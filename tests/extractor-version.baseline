@@ -1052,4 +1052,93 @@
 #   include (none exist today; the plan is byte-identical without one), never HOW any file parses: no parser,
 #   preprocessor, emitted symbol/ref/uses/edge or IFDEF-branch change. Existing parses stay valid.
 #   Superseded: 1.24.0-alpha|4b3275855c74f1c445c880a43460856f879cbd73ce256ec252b099dbd5fe5021
-1.25.0-alpha|93a60a03abe61057f8e40478f6de98c207be45a67523d12a86fe0197734a93d7
+#   2026-10-27 (taint wave T0, gaps/taint): BUMP 1.25.0 -> 1.26.0-alpha. New additive table data_flows;
+#   storage writer PutDataFlows joins the emit list; DRagLint.Index.DataFlowFacts (src\index) is an EMPTY
+#   shell until T1 -- T1 re-pastes this line when it fills Collect and adds Cfg/DataFlow/Lattices (Q5).
+#   Superseded: 1.25.0-alpha|93a60a03abe61057f8e40478f6de98c207be45a67523d12a86fe0197734a93d7
+#   2026-10-27 (taint wave T1, gaps/taint-t1): re-pinned WITHIN 1.26.0-alpha (no index has been built
+#   under 1.26.0 from a merged branch; T0 bumped and said T1 re-pastes). DataFlowFacts.Collect now emits
+#   data_flows rows (TTaintReach over the CFG, fallback + DF_ROW_CAP); Doc.SymbolFacts.Analyze gains an
+#   out TSymbolFactsAst; Core.Indexer calls Collect after PutSymbolFacts; and the hashed set gains
+#   src\analysis\DRagLint.Analysis.Cfg.pas, DataFlow.pas, Flow.Lattices.pas (owner Q5: they now decide
+#   stored rows). Pinned by tests\autotest\run_dataflow_facts.ps1 (RED on T0, green on T1).
+#   Superseded: 1.26.0-alpha|8b00b25aa4488d0761c960672cc9840551dbdacdc332c0757c53cd0cb15e423a
+#   2026-10-27 (lane ARGOUT, gaps/argout): re-pinned WITHIN 1.26.0-alpha (no index built under 1.26.0 from
+#   main yet). Size cut: an argout source is emitted only when the callee may write that argument --
+#   a same-unit callee by its var/out mask (TDataFlowFacts.BuildCallees, Core.Indexer passes it), else a
+#   built-in RTL list (value-only names drop; TryGetValue keeps position 1); every other callee is
+#   unresolved at extraction and KEEPS its argout. Pinned by tests\autotest\run_dataflow_facts.ps1.
+#   Superseded: 1.26.0-alpha|a587beb2e69e9152033d302219f832c2d5f3a73f5eea26dd998964d3800590dc
+#   2026-10-27 (controller, merge gaps/inc into gaps/taint): re-pinned WITHIN 1.26.0-alpha -- ARGOUT + INC
+#   both changed the surface; no index built under 1.26.0 yet. Superseded: f26a8bd6 (ARGOUT), ec65f9df (INC).
+#   2026-10-27 (lane INC2, gaps/inc2): re-pinned WITHIN 1.26.0-alpha (no index built under 1.26.0 yet).
+#   Valued DCC_Define / delphilsp -D (DEBUG2=3) reach {$IF} as numerics, CompilerVersion/RTLVersion
+#   seeded, {$IFOPT} evaluated (dcc defaults + .dproj DCC_ switches + -$X+ + in-source switches) --
+#   which preprocessor branches parse changes. Pinned by tests\autotest\run_index_inc_value_defines.ps1.
+#   Superseded: 80ca533e (controller merge INC + ARGOUT).
+#   superseded at merge: 1.26.0-alpha|470635dde28593b22c55d0a07367ba49f14278c32b630b691325b92c4af9183b
+#   2026-10-27 (lane REFTYPE, gaps/reftype): re-pinned WITHIN 1.26.0-alpha (rides the T0 bump, no second
+#   bump). Parser.Delphi13 TryWalkProcType now walks the declProcRef signature, so the parameter / result
+#   types of procedural and anonymous-method type declarations emit type_use refs. Pinned by
+#   tests\autotest\run_reftype_refs.ps1.
+#   Superseded: 1.26.0-alpha|a587beb2e69e9152033d302219f832c2d5f3a73f5eea26dd998964d3800590dc
+#   2026-10-27 (lane REFTYPE part 2, gaps/reftype): re-pinned WITHIN 1.26.0-alpha. Initializer positions
+#   now emit read refs: const / typed const / resourcestring / global var initial values, param default
+#   VALUES, array and record const initializers, explicit enum ordinals (EmitExpressionIdentReads +
+#   declVar + TryWalkEnum). Pinned by tests\autotest\run_reftype_refs.ps1 part 2.
+#   Superseded: 1.26.0-alpha|78e9e91c9c34038abda630fd61f0508077e8fca2441009aa9be4f075b99be338
+#   superseded at merge: 1.26.0-alpha|cf421226101da454ad3f2fec99f01910c34315a655f06cb9d459e431aa70240c
+#   2026-10-27 (controller, merge gaps/reftype into gaps/taint): re-pinned WITHIN 1.26.0-alpha for INC2 + REFTYPE; no index built under 1.26.0 yet.
+#   Superseded: 1.26.0-alpha|65c3b5089ab03f94ca0b8727d269a368bd30acb93231d944bced1d7d3014df79
+#   2026-10-27 (lane INC3, gaps/inc3): re-pinned WITHIN 1.26.0-alpha (no index built under 1.26.0 yet). {$IF} now resolves
+#   true constants -- same file (active text only; typed consts excluded) and uses-clause units (project scan +
+#   library DB) -- plus arithmetic / xor / strings / Ord / SizeOf / Declared(), so a different branch and include can
+#   be indexed. Pinned by tests\autotest\run_index_pp_consts.ps1 + tests\preprocess\run_expr_ext.ps1.
+# 2026-10-28 (1.37.0 B-FLOW, item 2b): hash re-pinned WITHOUT a bump -- ref-gap G5 (hard-cast receiver
+#   T(X).M emits a member-access ref) rides the still-unreleased 1.26.0-alpha re-parse. Pinned by
+#   tests\callresolve\run_receiver_cst_capture.ps1 H1-H3.
+# 2026-10-28 INT-B: re-pinned within unreleased 1.26.0-alpha after merging gaps/r0 (item 4: R4X handler local_var, receiver_type_text) onto gaps/stage (B-FLOW 2b, INC, REFTYPE). No bump: 1.26.0-alpha has not shipped.
+# 2026-10-28 lane EXT (1.37.0 gaps triage, EXT-FREEZE candidate): re-pinned ONCE within unreleased 1.26.0-alpha, no bump.
+#   E1 routine-header comments stripped from signatures; E2 DataFlowFacts G5 hard-cast mirror; E4 typed const
+#   symbols.modifiers 'typed' + $IF refusal; E5 Model.pas note, Plan/Manifest doc regen, marker re-stamps.
+#   Superseded: 1.26.0-alpha|352247e0e7c75ceada222be9b410d47d29401994c3ccbbe39031e55a3c9990f3
+# 2026-10-28 lane EXT E1b: re-pinned once more within unreleased 1.26.0-alpha, no bump. Procedural-type signature and
+#   array-const initializer now strip comment extras (NodeTextSansComments / skip comment as value node).
+#   Superseded: 1.26.0-alpha|3d37be7645f2d1232d806f2052002081acf22ad7f261d8e05f4fc6181d9f1935
+# 2026-10-28 (gaps/xj-7, xerj item 7): hash re-pinned WITHOUT a bump -- content-hash skip in TIndexer.IndexFile
+#   (a file whose sha256 matches is skipped even when its mtime moved, mtime refreshed). It only decides whether to
+#   re-parse, never what a parse emits, so it cannot affect extraction. Pinned by tests\autotest\run_index_content_hash_skip.ps1.
+# 2026-10-28 lane ki-exta (gaps/ki-exta): hash re-pinned WITHOUT a bump, within unreleased 1.26.0-alpha. A bare TPF0
+#   binary DFM (no FF 0A 00 header) is now recognised (Core.Indexer HasBinaryDfmHeader, Parser.DFM IsBinaryDfmBytes) and
+#   reports the binary-DFM diagnostic instead of a text parse error / EEncodingError skip. Controller recomputes at freeze.
+#   Superseded: 1.26.0-alpha|3d37be7645f2d1232d806f2052002081acf22ad7f261d8e05f4fc6181d9f1935
+# 2026-10-28 freeze merge: E1b + xj-7 + ki-exta, 1.26.0-alpha, no bump
+#   Superseded: 1.26.0-alpha|7dd7877fe935d3ae54d29bfaa453eb233362e9f7a397dfbbd0b9991c8657ab73
+# 2026-10-28 lane rb5-gen (RB-5 P2+P3): hash re-pinned WITHOUT a bump. WHY NO BUMP: the only src\index byte change is
+#   DispatchResolver.pas (ResolveImplements no longer skips generic interfaces; NarrowByParamTypes / ParamTypeKey
+#   narrow same-arity implements ties). DispatchResolver runs in the RESOLVE pass and writes only dispatch_edges --
+#   resolver surface (tests\resolver-surface.txt), billed by DRAGLINT_RESOLVER_VERSION 1.16.0 -> 1.17.0-alpha;
+#   remedy index --all --resolve-only. No symbol/ref/uses/call-edge row emitted at parse time changes.
+#   Precedent: the 2026-09-16 CallResolver re-pin above. Model.pas is outside the hashed surface.
+#   Superseded: 1.26.0-alpha|9a5c75a9f13d8988a7fe73836e9ce89d6fd9cd757fb8ff7f1d939800f34daf94
+# 2026-10-28 lane rb5-ovl (same-arity overloads narrowed by ARGUMENT SHAPE): hash re-pinned WITHOUT a bump. WHY NO
+#   BUMP: the src\index byte changes are CallResolver.pas (PickFromMatches narrows an arity tie by the shapes of the
+#   call site's arguments -- NarrowByArgShapes / SiteArgShapes / ArgFitsParam) and DispatchResolver.pas (ParamTypeKey
+#   MOVED into CallResolver, unchanged). Both run in the RESOLVE pass and write only call_edges / dispatch_edges --
+#   resolver surface, billed by DRAGLINT_RESOLVER_VERSION 1.17.0-alpha (rb5-gen's unreleased bump, not bumped
+#   again). No symbol/ref/uses row emitted at parse time changes. Precedent: rb5-gen above.
+# 2026-10-28 lane ext-plat: PlatformBuiltins now covers Win64x, Linux64, OSX64, OSXARM64, Android, Android64,
+#   iOSDevice64, iOSSimARM64 (+ PlatformGroupSuffix); re-pinned within unreleased 1.26.0-alpha, no bump. Controller recomputes at the freeze merge.
+#   Superseded: 1.26.0-alpha|0a258c0449063bf1b56057ea6dbda480550a2202ab44811acdd4398d80250c4d
+# 2026-10-28 lane ext-plat (2): Win32/Win64 built-ins now EXACTLY the dcc32/dcc64 output (Win64 gains cpux64, assembler, weakref,
+#   nativecode, dcc; loses cpux86_64, compiler_version_37); other platforms UNVERIFIED. Re-pinned within unreleased 1.26.0-alpha, no bump.
+#   Superseded: 1.26.0-alpha|0cf33f0abbeec93a4ea58c7f2d25c0a06b510fb5f475070c9f6c745cbc924c18
+# 2026-10-28 FREEZE-FINAL merge ext + ext-plat (interim pin, no bump; final recompute after gaps/doclit):
+#   Superseded: 1.26.0-alpha|1ce747432049d6a73441ea9d3f7aed5862c58d054f1fbc989283ad3e4043abb4
+# 2026-10-28 FREEZE-FINAL recompute (the ONE re-pin): gaps/ext-plat 843a7fc8 (Win32/Win64 built-ins exact vs dcc32/dcc64) +
+#   gaps/doclit 52e7df08 (/// doc literal symbol_id = documented decl) + gaps/multiname 0e5de0f3 (one field symbol per name in a
+#   multi-name field list). Within unreleased 1.26.0-alpha, no bump: deployed DBs are v=1.25.0-alpha, so the 1.37 re-parse is forced anyway.
+
+# 2026-10-28 int138-sync: merge gaps/stage3 into gaps/int138; the ONE combined pin (rb5-gen + rb5-ovl + stage3), no bump.
+#   Superseded: 1.26.0-alpha|619af3482ab963dd10999252a53259fa748b894ed9ad7d818ba6cd1d34140d8c and ...|2e3128646f62cadf2a6ddf46f5f2fb6f2d056ee5d9e96325e966b2b295a4f8cb
+1.26.0-alpha|3302e490166911801893376a90ca2bfa592e1e09b70260a65f5bc35469a53acc

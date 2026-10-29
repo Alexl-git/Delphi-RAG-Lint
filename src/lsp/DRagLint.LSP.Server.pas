@@ -7,13 +7,14 @@ uses
   , System.Classes
   , System.IOUtils
   , System.Generics.Collections  { v(P7): the per-file source cache in HandleHoverBundle }
+  , System.SyncObjs  { LSP-1 CORE: the re-index watcher's lock + stop event }
   , System.JSON
   , System.NetEncoding
   , Winapi.Windows
   , TreeSitter
   , TreeSitterLib
   , DRagLint.Core    .Model
-  , DRagLint.Core    .Versions // dl:unit DRagLint.Core.Versions accepted -- INDEXER_FINGERPRINT_META_KEY: the stamp each --db is reported with at startup
+  , DRagLint.Core    .Versions // dl:unit DRagLint.Core.Versions accepted -- INDEXER_FINGERPRINT_META_KEY: the stamp each --db is reported with at startup; LIBRARY_RESOLVE_STATE_META_KEY: the lf-marker key
   , DRagLint.Core    .ControlChannel { W3: the maintenance control channel the lsp host cooperates with in Run }
   , DRagLint.Core    .Interfaces
   , DRagLint.Core    .Encoding
@@ -34,6 +35,7 @@ uses
   , DRagLint.Query   .Callers   { v(hover bundle): the shared caller queries the CLI also renders from }
   , DRagLint.Query   .HoverModel{ v(hover bundle): the shared model assembly `hover --format json` uses }
   , DRagLint.LSP     .Context   { S0: ILspServerContext + the feature registry }
+  , DRagLint.Project .ContextFile { LSP-1 CORE: .dlcontext.json + central context defaults }
   ;
 
 type
@@ -97,6 +99,38 @@ type
     HaveOwnerFloor: Boolean        ;
     OwnerFloorType: TSymbol        ;
   end;
+
+  /// <summary>Which precedence step decided a file's project context (spec 1b):
+  /// startup args, the client/IDE, the owning .dproj, a .dlcontext.json (only
+  /// when no .dproj exists), the central defaults, or nothing (placeholder).</summary>
+  TLspContextSource = (lcsStartup, lcsClient, lcsDproj, lcsContextFile, lcsDefaults, lcsPlaceholder);
+
+  /// <summary>The resolved build context of one source file -- what the Delphi
+  /// IDE would call the active project and platform for it.</summary>
+  /// <remarks>Plain value record. Project = '' means no project is known; the
+  /// answer set is then the platform library (plus an ephemeral index of the
+  /// file). PlatformDefaulted = the platform came from the central defaults or
+  /// the Win64 placeholder, not from the project.</remarks>
+  TLspFileContext = record
+    Project, Platform, Config, TargetCompiler: string;
+    Source           : TLspContextSource;
+    PlatformDefaulted: Boolean;
+    /// <summary>`projectDb` / `libraryDb` of the .dlcontext.json that applied, or ''.</summary>
+    ProjectDbOverride, LibraryDbOverride: string;
+    /// <summary>A .dlcontext.json found stale (its .dproj changed) and bypassed, or ''.</summary>
+    StaleContextFile: string;
+  end;
+
+  /// <summary>The authoritative DB pair for one (project, platform): the
+  /// project's own index and that platform's library index; '' = none.</summary>
+  TLspDbSet = record
+    ProjectDb, LibraryDb: string;
+  end;
+
+  /// <summary>Resolves (project file, platform) to its DB pair with the CLI's
+  /// consumer-DB logic (`resolve-dbs --project X --platform P`). AProject = ''
+  /// asks for the platform library only.</summary>
+  TLspContextDbResolver = reference to function(const AProject, APlatform: string): TLspDbSet;
 
   // Language Server Protocol over stdio with Content-Length framing.
   // Implements the subset that's actually useful when backed by a static
@@ -191,6 +225,98 @@ type
       FFeatures       : TObjectList<TLspFeature>         ;
       FFeatureByMethod: TDictionary<string, TLspFeature> ;
       FContext        : ILspServerContext                ;
+    strict private type
+      { LSP-1 CORE: one opened (project DB, library DB) pair; Stores excludes
+        the ephemeral index. }
+      TStoreSet = record
+        Key   : string;
+        Stores: TArray<ISymbolStore>;
+        Paths : TArray<string>;
+      end;
+      { LSP-1 CORE: one background re-index of a project DB that needs re-resolve. }
+      TReindexState = (risRunning, risDone, risFailed);
+      TReindexRun = record
+        Db, Dproj, LogPath, Reason: string;
+        State  : TReindexState;
+        Process: THandle;
+      end;
+      TCtxEntry = record
+        Ctx  : TLspFileContext;
+        Stamp: string;   { the .dproj / .dlcontext.json write stamp the entry was resolved against }
+      end;
+    strict private
+      { LSP-1 CORE: per-file project context (SPEC.md 1b / 3). }
+      FDbResolver    : TLspContextDbResolver;   { nil = the startup store list is the whole universe }
+      FExplicitDbs   : Boolean;                 { --db was given: those DBs are the authoritative universe }
+      FClientProject : string;
+      FClientPlatform: string;
+      FClientConfig  : string;
+      FClientCtx     : TProjectContext;         { when the client named a .dlcontext.json }
+      FHaveClientCtx : Boolean;
+      FDefaults      : TContextDefaults;
+      FDefaultsRead  : Boolean;
+      FSets          : TList<TStoreSet>;        { LRU, most recent first, at most LSP_STORE_SET_LRU }
+      FCtxCache      : TDictionary<string, TCtxEntry>;
+      FNoticed       : TDictionary<string, Byte>; { lower(path)|reason already shown }
+      FPending       : TObjectList<TJSONObject>;  { notifications queued for the stdio loop }
+      FQueueNotices  : Boolean;                   { True only inside Run: proxy mode never writes to stdout }
+      FLastOpenPath  : string;
+      FResolved      : TDictionary<string, TLspDbSet>; { project|platform -> FDbResolver's answer }
+      { LSP-1 CORE (owner ruling 2026-10-28): a project DB that needs re-resolve
+        is re-indexed by a SEPARATE engine process, at most one run per DB, never
+        retried after a failure. The watcher thread holds FWorkLock while it
+        swaps stores, so it never interleaves with a request Run is answering. }
+      FWorkLock      : TCriticalSection;
+      FStopEvent     : TEvent;
+      FReindex       : TDictionary<string, TReindexRun>; { lower(db) -> run }
+      FReindexThreads: TObjectList<TThread>;
+      FOpenDocs      : TDictionary<string, string>;      { lower(path) -> uri of every open document }
+      { Yield (INBOX-ide-hang-on-slow-engine section 2): messages read while a
+        long request yielded, to be dispatched by Run before its next read, in
+        arrival order. FInputEnded: such a read hit EOF / a cancelled read. }
+      FDeferred       : TQueue<TJSONObject>              ;
+      FInputEnded     : Boolean                          ;
+      FYielding       : Boolean                          ;
+      procedure StartReindex(const ADb, ADproj: string);
+      procedure ReindexFinished(const AKey: string);
+      procedure PublishDiagnostics(const AUri, APath: string);
+      function  StorePathOf(const AStore: ISymbolStore): string;
+      function  CallerSearchStores(const APath: string): TArray<ISymbolStore>;
+      function  Defaults: TContextDefaults;
+      function  DprojStamp(const AFile: string): string;
+      function  ComputeFileContext(const APath: string): TLspFileContext;
+      function  IsLibraryPath(const APath: string): Boolean;
+      function  OwningStartupProjectDb(const APath: string): string;
+      function  StartupLibraryFor(const APlatform: string): string;
+      function  DbSetFor(const APath: string; const ACtx: TLspFileContext): TLspDbSet;
+      function  OpenReaderStore(const APath: string): ISymbolStore;
+      function  StoreSet(const ADbs: TLspDbSet): TArray<ISymbolStore>;
+      function  ContextNotice(const APath: string; const ACtx: TLspFileContext; const ADbs: TLspDbSet; AQueue: Boolean): string;
+      function  ProjectDbIncompleteReason(const AProjectDb: string): string;
+      procedure QueueNotification(const AMethod: string; AParams: TJSONObject);
+      procedure QueueContextNotification(const APath: string);
+      procedure FlushPending;
+      procedure ApplyClientContext(const AObj: TJSONObject);
+      function  HandleSetContext(const AId: TJSONValue; const AParams: TJSONObject): Boolean;
+      procedure HandleDidChangeConfiguration(const AParams: TJSONObject);
+      function  ContextFooter(const APath: string): string;
+      /// <summary>Dispatches one JSON-RPC message to its handler.</summary>
+      /// <param name="AMsg">The message; not freed here, the caller owns it.</param>
+      /// <returns>False for `exit` (the loop must end), True otherwise.</returns>
+      function DispatchMessage(const AMsg: TJSONObject): Boolean;
+      /// <summary>True when a whole message can be read from stdin without
+      /// blocking: a pipe with bytes waiting (PeekNamedPipe) or a file not at
+      /// its end. A console or any other handle answers False -- never yield.</summary>
+      /// <returns>True when a read would not block; False after FInputEnded.</returns>
+      function InputPending: Boolean;
+      /// <summary>Called by a long request between its batches: reads every
+      /// message already waiting and dispatches the hover-class ones at once,
+      /// deferring anything else (and everything after it) to Run.</summary>
+      /// <remarks>Single-threaded: it runs INSIDE the long handler, so a served
+      /// hover sees the same stores. Order-preserving: once one message is
+      /// deferred no later one is served early, so a hover can never overtake
+      /// a didChange it was sent after. Not re-entrant (FYielding).</remarks>
+      procedure YieldToPendingRequests;
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (FControl &lt;&gt; nil) and
       /// FControl.StandDownRequested.</returns>
       /// <remarks>
@@ -815,6 +941,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleDidClose(const AParams: TJSONObject);
+      /// <summary>Publishes an empty diagnostics array for AUri so the client drops the entries it holds.</summary>
+      /// <param name="AUri">The uri string exactly as the client sent it (never re-encoded from a path), or the client keys the clear to a different document.</param>
+      /// <remarks>WHY: the server publishes but never cleared, so a closed or deleted file kept its warnings in Problems forever.</remarks>
+      procedure PublishEmptyDiagnostics(const AUri: string);
+      /// <summary>Handles workspace/didChangeWatchedFiles: for each change of type 3 (Deleted) clears the file diagnostics and drops its overlay/memo state.</summary>
+      /// <param name="AParams">Notification params; params.changes[] of {uri, type}. nil is ignored.</param>
+      /// <remarks>Notification: no response. Types 1 (Created) and 2 (Changed) are ignored.</remarks>
+      procedure HandleDidChangeWatchedFiles(const AParams: TJSONObject);
       /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
       /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: TJSONObject.Create.</returns>
       /// <remarks>
@@ -1047,6 +1181,29 @@ type
       /// <summary>C15: the explicit --platform the CLI was started with ('' when none was typed).</summary>
       /// <remarks>Set by the CLI from its parsed arguments; forwarded like StartupProject.</remarks>
       property StartupPlatform: string read FStartPlatform write FStartPlatform;
+      /// <summary>LSP-1 CORE: resolves (project, platform) to its DB pair with the
+      /// CLI's resolve-dbs logic; nil = only the startup stores are ever used.</summary>
+      /// <remarks>Set by the CLI before Run. Called on the server's own thread.</remarks>
+      property DbResolver: TLspContextDbResolver read FDbResolver write FDbResolver;
+      /// <summary>LSP-1 CORE: True when the store list came from explicit --db
+      /// flags. Those DBs are then the whole universe: the resolver is not
+      /// consulted, the owning store is the project DB and a startup store named
+      /// library-&lt;platform&gt; is that platform's library.</summary>
+      property ExplicitDbs: Boolean read FExplicitDbs write FExplicitDbs;
+      /// <summary>LSP-1 CORE: the resolved project context of APath (SPEC.md 1b):
+      /// startup args &gt; client/IDE &gt; owning .dproj &gt; .dlcontext.json (no
+      /// .dproj) &gt; central defaults &gt; Win64 placeholder.</summary>
+      /// <param name="APath">A source file path.</param>
+      /// <returns>The context; Project = '' when none is known.</returns>
+      /// <remarks>Memoised per file against the project file's write stamp; the
+      /// memo is dropped on didClose and on every client context change.</remarks>
+      function  FileContext(const APath: string): TLspFileContext;
+      /// <summary>LSP-1 CORE: adopts the IDE's `&lt;Project&gt;.delphilsp.json` as the
+      /// client context -- its sibling .dproj (else .dpr) is the project and its
+      /// dllname the platform.</summary>
+      /// <param name="AFile">The .delphilsp.json path (not a URI).</param>
+      /// <remarks>Not thread-safe; call from the thread that owns this server.</remarks>
+      procedure ApplyClientSettingsFile(const AFile: string);
       /// <summary>The databases this server actually opened, in FStores order.</summary>
       /// <returns>Paths of the stores that opened and passed the schema check;
       /// a --db that was skipped is not in it.</returns>
@@ -1143,6 +1300,9 @@ type
       /// <param name="APath">Local path; '' answers an empty array.</param>
       /// <returns>A NEW array, empty for a file no store knows; the caller owns it.</returns>
       /// <remarks>
+      /// <para>Bounded: one CountCallerSitesByNames statement per 64 distinct names, not one
+      /// row set per routine; between statements it calls YieldToPendingRequests, so hovers
+      /// sent meanwhile are answered before this returns.</para>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLspServerContextAdapter.CallerCounts (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, IntToStr, LowerCase</para>
@@ -1209,7 +1369,11 @@ type
 implementation
 
 uses
+  System.StrUtils, { LSP-1 CORE: MatchText }
+  DRagLint.Lint.MissingUses, { MISSING_USES_RULE: publish + codeAction } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
   DRagLint.Project.DefineProfile,
+  DRagLint.Symbol.Describe,  // DescribeDeclaredType: the type a hover shows for a value kind
+  DRagLint.Convert.PropTree, // ClearPropertyDeclaredTypeCache: a reopened DB must not answer from old rows
   DRagLint.LSP.Features  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
   ;
 
@@ -1221,6 +1385,39 @@ const
   LSP_FULL_RULES_REAP_MS = 2000;
   { S8: JSON-RPC internal error, answered when a registered feature raises. }
   LSP_ERR_INTERNAL = -32603;
+  /// <summary>JSON-RPC 'method not found': the answer to a request no handler claims.</summary>
+  LSP_ERR_METHOD_NOT_FOUND = -32601;
+  { LSP-1 CORE: SPEC.md 3 -- opened (project DB, library DB) pairs kept. }
+  LSP_STORE_SET_LRU = 3;
+  { LSP-1 CORE: longest log line quoted in a failed re-index notice. }
+  LSP_REINDEX_REASON_MAX = 200;
+  { LSP-1 CORE: SPEC.md 1b -- the placeholder platform when nothing names one. }
+  LSP_PLACEHOLDER_PLATFORM = 'Win64';
+  LSP_CMD_SET_CONTEXT      = 'draglint.setContext';
+  LSP_NOTIFY_CONTEXT       = 'draglint/context';
+  LSP_MSG_TYPE_WARNING     = 2; // window/showMessage MessageType.Warning
+  LSP_ERR_INVALID_PARAMS   = -32602;
+  LSP_CONFIG_SECTION       = 'dragLint';
+  LSP_CONTEXT_FILE_EXT     = '.dlcontext.json';
+  LSP_SOURCE_NAMES: array[TLspContextSource] of string =
+    ('startup', 'client', 'dproj', 'dlcontext', 'defaults', 'placeholder');
+
+{ LSP-1 CORE: JSON helpers for the client-context messages. }
+function JsonStrOf(const AObj: TJSONObject; const AName: string): string;
+var
+  V: TJSONValue;
+begin
+  Result:= '';
+  if AObj = nil then Exit;
+  V:= AObj.GetValue(AName);
+  if V is TJSONString then Result:= V.Value;
+end;
+
+function HasContextKeys(const AObj: TJSONObject): Boolean;
+begin
+  Result:= (AObj <> nil) and ((AObj.GetValue('project') <> nil) or (AObj.GetValue('platform') <> nil)
+    or (AObj.GetValue('config') <> nil));
+end;
 
 type
   { S0: the ILspServerContext a feature is handed. A thin forwarder: every
@@ -1342,8 +1539,64 @@ begin
   Create(TArray<string>.Create(ADbPath));
 end;
 
-constructor TLSPServer.Create(const ADbPaths: TArray<string>);
+function TLSPServer.OpenReaderStore(const APath: string): ISymbolStore;
 var
+  S: ISymbolStore;
+begin
+  Result:= nil;
+  if APath = '' then Exit;
+  if not TFile.Exists(APath) then
+  begin
+    { Server protocol doesn't have a startup-message channel; write to
+      stderr so the spawning plugin / shell can surface it. The plugin's
+      DebugLog will capture this if redirected. }
+    Writeln(ErrOutput, 'drag-lint LSP: db not found, skipping: ', APath);
+    Exit;
+  end;
+  try
+    { A READER, since 2026-09-15 (owner ruling 2: only the IDE writes; every
+      other client reads -- docs\PLAN-multi-client-index-safety.md). Until
+      then this loop opened every --db WRITABLE and ran Migrate (DDL), so each
+      editor held a writable, migrated connection to the real project index
+      and the 2.98 GB library index, and an editor on an OLDER engine migrated
+      the database it was only meant to read. The open is read-write (never
+      create) under query_only, with the journal mode the file already has
+      (HeaderSaysWal), so the header is left alone too. NOT a true
+      SQLITE_OPEN_READONLY, though D25 measured that it opens a WAL index
+      fine: this server is often the LAST connection to close, and a
+      read-only last closer can neither checkpoint nor delete the -wal/-shm
+      -- a graceful `drag-lint shutdown` left both behind, and WAL pages an
+      indexer left stayed outside the main file (ruling R21; pinned by
+      run_control_channel_guard.ps1 S5 / F1-4).
+
+      A reader does not migrate. A database whose schema predates this engine
+      is REFUSED with the same actionable line the read verbs print, and the
+      caller moves on: the stores behind it still serve, and the IDE is the
+      side that brings the index forward. Pinned by run_lsp_reader_guard.ps1. }
+    S:= TSQLiteSymbolStore.Create(APath, {AReadOnly=}True);
+    var Found, Expected: Integer;
+    if not S.IsSchemaCurrent(Found, Expected) then
+    begin
+      Writeln(ErrOutput, Format('drag-lint LSP: index schema v%d < v%d, refusing %s -- a reader does not migrate; '
+        + 'to migrate, run "drag-lint index --project <file.dproj> --db <db>" for a project index, '
+        + 'or "drag-lint index <dir> --db <db>" for a library index', [Found, Expected, APath]));
+      Exit;
+    end;
+    { The skew this server can see is stated once per store, on stderr, where
+      the editor's engine log captures it: which engine this is and what the
+      index was built by. T4 of the plan -- the skew is now SAFE (T1, T2);
+      this line is what makes it VISIBLE. }
+    var Stamp: string:= S.GetMetaValue(INDEXER_FINGERPRINT_META_KEY);
+    if Stamp = '' then Stamp:= 'unstamped';
+    Writeln(ErrOutput, Format('drag-lint LSP: %s (extractor %s) opened read-only %s [index %s]',
+      [DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, APath, Stamp]));
+    Result:= S;
+  except
+    on E: Exception do Writeln(ErrOutput, 'drag-lint LSP: could not open ', APath, ': ', E.Message);
+  end;
+end; // function
+
+constructor TLSPServer.Create(const ADbPaths: TArray<string>);var
   I   : Integer     ;
   Path: string      ;
   S   : ISymbolStore;
@@ -1357,63 +1610,28 @@ begin
   begin
     Path:= ADbPaths[I];
     if Path = '' then Continue;
-    if not TFile.Exists(Path) then
-    begin
-      { Server protocol doesn't have a startup-message channel; write to
-        stderr so the spawning plugin / shell can surface it. The plugin's
-        DebugLog will capture this if redirected. }
-      Writeln(ErrOutput, 'drag-lint LSP: db not found, skipping: ', Path);
-      Continue;
-    end;
-    try
-      { A READER, since 2026-09-15 (owner ruling 2: only the IDE writes; every
-        other client reads -- docs\PLAN-multi-client-index-safety.md). Until
-        then this loop opened every --db WRITABLE and ran Migrate (DDL), so each
-        editor held a writable, migrated connection to the real project index
-        and the 2.98 GB library index, and an editor on an OLDER engine migrated
-        the database it was only meant to read. The open is read-write (never
-        create) under query_only, with the journal mode the file already has
-        (HeaderSaysWal), so the header is left alone too. NOT a true
-        SQLITE_OPEN_READONLY, though D25 measured that it opens a WAL index
-        fine: this server is often the LAST connection to close, and a
-        read-only last closer can neither checkpoint nor delete the -wal/-shm
-        -- a graceful `drag-lint shutdown` left both behind, and WAL pages an
-        indexer left stayed outside the main file (ruling R21; pinned by
-        run_control_channel_guard.ps1 S5 / F1-4).
-
-        A reader does not migrate. A database whose schema predates this engine
-        is REFUSED with the same actionable line the read verbs print, and the
-        loop moves on: the stores behind it still serve, and the IDE is the
-        side that brings the index forward. Pinned by run_lsp_reader_guard.ps1. }
-      S:= TSQLiteSymbolStore.Create(Path, {AReadOnly=}True);
-      var Found, Expected: Integer;
-      if not S.IsSchemaCurrent(Found, Expected) then
-      begin
-        Writeln(ErrOutput, Format('drag-lint LSP: index schema v%d < v%d, refusing %s -- a reader does not migrate; '
-          + 'to migrate, run "drag-lint index --project <file.dproj> --db <db>" for a project index, '
-          + 'or "drag-lint index <dir> --db <db>" for a library index', [Found, Expected, Path]));
-        S:= nil;
-        Continue;
-      end;
-      { The skew this server can see is stated once per store, on stderr, where
-        the editor's engine log captures it: which engine this is and what the
-        index was built by. T4 of the plan -- the skew is now SAFE (T1, T2);
-        this line is what makes it VISIBLE. }
-      var Stamp: string:= S.GetMetaValue(INDEXER_FINGERPRINT_META_KEY);
-      if Stamp = '' then Stamp:= 'unstamped';
-      Writeln(ErrOutput, Format('drag-lint LSP: %s (extractor %s) opened read-only %s [index %s]',
-        [DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, Path, Stamp]));
-      SetLength(FStores, Length(FStores) + 1);
-      FStores[High(FStores)]:= S;
-      { Kept in lockstep with FStores -- appended only on the success path, so
-        a db that failed to open never shifts the two out of alignment. }
-      SetLength(FStorePaths, Length(FStores));
-      FStorePaths[High(FStorePaths)]:= Path;
-    except
-      on E: Exception do Writeln(ErrOutput, 'drag-lint LSP: could not open ', Path, ': ', E.Message);
-    end;
+    { LSP-1 CORE: the open + schema check moved to OpenReaderStore, which the
+      lazily opened per-context sets use too. }
+    S:= OpenReaderStore(Path);
+    if S = nil then Continue;
+    SetLength(FStores, Length(FStores) + 1);
+    FStores[High(FStores)]:= S;
+    { Kept in lockstep with FStores -- appended only on the success path, so
+      a db that failed to open never shifts the two out of alignment. }
+    SetLength(FStorePaths, Length(FStores));
+    FStorePaths[High(FStorePaths)]:= Path;
   end; // for
   if Length(FStores) > 0 then FStore:= FStores[0];
+  FSets    := TList<TStoreSet>.Create;
+  FCtxCache:= TDictionary<string, TCtxEntry>.Create;
+  FNoticed := TDictionary<string, Byte>.Create;
+  FResolved:= TDictionary<string, TLspDbSet>.Create;
+  FWorkLock      := TCriticalSection.Create;
+  FStopEvent     := TEvent.Create(nil, True, False, '');
+  FReindex       := TDictionary<string, TReindexRun>.Create;
+  FReindexThreads:= TObjectList<TThread>.Create({AOwnsObjects=}True);
+  FOpenDocs      := TDictionary<string, string>.Create;
+  FPending := TObjectList<TJSONObject>.Create({AOwnsObjects=}True);
 
   { S0 feature registry: one instance per registered class; the first feature
     to claim a method keeps it. Built-in methods never reach this table --
@@ -1428,16 +1646,37 @@ begin
       if not FFeatureByMethod.ContainsKey(M) then FFeatureByMethod.Add(M, Feature);
   end;
   FContext:= TLspServerContextAdapter.Create(Self);
+  FDeferred:= TQueue<TJSONObject>.Create;
 end; // constructor
 
 destructor TLSPServer.Destroy;
 begin
+  { LSP-1 CORE: watchers first -- each holds FWorkLock while it touches the
+    stores and the linter. A child still running is left to finish: it is a
+    writer completing its own work. }
+  FStopEvent.SetEvent;
+  for var T: TThread in FReindexThreads do T.WaitFor;
+  if FDeferred <> nil then
+    while FDeferred.Count > 0 do FDeferred.Dequeue.Free;
+  FDeferred.Free;
   FContext:= nil;
   FFeatureByMethod.Free;
   FFeatures.Free;
   FLinter.Free;
   FStdIn.Free;
   DropEphemeralStore; { closes the ephemeral connection and removes its %TEMP% database }
+  FReindexThreads.Free;
+  for var Run: TReindexRun in FReindex.Values do
+    if Run.Process <> 0 then CloseHandle(Run.Process);
+  FReindex.Free;
+  FOpenDocs.Free;
+  FStopEvent.Free;
+  FWorkLock.Free;
+  FPending.Free;
+  FNoticed.Free;
+  FResolved.Free;
+  FCtxCache.Free;
+  FSets.Free;
   FStore:= nil;
   inherited;
 end;
@@ -1730,6 +1969,28 @@ begin
     { S0: every registered feature adds its own pairs; HandleInitialize never
       names a feature. }
     for var Feature: TLspFeature in FFeatures do Feature.AddCapabilities(Caps);
+    { LSP-1 CORE: draglint.setContext is answered by Run itself, ahead of the
+      feature table; it joins whatever command list a feature advertised. }
+    var ExecProv: TJSONValue:= Caps.GetValue('executeCommandProvider');
+    if (ExecProv is TJSONObject) and (TJSONObject(ExecProv).GetValue('commands') is TJSONArray) then
+      TJSONArray(TJSONObject(ExecProv).GetValue('commands')).Add(LSP_CMD_SET_CONTEXT)
+    else if ExecProv = nil then
+    begin
+      var Cmds: TJSONArray:= TJSONArray.Create;
+      Cmds.Add(LSP_CMD_SET_CONTEXT);
+      var NewProv: TJSONObject:= TJSONObject.Create;
+      NewProv.AddPair('commands', Cmds);
+      Caps.AddPair('executeCommandProvider', NewProv);
+    end;
+    { LSP-1 CORE: initializationOptions (project, platform, config), or the
+      IDE's settingsFile (.delphilsp.json), is the client context. }
+    if AParams <> nil then
+    begin
+      var InitOpt: TJSONValue:= AParams.GetValue('initializationOptions');
+      if (InitOpt is TJSONObject) and HasContextKeys(TJSONObject(InitOpt)) then ApplyClientContext(TJSONObject(InitOpt))
+      else if (InitOpt is TJSONObject) and (JsonStrOf(TJSONObject(InitOpt), 'settingsFile') <> '') then
+        ApplyClientSettingsFile(FileFromUri(JsonStrOf(TJSONObject(InitOpt), 'settingsFile')));
+    end;
     ResObj     .AddPair('capabilities'         , Caps           );
     Info:= TJSONObject.Create;
     Info  .AddPair('name'      , 'drag-lint LSP');
@@ -2079,10 +2340,15 @@ end; // function
 //   class TShape                          (containers: no signature)
 // Signature already carries the leading '(' or ': ' for proc-likes, so we
 // concatenate directly; for type-valued kinds we insert ': ' before the type.
-function DeclLineFor(const ASym: TSymbol): string;
+// Value kinds take their type from DescribeDeclaredType -- the describer the
+// hover model uses -- so a bare re-published property ('property Text;')
+// shows the type its ancestor declares, plus a '// declared in' note, and a
+// local var / parameter shows its type at all. AStore owns ASym.
+function DeclLineFor(const ASym: TSymbol; const AStore: ISymbolStore): string;
 var
-  Keyword: string;
-  Sig    : string;
+  Keyword : string;
+  Sig     : string;
+  Declared: TDeclaredType;
 begin
   Sig:= ASym.Signature;
   case ASym.Kind of
@@ -2095,9 +2361,9 @@ begin
       if (Sig <> '') and ((Sig[1] = ':') or (Pos('): ', Sig) > 0)) then Keyword:= 'function'
     else Keyword:= 'procedure';
     skProperty : Keyword:= 'property';
-    skField    : Keyword:= 'var';
-    skVarDecl  : Keyword:= 'var';
+    skField, skVarDecl, skLocalVar: Keyword:= 'var';
     skConstDecl: Keyword:= 'const';
+    skParam    : Keyword:= '';
     else Keyword:= ASym.Kind.ToText;
   end; // case
 
@@ -2105,8 +2371,16 @@ begin
     skFunction, skProcedure, skConstructor, skDestructor, skMethod:
       // Sig is '(args): Ret' or ': Ret' or '(args)' or '' -- concat directly.
       Result:= Format('%s %s%s', [Keyword, ASym.Name, Sig]);
-    skProperty, skField, skVarDecl, skConstDecl: if Sig <> '' then Result:= Format('%s %s: %s', [Keyword, ASym.Name, Sig])
-    else Result:= Format('%s %s', [Keyword, ASym.Name]);
+    skProperty, skField, skVarDecl, skConstDecl, skLocalVar, skParam:
+      begin
+        Declared:= DescribeDeclaredType(ASym, AStore);
+        { A const keeps its whole signature ('Integer = 5'): the value is the
+          point of hovering one. }
+        if (ASym.Kind <> skConstDecl) and (Declared.TypeName <> '') then Sig:= Declared.TypeName;
+        Result:= if Sig <> '' then Trim(Format('%s %s: %s', [Keyword, ASym.Name, Sig]))
+                  else Trim(Format('%s %s', [Keyword, ASym.Name]));
+        if Declared.DeclaredIn <> '' then Result:= Result + '  // declared in ' + Declared.DeclaredIn;
+      end;
     else Result:= Format('%s %s', [Keyword, ASym.Name]);
   end;
 end; // function
@@ -2363,15 +2637,699 @@ begin
   Result:= (FEphemStore <> nil) and (Length(AStores) > 0) and (AStores[0] = FEphemStore);
 end;
 
+{ ---- LSP-1 CORE: per-file project context ----------------------------------
+  SPEC.md (C:\TEMP\claude\lanes\lsp-context) 1b + 3; owner ruling D1: the LSP
+  answers like the IDE -- the file's active project + platform select THAT
+  project's DB and THAT platform's library DB, never another project's store.
+  Guarded by tests\autotest\run_lsp_context_*.ps1. }
+
+{ The libraries.<APlatform>.libraryDb of the central defaults, or ''. }
+function DefaultsLibraryDbFor(const ADefaults: TContextDefaults; const APlatform: string): string;
+begin
+  Result:= '';
+  for var L: TLibraryDefault in ADefaults.Libraries do
+    if SameText(L.PlatformName, APlatform) then Exit(L.LibraryDb);
+end;
+
+function TLSPServer.Defaults: TContextDefaults;
+begin
+  if not FDefaultsRead then
+  begin
+    FDefaultsRead:= True;
+    if not TryLoadContextDefaults(FDefaults) then FDefaults:= Default(TContextDefaults);
+  end;
+  Result:= FDefaults;
+end;
+
+function TLSPServer.DprojStamp(const AFile: string): string;
+begin
+  Result:= '';
+  try
+    if (AFile <> '') and TFile.Exists(AFile) then
+      Result:= FormatDateTime('yyyymmddhhnnsszzz', TFile.GetLastWriteTime(AFile));
+  except
+    on E: Exception do Result:= ''; // an unreadable stamp only costs a re-resolve
+  end;
+end;
+
+function TLSPServer.FileContext(const APath: string): TLspFileContext;
+var
+  Key  : string;
+  Entry: TCtxEntry;
+begin
+  Key:= LowerCase(APath);
+  if FCtxCache.TryGetValue(Key, Entry) and (Entry.Stamp = DprojStamp(Entry.Ctx.Project)) then Exit(Entry.Ctx);
+  Entry.Ctx  := ComputeFileContext(APath);
+  Entry.Stamp:= DprojStamp(Entry.Ctx.Project);
+  FCtxCache.AddOrSetValue(Key, Entry);
+  Result:= Entry.Ctx;
+end;
+
+function TLSPServer.ComputeFileContext(const APath: string): TLspFileContext;
+var
+  Ctx    : TProjectContext;
+  HaveCtx: Boolean;
+  P, C   : string;
+  LspDefs: TArray<string>;
+  LspNum : TArray<TPair<string, Integer>>;
+  LspSw  : TArray<TPair<string, Boolean>>;
+begin
+  Result       := Default(TLspFileContext);
+  Result.Source:= lcsPlaceholder;
+  Ctx          := Default(TProjectContext);
+  HaveCtx      := False;
+  P:= '';
+  C:= '';
+  { Project: startup > client/IDE > owning .dproj > .dlcontext.json (only when no
+    .dproj owns the file; a stale one falls back to the .dproj it names). }
+  if FStartProject <> '' then
+  begin
+    Result.Project:= ExpandFileName(FStartProject);
+    Result.Source := lcsStartup;
+  end
+  else if FClientProject <> '' then
+  begin
+    Result.Project:= FClientProject;
+    Result.Source := lcsClient;
+    HaveCtx:= FHaveClientCtx;
+    if HaveCtx then Ctx:= FClientCtx;
+  end
+  else
+  begin
+    Result.Project:= TProjectProfileCache.BuildForFile(APath).Dproj;
+    if Result.Project <> '' then Result.Source:= lcsDproj
+    else if FindProjectContextForUnit(APath, Ctx) then
+    begin
+      if Ctx.Stale then
+      begin
+        Result.StaleContextFile:= ContextFileFor(Ctx.SourceFile);
+        Result.Project:= Ctx.SourceFile;
+        Result.Source := lcsDproj;
+      end
+      else
+      begin
+        HaveCtx       := True;
+        Result.Source := lcsContextFile;
+        Result.Project:= if Ctx.Project <> '' then Ctx.Project else Ctx.SourceFile;
+      end;
+    end;
+  end;
+  if SameText(ExtractFileExt(Result.Project), '.dproj') then
+    if not ReadDprojActiveSelection(Result.Project, P, C) then
+    begin
+      P:= '';
+      C:= '';
+    end;
+  if (P = '') and SameText(ExtractFileExt(Result.Project), '.dproj') then
+    if not ReadDelphiLspDefines(Result.Project, P, LspDefs, LspNum, LspSw) then P:= '';
+
+  { Platform: startup > client > context file > the project's active platform >
+    central defaults > placeholder. }
+  if FStartPlatform <> '' then Result.Platform:= FStartPlatform
+  else if FClientPlatform <> '' then Result.Platform:= FClientPlatform
+  else if HaveCtx and (Ctx.PlatformName <> '') then Result.Platform:= Ctx.PlatformName
+  else Result.Platform:= P;
+  if Result.Platform = '' then
+  begin
+    Result.PlatformDefaulted:= True;
+    Result.Platform:= if Defaults.PlatformName <> '' then Defaults.PlatformName else LSP_PLACEHOLDER_PLATFORM;
+    if (Result.Project = '') and (Defaults.PlatformName <> '') then Result.Source:= lcsDefaults;
+  end;
+
+  if FClientConfig <> '' then Result.Config:= FClientConfig
+  else if HaveCtx and (Ctx.Config <> '') then Result.Config:= Ctx.Config
+  else if C <> '' then Result.Config:= C
+  else Result.Config:= Defaults.Config;
+
+  Result.TargetCompiler:= if HaveCtx and (Ctx.TargetCompiler <> '') then Ctx.TargetCompiler else Defaults.TargetCompiler;
+  if HaveCtx then
+  begin
+    Result.ProjectDbOverride:= Ctx.ProjectDb;
+    Result.LibraryDbOverride:= Ctx.LibraryDb;
+  end;
+end;
+
+function TLSPServer.IsLibraryPath(const APath: string): Boolean;
+begin
+  { The convention the caller-scoping rule in HandleHoverBundle has always used. }
+  Result:= LowerCase(ExtractFileName(APath)).StartsWith('library-');
+end;
+
+function TLSPServer.OwningStartupProjectDb(const APath: string): string;
+begin
+  Result:= '';
+  if APath = '' then Exit;
+  for var I:= 0 to High(FStores) do
+    if (I <= High(FStorePaths)) and not IsLibraryPath(FStorePaths[I]) and (FStores[I].FindFileIdByPath(APath) > 0) then
+      Exit(FStorePaths[I]);
+end;
+
+function TLSPServer.StartupLibraryFor(const APlatform: string): string;
+begin
+  Result:= '';
+  for var P: string in FStorePaths do
+    if SameText(ChangeFileExt(ExtractFileName(P), ''), 'library-' + APlatform) then Exit(P);
+end;
+
+function TLSPServer.DbSetFor(const APath: string; const ACtx: TLspFileContext): TLspDbSet;
+var
+  UseResolver: Boolean;
+  Resolved   : TLspDbSet;
+  Key        : string;
+begin
+  Result     := Default(TLspDbSet);
+  Resolved   := Default(TLspDbSet);
+  UseResolver:= Assigned(FDbResolver) and not FExplicitDbs;
+  if UseResolver then
+  begin
+    Key:= LowerCase(ACtx.Project + '|' + ACtx.Platform);
+    if not FResolved.TryGetValue(Key, Resolved) then
+    begin
+      try
+        Resolved:= FDbResolver(ACtx.Project, ACtx.Platform);
+      except
+        on E: Exception do
+        begin
+          Writeln(ErrOutput, 'drag-lint LSP: context DB resolve failed for ', ACtx.Project, ' / ', ACtx.Platform, ': ', E.Message);
+          Resolved:= Default(TLspDbSet);
+        end;
+      end;
+      FResolved.Add(Key, Resolved);
+    end;
+  end;
+
+  { Project DB: the context file's override > the resolved owner of the project >
+    the startup store that owns the file. Never another project's store. }
+  if ACtx.ProjectDbOverride <> '' then Result.ProjectDb:= ACtx.ProjectDbOverride
+  else if UseResolver and (ACtx.Project <> '') then Result.ProjectDb:= Resolved.ProjectDb;
+  if (Result.ProjectDb = '') or not TFile.Exists(Result.ProjectDb) then Result.ProjectDb:= OwningStartupProjectDb(APath);
+
+  { Library DB for the context's platform: an explicit --db library-<platform> >
+    the context file's libraryDb > central libraries.<platform>.libraryDb >
+    resolve-dbs. None -> '' and the caller refuses library answers. }
+  if FExplicitDbs or not UseResolver then Result.LibraryDb:= StartupLibraryFor(ACtx.Platform);
+  if Result.LibraryDb = '' then Result.LibraryDb:= ACtx.LibraryDbOverride;
+  if Result.LibraryDb = '' then Result.LibraryDb:= DefaultsLibraryDbFor(Defaults, ACtx.Platform);
+  if (Result.LibraryDb = '') and UseResolver then Result.LibraryDb:= Resolved.LibraryDb;
+  if (Result.LibraryDb <> '') and not TFile.Exists(Result.LibraryDb) then Result.LibraryDb:= '';
+end;
+
+function TLSPServer.StoreSet(const ADbs: TLspDbSet): TArray<ISymbolStore>;
+var
+  E: TStoreSet;
+  S: ISymbolStore;
+begin
+  E.Key:= LowerCase(ADbs.ProjectDb + '|' + ADbs.LibraryDb);
+  for var I:= 0 to FSets.Count - 1 do
+    if FSets[I].Key = E.Key then
+    begin
+      E:= FSets[I];
+      if I > 0 then
+      begin
+        FSets.Delete(I);
+        FSets.Insert(0, E);
+      end;
+      Exit(E.Stores);
+    end;
+  E.Stores:= nil;
+  E.Paths := nil;
+  for var D: string in [ADbs.ProjectDb, ADbs.LibraryDb] do
+  begin
+    if (D = '') or ((Length(E.Paths) > 0) and SameText(E.Paths[0], D)) then Continue;
+    { Reuse an already open connection: the startup stores, then the cached sets. }
+    S:= nil;
+    for var I:= 0 to High(FStorePaths) do
+      if SameText(FStorePaths[I], D) then S:= FStores[I];
+    if S = nil then
+      for var Cached: TStoreSet in FSets do
+        for var J:= 0 to High(Cached.Paths) do
+          if SameText(Cached.Paths[J], D) then S:= Cached.Stores[J];
+    if S = nil then S:= OpenReaderStore(D);
+    if S = nil then Continue;
+    E.Stores:= E.Stores + [S];
+    E.Paths := E.Paths + [D];
+  end;
+  FSets.Insert(0, E);
+  while FSets.Count > LSP_STORE_SET_LRU do FSets.Delete(FSets.Count - 1);
+  Result:= E.Stores;
+end;
+
+function TLSPServer.StorePathOf(const AStore: ISymbolStore): string;
+begin
+  Result:= '';
+  for var I:= 0 to High(FStores) do
+    if (FStores[I] = AStore) and (I <= High(FStorePaths)) then Exit(FStorePaths[I]);
+  for var Cached: TStoreSet in FSets do
+    for var J:= 0 to High(Cached.Stores) do
+      if Cached.Stores[J] = AStore then Exit(Cached.Paths[J]);
+end;
+
+function TLSPServer.CallerSearchStores(const APath: string): TArray<ISymbolStore>;
+var
+  All: TArray<ISymbolStore>;
+begin
+  All   := StoresForFile(APath);
+  Result:= nil;
+  for var St: ISymbolStore in All do
+    if not IsLibraryPath(StorePathOf(St)) then Result:= Result + [St];
+  if Length(Result) = 0 then Result:= All;
+end;
+
+function TLSPServer.ProjectDbIncompleteReason(const AProjectDb: string): string;
+begin
+  { lf-lsp (docs\superpowers\plans\2026-10-28-library-first-resolve-plan.md 2.5):
+    STUB until ENGINE's lf-ready / lf-marker lanes name the marker meta key and
+    the readiness API. TEST-ONLY seam: run_lsp_context_reindex_guard names a
+    FIXTURE db in DRAGLINT_LSP_TEST_MARK_INCOMPLETE; never set in production. }
+  Result:= '';
+  if AProjectDb = '' then Exit;
+  var Marked: string:= GetEnvironmentVariable('DRAGLINT_LSP_TEST_MARK_INCOMPLETE');
+  { The test marker behaves like the real one: a successful writer run clears it. }
+  var Done: TReindexRun;
+  if (Marked <> '') and SameText(ExpandFileName(Marked), ExpandFileName(AProjectDb)) then
+    if FReindex.TryGetValue(LowerCase(AProjectDb), Done) and (Done.State = risDone) then Exit('')
+    else Exit('needs re-resolve (test marker)');
+  { lf-marker (gaps/lf-marker cb98fe76): schema_meta.library_resolve_state =
+    JSON (state: pending|bound, platform, library, reason, ...); missing or
+    empty = no marker. Only `pending` is incomplete. Key: Core.Versions.LIBRARY_RESOLVE_STATE_META_KEY. }
+  var St: ISymbolStore:= nil;
+  for var I:= 0 to High(FStorePaths) do
+    if SameText(FStorePaths[I], AProjectDb) then St:= FStores[I];
+  if St = nil then
+    for var Cached: TStoreSet in FSets do
+      for var J:= 0 to High(Cached.Paths) do
+        if SameText(Cached.Paths[J], AProjectDb) then St:= Cached.Stores[J];
+  if St = nil then Exit;
+  var Raw: string:= '';
+  try
+    Raw:= St.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY);
+  except
+    on E: Exception do Raw:= ''; { an unreadable marker is no marker; the answers stand }
+  end;
+  if Trim(Raw) = '' then Exit;
+  var V: TJSONValue:= nil;
+  try
+    V:= TJSONObject.ParseJSONValue(Raw);
+    if (V is TJSONObject) and SameText(JsonStrOf(TJSONObject(V), 'state'), 'pending') then
+    begin
+      Result:= 'is resolved without the ' + JsonStrOf(TJSONObject(V), 'platform') + ' library';
+      if JsonStrOf(TJSONObject(V), 'reason') <> '' then Result:= Result + ' (' + JsonStrOf(TJSONObject(V), 'reason') + ')';
+    end;
+  finally
+    V.Free;
+  end;
+end;
+
+function LastLogLine(const ALog: string): string;
+begin
+  Result:= '';
+  try
+    if not TFile.Exists(ALog) then Exit;
+    var Lines: TArray<string>:= TFile.ReadAllLines(ALog);
+    for var I:= High(Lines) downto 0 do
+      if Trim(Lines[I]) <> '' then Exit(Copy(Trim(Lines[I]), 1, LSP_REINDEX_REASON_MAX));
+  except
+    on E: Exception do Result:= ''; { the exit code alone still names the failure }
+  end;
+end;
+
+procedure TLSPServer.StartReindex(const ADb, ADproj: string);
+var
+  Run : TReindexRun;
+  Sa  : TSecurityAttributes;
+  HLog: THandle;
+  HNul: THandle;
+  Si  : TStartupInfo;
+  Pi  : TProcessInformation;
+  Exe : string;
+  Cmd : string;
+begin
+  Run        := Default(TReindexRun);
+  Run.Db     := ADb;
+  Run.Dproj  := ADproj;
+  Run.State  := risFailed;
+  Run.LogPath:= TPath.Combine(TPath.GetTempPath,
+    Format('drag-lint-lsp-reindex-%d-%d.log', [GetCurrentProcessId, FReindex.Count + 1]));
+  FillChar(Sa, SizeOf(Sa), 0);
+  Sa.nLength       := SizeOf(Sa);
+  Sa.bInheritHandle:= True;
+  HLog:= CreateFile(PChar(Run.LogPath), GENERIC_WRITE, FILE_SHARE_READ, @Sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+  HNul:= CreateFile('NUL', GENERIC_READ, FILE_SHARE_READ or FILE_SHARE_WRITE, @Sa, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  try
+    if (HLog = INVALID_HANDLE_VALUE) or (HNul = INVALID_HANDLE_VALUE) then
+      Run.Reason:= 'cannot create ' + Run.LogPath
+    else
+    begin
+      FillChar(Si, SizeOf(Si), 0);
+      Si.cb         := SizeOf(Si);
+      Si.dwFlags    := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
+      Si.wShowWindow:= SW_HIDE;
+      Si.hStdInput  := HNul;
+      Si.hStdOutput := HLog;
+      Si.hStdError  := HLog;
+      { TEST-ONLY override, like DRAGLINT_FULLRULES_CHILD_EXE: the guard points
+        this at a stub so no run ever touches a real project DB. The writer slot
+        is the engine's own (busy timeout / two-writers rule), not ours. }
+      Exe:= GetEnvironmentVariable('DRAGLINT_LSP_REINDEX_EXE');
+      if Exe = '' then Exe:= ParamStr(0);
+      Cmd:= Format('"%s" index --project "%s" --db "%s"', [Exe, ADproj, ADb]);
+      { A batch stub runs through cmd /s /c, which keeps the inner quoting. }
+      if MatchText(ExtractFileExt(Exe), ['.cmd', '.bat']) then
+      begin
+        Cmd:= Format('"%s" /s /c "%s"', [GetEnvironmentVariable('ComSpec'), Cmd]);
+        Exe:= GetEnvironmentVariable('ComSpec');
+      end;
+      UniqueString(Cmd);
+      if CreateProcess(PChar(Exe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then
+      begin
+        CloseHandle(Pi.hThread);
+        Run.Process:= Pi.hProcess;
+        Run.State  := risRunning;
+        Writeln(ErrOutput, 'drag-lint LSP: re-index started (log ', Run.LogPath, '): ', Cmd);
+      end
+      else
+        Run.Reason:= 'cannot start ' + Exe + ': ' + SysErrorMessage(GetLastError);
+    end;
+  finally
+    if HLog <> INVALID_HANDLE_VALUE then CloseHandle(HLog);
+    if HNul <> INVALID_HANDLE_VALUE then CloseHandle(HNul);
+  end;
+  var Key: string:= LowerCase(ADb);
+  FReindex.AddOrSetValue(Key, Run);
+  if Run.State <> risRunning then
+  begin
+    Writeln(ErrOutput, 'drag-lint LSP: re-index NOT started for ', ADb, ': ', Run.Reason);
+    Exit;
+  end;
+  var H: THandle:= Run.Process;
+  var Watcher: TThread:= TThread.CreateAnonymousThread(
+    procedure
+    var
+      Handles: array[0..1] of THandle;
+    begin
+      Handles[0]:= H;
+      Handles[1]:= FStopEvent.Handle;
+      if WaitForMultipleObjects(Length(Handles), @Handles[0], False, INFINITE) <> WAIT_OBJECT_0 then Exit;
+      FWorkLock.Enter;
+      try
+        ReindexFinished(Key);
+      finally
+        FWorkLock.Leave;
+      end;
+    end);
+  Watcher.FreeOnTerminate:= False;
+  FReindexThreads.Add(Watcher);
+  Watcher.Start;
+end;
+
+procedure TLSPServer.ReindexFinished(const AKey: string);
+var
+  Run : TReindexRun;
+  Code: DWORD;
+begin
+  if not FReindex.TryGetValue(AKey, Run) or (Run.Process = 0) then Exit;
+  try
+    Code:= 1;
+    GetExitCodeProcess(Run.Process, Code);
+    CloseHandle(Run.Process);
+    Run.Process:= 0;
+    if Code = 0 then
+    begin
+      Run.State:= risDone;
+      try
+        TFile.Delete(Run.LogPath);
+      except
+        on E: Exception do Run.LogPath:= ''; { a leftover log is harmless }
+      end;
+    end
+    else
+    begin
+      Run.State := risFailed;
+      Run.Reason:= Format('exit %d: %s; log %s', [Code, LastLogLine(Run.LogPath), Run.LogPath]);
+    end;
+    FReindex.AddOrSetValue(AKey, Run);
+    Writeln(ErrOutput, 'drag-lint LSP: re-index of ', Run.Db, ' finished, exit ', Code);
+    { The declared-type session cache is keyed by store INSTANCE; the reopened
+      store may reuse a freed address over changed rows. }
+    ClearPropertyDeclaredTypeCache;
+    { Re-open that DB: drop every cached set holding it (reopened lazily) and
+      swap a startup store in place. }
+    for var I:= FSets.Count - 1 downto 0 do
+      for var P: string in FSets[I].Paths do
+        if SameText(P, Run.Db) then
+        begin
+          FSets.Delete(I);
+          Break;
+        end;
+    for var I:= 0 to High(FStorePaths) do
+      if SameText(FStorePaths[I], Run.Db) then
+      begin
+        var S: ISymbolStore:= OpenReaderStore(Run.Db);
+        if S <> nil then FStores[I]:= S;
+      end;
+    if Length(FStores) > 0 then FStore:= FStores[0];
+    FCtxCache.Clear;
+    { Clear (or state) the notice and republish every open document. }
+    for var Doc: TPair<string, string> in FOpenDocs.ToArray do
+    begin
+      var DocPath: string:= FileFromUri(Doc.Value);
+      PublishDiagnostics(Doc.Value, DocPath);
+      StoresForFile(DocPath);
+      QueueContextNotification(DocPath);
+    end;
+    FlushPending;
+  except
+    on E: Exception do Writeln(ErrOutput, 'drag-lint LSP: re-index completion failed: ', E.ClassName, ': ', E.Message);
+  end;
+end;
+
+function TLSPServer.ContextNotice(const APath: string; const ACtx: TLspFileContext; const ADbs: TLspDbSet;
+  AQueue: Boolean): string;
+var
+  Acc: string;
+
+  procedure Add(const AReason, AText: string);
+  begin
+    Acc:= if Acc = '' then AText else Acc + ' ' + AText;
+    if not AQueue then Exit;
+    var Key: string:= LowerCase(APath) + '|' + AReason;
+    if FNoticed.ContainsKey(Key) then Exit;
+    FNoticed.Add(Key, 1);
+    var Params: TJSONObject:= TJSONObject.Create;
+    Params.AddPair('type'   , TJSONNumber.Create(LSP_MSG_TYPE_WARNING));
+    Params.AddPair('message', AText);
+    QueueNotification('window/showMessage', Params);
+  end;
+
+begin
+  Result:= '';
+  Acc   := '';
+  if APath = '' then Exit;
+  if ACtx.Project = '' then
+    Add('unknown-project', Format('drag-lint: no project is known for %s -- answering from the %s library only. '
+      + 'Name it with draglint.setContext or a .dlcontext.json.', [ExtractFileName(APath), ACtx.Platform]));
+  if ACtx.PlatformDefaulted then
+    Add('default-platform', Format('drag-lint: no platform is known for %s -- using the default %s.',
+      [ExtractFileName(APath), ACtx.Platform]));
+  if ACtx.StaleContextFile <> '' then
+    Add('stale-context', Format('drag-lint: %s is stale (its .dproj changed) -- reading the .dproj instead.',
+      [ExtractFileName(ACtx.StaleContextFile)]));
+  if ADbs.LibraryDb = '' then
+    Add('no-library', Format('drag-lint: no library index for platform %s -- library answers are refused. '
+      + 'Index that library, or set libraries.%s.libraryDb in %s.', [ACtx.Platform, ACtx.Platform, ContextDefaultsFile]));
+  { Library-first resolve (lf-lsp) + owner ruling 2026-10-28: a project DB
+    marked "needs re-resolve" is re-indexed in the background; meanwhile the
+    answers continue, marked incomplete. }
+  var Run: TReindexRun;
+  if (ADbs.ProjectDb <> '') and FReindex.TryGetValue(LowerCase(ADbs.ProjectDb), Run) then
+  begin
+    if Run.State = risRunning then
+      Add('reindex-running', Format('drag-lint: re-index in progress for %s -- answers may be incomplete.',
+        [ExtractFileName(ADbs.ProjectDb)]))
+    else if Run.State = risFailed then
+      Add('reindex-failed', Format('drag-lint: re-index of %s failed (%s) -- answers may be incomplete; not retried.',
+        [ExtractFileName(ADbs.ProjectDb), Run.Reason]))
+    else
+    begin
+      { The run finished but the marker still says pending (e.g. the library
+        was not ready): state it, never start another run. }
+      var StillPending: string:= ProjectDbIncompleteReason(ADbs.ProjectDb);
+      if StillPending <> '' then
+        Add('incomplete', Format('drag-lint: %s %s -- answers may be incomplete.', [ExtractFileName(ADbs.ProjectDb), StillPending]));
+    end;
+  end
+  else if ADbs.ProjectDb <> '' then
+  begin
+    var Incomplete: string:= ProjectDbIncompleteReason(ADbs.ProjectDb);
+    if Incomplete <> '' then
+      if AQueue and FQueueNotices and SameText(ExtractFileExt(ACtx.Project), '.dproj') then
+      begin
+        StartReindex(ADbs.ProjectDb, ACtx.Project);
+        Acc:= ''; { restart the text: the run's state decides the wording now }
+        Result:= ContextNotice(APath, ACtx, ADbs, AQueue);
+        Exit;
+      end
+      else Add('incomplete', Format('drag-lint: %s %s -- answers may be incomplete.', [ExtractFileName(ADbs.ProjectDb), Incomplete]));
+  end;
+  Result:= Acc;
+end;
+
+procedure TLSPServer.QueueNotification(const AMethod: string; AParams: TJSONObject);
+begin
+  if not FQueueNotices then
+  begin
+    AParams.Free; { proxy mode: stdout belongs to the relay, nothing may be written }
+    Exit;
+  end;
+  var Obj: TJSONObject:= TJSONObject.Create;
+  Obj.AddPair('jsonrpc', '2.0');
+  Obj.AddPair('method' , AMethod);
+  Obj.AddPair('params' , AParams);
+  FPending.Add(Obj);
+end;
+
+procedure TLSPServer.QueueContextNotification(const APath: string);
+begin
+  if (APath = '') or not FQueueNotices then Exit;
+  var Ctx: TLspFileContext:= FileContext(APath);
+  var Dbs: TLspDbSet      := DbSetFor(APath, Ctx);
+  var Params: TJSONObject := TJSONObject.Create;
+  Params.AddPair('uri'     , FileToUri(APath));
+  Params.AddPair('project' , Ctx.Project);
+  Params.AddPair('platform', Ctx.Platform);
+  Params.AddPair('config'  , Ctx.Config);
+  Params.AddPair('source'  , LSP_SOURCE_NAMES[Ctx.Source]);
+  Params.AddPair('notice'  , ContextNotice(APath, Ctx, Dbs, False));
+  QueueNotification(LSP_NOTIFY_CONTEXT, Params);
+end;
+
+procedure TLSPServer.FlushPending;
+begin
+  try
+    for var Obj: TJSONObject in FPending do SendRawNotification(Obj);
+  finally
+    FPending.Clear;
+  end;
+end;
+
+procedure TLSPServer.ApplyClientContext(const AObj: TJSONObject);
+var
+  Proj, Plat, Conf: string;
+begin
+  Proj:= JsonStrOf(AObj, 'project');
+  Plat:= JsonStrOf(AObj, 'platform');
+  Conf:= JsonStrOf(AObj, 'config');
+  FHaveClientCtx:= False;
+  FClientCtx    := Default(TProjectContext);
+  { CLIENT contract: `project` may name a .dlcontext.json; its project /
+    platform / config then apply (an explicit platform / config still wins). }
+  if Proj.EndsWith(LSP_CONTEXT_FILE_EXT, True) then
+  begin
+    if TryLoadProjectContext(Proj, FClientCtx) then
+    begin
+      FHaveClientCtx:= True;
+      if FClientCtx.Project <> '' then Proj:= FClientCtx.Project;
+    end
+    else
+      Writeln(ErrOutput, 'drag-lint LSP: client context file not readable, ignored: ', Proj);
+  end;
+  FClientProject := if Proj <> '' then ExpandFileName(Proj) else '';
+  FClientPlatform:= Plat;
+  FClientConfig  := Conf;
+  FCtxCache.Clear;
+  QueueContextNotification(FLastOpenPath);
+end;
+
+procedure TLSPServer.ApplyClientSettingsFile(const AFile: string);
+var
+  Base, Proj, Plat: string;
+  LspDefs: TArray<string>;
+  LspNum : TArray<TPair<string, Integer>>;
+  LspSw  : TArray<TPair<string, Boolean>>;
+begin
+  if AFile = '' then Exit;
+  Base:= ChangeFileExt(ChangeFileExt(AFile, ''), '');   { App.delphilsp.json -> App }
+  Proj:= Base + '.dproj';
+  if not TFile.Exists(Proj) then Proj:= Base + '.dpr';
+  if not TFile.Exists(Proj) then
+  begin
+    Writeln(ErrOutput, 'drag-lint LSP: settingsFile names no project beside it, ignored: ', AFile);
+    Exit;
+  end;
+  if not ReadDelphiLspDefines(Base + '.dproj', Plat, LspDefs, LspNum, LspSw) then Plat:= '';
+  FHaveClientCtx := False;
+  FClientCtx     := Default(TProjectContext);
+  FClientProject := ExpandFileName(Proj);
+  FClientPlatform:= Plat;
+  FClientConfig  := '';
+  FCtxCache.Clear;
+  QueueContextNotification(FLastOpenPath);
+end;
+
+function TLSPServer.HandleSetContext(const AId: TJSONValue; const AParams: TJSONObject): Boolean;
+var
+  Args: TJSONValue;
+  Obj : TJSONObject;
+begin
+  Result:= JsonStrOf(AParams, 'command') = LSP_CMD_SET_CONTEXT;
+  if not Result then Exit;
+  Obj := nil;
+  Args:= AParams.GetValue('arguments');
+  if (Args is TJSONArray) and (TJSONArray(Args).Count > 0) and (TJSONArray(Args).Items[0] is TJSONObject) then
+    Obj:= TJSONObject(TJSONArray(Args).Items[0]);
+  if Obj = nil then
+  begin
+    if AId <> nil then
+      SendError(AId, LSP_ERR_INVALID_PARAMS, LSP_CMD_SET_CONTEXT + ' expects arguments [{project, platform, config}]');
+    Exit;
+  end;
+  ApplyClientContext(Obj);
+  if AId <> nil then SendResult(AId, nil);
+end;
+
+procedure TLSPServer.HandleDidChangeConfiguration(const AParams: TJSONObject);
+var
+  Settings: TJSONValue;
+  Section : TJSONValue;
+begin
+  if AParams = nil then Exit;
+  Settings:= AParams.GetValue('settings');
+  if not (Settings is TJSONObject) then Exit;
+  Section:= TJSONObject(Settings).GetValue(LSP_CONFIG_SECTION);
+  if (Section is TJSONObject) and HasContextKeys(TJSONObject(Section)) then ApplyClientContext(TJSONObject(Section))
+  else if JsonStrOf(TJSONObject(Settings), 'settingsFile') <> '' then
+    ApplyClientSettingsFile(FileFromUri(JsonStrOf(TJSONObject(Settings), 'settingsFile')));
+end;
+
+function TLSPServer.ContextFooter(const APath: string): string;
+var
+  Ctx: TLspFileContext;
+begin
+  Ctx   := FileContext(APath);
+  Result:= 'context: ' + (if Ctx.Project = '' then 'none' else ExtractFileName(Ctx.Project)) + ' -- ' + Ctx.Platform
+    + (if Ctx.PlatformDefaulted then ' [default]' else '');
+  var Notice: string:= ContextNotice(APath, Ctx, DbSetFor(APath, Ctx), False);
+  if Notice <> '' then Result:= Result + #10#10 + Notice;
+end;
+
 function TLSPServer.StoresForFile(const APath: string): TArray<ISymbolStore>;
 var
   Stamp: TDateTime;
+  Ctx  : TLspFileContext;
+  Dbs  : TLspDbSet;
 begin
   Result:= FStores;
   if APath = '' then Exit;
-  { The overwhelmingly common case: a file the project or library index owns.
-    Nothing below runs, and the request is answered exactly as before. }
-  if AnyStoreOwns(APath) then Exit;
+  { LSP-1 CORE: the file's context set -- its project's DB + its platform's
+    library -- replaces the startup list; another project's store never answers. }
+  Ctx:= FileContext(APath);
+  Dbs:= DbSetFor(APath, Ctx);
+  ContextNotice(APath, Ctx, Dbs, True);
+  Result:= StoreSet(Dbs);
+  { The overwhelmingly common case: a file the project index owns. Nothing
+    below runs. }
+  for var St: ISymbolStore in Result do
+    if St.FindFileIdByPath(APath) > 0 then Exit;
   if not TFile.Exists(APath) then Exit;
 
   { Kept in step with TDelphi13Parser.FileExtensions, which is the authority.
@@ -2393,9 +3351,9 @@ begin
     if not BuildEphemeralStore(APath, Stamp) then Exit;
 
   { PREPENDED, not substituted. TTypeAtResolver.Resolve picks as its Primary the
-    first store that owns the file, so this makes the anchor exist; every store
-    that answered before still answers, just behind it. }
-  Result:= TArray<ISymbolStore>.Create(FEphemStore) + FStores;
+    first store that owns the file, so this makes the anchor exist; the context
+    set still answers, just behind it. }
+  Result:= TArray<ISymbolStore>.Create(FEphemStore) + Result;
 end; // function
 
 
@@ -2657,7 +3615,8 @@ begin
     // mirroring a default `document` run.
     var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel, LoadDocHandlesOptions); { gap 3: the SAME 'Catches:' knob document writes with }
     var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
-    MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines);
+    MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines,
+      FormatDeclaredType(DescribeDeclaredType(Sel, HitStore)));
   end
   else
   begin
@@ -2750,7 +3709,7 @@ begin
       for Sym in Filtered do
       begin
         Sb.AppendLine(Format('- `%s` - line %d', [Sym.QualifiedName, Sym.StartLine]));
-        Sb.AppendLine('    ' + DeclLineFor(Sym));
+        Sb.AppendLine('    ' + DeclLineFor(Sym, HitStore));
         { v0.43: break the signature into an IDE-style Parameters block
           (name + type per line, + Returns). Only for a focused candidate
           set so a 50-hit common member doesn't explode the popup. }
@@ -2821,6 +3780,11 @@ begin
     SendResult(AId, nil); { result: null }
     Exit;
   end;
+  { LSP-1 CORE: the footer names the context the answer came from (SPEC 3). }
+  var FooterPath: string;
+  var FooterLine, FooterCol: Integer;
+  if PositionParams(AParams, FooterPath, FooterLine, FooterCol) then
+    Comp.MdValue:= Comp.MdValue + #10#10'---'#10#10 + ContextFooter(FooterPath);
   HoverObj:= TJSONObject.Create;
   Contents:= TJSONObject.Create;
   Contents.AddPair('kind'    , 'markdown' );
@@ -2908,78 +3872,171 @@ begin
 end;
 
 function TLSPServer.ComputeCallerCounts(const APath: string): TJSONArray;
+{ PERFORMANCE (INBOX-ide-hang-on-slow-engine section 2, 2026-10-29). The first
+  version asked FindCallersByName ONCE PER ROUTINE and resolved GetFilePath ONCE
+  PER RETURNED ROW. DevExpress dxBar.pas from the platform library: 4,256
+  routines but 2,740 distinct names (84 `Create`s each re-fetched all 43,001
+  `Create` refs), so 4.25 million rows and 4.25 million one-row path queries --
+  13 minutes, during which the serial loop answered nothing. Now:
+
+    * the work is keyed by (store, lowercased name), so a name is asked ONCE
+      however many routines share it;
+    * a line declared by ONE name in ONE store -- nearly every line -- gets its
+      count from CountCallerSitesByNames, NAME_BATCH names per statement, no
+      rows materialised (dxBar: 413 ms warm);
+    * only a line with several keys (the same file in two stores, S1; or two
+      routines on one line) still unions real sites, once per distinct key set,
+      with each store's file paths cached;
+    * between batches the loop serves waiting hovers (YieldToPendingRequests),
+      so even a cold page cache cannot queue a tooltip behind this. }
+const
+  NAME_BATCH     = 64;   { names per CountCallerSitesByNames statement; a hover waits at most one batch }
+  FILE_KEY_SHIFT = 40;   { Paths key: store index above bit 40, file id below (ids stay far under 2^40) }
 var
-  Arr   : TJSONArray ;
-  Path  : string     ;
-  Syms  : TArray<TSymbol>;
-  St    : ISymbolStore;
-  Sites : TObjectDictionary<Integer, TDictionary<string, Byte>>;   { decl line -> distinct (file:line) call sites }
-  Lines : TDictionary<string, Byte>;
+  Arr     : TJSONArray;
+  Path    : string    ;
+  Decl    : TObjectDictionary<Integer, TStringList>;   { decl line -> distinct 'store:lowername' keys }
+  KeyCount: TDictionary<string, Integer>;              { single-key lines: key -> distinct sites }
+  SetCount: TDictionary<string, Integer>;              { multi-key lines: key set -> distinct sites }
+  Batches : TObjectDictionary<Integer, TList<string>>; { store index -> names to count }
+  Paths   : TDictionary<Int64, string>;                { store index shl 40 + file id -> lowercased path }
+  Lines   : TList<Integer>;
+  Stores  : TArray<ISymbolStore>;                   { LSP-1 CORE: the file's context set, not every startup store }
+
+  function StoreOf(const AKey: string): Integer;
+  begin
+    Result:= StrToInt(Copy(AKey, 1, Pos(':', AKey) - 1));
+  end;
+
+  function NameOf(const AKey: string): string;
+  begin
+    Result:= Copy(AKey, Pos(':', AKey) + 1, MaxInt);
+  end;
+
+  { Distinct (path, line) sites over every key of one line -- the S1 dedup. }
+  function UnionCount(const AKeys: TStringList): Integer;
+  var
+    Sites: TDictionary<string, Byte>;
+  begin
+    Sites:= TDictionary<string, Byte>.Create;
+    try
+      for var K: string in AKeys do
+      begin
+        var SI: Integer:= StoreOf(K);
+        var St: ISymbolStore:= Stores[SI];
+        for var R: TReference in St.FindCallersByName(NameOf(K)) do
+        begin
+          var PKey: Int64:= (Int64(SI) shl FILE_KEY_SHIFT) + R.FileId;
+          var P: string;
+          if not Paths.TryGetValue(PKey, P) then
+          begin
+            P:= LowerCase(St.GetFilePath(R.FileId));
+            Paths.Add(PKey, P);
+          end;
+          Sites.AddOrSetValue(P + ':' + IntToStr(R.StartLine), 1);
+        end;
+      end;
+      Result:= Sites.Count;
+    finally
+      Sites.Free;
+    end;
+  end;
+
 begin
   Arr:= TJSONArray.Create;
   try
     Path:= APath;
+    Stores:= StoresForFile(Path);
 
     { A file this index does not know is not an error -- it is a file with no
       lenses. An empty array says that unambiguously; an error would make the
       client retry something that will never succeed. }
     if Path <> '' then
     begin
-      Sites:= TObjectDictionary<Integer, TDictionary<string, Byte>>.Create([doOwnsValues]);
+      Decl    := TObjectDictionary<Integer, TStringList>.Create([doOwnsValues]);
+      KeyCount:= TDictionary<string, Integer>.Create;
+      SetCount:= TDictionary<string, Integer>.Create;
+      Batches := TObjectDictionary<Integer, TList<string>>.Create([doOwnsValues]);
+      Paths   := TDictionary<Int64, string>.Create;
+      Lines   := TList<Integer>.Create;
       try
-        for St in FStores do
+        { ROUTINES ONLY, keyed per DECLARATION LINE (S1), across the file's context set (LSP-1 CORE). }
+        for var SI: Integer:= 0 to High(Stores) do
         begin
-          if St = nil then Continue;
-          Syms:= St.FindSymbolsByFile(Path);
-          for var Sym: TSymbol in Syms do
+          if Stores[SI] = nil then Continue;
+          for var Sym: TSymbol in Stores[SI].FindSymbolsByFile(Path) do
           begin
-            if not (Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) then Continue;
+            if Sym.Kind not in [skProcedure, skFunction, skMethod, skConstructor, skDestructor] then Continue;
             if Sym.StartLine <= 0 then Continue;
-            { ONE PER CALL SITE, not one per reference. FindCallersByName returns
-              BOTH a 'call' and a 'member-access' ref for `T.Thrice;`, so a raw
-              Length() reports three calls as six. The CLI's text output happens
-              to collapse them per line, which is why the plugin's old
-              line-counting parser got the right number -- by accident of the
-              formatting, not by asking for it. Deduplicating on (file, line)
-              asks for it, and keeps a reference that is not a call: a caller the
-              user can navigate to is a caller.
-
-              Counted across EVERY open store, because a caller in another
-              project still calls this routine. }
-            { S1: the distinct sites are kept PER DECLARATION LINE across every
-              store and symbol, so the count equals the number of rows
-              workspace/executeCommand draglint.showCallers answers (which
-              dedups the same way). Summing per-store counts double-counted a
-              site seen in two stores. }
-            if not Sites.TryGetValue(Sym.StartLine, Lines) then
+            var Keys: TStringList;
+            if not Decl.TryGetValue(Sym.StartLine, Keys) then
             begin
-              Lines:= TDictionary<string, Byte>.Create;
-              Sites.Add(Sym.StartLine, Lines);
+              Keys:= TStringList.Create;
+              Keys.Sorted    := True;
+              Keys.Duplicates:= dupIgnore;
+              Decl.Add(Sym.StartLine, Keys);
             end;
-            for var R: TReference in St.FindCallersByName(Sym.Name) do
-              Lines.AddOrSetValue(LowerCase(St.GetFilePath(R.FileId)) + ':' + IntToStr(R.StartLine), 1);
+            Keys.Add(IntToStr(SI) + ':' + LowerCase(Sym.Name));
           end;
         end;
+
+        { The fast path: one key on the line, its count from the aggregate. }
+        for var Keys: TStringList in Decl.Values do
+          if (Keys.Count = 1) and not KeyCount.ContainsKey(Keys[0]) then
+          begin
+            KeyCount.Add(Keys[0], 0);
+            var SI: Integer:= StoreOf(Keys[0]);
+            var Names: TList<string>;
+            if not Batches.TryGetValue(SI, Names) then
+            begin
+              Names:= TList<string>.Create;
+              Batches.Add(SI, Names);
+            end;
+            Names.Add(NameOf(Keys[0]));
+          end;
+        for var SI: Integer in Batches.Keys do
+        begin
+          var Names: TArray<string>:= Batches[SI].ToArray;
+          var B: Integer:= 0;
+          while B < Length(Names) do
+          begin
+            YieldToPendingRequests;
+            var Slice: TArray<string>:= Copy(Names, B, NAME_BATCH);
+            var Got: TArray<Integer>:= Stores[SI].CountCallerSitesByNames(Slice);
+            for var I: Integer:= 0 to High(Slice) do KeyCount[IntToStr(SI) + ':' + Slice[I]]:= Got[I];
+            Inc(B, NAME_BATCH);
+          end;
+        end;
+
+        { The exact path: several keys on the line, union their real sites. }
+        for var Keys: TStringList in Decl.Values do
+          if (Keys.Count > 1) and not SetCount.ContainsKey(Keys.CommaText) then
+          begin
+            YieldToPendingRequests;
+            SetCount.Add(Keys.CommaText, UnionCount(Keys));
+          end;
 
         { S2: SOURCE order, not dictionary enumeration order. }
-        var Keys: TList<Integer>:= TList<Integer>.Create(Sites.Keys);
-        try
-          Keys.Sort;
-          for var Key: Integer in Keys do
-          begin
-            var Item: TJSONObject:= TJSONObject.Create;
-            { 0-BASED, matching LSP convention. The store is 1-based and the
-              plugin's cache is 0-based; converting HERE means exactly one place
-              knows about the offset. }
-            Item.AddPair('line' , TJSONNumber.Create(Key - 1));
-            Item.AddPair('count', TJSONNumber.Create(Sites[Key].Count));
-            Arr.AddElement(Item);
-          end;
-        finally
-          Keys.Free;
+        Lines.AddRange(Decl.Keys);
+        Lines.Sort;
+        for var Line: Integer in Lines do
+        begin
+          var Keys: TStringList:= Decl[Line];
+          var Item: TJSONObject:= TJSONObject.Create;
+          { 0-BASED, matching LSP convention. The store is 1-based and the
+            plugin's cache is 0-based; converting HERE means exactly one place
+            knows about the offset. }
+          Item.AddPair('line' , TJSONNumber.Create(Line - 1));
+          Item.AddPair('count', TJSONNumber.Create(if Keys.Count = 1 then KeyCount[Keys[0]] else SetCount[Keys.CommaText]));
+          Arr.AddElement(Item);
         end;
       finally
-        Sites.Free;
+        Lines.Free;
+        Paths.Free;
+        Batches.Free;
+        SetCount.Free;
+        KeyCount.Free;
+        Decl.Free;
       end;
     end;
   except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
@@ -2987,6 +4044,77 @@ begin
     raise;
   end;
   Result:= Arr;
+end;
+
+function TLSPServer.InputPending: Boolean;
+var
+  H    : THandle;
+  Avail: DWORD  ;
+begin
+  Result:= False;
+  if FInputEnded or (FStdIn = nil) then Exit;
+  H:= FStdIn.Handle;
+  case GetFileType(H) of
+    FILE_TYPE_PIPE: Result:= PeekNamedPipe(H, nil, 0, nil, @Avail, nil) and (Avail > 0);
+    { A redirected FILE (the battery's stdin): readable without blocking while
+      the position is short of the end. }
+    FILE_TYPE_DISK: Result:= FStdIn.Position < FStdIn.Size;
+  end;
+end;
+
+procedure TLSPServer.YieldToPendingRequests;
+{ WHY A YIELD AND NOT A WORKER THREAD. A worker would need its own connection to
+  every store (FireDAC connections are not shared across threads), opening a
+  3 GB library DB a second time, and every handler's state made thread-safe.
+  The loop is single-threaded by design; the defect was only that ONE request
+  could hold it for minutes. Serving waiting hovers at batch boundaries bounds
+  hover latency by one batch with no new concurrency at all.
+
+  WHICH METHODS. Read-only, cheap, latency-visible ones: hover, hoverBundle,
+  definition, and $/cancelRequest (a notification with nothing to answer).
+  Everything else -- didChange, shutdown, another callerCounts -- is deferred
+  to Run, and once anything is deferred nothing later is served early. }
+var
+  Msg   : TJSONObject;
+  Method: string     ;
+begin
+  if FYielding or (FDeferred.Count > 0) then Exit;
+  FYielding:= True;
+  try
+    while (FDeferred.Count = 0) and InputPending do
+    begin
+      Msg:= ReadMessage;
+      if Msg = nil then
+      begin
+        FInputEnded:= True;
+        Break;
+      end;
+      Method:= if Msg.GetValue('method') <> nil then Msg.GetValue('method').Value else '';
+      if (Method = 'textDocument/hover') or (Method = 'draglint/hoverBundle') or
+         (Method = 'textDocument/definition') or (Method = '$/cancelRequest') then
+      begin
+        try
+          try
+            DispatchMessage(Msg);
+          except
+            { Isolated like a feature (S8): a hover raising here must not abort
+              the long request it interrupted. stderr only -- stdout is the protocol. }
+            on E: Exception do
+            begin
+              Writeln(ErrOutput, 'drag-lint LSP: ', Method, ' (served during a yield) raised ', E.ClassName, ': ', E.Message);
+              if Msg.GetValue('id') <> nil then
+                SendError(Msg.GetValue('id'), LSP_ERR_INTERNAL, 'internal error in ' + Method + ': ' + E.ClassName + ': ' + E.Message);
+            end;
+          end;
+        finally
+          Msg.Free;
+        end;
+      end
+      else FDeferred.Enqueue(Msg);
+    end;
+  finally
+    FYielding:= False;
+  end;
 end;
 
 procedure TLSPServer.HandleUsages(const AId: TJSONValue; const AParams: TJSONObject);
@@ -3034,7 +4162,7 @@ var
   L      : TImpactLevel  ;
   DeclO  : TJSONObject   ;
 
-  procedure AddRefRow(AArr: TJSONArray; const AFile: string; ALine, ACol: Integer);
+  procedure AddRefRow(AArr: TJSONArray; const AFile: string; ALine, ACol: Integer; const AResolution: string);
   var
     O: TJSONObject;
   begin
@@ -3042,6 +4170,7 @@ var
     O.AddPair('file', AFile);
     O.AddPair('line', TJSONNumber.Create(ALine));
     O.AddPair('col' , TJSONNumber.Create(ACol ));
+    if AResolution <> '' then O.AddPair('resolution', AResolution); { XERJ item 3: LAST key, as the CLI }
     AArr.AddElement(O);
   end;
 
@@ -3120,7 +4249,7 @@ begin
         JDecls.AddElement(DeclO);
       end;
       for R in UsageRefsForName(St, Nm, Decls) do
-        AddRefRow(GroupFor(R), St.GetFilePath(R.FileId), R.StartLine, R.StartCol);
+        AddRefRow(GroupFor(R), St.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
       if Width = 'very-wide' then
         for L in St.FindTransitiveCallers(Nm, Depth) do
         begin
@@ -3273,19 +4402,12 @@ begin
       them would leave nothing to search -- a hover on a purely library symbol.
       This rule used to live in the plugin, which had to guess from file names;
       here the store list itself is the answer. }
+    { LSP-1 CORE: from the hovered file's context set, never another project's store. }
+    var BundlePath: string;
+    var BundleLine, BundleCol: Integer;
     var Search: TArray<ISymbolStore>;
-    SetLength(Search, 0);
-    for var i:= 0 to High(FStores) do
-    begin
-      var IsLib: Boolean:= (i <= High(FStorePaths))
-        and (Pos('library-', LowerCase(ExtractFileName(FStorePaths[i]))) > 0);
-      if not IsLib then
-      begin
-        SetLength(Search, Length(Search) + 1);
-        Search[High(Search)]:= FStores[i];
-      end;
-    end;
-    if Length(Search) = 0 then Search:= FStores;
+    if PositionParams(AParams, BundlePath, BundleLine, BundleCol) then Search:= CallerSearchStores(BundlePath)
+    else Search:= FStores;
 
     { A PARAMETER or LOCAL cannot be referenced outside the routine that
       declares it, so every row must come from that routine's own body -- and
@@ -3562,6 +4684,22 @@ begin
     try
       { Build code actions for the given range and diagnostics. }
       Actions:= TLspCompletion.BuildCodeActions(Path, StartLine, StartCol, EndLine, EndCol, Diags);
+      { unit-missing-from-uses quick-fixes, recomputed from the stores rather than read
+        from the client's copy (a client may drop diagnostic data), placed first. }
+      var MuDiags: TJSONArray:= TLspCompletion.BuildMissingUsesDiagnostics(Path, StoresForFile(Path));
+      try
+        var MuActs: TJSONArray:= TLspCompletion.BuildMissingUsesActions(Path, StartLine, EndLine, MuDiags);
+        try
+          for var J:= 0 to Actions.Count - 1 do MuActs.AddElement(Actions.Items[J].Clone as TJSONValue);
+          Actions.Free;
+          Actions:= MuActs;
+          MuActs := nil;
+        finally
+          MuActs.Free;
+        end;
+      finally
+        MuDiags.Free;
+      end;
       Reply.AddPair('result', Actions);
     finally
       if Context = nil then Diags.Free; { only free if we built it; context owns it }
@@ -3578,15 +4716,16 @@ var
   TextDoc  : TJSONObject;
   Uri      : string     ;
   Path     : string     ;
-  Diags    : TJSONArray ;
-  Notif    : TJSONObject;
-  ParamsObj: TJSONObject;
 begin
   if AParams = nil then Exit;
   TextDoc:= AParams.GetValue('textDocument') as TJSONObject;
   if TextDoc = nil then Exit;
   Uri:= TextDoc.GetValue('uri').Value;
   Path:= FileFromUri(Uri);
+  { LSP-1 CORE: announce the file's context (status bar) and its notices once. }
+  FLastOpenPath:= Path;
+  StoresForFile(Path);
+  QueueContextNotification(Path);
   { v(live-buffer): didOpen carries the buffer's text, and didSave may. Seed the
     overlay from it so the very first hover in a session is buffer-accurate
     without waiting for an edit. On didSave WITHOUT text the buffer now equals
@@ -3597,6 +4736,20 @@ begin
     TLiveDocuments.SetText(Path, OpenText.Value)
   else
     TLiveDocuments.Remove(Path);
+  FOpenDocs.AddOrSetValue(LowerCase(Path), Uri);
+  PublishDiagnostics(Uri, Path);
+end; // procedure
+
+procedure TLSPServer.PublishDiagnostics(const AUri, APath: string);
+var
+  Uri      : string     ;
+  Path     : string     ;
+  Diags    : TJSONArray ;
+  Notif    : TJSONObject;
+  ParamsObj: TJSONObject;
+begin
+  Uri := AUri;
+  Path:= APath;
   // v0.26: pass FStore so compiler_findings are merged into publishDiagnostics.
   Diags:= TLspCompletion.BuildDiagnostics(EnsureLinter, Path, FStore);
   if FFullRules then
@@ -3619,6 +4772,20 @@ begin
     else
       Writeln(ErrOutput, 'drag-lint lsp: full-rules fallback to the subset (timeout, failed run or invalid JSON): ', Path);
     Writeln(ErrOutput, Format('drag-lint lsp: full-rules %s %d ms %d findings', [Path, GetTickCount64 - Started, Diags.Count]));
+  end;
+  { unit-missing-from-uses needs the file's project store AND the platform library
+    (StoresForFile), which BuildDiagnostics' single store cannot give it; built here,
+    with the uses edits as data for the codeAction. Replaces any copy the --full-rules
+    child produced (that one carries no data). }
+  var MissingUses: TJSONArray:= TLspCompletion.BuildMissingUsesDiagnostics(Path, StoresForFile(Path));
+  try
+    for var K:= Diags.Count - 1 downto 0 do
+      if SameText((Diags.Items[K] as TJSONObject).GetValue<string>('code', ''), MISSING_USES_RULE) then
+        Diags.Remove(K).Free;
+    for var J:= 0 to MissingUses.Count - 1 do
+      Diags.AddElement(MissingUses.Items[J].Clone as TJSONValue);
+  finally
+    MissingUses.Free;
   end;
   { No store owns the file (e.g. another worktree's copy): its findings are not backed by
     a project index, so say so in the source tag. Owned files keep 'drag-lint'. }
@@ -3779,14 +4946,64 @@ begin
   if AParams = nil then Exit;
   TextDoc:= AParams.GetValue('textDocument') as TJSONObject;
   if TextDoc = nil then Exit;
-  var ClosedPath: string:= FileFromUri(TextDoc.GetValue('uri').Value);
+  var ClosedUri: string:= TextDoc.GetValue('uri').Value;
+  var ClosedPath: string:= FileFromUri(ClosedUri);
   TLiveDocuments.Remove(ClosedPath);
   TProjectProfileCache.Forget(ClosedPath); // LSP C10: keep the file -> .dproj memo bounded to open files
+  FCtxCache.Remove(LowerCase(ClosedPath)); // LSP-1 CORE: same bound for the context memo
+  FOpenDocs.Remove(LowerCase(ClosedPath));
   { INBOX-lsp-hover-unindexed-file: the ephemeral index exists only to answer
     hovers in ONE file. Once that buffer is gone it is dead weight holding a
     temp database open, so it is evicted with the overlay and for the same
     reason. }
   if (ClosedPath <> '') and SameText(ClosedPath, FEphemFile) then DropEphemeralStore;
+  PublishEmptyDiagnostics(ClosedUri); // stale Problems entries: the client keeps the last publish until told otherwise
+end; // procedure
+
+procedure TLSPServer.PublishEmptyDiagnostics(const AUri: string);
+var
+  Notif, ParamsObj: TJSONObject;
+begin
+  Notif:= TJSONObject.Create;
+  try
+    Notif.AddPair('jsonrpc', '2.0');
+    Notif.AddPair('method', 'textDocument/publishDiagnostics');
+    ParamsObj:= TJSONObject.Create;
+    ParamsObj.AddPair('uri', AUri);
+    ParamsObj.AddPair('diagnostics', TJSONArray.Create);
+    Notif.AddPair('params', ParamsObj);
+    SendRawNotification(Notif);
+  finally
+    Notif.Free;
+  end;
+end; // procedure
+
+procedure TLSPServer.HandleDidChangeWatchedFiles(const AParams: TJSONObject);
+{ A deleted file (e.g. a removed git worktree) is never didClose'd, so without this its
+  last diagnostics stay in the client's Problems panel forever. }
+const
+  FILE_CHANGE_DELETED = 3; // LSP FileChangeType.Deleted
+var
+  Changes: TJSONArray;
+  Item: TJSONValue;
+  Entry: TJSONObject;
+  DelUri, DelPath: string;
+begin
+  if AParams = nil then Exit;
+  Changes:= AParams.GetValue('changes') as TJSONArray;
+  if Changes = nil then Exit;
+  for Item in Changes do
+  begin
+    Entry:= Item as TJSONObject;
+    if (Entry = nil) or (Entry.GetValue<Integer>('type', 0) <> FILE_CHANGE_DELETED) then Continue;
+    DelUri:= Entry.GetValue<string>('uri', '');
+    if DelUri = '' then Continue;
+    DelPath:= FileFromUri(DelUri);
+    TLiveDocuments.Remove(DelPath);
+    TProjectProfileCache.Forget(DelPath);
+    if (DelPath <> '') and SameText(DelPath, FEphemFile) then DropEphemeralStore;
+    PublishEmptyDiagnostics(DelUri);
+  end;
 end; // procedure
 
 function TLSPServer.StandDownTaken: Boolean;
@@ -3806,15 +5023,73 @@ begin
   end;
 end;
 
-procedure TLSPServer.Run;
+function TLSPServer.DispatchMessage(const AMsg: TJSONObject): Boolean;  // dl:ok cognitive-complexity@f917 -- the former Run body moved verbatim: one flat method-name dispatch chain, each branch a one-line delegate
 var
-  Msg      : TJSONObject;
   Method   : string     ;
   Id       : TJSONValue ;
   Params   : TJSONObject;
   ParamsVal: TJSONValue ;
   Feature  : TLspFeature;
 begin
+  Result:= True;
+  Method:= if AMsg.GetValue('method') <> nil then AMsg.GetValue('method').Value else '';
+  Id       := AMsg.GetValue('id'    );
+  ParamsVal:= AMsg.GetValue('params');
+  Params:= if ParamsVal is TJSONObject then TJSONObject(ParamsVal) else nil;
+
+  if Method      = 'initialize' then HandleInitialize(Id, Params)
+  else if Method = 'initialized' then
+    // notification, no response
+  else if Method = 'shutdown' then HandleShutdown(Id)
+  else if Method = 'exit' then Result:= False
+  else if Method = 'workspace/symbol' then HandleWorkspaceSymbol(Id, Params)
+  else if Method = 'textDocument/definition' then HandleDefinition(Id, Params)
+  else if Method = 'textDocument/references' then HandleReferences(Id, Params)
+  else if Method = 'textDocument/hover' then HandleHover(Id, Params)
+  { Custom, hence the vendor prefix: one reply carrying hover markdown, the
+    structured model and both caller row sets. An engine that predates it
+    answers -32601 through the catch-all below, immediately, so a client can
+    detect absence in one round trip instead of waiting for a timeout. }
+  else if Method = 'draglint/hoverBundle' then HandleHoverBundle(Id, Params)
+  else if Method = 'draglint/callerCounts' then HandleCallerCounts(Id, Params)
+  else if Method = 'draglint/usages' then HandleUsages(Id, Params)
+  else if Method = 'textDocument/completion' then HandleCompletion(Id, Params)
+  else if Method = 'textDocument/signatureHelp' then HandleSignatureHelp(Id, Params)
+  else if Method = 'textDocument/codeAction' then HandleCodeAction(Id, Params)
+  else if Method = 'textDocument/didOpen' then HandleDidOpenOrSave(Params)
+  else if Method = 'textDocument/didSave' then HandleDidOpenOrSave(Params)
+  else if Method = 'textDocument/didChange' then HandleDidChange(Params)
+  else if Method = 'textDocument/didClose' then HandleDidClose(Params)
+  else if Method = 'workspace/didChangeWatchedFiles' then HandleDidChangeWatchedFiles(Params)
+  else if Method = 'workspace/didChangeConfiguration' then HandleDidChangeConfiguration(Params)
+  else if (Method = 'workspace/executeCommand') and HandleSetContext(Id, Params) then
+    // LSP-1 CORE: draglint.setContext answered; other commands fall through to the feature
+  { S0: registered features, tried after every built-in and before the
+    catch-all, so an unknown method still answers -32601. }
+  else if FFeatureByMethod.TryGetValue(Method, Feature) then
+  begin
+    { S8: exception isolation. One feature raising answers THIS request with
+      -32603 (internal error) and leaves the server alive for the next. }
+    try
+      Feature.Handle(FContext, Method, Id, Params);
+    except
+      on E: Exception do
+      begin
+        { stderr only -- stdout is the protocol channel. A notification (Id = nil) has no reply, so this is its only trace. }
+        Writeln(ErrOutput, 'drag-lint LSP: feature ', Method, ' raised ', E.ClassName, ': ', E.Message);
+        if Id <> nil then SendError(Id, LSP_ERR_INTERNAL, 'internal error in ' + Method + ': ' + E.ClassName + ': ' + E.Message);
+      end;
+    end;
+  end
+  else if (Id <> nil) and (Method <> '') then SendError(Id, LSP_ERR_METHOD_NOT_FOUND, 'method not found: ' + Method);
+end;
+
+procedure TLSPServer.Run;
+var
+  Msg   : TJSONObject;
+  Method: string     ;
+begin
+  FQueueNotices:= True; { LSP-1 CORE: stdout is ours here (never in proxy mode) }
   while not FShuttingDown do
   begin
     { W3 control channel: a stand-down taken here (after a handler ran while
@@ -3824,60 +5099,24 @@ begin
       the listener that cancelling is safe, i.e. the pending I/O is stdin's and
       not a SQLite page read inside a handler. }
     if StandDownTaken then Break;
-    Msg:= ReadMessageGuarded;
+    { Yield: what a long request read but did not serve comes first, in
+      arrival order; an EOF met during a yield ends the loop once it is drained. }
+    Msg:= nil;
+    if FDeferred.Count > 0 then Msg:= FDeferred.Dequeue
+    else if not FInputEnded then Msg:= ReadMessageGuarded;
     if Msg = nil then Break;
+    FWorkLock.Enter; { LSP-1 CORE: a finishing re-index waits for this request }
     try
-      Method:= '';
-      if Msg.GetValue('method') <> nil then Method:= Msg.GetValue('method').Value;
-      Id       := Msg.GetValue('id'    );
-      ParamsVal:= Msg.GetValue('params');
-      if ParamsVal is TJSONObject then Params:= TJSONObject(ParamsVal)
-      else Params:= nil;
+      Method:= if Msg.GetValue('method') <> nil then Msg.GetValue('method').Value else '';
       if FControl <> nil then FControl.BeginWork(Method);
-
-      if Method      = 'initialize' then HandleInitialize(Id, Params)
-      else if Method = 'initialized' then
-        // notification, no response
-      else if Method = 'shutdown' then HandleShutdown(Id)
-      else if Method = 'exit' then Break
-      else if Method = 'workspace/symbol' then HandleWorkspaceSymbol(Id, Params)
-      else if Method = 'textDocument/definition' then HandleDefinition(Id, Params)
-      else if Method = 'textDocument/references' then HandleReferences(Id, Params)
-      else if Method = 'textDocument/hover' then HandleHover(Id, Params)
-      { Custom, hence the vendor prefix: one reply carrying hover markdown, the
-        structured model and both caller row sets. An engine that predates it
-        answers -32601 through the catch-all below, immediately, so a client can
-        detect absence in one round trip instead of waiting for a timeout. }
-      else if Method = 'draglint/hoverBundle' then HandleHoverBundle(Id, Params)
-      else if Method = 'draglint/callerCounts' then HandleCallerCounts(Id, Params)
-      else if Method = 'draglint/usages' then HandleUsages(Id, Params)
-      else if Method = 'textDocument/completion' then HandleCompletion(Id, Params)
-      else if Method = 'textDocument/signatureHelp' then HandleSignatureHelp(Id, Params)
-      else if Method = 'textDocument/codeAction' then HandleCodeAction(Id, Params)
-      else if Method = 'textDocument/didOpen' then HandleDidOpenOrSave(Params)
-      else if Method = 'textDocument/didSave' then HandleDidOpenOrSave(Params)
-      else if Method = 'textDocument/didChange' then HandleDidChange(Params)
-      else if Method = 'textDocument/didClose' then HandleDidClose(Params)
-      { S0: registered features, tried after every built-in and before the
-        catch-all, so an unknown method still answers -32601. }
-      else if FFeatureByMethod.TryGetValue(Method, Feature) then
-      begin
-        { S8: exception isolation. One feature raising answers THIS request with
-          -32603 (internal error) and leaves the server alive for the next. }
-        try
-          Feature.Handle(FContext, Method, Id, Params);
-        except
-          on E: Exception do
-          begin
-            { stderr only -- stdout is the protocol channel. A notification (Id = nil) has no reply, so this is its only trace. }
-            Writeln(ErrOutput, 'drag-lint LSP: feature ', Method, ' raised ', E.ClassName, ': ', E.Message);
-            if Id <> nil then SendError(Id, LSP_ERR_INTERNAL, 'internal error in ' + Method + ': ' + E.ClassName + ': ' + E.Message);
-          end;
-        end;
-      end
-      else if (Id <> nil) and (Method <> '') then SendError(Id, -32601, 'method not found: ' + Method);
+      if not DispatchMessage(Msg) then Break;
     finally
       if FControl <> nil then FControl.EndWork;
+      try
+        FlushPending; { LSP-1 CORE: notices + draglint/context queued by this message }
+      finally
+        FWorkLock.Leave;
+      end;
       Msg.Free;
     end; // try
   end; // while

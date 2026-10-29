@@ -1,0 +1,3 @@
+# The main program is where Halt/ExitProcess/Application.Terminate belong: nothing fires
+!halt-in-library
+!application-terminate-in-library

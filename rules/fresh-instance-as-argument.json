@@ -1,0 +1,8 @@
+{
+  "id": "fresh-instance-as-argument",
+  "severity": "info",
+  "category": "resource-lifetime",
+  "enabled": false,
+  "message": "A freshly created object is passed as an argument -- it leaks unless the callee takes ownership or the parameter is an interface (CWE-401).",
+  "warn_capture": "warn"
+}

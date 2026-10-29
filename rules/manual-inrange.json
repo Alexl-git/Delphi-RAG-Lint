@@ -1,0 +1,14 @@
+{
+  "id": "manual-inrange",
+  "severity": "hint",
+  "category": "refactoring",
+  "needs_compiler": 14,
+  "message": "Two-sided inclusive bounds check on one value -- System.Math.InRange(X, A, B) states the intent and evaluates X once.",
+  "warn_capture": "warn",
+  "fix": [
+    { "when_capture": "lo1", "replace": "InRange({x1}, {lo1}, {hi1})", "uses": "System.Math" },
+    { "when_capture": "lo2", "replace": "InRange({x1}, {lo2}, {hi2})", "uses": "System.Math" },
+    { "when_capture": "lo3", "replace": "InRange({x1}, {lo3}, {hi3})", "uses": "System.Math" },
+    { "when_capture": "lo4", "replace": "InRange({x1}, {lo4}, {hi4})", "uses": "System.Math" }
+  ]
+}

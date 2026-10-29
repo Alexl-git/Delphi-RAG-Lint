@@ -1,0 +1,12 @@
+{
+  "id": "nonminimal-bool",
+  "severity": "info",
+  "category": "dead-code",
+  "message": "Negated comparison can be written without not: use <> for not (A = B), = for not (A <> B), A not in S for not (A in S).",
+  "warn_capture": "warn",
+  "fix": [
+    { "when_capture": "eql", "replace": "({eql} <> {eqr})" },
+    { "when_capture": "nel", "replace": "({nel} = {ner})" },
+    { "when_capture": "inl", "replace": "({inl} not in {inr})", "needs_compiler": 37 }
+  ]
+}

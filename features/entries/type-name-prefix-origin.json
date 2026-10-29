@@ -13,7 +13,7 @@
       "type": "cli",
       "verb": "lint",
       "example": "lint <unit> --db <proj> --library-db <lib> --rule type-name-prefix",
-      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]",
+      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]",
       "flags": [
         {
           "name": "--rule",
@@ -28,6 +28,9 @@
         },
         {
           "name": "--json"
+        },
+        {
+          "name": "--labels"
         },
         {
           "name": "--no-preprocess"
@@ -52,7 +55,7 @@
     {
       "type": "cli",
       "verb": "lint-all",
-      "usage": "drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]",
+      "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]",
       "flags": [
         {
           "name": "--db",
@@ -75,6 +78,9 @@
         },
         {
           "name": "--json"
+        },
+        {
+          "name": "--labels"
         },
         {
           "name": "--quiet",
@@ -101,7 +107,7 @@
       "type": "cli",
       "verb": "lint",
       "example": "lint <unit> --db <proj> --fix --fix-naming --rule type-name-prefix",
-      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]",
+      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]",
       "flags": [
         {
           "name": "--rule",
@@ -116,6 +122,9 @@
         },
         {
           "name": "--json"
+        },
+        {
+          "name": "--labels"
         },
         {
           "name": "--no-preprocess"
@@ -161,9 +170,9 @@
     "build": "1.31.4-alpha"
   },
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "89c47772b02dd25c4899ed95b85d00ce816eb8d6aeeb42e276f581426b09704e"
+    "build": "1.36.0-alpha",
+    "surfaceHash": "23e9012b6b41c0403697f84eb9c7f767753cf8b2480f4731379fc93470ae3bf1"
   }
 }

@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_reader_guard.ps1 -- the LSP server is a READER of every --db it is
   handed (PLAN-multi-client-index-safety, ruling 2, T1/T3).
@@ -380,7 +381,14 @@ $ctorTo   = $ctorFrom
 while ($ctorTo -lt $srcLines.Count -and $srcLines[$ctorTo] -notmatch '^end;') { $ctorTo++ }
 $ctorBody = ($srcLines[$ctorFrom..$ctorTo] -join "`n")
 Check 'S3 found the --db constructor' ($ctorFrom -ge 0) "from=$ctorFrom to=$ctorTo"
-Check 'S4 the --db constructor opens each store READ-ONLY (Create(Path, ...True))' ($ctorBody -match 'TSQLiteSymbolStore\.Create\(\s*Path\s*,[^)]*True\s*\)') ''
+# LSP-1 CORE moved the open into TLSPServer.OpenReaderStore (the lazily opened per-context
+# sets use it too): the constructor must delegate to it, and IT must open READ-ONLY.
+$oprFrom = [Array]::FindIndex($srcLines, [Predicate[string]]{ param($x) $x -match '^function TLSPServer\.OpenReaderStore\(' })
+$oprTo   = $oprFrom
+while ($oprFrom -ge 0 -and $oprTo -lt $srcLines.Count -and $srcLines[$oprTo] -notmatch '^end;') { $oprTo++ }
+$oprBody = if ($oprFrom -ge 0) { ($srcLines[$oprFrom..$oprTo] -join "`n") } else { '' }
+Check 'S4 the --db constructor opens each store READ-ONLY (OpenReaderStore(Path) -> Create(APath, ...True))' (($ctorBody -match 'OpenReaderStore\(\s*Path\s*\)') -and
+  ($oprBody -match 'TSQLiteSymbolStore\.Create\(\s*APath\s*,[^)]*True\s*\)')) ''
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

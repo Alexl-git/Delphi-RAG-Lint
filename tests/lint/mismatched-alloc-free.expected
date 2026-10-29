@@ -1,0 +1,8 @@
+# generated from HIT / OK markers in mismatched-alloc-free.pas
+mismatched-alloc-free 23
+mismatched-alloc-free 31
+mismatched-alloc-free 39
+mismatched-alloc-free 46
+!mismatched-alloc-free 54
+!mismatched-alloc-free 62
+!mismatched-alloc-free 70

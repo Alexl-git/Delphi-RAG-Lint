@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_dlok_filtering_guard.ps1 -- the LSP's publishDiagnostics must honour
   `// dl:ok <rule>@<hash>` (and the legacy `// drag-lint:ignore`) exactly as the

@@ -219,6 +219,29 @@ type
       /// </remarks>
       class function BuildCodeActions(const AFile: string; AStartLine, AStartCol, AEndLine, AEndCol: Integer;
         const ADiagnostics: TJSONArray): TJSONArray;
+      /// <summary>The unit-missing-from-uses diagnostics of AFile, each carrying
+      /// its uses edits in data.fixes for the codeAction that follows.</summary>
+      /// <param name="AFile">Path to the source file.</param>
+      /// <param name="AStores">The file's context stores (its project index and
+      /// the platform library); the first that indexes AFile is the file store.</param>
+      /// <returns>A new array (caller owns); empty when no store indexes the file,
+      /// the rule is disabled by the lint config, or nothing is missing.</returns>
+      /// <remarks>Honours the drag-lint-lint.json config and dl:ok markers like
+      /// BuildDiagnostics. data = {"unit", "section", "fixes": [{"title",
+      /// "line", "character" (0-based), "newText", "isPreferred"}]}.</remarks>
+      class function BuildMissingUsesDiagnostics(const AFile: string; const AStores: TArray<ISymbolStore>): TJSONArray;
+      /// <summary>Quick-fix code actions (kind quickfix) for the
+      /// unit-missing-from-uses diagnostics on lines AStartLine..AEndLine.</summary>
+      /// <param name="AFile">Path to the source file.</param>
+      /// <param name="AStartLine">1-based first line of the requested range.</param>
+      /// <param name="AEndLine">1-based last line of the requested range.</param>
+      /// <param name="ADiagnostics">Diagnostics as BuildMissingUsesDiagnostics makes them.</param>
+      /// <returns>A new array (caller owns): one action per offered edit, the
+      /// recommended one first and marked isPreferred.</returns>
+      /// <remarks>Pure. Each action inserts text at one position (a zero-width
+      /// TextEdit), so the editor keeps the rest of the buffer untouched.</remarks>
+      class function BuildMissingUsesActions(const AFile: string; AStartLine, AEndLine: Integer;
+        const ADiagnostics: TJSONArray): TJSONArray;
     private
       /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
@@ -277,6 +300,8 @@ uses
   , DRagLint.Core.LiveDocs  { v(live-buffer): unsaved editor text, consulted before disk }
   , DRagLint.Lint.RuleCatalog  { BUILTIN_RULES_OFF_BY_DEFAULT -- the CLI's default-off set }
   , System.Math                { Max: the H2 doc-comment marker span }
+  , DRagLint.Core.UsesInsert   { TUsesSection / SectionWord: unit-missing-from-uses data }
+  , DRagLint.Lint.MissingUses  { unit-missing-from-uses: findings + their uses edits } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
   ;
 
 { TLspCompletion }
@@ -894,6 +919,27 @@ begin
   end;
 end;
 
+{ True when a marker reviews finding F of AFile (AMarkLines, its buffer): the C2
+  predicate TReviewMarkers.Suppresses on the finding's own span (H2: a /// block
+  is reviewed on its declaration), or -- ENUMRULES 2026-10-28 -- a dl:ok on the
+  TYPE the finding is about (F.ScopeFile:ScopeLine, an enum's declaration,
+  perhaps in another unit), decided as DRagLint.CLI.ApplyLineMarkers does: the
+  first marker for the rule on that line, with no hash or the type line's
+  window hash. }
+function MarkerReviews(const F: TLintFinding; const AFile: string; const AMarkLines: TArray<string>): Boolean;
+begin
+  if TReviewMarkers.Suppresses(AMarkLines, F.RuleId, F.StartLine,
+       Max(F.EndLine, DocCommentMarkerLine(AMarkLines, F.StartLine)),
+       MarkerExpectedHash(AMarkLines, F.RuleId, F.StartLine, F.Metric)) then Exit(True);
+  Result:= False;
+  if (F.ScopeLine <= 0) or (F.ScopeFile = '') then Exit;
+  var SLines: TArray<string>:= if SameText(F.ScopeFile, AFile) then AMarkLines else TLiveDocuments.ReadLines(F.ScopeFile);
+  if F.ScopeLine > Length(SLines) then Exit;
+  for var SM: TReviewMarker in TReviewMarkers.Parse(SLines[F.ScopeLine - 1]) do
+    if SameText(SM.RuleId, F.RuleId) then
+      Exit((SM.Hash = '') or SameText(SM.Hash, TReviewMarkers.HashWindow(SLines, F.ScopeLine - 1)));
+end;
+
 class function TLspCompletion.BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray;
 var
   Findings: TArray<TLintFinding>;
@@ -1009,9 +1055,7 @@ begin
         `lint` -- one predicate, so the gutter cannot keep a squiggle the CLI
         dropped (or the "Mark as reviewed" action would change nothing). }
       if Length(MarkLines) = 0 then MarkLines:= TLiveDocuments.ReadLines(AFile);
-      if TReviewMarkers.Suppresses(MarkLines, F.RuleId, F.StartLine,
-           Max(F.EndLine, DocCommentMarkerLine(MarkLines, F.StartLine)), { H2: /// -> its declaration }
-           MarkerExpectedHash(MarkLines, F.RuleId, F.StartLine, F.Metric)) then Continue;
+      if MarkerReviews(F, AFile, MarkLines) then Continue;
       Sev:= Cfg.ApplySeverity(F.RuleId, F.Severity);
 
       DiagObj:= TJSONObject.Create;
@@ -1296,7 +1340,9 @@ begin
       if (DiagLine < AStartLine) or (DiagLine > AEndLine) then Continue;
 
       var DSource := Diag.GetValue('source');
-      if (DSource = nil) or (DSource.Value <> 'drag-lint') then Continue;
+      { 'drag-lint (unowned)' = the same findings on a file no store owns (HandleDidOpenOrSave, 9df8eab3):
+        still drag-lint's, so they still get the dl:ok action. }
+      if (DSource = nil) or ((DSource.Value <> 'drag-lint') and (DSource.Value <> 'drag-lint (unowned)')) then Continue;
 
       { Get the line text and create the marker. }
       if (DiagLine - 1) >= Lines.Count then Continue;
@@ -1371,5 +1417,113 @@ begin
     Lines.Free;
   end; // try
 end; // function
+
+class function TLspCompletion.BuildMissingUsesDiagnostics(const AFile: string; const AStores: TArray<ISymbolStore>): TJSONArray;
+
+  function Pos0(ALine, ACol: Integer): TJSONObject;
+  begin
+    Result:= TJSONObject.Create;
+    Result.AddPair('line'     , TJSONNumber.Create(ALine - 1));
+    Result.AddPair('character', TJSONNumber.Create(ACol  - 1));
+  end;
+
+begin
+  Result:= TJSONArray.Create;
+  var FileStore: ISymbolStore:= nil;
+  var FileId: Int64:= 0;
+  for var St: ISymbolStore in AStores do
+    if St <> nil then
+    begin
+      FileId:= St.FindFileIdByPath(AFile);
+      if FileId > 0 then
+      begin
+        FileStore:= St;
+        Break;
+      end;
+    end;
+  if FileStore = nil then Exit;
+  var Cfg: TLintConfig:= TLintConfig.Load(DiscoverLintConfig(AFile), '');
+  if not Cfg.ShouldKeep(MISSING_USES_RULE, False) then Exit;
+  var MarkLines: TArray<string>:= nil;
+  for var MF: TMissingUsesFinding in TMissingUsesChecker.Analyze(AFile, FileStore, FileId, AStores) do
+  begin
+    if Length(MarkLines) = 0 then MarkLines:= TLiveDocuments.ReadLines(AFile);
+    if MarkerReviews(MF.Finding, AFile, MarkLines) then Continue;
+    var Diag: TJSONObject:= TJSONObject.Create;
+    var Range: TJSONObject:= TJSONObject.Create;
+    Range.AddPair('start', Pos0(MF.Finding.StartLine, MF.Finding.StartCol));
+    Range.AddPair('end'  , Pos0(MF.Finding.EndLine  , MF.Finding.EndCol  ));
+    Diag.AddPair('range'   , Range);
+    Diag.AddPair('severity', TJSONNumber.Create(MapLintSeverityToLspSeverity(Cfg.ApplySeverity(MF.Finding.RuleId, MF.Finding.Severity))));
+    Diag.AddPair('source'  , 'drag-lint');
+    Diag.AddPair('code'    , MF.Finding.RuleId);
+    Diag.AddPair('message' , MF.Finding.Message);
+    var Data: TJSONObject:= TJSONObject.Create;
+    Data.AddPair('unit'   , MF.UnitName);
+    Data.AddPair('section', TUsesText.SectionWord(MF.Section));
+    var Fixes: TJSONArray:= TJSONArray.Create;
+    for var Fx: TMissingUsesFix in MF.Fixes do
+    begin
+      var FO: TJSONObject:= TJSONObject.Create;
+      FO.AddPair('title'      , Fx.Title);
+      FO.AddPair('line'       , TJSONNumber.Create(Fx.Insertion.Line - 1));
+      FO.AddPair('character'  , TJSONNumber.Create(Fx.Insertion.Col  - 1));
+      FO.AddPair('newText'    , Fx.Insertion.Text);
+      FO.AddPair('isPreferred', TJSONBool.Create(Fx.Preferred));
+      Fixes.AddElement(FO);
+    end;
+    Data.AddPair('fixes', Fixes);
+    Diag.AddPair('data', Data);
+    Result.AddElement(Diag);
+  end;
+end;
+
+class function TLspCompletion.BuildMissingUsesActions(const AFile: string; AStartLine, AEndLine: Integer;
+  const ADiagnostics: TJSONArray): TJSONArray;
+begin
+  Result:= TJSONArray.Create;
+  if ADiagnostics = nil then Exit;
+  var FileUri: string:= 'file:///' + StringReplace(AFile, '\', '/', [rfReplaceAll]);
+  for var I: Integer:= 0 to ADiagnostics.Count - 1 do
+  begin
+    if ADiagnostics.Items[I] is not TJSONObject then Continue;
+    var Diag: TJSONObject:= ADiagnostics.Items[I] as TJSONObject;
+    if not SameText(Diag.GetValue<string>('code', ''), MISSING_USES_RULE) then Continue;
+    var DLine: Integer:= Diag.GetValue<Integer>('range.start.line', -1) + 1;
+    if (DLine < AStartLine) or (DLine > AEndLine) then Continue;
+    var Data: TJSONObject:= Diag.GetValue('data') as TJSONObject;
+    if (Data = nil) or (Data.GetValue('fixes') is not TJSONArray) then Continue;
+    var Fixes: TJSONArray:= Data.GetValue('fixes') as TJSONArray;
+    for var J: Integer:= 0 to Fixes.Count - 1 do
+    begin
+      if Fixes.Items[J] is not TJSONObject then Continue;
+      var Fx: TJSONObject:= Fixes.Items[J] as TJSONObject;
+      var At: TJSONObject:= TJSONObject.Create;
+      At.AddPair('line'     , TJSONNumber.Create(Fx.GetValue<Integer>('line', 0)));
+      At.AddPair('character', TJSONNumber.Create(Fx.GetValue<Integer>('character', 0)));
+      var Range: TJSONObject:= TJSONObject.Create;
+      Range.AddPair('start', At);
+      Range.AddPair('end'  , At.Clone as TJSONObject);
+      var TE: TJSONObject:= TJSONObject.Create;
+      TE.AddPair('range'  , Range);
+      TE.AddPair('newText', Fx.GetValue<string>('newText', ''));
+      var Edits: TJSONArray:= TJSONArray.Create;
+      Edits.AddElement(TE);
+      var Changes: TJSONObject:= TJSONObject.Create;
+      Changes.AddPair(FileUri, Edits);
+      var WEdit: TJSONObject:= TJSONObject.Create;
+      WEdit.AddPair('changes', Changes);
+      var DiagList: TJSONArray:= TJSONArray.Create;
+      DiagList.AddElement(Diag.Clone as TJSONObject);
+      var Action: TJSONObject:= TJSONObject.Create;
+      Action.AddPair('title'      , Fx.GetValue<string>('title', 'Add unit to uses'));
+      Action.AddPair('kind'       , 'quickfix');
+      Action.AddPair('isPreferred', TJSONBool.Create(Fx.GetValue<Boolean>('isPreferred', False)));
+      Action.AddPair('diagnostics', DiagList);
+      Action.AddPair('edit'       , WEdit);
+      Result.AddElement(Action);
+    end;
+  end;
+end;
 
 end.

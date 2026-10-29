@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_caller_counts_guard.ps1 -- `draglint/callerCounts` answers a whole
   file's caller counts in ONE round trip, against already-open stores.

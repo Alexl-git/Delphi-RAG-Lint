@@ -46,6 +46,29 @@ entry and the field.
 build check in the battery. A missing `featuregen.exe` or engine is a failure that names the
 path -- never a pass.
 
+## Docs-drift checks (C1-C4)
+
+`check --level full` also judges the PROSE a reader sees -- each entry's text and its wiki page --
+against the product, so a renamed flag, a moved log or a promise that shipped cannot sit on a
+page unnoticed (lane ki-docscheck; found by the ki-help pass: `-OutRoot` for `--out-root`, a log
+path without `logs\`, "Planned" for a shipped verb). They live in `FeatureGen.DocsCheck.pas` and
+run from `CheckProse`, because that routine already walks every entry text and wiki page beside
+the harvested engine `--help`. Findings print as `C: C<n> <id>: ...`.
+
+| Check | Rule |
+|---|---|
+| C1 | A `--flag` written in a backtick span or fenced line that starts `drag-lint <verb>` must be on that verb's `--help` block (usage line plus its continuation lines) or be a global flag (a `--flag` line outside every verb block). A span that opens a table row or list item with `--flag` is judged against the cli verbs of its page's entries. `--help` and `--version` always pass; a verb the help does not list is check B's business. |
+| C2 | A quoted `%LOCALAPPDATA%` / `%APPDATA%` / `%TEMP%` / `%USERPROFILE%` / `%PROGRAMDATA%` path must occur in the product sources (every source file except `docs`, `WWW`, `features`, `third_party` and any `tests` / `fixtures` folder). The part after the variable is searched, cut at the first `<placeholder>` or `*`; comments count, because a documented path in the code is the contract. |
+| C3 | "Planned", "until then", "not yet" or "coming" (whole words, any case) in the prose of an entry whose status is `shipped`. |
+| C4 | A NOTE, never a failure: `docs-stale:` lists shipped entries verified before the newest commit that touched their verb's source (the unit named after the verb, e.g. `DRagLint.Charts.Ask.pas` for `ask`, or `sources` in `docs-check.json`). Needs `git` on PATH and a git checkout. |
+
+Waiving an intentional example: a row in `features\docs-check.json`,
+`{ "check": "C1", "where": "<entry id, or wiki page stem for page text>", "token": "--flag", "why": "<reason>" }`
+(token: the flag, the path as written, or the phrase in lower case). A row with no `why` is a
+failure; a row that matches nothing is a note (`docs-check: allow row ... matched nothing`), so
+fixed pages shed their rows. The same file's `"sources": { "<entry id>": [ "src/...", ... ] }`
+replaces C4's naming convention for that entry. Tests: `Docs.C1` - `Docs.C4` and `Docs.E2E` in
+`FeatureGenTests.dpr`, each with a stale fixture that must fail and a clean control that must pass.
 ## The self-verify rule
 
 A commit that adds or changes a feature updates ITS OWN entry (usage, flags, steps,

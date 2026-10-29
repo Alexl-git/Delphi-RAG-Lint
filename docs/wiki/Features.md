@@ -75,6 +75,7 @@ Build and maintain the per-project and library indexes.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Auto-Document Whole Project](Auto-Document-Whole-Project) | drag-lint > Generate & Export > Auto-Document Whole Project...; `index`; `document` |  |
+| [Include-file indexing and IF evaluation](inc-indexing) | `index` |  |
 | [Index a project against its active build config](index-build-config) | `index` |  |
 | [migrate-dbs](migrate-dbs) | `migrate-dbs`; drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG... |  |
 | [pp-profile](pp-profile) | `pp-profile` |  |
@@ -99,14 +100,17 @@ Find symbols, callers, callees, text and types in the index.
 | [Find Usages](Find-Usages-context) | Structure form: Find Usages; `usages` |  |
 | [find-callees](find-callees) | `find-callees`; drag-lint > Uses & Dependencies > What This Routine Calls (callees)... |  |
 | [find-unit](find-unit) | `find-unit`; drag-lint > Uses & Dependencies > Find Unit for Symbol (add to uses)... |  |
+| [Gain (counted savings)](Gain-usage-log) | `gain` |  |
 | [Go to Declaration](Go-to-Declaration) | Structure form: Go to Declaration |  |
 | [Go to Definition](Go-to-Definition) | drag-lint > Go to Definition |  |
 | [Go to Implementation](Go-to-Implementation) | Structure form: Go to Implementation |  |
 | [helpers-of](helpers-of) | `helpers-of`; drag-lint > Inspect Symbol > Helpers of Type... |  |
 | [Hover at Cursor](Hover-at-Cursor) | drag-lint > Hover at Cursor; `hover` |  |
 | [outline](outline) | `outline`; drag-lint > Show Structure |  |
+| [query --concept](concept-search) | `query` |  |
 | [query --kind --all](query-kind-all) | `query` |  |
 | [query --name-like](query-name-like) | `query` |  |
+| [query --text --near](query-text-near) | `query` |  |
 | [query ancestors](query-ancestors) | `query ancestors`; drag-lint > Inspect Symbol > Ancestors of Type (full chain)... |  |
 | [query descendants](query-descendants) | `query descendants`; drag-lint > Inspect Symbol > Descendants of Class... |  |
 | [query find-callers](query-find-callers) | `query find-callers`; drag-lint > Find Usages... |  |
@@ -126,33 +130,38 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**195 rules. 23 have an auto-fix. 165 are on by default.** 142 are built-in checks; 53 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**290 rules. 111 have an auto-fix. 246 are on by default.** 197 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
-| bug-patterns | 55 | 6 |
-| complexity | 11 | - |
-| data-flow | 9 | - |
-| dead-code | 12 | 6 |
-| documentation | 5 | 2 |
-| firedac | 3 | - |
+| bug-patterns | 88 | 33 |
+| complexity | 13 | 2 |
+| data-flow | 9 | 2 |
+| dead-code | 19 | 15 |
+| documentation | 5 | 4 |
+| firedac | 3 | 3 |
 | metrics | 8 | - |
-| naming | 11 | 8 |
-| other | 6 | - |
-| platform | 10 | - |
-| project-wide | 23 | - |
-| refactoring | 11 | - |
-| resource-lifetime | 8 | 1 |
-| review-markers | 5 | - |
-| security | 10 | - |
-| structure | 8 | - |
-| **Total** | **195** | **23** |
+| modernize | 4 | 4 |
+| naming | 13 | 9 |
+| other | 11 | 3 |
+| platform | 10 | 4 |
+| policy | 3 | - |
+| project-wide | 30 | 6 |
+| refactoring | 20 | 8 |
+| resource-lifetime | 14 | 7 |
+| review-markers | 5 | 2 |
+| security | 22 | 2 |
+| structure | 13 | 7 |
+| **Total** | **290** | **111** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
+| [Autofix for fixable rules](autofix-wave) | `lint` |  |
+| [Compliance labels (CWE, CERT, MISRA)](compliance-labels) | `rules`; `lint-all` |  |
 | [Copy All Diagnostics](Copy-All-Diagnostics) | Structure form: Copy All Diagnostics; `lint` |  |
 | [Copy Diagnostics (Current File)](Copy-Diagnostics-Current-File) | About window: Copy Diagnostics (Current File); `lint` |  |
 | [Copy Selected Diagnostics](Copy-Selected-Diagnostics) | Structure form: Copy |  |
+| [Downgrade fixes (compat rules)](compat-downgrade-fixes) | `lint` | planned |
 | [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
 | [exceptions-sync](Features) | `exceptions-sync` |  |
 | [Fix all in project](Fix-all-in-project) | Structure form: Fix all in project; `lint-all` |  |
@@ -161,8 +170,9 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Fix it](Fix-it) | Structure form: Fix it; `lint`; `uses-fix` |  |
 | [Format Whole Project with YADF](Format-Whole-Project-with-YADF) | drag-lint > Format Whole Project with YADF...; `format`; `index` |  |
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
+| [Gap-wave lint rules](gap-wave-rules) | `rules` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
-| [Lint rules](rules) | 195 rules, 23 fixable; `rules` |  |
+| [Lint rules](rules) | 290 rules, 111 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
@@ -170,6 +180,9 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Run AST Checks](Run-AST-Checks) | About window: Run AST Checks; `check-ast` |  |
 | [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | About window: Run Diagnostics (didSave) |  |
 | [Run Lint All (Full Report)](Run-Lint-All-Full-Report) | drag-lint > Code Quality > Run Lint All (Full Report)...; `lint-all` |  |
+| [Taint analysis (SQL, command, path)](taint-analysis) | `lint-all` |  |
+| [Target compiler (--target-compiler)](target-compiler) | `lint`; `lint-all`; `rules`; drag-lint > Code Quality > Run Lint All (Full Report)... |  |
+| [Type-level dl:ok review](Type-Level-Review-Marker) | procedure: `docs\wiki\Type-Level-Review-Marker.md` |  |
 | [type-name-prefix: expected letter from the ancestor chain](Type-Name-Prefix-Origin) | `lint`; `lint-all`; `lint` |  |
 
 ## Documentation
@@ -218,7 +231,7 @@ Rule-driven migration of legacy component types.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Convert progress](convrules-editor-convert-progress) | `ConvRulesEditor.exe` (Convert tab progress line) |  |
-| [convert-apply #migrate (member rename / DL_NONE)](convert-apply-migrate) | `convert-apply` |  |
+| [convert-apply #migrate (member, type and enum rename / DL_NONE)](convert-apply-migrate) | `convert-apply` |  |
 | [convert-apply](convert-apply) | `convert-apply` |  |
 | [convert-reemit](Maintenance) | `convert-reemit` | internal |
 | [convert-scaffold](convert-scaffold) | `convert-scaffold` |  |
@@ -255,6 +268,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [Find Dead Code](Find-Dead-Code) | drag-lint > Code Quality > Find Dead Code...; `find-deadcode` |  |
 | [Forms for testers (CSV)](Generate-Test-Helper-CSV) | drag-lint > Reports > Forms for testers (CSV)...; `forms-csv` |  |
 | [Impact / Blast Radius (symbol)](Impact-Blast-Radius-symbol) | drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...; `impact` |  |
+| [Overview (first-turn summary)](Overview-first-turn) | `overview` |  |
 | [Reverse Call Tree (clickable, Messages window)](Reverse-Call-Tree-clickable-Messages-window) | `reverse-calltree`; drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... |  |
 | [Reverse Call Tree (who calls this, N-deep)](Reverse-Call-Tree-who-calls-this-N-deep) | drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...; `reverse-calltree` |  |
 | [Scan TODOs / FIXMEs](Scan-TODOs-FIXMEs) | drag-lint > Code Quality > Scan TODOs / FIXMEs...; `todos` |  |
@@ -318,6 +332,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [Help line (DL page)](ide-help-line) | View > Tool Windows > drag-lint; drag-lint > Help > Help on a feature...; drag-lint > Help > All features (web) |  |
 | [IDE Menu Reference](IDE-Menu-Reference) | procedure: `docs\wiki\IDE-Menu-Reference.md`; drag-lint > Help > IDE Menu Reference |  |
 | [ide-release](ide-release) | `ide-release` |  |
+| [init: one command from a project to a wired AI client](init-verb) | `init` |  |
 | [Installation](Installation) | `drag-lint.exe`; procedure: `docs\wiki\Installation.md` |  |
 | [LSP full rule set on save](lsp-proxy-merge) | `lsp` |  |
 | [LSP protocol extensions](lsp-proxy-merge) | `lsp textDocument/documentSymbol`; `lsp textDocument/implementation`; `lsp textDocument/declaration`; `lsp textDocument/rename`; `lsp textDocument/codeLens`; `lsp textDocument/semanticTokens/full`; `lsp textDocument/inlayHint`; `lsp workspace/executeCommand`; `lsp draglint/ping` |  |
@@ -325,7 +340,8 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [lsp](lsp) | `lsp` |  |
 | [MCP server](Register-MCP-Server) | `mcp find_symbol`; `mcp find_callers`; `mcp lint`; `mcp get_symbol_doc`; `mcp find_by_doc_tag`; `mcp find_undocumented`; `mcp get_impact`; `mcp get_wiring`; `mcp get_surface`; `mcp get_slice`; `mcp get_context_bundle`; `mcp get_type_at_position`; `mcp rename_symbol`; `mcp run_ast_checks`; `mcp run_compile_check` |  |
 | [Output encoding (--output-encoding)](output-encoding) | `sql` |  |
-| [Register the MCP server (Claude Code, VS Code)](Register-MCP-Server) | `mcp-config` |  |
+| [project-context](project-context) | `project-context` |  |
+| [Register the MCP server (Claude Code, VS Code, Cursor)](Register-MCP-Server) | `mcp-config` |  |
 | [serve](serve) | `serve` |  |
 | [Setup installer](Setup-Installer) | procedure: `docs\wiki\Setup-Installer.md` | experimental |
 | [Switch VS Code Delphi MCP entry](lsp-proxy-merge) | `drag-lint-switch.exe` (drag-lint-switch --vscode --off) |  |
@@ -361,6 +377,14 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [shutdown](Features) | `shutdown` |  |
 | [sql](sql) | `sql` |  |
 | [test-store-freshness](Maintenance) | `test-store-freshness` | internal |
+
+## Uses and Dependencies
+
+Which units a unit needs, where they go in uses, and the cycles they make
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [Missing unit in uses (unit-missing-from-uses)](unit-missing-from-uses) | `lint` |  |
 
 ---
 

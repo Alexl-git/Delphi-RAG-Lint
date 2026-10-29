@@ -1,0 +1,25 @@
+{
+  "id": "inc-indexing",
+  "title": "Include-file indexing and IF evaluation",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.37.0-alpha",
+  "summary": "Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint",
+  "intro": "Read this when units pull code from .inc files or choose branches with IF directives. The indexer follows includes, evaluates value defines, Declared() and true constants, and says so when it cannot decide a branch.",
+  "wikiPage": "inc-indexing",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "index",
+      "example": "drag-lint index --project <file.dproj> --db <file.sqlite>"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-27",
+    "by": "ENGINE",
+    "build": "1.36.0-alpha",
+    "surfaceHash": "6702d742100136b4850c54aed3a0db6b6c487c77f5a66aa5b7b0d454af9e9b58"
+  }
+}

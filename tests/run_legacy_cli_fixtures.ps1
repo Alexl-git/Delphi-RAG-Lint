@@ -180,6 +180,59 @@ Check 'SELF-TEST: registry comparison (equal=pass, empty=pass, changed value=fai
   ("equal={0} empty={1} changed={2} added={3}" -f $stEqual.Count, $stEmpty.Count, $stChanged.Count, $stAdded.Count)
 $liveBefore = Get-RegSnapshot $LiveRegKey
 
+# RESTORE ON A DIFFERENCE (1.20.4 #4b-5). Detecting a change to the owner's
+# settings is not enough: the owner's IDE then runs on whatever a fixture left
+# behind. So the key is exported (reg.exe) BEFORE the run and, when the
+# snapshot differs afterwards, deleted and re-imported (or just deleted when it
+# did not exist before). The check below still FAILS -- the run did damage --
+# but the damage is undone. Reg-form path is passed separately because reg.exe
+# does not take the PowerShell HKCU: drive form.
+function Export-RegKeyBackup([string]$RegPath, [string]$File) {
+  if (Test-Path -LiteralPath $File) { [IO.File]::Delete($File) }
+  $existed = Test-Path -LiteralPath ($RegPath -replace '^HKCU\\', 'HKCU:\')
+  if ($existed) { & reg.exe export $RegPath $File /y *> $null }
+  return $existed -and (Test-Path -LiteralPath $File)
+}
+function Restore-RegKeyBackup([string]$RegPath, [string]$File, [bool]$Existed) {
+  $sub = $RegPath -replace '^HKCU\\', ''
+  [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($sub, $false)
+  if ($Existed) { & reg.exe import $File *> $null }
+}
+# SELF-TEST on a scratch key (never the live one): export, change one value and
+# add another, restore, and the snapshot must equal the original; a key absent
+# before must be absent after.
+$stReg  = 'HKCU\Software\drag-lint\DelphiPlugin.RestoreSelfTest'
+$stPs   = 'HKCU:\Software\drag-lint\DelphiPlugin.RestoreSelfTest'
+$stFile = Join-Path $env:TEMP ("drag-lint-legacy-restore-selftest-{0}.reg" -f $PID)
+try {
+  New-Item -Path $stPs -Force | Out-Null
+  New-ItemProperty -Path $stPs -Name 'A' -Value '1' -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $stPs -Name 'B' -Value 0 -PropertyType DWord -Force | Out-Null
+  $stSnap0   = Get-RegSnapshot $stPs
+  $stHad     = Export-RegKeyBackup $stReg $stFile
+  New-ItemProperty -Path $stPs -Name 'A' -Value '2' -PropertyType String -Force | Out-Null
+  New-ItemProperty -Path $stPs -Name 'C' -Value 'x' -PropertyType String -Force | Out-Null
+  $stDirty   = (Compare-RegSnapshot $stSnap0 (Get-RegSnapshot $stPs)).Count
+  Restore-RegKeyBackup $stReg $stFile $stHad
+  $stRestored = (Compare-RegSnapshot $stSnap0 (Get-RegSnapshot $stPs)).Count
+  # key absent before the run, created by it: restore must remove it
+  [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree('Software\drag-lint\DelphiPlugin.RestoreSelfTest', $false)
+  $stHadNone = Export-RegKeyBackup $stReg $stFile
+  New-Item -Path $stPs -Force | Out-Null
+  New-ItemProperty -Path $stPs -Name 'Z' -Value '1' -PropertyType String -Force | Out-Null
+  Restore-RegKeyBackup $stReg $stFile $stHadNone
+  $stGone = -not (Test-Path -LiteralPath $stPs)
+}
+finally {
+  [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree('Software\drag-lint\DelphiPlugin.RestoreSelfTest', $false)
+  if (Test-Path -LiteralPath $stFile) { [IO.File]::Delete($stFile) }
+}
+Check 'SELF-TEST: registry restore (exported key: changed+added value undone; absent key: removed again)' `
+  ($stHad -and ($stDirty -eq 3) -and ($stRestored -eq 0) -and (-not $stHadNone) -and $stGone) `
+  ("exported={0} dirty={1} restored={2} absentExported={3} absentGone={4}" -f $stHad, $stDirty, $stRestored, $stHadNone, $stGone)
+$liveBackupFile = Join-Path $env:TEMP ("drag-lint-legacy-livekey-{0}.reg" -f $PID)
+$liveExisted = Export-RegKeyBackup 'HKCU\Software\drag-lint\DelphiPlugin' $liveBackupFile
+
 # NO FIXTURE WRITES A DCU UNDER src\. Every compiling fixture passes -NU into
 # tests\fixtures\_dcu\<name>. A .dcu beside a source is reused by any later
 # build that searches that directory -- a Settings.dcu built with
@@ -246,7 +299,14 @@ foreach ($name in ($Fixtures + $RootDrivers)) {
 Remove-Item Env:\EXE -ErrorAction SilentlyContinue
 
 $liveDiff = Compare-RegSnapshot $liveBefore (Get-RegSnapshot $LiveRegKey)
-Check 'owner plugin settings untouched' ($liveDiff.Count -eq 0) ($liveDiff -join '; ')
+$liveNote = ''
+if ($liveDiff.Count -gt 0) {
+  Restore-RegKeyBackup 'HKCU\Software\drag-lint\DelphiPlugin' $liveBackupFile $liveExisted
+  $left = (Compare-RegSnapshot $liveBefore (Get-RegSnapshot $LiveRegKey)).Count
+  $liveNote = if ($left -eq 0) { ' [RESTORED from the pre-run export]' } else { " [RESTORE INCOMPLETE: $left difference(s) remain]" }
+}
+if (Test-Path -LiteralPath $liveBackupFile) { [IO.File]::Delete($liveBackupFile) }
+Check 'owner plugin settings untouched' ($liveDiff.Count -eq 0) (($liveDiff -join '; ') + $liveNote)
 $dcuDiff = Compare-RegSnapshot $dcuBefore (Get-SrcDcuSnapshot)
 Check 'no fixture wrote a DCU under src\' ($dcuDiff.Count -eq 0) `
   ("{0} change(s): {1}" -f $dcuDiff.Count, (($dcuDiff | Select-Object -First 5) -join '; '))

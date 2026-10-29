@@ -23,7 +23,7 @@
         }
       ],
       "helpOrder": 49,
-      "help": ["  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)", "                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict", "                               (current | resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Two keyed lookups, no COUNT.", "                               text form: one \"index: <path>  verdict: <v>\" line per --db, then \"  remedy: ...\" when one is owed."]
+      "help": ["  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)", "                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict", "                               (current | resolve-owed | library-resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Keyed lookups, no COUNT.", "                               text form: one \"index: <path>  verdict: <v>\" line per --db, then \"  remedy: ...\" when one is owed.", "                               library-resolve-owed: the DB was resolved without its platform library (marker schema_meta library_resolve_state = pending); --json adds library_resolve {state, reason, since_unix, library_state}, the text form a library_resolve line."]
     }
   ],
   "audience": "both",
@@ -44,9 +44,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "40266d03772d546272e6450e9663196066b10587d4fd30b401eaaefe9f28b68e"
+    "build": "1.36.0-alpha",
+    "surfaceHash": "50933f95ecd01a9516bd4ef00f58ac9d1ddc49b7f824bc0dcd204b0e948ac292"
   }
 }

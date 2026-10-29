@@ -60,6 +60,7 @@ $unit = @(
   ''
   'type'
   '  TMystery = TUnresolvedElsewhere;'
+  '  TIntRows = TArray<Integer>;'
   ''
   'procedure Run(const AItems: TArray<string>; const AOther: TArray<Integer>; D: Double; Count: Integer);'
   'function SumInts(const AItems: TArray<Integer>): Integer;'
@@ -77,6 +78,8 @@ $unit = @(
   '  Arr: TArray<Integer>;'
   '  M, Y: TMystery;'
   '  Item: string;'
+  '  Lit: TArray<Integer>;'
+  '  Al: TIntRows;'
   'begin'
   '  S := ''''; Total := 0; Sum := 0; Arr := nil;'
   '  for Item in AItems do'
@@ -87,6 +90,15 @@ $unit = @(
   '    Arr := Arr + AOther;'
   '    M := M + Y;'
   '  end;'
+  '  Lit := nil; Al := nil;'
+  '  for Item in AItems do'
+  '  begin'
+  '    Lit := Lit + [Count];'
+  '    Al := Al + AOther;'
+  '  end;'
+  '  var InlA: TArray<Integer> := [];'
+  'for Count in AOther do'
+  '    InlA := InlA + [Count];'
   '  var Inl: Double := 0;'
   '  var InlS: string := '''';'
   '  for Item in AItems do'
@@ -162,8 +174,11 @@ $ln = [ordered]@{
   Ambiguous   = LineOf 'Acc := Acc + W;'
   InlineDbl   = LineOf 'Inl := Inl + D;'
   InlineStr   = LineOf 'InlS := InlS + Item;'
+  ArrLiteral  = LineOf 'Lit := Lit + [Count];'
+  AliasArr    = LineOf 'Al := Al + AOther;'
+  InlArrLit   = LineOf 'InlA := InlA + [Count];'
 }
-Check 'all ten fixture statements located' (@($ln.Values) -notcontains -1) (($ln.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' ')
+Check 'all thirteen fixture statements located' (@($ln.Values) -notcontains -1) (($ln.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ' ')
 
 & $Exe index --project $dprPath --db $db 2>&1 | Out-Null
 Check 'fixture indexed' ((Test-Path $db) -and $LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
@@ -223,6 +238,9 @@ foreach ($s in $surfaces.GetEnumerator()) {
   Check "$($s.Key): TArray<Integer> Arr := Arr + AOther must NOT fire"                         (-not ($fired -contains $ln.ArrayVar))
   Check "$($s.Key): Integer function Result := Result + N must NOT fire"                       (-not ($fired -contains $ln.IntResult))
   Check "$($s.Key): INLINE string var InlS := InlS + Item MUST fire (positive control)"         ($fired -contains $ln.InlineStr)
+  Check "$($s.Key): TArray literal append Lit := Lit + [Count] must NOT fire"  (-not ($fired -contains $ln.ArrLiteral))
+  Check "$($s.Key): INLINE TArray InlA := InlA + [Count] must NOT fire"  (-not ($fired -contains $ln.InlArrLit))
+  Check "$($s.Key): ALIAS-of-TArray Al := Al + AOther must NOT fire"  (-not ($fired -contains $ln.AliasArr))
   Check "$($s.Key): INLINE Double var Inl := Inl + D must NOT fire"                            (-not ($fired -contains $ln.InlineDbl))
 }
 

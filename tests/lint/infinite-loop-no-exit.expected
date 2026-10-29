@@ -1,0 +1,12 @@
+# Hits: while True / repeat..until False with no Break (of THIS loop), Exit, raise or Halt.
+# FP shapes (non-hits): Break / Exit / raise / Halt in the body; ordinary conditions.
+# A Break nested in an inner loop leaves only the inner loop (line 26 is a hit).
+infinite-loop-no-exit 9
+infinite-loop-no-exit 17
+infinite-loop-no-exit 26
+!infinite-loop-no-exit 35
+!infinite-loop-no-exit 43
+!infinite-loop-no-exit 50
+!infinite-loop-no-exit 58
+!infinite-loop-no-exit 67
+!infinite-loop-no-exit 73

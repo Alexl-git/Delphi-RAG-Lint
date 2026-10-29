@@ -1,0 +1,7 @@
+# resolveExternals/ProhibitDTD flipped the unsafe way (9, 11, 13) fires; the safe values (10, 12, 14) must not
+xml-external-entities-enabled 9
+xml-external-entities-enabled 11
+xml-external-entities-enabled 13
+!xml-external-entities-enabled 10
+!xml-external-entities-enabled 12
+!xml-external-entities-enabled 14

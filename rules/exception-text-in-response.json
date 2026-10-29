@@ -1,0 +1,7 @@
+{
+  "id": "exception-text-in-response",
+  "severity": "info",
+  "category": "security",
+  "message": "Exception text sent in a response (CWE-209) -- log E.Message server-side and return a generic error to the client.",
+  "warn_capture": "warn"
+}

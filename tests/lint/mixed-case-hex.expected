@@ -1,0 +1,11 @@
+# Lines 11-12 mix upper and lower hex digits and must fire. All-upper,
+# all-lower, digits-only and one-case-with-digits hex, and decimals must not.
+# Known FP shape: none expected; e in a decimal float (1e5) is not hex.
+mixed-case-hex 11
+mixed-case-hex 12
+!mixed-case-hex 13
+!mixed-case-hex 14
+!mixed-case-hex 15
+!mixed-case-hex 16
+!mixed-case-hex 17
+!mixed-case-hex 18

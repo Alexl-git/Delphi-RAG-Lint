@@ -4,10 +4,10 @@ title: Show Signature Help
 summary: Shows parameter help for the call being typed at the editor caret
 product: DL
 group: search-navigation
-order: 20025
+order: 20028
 since: 0.21.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # Show Signature Help

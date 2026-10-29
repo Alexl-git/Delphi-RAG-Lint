@@ -1,0 +1,20 @@
+# Lines 11-19: one per operator in the plan list (x+0 x-0 x*1 x div 1 x mod 1
+# x shl 0 x shr 0 x or 0 x and 0) must fire. Lines 20-25 use other literals or
+# literals that merely START with 0/1 (10, 100) and must not fire.
+# Known FP shape: Byte + 0 written on purpose to promote the type; and
+# X and 0 / X mod 1 are constant 0 rather than identity (flagged anyway).
+identity-op 11
+identity-op 12
+identity-op 13
+identity-op 14
+identity-op 15
+identity-op 16
+identity-op 17
+identity-op 18
+identity-op 19
+!identity-op 20
+!identity-op 21
+!identity-op 22
+!identity-op 23
+!identity-op 24
+!identity-op 25

@@ -36,7 +36,7 @@
         }
       ],
       "helpOrder": 35,
-      "help": ["  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]"]
+      "help": ["  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]", "                               an interface method also lists its implementors; an implementor, the interface sites reaching it", "                               --format json: \"implementors\" [QName,...] and \"via_dispatch\" [{via,kind,sites}] (keys present only when non-empty; RB-5)"]
     }
   ],
   "audience": "both",
@@ -51,9 +51,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.36.0-alpha",
     "surfaceHash": "9ff33aa762b192d127f29364855c7f133a588b606981cb87302133bc1c2e2e99"
   }
 }

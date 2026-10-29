@@ -14,6 +14,8 @@ uses
   , System  .Generics.Collections
   , DRagLint.Core    .Model
   , DRagLint.Core    .Interfaces
+  , DRagLint.Index   .LibraryOracle { TLibraryOracle -- the opt-in query-time Library calls count (RSV-R2) }
+  , DRagLint.Query   .Callers
   ;
 
 type
@@ -40,6 +42,12 @@ type
       /// lookup entirely, so every existing caller is unaffected. Honoured only
       /// when AIncludeDocs is set -- <c>--no-docs</c> means no prose, and a
       /// concept body is prose.</param>
+      /// <param name="AOracle">Optional library oracle (RSV-R2). When set, a call in the target's
+      /// body that carries NO stored external_target but whose receiver type text the oracle
+      /// binds to exactly one library member counts toward "Library calls" as well
+      /// (LibraryCallVia = 'oracle' if at least one such hit was added, else 'stored').
+      /// nil (the default) keeps the stored-only count and never touches a library. The
+      /// caller owns the oracle and the stores behind it.</param>
       /// <returns><!-- drag-lint:auto type -->TContextBundle</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -56,7 +64,7 @@ type
       /// </remarks>
       class function Build(
         const AStore: ISymbolStore; const AVerb, AQName: string; ACallerContext, AMaxCallers: Integer; AIncludeDocs, AIncludeSurface,
-        AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''): TContextBundle;
+        AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''; AOracle: TLibraryOracle = nil): TContextBundle;
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: Round(Length(AText) / 3.7).</returns>
       /// <remarks>
@@ -122,6 +130,10 @@ uses
   DRagLint.Doc.Regions
   , DRagLint.Doc.Wiki   { TWikiParser -- alias matching for the ## Wiki section }
   ;
+
+const
+  { How many external targets the "Library calls" line names. }
+  LIBRARY_CALLS_TOP = 3;
 
 class function TContextBundler.EstimateTokens(const AText: string): Integer;
 begin
@@ -336,9 +348,80 @@ begin
   end;
 end; // function
 
+{ The library routine the oracle binds for one unresolved call that has no stored
+  external_target, or '' (no oracle, no receiver type text, or a decline). Same
+  binding find-callees uses (EmitExternalCallees): the receiver type text is
+  split at its first dot into the type and the pending member chain. }
+function OracleTarget(const AStore: ISymbolStore; AOracle: TLibraryOracle; const ARef: TReference): string;
+begin
+  Result:= '';
+  if (AOracle = nil) or (ARef.ReceiverTypeText = '') then Exit;
+  var Dot: Integer:= Pos('.', ARef.ReceiverTypeText);
+  var TypeText: string:= (if Dot > 0 then Copy(ARef.ReceiverTypeText, 1, Dot - 1) else ARef.ReceiverTypeText);
+  var Pending : string:= (if Dot > 0 then Copy(ARef.ReceiverTypeText, Dot + 1, MaxInt) else '');
+  var UsedUnits: TArray<string>:= nil;
+  for var U: TUnitUse in AStore.GetUnitUsesForFile(ARef.FileId) do UsedUnits:= UsedUnits + [LowerCase(U.UnitName)];
+  var Reason: string;
+  Result:= AOracle.Bind(TypeText, Pending, ARef.NameText, ekCall, UsedUnits, Reason);
+end; // function
+
+{ Library calls (item 4 / C3, RSV-R2): one query per target id, counted from the stored
+  external_target and, when AOracle is set, from calls the oracle binds now; with
+  neither, a project indexed without a library gets count 0 and the line stays out of the bundle. ACount is incremented (the
+  caller's bundle starts zeroed); ATop receives at most LIBRARY_CALLS_TOP targets,
+  most-called first, ties in first-seen order. Split out of TContextBundler.Build
+  to keep that routine under the cyclomatic-complexity limit. }
+procedure CollectLibraryCalls(const AStore: ISymbolStore; AOracle: TLibraryOracle; const ATargetIds: TArray<Int64>;
+  var ACount: Integer; var ATop: TArray<string>; var AVia: string);
+var
+  LibCounts: TDictionary<string, Integer>;
+  LibOrder : TList<string>               ;
+  Seen     : Integer                     ;
+  Best     : Integer                     ;
+begin
+  LibCounts:= TDictionary<string, Integer>.Create;
+  try
+    LibOrder:= TList<string>.Create;
+    try
+      AVia:= '';
+      for var TId: Int64 in ATargetIds do
+        for var LR: TReference in AStore.GetUnresolvedCallsFromSymbol(TId) do
+        begin
+          var Target: string:= LR.ExternalTarget;
+          if Target <> '' then AVia:= (if AVia = '' then 'stored' else AVia)
+          else
+          begin
+            Target:= OracleTarget(AStore, AOracle, LR);
+            if Target <> '' then AVia:= 'oracle';
+          end;
+          if Target = '' then Continue;
+          Inc(ACount);
+          if LibCounts.TryGetValue(Target, Seen) then LibCounts[Target]:= Seen + 1
+          else
+          begin
+            LibCounts.Add(Target, 1);
+            LibOrder.Add(Target);
+          end;
+        end;
+      while (Length(ATop) < LIBRARY_CALLS_TOP) and (LibOrder.Count > 0) do
+      begin
+        Best:= 0;
+        for var K: Integer:= 1 to LibOrder.Count - 1 do
+          if LibCounts[LibOrder[K]] > LibCounts[LibOrder[Best]] then Best:= K;
+        ATop:= ATop + [LibOrder[Best]];
+        LibOrder.Delete(Best);
+      end;
+    finally
+      LibOrder.Free;
+    end;
+  finally
+    LibCounts.Free;
+  end;
+end; // procedure
+
 class function TContextBundler.Build(
   const AStore: ISymbolStore; const AVerb, AQName: string; ACallerContext, AMaxCallers: Integer; AIncludeDocs, AIncludeSurface,
-  AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''): TContextBundle;
+  AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''; AOracle: TLibraryOracle = nil): TContextBundle;
 var
   Syms       : TArray<TSymbol>   ;
   Sym        : TSymbol           ;
@@ -355,6 +438,7 @@ var
   L          : TSurfaceLine      ;
   C          : TSliceChunk       ;
   BC         : TBundleCaller     ;
+  VTot       : TBundleViaTotal   ;
   R          : TReference        ;
 
   { Up to MAX_WIKI_TOPICS topics whose name or alias the task phrase matched.
@@ -577,6 +661,8 @@ begin
   if LastDelimiter('.', OwnerLeaf) > 0 then OwnerLeaf:= Copy(OwnerLeaf, LastDelimiter('.', OwnerLeaf) + 1, MaxInt);
   RawCallers:= DistinctCallSites(CallersOfTarget(AStore.FindCallersByNameWithContext(CallerName, ACallerContext),
                                                  TargetIds, Sym.Kind = skConstructor, OwnerLeaf));
+  Result.TotalCallers:= Length(RawCallers); { XERJ item 2: the count BEFORE the cut }
+  Result.CallerCap   := AMaxCallers;
   if Length(RawCallers) > AMaxCallers then SetLength(RawCallers, AMaxCallers);
   SetLength(Result.Callers, Length(RawCallers));
   for I:= 0 to High(RawCallers) do
@@ -586,8 +672,33 @@ begin
     BC.Line       := R.StartLine;
     BC.Col        := R.StartCol;
     BC.ContextText:= R.ContextText;
+    BC.Resolution := R.Resolution ;
     Result.Callers[I]:= BC;
   end;
+
+  { RB-5 P1: sites that reach the target only through the interface method it
+    implements. Same truncation as Callers; the text is the call line, no
+    context window, to keep the bundle small. }
+  VTot:= Default(TBundleViaTotal);
+  if Sym.Kind in [skProcedure, skFunction, skMethod] then
+    for var TgtId in TargetIds do
+      for var VR in DispatchCallersOf(AStore, TgtId) do
+      begin
+        if VR.ViaCount > 0 then
+        begin
+          VTot.Via  := VR.Via     ;
+          VTot.Count:= VR.ViaCount;
+          Result.ViaTotals:= Result.ViaTotals + [VTot];
+        end;
+        if Length(Result.ViaCallers) >= AMaxCallers then Continue;
+        BC:= Default(TBundleCaller);
+        BC.FilePath:= VR.FullPath;
+        BC.Line    := VR.CallSiteLine;
+        BC.Via     := VR.Via;
+        Result.ViaCallers:= Result.ViaCallers + [BC];
+      end;
+
+  CollectLibraryCalls(AStore, AOracle, TargetIds, Result.LibraryCallCount, Result.LibraryCallTop, Result.LibraryCallVia);
 
   // Impact summary (for refactor/delete verbs)
   if SameText(AVerb, 'refactor') or SameText(AVerb, 'delete') then Result.ImpactSummary:= AStore.FindTransitiveCallers(CallerName, 2);
@@ -726,19 +837,50 @@ begin
       SB.AppendLine;
     end;
 
+    if ABundle.LibraryCallCount > 0 then
+    begin
+      SB.AppendLine(Format('Library calls: %d (top: %s)', [ABundle.LibraryCallCount, string.Join(', ', ABundle.LibraryCallTop)]));
+      SB.AppendLine;
+    end;
+
     if Length(ABundle.Callers) > 0 then
     begin
-      SB.AppendLine(Format('## Callers (%d)', [Length(ABundle.Callers)]));
+      if ABundle.TotalCallers > Length(ABundle.Callers) then
+        SB.AppendLine(Format('## Callers (%d of %d)', [Length(ABundle.Callers), ABundle.TotalCallers]))
+      else
+        SB.AppendLine(Format('## Callers (%d)', [Length(ABundle.Callers)]));
       for I:= 0 to High(ABundle.Callers) do
       begin
         BC:= ABundle.Callers[I];
-        SB.AppendLine(Format('- %s:%d:%d', [BC.FilePath, BC.Line, BC.Col]));
+        { XERJ item 3: only a caller that is NOT an exact bind says so. }
+        SB.AppendLine(Format('- %s:%d:%d%s', [BC.FilePath, BC.Line, BC.Col,
+          (if (BC.Resolution = '') or (BC.Resolution = RESOLUTION_EXACT) then '' else ' [' + BC.Resolution + ']')]));
         if BC.ContextText <> '' then
         begin
           SB.AppendLine('  ```');
           SB.AppendLine(BC.ContextText);
           SB.AppendLine('  ```');
         end;
+      end;
+      if ABundle.TotalCallers > Length(ABundle.Callers) then
+        SB.AppendLine(CapOmittedNote(ABundle.TotalCallers - Length(ABundle.Callers), ABundle.CallerCap, False, '--max-callers', ABundle.TotalCallers));
+    end;
+
+    if Length(ABundle.ViaCallers) > 0 then
+    begin
+      var LastVia: string:= #0;
+      for I:= 0 to High(ABundle.ViaCallers) do
+      begin
+        BC:= ABundle.ViaCallers[I];
+        if BC.Via <> LastVia then
+        begin
+          var Cnt: Integer:= 0;
+          for var VT in ABundle.ViaTotals do
+            if VT.Via = BC.Via then Inc(Cnt, VT.Count);
+          SB.AppendLine(Format('## Callers via interface dispatch (%s): %d site(s)', [BC.Via, Cnt]));
+          LastVia:= BC.Via;
+        end;
+        SB.AppendLine(Format('- %s:%d', [BC.FilePath, BC.Line]));
       end;
     end;
 
@@ -791,9 +933,10 @@ end; // function
 
 class function TContextBundler.RenderJson(const ABundle: TContextBundle): string;
 var
-  Wiki: string    ;
-  I   : Integer   ;
-  W   : TWikiTopic;
+  Wiki   : string    ;
+  LibJson: string    ;
+  I      : Integer   ;
+  W      : TWikiTopic;
 begin
   { The wiki topics are NAMED here rather than dumped: a JSON consumer that
     wants the body has `wiki --term`, and a bundle summary that inlined
@@ -808,13 +951,29 @@ begin
       [JsonEscape(W.Name), JsonEscape(W.FilePath), W.HeaderLine]);
   end;
 
+  LibJson:= '';
+  if ABundle.LibraryCallCount > 0 then
+  begin
+    var Quoted: TArray<string>:= nil;
+    for I:= 0 to High(ABundle.LibraryCallTop) do Quoted:= Quoted + ['"' + JsonEscape(ABundle.LibraryCallTop[I]) + '"'];
+    LibJson:= Format(',"library_calls":{"count":%d,"via":"%s","top":[%s]}', [ABundle.LibraryCallCount, ABundle.LibraryCallVia, string.Join(',', Quoted)]);
+  end;
+
+  { XERJ item 3: the bundle JSON carries counts, not caller rows, so the resolution kinds
+    arrive as a tally object (an additive key, after library_calls). }
+  var ResTally: TResolutionTally:= Default(TResolutionTally);
+  for I:= 0 to High(ABundle.Callers) do ResTally.Add(ABundle.Callers[I].Resolution);
+  LibJson:= LibJson + Format(',"caller_resolution":{"exact":%d,"ambiguous":%d,"external":%d,"name-only":%d}',
+    [ResTally.Exact, ResTally.Ambiguous, ResTally.External, ResTally.NameOnly]);
+
   Result:= Format(
     '{"task":"%s","verb":"%s","qname":"%s","resolved":%s,"token_estimate":%d,' +
-    '"has_doc":%s,"caller_count":%d,"surface_lines":%d,"slice_chunks":%d,"wiki":[%s]}', [
+    '"has_doc":%s,"caller_count":%d,"surface_lines":%d,"slice_chunks":%d,"wiki":[%s]%s,"omitted":%d,"cap":%d}', [
       JsonEscape(ABundle.Verb + ' ' + ABundle.QName), JsonEscape(ABundle.Verb), JsonEscape(ABundle.QName),
       IfThen(ABundle.Resolved, 'true', 'false'),
       ABundle.TokenEstimate, IfThen(ABundle.HasDoc, 'true', 'false'), Length(ABundle.Callers),
-      Length(ABundle.ClassSurface), Length(ABundle.ImplSlice), Wiki]);
+      Length(ABundle.ClassSurface), Length(ABundle.ImplSlice), Wiki, LibJson,
+      Ord(ABundle.TotalCallers > Length(ABundle.Callers)) * (ABundle.TotalCallers - Length(ABundle.Callers)), ABundle.CallerCap]);
 end; // function
 
 end.

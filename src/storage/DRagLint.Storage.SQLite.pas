@@ -132,6 +132,14 @@ function IsDuplicateColumnError(const pError: Exception): Boolean;
 procedure ExecAdditiveDDL(const pConn: TFDConnection; const pSql: string);
 
 type
+  /// <summary>Between-files gate (DEC-13): called by OpenFileTx before it opens a file transaction.</summary>
+  TFileTxGate = reference to procedure(AStore: TObject);
+
+var
+  /// <summary>Set by a batch verb that listens on the control channel; nil otherwise. Called on the indexing thread with NO transaction open, so the gate may checkpoint, close the store and end the process.</summary>
+  GFileTxGate: TFileTxGate;
+
+type
   /// <summary>One resolver answer for one ref -- the shape of
   /// TCallResolver.ResolveTypeUse and TCallResolver.ResolveEnumCast.</summary>
   /// <remarks>Returns the bound symbol id, or 0 with AReason naming the decline.</remarks>
@@ -146,6 +154,7 @@ type
   TSQLiteSymbolStore = class(TInterfacedObject, ISymbolStore)
     strict private
       FConn                  : TFDConnection;
+      FRtyColumn             : Integer      ; { item 4: refs.receiver_type_text present? 0 unknown, 1 yes, 2 no }
       FQInsertFile           : TFDQuery     ;
       FQUpsertFile           : TFDQuery     ;
       FQInsertSymbol         : TFDQuery     ;
@@ -157,6 +166,8 @@ type
       FHasMemberAccesses     : Integer      ; { -1 unprobed, 0 absent, 1 present -- see HasMemberAccesses }
       FHasEffectCols         : Integer      ; { -1 unprobed, 0 absent, 1 present -- see HasEffectCols }
       FHasUseOriginCols      : Integer      ; { N-06: -1 unprobed, 0 absent, 1 present -- see HasUseOriginCols }
+      FHasDataFlows          : Integer      ; { taint T0: -1 unprobed, 0 absent, 1 present -- see HasDataFlows }
+      FQPutDataFlows         : TFDQuery     ; { taint T0: data_flows writer, prepared on first use }
       FQDeleteFileSymbols    : TFDQuery     ;
       FQDeleteFileRefs       : TFDQuery     ;
       FQUpsertDiBinding          : TFDQuery     ;
@@ -335,6 +346,16 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ProbeExists(const ASQL: string): Boolean;
+      /// <summary>Item 4 type filter of the Called-from name bucket: removes from AList (and the parallel
+      /// ARtyList) every candidate whose receiver_type_text names a type that resolves in THIS store and is
+      /// neither the owner, nor one of its ancestors, nor one of its descendants.</summary>
+      /// <param name="AOwnerTypeName">The target's owning type (leaf name).</param>
+      /// <param name="AList">Candidates; filtered in place.</param>
+      /// <param name="ARtyList">receiver_type_text per candidate, same order and length as AList.</param>
+      /// <remarks>Keeps (unknown is not foreign): an empty or NULL type text, a text with pending segments
+      /// ('T.seg'), and a type this store does not declare (a library type). Ancestors are kept because a
+      /// call through a base type reaches the owner's override. Not thread-safe.</remarks>
+      procedure DropForeignTypedCallers(const AOwnerTypeName: string; AList: TList<TResolvedCaller>; ARtyList: TList<string>);
       /// <summary>True when ResolveCallTargets may restrict itself to the refs
       /// this instance's writes can have affected.</summary>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ScopedResolveDeclineReason
@@ -1025,7 +1046,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
+      function FileShaMatches(const APath: string; const ASha: string): Boolean;
+      procedure RefreshFileMtime(const APath: string; AMtimeUnix: Int64);
       function IncludeOriginsChanged(const APath: string): Boolean;
+      /// <summary>Lane INC: records the include files AHostPath took in its last
+      /// parse; see ISymbolStore.SetFileIncludes.</summary>
+      /// <param name="AHostPath">The host file path.</param>
+      /// <param name="AIncludes">Absolute include paths; empty deletes the record.</param>
+      procedure SetFileIncludes(const AHostPath: string; const AIncludes: TArray<string>);
       /// <summary><!-- drag-lint:auto sum -->INBOX 2.3: generic schema_meta reader.
       /// Tolerates a missing table (a DB from before schema_meta existed) and a missing
       /// key, both as '' -- callers treat that as "unknown", never as an error, exactly
@@ -1137,6 +1165,9 @@ type
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
+      /// <summary>Checkpoints the WAL (TRUNCATE) and closes the connection so no -wal/-shm sidecar survives; the store is unusable afterwards.</summary>
+      /// <remarks>Maintenance stand-down only (DEC-13); call with no file transaction open.</remarks>
+      procedure CloseForStandDown;
       function OpenFileTx(const APath: string; AMtimeUnix: Int64; const ASha: string; const ALanguage: string): TFileTxToken;
       /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
       /// <param name="ASymbol"><!-- drag-lint:auto type -->const TSymbol</param>
@@ -1325,6 +1356,13 @@ type
       /// </remarks>
       function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer;
         const AKind: string = ''): TArray<TStringLitMatch>;
+      /// <summary>Implements ISymbolStore.FindSymbolsWithinHops.</summary>
+      /// <param name="ASeedId">symbols.id of the seed.</param>
+      /// <param name="AHops">Maximum hop count (1..3).</param>
+      /// <param name="AUsesEdges">True adds unit-uses edges.</param>
+      /// <returns>One row per qualified name with its smallest hop.</returns>
+      function FindSymbolsWithinHops(ASeedId: Int64; AHops: Integer;
+        AUsesEdges: Boolean): TArray<TSymbolHop>;
       // v14 (D5): resolved call-target edges (call_edges table).
       /// <summary><!-- drag-lint:auto sum -->v14 (D5): resolved call-target edges
       /// (call_edges table).</summary>
@@ -1429,6 +1467,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
+    function FindDispatchLinks(ASymbolId: Int64; AToBases: Boolean): TArray<TDispatchLink>;
     function GetUnresolvedCallsFromSymbol(AEnclosingSymbolId: Int64): TArray<TReference>;
       /// <returns><!-- drag-lint:auto -->Int64 -- Observed:
       /// Q.FieldByName('n').AsLargeInt.</returns>
@@ -1866,6 +1905,13 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FindCallersByName(const ACalleeName: string): TArray<TReference>              ;
+      /// <summary>Implements ISymbolStore.CountCallerSitesByNames: one correlated
+      /// COUNT(DISTINCT) per name over idx_refs_name_nocase, all names in one statement.</summary>
+      /// <param name="ANames">Callee names, matched COLLATE NOCASE.</param>
+      /// <returns>Distinct (file_id, start_line) count per name, in ANames order.</returns>
+      /// <remarks>Read-only. Callers batch ANames (draglint/callerCounts uses 64) so one
+      /// statement stays short and the LSP loop can serve hovers between batches.</remarks>
+      function CountCallerSitesByNames(const ANames: TArray<string>): TArray<Integer>        ;
       /// <summary>Implements ISymbolStore.GetReferencedSymbolIds -- one DISTINCT scan of refs.</summary>
       /// <returns><!-- drag-lint:auto -->TArray&lt;Int64&gt; -- Observed: List.ToArray.</returns>
       /// <remarks>
@@ -2125,6 +2171,40 @@ type
       /// (Migrate has not run on it -- a read-only open). Defensive; never a silent no-op.</exception>
       /// <remarks>Implements ISymbolStore.PutEffectFacts.</remarks>
       procedure PutEffectFacts(const ARows: TArray<TEffectFactRow>);
+      /// <summary>Writes one routine's data_flows rows inside the open file tx.</summary>
+      /// <param name="AToken">The open file tx (supplies file_id).</param>
+      /// <param name="ARows">Rows to insert; empty is a no-op.</param>
+      /// <remarks>Implements ISymbolStore.PutDataFlows. No-op when the table is absent.</remarks>
+      procedure PutDataFlows(const AToken: TFileTxToken; const ARows: TArray<TDataFlowRow>);
+      /// <summary>True when the data_flows table exists (probed once per store).</summary>
+      /// <returns>Implements ISymbolStore.HasDataFlows.</returns>
+      function HasDataFlows: Boolean;
+      /// <summary>data_flows rows whose destination is at (AFileId, ALine, ACol).</summary>
+      /// <param name="AFileId">files.id.</param>
+      /// <param name="ALine">dst_line.</param>
+      /// <param name="ACol">dst_col.</param>
+      /// <param name="ADstKind">DF_DST_* or '' for all.</param>
+      /// <returns>Implements ISymbolStore.GetDataFlowsAt.</returns>
+      function GetDataFlowsAt(AFileId: Int64; ALine, ACol: Integer; const ADstKind: string): TArray<TDataFlowRow>;
+      /// <summary>data_flows rows of one routine.</summary>
+      /// <param name="ASymbolId">symbols.id of the routine.</param>
+      /// <param name="ADstKind">DF_DST_* or '' for all.</param>
+      /// <returns>Implements ISymbolStore.GetDataFlowsOf.</returns>
+      function GetDataFlowsOf(ASymbolId: Int64; const ADstKind: string): TArray<TDataFlowRow>;
+      /// <summary>dst_kind='field' rows writing AName under one of AOwnerIds.</summary>
+      /// <param name="AOwnerIds">owner_id values; empty returns nothing.</param>
+      /// <param name="AName">Field name (case-insensitive).</param>
+      /// <returns>Implements ISymbolStore.GetFieldWriters.</returns>
+      function GetFieldWriters(const AOwnerIds: TArray<Int64>; const AName: string): TArray<TDataFlowRow>;
+      /// <summary>dst_kind='global' rows writing AName.</summary>
+      /// <param name="AName">Variable name (case-insensitive).</param>
+      /// <param name="AFileId">files.id filter; 0 or less = every file.</param>
+      /// <returns>Implements ISymbolStore.GetGlobalWriters.</returns>
+      function GetGlobalWriters(const AName: string; AFileId: Int64): TArray<TDataFlowRow>;
+      /// <summary>Runs a data_flows SELECT (column list DATA_FLOWS_COLS) and maps every row.</summary>
+      /// <param name="AQ">An unopened query whose SQL and params are set; opened and closed here.</param>
+      /// <returns>The mapped rows.</returns>
+      function ReadDataFlowRows(AQ: TFDQuery): TArray<TDataFlowRow>;
       /// <summary>True when at least one routine with a body has no purity
       /// verdict yet (effect_free IS NULL) -- the gate that makes the `purity`
       /// stage run after a per-file reindex even when the calls stage was
@@ -2134,6 +2214,21 @@ type
       /// (pre-purity index: a writable open migrates them in first).</returns>
       /// <remarks>Implements ISymbolStore.PurityNeedsRun.</remarks>
       function PurityNeedsRun: Boolean;
+      /// <summary>Concept-search stage: syncs symbol_search with symbols.</summary>
+      /// <returns>Rows inserted.</returns>
+      /// <remarks>Implements ISymbolStore.BuildSymbolSearch (see there).</remarks>
+      function BuildSymbolSearch: Integer;
+      /// <summary>True when SearchConcept can answer on this DB.</summary>
+      /// <returns>See ISymbolStore.ConceptSearchReady.</returns>
+      /// <remarks>Implements ISymbolStore.ConceptSearchReady.</remarks>
+      function ConceptSearchReady: Boolean;
+      /// <summary>Ranked concept search (query --concept).</summary>
+      /// <param name="AWords">Free-text question.</param>
+      /// <param name="ALimit">Maximum rows; &lt; 1 means 20.</param>
+      /// <param name="AKinds">Comma-separated kind filter; '' = all.</param>
+      /// <returns>See ISymbolStore.SearchConcept.</returns>
+      /// <remarks>Implements ISymbolStore.SearchConcept.</remarks>
+      function SearchConcept(const AWords: string; ALimit: Integer; const AKinds: string = ''): TArray<TConceptHit>;
       /// <summary>Every symbol_facts row, Present = True on each. Bulk read for
       /// the purity stage (one query instead of one per routine).</summary>
       /// <returns>All rows; EffectFree is -1 where the column is NULL or ABSENT (pre-purity DB).</returns>
@@ -2421,7 +2516,15 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
-      /// <summary>Implements ISymbolStore.ResolveDispatch: runs TDispatchResolver,
+      /// <summary>Item 4 (spec s.4.3): records which extra stores the resolve pass
+      /// consulted as schema_meta.external_stores -- a JSON array of {path,
+      /// indexer_fingerprint, resolver_fingerprint, indexed_at_unix} read from each
+      /// store's own schema_meta -- so a reader can tell which library build the
+      /// external names came from.</summary>
+      /// <param name="AExtraStores">The stores the pass consulted; empty removes the key.</param>
+      /// <param name="AScoped">True for a scoped pass: with no stores it leaves the key, since
+      /// the rows it did not re-resolve keep their external names.</param>
+      procedure WriteExternalStores(const AExtraStores: TArray<ISymbolStore>; AScoped: Boolean);      /// <summary>Implements ISymbolStore.ResolveDispatch: runs TDispatchResolver,
       /// then wipes and rewrites dispatch_edges and classref_args in one
       /// transaction.</summary>
       /// <param name="AExtraStores">Library stores for class-reference type lookup; may be nil.</param>
@@ -3468,18 +3571,26 @@ type
       class function FindImplEnd(const ALines: TArray<string>; AStartLine: Integer): Integer; static;
   end;
 
+const
+  /// <summary>Lane INC: the schema_meta key prefix of a host's recorded include
+  /// list (SetFileIncludes); the full key is this plus the lowercased stored host
+  /// path, the value the include paths joined by '|'. Public for lint-all (lane INC2).</summary>
+  FILE_INCLUDES_META_KEY = 'file_includes:';
+
 implementation
 
 uses
   System.Generics.Defaults
   , System.StrUtils
+  , System.Character
   , System.IOUtils
   , System.Math
   , System.Diagnostics        { v0.86: resolve-pass progress timing -- see ResolveLog }
-  , DRagLint.Storage.Schema
+  , DRagLint.Storage.Schema  // dl:unit DRagLint.Storage.Schema accepted -- the DDL constants exist only for this store: Migrate is their one reader, so they travel together
   , DRagLint.Storage.FileMembership { HeaderSaysWal: the read-only Connect names the journal mode the file already has }
   , DRagLint.Core.Versions { REBUILD_IN_PROGRESS_META_KEY: ClearAllFiles stamps it (B-23) }
   , DRagLint.Query  .Fuzzy
+  , DRagLint.Query.IdentWords { SplitIdentifierWords: concept-search tokens (BuildSymbolSearch) }
   { DRagLint.Index.CallResolver (v14, D5: the receiver-typing engine for
     ResolveCallTargets) moved to the INTERFACE uses on 2026-09-23 -- see the
     note there. Listing it in both sections is a duplicate-uses error. }
@@ -3545,6 +3656,20 @@ begin
   Result:= (TStopwatch.GetTimeStamp - AStart) / TStopwatch.Frequency;
 end;
 
+{ Item 12: PRAGMA data_version on AConn. SQLite bumps it for a connection when ANOTHER
+  connection commits, never for its own commits, so two readings inside one
+  BEGIN IMMEDIATE transaction must be equal; a difference means the lock discipline was
+  bypassed somewhere. -1 when the pragma cannot be read -- a witness must never be the
+  reason a pass fails. }
+function ReadDataVersion(AConn: TFDConnection): Int64;
+begin
+  try
+    Result:= AConn.ExecSQLScalar('PRAGMA data_version');
+  except
+    on EFDDBEngineException do Result:= -1;
+  end;
+end;
+
 { V-C (1.31.5): the REF count from which a WHOLE-DB calls pass is worth the
   "expensive shape ... running, not hung" warning. Refs, not files: the pass
   cost follows refs, and file count misleads both ways (drag-lint's own 205
@@ -3585,6 +3710,7 @@ begin
   FHasMemberAccesses:= -1; { probed lazily -- see HasMemberAccesses }
   FHasEffectCols    := -1; { probed lazily -- see HasEffectCols }
   FHasUseOriginCols := -1; { N-06: probed lazily -- see HasUseOriginCols }
+  FHasDataFlows     := -1; { taint T0: probed lazily -- see HasDataFlows }
   FLateAncCache  := TDictionary<string, TSymbol>.Create;
   FAnchorCache   := TDictionary<Int64, string>.Create; // Task 3c; see FrameworkAnchorForFile
   FFlowOracles   := TFlowOracleCache.Create;           // C1b; see FlowOracles
@@ -3639,6 +3765,206 @@ begin
   Result:= TableExists('dispatch_edges');
 end;
 
+{ ---- data_flows (taint wave T0, 2026-10-27) ----------------------------------
+  Writer + readers only; no analysis here. Column order of every SELECT is
+  DATA_FLOWS_COLS, mapped POSITIONALLY by ReadDataFlowRows. }
+const
+  DATA_FLOWS_COLS = 'file_id, symbol_id, owner_id, dst_kind, dst_line, dst_col, dst_index, dst_name, ' +
+                    'dst_receiver, src_kind, src_index, src_line, src_col, src_name, via_local, cond';
+  { a bare `F := e` (no receiver) in a descendant is a 'write' row: the extractor
+    classifies only the owner's own fields, so an inherited field arrives by name }
+  SQL_FIELD_WRITERS_HEAD = 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE (dst_kind = ''' + DF_DST_FIELD +
+                           ''' OR (dst_kind = ''' + DF_DST_WRITE + ''' AND dst_receiver = ''''))' +
+                           ' AND dst_name = :n COLLATE NOCASE AND owner_id IN (';
+  SQL_FIELD_WRITERS_TAIL = ') ORDER BY file_id, dst_line, dst_col';
+  SQL_PUT_DATA_FLOWS = 'INSERT INTO data_flows(' + DATA_FLOWS_COLS + ') VALUES (:fid, :sid, :own, :dk, ' +  // dl:ok sql-injection-concat@11f0 -- REVIEWED 2026-10-27: DATA_FLOWS_COLS is a compile-time const column list, no runtime value; every value is a bound :param
+                       ':dl, :dc, :di, :dn, :dr, :sk, :si, :sl, :sc, :sn, :vl, :cd)';
+
+type
+  { Positional column order of DATA_FLOWS_COLS -- keep the two in step. }
+  TDataFlowCol = (dfcFileId = 0, dfcSymbolId = 1, dfcOwnerId = 2, dfcDstKind = 3, dfcDstLine = 4, dfcDstCol = 5,
+                  dfcDstIndex = 6, dfcDstName = 7, dfcDstReceiver = 8, dfcSrcKind = 9, dfcSrcIndex = 10, dfcSrcLine = 11,
+                  dfcSrcCol = 12, dfcSrcName = 13, dfcViaLocal = 14, dfcCond = 15);
+
+function TSQLiteSymbolStore.HasDataFlows: Boolean;
+begin
+  if FHasDataFlows < 0 then FHasDataFlows:= if TableExists('data_flows') then 1 else 0;
+  Result:= FHasDataFlows = 1;
+end;
+
+procedure TSQLiteSymbolStore.PutDataFlows(const AToken: TFileTxToken; const ARows: TArray<TDataFlowRow>);
+var
+  R: TDataFlowRow;
+begin
+  if (Length(ARows) = 0) or not HasDataFlows then Exit;
+  if FQPutDataFlows = nil then
+  begin
+    FQPutDataFlows:= TFDQuery.Create(nil);
+    FQPutDataFlows.Connection:= FConn;
+    FQPutDataFlows.SQL.Text:= SQL_PUT_DATA_FLOWS;
+    FQPutDataFlows.ParamByName('fid').DataType:= ftLargeint;
+    FQPutDataFlows.ParamByName('sid').DataType:= ftLargeint;
+    FQPutDataFlows.ParamByName('own').DataType:= ftLargeint;
+    FQPutDataFlows.ParamByName('dk' ).DataType:= ftWideString;
+    FQPutDataFlows.ParamByName('dl' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('dc' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('di' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('dn' ).DataType:= ftWideString;
+    FQPutDataFlows.ParamByName('dr' ).DataType:= ftWideString;
+    FQPutDataFlows.ParamByName('sk' ).DataType:= ftWideString;
+    FQPutDataFlows.ParamByName('si' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('sl' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('sc' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('sn' ).DataType:= ftWideString;
+    FQPutDataFlows.ParamByName('vl' ).DataType:= ftInteger;
+    FQPutDataFlows.ParamByName('cd' ).DataType:= ftInteger;
+    FQPutDataFlows.Prepare;
+  end;
+  for R in ARows do
+  begin
+    FQPutDataFlows.ParamByName('fid').AsLargeInt  := AToken.FileId;
+    FQPutDataFlows.ParamByName('sid').AsLargeInt  := R.SymbolId;
+    FQPutDataFlows.ParamByName('own').AsLargeInt  := R.OwnerId;
+    FQPutDataFlows.ParamByName('dk' ).AsWideString:= R.DstKind;
+    FQPutDataFlows.ParamByName('dl' ).AsInteger   := R.DstLine;
+    FQPutDataFlows.ParamByName('dc' ).AsInteger   := R.DstCol;
+    FQPutDataFlows.ParamByName('di' ).AsInteger   := R.DstIndex;
+    FQPutDataFlows.ParamByName('dn' ).AsWideString:= R.DstName;
+    FQPutDataFlows.ParamByName('dr' ).AsWideString:= R.DstReceiver;
+    FQPutDataFlows.ParamByName('sk' ).AsWideString:= R.SrcKind;
+    FQPutDataFlows.ParamByName('si' ).AsInteger   := R.SrcIndex;
+    FQPutDataFlows.ParamByName('sl' ).AsInteger   := R.SrcLine;
+    FQPutDataFlows.ParamByName('sc' ).AsInteger   := R.SrcCol;
+    FQPutDataFlows.ParamByName('sn' ).AsWideString:= R.SrcName;
+    FQPutDataFlows.ParamByName('vl' ).AsInteger   := Ord(R.ViaLocal);
+    FQPutDataFlows.ParamByName('cd' ).AsInteger   := Ord(R.Cond);
+    FQPutDataFlows.ExecSQL;
+  end;
+end;
+
+function TSQLiteSymbolStore.ReadDataFlowRows(AQ: TFDQuery): TArray<TDataFlowRow>;
+var
+  L: TList<TDataFlowRow>;
+  R: TDataFlowRow;
+begin
+  L:= TList<TDataFlowRow>.Create;
+  try
+    AQ.Open;
+    try
+      while not AQ.Eof do
+      begin
+        R:= Default(TDataFlowRow);
+        R.FileId     := AQ.Fields[Ord(dfcFileId)].AsLargeInt;
+        R.SymbolId   := AQ.Fields[Ord(dfcSymbolId)].AsLargeInt;
+        R.OwnerId    := AQ.Fields[Ord(dfcOwnerId)].AsLargeInt;
+        R.DstKind    := AQ.Fields[Ord(dfcDstKind)].AsString;
+        R.DstLine    := AQ.Fields[Ord(dfcDstLine)].AsInteger;
+        R.DstCol     := AQ.Fields[Ord(dfcDstCol)].AsInteger;
+        R.DstIndex   := AQ.Fields[Ord(dfcDstIndex)].AsInteger;
+        R.DstName    := AQ.Fields[Ord(dfcDstName)].AsString;
+        R.DstReceiver:= AQ.Fields[Ord(dfcDstReceiver)].AsString;
+        R.SrcKind    := AQ.Fields[Ord(dfcSrcKind)].AsString;
+        R.SrcIndex   := AQ.Fields[Ord(dfcSrcIndex)].AsInteger;
+        R.SrcLine    := AQ.Fields[Ord(dfcSrcLine)].AsInteger;
+        R.SrcCol     := AQ.Fields[Ord(dfcSrcCol)].AsInteger;
+        R.SrcName    := AQ.Fields[Ord(dfcSrcName)].AsString;
+        R.ViaLocal   := AQ.Fields[Ord(dfcViaLocal)].AsInteger <> 0;
+        R.Cond       := AQ.Fields[Ord(dfcCond)].AsInteger <> 0;
+        L.Add(R);
+        AQ.Next;
+      end;
+    finally
+      AQ.Close;
+    end;
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetDataFlowsAt(AFileId: Int64; ALine, ACol: Integer;
+  const ADstKind: string): TArray<TDataFlowRow>;
+var
+  Q: TFDQuery;
+begin
+  Result:= nil;
+  if not HasDataFlows then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE file_id = :f AND dst_line = :l AND ' +
+      'dst_col = :c AND (:k = '''' OR dst_kind = :k) ORDER BY dst_index, src_kind, src_line, src_col';
+    Q.ParamByName('f').AsLargeInt  := AFileId;
+    Q.ParamByName('l').AsInteger   := ALine;
+    Q.ParamByName('c').AsInteger   := ACol;
+    Q.ParamByName('k').AsWideString:= ADstKind;
+    Result:= ReadDataFlowRows(Q);
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetDataFlowsOf(ASymbolId: Int64; const ADstKind: string): TArray<TDataFlowRow>;
+var
+  Q: TFDQuery;
+begin
+  Result:= nil;
+  if not HasDataFlows then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE symbol_id = :s AND ' +
+      '(:k = '''' OR dst_kind = :k) ORDER BY dst_kind, dst_index, dst_line, dst_col';
+    Q.ParamByName('s').AsLargeInt  := ASymbolId;
+    Q.ParamByName('k').AsWideString:= ADstKind;
+    Result:= ReadDataFlowRows(Q);
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetFieldWriters(const AOwnerIds: TArray<Int64>; const AName: string): TArray<TDataFlowRow>;
+var
+  Q     : TFDQuery;
+  Ids   : string;
+  IdText: TArray<string>;
+  I     : Integer;
+begin
+  Result:= nil;
+  if (Length(AOwnerIds) = 0) or not HasDataFlows then Exit;
+  SetLength(IdText, Length(AOwnerIds));
+  for I:= 0 to High(AOwnerIds) do IdText[I]:= IntToStr(AOwnerIds[I]);
+  Ids:= string.Join(',', IdText);
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= SQL_FIELD_WRITERS_HEAD + Ids + SQL_FIELD_WRITERS_TAIL;  { Ids: IntToStr of Int64 ids only, never text }
+    Q.ParamByName('n').AsWideString:= AName;
+    Result:= ReadDataFlowRows(Q);
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.GetGlobalWriters(const AName: string; AFileId: Int64): TArray<TDataFlowRow>;
+var
+  Q: TFDQuery;
+begin
+  Result:= nil;
+  if not HasDataFlows then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT ' + DATA_FLOWS_COLS + ' FROM data_flows WHERE dst_kind = ''' + DF_DST_GLOBAL + ''' AND ' +
+      'dst_name = :n COLLATE NOCASE AND (:f <= 0 OR file_id = :f) ORDER BY file_id, dst_line, dst_col';
+    Q.ParamByName('n').AsWideString:= AName;
+    Q.ParamByName('f').AsLargeInt  := AFileId;
+    Result:= ReadDataFlowRows(Q);
+  finally
+    Q.Free;
+  end;
+end;
+
 procedure TSQLiteSymbolStore.ResolveDispatch(const AExtraStores: TArray<ISymbolStore>);
 var
   Res: TDispatchResolver;
@@ -3655,13 +3981,16 @@ begin
   QE := TFDQuery.Create(nil);
   QA := TFDQuery.Create(nil);
   try
+    { ITEM 12: the transaction opens BEFORE Res.Run reads the symbol ids it will write
+      (BEGIN IMMEDIATE via ConnectWriter); a second writer re-issuing ids in between made
+      the dispatch_edges / classref_args inserts fail their foreign keys. }
+    FConn.StartTransaction;
+    try
     Res.Run;
     QE.Connection:= FConn;
     QE.SQL.Text  := 'INSERT INTO dispatch_edges(base_symbol_id, impl_symbol_id, kind, confidence) VALUES (:b, :i, :k, :c)';
     QA.Connection:= FConn;
     QA.SQL.Text  := 'INSERT INTO classref_args(ref_id, arg_index, param_symbol_id, class_symbol_id, confidence) VALUES (:r, :a, :p, :k, :c)';
-    FConn.StartTransaction;
-    try
       FConn.ExecSQL('DELETE FROM dispatch_edges');
       FConn.ExecSQL('DELETE FROM classref_args');
       for E in Res.Edges do
@@ -3924,6 +4253,7 @@ begin
   FQDeleteFileDocs.Free;
   FQGetSymbolDoc.Free;
   FQPutSymbolFacts.Free;
+  FQPutDataFlows.Free;
   FQGetSymbolFacts.Free;
   FQFindByDocTag.Free;
   FQFindUndocumented.Free;
@@ -4319,6 +4649,20 @@ begin
     Writeln('WARNING: FTS5 unavailable in sqlite3.dll; ' +
             'text-search index (string_literals) will not be updated.');
   end;
+  { XERJ item 5: concept-search tables. Derived data (filled by the search index stage),
+    no SCHEMA_VERSION bump. Without FTS5 the three triggers are dropped so a cascade from
+    symbols never reaches a missing fts5 module. }
+  if FFts5Available then
+  begin
+    for I := Low(SCHEMA_DDL_SYMBOL_SEARCH) to High(SCHEMA_DDL_SYMBOL_SEARCH) do
+      TryExec(SCHEMA_DDL_SYMBOL_SEARCH[I]);
+  end
+  else
+  begin
+    TryExec('DROP TRIGGER IF EXISTS symbol_search_ai');
+    TryExec('DROP TRIGGER IF EXISTS symbol_search_ad');
+    TryExec('DROP TRIGGER IF EXISTS symbol_search_au');
+  end;
   { v9: additive body-span columns for pre-v9 symbols tables. CREATE TABLE IF
     NOT EXISTS never adds columns to an existing table, so ALTER explicitly
     (after the commit so a swallowed duplicate-column error can't disturb the
@@ -4466,6 +4810,11 @@ begin
     (the edge says so) and "not resolved at all". It is deliberately NOT a
     substitute for a local edge: a ref never carries both. }
   TryExec('ALTER TABLE refs ADD COLUMN external_target TEXT');
+  { item 4 (1.16 resolver): refs.receiver_type_text -- the receiver's declared type
+    text as the resolve ladder reached it (spec 2026-10-28-untypable-receivers s.4.1).
+    NULL = never resolved by a 1.16 engine; '' = bare/untypable; additive, no
+    SCHEMA_VERSION bump (dispatch_edges / data_flows precedent). }
+  TryExec('ALTER TABLE refs ADD COLUMN receiver_type_text TEXT');
   // N-06: unit_uses rows extracted from an include directive carry the absolute
   // .inc path and the host line of the directive (NULL = the unit's own text).
   // The partial index serves editors and the .inc host-invalidation lookup.
@@ -4544,6 +4893,33 @@ begin
           '  PRIMARY KEY (ref_id, arg_index))');
   TryExec('CREATE INDEX IF NOT EXISTS idx_classref_args_class ON classref_args(class_symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_classref_args_param ON classref_args(param_symbol_id)');
+  { 2026-10-27 (taint wave T0, plan 2026-10-27-taint-interprocedural-plan.md section 2):
+    per-routine data-flow facts, written by the indexer (PutDataFlows) inside the file tx.
+    ADDITIVE and probed for (HasDataFlows), so NO SCHEMA_VERSION bump -- the member_accesses /
+    classref_args precedent, and like them it lives ONLY here (Migrate runs on every writable
+    open, new DB or old), not in SCHEMA_DDL, so SCHEMA_DDL_FTS5_FIRST does not move. Both FK
+    child columns are covered by an index's LEADING column (file_id: idx_data_flows_dst,
+    symbol_id: idx_data_flows_sym) -- the v0.85 PERF rule below. Column semantics: TDataFlowRow. }
+  TryExec('CREATE TABLE IF NOT EXISTS data_flows (' +
+          '  file_id      INTEGER NOT NULL REFERENCES files(id)   ON DELETE CASCADE,' +
+          '  symbol_id    INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,' +
+          '  owner_id     INTEGER NOT NULL,' +
+          '  dst_kind     TEXT    NOT NULL,' +
+          '  dst_line     INTEGER NOT NULL,' +
+          '  dst_col      INTEGER NOT NULL,' +
+          '  dst_index    INTEGER NOT NULL,' +
+          '  dst_name     TEXT,' +
+          '  dst_receiver TEXT,' +
+          '  src_kind     TEXT    NOT NULL,' +
+          '  src_index    INTEGER NOT NULL,' +
+          '  src_line     INTEGER NOT NULL,' +
+          '  src_col      INTEGER NOT NULL,' +
+          '  src_name     TEXT,' +
+          '  via_local    INTEGER NOT NULL,' +
+          '  cond         INTEGER NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_data_flows_dst  ON data_flows(file_id, dst_line, dst_col)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_data_flows_sym  ON data_flows(symbol_id, dst_kind)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_data_flows_name ON data_flows(dst_kind, dst_name COLLATE NOCASE)');
   { v0.85 PERF -- the three FK child columns that had no index.
 
     `PRAGMA foreign_keys = ON` is set on the write connection, so deleting a
@@ -5289,10 +5665,101 @@ begin
   end;
 end; // function
 
+function TSQLiteSymbolStore.FileShaMatches(const APath: string; const ASha: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT 1 FROM files WHERE (path = :p OR LOWER(path) = LOWER(:p)) AND sha256 = :s';
+    Q.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
+    Q.ParamByName('s').AsWideString:= ASha;
+    Q.Open;
+    Result:= not Q.IsEmpty;
+  finally
+    Q.Free;
+  end;
+end; // function
+
+procedure TSQLiteSymbolStore.RefreshFileMtime(const APath: string; AMtimeUnix: Int64);
+var
+  Q: TFDQuery;
+begin
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'UPDATE files SET mtime_unix = :m WHERE (path = :p OR LOWER(path) = LOWER(:p))';
+    Q.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
+    Q.ParamByName('m').AsLargeInt:= AMtimeUnix;
+    Q.ExecSQL;
+  finally
+    Q.Free;
+  end;
+end; // procedure
+
+const
+  // Lane INC: schema_meta key prefix of a host's recorded include list.
+  FILE_INCLUDES_KEY = FILE_INCLUDES_META_KEY;
+  FILE_INCLUDES_SEP = '|';
+
+// True when one of the includes recorded for APath by SetFileIncludes is
+// missing or newer than APath's last parse.
+function RecordedIncludesChanged(AConn: TFDConnection; const APath: string): Boolean;
+var
+  Q: TFDQuery;
+  ParsedAt: Int64;
+  List: string;
+begin
+  Result:= False;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= AConn;
+    Q.SQL.Text:= 'SELECT m.value, f.parsed_at FROM schema_meta m JOIN files f ' +
+                 'ON (f.path = :p OR LOWER(f.path) = LOWER(:p)) WHERE m.key = :k LIMIT 1';
+    Q.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
+    Q.ParamByName('k').AsWideString:= FILE_INCLUDES_KEY + LowerCase(NormalizeStoredPath(APath));
+    try
+      Q.Open;
+    except
+      { no schema_meta table (a pre-schema_meta DB): nothing was recorded }
+    end;
+    if (not Q.Active) or Q.IsEmpty then Exit;
+    List    := Q.Fields[0].AsString;
+    ParsedAt:= Q.Fields[1].AsLargeInt;
+  finally
+    Q.Free;
+  end;
+  for var Inc_ in List.Split([FILE_INCLUDES_SEP]) do
+  begin
+    if Inc_ = '' then Continue;
+    if (not TFile.Exists(Inc_)) or (DateTimeToUnix(TFile.GetLastWriteTime(Inc_), False) > ParsedAt) then
+      Exit(True);
+  end;
+end;
+
+procedure TSQLiteSymbolStore.SetFileIncludes(const AHostPath: string; const AIncludes: TArray<string>);
+var
+  Key: string;
+begin
+  Key:= FILE_INCLUDES_KEY + LowerCase(NormalizeStoredPath(AHostPath));
+  if Length(AIncludes) = 0 then
+  begin
+    try
+      FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ?', [Key]);
+    except
+      { no schema_meta table: nothing to clear }
+    end;
+    Exit;
+  end;
+  SetMetaValue(Key, string.Join(FILE_INCLUDES_SEP, AIncludes));
+end;
+
 function TSQLiteSymbolStore.IncludeOriginsChanged(const APath: string): Boolean;
 var
   Q: TFDQuery;
 begin
+  if RecordedIncludesChanged(FConn, APath) then Exit(True);
   Result:= False;
   if not HasUseOriginCols then Exit;
   Q:= TFDQuery.Create(nil);
@@ -5476,11 +5943,18 @@ begin
   Result:= NormalizeStoredPathSpelling(ExpandFileName(StringReplace(APath, '/', '\', [rfReplaceAll])));
 end;
 
+procedure TSQLiteSymbolStore.CloseForStandDown;
+begin
+  Checkpoint;
+  if Assigned(FConn) and FConn.Connected then FConn.Close;
+end;
+
 function TSQLiteSymbolStore.OpenFileTx(const APath: string; AMtimeUnix: Int64; const ASha: string; const ALanguage: string): TFileTxToken;
 var
   Q : TFDQuery;
   NP: string  ;
 begin
+  if Assigned(GFileTxGate) then GFileTxGate(Self); { DEC-13: between files, no tx open }
   NP:= NormalizeStoredPath(APath);
   { V-C: the corpus size BEFORE this run's first write -- read ahead of the
     upsert, which would otherwise count the run's first new file as old. }
@@ -6546,6 +7020,9 @@ var
   ScopeC: string                ; { the reach CTE, or '' }
   ScopeP: string                ; { the reach predicate, or '' }
   RcvP  : string                ; { v20: the receiver predicate, or '' }
+  RtyCol: string                ; { item 4: the receiver_type_text select term }
+  RtyList: TList<string>        ; { item 4: receiver_type_text per row of List }
+  UnknownRty: Boolean           ; { item 4: the column is absent (pre-item-4 DB) }
 begin
   { ACallSitesOnly=False is the historic kind-blind scan. Its contract lives on
     the ISymbolStore declaration in DRagLint.Core.Interfaces and nowhere else --
@@ -6672,12 +7149,18 @@ begin
     '                    AND sv.kind IN (''local_var'',''param'',''field'',''property'',''var'',''const''))) ';
 
   List:= TList<TResolvedCaller>.Create;
+  RtyList:= TList<string>.Create;
+  { A DB older than the column reads '' for every row (keep everything). }
+  if FRtyColumn = 0 then
+    FRtyColumn:= (if ProbeExists('SELECT 1 FROM pragma_table_info(''refs'') WHERE name = ''receiver_type_text''') then 1 else 2);
+  UnknownRty:= FRtyColumn = 2;
+  RtyCol:= (if UnknownRty then ''''' AS rty ' else 'r.receiver_type_text AS rty ');
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
     Q.SQL.Text:= ScopeC +
       'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ' +
-      '       r.receiver_text ' +
+      '       r.receiver_text, ' + RtyCol +
       'FROM refs r ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
       'JOIN files f ON f.id = r.file_id ' +
@@ -6715,14 +7198,99 @@ begin
       else R.ReceiverText:= Q.FieldByName('receiver_text').AsString;
       R.Confidence:= 'unverified';
       List.Add(R);
+      RtyList.Add(Q.FieldByName('rty').AsString);
       Q.Next;
     end; // while
+    Q.Close;
+    { item 4 TYPE FILTER -- see FoldForeignTypedCallers. }
+    if (Trim(AOwnerTypeName) <> '') and not UnknownRty then DropForeignTypedCallers(AOwnerTypeName, List, RtyList);
     Result:= List.ToArray;
   finally
     Q.Free;
     List.Free;
+    RtyList.Free;
   end; // try
 end; // function
+
+procedure TSQLiteSymbolStore.DropForeignTypedCallers(const AOwnerTypeName: string; AList: TList<TResolvedCaller>; ARtyList: TList<string>);
+var
+  Related : TStringList;
+  Declared: TDictionary<string, Boolean>;
+  Q       : TFDQuery;
+
+  procedure Load(const ASql: string);
+  begin
+    Q.SQL.Text:= ASql;
+    Q.ParamByName('o').AsWideString:= AOwnerTypeName;
+    Q.Open;
+    try
+      while not Q.Eof do
+      begin
+        Related.Add(Q.Fields[0].AsString);
+        Q.Next;
+      end;
+    finally
+      Q.Close;
+    end;
+  end;
+
+  function DeclaredHere(const ATypeName: string): Boolean;
+  begin
+    if Declared.TryGetValue(LowerCase(ATypeName), Result) then Exit;
+    Q.SQL.Text:= 'SELECT 1 FROM symbols WHERE name = :t COLLATE NOCASE AND kind IN (''class'',''interface'',''record'',''type'') LIMIT 1';
+    Q.ParamByName('t').AsWideString:= ATypeName;
+    Q.Open;
+    try
+      Result:= not Q.Eof;
+    finally
+      Q.Close;
+    end;
+    Declared.Add(LowerCase(ATypeName), Result);
+  end;
+
+begin
+  Related := nil;
+  Declared:= nil;
+  Q       := nil;
+  try
+    for var i: Integer:= AList.Count - 1 downto 0 do
+    begin
+      var Rty: string:= ARtyList[i];
+      if (Rty = '') or Rty.Contains('.') or SameText(Rty, AOwnerTypeName) then Continue;
+      if Related = nil then
+      begin
+        Related := TStringList.Create;
+        Related.Sorted       := True;
+        Related.Duplicates   := dupIgnore;
+        Related.CaseSensitive:= False;
+        Declared:= TDictionary<string, Boolean>.Create;
+        Q:= TFDQuery.Create(nil);
+        Q.Connection:= FConn;
+        { descendants (any kind: an implementer of an interface owner is one) and ancestors, by NAME }
+        Load('WITH RECURSIVE d(name) AS (' +
+             ' SELECT s.name FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id' +
+             '  WHERE ta.ancestor_name = :o COLLATE NOCASE' +
+             ' UNION' +
+             ' SELECT s.name FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id' +
+             '  JOIN d ON ta.ancestor_name = d.name COLLATE NOCASE) SELECT name FROM d');
+        Load('WITH RECURSIVE a(name) AS (' +
+             ' SELECT ta.ancestor_name FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id' +
+             '  WHERE s.name = :o COLLATE NOCASE AND s.kind IN (''class'',''interface'',''record'',''type'')' +
+             ' UNION' +
+             ' SELECT ta.ancestor_name FROM type_ancestors ta JOIN symbols s ON s.id = ta.symbol_id' +
+             '  JOIN a ON s.name = a.name COLLATE NOCASE) SELECT name FROM a');
+      end;
+      if Related.IndexOf(Rty) >= 0 then Continue;
+      if not DeclaredHere(Rty) then Continue; { a library type: unknown is not foreign }
+      AList.Delete(i);
+      ARtyList.Delete(i);
+    end;
+  finally
+    Q.Free;
+    Declared.Free;
+    Related.Free;
+  end;
+end;
 
 function TSQLiteSymbolStore.GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
 var
@@ -6750,6 +7318,58 @@ begin
       if Q.FieldByName('receiver_type_symbol_id').IsNull then E.ReceiverTypeSymbolId:= 0
       else E.ReceiverTypeSymbolId:= Q.FieldByName('receiver_type_symbol_id').AsLargeInt;
       List.Add(E);
+      Q.Next;
+    end; // while
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.FindDispatchLinks(ASymbolId: Int64; AToBases: Boolean): TArray<TDispatchLink>;
+var
+  Q   : TFDQuery             ;
+  List: TList<TDispatchLink> ;
+  L   : TDispatchLink        ;
+  NearCol: string            ;
+  FarCol : string            ;
+  FldId, FldQ, FldK, FldC: TField;
+begin
+  Result:= [];
+  if not HasDispatchEdges then Exit;
+  if AToBases then
+  begin
+    NearCol:= 'impl_symbol_id';
+    FarCol := 'base_symbol_id';
+  end
+  else
+  begin
+    NearCol:= 'base_symbol_id';
+    FarCol := 'impl_symbol_id';
+  end;
+  List:= TList<TDispatchLink>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:=
+      'SELECT d.' + FarCol + ' AS far_id, s.qualified_name AS far_q, d.kind AS k, d.confidence AS c ' +
+      'FROM dispatch_edges d JOIN symbols s ON s.id = d.' + FarCol + ' ' +
+      'WHERE d.' + NearCol + ' = :x ORDER BY s.qualified_name, d.' + FarCol;
+    Q.ParamByName('x').AsLargeInt:= ASymbolId;
+    Q.Open;
+    FldId:= Q.FieldByName('far_id');
+    FldQ := Q.FieldByName('far_q' );
+    FldK := Q.FieldByName('k'     );
+    FldC := Q.FieldByName('c'     );
+    while not Q.Eof do
+    begin
+      L:= Default(TDispatchLink);
+      L.OtherId   := FldId.AsLargeInt;
+      L.OtherQName:= FldQ .AsString  ;
+      L.Kind      := FldK .AsString  ;
+      L.Confidence:= FldC .AsString  ;
+      List.Add(L);
       Q.Next;
     end; // while
     Result:= List.ToArray;
@@ -6787,6 +7407,9 @@ begin
     var EColF : TField:= Q.FieldByName('end_col'   );
     { FindField: a pre-v20 DB has no receiver_text, which reads as '' (bare). }
     var RcvF  : TField:= Q.FindField('receiver_text');
+    { item 4: both columns are additive (Migrate); a DB older than the engine reads '' }
+    var RtyF  : TField:= Q.FindField('receiver_type_text');
+    var ExtF  : TField:= Q.FindField('external_target');
     while not Q.Eof do
     begin
       R:= Default(TReference);
@@ -6800,6 +7423,8 @@ begin
       R.EndCol           := EColF.AsInteger;
       R.EnclosingSymbolId:= AEnclosingSymbolId;
       if (RcvF <> nil) and not RcvF.IsNull then R.ReceiverText:= RcvF.AsString;
+      if (RtyF <> nil) and not RtyF.IsNull then R.ReceiverTypeText:= RtyF.AsString;
+      if (ExtF <> nil) and not ExtF.IsNull then R.ExternalTarget:= ExtF.AsString;
       List.Add(R);
       Q.Next;
     end;
@@ -7842,7 +8467,13 @@ begin
       with existing consumers; the routine lands in owner_name, which was empty
       for .pas anyway. DFM/SQL literals keep their own owner_name (a property or
       exception name) -- NULLIF makes the stored value win when it is non-empty,
-      and their files hold no routines, so the subquery yields NULL for them. }
+      and their files hold no routines, so the subquery yields NULL for them.
+
+      doclit (extractor 1.26.0-alpha): the indexer now STORES the innermost
+      routine body as sl.symbol_id (a local const/var keeps itself), and a ///
+      literal stores the declaration it documents. On such a database `encl`
+      names that symbol instead of the unit, and agrees with `owner` for body
+      literals; the live subquery stays so a pre-1.26 database answers the same. }
     Sql:=
       'SELECT sl.text AS txt, sl.source AS src, sl.kind AS kind, ' +
       '  COALESCE(NULLIF(sl.owner_name, ''''), ' +
@@ -7907,6 +8538,68 @@ begin
     List.Free;
   end;
 end;
+
+function TSQLiteSymbolStore.FindSymbolsWithinHops(ASeedId: Int64; AHops: Integer;
+  AUsesEdges: Boolean): TArray<TSymbolHop>;
+const
+  CallCte =
+    'WITH RECURSIVE nb(id, hop) AS (' +
+    ' SELECT :seed, 0 ' +
+    ' UNION ' +
+    ' SELECT ce.target_symbol_id, nb.hop + 1 FROM nb' +
+    '  JOIN refs r ON r.enclosing_symbol_id = nb.id' +
+    '  JOIN call_edges ce ON ce.ref_id = r.id WHERE nb.hop < :n ' +
+    ' UNION ' +
+    ' SELECT r.enclosing_symbol_id, nb.hop + 1 FROM nb' +
+    '  JOIN call_edges ce ON ce.target_symbol_id = nb.id' +
+    '  JOIN refs r ON r.id = ce.ref_id' +
+    '  WHERE nb.hop < :n AND r.enclosing_symbol_id IS NOT NULL) ';
+  UsesCte =
+    ', fh(fid, hop) AS (' +
+    ' SELECT file_id, 0 FROM symbols WHERE id = :seed ' +
+    ' UNION ' +
+    ' SELECT uu.target_file_id, fh.hop + 1 FROM fh JOIN unit_uses uu ON uu.file_id = fh.fid' +
+    '  WHERE uu.target_file_id IS NOT NULL AND fh.hop < :n ' +
+    ' UNION ' +
+    ' SELECT uu.file_id, fh.hop + 1 FROM fh JOIN unit_uses uu ON uu.target_file_id = fh.fid' +
+    '  WHERE fh.hop < :n) ';
+var
+  Q   : TFDQuery        ;
+  List: TList<TSymbolHop>;
+  H   : TSymbolHop      ;
+  Sql : string          ;
+begin
+  Sql:= CallCte;
+  if AUsesEdges then Sql:= Sql + UsesCte;
+  Sql:= Sql + 'SELECT qn, MIN(hop) AS hop FROM (' +
+    'SELECT s.qualified_name AS qn, nb.hop AS hop FROM nb JOIN symbols s ON s.id = nb.id';
+  if AUsesEdges then
+    Sql:= Sql + ' UNION ALL SELECT s.qualified_name, fh.hop FROM fh JOIN symbols s ON s.file_id = fh.fid' +
+      ' WHERE fh.hop > 0 AND s.impl_start_line IS NOT NULL AND s.impl_start_line > 0';
+  Sql:= Sql + ') GROUP BY qn';
+  List:= TList<TSymbolHop>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= Sql;
+    Q.ParamByName('seed').AsLargeInt:= ASeedId;
+    Q.ParamByName('n').AsInteger:= AHops;
+    Q.Open;
+    var FQn := Q.FieldByName('qn' );
+    var FHop:= Q.FieldByName('hop');
+    while not Q.Eof do
+    begin
+      H.QualifiedName:= FQn.AsString;
+      H.Hop          := FHop.AsInteger;
+      List.Add(H);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
 
 function TSQLiteSymbolStore.FindImplementationsOf( const AInterfaceName: string): TArray<TDiBindingRow>;
 var
@@ -8763,11 +9456,14 @@ begin
       calls. ref_id is that table's PRIMARY KEY, so the LEFT JOIN cannot add
       or drop a row -- every other caller sees the same rows as before. }
     if HasMemberAccesses then
-      Q.SQL.Text:= 'SELECT refs.*, ma.mode AS access_mode FROM refs ' +
+      Q.SQL.Text:= 'SELECT refs.*, ma.mode AS access_mode, ce.confidence AS edge_conf FROM refs ' +
                    'LEFT JOIN member_accesses ma ON ma.ref_id = refs.id ' +
+                   'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
                    'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line'
     else
-      Q.SQL.Text:= 'SELECT * FROM refs WHERE name_text = :name COLLATE NOCASE ' + 'ORDER BY file_id, start_line';
+      Q.SQL.Text:= 'SELECT refs.*, ce.confidence AS edge_conf FROM refs ' +
+                   'LEFT JOIN call_edges ce ON ce.ref_id = refs.id ' +
+                   'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line';
     Q.ParamByName('name').AsWideString:= ACalleeName;
     Q.Open;
     while not Q.Eof do
@@ -8799,6 +9495,16 @@ begin
       var ModeF: TField:= Q.FindField('access_mode');
       if (ModeF <> nil) and not ModeF.IsNull then R.AccessMode:= ModeF.AsString
       else R.AccessMode:= '';
+      { XERJ item 3: resolution, DERIVED from columns the index already holds -- no
+        resolver write. call_edges.ref_id is its PRIMARY KEY, so the LEFT JOIN cannot
+        add or drop a row. }
+      var EdgeF: TField:= Q.FindField('edge_conf');
+      var ExtF : TField:= Q.FindField('external_target');
+      if (EdgeF <> nil) and not EdgeF.IsNull then
+        R.Resolution:= (if SameText(EdgeF.AsString, 'ambiguous') then RESOLUTION_AMBIGUOUS else RESOLUTION_EXACT)
+      else if (ExtF <> nil) and not ExtF.IsNull and (ExtF.AsString <> '') then R.Resolution:= RESOLUTION_EXTERNAL
+      else if R.SymbolId <> 0 then R.Resolution:= RESOLUTION_EXACT
+      else R.Resolution:= RESOLUTION_NAME_ONLY;
       List.Add(R);
       Q.Next;
     end; // while
@@ -8930,6 +9636,50 @@ begin
   FTestMarkersValue:= Result;
   FTestMarkersKnown:= True;
 end; // function
+
+function TSQLiteSymbolStore.CountCallerSitesByNames(const ANames: TArray<string>): TArray<Integer>;
+{ ONE statement for the whole batch:
+    WITH n(i, nm) AS (VALUES (0, :n0), (1, :n1), ...)
+    SELECT n.i, (SELECT COUNT(DISTINCT ...) FROM refs WHERE name_text = n.nm COLLATE NOCASE)
+  The correlated subquery is a SEARCH on idx_refs_name_nocase per name; nothing
+  is materialised but the counts. A site key of file_id * 2^24 + start_line is
+  exact while a file has fewer than 16.7 million lines. Measured on the platform
+  library (3.7 M refs), all 2,740 names of dxBar.pas: 413 ms warm. }
+const
+  SITE_KEY_LINE_SPAN = 16_777_216;   { 2^24: line numbers below this cannot collide across files }
+var
+  Q  : TFDQuery     ;
+  Sql: TStringBuilder;
+begin
+  SetLength(Result, Length(ANames));
+  if Length(ANames) = 0 then Exit;
+  Q  := TFDQuery.Create(nil);
+  Sql:= TStringBuilder.Create;
+  try
+    Q.Connection:= FConn;
+    Sql.Append('WITH n(i, nm) AS (VALUES ');
+    for var I: Integer:= 0 to High(ANames) do
+    begin
+      if I > 0 then Sql.Append(', ');
+      Sql.Append('(').Append(I).Append(', :n').Append(I).Append(')');
+    end;
+    Sql.Append(') SELECT n.i AS i, (SELECT COUNT(DISTINCT r.file_id * ').Append(SITE_KEY_LINE_SPAN)
+       .Append(' + r.start_line) FROM refs r WHERE r.name_text = n.nm COLLATE NOCASE) AS c FROM n');
+    Q.SQL.Text:= Sql.ToString;
+    for var I: Integer:= 0 to High(ANames) do Q.ParamByName('n' + IntToStr(I)).AsWideString:= ANames[I];
+    Q.Open;
+    var FI: TField:= Q.FieldByName('i');
+    var FC: TField:= Q.FieldByName('c');
+    while not Q.Eof do
+    begin
+      Result[FI.AsInteger]:= FC.AsInteger;
+      Q.Next;
+    end;
+  finally
+    Sql.Free;
+    Q.Free;
+  end;
+end;
 
 function TSQLiteSymbolStore.GetFilePath(AFileId: Int64): string;
 var
@@ -9146,6 +9896,448 @@ begin
     stage fills them. Probing the column would itself be "no such column". }
   if not HasEffectCols then Exit(True);
   Result:= ProbeExists('SELECT 1 FROM symbol_facts WHERE ifnull(body_loc, 0) > 0 AND effect_free IS NULL LIMIT 1');
+end; // function
+
+function ConceptCutSpans(const AText, AOpen, AClose: string): string;
+{ Drops every `OPEN` .. `CLOSE` span from AText (an unterminated OPEN drops the rest). }
+var
+  A, B: Integer;
+begin
+  Result:= AText;
+  A:= Pos(AOpen, Result);
+  while A > 0 do
+  begin
+    B:= PosEx(AClose, Result, A + Length(AOpen));
+    if B = 0 then
+      Result:= Copy(Result, 1, A - 1)
+    else
+      Delete(Result, A, B + Length(AClose) - A);
+    A:= Pos(AOpen, Result);
+  end; // while
+end; // function
+
+
+{ XERJ item 5 (concept search) helpers. Unit-level, not class members, so the class
+  declaration stays untouched. None is named Upsert/Put/Insert/Write/Resolve (the
+  extractor and resolver guards slice this unit by routine name). }
+/// <summary>Reduces a doc-comment body to plain prose for symbol_search.summary / remarks:
+/// drops the generated drag-lint:auto blocks (their "Called from:" qnames are noise), other
+/// HTML comments and XML tags, strips comment prefixes and brackets (///, //, {, }, (*, *)),
+/// decodes &amp;lt; &amp;gt; &amp;amp; and collapses whitespace.</summary>
+/// <param name="AText">Raw summary / remarks / doc-literal text; may be ''.</param>
+/// <returns>Single-line plain text, '' when nothing is left.</returns>
+function ConceptStripDocMarkup(const AText: string): string;
+var
+  S, Line: string;
+  Lines  : TArray<string>;
+  SB     : TStringBuilder;
+  A, B   : Integer;
+begin
+  S:= ConceptCutSpans(AText, '<!-- drag-lint:auto BEGIN -->', '<!-- drag-lint:auto END -->');
+  S:= ConceptCutSpans(S, '<!--', '-->');
+  A:= Pos('<', S);
+  while A > 0 do
+  begin
+    B:= PosEx('>', S, A + 1);
+    if B = 0 then Break;
+    Delete(S, A, B - A + 1);
+    Insert(' ', S, A);
+    A:= PosEx('<', S, A + 1);
+  end; // while
+  Lines:= S.Replace(#13, '').Split([#10]);
+  SB:= TStringBuilder.Create;
+  try
+    for Line in Lines do
+    begin
+      S:= Line.Trim;
+      while S.StartsWith('/') do S:= S.Substring(1);
+      if S.StartsWith('(*') then S:= S.Substring(2);
+      if S.StartsWith('{') then S:= S.Substring(1);
+      if S.EndsWith('*)') then S:= S.Substring(0, Length(S) - 2);
+      if S.EndsWith('}') then S:= S.Substring(0, Length(S) - 1);
+      SB.Append(S.Trim).Append(' ');
+    end; // for
+    S:= SB.ToString;
+  finally
+    SB.Free;
+  end; // try
+  S:= S.Replace('&lt;', '<').Replace('&gt;', '>').Replace('&amp;', '&');
+  Result:= '';
+  for Line in S.Split([' ', #9], TStringSplitOptions.ExcludeEmpty) do
+    Result:= Result + IfThen(Result = '', '', ' ') + Line;
+end; // function
+
+const
+  { Prefix length that stands in for a porter stem when ConceptMatchedColumns guesses which column matched. }
+  CONCEPT_STEM_LEN      = 5;
+  { query --concept row cap when the caller passes no positive limit. }
+  CONCEPT_DEFAULT_LIMIT = 20;
+  CONCEPT_STOP_WORDS = ' a an and are as at be by do does for from how in is it of on or that the this to what when where which who why with ';
+
+{ The distinct, lower-cased, stop-word-free FTS terms of a free-text question. }
+function ConceptTerms(const AWords: string): TArray<string>;
+var
+  L  : TList<string>;
+  Tok, W: string;
+  AllDigits: Boolean;
+  C  : Char;
+begin
+  L:= TList<string>.Create;
+  try
+    for Tok in AWords.Split([' ', #9, #13, #10], TStringSplitOptions.ExcludeEmpty) do
+      for W in SplitIdentifierWords(Tok).Split([' '], TStringSplitOptions.ExcludeEmpty) do
+      begin
+        AllDigits:= True;
+        for C in W do
+          if not C.IsDigit then AllDigits:= False;
+        if (Length(W) < 2) and not AllDigits then Continue;
+        if Pos(' ' + W + ' ', CONCEPT_STOP_WORDS) > 0 then Continue;
+        if not L.Contains(W) then L.Add(W);
+      end; // for
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end; // try
+end; // function
+
+{ Column names (tokens, summary, remarks) whose text contains the first
+  min(Length, 5) chars of any term -- an approximation of the porter stemming. }
+function ConceptMatchedColumns(const ATerms: TArray<string>; const ATokens, ASummary, ARemarks: string): string;
+  function Hit(const AText: string): Boolean;
+  var
+    T, Stem: string;
+    Low    : string;
+  begin
+    Low:= AText.ToLower;
+    for T in ATerms do
+    begin
+      Stem:= Copy(T, 1, Min(Length(T), CONCEPT_STEM_LEN));
+      if Pos(Stem, Low) > 0 then Exit(True);
+    end; // for
+    Result:= False;
+  end; // function
+begin
+  Result:= '';
+  if Hit(ATokens ) then Result:= 'tokens';
+  if Hit(ASummary) then Result:= Result + IfThen(Result = '', '', ',') + 'summary';
+  if Hit(ARemarks) then Result:= Result + IfThen(Result = '', '', ',') + 'remarks';
+end; // function
+
+function TSQLiteSymbolStore.BuildSymbolSearch: Integer;
+{ Doc attribution (xj-5 integration, 2026-10-28): string_literals.symbol_id of a
+  kind='doc' row is the ENCLOSING scope (the unit or the class), not the symbol
+  the comment documents -- on TableTools every doc literal pointed at a unit,
+  class, record, enum or interface, none at a method. Grouping by symbol_id
+  piled every member's prose onto its class. So a doc literal is attributed by
+  POSITION instead: consecutive doc lines form one block, and the block belongs
+  to the symbol(s) declared on the first line after it that starts a symbol,
+  provided that line is at most DOC_GAP lines below the block (an attribute
+  line may sit between). A block with no declaration right below it is
+  dropped. Only the files that own a missing row are read. }
+const
+  DOC_GAP      = 2;   { lines allowed between a doc block and its declaration }
+  MAX_IN_FILES = 500; { above this many files, read every doc literal instead of an IN list }
+type
+  TSearchRow = record
+    Id                     : Int64;
+    FileId, StartLine      : Integer;
+    Tokens, Summary, Remarks: string;
+  end;
+var
+  Q, Ins   : TFDQuery;
+  Rows     : TList<TSearchRow>;
+  R        : TSearchRow;
+  I        : Integer;
+  Name, Parent, DocSummary, FileFilter, BlockText, Key: string;
+  FileSet  : TDictionary<Integer, Boolean>;
+  Starts   : TDictionary<Integer, TList<Integer>>;
+  DocByDecl: TDictionary<string, string>;
+  FileIds  : TArray<Integer>;
+  CurFile, BlockEnd, LitFile, LitStart, LitEnd: Integer;
+  FldId, FldName, FldPName, FldDSum, FldDRem, FldFile, FldStart, FldEnd, FldText: TField;
+  Block    : TStringBuilder;
+  IdText   : TArray<string>;
+
+  procedure FlushBlock;
+  var
+    L     : TList<Integer>;
+    Target, Idx: Integer;
+    Prior : string;
+  begin
+    BlockText:= Block.ToString;
+    Block.Clear;
+    if (BlockText = '') or (not Starts.TryGetValue(CurFile, L)) then
+    begin
+      BlockText:= '';
+      Exit;
+    end;
+    { first declaration line strictly below the block }
+    L.BinarySearch(BlockEnd + 1, Idx);
+    if Idx < L.Count then
+    begin
+      Target:= L[Idx];
+      if Target - BlockEnd <= DOC_GAP + 1 then
+      begin
+        Key:= IntToStr(CurFile) + ':' + IntToStr(Target);
+        if DocByDecl.TryGetValue(Key, Prior) then BlockText:= Prior + ' ' + BlockText;
+        DocByDecl.AddOrSetValue(Key, BlockText);
+      end;
+    end;
+    BlockText:= '';
+  end; // procedure
+
+begin
+  Result:= 0;
+  if not FFts5Available then Exit;
+  if not (TableExists('symbol_search') and TableExists('symbol_search_fts')) then Exit;
+  Rows     := TList<TSearchRow>.Create;
+  FileSet  := TDictionary<Integer, Boolean>.Create;
+  Starts   := TObjectDictionary<Integer, TList<Integer>>.Create([doOwnsValues]);
+  DocByDecl:= TDictionary<string, string>.Create;
+  Block    := TStringBuilder.Create;
+  Q        := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT s.id, s.name, p.name AS pname, d.summary AS dsum, d.remarks AS drem, s.file_id, s.start_line ' +
+                 'FROM symbols s LEFT JOIN symbols p ON p.id = s.parent_id ' +
+                 'LEFT JOIN symbol_docs d ON d.symbol_id = s.id ' +
+                 'WHERE s.kind IN (' + CONCEPT_SEARCH_KINDS + ') ' +
+                 'AND NOT EXISTS (SELECT 1 FROM symbol_search x WHERE x.symbol_id = s.id)';
+    Q.Open;
+    FldId   := Q.FieldByName('id');
+    FldName := Q.FieldByName('name');
+    FldPName:= Q.FieldByName('pname');
+    FldDSum := Q.FieldByName('dsum');
+    FldDRem := Q.FieldByName('drem');
+    FldFile := Q.FieldByName('file_id');
+    FldStart:= Q.FieldByName('start_line');
+    while not Q.Eof do
+    begin
+      Name      := FldName.AsString;
+      Parent    := FldPName.AsString;
+      DocSummary:= ConceptStripDocMarkup(FldDSum.AsString);
+      R.Id       := FldId.AsLargeInt;
+      R.FileId   := FldFile.AsInteger;
+      R.StartLine:= FldStart.AsInteger;
+      R.Tokens   := (SplitIdentifierWords(Name) + ' ' + SplitIdentifierWords(Parent) + ' ' + Name.ToLower).Trim;
+      R.Summary  := DocSummary;
+      R.Remarks  := ConceptStripDocMarkup(FldDRem.AsString);
+      if R.Tokens = '' then R.Tokens:= Name.ToLower;
+      Rows.Add(R);
+      FileSet.AddOrSetValue(R.FileId, True);
+      Q.Next;
+    end; // while
+    Q.Close;
+    { Positional doc attribution for the rows symbol_docs left without a summary. }
+    if Rows.Count > 0 then
+    begin
+      FileIds:= FileSet.Keys.ToArray;
+      FileFilter:= '';
+      if Length(FileIds) <= MAX_IN_FILES then
+      begin
+        SetLength(IdText, Length(FileIds));
+        for I:= 0 to High(FileIds) do IdText[I]:= IntToStr(FileIds[I]);
+        FileFilter:= ' AND file_id IN (' + string.Join(',', IdText) + ')';
+      end;
+      Q.SQL.Text:= 'SELECT DISTINCT file_id, start_line FROM symbols WHERE 1 = 1' + FileFilter + ' ORDER BY file_id, start_line';  // dl:ok sql-injection-concat@7486 -- FileFilter is built only from IntToStr of file ids read from the DB
+      Q.Open;
+      while not Q.Eof do
+      begin
+        LitFile:= Q.Fields[0].AsInteger;
+        if not Starts.ContainsKey(LitFile) then Starts.Add(LitFile, TList<Integer>.Create);
+        Starts[LitFile].Add(Q.Fields[1].AsInteger);
+        Q.Next;
+      end; // while
+      Q.Close;
+      Q.SQL.Text:= 'SELECT file_id, start_line, end_line, text FROM string_literals ' +
+                   'WHERE kind = ''doc''' + FileFilter + ' ORDER BY file_id, start_line';
+      Q.Open;
+      CurFile:= -1;
+      BlockEnd:= -1;
+      FldFile := Q.FieldByName('file_id');
+      FldStart:= Q.FieldByName('start_line');
+      FldEnd  := Q.FieldByName('end_line');
+      FldText := Q.FieldByName('text');
+      while not Q.Eof do
+      begin
+        LitFile := FldFile.AsInteger;
+        LitStart:= FldStart.AsInteger;
+        LitEnd  := FldEnd.AsInteger;
+        if (LitFile <> CurFile) or (LitStart > BlockEnd + 1) then
+        begin
+          FlushBlock;
+          CurFile:= LitFile;
+        end;
+        if Block.Length > 0 then Block.Append(' ');
+        Block.Append(FldText.AsString);
+        BlockEnd := LitEnd;
+        Q.Next;
+      end; // while
+      FlushBlock;
+      Q.Close;
+      for I:= 0 to Rows.Count - 1 do
+        if (Rows[I].Summary = '') and DocByDecl.TryGetValue(IntToStr(Rows[I].FileId) + ':' + IntToStr(Rows[I].StartLine), BlockText) then
+        begin
+          R:= Rows[I];
+          R.Summary:= ConceptStripDocMarkup(BlockText);
+          Rows[I]:= R;
+        end;
+    end;
+    Ins:= TFDQuery.Create(nil);
+    try
+      Ins.Connection:= FConn;
+      Ins.SQL.Text:= 'INSERT INTO symbol_search(symbol_id, tokens, summary, remarks) ' +
+                     'VALUES (:sid, :tok, :sum, :rem)';
+      Ins.ParamByName('sid').DataType:= ftLargeint;
+      Ins.ParamByName('tok').DataType:= ftWideMemo;
+      Ins.ParamByName('sum').DataType:= ftWideMemo;
+      Ins.ParamByName('rem').DataType:= ftWideMemo;
+      Ins.Prepare;
+      FConn.StartTransaction;
+      try
+        Q.SQL.Text:= 'DELETE FROM symbol_search WHERE symbol_id NOT IN (SELECT id FROM symbols)';
+        Q.ExecSQL;
+        for R in Rows do  // dl:ok duplicate-code@b0f0 -- the prepared-insert-in-one-transaction shape PutEffectFacts also uses; PutEffectFacts is a hashed emit routine, so sharing a helper with it would bill an extractor re-parse
+        begin
+          Ins.ParamByName('sid').AsLargeInt:= R.Id;
+          Ins.ParamByName('tok').Value:= R.Tokens;
+          if R.Summary = '' then Ins.ParamByName('sum').Clear else Ins.ParamByName('sum').Value:= R.Summary;
+          if R.Remarks = '' then Ins.ParamByName('rem').Clear else Ins.ParamByName('rem').Value:= R.Remarks;
+          Ins.ExecSQL;
+        end; // for
+        FConn.Commit;
+      except  // dl:ok bare-except@4bef -- rollback then RE-RAISE: nothing is swallowed, any failure must undo the partial write
+        FConn.Rollback;
+        raise;
+      end;
+    finally
+      Ins.Free;
+    end; // try
+    Result:= Rows.Count;
+  finally
+    Q.Free;
+    Block.Free;
+    DocByDecl.Free;
+    Starts.Free;
+    FileSet.Free;
+    Rows.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.ConceptSearchReady: Boolean;
+begin
+  Result:= False;
+  try
+    if not (TableExists('symbol_search_fts') and TableExists('symbol_search')) then Exit;
+    Result:= ProbeExists('SELECT 1 FROM symbol_search LIMIT 1') or
+             not ProbeExists('SELECT 1 FROM symbols WHERE kind IN (' + CONCEPT_SEARCH_KINDS + ') LIMIT 1');  // dl:ok sql-injection-concat@1b60 -- CONCEPT_SEARCH_KINDS is a compile-time const, no input reaches it
+  except  // dl:ok bare-except@79dc -- contract: any failure (locked DB, missing fts5 module) means "not ready", never a crash
+    Result:= False;
+  end;
+end; // function
+
+function TSQLiteSymbolStore.SearchConcept(const AWords: string; ALimit: Integer; const AKinds: string): TArray<TConceptHit>;
+var
+  Terms : TArray<string>;
+  Hits  : TList<TConceptHit>;
+  Seen  : TList<Int64>;
+  Kinds : TArray<string>;
+
+  procedure RunPass(const AMatch: string; AAllTerms: Boolean; AMax: Integer);
+  var
+    Q  : TFDQuery;
+    I  : Integer;
+    H  : TConceptHit;
+    Sql: string;
+    ColSid, ColQn, ColKd, ColPth, ColLn, ColSc, ColTok, ColSm, ColRmk: TField;
+  begin
+    Sql:= 'SELECT s.id AS sid, s.qualified_name AS qn, s.kind AS kd, f.path AS fpath, s.start_line AS ln, ' +
+          '-bm25(symbol_search_fts, 3.0, 2.0, 1.0) AS sc, ss.tokens AS tok, ss.summary AS sm, ss.remarks AS rmk ' +
+          'FROM symbol_search_fts JOIN symbol_search ss ON ss.symbol_id = symbol_search_fts.rowid ' +
+          'JOIN symbols s ON s.id = ss.symbol_id JOIN files f ON f.id = s.file_id ' +
+          'WHERE symbol_search_fts MATCH :q';
+    if Length(Kinds) > 0 then
+    begin
+      Sql:= Sql + ' AND s.kind IN (';
+      for I:= 0 to High(Kinds) do Sql:= Sql + IfThen(I = 0, '', ',') + ':k' + IntToStr(I);
+      Sql:= Sql + ')';
+    end;
+    Sql:= Sql + ' ORDER BY sc DESC, s.qualified_name LIMIT :n';
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= FConn;
+      Q.SQL.Text:= Sql;
+      Q.ParamByName('q').AsString:= AMatch;
+      Q.ParamByName('n').AsInteger:= AMax;
+      for I:= 0 to High(Kinds) do Q.ParamByName('k' + IntToStr(I)).AsString:= Kinds[I];
+      Q.Open;
+      ColSid:= Q.FieldByName('sid');
+      ColQn := Q.FieldByName('qn');
+      ColKd := Q.FieldByName('kd');
+      ColPth:= Q.FieldByName('fpath');
+      ColLn := Q.FieldByName('ln');
+      ColSc := Q.FieldByName('sc');
+      ColTok:= Q.FieldByName('tok');
+      ColSm := Q.FieldByName('sm');
+      ColRmk:= Q.FieldByName('rmk');
+      while not Q.Eof do
+      begin
+        H.SymbolId     := ColSid.AsLargeInt;
+        if not Seen.Contains(H.SymbolId) then
+        begin
+          H.QualifiedName:= ColQn.AsString;
+          H.Kind         := ColKd.AsString;
+          H.FilePath     := ColPth.AsString;
+          H.Line         := ColLn.AsInteger;
+          H.Score        := ColSc.AsFloat;
+          H.Matched      := ConceptMatchedColumns(Terms, ColTok.AsString, ColSm.AsString, ColRmk.AsString);
+          H.AllTerms     := AAllTerms;
+          Hits.Add(H);
+          Seen.Add(H.SymbolId);
+        end;
+        Q.Next;
+      end; // while
+    finally
+      Q.Free;
+    end; // try
+  end; // procedure
+
+var
+  T, MatchAnd, MatchOr, K: string;
+  KList: TList<string>;
+begin
+  Result:= nil;
+  if ALimit < 1 then ALimit:= CONCEPT_DEFAULT_LIMIT;
+  Terms:= ConceptTerms(AWords);
+  if (Length(Terms) = 0) or not ConceptSearchReady then Exit;
+  KList:= TList<string>.Create;
+  try
+    for K in AKinds.Split([','], TStringSplitOptions.ExcludeEmpty) do
+      if Trim(K) <> '' then KList.Add(LowerCase(Trim(K)));
+    Kinds:= KList.ToArray;
+  finally
+    KList.Free;
+  end; // try
+  MatchAnd:= '';
+  MatchOr := '';
+  for T in Terms do
+  begin
+    K:= '"' + T.Replace('"', '""') + '"';
+    MatchAnd:= MatchAnd + IfThen(MatchAnd = '', '', ' ') + K;
+    MatchOr := MatchOr  + IfThen(MatchOr  = '', '', ' OR ') + K;
+  end; // for
+  Hits:= TList<TConceptHit>.Create;
+  Seen:= TList<Int64>.Create;
+  try
+    RunPass(MatchAnd, True, ALimit);
+    if (Length(Terms) > 1) and (Hits.Count < ALimit) then
+      RunPass(MatchOr, False, ALimit + Hits.Count);
+    while Hits.Count > ALimit do Hits.Delete(Hits.Count - 1);
+    Result:= Hits.ToArray;
+  finally
+    Seen.Free;
+    Hits.Free;
+  end; // try
 end; // function
 
 function TSQLiteSymbolStore.GetAllSymbolFacts: TArray<TSymbolFacts>;
@@ -12062,6 +13254,11 @@ begin
   QNames := TFDQuery.Create(nil);
   QUpdate:= TFDQuery.Create(nil);
   try
+    { ITEM 12: the transaction opens BEFORE the files/unit_uses reads (BEGIN IMMEDIATE via
+      ConnectWriter), so a concurrent prune that deletes a files row cannot slip between
+      the stem map and the UPDATE of unit_uses.target_file_id (FK). }
+    FConn.StartTransaction;
+    try
     QFiles.Connection:= FConn;
     QFiles.SQL.Text:= 'SELECT id, path FROM files';
     QFiles.Open;
@@ -12132,8 +13329,6 @@ begin
     QUpdate.Params.ParamByName('un'  ).DataType:= ftString;
     QUpdate.Params.ParamByName('full').DataType:= ftString;
     QUpdate.Prepare;
-    FConn.StartTransaction;
-    try
       { RECOMPUTE, don't top up. Filling only NULL rows made the pass unable to
         REPAIR a wrong value: on an incremental re-index a file that is not
         re-parsed keeps its unit_uses rows, so the 122 measured wrong dotted
@@ -12366,6 +13561,11 @@ begin
   Q   := TFDQuery.Create(nil);
   QIns:= TFDQuery.Create(nil);
   try
+    { ITEM 12: the transaction (BEGIN IMMEDIATE) opens BEFORE the candidate reads below, so
+      the ids read in steps 1-1b are the ids written; a second writer re-issuing them in
+      between used to write a WRONG type_ancestors.ancestor_symbol_id (no FK to say so). }
+    FConn.StartTransaction;
+    try
     Q.Connection:= FConn;
     { 1. candidate class/interface symbols, indexed by lowercased simple name.
       qualified_name is load-bearing: PickAncestorCandidateByScope derives each
@@ -12498,8 +13698,6 @@ begin
       CLIENT, 2 on SERVER, 3 in this repo. }
     Q.SQL.Text:= 'SELECT id, file_id, heritage FROM symbols ' +
                  'WHERE kind IN (''class'',''interface'',''type'',''classref'') AND heritage IS NOT NULL AND heritage <> ''''';   { E1 (2026-10-26): a `class of X` row carries X as heritage -> one ordinal-0 row }
-    FConn.StartTransaction;
-    try
       FConn.ExecSQL('DELETE FROM type_ancestors');
       Q.Open;
       while not Q.Eof do
@@ -12630,6 +13828,11 @@ begin
   Q   := TFDQuery.Create(nil);
   QIns:= TFDQuery.Create(nil);
   try
+    { ITEM 12: the transaction opens BEFORE the candidate reads (BEGIN IMMEDIATE via
+      ConnectWriter), so the symbol ids read in step 1 are the ids written to
+      type_helpers.target_symbol_id -- a second writer can no longer re-issue them in between. }
+    FConn.StartTransaction;
+    try
     Q.Connection:= FConn;
     { 1. candidate type symbols (all, any kind), indexed by lowercased simple name. }
     Q.SQL.Text:= 'SELECT id, file_id, kind, name FROM symbols WHERE kind IS NOT NULL';
@@ -12668,8 +13871,6 @@ begin
     QIns.Params.ParamByName('tfid').DataType:= ftLargeint;
     Q.SQL.Text:= 'SELECT id, file_id, kind, heritage FROM symbols ' +
                  'WHERE is_helper = 1 AND heritage IS NOT NULL AND heritage <> ''''';
-    FConn.StartTransaction;
-    try
       FConn.ExecSQL('DELETE FROM type_helpers');
       Q.Open;
       while not Q.Eof do
@@ -13236,8 +14437,39 @@ begin
   FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + CAST_WRITTEN + Suffix);  // dl:ok sql-injection-concat@1334 -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveTypeUseRefs uses; a temp-table name and an IN-list cannot be parameters.
   BindRefStream(CAST_UNIVERSE, REF_KIND_CALL, Suffix, AResolver.ResolveEnumCast, ACandidates, ABound);
 end;
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
-{ v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
+procedure TSQLiteSymbolStore.WriteExternalStores(const AExtraStores: TArray<ISymbolStore>; AScoped: Boolean);
+const
+  KEY = 'external_stores';
+
+  function J(const S: string): string;
+  begin
+    Result:= '"' + S.Replace('\', '\\').Replace('"', '\"') + '"';
+  end;
+
+var
+  Parts: TArray<string>;
+begin
+  if Length(AExtraStores) = 0 then
+  begin
+    if not AScoped then FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ''external_stores''');
+    Exit;
+  end;
+  Parts:= [];
+  for var S: ISymbolStore in AExtraStores do
+  begin
+    if S = nil then Continue;
+    var Path: string:= '';
+    if S is TSQLiteSymbolStore then
+      Path:= (S as TSQLiteSymbolStore).FConn.Params.Values['Database'];
+    Parts:= Parts + ['{"path":' + J(Path) +
+      ',"indexer_fingerprint":' + J(S.GetMetaValue('indexer_fingerprint')) +
+      ',"resolver_fingerprint":' + J(S.GetMetaValue('resolver_fingerprint')) +
+      ',"indexed_at_unix":' + J(S.GetMetaValue('indexed_at_unix')) + '}'];
+  end;
+  SetMetaValue(KEY, '[' + string.Join(',', Parts) + ']');
+end;
+
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);{ v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
   every 'call' ref through ResolveOne. Non-resolving sites (Edge.TargetSymbolId=0)
@@ -13309,6 +14541,7 @@ var
   Profiled  : Boolean       ;
   Scoped    : Boolean       ; { re-resolving only the affected refs -- see ScopedResolveIsSound }
   ScopeWhere: string        ; { the predicate that selects them ('' when not scoped)           }
+  DataVersion0: Int64       ; { PRAGMA data_version right after the transaction opened (item 12) }
 begin
   T0:= TStopwatch.GetTimeStamp;
   { The accumulators cost two QueryPerformanceCounter reads per ref, which on a
@@ -13348,6 +14581,17 @@ begin
     if CountReferences >= WholeDbSlowRefThreshold then
       ResolveLog('calls      ... this is the expensive shape (~37 min on a 2 GB index) -- it is running, not hung');
   end;
+  { ITEM 12 (two writers on one DB): THE TRANSACTION OPENS HERE, ABOVE EVERY READ OF
+    CANDIDATE IDS. The writer connection starts BEGIN IMMEDIATE (ConnectWriter), so the
+    write lock is taken now: a second writer that commits a per-file reindex (new symbol
+    ids) can no longer slip between TCallResolver.BuildMaps / the stale prescan and the
+    edge writes below -- that interleaving wrote call_edges rows naming dead ids
+    (FOREIGN KEY constraint failed). Reads and writes now share one snapshot. }
+  FConn.StartTransaction;
+  Ref := Default(TReference);
+  Edge:= Default(TCallEdge );
+  DataVersion0:= ReadDataVersion(FConn);
+  try
   { Only the temp tables are built here. The DELETE they feed happens INSIDE the
     rebuild transaction below -- see the note there. MaterializeResolveScope
     writes nothing but connection-local temp tables, so it is safe outside. }
@@ -13379,6 +14623,10 @@ begin
   CastBound      := 0;
   Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
+  except // dl:ok bare-except@4bef -- rollback and RE-RAISE: the lock taken above must not outlive a failed set-up
+    FConn.Rollback;
+    raise;
+  end;
   { Split out because it is O(symbols) and independent of how many refs this run
     actually needs to resolve -- i.e. it is the part an incremental version of
     this pass would still pay, so it must be measured separately from the stream
@@ -13392,18 +14640,20 @@ begin
   StaleFileCount:= 0;
   StaleWhere:= '';
   try
+    try { item 12: the rollback frame starts here, so it also covers the prescan above the DELETE }
     Q.Connection:= FConn;
     { PREPARED once, executed per ref -- the same discipline UpsertCallEdge uses,
       and for the same reason: this runs inside the one big transaction below,
       where a fresh statement per row would dominate the pass. }
     UpdRcv.Connection:= FConn;
-    UpdRcv.SQL.Text  := 'UPDATE refs SET receiver_text = :r, external_target = :x WHERE id = :id';
+    UpdRcv.SQL.Text  := 'UPDATE refs SET receiver_text = :r, external_target = :x, receiver_type_text = :t WHERE id = :id';
     { DataType MUST be set before Prepare. FireDAC cannot infer a parameter's
       type from the SQL alone and fails at execute with "Parameter [R] data type
       is unknown" -- which surfaces as a FATAL that aborts the whole index run,
       not as a skipped update. }
     UpdRcv.ParamByName('r' ).DataType:= ftString;
     UpdRcv.ParamByName('x' ).DataType:= ftString;
+    UpdRcv.ParamByName('t' ).DataType:= ftString;
     UpdRcv.ParamByName('id').DataType:= ftLargeint;
     UpdRcv.Prepare;
 
@@ -13518,7 +14768,6 @@ begin
       StaleIds.Free;
     end;
 
-    FConn.StartTransaction;
     { INBOX-used-before-assignment, shape D -- and the note that called it a
       FALSE POSITIVE had it backwards. The except handler ~130 lines below
       renders Edge and Ref as `the failing edge`, and the try starts HERE:
@@ -13534,9 +14783,6 @@ begin
       (INBOX-intermittent-fk-failure-on-incremental-reindex) needs to know: it
       separates a failing DELETE/open from a failing edge insert, and those have
       nothing in common but the message. }
-    Ref := Default(TReference);
-    Edge:= Default(TCallEdge );
-    try
       { THE DELETE BELONGS IN THIS TRANSACTION, and it was outside it until
         v0.86. ResolveAncestry and ResolveHelpers both DELETE inside their own
         transaction; this pass did not, so its `DELETE FROM call_edges`
@@ -13628,6 +14874,8 @@ begin
           externally" stays distinguishable from "resolved to an empty name". }
         if Edge.ExternalTarget <> '' then UpdRcv.ParamByName('x').AsWideString:= Edge.ExternalTarget
         else UpdRcv.ParamByName('x').Clear;
+        { item 4: '' is a value (bare / untypable); NULL only if never computed. }
+        UpdRcv.ParamByName('t').AsWideString := Edge.ReceiverTypeText;
         UpdRcv.ParamByName('id').AsLargeInt := Ref.Id;
         UpdRcv.ExecSQL;
         end
@@ -13776,14 +15024,19 @@ begin
         try
           Diag:= sLineBreak +
             Format('  [call-edge capture] shape=%s written=%d streamed=%d',
-                   [Shape, Written, Streamed]) + sLineBreak;
+                   [Shape, Written, Streamed]) + sLineBreak +
+            { Item 12: the two readings must be EQUAL -- this pass holds the write lock since
+              its first statement. Unequal means another connection committed during the
+              pass, i.e. the lock discipline was bypassed somewhere. A pragma read, not a
+              probe of any table, so it cannot mask the original error. }
+            Format('  data_version before=%d now=%d', [DataVersion0, ReadDataVersion(FConn)]) + sLineBreak;
           { Ref.Id is 0 exactly when the stream never produced a row -- see the
             zeroing above the try. Naming an edge here would be naming stack
             noise, and this branch is a FACT the investigation wants: the
-            failure was in the DELETE or in Q.Open, not in an edge insert. }
+            failure was before the first edge insert (set-up, prescan, DELETE or Q.Open). }
           if Ref.Id = 0 then
             Diag:= Diag +
-              '  no row had been read when this failed -- the DELETE or the ' +
+              '  no row had been read when this failed -- set-up, the prescan, the DELETE or the ' +
               'stream open raised, so there is NO failing edge to name.' + sLineBreak
           else
             Diag:= Diag +
@@ -13809,6 +15062,16 @@ begin
     else
       ResolveLog(Format('calls      %d edge(s) from %d call-site ref(s), WHOLE DB  [%.1fs, clear %.1fs, maps %.1fs]',
         [Written, Streamed, ResolveSecs(T0), TClear, TMaps]));
+    { Item 4 (resolver 1.16.0-alpha). How the receivers typed, and what the library
+      oracle did with the sites this index could not bind. `no-store` is the count a
+      project indexed WITHOUT a library shows: every one of those sites had a type
+      (or a head, or a bare name) to offer and no store to offer it to. }
+    ResolveLog(Format('calls      receivers: typed-local %d, typed-by-name-only %d, untyped %d; ' +
+      'external-bound %d, external-declined ambiguous-type %d, no-member %d, no-type %d, no-store %d',
+      [Resolver.ReceiverStats.TypedLocal, Resolver.ReceiverStats.TypedByNameOnly, Resolver.ReceiverStats.Untyped,
+       Resolver.OracleStats.Bound, Resolver.OracleStats.AmbiguousType, Resolver.OracleStats.NoMember,
+       Resolver.OracleStats.NoType, Resolver.OracleStats.NoStore]));
+    WriteExternalStores(AExtraStores, Scoped);
     { 2026-09-23 (enum-value-ref-binding). EVERY DECLINE IS PRINTED BY REASON,
       and that is the point of the line rather than a nicety: the pass answers
       `certain` or nothing, so a ref that does not bind leaves no trace anywhere

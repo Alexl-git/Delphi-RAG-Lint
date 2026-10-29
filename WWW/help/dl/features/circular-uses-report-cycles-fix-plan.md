@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70005
 since: 0.43.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # Circular Uses Report (cycles + fix plan)
@@ -268,6 +268,26 @@ first intra-cycle `uses` entry of that file (implementation section preferred), 
 `"fix_hint": "cycles --fix --project \"<X.dproj>\" --db \"<db>\" --unit <stem>"`; `lint-all`
 keeps one finding per cycle and no hint.
 
+### The extended example: what DL does, what it reports, what you do
+
+`docs\examples\cycle-lab` extends `circular-demo` with the shapes `cycles --fix` refuses, one small
+unit pair each, plus `illegal\` (a project the compiler rejects). Replay it with `run-lab.sh`.
+Measured on 1.36.0-alpha; the playbook text alone was handed to Haiku.
+
+| Layer | What happens | Cases |
+|---|---|---|
+| DL fixes (compile-gated, `cycles --fix --apply`) | Part A leaf units; the build and the program output stay identical | the four circular-demo groups, LabInit, LabExc |
+| DL reports, you cut by hand | `Verdict: refused` with the kind and line, or `Nothing can be moved mechanically` + a MANUAL list | LabVar, LabCtor, LabRc, LabCls (`blocked-symbol`), LabDir, LabGuard (`directive`) |
+| DL reports only | `cycles --f2047` names both interface edges and symbols; `--fix --apply` rolls back (F2047 stays) | `illegal\` |
+| DL does not see it | `uses {$I file.inc}`: parse error at index time, no cycle line | LabInc |
+
+Haiku (playbook only, no shell): the build stayed green and the output identical, but of the six
+refused groups only LabDir (delete the unused guarded entry), LabCls (class and metaclass merged into
+one new unit) and `illegal\` (both classes merged into one unit, forward `TIllOrder = class;`) ended
+without a cycle. For LabVar, LabGuard, LabCtor and LabRc it moved one class into a `*.Untangle` unit
+that still uses its partner in the interface: the cycle only changed name. Rule for the manual step:
+a cut counts only when `cycles` stops printing "has interface coupling" for the pair, not when the
+project compiles.
 ### What it needs
 Required. You must have indexed the project before running this -- cycle
 detection reads unit-to-unit `uses` edges from the index, not from disk.

@@ -1,0 +1,12 @@
+# Hits: a routine whose straight-line top-level statements (before any if / case / loop /
+# try / Exit) call the routine itself, bare or through Self.
+# FP shapes (non-hits): recursion guarded by if/else, early Exit, recursion inside a loop,
+# calls to a same-named method on ANOTHER object (delegation), overloaded names.
+unconditional-recursion 20
+unconditional-recursion 25
+unconditional-recursion 30
+!unconditional-recursion 39
+!unconditional-recursion 47
+!unconditional-recursion 53
+!unconditional-recursion 64
+!unconditional-recursion 73

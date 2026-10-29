@@ -250,9 +250,12 @@ $r = Run @('document', '--unit', $shared3c, '--db', $db3c, '--apply', '--no-back
 Check 'E3c: a second document --apply is a no-op' ((Get-FileHash $shared3c).Hash -eq $h) (LastLine $r.Out)
 # ------------------------------------------------------------------ E5 --------
 # Tracked sources only (git ls-files): scratch and build output are not the
-# product. No exclusions today; a fixture that is long ON PURPOSE is excluded
-# BY NAME here, with its reason.
-$exclude = @()
+# product. A fixture that is long ON PURPOSE is excluded BY NAME here, with its reason.
+# line-too-long/doc_lines*.pas (B-DOC, 1.37.0): the `///` line-too-long fixer's input and
+# expected output -- over-long doc lines are the point, and the fixtures are only lint --fix
+# inputs, never compiled.
+$exclude = @('tests/autofix/fixtures/line-too-long/doc_lines.pas',
+  'tests/autofix/fixtures/line-too-long/doc_lines.fixed.pas')
 $tracked = @(git -C $repo ls-files -- 'src/*.pas' 'src/*.dpr' 'src/*.inc' 'tests/*.pas' 'tests/*.dpr' 'tests/*.inc')
 $over = @()
 foreach ($f in $tracked) {

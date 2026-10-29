@@ -7,12 +7,14 @@ $exePath = (Resolve-Path $Exe).Path
 $fixture = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\gating\gating.pas')).Path
 
 # Disable self-assignment via a local drag-lint-lint.json; leave redundant-not-not enabled.
+# write-only-local / overwrite-before-read (fixable since autofix lane A3) are disabled too:
+# their fixes delete gating.pas's B store and X := X and would shift the lines asserted below.
 $scratch = Join-Path C:\TEMP "draglint_gating_$PID"
 if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
 New-Item -ItemType Directory -Path $scratch | Out-Null
 $target = Join-Path $scratch 'gating.pas'
 Copy-Item $fixture $target -Force
-'{ "disabled": ["self-assignment"] }' | Set-Content -Path (Join-Path $scratch 'drag-lint-lint.json') -Encoding Ascii
+'{ "disabled": ["self-assignment", "write-only-local", "overwrite-before-read"] }' | Set-Content -Path (Join-Path $scratch 'drag-lint-lint.json') -Encoding Ascii
 
 Push-Location $scratch
 try {

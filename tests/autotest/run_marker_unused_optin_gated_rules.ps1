@@ -39,6 +39,14 @@ $Exe = (Resolve-Path $Exe).Path
 $src = Join-Path $PSScriptRoot '..\..\src\lint\DRagLint.Lint.ProjectRules.pas'
 $ids = [regex]::Matches([IO.File]::ReadAllText($src), "OptedIn\('([a-z-]+)'\)") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
 Check 'OptedIn-gated ids found in ProjectRules.pas' (@($ids).Count -ge 8) ("count=" + @($ids).Count)
+# The ON opt-in rules `lint <file>` opts in itself when the store holds the file
+# (CLI.pas LINT_FILE_OPTIN_ON, lane DIRLINT 2026-10-27) ARE evaluated per file, so a
+# marker for one with no finding on its line is genuinely unused -- as lint-all says.
+$cli = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\..\src\cli\DRagLint.CLI.pas'))
+$onDecl = [regex]::Match($cli, 'LINT_FILE_OPTIN_ON\s*:\s*array\[[^\]]*\]\s*of\s*string\s*=\s*\(([^)]*)\)')
+$onIds = @([regex]::Matches($onDecl.Groups[1].Value, "'([a-z-]+)'") | ForEach-Object { $_.Groups[1].Value })
+Check 'LINT_FILE_OPTIN_ON found in CLI.pas' ($onIds.Count -ge 1) ("ids=" + ($onIds -join ','))
+$ids = @($ids | Where-Object { $onIds -notcontains $_ })
 
 New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
 $db  = Join-Path $WorkDir 'probe.sqlite'
@@ -63,6 +71,13 @@ Write-Host '-- 1. per-file run, index present: no OptedIn-gated marker is called
 $r = LintFile $pas
 $bad = @($r -split "`n" | Where-Object { $_ -match 'review-marker-unused' })
 Check 'no review-marker-unused for any OptedIn-gated rule' ($bad.Count -eq 0) (($bad | Select-Object -First 3) -join ' || ')
+$p0 = [IO.File]::ReadAllLines($pas)
+[IO.File]::WriteAllLines($pas, [string[]]($p0[0..($p0.Count - 3)] + @($onIds | ForEach-Object { "// dl:ok $_ -- REVIEWED 2026-10-27: fixture, an ON rule this run DOES evaluate" }) + $p0[($p0.Count - 2)..($p0.Count - 1)]), [Text.Encoding]::ASCII)
+$r = LintFile $pas
+foreach ($on in $onIds) {
+  Check "the ON opt-in rule $on IS judged per file (its marker reported unused)" ($r -match "review-marker-unused: dl:ok marker for `"$on`"") ''
+}
+[IO.File]::WriteAllLines($pas, $p0, [Text.Encoding]::ASCII)
 
 Write-Host ''
 Write-Host '-- 2. POSITIVE CONTROL: a file-scope marker on an unrelated line IS unused per file' -ForegroundColor Cyan

@@ -1,0 +1,2 @@
+{ "disallowed": { "types": [
+  { "name": "TStringList", "reason": "use IList<string>", "except": ["*disallowed-type-except*"] } ] } }

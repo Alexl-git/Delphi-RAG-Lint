@@ -1,3 +1,4 @@
+#Requires -Version 7
 # dl:serial: LSP proxy family. Spawns and reaps LspStub children; the sibling
 #   proxy guards were observed interfering with each other even when strictly
 #   serialised (root cause fixed in 41b0004), so this one joins the quarantine.
@@ -58,9 +59,20 @@ $Exe = (Resolve-Path $Exe).Path
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
 
-# Writes $c1, then (after $gapMs) $c2, then closes stdin.
+# Writes $c1, then $c2, then closes stdin. Before $c2: sleeps $gapMs, and when
+# $afterReplyId > 0 first waits (30 s deadline) until the reply with that id is
+# on stdout.
+#
+# 2026-10-28 (lane LSP-3): cases 6 and 6b used a bare 1500 ms gap to mean "the
+# proxy has seen DelphiLSP's initialize reply" (that reply is where it learns
+# referencesProvider / workspaceSymbolProvider were advertised). On a loaded
+# machine (CPU at 100 %, 15 other drag-lint processes) the proxy plus stub had
+# not got that far in 1500 ms, the references request arrived first and was
+# answered by the proxy: 3 FAILs, identical on main. Waiting for the reply
+# itself is the condition the cases depend on; the proxy sets its flags before
+# it writes the (merged) reply, so seeing reply 1 proves they are set.
 function Invoke-Raw {
-  param([string]$exe, [string[]]$argv, [byte[]]$c1, [hashtable]$envs = @{}, [byte[]]$c2 = $null, [int]$gapMs = 0)
+  param([string]$exe, [string[]]$argv, [byte[]]$c1, [hashtable]$envs = @{}, [byte[]]$c2 = $null, [int]$gapMs = 0, [int]$afterReplyId = 0)
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName               = $exe
   foreach ($a in $argv) { [void]$psi.ArgumentList.Add($a) }
@@ -80,6 +92,13 @@ function Invoke-Raw {
     $sin = $p.StandardInput.BaseStream
     if ($c1 -and $c1.Length) { $sin.Write($c1, 0, $c1.Length); $sin.Flush() }
     if ($c2 -and $c2.Length) {
+      if ($afterReplyId -gt 0) {
+        $until = (Get-Date).AddSeconds(30)
+        while ((Get-Date) -lt $until -and -not $p.HasExited) {
+          if ([System.Text.Encoding]::UTF8.GetString($outMs.ToArray()) -match ('"id"\s*:\s*' + $afterReplyId + '\s*[,}]')) { break }
+          Start-Sleep -Milliseconds 50
+        }
+      }
       if ($gapMs -gt 0) { Start-Sleep -Milliseconds $gapMs }
       $sin.Write($c2, 0, $c2.Length); $sin.Flush()
     }
@@ -277,7 +296,7 @@ Check 'positive control: the plain relay forwards BOTH cancels' ($pc5c -eq 2) ("
 Write-Host ''
 Write-Host '(6) DelphiLSP advertised referencesProvider: references forwarded (theirs wins)' -ForegroundColor Cyan
 $env6 = Script @(,@('initialize', 0, $initBoth))
-$r6 = Invoke-Raw $Exe $onArgs ([byte[]]($initReq + $didOpen)) $env6 $refReq 1500
+$r6 = Invoke-Raw $Exe $onArgs ([byte[]]($initReq + $didOpen)) $env6 $refReq -afterReplyId 1
 Check 'references IS in the stub log' (LogHas $env6.DRAGLINT_STUB_LOG 'textDocument/references') ''
 $m6 = ReplyOf $r6.Out 9
 Check 'the reply for id 9 is DelphiLSP''s (error: not scripted)' ($m6 -and -not $m6.HasResult -and $m6.Json.ContainsKey('error')) ("body=$(if ($m6) { $m6.Frame.Body } else { '<none>' })")
@@ -287,7 +306,7 @@ Write-Host ''
 Write-Host '(6b) referencesProvider false = not advertised; workspaceSymbolProvider {} = advertised' -ForegroundColor Cyan
 $initMixed = '{"capabilities":{"hoverProvider":true,"referencesProvider":false,"workspaceSymbolProvider":{}}}'
 $env6b = Script @(@('initialize', 0, $initMixed), @('textDocument/hover', 300, 'null'))
-$r6b = Invoke-Raw $Exe $onArgs ([byte[]]($initReq + $didOpen)) $env6b ([byte[]]($refReq + $symReq + $hoverReq)) 1500
+$r6b = Invoke-Raw $Exe $onArgs ([byte[]]($initReq + $didOpen)) $env6b ([byte[]]($refReq + $symReq + $hoverReq)) -afterReplyId 1
 $m6b = ReplyOf $r6b.Out 1
 $cap6b = if ($m6b -and $m6b.HasResult) { $m6b.Json['result']['capabilities'] } else { $null }
 Check 'referencesProvider false -> true' ($cap6b -and $cap6b['referencesProvider'] -eq $true) ("body=$(if ($m6b) { $m6b.Frame.Body } else { '<none>' })")

@@ -18,7 +18,7 @@
     {
       "type": "cli",
       "verb": "lint-all",
-      "usage": "drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]",
+      "usage": "drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]",
       "flags": [
         {
           "name": "--db",
@@ -27,6 +27,10 @@
         {
           "name": "--project",
           "arg": "<.dproj>"
+        },
+        {
+          "name": "--build-config",
+          "arg": "<name>"
         },
         {
           "name": "--rule",
@@ -41,6 +45,9 @@
         },
         {
           "name": "--json"
+        },
+        {
+          "name": "--labels"
         },
         {
           "name": "--quiet",
@@ -63,7 +70,7 @@
         }
       ],
       "helpOrder": 19,
-      "help": ["  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]", "                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>: report ONLY that rule (one id per run; a second, different --rule exits 2); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
+      "help": ["  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]", "                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).", "                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)", "                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in", "                               for the run (no --enable needed) -- the same contract as lint and lint-project.", "                               --quiet: suppress per-file progress lines written to stderr", "                               --project <.dproj|.dpr>: report ONLY on the units that project compiles", "                               (its compile closure + their .dfm siblings). Use it when one folder holds", "                               several projects, or when the DB spans more than the project you are reviewing.", "                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index's data_flows", "                               facts from a catalogued source to a sink; catalogues rules\\taint-sources|sinks|propagators.json, extended by the", "                               \"taint\" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds", "                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.", "                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.", "                               DRY RUN WITHOUT --apply. This is what the Structure form's right-click", "                               \"Fix all in project\" runs. It can rewrite many files at once -- dry-run first."]
     }
   ],
   "audience": "both",
@@ -74,14 +81,14 @@
       "command": "drag-lint lint-all --db <file.sqlite> --fix"
     },
     {
-      "ask": "Can I include naming fixes?",
-      "command": "drag-lint lint-all --db <file.sqlite> --fix --fix-naming --apply"
+      "ask": "Are naming fixes included, and how do I switch one off?",
+      "command": "drag-lint lint-all --db <file.sqlite> --fix --apply   (naming renames are included; list a rule in \"autofix_off\" in drag-lint-lint.json to withhold it)"
     }
   ],
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "733dd92e8ad0e281e3732222f3689196063b898b41646bb0ec28f74a2a1116f8"
+    "build": "1.36.0-alpha",
+    "surfaceHash": "e34870d6f3fadb022d2c750019246e275079c68a89bd92a6d90079748991b7f7"
   }
 }

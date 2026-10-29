@@ -1,0 +1,10 @@
+# Hits: a fresh instance passed straight to a callee that is not an Add/Insert/Register-style owner (16, 17)
+# Non-hits: List.Add / Insert (24, 25), a constructor statement (26), a named local (27), Register* (33), constructor outer call (34)
+fresh-instance-as-argument 16
+fresh-instance-as-argument 17
+!fresh-instance-as-argument 24
+!fresh-instance-as-argument 25
+!fresh-instance-as-argument 26
+!fresh-instance-as-argument 27
+!fresh-instance-as-argument 33
+!fresh-instance-as-argument 34

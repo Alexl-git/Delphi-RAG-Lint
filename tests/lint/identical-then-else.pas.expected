@@ -1,1 +1,13 @@
+# P1 (single assignment, line 6) is the old DeadCodeChecks shape; line 7 differs.
+# G9 extensions (INBOX W507): identical begin..end blocks (line 12), identical call
+# statements (line 24), identical one-line blocks (line 26, whitespace-insensitive),
+# identical blocks that differ only in comments (line 28). Non-hits: 25, 27, 36.
 identical-then-else 6
+!identical-then-else 7
+identical-then-else 12
+identical-then-else 24
+!identical-then-else 25
+identical-then-else 26
+!identical-then-else 27
+identical-then-else 28
+!identical-then-else 36

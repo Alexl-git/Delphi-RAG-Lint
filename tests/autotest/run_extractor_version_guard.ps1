@@ -72,6 +72,15 @@ $files += @(Get-ChildItem (Join-Path $repo 'src\core') -File -Filter 'DRagLint.C
 # parser change makes every stored parse stale, and until it joined this list
 # nothing billed for that. Joined 2026-09-21.
 $files += @(Get-ChildItem (Join-Path $repo 'src\doc') -File -Filter 'DRagLint.Doc.SymbolFacts.pas')
+# Taint T1 (2026-10-27, owner Q5): the CFG builder, the solver and the lattice
+# units now decide STORED rows -- DRagLint.Index.DataFlowFacts builds every
+# data_flows row from TCfgBuilder + TDataFlowSolver + TRoutineVarTable at index
+# time -- and Flow.Lattices already decided symbol_facts (TRoutineVarTable in
+# SymbolFacts since ADP2 T4) without being billed. A change to any of the three
+# is an extractor change from 1.26.0 on.
+foreach ($a in @('DRagLint.Analysis.Cfg.pas', 'DRagLint.Analysis.DataFlow.pas', 'DRagLint.Analysis.Flow.Lattices.pas')) {
+  $files += @(Get-ChildItem (Join-Path $repo 'src\analysis') -File -Filter $a)
+}
 
 # F3 (deep review 2026-10-25): the storage WRITE side decides what a stored row
 # CONTAINS (receiver_text, member_accesses.mode, ...), so it is part of the
@@ -85,8 +94,9 @@ $files += @(Get-ChildItem (Join-Path $repo 'src\doc') -File -Filter 'DRagLint.Do
 $storagePas   = 'src\storage\DRagLint.Storage.SQLite.pas'
 $emitRoutines = @('UpsertSymbol','UpsertReference','UpsertDiBinding','UpsertStringLiteral',
                   'UpsertChunk','UpsertSymbolDoc','PutSymbolFacts','PutEffectFacts',
-                  'InsertCompilerFinding','UpsertUnitUse','WriteMemberAccess')
-$notEmit      = @('UpsertCallEdge')   # resolver surface (resolver-surface.txt)
+                  'InsertCompilerFinding','UpsertUnitUse','WriteMemberAccess',
+                  'PutDataFlows')   # 2026-10-27 taint T0: data_flows rows (per-routine facts, file tx)
+$notEmit      = @('UpsertCallEdge','WriteExternalStores')   # resolver surface (resolver-surface.txt); WriteExternalStores = schema_meta.external_stores, written by the resolve pass (R2, 2026-10-28)
 $HdrRx  = [regex]'^(?i)(function|procedure|constructor|destructor)\s+([A-Za-z0-9_]+\.)?([A-Za-z0-9_]+)'
 $ImplRx = [regex]'^(?i)implementation\s*$'
 function Get-TopLevelRoutines([string]$Path) {

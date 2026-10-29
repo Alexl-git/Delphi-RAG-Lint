@@ -1,0 +1,2 @@
+{ "disallowed": { "names": [
+  { "name": "foo", "reason": "descriptive names", "except": ["*disallowed-name-except*"] } ] } }

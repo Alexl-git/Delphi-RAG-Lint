@@ -1,0 +1,2 @@
+# Four documented FP shapes (untyped var arg x2, count-bounded array read, partially initialised record): none may fire.
+!used-before-assignment

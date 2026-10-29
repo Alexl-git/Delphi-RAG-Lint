@@ -1,0 +1,19 @@
+# enum-ordinal-cast: hits on the five shapes, silent on the known FP shapes and on a type-level dl:ok (generated from the { hit / { silent comments)
+enum-ordinal-cast 33
+enum-ordinal-cast 34
+enum-ordinal-cast 35
+enum-ordinal-cast 36
+enum-ordinal-cast 37
+!enum-ordinal-cast 41
+!enum-ordinal-cast 42
+!enum-ordinal-cast 43
+!enum-ordinal-cast 44
+!enum-ordinal-cast 45
+!enum-ordinal-cast 46
+!enum-ordinal-cast 47
+!enum-ordinal-cast 50
+!enum-ordinal-cast 51
+!enum-ordinal-cast 52
+!enum-ordinal-cast 53
+!enum-ordinal-cast 54
+!review-marker-unused 16

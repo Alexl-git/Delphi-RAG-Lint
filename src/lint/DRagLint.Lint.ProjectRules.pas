@@ -223,7 +223,10 @@ implementation
 uses
   DRagLint.Report.CycleEdge, { BareUsesBinding / ProjectUnitScopes -- circular-uses binds a bare
                                uses name exactly as the cycles graph does (A3-b) }
-  DRagLint.Lint.EnumOrdinalPersisted; { CollectEnumOrdinalPersisted -- lane X6 }
+  DRagLint.Lint.EnumOrdinalPersisted, { CollectEnumOrdinalPersisted -- lane X6 }
+  DRagLint.Lint.UnusedEnumValue, { CollectUnusedEnumValue -- lane B-ENUM }
+  DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
+  DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) }
 
 { Side-effect / operator / helper units that are legitimately used without any
   named symbol reference. Stored lowercase for fast SameText comparison. }
@@ -285,7 +288,8 @@ begin
 end;
 
 { Walk the tree-sitter AST for AFile and collect every identifier that appears
-  as a getter ('read') or setter ('write') accessor in a declProp node, plus
+  as a getter ('read'), setter ('write'), 'stored', 'index' or 'default'
+  specifier in a declProp node, plus
   the property's own backing-field name when it appears literally in those
   clauses.  Returns a lowercased-name set (TDictionary<string,Boolean>) that
   the caller must free.  Returns nil when the file cannot be parsed.
@@ -343,25 +347,20 @@ var
   var
     I      : Integer;
     GNode  : TTSNode;
-    SNode  : TTSNode;
     GName  : string ;
-    SName  : string ;
   begin
     if N.IsNull then Exit;
     if N.NodeType = 'declProp' then
     begin
-      { getter = read accessor; setter = write accessor. }
-      GNode:= N.ChildByField('getter');
-      if not GNode.IsNull then
+      { getter = read, setter = write; stored / index / defaultValue name a
+        private method or const just as often (`stored IsXStored`,
+        `index IDX_Y`, `default DEF_X`) and get no ref in the index either. }
+      for var Field in ['getter', 'setter', 'stored', 'index', 'defaultValue'] do
       begin
+        GNode:= N.ChildByField(Field);
+        if GNode.IsNull then Continue;
         GName:= BaseIdentOf(GNode);
         if GName <> '' then Dict.AddOrSetValue(GName, True);
-      end;
-      SNode:= N.ChildByField('setter');
-      if not SNode.IsNull then
-      begin
-        SName:= BaseIdentOf(SNode);
-        if SName <> '' then Dict.AddOrSetValue(SName, True);
       end;
       { No need to recurse inside declProp: nested declProp is not valid
         Delphi, so we exit early to avoid false matches from the type ref. }
@@ -883,6 +882,76 @@ begin
     end;
   end;
 end;
+
+{ duplicate-unit-on-search-path (clippy-parity L11). Two indexed .pas files that
+  share a unit stem (case-insensitive) are both on the search path: the compiler
+  takes the first it finds and silently ignores the other.
+
+  Q6, MEASURED 2026-10-27: index membership does NOT evict the second file. The
+  compile closure dedupes by full path only (TProjectClosure EnqueueFile), a
+  directory index admits both, and FindUnitFile's first-file-wins only decides
+  which file a `uses` clause resolves to. So the DB really holds both rows and
+  this pass can see the collision by grouping file paths on their stem.
+  One finding per file in a group, naming the other file(s); dotted unit names
+  keep their dots (Vcl.Forms is one stem). Guarded by
+  tests\autotest\run_duplicate_unit_on_search_path.ps1. }
+function CollectDuplicateUnits(const AStore: ISymbolStore): TArray<TLintFinding>;
+var
+  Groups: TObjectDictionary<string, TList<string>>;
+  Paths : TList<string>;
+  Pair  : TPair<string, TList<string>>;
+  FileId: Int64;
+  Path  : string;
+  Stem  : string;
+  Other : TList<string>;
+  P     : string;
+  F     : TLintFinding;
+begin
+  Result:= nil;
+  Groups:= TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
+  try
+    for FileId in AStore.GetAllFileIds do
+    begin
+      Path:= AStore.GetFilePath(FileId);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      Stem:= LowerCase(ChangeFileExt(ExtractFileName(Path), ''));
+      if not Groups.TryGetValue(Stem, Paths) then
+      begin
+        Paths:= TList<string>.Create;
+        Groups.Add(Stem, Paths);
+      end;
+      if not Paths.Contains(Path) then Paths.Add(Path);
+    end;
+    for Pair in Groups do
+    begin
+      if Pair.Value.Count < 2 then Continue;
+      for P in Pair.Value do
+      begin
+        Other:= TList<string>.Create;
+        try
+          for Path in Pair.Value do
+            if Path <> P then Other.Add(Path);
+          F:= Default(TLintFinding);
+          F.RuleId   := 'duplicate-unit-on-search-path';
+          F.Severity := 'warning';
+          F.FilePath := P;
+          F.StartLine:= 1;
+          F.StartCol := 1;
+          F.EndLine  := 1;
+          F.EndCol   := 1;
+          F.Message  := Format('Unit %s also exists as %s -- two files with the same unit name are on the search path; the compiler uses the first one it finds',
+            [ChangeFileExt(ExtractFileName(P), ''), string.Join(', ', Other.ToArray)]);
+          Result:= Result + [F];
+        finally
+          Other.Free;
+        end;
+      end;
+    end;
+  finally
+    Groups.Free;
+  end;
+end;
+
 
 { Shared by the two uses-edge rules below (global-only-uses-edge and
   uses-global-census). Hoisted out of the first one when the second arrived:
@@ -2122,6 +2191,425 @@ begin
   end;
 end;
 
+{ ---- gap-rules wave, lane G8: dfm-event-handler-missing / dfm-password-edit-unmasked /
+  uses-movable-to-implementation / virtual-never-overridden ---- }
+
+{ The one unique class/interface/record named AName in AStore, with the same gate (c) as
+  dfm-property-not-declared: two indexed declarations mean the bare name identifies neither. }
+function ProjUniqueClass(const AStore: ISymbolStore; const AName: string; out ASym: TSymbol): Boolean;
+var
+  S   : TSymbol;
+  Hits: Integer;
+begin
+  ASym:= Default(TSymbol);
+  Hits:= 0;
+  if AStore <> nil then
+    for S in AStore.FindSymbolsByExactName(AName) do
+      if S.Kind in [skClass, skInterface, skRecord, skTypeAlias] then
+      begin
+        Inc(Hits);
+        ASym:= S;
+      end;
+  Result:= Hits = 1;
+end;
+
+{ Adds to AMembers the (lower-case) names declared by AClassName and its ancestors.
+  False = the chain is UNKNOWN (class not found / ambiguous / an ancestor cannot be resolved in
+  either store), and the caller must stay silent. The project index cannot resolve TForm or
+  TObject, so an unresolved ancestor is CONTINUED in the library index (the same bridge
+  UnresolvedAncestorNames exists for); a library chain must resolve completely. }
+function ProjChainMembers(const AStore, ALibStore: ISymbolStore; const AClassName: string;
+  AMembers, ASeen: TStringList; ADepth: Integer): Boolean;
+const
+  MAX_BRIDGE_DEPTH = 8;
+var
+  Used  : ISymbolStore;
+  Sym   : TSymbol     ;
+  Anc   : TTypeAncestor;
+  Ch    : TSymbol     ;
+  Name  : string      ;
+begin
+  Result:= False;
+  if (AClassName = '') or (ADepth > MAX_BRIDGE_DEPTH) then Exit;
+  if ASeen.IndexOf(AClassName) >= 0 then Exit(True);   { a cycle adds nothing new }
+  ASeen.Add(AClassName);
+  Used:= AStore;
+  if not ProjUniqueClass(Used, AClassName, Sym) then
+  begin
+    Used:= ALibStore;
+    if not ProjUniqueClass(Used, AClassName, Sym) then Exit;
+  end;
+  for Ch in Used.FindAllChildSymbols(Sym.Id) do
+    if Ch.Name <> '' then AMembers.Add(Ch.Name);
+  for Anc in Used.GetTransitiveAncestors(Sym.Id) do
+    if Anc.Resolved and (Anc.SymbolId > 0) then
+      for Ch in Used.FindAllChildSymbols(Anc.SymbolId) do
+        if Ch.Name <> '' then AMembers.Add(Ch.Name);
+  for Name in Used.UnresolvedAncestorNames(AClassName, Sym.FileId) do
+  begin
+    if Used = ALibStore then Exit;   { a library chain with a hole is unknown }
+    if not ProjChainMembers(AStore, ALibStore, Name, AMembers, ASeen, ADepth + 1) then Exit;
+  end;
+  Result:= True;
+end;
+
+{ True for a plain Pascal identifier -- how an event handler name reads in a .dfm. }
+function ProjIsIdentifier(const AText: string): Boolean;
+var
+  i: Integer;
+begin
+  Result:= AText <> '';
+  if not Result then Exit;
+  if not CharInSet(AText[1], ['A'..'Z', 'a'..'z', '_']) then Exit(False);
+  for i:= 2 to Length(AText) do
+    if not CharInSet(AText[i], ['A'..'Z', 'a'..'z', '_', '0'..'9']) then Exit(False);
+end;
+
+{ dfm-event-handler-missing (G8). Every `OnX = Handler` row of a .dfm names a method of the
+  FORM class (the root object's class), not of the component carrying the event. A handler the
+  form class and its ancestors do not declare makes the form fail to load (EReadError "Method
+  not found"). Silent whenever the chain is unknown (see ProjChainMembers) -- the same
+  contract as dfm-property-not-declared gate (b). Collection-item events live inside one
+  `Columns = <...>` value and never arrive as rows, so they are out of scope here. }
+function CollectDfmEventHandlerMissing(const AStore, ALibStore: ISymbolStore): TArray<TLintFinding>;
+const
+  EVENT_PREFIX = 'On';
+var
+  Findings: TList<TLintFinding>;
+  Memo    : TObjectDictionary<string, TStringList>;   { root class -> members; nil value = unknown }
+  RootOf  : TDictionary<Int64, string>;               { object symbol id -> root class name }
+
+  function RootClassOf(ASymbolId: Int64): string;
+  const
+    MAX_CLIMB = 64;
+  var
+    S, Next: TSymbol;
+    Guard  : Integer;
+  begin
+    if RootOf.TryGetValue(ASymbolId, Result) then Exit;
+    Result:= '';
+    S:= AStore.GetSymbolById(ASymbolId);
+    Guard:= 0;
+    while (S.Id > 0) and (S.ParentId > 0) and (Guard < MAX_CLIMB) do
+    begin
+      Inc(Guard);
+      Next:= AStore.GetSymbolById(S.ParentId);
+      if Next.Id <= 0 then Break;
+      S:= Next;
+    end;
+    if S.Id > 0 then Result:= Trim(S.Signature);
+    RootOf.Add(ASymbolId, Result);
+  end;
+
+  function MembersOf(const AClassName: string): TStringList;
+  var
+    L, Seen: TStringList;
+    Keep   : Boolean    ;
+  begin
+    if Memo.TryGetValue(LowerCase(AClassName), Result) then Exit;
+    L   := TStringList.Create;
+    Seen:= TStringList.Create;
+    Keep:= False;
+    try
+      L.CaseSensitive:= False;
+      L.Sorted       := True;
+      L.Duplicates   := dupIgnore;
+      Seen.CaseSensitive:= False;
+      Result:= nil;
+      if ProjChainMembers(AStore, ALibStore, AClassName, L, Seen, 0) then
+      begin
+        Result:= L;
+        Keep  := True;      { the memo owns it from here }
+      end;
+    finally
+      Seen.Free;
+      if not Keep then L.Free;
+    end;
+    Memo.Add(LowerCase(AClassName), Result);
+  end;
+
+var
+  Fid    : Int64         ;
+  Path   : string        ;
+  Lit    : TStringLiteral;
+  Prop   : string        ;
+  Handler: string        ;
+  Cls    : string        ;
+  Members: TStringList   ;
+  P      : Integer       ;
+begin
+  Findings:= TList<TLintFinding>.Create;
+  Memo    := TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
+  RootOf  := TDictionary<Int64, string>.Create;
+  try
+    for Fid in AStore.GetAllFileIds do
+    begin
+      Path:= AStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), '.dfm') then Continue;
+      for Lit in AStore.GetLiteralsByKind(Fid, 'dfm-prop') do
+      begin
+        Prop:= Lit.OwnerName;
+        P   := LastDelimiter('.', Prop);
+        if P > 0 then Prop:= Copy(Prop, P + 1, MaxInt);
+        { OnX with an upper-case third letter: OnClick yes, Online no. }
+        if (Length(Prop) <= Length(EVENT_PREFIX)) or not Prop.StartsWith(EVENT_PREFIX)
+           or not CharInSet(Prop[Length(EVENT_PREFIX) + 1], ['A'..'Z']) then Continue;
+        Handler:= Trim(Lit.Text);
+        if (not ProjIsIdentifier(Handler)) or SameText(Handler, 'nil') then Continue;
+        if Lit.SymbolId <= 0 then Continue;
+        Cls:= RootClassOf(Lit.SymbolId);
+        if Cls = '' then Continue;
+        Members:= MembersOf(Cls);
+        if Members = nil then Continue;                 { unknown chain: silent }
+        if Members.IndexOf(Handler) >= 0 then Continue;
+
+        var F: TLintFinding:= Default(TLintFinding);
+        F.RuleId   := 'dfm-event-handler-missing';
+        F.Severity := 'warning';
+        F.FilePath := Path;
+        F.StartLine:= Lit.StartLine;
+        F.StartCol := Lit.StartCol;
+        F.EndLine  := Lit.EndLine;
+        F.EndCol   := Lit.EndCol;
+        F.Message  := Format('.dfm binds %s to handler "%s", but neither %s nor any of its ' +
+                             'ancestors declares a method of that name -- the form will ' +
+                             'fail to load ("Method not found")', [Lit.OwnerName, Handler, Cls]);
+        Findings.Add(F);
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    RootOf  .Free;
+    Memo    .Free;
+    Findings.Free;
+  end;
+end;
+
+{ dfm-password-edit-unmasked (G8, CWE-549). A text-edit object of the TEdit family whose NAME
+  reads like a password field and which sets no PasswordChar / Properties.EchoMode /
+  Properties.PasswordChar shows the typed secret on screen. A value that leaves the field
+  readable (PasswordChar = #0, EchoMode = eemNormal) does not count as a mask. A binary .dfm
+  carries no rows and is silently skipped. }
+function CollectDfmPasswordEditUnmasked(const AStore: ISymbolStore): TArray<TLintFinding>;
+const
+  EDIT_CLASSES: array[0..5] of string = ('TEdit', 'TMaskEdit', 'TcxTextEdit', 'TcxMaskEdit', 'TButtonedEdit', 'TLabeledEdit');
+  MASK_PROPS  : array[0..2] of string = ('PasswordChar', 'Properties.EchoMode', 'Properties.PasswordChar');
+var
+  Findings : TList<TLintFinding>;
+  Cand     : TDictionary<Int64, TSymbol>;   { candidate object id -> symbol }
+  Masked   : TDictionary<Int64, Boolean>;
+  TypeLits : TDictionary<Integer, TStringLiteral>;   { header line -> dfm-type literal }
+
+  function IsEditClass(const AClass: string): Boolean;
+  var C: string;
+  begin
+    for C in EDIT_CLASSES do
+      if SameText(C, AClass) then Exit(True);
+    Result:= False;
+  end;
+
+  function NameLooksLikePassword(const AName: string): Boolean;
+  begin
+    Result:= ContainsText(AName, 'pass') or ContainsText(AName, 'pwd');
+  end;
+
+  function IsMaskProp(const AProp: string): Boolean;
+  var M: string;
+  begin
+    for M in MASK_PROPS do
+      if SameText(M, AProp) then Exit(True);
+    Result:= False;
+  end;
+
+var
+  Fid : Int64         ;
+  Path: string        ;
+  Sym : TSymbol       ;
+  Lit : TStringLiteral;
+  Pair: TPair<Int64, TSymbol>;
+begin
+  Findings:= TList<TLintFinding>.Create;
+  Cand    := TDictionary<Int64, TSymbol>.Create;
+  Masked  := TDictionary<Int64, Boolean>.Create;
+  TypeLits:= TDictionary<Integer, TStringLiteral>.Create;
+  try
+    for Fid in AStore.GetAllFileIds do
+    begin
+      Path:= AStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), '.dfm') then Continue;
+      Cand.Clear;
+      Masked.Clear;
+      TypeLits.Clear;
+      for Sym in AStore.FindSymbolsByFile(Path) do
+        if (Sym.Kind in [skForm, skComponent]) and IsEditClass(Trim(Sym.Signature))
+           and NameLooksLikePassword(Sym.Name) then
+          Cand.AddOrSetValue(Sym.Id, Sym);
+      if Cand.Count = 0 then Continue;
+      for Lit in AStore.GetLiteralsByKind(Fid, 'dfm-prop') do
+        if Cand.ContainsKey(Lit.SymbolId) and IsMaskProp(Lit.OwnerName)
+           and (not SameText(Trim(Lit.Text), '#0')) and (not SameText(Trim(Lit.Text), 'eemNormal')) then
+          Masked.AddOrSetValue(Lit.SymbolId, True);
+      for Lit in AStore.GetLiteralsByKind(Fid, 'dfm-type') do
+        TypeLits.AddOrSetValue(Lit.StartLine, Lit);
+      for Pair in Cand do
+      begin
+        if Masked.ContainsKey(Pair.Key) then Continue;
+        var F: TLintFinding:= Default(TLintFinding);
+        F.RuleId   := 'dfm-password-edit-unmasked';
+        F.Severity := 'info';
+        F.FilePath := Path;
+        F.StartLine:= Pair.Value.StartLine;
+        F.StartCol := Pair.Value.StartCol;
+        F.EndLine  := Pair.Value.StartLine;
+        F.EndCol   := Pair.Value.StartCol + 1;
+        if TypeLits.TryGetValue(Pair.Value.StartLine, Lit) then
+        begin
+          F.StartCol:= Lit.StartCol;
+          F.EndCol  := Lit.EndCol;
+        end;
+        F.Message  := Format('%s: %s is named like a password field but sets no PasswordChar ' +
+                             '/ Properties.EchoMode -- the typed secret is shown in clear (CWE-549)',
+                             [Pair.Value.Name, Trim(Pair.Value.Signature)]);
+        Findings.Add(F);
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    TypeLits.Free;
+    Masked  .Free;
+    Cand    .Free;
+    Findings.Free;
+  end;
+end;
+
+{ uses-movable-to-implementation (G8): one finding per interface-uses entry the `uses-audit`
+  verdict calls move-to-implementation. The verdict routine is TUsesAuditor (shared with the
+  verb). AOnlyFileId > 0 audits that file only. Pure hint: the verdict is index-based, the fix
+  hint names `uses-fix`, which compiler-verifies every candidate. }
+function CollectUsesMovableToImplementation(const AStore: ISymbolStore; AOnlyFileId: Int64): TArray<TLintFinding>;
+var
+  Findings: TList<TLintFinding>;
+  Auditor : TUsesAuditor;
+  FileIds : TArray<Int64>;
+  Fid     : Int64;
+  Path    : string;
+  Row     : TUsesAuditRow;
+begin
+  Findings:= TList<TLintFinding>.Create;
+  Auditor := TUsesAuditor.Create(AStore);
+  try
+    FileIds:= AStore.GetAllFileIds;
+    if AOnlyFileId > 0 then FileIds:= [AOnlyFileId];
+    for Fid in FileIds do
+    begin
+      Path:= AStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      for Row in Auditor.Audit(Fid, Path) do
+      begin
+        if Row.Verdict <> USES_VERDICT_MOVE then Continue;
+        var F: TLintFinding:= Default(TLintFinding);
+        F.RuleId   := 'uses-movable-to-implementation';
+        F.Severity := 'hint';
+        F.FilePath := Path;
+        F.StartLine:= Row.StartLine;
+        F.StartCol := Row.StartCol;
+        F.EndLine  := Row.EndLine;
+        F.EndCol   := Row.EndCol;
+        F.Message  := Format('%s is in the interface uses but only the implementation section ' +
+                             'needs it -- move it down to cut coupling and compile time ' +
+                             '(drag-lint uses-fix verifies the move by compiling)', [Row.UnitName]);
+        Findings.Add(F);
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Auditor .Free;
+    Findings.Free;
+  end;
+end;
+
+{ virtual-never-overridden (G8, OFF; FixInsight O805). A `virtual` / `dynamic` method that is
+  not abstract and that no class in the project overrides: the dispatch buys nothing. The
+  override test is by bare method NAME across the whole project (any `override` of that name
+  anywhere keeps the method silent), which errs toward silence. Constructors and destructors
+  are skipped -- a virtual constructor serves metaclass construction, which the index cannot
+  see -- and so is any class the platform library also declares (a package class an outside
+  project may override). }
+function CollectVirtualNeverOverridden(const AStore, ALibStore: ISymbolStore): TArray<TLintFinding>;
+type
+  TCand = record
+    Sym : TSymbol;
+    Path: string ;
+    Word: string ;
+  end;
+var
+  Findings : TList<TLintFinding>;
+  Overrides: TDictionary<string, Boolean>;
+  Cands    : TList<TCand>;
+  Fid      : Int64 ;
+  Path     : string;
+  Sym      : TSymbol;
+  Words    : TArray<string>;
+  C        : TCand ;
+  Owner    : TSymbol;
+  W        : string;
+  Kw       : string;
+begin
+  Findings := TList<TLintFinding>.Create;
+  Overrides:= TDictionary<string, Boolean>.Create;
+  Cands    := TList<TCand>.Create;
+  try
+    for Fid in AStore.GetAllFileIds do
+    begin
+      Path:= AStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      for Sym in AStore.FindSymbolsByFile(Path) do
+      begin
+        if (Sym.Directives = '') or (Sym.ParentId <= 0) then Continue;
+        Words:= LowerCase(Sym.Directives).Split([' ']);
+        Kw:= '';
+        var IsAbstract: Boolean:= False;
+        for W in Words do
+          if W = 'override' then Overrides.AddOrSetValue(LowerCase(Sym.Name), True)
+          else if W = 'abstract' then IsAbstract:= True
+          else if (W = 'virtual') or (W = 'dynamic') then Kw:= W;
+        if (Kw = '') or IsAbstract or (Sym.Kind in [skConstructor, skDestructor]) then Continue;
+        if Sym.Kind in [skProcedure, skFunction, skMethod] then
+        begin
+          C.Sym := Sym;
+          C.Path:= Path;
+          C.Word:= Kw;
+          Cands.Add(C);
+        end;
+      end;
+    end;
+    for C in Cands do
+    begin
+      if Overrides.ContainsKey(LowerCase(C.Sym.Name)) then Continue;
+      Owner:= AStore.GetSymbolById(C.Sym.ParentId);
+      if (Owner.Id = C.Sym.ParentId) and (ALibStore <> nil)
+         and (Length(ALibStore.FindSymbolsByExactName(Owner.Name)) > 0) then Continue;
+      var F: TLintFinding:= Default(TLintFinding);
+      F.RuleId    := 'virtual-never-overridden';
+      F.Severity  := 'hint';
+      F.FilePath  := C.Path;
+      F.StartLine := C.Sym.StartLine;
+      F.StartCol  := C.Sym.StartCol;
+      F.EndLine   := C.Sym.StartLine;
+      F.EndCol    := C.Sym.StartCol + 1;
+      F.SymbolName:= C.Sym.Name;
+      F.Message   := Format('%s is declared %s but no class in the project overrides it -- the ' +
+                            'virtual dispatch buys nothing (drop the directive, or keep it as ' +
+                            'a deliberate extension point)', [C.Sym.QualifiedName, C.Word]);
+      Findings.Add(F);
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Cands    .Free;
+    Overrides.Free;
+    Findings .Free;
+  end;
+end;
 { dependent-project-not-recompiled (R2, PLAN-lint-tree section 4).
 
   A unit marked `dl:shared` is compiled by more than one project. Edit it, build
@@ -3038,6 +3526,9 @@ end; // function
 /// statement -- <c>Name(args);</c> or <c>Rcv.Name(args);</c> alone on its line.
 /// Such a call cannot do anything, so discarding its result is dead code.</summary>
 /// <param name="AStore">The project index; must carry the purity columns.</param>
+/// <param name="AOnlyFileId">0 = every file. Otherwise only call sites IN that file are
+/// judged (`lint <file>`): the routine set is still the whole store's, so the
+/// answer for that file is unchanged, and no other caller file is read.</param>
 /// <returns>One finding per discarded call, anchored at the call line. Empty on
 /// an index whose <c>purity</c> stage has not run (every verdict is -1).</returns>
 /// <remarks>THE SUMMARY DECIDES, NEVER "is a function": a routine that returns a
@@ -3048,7 +3539,7 @@ end; // function
 /// (spec 14.1's named false positive), and the name must begin a dotted segment
 /// so <c>OtherTwice(3);</c> cannot be read as a call to <c>Twice</c>. Never
 /// raises; an unreadable file yields no finding for its call sites.</remarks>
-function CollectDiscardedEffectFreeResult(const AStore: ISymbolStore): TArray<TLintFinding>;
+function CollectDiscardedEffectFreeResult(const AStore: ISymbolStore; AOnlyFileId: Int64): TArray<TLintFinding>;
 const
   CInheritedKw = 'inherited ';
   { A receiver may only be a dotted chain of identifiers. }
@@ -3240,6 +3731,9 @@ begin
       for var C in AStore.FindResolvedCallers(Sym.Id) do
       begin
         if (C.FullPath = '') or (C.CallSiteLine <= 0) then Continue;
+        var CFid: Int64;
+        if not FileIdOf.TryGetValue(C.FullPath, CFid) then CFid:= 0;
+        if (AOnlyFileId > 0) and (CFid <> AOnlyFileId) then Continue;
         var L: TArray<string>:= LinesOf(C.FullPath);
         if (L = nil) or (C.CallSiteLine > Length(L)) then Continue;
         if not StartsNewStatement(L, C.CallSiteLine) then Continue;
@@ -3247,7 +3741,7 @@ begin
         var Fd: TLintFinding:= Default(TLintFinding);
         Fd.RuleId    := 'discarded-effect-free-result';
         Fd.FilePath  := C.FullPath;
-        if not FileIdOf.TryGetValue(C.FullPath, Fd.FileId) then Fd.FileId:= 0;
+        Fd.FileId    := CFid;
         Fd.StartLine := C.CallSiteLine;
         Fd.EndLine   := C.CallSiteLine;
         Fd.StartCol  := 1;
@@ -3631,6 +4125,10 @@ var
     queries per symbol. See IsReferenced. }
   RefdIds       : TDictionary<Int64 , Boolean>;
   RefdNames     : TDictionary<string, Boolean>;
+  { Lazily built for the own-unit tier of unused-public-symbol: lowercased reference
+    name -> the one file id every reference sits in, or -1 once a second file refers
+    to the same name. See IsOwnUnitOnly. }
+  OwnRefFile    : TDictionary<string, Int64>;
 
   function WantRule(const AId: string): Boolean;
   begin
@@ -3684,6 +4182,36 @@ var
   function IsReferenced(const ASym: TSymbol): Boolean;
   begin
     Result:= RefdIds.ContainsKey(ASym.Id) or RefdNames.ContainsKey(LowerCase(ASym.Name));
+  end;
+
+  { unused-public-symbol, own-unit-only tier (clippy visibility-could-be-reduced,
+    merged here L11): an exported routine that IS referenced, but only from the
+    file that declares it, could leave the interface section. NAME-keyed like
+    IsReferenced, so it is conservative the same way: any same-named reference in
+    another file (a homonym included) keeps the routine "used elsewhere" and
+    silent. The map costs one GetReferencesFromFile per file, built on first
+    use only. }
+  function IsOwnUnitOnly(const ASym: TSymbol): Boolean;
+  var
+    FileId: Int64;
+    R     : TReference;
+    Key   : string;
+    Prev  : Int64;
+  begin
+    if OwnRefFile = nil then
+    begin
+      OwnRefFile:= TDictionary<string, Int64>.Create;
+      for FileId in AStore.GetAllFileIds do
+        for R in AStore.GetReferencesFromFile(FileId) do
+        begin
+          Key:= LowerCase(R.NameText);
+          if not OwnRefFile.TryGetValue(Key, Prev) then
+            OwnRefFile.Add(Key, FileId)
+          else if Prev <> FileId then
+            OwnRefFile.AddOrSetValue(Key, -1);
+        end;
+    end;
+    Result:= OwnRefFile.TryGetValue(LowerCase(ASym.Name), Prev) and (Prev = ASym.FileId);
   end;
 
   { The unit stems of every symbol named AName, memoised for the whole run.
@@ -3920,6 +4448,7 @@ begin
   UnitHasInit  := TDictionary<string, Boolean>      .Create;
   RefdIds    := TDictionary<Int64 , Boolean>      .Create;
   RefdNames  := TDictionary<string, Boolean>      .Create;
+  OwnRefFile := nil;
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TCirc:= 0; TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
   TGlob:= 0; TDupD:= 0; TCens:= 0;
@@ -3950,6 +4479,10 @@ begin
     if WantRule('global-only-uses-edge') and OptedIn('global-only-uses-edge') then
       for var Gf in CollectGlobalOnlyUsesEdges(AStore, ALibraryStore) do Findings.Add(Gf);
     Inc(TGlob, Tick - T0); T0:= Tick;
+
+    { duplicate-unit-on-search-path: one pass over the file list, grouped by unit stem. }
+    if WantRule('duplicate-unit-on-search-path') then
+      for var Df in CollectDuplicateUnits(AStore) do Findings.Add(Df);
 
     { dfm-property-not-declared (R1): whole-DFM pass. OFF by default AND gated
       on OptedIn, for the reason that gate exists -- an ungated run would walk
@@ -3987,12 +4520,19 @@ begin
       resolved-callers query per proven routine for 14.1, which a post-hoc
       config filter would hide perfectly while still charging for it. }
     if WantRule('discarded-effect-free-result') and OptedIn('discarded-effect-free-result') then
-      for var Pf1 in CollectDiscardedEffectFreeResult(AStore) do Findings.Add(Pf1);
+      for var Pf1 in CollectDiscardedEffectFreeResult(AStore, AOnlyFileId) do Findings.Add(Pf1);
     if WantRule('query-name-with-effect') and OptedIn('query-name-with-effect') then
       for var Pf2 in CollectQueryNameWithEffect(AStore) do Findings.Add(Pf2);
     { assert-with-side-effect (INBOX 2026-09-23 rule 4): same gate, same reason. }
     if WantRule('assert-with-side-effect') and OptedIn('assert-with-side-effect') then
       for var Pf3 in CollectAssertWithSideEffect(AStore) do Findings.Add(Pf3);
+    { lane B-EFFECT (DRagLint.Lint.EffectRules): same gate, same reason. }
+    if WantRule('side-effect-in-short-circuit') and OptedIn('side-effect-in-short-circuit') then
+      for var Pf4 in CollectSideEffectInShortCircuit(AStore, AOnlyFileId) do Findings.Add(Pf4);
+    if WantRule('property-getter-with-effect') and OptedIn('property-getter-with-effect') then
+      for var Pf5 in CollectPropertyGetterWithEffect(AStore, AOnlyFileId) do Findings.Add(Pf5);
+    if WantRule('ui-access-in-thread-transitive') and OptedIn('ui-access-in-thread-transitive') then
+      for var Pf6 in CollectUiAccessInThreadTransitive(AStore, AOnlyFileId) do Findings.Add(Pf6);
     Inc(TPurity, Tick - T0);
     T0:= Tick;
 
@@ -4015,6 +4555,22 @@ begin
       refs read per file that names a sink, symbols by kind, no per-row query. }
     if WantRule('enum-ordinal-persisted') then
       for var Eo in CollectEnumOrdinalPersisted(AStore) do Findings.Add(Eo);
+    { unused-enum-value (lane B-ENUM; ON since ENUMRULES 2026-10-28, the caller opts it in) and OptedIn-gated --
+      a refs read per file, which a post-hoc config filter would hide while still charging for it. }
+    if WantRule(UNUSED_ENUM_VALUE_RULE) and OptedIn(UNUSED_ENUM_VALUE_RULE) then
+      for var Uv in CollectUnusedEnumValue(AStore) do Findings.Add(Uv);
+    { gap-rules wave, lane G8. The two DFM rules and uses-movable-to-implementation are ON by
+      default and walk one table each (uses-movable back ON in lane IMOV after REFTYPE: 0 FP on
+      engine 114 / ORM3 243, and the engine dogfood --fix --apply builds); virtual-never-overridden
+      scans every file's symbols, so it is OFF by default and OptedIn-gated. }
+    if WantRule('dfm-event-handler-missing') then
+      for var Hf in CollectDfmEventHandlerMissing(AStore, ALibraryStore) do Findings.Add(Hf);
+    if WantRule('dfm-password-edit-unmasked') then
+      for var Pw in CollectDfmPasswordEditUnmasked(AStore) do Findings.Add(Pw);
+    if WantRule('uses-movable-to-implementation') then
+      for var Um in CollectUsesMovableToImplementation(AStore, AOnlyFileId) do Findings.Add(Um);
+    if WantRule('virtual-never-overridden') and OptedIn('virtual-never-overridden') then
+      for var Vn in CollectVirtualNeverOverridden(AStore, ALibraryStore) do Findings.Add(Vn);
 
     { ONE FILE when the caller names one (`lint <file>`): every finding this loop
       emits is stamped with the loop's own Path, and the memos it fills are caches
@@ -4319,6 +4875,15 @@ begin
                 else
                   Add('unused-public-symbol', 'info',
                     Format('Exported routine %s has no references in the index -- possible dead public API', [Sym.Name]), Sym);
+              end
+              else if IsOwnUnitOnly(Sym) then
+              begin
+                { Own-unit tier. A SHARED unit (dl:shared) is skipped: a sibling
+                  project may call the routine, and this index cannot see it. }
+                var OPath: string:= AStore.GetFilePath(Sym.FileId);
+                if (OPath = '') or (Length(DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf(OPath)) <= 1) then
+                  Add('unused-public-symbol', 'hint',
+                    Format('Exported routine %s is only referenced within its own unit -- its visibility could be reduced (move it to the implementation section)', [Sym.Name]), Sym);
               end;
           end;
           Inc(TUpub, Tick - TS); TS:= Tick;
@@ -4394,6 +4959,7 @@ begin
     Result:= Findings.ToArray;
   finally
     RefdNames  .Free;
+    OwnRefFile .Free;
     RefdIds    .Free;
     UnitIndexed.Free;
     ExportsOfUnit.Free;

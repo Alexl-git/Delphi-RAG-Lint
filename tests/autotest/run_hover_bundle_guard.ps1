@@ -163,7 +163,9 @@ WriteAnsi $SrcFile $Fixture
 
 $Db = Join-Path $WorkDir 'fix.sqlite'
 & $Exe index $SrcDir --db $Db 2>&1 | Out-Null
-if (-not (Test-Path $Db)) { Write-Host 'FATAL: index produced no DB' -ForegroundColor Red; exit 2 }
+$idxCode = $LASTEXITCODE
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (CLIFIX C2)
+if (-not (Test-Path $Db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: index produced no DB' -ForegroundColor Red; exit 2 }
 Check 'built the fixture index' (Test-Path $Db)
 
 $lines = [System.IO.File]::ReadAllLines($SrcFile)

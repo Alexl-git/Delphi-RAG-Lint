@@ -1,0 +1,5 @@
+# Marker comment at line 11 (existing rule); `raise ENotImplemented` at line 12 is the merged todo-left shape (clippy todo!/unimplemented!). Lines 17-18 must not fire (DEBUG_MODE has no word-boundary BUG; ordinary exception).
+compiler-magic-comments 11
+compiler-magic-comments 12
+!compiler-magic-comments 17
+!compiler-magic-comments 18

@@ -261,6 +261,14 @@ function BuildNamingFixEdits(const AStore: ISymbolStore;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
   out AFixCount: Integer; out ASkippedCount: Integer; out AStaleCount: Integer): TArray<TTextEdit>;
 
+/// <summary>The identifier a naming finding's span holds in the file today.</summary>
+/// <param name="AFile">Path of the source file.</param>
+/// <param name="ALine">1-based line of the span.</param>
+/// <param name="AStartCol">1-based first column.</param>
+/// <param name="AEndCol">Exclusive end column.</param>
+/// <returns>The text of the span, or '' when the file or span is not there.</returns>
+function ReadIdentifierAt(const AFile: string; ALine, AStartCol, AEndCol: Integer): string;
+
 implementation
 
 uses
@@ -269,6 +277,7 @@ uses
   System.IOUtils,
   System.Classes,
   System.Generics.Collections,
+  System.RegularExpressions,
   TreeSitter,
   DRagLint.Diagnostics.ParseCache,
   DRagLint.Refactor.Rename;
@@ -599,6 +608,34 @@ begin
   Result:= False;
 end;
 
+{ property-accessor-name (lane A5B): the finding sits on the accessor's name
+  INSIDE the property declaration, which is a use, not a declaration -- so
+  ResolveSymbolAt finds nothing there. The target is the member of the
+  property's own class that bears AOldName: exactly one, else nothing (an
+  inherited accessor, or an overload, is left for a human). }
+function ResolveAccessor(const AStore: ISymbolStore; const AF: TLintFinding; const AOldName: string): TSymbol;
+var
+  Syms   : TArray<TSymbol>;
+  Sym    : TSymbol;
+  ClassId: Int64;
+  Hits   : Integer;
+begin
+  Result:= Default(TSymbol);
+  Syms:= AStore.FindSymbolsByFile(AF.FilePath);
+  ClassId:= 0;
+  for Sym in Syms do
+    if (Sym.Kind = skProperty) and (Sym.StartLine <= AF.StartLine) and (Sym.EndLine >= AF.StartLine) then ClassId:= Sym.ParentId;
+  if ClassId = 0 then Exit;
+  Hits:= 0;
+  for Sym in Syms do
+    if (Sym.ParentId = ClassId) and (Sym.Kind in [skField, skMethod]) and SameText(Sym.Name, AOldName) then
+    begin
+      Inc(Hits);
+      Result:= Sym;
+    end;
+  if Hits <> 1 then Result:= Default(TSymbol);
+end;
+
 { The rename candidates for finding AF whose identifier is AOldName, best first;
   nil when no candidate differs from AOldName or no legal one exists. }
 function NamingCandidates(const AStore: ISymbolStore; const AF: TLintFinding;
@@ -625,6 +662,17 @@ begin
       identifier. Leave both for a human -- silently emitting a broken
       rename is worse than reporting the finding unfixed. }
     if (NewName = '') or CharInSet(NewName[1], ['0'..'9']) then Exit;
+  end
+  else if SameText(AF.RuleId, 'property-accessor-name') then
+  begin
+    { The message names both legal names (DeclParityChecks.CheckAccessorNames):
+      "should be named F<Prop> or Get<Prop>" -- the first for a field, the
+      second for a method accessor. }
+    var AccM: TMatch:= TRegEx.Match(AF.Message, 'should be named ([A-Za-z_]\w*) or ([A-Za-z_]\w*)$');
+    if not AccM.Success then Exit;
+    Sym:= ResolveAccessor(AStore, AF, AOldName);
+    if Sym.Id = 0 then Exit;
+    NewName:= if Sym.Kind = skField then AccM.Groups[1].Value else AccM.Groups[2].Value;
   end
   else if SameText(AF.RuleId, 'const-casing') then
     { Word-aware; ConstCaseCandidates already drops the unchanged name. }
@@ -682,7 +730,8 @@ begin
       IsLocal:= SameText(F.RuleId, 'local-var-casing') or SameText(F.RuleId, 'param-name-prefix')
                 or SameText(F.RuleId, 'local-field-prefix');
       if not (IsLocal or SameText(F.RuleId, 'method-pascalcase') or SameText(F.RuleId, 'const-casing')
-          or SameText(F.RuleId, 'field-name-prefix') or SameText(F.RuleId, 'type-name-prefix')) then Continue;
+          or SameText(F.RuleId, 'field-name-prefix') or SameText(F.RuleId, 'type-name-prefix')
+          or SameText(F.RuleId, 'property-accessor-name')) then Continue;
 
       try
         T:= Default(TNamingTarget);
@@ -713,7 +762,8 @@ begin
               name in this file means the index predates an edit that moved the
               declaration: "stale index", not "no fixable findings" (spec
               criterion 12). }
-            Sym:= ResolveSymbolAt(AStore, F.FilePath, F.StartLine, F.StartCol, T.OldName);
+            Sym:= if SameText(F.RuleId, 'property-accessor-name') then ResolveAccessor(AStore, F, T.OldName)
+                  else ResolveSymbolAt(AStore, F.FilePath, F.StartLine, F.StartCol, T.OldName);
             if Sym.Id = 0 then
               T.Status:= if DeclaredInFile(AStore, F.FilePath, T.OldName) then tsStalePosition else tsUnresolved
             else
@@ -886,6 +936,38 @@ begin
     if ATarget.Scope = nsLocal then
       EmitRenameEdits(TRenameRefactoring.BuildLocal(F.FilePath, F.StartLine, F.StartCol, ANewName),
         F.StartLine, F.StartCol, F.EndCol, ATarget.OldName)
+    else if SameText(F.RuleId, 'property-accessor-name') then
+    begin
+      { The finding sits on the PROPERTY line, which the refs table does not
+        hold, so the finding-span override below would hand the declaration
+        line the property line's columns. Instead: an engine edit whose column
+        is the `procedure` / `function` keyword moves to the ONE whole-word
+        occurrence of the old name on its own line (none or several: left as
+        is, so the span guard skips it), and the property's `read X` /
+        `write X` is renamed from the finding's own verified span. }
+      var REs: TArray<TRenameEdit>:= TRenameRefactoring.Build(AStore, ATarget.QName, ANewName);
+      var OnProp: Boolean:= False;
+      for var I:= 0 to High(REs) do
+      begin
+        var SL: TStringList:= LinesFor(REs[I].FilePath);
+        if (REs[I].Line < 1) or (REs[I].Line > SL.Count) then Continue;
+        OnProp:= OnProp or ((REs[I].Line = F.StartLine) and SameText(REs[I].FilePath, F.FilePath));
+        if SameText(Copy(SL[REs[I].Line - 1], REs[I].Col, Length(REs[I].OldName)), REs[I].OldName) then Continue;
+        var Ms: TMatchCollection:= TRegEx.Matches(SL[REs[I].Line - 1], '\b' + TRegEx.Escape(REs[I].OldName) + '\b', [roIgnoreCase]);
+        if Ms.Count = 1 then REs[I].Col:= Ms[0].Index;
+      end;
+      if not OnProp then
+      begin
+        var PE: TRenameEdit;
+        PE.FilePath:= F.FilePath;
+        PE.Line    := F.StartLine;
+        PE.Col     := F.StartCol;
+        PE.OldName := ATarget.OldName;
+        PE.NewName := ANewName;
+        REs:= REs + [PE];
+      end;
+      EmitRenameEdits(REs, 0, 0, 0, ATarget.OldName);
+    end
     else
       { method-pascalcase / const-casing / field-name-prefix / type-name-prefix:
         Build also covers the symbol's separate implementation-section header

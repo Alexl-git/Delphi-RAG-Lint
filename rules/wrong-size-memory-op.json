@@ -1,0 +1,11 @@
+{
+  "id": "wrong-size-memory-op",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "Byte count does not match the buffer: SizeOf of the pointer instead of its pointee, Length of a string without the character size, or FillChar over a managed variable (CWE-805).",
+  "warn_capture": "warn",
+  "fix": [
+    { "when_capture": "p", "replace": "SizeOf({p}^)" },
+    { "when_capture": "s", "replace": "Length({s}) * SizeOf(Char)" }
+  ]
+}

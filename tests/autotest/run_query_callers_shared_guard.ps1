@@ -16,6 +16,9 @@
     and the LSP produce the SAME rows -- the assertion that fails if the two
     surfaces ever diverge.
 
+  2026-10-28 (XERJ item 3, gaps/xj-3): the pinned JSON key order gained `resolution` as the LAST key,
+  by owner ruling; the order check below was updated in the same commit.
+
   WHY BOTH FORMATS:
     The text path groups rows under a per-target header and prints callbacks
     WITHOUT one; the JSON path emits a fixed key order and OMITS the
@@ -132,7 +135,9 @@ WriteAnsi (Join-Path $SrcDir 'uSharedCallers.pas') $Fixture
 
 $Db = Join-Path $WorkDir 'fix.sqlite'
 & $Exe index $SrcDir --db $Db 2>&1 | Out-Null
-if (-not (Test-Path $Db)) { Write-Host 'FATAL: index produced no DB' -ForegroundColor Red; exit 2 }
+$idxCode = $LASTEXITCODE
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (CLIFIX C2)
+if (-not (Test-Path $Db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: index produced no DB' -ForegroundColor Red; exit 2 }
 
 # ---- text form ------------------------------------------------------------
 # Capture stdout ONLY. 2>&1 interleaves the config banner into the captured
@@ -171,10 +176,14 @@ if ($null -ne $jsonRaw) {
     Check 'json: target_qname is the resolved target' ($r.target_qname -match 'TWorker\.ApplyDelta') "got=$($r.target_qname)"
     Check 'json: file is file-name-only, not a path' (($r.file -notmatch '[\\/]') -and ($r.file -match '\.pas$')) "got=$($r.file)"
     Check 'json: a line is present when the enclosing symbol is known' ($null -ne $r.line -and $r.line -gt 0) "got=$($r.line)"
+    Check 'json: resolution is derived from the edge confidence (certain -> exact)' (($r.confidence -ne 'certain') -or ($r.resolution -ceq 'exact')) "confidence=$($r.confidence) resolution=$($r.resolution)"
   }
   # Key ORDER is part of the contract -- a consumer diffing two runs sees it.
-  Check 'json: key order is caller_qname,file,confidence,target_qname[,line]' `
-    ($jsonRaw -match '"caller_qname"[\s\S]*?"file"[\s\S]*?"confidence"[\s\S]*?"target_qname"') `
+  # XERJ item 3 (owner ruling 2026-10-28, gaps/xj-3): `resolution` joined the pinned row as the
+  # LAST key. Changed deliberately, not weakened: the key must exist, hold a known kind, and
+  # close the object.
+  Check 'json: key order is caller_qname,file,confidence,target_qname[,line][,caller_line][,mode],resolution' `
+    ($jsonRaw -match '"caller_qname"[\s\S]*?"file"[\s\S]*?"confidence"[\s\S]*?"target_qname"[\s\S]*?"resolution":\s*"(exact|ambiguous|external|name-only)"\s*\}') `
     'key order changed'
 }
 

@@ -1,0 +1,77 @@
+## Cycle 1: labvarwidget <-> labvarhost
+
+Status: **interface coupling** -- 1 of 2 uses between the units of this cycle are in INTERFACE uses clauses.
+
+Files:
+- `labvarwidget` -> `C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\LabVarWidget.pas`
+- `labvarhost` -> `C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\LabVarHost.pas`
+
+### Why it cycles
+- `labvarhost` interface uses `TLabVarWidget` (class) at `LabVarHost.pas:11`; declared in `LabVarWidget.pas:6`.
+
+### Goal
+Part A (steps 1-4, required) removes the INTERFACE coupling: each symbol above -- and whatever it needs -- moves into a new leaf unit, or its class gets a base class there, so no unit of the cycle needs another one in its interface any more. Part B (optional) removes the implementation-only cycle that may remain.
+
+### DONE
+This plan (Part A) removes the INTERFACE-section coupling of this cycle. It is DONE when both hold: (1) the project compiles with 0 errors, and (2) `drag-lint cycles` prints exactly the output given in the last checklist item.
+After it, some of these units still use each other in their interfaces: the MANUAL items were not cut. Cut them by hand, or leave them.
+
+### Step 1: what moves where
+Nothing can be moved mechanically.
+
+**MANUAL -- not mechanical.** These symbols cannot be moved by the recipes above; their edge stays until you cut it by hand:
+- `TLabVarWidget` (class, `LabVarWidget.pas` line 6): `LabVarHost.pas` line 19 uses `TLabVarWidget.` (the class itself, not an instance).
+
+### Step 2: uses clauses -- keep, move or remove the old unit
+For each unit of the cycle that uses a unit whose declarations move. A unit can be removed from a section only when nothing else from it is used there.
+- (no uses entry between units of this cycle changes)
+
+### Step 3: create the new units
+No new unit is needed.
+
+### Step 4: edit the existing files
+Apply each file's edits in the order listed. They run from the bottom of the file to the top, so the line numbers of the edits still to do do not move. "Current text" is what the lines say before the edit -- if it does not match, stop: the file changed since it was indexed.
+
+### Checklist
+Tick each box in order. Do not skip the compile.
+1. [ ] Compile `CycleLab.dproj` (RAD Studio: Project > Build; or `msbuild "C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\CycleLab.dproj" /t:Build` from a RAD Studio Command Prompt). Expect 0 errors; on an error see "If the compile fails" below, fix, and compile again.
+2. [ ] Re-index: `drag-lint index --project "C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\CycleLab.dproj" --db "db/CycleLab.sqlite"`
+3. [ ] Run `drag-lint cycles --db "db/CycleLab.sqlite"`. It must print exactly:
+```text
+11 circular unit group(s) found:
+  [2 units] labvarwidget <-> labvarhost   (has interface coupling -- widest recompile blast radius)
+  [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (has interface coupling -- widest recompile blast radius)
+  [2 units] demouiconnect <-> demogageport   (implementation-only -- legal, lower impact)
+  [2 units] labdira <-> labdirb   (has interface coupling -- widest recompile blast radius)
+  [3 units] democontrolplan <-> demoblueprint.viewmodel <-> demoblueprint   (implementation-only -- legal, lower impact)
+  [2 units] labguarda <-> labguardb   (has interface coupling -- widest recompile blast radius)
+  [2 units] labctorowner <-> labctorchild   (has interface coupling -- widest recompile blast radius)
+  [2 units] labrchost <-> labrcwidget   (has interface coupling -- widest recompile blast radius)
+  [2 units] labinitsink <-> labinitconsumer   (has interface coupling -- widest recompile blast radius)
+  [2 units] labexchost <-> labexcwidget   (has interface coupling -- widest recompile blast radius)
+  [2 units] labclswidget <-> labclsregistry   (has interface coupling -- widest recompile blast radius)
+  (add --edges for the uses lines, --causes for the symbols to refactor)
+```
+   The units inside a group may be listed in a different order. Lines starting with `(loaded`, `drag-lint: note:` or `  resolver:` are informational -- ignore them.
+
+#### If the compile fails
+- `E2003 Undeclared identifier: 'X'` in file F at line N: the index missed a use of X. If X is listed in the "what moves where" step, add that step's new unit to F's uses clause of the section holding line N (interface above `implementation`, implementation below it). Otherwise X still lives in a unit you moved or removed in the uses step: add that unit back to the same section.
+- `E2065 Unsatisfied forward or external declaration`: a class moved without its method bodies. Move the bodies listed for it as well.
+- `E2010 Incompatible types: 'TX' and 'TXBase'` or `E2033 Types of actual and formal var parameters must be identical`: a routine now takes or returns the base class. Cast at that line: `TX(value)`.
+- `F2047 Circular unit reference`: a new unit names a unit of this cycle in its uses. Remove that entry -- the new units may use only what the "create the new units" step lists.
+- `F1026 File not found`: a new unit's file name must equal its unit name plus `.pas`.
+
+### Part B (optional): remove the implementation-only cycle too
+After Part A these units still use each other through these edges (predicted):
+- `labvarwidget -> labvarhost`: `TLabVarHost (class)` -- not mechanical: `TLabVarHost` (class): its method bodies use `TLabVarWidget`, which live in units of this cycle -- they would have to move with it
+- `labvarhost -> labvarwidget`: `TLabVarWidget (class)` -- not mechanical: `TLabVarWidget` (class): its method bodies use `TLabVarHost`, which live in units of this cycle -- they would have to move with it
+
+The standard remedy: move the shared GLOBAL variables (and the plain types they need) into a leaf unit that both sides use; a routine can move only together with everything its body uses, or be handed over as a parameter / event instead of being called by name.
+No edge above can be cut mechanically as the units stand before Part A. Part A changes what these edges carry, so after it run `drag-lint cycles --db "db/CycleLab.sqlite" --plan` again: it weighs move globals, routine-call inversion and member hand-over against the edited units. Leaving the implementation-only cycle is acceptable.
+
+Fix it: not available -- blocked-symbol
+
+Verdict: refused
+  - blocked-symbol: TLabVarWidget C:\TEMP\claude\lanes\gaps\agent-d6\cycle-lab\LabVarWidget.pas:6 -- `LabVarHost.pas` line 19 uses `TLabVarWidget.` (the class itself, not an instance)
+compile: baseline 16.2 s
+drag-lint: note: cycles --plan reads class ancestry from C:\Projects\.drag-lint\library-Win64.sqlite

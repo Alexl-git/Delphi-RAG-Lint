@@ -91,6 +91,7 @@ type
       FTimeoutMs  : Integer        ;
       FTimedOut   : Boolean        ;
       FDenied     : Boolean        ;
+      FInSelect   : Boolean        ;
       FDeniedCode : Integer        ;
       FDeniedName : string         ;
       FPrevNOpers : Integer        ;
@@ -483,7 +484,20 @@ begin
   case ACode of
     { The reads a SELECT is made of. }
     SQLITE_SELECT, SQLITE_READ, SQLITE_RECURSIVE:
-      Exit;
+      begin
+        if ACode = SQLITE_SELECT then FInSelect:= True;
+        Exit;
+      end;
+
+    { The FTS5 module issues its own PRAGMA data_version while a MATCH query
+      is being prepared. That happens INSIDE a SELECT the user wrote, so the
+      SELECT action has already fired; a user-written PRAGMA statement never
+      fires it. data_version is a read-only counter. Every other pragma, and
+      data_version outside a SELECT, stays refused. }
+    SQLITE_PRAGMA:
+      if FInSelect and SameText(Trim(AArg1), 'data_version') and (Trim(AArg2) = '') then
+        Exit;
+
 
     { Not a relaxation. A BEGIN/COMMIT/SAVEPOINT changes no row and creates no
       object, and the handle is already query_only, so the writes such a

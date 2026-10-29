@@ -4,10 +4,10 @@ title: "type-name-prefix: expected letter from the ancestor chain"
 summary: type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter
 product: DL
 group: linting
-order: 30021
+order: 30027
 since: 1.31.4-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # type-name-prefix: expected letter from the ancestor chain
@@ -19,7 +19,7 @@ Before 1.31.4 a class whose ancestry left the project index was judged by its pr
 ## How to run it
 
 ```text
-drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]
+drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]
 ```
 
 Example:
@@ -31,13 +31,13 @@ lint <unit> --db <proj> --library-db <lib> --rule type-name-prefix
 Full flag list: [lint in the CLI reference](../cli.md#lint).
 
 ```text
-drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]
+drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]
 ```
 
 Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 
 ```text
-drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]
+drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]
 ```
 
 Example:
@@ -56,6 +56,7 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--disable` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--no-preprocess` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |
@@ -67,6 +68,7 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--disable` |  |  |  |
 | `--output` | `<report.txt>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--quiet` |  | suppress per-file progress lines written to stderr |  |
 | `--lint-third-party` |  |  |  |
 | `--no-preprocess` |  |  |  |
@@ -77,6 +79,7 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--disable` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--no-preprocess` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |

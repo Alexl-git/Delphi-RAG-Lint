@@ -1,6 +1,6 @@
-; 'not A = B' parses as '(not A) = B' because 'not' binds tighter than the
-; comparison operators -- almost always a bug; write 'not (A = B)'. Only the
-; comparison operators are flagged (logical 'not A and B' is intentional).
+; 'not A = B' parses as '(not A) = B' -- almost always a bug; the evident intent is
+; 'not (A = B)' (the autofix, tagged risky: it changes the value).
 ((exprBinary
-  lhs: (exprUnary operator: (kNot))
-  operator: [(kEq) (kNeq) (kLt) (kGt)]) @warn)
+  lhs: (exprUnary operator: (kNot) operand: (_) @a)
+  operator: [(kEq) (kNeq) (kLt) (kGt)] @op
+  rhs: (_) @b) @warn)

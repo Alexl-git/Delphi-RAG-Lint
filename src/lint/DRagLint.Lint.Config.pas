@@ -34,6 +34,24 @@ const
   DEFAULT_EXCEPTIONS_ROOT = 'Exception';
 
 type
+  /// <summary>Raised by TLintConfig.Load when a config key is present but malformed
+  /// (v1: only the "disallowed" block is validated this strictly).</summary>
+  ELintConfigError = class(Exception);
+
+  /// <summary>One entry of the "disallowed" config block: an identifier the project
+  /// bans, why, and the files exempt from the ban.</summary>
+  /// <remarks>Plain value record. Name may be dotted (TFile.Delete); matching is
+  /// case-insensitive and textual (see TDisallowedChecker).</remarks>
+  TDisallowedEntry = record
+    /// <summary>Banned identifier or dotted identifier path; never empty.</summary>
+    Name  : string;
+    /// <summary>Why it is banned; shown in the finding. May be empty.</summary>
+    Reason: string;
+    /// <summary>Case-insensitive path globs (as exclude_paths); a file matching any
+    /// is exempt from this entry only.</summary>
+    Exempt: TArray<string>;
+  end;
+
   /// <summary>Configurable naming conventions read from the drag-lint-lint.json
   /// "naming" block. Empty-string prefixes disable that prefix check; empty
   /// ConstCase disables const casing. KeywordCase='' disables reserved-word-casing;
@@ -83,6 +101,7 @@ type
     FDisabled    : TArray<string> ;
     FEnabled     : TArray<string> ;
     FAutoFix     : TArray<string> ;
+    FAutoFixOff  : TArray<string> ;
     FSevNames    : TArray<string> ; // parallel arrays: rule id -> severity
     FSevValues   : TArray<string> ;
     FThreshNames : TArray<string> ; // parallel arrays: metric name -> value
@@ -156,10 +175,27 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ApplyConfigObject(const AObj: TJSONObject; AReplace: Boolean);
+    /// <summary>Parses the "disallowed" block into DisallowedMethods / Types / Names.</summary>
+    /// <param name="ABlock">The "disallowed" JSON object.</param>
+    /// <param name="AReplace">True for a profile (lists replaced), False to append.</param>
+    /// <exception cref="ELintConfigError">Block, list or entry is malformed.</exception>
+    procedure ApplyDisallowedObject(const ABlock: TJSONObject; AReplace: Boolean);
   public
+    /// <summary>Entries of "disallowed"."methods" (disallowed-method rule). Empty when
+    /// absent, which keeps the rule silent.</summary>
+    DisallowedMethods: TArray<TDisallowedEntry>;
+    /// <summary>Entries of "disallowed"."types" (disallowed-type rule).</summary>
+    DisallowedTypes: TArray<TDisallowedEntry>;
+    /// <summary>Entries of "disallowed"."names" (disallowed-name rule).</summary>
+    DisallowedNames: TArray<TDisallowedEntry>;
     /// <summary>Naming conventions parsed from the "naming" block; always
     /// populated with TNamingConfig.Default when no block is present.</summary>
     Naming: TNamingConfig;
+    /// <summary>The `taint` objects of the config, as JSON text, in the order they were read (top level,
+    /// then the profile); TTaintRules.LoadConfig merges them over the built-in catalogues.</summary>
+    /// <remarks>Kept as text so this unit does not depend on the taint unit; additive on purpose --
+    /// a profile adds to the top level rather than replacing it (the merge is additive by design).</remarks>
+    TaintJson: TArray<string>;
     /// <summary>The unit that owns this project's exception classes, from
     /// "exceptions": { "unit": "..." }. EMPTY when the block is absent, and that
     /// is the OFF switch for the whole feature: raise-bare-exception then reports
@@ -189,6 +225,25 @@ type
     /// replaces the list; the top level appends. Not written by
     /// TLintConfigWriter, which preserves the key verbatim.</remarks>
     PlatformDivergentAllow: TArray<string>;
+    /// <summary>The raw "target_compiler" token (two-way modernize, 1.38): a
+    /// product version (13, 12, 10.4, XE7 ...), a CompilerVersion (37, 36 ...)
+    /// or "auto". Empty when the key is absent.</summary>
+    /// <remarks>Not validated here -- DRagLint.Lint.TargetCompiler.
+    /// ResolveTargetCompiler parses it (and refuses an unknown token) after the
+    /// command line had its say. A profile that names the key replaces the
+    /// top-level value, so a "legacy" profile can pin 12 while the top level
+    /// stays 13.</remarks>
+    TargetCompiler: string;
+    /// <summary>True when Load found a profile named AProfile under "profiles" in the
+    /// config file. A built-in compliance profile name applies only when this is False
+    /// (a user-defined profile of the same name wins).</summary>
+    UserProfileFound: Boolean;    /// <summary>True when AFilePath matches any glob in AGlobs (case-insensitive;
+    /// '/' and '\' equivalent). The matcher behind IsPathExcluded and the
+    /// per-entry "except" lists.</summary>
+    /// <param name="AFilePath">Full path of the file.</param>
+    /// <param name="AGlobs">Globs; empty entries are ignored.</param>
+    /// <returns>False for an empty list or empty path.</returns>
+    class function MatchesAnyGlob(const AFilePath: string; const AGlobs: TArray<string>): Boolean; static;
     /// <summary>Loads config from APath (JSON). Empty/missing APath yields a
     /// no-op default config. If AProfile is non-empty and present under
     /// "profiles", the profile is merged over the top-level values: list fields
@@ -485,7 +540,23 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure SetAutoFix(const AIds: TArray<string>);
-    /// <summary>Sets or updates the severity override for AId.</summary>
+    /// <summary>True when ARuleId is in the configured "autofix_off" list --
+    /// the ONLY brake on the default-on autofixes (1.37.0).</summary>
+    /// <param name="ARuleId">A lint rule id; compared case-insensitively.</param>
+    /// <returns>True when the rule's fix must not be applied.</returns>
+    /// <remarks>Pure. Independent of enabled/disabled: a rule still reports
+    /// findings, only its fix is withheld.</remarks>
+    function IsAutoFixOff(const ARuleId: string): Boolean;
+    /// <summary>Returns a copy of the "autofix_off" rule-id list.</summary>
+    /// <returns>The ids whose fix is withheld.</returns>
+    function AutoFixOffIds: TArray<string>;
+    /// <summary>Replaces the "autofix_off" list with AIds.</summary>
+    /// <param name="AIds">The ids whose fix is to be withheld.</param>
+    procedure SetAutoFixOff(const AIds: TArray<string>);
+    /// <summary>True when the loaded config still carries the retired
+    /// "autofix": [...] key (read and ignored since 1.37.0).</summary>
+    /// <returns>True when that key listed at least one id.</returns>
+    function HasLegacyAutoFix: Boolean;    /// <summary>Sets or updates the severity override for AId.</summary>
     /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ASev"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
@@ -665,6 +736,67 @@ begin
   end;
 end;
 
+procedure TLintConfig.ApplyDisallowedObject(const ABlock: TJSONObject; AReplace: Boolean);
+
+  { One list key into AList; ALabel names it in errors. }
+  procedure ApplyEntries(const AKey: string; var AList: TArray<TDisallowedEntry>);
+  var
+    Arr  : TJSONArray;
+    V, G : TJSONValue;
+    O    : TJSONObject;
+    E    : TDisallowedEntry;
+    Idx  : Integer;
+  begin
+    if ABlock.GetValue(AKey) = nil then Exit;
+    if (ABlock.GetValue(AKey) is not TJSONArray) then
+      raise ELintConfigError.CreateFmt('config: disallowed.%s must be an array of objects', [AKey]);
+    Arr:= ABlock.GetValue(AKey) as TJSONArray;
+    if AReplace then AList:= nil;
+    Idx:= 0;
+    for V in Arr do
+    begin
+      if (V is not TJSONObject) then
+        raise ELintConfigError.CreateFmt('config: disallowed.%s[%d] must be an object with "name"', [AKey, Idx]);
+      O:= V as TJSONObject;
+      E:= Default(TDisallowedEntry);
+      if (O.GetValue('name') is not TJSONString) or (Trim(O.GetValue('name').Value) = '') then
+        raise ELintConfigError.CreateFmt('config: disallowed.%s[%d] needs a non-empty string "name"', [AKey, Idx]);
+      E.Name:= Trim(O.GetValue('name').Value);
+      if O.GetValue('reason') <> nil then
+      begin
+        if (O.GetValue('reason') is not TJSONString) then
+          raise ELintConfigError.CreateFmt('config: disallowed.%s[%d].reason must be a string', [AKey, Idx]);
+        E.Reason:= O.GetValue('reason').Value;
+      end;
+      if O.GetValue('except') <> nil then
+      begin
+        if (O.GetValue('except') is not TJSONArray) then
+          raise ELintConfigError.CreateFmt('config: disallowed.%s[%d].except must be an array of glob strings', [AKey, Idx]);
+        for G in (O.GetValue('except') as TJSONArray) do
+        begin
+          if (G is not TJSONString) then
+            raise ELintConfigError.CreateFmt('config: disallowed.%s[%d].except holds a non-string', [AKey, Idx]);
+          E.Exempt:= E.Exempt + [G.Value];
+        end;
+      end;
+      AList:= AList + [E];
+      Inc(Idx);
+    end;
+  end;
+
+var
+  Pair: TJSONPair;
+begin
+  for Pair in ABlock do
+    if not (SameText(Pair.JsonString.Value, 'methods') or SameText(Pair.JsonString.Value, 'types')
+      or SameText(Pair.JsonString.Value, 'names')) then
+      raise ELintConfigError.CreateFmt('config: unknown key disallowed.%s (expected methods, types or names)',
+        [Pair.JsonString.Value]);
+  ApplyEntries('methods', DisallowedMethods);
+  ApplyEntries('types', DisallowedTypes);
+  ApplyEntries('names', DisallowedNames);
+end;
+
 procedure TLintConfig.ApplyConfigObject(const AObj: TJSONObject; AReplace: Boolean);
 
   { One top-level string-array key into AList: a profile (AReplace) replaces
@@ -685,9 +817,12 @@ begin
   ApplyList('disabled', FDisabled);
   ApplyList('enabled', FEnabled);
   ApplyList('autofix', FAutoFix);
+  ApplyList('autofix_off', FAutoFixOff);
   ApplyList('exclude_paths', FExcludePaths);
   ApplyList('ifdef_allow', IfdefAllow);
   ApplyList('platform_divergent_allow', PlatformDivergentAllow);
+  { two-way modernize (1.38): a scalar, so a profile simply overrides it }
+  if AObj.GetValue('target_compiler') <> nil then TargetCompiler:= Trim(AObj.GetValue('target_compiler').Value);
   if AObj.GetValue('severity') is TJSONObject then
   begin
     { profile semantics: update-or-add each severity key; base keys not
@@ -728,8 +863,17 @@ begin
       end;
     end;
   end;
+  if AObj.GetValue('disallowed') <> nil then
+  begin
+    if (AObj.GetValue('disallowed') is not TJSONObject) then
+      raise ELintConfigError.Create('config: "disallowed" must be an object with methods/types/names lists');
+    ApplyDisallowedObject(AObj.GetValue('disallowed') as TJSONObject, AReplace);
+  end;
   if AObj.GetValue('naming') is TJSONObject then
     ApplyNamingObject(AObj.GetValue('naming') as TJSONObject);
+  { taint wave T2: the `taint` object is merged by TTaintRules.LoadConfig }
+  if AObj.GetValue('taint') is TJSONObject then
+    TaintJson:= TaintJson + [AObj.GetValue('taint').ToJSON];
   { The "exceptions" block, key "unit" -- names the unit that owns the project's
     exception classes. Absent leaves ExceptionsUnit empty, which is the feature's
     off switch. NB: no JSON braces in this comment on purpose; a closing brace
@@ -764,7 +908,10 @@ begin
     begin
       Profiles:= Root.GetValue('profiles') as TJSONObject;
       if Profiles.GetValue(AProfile) is TJSONObject then
+      begin
+        Result.UserProfileFound:= True;
         Result.ApplyConfigObject(Profiles.GetValue(AProfile) as TJSONObject, True);
+      end;
     end;
   finally
     RootVal.Free;
@@ -798,17 +945,22 @@ begin
 end;
 
 function TLintConfig.IsPathExcluded(const AFilePath: string): Boolean;
+begin
+  Result:= MatchesAnyGlob(AFilePath, FExcludePaths);
+end;
+
+class function TLintConfig.MatchesAnyGlob(const AFilePath: string; const AGlobs: TArray<string>): Boolean;
 var
   G: string;
 begin
   Result:= False;
-  if (Length(FExcludePaths) = 0) or (AFilePath = '') then Exit;
+  if (Length(AGlobs) = 0) or (AFilePath = '') then Exit;
   { MatchesMask on the LOWERCASED path, with '/' folded to '\': an author writes
     the glob one way and Windows hands us the other, and a filter that silently
     fails to match is the worst outcome here -- it reports a full scan while
     quietly linting what the config said to skip. }
   var P: string:= LowerCase(StringReplace(AFilePath, '/', '\', [rfReplaceAll]));
-  for G in FExcludePaths do
+  for G in AGlobs do
     if (G <> '') and MatchesMask(P, LowerCase(StringReplace(G, '/', '\', [rfReplaceAll]))) then
       Exit(True);
 end;
@@ -892,6 +1044,26 @@ end;
 procedure TLintConfig.SetAutoFix(const AIds: TArray<string>);
 begin
   FAutoFix:= AIds;
+end;
+
+function TLintConfig.IsAutoFixOff(const ARuleId: string): Boolean;
+begin
+  Result:= Contains(FAutoFixOff, ARuleId);
+end;
+
+function TLintConfig.AutoFixOffIds: TArray<string>;
+begin
+  Result:= FAutoFixOff;
+end;
+
+procedure TLintConfig.SetAutoFixOff(const AIds: TArray<string>);
+begin
+  FAutoFixOff:= AIds;
+end;
+
+function TLintConfig.HasLegacyAutoFix: Boolean;
+begin
+  Result:= Length(FAutoFix) > 0;
 end;
 
 procedure TLintConfig.SetSeverityPair(const AId, ASev: string);

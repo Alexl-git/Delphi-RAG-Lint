@@ -4,17 +4,17 @@ title: register-project
 summary: Add a new project to the manifest so index --all and the IDE can see it
 product: DL
 group: indexing
-order: 10007
+order: 10008
 since: 1.20.4-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # register-project
 
 Add a new project to the manifest so index --all and the IDE can see it.
 
-Read this when a new project is not yet known to drag-lint. It adds the .dproj to the manifest so index --all and the IDE can see it; without --apply it is a dry run.
+Read this when drag-lint does not know a new project. It adds the .dproj to the manifest so index --all and the IDE can see it; without --apply it is a dry run.
 
 ## How to run it
 

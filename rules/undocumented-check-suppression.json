@@ -1,0 +1,11 @@
+{
+  "id": "undocumented-check-suppression",
+  "category": "other",
+  "severity": "hint",
+  "enabled": false,
+  "message": "Range/overflow checking is switched off with no explaining comment just above -- say why it is safe.",
+  "warn_capture": "warn",
+  "exclude_if_preceded_by": [
+    "(//[^\\r\\n]*|\\*\\)|\\{[^$}][^}]*\\})[ \\t]*\\r?\\n[ \\t]*$"
+  ]
+}

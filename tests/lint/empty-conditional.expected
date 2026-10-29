@@ -1,3 +1,10 @@
-# empty then at line 11; empty else at line 14
+# empty then/else; INBOX FixInsight-parity gap W505 shapes:
+#   `if c then else s` (line 19), `if c then begin end else s` (line 22),
+#   `if c then begin end;` (line 27). Non-hits: a real then statement / non-empty block.
 empty-conditional 11
 empty-conditional 14
+empty-conditional 19
+empty-conditional 22
+empty-conditional 27
+!empty-conditional 30
+!empty-conditional 32

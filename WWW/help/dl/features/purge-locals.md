@@ -4,10 +4,10 @@ title: purge-locals
 summary: "A size escape hatch for an index database that has grown too large: it drops local-variable and parameter symbols and runs VACUUM to reclaim space"
 product: DL
 group: indexing
-order: 10005
+order: 10006
 since: 0.91.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # purge-locals

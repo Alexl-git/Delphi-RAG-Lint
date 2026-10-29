@@ -227,8 +227,12 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # pinned deliberately -- a builtin appearing or vanishing unnoticed is exactly
 # what this line exists to catch -- so it is UPDATED with the change that moves
 # it, never relaxed to a range.
-$ExpectedBuiltins = 142
-Assert ("built-in rule count = {0} (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit + confusable-identifier + line-too-long + enum-bare-read-scoped + platform-divergent-define + enum-ordinal-persisted); got {1}" -f $ExpectedBuiltins, $builtins.Count) ($builtins.Count -eq $ExpectedBuiltins)
+# 142 -> 191 (2026-10-28, gaps-wave INT): +49 built-ins from the clippy/gap lanes, G8, taint T0-T2
+# and INC3 -- the ids are RuleCatalog.pas B() rows absent on main cfd13660.
+# 191 -> 196 (2026-10-28, INT-A): enum-ordinal-cast + unused-enum-value (B-ENUM),
+# side-effect-in-short-circuit + property-getter-with-effect + ui-access-in-thread-transitive (B-EFFECT).
+$ExpectedBuiltins = 196
+Assert ("built-in rule count = {0} (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit + confusable-identifier + line-too-long + enum-bare-read-scoped + platform-divergent-define + enum-ordinal-persisted + 49 gaps-wave built-ins); got {1}" -f $ExpectedBuiltins, $builtins.Count) ($builtins.Count -eq $ExpectedBuiltins)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
 Assert ("exactly 5 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 5)

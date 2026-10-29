@@ -1,0 +1,13 @@
+# class local, member write, never assigned -> the base pointer is READ (store-free: TFoo is declared in this unit)
+used-before-assignment 25
+# record local: the write lands in the local's own storage -> silent
+!used-before-assignment 31
+# assigned by a constructor first -> silent
+!used-before-assignment 38
+# assigned on one branch only -> the existing may tier
+used-before-assignment 47
+# with Obj do K := 1 -> unchanged (the with head reads Obj)
+used-before-assignment 53
+!used-before-assignment 54
+# TStringList is not declared here and there is no store -> silent (no T-prefix guess)
+!used-before-assignment 60

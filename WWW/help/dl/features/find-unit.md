@@ -4,10 +4,10 @@ title: find-unit
 summary: Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause
 product: DL
 group: search-navigation
-order: 20007
+order: 20008
 since: 0.69.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # find-unit

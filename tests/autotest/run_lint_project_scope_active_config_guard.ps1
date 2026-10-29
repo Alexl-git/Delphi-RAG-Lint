@@ -82,11 +82,13 @@ New-Unit 'uReleaseOnly' 48633
 
 # FOLDER index: every unit is in the DB, whatever the config.
 & $Exe index "$WorkDir\proj" --db $Db *> "$WorkDir\index.log"
-if (-not (Test-Path $Db)) { Write-Host "FATAL: index produced no DB; see $WorkDir\index.log" -ForegroundColor Red; exit 2 }
+$idxCode = $LASTEXITCODE
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (CLIFIX C2)
+if (-not (Test-Path $Db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index produced no DB; see $WorkDir\index.log" -ForegroundColor Red; exit 2 }
 
 # The units a --project lint-all run reports magic-literal findings for.
-function ScopedUnits() {
-  $o = & $Exe lint-all --db $Db --project $Dproj --enable magic-literal --json 2>$null | Out-String
+function ScopedUnits([string[]]$Extra = @()) {
+  $o = & $Exe lint-all --db $Db --project $Dproj @Extra --enable magic-literal --json 2>$null | Out-String
   $start = $o.IndexOf('[')
   if ($start -lt 0) { return @("<no json: $o>") }
   try { $arr = @($o.Substring($start) | ConvertFrom-Json) } catch { return @("<unparsed: $o>") }
@@ -108,6 +110,19 @@ $d = "units=[$($u -join ',')]"
 Check 'c Release: uReleaseOnly in scope'  ($u -contains 'uReleaseOnly')      $d
 Check 'c Release: uDebugOnly out of scope' (-not ($u -contains 'uDebugOnly')) $d
 Check 'c Release: uCommon in scope'       ($u -contains 'uCommon')           $d
+
+# ---- d/e: --build-config overrides the marker (scope AND defines together) ----
+# marker is Release now; --build-config Debug must flip the scope to the Debug build.
+$u = ScopedUnits @('--build-config', 'Debug')
+$d = "units=[$($u -join ',')]"
+Check 'd marker Release + --build-config Debug: uDebugOnly in scope'      ($u -contains 'uDebugOnly')            $d
+Check 'd marker Release + --build-config Debug: uReleaseOnly out of scope' (-not ($u -contains 'uReleaseOnly'))  $d
+# and the reverse: marker Debug, --build-config Release.
+New-Dproj $Dproj 'Debug'
+$u = ScopedUnits @('--build-config', 'Release')
+$d = "units=[$($u -join ',')]"
+Check 'e marker Debug + --build-config Release: uReleaseOnly in scope'    ($u -contains 'uReleaseOnly')          $d
+Check 'e marker Debug + --build-config Release: uDebugOnly out of scope'  (-not ($u -contains 'uDebugOnly'))     $d
 
 if ($script:Failed) { Write-Host 'run_lint_project_scope_active_config_guard: FAIL' -ForegroundColor Red; exit 1 }
 [IO.Directory]::Delete($WorkDir, $true)

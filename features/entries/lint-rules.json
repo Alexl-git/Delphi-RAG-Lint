@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "rules",
-      "usage": "drag-lint rules [--json] [--category <name>] [--rules-dir <dir>] - list every lint rule (catalog)",
+      "usage": "drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)",
       "flags": [
         {
           "name": "--json"
@@ -22,10 +22,15 @@
           "arg": "<name>"
         },
         {
+          "name": "--standard",
+          "arg": "cwe|cert|misra"
+        },
+        {
           "name": "--rules-dir",
           "arg": "<dir>"
         }
-      ]
+      ],
+      "help": ["  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it)"]
     }
   ],
   "audience": "both",
@@ -47,9 +52,9 @@
   },
   "family": "lint-rules",
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "24f0fa153a4d6847545dfaabc80f851eaed458dfa6bb009d8b811fc6f9ba7289"
+    "build": "1.36.0-alpha",
+    "surfaceHash": "705db8e60b73cfa9130304fc465e5d099d54877dbc5b0294285efffb6c50d9f0"
   }
 }

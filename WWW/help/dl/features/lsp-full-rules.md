@@ -4,10 +4,10 @@ title: LSP full rule set on save
 summary: Runs the full lint rule set on save so the editor shows what the CLI shows
 product: DL
 group: editor-integration
-order: 110011
+order: 110012
 since: 1.33.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # LSP full rule set on save

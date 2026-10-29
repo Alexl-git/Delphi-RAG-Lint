@@ -1,0 +1,8 @@
+# Config bans TStringList. Hits: var type (16), constructor call (20).
+# Non-hits: other type TLegacyList (17, 21), string literal (22), comment (23).
+disallowed-type 16
+disallowed-type 20
+!disallowed-type 17
+!disallowed-type 21
+!disallowed-type 22
+!disallowed-type 23

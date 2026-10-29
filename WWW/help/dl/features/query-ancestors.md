@@ -4,10 +4,10 @@ title: query ancestors
 summary: Resolves the transitive class/interface hierarchy of a type
 product: DL
 group: search-navigation
-order: 20016
+order: 20018
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # query ancestors

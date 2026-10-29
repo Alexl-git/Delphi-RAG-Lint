@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_semantic_tokens_guard.ps1 -- `textDocument/semanticTokens/full` (B5).
 

@@ -1,0 +1,10 @@
+# Check-disabling directives with no comment on the line above: 9-12. Documented 18/20 and enabling/other directives 21-24 must not fire. Known FP shape: a same-line trailing comment is not seen (only a PRECEDING comment documents).
+undocumented-check-suppression 9
+undocumented-check-suppression 10
+undocumented-check-suppression 11
+undocumented-check-suppression 12
+!undocumented-check-suppression 18
+!undocumented-check-suppression 20
+!undocumented-check-suppression 21
+!undocumented-check-suppression 22
+!undocumented-check-suppression 23

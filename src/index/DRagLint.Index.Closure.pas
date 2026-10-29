@@ -48,6 +48,10 @@ type
     /// '&lt;project&gt;' for entries seeded directly from the .dpr/.dproj member list.
     /// Existing callers need not change -- they simply ignore this field.</summary>
     UsedBy: TArray<string>;
+    /// <summary>Lane INC: the absolute search path the walk resolved units and
+    /// includes against (the project folder first, then the .dproj's
+    /// DCC_UnitSearchPath), so an indexer can resolve {$I} names the same way.</summary>
+    SearchPaths: TArray<string>;
   end;
 
   /// <summary>Resolves the compile closure of a Delphi .dpr or .dproj project.</summary>
@@ -99,6 +103,20 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function MaybePreprocess(const AContent, AFileLabel: string): string;
+
+      // Writes the one-shot PREPROCESS FALLBACK line (FPreprocessFellBack latch).
+      procedure LogFallbackOnce(const AFileLabel: string; const AError: Exception);
+
+      // Lane INC: the include-aware preprocess. Runs 'defines-only' under
+      // FProfile with AFilePath's folder as BaseDir and ASearchPaths, returning
+      // the resolved text in AScanText (for the uses scan -- defines an include
+      // sets now reach the host's later branches) and every ACTIVE include site,
+      // nested ones too, in ASites. False when preprocessing is off or the
+      // preprocess raised (logged once): the caller then does the old all-branch
+      // raw scan for that file.
+      function TryPreprocessWithSites(const AContent, AFilePath: string;
+        const ASearchPaths: TArray<string>; out AScanText: string;
+        out ASites: TArray<TPPIncludeSite>): Boolean;
 
       // ---- unit-file resolution helpers ----------------------------------------
 
@@ -228,7 +246,7 @@ type
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindUnitFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure ParseDprojSearchPaths(const AContent, ABaseDir: string; APaths: TStringList);
+      class procedure ParseDprojSearchPaths(const AContent, ABaseDir: string; APaths: TStringList);
 
       // ---- source text scanning ------------------------------------------------
 
@@ -313,6 +331,13 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ALibraryRoots: TArray<string>);
+      /// <summary>Lane INC2: the search path a project's walk resolves units and
+      /// includes against, as Resolve builds it for a .dproj: the project folder first,
+      /// then each existing DCC_UnitSearchPath directory (macros skipped).</summary>
+      /// <param name="ADproj">The .dproj path.</param>
+      /// <returns>Absolute directories; just the folder when the file cannot be read.</returns>
+      /// <remarks>Never raises. lint-all uses it to rebuild an include's host context.</remarks>
+      class function ProjectSearchPaths(const ADproj: string): TArray<string>;
 
       /// <summary>PP-Task-10: enable/disable per-config directive preprocessing of source
       /// content before its `uses` clause is scanned. When enabled, a unit
@@ -399,6 +424,15 @@ begin
   FPreprocessFellBack:= False;   // reset the one-shot fallback latch per configure
 end;
 
+procedure TClosureResolver.LogFallbackOnce(const AFileLabel: string; const AError: Exception);
+begin
+  if FPreprocessFellBack then Exit;
+  FPreprocessFellBack:= True;
+  Writeln(ErrOutput, Format(
+    '  PREPROCESS FALLBACK (closure): %s -- %s: %s (scanning raw; further fallbacks silent)',
+    [AFileLabel, AError.ClassName, AError.Message]));
+end;
+
 function TClosureResolver.MaybePreprocess(const AContent, AFileLabel: string): string;
 // PP-Task-10: when preprocessing is enabled, resolve compiler-directive branches
 // per FProfile BEFORE the caller scans `uses`, so inactive-branch unit names are
@@ -418,14 +452,39 @@ begin
   except
     on E: Exception do
     begin
-      if not FPreprocessFellBack then
-      begin
-        FPreprocessFellBack:= True;
-        Writeln(ErrOutput, Format(
-          '  PREPROCESS FALLBACK (closure): %s -- %s: %s (scanning raw; further fallbacks silent)',
-          [AFileLabel, E.ClassName, E.Message]));
-      end;
+      LogFallbackOnce(AFileLabel, E);
+
       Result:= AContent;   // fall back to the raw all-branch scan for this file
+    end;
+  end;
+end;
+
+function TClosureResolver.TryPreprocessWithSites(const AContent, AFilePath: string;
+  const ASearchPaths: TArray<string>; out AScanText: string;
+  out ASites: TArray<TPPIncludeSite>): Boolean;
+var
+  Opts: TPPOptions;
+begin
+  AScanText:= AContent;
+  ASites   := nil;
+  if not FPreprocessEnabled then Exit(False);
+  try
+    Opts:= TPPOptionsDefault;
+    Opts.Profile    := FProfile;
+    Opts.IncludeMode:= 'defines-only';
+    Opts.BaseDir    := TPath.GetDirectoryName(AFilePath);
+    Opts.SearchPaths:= ASearchPaths;
+    AScanText:= TEncoding.UTF8.GetString(
+      Preprocess(EnsureUtf8Bytes(TEncoding.UTF8.GetBytes(AContent)), Opts, ASites));
+    Result:= True;
+  except
+    on E: Exception do
+    begin
+      LogFallbackOnce(AFilePath, E);
+
+      AScanText:= AContent;
+      ASites   := nil;
+      Result   := False;
     end;
   end;
 end;
@@ -597,7 +656,28 @@ begin
   end;
 end;
 
-procedure TClosureResolver.ParseDprojSearchPaths(const AContent, ABaseDir: string; APaths: TStringList);
+class function TClosureResolver.ProjectSearchPaths(const ADproj: string): TArray<string>;
+var
+  Paths  : TStringList;
+  BaseDir: string;
+begin
+  BaseDir:= TPath.GetDirectoryName(TPath.GetFullPath(ADproj));
+  Paths:= TStringList.Create;
+  try
+    Paths.CaseSensitive:= False;
+    Paths.Add(BaseDir);
+    try
+      ParseDprojSearchPaths(TFile.ReadAllText(ADproj), BaseDir, Paths);
+    except // dl:ok try-except-swallowed@6cec -- REVIEWED 2026-10-27 never raises by contract: an unreadable .dproj gives just its folder
+      on E: Exception do ;  // dl:ok empty-on-handler@1c60 -- REVIEWED 2026-10-27: same contract as the except above -- an unreadable .dproj gives just its folder
+    end;
+    Result:= Paths.ToStringArray;
+  finally
+    Paths.Free;
+  end;
+end;
+
+class procedure TClosureResolver.ParseDprojSearchPaths(const AContent, ABaseDir: string; APaths: TStringList);
 var
   Pat     : string          ;
   Matches : TMatchCollection;
@@ -872,6 +952,7 @@ var
   SubName     : string        ;
   Wi          : TWorkItem     ;
   BaseName    : string        ;
+  ProjSource  : string        ; // lane INC: the .dpr/.dpk whose own includes are scanned too
 
   procedure EnqueueFile(const AAbsPath, AUsingUnit: string);
   var
@@ -890,6 +971,33 @@ var
     // Exclude-but-in-closure warning
     if TGlob.MatchesAny(TPath.GetFileName(AAbsPath), AExclude) then
       Warnings.Add('WARN: ' + AAbsPath + ' is in the compile closure (used by ' + AUsingUnit + ') but matches an exclude pattern');
+  end;
+
+  { Lane INC: the project-local include files ARaw (the text of AFile) pulls
+    in, and in AScanText the text its uses clause is scanned from. Preprocessing
+    on: only ACTIVE includes under the build's profile, nested ones too, with
+    every define an include sets applied to the host's later branches.
+    Preprocessing off (or a preprocess failure): the old all-branch raw scan,
+    one level deep. }
+  function ScanIncludes(const AFile, ARaw: string; out AScanText: string): TArray<string>;
+  var
+    Sites: TArray<TPPIncludeSite>;
+    Site : TPPIncludeSite;
+    R    : string;
+  begin
+    Result:= nil;
+    if TryPreprocessWithSites(ARaw, AFile, SearchArr, AScanText, Sites) then
+    begin
+      for Site in Sites do
+        if not IsLibraryFile(Site.Path) then Result:= Result + [Site.Path];
+      Exit;
+    end;
+    AScanText:= MaybePreprocess(ARaw, AFile);
+    for var IncName: string in ExtractIncludes(ARaw) do
+    begin
+      R:= FindIncFile(IncName, TPath.GetDirectoryName(AFile), SearchArr);
+      if (R <> '') and not IsLibraryFile(R) then Result:= Result + [R];
+    end;
   end;
 
 begin
@@ -916,6 +1024,7 @@ begin
     SearchPaths.Add(BaseDir);
 
     Content:= TFile.ReadAllText(ProjectAbs);
+    ProjSource:= '';
 
     if Ext = '.dproj' then
     begin
@@ -925,6 +1034,7 @@ begin
       if not TFile.Exists(DprPath) then DprPath:= TPath.ChangeExtension(ProjectAbs, '.dpk');
       if TFile.Exists(DprPath) then
       begin
+        ProjSource:= DprPath;
         var DprContent:= MaybePreprocess(TFile.ReadAllText(DprPath), DprPath);
         ParseDprUses(DprContent, BaseDir, UnitNames, UnitFilePaths);
       end;
@@ -968,6 +1078,7 @@ begin
       ParseDprUses(MaybePreprocess(Content, ProjectAbs), BaseDir, UnitNames, UnitFilePaths);
     end;
 
+    if (ProjSource = '') and (Ext <> '.dproj') then ProjSource:= ProjectAbs;
     SearchArr:= SearchPaths.ToStringArray;
 
     // --- Step 2: seed the worklist -------------------------------------------
@@ -1008,6 +1119,16 @@ begin
       end;
     end; // for
 
+    // Lane INC: the program / package file's OWN includes. It is never a BFS
+    // item (its uses were parsed above), so without this an {$I} written in
+    // the .dpr was never part of the closure.
+    if ProjSource <> '' then
+    begin
+      var DprScan: string;
+      for var PI_: string in ScanIncludes(ProjSource, TFile.ReadAllText(ProjSource), DprScan) do
+        EnqueueFile(PI_, '<project>');
+    end;
+
     // --- Step 3: BFS ---------------------------------------------------------
     while Queue.Count > 0 do
     begin
@@ -1022,11 +1143,12 @@ begin
       UnitDir:= TPath.GetDirectoryName(Item.FilePath);
       // PP-Task-10: preprocess the unit source before its uses-scan so a unit
       // pulled in only under an inactive branch of THIS member unit is likewise
-      // not discovered (per-config transitive closure). {$I}/{$INCLUDE} scanning
-      // below uses the RAW content -- includes are file references we still want
-      // resolved regardless of branch, and MaybePreprocess blanks directives.
-      var RawUnitContent:= TFile.ReadAllText(Item.FilePath);
-      var UnitContent:= MaybePreprocess(RawUnitContent, Item.FilePath);
+      // not discovered (per-config transitive closure). Lane INC: the same
+      // preprocess reports the ACTIVE include sites (nested ones too), and the
+      // defines those includes set reach the uses scan; with preprocessing off
+      // ScanIncludes keeps the old all-branch raw include scan.
+      var UnitContent: string;
+      SubIncs:= ScanIncludes(Item.FilePath, TFile.ReadAllText(Item.FilePath), UnitContent);
 
       // (a) Recurse into `uses` references
       SubUses:= ExtractUses(UnitContent);
@@ -1045,25 +1167,16 @@ begin
         end;
       end;
 
-      // (b) {$I}/{$INCLUDE} files -- add but don't recurse for uses. Scan the
-      // RAW content: MaybePreprocess blanks ALL directives (including {$I}), so
-      // include discovery must read the original text. Include-file discovery is
-      // intentionally all-branch and thus identical to the pre-Task-10 behaviour.
-      SubIncs:= ExtractIncludes(RawUnitContent);
-      for IncFile in SubIncs do
-      begin
-        ResolvedFile:= FindIncFile(IncFile, UnitDir, SearchArr);
-        if (ResolvedFile <> '') and not IsLibraryFile(ResolvedFile) then
-        begin
-          BaseName:= TPath.GetFileNameWithoutExtension(Item.FilePath);
-          EnqueueFile(ResolvedFile, BaseName);
-        end;
-      end;
+      // (b) {$I}/{$INCLUDE} files -- add but don't recurse for uses (ScanIncludes
+      // above already followed nested includes when preprocessing is on).
+      BaseName:= TPath.GetFileNameWithoutExtension(Item.FilePath);
+      for IncFile in SubIncs do EnqueueFile(IncFile, BaseName);
     end; // while
 
     Result.Files   := Files     .ToArray;
     Result.Warnings:= Warnings  .ToArray;
     Result.UsedBy  := UsedByList.ToArray;
+    Result.SearchPaths:= SearchArr;
   finally
     DprojRefFiles.Free;
     UnitFilePaths.Free;

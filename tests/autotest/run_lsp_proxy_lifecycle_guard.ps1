@@ -1,3 +1,4 @@
+#Requires -Version 7
 # dl:serial: LSP proxy family. These spawn and reap DelphiLSP/LspStub children and have
 #   been observed interfering with EACH OTHER while strictly SERIALISED (three
 #   battery runs, exactly one of two adjacent proxy guards failing each time,
@@ -142,6 +143,8 @@ function Wait-Gone([int]$procPid, [int]$timeoutMs = 8000) {
 
 Write-Host 'run_lsp_proxy_lifecycle_guard -- the relay never orphans DelphiLSP' -ForegroundColor Cyan
 
+# A fresh worktree has no LspStubServer.exe (untracked): build it, as run_battery.ps1 would (ki-verify, 0930 #3).
+if ((Test-Path $Exe) -and -not (Test-Path $Stub)) { & "$PSScriptRoot\prepare_battery.ps1" -Exe $Exe -Only stub | Out-Host }
 foreach ($need in @($Exe, $Stub)) {
   if (-not (Test-Path $need)) {
     Write-Host "FATAL: not found -- $need" -ForegroundColor Red

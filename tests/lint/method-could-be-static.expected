@@ -1,0 +1,17 @@
+# Hits: plain methods touching nothing of their class (class has no outside ancestor).
+# FP shapes silent: field/member/Self/inherited use, virtual, class method, Sender handler,
+# address taken, property accessor, published, interface-implementing class, unknown ancestor.
+method-could-be-static 53
+method-could-be-static 58
+!method-could-be-static 63
+!method-could-be-static 68
+!method-could-be-static 73
+!method-could-be-static 78
+!method-could-be-static 83
+!method-could-be-static 88
+!method-could-be-static 93
+!method-could-be-static 98
+!method-could-be-static 103
+!method-could-be-static 113
+!method-could-be-static 118
+!method-could-be-static 123

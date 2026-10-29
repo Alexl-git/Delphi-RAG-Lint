@@ -90,7 +90,7 @@ const
 /// <summary>THE ONE GATE: does an engine running <paramref name="ACommand"/>
 /// open a control channel?</summary>
 /// <param name="ACommand">The CLI verb the engine was started with.</param>
-/// <returns>True for <c>lsp</c> and <c>cycles</c>.</returns>
+/// <returns>True for <c>lsp</c>, <c>cycles</c>, <c>index</c> and <c>lint-all</c>.</returns>
 /// <remarks>
 /// PROVISIONAL ANSWER to the plan's open owner question (Q1, session
 /// 93): honoured by every running engine, or only by one in <c>lsp</c> mode?
@@ -109,6 +109,7 @@ const
 /// <c>cycles --fix</c> run reaches -- not by the dispatch. Standing down there
 /// means: kill the build it waits on, roll every written file back and exit 1
 /// with "cancelled -- rolled back" (not 0: the run did not finish).</para>
+/// <para>WIDENED 2026-10-28 (DEC-13 reopened, owner): <c>index</c> (single root, `--project`, `--all`) and `lint-all` listen too, started by the Do* verb through BatchChannelOpen. A stand-down is taken BETWEEN FILES (index: the storage layer's file-transaction gate, so no file row is ever half written) or between files of the lint scan (lint-all stops and prints the findings so far). Exit code CONTROL_EXIT_STOOD_DOWN.</para>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
 /// <para>Calls: SameText</para>
@@ -442,6 +443,30 @@ type
       procedure StandDownComplete;
   end;
 
+
+const
+  /// <summary>Exit code of a batch verb (index, lint-all) that stopped on a maintenance stand-down: it did NOT finish, it left no half-written state, and re-running the same command resumes.</summary>
+  CONTROL_EXIT_STOOD_DOWN = 4;
+
+/// <summary>Opens the process-wide control channel of a long one-shot verb, when ControlChannelEnabledFor(ACommand).</summary>
+/// <param name="ACommand">The CLI verb.</param>
+/// <param name="ADbs">Databases the run writes or reads -- what status reports.</param>
+/// <param name="AVersion">DRAGLINT_VERSION.</param>
+/// <param name="AExtractor">DRAGLINT_EXTRACTOR_VERSION.</param>
+/// <returns>True when listening. False when the verb does not listen, a channel is already open, or the pipe could not be created (said on stderr; the run proceeds without it).</returns>
+/// <remarks>Main thread only. Pair with BatchChannelClose in a finally.</remarks>
+function BatchChannelOpen(const ACommand: string; const ADbs: TArray<string>; const AVersion, AExtractor: string): Boolean;
+
+/// <summary>True once a maintenance stand-down request has been taken by this batch run.</summary>
+/// <returns>True when the run must stop at its next safe point; sticky once true.</returns>
+function BatchStandDownTaken: Boolean;
+
+/// <summary>Releases the batch channel; when a request was taken, answers `exiting` first.</summary>
+/// <remarks>Call AFTER every store is closed. Safe when no channel is open.</remarks>
+procedure BatchChannelClose;
+
+/// <summary>Pipe name of the open batch channel, '' when none.</summary>
+function BatchChannelPipeName: string;
 implementation
 
 uses
@@ -520,10 +545,53 @@ function QueryFullProcessImageNameW(hProcess: THandle; dwFlags: DWORD; lpExeName
 
 function ControlChannelEnabledFor(const ACommand: string): Boolean;
 begin
-  { PROVISIONAL -- see the interface remarks. `lsp`, and `cycles` (its --fix run). }
-  Result:= SameText(ACommand, 'lsp') or SameText(ACommand, 'cycles');
+  { PROVISIONAL -- see the interface remarks. `lsp`, `cycles` (its --fix run), and (DEC-13, 2026-10-28)
+    the long one-shot runs `index` and `lint-all`. }
+  Result:= SameText(ACommand, 'lsp') or SameText(ACommand, 'cycles') or SameText(ACommand, 'index')
+    or SameText(ACommand, 'lint-all');
 end;
 
+{ ---- batch channel (DEC-13) ---------------------------------------------- }
+
+var
+  GBatchChannel: TControlChannel;
+  GBatchTaken  : Boolean;
+
+function BatchChannelOpen(const ACommand: string; const ADbs: TArray<string>; const AVersion, AExtractor: string): Boolean;
+var
+  Err: string;
+begin
+  Result:= False;
+  if (GBatchChannel <> nil) or not ControlChannelEnabledFor(ACommand) then Exit;
+  GBatchTaken:= False;
+  GBatchChannel:= TControlChannel.Create(ADbs, AVersion, AExtractor);
+  if GBatchChannel.Start(Err) then
+  begin
+    Writeln(ErrOutput, 'drag-lint ', ACommand, ': control channel listening on ', GBatchChannel.PipeName, ' (accepts status and shutdown)');
+    Exit(True);
+  end;
+  Writeln(ErrOutput, 'drag-lint ', ACommand, ': control channel NOT started: ', Err);
+  FreeAndNil(GBatchChannel);
+end;
+
+function BatchStandDownTaken: Boolean;
+begin
+  if GBatchChannel = nil then Exit(False);
+  if not GBatchTaken then GBatchTaken:= GBatchChannel.StandDownRequested;
+  Result:= GBatchTaken;
+end;
+
+procedure BatchChannelClose;
+begin
+  if GBatchChannel = nil then Exit;
+  if GBatchTaken then GBatchChannel.StandDownComplete;
+  FreeAndNil(GBatchChannel);
+end;
+
+function BatchChannelPipeName: string;
+begin
+  if GBatchChannel = nil then Result:= '' else Result:= GBatchChannel.PipeName;
+end;
 { ---- identity ------------------------------------------------------------ }
 
 function CurrentUserSidString: string;

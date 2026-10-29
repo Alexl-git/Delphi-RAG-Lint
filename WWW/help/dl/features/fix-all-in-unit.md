@@ -4,10 +4,10 @@ title: Fix all in unit
 summary: Applies autofixes for every fixable finding in the current unit, starting from the Structure form
 product: DL
 group: linting
-order: 30007
+order: 30009
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # Fix all in unit
@@ -28,6 +28,7 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--disable` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--no-preprocess` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |
@@ -91,24 +92,26 @@ drag-lint lint --in <path.pas> --fix --apply [--db <project.sqlite>]
 ```
 
 The IDE passes the project's `--db`: the naming fixes need the index to find
-every use, and without it the engine does not say which ones are opted out.
-With a naming finding in the unit it also passes `--fix-naming` -- on the
-preview AND on the apply; only the apply waits for your confirm:
+every use. Every fix is on by default (since 1.37.0). With a naming finding in
+the unit it also passes `--fix-naming` (a no-op the engine still accepts, and
+the reason it prints `rename-local: <N>`) -- on the preview AND on the apply;
+only the apply waits for your confirm:
 
 ```text
 drag-lint lint --in <path.pas> --fix --fix-naming --db <project.sqlite>           (preview)
 drag-lint lint --in <path.pas> --fix --fix-naming --apply --db <project.sqlite>   (after Yes)
 ```
 
-Without `--fix-naming` (and without an `"autofix": [...]` entry in
-`drag-lint-lint.json`) a batch run never renames, and says which naming fixes
-were not opted in.
+To withhold a rule, list it in `"autofix_off": [...]` in `drag-lint-lint.json`
+(the retired `"autofix": [...]` key is ignored). A rename the engine cannot
+prove complete is skipped and counted (`skipped (dfm-referenced): N`,
+`skipped (with-block): N`) -- nothing is written for it.
 
 Without `--apply` the command is a DRY RUN: it reports what it would fix
 and writes no source file and no index. With `--apply`, naming fixes may
 first reindex stale owning project indexes. Always dry-run first.
 
-Only rules marked fixable are applied; 23 of the 195 rules are fixable
+Only rules marked fixable are applied; 110 of the 290 rules are fixable
 (`drag-lint rules --json` reports a `fixable` field per rule).
 
 ### What it needs

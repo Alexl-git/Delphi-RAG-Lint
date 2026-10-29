@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_switch_vscode_guard.ps1 -- drag-lint-switch --vscode --on|--off must
   toggle servers["delphi-lsp"] in <workspace>\.vscode\mcp.json, losslessly.

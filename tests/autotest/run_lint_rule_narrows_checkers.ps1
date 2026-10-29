@@ -267,13 +267,26 @@ $typeSpan = '(?s)class function TAstChecker\.CheckTypeAware\(.*?(?=\r?\nclass fu
 $emitted = [ordered]@{
   'LINT_GATE_TYPE_AWARE'    = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.AstChecks.pas' "'([a-z0-9]+(?:-[a-z0-9]+)+)'" $typeSpan | Where-Object { $catalog -contains $_ })
   'LINT_GATE_FLOW'          = IdsIn 'src\diagnostics\DRagLint.Diagnostics.FlowChecks.pas' "\bEmit\('([a-z0-9-]+)'"
-  'LINT_GATE_PROJECT_RULES' = IdsIn 'src\lint\DRagLint.Lint.ProjectRules.pas' "\bWantRule\('([a-z0-9-]+)'\)"
+  # WantRule(<CONST>) too (B-ENUM: WantRule(UNUSED_ENUM_VALUE_RULE)) -- each constant resolved to its
+  # literal in src\lint\*.pas, so a gate id named through a constant is not reported as a phantom.
+  'LINT_GATE_PROJECT_RULES' = @(@(IdsIn 'src\lint\DRagLint.Lint.ProjectRules.pas' "\bWantRule\('([a-z0-9-]+)'\)") + @(
+      IdsIn 'src\lint\DRagLint.Lint.ProjectRules.pas' '\bWantRule\(([A-Z][A-Z0-9_]*_RULE)\)' | ForEach-Object {
+        $c = $_; Get-ChildItem (Join-Path $Repo 'src\lint') -Filter *.pas | ForEach-Object {
+          [regex]::Matches([IO.File]::ReadAllText($_.FullName), "\b$c\s*=\s*'([a-z0-9-]+)'") } |
+          ForEach-Object { $_.Groups[1].Value } }) | Sort-Object -Unique)
   'LINT_GATE_CLASS_METRICS' = IdsIn 'src\lint\DRagLint.Lint.ClassMetrics.pas' "\bWantRule\('([a-z0-9-]+)'\)"
   # D17: the multi-id walks `lint` and `lint-all` now share. Every catalogue id
   # the checker's own unit names -- local-field-prefix and doc-orphan-block were
   # the two the old inline lists missed.
   'LINT_GATE_NAMING'        = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.NamingChecks.pas' "'([a-z0-9]+(?:-[a-z0-9]+)+)'" | Where-Object { $catalog -contains $_ })
   'LINT_GATE_DEAD_CODE'     = @(IdsIn 'src\diagnostics\DRagLint.Diagnostics.DeadCodeChecks.pas' "'([a-z0-9]+(?:-[a-z0-9]+)+)'" | Where-Object { $catalog -contains $_ })
+  # taint wave T2 (2026-10-27): the three ids TTaintRules.Check emits, named by its TAINT_RULE_* constants
+  'LINT_GATE_TAINT'         = IdsIn 'src\lint\DRagLint.Lint.TaintRules.pas' "TAINT_RULE_[A-Z]+\s*=\s*'([a-z0-9-]+)'"
+}
+# gap-rules wave (G0): gate ids whose emitting lane has not landed. A lane deletes its own ids from this table;
+# integration leaves it empty (D3 then bites again).
+$pendingEmit = [ordered]@{
+  # lane G8 emptied its entry (LINT_GATE_PROJECT_RULES now emits all four of its ids)
 }
 foreach ($k in $emitted.Keys) {
   $gate = GateList $k
@@ -281,7 +294,9 @@ foreach ($k in $emitted.Keys) {
   Check "D1 $k parsed from CLI.pas" ($gate.Count -gt 0) "($($gate.Count) id(s))"
   Check "D1 $k emit sites found" ($emit.Count -gt 0) "($($emit.Count) id(s))"
   $short = @($emit | Where-Object { $gate -notcontains $_ })
-  $extra = @($gate | Where-Object { $emit -notcontains $_ })
+  # gap-rules wave (G0): ids already listed in a gate before their lane emits them (see $pendingEmit).
+  $gatePendingEmit = if ($pendingEmit.Contains($k)) { @($pendingEmit[$k]) } else { @() }
+  $extra = @($gate | Where-Object { ($emit -notcontains $_) -and ($gatePendingEmit -notcontains $_) })
   Check "D2 $k carries every id its checker emits" ($short.Count -eq 0) `
     ("missing -> --rule answers 0 for: " + ($short -join ' '))
   Check "D3 $k names no id its checker never emits" ($extra.Count -eq 0) ("phantom: " + ($extra -join ' '))

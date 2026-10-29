@@ -791,6 +791,30 @@ column as "fact not available", never as a negative assertion.
 
 ---
 
+### 2.16 `symbol_search` and `symbol_search_fts` (concept search)
+
+DERIVED tables behind `drag-lint query --concept`. The extractor does not write
+them: a separate `search` stage (after `purity`, on every index run) fills a row
+for each searchable symbol that has none, from rows already stored (symbols,
+`symbol_docs`, `///` literals in `string_literals`). Because of that an older
+index gains them with one `index` run and no re-parse. Created only when SQLite
+has FTS5; otherwise the stage is a no-op and `query --concept` exits 3.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `symbol_id` | INTEGER PK, FK -> `symbols.id` (ON DELETE CASCADE) | One row per searchable symbol |
+| `tokens` | TEXT NOT NULL | Name split into words (camelCase / underscore) + parent type name split + lower-cased name; BM25 weight 3 |
+| `summary` | TEXT | `symbol_docs.summary`, else the stripped `///` doc literal; weight 2 |
+| `remarks` | TEXT | `symbol_docs.remarks`, markup stripped; weight 1 |
+
+`symbol_search_fts` is an external-content `fts5(tokens, summary, remarks,
+content='symbol_search', content_rowid='symbol_id', tokenize='porter
+unicode61')` kept in sync by triggers `symbol_search_ai` / `_ad` / `_au`. Do
+not write to it directly; use `query --concept`. Kinds included: unit, class,
+interface, record, type, enum, method, function, procedure, constructor,
+destructor, property, field, const, var, component, form (not param,
+local_var, enum_value, initialization, finalization). See wiki page
+`concept-search`.
 ## 3. Programmatic introspection
 
 Do not hardcode a table/column list in a consuming tool if you can avoid it.

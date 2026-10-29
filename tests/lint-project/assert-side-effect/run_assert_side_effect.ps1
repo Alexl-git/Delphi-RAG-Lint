@@ -63,6 +63,7 @@ function MsgAt([int]$L) { $m = @($a | Where-Object { [int]$_.start_line -eq $L }
 
 $c0  = ($off -eq 0)
 $c0b = ($f0.Count -gt 0)                           # a crashed run also reports zero
+# positive-control: assert-with-side-effect
 # positive controls: one finding per trigger line, and nothing else
 $c1  = ($a.Count -eq 5)
 $c2  = ($lines -contains $t1) -and ((MsgAt $t1) -like '*Pop*') -and ((MsgAt $t1) -like '*p0*')

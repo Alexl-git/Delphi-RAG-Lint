@@ -15,12 +15,26 @@ drag-lint rules                       # grouped text table + a "N rules across M
 drag-lint rules --json                # structured catalog: [{id,category,title,default_severity,default_enabled,source,params}] + summary
 drag-lint rules --category naming      # only one category
 drag-lint rules --rules-dir <dir>      # point at a specific rules folder (default <exe-dir>\rules)
+drag-lint rules --standard cwe        # only rules labelled with a CWE (or cert / misra); --json adds a compliance object per rule
 ```
 
 Built-in rules carry their category/severity/params from an in-code registry
 (`DRagLint.Lint.RuleCatalog`); external `.scm` rules contribute id/severity/message
 from their sidecar `.json`. This command replaces the hand-maintained rule tables
 below as the canonical inventory.
+
+## Compliance labels
+
+`rules\compliance.json` maps every rule id to the standards ids it answers: one line per rule, sorted by id, an unlabelled rule is `{}`:
+
+```json
+{
+  "hardcoded-credential": {"cwe": ["CWE-798", "CWE-259"], "cert": ["MSC41-C"]},
+  "wait-while-holding-lock": {"cwe": ["CWE-833"], "cert": ["LCK09-J"], "weak": ["CWE-833", "LCK09-J"]}
+}
+```r
+
+Id formats (checked by `tests\autotest\run_compliance_labels_guard.ps1` and by the loader): `CWE-<n>`; CERT `ABC12-C|CPP|J`; MISRA `MISRA-C-2012-R<n>.<n>` / `D<n>.<n>`, `MISRA-CPP-2008-<n>-<n>-<n>`. `weak` lists the ids (a subset of the entry's own) whose fit is only plausible; everything not listed is confident, meaning the rule's title IS the weakness. The file is not a rule sidecar: the catalog skips it by name. Every rule must have an entry.
 
 ## Rule files
 
@@ -59,6 +73,8 @@ the rule id, warn capture name = `warn`).
 | `exclude_if_preceded_by` | none | Regexes (case-insensitive); `{name}` is replaced by the regex-escaped text of capture `@name`. A match is DROPPED when a regex matches the source text of the enclosing routine before the picked node. A pattern naming a capture the match did not bind never excludes. Example: `off-by-one-count` skips `for i := 0 to Length(A)` after `SetLength(X, Length(A) + 1)`. |
 | `require_ancestor` | none | Node kinds; a match COUNTS ONLY inside one of them. |
 | `require_file_text` | none | Substrings; the rule does not run at all against a file whose text contains NONE of them. Case-insensitive, matched against the whole file. |
+| `needs_compiler` | `0` | (1.38.0) The oldest CompilerVersion (37 = Delphi 13, 36 = 12, 35 = 11, 33 = 10.3, 24 = XE3 ...) that accepts what the rule advises. Under `--target-compiler` / config `target_compiler` older than this the rule reports nothing. The same key on ONE entry of `fix` gates only that pattern: a match whose first applicable entry is gated is dropped (`nonminimal-bool`'s `not in` entry, `pos-for-contains`'s `Contains` entries). `0` = any compiler. |
+| `compat_since` | `0` | (1.38.0) For a rule of category `compat` (a downgrade rule): the CompilerVersion that introduced the construct it reports. Ship it `"enabled": false`; it is switched ON for a run whose target is older than this. `--enable <id>` runs it at any target. |
 
 If `warn_capture` is omitted (or no capture by that name is present in a
 match), the finding is pinned to the **first** capture in the match.
@@ -95,6 +111,8 @@ The runner evaluates these standard tree-sitter predicates:
 | `#match? @cap "re"` / `#not-match?` | Capture text matches the regex (TRegEx) |
 | `#any-of? @cap "a" "b" ...` / `#not-any-of?` | Capture text equals any of the listed |
 | `#in? @cap "nodeType" ["nameRegex"]` / `#not-in?` | **drag-lint's own (2026-09-16):** some ANCESTOR of the captured node has that node type and, when the regex is given, its `name:` field matches it. Walks parents, so it needs no knowledge of which syntactic context the capture sits in. Put it last -- it runs only for matches that passed the cheaper predicates. Born for `hardcoded-ip-address`: `(#not-in? @warn "declConst" "(?i)version")` keeps a dotted-quad VERSION const from reading as an IPv4 address |
+
+**Escaping in `#match?` regexes.** A backslash escape does not reliably survive the engine's predicate handling, so write a metacharacter as a one-member class instead: `[$]` for a dollar sign, `[[]` for `[` and `[]]` for `]` (see `rules\mixed-case-hex.scm`). A literal dot is `[.]`; `\\.` also works inside the `.scm` string, as in `ifthen-both-branches.scm`.
 
 Unknown predicates pass through (don't suppress) so future tree-sitter
 extensions don't silently filter matches.
@@ -443,3 +461,12 @@ run on the `lint-all --db` / `lint-project --db` path (store-backed). All are `w
 | `referenced-never-set` | warning | `lint <file>` | A `private`/`strict private` class field with >= 1 read and 0 writes anywhere in the declaring unit. Field always holds its zero value. Guards: skips `published` fields, form/frame/`TComponent`-streamed classes, and fields with initializers. |
 | `unused-private-member` | warning | `lint-all --db` / `lint-project --db` | A `private`/`strict private` method, field, const, or nested type with zero references in the symbol index. Mirrors `unused-public-symbol` for private scope. Guards: skips published fields, RTTI/`{$M+}`-streamed members, and property accessor methods/fields. See Known limitations above for a residual intra-class FP. |
 | `unused-unit-in-uses` | warning | `lint-all --db` / `lint-project --db` | A unit in a `uses` clause with zero of its exported symbols referenced by the using unit. Conservative: skips plausible operator-overload / helper / side-effect-only units and a known allow-list. A unit used only for operator overloads or side effects without a referenced symbol may still be flagged; see Known limitations above. |
+
+### Enum rules and the type-level `dl:ok` (ENUMRULES, 2026-10-28)
+
+| Rule id | Severity | Path | Description |
+|---------|----------|------|-------------|
+| `enum-ordinal-cast` | warning | `lint <file>` (index-widened) | `TEnum(<literal>)`, `Ord(e) <cmp> <literal>`, `case Ord(e) of` with literal labels. Exempt: `Ord()` vs `Ord()`, a negative sentinel `TEnum(-1)`, an enum whose values are all pinned (`= N`). |
+| `unused-enum-value` | hint | `lint-all --db` / `lint-project --db` | ON by default. An enum value no ref names, in a type with at least one named value and no implicit use (Low/High, Succ/Pred/Inc/Dec, a cast, `Ord`, RTTI, a streamed property). A FILLER value named for its own ordinal (`Dummy0` at 0) is exempt. |
+
+Both rules honour ONE marker on the enum TYPE declaration line -- `// dl:ok unused-enum-value -- <reason>` or `// dl:ok enum-ordinal-cast -- <reason>` -- which reviews every finding of that rule for the type, in any unit (findings carry the type as `ScopeFile` / `ScopeLine`). `lint-all` reports such a marker `review-marker-unused` when it suppresses nothing; `lint <file>` does not judge it. Wiki: `Type-Level-Review-Marker`.

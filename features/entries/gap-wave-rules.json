@@ -1,0 +1,25 @@
+{
+  "id": "gap-wave-rules",
+  "title": "Gap-wave lint rules",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.37.0-alpha",
+  "summary": "About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave",
+  "intro": "Read this to see what the 1.37.0 lint rule additions check. Each rule is listed by drag-lint rules with its category and default, and most have an autofix.",
+  "wikiPage": "gap-wave-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "rules",
+      "example": "drag-lint rules --json"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-27",
+    "by": "ENGINE",
+    "build": "1.36.0-alpha",
+    "surfaceHash": "8ea04f384d04eaf3edaec969f1dfad83730fe418e900b4b5ddb76124c85923c3"
+  }
+}

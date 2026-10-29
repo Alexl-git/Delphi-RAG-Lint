@@ -4,10 +4,10 @@ title: query find-callers
 summary: Lists callers of a routine by name, with an option to restrict results to precise, resolved callers
 product: DL
 group: search-navigation
-order: 20018
+order: 20020
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # query find-callers
@@ -28,7 +28,7 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 | `--context` | `N` |  |  |
 | `--resolved` |  | precise callers via resolved call_edges (grouped by target, certain\|ambiguous); a PROPERTY/FIELD name lists its bound accesses [certain, read\|write]; an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha) |  |
 | `--db` |  |  |  |
-| `--json` |  |  |  |
+| `--json` |  | every row ends with a derived "resolution" key: exact \| ambiguous \| external \| name-only (text totals: N callers (a exact, b name-only)); a site that reaches the target only through an interface method also carries "via", "via_kind" and, for an ambiguous implements edge, "via_edge" (RB-5), placed before "resolution" |  |
 
 ## Where to click
 
@@ -87,9 +87,22 @@ text form prints `(<file>:<site line>)` and the JSON `line` key is the same
 number. The caller routine's own declaration line is a separate JSON key,
 `caller_line`, omitted when the enclosing routine is unknown (a unit-level
 reference). Key order: `caller_qname, file, confidence, target_qname, line,
-caller_line, mode`. Before 2026-09-23 the JSON `line` on every row except a
+caller_line, mode, resolution`. Before 2026-09-23 the JSON `line` on every row except a
 callback was the caller's DECLARATION line, and the text form printed no line
 for those rows.
+
+**`resolution` -- how sure each row is (XERJ item 3).** Every `--json` row of
+`find-callers` (both forms), `find-callees` and `usages`, and the `context`
+bundle, carries a derived `resolution`, always the LAST key: `exact` (a certain
+call edge, or a reference the resolver bound), `ambiguous` (an ambiguous edge,
+e.g. overloads), `external` (the callee lives in a library DB, via
+`refs.external_target`), `name-only` (no edge and no external target: the row
+matched by NAME alone, e.g. a `--resolved` callback reach, or a call on a
+receiver the index cannot type). Nothing is stored for it; it is read from
+`call_edges` and `refs`. Text output ends `N callers (9 exact, 1 ambiguous, 2
+name-only)` and marks non-exact rows `[name-only]` / `[ambiguous]`. `context`
+JSON gains a `caller_resolution` count object. Guard
+`tests\autotest\run_resolution_kind.ps1`.
 
 **One known wrong-bind risk, on BARE enum reads only.** Inside a `with`
 whose target the index cannot type (since resolver 1.8.0-alpha the `with` scope

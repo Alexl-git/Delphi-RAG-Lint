@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_impl_decl_guard.ps1 -- `textDocument/implementation` and
   `textDocument/declaration` (B2).

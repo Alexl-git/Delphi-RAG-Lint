@@ -879,6 +879,12 @@ type
     /// caller. Passed in rather than queried here so the two callers can each
     /// keep the load they already do -- the checker loads lazily, Build loads
     /// once -- instead of this adding a third query per symbol.</param>
+    /// <param name="ASkipCaught">True (the WRITER) leaves out a raise whose
+    /// call site sits in the protected part of a try-except of ASym that
+    /// swallows it: a bare `except`, an `else` arm, `on [E:] Exception`, or
+    /// `on` the exact class, with no `raise` anywhere in the except part.
+    /// False (the default; the CHECKER) keeps every callee raise, so doc-drift
+    /// still accepts a hand-written cref the callee justifies.</param>
     /// <returns>Callee-attributed raises, sorted by class then callee qualified
     /// name; empty when nothing resolves. Empty means "found nothing", and as
     /// everywhere else in this unit it must not be read as "raises nothing".</returns>
@@ -920,7 +926,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MineCalleeRaises(const AStore: ISymbolStore; const ASym: TSymbol;
-      const AEdges: TArray<TCallEdge>): TArray<TCalleeRaise>;
+      const AEdges: TArray<TCallEdge>; ASkipCaught: Boolean = False): TArray<TCalleeRaise>;
   end;
 
 /// <summary>Per-section cost of every TDocFactsBuilder.Build call so far, as two
@@ -1007,7 +1013,13 @@ uses
   // checker forgives entries on a marked unit and this decides what the renderer
   // may drop, so a second answer to "is this unit shared" would let the two
   // disagree about the same file.
-  DRagLint.Lint.SharedUnit;
+  DRagLint.Lint.SharedUnit,
+  // 1.20.4 #5 (2026-10-28): CatchSpansOf reads the try/except nesting of the
+  // caller off the memoised parse tree, so a callee raise caught at the call
+  // site is not written as the caller's cref. Doc.SymbolFacts already reaches
+  // the same cache, so this adds no cycle.
+  TreeSitter,
+  DRagLint.Diagnostics.ParseCache;
 
 { PERF ATTRIBUTION for Build, printed by the DRAGLINT_PROFILE doc-drift
   breakdown. Build is called once per declaration and dominated both the
@@ -3614,16 +3626,153 @@ begin
     if SameText(Nm, K) then Exit(KNOWN_RAISER_UNIT + '.' + K);
 end;
 
-class function TDocFactsBuilder.MineCalleeRaises(const AStore: ISymbolStore;
-  const ASym: TSymbol; const AEdges: TArray<TCallEdge>): TArray<TCalleeRaise>;
+const
+  { Packs a call site as Line * SITE_SCALE + Column; a column never reaches it. }
+  SITE_SCALE = 100000;
+
+type
+  { The protected part of one `try .. except` whose handlers SWALLOW: positions
+    are 1-based (line, column), the column as the index stores a ref's. }
+  TCatchSpan = record
+    FromLine, FromCol, ToLine, ToCol: Integer;
+    CatchAll: Boolean;          { bare except, an `else` arm, or `on [E:] Exception` }
+    Classes : TArray<string>;   { last dotted segment of each `on` type }
+  end;
+
+{ The source text of one node. }
+function NodeText(const ANode: TTSNode; const ASrc: TBytes): string;
+begin
+  var B: Integer:= Integer(ANode.StartByte);
+  var L: Integer:= Integer(ANode.EndByte) - B;
+  if (L <= 0) or (B + L > Length(ASrc)) then Exit('');
+  Result:= TEncoding.UTF8.GetString(ASrc, B, L);
+end;
+
+{ True when ANode or any descendant is a `raise` statement. }
+function HasRaiseNode(const ANode: TTSNode): Boolean;
+begin
+  if ANode.NodeType = 'raise' then Exit(True);
+  for var I:= 0 to ANode.NamedChildCount - 1 do
+    if HasRaiseNode(ANode.NamedChild(I)) then Exit(True);
+  Result:= False;
+end;
+
+{ Every swallowing try-except span inside lines AFromLine..AToLine of APath.
+  CONSERVATIVE by construction -- a span is left out (so the raise stays
+  documented) when the except part holds ANY `raise` (a re-raise or a
+  translation: either way something leaves), when it is a try-finally, or when
+  the file does not parse. A handler for an ancestor class other than Exception
+  is not matched: the class hierarchy is not consulted here. }
+function CatchSpansOf(const APath: string; AFromLine, AToLine: Integer): TArray<TCatchSpan>;
 var
-  Acc: TList<TCalleeRaise>;
+  Acc: TArray<TCatchSpan>;
+  Src: TBytes;
+
+  procedure AddTry(const ATry: TTSNode);
+  begin
+    var Body: TTSNode;
+    var SawExcept: Boolean:= False;
+    var HasBody: Boolean:= False;
+    var Span: TCatchSpan:= Default(TCatchSpan);
+    var HandlerSeen: Boolean:= False;
+    for var I:= 0 to ATry.ChildCount - 1 do
+    begin
+      var C: TTSNode:= ATry.Child(I);
+      var T: string:= C.NodeType;
+      if T = 'kFinally' then Exit;
+      if T = 'kExcept' then SawExcept:= True
+      else if not SawExcept then
+      begin
+        if T = 'statements' then
+        begin
+          Body:= C;
+          HasBody:= True;
+        end;
+      end
+      else if T = 'kEnd' then Break
+      else if HasRaiseNode(C) then Exit
+      else if T = 'exceptionHandler' then
+      begin
+        HandlerSeen:= True;
+        var Cls: string:= LastDottedSegment(Trim(NodeText(C.ChildByField('exception'), Src)));
+        if SameText(Cls, 'Exception') then Span.CatchAll:= True
+        else Span.Classes:= Span.Classes + [Cls];
+      end
+      else if (T = 'exceptionElse') or (T = 'statements') then
+      begin
+        HandlerSeen:= True;
+        Span.CatchAll:= True;
+      end;
+    end; // for
+    if not (SawExcept and HasBody) then Exit;
+    if not HandlerSeen then Span.CatchAll:= True; { `except end` swallows everything }
+    Span.FromLine:= Integer(Body.StartPoint.Row) + 1;
+    Span.FromCol := Integer(Body.StartPoint.Column) + 1;
+    Span.ToLine  := Integer(Body.EndPoint.Row) + 1;
+    Span.ToCol   := Integer(Body.EndPoint.Column) + 1;
+    Acc:= Acc + [Span];
+  end;
+
+  procedure Walk(const ANode: TTSNode);
+  begin
+    if (Integer(ANode.EndPoint.Row) + 1 < AFromLine)
+       or (Integer(ANode.StartPoint.Row) + 1 > AToLine) then Exit;
+    if ANode.NodeType = 'try' then AddTry(ANode);
+    for var I:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(I));
+  end;
+
+begin
+  Acc:= nil;
+  var PF: TParsedFile:= TAstParseCache.Get(APath);
+  if PF.Tree = nil then Exit(nil);
+  Src:= PF.Src;
+  Walk(PF.Tree.RootNode);
+  Result:= Acc;
+end;
+
+{ True when a call at (ALine, ACol) sits in the protected part of a span whose
+  handlers swallow AExcClass. }
+function CaughtAt(const ASpans: TArray<TCatchSpan>; ALine, ACol: Integer;
+  const AExcClass: string): Boolean;
+begin
+  for var S in ASpans do
+  begin
+    if (ALine < S.FromLine) or ((ALine = S.FromLine) and (ACol < S.FromCol)) then Continue;
+    if (ALine > S.ToLine) or ((ALine = S.ToLine) and (ACol >= S.ToCol)) then Continue;
+    if S.CatchAll then Exit(True);
+    for var C in S.Classes do
+      if SameText(C, AExcClass) then Exit(True);
+  end;
+  Result:= False;
+end;
+
+class function TDocFactsBuilder.MineCalleeRaises(const AStore: ISymbolStore;
+  const ASym: TSymbol; const AEdges: TArray<TCallEdge>; ASkipCaught: Boolean): TArray<TCalleeRaise>;
+var
+  Acc    : TList<TCalleeRaise>;
+  Spans  : TArray<TCatchSpan>;
+  RefPos : TDictionary<Int64, Int64>; { ref id -> StartLine * SITE_SCALE + StartCol; nil until needed }
+  SiteLn : Integer;                    { the call site being harvested; 0 = unknown }
+  SiteCol: Integer;
+
+  { Loads the caller's swallowing spans and its call-site positions, once. }
+  procedure EnsureSites;
+  begin
+    if RefPos <> nil then Exit;
+    RefPos:= TDictionary<Int64, Int64>.Create;
+    Spans:= CatchSpansOf(AStore.GetFilePath(ASym.FileId), ASym.ImplStartLine, ASym.ImplEndLine);
+    if Length(Spans) = 0 then Exit;
+    for var R in AStore.GetReferencesFromFile(ASym.FileId) do
+      if R.EnclosingSymbolId = ASym.Id then RefPos.AddOrSetValue(R.Id, Int64(R.StartLine) * SITE_SCALE + R.StartCol);
+  end;
 
   { Dedupe on the whole triple. One callee raising a class twice with the
     same message is one fact, not two; with DIFFERENT messages it is two,
-    which matches how MineRaisesDetailed treats the own-body case. }
+    which matches how MineRaisesDetailed treats the own-body case. A raise the
+    caller swallows at the current site is dropped when ASkipCaught. }
   procedure AddRaise(const AExcClass, AViaQName, AMessage: string);
   begin
+    if ASkipCaught and (SiteLn > 0) and CaughtAt(Spans, SiteLn, SiteCol, AExcClass) then Exit;
     for var Have in Acc do
       if SameText(Have.ExcClass, AExcClass) and SameText(Have.ViaQName, AViaQName)
          and (Have.Message = AMessage) then Exit;
@@ -3648,6 +3797,10 @@ var
 
 begin
   Result:= nil;
+  RefPos:= nil;
+  Spans := nil;
+  SiteLn:= 0;
+  SiteCol:= 0;
   Acc:= TList<TCalleeRaise>.Create;
   try
     for var E in AEdges do
@@ -3655,6 +3808,18 @@ begin
       if E.TargetSymbolId <= 0 then Continue; { unresolved / external -> fail safe }
       var Callee: TSymbol:= AStore.GetSymbolById(E.TargetSymbolId);
       if Callee.Id <= 0 then Continue;        { vanished row -> fail safe }
+
+      SiteLn:= 0; { an unknown site is never "caught": the raise is kept }
+      if ASkipCaught then
+      begin
+        EnsureSites;
+        var Site: Int64;
+        if RefPos.TryGetValue(E.RefId, Site) then
+        begin
+          SiteLn := Integer(Site div SITE_SCALE);
+          SiteCol:= Integer(Site mod SITE_SCALE);
+        end;
+      end;
 
       if Callee.Id <> ASym.Id then Harvest(Callee);
 
@@ -3675,12 +3840,21 @@ begin
     for var R in AStore.GetUnresolvedCallsFromSymbol(ASym.Id) do
     begin
       var Via: string:= KnownOsRaiser(R);
-      if Via <> '' then AddRaise(KNOWN_RAISER_EXC, Via, '');
+      if Via = '' then Continue;
+      SiteLn:= 0;
+      if ASkipCaught then
+      begin
+        EnsureSites;
+        SiteLn := R.StartLine;
+        SiteCol:= R.StartCol;
+      end;
+      AddRaise(KNOWN_RAISER_EXC, Via, '');
     end;
 
     Result:= Acc.ToArray;
   finally
     Acc.Free;
+    RefPos.Free;
   end;
 
   { Stable order: class, then callee. Insertion order here is edge-row order,
@@ -4503,7 +4677,8 @@ begin
   if AIncludeCalleeRaises then
   begin
     Result.CalleeRaises:= MineCalleeRaises(AStore, ASym,
-                                           AStore.GetCallEdgesFromSymbol(ASym.Id));
+                                           AStore.GetCallEdgesFromSymbol(ASym.Id),
+                                           True { the writer: a raise caught at the site is not ASym's });
     { Widen Raises to own UNION callee classes. Both emit loops and the repair
       reconciliation in Doc.Regions iterate Raises, so a class that only a
       callee raises has to be IN that set or no tag is emitted for it -- and,

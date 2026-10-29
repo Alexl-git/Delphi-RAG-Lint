@@ -1,0 +1,6 @@
+# Hits: a generic interface carrying a GUID (6, 11) -- all instantiations share the one GUID.
+# Non-hits: generic without GUID (16), non-generic with GUID (20).
+guid-on-generic-interface 6
+guid-on-generic-interface 11
+!guid-on-generic-interface 16
+!guid-on-generic-interface 20

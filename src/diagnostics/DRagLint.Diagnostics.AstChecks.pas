@@ -1884,6 +1884,74 @@ var
     Result:= PosKey(Integer(N.StartPoint.Row) + 1, Integer(N.StartPoint.Column) + 1);
   end;
 
+  { Source row ARow (1-based) as text, without its line break. }
+  function SrcRow(ARow: Integer): string;
+  const
+    LF_BYTE = 10;
+  var
+    S: Integer;
+    E: Integer;
+    R: Integer;
+  begin
+    S:= 0;
+    for R:= 2 to ARow do
+    begin
+      while (S < Length(Src)) and (Src[S] <> LF_BYTE) do Inc(S);
+      Inc(S);
+    end;
+    E:= S;
+    while (E < Length(Src)) and (Src[E] <> LF_BYTE) do Inc(E);
+    if E <= S then Exit('');
+    Result:= TEncoding.UTF8.GetString(Src, S, E - S).TrimRight([#13]);
+  end;
+
+  { Adds the edit(s) that remove the dead code spanning source rows ARow1..ARow2
+    (1-based) and ending at 0-based column AEndCol of ARow2. A trailing `// dl:`
+    comment after the code (a dl:bk<N> bookmark or a dl:ok review -- owner ruling
+    2026-09-22, DECISION-2026-10-28-comment-anchors) is NOT deleted with it: the
+    code is cut out and the comment stays as an own-line comment at the same
+    indentation. A plain non-dl comment is deleted with the line. }
+  procedure AddDeleteKeepingDlComment(ASection: TList<TTextEdit>; ARow1, ARow2, AEndCol: Integer);
+  const
+    DL_PREFIX = 'dl:';
+  var
+    First : string     ;
+    Last  : string     ;
+    CmtAt : Integer    ;
+    Indent: Integer    ;
+    E2    : TTextEdit  ;
+  begin
+    First:= SrcRow(ARow1);
+    Last := SrcRow(ARow2);
+    CmtAt:= Pos('//', Last, AEndCol + 1);
+    Indent:= 0;
+    while (Indent < Length(First)) and CharInSet(First[Indent + 1], [' ', #9]) do Inc(Indent);
+    E2:= Default(TTextEdit);
+    E2.FilePath:= AFile;
+    if (CmtAt > 0) and (Indent > 0) and Trim(Copy(Last, CmtAt + 2, MaxInt)).StartsWith(DL_PREFIX) then
+    begin
+      if ARow2 > ARow1 then
+      begin
+        E2.Kind   := tekDeleteLines;
+        E2.Line   := ARow1;
+        E2.EndLine:= ARow2 - 1;
+        ASection.Add(E2);
+        E2:= Default(TTextEdit);
+        E2.FilePath:= AFile;
+      end;
+      E2.Kind  := tekReplaceInLine;
+      E2.Line  := ARow2;
+      E2.Col   := 1;
+      E2.EndCol:= CmtAt;
+      E2.Text  := Copy(First, 1, Indent);
+      ASection.Add(E2);
+      Exit;
+    end;
+    E2.Kind   := tekDeleteLines;
+    E2.Line   := ARow1;
+    E2.EndLine:= ARow2;
+    ASection.Add(E2);
+  end;
   { One routine's own var sections. Mirrors CheckUnusedLocals: only declVars
     that are DIRECT children of the defProc, so a nested routine's sections are
     handled when the walk reaches that routine. }
@@ -1954,12 +2022,8 @@ var
           if FlagCount = Length(Names) then
           begin
             { every name here is dead -> the whole declaration goes }
-            E:= Default(TTextEdit);
-            E.FilePath:= AFile;
-            E.Kind    := tekDeleteLines;
-            E.Line    := Integer(DV.StartPoint.Row) + 1;
-            E.EndLine := Integer(DV.EndPoint.Row  ) + 1;
-            Section.Add(E);
+            AddDeleteKeepingDlComment(Section, Integer(DV.StartPoint.Row) + 1,
+              Integer(DV.EndPoint.Row) + 1, Integer(DV.EndPoint.Column));
             Inc(SectFixed, FlagCount);
             AnyDeleted:= True;
             Continue;
@@ -2019,12 +2083,7 @@ var
             end;
             if not Covered then
             begin
-              E:= Default(TTextEdit);
-              E.FilePath:= AFile;
-              E.Kind    := tekDeleteLines;
-              E.Line    := KwLine;
-              E.EndLine := KwLine;
-              Section.Add(E);
+              AddDeleteKeepingDlComment(Section, KwLine, KwLine, Integer(KwVar.EndPoint.Column));
             end;
           end;
         end;
@@ -2268,6 +2327,13 @@ var
       if HasInherited(N.Child(I)) then Exit(True);
   end; // function
 
+  { F1: does the body call a constructor of its own class by name (bare Create*(...) or Self.Create*(...))?
+    A qualified TOther.Create builds another object and does not count. }
+  function DelegatesToOwnCtor(const ABody: TTSNode): Boolean;
+  begin
+    Result:= TRegEx.IsMatch(SrcText(ABody, Src), '(?<![\w.])(Self\s*\.\s*)?Create\w*\s*[(;]|\bSelf\s*\.\s*Create\w*', [roIgnoreCase]);
+  end; // function
+
   procedure CheckProc(const ADefProc: TTSNode);
   var
     Hdr  : TTSNode     ;
@@ -2293,7 +2359,8 @@ var
     Body:= ADefProc.ChildByField('body');
     if Body.IsNull then Exit;
     if Body.NodeType = 'asm' then Exit;
-    if HasInherited(Body) then Exit;
+    { F1: a delegating constructor leaves ancestor init to its target }
+    if HasInherited(Body) or (IsCtor and DelegatesToOwnCtor(Body)) then Exit;
     P:= Hdr.StartPoint;
     F:= Default(TLintFinding);
     F.Severity:= 'warning';
@@ -3597,19 +3664,57 @@ var
   NonString: TDictionary<string, Boolean>; { 'line:col' of a proven non-string target }
   HasConcat: Boolean;
 
+  { True when ATypeText names a container that is never a string. }
+  function IsContainerType(const ATypeText: string): Boolean;
+  var
+    L: string;
+  begin
+    L:= LowerCase(Trim(ATypeText));
+    Result:= L.StartsWith('tarray<') or L.StartsWith('array of') or L.StartsWith('set of') or (L = 'tbytes');
+  end;
+
+  { The target text of the type alias ATypeName (`type TRows = TArray<TRow>;`),
+    or '' when ATypeName is not an alias the store knows. The store's own alias
+    chase ends at an intrinsic, so a generic-container alias stays tcUnknown;
+    this walks the alias chain (capped, cycle-safe) to the container text. }
+  function AliasContainerTarget(const ATypeName: string): string;
+  const
+    MAX_ALIAS_HOPS = 8;
+  var
+    Cur: string;
+    Hop: Integer;
+    S  : TSymbol;
+    Hit: Boolean;
+  begin
+    Result:= '';
+    Cur:= Trim(ATypeName);
+    for Hop:= 1 to MAX_ALIAS_HOPS do
+    begin
+      if IsContainerType(Cur) then Exit(Cur);
+      Hit:= False;
+      for S in AStore.FindSymbolsByExactName(Cur) do
+        if S.Kind = skTypeAlias then
+        begin
+          Cur:= Trim(S.Signature);
+          Hit:= True;
+          Break;
+        end;
+      if not Hit then Exit;
+    end;
+  end;
+
   { True only when ATypeText is known and cannot be a string. }
   function ProvenNonString(const ATypeText: string): Boolean;
   var
-    L: string;
     C: TTypeCategory;
   begin
     Result:= False;
     if (ATypeText = '') or (ATypeText = AMBIGUOUS_DECL_TYPE) then Exit;
     C:= AStore.ResolveTypeCategory(ATypeText, AFileId);
     if C <> tcUnknown then Exit(C in NON_STRING_CATEGORIES);
-    { No category for container types: a dynamic array or a set is never a string. }
-    L:= LowerCase(Trim(ATypeText));
-    Result:= L.StartsWith('tarray<') or L.StartsWith('array of') or L.StartsWith('set of') or (L = 'tbytes');
+    { No category for container types: a dynamic array or a set is never a string,
+      directly or through a type alias (`TRows = TArray<TRow>`). }
+    Result:= IsContainerType(ATypeText) or (AliasContainerTarget(ATypeText) <> '');
   end;
 
   { Records every `X := X + Y` whose X is proven non-string. AReturnType is the

@@ -73,21 +73,18 @@ const
 /// (Args); DoTop (Args); DoImportLog (Args); DoGraph (Args); DoTodos (Args); DoHover
 /// (Args); DoContrastSelfTest; DoImpact (Args); DoWiring (Args); DoSurface (Args);
 /// DoOutline (Args); DoCompare (Args).</returns>
-/// <exception cref="EConvertApplyWrite"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoConvertApply: cannot write %s: %s -- unit not changed, nothing written; via DRagLint.CLI.DoConvertApply: cannot write %s: the file is read-only -- unit not changed, nothing written; via DRagLint.CLI.DoConvertApply: write failed for %s: %s: %s -- rollback FAILED for %s: the unit may be PARTLY converted; %s (+1 more)</exception>
-/// <exception cref="EInvalidOperation"><!-- drag-lint:auto exc -->via DRagLint.Core.ControlChannel.TControlChannel.Create: TControlChannel must be created on the main thread -- the one the listener has to wake</exception>
-/// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoLint: stand-in materialisation would write outside %s (computed %s) -- refusing; via DRagLint.CLI.ParseArgs: --delphi-lsp-bits must be 32 or 64, got: %s; via DRagLint.CLI.ParseArgs: --merge-budget-ms must be a non-negative whole number of milliseconds, got: %s; via DRagLint.CLI.ParseArgs: Unknown argument: %s</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, main block (drag-lint.dpr)</para>
-/// <para>Calls: Default, DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit (+116 more)</para>
-/// <para>Complexity: 124 (cyclomatic, outer body), 361 lines (full implementation)</para>
+/// <para>Calls: Default, DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine, DRagLint.CLI.ConfigureLspLint, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst (+123 more)</para>
+/// <para>Complexity: 135 (cyclomatic, outer body), 393 lines (full implementation)</para>
 /// <para>Catches: Exception (empty); Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine"/>
+/// <seealso cref="DRagLint.CLI.ConfigureLspLint"/>
 /// <seealso cref="DRagLint.CLI.DoAllow"/>
 /// <seealso cref="DRagLint.CLI.DoAmbiguousCalls"/>
 /// <seealso cref="DRagLint.CLI.DoBenchContext"/>
-/// <seealso cref="DRagLint.CLI.DoButterfly"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Run: Integer;
@@ -97,12 +94,16 @@ implementation
 uses
   Winapi.Windows
   , DRagLint.Core.CliError
+  , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
   , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
   , Winapi.ShellAPI
+  , DRagLint.Lint.MissingUses { unit-missing-from-uses (lint <file> / lint-all) } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
   , System.SysUtils
   , System.Classes
   , System.Hash
   , System.IOUtils
+  , DRagLint.CLI.LibraryReady { library-first resolve: readiness probe + platform choice (plan 2026-10-28) }
+  , DRagLint.CLI.LibraryMarker { the project DB's library_resolve_state marker: JSON, decision table, notice }
   , DRagLint.CLI.HelpText   { WriteVerbReference -- the generated verb reference of --help (featuregen, P7) }
   , DRagLint.Core.Versions // dl:unit DRagLint.Core.Versions accepted -- the schema_meta keys travel with the gate that reads them: INDEXER_FINGERPRINT_META_KEY (never-downgrade) and REBUILD_IN_PROGRESS_META_KEY (B-23, cleared on a completed walk)
   , System.NetEncoding { TNetEncoding.URL -- encodes the vault name into the obsidian:// URI }
@@ -129,6 +130,10 @@ uses
   , DRagLint.Core.DeclText { v(A2): TDeclTextReader -- `query find --decl-contains` }
   , DRagLint.Core.ForwardStub { C2.5: PairForwardStubs/HasChildInSet -- `outline` tags a forward stub row (S6) }
   , DRagLint.Lint.RuleCache // dl:unit DRagLint.Lint.RuleCache accepted -- CACHED_RULES travels with the cache that defines which rules it may hold, so lint and the indexer warm cannot drift apart
+  , DRagLint.Lint.UsesAudit { TUsesAuditor -- the uses-audit core shared with the uses-movable-to-implementation rule (G8) }
+  , DRagLint.Index.LibraryOracle { TLibraryOracle -- find-callees binds a value receiver typed by name to a library routine (item 4) }
+  , DRagLint.Lint.Autofix   { IsFixableRule & co. + BuildAutofixEdits -- the autofix registry (lane A0) }
+  , DRagLint.Lint.TargetCompiler { --target-compiler: ResolveTargetCompiler, TTargetRuleGate (1.38) }
   { DRagLint.Core.Model moved to the INTERFACE uses (for DRAGLINT_VERSION); it
     must not be listed twice. }
   , DRagLint.Core   .Interfaces
@@ -144,10 +149,12 @@ uses
   , DRagLint.Sql    .OrmLinker
   , DRagLint.Sql    .Guarded   { TSqlGuard: the authorizer + time cap behind `sql` }
   , DRagLint.Core   .EngineHold { the sentinel behind `ide-release` }
+  , DRagLint.Core   .UsageLog   { RecordUsage + BuildGainReport behind `gain` }
   , DRagLint.Core   .ControlChannel // dl:unit DRagLint.Core.ControlChannel accepted -- the wire constants travel with the pipe: the channel behind `shutdown`, and the lsp-only gate
   , DRagLint.Core   .StudioEnv  { TStudioEnv: the ONLY source of a RAD Studio path }
   , DRagLint.Lint   .Config
   , DRagLint.Lint   .RuleCatalog
+  , DRagLint.Lint   .Compliance
   , DRagLint.Lint   .Linter
   , DRagLint.Lint   .QueryRules { QueryRuleTimings -- the per-rule .scm breakdown }
   , DRagLint.Lint   .ProjectChecks
@@ -155,10 +162,12 @@ uses
   , DRagLint.Lint   .PlatformDivergent // dl:unit DRagLint.Lint.PlatformDivergent accepted -- the rule id travels with the checker that emits it, so --rule gating and the findings cannot drift apart
   , DRagLint.Lint   .ProjectRules
   , DRagLint.Lint   .ClassMetrics
+  , DRagLint.Lint   .TaintRules
   , DRagLint.Lint   .DocRules
   , DRagLint.Lint   .SharedUnit
   , DRagLint.Lint   .ExceptionUnitWriter { exceptions-sync: the managed block in the exceptions unit }
   , DRagLint.Project.Resolver
+  , DRagLint.Project.ContextFile
   , DRagLint.Project.Members
   , DRagLint.Project.Coherence
   , DRagLint.Project.OwnRoots
@@ -202,6 +211,21 @@ uses
   , DRagLint.Diagnostics.AstChecks
   , DRagLint.Diagnostics.NamingChecks
   , DRagLint.Diagnostics.DeadCodeChecks
+  , DRagLint.Diagnostics.ControlFlowChecks
+  , DRagLint.Diagnostics.ExprChecks
+  , DRagLint.Diagnostics.DeclChecks
+  , DRagLint.Diagnostics.SizeChecks
+  , DRagLint.Diagnostics.ConcurrencyChecks
+  , DRagLint.Diagnostics.EnumOrdinalCast { enum-ordinal-cast (lane B-ENUM) }
+  , DRagLint.Diagnostics.DisallowedChecks
+  , DRagLint.Diagnostics.ModernizeChecks
+  , DRagLint.Diagnostics.PpChecks
+  , DRagLint.Index.PPUnitSource
+  , DRagLint.Diagnostics.OwnershipChecks
+  , DRagLint.Diagnostics.BoundsNilChecks
+  , DRagLint.Diagnostics.ExceptionThreadChecks
+  , DRagLint.Diagnostics.DeclParityChecks
+  , DRagLint.Diagnostics.ParityExtChecks
   , DRagLint.Diagnostics.CloneChecks
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Diagnostics.FlowChecks
@@ -231,6 +255,7 @@ uses
   , DRagLint.Preprocess.Profile
   , DRagLint.Report    .Deps
   , DRagLint.Report    .RCallTree
+  , DRagLint.Report    .Overview
   , DRagLint.Report    .CyclePlan // dl:unit DRagLint.Report.CyclePlan accepted -- the report's line formats travel with the playbook that predicts them, so the predicted output cannot drift from what cycles prints
   , DRagLint.CLI       .CycleFix
   , DRagLint.Convert   .PropTree
@@ -315,6 +340,7 @@ type
     HoldSeconds     : Integer       ; // --seconds N: `ide-release` hold length
     Resume          : Boolean       ; // --resume: `ide-release` clears the hold instead of setting it
     StatusOnly      : Boolean       ; // --status: `ide-release` reports the hold without changing it
+    GainSince       : string        ; // --since <yyyy-mm-dd>: `gain` skips usage-log lines older than this
     WaitSeconds     : Integer       ; // --wait N: `shutdown` graceful deadline per engine (default 5)
     ForceKill       : Boolean       ; // --force: `shutdown` escalates to TerminateProcess -- only after a refusal
     SqlQuery        : string        ; // --query "SELECT ...": the one statement `sql` runs
@@ -334,12 +360,15 @@ type
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
     RuleCategory    : string        ; // --category <name>: filter `rules` output
+    RuleStandard    : string        ; // --standard cwe|cert|misra: `rules` lists only rules labelled under it
+    ShowLabels      : Boolean       ; // --labels: `lint` / `lint-all` text findings get a  [CWE-476] suffix
     Disable         : string        ; // --disable id1,id2,...: rule ids to drop from lint output
     LayersPath      : string        ; // --layers <file.json>: architecture-layer config for lint-project
     Format          : string        ;
     Output          : string        ;
     OutputDir       : string        ;
     Limit           : Integer       ;
+    MaxRows         : Integer       ; // --max-rows N: per-section row cap of `overview`
     SortBy          : string        ;
     ScanLibraries   : Boolean       ;
     ScanLibrariesAll: Boolean       ; // --scan-libraries-all: every platform subkey
@@ -366,6 +395,7 @@ type
     ConfigPath   : string ; // --config <file>: drag-lint-lint.json override path
     Enable       : string ; // --enable id1,id2: re-include disabled/off-by-default rules
     Profile      : string ; // --profile <name>: merge a named enable/disable set
+    TargetCompiler: string ; // --target-compiler <ver|auto> (1.38): lint / lint-all / rules; '' = config, then 37
     // v0.16: query find flags
     DocTag     : string ;
     DocContains: string ;
@@ -558,6 +588,8 @@ type
     LspMergeBudgetMs   : Integer; // --merge-budget-ms <n>
     LspMergeBudgetSet  : Boolean; // False = LSP_MERGE_BUDGET_DEFAULT_MS
     ResolveOnly : Boolean; // index --resolve-only: re-derive edges, skip the walk
+    WaitLibraryMin : Integer; // index --wait-library <minutes>: poll a not-ready platform library, then continue
+    RequireLibrary : Boolean; // index --require-library: a not-ready platform library is ERROR, exit 2
     // v0.47: ghost-check -- compile the project with one unit's content replaced
     // by an unsaved buffer, with a guaranteed restore. Track 3 sub-project B
     // Task 2: convert-apply's --unit (the .pas being converted) ALSO reuses
@@ -624,8 +656,13 @@ type
     GhostOverlays: string; // --overlays <manifest>
     // v0.57: text-constant search (Tasks 3-8)
     TextQuery    : string ; // --text "<phrase>"
+    ConceptQuery : string ; // --concept "<words>" (xj-5 concept search)
     TextAnyOrder : Boolean; // --any-order
     TextSubstring: Boolean; // --substring
+    NearQName    : string ; // query --text --near <QName> (call-graph neighbourhood filter)
+    HopsRaw      : string ; // --hops N ('' = default 2; 1..3 accepted)
+    HopsUses     : Boolean; // --hops-uses: unit-uses edges join the neighbourhood
+    NearBoost    : Boolean; // --near-boost: keep every row, neighbourhood first
     TextSource   : string ; // --source pas|dfm|sql ('' = all)
     { `query --text --kind` reuses the EXISTING Kind field rather than adding a
       second one. --kind is parsed unconditionally further up this chain, so a
@@ -680,6 +717,7 @@ type
     // open that never mutates the DB. A writable open that fails falls back to
     // read-only automatically (resolution still works; memoization skipped).
     NoWriteBack   : Boolean; // proptree: force read-only, no memoization (default False = auto write-back)
+    WriteBack     : Boolean; // hover --write-back: open writable so a recovered property type is memoized (default False = read-only)
     // proptree/2 (Task 2, R2): --min-visibility published|public filters emitted
     // leaves by EFFECTIVE (most-derived) visibility. '' (default/unset) = emit
     // ALL leaves, exactly as proptree/1 did (back-compat).
@@ -773,6 +811,8 @@ begin
   Writeln('       ^ STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///.');
   Writeln('         Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception.');
   Writeln('         --kind literal is what this returned before comments were indexed.');
+  Writeln('  Find by meaning / doc prose (name unknown)?  drag-lint query --concept "<words>" --db <db>');
+  Writeln('       ^ BM25-ranked over identifier words (ApplyDelta = "apply delta") + doc summary/remarks.');
   Writeln('  Which files reference unit U?         drag-lint query unit-usage --unit U --db <db>');
   Writeln('       ^ omit --in for the project-wide answer; add --in <F.pas> to ask about ONE file.');
   Writeln('       ^ for an RTL/VCL/third-party unit pass the platform library DB too');
@@ -855,7 +895,7 @@ begin
   Writeln('  --output-encoding ascii|utf8|utf16   default ascii, or "outputEncoding" in .drag-lint.json.');
   Writeln('  ascii: 7-bit only; each non-ASCII UTF-16 code unit is written \uXXXX (lower-case hex,');
   Writeln('         a surrogate pair outside the BMP) -- the JSON escape, so --json decodes exactly.');
-  Writeln('  utf8 / utf16: UTF-8 / UTF-16LE, no BOM. Files a verb writes (--output) are not affected.');
+  Writeln('  utf8 / utf16: UTF-8 / UTF-16LE, no BOM. Files a verb writes (--output) obey it too; ascii runs that lose characters warn once on stderr.');
 end; // procedure
 
 const
@@ -912,16 +952,33 @@ begin
     if SameText(ParamStr(i), ASwitch) then Exit(True);
 end;
 
+/// <summary>True when argv asks for a machine-readable stdout document: --json,
+/// or --format json|sarif.</summary>
+/// <remarks>Read from ParamStr like HasSwitch (config load runs before ParseArgs).
+/// Merged-stream consumers (converter RunCapture, the editor) read stdout and
+/// stderr as one pipe, so under these modes no advisory note may be written.</remarks>
+function JsonOutputRequested: Boolean;
+var i: Integer;
+begin
+  Result:= HasSwitch('--json');
+  if Result then Exit;
+  for i:= 1 to ParamCount - 1 do
+    if SameText(ParamStr(i), '--format') and (SameText(ParamStr(i + 1), 'json') or SameText(ParamStr(i + 1), 'sarif')) then Exit(True);
+end;
+
 // v0.45 Task 9: forward declarations so DoQuery (declared early) can call
 // these helpers that are defined later in the file.
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
+function ManifestStartDir(const AProjectPath: string): string; forward;
+function LoadManifestForProject(const AEngineDir, AProjectPath: string): TIndexManifest; forward;
 procedure WarmRuleCache(const AProjectDb, ALibraryDb: string); forward;
 function RuleCacheLibraryDb(const AArgs: TArgs): string; forward;
 { Declared here because ResolveReadDbsForFileWith (used by `outline`, well above
   the implementation) needs it, and the implementation sits beside the manifest
   helpers near DoResolveDbsList. }
 function DetectPlatformFromDproj(const AManifest: TIndexManifest; const ACwd: string): string; forward;
+function PlatformFromDprojFile(const ADproj: string): string; forward;
 { Forward: DoLint needs the project's scoped closure for unit-not-in-dpr's third
   direction, and BuildProjectFileScope is defined some 3,000 lines below it. }
 function BuildProjectFileScope(const AArgs: TArgs): TDictionary<string, Boolean>; forward;
@@ -947,6 +1004,8 @@ function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string; f
   wraps RefreshProjectIndex, which sits beside convert-apply far below. }
 function ReindexOwnerProject(const AProjectFile, ADbPath: string): Boolean; forward;
 function ResolveLibraryDb(const AArgs: TArgs): string        ; forward;
+function OpenLibraryStores(const AArgs: TArgs): TArray<ISymbolStore>; forward;
+function FindCalleesLibraryDb(const AArgs: TArgs; var AProjectDb: string): string; forward;
 function LintLibraryDb     (const AArgs: TArgs): string        ; forward;
 function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string; forward;
 function MakeSiblingStoreResolver(const AArgs: TArgs;
@@ -1125,7 +1184,7 @@ begin
     BEFORE ParseArgs -- there is no TArgs yet. Scanning argv directly is the only
     thing available here, and it is exact: --quiet takes no value, so a bare
     match cannot collide with another switch's argument. }
-  if not HasSwitch('--quiet') then
+  if not (HasSwitch('--quiet') or JsonOutputRequested) then
     Writeln(ErrOutput, '(loaded defaults from ', Candidate, ')');
 end; // procedure
 
@@ -1282,12 +1341,13 @@ begin
   Result.ToPersistent       := True;       // proptree: stop ancestor climb at TPersistent/TObject unless --no-to-persistent
   Result.RefsAsLeaves       := False;      // proptree: expand TComponent refs (legacy); --refs-as-leaves treats them as leaves
   Result.NoWriteBack        := False;      // proptree: auto write-back ON; --no-write-back forces read-only
+  Result.WriteBack          := False;      // hover: read-only unless --write-back
   Result.MinVisibility      := '';        // proptree: --min-visibility unset = emit ALL leaves (back-compat)
   Result.FromBlockFile      := '';        // convert-reemit: --from-block <file>
   if ParamCount > 0 then Result.Command:= ParamStr(1); { LoadConfigDefaults keys on the verb }
   { `ask`, `protocol` and `mcp-config` parse their own flags (DRagLint.Charts.AskVerb, DRagLint.Core.ProtocolReg,
     DRagLint.MCP.ClientConfig) and print nothing else: no defaults note on stderr }
-  if (Result.Command = 'ask') or (Result.Command = 'protocol') or (Result.Command = 'mcp-config') then Exit;
+  if (Result.Command = 'ask') or (Result.Command = 'protocol') or (Result.Command = 'mcp-config') or (Result.Command = 'init') then Exit;
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
@@ -1440,6 +1500,8 @@ begin
     else if (A = '--project') and (i < ParamCount) then begin Inc(i); Result.ProjectPath:= ParamStr(i); Result.ProjectFromConfig:= False; end  // dl:ok multiple-statements-per-line@7a94 -- REVIEWED 2026-10-25: the ParseArgs one-line value-flag arm shape shared by every sibling arm; X-11 adds the config-flag reset to it
     else if (A = '--rules-dir') and (i < ParamCount) then begin Inc(i); Result.RulesDir:= ParamStr(i); end
     else if (A = '--category') and (i < ParamCount) then begin Inc(i); Result.RuleCategory:= ParamStr(i); end
+    else if (A = '--standard') and (i < ParamCount) then begin Inc(i); Result.RuleStandard:= ParamStr(i); end
+    else if A = '--labels' then Result.ShowLabels:= True
     else if (A = '--disable') and (i < ParamCount) then begin Inc(i); Result.Disable:= ParamStr(i); end
     else if (A = '--layers') and (i < ParamCount) then begin Inc(i); Result.LayersPath:= ParamStr(i); end
     else if A = '--json'    then Result.AsJson:= True
@@ -1499,6 +1561,11 @@ begin
     end
     else if (A = '--enable') and (i < ParamCount) then begin Inc(i); Result.Enable:= ParamStr(i); end
     else if (A = '--profile') and (i < ParamCount) then begin Inc(i); Result.Profile:= ParamStr(i); end
+    else if (A = '--target-compiler') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.TargetCompiler:= ParamStr(i);
+    end
     else if ((A = '--output') or (A = '--out')) and (i < ParamCount) then begin Inc(i); Result.Output:= ParamStr(i); end
     else if (A = '--output-dir') and (i < ParamCount) then begin Inc(i); Result.OutputDir:= ParamStr(i); end
     else if A = '--include-external' then Result.IncludeExternal:= True
@@ -1540,6 +1607,11 @@ begin
     else if (A = '--max-file-kb') and (i < ParamCount) then begin Inc(i); Result.MaxFileKB:= StrToIntDef(ParamStr(i), 2048); Result.MaxFileKBSet:= True; end
     else if (A = '--connection') and (i < ParamCount) then begin Inc(i); Result.FbConnection:= ParamStr(i); end
     else if (A = '--limit') and (i < ParamCount) then begin Inc(i); Result.Limit:= StrToIntDef(ParamStr(i), 50); end
+    else if (A = '--max-rows') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.MaxRows:= StrToIntDef(ParamStr(i), 0);
+    end
     else if (A = '--name-like') and (i < ParamCount) then begin Inc(i); Result.NameLike:= ParamStr(i); end
     else if (A = '--seconds') and (i < ParamCount) then begin Inc(i); Result.HoldSeconds:= StrToIntDef(ParamStr(i), 0); end
     else if A = '--resume' then Result.Resume:= True
@@ -1594,6 +1666,7 @@ begin
     else if A = '--no-to-persistent' then Result.ToPersistent:= False // proptree: climb past TPersistent/TObject
     else if A = '--refs-as-leaves' then Result.RefsAsLeaves:= True // proptree: TComponent-typed props are reference leaves
     else if A = '--no-write-back' then Result.NoWriteBack:= True // proptree: force read-only (no memoization)
+    else if A = '--write-back' then Result.WriteBack:= True // hover: memoize a recovered property type  // dl:ok duplicate-code@417f -- REVIEWED 2026-10-29: the ParseArgs one-flag arm chain; the 100-token window matches the --deep/--no-preprocess arms by shape, there is no shared logic to extract
     else if (A = '--min-visibility') and (i < ParamCount) then begin Inc(i); Result.MinVisibility:= ParamStr(i); end // proptree/2: --min-visibility published|public
     else if (A = '--surface') and (i < ParamCount) then begin Inc(i); Result.Surface:= ParamStr(i); end // convert-scaffold (Task 5): --surface dfm|pas
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
@@ -1751,6 +1824,12 @@ begin
       Result.LspMergeBudgetSet:= True;
     end
     else if A = '--resolve-only' then Result.ResolveOnly:= True
+    else if A = '--require-library' then Result.RequireLibrary:= True
+    else if (A = '--wait-library') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.WaitLibraryMin:= StrToIntDef(ParamStr(i), 0);
+    end
     { LSP TRANSPORT FLAGS -- ACCEPTED AND IGNORED, NOT REJECTED.
       vscode-languageclient appends a transport flag to argv from the client's
       `transport:` declaration (node/main.js: `args.push('--stdio')`), so the
@@ -1806,6 +1885,11 @@ begin
     else if A = '--no-seealso' then Result.DocSeeAlso:= False  // dl:ok duplicate-code@b5e0 -- REVIEWED 2026-09-23: the ParseArgs shape every flag branch shares (a flag parser is a chain of these by design); the duplicate window moved here when the doc-forget flags were added below
     // AutoDocument (ADF T5): --since opts in the git <since> doc-source; --base-dir
     // sets the repo root for the git lookup (defaults to the file's own dir).
+    else if (A = '--since') and (Result.Command = 'gain') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.GainSince:= ParamStr(i);
+    end
     else if A = '--since' then Result.DocSince:= True
     else if A = '--migrate-pure' then Result.DocMigratePure:= True
     else if (A = '--scope') and (i < ParamCount) then
@@ -1830,9 +1914,26 @@ begin
     else if (A = '--overlays') and (i < ParamCount) then begin Inc(i); Result.GhostOverlays:= ParamStr(i); end
     // v0.57: text-constant search flags
     else if (A = '--text') and (i < ParamCount) then begin Inc(i); Result.TextQuery:= ParamStr(i); end
+    else if (A = '--concept') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.ConceptQuery:= ParamStr(i);  // dl:ok duplicate-code@33b9 -- the one-value flag shape every ParseArgs branch repeats; folding it is a ParseArgs refactor, not this lane
+    end
     else if (A = '--source') and (i < ParamCount) then begin Inc(i); Result.TextSource:= ParamStr(i); end
     else if A = '--any-order' then Result.TextAnyOrder := True
     else if A = '--substring' then Result.TextSubstring:= True
+    else if (A = '--near') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.NearQName:= ParamStr(i);
+    end
+    else if (A = '--hops') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.HopsRaw:= ParamStr(i);
+    end
+    else if A = '--hops-uses' then Result.HopsUses:= True
+    else if A = '--near-boost' then Result.NearBoost:= True
     // PP-Task-3: dump-pp-eval flags. --expr is the expression; --define and
     // --numeric are repeatable and accumulate into TArrays (parsed in DoDumpPpEval).
     else if (A = '--expr') and (i < ParamCount) then begin Inc(i); Result.PpExpr:= ParamStr(i); end
@@ -1941,6 +2042,15 @@ begin
   if H <> 0 then CloseHandle(H);
 end;
 
+/// <summary>XERJ item 3: the text-row suffix for a caller that is not an exact bind.</summary>
+/// <param name="AResolution">A RESOLUTION_* value or ''.</param>
+/// <returns>`  [name-only]` | `  [ambiguous]` | `  [external]`; '' for exact or unknown.</returns>
+function ResolutionSuffix(const AResolution: string): string;
+begin
+  if (AResolution = '') or (AResolution = RESOLUTION_EXACT) then Result:= ''
+  else Result:= '  [' + AResolution + ']';
+end; // function
+
 procedure PrintReferences(const AStore: ISymbolStore; const ARefs: TArray<TReference>; AsJson: Boolean);
 var
   JArr: TJSONArray ;
@@ -1964,6 +2074,7 @@ begin
         JObj.AddPair('start_col' , TJSONNumber.Create(R.StartCol ));
         JObj.AddPair('end_line'  , TJSONNumber.Create(R.EndLine  ));
         JObj.AddPair('end_col'   , TJSONNumber.Create(R.EndCol   ));
+        if R.Resolution <> '' then JObj.AddPair('resolution', R.Resolution); { XERJ item 3: LAST key }
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
@@ -1973,8 +2084,14 @@ begin
   end // if
   else
   begin
-    for R in ARefs do begin Path:= AStore.GetFilePath(R.FileId); Writeln(Format('%s:%d:%d  %s', [Path, R.StartLine, R.StartCol, R.NameText])); end;
-    Writeln(Format('%d caller(s)', [Length(ARefs)]));
+    var Tally: TResolutionTally:= Default(TResolutionTally);
+    for R in ARefs do
+    begin
+      Path:= AStore.GetFilePath(R.FileId);
+      Writeln(Format('%s:%d:%d  %s%s', [Path, R.StartLine, R.StartCol, R.NameText, ResolutionSuffix(R.Resolution)]));
+      Tally.Add(R.Resolution);
+    end;
+    Writeln(Format('%d caller(s)%s', [Length(ARefs), (if Tally.ToText <> '' then ' (' + Tally.ToText + ')' else '')]));
   end;
 end; // procedure
 
@@ -2003,6 +2120,7 @@ begin
         JObj.AddPair('end_line'  , TJSONNumber.Create(R.EndLine  ));
         JObj.AddPair('end_col'   , TJSONNumber.Create(R.EndCol   ));
         if R.ContextText <> '' then JObj.AddPair('context', R.ContextText);
+        if R.Resolution <> '' then JObj.AddPair('resolution', R.Resolution); { XERJ item 3: LAST key }
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
@@ -2012,13 +2130,15 @@ begin
   end // if
   else
   begin
+    var Tally: TResolutionTally:= Default(TResolutionTally);
     for R in ARefs do
     begin
       Path:= AStore.GetFilePath(R.FileId);
-      Writeln(Format('%s:%d:%d  %s', [Path, R.StartLine, R.StartCol, R.NameText]));
+      Writeln(Format('%s:%d:%d  %s%s', [Path, R.StartLine, R.StartCol, R.NameText, ResolutionSuffix(R.Resolution)]));
       if R.ContextText <> '' then begin Writeln('  ' + StringReplace(R.ContextText, sLineBreak, sLineBreak + '  ', [rfReplaceAll])); end;
+      Tally.Add(R.Resolution);
     end;
-    Writeln(Format('%d caller(s)', [Length(ARefs)]));
+    Writeln(Format('%d caller(s)%s', [Length(ARefs), (if Tally.ToText <> '' then ' (' + Tally.ToText + ')' else '')]));
   end;
 end; // procedure
 
@@ -2119,6 +2239,29 @@ var GFreshnessNoted: Boolean = False;
     GFreshnessDb    : string  = '';
     GFreshnessRep   : TFreshnessReport;
 
+function IndexRemedyFor(const AStore: ISymbolStore; const ADbPath: string; AResolveOnly: Boolean): string; forward;
+
+{ Adds the top-level `index_notes` array to an object JSON envelope when ADbPath is marked library-pending. }
+procedure AddLibraryPendingNotes(const AObj: TJSONObject; const ADbPath: string);
+var
+  Remedy: string;
+begin
+  if (AObj = nil) or (ADbPath = '') or not TFile.Exists(ADbPath) then Exit;
+  var Probe: ISymbolStore:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
+  var M: TLibraryMarker:= LibraryMarkerFromJson(Probe.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY));
+  if M.State <> LIBSTATE_PENDING then Exit;
+  Remedy:= 'drag-lint ' + IndexRemedyFor(Probe, ADbPath, {AResolveOnly=}True);
+  var Notes: TJSONArray:= TJSONArray.Create;
+  var One: TJSONObject:= TJSONObject.Create;
+  One.AddPair('db', ADbPath);
+  One.AddPair('kind', 'library-pending');
+  One.AddPair('reason', M.Reason);
+  One.AddPair('since_unix', TJSONNumber.Create(M.SinceUnix));
+  One.AddPair('remedy', Remedy);
+  Notes.AddElement(One);
+  AObj.AddPair('index_notes', Notes);
+end;
+
 { ENG-3 (2026-09-23): THE STALENESS FACT, CARRIED IN THE JSON ENVELOPE.
 
   The human note ("N of M indexed file(s) changed since this index was built")
@@ -2147,6 +2290,7 @@ begin
   end;
   AObj.AddPair('stale'      , TJSONBool.Create(Rep.Verdict = fvStale));
   AObj.AddPair('stale_files', TJSONNumber.Create(Rep.Changed));
+  AddLibraryPendingNotes(AObj, ADbPath);
 end;
 
 { The command that refreshes AStore, shaped by the database's own scan type.
@@ -2288,6 +2432,13 @@ begin
   else if Prev <> Cur then
     Writeln(ErrOutput, Format('  resolver: edges were derived by %s, this build is %s -- re-derive with `%s` (minutes, not a re-parse).',
       [Prev, Cur, IndexRemedyFor(AStore, ADbPath, {AResolveOnly=}True)]));
+
+  { LIBRARY-FIRST RESOLVE: a DB marked `pending` was resolved without its platform library, so
+    callers/callees into the library are missing. A reader never writes the marker and never
+    re-resolves; it says the answer is incomplete, once, with the exact remedy. }
+  var LibMarker: TLibraryMarker:= LibraryMarkerFromJson(AStore.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY));
+  if LibMarker.State = LIBSTATE_PENDING then
+    Writeln(ErrOutput, LibraryPendingNote(LibMarker, ADbPath, 'drag-lint ' + IndexRemedyFor(AStore, ADbPath, {AResolveOnly=}True)));
 end;
 
 function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Boolean = False): ISymbolStore;
@@ -2483,7 +2634,18 @@ begin
       and may be spelled differently from the raw --db the user typed. }
     if not SameText(ExpandFileName(D), ExpandFileName(APrimaryDb)) then
     begin
-      ES:= OpenReadOnlyStore(D, EOk);
+      { A DB that will not open at all (not a SQLite file) is skipped like a stale
+        one: this is facts enrichment, and a corrupt library was already reported
+        once by DropUnreadableLibraryDb (CLIFIX C1). }
+      try
+        ES:= OpenReadOnlyStore(D, EOk);
+      except
+        on Exception do
+        begin
+          ES := nil;
+          EOk:= False;
+        end;
+      end;
       if EOk and (ES <> nil) then Result:= Result + [ES];
     end;
 end;
@@ -2795,7 +2957,7 @@ begin
   Plat:= EffectiveIndexPlatform(APlatform); // library / no-project fallback (plan default)
   if ADproj <> '' then Result:= ProfileFromDproj(ADproj, Plat, AConfig)
   else Result:= Default(TDefineProfile);
-  if ADproj = '' then Result.Defines:= PlatformBuiltins(Plat);
+  if ADproj = '' then Result:= BuiltinsProfile(Plat); // lane INC2: + CompilerVersion and the default switches
 end;
 
 /// <summary>A7-I: the full active build an INDEX run preprocesses a PROJECT section
@@ -2891,8 +3053,8 @@ begin
   if AArgs.NoPreprocess then Exit;
   Fallback:= AFallback;
   if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') and TFile.Exists(AArgs.ProjectPath) then
-    Fallback:= ResolveActiveBuild(AArgs.ProjectPath, AArgs.CheckPlatform, '', True).Profile;
-  TProjectProfileCache.Configure(ADbPaths, AArgs.ProjectPath, AArgs.CheckPlatform, '', Fallback, True);
+    Fallback:= ResolveActiveBuild(AArgs.ProjectPath, AArgs.CheckPlatform, AArgs.BuildConfig, True).Profile;
+  TProjectProfileCache.Configure(ADbPaths, AArgs.ProjectPath, AArgs.CheckPlatform, AArgs.BuildConfig, Fallback, True);
   TAstParseCache.SetProfileResolver(
     function(AFile: string): TDefineProfile
     begin
@@ -2918,6 +3080,13 @@ begin
   TAstParseCache.SetPreprocess(not AArgs.NoPreprocess,
     ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   InstallFileProfileResolver(AArgs, ADbPaths, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  { Lane IFCONST: the IF symbol table `lint` installs (lane INC3) -- an IF directive
+    naming a const of a USED unit (project unit through the DBs' files, library
+    unit from the library DB) must evaluate here too, else the name reads as
+    unknown = False and the inactive branch's parser-error is published.
+    Guard: run_lsp_if_sourceconst_guard.ps1. }
+  if not AArgs.NoPreprocess then
+    InstallPPUnitSource(ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''), ADbPaths, [LintLibraryDb(AArgs)]);
 end;
 
 // v0.45 Task 7: build one plan item into its SQLite database.
@@ -3024,6 +3193,7 @@ begin
   try
     for F in AClosureFiles do
     begin
+      if SameText(ExtractFileExt(F), '.inc') then Continue; // lane INC: added last, below
       AddOnce(F);
       if SameText(ExtractFileExt(F), '.pas') then
       begin
@@ -3047,6 +3217,12 @@ begin
       end
       else if TFile.Exists(ProjAbs) then AddOnce(ProjAbs); // a bare .dpr/.dpk
     end;
+
+    { Lane INC: include files LAST, after every host (the program file too), so
+      the indexer has seen each includer's include site -- and parses the .inc
+      under that host's defines -- before it reaches the .inc itself. }
+    for F in AClosureFiles do
+      if SameText(ExtractFileExt(F), '.inc') then AddOnce(F);
 
     Result:= Scope.ToArray;
   finally
@@ -3614,12 +3790,273 @@ begin
   end;
 end;
 
+{ The manifest default platform, the last resort of the library-platform choice; '' when the manifest
+  will not load (every caller then lets ResolveLibraryDb's own detection decide). }
+function ManifestDefaultPlatform: string;
+begin
+  Result:= '';
+  try
+    Result:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir).Settings.DefaultPlatform;
+  except
+    on E: Exception do Result:= '';
+  end;
+end;
+
+{ Milliseconds between --wait-library probes: 30 s; DRAGLINT_LIBRARY_POLL_MS overrides (tests). }
+function LibraryPollMs: Integer;
+const
+  DEFAULT_POLL_MS = 30000;
+begin
+  Result:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_LIBRARY_POLL_MS'), DEFAULT_POLL_MS);
+end;
+
+type
+  /// <summary>How EvaluateLibraryGate behaves: how long to wait, whether a not-ready library refuses, whether to print.</summary>
+  TLibraryGateOptions = record
+    WaitMin: Integer;
+    Require: Boolean;
+    Notify : Boolean;
+  end;
+
+function LibraryGateOptions(AWaitMin: Integer; ARequire, ANotify: Boolean): TLibraryGateOptions;
+begin
+  Result.WaitMin:= AWaitMin;
+  Result.Require:= ARequire;
+  Result.Notify := ANotify;
+end;
+
+function QuietLibraryGate: TLibraryGateOptions;
+begin
+  Result:= LibraryGateOptions(0, False, False);
+end;
+
+/// <summary>Evaluates the platform library an index run would consult: which platform, which DB, ready or not
+/// (library-first resolve, plan 2026-10-28 s.2.1/s.2.2/s.2.5 line 1).</summary>
+/// <param name="AEnabled">The section opted in with "libraryResolve": true.</param>
+/// <param name="AExplicitLibDb">The --library-db the user named, or ''. Wins; is printed but never waited on or refused.</param>
+/// <param name="APlatformArg">--platform, or the section's platform token ('' for a project section).</param>
+/// <param name="ADproj">The project's .dproj/.dpr, or ''.</param>
+/// <param name="AOwnDb">The DB being built; a library that IS this DB is not active.</param>
+/// <param name="AStore">The project DB's store (its indexer_fingerprint plat= limb names the platform), or nil.</param>
+/// <param name="AOpt">WaitMin: --wait-library minutes (probe every 30 s); Require: --require-library (not ready sets Refuse, the caller exits 2); Notify: print the one pre-walk `library:` line, the wait progress and the refusal.</param>
+/// <returns>The gate; Active=False when the run did not opt in.</returns>
+/// <remarks>Reads the library read-only. Default with a not-ready library is continue + mark + say so.</remarks>
+function EvaluateLibraryGate(AEnabled: Boolean; const AExplicitLibDb, APlatformArg, ADproj, AOwnDb: string;
+  const AStore: ISymbolStore; const AOpt: TLibraryGateOptions): TLibraryGate;
+begin
+  var AWaitMin: Integer:= AOpt.WaitMin;
+  var ARequire: Boolean:= AOpt.Require;
+  var ANotify : Boolean:= AOpt.Notify;
+  Result:= Default(TLibraryGate);
+  if not AEnabled and (AExplicitLibDb = '') then Exit;
+  Result.Explicit:= AExplicitLibDb <> '';
+  var ProjFp: string:= '';
+  if AStore <> nil then ProjFp:= AStore.GetMetaValue(INDEXER_FINGERPRINT_META_KEY);
+  Result.Platform:= ChooseLibraryPlatform(APlatformArg, ProjFp, ADproj, ManifestDefaultPlatform, Result.PlatformSource);
+  if Result.Explicit then Result.LibDb:= AExplicitLibDb
+  else
+  begin
+    var LibArgs: TArgs:= Default(TArgs);
+    LibArgs.CheckPlatform:= Result.Platform;
+    Result.LibDb:= ResolveLibraryDb(LibArgs);
+  end;
+  if (Result.LibDb <> '') and SameText(ExpandFileName(Result.LibDb), ExpandFileName(AOwnDb)) then Exit;
+  Result.Active:= True;
+  var CheckPlat: string:= if Result.Explicit then '' else Result.Platform;
+  Result.State:= ProbeLibraryReadiness(Result.LibDb, CheckPlat, Result.Why, Result.StampFp);
+  if ANotify and (Result.State <> lrReady) and not Result.Explicit and (AWaitMin > 0) then
+  begin
+    var Deadline: TDateTime:= IncMinute(Now, AWaitMin);
+    var Probe   : Integer  := 1;
+    while (Result.State <> lrReady) and (Now < Deadline) do
+    begin
+      Writeln(Format('library: waiting for %s (probe %d: %s)', [Result.LibDb, Probe, Result.Why]));
+      Flush(Output); { a redirected stdout is block-buffered: a poll line must be visible while the wait runs }
+      TThread.Sleep(LibraryPollMs);
+      Inc(Probe);
+      Result.State:= ProbeLibraryReadiness(Result.LibDb, CheckPlat, Result.Why, Result.StampFp);
+    end;
+    Writeln(Format('library: probe %d: %s', [Probe, LibraryReadinessToken(Result.State)]));
+  end;
+  if Result.State <> lrReady then Result.Refuse:= ARequire and not Result.Explicit;
+  if not ANotify then Exit;
+  if Result.State = lrReady then
+    Writeln(Format('library: %s (%s) READY %s', [Result.LibDb, Result.Platform, Result.Why]))
+  else if Result.Refuse then
+    Writeln(Format('ERROR: library: %s (%s) NOT READY -- %s; --require-library refuses to continue',
+      [Result.LibDb, Result.Platform, Result.Why]))
+  else
+    Writeln(Format('library: %s (%s) NOT READY -- %s; this run resolves %s',
+      [Result.LibDb, Result.Platform, Result.Why,
+       (if Result.Explicit then 'against the named library anyway' else 'against the project only and is marked pending')]));
+end;
+
+/// <summary>The extra (library) stores a manifest section's call-resolve pass opens when the
+/// section opts in with "libraryResolve": true (item 4).</summary>
+/// <param name="ALibraryResolve">The section's key; False returns no store at all.</param>
+/// <param name="APlatformArg">--platform / the section's platform token ('' = project-authoritative choice).</param>
+/// <param name="ADproj">The project file, for the platform choice; '' when none.</param>
+/// <param name="AOwnDb">The DB being built; a library that IS this DB is never opened against itself.</param>
+/// <param name="AStore">The project DB's store (its fingerprint names the platform), or nil.</param>
+/// <param name="AGate">Out: the readiness verdict (re-probed now, quietly) for the marker writer.</param>
+/// <returns>The platform library opened like --library-db (read-only use, never written) when it is
+/// READY; an empty array when it is not (continue; FinishLibraryResolve marks and says so).</returns>
+/// <remarks>Default OFF: the 2026-10-25 ruling is that no run attaches a library nobody named.
+/// The key is the explicit, per-section, reviewable form of naming it.</remarks>
+function ManifestLibraryStores(ALibraryResolve: Boolean; const APlatformArg, ADproj, AOwnDb: string;
+  const AStore: ISymbolStore; out AGate: TLibraryGate): TArray<ISymbolStore>;
+begin
+  Result:= nil;
+  AGate := EvaluateLibraryGate(ALibraryResolve, '', APlatformArg, ADproj, AOwnDb, AStore, QuietLibraryGate);
+  if not AGate.Active then Exit;
+  if AGate.State = lrReady then
+  begin
+    var LibArgs: TArgs:= Default(TArgs);
+    LibArgs.LibraryDbs:= [AGate.LibDb];
+    Result:= OpenLibraryStores(LibArgs);
+    if Length(Result) = 0 then AGate.State:= lrUnreadable;
+  end;
+  if Length(Result) = 0 then
+  begin
+    if AGate.State = lrMissing then
+      Writeln('  NOTE: libraryResolve is on but no library index was found; resolving without it.');
+  end;
+end;
+
+/// <summary>True when the manifest section that owns ADb opts in with "libraryResolve".</summary>
+/// <param name="AManifest">The manifest the run loaded.</param>
+/// <param name="ADb">The DB the run writes.</param>
+/// <returns>False for library sections (never resolved against a library) and for any DB no section owns.</returns>
+function ManifestSectionLibraryResolve(const AManifest: TIndexManifest; const ADb: string): Boolean;
+begin
+  Result:= False;
+  for var Sec: TIndexSection in AManifest.Sections do
+    if Sec.LibraryResolve and (Sec.Source <> 'registry-libraries') and
+       SameText(ExpandFileName(ExpandSectionDb(AManifest, Sec)), ExpandFileName(ADb)) then Exit(True);
+end;
+
+type
+  /// <summary>One section's library-first plan: what the marker says, what the probe says, and
+  /// the decision that follows (library-first resolve plan s.2.3/2.4).</summary>
+  TLibraryRun = record
+    Wanted  : Boolean;
+    Ready   : Boolean;
+    LibDb   : string;
+    Platform: string;
+    Reason  : string;
+    Fp      : string;
+    Old     : TLibraryMarker;
+    Decision: TLibraryDecision;
+  end;
+
+/// <summary>Reads the DB's library marker, probes the platform library and decides whether this
+/// writer run must re-resolve (the extra RanCalls term).</summary>
+/// <param name="AStore">The project DB, open for writing.</param>
+/// <param name="AWanted">The section opted in with libraryResolve AND no explicit --library-db named a store.</param>
+/// <param name="APlatform">The section's platform token ('' = manifest default).</param>
+/// <param name="AOwnDb">The DB being built; a library that IS this DB is never a library for it.</param>
+/// <returns>The plan; Decision.RunPass is True when the DB is pending (or never bound) and the library is now ready.</returns>
+/// <remarks>Writers only: it prints nothing and writes nothing; FinishLibraryResolve does both.</remarks>
+function PlanLibraryResolve(const AStore: ISymbolStore; AWanted: Boolean; const APlatform, AOwnDb: string): TLibraryRun;
+begin
+  Result:= Default(TLibraryRun);
+  Result.Old:= LibraryMarkerFromJson(AStore.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY));
+  Result.Platform:= APlatform;
+  if AWanted then
+  begin
+    var LibArgs: TArgs:= Default(TArgs);
+    LibArgs.CheckPlatform:= APlatform;
+    Result.LibDb:= ResolveLibraryDb(LibArgs);
+    AWanted:= (Result.LibDb = '') or not SameText(ExpandFileName(Result.LibDb), ExpandFileName(AOwnDb));
+  end;
+  Result.Wanted:= AWanted;
+  if AWanted then
+  begin
+    var State: TLibraryReadiness:= ProbeLibraryReadiness(Result.LibDb, APlatform, Result.Reason, Result.Fp);
+    Result.Ready:= State = lrReady;
+    if not Result.Ready then Result.Reason:= LibraryReadinessToken(State) + ': ' + Result.Reason;
+  end;
+  Result.Decision:= DecideLibraryResolve(Result.Wanted, Result.Old.State,
+    AStore.GetMetaValue('external_stores') <> '', Result.Ready);
+end;
+
+/// <summary>Writes the marker the run ends with and tells the user the state.</summary>
+/// <param name="AStore">The project DB, open for writing.</param>
+/// <param name="ARun">The plan PlanLibraryResolve returned for this run.</param>
+/// <param name="ARanCalls">The resolve pass ran this run.</param>
+/// <param name="AOpened">The pass got a library store.</param>
+/// <param name="APrefix">Indent for the stdout line.</param>
+/// <param name="ADb">The project DB path (for the remedy text).</param>
+/// <remarks>pending -> a stderr NOTE that the result is incomplete, with the exact remedy; bound ->
+/// one stdout line. A section that no longer uses libraryResolve has its marker deleted.</remarks>
+procedure FinishLibraryResolve(const AStore: ISymbolStore; const ARun: TLibraryRun; ARanCalls, AOpened: Boolean;
+  const APrefix, ADb: string);
+var
+  M: TLibraryMarker;
+begin
+  if not ARun.Wanted then
+  begin
+    if ARun.Old.State <> '' then AStore.SetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY, '');
+    Exit;
+  end;
+  var NowUnix: Int64:= DateTimeToUnix(Now, False);
+  M:= Default(TLibraryMarker);
+  M.Platform     := ARun.Platform;
+  M.LibraryDb    := ARun.LibDb;
+  M.FpSeen       := ARun.Fp;
+  M.Engine       := DRAGLINT_VERSION;
+  M.LastCheckUnix:= NowUnix;
+  if ARun.Ready and ((not ARanCalls) or AOpened) then
+  begin
+    M.State    := LIBSTATE_BOUND;
+    M.SinceUnix:= if ARun.Old.State = LIBSTATE_BOUND then ARun.Old.SinceUnix else NowUnix;
+    if ARun.Old.State <> LIBSTATE_BOUND then AStore.SetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY, LibraryMarkerToJson(M));
+    if ARanCalls then Writeln(APrefix, 'library: bound (', ExtractFileName(ARun.LibDb), ')');
+    Exit;
+  end;
+  M.State    := LIBSTATE_PENDING;
+  M.Reason   := if ARun.Ready then 'library could not be opened' else ARun.Reason;
+  M.SinceUnix:= if ARun.Old.State = LIBSTATE_PENDING then ARun.Old.SinceUnix else NowUnix;
+  AStore.SetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY, LibraryMarkerToJson(M));
+  Writeln(ErrOutput, APrefix, 'library: PENDING (', M.Reason, ') -- stored call edges are project-local; the result is INCOMPLETE. ',
+    'Re-resolve once the library is ready: drag-lint ', IndexRemedyFor(AStore, ADb, {AResolveOnly=}True));
+end;
+
+var
+  { The explicit --platform of this `index --all` run ('' = none). TPlanSection.Platform
+    is '' for closure / folder sections (ResolvePlan, src\index -- extractor-hashed, so not
+    touched), so the explicit choice has to reach BuildPlanItem some other way. }
+  GIndexAllPlatformArg: string = '';
+
+/// <summary>The platform whose library a manifest section resolves against.</summary>
+/// <param name="AItem">The plan item; closure roots are the .dpr/.dproj the section builds.</param>
+/// <returns>Explicit --platform, else the item's own platform, else the active platform of the
+/// section's .dproj. '' (after one visible NOTE) when none is known; never a silent Win32.</returns>
+/// <remarks>Before this a closure section arrived with Platform = '' and the library was picked
+/// from the CWD / manifest default, so a Win64 project could bind against library-Win32.</remarks>
+function SectionLibraryPlatform(const AItem: TPlanSection): string;
+begin
+  Result:= GIndexAllPlatformArg;
+  if Result = '' then Result:= AItem.Platform;
+  if Result = '' then
+    for var Root in AItem.Roots do
+    begin
+      var Dproj: string:= ChangeFileExt(Root, '.dproj');
+      if TFile.Exists(Dproj) then Result:= PlatformFromDprojFile(Dproj);
+      if Result <> '' then Break;
+    end;
+  if Result = '' then
+    Writeln('  NOTE: platform of section "', AItem.Name, '" is unknown (no --platform, no .dproj platform); ',
+            'the library is picked from the manifest default platform -- pass --platform.');
+end;
+
 { Defined beside IndexerFingerprint, below; BuildPlanItem is its first caller. }
 function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: string): Boolean; forward;
 
 function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
   AForceReparse: Boolean = False; ARebuild: Boolean = False; ANoPrune: Boolean = False;
-  AResolveOnly: Boolean = False; const ABuildConfig: string = ''): Boolean;
+  AResolveOnly: Boolean = False; const ABuildConfig: string = ''; AWaitLibraryMin: Integer = 0;
+  ARequireLibrary: Boolean = False): Boolean;
 var
   Store          : ISymbolStore                              ;
   Indexer        : IIndexer                                  ;
@@ -3666,6 +4103,13 @@ begin
     Store.Migrate;
     { V-C (1.31.5): a section DB with no files yet has no stale stamp to report. }
     var SecDbWasEmpty: Boolean:= Store.CountFiles = 0;
+    { Library-first resolve: say BEFORE the walk whether the platform library is ready (and wait or
+      refuse when asked); the resolve stage below re-probes. }
+    var ItemDproj: string:= '';
+    if (AItem.Mode = smClosure) and (Length(AItem.Roots) > 0) then ItemDproj:= AItem.Roots[0];
+    var PreGate: TLibraryGate:= EvaluateLibraryGate(AItem.LibraryResolve and (AItem.Mode <> smLibrary), '',
+      AItem.Platform, ItemDproj, AItem.DbPath, Store, LibraryGateOptions(AWaitLibraryMin, ARequireLibrary, True));
+    if PreGate.Refuse then Exit(False);
 
     { THE OPENING HALF OF A PAIR. The section already announces how it ENDED;
       until now it never announced that it had BEGUN, and the difference is not
@@ -3865,6 +4309,16 @@ begin
             // PP-Task-10: per-config uses-discovery -- honour the SAME profile
             // the indexer uses for this section (default ON; --no-preprocess -> False).
             Cl.SetPreprocess(APreprocess, SectionProfile);
+            { Lane INC3: IF names resolve in the used units -- project files
+              scanned (registered per closure below), library units from the
+              platform library DB. }
+            var PPSrc: TPPUnitSourceResolver:= nil;
+            if APreprocess then
+            begin
+              var PPLibArgs: TArgs:= Default(TArgs);
+              PPLibArgs.CheckPlatform:= AItem.Platform;
+              PPSrc:= InstallPPUnitSource(SectionProfile, nil, [ResolveLibraryDb(PPLibArgs)]);
+            end;
             for F in AItem.Roots do
             begin
               { A project file that is not there is a FAILURE, not a skip. It was
@@ -3880,7 +4334,15 @@ begin
               // Combine global + section exclude patterns for the closure.
               ExcludePatterns:= Concat( AItem.Filter.GlobalExclude, AItem.Filter.SectionExclude);
               CR:= Cl.Resolve(F, ExcludePatterns);
+              if PPSrc <> nil then // lane INC3: second pass as in DoIndex
+              begin
+                var PPMissed: Boolean:= PPSrc.UnknownAnswers > 0;
+                PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
+                if PPMissed then CR:= Cl.Resolve(F, ExcludePatterns);
+              end;
               for W in CR.Warnings do Writeln('  ', W);
+              Indexer.SetIncludeContext(APreprocess, CR.SearchPaths); // lane INC: as in DoIndex
+              if PPSrc <> nil then PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths); // lane INC3
               { Same scope expansion as `index --project` (sibling .dfm + the
                 project file). Before this, closure sections indexed .pas/.inc
                 only: Loader.sqlite held 84 files, dfm 0, dpr 0. }
@@ -3985,15 +4447,26 @@ begin
       resolver -- which is precisely the 2026-08-30 failure, reproduced by the
       fix meant to prevent it. ClearCallEdges also nulls refs.symbol_id. }
     if ResolverStale or AResolveOnly then Store.ClearCallEdges;
+    { Library-first resolve: a DB marked `pending` whose library is ready now re-resolves even when no file changed. }
+    { lf-order: the section's library platform, computed once (SectionLibraryPlatform may print a NOTE). }
+    var SecPlatform: string:= if AItem.LibraryResolve and (AItem.Mode <> smLibrary) then SectionLibraryPlatform(AItem) else AItem.Platform;
+    var LibRun: TLibraryRun:= PlanLibraryResolve(Store, AItem.LibraryResolve and (AItem.Mode <> smLibrary), SecPlatform, AItem.DbPath);
     var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) or
-       Store.CallEdgesNeedRebuild or ResolverStale or AResolveOnly;
+       Store.CallEdgesNeedRebuild or ResolverStale or AResolveOnly or LibRun.Decision.RunPass;
+    var SectionLibs: TArray<ISymbolStore>:= nil;
     if RanCalls then
     begin
-      Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end); { v14 (D5): resolve call sites to target symbols }
-      Stage('  ', 'dispatch', procedure begin Store.ResolveDispatch; end); { 2026-10-26: overrides / implements / classref args, derived from the edges }
+      { item 4: the opt-in library store, opened once for both stages; none when the key is off or the
+        library is not READY (lf-ready's gate re-probes quietly). LibRun (lf-marker) decided RunPass above
+        and FinishLibraryResolve writes the marker below; SecPlatform (lf-order) names the platform. }
+      var SectionGate: TLibraryGate;
+      SectionLibs:= ManifestLibraryStores(LibRun.Wanted, SecPlatform, ItemDproj, AItem.DbPath, Store, SectionGate);
+      Stage('  ', 'calls', procedure begin Store.ResolveCallTargets(SectionLibs); end); { v14 (D5): resolve call sites to target symbols }
+      Stage('  ', 'dispatch', procedure begin Store.ResolveDispatch(SectionLibs); end); { 2026-10-26: overrides / implements / classref args, derived from the edges }
     end
     else
       Writeln('  stage: calls -- skipped, no file changed, so every call edge already holds.');
+    FinishLibraryResolve(Store, LibRun, RanCalls, Length(SectionLibs) > 0, '  ', AItem.DbPath);
     { Purity v2: a VERDICT is derived from the edges, so it runs whenever they
       were re-derived -- and ALSO when a per-file reindex recreated symbol_facts
       rows with NULL verdicts while the calls pass was skipped (PurityNeedsRun). }
@@ -4001,6 +4474,8 @@ begin
       Stage('  ', 'purity', procedure begin TPurityStage.Run(Store); end)
     else
       Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
+    { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
+    Stage('  ', 'search', procedure begin Store.BuildSymbolSearch; end);
     { The checkpoint below folds the -wal in and is NOT free on a multi-gigabyte
       index, so it is announced too: it is the last thing between the operator
       and the section summary, and an unannounced pause there reads exactly like
@@ -4104,15 +4579,23 @@ begin
     var RateStr: string:= 'n/a';
     if (Elapsed > 0) and (Indexer.ParsedFiles > 0) then
       RateStr:= Format('%.0f attempted/min', [Indexer.ParsedFiles / Elapsed * SecsPerMin]);
-    Writeln(Format('=== %s%s -> %s : files=%d symbols=%d refs=%d walked=%d attempted=%d up-to-date=%d [%.1fs, %s] ===',
+    { DEC-15 committed=: attempted files whose rows actually LANDED this run.
+      attempted is an upper bound by contract (counted before the parse); the
+      only way an attempt ends without a commit is a rolled-back file
+      transaction, which IIndexer.FailedFiles counts, so committed =
+      attempted - failed. Derived HERE (not in TIndexer) so the extraction
+      surface stays untouched. Appended AFTER up-to-date= to keep the existing
+      field order; fields keep their meanings. }
+    var SectionFailedFiles: Integer:= Indexer.FailedFiles;
+    var SectionCommitted: Integer:= Max(0, Indexer.ParsedFiles - SectionFailedFiles);
+    Writeln(Format('=== %s%s -> %s : files=%d symbols=%d refs=%d walked=%d attempted=%d up-to-date=%d committed=%d [%.1fs, %s] ===',
       [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols,
        Store.CountReferences, Length(Indexer.VisitedFiles), Indexer.ParsedFiles,
-       Indexer.SkippedUpToDate, Elapsed, RateStr]));
+       Indexer.SkippedUpToDate, SectionCommitted, Elapsed, RateStr]));
     { F1: a section with a file that failed to store is a FAILED section -- the
       failed file keeps its old rows. Read the count before the warm below
       releases the indexer. The rule cache is still warmed: the rows that did
       commit are real. }
-    var SectionFailedFiles: Integer:= Indexer.FailedFiles;
     if SectionFailedFiles > 0 then
     begin
       Flush(Output);
@@ -4288,7 +4771,7 @@ end;
 /// whose DB is _D-RAG\Foo.sqlite): both advised commands exited 2.</remarks>
 function IndexSectionCommand(const AItem: TPlanSection; const AConfigPath: string): string;
 begin
-  Result:= 'drag-lint index --all --only ' + (if AItem.Name.Contains(' ') then AnsiQuotedStr(AItem.Name, '"') else AItem.Name);
+  Result:= 'drag-lint index --all --only ' + (if AItem.Name.Contains(' ') or AItem.Name.Contains('"') then '"' + AItem.Name.Replace('"', '\"') + '"' else AItem.Name);
   if AItem.Platform <> '' then Result:= Result + ' --platform ' + AItem.Platform;
   if AConfigPath <> '' then Result:= Result + ' --config ' + AnsiQuotedStr(TPath.GetFullPath(AConfigPath), '"');
 end;
@@ -4320,6 +4803,51 @@ begin
   if Result then ReportManifestRefusal(AVerb, AManifest.LoadError);
 end;
 
+/// <summary>Installs the between-files stand-down gate on the storage layer (DEC-13).</summary>
+/// <remarks>Once the batch channel's request is taken, the next file the walk is about to
+/// open stops the run: the resolver stamp is cleared (the next run re-derives every edge,
+/// because the files written so far were never resolved), the WAL is checkpointed, the
+/// connection is closed, `exiting` is answered and the process ends with
+/// CONTROL_EXIT_STOOD_DOWN. No file transaction is open at that point, so no file row is
+/// half written; every committed file is up to date and the same command resumes.</remarks>
+procedure InstallIndexStandDownGate;
+begin
+  { Test seam (run_control_channel_guard.ps1): slows each file so a stand-down can land mid-walk. }
+  var FileDelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_INDEX_FILE_DELAY_MS'), 0);
+  GFileTxGate:= procedure(AStore: TObject)
+    begin
+      if FileDelayMs > 0 then Sleep(FileDelayMs);
+      if not BatchStandDownTaken then Exit;
+      Writeln(ErrOutput, 'index: stopped by a maintenance stand-down between files; the database is consistent. Re-run the same command to resume.');
+      if AStore is TSQLiteSymbolStore then
+      begin
+        try
+          TSQLiteSymbolStore(AStore).SetMetaValue(RESOLVER_FP_KEY, '');
+        except
+          { best effort: the stamp only makes the next run re-resolve }
+        end;
+        TSQLiteSymbolStore(AStore).CloseForStandDown;
+      end;
+      Flush(Output);
+      Flush(ErrOutput);
+      BatchChannelClose;
+      Halt(CONTROL_EXIT_STOOD_DOWN);
+    end;
+end;
+
+/// <summary>Asks every child of an `index --all --jobs N` pool to stand down (the parent stops spawning).</summary>
+/// <param name="AHandles">Process handles of the running children.</param>
+/// <param name="ACount">How many entries of AHandles are live.</param>
+procedure ForwardStandDownToChildren(const AHandles: TArray<THandle>; ACount: Integer);
+const
+  CONNECT_MS = 2000;
+begin
+  for var K:= 0 to ACount - 1 do
+  begin
+    var Reply, Err: string;
+    ControlRequest(ControlPipeNameFor(GetProcessId(AHandles[K])), CONTROL_MSG_SHUTDOWN, CONNECT_MS, Reply, Err);
+  end;
+end;
 // v0.45: index --all [--config <path>] [--dry-run [--json]] [--only <Secs>] [--platform <P>]
 // Loads the manifest (from --config if given, else TManifestIO.Load(enginedir, cwd)),
 // validates it, resolves the build plan, optionally filters by --only / --platform,
@@ -4377,6 +4905,7 @@ begin
   // Build platform filter from --platform (reuses CheckPlatform field).
   if AArgs.CheckPlatform <> '' then PlatFilter:= [AArgs.CheckPlatform]
   else PlatFilter:= nil;
+  GIndexAllPlatformArg:= AArgs.CheckPlatform;
 
   // Resolve the full build plan.
   Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
@@ -4451,6 +4980,16 @@ begin
     end;
   end; // if
 
+  { Library-first (owner 2026-10-28, library-first-resolve plan s.2.6): every smLibrary item
+    runs before any project item, always -- a project section's resolve pass can then find its
+    platform library READY. A stable partition done here, not in Index.Plan.pas (extractor-hashed). }
+  begin
+    var Ordered: TArray<TPlanSection>:= nil;
+    for var Lib in Plan.Items do if Lib.Mode = smLibrary then Ordered:= Ordered + [Lib];
+    for var Prj in Plan.Items do if Prj.Mode <> smLibrary then Ordered:= Ordered + [Prj];
+    Plan.Items:= Ordered;
+  end;
+
   if AArgs.DryRun then
   begin
     if AArgs.AsJson then
@@ -4496,6 +5035,21 @@ begin
             Writeln(Format('        sibling-platform-prune: %d [%s]',
                            [Length(DrySib), string.Join(', ', DrySib)]));
           end;
+          if PS.LibraryResolve and (PS.Mode <> smLibrary) then
+          begin
+            var DryStore: ISymbolStore:= nil;
+            if TFile.Exists(PS.DbPath) then
+              try
+                DryStore:= TSQLiteSymbolStore.Create(PS.DbPath, {AReadOnly=}True);
+              except
+                on E: Exception do DryStore:= nil;
+              end;
+            var DryDproj: string:= '';
+            if (PS.Mode = smClosure) and (Length(PS.Roots) > 0) then DryDproj:= PS.Roots[0];
+            var DryGate: TLibraryGate:= EvaluateLibraryGate(True, '', PS.Platform, DryDproj, PS.DbPath, DryStore, QuietLibraryGate);
+            if DryGate.Active then
+              Writeln(Format('        library: %s (%s, %s)', [DryGate.LibDb, DryGate.Platform, LibraryReadinessToken(DryGate.State)]));
+          end;
           if PS.Mode in [smLibrary, smFolderTree] then
           begin
             var DryDropped: TArray<string>;
@@ -4512,6 +5066,13 @@ begin
   end; // if
 
   // Build each section: sequential or parallel based on --jobs / manifest.maxJobs.
+  { DEC-13: `index --all` listens too. In-process sections stop at the storage gate; the
+    parent of a --jobs pool stops spawning and forwards the stand-down to its children. }
+  begin
+    var AllDbs: TArray<string>:= nil;
+    for var PlanSec in Plan.Items do AllDbs:= AllDbs + [ExpandFileName(PlanSec.DbPath)];
+    if BatchChannelOpen('index', AllDbs, DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION) then InstallIndexStandDownGate;
+  end;
   // Compute effective job count.
   // Priority: --jobs CLI > manifest.settings.maxJobs > auto (min(CpuCount, sections)).
   var EffJobs  : Integer;
@@ -4537,7 +5098,11 @@ begin
   if EffJobs <= 1 then
   begin
     FailedNames:= nil;
-    for i:= 0 to High(Plan.Items) do begin if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly, AArgs.BuildConfig) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
+    for i:= 0 to High(Plan.Items) do
+    begin
+      if BatchStandDownTaken then Exit(CONTROL_EXIT_STOOD_DOWN);
+      if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly, AArgs.BuildConfig, AArgs.WaitLibraryMin, AArgs.RequireLibrary) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])];
+    end;
     Result:= ReportFailedSections(FailedNames, Length(Plan.Items));
     Exit;
   end;
@@ -4602,6 +5167,20 @@ begin
   try
     for i:= 0 to TotalSections - 1 do
     begin
+      if BatchStandDownTaken then
+      begin
+        ForwardStandDownToChildren(ProcHandles, PoolCount);
+        for var k:= i to TotalSections - 1 do FailedNames:= FailedNames + [SectionLabel(Plan.Items[k])];
+        Break;
+      end;
+      { Phase barrier: the last library child must be reaped before the first project child
+        starts (library-first). A failed wait is handled by the WaitBroken block below. }
+      if (i > 0) and (Plan.Items[i - 1].Mode = smLibrary) and (Plan.Items[i].Mode <> smLibrary) then
+        while (PoolCount > 0) and not WaitBroken do
+        begin
+          WaitBroken:= not ReapOneChild(ProcHandles, ProcItemIdx, PoolCount, DoneItem, ExitCode);
+          if (not WaitBroken) and (ExitCode <> 0) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[DoneItem])];
+        end;
       // Drain one slot from pool if it is full.
       while PoolCount >= EffJobs do
       begin
@@ -4624,7 +5203,8 @@ begin
 
       // Build child command line.
       ChildCmdLine:= '"' + SelfExe + '" index --all --only "' + Plan.Items[i].Name + '"';
-      if Plan.Items[i].Platform <> '' then ChildCmdLine:= ChildCmdLine + ' --platform "' + Plan.Items[i].Platform + '"';
+      if Plan.Items[i].Platform <> '' then ChildCmdLine:= ChildCmdLine + ' --platform "' + Plan.Items[i].Platform + '"'
+      else if AArgs.CheckPlatform <> '' then ChildCmdLine:= ChildCmdLine + ' --platform "' + AArgs.CheckPlatform + '"';
       { Only when the caller gave one -- see the block above. With no --config
         the child rediscovers the SAME manifest from the EngineDir and CWD it
         inherits, which is what the parent did. }
@@ -4634,6 +5214,8 @@ begin
       // build honours the raw all-branch request across every spawned worker.
       if AArgs.NoPreprocess then ChildCmdLine:= ChildCmdLine + ' --no-preprocess';
       if AArgs.BuildConfig <> '' then ChildCmdLine:= ChildCmdLine + ' --build-config "' + AArgs.BuildConfig + '"';
+      if AArgs.WaitLibraryMin > 0 then ChildCmdLine:= ChildCmdLine + ' --wait-library ' + IntToStr(AArgs.WaitLibraryMin);
+      if AArgs.RequireLibrary then ChildCmdLine:= ChildCmdLine + ' --require-library';
       { The MODE has to travel with the section, and did not have to before: when
         every section was recreated unconditionally there was nothing to
         propagate. A child that defaulted to --recompile would turn
@@ -4724,6 +5306,7 @@ begin
   Writeln(Format('parallel build: %d/%d sections OK (jobs=%d)', [OkCount, TotalSections, EffJobs]));
 
   Result:= ReportFailedSections(FailedNames, TotalSections);
+  if BatchStandDownTaken then Result:= CONTROL_EXIT_STOOD_DOWN;
 end; // function
 
 { ONE PLACE THAT SAYS WHY THERE IS NO DATABASE (2026-08-26).
@@ -5549,7 +6132,24 @@ begin
   if ManifestWriteRefused('index', TargetManifest) then Exit(2);
   var CwdManifest: TIndexManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
   if ManifestWriteRefused('index', CwdManifest) then Exit(2);
-  var ResolvedDb: string:= ResolveIndexDb(AArgs, IndexTarget, TargetManifest);
+  { A CWD "db" KEY MAY NOT REDIRECT A WRITE THAT IS NOT UNDER IT (INBOX 2026-09-29 4b-1;
+    guard run_index_cwd_config_db_anchor.ps1). The .drag-lint.json found by walking up
+    from the CWD can belong to a different tree; honouring its "db" for a target outside
+    that tree overwrote another project's index. Ignored with a warning; --db still wins. }
+  var IdxArgs: TArgs:= AArgs;
+  if IdxArgs.DbFromConfig then
+  begin
+    var CfgDir: string:= IncludeTrailingPathDelimiter(TPath.GetFullPath(ExtractFilePath(IdxArgs.DbConfigFile)));
+    if not IncludeTrailingPathDelimiter(TPath.GetFullPath(IndexTarget)).StartsWith(CfgDir, True) then
+    begin
+      Writeln(ErrOutput, 'WARNING: index: ignoring the "db" key of ', IdxArgs.DbConfigFile,
+        ' -- the target ', IndexTarget, ' is not under that file''s folder; pass --db to choose the database.');
+      IdxArgs.DbPaths     := nil;
+      IdxArgs.DbPath      := '';
+      IdxArgs.DbFromConfig:= False;
+    end;
+  end;
+  var ResolvedDb: string:= ResolveIndexDb(IdxArgs, IndexTarget, TargetManifest);
   if ResolvedDb = '' then
   begin
     { A project target's refusal (two claimants, or no manifest) was already
@@ -5566,8 +6166,8 @@ begin
     user typed no --db -- and it may belong to another project's tree (INBOX
     2026-09-29 item 4b). Say where it came from, on its own line so a reader of
     the Database: line is unaffected. }
-  if AArgs.DbFromConfig and SameText(ResolvedDb, AArgs.DbPath) then
-    Writeln('          (the "db" key of ', AArgs.DbConfigFile, '; pass --db to write elsewhere)');
+  if IdxArgs.DbFromConfig and SameText(ResolvedDb, IdxArgs.DbPath) then
+    Writeln('          (the "db" key of ', IdxArgs.DbConfigFile, '; pass --db to write elsewhere)');
 
   { CREATE THE _D-RAG HOME BEFORE OPENING. The --all path already does this
     for a manifest item; this single-target path never did, because the old
@@ -5635,6 +6235,8 @@ begin
     end;
   end;
   Store.Migrate;
+  { DEC-13: a long one-shot run listens for a maintenance stand-down (a dry run touches no disk, so it does not). }
+  if (not AArgs.DryRun) and BatchChannelOpen('index', TArray<string>.Create(ExpandFileName(ResolvedDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION) then InstallIndexStandDownGate;
   { V-C (1.31.5): a DB with no files before this run (created by it, or never
     filled) has nothing stale -- the stamp / scan_type notes below are real
     warnings only on a DB that already holds an index. Read before any rebuild
@@ -5800,7 +6402,28 @@ begin
           from an inactive branch would be pulled in and then parsed as though
           it were not compiled, and vice versa. }
         Cl.SetPreprocess(not AArgs.NoPreprocess, IdxBuild.Profile);
+        { Lane INC3: IF names resolve in the used units -- the closure's
+          project files are scanned (order-independent), library units come
+          from the library DB (--library-db, else the manifest's). }
+        var PPSrc: TPPUnitSourceResolver:= nil;
+        if not AArgs.NoPreprocess then
+          PPSrc:= InstallPPUnitSource(IdxBuild.Profile, nil, [LintLibraryDb(AArgs)]);
         var CR: TClosureResult:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
+        { The first pass could not see the project's own units yet; when an IF
+          asked for a name it could not answer, resolve once more with them. }
+        if PPSrc <> nil then
+        begin
+          var PPMissed: Boolean:= PPSrc.UnknownAnswers > 0;
+          PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
+          if PPMissed then
+          begin
+            CR:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
+            PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
+          end;
+        end;
+        { Lane INC: each .inc is parsed in its includer's define context, with
+          include names resolved on the same search path the closure used. }
+        Indexer.SetIncludeContext(not AArgs.NoPreprocess, CR.SearchPaths);
         for var W: string in CR.Warnings do Writeln('  ', W);
 
         { The closure is .pas/.inc only; ExpandProjectScope adds each unit's
@@ -5856,6 +6479,17 @@ begin
   var IsProjectScopedTarget: Boolean:=
     (AArgs.ProjectPath <> '') or
     MatchText(ExtractFileExt(AArgs.Path), ['.dpr', '.dproj', '.dpk']);
+
+  { Library-first resolve: say BEFORE the walk whether the platform library is ready; wait or refuse on
+    request. A dry run prints the state and never waits or refuses. }
+  var IdxDproj: string:= AArgs.ProjectPath;
+  if (IdxDproj = '') and MatchText(ExtractFileExt(AArgs.Path), ['.dpr', '.dproj']) then IdxDproj:= AArgs.Path;
+  var IdxExplicit: string:= '';
+  if Length(AArgs.LibraryDbs) > 0 then IdxExplicit:= AArgs.LibraryDbs[0];
+  var IdxGate: TLibraryGate:= EvaluateLibraryGate(ManifestSectionLibraryResolve(TargetManifest, ResolvedDb), IdxExplicit,
+    AArgs.CheckPlatform, IdxDproj, ResolvedDb, Store,
+    LibraryGateOptions((if AArgs.DryRun then 0 else AArgs.WaitLibraryMin), AArgs.RequireLibrary and not AArgs.DryRun, True));
+  if IdxGate.Refuse then Exit(2);
 
   if AArgs.DryRun then begin Writeln('--dry-run: NOT indexing. Re-run without --dry-run to index.'); Result:= 0; Exit; end;
 
@@ -6264,15 +6898,26 @@ begin
       than not having the flag. }
     if ResolverStale or AArgs.ResolveOnly then Store.ClearCallEdges;
     var CorpusMoved: Boolean:= (Indexer.ParsedFiles > ParsedBeforeTick) or AArgs.Rebuild or (SweptRows > 0);
+    { Library-first resolve: an explicit --library-db names the store itself and clears any marker. }
+    var LibRun: TLibraryRun:= PlanLibraryResolve(Store,
+      (Length(AArgs.LibraryDbs) = 0) and ManifestSectionLibraryResolve(TargetManifest, ResolvedDb), AArgs.CheckPlatform, ResolvedDb);
     var RanCalls: Boolean:= CorpusMoved or (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or
-       ResolverStale or AArgs.ResolveOnly;
+       ResolverStale or AArgs.ResolveOnly or LibRun.Decision.RunPass;
+    var RunLibs: TArray<ISymbolStore>:= nil;
     if RanCalls then
     begin
-      Stage('', 'calls', procedure begin Store.ResolveCallTargets(OpenLibraryStores(AArgs)); end); { v14 (D5) + v21 cross-DB }
-      Stage('', 'dispatch', procedure begin Store.ResolveDispatch(OpenLibraryStores(AArgs)); end); { 2026-10-26: libraries only recognise a library `class of` param type }
+      { item 4: --library-db wins; else the section's "libraryResolve" opt-in (LibRun.Wanted: no --library-db,
+        the key on, the library is not this DB), opened only when READY; else no extra store. }
+      var IdxResolveGate: TLibraryGate;
+      RunLibs:= OpenLibraryStores(AArgs);
+      if Length(RunLibs) = 0 then
+        RunLibs:= ManifestLibraryStores(LibRun.Wanted, AArgs.CheckPlatform, IdxDproj, ResolvedDb, Store, IdxResolveGate);
+      Stage('', 'calls', procedure begin Store.ResolveCallTargets(RunLibs); end); { v14 (D5) + v21 cross-DB }
+      Stage('', 'dispatch', procedure begin Store.ResolveDispatch(RunLibs); end); { 2026-10-26: libraries only recognise a library `class of` param type }
     end
     else
       Writeln('stage: calls -- skipped, no file changed, so every call edge already holds.');
+    FinishLibraryResolve(Store, LibRun, RanCalls, Length(RunLibs) > 0, '', ResolvedDb);
     { Purity v2: a VERDICT is derived from the edges, so it runs whenever they
       were re-derived -- and ALSO when a per-file reindex recreated symbol_facts
       rows with NULL verdicts while the calls pass was skipped (PurityNeedsRun).
@@ -6282,6 +6927,8 @@ begin
       Stage('', 'purity', procedure begin TPurityStage.Run(Store); end)
     else
       Writeln('stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
+    { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
+    Stage('', 'search', procedure begin Store.BuildSymbolSearch; end);
     { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
       stamp waits until here rather than happening before the walk. }
     CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb);
@@ -6356,7 +7003,15 @@ begin
     else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d%s, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, FailedNote, Elapsed]));
     AnyFileFailed:= AnyFileFailed or (TickFailed > 0);
     if not AArgs.Watch then Break;
-    Sleep(Interval * 1000);
+    const WATCH_POLL_MS = 100;
+    const MS_PER_SEC = 1000;
+    var Slept: Integer:= 0;
+    while (Slept < Interval * MS_PER_SEC) and not BatchStandDownTaken do
+    begin
+      Sleep(WATCH_POLL_MS);
+      Inc(Slept, WATCH_POLL_MS);
+    end;
+    if BatchStandDownTaken then Break; { idle between ticks: nothing open, stop cleanly }
   end; // while
 
   { WARM THE `lint <file>` RULE CACHE for a project index, AFTER releasing the
@@ -6430,6 +7085,8 @@ begin
     Stage('  ', 'purity', procedure begin TPurityStage.Run(Store); end)
   else
     Writeln('  stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
+  { xj-5: concept-search table; incremental, backfills from existing rows (no re-parse). }
+  Stage('  ', 'search', procedure begin Store.BuildSymbolSearch; end);
   AElapsedSec:= (Now - T0) * 86400;
   Writeln(Format('  Done. Files: %d, Symbols: %d, Refs: %d  [%.1fs]', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, AElapsedSec]));
   Result:= True;
@@ -7705,8 +8362,143 @@ begin
   end;
 end; // function
 
+const
+  DefaultNearHops = 2;      // query --text --near: --hops default
+  MaxNearHops     = 3;      // query --text --near: --hops ceiling (wider = impact --depth)
+  NearFetchLimit  = 100000; // rows fetched before the neighbourhood filter cuts to --limit
+  OutsideHood     = -1;     // hop value of a hit outside the --near neighbourhood
+
+/// <summary>Resolves the `--near` seed in one store and returns its call-graph
+/// neighbourhood keyed by qualified name (case-insensitive) to the fewest hops.</summary>
+/// <param name="AStore">Open store to read.</param>
+/// <param name="AArgs">Parsed args; NearQName is the seed, HopsUses adds unit-uses edges.</param>
+/// <param name="AHops">Hop ceiling, 1..MaxNearHops.</param>
+/// <param name="AStatus">0 = seed found; 1 = not in this store; 2 = ambiguous (several
+/// qualified names answer to the bare name); AErr then lists them.</param>
+/// <param name="AErr">Error text when AStatus is 2, else empty.</param>
+/// <returns>A new dictionary the caller frees; empty unless AStatus is 0.</returns>
+function CollectNearHops(const AStore: ISymbolStore; const AArgs: TArgs; AHops: Integer;
+  out AStatus: Integer; out AErr: string): TDictionary<string, Integer>;
+var
+  Seeds: TArray<TSymbol>;
+  S    : TSymbol        ;
+  H    : TSymbolHop     ;
+  Cur  : Integer        ;
+begin
+  Result:= TDictionary<string, Integer>.Create(TIStringComparer.Ordinal);
+  AErr:= '';
+  Seeds:= AStore.FindSymbolsByQualifiedName(AArgs.NearQName);
+  if Length(Seeds) = 0 then
+  begin
+    AStatus:= 1;
+    Exit;
+  end;
+  for S in Seeds do
+    if not SameText(S.QualifiedName, Seeds[0].QualifiedName) then
+    begin
+      AStatus:= 2;
+      AErr:= 'ERROR: --near "' + AArgs.NearQName + '" is ambiguous (' + Seeds[0].QualifiedName + ', ' +
+        S.QualifiedName + ', ...); qualify it, e.g. Unit.Routine or Type.Method';
+      Exit;
+    end;
+  AStatus:= 0;
+  for S in Seeds do
+    for H in AStore.FindSymbolsWithinHops(S.Id, AHops, AArgs.HopsUses) do
+      if (not Result.TryGetValue(H.QualifiedName, Cur)) or (H.Hop < Cur) then
+        Result.AddOrSetValue(H.QualifiedName, H.Hop);
+end; // function
+
+/// <summary>Applies the `--near` result policy to the fetched rows: restrict to the
+/// neighbourhood (hop &gt;= 0), or with ABoost keep every row and put neighbourhood
+/// rows first, nearest hop first. Stable within a hop, so the SQL ranking survives.</summary>
+/// <param name="AMatches">Fetched rows; replaced by the kept rows.</param>
+/// <param name="AHops">Hop per row, -1 = outside the neighbourhood; replaced in step.</param>
+/// <param name="AMaxHop">Highest hop present in the neighbourhood.</param>
+/// <param name="ABoost">True keeps rows outside the neighbourhood, last.</param>
+procedure ApplyNearFilter(var AMatches: TArray<TStringLitMatch>; var AHops: TArray<Integer>;
+  AMaxHop: Integer; ABoost: Boolean);
+var
+  OutM: TList<TStringLitMatch>;
+  OutH: TList<Integer>        ;
+  Hop : Integer               ;
+  i   : Integer               ;
+begin
+  OutM:= TList<TStringLitMatch>.Create;
+  OutH:= TList<Integer>.Create;
+  try
+    for Hop:= 0 to AMaxHop do
+      for i:= 0 to High(AMatches) do
+        if AHops[i] = Hop then
+        begin
+          OutM.Add(AMatches[i]);
+          OutH.Add(Hop);
+        end;
+    if ABoost then
+      for i:= 0 to High(AMatches) do
+        if AHops[i] < 0 then
+        begin
+          OutM.Add(AMatches[i]);
+          OutH.Add(OutsideHood);
+        end;
+    AMatches:= OutM.ToArray;
+    AHops   := OutH.ToArray;
+  finally
+    OutH.Free;
+    OutM.Free;
+  end; // try
+end; // procedure
+
 // v0.57 Task 8: text-constant search (phrase / any-order / substring).
 // Placed immediately before DoQuery so no forward declaration is needed.
+const
+  { A reader that prints through a helper cannot report its own byte count; one
+    result row (a path, a name, a kind) is estimated at 15 tokens (~60 chars).
+    Only `context` (TContextBundle.TokenEstimate) and `query --text` (actual
+    characters) use a measured figure. }
+  USAGE_TOKENS_PER_ROW = 15;
+
+{ XERJ item 2: the one place a capped list says so. AOmitted is the number of
+  rows the cap hid (a lower bound when AAtLeast: the reader fetched cap + 1).
+  AJson, when given, receives `omitted` and `cap` keys (always, 0 included, so
+  a consumer can read them unconditionally). Without it the note is a text line
+  -- on STDERR when the verb's stdout is a bare JSON array (AAsJsonStream), so
+  the array stays parseable. The exit code is never touched here. }
+procedure ReportCap(AOmitted, ACap: Integer; AAtLeast: Boolean; const AFlag: string; ARerun: Integer; AJson: TJSONObject; AAsJsonStream: Boolean);
+begin
+  if AJson <> nil then
+  begin
+    AJson.AddPair('omitted', TJSONNumber.Create(Max(0, AOmitted)));
+    AJson.AddPair('cap'    , TJSONNumber.Create(ACap));
+    if AAtLeast and (AOmitted > 0) then AJson.AddPair('omitted_is_lower_bound', TJSONBool.Create(True));
+    Exit;
+  end;
+  if AOmitted <= 0 then Exit;
+  if AAsJsonStream then Writeln(ErrOutput, CapOmittedNote(AOmitted, ACap, AAtLeast, AFlag, ARerun))
+  else Writeln(CapOmittedNote(AOmitted, ACap, AAtLeast, AFlag, ARerun));
+end; // procedure
+
+{ XERJ item 1: appends one usage-log line for a reader verb. The source files the
+  answer stands in for are summed once each (distinct paths). Best effort and
+  silent -- see DRagLint.Core.UsageLog. }
+procedure LogReaderUsage(const AVerb, ADbPath: string; ATokens: Int64; const AFilePaths: TArray<string>);
+var
+  Units: Integer;
+  Bytes: Int64  ;
+begin
+  if not UsageLogEnabled then Exit;
+  Bytes:= SumDistinctFileBytes(AFilePaths, Units);
+  RecordUsage(AVerb, ChangeFileExt(ExtractFileName(ADbPath), ''), ATokens, Bytes, Units);
+end;
+
+/// <summary>drag-lint gain [--since yyyy-mm-dd] [--json]: sums the usage log per verb and per day.</summary>
+/// <param name="AArgs">Parsed arguments; GainSince and AsJson are used.</param>
+/// <returns>0 always; a missing log is an all-zero report.</returns>
+function DoGain(const AArgs: TArgs): Integer;
+begin
+  Writeln(BuildGainReport(UsageLogPath, AArgs.GainSince, AArgs.AsJson));
+  Result:= 0;
+end;
+
 function DoQueryText(const AArgs: TArgs): Integer;
 var
   PathsToScan: TArray<string>         ;
@@ -7719,6 +8511,22 @@ var
   M          : TStringLitMatch        ;
   JArr       : TJSONArray             ;
   JObj       : TJSONObject            ;
+  Omitted    : Integer                ;
+  TextChars  : Int64                  ;
+  UsagePaths : TArray<string>         ;
+  I          : Integer                ;
+  NearOn     : Boolean                ;
+  Hops       : Integer                ;
+  FetchLim   : Integer                ;
+  NearMap    : TDictionary<string, Integer>;
+  NearStatus : Integer                ;
+  NearErr    : string                 ;
+  SeedFound  : Boolean                ;
+  AllHops    : TArray<Integer>        ;
+  HopOf      : Integer                ;
+  OwnerKey   : string                 ;
+  HopTag     : string                 ;
+  EnclTag    : string                 ;
 begin
   if not ExplicitDbsExist(AArgs, 'query --text') then Exit(2);
   if AArgs.TextQuery = '' then begin Writeln('ERROR: query --text requires a phrase'); Exit(2); end;
@@ -7726,6 +8534,28 @@ begin
   else if AArgs.TextAnyOrder then Mode:= 'anyorder'
   else Mode:= 'phrase';
   if AArgs.Limit > 0 then Lim:= AArgs.Limit else Lim:= 200;
+  NearOn:= AArgs.NearQName <> '';
+  if (not NearOn) and ((AArgs.HopsRaw <> '') or AArgs.HopsUses or AArgs.NearBoost) then
+  begin
+    Writeln('ERROR: --hops, --hops-uses and --near-boost require --near <QName>');
+    Exit(2);
+  end;
+  Hops:= DefaultNearHops;
+  if NearOn and (AArgs.HopsRaw <> '') then
+  begin
+    Hops:= StrToIntDef(AArgs.HopsRaw, 0);
+    if Hops > MaxNearHops then
+    begin
+      Writeln('ERROR: --hops ', AArgs.HopsRaw, ': ', MaxNearHops, ' hops max; use impact --depth for wider');
+      Exit(2);
+    end;
+    if Hops < 1 then
+    begin
+      Writeln('ERROR: --hops must be a whole number from 1 to ', MaxNearHops);
+      Exit(2);
+    end;
+  end;
+  FetchLim:= if NearOn then NearFetchLimit else Lim + 1; { cap + 1: one extra row proves the cap hid something (XERJ item 2) }
   if (Mode = 'substring') and (Length(Trim(AArgs.TextQuery)) < 3) then
     Writeln('NOTE: --substring needs a query of at least 3 characters (trigram tokenizer); "' + AArgs.TextQuery + '" is too short - try --any-order for shorter terms.');
 
@@ -7734,6 +8564,8 @@ begin
     if not TFile.Exists(DbPath) then begin Writeln('ERROR: database not found: ', DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
 
   SetLength(AllMatches, 0);
+  SetLength(AllHops, 0);
+  SeedFound:= False;
   for DbPath in PathsToScan do
   begin
     var RoOk: Boolean;
@@ -7743,17 +8575,60 @@ begin
       if StaleDbRefusesRun(AArgs, 'query --text', DbPath) then Exit(2);
       Continue; { manifest-resolved: stale DB reported, scan the rest }
     end;
-    Matches:= Store.SearchText(AArgs.TextQuery, Mode, AArgs.TextSource, Lim, AArgs.Kind);
-    for M in Matches do begin SetLength(AllMatches, Length(AllMatches) + 1); AllMatches[High(AllMatches)]:= M; end;
+    NearMap:= nil;
+    if NearOn then
+    begin
+      NearMap:= CollectNearHops(Store, AArgs, Hops, NearStatus, NearErr);
+      if NearStatus = 2 then
+      begin
+        NearMap.Free;
+        Writeln(NearErr);
+        Exit(2);
+      end;
+      if NearStatus = 1 then { seed lives in another scanned DB }
+      begin
+        NearMap.Free;
+        Continue;
+      end;
+      SeedFound:= True;
+    end;
+    try
+      Matches:= Store.SearchText(AArgs.TextQuery, Mode, AArgs.TextSource, FetchLim, AArgs.Kind);
+      for M in Matches do
+      begin
+        SetLength(AllMatches, Length(AllMatches) + 1);
+        AllMatches[High(AllMatches)]:= M;
+        if NearOn then
+        begin
+          OwnerKey:= if M.OwnerName <> '' then M.OwnerName else M.EnclosingQName;
+          if not NearMap.TryGetValue(OwnerKey, HopOf) then HopOf:= OutsideHood;
+          SetLength(AllHops, Length(AllHops) + 1);
+          AllHops[High(AllHops)]:= HopOf;
+        end;
+      end;
+    finally
+      NearMap.Free;
+    end; // try
   end;
-  if Length(AllMatches) > Lim then SetLength(AllMatches, Lim);
+  if NearOn then
+  begin
+    if not SeedFound then
+    begin
+      Writeln('ERROR: --near symbol not found in the scanned index: ', AArgs.NearQName);
+      Exit(2);
+    end;
+    ApplyNearFilter(AllMatches, AllHops, Hops, AArgs.NearBoost);
+  end;
+  Omitted:= Max(0, Length(AllMatches) - Lim);
+  if Omitted > 0 then SetLength(AllMatches, Lim);
 
   if AArgs.AsJson then
   begin
     JArr:= TJSONArray.Create;
     try
-      for M in AllMatches do
+      for I:= 0 to High(AllMatches) do
       begin
+        M:= AllMatches[I];
         JObj:= TJSONObject.Create;
         JObj.AddPair('file_path', M.FilePath );
         JObj.AddPair('start_line', TJSONNumber.Create(M.StartLine));
@@ -7763,6 +8638,9 @@ begin
         JObj.AddPair('owner_name', M.OwnerName     );
         JObj.AddPair('text'      , M.Text          );
         JObj.AddPair('enclosing' , M.EnclosingQName);
+        if NearOn then
+          if AllHops[I] >= 0 then JObj.AddPair('hop', TJSONNumber.Create(AllHops[I]))
+          else JObj.AddPair('hop', TJSONNull.Create);
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
@@ -7772,9 +8650,27 @@ begin
   end // if
   else
   begin
-    for M in AllMatches do
-      Writeln(Format('%s:%d:%d  [%s/%s]  %s%s', [M.FilePath, M.StartLine, M.StartCol, M.Source, M.Kind, M.Text, IfThen(M.EnclosingQName <> '', '  -> ' + M.EnclosingQName, '')]));
+    for I:= 0 to High(AllMatches) do
+    begin
+      M:= AllMatches[I];
+      HopTag:= '';
+      if NearOn and (AllHops[I] >= 0) then HopTag:= '  hop=' + IntToStr(AllHops[I]);
+      EnclTag:= if M.EnclosingQName <> '' then '  -> ' + M.EnclosingQName else '';
+      Writeln(Format('%s:%d:%d  [%s/%s]  %s%s%s', [M.FilePath, M.StartLine, M.StartCol, M.Source, M.Kind, M.Text, EnclTag, HopTag]));
+    end;
     Writeln(Format('%d match(es)', [Length(AllMatches)]));
+  end;
+  ReportCap(Omitted, Lim, True, '--limit', Lim * 2, nil, AArgs.AsJson);
+  if Length(AllMatches) > 0 then
+  begin
+    TextChars:= 0;
+    SetLength(UsagePaths, Length(AllMatches));
+    for var K:= 0 to High(AllMatches) do
+    begin
+      UsagePaths[K]:= AllMatches[K].FilePath;
+      Inc(TextChars, Length(AllMatches[K].FilePath) + Length(AllMatches[K].Text) + Length(AllMatches[K].EnclosingQName));
+    end;
+    LogReaderUsage('query', PathsToScan[0], (TextChars + USAGE_BYTES_PER_TOKEN - 1) div USAGE_BYTES_PER_TOKEN, UsagePaths);
   end;
   if Length(AllMatches) > 0 then Result:= 0 else Result:= 1;
 end; // function
@@ -7827,6 +8723,109 @@ begin
   if Lockstep then APaths:= OutPaths;
 end; // procedure
 
+
+/// <summary>drag-lint query --concept: ranked BM25 search over identifier words
+/// (camelCase split) and doc-comment prose, for the "I know what it does, not
+/// what it is called" question.</summary>
+/// <param name="AArgs">Parsed CLI args. ConceptQuery is the free-text words;
+/// Limit caps the hits (default 20); Kind optionally filters (comma-separated);
+/// AsJson selects JSON output.</param>
+/// <returns>0 when there were hits; 1 when none; 2 on a usage error or an
+/// unreadable --db; 3 when the index has no concept-search table yet
+/// (ConceptSearchReady False) -- a one-line note goes to stderr.</returns>
+/// <remarks>Read-only. Searches the first resolved DB only. Score is -bm25 over
+/// (tokens 3, summary 2, remarks 1); larger ranks first.</remarks>
+function DoQueryConcept(const AArgs: TArgs): Integer;
+const
+  CONCEPT_DEFAULT_LIMIT  = 20;
+  CONCEPT_EXIT_NOT_READY = 3;
+var
+  PathsToScan: TArray<string>;
+  DbPath     : string        ;
+  Store      : ISymbolStore  ;
+  Lim        : Integer       ;
+  Hits       : TArray<TConceptHit>;
+  H          : TConceptHit   ;
+  AllCount   : Integer       ;
+  Rank       : Integer       ;
+  RoOk       : Boolean       ;
+  JRoot      : TJSONObject   ;
+  JArr       : TJSONArray    ;
+  JObj       : TJSONObject   ;
+  JMatched   : TJSONArray    ;
+  Col        : string        ;
+begin
+  if not ExplicitDbsExist(AArgs, 'query --concept') then Exit(2);
+  if Trim(AArgs.ConceptQuery) = '' then
+  begin
+    Writeln('ERROR: query --concept requires words');
+    Exit(2);
+  end;
+  if AArgs.Limit > 0 then Lim:= AArgs.Limit else Lim:= CONCEPT_DEFAULT_LIMIT;
+  PathsToScan:= ResolveConsumerDbs(AArgs);
+  if (Length(PathsToScan) = 0) or not TFile.Exists(PathsToScan[0]) then
+  begin
+    Writeln('ERROR: database not found; pass --db <file.sqlite> (run "drag-lint index <path>" first).');
+    Exit(2);
+  end;
+  DbPath:= PathsToScan[0];
+  Store:= OpenReadOnlyStore(DbPath, RoOk);
+  if not RoOk then
+  begin
+    StaleDbRefusesRun(AArgs, 'query --concept', DbPath);
+    Exit(2);
+  end;
+  if not Store.ConceptSearchReady then
+  begin
+    Writeln(ErrOutput, 'note: this index has no concept-search table yet; run "drag-lint index" on it once -- it backfills from the existing rows, no re-parse.');
+    Exit(CONCEPT_EXIT_NOT_READY);
+  end;
+  Hits:= Store.SearchConcept(AArgs.ConceptQuery, Lim, AArgs.Kind);
+  AllCount:= 0;
+  for H in Hits do if H.AllTerms then Inc(AllCount);
+  if AArgs.AsJson then
+  begin
+    JRoot:= TJSONObject.Create;
+    try
+      JRoot.AddPair('query', AArgs.ConceptQuery);
+      JRoot.AddPair('count', TJSONNumber.Create(Length(Hits)));
+      JRoot.AddPair('allTermsCount', TJSONNumber.Create(AllCount));
+      JArr:= TJSONArray.Create;
+      JRoot.AddPair('hits', JArr);
+      Rank:= 0;
+      for H in Hits do
+      begin
+        Inc(Rank);
+        JObj:= TJSONObject.Create;
+        JObj.AddPair('rank', TJSONNumber.Create(Rank));
+        JObj.AddPair('qname', H.QualifiedName);
+        JObj.AddPair('kind', H.Kind);
+        JObj.AddPair('file', H.FilePath);
+        JObj.AddPair('line', TJSONNumber.Create(H.Line));
+        JObj.AddPair('score', TJSONNumber.Create(H.Score));
+        JMatched:= TJSONArray.Create;
+        for Col in H.Matched.Split([',']) do if Col <> '' then JMatched.Add(Col);
+        JObj.AddPair('matched', JMatched);
+        JObj.AddPair('allTerms', TJSONBool.Create(H.AllTerms));
+        JArr.AddElement(JObj);
+      end;
+      Writeln(JRoot.ToJSON);
+    finally
+      JRoot.Free;
+    end; // try
+  end // if
+  else
+  begin
+    Writeln(Format('concept "%s": %d hit(s) (%d match every word)', [AArgs.ConceptQuery, Length(Hits), AllCount]));
+    Rank:= 0;
+    for H in Hits do
+    begin
+      Inc(Rank);
+      Writeln(Format('  %d  %.2f  %-10s %s   %s:%d   [%s]', [Rank, H.Score, H.Kind, H.QualifiedName, H.FilePath, H.Line, H.Matched]));
+    end;
+  end;
+  if Length(Hits) > 0 then Result:= 0 else Result:= 1;
+end; // function
 
 { ---------------------------------------------------------------------------
   query --name-like <term> -- substring search over symbol NAMES.
@@ -7965,6 +8964,7 @@ begin
   if not ExplicitDbsExist(AArgs, 'query') then Exit(2);
   // v0.57 Task 8: text-content search routes to its own handler.
   if AArgs.TextQuery <> '' then Exit(DoQueryText(AArgs));
+  if AArgs.ConceptQuery <> '' then Exit(DoQueryConcept(AArgs));
   // substring/discovery search over NAMES (distinct from --name, whose
   // contract stays exact-plus-edit-distance-fallback).
   if AArgs.NameLike <> '' then Exit(DoQueryNameLike(AArgs));
@@ -8024,6 +9024,8 @@ begin
         with caller_line OMITTED when the enclosing symbol is unknown.
         Pinned by run_query_callers_shared_guard.ps1. }
       var TotalCallers:= 0;
+      var CallerFiles: TArray<string>:= nil;
+      var ResTally: TResolutionTally:= Default(TResolutionTally);
       var JOut: TJSONArray:= nil;
       if AArgs.AsJson then JOut:= TJSONArray.Create;
       try
@@ -8037,7 +9039,7 @@ begin
             Continue; { manifest-resolved: stale DB reported, scan the rest }
           end;
 
-          for var Row in ResolvedCallersForName(Store, AArgs.Name) do
+          for var Row in ResolvedCallersForName(Store, AArgs.Name, True) do
           begin
             if AArgs.AsJson then
             begin
@@ -8057,6 +9059,17 @@ begin
               { 2026-09-16: a PROPERTY/FIELD access carries its mode; routine rows
                 keep the pinned key order exactly (no key when empty). }
               if Row.Mode <> '' then JObj.AddPair('mode', Row.Mode);
+              { RB-5 P1: a site that reaches the target only through the interface
+                method it implements names that method; direct rows gain no key. }
+              if Row.Via <> '' then
+              begin
+                JObj.AddPair('via'     , Row.Via    );
+                JObj.AddPair('via_kind', Row.ViaKind);
+                if Row.ViaEdge = 'ambiguous' then JObj.AddPair('via_edge', Row.ViaEdge);
+              end;
+              { XERJ item 3 (owner ruling 2026-10-28): `resolution` is the LAST key; the
+                pinned key order of run_query_callers_shared_guard.ps1 gained it on purpose. }
+              JObj.AddPair('resolution', Row.Resolution);
               JOut.AddElement(JObj);
             end
             else
@@ -8077,10 +9090,16 @@ begin
                 if Row.FirstOfTarget then Writeln(Format('  %s:', [Row.TargetQName]));
                 var Tag: string:= Row.Confidence;
                 if Row.Mode <> '' then Tag:= Tag + ', ' + Row.Mode;
-                Writeln(Format('    %s  (%s)  [%s]', [Row.CallerQName, Where, Tag]));
+                { RB-5 P1: the via group gets one header line, its sites sit one level in. }
+                if Row.ViaCount > 0 then
+                  Writeln(Format('    via %s dispatch (%s): %d site(s)%s',
+                    [Row.ViaKind, Row.Via, Row.ViaCount, (if Row.ViaEdge = 'ambiguous' then ' [ambiguous edge]' else '')]));
+                Writeln(Format('%s%s  (%s)  [%s]', [(if Row.Via <> '' then '      ' else '    '), Row.CallerQName, Where, Tag]));
               end;
             end;
             Inc(TotalCallers);
+            CallerFiles:= CallerFiles + [Row.FilePath];
+            ResTally.Add(Row.Resolution);
           end; // for Row
         end; // for DbPath
         if AArgs.AsJson then Writeln(JOut.Format(2))
@@ -8088,15 +9107,18 @@ begin
         begin
           Writeln('0 caller(s)');
           Writeln(ErrOutput, 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --name ', AArgs.Name);
-        end;
+        end
+        else Writeln(Format('%d callers (%s)', [TotalCallers, ResTally.ToText]));
       finally
         JOut.Free;
       end; // try
+      if TotalCallers > 0 then LogReaderUsage('find-callers', PathsToScan[0], TotalCallers * USAGE_TOKENS_PER_ROW, CallerFiles);
       if TotalCallers = 0 then Result:= 1 else Result:= 0;
       Exit;
     end; // if AArgs.Resolved
 
     var TotalRefs:= 0;
+    var RefFiles: TArray<string>:= nil;
     for DbPath in PathsToScan do
     begin
       var RoOk: Boolean;
@@ -8116,8 +9138,10 @@ begin
         if AArgs.ContextLines > 0 then PrintReferencesWithContext(Store, Refs, AArgs.ContextLines, AArgs.AsJson)
         else PrintReferences(Store, Refs, AArgs.AsJson);
         Inc(TotalRefs, Length(Refs));
+        for var Rf: TReference in Refs do RefFiles:= RefFiles + [Store.GetFilePath(Rf.FileId)];
       end;
     end; // for
+    if TotalRefs > 0 then LogReaderUsage('find-callers', PathsToScan[0], TotalRefs * USAGE_TOKENS_PER_ROW, RefFiles);
     if (TotalRefs = 0) and (not AArgs.AsJson) then
     begin
       Writeln('0 caller(s)');
@@ -8446,6 +9470,8 @@ begin
     end;
   end;
   PrintSymbols(AllSymbols, AArgs.AsJson, AllPaths);
+  if (Length(AllSymbols) > 0) and (Length(PathsToScan) > 0) then
+    LogReaderUsage('query', PathsToScan[0], Length(AllSymbols) * USAGE_TOKENS_PER_ROW, AllPaths);
   if Length(AllSymbols) = 0 then Result:= 1
   else Result:= 0;
 end; // function
@@ -8977,14 +10003,14 @@ begin
     Q.Sql.Text:= 'WITH ref_counts AS (' + '  SELECT name_text, COUNT(*) AS fanin FROM refs ' + '  GROUP BY name_text ORDER BY fanin DESC LIMIT :lim' + ') ' +
     'SELECT rc.name_text AS name, rc.fanin, ' + '       (SELECT kind FROM symbols WHERE name = rc.name_text LIMIT 1) ' + '         AS kind, ' +
     '       (SELECT qualified_name FROM symbols WHERE name = rc.name_text ' + '        ORDER BY id LIMIT 1) AS sample_qname ' + 'FROM ref_counts rc ORDER BY rc.fanin DESC';
-    Q.ParamByName('lim').AsInteger:= Limit;
+    Q.ParamByName('lim').AsInteger:= Limit + 1; { cap + 1: one extra row proves the cap hid something }
     Q.Open;
     Rows:= 0;
     if AArgs.AsJson then
     begin
       JArr:= TJSONArray.Create;
       try
-        while not Q.Eof do
+        while (not Q.Eof) and (Rows < Limit) do
         begin
           JObj:= TJSONObject.Create;
           JObj.AddPair('name', Q.FieldByName('name').AsString);
@@ -9004,7 +10030,7 @@ begin
     begin
       Writeln(Format('%6s  %-22s  %-10s  %s', ['fan-in', 'name', 'kind', 'sample qualified name']));
       Writeln(StringOfChar('-', 90));
-      while not Q.Eof do
+      while (not Q.Eof) and (Rows < Limit) do
       begin
         Writeln(Format(
             '%6d  %-22s  %-10s  %s', [Q.FieldByName('fanin').AsInteger, Q.FieldByName('name').AsString, Q.FieldByName('kind').AsString, Q.FieldByName('sample_qname').AsString]));
@@ -9013,6 +10039,7 @@ begin
       end;
       Writeln(Format('%d row(s) (fan-in = how many references in the index ' + 'use this name; ambiguous if multiple symbols share it)', [Rows]));
     end;
+    ReportCap(Ord(not Q.Eof), Limit, True, '--limit', Limit * 2, nil, AArgs.AsJson);
   finally
     Q.Free;
     Conn.Free;
@@ -9563,7 +10590,11 @@ var
   UsedDb: string        ;
 begin
   if not ExplicitDbsExist(AArgs, 'hover') then Exit(2);
-  if AArgs.QName = '' then begin Writeln('Usage: drag-lint hover --qname <Foo.Bar> [--db <path>] ' + '[--format md|plain|json]'); Exit(2); end;
+  if AArgs.QName = '' then
+  begin
+    Writeln('Usage: drag-lint hover --qname <Foo.Bar> [--db <path>] ' + '[--format md|plain|json] [--write-back]');
+    Exit(2);
+  end;
 
   // v0.94.1 BUGFIX: hover must search ALL --db paths, not just one. The IDE (and
   // manifest resolution) pass several --db values -- e.g. a project index, a SQL
@@ -9586,7 +10617,14 @@ begin
   begin
     if not TFile.Exists(Db) then Continue;
     var RoOk: Boolean;
-    Store:= OpenReadOnlyStore(Db, RoOk);
+    { --write-back: open WRITABLE so a property type recovered from an ancestor
+      is memoized onto the row (DRagLint.Convert.PropTree.ResolvePropertyDeclaredType).
+      A writable open that fails falls back to read-only -- memoization is
+      best-effort, the hover itself never depends on it. }
+    Store:= nil;
+    if AArgs.WriteBack then Store:= OpenWritableStore(Db, RoOk);
+    if Store = nil then Store:= OpenReadOnlyStore(Db, RoOk)
+    else if not RoOk then Store:= OpenReadOnlyStore(Db, RoOk);
     if not RoOk then
     begin
       if StaleDbRefusesRun(AArgs, 'hover', Db) then Exit(2);
@@ -9632,9 +10670,9 @@ begin
   if (Fmt = 'json') or (Fmt = 'md') then
   begin
     if Fmt = 'json' then Write(DRagLint.Hover.Renderer.RenderHoverJson(Model, Asm_.FactLines))
-    else Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs, Asm_.FactLines));
+    else Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs, Asm_.FactLines, Asm_.DeclaredType));
   end
-  else Write(RenderHoverPlain(Syms[0], Doc));
+  else Write(DRagLint.Hover.Renderer.RenderHoverPlain(Syms[0], Doc, Asm_.DeclaredType));
   Result:= 0;
 end; // function
 
@@ -9793,6 +10831,19 @@ begin
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if (not RoOk) and StaleDbRefusesRun(AArgs, 'impact', AArgs.DbPath) then Exit(2);
   Levels:= Store.FindTransitiveCallers(TargetName, Depth);
+  { RB-5 P1: what dispatches to / from this method. An interface method lists
+    its implementors; an implementor lists the interface sites that reach it. }
+  var DispImpls: TArray<TDispatchLink>:= [];
+  var DispVia  : TQueryCallerRows     := [];
+  var DispSyms : TArray<TSymbol>      := Store.FindSymbolsByQualifiedName(AArgs.QName);
+  if Length(DispSyms) = 0 then DispSyms:= Store.FindSymbolsByExactName(AArgs.QName);
+  for var DS in DispSyms do
+    if DS.Kind in [skProcedure, skFunction, skMethod] then
+    begin
+      for var DL in Store.FindDispatchLinks(DS.Id, False) do
+        if DL.Kind = 'implements' then DispImpls:= DispImpls + [DL];
+      DispVia:= DispVia + DispatchCallersOf(Store, DS.Id);
+    end;
   if SameText(AArgs.Format, 'json') then
   begin
     JRoot:= TJSONObject.Create;
@@ -9808,6 +10859,24 @@ begin
         JArr.AddElement(JLevel);
       end;
       JRoot.AddPair('levels', JArr);
+      if Length(DispImpls) > 0 then
+      begin
+        var JImpls:= TJSONArray.Create;
+        for var DL in DispImpls do JImpls.Add(DL.OtherQName);
+        JRoot.AddPair('implementors', JImpls);
+      end;
+      var JVia: TJSONArray:= nil;
+      for var VR in DispVia do
+        if VR.ViaCount > 0 then
+        begin
+          if JVia = nil then JVia:= TJSONArray.Create;
+          var JV:= TJSONObject.Create;
+          JV.AddPair('via'  , VR.Via);
+          JV.AddPair('kind' , VR.ViaKind);
+          JV.AddPair('sites', TJSONNumber.Create(VR.ViaCount));
+          JVia.AddElement(JV);
+        end;
+      if JVia <> nil then JRoot.AddPair('via_dispatch', JVia);
       Writeln(JRoot.Format(2));
     finally
       JRoot.Free;
@@ -9823,6 +10892,16 @@ begin
       else Writeln(Format('  Depth %d: %3d callers in %d units', [L.Depth, L.CallerCount, L.UnitCount]));
       Prev:= L.CallerCount;
     end;
+    if Length(DispImpls) > 0 then
+    begin
+      Writeln('  implementors (interface dispatch):');
+      for var DL in DispImpls do
+        Writeln(Format('    %s%s', [DL.OtherQName, (if DL.Confidence = 'ambiguous' then ' [ambiguous edge]' else '')]));
+    end;
+    for var VR in DispVia do
+      if VR.ViaCount > 0 then
+        Writeln(Format('  via %s dispatch (%s): %d site(s)%s',
+          [VR.ViaKind, VR.Via, VR.ViaCount, (if VR.ViaEdge = 'ambiguous' then ' [ambiguous edge]' else '')]));
     if Length(Levels) = 0 then begin Writeln('  (no callers)'); Exit (1 ); end;
   end; // else
   Result:= 0;
@@ -10195,7 +11274,7 @@ var
   JHandles   : TJSONArray    ; { 1.36.0 handle / handle-all rows }
   JImpact    : TJSONArray    ;
 
-  procedure AddRefRow(AArr: TJSONArray; const AFile: string; ALine, ACol: Integer);
+  procedure AddRefRow(AArr: TJSONArray; const AFile: string; ALine, ACol: Integer; const AResolution: string);
   var
     O: TJSONObject;
   begin
@@ -10203,6 +11282,7 @@ var
     O.AddPair('file', AFile);
     O.AddPair('line', TJSONNumber.Create(ALine));
     O.AddPair('col' , TJSONNumber.Create(ACol ));
+    if AResolution <> '' then O.AddPair('resolution', AResolution); { XERJ item 3: LAST key }
     AArr.AddElement(O);
   end;
 
@@ -10295,7 +11375,7 @@ begin
         JDecls.AddElement(DeclO);
       end;
 
-      for R in UsageRefsForName(Store, AArgs.Name, Decls) do AddRefRow(GroupFor(R), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol);
+      for R in UsageRefsForName(Store, AArgs.Name, Decls) do AddRefRow(GroupFor(R), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
 
       if (Width = 'wide') or (Width = 'very-wide') then
         for L in Store.FindTransitiveCallers(AArgs.Name, Depth) do
@@ -10452,6 +11532,10 @@ const
     a COMMENT, so appending a marker comment changes the very text the rule
     reads. }
   COMMENT_SENSITIVE: array[0..2] of string = ('empty-except', 'empty-case-branch', 'commented-out-code');
+  { The rules whose findings carry a TYPE scope (TLintFinding.ScopeFile/ScopeLine),
+    and the shape of the enum declaration line their type-level marker sits on. }
+  TYPE_SCOPE_RULES: array[0..1] of string = ('unused-enum-value', 'enum-ordinal-cast');
+  ENUM_DECL_LINE = '^\s*&?[A-Za-z_][A-Za-z0-9_]*\s*=\s*\(';
 var
   LineCache : TDictionary<string, TArray<string>>;
   Lines     : TArray<string>                     ;
@@ -10526,6 +11610,30 @@ var
       if TFile.Exists(AFile) then Result:= TFile.ReadAllLines(AFile) else SetLength(Result, 0);
       LineCache.Add(AFile, Result);
     end;
+  end;
+
+  { The first dl:ok marker for ARule on ANOTHER site of a finding -- a pair's
+    other end, a type's declaration -- accounted as used whichever finding it
+    then suppresses. AWant is that line's window hash. False when the line is
+    out of range or carries no marker for ARule. }
+  function SiteMarker(const ASiteFile: string; ASiteLine: Integer; const ARule: string;
+    out AMarker: TReviewMarker; out AWant: string): Boolean;
+  var
+    SLines: TArray<string>;
+  begin
+    Result:= False;
+    AMarker:= Default(TReviewMarker);
+    AWant  := '';
+    SLines:= LinesOf(ASiteFile);
+    if (ASiteLine < 1) or (ASiteLine > Length(SLines)) then Exit;
+    for var SM: TReviewMarker in TReviewMarkers.Parse(SLines[ASiteLine - 1]) do
+      if SameText(SM.RuleId, ARule) then
+      begin
+        Accounted.AddOrSetValue(MarkerKey(ASiteFile, ASiteLine, SM.RuleId), True);
+        AMarker:= SM;
+        AWant  := TReviewMarkers.HashWindow(SLines, ASiteLine - 1);
+        Exit(True);
+      end;
   end;
 
 begin
@@ -10713,28 +11821,46 @@ begin
         it is accounted whichever end suppresses (so neither end's marker is
         called unused), and it is verified against the line it was hashed on
         -- the partner's own window, not the anchor's. }
-      if (F.RelatedLine > 0) and (F.RelatedFile <> '') then
+      if (F.RelatedLine > 0) and (F.RelatedFile <> '') and SiteMarker(F.RelatedFile, F.RelatedLine, F.RuleId, M, Want)
+         and not Suppressed then
       begin
-        var RLines: TArray<string>:= LinesOf(F.RelatedFile);
-        if F.RelatedLine <= Length(RLines) then
-          for M in TReviewMarkers.Parse(RLines[F.RelatedLine - 1]) do
-          begin
-            if not SameText(M.RuleId, F.RuleId) then Continue;
-            Accounted.AddOrSetValue(MarkerKey(F.RelatedFile, F.RelatedLine, M.RuleId), True);
-            if not Suppressed then
-            begin
-              Want:= TReviewMarkers.HashWindow(RLines, F.RelatedLine - 1);
-              if (M.Hash = '') or SameText(M.Hash, Want) then Suppressed:= True
-              { a placeholder hash suppresses nothing and is reported by the
-                scanned-file walk below; only a real, mismatching hash is stale }
-              else if not (TReviewMarkers.IsPlaceholderHash(M.Hash) or TReviewMarkers.IsMalformedHash(M.Hash)) then
-                EmitHint(F.RelatedFile, F.RelatedLine, 'review-marker-stale',
-                  Format('dl:ok marker for "%s" (on the other end of this pair) records @%s but line %d now hashes to @%s. ' +
-                         'Re-review, then: allow --fix-line %d --fix-rule %s',
-                         [M.RuleId, M.Hash, F.RelatedLine, Want, F.RelatedLine, M.RuleId]), M.RuleId);
-            end;
-            Break;
-          end;
+        if (M.Hash = '') or SameText(M.Hash, Want) then Suppressed:= True
+        { a placeholder hash suppresses nothing and is reported by the
+          scanned-file walk below; only a real, mismatching hash is stale }
+        else if not (TReviewMarkers.IsPlaceholderHash(M.Hash) or TReviewMarkers.IsMalformedHash(M.Hash)) then
+          EmitHint(F.RelatedFile, F.RelatedLine, 'review-marker-stale',
+            Format('dl:ok marker for "%s" (on the other end of this pair) records @%s but line %d now hashes to @%s. ' +
+                   'Re-review, then: allow --fix-line %d --fix-rule %s',
+                   [M.RuleId, M.Hash, F.RelatedLine, Want, F.RelatedLine, M.RuleId]), M.RuleId);
+      end;
+      { THE TYPE SCOPE (lane ENUMRULES, owner rule 2026-10-28). A finding ABOUT a
+        type -- an unused value of an enum, a hard-coded ordinal cast of it -- also
+        honours a marker on that type's declaration line (F.ScopeFile:ScopeLine),
+        so ONE `dl:ok <rule-id>` reviews every finding of that rule for the type:
+        the 65 filler values that pad a DB-stored ordinal, or every cast of a
+        wire-protocol enum, in any unit. Same contract as the pair end above:
+        accounted on the MARKER'S line whichever finding it suppresses (so it is
+        not called unused), verified against the window hash of the type line
+        (a re-shaped declaration re-opens the review), and a hint per marker,
+        never per finding (EmitHint's key). Unlike the pair end, a marker with
+        no @hash says so, as the finding's own line does. }
+      if (F.ScopeLine > 0) and (F.ScopeFile <> '') and SiteMarker(F.ScopeFile, F.ScopeLine, F.RuleId, M, Want)
+         and not Suppressed then
+      begin
+        if M.Hash = '' then
+        begin
+          Suppressed:= True;
+          EmitHint(F.ScopeFile, F.ScopeLine, 'review-marker-stale',
+            Format('dl:ok marker for "%s" on this type declaration carries no @hash, so it cannot be checked ' +
+                   'against the code -- re-mark it as %s@%s.', [M.RuleId, M.RuleId, Want]), M.RuleId);
+        end
+        else if SameText(M.Hash, Want) then
+          Suppressed:= True
+        else if not (TReviewMarkers.IsPlaceholderHash(M.Hash) or TReviewMarkers.IsMalformedHash(M.Hash)) then
+          EmitHint(F.ScopeFile, F.ScopeLine, 'review-marker-stale',
+            Format('dl:ok marker for "%s" on this type declaration records @%s but line %d now hashes to @%s. ' +
+                   'Re-review the type, then re-mark it as %s@%s.',
+                   [M.RuleId, M.Hash, F.ScopeLine, Want, M.RuleId, Want]), M.RuleId);
       end;
       if not Suppressed then Kept.Add(F);
     end; // for
@@ -10770,9 +11896,25 @@ begin
         than half the catalogue, and leaving them out meant a dl:ok naming one was
         never reported unused -- it fails safe, but it silently under-counts, which
         is exactly wrong when the target is zero findings. BuildCatalog('') reads
-        the default <exe-dir>\rules. }
-      for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog('', '') do
-        Known.AddOrSetValue(LowerCase(RI.Id), True);
+        the default <exe-dir>\rules.
+        BUILT ON THE FIRST MARKER, NOT UP FRONT (lane PERF2, 2026-10-28): the
+        catalogue is every rules\*.json sidecar plus compliance.json, 0.06-0.10 s
+        per `lint` process at 95 rules, paid by every file whether or not it holds
+        a single dl:ok -- the [after-checkers] phase went 0.03 -> 0.25 s. Only the
+        ids are needed here, so the compliance labels are skipped too. Pinned by
+        run_rule_load_parallel.ps1 ([after-checkers] median). }
+      var KnownBuilt: Boolean:= False;
+      var IsKnownRule: TFunc<string, Boolean>:=
+        function(AId: string): Boolean
+        begin
+          if not KnownBuilt then
+          begin
+            for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog('', '', {AWithLabels=}False) do
+              Known.AddOrSetValue(LowerCase(RI.Id), True);
+            KnownBuilt:= True;
+          end;
+          Result:= Known.ContainsKey(LowerCase(AId));
+        end;
       for var SF: string in AScannedFiles do
       begin
         Lines:= LinesOf(SF);
@@ -10806,7 +11948,7 @@ begin
               quotes a realistic hash (`bare-except@7f3a`) or a placeholder id
               (`<rule-id>`), and neither passes both tests. }
             for M in TReviewMarkers.EmbeddedMarkers(Lines[LN - 1], (LN <= Length(InBlock)) and InBlock[LN - 1]) do
-              if Known.ContainsKey(LowerCase(M.RuleId)) and TReviewMarkers.IsPlaceholderHash(M.Hash) then
+              if TReviewMarkers.IsPlaceholderHash(M.Hash) and IsKnownRule(M.RuleId) then
                 EmitHint(SF, LN, 'review-marker-placeholder-hash',
                   Format('dl:ok for "%s" sits in a block or doc comment and carries the placeholder @%s -- only a ' +
                          '`//` line comment is read as a marker, so this suppresses NOTHING. Re-review, then ' +
@@ -10842,7 +11984,7 @@ begin
               colon is correct too and lands with the sleep-in-vcl scoping fix,
               so that activating those 11 markers does not launder 11 findings
               they have said they do not accept. }
-            if not Known.ContainsKey(LowerCase(M.RuleId)) then
+            if not IsKnownRule(M.RuleId) then
             begin
               EmitHint(SF, LN, 'review-marker-malformed',
                 { EVERY accepted form, or this message lies to the one reader who
@@ -10902,6 +12044,12 @@ begin
               have accounted its marker, so "no longer matches" would be a claim the
               run has no evidence for. See LintUnjudgedMarkerRules. }
             if MatchStr(LowerCase(M.RuleId), AUnjudgedRules) then Continue;
+            { A TYPE-SCOPE marker (ENUMRULES) reviews findings that may sit in
+              OTHER units -- the casts of an enum declared here. A file-scoped run
+              (AUnjudgedRules is never nil there) did not evaluate those units, so
+              it cannot judge the marker on an enum declaration line; lint-all can. }
+            if (AUnjudgedRules <> nil) and MatchText(M.RuleId, TYPE_SCOPE_RULES)
+               and TRegEx.IsMatch(Lines[LN - 1], ENUM_DECL_LINE) then Continue;
             if not Accounted.ContainsKey(MarkerKey(SF, LN, M.RuleId)) then
               EmitHint(SF, LN, 'review-marker-unused',
                 Format('dl:ok marker for "%s" no longer matches any finding on this line -- remove it.', [M.RuleId]));
@@ -10921,6 +12069,88 @@ begin
     LineCache.Free;
   end; // try
 end; // function
+
+/// <summary>Applies a built-in compliance profile (cwe, cert, misra, cwe-top25) to ACfg: enables the
+/// rules labelled under the standard, disables every other rule, and floors the severity of the
+/// selected rules at warning (a rule already at warning or error keeps its level).</summary>
+/// <param name="ACfg">The config to update; its enabled/disabled lists are replaced.</param>
+/// <param name="AProfile">A name accepted by IsComplianceProfile.</param>
+/// <param name="ARulesDir">The --rules-dir value ('' = rules beside the exe).</param>
+procedure ApplyComplianceProfile(var ACfg: TLintConfig; const AProfile, ARulesDir: string);
+var
+  R : TRuleInfo;
+  En, Dis: TArray<string>;
+  Sev: string;
+begin
+  for R in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(ARulesDir, '') do
+    if ComplianceProfileSelects(AProfile, R.Compliance) then
+    begin
+      En:= En + [R.Id];
+      Sev:= ACfg.ApplySeverity(R.Id, R.DefaultSeverity);
+      if not (SameText(Sev, 'warning') or SameText(Sev, 'error')) then ACfg.SetSeverityPair(R.Id, 'warning');
+    end
+    else Dis:= Dis + [R.Id];
+  ACfg.SetEnabled(En);
+  ACfg.SetDisabled(Dis);
+end;
+
+type
+  /// <summary>Owner handle for the SARIF rule-metadata map, so the lookup closure keeps it alive and frees it with the closure.</summary>
+  ISarifMetaMap = interface
+    /// <summary>The rule id to metadata map; owned by the handle.</summary>
+    function Map: TDictionary<string, TSarifRuleMeta>;
+  end;
+
+  /// <summary>Reference-counted owner of the metadata map; frees it when the last reference (the lookup closure) goes.</summary>
+  TSarifMetaMap = class(TInterfacedObject, ISarifMetaMap)
+  strict private
+    FMap: TDictionary<string, TSarifRuleMeta>;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    function Map: TDictionary<string, TSarifRuleMeta>;
+  end;
+
+constructor TSarifMetaMap.Create;
+begin
+  inherited Create;
+  FMap:= TDictionary<string, TSarifRuleMeta>.Create;
+end;
+
+destructor TSarifMetaMap.Destroy;
+begin
+  FMap.Free;
+  inherited;
+end;
+
+function TSarifMetaMap.Map: TDictionary<string, TSarifRuleMeta>;
+begin
+  Result:= FMap;
+end;
+
+/// <summary>The rule-metadata lookup the SARIF writer needs (title, category, severity, labels).</summary>
+/// <param name="ARulesDir">The --rules-dir value ('' = rules beside the exe).</param>
+/// <returns>A lookup over the rule catalog; False for an id the catalog does not know.</returns>
+function SarifMetaLookup(const ARulesDir: string): TSarifMetaLookup;
+var
+  Holder: ISarifMetaMap;
+  Meta  : TDictionary<string, TSarifRuleMeta>;
+  R     : TRuleInfo;
+  M     : TSarifRuleMeta;
+begin
+  Holder:= TSarifMetaMap.Create;
+  Meta:= Holder.Map;
+  for R in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(ARulesDir, '') do
+  begin
+    M.Title:= R.Title; M.Category:= R.Category; M.Severity:= R.DefaultSeverity; M.Labels:= R.Compliance;
+    Meta.AddOrSetValue(R.Id, M);
+  end;
+  Result:=
+    function(const ARuleId: string; out AMeta: TSarifRuleMeta): Boolean
+    begin
+      Result:= Holder.Map.TryGetValue(ARuleId, AMeta);
+    end;
+end;
 
 /// <summary>Builds the effective TLintConfig for a command: discovers the config
 /// file (--config, else drag-lint-lint.json in CWD), applies the named --profile,
@@ -11036,8 +12266,73 @@ begin
 
   if (Path = '') and TFile.Exists('drag-lint-lint.json') then Path:= 'drag-lint-lint.json';
   Result:= TLintConfig.Load(Path, AArgs.Profile);
+  if IsComplianceProfile(AArgs.Profile) and not Result.UserProfileFound then
+    ApplyComplianceProfile(Result, AArgs.Profile, AArgs.RulesDir);
   if AArgs.Disable <> '' then Result.AddDisabled(AArgs.Disable.Split([',', ' ', ';']));
   if AArgs.Enable  <> '' then Result.AddEnabled (AArgs.Enable .Split([',', ' ', ';']));
+end;
+
+var
+  { THE RULE GATE OF THIS RUN (two-way modernize, 1.38). Set once by
+    ApplyRunTargetCompiler at the top of lint / lint-all / rules and read by
+    FinalizeAndOutput and DoRules. Its zero value is inactive -- Drops and
+    ForcesOn answer False for every id -- so a verb that never calls
+    ApplyRunTargetCompiler, or a run at the default target, takes no new path. }
+  GRunTargetGate: TTargetRuleGate;
+
+/// <summary>Resolves the run's target compiler, publishes it
+/// (SetActiveTargetCompiler) and builds GRunTargetGate from the rule catalog.</summary>
+/// <param name="AArgs">--target-compiler, and --project for "auto".</param>
+/// <param name="AConfigValue">The lint config's target_compiler (after --profile), or ''.</param>
+/// <returns>False after printing the refusal to stderr (an unknown token, or
+/// "auto" that cannot be mapped); the verb then exits 2.</returns>
+/// <remarks>The project-context hook: the LSP lane passes the .dlcontext.json
+/// targetCompiler as the third argument of ResolveTargetCompiler. The catalog
+/// is built only for a non-default target.</remarks>
+function ApplyRunTargetCompiler(const AArgs: TArgs; const AConfigValue: string): Boolean;
+var
+  V    : Integer;
+  Err  : string;
+  Dproj: string;
+  Cat  : TArray<TRuleInfo>;
+  Ids  : TArray<string>;
+  Needs: TArray<Integer>;
+  Since: TArray<Integer>;
+  I    : Integer;
+begin
+  Dproj:= if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then AArgs.ProjectPath else '';
+  if not ResolveTargetCompiler(AArgs.TargetCompiler, AConfigValue, '', Dproj, V, Err) then
+  begin
+    Writeln(ErrOutput, 'drag-lint: ' + Err);
+    Exit(False);
+  end;
+  SetActiveTargetCompiler(V);
+  GRunTargetGate:= Default(TTargetRuleGate);
+  GRunTargetGate.Target:= V;
+  if V <> DEFAULT_TARGET_COMPILER then
+  begin
+    Cat:= TRuleCatalog.BuildCatalog(AArgs.RulesDir, '', False);
+    SetLength(Ids, Length(Cat));
+    SetLength(Needs, Length(Cat));
+    SetLength(Since, Length(Cat));
+    for I:= 0 to High(Cat) do
+    begin
+      Ids[I]  := Cat[I].Id;
+      Needs[I]:= Cat[I].NeedsCompiler;
+      Since[I]:= Cat[I].CompatSince;
+    end;
+    GRunTargetGate:= TTargetRuleGate.Build(V, Ids, Needs, Since);
+  end;
+  Result:= True;
+end;
+
+/// <summary>Does rule AInfo run by default at this run's target compiler?</summary>
+/// <param name="AInfo">A catalog row.</param>
+/// <returns>DefaultEnabled, lifted for a compat rule the target switches on and
+/// cleared for a rule the target gates; equal to DefaultEnabled at 37.</returns>
+function RuleActiveAtRunTarget(const AInfo: TRuleInfo): Boolean;
+begin
+  Result:= (AInfo.DefaultEnabled or GRunTargetGate.ForcesOn(AInfo.Id)) and not GRunTargetGate.Drops(AInfo.Id);
 end;
 
 { The "may drag-lint touch this file at all?" half of ownership, as a predicate
@@ -11064,703 +12359,6 @@ begin
       Result:= Cfg.IsPathExcluded(APath);
     end;
 end;
-
-{ The set of rule-ids that have a registered, mechanical, side-effect-free
-  quick-fix. Single source of truth for both the rules-catalog 'fixable' flag
-  and the fix verbs. Widening AutoFix = add an id here AND a branch in
-  BuildAutofixEdits (kept in lockstep; a guard test asserts they agree).
-  EXCEPTION: store-backed fixes (doc-drift, missing-doc, method-pascalcase,
-  local-var-casing, const-casing, field-name-prefix, param-name-prefix,
-  type-name-prefix, raise-bare-exception) are fixable but have NO
-  BuildAutofixEdits branch --
-  doc-drift/missing-doc edits come from TDocumenter.BuildFor and the naming
-  re-casing/prefix-adding edits come from DRagLint.Refactor.NamingFix.Build-
-  NamingFixEdits (the rename engine), both via a store-backed append in
-  FinalizeAndOutput, not from the pure-text edit builder.
-  raise-bare-exception joins them: its replacement class NAME is read out of
-  the exceptions unit's managed block, so a pure-text builder could not know
-  it -- BuildExceptionRewriteEdits supplies those edits the same way. }
-const
-  FIXABLE_RULE_IDS: array[0..22] of string = (
-    'self-assignment', 'redundant-parentheses', 'redundant-cast', 'redundant-not-not', 'redundant-as-tobject', 'boolean-comparison-true', 'reserved-word-casing',
-    'redundant-assigned-free', 'off-by-one-count', 'doc-drift', 'missing-doc',
-    'method-pascalcase', 'local-var-casing', 'const-casing',
-    'field-name-prefix', 'param-name-prefix', 'type-name-prefix',
-    'nil-comparison', 'uppercase-compare', 'uppercase-compare-always-false', 'unused-local',
-    { local-field-prefix: strips an F prefix off a LOCAL. Safest rename in the
-      family -- single-routine scope, so no call site can be affected. }
-    'local-field-prefix',
-    { raise-bare-exception: `raise Exception.Create('x')` -> the generated
-      class for that message, plus the uses entry. Gated on exceptions-sync
-      having run, and it SKIPS any file that tests the class exactly. }
-    'raise-bare-exception');
-
-function IsFixableRule(const ARuleId: string): Boolean;
-var
-  S: string;
-begin
-  for S in FIXABLE_RULE_IDS do
-    if SameText(S, ARuleId) then Exit(True);
-  Result:= False;
-end;
-
-{ The NAMING fixes. Each rewrites a declaration and every use the index knows
-  about -- project-wide -- so `lint --fix` applies one only when the config
-  opts it in ("autofix": [...] in drag-lint-lint.json) AND a store is open.
-  One list, read by the fixer AND by `rules --json` (`fix_opt_in`): the IDE
-  counted these as fixable, offered "Fix all in unit (78)" on ORM3's
-  BASICS.PAS, and the run then reported "no fixable findings" (2026-10-13). }
-const
-  OPT_IN_FIX_RULE_IDS: array[0..6] of string = (
-    'method-pascalcase', 'local-var-casing', 'const-casing', 'field-name-prefix',
-    'param-name-prefix', 'type-name-prefix', 'local-field-prefix');
-
-/// <summary>Is ARuleId a fixable rule whose fix applies only when opted in?</summary>
-/// <param name="ARuleId">A lint rule id; compared case-insensitively.</param>
-/// <returns>True for the naming fixes in OPT_IN_FIX_RULE_IDS.</returns>
-function IsOptInFixRule(const ARuleId: string): Boolean;
-var
-  S: string;
-begin
-  for S in OPT_IN_FIX_RULE_IDS do
-    if SameText(S, ARuleId) then Exit(True);
-  Result:= False;
-end;
-
-function FixableRuleIds: TArray<string>;
-var
-  i: Integer;
-begin
-  SetLength(Result, Length(FIXABLE_RULE_IDS));
-  for i:= 0 to High(FIXABLE_RULE_IDS) do Result[i]:= FIXABLE_RULE_IDS[i];
-end;
-
-{ Behaviour-CHANGING fixes: still applied by Fix-it/Fix-all, but tagged so a
-  human/AI orchestrator is warned. off-by-one-count appends ' - 1' to a loop
-  bound, which breaks an intentionally-inclusive loop.
-  uppercase-compare-always-false recases the literal so a comparison that could
-  NEVER be true becomes capable of being true -- that is the whole point of the
-  fix, but it means a previously-dead branch starts executing, so a human has to
-  confirm the branch was meant to run. }
-const
-  RISKY_FIX_RULE_IDS: array[0..1] of string = ('off-by-one-count', 'uppercase-compare-always-false');
-
-  /// <summary>True iff the rule's registered fix is behaviour-CHANGING (not merely
-  /// a redundant-code cleanup). Such fixes are still applied, but callers surface a
-  /// 'risky' flag so a human/AI reviews before trusting a batch apply.</summary>
-function IsRiskyFixRule(const ARuleId: string): Boolean;
-var
-  S: string;
-begin
-  for S in RISKY_FIX_RULE_IDS do
-    if SameText(S, ARuleId) then Exit(True);
-  Result:= False;
-end;
-
-{ Fixable rules whose fix is offered ONLY for a single targeted finding (the IDE
-  "Fix it" on one decl, or `lint-all --fix --fix-line/--fix-rule`), and DELIBERATELY
-  EXCLUDED from the blanket batch (`lint-all --fix` / "Fix all"). Currently only
-  missing-doc: batch-documenting every undocumented decl project-wide is what
-  `document --project` is for (facts-only default + --stubs control); folding it
-  into the blanket batch would inject TODO stubs across a whole project. }
-const
-  SINGLE_FIX_ONLY_RULE_IDS: array[0..0] of string = ('missing-doc');
-
-  /// <summary>True iff the rule's registered fix is SINGLE-FIX-ONLY: applied for a
-  /// single targeted finding (IDE "Fix it" / --fix-line + --fix-rule) but excluded
-  /// from the blanket `lint-all --fix` batch so it does not mass-inject edits.</summary>
-function IsSingleFixOnlyRule(const ARuleId: string): Boolean;
-var
-  S: string;
-begin
-  for S in SINGLE_FIX_ONLY_RULE_IDS do
-    if SameText(S, ARuleId) then Exit(True);
-  Result:= False;
-end;
-
-/// <summary>True iff S (trimmed) needs NO extra parentheses to be the operand of
-/// a unary 'not'. That holds when S is either (a) a lone primary term -- an
-/// identifier or dotted chain, optionally followed only by balanced call '(...)'
-/// / index '[...]' groups and '.ident' segments, with NO top-level operator and
-/// NO top-level whitespace -- OR (b) already a single fully-enclosing '(...)'
-/// group (the opening paren balances exactly at the last character).
-/// Errs toward False (compound): over-wrapping 'not (X)' is harmless, but
-/// under-wrapping 'not a and b' silently changes meaning.</summary>
-function IsSingleTokenAtom(const S: string): Boolean;
-var
-  T    : string                           ;
-  i    : Integer                          ;
-  Depth: Integer                          ;
-  C    : Char                             ;
-  function IsIdentStart(Ch: Char): Boolean;
-  begin Result:= CharInSet(Ch, ['A'..'Z','a'..'z','_']); end;
-  function IsIdentChar(Ch: Char): Boolean;
-  begin Result:= CharInSet(Ch, ['A'..'Z','a'..'z','_','0'..'9']); end;
-begin
-  T:= Trim(S);
-  if T = '' then Exit(False);
-
-  { (b) already a single fully-enclosing '(...)' group: the leading '(' must
-    balance to depth 0 only at the very last character (so '(a) and (b)' does
-    NOT qualify -- its first '(' closes mid-string). }
-  if T[1] = '(' then
-  begin
-    Depth:= 0;
-    for i:= 1 to Length(T) do
-    begin
-      if T[i]      = '(' then Inc(Depth)
-      else if T[i] = ')' then
-      begin
-        Dec(Depth);
-        if (Depth = 0) then Exit(i = Length(T)); { balanced only at the end => atomic }
-      end;
-    end;
-    Exit(False); { unbalanced }
-  end;
-
-  { (a) lone primary term. }
-  if not IsIdentStart(T[1]) then Exit(False);
-  Depth:= 0;
-  i    := 1;
-  while i <= Length(T) do
-  begin
-    C:= T[i];
-    if (C = '(') or (C = '[') then Inc(Depth)
-    else if (C = ')') or (C = ']') then begin Dec(Depth); if Depth < 0 then Exit(False); end
-    else if Depth = 0 then
-    begin
-      { at top level, only identifier chars and a '.' between segments are allowed;
-        anything else (whitespace, operator char, ',', ':', etc.) => compound. }
-      if not (IsIdentChar(C) or (C = '.')) then Exit(False);
-    end;
-    Inc(i);
-  end;
-  Result:= (Depth = 0);
-end; // begin
-
-/// <summary>Builds the quick-fix text edits for the subset of AFindings whose
-/// rule has a registered autofix (the FIXABLE_RULE_IDS set). Mechanical, no
-/// type info:
-///   self-assignment       -> delete the offending statement line(s);
-///   redundant-parentheses -> strip the outer '(' ')' of the flagged span;
-///   redundant-cast        -> strip a 'TFoo(x)' cast where x is one identifier;
-///   redundant-not-not     -> strip the two leading 'not' keywords;
-///   redundant-as-tobject  -> strip the ' as TObject' suffix;
-///   boolean-comparison-true -> X=True/X&lt;&gt;False->X; X=False/X&lt;&gt;True->not X;
-///   reserved-word-casing  -> lowercase the keyword token;
-///   redundant-assigned-free -> drop the 'if Assigned(X) then' guard;
-///   off-by-one-count      -> append ' - 1' to the loop bound (RISKY);
-///   unused-local          -> remove the dead declaration (AST-driven, grouped
-///                            per file -- see below).
-/// AFixableCount returns how many findings produced a fix. Rules without a fix
-/// are silently skipped.</summary>
-/// <remarks>Deliberately conservative: only rules whose fix is an exact,
-/// side-effect-free text edit are wired. redundant-parentheses is fixed only
-/// when the flagged span is single-line and literally starts with '(' and ends
-/// with ')'. Best for non-overlapping findings; same-line multi-fixes are not
-/// column-reconciled (the applier orders by line).
-/// unused-local is the ONE rule here that is NOT per-finding: it is delegated,
-/// once per file, to TAstChecker.BuildUnusedLocalFixEdits. Several dead names can
-/// share one declaration, so whether that declaration may be deleted outright or
-/// must have its name list spliced depends on every finding against it -- and the
-/// emptied-'var'-block collapse depends on the whole section. Per-finding edits
-/// here would delete still-used variables and stack overlapping deletes on one
-/// line, so that grouping is load-bearing, not a tidiness choice.</remarks>
-function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCount: Integer): TArray<TTextEdit>;
-var
-  F    : TLintFinding                    ;
-  E    : TTextEdit                       ;
-  EndL : Integer                         ;
-  Cache: TDictionary<string, TStringList>;
-  SL   : TStringList                     ;
-  Ln   : string                          ;
-  Span : string                          ;
-  Repl : string                          ;
-
-  function LinesFor(const APath: string): TStringList;
-  begin
-    if not Cache.TryGetValue(APath, Result) then
-    begin
-      Result:= TStringList.Create;
-      if TFile.Exists(APath) then Result.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
-      Cache.Add(APath, Result);
-    end;
-  end;
-begin
-  Result:= nil;
-  AFixableCount:= 0;
-  Cache:= TDictionary<string, TStringList>.Create;
-  try
-    for F in AFindings do
-    begin
-      if SameText(F.RuleId, 'self-assignment') then
-      begin
-        EndL:= F.EndLine;
-        if EndL < F.StartLine then EndL:= F.StartLine;
-        E:= Default(TTextEdit);
-        E.FilePath:= F.FilePath;
-        E.Kind:= tekDeleteLines;
-        E.Line:= F.StartLine;
-        E.EndLine:= EndL;
-        Result:= Result + [E];
-        Inc(AFixableCount);
-      end
-      else if SameText(F.RuleId, 'redundant-parentheses') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
-      begin
-        SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
-        begin
-          Ln:= SL[F.StartLine - 1];
-          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
-          if (Length(Span) >= 2) and (Span[1] = '(') and (Span[Length(Span)] = ')') then
-          begin
-            Repl:= Copy(Span, 2, Length(Span) - 2); { strip the outer parens }
-            E:= Default(TTextEdit);
-            E.FilePath:= F.FilePath;
-            E.Kind:= tekReplaceInLine;
-            E.Line  := F.StartLine;
-            E.Col   := F.StartCol;
-            E.EndCol:= F.EndCol;
-            E.Text:= Repl;
-            Result:= Result + [E];
-            Inc(AFixableCount);
-          end;
-        end; // if
-      end // if
-      { v(autofix-compare): `X = nil` -> `not Assigned(X)`, `X <> nil` -> `Assigned(X)`.
-        The rule pins @warn to the whole exprBinary, so the span is the complete
-        comparison. Note the polarity inversion: `= nil` means NOT assigned. }
-      else if SameText(F.RuleId, 'nil-comparison') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
-      begin
-        SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
-        begin
-          Ln:= SL[F.StartLine - 1];
-          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
-          var NcOpAt : Integer:= Pos('<>', Span);
-          var NcOpLen: Integer:= 2;
-          var NcNeg  : Boolean:= False;   { True -> the fix needs a leading `not` }
-          if NcOpAt <= 0 then
-          begin
-            NcOpAt := Pos('=', Span);
-            NcOpLen:= 1;
-            NcNeg  := True;               { `X = nil` is "not assigned" }
-          end;
-          if NcOpAt > 1 then
-          begin
-            var NcLhs: string:= Trim(Copy(Span, 1, NcOpAt - 1));
-            var NcRhs: string:= Trim(Copy(Span, NcOpAt + NcOpLen, MaxInt));
-            if SameText(NcRhs, 'nil') and (NcLhs <> '') then
-            begin
-              Repl:= 'Assigned(' + NcLhs + ')';
-              if NcNeg then Repl:= 'not ' + Repl;
-              E:= Default(TTextEdit);
-              E.FilePath:= F.FilePath;
-              E.Kind    := tekReplaceInLine;
-              E.Line    := F.StartLine;
-              E.Col     := F.StartCol;
-              E.EndCol  := F.EndCol;
-              E.Text    := Repl;
-              Result:= Result + [E];
-              Inc(AFixableCount);
-            end;
-          end;
-        end; // if
-      end
-      { v(autofix-compare): `UpperCase(X) = 'ABC'` -> `SameText(X, 'ABC')` (and
-        `<>` -> `not SameText(...)`). Only the STYLE variant of the rule reaches
-        here -- the always-false variant is a separate rule id below, because
-        rewriting THAT one to SameText would silently turn a never-matching test
-        into a sometimes-matching one.
-        The operator is located in the text BEFORE the first quote, so a literal
-        containing '=' or '<>' ('a<>b') cannot be mistaken for the operator. }
-      else if SameText(F.RuleId, 'uppercase-compare') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
-      begin
-        SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
-        begin
-          Ln:= SL[F.StartLine - 1];
-          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
-          var UcOpen: Integer:= Pos('(', Span);
-          var UcClose: Integer:= 0;
-          if UcOpen > 0 then
-          begin
-            var UcDepth: Integer:= 0;
-            for var UcQ: Integer:= UcOpen to Length(Span) do
-            begin
-              if Span[UcQ] = '(' then Inc(UcDepth)
-              else if Span[UcQ] = ')' then
-              begin
-                Dec(UcDepth);
-                if UcDepth = 0 then begin UcClose:= UcQ; Break; end;
-              end;
-            end;
-          end;
-          if UcClose > UcOpen then
-          begin
-            var UcInner: string := Trim(Copy(Span, UcOpen + 1, UcClose - UcOpen - 1));
-            var UcRest : string := Copy(Span, UcClose + 1, MaxInt);
-            var UcQuote: Integer:= Pos('''', UcRest);
-            if (UcInner <> '') and (UcQuote > 1) then
-            begin
-              var UcNeg: Boolean:= Pos('<>', Copy(UcRest, 1, UcQuote - 1)) > 0;
-              var UcLit: string := Trim(Copy(UcRest, UcQuote, MaxInt));
-              if UcLit <> '' then
-              begin
-                Repl:= 'SameText(' + UcInner + ', ' + UcLit + ')';
-                if UcNeg then Repl:= 'not ' + Repl;
-                E:= Default(TTextEdit);
-                E.FilePath:= F.FilePath;
-                E.Kind    := tekReplaceInLine;
-                E.Line    := F.StartLine;
-                E.Col     := F.StartCol;
-                E.EndCol  := F.EndCol;
-                E.Text    := Repl;
-                Result:= Result + [E];
-                Inc(AFixableCount);
-              end;
-            end;
-          end; // if
-        end; // if
-      end
-      { v(autofix-compare): the always-false variant. The fix RECASES THE LITERAL
-        to agree with the conversion (`UpperCase(X) = 'abc'` -> `... = 'ABC'`),
-        which preserves the author's evident intent and makes the comparison
-        capable of being true. Deliberately NOT a SameText rewrite: that also
-        works, but it changes case-sensitivity as well as fixing the dead branch,
-        and one behaviour change at a time is enough. Registered RISKY -- a test
-        that could never pass can now pass, which is the point, but a human must
-        confirm that was the intent. }
-      else if SameText(F.RuleId, 'uppercase-compare-always-false') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
-      begin
-        SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
-        begin
-          Ln:= SL[F.StartLine - 1];
-          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
-          var AfOpen: Integer:= Pos('(', Span);
-          if AfOpen > 1 then
-          begin
-            var AfFn   : string := Trim(Copy(Span, 1, AfOpen - 1));
-            var AfClose: Integer:= 0;
-            var AfDepth: Integer:= 0;
-            for var AfQ: Integer:= AfOpen to Length(Span) do
-            begin
-              if Span[AfQ] = '(' then Inc(AfDepth)
-              else if Span[AfQ] = ')' then
-              begin
-                Dec(AfDepth);
-                if AfDepth = 0 then begin AfClose:= AfQ; Break; end;
-              end;
-            end;
-            if AfClose > AfOpen then
-            begin
-              var AfRest : string := Copy(Span, AfClose + 1, MaxInt);
-              var AfQuote: Integer:= Pos('''', AfRest);
-              if AfQuote > 0 then
-              begin
-                var AfLit: string:= Trim(Copy(AfRest, AfQuote, MaxInt));
-                var AfNew: string;
-                { Recase toward the conversion the code already performs. }
-                if ContainsText(AfFn, 'upper') then AfNew:= UpperCase(AfLit)
-                else                                AfNew:= LowerCase(AfLit);
-                if (AfLit <> '') and (AfNew <> AfLit) then
-                begin
-                  E:= Default(TTextEdit);
-                  E.FilePath:= F.FilePath;
-                  E.Kind    := tekReplaceInLine;
-                  E.Line    := F.StartLine;
-                  E.Col     := F.StartCol;
-                  E.EndCol  := F.EndCol;
-                  E.Text    := Copy(Span, 1, AfClose + AfQuote - 1) + AfNew;
-                  Result:= Result + [E];
-                  Inc(AFixableCount);
-                end;
-              end;
-            end;
-          end; // if
-        end; // if
-      end
-      else if SameText(F.RuleId, 'redundant-cast') and (F.StartLine = F.EndLine) then
-      begin
-        { redundant-cast fires only on 'TFoo(x)' with x a SINGLE identifier (the
-          rule's precondition), so there is no nested paren: the ')' is the first
-          one after the '('. The finding span [StartCol, EndCol) covers the entity
-          name 'TFoo'; scan on to '(' then to ')' and replace 'TFoo(x)' with 'x'. }
-        SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
-        begin
-          Ln:= SL[F.StartLine - 1];
-          var OpenP: Integer:= F.EndCol; { 1-based; '(' expected at/after the name }
-          while (OpenP <= Length(Ln)) and (Ln[OpenP] <> '(') do Inc(OpenP);
-          if (OpenP <= Length(Ln)) and (Ln[OpenP] = '(') then
-          begin
-            var CloseP: Integer:= OpenP + 1;
-            while (CloseP <= Length(Ln)) and (Ln[CloseP] <> ')') do Inc(CloseP);
-            if (CloseP <= Length(Ln)) and (Ln[CloseP] = ')') then
-            begin
-              var Inner: string:= Trim(Copy(Ln, OpenP + 1, CloseP - OpenP - 1));
-              if Inner <> '' then
-              begin
-                E:= Default(TTextEdit);
-                E.FilePath:= F.FilePath;
-                E.Kind:= tekReplaceInLine;
-                E.Line:= F.StartLine;
-                E.Col := F.StartCol;
-                E.EndCol:= CloseP + 1; { exclusive end -- one past the ')' }
-                E.Text:= Inner;
-                Result:= Result + [E];
-                Inc(AFixableCount);
-              end;
-            end;
-          end; // if
-        end; // if
-      end // if
-      else if SameText(F.RuleId, 'redundant-not-not') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
-      begin
-        { span covers 'not not X' (the outer exprUnary). Strip the two leading
-          'not' keywords + their trailing whitespace; the remainder is X. }
-        SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
-        begin
-          Ln:= SL[F.StartLine - 1];
-          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
-          var Rest: string:= Span;
-          var Ok: Boolean:= True ;
-          { consume 'not' then >=1 whitespace, twice }
-          for var Pass: Integer:= 1 to 2 do
-          begin
-            var LR: string:= TrimLeft(Rest);
-            if (Length(LR) >= 3) and SameText(Copy(LR, 1, 3), 'not') and ((Length(LR) = 3) or (LR[4] <= ' ')) then Rest:= TrimLeft(Copy(LR, 4, MaxInt))
-            else
-            begin Ok:= False; Break; end;
-          end;
-          if Ok and (Rest <> '') then
-          begin
-            E:= Default(TTextEdit);
-            E.FilePath:= F.FilePath;
-            E.Kind:= tekReplaceInLine;
-            E.Line  := F.StartLine;
-            E.Col   := F.StartCol;
-            E.EndCol:= F.EndCol;
-            E.Text:= Rest;
-            Result:= Result + [E];
-            Inc(AFixableCount);
-          end;
-        end; // if
-      end // if
-      else if SameText(F.RuleId, 'redundant-as-tobject') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
-      begin
-        { span covers 'X as TObject' (the exprBinary). Find the depth-0 whole-word
-          'as' keyword; the lhs before it is X. }
-        SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
-        begin
-          Ln:= SL[F.StartLine - 1];
-          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
-          { scan for ' as ' at bracket depth 0 (whole word, case-insensitive) }
-          var Depth: Integer:= 0;
-          var AsPos: Integer:= 0;
-          for var K: Integer:= 2 to Length(Span) - 2 do
-          begin
-            var Ch: Char:= Span[K];
-            if (Ch = '(') or (Ch = '[') then Inc(Depth)
-            else if (Ch = ')') or (Ch = ']') then Dec(Depth)
-            else if (Depth = 0) and (Span[K - 1] <= ' ') and SameText(Copy(Span, K, 2), 'as') and ((K + 2 > Length(Span)) or (Span[K + 2] <= ' ')) then
-            begin AsPos:= K; Break; end;
-          end;
-          if AsPos > 1 then
-          begin
-            Repl:= TrimRight(Copy(Span, 1, AsPos - 1));
-            if Repl <> '' then
-            begin
-              E:= Default(TTextEdit);
-              E.FilePath:= F.FilePath;
-              E.Kind:= tekReplaceInLine;
-              E.Line  := F.StartLine;
-              E.Col   := F.StartCol;
-              E.EndCol:= F.EndCol;
-              E.Text:= Repl;
-              Result:= Result + [E];
-              Inc(AFixableCount);
-            end;
-          end;
-        end; // if
-      end // if
-      else if SameText(F.RuleId, 'boolean-comparison-true') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
-      begin
-        { span covers 'X op bool', op is '=' or '<>', bool is True or False.
-          Scan for the LAST depth-0 '=' or '<>' operator; split into lhs/op/rhs.
-          positive (= True / <> False) -> lhs; negative (= False / <> True) ->
-          'not ' + (lhs, parenthesized when not a single-token atom). }
-        SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
-        begin
-          Ln:= SL[F.StartLine - 1];
-          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
-          var Depth: Integer:= 0;
-          var OpPos: Integer:= 0;
-          var OpLen: Integer:= 0;
-          for var K: Integer:= 1 to Length(Span) do
-          begin
-            var Ch: Char:= Span[K];
-            if (Ch = '(') or (Ch = '[') then Inc(Depth)
-            else if (Ch = ')') or (Ch = ']') then Dec(Depth)
-            else if Depth = 0 then
-            begin
-              if (K < Length(Span)) and (Ch = '<') and (Span[K + 1] = '>') then
-              begin OpPos:= K; OpLen:= 2; end
-              else if Ch = '=' then
-              begin OpPos:= K; OpLen:= 1; end;
-            end;
-          end;
-          if OpPos > 1 then
-          begin
-            var LhsText: string:= Trim(Copy(Span, 1, OpPos - 1))         ;
-            var OpText : string:= Copy(Span, OpPos, OpLen)               ;
-            var RhsText: string:= Trim(Copy(Span, OpPos + OpLen, MaxInt));
-            var IsTrue : Boolean:= SameText(RhsText, 'True' );
-            var IsFalse: Boolean:= SameText(RhsText, 'False');
-            var Positive: Boolean                                        ;
-            if (LhsText <> '') and (IsTrue or IsFalse) then
-            begin
-              { (= True) or (<> False) => positive; (= False) or (<> True) => negative }
-              if OpText = '=' then Positive:= IsTrue else Positive:= IsFalse;
-              if Positive then Repl:= LhsText
-              else if IsSingleTokenAtom(LhsText) then Repl:= 'not ' + LhsText
-              else Repl:= 'not (' + LhsText + ')';
-              E:= Default(TTextEdit);
-              E.FilePath:= F.FilePath;
-              E.Kind:= tekReplaceInLine;
-              E.Line  := F.StartLine;
-              E.Col   := F.StartCol;
-              E.EndCol:= F.EndCol;
-              E.Text:= Repl;
-              Result:= Result + [E];
-              Inc(AFixableCount);
-            end; // if
-          end; // if
-        end; // if
-      end // if
-      else if SameText(F.RuleId, 'reserved-word-casing') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
-      begin
-        { span covers the keyword token; keywords are case-insensitive and have no
-          reference sites, so lowercasing the span is a safe local edit. }
-        SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
-        begin
-          Ln:= SL[F.StartLine - 1];
-          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
-          if (Span <> '') and (Span <> LowerCase(Span)) then
-          begin
-            E:= Default(TTextEdit);
-            E.FilePath:= F.FilePath;
-            E.Kind:= tekReplaceInLine;
-            E.Line  := F.StartLine;
-            E.Col   := F.StartCol;
-            E.EndCol:= F.EndCol;
-            E.Text:= LowerCase(Span);
-            Result:= Result + [E];
-            Inc(AFixableCount);
-          end;
-        end; // if
-      end // if
-      else if SameText(F.RuleId, 'redundant-assigned-free') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
-      begin
-        { span covers 'if Assigned(X) then <stmt>;'. Take the text after the
-          delimited 'then' keyword (whole word, not a substring of an identifier)
-          to end of span. The Assigned guard is redundant -- Free is nil-safe. }
-        SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
-        begin
-          Ln:= SL[F.StartLine - 1];
-          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
-          var Depth  : Integer:= 0;
-          var ThenEnd: Integer:= 0; { 1-based index one past the 'then' }
-          var LS: string:= LowerCase(Span);
-          for var K: Integer:= 1 to Length(Span) - 3 do
-          begin
-            var Ch: Char:= Span[K];
-            if (Ch = '(') or (Ch = '[') then Inc(Depth)
-            else if (Ch = ')') or (Ch = ']') then Dec(Depth)
-            else if (Depth = 0) and (Copy(LS, K, 4) = 'then') and ((K = 1) or (Span[K - 1] <= ' ') or (Span[K - 1] = ')')) and ((K + 4 > Length(Span)) or (Span[K + 4] <= ' ')) then
-            begin ThenEnd:= K + 4; Break; end;
-          end;
-          if ThenEnd > 0 then
-          begin
-            Repl:= TrimLeft(Copy(Span, ThenEnd, MaxInt));
-            if Repl <> '' then
-            begin
-              E:= Default(TTextEdit);
-              E.FilePath:= F.FilePath;
-              E.Kind:= tekReplaceInLine;
-              E.Line  := F.StartLine;
-              E.Col   := F.StartCol;
-              E.EndCol:= F.EndCol;
-              E.Text:= Repl;
-              Result:= Result + [E];
-              Inc(AFixableCount);
-            end;
-          end;
-        end; // if
-      end // if
-      else if SameText(F.RuleId, 'off-by-one-count') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
-      begin
-        { span covers the loop end-bound (X.Count / Length(X)). Append ' - 1'.
-          BEHAVIOUR-CHANGING (tagged risky via IsRiskyFixRule). The bound is
-          isolated by 'to .. do', so no precedence hazard. }
-        SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
-        begin
-          Ln:= SL[F.StartLine - 1];
-          Span:= Copy(Ln, F.StartCol, F.EndCol - F.StartCol);
-          if Trim(Span) <> '' then
-          begin
-            E:= Default(TTextEdit);
-            E.FilePath:= F.FilePath;
-            E.Kind:= tekReplaceInLine;
-            E.Line  := F.StartLine;
-            E.Col   := F.StartCol;
-            E.EndCol:= F.EndCol;
-            E.Text:= Span + ' - 1';
-            Result:= Result + [E];
-            Inc(AFixableCount);
-          end;
-        end; // if
-      end; // if
-    end; // for
-
-    { unused-local is handled per FILE, not per finding: several dead names can
-      share one declaration, and whether a declaration may be deleted outright
-      (vs. having its name list spliced) depends on ALL the findings against it.
-      Emitting one edit per finding -- the obvious shape -- deletes live
-      variables and stacks overlapping deletes on the same line. Grouping also
-      keeps at most one edit per declaration, so the applier never sees an
-      overlap. Driven off the AST in TAstChecker, next to the check itself. }
-    var ULFiles: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
-    try
-      for F in AFindings do
-        if SameText(F.RuleId, 'unused-local') and (F.FilePath <> '') then
-          ULFiles.AddOrSetValue(F.FilePath, True);
-      for var ULPath: string in ULFiles.Keys do
-      begin
-        var ULFixed: Integer:= 0;
-        var ULEdits: TArray<TTextEdit>:=
-          DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits(ULPath, AFindings, ULFixed);
-        if Length(ULEdits) > 0 then
-        begin
-          Result:= Result + ULEdits;
-          Inc(AFixableCount, ULFixed);
-        end;
-      end;
-    finally
-      ULFiles.Free;
-    end;
-  finally
-    for SL in Cache.Values do SL.Free;
-    Cache.Free;
-  end; // try
-end; // begin
 
 /// <summary>True when stdout is carrying a machine-readable DOCUMENT (JSON or
 /// SARIF) rather than human text, so a single line of prose on stdout makes the
@@ -11888,53 +12486,6 @@ var
              (Pos('classnameis(''exception'')', T) > 0);
   end;
 
-  { Insert AUnit into the implementation uses clause, as ONE edit. Returns False
-    when the unit is already there or no uses clause can be found -- in both
-    cases adding nothing is the correct outcome, so neither is an error. }
-  function BuildUsesEdit(const APath, AUnit: string; ALines: TStringList; out AEdit: TTextEdit): Boolean;
-  var
-    M, ImplAt, UsesAt: Integer;
-    T                : string ;
-  begin
-    Result:= False;
-    ImplAt:= -1;
-    for M:= 0 to ALines.Count - 1 do
-      if SameText(Trim(ALines[M]), 'implementation') then begin ImplAt:= M; Break; end;
-    { the raises are in the implementation, so that is the clause to extend; a
-      unit with no implementation section falls back to the interface one }
-    UsesAt:= -1;
-    for M:= Max(ImplAt, 0) to ALines.Count - 1 do
-    begin
-      T:= LowerCase(Trim(ALines[M]));
-      if (T = 'uses') or T.StartsWith('uses ') then begin UsesAt:= M; Break; end;
-    end;
-    if (UsesAt < 0) and (ImplAt >= 0) then
-      for M:= 0 to ALines.Count - 1 do
-      begin
-        T:= LowerCase(Trim(ALines[M]));
-        if (T = 'uses') or T.StartsWith('uses ') then begin UsesAt:= M; Break; end;
-      end;
-    if UsesAt < 0 then Exit;
-    AEdit:= Default(TTextEdit);
-    AEdit.FilePath:= APath;
-    if SameText(Trim(ALines[UsesAt]), 'uses') then
-    begin
-      AEdit.Kind   := tekInsertLines;
-      AEdit.Line   := UsesAt + 1;          { 1-based: insert AFTER the 'uses' line }
-      AEdit.Text   := '  ' + AUnit + ',';
-    end
-    else
-    begin
-      { 'uses A, B;' -- inject immediately after the keyword, which keeps the
-        edit to one line and cannot disturb a continuation line below it }
-      AEdit.Kind:= tekInsertInLine;
-      AEdit.Line:= UsesAt + 1;
-      AEdit.Col := Pos('uses', LowerCase(ALines[UsesAt])) + 4;
-      AEdit.Text:= ' ' + AUnit + ',';
-    end;
-    Result:= True;
-  end;
-
 begin
   Result:= nil;
   AFixed:= 0;
@@ -12055,7 +12606,7 @@ begin
         if K < 0 then
         begin
           var UE: TTextEdit;
-          if BuildUsesEdit(F.FilePath, Cfg.ExceptionsUnit, Lines, UE) then Result:= Result + [UE];
+          if BuildImplUsesEdit(F.FilePath, Cfg.ExceptionsUnit, Lines, UE) then Result:= Result + [UE];
         end;
       end;
     end;
@@ -12177,6 +12728,191 @@ begin
     Dropped.Free;
     InClosure.Free;
   end;
+end;
+
+{ Blank out comments and string literals (same length, so offsets and line
+  numbers survive) so a token scan below sees only code. }
+procedure BlankRange(var AText: string; AFrom, ATo: Integer);
+begin
+  for var I:= AFrom to ATo do
+    if (AText[I] <> #10) and (AText[I] <> #13) then AText[I]:= ' ';
+end;
+
+function MaskNonCode(const AText: string): string;
+var
+  I, J, N: Integer;
+  C, C2  : Char;
+begin
+  Result:= AText;
+  N:= Length(AText);
+  I:= 1;
+  while I <= N do
+  begin
+    C:= AText[I];
+    C2:= if I < N then AText[I + 1] else #0;
+    J:= I;
+    if (C = '/') and (C2 = '/') then
+    begin
+      while (J <= N) and (AText[J] <> #10) do Inc(J);
+      BlankRange(Result, I, J - 1);
+    end
+    else if C = '{' then
+    begin
+      while (J <= N) and (AText[J] <> '}') do Inc(J);
+      BlankRange(Result, I, Min(J, N));
+    end
+    else if (C = '(') and (C2 = '*') then
+    begin
+      Inc(J, 2);
+      while (J < N) and not ((AText[J] = '*') and (AText[J + 1] = ')')) do Inc(J);
+      J:= Min(J + 1, N);
+      BlankRange(Result, I, J);
+    end
+    else if C = '''' then
+    begin
+      Inc(J);
+      while (J <= N) and (AText[J] <> '''') and (AText[J] <> #10) do Inc(J);
+      BlankRange(Result, I, Min(J, N));
+    end;
+    I:= J + 1;
+  end;
+end;
+
+/// <summary>Is AIdent read or written BARE (not after a dot) inside the body of
+/// a `with` statement in AText?</summary>
+/// <param name="AText">Pascal source; comments and strings are ignored.</param>
+/// <param name="AIdent">The identifier; compared case-insensitively.</param>
+/// <returns>True when a `with ... do` body names AIdent without a qualifier.</returns>
+/// <remarks>Pure and conservative: it may say True for a name that the `with`
+/// target does not own (the fix is then skipped, never wrongly written). The
+/// body extent is the `begin..end` block or the statement up to its `;`.</remarks>
+function IdentReadBareInWith(const AText, AIdent: string): Boolean;
+var
+  Toks      : TMatchCollection;
+  I, J, Depth: Integer;
+  Tok       : string;
+begin
+  Result:= False;
+  Toks:= TRegEx.Matches(MaskNonCode(AText), '[A-Za-z_][A-Za-z0-9_]*|[;().]');
+  for I:= 0 to Toks.Count - 1 do
+    if SameText(Toks[I].Value, 'with') then
+    begin
+      J:= I + 1;
+      Depth:= 0;
+      while (J < Toks.Count) and not ((Depth = 0) and SameText(Toks[J].Value, 'do')) do
+      begin
+        if Toks[J].Value = '(' then Inc(Depth)
+        else if Toks[J].Value = ')' then Dec(Depth);
+        Inc(J);
+      end;
+      Inc(J);
+      Depth:= 0;
+      while J < Toks.Count do
+      begin
+        Tok:= Toks[J].Value;
+        if SameText(Tok, AIdent) and (Toks[J - 1].Value <> '.') then Exit(True);
+        if SameText(Tok, 'begin') or SameText(Tok, 'case') or SameText(Tok, 'try') or SameText(Tok, 'asm') then Inc(Depth)
+        else if SameText(Tok, 'end') then
+        begin
+          if Depth > 0 then Dec(Depth);
+          if Depth = 0 then Break;
+        end
+        else if (Tok = ';') and (Depth = 0) then Break;
+        Inc(J);
+      end;
+    end;
+end;
+
+const
+  BINARY_FORM_MAGIC = 'TPF0'; // the first bytes of a binary .dfm / .fmx
+
+{ The rename-engine finding's identifier, read from the file's own span. '' when
+  the span no longer holds one. }
+function NamingFixIdentifier(const AFinding: TLintFinding): string;
+begin
+  Result:= DRagLint.Refactor.NamingFix.ReadIdentifierAt(AFinding.FilePath, AFinding.StartLine, AFinding.StartCol, AFinding.EndCol);
+end;
+
+/// <summary>Does a BINARY form file beside the finding's unit contain the symbol
+/// the naming fix is about to rename?</summary>
+/// <param name="AFinding">A naming finding.</param>
+/// <returns>True for method-pascalcase / type-name-prefix / field-name-prefix
+/// when the sibling .dfm / .fmx starts with the binary signature `TPF0` and holds
+/// the identifier (case-insensitively, as a substring: conservative).</returns>
+/// <remarks>A TEXT form file is not a skip: the rename engine rewrites its
+/// `OnClick = Handler` / `object X: TX` rows with the .pas edits (pinned by
+/// tests\autotest\run_rules_fix_default_on.ps1 A1). A binary one is opaque to the
+/// index, so the rename could not be proved complete and is skipped.</remarks>
+function NamingFixReferencedByBinaryForm(const AFinding: TLintFinding): Boolean;
+var
+  Ext, FormFile, Ident, Body: string;
+  Bytes: TBytes;
+begin
+  Result:= False;
+  if not (SameText(AFinding.RuleId, 'method-pascalcase') or SameText(AFinding.RuleId, 'type-name-prefix')
+       or SameText(AFinding.RuleId, 'field-name-prefix')) then Exit;
+  Ident:= NamingFixIdentifier(AFinding);
+  if Ident = '' then Exit;
+  for Ext in ['.dfm', '.fmx'] do
+  begin
+    FormFile:= TPath.ChangeExtension(AFinding.FilePath, Ext);
+    if not TFile.Exists(FormFile) then Continue;
+    Bytes:= TFile.ReadAllBytes(FormFile);
+    if (Length(Bytes) < Length(BINARY_FORM_MAGIC)) or (TEncoding.ASCII.GetString(Bytes, 0, Length(BINARY_FORM_MAGIC)) <> BINARY_FORM_MAGIC) then Continue;
+    Body:= TEncoding.ANSI.GetString(Bytes);
+    if ContainsText(Body, Ident) then Exit(True);
+  end;
+end;
+
+/// <summary>Does a TEXT form file in the finding's folder, other than the unit's
+/// own indexed form (same base name), name the symbol being renamed?</summary>
+/// <param name="AFinding">A naming finding.</param>
+/// <returns>True for method-pascalcase / type-name-prefix / field-name-prefix when
+/// another .dfm / .fmx in the unit's folder holds the identifier as a whole word
+/// (case-insensitively).</returns>
+/// <remarks>Such a form (an inherited form, a form outside the .dproj) is not in the
+/// index, so the rename engine would leave its OnClick = Handler / inherited X:
+/// TX row stale: the .pas compiles and the form dies at load. Skipped, never
+/// rewritten (conservative). The unit's own same-named form is the engine's job.</remarks>
+function NamingFixReferencedByUnindexedForm(const AFinding: TLintFinding): Boolean;
+var
+  Ident, Dir, Own, Pattern, FormFile: string;
+  Mask: string;
+begin
+  Result:= False;
+  if not (SameText(AFinding.RuleId, 'method-pascalcase') or SameText(AFinding.RuleId, 'type-name-prefix')
+       or SameText(AFinding.RuleId, 'field-name-prefix')) then Exit;
+  Ident:= NamingFixIdentifier(AFinding);
+  if Ident = '' then Exit;
+  Dir:= TPath.GetDirectoryName(AFinding.FilePath);
+  if (Dir = '') or not TDirectory.Exists(Dir) then Exit;
+  Own:= TPath.GetFileNameWithoutExtension(AFinding.FilePath);
+  Pattern:= '(?<![A-Za-z0-9_])' + TRegEx.Escape(Ident) + '(?![A-Za-z0-9_])';
+  for Mask in ['*.dfm', '*.fmx'] do
+    for FormFile in TDirectory.GetFiles(Dir, Mask) do
+    begin
+      if SameText(TPath.GetFileNameWithoutExtension(FormFile), Own) then Continue;
+      var Bytes: TBytes:= TFile.ReadAllBytes(FormFile);
+      if (Length(Bytes) >= Length(BINARY_FORM_MAGIC)) and (TEncoding.ASCII.GetString(Bytes, 0, Length(BINARY_FORM_MAGIC)) = BINARY_FORM_MAGIC) then Continue;
+      if TRegEx.IsMatch(TEncoding.ANSI.GetString(Bytes), Pattern, [roIgnoreCase]) then Exit(True);
+    end;
+end;
+/// <summary>Is the field a field-name-prefix finding names read bare inside a
+/// `with` in its own file?</summary>
+/// <param name="AFinding">A naming finding.</param>
+/// <returns>True only for field-name-prefix when IdentReadBareInWith holds for
+/// the finding's file.</returns>
+/// <remarks>The reference index holds no ref for such a read, so a rename would
+/// strand it and break the build. Only the declaring file is scanned.</remarks>
+function NamingFixReadBareInWith(const AFinding: TLintFinding): Boolean;
+var
+  Ident: string;
+begin
+  Result:= False;
+  if not SameText(AFinding.RuleId, 'field-name-prefix') then Exit;
+  Ident:= NamingFixIdentifier(AFinding);
+  if (Ident = '') or not TFile.Exists(AFinding.FilePath) then Exit;
+  Result:= IdentReadBareInWith(TEncoding.ANSI.GetString(TFile.ReadAllBytes(AFinding.FilePath)), Ident);
 end;
 
 type
@@ -12424,9 +13160,29 @@ begin
   if AArgs.Output = '' then Writeln(ADoc)
   else
   begin
-    TFile.WriteAllBytes(AArgs.Output, TEncoding.UTF8.GetBytes(ADoc + sLineBreak));
+    WriteOutputFile(AArgs.Output, ADoc + sLineBreak);
     Writeln(ErrOutput, 'drag-lint: findings written to ' + AArgs.Output);
   end;
+end;
+
+/// <summary>JSON form of one rule's compliance labels: `{cwe[],cert[],misra[],weak[]}`.</summary>
+/// <param name="ALabels">The rule's labels.</param>
+/// <param name="AAlways">True = always build the object; False = nil when the rule has no CWE/CERT/MISRA id.</param>
+/// <returns>A new TJSONObject the caller owns (or nil, see AAlways).</returns>
+function ComplianceToJson(const ALabels: TComplianceLabels; AAlways: Boolean): TJSONObject;
+  function Arr(const AIds: TArray<string>): TJSONArray;
+  var S: string;
+  begin
+    Result:= TJSONArray.Create;
+    for S in AIds do Result.Add(S);
+  end;
+begin
+  if ALabels.IsEmpty and not AAlways then Exit(nil);
+  Result:= TJSONObject.Create;
+  Result.AddPair('cwe'  , Arr(ALabels.Cwe  ));
+  Result.AddPair('cert' , Arr(ALabels.Cert ));
+  Result.AddPair('misra', Arr(ALabels.Misra));
+  Result.AddPair('weak' , Arr(ALabels.Weak ));
 end;
 
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
@@ -12554,14 +13310,22 @@ begin
     names its marker's rule as `"<id>"` (ApplyLineMarkers' messages), and a
     stale dl:ok for the rule being asked about is part of that rule's answer --
     run_marker_metric_scope.ps1 check 6 prints its remedy from exactly that line. }
+  { 1.38 two-way modernize: ONE stderr line when the run targets an older compiler. }
+  if GRunTargetGate.Active then
+    Writeln(ErrOutput, Format('target-compiler: %d (%s) -- %d modernize rule(s) gated, %d compat rule(s) on',
+      [GRunTargetGate.Target, CompilerDisplayName(GRunTargetGate.Target), Length(GRunTargetGate.Gated), Length(GRunTargetGate.CompatOn)]));
   Survivors:= nil;
   for F in AFindings do
   begin
     if (AArgs.Rule <> '') and not SameText(F.RuleId, AArgs.Rule)
        and not (StartsText('review-marker-', F.RuleId) and ContainsText(F.Message, '"' + AArgs.Rule + '"')) then Continue;
+    { 1.38: a modernize finding the target compiler cannot take is not advice }
+    if GRunTargetGate.Drops(F.RuleId) then Continue;
     IsDefDis:= False;
     for DId in ADefaultDisabled do
       if SameText(DId, F.RuleId) then begin IsDefDis:= True; Break; end;
+    { 1.38: a compat rule is OFF by default and ON when the target predates its construct }
+    if IsDefDis and GRunTargetGate.ForcesOn(F.RuleId) then IsDefDis:= False;
     if Cfg.ShouldKeep(F.RuleId, IsDefDis) then begin MF:= F; MF.Severity:= Cfg.ApplySeverity(F.RuleId, F.Severity); Survivors:= Survivors + [MF]; end;
   end;
 
@@ -12596,8 +13360,35 @@ begin
     end
     else Targeted:= Survivors;
 
+    { Every fix is ON by default (1.37.0, lane A7). The only brake is the config
+      key "autofix_off": [...] -- a rule listed there keeps reporting, its fix is
+      withheld from a BATCH run. ONE finding asked for by line AND rule is an
+      explicit request and wins over the brake. The retired "autofix": [...] key
+      is read and ignored, with one note. }
+    if Cfg.HasLegacyAutoFix then
+      Writeln(ErrOutput, 'drag-lint: note: "autofix" no longer gates fixes -- every fix is on; ' +
+        'use "autofix_off": [...] to exclude a rule.');
+    var Braked: TArray<TLintFinding>:= nil;
+    var BrakedIds: TArray<string>:= nil;
+    for F in Targeted do
+      if Cfg.IsAutoFixOff(F.RuleId) and not ((AArgs.FixLine > 0) and SameText(AArgs.FixRule, F.RuleId)) then
+      begin
+        if not MatchText(F.RuleId, BrakedIds) then BrakedIds:= BrakedIds + [F.RuleId];
+      end
+      else Braked:= Braked + [F];
+    Targeted:= Braked;
+    if Length(BrakedIds) > 0 then
+      Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here are not fixed because "autofix_off" lists them: %s.',
+        [Length(BrakedIds), string.Join(', ', BrakedIds)]));
+
     var FixCount: Integer                                               ;
+    { lane A5B: the store-backed registered fixers (DRagLint.Fix.Store) read the run's store }
+    SetAutofixStore(AStore);
     var Edits: TArray<TTextEdit>:= BuildAutofixEdits(Targeted, FixCount);
+    if AutofixTargetSkipped > 0 then
+      Writeln(ErrOutput, Format('drag-lint: %d fix(es) skipped (target-compiler) -- the fix emits syntax newer than %s; the finding stays.',
+        [AutofixTargetSkipped, CompilerDisplayName(ActiveTargetCompiler)]));
+    SetAutofixStore(nil);
     { Naming edits dropped by BuildNamingFixEdits' stale-position guard (the
       recorded site no longer holds the identifier being renamed). Declared out
       here so the autofix summary below can report it -- an invisible skip is
@@ -12704,77 +13495,42 @@ begin
       { Naming autofix: store-backed like doc-drift. Covers phase 1 (re-casing:
         method-pascalcase, local-var-casing, const-casing) AND phase 2
         (prefix-adding: field-name-prefix, param-name-prefix, type-name-prefix).
-        Only for findings whose rule is BOTH registered-fixable AND opted-in via
-        AutoFixIds (config "autofix": [...], tested via Cfg.IsAutoFix -- naming
-        fixes rewrite call sites project-wide, so they stay opt-in rather than
-        joining the always-on doc-drift append). The synthesizers + rename
-        engine live in DRagLint.Refactor.NamingFix. }
+        Default ON since 1.37.0 (lane A7): no config key and no --fix-naming is
+        needed. Two per-finding SAFETY NETS replace the old opt-in gate -- a
+        finding whose rename the engine cannot prove complete is SKIPPED and
+        COUNTED, never written: a symbol a BINARY form file references
+        (dfm-referenced; a TEXT .dfm row is rewritten with the .pas), and a
+        field read bare inside a `with` (with-block; the index holds no ref for
+        it). The only brake is "autofix_off": [...] (applied above). The
+        synthesizers + rename engine live in DRagLint.Refactor.NamingFix. }
       var NamingTargets: TArray<TLintFinding>:= nil;
-      { Findings whose rule CAN be fixed but is not opted in. Counted separately
-        so the summary can say which it is: "no fixable findings" is false and
-        actively misleading here -- the rule IS registered fixable, the catalog
-        advertises `"fixable": true` for it, and the fix demonstrably works the
-        moment the config opts in. Reporting the opt-in as an absence of
-        capability sent a triage session down the path of believing the fixer
-        was broken (docs\INBOX-field-name-prefix-fixable-flag-lies.md). }
-      var NamingOptOut: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
-      try
+      var DfmSkipped: Integer:= 0;
+      var WithSkipped: Integer:= 0;
+      var UnindexedSkipped: Integer:= 0;
       for F in Targeted do
-        if IsOptInFixRule(F.RuleId) then
+        if IsNamingFixRule(F.RuleId) then
         begin
-          { A request for ONE finding -- --fix-line AND --fix-rule naming this
-            rule, which is what the IDE's "Fix it" sends -- IS the opt-in. The
-            config gate exists so a BATCH fix never renames across the project
-            unasked; a human pointing at one constant and asking for it to be
-            renamed has asked (owner, 2026-10-13: "We can change them to
-            PascalCase"). }
-          { --fix-naming is the same consent for a BATCH run. The IDE's Fix all
-            sends it on BOTH runs -- the preview (to get the plan to show) and
-            the apply; only the apply follows the user's confirmation, and a
-            preview writes no source file whatever this flag says. }
-          var Explicit: Boolean:= ((AArgs.FixLine > 0) and SameText(AArgs.FixRule, F.RuleId)) or AArgs.FixNaming;
-          if Cfg.IsAutoFix(F.RuleId) or Explicit then NamingTargets:= NamingTargets + [F]
-          else NamingOptOut.AddOrSetValue(LowerCase(F.RuleId), True);
+          if NamingFixReferencedByBinaryForm(F) then Inc(DfmSkipped)
+          else if NamingFixReferencedByUnindexedForm(F) then Inc(UnindexedSkipped)
+          else if NamingFixReadBareInWith(F) then Inc(WithSkipped)
+          else NamingTargets:= NamingTargets + [F];
         end;
-      if NamingOptOut.Count > 0 then
-      begin
-        var OptOutIds: TArray<string>:= NamingOptOut.Keys.ToArray;
-        TArray.Sort<string>(OptOutIds);
-        Writeln(ErrOutput, Format(
-          'drag-lint: note: %d naming rule(s) here are fixable but NOT opted in: %s. ' +
-          'Naming fixes rewrite call sites project-wide, so they are opt-in -- add them to ' +
-          '"autofix": [...] in drag-lint-lint.json to apply.',
-          [Length(OptOutIds), string.Join(', ', OptOutIds)]));
-      end;
-      finally
-        NamingOptOut.Free;
-      end;
+      if DfmSkipped > 0 then
+        Writeln(ErrOutput, Format('skipped (dfm-referenced): %d -- a binary form file names the symbol, so the rename ' +
+          'could not be proved complete; nothing was written for it.', [DfmSkipped]));
+      if UnindexedSkipped > 0 then
+        Writeln(ErrOutput, Format('skipped (dfm-unindexed): %d -- a text form file beside the unit names the symbol and is not the unit''s own indexed form, ' +
+          'so the rename could not be proved complete; nothing was written for it.', [UnindexedSkipped]));
+      if WithSkipped > 0 then
+        Writeln(ErrOutput, Format('skipped (with-block): %d -- the field is read bare inside a `with`, a site the index ' +
+          'holds no reference for; nothing was written for it.', [WithSkipped]));
       if Length(NamingTargets) > 0 then
       begin
         { Naming-prefix autofixes rewrite the declaration + every use the ref
-          index knows about. Coverage status per rule:
-          - type-name-prefix: FULLY covered as of ref-gap E (v-next). The index
-            now captures impl-header qualifier + param/return types, local-var
-            type annotations, and is/as operands (ref-gap E), on top of the
-            ordinary typeref sites; ref-gap D already covered Self.-qualified
-            uses. So a type rename no longer strands references -- NO warning.
-          - field-name-prefix: ref-gap D covers Self.-qualified field uses, but
-            a BARE field read used as an expression operand (e.g.
-            `Result := client + 1;`) is still NOT indexed as a ref, so that one
-            site can be left on the old name -- the file can fail to compile
-            with exit code 0 and no other diagnostic. So field-name-prefix STILL
-            warrants the warning, narrowed to that remaining shape.
-          param-name-prefix uses BuildLocal's pure-AST scope walk and needs no
-          warning. When ref-gaps close the bare-field-read shape, drop this too. }
-        for F in NamingTargets do
-          if SameText(F.RuleId, 'field-name-prefix') then
-          begin
-            Writeln(ErrOutput, 'drag-lint: warning: field-name-prefix autofix may leave a bare field '
-              + 'read used as an expression operand (e.g. `X := field + 1`) unrenamed (the index does '
-              + 'not yet capture that site) -- review the diff and recompile.');
-            Break;
-          end;
-
+          index knows about. The index holds a ref for a bare field read in the
+          class's own methods (probed, pinned by run_rules_fix_default_on.ps1 C1),
+          so no review warning is printed; the one shape it cannot see, a bare
+          read inside with, is skipped and counted above. }
         Rename:= PlanMultiOwnerNaming(AArgs, NFHintDb, Cfg.Naming, NamingTargets);
         Inc(FixCount, Rename.Applied);
 
@@ -12789,6 +13545,18 @@ begin
         end;
         Inc(NFSkippedTotal, NFSkipped);
         Inc(NFStaleTotal, NFStale);
+        { The dry run IS the confirmation now that no opt-in gates a rename: say
+          how many symbols are renamed and in how many projects BEFORE --apply
+          writes. stderr keeps a --json stdout clean. }
+        var RenameOwners: TArray<string>:= nil;
+        for var RP: TTargetPlan in Rename.Plans do
+          if RP.Decision = rdApply then
+            for var RO: TOwnerReport in RP.Owners do
+              if (RO.RefCount > 0) and not MatchText(RO.Owner.SectionName, RenameOwners) then
+                RenameOwners:= RenameOwners + [RO.Owner.SectionName];
+        if Rename.Applied + NFCount > 0 then
+          Writeln(ErrOutput, Format('rename: %d symbol(s) across %d project(s)',
+            [Rename.Applied + NFCount, Max(1, Length(RenameOwners))]));
         { The single-project naming renames this run makes, for the IDE's Fix all
           confirmation. Only under --fix-naming, so an ordinary run's output is
           unchanged (spec criterion 15); stderr keeps a --json stdout clean. }
@@ -12847,6 +13615,33 @@ begin
     end;
     if AArgs.Apply then GuardRenameWrites(AArgs, Rename, FixCount);
     Edits:= Edits + Rename.Edits;
+    { ONE PASS NEVER WRITES MIXED BYTES: a finding whose edits overlap an earlier
+      finding's (two rules rewriting one span) is withheld WHOLE and reported
+      deferred; the next --fix pass re-lints and applies it.
+      tests\autofix\run_fix_overlap_deferred.ps1. }
+    var DeferredOwners: TArray<string>;
+    Edits:= DeferConflictingFixes(Edits, DeferredOwners);
+    if Length(DeferredOwners) > 0 then
+    begin
+      Dec(FixCount, Length(DeferredOwners));
+      Writeln(ErrOutput, Format('drag-lint: %d fix(es) deferred -- their edits overlap an earlier fix in this pass; ' +
+        'run --fix again to apply them.', [Length(DeferredOwners)]));
+    end;
+    { lane IATOM: ALL-OR-NOTHING per fix. A fix one of whose edits no longer
+      matches the file (stale index, a file changed since it was read) is
+      withdrawn WHOLE before anything is written -- never its insert without
+      its removal (E2004). tests\autotest\run_uses_movable_to_implementation.ps1 (uJ). }
+    var DeclinedOwners: TArray<string>;
+    Edits:= TTextEditApplier.WithdrawBrokenFixes(Edits, DeclinedOwners);
+    var DeclineSuffix: string:= '';
+    if Length(DeclinedOwners) > 0 then
+    begin
+      Dec(FixCount, Length(DeclinedOwners));
+      if FixCount < 0 then FixCount:= 0;
+      DeclineSuffix:= Format(', %d declined (%s)', [Length(DeclinedOwners), DECLINE_STALE_REASON]);
+      Writeln(ErrOutput, Format('drag-lint: %d fix(es) declined -- %s; none of their edits were written. ' +
+        'Reindex and run --fix again.', [Length(DeclinedOwners), DECLINE_STALE_REASON]));
+    end;
     if AArgs.AsJson or SameText(AArgs.Format, 'json') then
     begin
       { Structured per-finding output so an AI orchestrator can drive fixes
@@ -12868,10 +13663,17 @@ begin
           one edit on its own StartLine. }
         var EditLineKeys: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
         try
-          for var Ed: TTextEdit in Edits do EditLineKeys.AddOrSetValue(LowerCase(Ed.FilePath) + '|' + IntToStr(Ed.Line), True);
+          { OWNED edits first (BuildAutofixEdits stamps Owner = FixOwnerKey of the finding
+            whose fixer returned them): a fix that edits away from its line -- a uses
+            entry, a FreeAndNil before inherited, doc lines above -- is still its
+            finding's. The (file, line) match stays only for UNOWNED edits (the
+            store-backed builders: doc-drift, naming, raise-bare-exception, per-file fixers). }
+          for var Ed: TTextEdit in Edits do
+            if Ed.Owner <> '' then EditedKeys.AddOrSetValue(Ed.Owner, True)
+            else EditLineKeys.AddOrSetValue(LowerCase(Ed.FilePath) + '|' + IntToStr(Ed.Line), True);
           for F in Targeted do
             if IsFixableRule(F.RuleId) and EditLineKeys.ContainsKey(LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine)) then
-              EditedKeys.AddOrSetValue( LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + LowerCase(F.RuleId), True);
+              EditedKeys.AddOrSetValue(FixOwnerKey(F), True);
         finally
           EditLineKeys.Free;
         end;
@@ -12880,7 +13682,7 @@ begin
         try
           for F in Targeted do
           begin
-            var HasEdit: Boolean:= EditedKeys.ContainsKey( LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + LowerCase(F.RuleId));
+            var HasEdit: Boolean:= EditedKeys.ContainsKey(FixOwnerKey(F));
             JObj:= TJSONObject.Create;
             JObj.AddPair('file' , F.FilePath);
             JObj.AddPair('line' , TJSONNumber.Create(F.StartLine));
@@ -12889,6 +13691,12 @@ begin
             JObj.AddPair('applied', TJSONBool.Create(AArgs.Apply and HasEdit));
             JObj.AddPair('preview', TJSONBool.Create((not AArgs.Apply) and HasEdit));
             JObj.AddPair('risky' , TJSONBool.Create(IsRiskyFixRule(F.RuleId)));
+            if MatchText(FixOwnerKey(F), DeferredOwners) then JObj.AddPair('deferred', TJSONBool.Create(True));
+            if MatchText(FixOwnerKey(F), DeclinedOwners) then
+            begin
+              JObj.AddPair('declined', TJSONBool.Create(True));
+              JObj.AddPair('decline_reason', DECLINE_STALE_REASON);
+            end;
             { Multi-project rename: the owners and, when it applies, why the
               rename was dropped (spec criterion 14). Absent for a
               single-project unit. }
@@ -12945,6 +13753,8 @@ begin
     else if (FixCount = 0) and (NFStaleTotal + NFSkippedTotal > 0) then
       Writeln(Format('autofix: 0 fixable finding(s)%s%s -- reindex: %s',
         [StaleSuffix, SkipSuffix, NamingReindexHint(AArgs, NFHintDb)]))
+    else if (FixCount = 0) and (DeclineSuffix <> '') then
+      Writeln(Format('autofix: nothing written%s -- reindex and run --fix again', [DeclineSuffix]))
     else if FixCount = 0 then Writeln('autofix: no fixable findings (of ' + IntToStr(Length(Targeted)) + ' finding(s))')
     else if AArgs.Apply then
     begin
@@ -12963,7 +13773,7 @@ begin
       var Written: Integer:= Length(Edits) - ApplySkipped;
       if ApplySkipped > 0 then
         SkipSuffix:= Format(', %d %sskipped (stale index)', [NFSkippedTotal + ApplySkipped, IfThen(NFStaleTotal > 0, 'edit(s) ', '')]);
-      Writeln(Format('autofix: applied %d edit(s) across %d file(s)%s%s%s%s', [Written, Touched, StaleSuffix, SkipSuffix, DropSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+      Writeln(Format('autofix: applied %d edit(s) across %d file(s)%s%s%s%s%s', [Written, Touched, StaleSuffix, SkipSuffix, DropSuffix, DeclineSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
     end
     else
     begin
@@ -12972,7 +13782,7 @@ begin
       for F in Targeted do
         if IsRiskyFixRule(F.RuleId) then begin HasRisky:= True; Break; end;
       if HasRisky then Writeln('[risky] one or more fixes are behaviour-changing -- review before --apply.');
-      Writeln(Format('autofix: %d fixable finding(s)%s%s%s -- pass --apply to write', [FixCount, StaleSuffix, SkipSuffix, DropSuffix]));
+      Writeln(Format('autofix: %d fixable finding(s)%s%s%s%s -- pass --apply to write', [FixCount, StaleSuffix, SkipSuffix, DropSuffix, DeclineSuffix]));
     end;
     { Other fixes on the line went ahead; the refused rename still has to be
       the last autofix: line the plugin reads. }
@@ -12980,8 +13790,25 @@ begin
     Exit(0);
   end; // if
 
-  { 3: output. }
-  if SameText(AArgs.Format, 'sarif') then EmitFindingsDoc(AArgs, DRagLint.Output.Sarif.TSarifWriter.ToJson(Survivors, VERSION))
+  { 3: output. Compliance labels (rules\compliance.json): JSON gets a `compliance` object per labelled finding;
+    text gets the  [CWE-476] suffix only under `--labels` -- default text is byte-identical to before. }
+  var CompTbl: TComplianceTable:= nil;
+  var CompErr: string:= '';
+  var IsJsonOut: Boolean:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+  if (IsJsonOut or AArgs.ShowLabels) and not SameText(AArgs.Format, 'sarif') then
+  begin
+    CompTbl:= TComplianceTable.Shared(AArgs.RulesDir, CompErr);
+    if CompTbl.Missing then Writeln(ErrOutput, 'drag-lint: note: rules\compliance.json not found; compliance labels are empty');
+    if CompErr <> '' then Writeln(ErrOutput, 'drag-lint: ' + CompErr);
+  end;
+  if AArgs.ShowLabels and not IsJsonOut and not SameText(AArgs.Format, 'sarif') then
+    for var LI: Integer:= 0 to High(Survivors) do
+    begin
+      var Lb: TComplianceLabels;
+      CompTbl.TryGet(Survivors[LI].RuleId, Lb);
+      Survivors[LI].Message:= Survivors[LI].Message + Lb.Suffix;
+    end;
+  if SameText(AArgs.Format, 'sarif') then EmitFindingsDoc(AArgs, DRagLint.Output.Sarif.TSarifWriter.ToJson(Survivors, VERSION, SarifMetaLookup(AArgs.RulesDir)))
   else if AArgs.AsJson or SameText(AArgs.Format, 'json') then
   begin
     JArr:= TJSONArray.Create;
@@ -13002,6 +13829,24 @@ begin
         if F.Metric > 0 then JObj.AddPair('metric', TJSONNumber.Create(F.Metric));
         { E18 T15b: the verb that fixes it (per-file circular-uses); absent = no such verb }
         if F.FixHint <> '' then JObj.AddPair('fix_hint', F.FixHint);
+        var CompLb: TComplianceLabels;
+        CompTbl.TryGet(F.RuleId, CompLb);
+        if not CompLb.IsEmpty then JObj.AddPair('compliance', ComplianceToJson(CompLb, False));
+        if Length(F.Path) > 0 then
+        begin
+          var JPath: TJSONArray:= TJSONArray.Create;
+          for var Hop: TLintLocation in F.Path do
+          begin
+            var JHop: TJSONObject:= TJSONObject.Create;
+            JHop.AddPair('file_path', Hop.FilePath);
+            JHop.AddPair('line'     , TJSONNumber.Create(Hop.Line));
+            JHop.AddPair('col'      , TJSONNumber.Create(Hop.Col ));
+            JHop.AddPair('routine'  , Hop.Routine);
+            JHop.AddPair('note'     , Hop.Note);
+            JPath.AddElement(JHop);
+          end;
+          JObj.AddPair('path', JPath);
+        end;
         JArr.AddElement(JObj);
       end;
       EmitFindingsDoc(AArgs, JArr.Format(2));
@@ -13014,6 +13859,20 @@ begin
   { 4: exit code. }
   Result:= ExitCodeFor(Survivors, AArgs.FailOn, IfThen(Length(Survivors) > 0, 1, 0));
 end; // function
+
+/// <summary>Keeps the rules labelled under one standard (`rules --standard`).</summary>
+/// <param name="ACat">The catalog.</param>
+/// <param name="AStandard">cwe, cert or misra (already validated).</param>
+/// <returns>The labelled subset, order kept.</returns>
+function ComplianceFilter(const ACat: TArray<TRuleInfo>; const AStandard: string): TArray<TRuleInfo>;
+var R: TRuleInfo;
+begin
+  Result:= nil;
+  for R in ACat do
+    if (SameText(AStandard, 'cwe') and (Length(R.Compliance.Cwe) > 0))
+      or (SameText(AStandard, 'cert') and (Length(R.Compliance.Cert) > 0))
+      or (SameText(AStandard, 'misra') and (Length(R.Compliance.Misra) > 0)) then Result:= Result + [R];
+end;
 
 /// <summary>`drag-lint rules [--json] [--category &lt;name&gt;] [--rules-dir &lt;dir&gt;]` --
 /// emit the full rule catalog (built-ins + external .scm). Default = grouped text
@@ -13036,7 +13895,17 @@ var
     AObj.AddPair('params', PA);
   end;
 begin
+  { rules reads only the command line (and --project for auto): it names no file, so it has no config to discover }
+  if not ApplyRunTargetCompiler(AArgs, '') then Exit(2);
   Cat:= TRuleCatalog.BuildCatalog(AArgs.RulesDir, AArgs.RuleCategory);
+  if TRuleCatalog.ComplianceError <> '' then begin Writeln(ErrOutput, 'drag-lint: ' + TRuleCatalog.ComplianceError); Exit(2); end;
+  var CompDummy: string;
+  if TComplianceTable.Shared(AArgs.RulesDir, CompDummy).Missing then Writeln(ErrOutput, 'drag-lint: note: rules\compliance.json not found; compliance labels are empty');
+  if AArgs.RuleStandard <> '' then
+  begin
+    if not MatchText(AArgs.RuleStandard, ['cwe', 'cert', 'misra']) then begin Writeln(ErrOutput, 'drag-lint: --standard must be cwe, cert or misra'); Exit(2); end;
+    Cat:= ComplianceFilter(Cat, AArgs.RuleStandard);
+  end;
   Sum:= TRuleCatalog.Summarize(Cat);
 
   if AArgs.AsJson then
@@ -13055,8 +13924,14 @@ begin
         O.AddPair('source', R.Source);
         O.AddPair('fixable', TJSONBool.Create(IsFixableRule(R.Id)));
         { true: the fix runs only when "autofix": [...] opts the rule in }
-        O.AddPair('fix_opt_in', TJSONBool.Create(IsOptInFixRule(R.Id)));
+        O.AddPair('fix_opt_in', TJSONBool.Create(False)); // deprecated: every fix is on by default (1.37.0); emitted for the IDE plugin
         AddParamsJson(O, R.Params);
+        O.AddPair('compliance', ComplianceToJson(R.Compliance, True));
+        { 1.38 two-way modernize: the gate's inputs, and whether the rule runs by
+          default at this run's --target-compiler (= default_enabled at 37) }
+        O.AddPair('needs_compiler', TJSONNumber.Create(R.NeedsCompiler));
+        O.AddPair('compat_since', TJSONNumber.Create(R.CompatSince));
+        O.AddPair('target_active', TJSONBool.Create(RuleActiveAtRunTarget(R)));
         Arr.AddElement(O);
       end;
       Root.AddPair('rules', Arr);
@@ -13073,6 +13948,7 @@ begin
       end;
       SumO.AddPair('per_category', PcA );
       Root.AddPair('summary'     , SumO);
+      Root.AddPair('target_compiler', TJSONNumber.Create(ActiveTargetCompiler));
       Writeln(Root.ToJson);
     finally
       Root.Free;
@@ -13090,13 +13966,16 @@ begin
       if R.Category <> CurCat then begin CurCat:= R.Category; Sb.AppendLine(''); Sb.AppendLine('[' + CurCat + ']'); end;
       var Flags: string:= R.DefaultSeverity;
       if not R.DefaultEnabled then Flags:= Flags + ', off';
+      { 1.38: only under a non-default --target-compiler, so a default run prints what it always did }
+      var TgtSuffix: string:= if GRunTargetGate.Drops(R.Id) then ', gated by target'
+        else if GRunTargetGate.ForcesOn(R.Id) then ', on for target' else '';
       if Length(R.Params) > 0 then
       begin
         var Names: string:= '';
         for P in R.Params do begin if Names <> '' then Names:= Names + ','; Names:= Names + P.Name + '=' + P.DefaultVal; end;
         Flags:= Flags + '; ' + Names;
       end;
-      Sb.AppendLine(Format('  %-34s %-8s (%s)', [R.Id, R.Source, Flags]));
+      Sb.AppendLine(Format('  %-34s %-8s (%s%s)', [R.Id, R.Source, Flags, TgtSuffix]) + R.Compliance.Suffix);
     end; // for
     Writeln(Sb.ToString);
   finally
@@ -13126,22 +14005,37 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak');
-  LINT_GATE_PROJECT_RULES: array[0..16] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..25] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
     'assert-with-side-effect', 'enum-helper-separate-units', 'repeated-type-switch',
-    'unused-unit-in-uses', 'god-class', 'enum-ordinal-persisted');
+    'unused-unit-in-uses', 'god-class', 'enum-ordinal-persisted', 'duplicate-unit-on-search-path',
+    'dfm-event-handler-missing', 'dfm-password-edit-unmasked', 'uses-movable-to-implementation', 'virtual-never-overridden',
+    'unused-enum-value',
+    'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
     index it never evaluates them unless --rule names one: a dl:ok for one of them
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..7] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..12] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
-    'query-name-with-effect', 'assert-with-side-effect');
+    'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
+    'unused-enum-value',
+    'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive');
+  { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
+    opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
+    is answered exactly for one file -- its own call sites, narrowed by AOnlyFileId
+    -- so the IDE gutter and lint-all agree. Every other PROJECT_RULES_OPTIN_GATED
+    id ships OFF and stays --rule-only on this verb.
+    tests\autotest\run_lint_file_discarded_effect_free.ps1. }
+  LINT_FILE_OPTIN_ON: array[0..0] of string = ('discarded-effect-free-result');
+  { The three OFF-by-default store rules of lane B-EFFECT (DRagLint.Lint.EffectRules). }
+  LANE_BEFFECT_RULES: array[0..2] of string = (
+    'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive');
   LINT_GATE_CLASS_METRICS: array[0..9] of string = (
     'too-many-children', 'deep-inheritance', 'high-response', 'high-coupling', 'low-cohesion',
     'middle-man', 'fan-out', 'fan-in', 'instability', 'feature-envy');
@@ -13171,7 +14065,39 @@ const
     'line-too-long');
   { RunDocDrift splits one analysis over three ids (DocRules.IsDocDriftFamily). }
   LINT_GATE_DOC_DRIFT: array[0..2] of string = ('doc-drift', 'doc-param-no-description', 'doc-param-not-in-signature');
-
+  { Clippy-parity wave (L0): one gate per new checker unit. A lane that adds an
+    emit site adds nothing here -- the ids are already listed. }
+  LINT_GATE_CONTROL_FLOW: array[0..5] of string = (
+    'loop-condition-invariant', 'for-bound-modified-in-body', 'infinite-loop-no-exit', 'redundant-continue-exit', 'else-after-exit', 'unconditional-recursion');
+  LINT_GATE_EXPR: array[0..4] of string = (
+    'bad-bit-mask', 'invalid-regex-literal', 'double-dictionary-lookup', 'case-same-branches', 'misleading-indentation');
+  LINT_GATE_DECL: array[0..2] of string = (
+    'missing-const-param', 'local-shadows-field', 'method-could-be-static');
+  LINT_GATE_SIZE: array[0..2] of string = (
+    'large-stack-local', 'too-many-bool-fields', 'inline-on-large-routine');
+  LINT_GATE_CONCURRENCY: array[0..0] of string = (
+    'wait-while-holding-lock');
+  LINT_GATE_DISALLOWED: array[0..2] of string = (
+    'disallowed-method', 'disallowed-type', 'disallowed-name');
+  LINT_GATE_MODERNIZE: array[0..0] of string = (
+    'index-loop-to-for-in');
+  { Gap-rules wave (G0): one gate per new checker unit; same rule as above. }
+  LINT_GATE_OWNERSHIP: array[0..4] of string = (
+    'field-created-not-freed', 'free-of-owned-item', 'mismatched-alloc-free', 'freeonterminate-then-wait', 'begin-end-pair-not-in-finally');
+  LINT_GATE_BOUNDS_NIL: array[0..3] of string = (
+    'nil-check-after-dereference', 'address-of-local-returned', 'constant-index-out-of-range', 'copy-paste-assignment');
+  LINT_GATE_EXCEPTION_THREAD: array[0..3] of string = (
+    'exception-escapes-thread', 'raise-in-destructor', 'network-client-without-timeout', 'closure-captures-loop-local');
+  LINT_GATE_DECL_PARITY: array[0..7] of string = (
+    'hides-ancestor-virtual', 'needless-exit', 'free-of-parameter', 'property-accessor-name', 'unused-loop-variable',
+    'property-references-itself', 'identical-then-else', 'interface-object-mixing');
+  LINT_GATE_PARITY_EXT: array[0..2] of string = (
+    'property-references-itself', 'identical-then-else', 'interface-object-mixing');
+  { taint wave T2: the store-backed interprocedural taint rules (DRagLint.Lint.TaintRules) }
+  LINT_GATE_TAINT: array[0..2] of string = (
+    'taint-sql-injection', 'taint-command-injection', 'taint-path-traversal');
+  { lane INC3: the preprocessor's own report (DRagLint.Diagnostics.PpChecks) }
+  LINT_GATE_PP: array[0..0] of string = ('pp-unresolved-if');
 { True when a lint run with --rule ARule needs a checker that emits AIds: always
   for a run with no --rule, otherwise only when ARule is one of them. }
 function LintRuleWants(const ARule: string; const AIds: array of string): Boolean;
@@ -13182,6 +14108,53 @@ begin
   Result:= False;
 end;
 
+{ True when at least one taint rule survives this run's config (--disable, the
+  config's disabled list, a marker): the taint stage is the most expensive pass and
+  runs not at all when every rule it emits would be dropped. }
+function TaintWanted(const AKeep: TFunc<string, Boolean>): Boolean;
+begin
+  for var Id: string in LINT_GATE_TAINT do
+    if AKeep(Id) then Exit(True);
+  Result:= False;
+end;
+
+var
+  { one stale-index note per process, however many files `lint` is asked about }
+  GTaintStaleNoted: Boolean = False;
+
+/// <summary>Runs the three taint rules (LINT_GATE_TAINT) over AScope and returns the
+/// findings the caller keeps.</summary>
+/// <param name="AStore">Project store; nil returns nothing (the rules are store-backed).</param>
+/// <param name="ALibStore">The platform library store the lint path opened, or nil.</param>
+/// <param name="AScope">files.id of the files whose sinks are examined.</param>
+/// <param name="ACfg">The lint config; its TaintJson objects extend the built-in catalogues.</param>
+/// <param name="ANarrowRule">--rule; '' = every taint rule.</param>
+/// <param name="AOnlyPath">Keep only findings in this file ('' = all).</param>
+/// <returns>Taint findings with their Path.</returns>
+/// <remarks>A DB indexed before extractor 1.26.0 (no or empty data_flows) prints ONE note to
+/// stderr and reports nothing. DRAGLINT_DEBUG / DRAGLINT_PROFILE print the
+/// `taint: sinks N, keys N, ...` stats line to stderr.</remarks>
+function RunTaintRules(const AStore, ALibStore: ISymbolStore; const AScope: TArray<Int64>;
+                       const ACfg: TLintConfig; const ANarrowRule, AOnlyPath: string): TArray<TLintFinding>;
+var
+  Stats: TTaintStats;
+  F    : TLintFinding;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  for F in TTaintRules.Check(AStore, ALibStore, AScope, TTaintRules.LoadConfig('', ACfg.TaintJson), Stats) do
+    if ((ANarrowRule = '') or SameText(ANarrowRule, F.RuleId))
+       and ((AOnlyPath = '') or SameText(F.FilePath, AOnlyPath)) then
+      Result:= Result + [F];
+  if Stats.StaleIndex and not GTaintStaleNoted then
+  begin
+    GTaintStaleNoted:= True;
+    Writeln(ErrOutput, 'taint: this index has no data_flows facts (built before extractor 1.26.0) -- ' +
+      're-index to enable taint-sql-injection / taint-command-injection / taint-path-traversal');
+  end;
+  if (GetEnvironmentVariable('DRAGLINT_DEBUG') <> '') or (GetEnvironmentVariable('DRAGLINT_PROFILE') <> '') then
+    Writeln(ErrOutput, Stats.ToLine);
+end;
 /// <summary>The rule ids named by a suppression marker anywhere in AFiles, lowercased:
 /// every `dl:ok &lt;rule&gt;` and every `drag-lint:ignore &lt;rule&gt;`; '*' when a
 /// `drag-lint:ignore` names no rule (it suppresses everything on its line).</summary>
@@ -13505,7 +14478,8 @@ end;
 /// that IS accounted by a finding this run produced (a within-file pair) is
 /// unaffected; lint-all still reports an unused marker for every rule here.
 /// The OptedIn-gated project rules (PROJECT_RULES_OPTIN_GATED, e.g. uses-global-census) are listed
-/// in every run, index or not: Run is handed no opt-in list, so none is evaluated (--rule<id> excepted).</remarks>
+/// in every run, index or not: Run is handed no opt-in list for them, so none is evaluated (--rule<id>
+/// excepted) -- except LINT_FILE_OPTIN_ON, which DoLint opts in whenever the store holds the file.</remarks>
 function LintUnjudgedMarkerRules(const AArgs: TArgs; AStoreSeen: Boolean): TArray<string>;
 
   procedure AddAll(const AIds: array of string);
@@ -13521,10 +14495,10 @@ begin
     AddAll(LINT_GATE_DOC_DRIFT);
     AddAll(['missing-doc']);
   end;
-  { OptedIn-gated project rules: not evaluated by any `lint <file>` run, index or not
-    (Run gets no opt-in list), except the one --rule names. }
+  { OptedIn-gated project rules: not evaluated by a `lint <file>` run, index or not,
+    except the one --rule names and, with a store, the ON ones in LINT_FILE_OPTIN_ON. }
   for var Gated: string in PROJECT_RULES_OPTIN_GATED do
-    if not SameText(Gated, AArgs.Rule) then AddAll([Gated]);
+    if (not SameText(Gated, AArgs.Rule)) and not (AStoreSeen and MatchText(Gated, LINT_FILE_OPTIN_ON)) then AddAll([Gated]);
   if AArgs.ProjectPath = '' then AddAll(['unit-not-in-dpr', UNIT_NOT_IN_LIBRARY_RULE_ID]);
   if not AStoreSeen then
   begin
@@ -13901,6 +14875,7 @@ var
     start reporting markers in files the run deliberately does not report on. }
   ScannedFiles: TArray<string>              ;
 begin
+  if not ApplyRunTargetCompiler(AArgs, LoadLintConfig(AArgs).TargetCompiler) then Exit(2);
   if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
   TraceLintChecker('setup');
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
@@ -13920,6 +14895,11 @@ begin
   TAstParseCache.SetPreprocess(not AArgs.NoPreprocess,
     ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
   InstallFileProfileResolver(AArgs, AArgs.DbPaths, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  { Lane INC3: the lint side's IF symbol table -- the same lookup the indexer
+    used: project units through the project DB's files, library units from
+    the library DB. }
+  if not AArgs.NoPreprocess then
+    InstallPPUnitSource(ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''), AArgs.DbPaths, [LintLibraryDb(AArgs)]);
   DefDisabled:= nil;
   { AutoFix Chunk 1: accept --file <F> as an alias for the positional <path>.
     The AutoFix spec's fix contract and the IDE spawn (Task 7) both invoke
@@ -14261,9 +15241,59 @@ begin
     { .dpr joins .pas/.inc: lint-all scans a .dpr with these same AST checks (fixed 2026-08-16),
       so the per-file verb must too or the editor's gutter hides them (1.20.6 T3;
       tests\autotest\run_lint_dpr_parity.ps1). .dpk stays out: lint-all does not scan it. }
-    if TFile.Exists(EffPath) and (SameText(ExtractFileExt(EffPath), '.pas') or SameText(ExtractFileExt(EffPath), '.inc')
-       or SameText(ExtractFileExt(EffPath), '.dpr')) then
+    { A DIRECTORY IS THE UNION OF ITS FILES (lane DIRLINT, 2026-10-27).
+      This block used to be gated on TFile.Exists(EffPath), so `lint <dir>` ran
+      the .scm pass above and NONE of the built-in checkers below: over
+      tests\lint, try-except-swallowed 0 vs 12, nil-check-after-dereference 0
+      vs 5, exception-escapes-thread 0 vs 3, while the .scm rules agreed. A
+      zero that means "not looked at" read as a clean folder.
+
+      Now every scanned .pas/.inc/.dpr of the walk runs this same block, with
+      the same flags, as if it had been linted alone: its own .scm findings are
+      handed to it as Findings (the block filters them per file -- the
+      string-equality drop, DropNonStringConcat, the buffer reconcile) and its
+      result is collected per file, so one file's store cannot filter another
+      file's findings. A single file stays byte-identical: one target, no
+      bucketing. tests\autotest\run_lint_dir_union_parity.ps1. }
+    var LintRoot      : string         := EffPath;
+    var LintDirMode   : Boolean        := (not TFile.Exists(EffPath)) and TDirectory.Exists(EffPath);
+    var PerFileTargets: TArray<string> := nil;
+    if LintDirMode then
     begin
+      for var PT: string in ScannedFiles do
+        if MatchText(ExtractFileExt(PT), ['.pas', '.inc', '.dpr']) then PerFileTargets:= PerFileTargets + [PT];
+    end
+    else if TFile.Exists(EffPath) and MatchText(ExtractFileExt(EffPath), ['.pas', '.inc', '.dpr']) then
+      PerFileTargets:= [EffPath];
+    var DirPending: TObjectDictionary<string, TList<TLintFinding>> := nil;
+    var DirOut    : TList<TLintFinding>                            := nil;
+    try
+    if LintDirMode then
+    begin
+      DirPending:= TObjectDictionary<string, TList<TLintFinding>>.Create([doOwnsValues]);
+      DirOut    := TList<TLintFinding>.Create;
+      for var PT: string in PerFileTargets do DirPending.AddOrSetValue(LowerCase(PT), TList<TLintFinding>.Create);
+      for var DF: TLintFinding in Findings do
+      begin
+        var Bucket: TList<TLintFinding>;
+        if DirPending.TryGetValue(LowerCase(DF.FilePath), Bucket) then Bucket.Add(DF) else DirOut.Add(DF);
+      end;
+      Findings:= nil;
+      { The two project-file checks above are gated on a FILE target too; they
+        already take a file list, so the directory hands them the whole set. }
+      var DirProj: string := IfdefProjectFile(AArgs, AArgs.DbPath);
+      if (DirProj <> '') and (Length(PerFileTargets) > 0) then
+      begin
+        if (NarrowRule = '') or SameText(NarrowRule, IFDEF_UNDEFINED_RULE_ID) then
+          DirOut.AddRange(TIfdefUndefinedCheck.CheckFiles(PerFileTargets, DirProj, LoadLintConfig(AArgs).IfdefAllow, nil));
+        if (NarrowRule = '') or SameText(NarrowRule, PLATFORM_DIVERGENT_RULE_ID) then
+          DirOut.AddRange(TPlatformDivergentCheck.CheckFiles(PerFileTargets, DirProj, LoadLintConfig(AArgs).PlatformDivergentAllow, nil));
+      end;
+    end;
+    for var PerFile: string in PerFileTargets do
+    begin
+      EffPath:= PerFile;
+      if LintDirMode then Findings:= DirPending[LowerCase(PerFile)].ToArray;
       var Cfg: TLintConfig:= LoadLintConfig(AArgs);
       { THE STORE IS RESOLVED ONCE, HERE, FOR EVERY PER-FILE CHECKER BELOW.
 
@@ -14388,7 +15418,7 @@ begin
       if (FlowStore <> nil) and
          (LintRuleWants(NarrowRule, ['with-hides-outer-symbol', 'enum-read-inside-with'])
           or LintRuleWants(NarrowRule, LINT_GATE_FLOW) or LintRuleWants(NarrowRule, LINT_GATE_PROJECT_RULES)
-          or LintRuleWants(NarrowRule, ['type-name-prefix'])) then
+          or LintRuleWants(NarrowRule, ['type-name-prefix', MISSING_USES_RULE])) then
       begin
         var FlowLibDb: string := LintLibraryDb(AArgs);
         { A STALE library index degrades to project-only exactly like an
@@ -14461,6 +15491,12 @@ begin
       { X4: a bare read the index bound to a scoped-enum value (needs the index) }
       if LintRuleWants(NarrowRule, ['enum-bare-read-scoped']) then
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(EffPath, FlowStore, FlowFid);
+      { a name declared in a unit the file does not use (project index + library) }
+      if LintRuleWants(NarrowRule, [MISSING_USES_RULE]) then
+        Findings:= Findings + TMissingUsesChecker.Check(EffPath, FlowStore, FlowFid, [FlowStore, FlowLibStore]); // dl:ok concat-in-loop@7c9b -- Findings is a TArray<TLintFinding>; one append per checker, not string concatenation
+      { B-ENUM: a hard-coded enum ordinal (the index widens what counts as an enum) }
+      if LintRuleWants(NarrowRule, [ENUM_ORDINAL_CAST_RULE]) then
+        Findings:= Findings + TEnumOrdinalCastChecker.Check(EffPath, FlowStore, FlowFid);
       { v0.48: type-aware checks (float equality, FreeAndNil-on-interface, v0.52 win64 cast) via a per-file type map.
         Gated on LINT_GATE_TYPE_AWARE (D3); before that it ran for every --rule. }
       { LSP C12: a platform-library unit skips the type map too, for the flow
@@ -14587,6 +15623,60 @@ begin
           EffPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
           Cfg.ThresholdFor('message-chain', 4)) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      { Clippy-parity wave (L0): the seven new per-file checker units. }
+      TraceLintChecker('controlflow');
+      if LintRuleWants(NarrowRule, LINT_GATE_CONTROL_FLOW) then
+        for F in DRagLint.Diagnostics.ControlFlowChecks.TControlFlowChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('expr');
+      if LintRuleWants(NarrowRule, LINT_GATE_EXPR) then
+        for F in DRagLint.Diagnostics.ExprChecks.TExprChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('decl');
+      if LintRuleWants(NarrowRule, LINT_GATE_DECL) then
+        for F in DRagLint.Diagnostics.DeclChecks.TDeclChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('size');
+      if LintRuleWants(NarrowRule, LINT_GATE_SIZE) then
+        for F in DRagLint.Diagnostics.SizeChecks.TSizeChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('concurrency');
+      if LintRuleWants(NarrowRule, LINT_GATE_CONCURRENCY) then
+        for F in DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('disallowed');
+      if LintRuleWants(NarrowRule, LINT_GATE_DISALLOWED) then
+        for F in DRagLint.Diagnostics.DisallowedChecks.TDisallowedChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('modernize');
+      if LintRuleWants(NarrowRule, LINT_GATE_MODERNIZE) then
+        for F in DRagLint.Diagnostics.ModernizeChecks.TModernizeChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('pp');
+      if LintRuleWants(NarrowRule, LINT_GATE_PP) then
+        for F in DRagLint.Diagnostics.PpChecks.TPpChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      { Gap-rules wave (G0): the five new per-file checker units. }
+      TraceLintChecker('ownership');
+      if LintRuleWants(NarrowRule, LINT_GATE_OWNERSHIP) then
+        for F in DRagLint.Diagnostics.OwnershipChecks.TOwnershipChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('boundsnil');
+      if LintRuleWants(NarrowRule, LINT_GATE_BOUNDS_NIL) then
+        for F in DRagLint.Diagnostics.BoundsNilChecks.TBoundsNilChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('exceptionthread');
+      if LintRuleWants(NarrowRule, LINT_GATE_EXCEPTION_THREAD) then
+        for F in DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('declparity');
+      if LintRuleWants(NarrowRule, LINT_GATE_DECL_PARITY) then
+        for F in DRagLint.Diagnostics.DeclParityChecks.TDeclParityChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
+      TraceLintChecker('parityext');
+      if LintRuleWants(NarrowRule, LINT_GATE_PARITY_EXT) then
+        for F in DRagLint.Diagnostics.ParityExtChecks.TParityExtChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+          if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       { v0.77: clone / duplicate-code detection (#6) -- within-file (single-file lint).
         lint-all uses CheckProject instead (LATER task) so within-file clones are
         not double-reported. }
@@ -14659,12 +15749,17 @@ begin
           if LintRuleWants(NarrowRule, LINT_GATE_PROJECT_RULES) then
           begin
             TraceLintChecker('project-rules');
+            { The ON opt-in-gated rules (LINT_FILE_OPTIN_ON), through the same
+              ShouldKeep(False) gate lint-all uses, so --disable still turns them off. }
+            var FileOptIn: TArray<string>:= nil;
+            for var OnId: string in LINT_FILE_OPTIN_ON do
+              if Cfg.ShouldKeep(OnId, {ADefaultDisabled=}False) then FileOptIn:= FileOptIn + [OnId];
             var WholeGraph: TFunc<string, TArray<TLintFinding>>:=
               WholeGraphProvider(FlowStore, FlowLibStore, FlowDb, FlowLibUsed, NarrowRule,
                                  RuleKeptByRun(AArgs, Cfg, Marked));
             for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
                        FlowStore, NarrowRule, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore,
-                       {AOptInRules=}nil, {AOnlyFileId=}FlowFid, WholeGraph) do
+                       FileOptIn, {AOnlyFileId=}FlowFid, WholeGraph) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
             { E18 T15b: circular-uses for EVERY unit of a cycle, on the uses line, with the
@@ -14691,6 +15786,11 @@ begin
                        {AOnlyFileId=}FlowFid, RuleKeptByRun(AArgs, Cfg, Marked)) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
+          end;          { taint wave T2: the sinks of THIS file; the walk may leave it (callers, fields, library) }
+          if LintRuleWants(NarrowRule, LINT_GATE_TAINT) and TaintWanted(RuleKeptByRun(AArgs, Cfg, Marked)) then
+          begin
+            TraceLintChecker('taint');
+            Findings:= Findings + RunTaintRules(FlowStore, FlowLibStore, [FlowFid], Cfg, NarrowRule, MyPath);
           end;
         finally
           SibKeep .Free;
@@ -14711,7 +15811,18 @@ begin
       { Free cached tree after single-file lint }
       TraceLintChecker('after-checkers');
       DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear;
-    end; // if
+      if LintDirMode then
+      begin
+        DirOut.AddRange(Findings);
+        Findings:= nil;
+      end;
+    end; // for PerFile
+    if LintDirMode then Findings:= DirOut.ToArray;
+    finally
+      EffPath:= LintRoot;
+      DirPending.Free;
+      DirOut.Free;
+    end;
   end; // if
   { The store-backed quick-fixes -- the six naming rules, doc-drift and
     missing-doc -- all sit behind `if AStore <> nil` in FinalizeAndOutput, and
@@ -14854,7 +15965,11 @@ end; // function
 
 // v0.18: drag-lint context --task "verb qname" [--db <path>]
 //   [--format md|json|raw] [--max-callers N] [--context N] [--no-docs]
+//   [--library-db LIBRARY]
 // Builds a TContextBundle and renders it in the requested format.
+// RSV-R2: with --library-db (or a second --db), the "Library calls" count also
+// includes calls whose receiver type the library oracle binds now (read-only,
+// degrades to the stored-only count when the library cannot be opened).
 // Exit 2 on usage error, 1 if symbol not found, 0 on success.
 function DoContext(const AArgs: TArgs): Integer;
 var
@@ -14863,19 +15978,33 @@ var
   IncDocs   : Boolean       ;
   IncSurface: Boolean       ;
   IncImpl   : Boolean       ;
+  Oracle    : TLibraryOracle;
 begin
-  if AArgs.Task = '' then begin Writeln('Usage: drag-lint context --task "verb qname" [--db PATH] ' + '[--format md|json|raw]'); Exit(2); end;
+  if AArgs.Task = '' then begin Writeln('Usage: drag-lint context --task "verb qname" [--db PATH] ' + '[--format md|json|raw] [--library-db LIBRARY]'); Exit(2); end;
   if NoDbResolved(AArgs.DbPath, 'context') then Exit(2);
-  if not TFile.Exists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  var ProjectDb: string:= AArgs.DbPath;
+  var LibraryDb: string:= FindCalleesLibraryDb(AArgs, ProjectDb);
+  if not TFile.Exists(ProjectDb) then begin Writeln(Format('Database not found: %s', [ProjectDb])); Exit(2); end;
   var RoOk: Boolean;
-  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  Store:= OpenReadOnlyStore(ProjectDb, RoOk);
   if not RoOk then Exit(1);
+  { The library is opened read-only and never written; one that cannot be opened is
+    a stderr NOTE and the stored-only count, never an error (as find-callees). }
+  Oracle:= nil;
+  if LibraryDb <> '' then
+  begin
+    var LibOk: Boolean;
+    var LibStore: ISymbolStore:= OpenReadOnlyStore(LibraryDb, LibOk, {AQuiet=}True);
+    if LibOk then Oracle:= TLibraryOracle.Create([LibStore])
+    else Writeln(ErrOutput, 'NOTE: context: the library index could not be opened (', LibraryDb, '); counting stored library calls only.');
+  end;
+  try
   IncDocs:= not AArgs.NoDocs;
   IncSurface:= AArgs.IncludeClassSurface;
   IncImpl:= SameText(AArgs.Verb, 'modify') or SameText(AArgs.Verb, 'refactor') or SameText(AArgs.Verb, 'extend');
   Bundle:= TContextBundler.Build(
     Store, AArgs.Verb, AArgs.BundleQName, AArgs.ContextLines, AArgs.MaxCallers, IncDocs, IncSurface, IncImpl, {AExcludeDfmFields=}
-    not AArgs.FullSurface, {ATaskText=}AArgs.Task);
+    not AArgs.FullSurface, {ATaskText=}AArgs.Task, {AOracle=}Oracle);
 
   { THE OLD TEST HERE WAS `Bundle.QName = ''`, AND IT WAS DEAD. Build stamps
     QName with what the caller asked for BEFORE it looks anything up, so it is
@@ -14904,7 +16033,17 @@ begin
   if SameText(AArgs.Format, 'json') then Writeln(TContextBundler.RenderJson(Bundle))
   else if SameText(AArgs.Format, 'raw') then Writeln(TContextBundler.RenderRaw(Bundle))
   else Writeln(TContextBundler.RenderMarkdown(Bundle));
+  if UsageLogEnabled then
+  begin
+    var UsagePaths: TArray<string>:= nil;
+    for var TS: TSymbol in Store.FindSymbolsByQualifiedName(Bundle.QName) do UsagePaths:= UsagePaths + [Store.GetFilePath(TS.FileId)];
+    for var BC: TBundleCaller in Bundle.Callers do UsagePaths:= UsagePaths + [BC.FilePath];
+    LogReaderUsage('context', AArgs.DbPath, Bundle.TokenEstimate, UsagePaths);
+  end;
   Result:= 0;
+  finally
+    Oracle.Free;
+  end; // try
 end; // function
 
 // v0.18: drag-lint bench-context [--db PATH] [--n N]
@@ -15650,7 +16789,7 @@ begin
     else if Fmt = 'csv' then Output:= RenderCsv(Rep)
     else Output:= RenderText(Rep);
 
-    if AArgs.Output <> '' then TFile.WriteAllText(AArgs.Output, Output, TEncoding.ANSI)
+    if AArgs.Output <> '' then WriteOutputFile(AArgs.Output, Output)
     else Writeln(Output);
   finally
     for i:= 0 to High(Stores) do Stores[i]:= nil;
@@ -15965,7 +17104,7 @@ begin
       end;
     end; // else
 
-    if AArgs.Output <> '' then TFile.WriteAllText(AArgs.Output, OutStr, TEncoding.ANSI)
+    if AArgs.Output <> '' then WriteOutputFile(AArgs.Output, OutStr)
     else Writeln(OutStr);
   finally
     Store.Free;
@@ -16014,6 +17153,90 @@ end; // function
     is no such data".
   --------------------------------------------------------------------------- }
 
+
+{ ---------------------------------------------------------------------------
+  drag-lint project-context -- write / check <base>.dlcontext.json.
+  --------------------------------------------------------------------------- }
+
+/// <summary>drag-lint project-context: writes (or with --check verifies) the
+/// project-context file beside a project.</summary>
+/// <param name="AArgs">ProjectPath (--project) = .dproj or .dpr; CheckPlatform
+/// (--platform) and ConfigPath (--config) override the active selection; Output
+/// (--out) overrides the destination; AsJson prints the file text; WikiCheck
+/// (--check) verifies instead of writing.</param>
+/// <returns>0 written / fresh; 1 --check found the file missing, unreadable or stale;
+/// 2 usage error (no project, missing file, a .dpr with no .dproj and no
+/// --platform/--config).</returns>
+/// <remarks>Touches no index and needs no --db. Writes only the context file.</remarks>
+function DoProjectContext(const AArgs: TArgs): Integer;
+var
+  Proj, Dproj, Target, Why: string;
+  Ctx, Disk, Want: DRagLint.Project.ContextFile.TProjectContext;
+begin
+  Proj:= AArgs.ProjectPath;
+  if Proj = '' then
+  begin
+    Writeln('ERROR: project-context needs --project <x.dproj|x.dpr>');
+    Exit(2);
+  end;
+  Proj:= TPath.GetFullPath(Proj);
+  if not TFile.Exists(Proj) then
+  begin
+    Writeln('ERROR: project file not found: ', Proj);
+    Exit(2);
+  end;
+  Dproj:= Proj;
+  if not SameText(ExtractFileExt(Proj), '.dproj') then
+  begin
+    Dproj:= TPath.ChangeExtension(Proj, '.dproj');
+    if not TFile.Exists(Dproj) then Dproj:= '';
+  end;
+  if (Dproj = '') and ((AArgs.CheckPlatform = '') or (AArgs.ConfigPath = '')) then
+  begin
+    Writeln('ERROR: no .dproj: run dl-project-setup.exe or pass --platform/--config');
+    Exit(2);
+  end;
+  Target:= if AArgs.Output <> '' then TPath.GetFullPath(AArgs.Output) else DRagLint.Project.ContextFile.ContextFileFor(Proj);
+
+  if AArgs.WikiCheck then
+  begin
+    Why:= '';
+    if not TFile.Exists(Target) then Why:= 'missing: ' + Target
+    else if not DRagLint.Project.ContextFile.TryLoadProjectContext(Target, Disk) then Why:= 'unreadable or wrong schema: ' + Target
+    else if Disk.Stale then Why:= 'stale: ' + Disk.SourceFile + ' changed since the context was written (SHA-1 differs)'
+    else
+    begin
+      Want:= DRagLint.Project.ContextFile.BuildProjectContext(if Dproj <> '' then Dproj else Proj, AArgs.CheckPlatform, AArgs.ConfigPath);
+      if (AArgs.CheckPlatform <> '') and not SameText(Disk.PlatformName, Want.PlatformName) then
+        Why:= 'stale: platform is ' + Disk.PlatformName + ', asked for ' + Want.PlatformName
+      else if (AArgs.ConfigPath <> '') and not SameText(Disk.Config, Want.Config) then
+        Why:= 'stale: config is ' + Disk.Config + ', asked for ' + Want.Config;
+    end;
+    if Why <> '' then
+    begin
+      Writeln(Why);
+      Exit(1);
+    end;
+    if AArgs.AsJson then Writeln(TFile.ReadAllText(Target, TEncoding.UTF8))
+    else Writeln('fresh: ', Target);
+    Exit(0);
+  end;
+
+  Ctx:= DRagLint.Project.ContextFile.BuildProjectContext(if Dproj <> '' then Dproj else Proj, AArgs.CheckPlatform, AArgs.ConfigPath);
+  Ctx.GeneratedBy:= 'drag-lint project-context ' + DRAGLINT_VERSION;
+  try
+    DRagLint.Project.ContextFile.SaveProjectContext(Ctx, Target);
+  except
+    on E: Exception do
+    begin
+      Writeln('ERROR: cannot write ', Target, ': ', E.Message);
+      Exit(1);
+    end;
+  end;
+  if AArgs.AsJson then Writeln(TFile.ReadAllText(Target, TEncoding.UTF8))
+  else Writeln(System.SysUtils.Format('wrote %s (%s, %s, %d defines)', [Target, Ctx.PlatformName, Ctx.Config, Length(Ctx.Defines)]));
+  Result:= 0;
+end;
 
 { ---------------------------------------------------------------------------
   drag-lint ide-release -- ask a running IDE plugin to let go of the engine.
@@ -17110,7 +18333,7 @@ begin
     JRows.Free; { nil once JRoot took it; a failure path still owns it here }
   end; // try
 
-  if AArgs.Output <> '' then TFile.WriteAllText(AArgs.Output, OutStr, TEncoding.ANSI)
+  if AArgs.Output <> '' then WriteOutputFile(AArgs.Output, OutStr)
   else WriteStdoutDocument(OutStr + sLineBreak); // after every stderr byte (T2i R18)
   Result:= 0;
 end; // function
@@ -17126,7 +18349,7 @@ function tree_sitter_dfm: PTSLanguage; cdecl;
 external 'tree-sitter-dfm';
 
 const
-  CLI_VERB_COUNT = 61; // informational only, not load-bearing; approximate verb count
+  CLI_VERB_COUNT = 62; // informational only, not load-bearing; approximate verb count
 
 /// <summary>Returns the tree-sitter ABI version for the given grammar, or
 /// 'unknown' if the grammar's entry point cannot be called (never fabricated).</summary>
@@ -17375,6 +18598,10 @@ type
     ResolverNewer   : Boolean;
     Verdict         : string;
     Remedy          : string;
+    { Library-first resolve: the stored marker (State = '' when none) and, for a pending one, the
+      probe's current word on the library (a readiness token, '' when no marker). }
+    LibraryMarker   : TLibraryMarker;
+    LibraryState    : string;
   end;
 
 /// <summary>Computes the `info --db` staleness verdict for one index file:
@@ -17422,6 +18649,7 @@ begin
       Result.IndexerFp       := St.GetMetaValue(INDEXER_FP_KEY );
       Result.ResolverFp      := St.GetMetaValue(RESOLVER_FP_KEY);
       Result.ResolverExpected:= ResolverFingerprint(St);
+      Result.LibraryMarker   := LibraryMarkerFromJson(St.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY));
     end;
   except
     on E: Exception do Ok:= False;
@@ -17471,6 +18699,15 @@ begin
   begin
     Result.Verdict:= 'resolve-owed';
     Result.Remedy := IndexRemedyFor(St, ADbPath, {AResolveOnly=}True) + '   (minutes, no parse becomes wrong)';
+  end
+  else if Result.LibraryMarker.State = LIBSTATE_PENDING then
+  begin
+    { The edges are current for THIS resolver but were derived without the platform library. }
+    var LWhy, LFp: string;
+    Result.LibraryState:= LibraryReadinessToken(ProbeLibraryReadiness(Result.LibraryMarker.LibraryDb, Result.LibraryMarker.Platform, LWhy, LFp));
+    Result.Verdict:= 'library-resolve-owed';
+    Result.Remedy := IndexRemedyFor(St, ADbPath, {AResolveOnly=}True) + '   (minutes; the platform library was not ready: ' +
+      Result.LibraryMarker.Reason + '; library now: ' + Result.LibraryState + ')';
   end
   else
     Result.Verdict:= 'current';
@@ -17624,6 +18861,7 @@ begin
         deliberate-break (inst.Old -> DL_NONE(inst.Old)), migrate-check;
         pas_uses[] status mapped for the member. }
       JCap.AddPair('migrate_members', TJSONBool.Create(True));
+      JCap.AddPair('migrate_identifiers', TJSONBool.Create(True)); { 1.38 (D2): file-scope / type / enum #migrate in code }
       { E18 (1.33.0): cycles --fix plans, gates and (with --apply) writes the mechanical
         fix of one circular group -- cycle-fix/1 JSON, exit 0 / 1 / 2. }
       JCap.AddPair('cycle_fix', TJSONBool.Create(True));
@@ -17680,6 +18918,13 @@ begin
           JOne.AddPair('verdict', V.Verdict);
           if V.Remedy <> '' then
             JOne.AddPair('remedy', V.Remedy);
+          if V.LibraryMarker.State <> '' then
+          begin
+            { Additive to info/1: the stored marker as an object, plus the library's state now. }
+            var JLib: TJSONObject:= TJSONObject(TJSONObject.ParseJSONValue(LibraryMarkerToJson(V.LibraryMarker)));
+            if V.LibraryState <> '' then JLib.AddPair('library_state', V.LibraryState);
+            JOne.AddPair('library_resolve', JLib);
+          end;
         end;
       end;
 
@@ -17710,6 +18955,8 @@ begin
       Writeln('index: ', DbP, '  verdict: ', V.Verdict);
       if V.Remedy <> '' then
         Writeln('  remedy: ', V.Remedy);
+      if V.LibraryMarker.State <> '' then
+        Writeln('  library_resolve: ', V.LibraryMarker.State, '  ', V.LibraryMarker.Reason);
     end;
   end;
 end; // function
@@ -19291,7 +20538,7 @@ begin
     if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then Dproj:= AArgs.ProjectPath;
     var ScopeProfile: TDefineProfile:= ResolveIndexProfile('', AArgs.CheckPlatform, '');
     if (Dproj <> '') and TFile.Exists(Dproj) then
-      ScopeProfile:= ResolveActiveBuild(Dproj, AArgs.CheckPlatform, '', True).Profile;
+      ScopeProfile:= ResolveActiveBuild(Dproj, AArgs.CheckPlatform, AArgs.BuildConfig, True).Profile;
     Resolver.SetPreprocess(not AArgs.NoPreprocess, ScopeProfile);
     { An unreadable/absent project file must surface as "no scope" -- which the
       caller turns into a usage error -- not as an unhandled exception. }
@@ -20008,7 +21255,65 @@ const
     cannot silently skew: run_lintall_progress_phases.ps1 asserts the sequence
     is monotonic and that 100 appears only last. }
   LINTALL_SCAN_PCT    = 90;
-  LINTALL_TAIL_PHASES = 13;
+  LINTALL_TAIL_PHASES = 14;
+
+{ Lane INC2: LINT AN INCLUDE FROM THE BYTES THE INDEXER PARSED. A project index
+  parses each .inc from its includer's include site (lane INC, TIndexer.
+  SetIncludeContext: the host's live defines at the directive, first host wins),
+  so lint-all registers the same bytes with TAstParseCache before the scan: the
+  hosts are walked in the index's file order, only those whose recorded include
+  list (SetFileIncludes) names an include in AFiles are re-preprocessed, and each
+  include takes the first host that reaches it. Positions stay the include's own
+  lines (offset identity); the include is linted once however many units include
+  it. An include no recorded host reaches is linted standalone -- as it was
+  indexed. Returns how many includes got a host context. }
+function InstallLintIncludeContexts(const AStore: ISymbolStore; const AFiles: TArray<string>;
+  const AProjectPath: string): Integer;
+var
+  Pending: TDictionary<string, Boolean>;
+  Paths  : TDictionary<string, TArray<string>>;
+begin
+  Result:= 0;
+  TAstParseCache.ClearIncludeContexts;
+  Pending:= TDictionary<string, Boolean>.Create;
+  Paths  := TDictionary<string, TArray<string>>.Create;
+  try
+    for var F: string in AFiles do
+      if SameText(ExtractFileExt(F), '.inc') then Pending.AddOrSetValue(LowerCase(TPath.GetFullPath(F)), True);
+    if Pending.Count = 0 then Exit;
+    for var Fid: Int64 in AStore.GetAllFileIds do
+    begin
+      if Pending.Count = 0 then Break;
+      var Host: string:= AStore.GetFilePath(Fid);
+      if not MatchText(ExtractFileExt(Host), ['.pas', '.dpr', '.dpk']) then Continue;
+      var Listed: string:= AStore.GetMetaValue(FILE_INCLUDES_META_KEY + LowerCase(Host));
+      var Wanted: Boolean:= False;
+      for var L: string in Listed.Split(['|']) do
+        if (L <> '') and Pending.ContainsKey(LowerCase(TPath.GetFullPath(L))) then Wanted:= True;
+      if not Wanted then Continue;
+      { The build's search path, as the closure walk resolved includes against it. }
+      var Dproj: string:= AProjectPath;
+      if not SameText(ExtractFileExt(Dproj), '.dproj') then Dproj:= TProjectProfileCache.BuildForFile(Host).Dproj;
+      var SP: TArray<string>:= nil;
+      if (Dproj <> '') and not Paths.TryGetValue(LowerCase(Dproj), SP) then
+      begin
+        SP:= TClosureResolver.ProjectSearchPaths(Dproj);
+        Paths.Add(LowerCase(Dproj), SP);
+      end;
+      for var Site: TPPIncludeSite in TAstParseCache.HostIncludeSites(Host, SP) do
+      begin
+        var Key: string:= LowerCase(TPath.GetFullPath(Site.Path));
+        if not Pending.ContainsKey(Key) then Continue;
+        TAstParseCache.SetIncludeContext(Site.Path, Site.Resolved);
+        Pending.Remove(Key);
+        Inc(Result);
+      end;
+    end;
+  finally
+    Paths.Free;
+    Pending.Free;
+  end;
+end;
 
 { --file / --in used to be accepted by lint-all and IGNORED, so a "scoped"
   `lint-all --rule doc-drift --fix --file X` planned the whole project (1.31.5
@@ -20021,6 +21326,34 @@ begin
     Writeln(ErrOutput, Format('lint-all does not take --file (got %s): it lints the whole index. ' +
       'For one unit run: drag-lint lint "%s" --db <db> [--rule <id>] [--fix]', [AArgs.InFile, AArgs.InFile]));
 end;
+
+/// <summary>Probes a library index and, when it cannot be opened at all (not a
+/// SQLite file, truncated, zeroed header), clears the path so the run continues
+/// without a library -- the same degrade lint-project always had.</summary>
+/// <param name="ALibDb">In: the library DB path ('' = none). Out: unchanged when
+/// readable, absent or ''; '' when the file exists but will not open.</param>
+/// <returns>True when the library was dropped; one line
+/// `warning: library DB &lt;path&gt; unreadable (&lt;sqlite message&gt;) -- continuing
+/// without it` has then gone to stderr.</returns>
+/// <remarks>Shared by DoLintAll and DoLintProject so both verbs say the same words.
+/// A stale-schema library is NOT dropped here: OpenLibraryStoreIfCurrent owns that
+/// case and its own warning. The probe opens read-only and releases at once.</remarks>
+function DropUnreadableLibraryDb(var ALibDb: string): Boolean;
+begin
+  Result:= False;
+  if (ALibDb = '') or (not TFile.Exists(ALibDb)) then Exit;
+  try
+    var Probe: ISymbolStore:= TSQLiteSymbolStore.Create(ALibDb, {AReadOnly=}True);
+    Probe:= nil;
+  except
+    on E: Exception do
+    begin
+      Writeln(ErrOutput, Format('warning: library DB %s unreadable (%s) -- continuing without it', [ALibDb, E.Message]));
+      ALibDb:= '';
+      Result:= True;
+    end;
+  end;
+end; // function
 
 function DoLintAll(const AArgs: TArgs): Integer;
 var
@@ -20080,6 +21413,7 @@ var
   end;
 
 begin
+  if not ApplyRunTargetCompiler(AArgs, LoadLintConfig(AArgs).TargetCompiler) then Exit(2);
   if LintAllRefusesFile(AArgs) or not ExplicitDbsExist(AArgs, 'lint-all') then Exit(2);
   TailPhase:= 0;
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
@@ -20116,6 +21450,8 @@ begin
     silent zero -- ProjectDb stays '' and the run refuses below. }
   SplitConsumerDbs(AArgs, Dbs, ProjectDb, LibDb);
   InstallFileProfileResolver(AArgs, Dbs, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  if not AArgs.NoPreprocess then // lane INC3: as in DoLint
+    InstallPPUnitSource(ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''), [ProjectDb], [LibDb, LintLibraryDb(AArgs)]);
   if (LibDb = '') and (Length(AArgs.DbPaths) > 1) then
     for var D in AArgs.DbPaths do
       if TFile.Exists(D) and (not SameText(ExpandFileName(D), ExpandFileName(ProjectDb))) then
@@ -20136,6 +21472,7 @@ begin
     handing a Win32 run the Win64 library is the same class of mis-selection that
     made used-unit-not-resolvable fire 99 times on DataCopy. }
   if LibDb = '' then LibDb:= ResolveLibraryDb(AArgs);
+  DropUnreadableLibraryDb(LibDb);
   if ProjectDb = '' then begin EmitStatusLine(AArgs, 'ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.'); Exit (2 ); end;
 
   { Open project store }
@@ -20241,7 +21578,9 @@ begin
       .dpr bodies are where Application.CreateForm, initialization order and
       top-level exception handling live -- exactly the code worth linting.
       See docs\INBOX-lint-all-never-scans-dpr-files.md. }
-    if (SameText(ExtractFileExt(PasPath), '.pas') or SameText(ExtractFileExt(PasPath), '.dpr'))
+    { Lane INC2: .dpk and .inc too -- every file the indexer parses as Pascal. An
+      include is linted from its includer's context (InstallLintIncludeContexts). }
+    if MatchText(ExtractFileExt(PasPath), ['.pas', '.dpr', '.dpk', '.inc'])
        and TFile.Exists(PasPath) then
     begin
       if Cfg.IsPathExcluded(PasPath) then begin Inc(ExcludedCount); Continue; end;
@@ -20277,6 +21616,11 @@ begin
     rule, which is computed from every other rule's findings (LintNarrowRule);
     the report is still filtered to AArgs.Rule in FinalizeAndOutput. }
   var Nr: string:= LintNarrowRule(AArgs.Rule);
+  if not AArgs.NoPreprocess then InstallLintIncludeContexts(Store, FilePaths, AArgs.ProjectPath);
+  { DEC-13: lint-all listens for a maintenance stand-down; the scan stops between files. }
+  BatchChannelOpen('lint-all', TArray<string>.Create(ExpandFileName(ProjectDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+  var LintStoodAt: Integer:= -1;
+  var LintDelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_LINT_FILE_DELAY_MS'), 0);
   Prof.Phase(Format('per-file scan (%d files)', [Length(FilePaths)]));
   Linter:= DRagLint.Lint.Linter.TLinter.Create(AArgs.RulesDir);
   Linter.OnlyRuleId:= Nr;
@@ -20287,6 +21631,12 @@ begin
   try
     for FileIdx:= 0 to Length(FilePaths) - 1 do
     begin
+      if LintDelayMs > 0 then Sleep(LintDelayMs); { test seam, see run_control_channel_guard.ps1 }
+      if BatchStandDownTaken then
+      begin
+        LintStoodAt:= FileIdx;
+        Break;
+      end;
       PasPath:= FilePaths[FileIdx];
       try
         { Progress output (throttled by percentage) }
@@ -20390,6 +21740,10 @@ begin
           ScanAdd(30, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(PasPath, Store, LibStore, Store.FindFileIdByPath(PasPath)));
         if LintRuleWants(Nr, ['enum-bare-read-scoped']) then { X4 }
           ScanAdd(30, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(PasPath, Store, Store.FindFileIdByPath(PasPath)));  // dl:ok magic-literal@099b -- REVIEWED 2026-10-25 profiler scan-slot id of the ScanAdd table, not a quantity
+        if LintRuleWants(Nr, [MISSING_USES_RULE]) then
+          for F in TMissingUsesChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), [Store, LibStore]) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, [ENUM_ORDINAL_CAST_RULE]) then { B-ENUM }
+          for F in TEnumOrdinalCastChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         { v0.68: naming-convention prefix rules (store-optional; store enables exception-ancestry sub-check, + library store continues the chain) }
         if LintRuleWants(Nr, LINT_GATE_NAMING) then
           for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];
@@ -20400,6 +21754,34 @@ begin
           for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
             PasPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
             Cfg.ThresholdFor('message-chain', 4)) do Findings:= Findings + [F];
+        { Clippy-parity wave (L0): the seven new per-file checker units. }
+        if LintRuleWants(Nr, LINT_GATE_CONTROL_FLOW) then
+          for F in DRagLint.Diagnostics.ControlFlowChecks.TControlFlowChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_EXPR) then
+          for F in DRagLint.Diagnostics.ExprChecks.TExprChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_DECL) then
+          for F in DRagLint.Diagnostics.DeclChecks.TDeclChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_SIZE) then
+          for F in DRagLint.Diagnostics.SizeChecks.TSizeChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_CONCURRENCY) then
+          for F in DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_DISALLOWED) then
+          for F in DRagLint.Diagnostics.DisallowedChecks.TDisallowedChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_MODERNIZE) then
+          for F in DRagLint.Diagnostics.ModernizeChecks.TModernizeChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_PP) then
+          for F in DRagLint.Diagnostics.PpChecks.TPpChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        { Gap-rules wave (G0): the five new per-file checker units. }
+        if LintRuleWants(Nr, LINT_GATE_OWNERSHIP) then
+          for F in DRagLint.Diagnostics.OwnershipChecks.TOwnershipChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_BOUNDS_NIL) then
+          for F in DRagLint.Diagnostics.BoundsNilChecks.TBoundsNilChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_EXCEPTION_THREAD) then
+          for F in DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_DECL_PARITY) then
+          for F in DRagLint.Diagnostics.DeclParityChecks.TDeclParityChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+        if LintRuleWants(Nr, LINT_GATE_PARITY_EXT) then
+          for F in DRagLint.Diagnostics.ParityExtChecks.TParityExtChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         ScanMark(31);
       except
         on E: Exception do Writeln(ErrOutput, Format('lint-all: skip %s (%s: %s)', [ExtractFileName(PasPath), E.ClassName, E.Message]));
@@ -20427,7 +21809,12 @@ begin
     Linter.Free;
     GScanTgt:= nil; { the pointer must not outlive Findings' frame }
   end; // try
-  { SESSION 25 B2 attribution -- see ScanAdd. Slots are listed in execution
+  if LintStoodAt >= 0 then
+  begin
+    Writeln(ErrOutput, Format('lint-all: stopped by a maintenance stand-down after %d of %d file(s) -- PARTIAL result (project-wide rules not run); re-run to complete.', [LintStoodAt, Length(FilePaths)]));
+    for F in Findings do Writeln(Format('%s:%d:%d  [%s] %s: %s', [F.FilePath, F.StartLine, F.StartCol, F.Severity, F.RuleId, F.Message]));
+    Exit(CONTROL_EXIT_STOOD_DOWN);
+  end;  { SESSION 25 B2 attribution -- see ScanAdd. Slots are listed in execution
     order and named for the routine that owns them, so a hot slot names the code
     to open rather than a rule id that may come from several. }
   if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
@@ -20638,6 +22025,12 @@ begin
       OptIn:= OptIn + ['query-name-with-effect'];
     if Cfg.ShouldKeep('assert-with-side-effect', {ADefaultDisabled=}True) then
       OptIn:= OptIn + ['assert-with-side-effect'];
+    for var Bx in LANE_BEFFECT_RULES do   { lane B-EFFECT }
+      if Cfg.ShouldKeep(Bx, {ADefaultDisabled=}True) then OptIn:= OptIn + [Bx];
+    if Cfg.ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
+      OptIn:= OptIn + ['virtual-never-overridden'];
+    if Cfg.ShouldKeep('unused-enum-value', {ADefaultDisabled=}False) then   { B-ENUM; ON since ENUMRULES 2026-10-28 }
+      OptIn:= OptIn + ['unused-enum-value'];
     { --rule <id> opts <id> in, as it does for lint and lint-project (D4). }
     if AArgs.Rule <> '' then OptIn:= OptIn + [AArgs.Rule];
     { D17: entered only when --rule can be one of its ids, and HANDED the
@@ -20668,7 +22061,10 @@ begin
   LintPhase('class-metrics');
   if LintRuleWants(Nr, LINT_GATE_CLASS_METRICS) then
     Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, Nr,
-      {AOnlyFileId=}0, RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths)));
+      {AOnlyFileId=}0, RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths)));  { taint wave T2: store-backed interprocedural taint over every file of the index }
+  LintPhase('taint');
+  if LintRuleWants(Nr, LINT_GATE_TAINT) and TaintWanted(RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths))) then
+    Findings:= Findings + RunTaintRules(Store, LibStore, Store.GetAllFileIds, Cfg, Nr, '');
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
     run where a store is open; ON by default (see RuleCatalog). }
   LintPhase('missing-doc');
@@ -21013,7 +22409,7 @@ begin
           non-ASCII (a path can hold it) still round-trips, while the ordinary
           all-ASCII report is now byte-for-byte plain ASCII. Pinned by
           tests\autotest\run_report_encoding.ps1. }
-        TFile.WriteAllBytes(OutPath, TEncoding.UTF8.GetBytes(OL.ToString));
+        WriteOutputFile(OutPath, OL.ToString);
       finally
         OL.Free;
       end;
@@ -21117,6 +22513,12 @@ begin
       OptIn2:= OptIn2 + ['query-name-with-effect'];
     if LoadLintConfig(AArgs).ShouldKeep('assert-with-side-effect', {ADefaultDisabled=}True) then
       OptIn2:= OptIn2 + ['assert-with-side-effect'];
+    for var Bx in LANE_BEFFECT_RULES do   { lane B-EFFECT }
+      if LoadLintConfig(AArgs).ShouldKeep(Bx, {ADefaultDisabled=}True) then OptIn2:= OptIn2 + [Bx];
+    if LoadLintConfig(AArgs).ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
+      OptIn2:= OptIn2 + ['virtual-never-overridden'];
+    if LoadLintConfig(AArgs).ShouldKeep('unused-enum-value', {ADefaultDisabled=}False) then   { B-ENUM; ON since ENUMRULES 2026-10-28 }
+      OptIn2:= OptIn2 + ['unused-enum-value'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that
       was a real divergence rather than a tidiness point: global-only-uses-edge
@@ -21129,6 +22531,7 @@ begin
       migrations as a side effect of linting takes a write lock on gigabytes of
       someone else's data. }
     var ProjLibDb: string:= ResolveLibraryDb(AArgs);
+    DropUnreadableLibraryDb(ProjLibDb);
     var ProjLibWhy: string;
     ProjLibStore:= OpenLibraryStoreIfCurrent(ProjLibDb, ProjLibWhy);
     if ProjLibWhy <> '' then
@@ -21482,7 +22885,7 @@ begin
       Manifest:= TManifestIO.ParseText(TFile.ReadAllText(AArgs.WorkspaceConfig),
                    ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig)))
     else
-      Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+      Manifest:= LoadManifestForProject(ExtractFilePath(ParamStr(0)), ProjArg);
   except
     { A manifest that will not load is not a reason to throw away a compile that
       already succeeded -- the caller wants dcc's answer, not ours. }
@@ -21502,10 +22905,12 @@ begin
 
   { The project DB is the one that owns compiler findings for this target. A
     project section never names a library DB, so none can come back here. }
-  case ResolveProjectDb(Manifest, ProjArg, ProjDb, Claimants) of
-    pdmUnique   : if TFile.Exists(ProjDb) then Result:= ProjDb;
-    pdmAmbiguous: ReportAmbiguousProject('compile-check', ProjArg, Claimants);
-    pdmNone     : ; { unregistered: no owner to cache into }
+  { 1.20.4 #4b-3: an unregistered project (pdmNone) caches into its OWN documented default
+    <project dir>\_D-RAG\<base>.sqlite when that file exists (the plugin passes no --db). The
+    file is never created here: a missing default stays "nothing to cache into". }
+  case ResolveOwnProjectDb(Manifest, ProjArg, ProjDb, Claimants) of
+    pdmUnique, pdmNone: if (ProjDb <> '') and TFile.Exists(ProjDb) then Result:= ProjDb;
+    pdmAmbiguous      : ReportAmbiguousProject('compile-check', ProjArg, Claimants);
   end;
 end;
 
@@ -23124,50 +24529,12 @@ end; // begin
 // applying, because the tree-sitter index can miss some references.
 function DoUsesAudit(const AArgs: TArgs): Integer;
 var
-  Store       : ISymbolStore                       ;
-  FileId      : Int64                              ;
-  ThisStem    : string                             ;
-  UU          : TArray<TUnitUse>                   ;
-  Uo          : TUnitUse                           ;
-  Refs        : TArray<TReference>                 ;
-  R           : TReference                         ;
-  Lines       : TStringList                        ;
-  ImplLine    : Integer                            ;
-  i           : Integer                            ;
-  RefIntf     : TDictionary<string, Boolean>       ;
-  RefImpl     : TDictionary<string, Boolean>       ;
-  IndexedUnits: TDictionary<string, Int64>         ; { stem -> file_id }
-  NameCache   : TDictionary<string, TArray<string>>;
-  UnitsForName: TArray<string>                     ;
-  U           : string                             ;
-  uStem       : string                             ;
-  JArr        : TJSONArray                         ;
-  nMove       : Integer                            ;
-  nUnused     : Integer                            ;
-
-  function UnitStemOf(const APath: string): string;
-  begin
-    Result:= LowerCase(ChangeFileExt(ExtractFileName( StringReplace(APath, '/', '\', [rfReplaceAll])), ''));
-  end;
-
-{ distinct indexed-unit stems that define a symbol named AName (cached) }
-  function UnitsDefining(const AName: string): TArray<string>;
-  var
-    Sm: TSymbol      ;
-    Us: TList<string>;
-    St: string       ;
-  begin
-    if NameCache.TryGetValue(AName, Result) then Exit;
-    Us:= TList<string>.Create;
-    try
-      for Sm in Store.FindSymbolsByExactName(AName) do begin St:= UnitStemOf(Store.GetFilePath(Sm.FileId)); if (St <> '') and not Us.Contains(St) then Us.Add(St); end;
-      Result:= Us.ToArray;
-    finally
-      Us.Free;
-    end;
-    NameCache.AddOrSetValue(AName, Result);
-  end;
-
+  Store  : ISymbolStore ;
+  FileId : Int64        ;
+  Auditor: TUsesAuditor ;
+  JArr   : TJSONArray   ;
+  nMove  : Integer      ;
+  nUnused: Integer      ;
 begin
   if AArgs.Target = '' then begin Writeln('Usage: drag-lint uses-audit <unit.pas> --db <sqlite> [--format json|text]'); Exit (2 ); end;
   if NoDbResolved(AArgs.DbPath, 'uses-audit') then Exit(2);
@@ -23176,76 +24543,31 @@ begin
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if (not RoOk) and StaleDbRefusesRun(AArgs, 'uses-audit', AArgs.DbPath) then Exit(2);
 
-  RefIntf     := TDictionary<string, Boolean>.Create;
-  RefImpl     := TDictionary<string, Boolean>.Create;
-  IndexedUnits:= TDictionary<string, Int64  >.Create;
-  NameCache:= TDictionary<string, TArray<string>>.Create;
+  { The verdict routine lives in DRagLint.Lint.UsesAudit (gap-rules wave G8), shared with the
+    uses-movable-to-implementation lint rule. }
+  Auditor:= TUsesAuditor.Create(Store);
   try
-    { stem -> file_id for every indexed unit. Also lets us resolve the target by
-      unit name, tolerant of the stored-path separator quirks that defeat a
-      direct path lookup. }
-    for var Fid2 in Store.GetAllFileIds do begin U:= UnitStemOf(Store.GetFilePath(Fid2)); if U <> '' then IndexedUnits.AddOrSetValue(U, Fid2); end;
+    if not Auditor.TryFindFile(AArgs.Target, FileId) then begin Writeln('Not indexed (re-run "drag-lint index"): ', AArgs.Target); Exit(2); end;
 
-    ThisStem:= UnitStemOf(AArgs.Target);
-    if not IndexedUnits.TryGetValue(ThisStem, FileId) then begin Writeln('Not indexed (re-run "drag-lint index"): ', AArgs.Target); Exit(2); end;
-
-    { which section references each indexed unit }
-    ImplLine:= MaxInt;
-    var SrcPath: string:= Store.GetFilePath(FileId);
-    if not TFile.Exists(SrcPath) then SrcPath:= AArgs.Target;
-    if TFile.Exists(SrcPath) then
-    begin
-      Lines:= TStringList.Create;
-      try
-        Lines.LoadFromFile(SrcPath);
-        for i:= 0 to Lines.Count - 1 do
-          if SameText(Trim(Lines[i]), 'implementation') then begin ImplLine:= i + 1; Break; end;
-      finally
-        Lines.Free;
-      end;
-    end;
-
-    Refs:= Store.GetReferencesFromFile(FileId);
-    for R in Refs do
-    begin
-      UnitsForName:= UnitsDefining(R.NameText);
-      for U in UnitsForName do
-      begin
-        if SameText(U, ThisStem) then Continue;
-        if R.StartLine < ImplLine then RefIntf.AddOrSetValue(U, True)
-        else RefImpl.AddOrSetValue(U, True);
-      end;
-    end;
-
-    UU:= Store.GetUnitUsesForFile(FileId);
     JArr:= TJSONArray.Create;
     nMove:= 0; nUnused:= 0;
     try
-      for Uo in UU do
+      for var Row in Auditor.Audit(FileId, AArgs.Target) do
       begin
-        uStem:= LowerCase(Uo.UnitName);
-        { audit only project units we can actually see in the index }
-        if not IndexedUnits.ContainsKey(uStem) then Continue;
-        if SameText(uStem, ThisStem) then Continue;
-
-        var Verdict: string:= '';
-        if (not RefIntf.ContainsKey(uStem)) and (not RefImpl.ContainsKey(uStem)) then begin Verdict:= 'unused'; Inc(nUnused); end
-        else if (Uo.Section = uusInterface) and (not RefIntf.ContainsKey(uStem)) then begin Verdict:= 'move-to-implementation'; Inc(nMove); end;
-        if Verdict = '' then Continue;
-
+        if Row.Verdict = USES_VERDICT_UNUSED then Inc(nUnused) else Inc(nMove);
         if SameText(AArgs.Format, 'json') then
         begin
           var JO:= TJSONObject.Create;
-          JO.AddPair('unit', Uo.UnitName);
-          JO.AddPair('verdict', Verdict);
-          JO.AddPair('section', IfThen(Uo.Section = uusInterface, 'interface', 'implementation'));
-          JO.AddPair('line', TJSONNumber.Create(Uo.StartLine));
+          JO.AddPair('unit', Row.UnitName);
+          JO.AddPair('verdict', Row.Verdict);
+          JO.AddPair('section', IfThen(Row.Section = uusInterface, 'interface', 'implementation'));
+          JO.AddPair('line', TJSONNumber.Create(Row.StartLine));
           JArr.AddElement(JO);
         end
         else
         begin
-          if Verdict = 'unused' then Writeln(Format('  line %d: %s  -- appears UNUSED (comment out?)', [Uo.StartLine, Uo.UnitName]))
-          else Writeln(Format('  line %d: %s  -- in interface uses, only used by ' + 'implementation -> MOVE down', [Uo.StartLine, Uo.UnitName]));
+          if Row.Verdict = USES_VERDICT_UNUSED then Writeln(Format('  line %d: %s  -- appears UNUSED (comment out?)', [Row.StartLine, Row.UnitName]))
+          else Writeln(Format('  line %d: %s  -- in interface uses, only used by ' + 'implementation -> MOVE down', [Row.StartLine, Row.UnitName]));
         end;
       end; // for
 
@@ -23260,10 +24582,9 @@ begin
     end; // try
     Result:= 0;
   finally
-    RefIntf.Free; RefImpl.Free; IndexedUnits.Free; NameCache.Free;
+    Auditor.Free;
   end; // try
 end; // begin
-
 // v0.43: compile ONE unit in full project context (the engine behind
 // check-unit, factored so uses-fix can reuse it). AShadow, if set, is put first
 // on the unit search path so a modified copy of the unit there is compiled
@@ -24702,6 +26023,34 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>Lane INC2: the value and switch lines pp-profile prints after the
+/// defines: each effective numeric value as 'name=value' and each switch state as
+/// '$x+' / '$x-' (the last pair per name wins), each group sorted.</summary>
+/// <param name="AProfile">The resolved profile.</param>
+/// <returns>The lines, values first.</returns>
+function PpProfileValueLines(const AProfile: TDefineProfile): TArray<string>;
+var
+  Nums: TDictionary<string, Integer>;
+  Sws : TDictionary<string, Boolean>;
+  A, B: TArray<string>;
+begin
+  A:= nil;
+  B:= nil;
+  Nums:= TDictionary<string, Integer>.Create;
+  Sws := TDictionary<string, Boolean>.Create;
+  try
+    for var N in AProfile.NumericDefines do Nums.AddOrSetValue(LowerCase(N.Key), N.Value);
+    for var S in AProfile.Switches do Sws.AddOrSetValue(LowerCase(S.Key), S.Value);
+    for var N in Nums do A:= A + [Format('%s=%d', [N.Key, N.Value])];
+    for var S in Sws do B:= B + ['$' + S.Key + (if S.Value then '+' else '-')];
+  finally
+    Sws.Free;
+    Nums.Free;
+  end;
+  TArray.Sort<string>(A);
+  TArray.Sort<string>(B);
+  Result:= A + B;
+end;
 /// <summary>PP-Task-7: drag-lint pp-profile [--dproj PATH] [--platform Win32|Win64]
 /// [--config Release|Debug] [--in FILE [--db DB]] -- diagnostic dump of the define-profile resolver.
 /// With --in FILE (LSP C10) it first prints dproj= / platform= / config= /
@@ -24711,7 +26060,9 @@ end; // function
 /// Base + selected-config DCC_Define symbols); without --dproj it dumps
 /// PlatformBuiltins for the platform. Prints the resolved defines SORTED, one
 /// lowercased symbol per line, so tests/preprocess/run_profile.ps1 can grep for
-/// membership. --platform defaults to Win64, --config to Release.</summary>
+/// membership; then (lane INC2) the effective values as 'name=value' and the switch
+/// states as '$x+' / '$x-' (PpProfileValueLines). --platform defaults to Win64,
+/// --config to Release.</summary>
 /// <param name="AArgs">Parsed CLI args; PpDproj (--dproj) the project;
 /// CheckPlatform (--platform) the target; WorkspaceConfig (--config) the
 /// config.</param>
@@ -24732,8 +26083,7 @@ begin
   Config:= AArgs.WorkspaceConfig;
   if Config = '' then Config:= 'Release';
 
-  Profile.Defines:= PlatformBuiltins(Platform);
-  Profile.NumericDefines:= nil;
+  Profile:= BuiltinsProfile(Platform);
   if AArgs.InFile <> '' then
   begin
     { LSP C10: the profile of the file's OWN project's active build. }
@@ -24754,6 +26104,10 @@ begin
   Defines:= Copy(Profile.Defines, 0, Length(Profile.Defines));
   TArray.Sort<string>(Defines);
   for Sym in Defines do
+    Writeln(Sym);
+  { Lane INC2: then the effective values ('name=value', sorted) and switch states
+    ('$x+' / '$x-', sorted) -- never mistakable for a define name. }
+  for Sym in PpProfileValueLines(Profile) do
     Writeln(Sym);
   Result:= 0;
 end; // function
@@ -24978,13 +26332,110 @@ begin
   Result:= 0;
 end; // function
 
-/// <summary>v14 (D5 T9): drag-lint find-callees --qname X [--json] --db PATH --
+type
+  /// <summary>Counters of find-callees' external (library-bound) callee pass.</summary>
+  TExternalCalleeTally = record
+    /// <summary>External callees listed (stored external_target, or bound now by the oracle).</summary>
+    Listed: Integer;
+    /// <summary>Unresolved calls with a known receiver type that a library COULD bind but
+    /// none is open; reported as "M external (library not open)".</summary>
+    NotOpen: Integer;
+  end;
+
+/// <summary>The library index find-callees opens beside the project index (item 4).</summary>
+/// <param name="AArgs">Parsed args: DbPaths (a second --db) and LibraryDbs (--library-db).</param>
+/// <param name="AProjectDb">In: --db (first). Out: the project DB, unchanged unless a
+/// manifest-classified library was named first.</param>
+/// <returns>An explicit --library-db (never 'none'), else a second --db that is not the
+/// project DB, else ''. Existence is not checked here; the caller degrades to "not open".</returns>
+/// <remarks>Never reads the manifest to GUESS a library: opening one nobody named would make
+/// the answer depend on a machine-level setting (the 2026-10-25 no-attach ruling).</remarks>
+function FindCalleesLibraryDb(const AArgs: TArgs; var AProjectDb: string): string;
+begin
+  Result:= '';
+  if Length(AArgs.DbPaths) > 1 then
+  begin
+    var Lib: string;
+    SplitConsumerDbs(AArgs, AArgs.DbPaths, AProjectDb, Lib);
+    if AProjectDb = '' then AProjectDb:= AArgs.DbPath;
+    if Lib = '' then
+      for var D: string in AArgs.DbPaths do
+        if TFile.Exists(D) and not SameText(ExpandFileName(D), ExpandFileName(AProjectDb)) then
+          begin
+            Lib:= D;
+            Break;
+          end;
+    Result:= Lib;
+  end;
+  if (Result = '') and (Length(AArgs.LibraryDbs) > 0) and not SameText(AArgs.LibraryDbs[0], 'none') then
+    Result:= AArgs.LibraryDbs[0];
+end;
+
+/// <summary>Lists the library-bound callees of one routine: its unresolved call refs that carry
+/// a stored external_target ("edge") or whose receiver_type_text the oracle binds against the
+/// open library right now ("oracle").</summary>
+/// <param name="AStore">The project store.</param>
+/// <param name="AOracle">Oracle over the open library stores (an empty list declines everything).</param>
+/// <param name="ALibraryOpen">True when at least one library store is open.</param>
+/// <param name="ASymbolId">The enclosing routine.</param>
+/// <param name="AJson">Receives one object per external callee, or nil for text output.</param>
+/// <param name="ATally">Incremented.</param>
+/// <remarks>Binds only through TLibraryOracle (exactly one type, exactly one member); a decline
+/// lists nothing. A site whose type text is known but whose library is not open only counts
+/// toward NotOpen, so the answer says what it could not see instead of staying silent.</remarks>
+procedure EmitExternalCallees(const AStore: ISymbolStore; AOracle: TLibraryOracle; ALibraryOpen: Boolean;
+  ASymbolId: Int64; AJson: TJSONArray; var ATally: TExternalCalleeTally);
+begin
+  for var R: TReference in AStore.GetUnresolvedCallsFromSymbol(ASymbolId) do
+  begin
+    var QName: string:= R.ExternalTarget;
+    var Via  : string:= 'edge';
+    if QName = '' then
+    begin
+      if R.ReceiverTypeText = '' then Continue;
+      if not ALibraryOpen then
+      begin
+        Inc(ATally.NotOpen);
+        Continue;
+      end;
+      var Dot: Integer:= Pos('.', R.ReceiverTypeText);
+      var TypeText: string:= (if Dot > 0 then Copy(R.ReceiverTypeText, 1, Dot - 1) else R.ReceiverTypeText);
+      var Pending : string:= (if Dot > 0 then Copy(R.ReceiverTypeText, Dot + 1, MaxInt) else '');
+      var UsedUnits: TArray<string>:= nil;
+      for var U: TUnitUse in AStore.GetUnitUsesForFile(R.FileId) do UsedUnits:= UsedUnits + [LowerCase(U.UnitName)];
+      var Reason: string;
+      QName:= AOracle.Bind(TypeText, Pending, R.NameText, ekCall, UsedUnits, Reason);
+      if QName = '' then Continue;
+      Via:= 'oracle';
+    end;
+    Inc(ATally.Listed);
+    if AJson <> nil then
+    begin
+      var JObj:= TJSONObject.Create;
+      JObj.AddPair('target_qname', QName);
+      JObj.AddPair('confidence'  , 'library');
+      JObj.AddPair('external'    , TJSONTrue.Create);
+      JObj.AddPair('via'         , Via);
+      JObj.AddPair('receiver_type', R.ReceiverTypeText);
+      JObj.AddPair('resolution'   , RESOLUTION_EXTERNAL); { XERJ item 3: LAST key }
+      AJson.AddElement(JObj);
+    end
+    else Writeln(Format('  -> %s   (library, %s)', [QName, (if Via = 'edge' then 'by name' else 'resolved now')]));
+  end; // for R
+end;
+
+/// <summary>v14 (D5 T9): drag-lint find-callees --qname X [--json] --db PATH
+/// [--db LIBRARY | --library-db LIBRARY] --
 /// the mirror of find-callers --resolved: every RESOLVED outgoing call made
 /// from inside routine X's body (via call_edges), rendered as the target's
 /// qualified name + confidence. X is resolved via FindSymbolsByQualifiedName;
 /// an overloaded/duplicate qname is handled by unioning the callees of every
 /// matching symbol. A routine with no resolved outgoing calls prints "0
-/// callee(s)" (text) / an empty array (json) -- a valid, non-error answer.</summary>
+/// callee(s)" (text) / an empty array (json) -- a valid, non-error answer.
+/// Item 4: library-bound callees follow the resolved ones, marked "(library"
+/// in text and {"external": true, "via": "edge"|"oracle"} in json; with no
+/// library open the text ends "M external (library not open)" for the sites a
+/// library could bind.</summary>
 /// <param name="AArgs">Parsed CLI args; QName is the calling routine, DbPath the index.</param>
 /// <returns>0 when the store opened OK and --qname resolved to at least one symbol
 /// (even with zero callees); 1 if --qname does not resolve to any symbol; 2 on
@@ -24998,17 +26449,42 @@ var
   E      : TCallEdge        ;
   QName  : string           ;
   Total  : Integer          ;
+  Ext    : TExternalCalleeTally;
+  Oracle : TLibraryOracle   ;
 begin
-  if AArgs.QName = '' then begin Writeln('Usage: drag-lint find-callees --qname X [--json] --db PATH'); Exit (2 ); end;
-  if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
+  if AArgs.QName = '' then
+  begin
+    Writeln('Usage: drag-lint find-callees --qname X [--json] --db PATH [--db LIBRARY | --library-db LIBRARY]');
+    Exit(2);
+  end;
+  var ProjectDb: string:= AArgs.DbPath;
+  var LibraryDb: string:= FindCalleesLibraryDb(AArgs, ProjectDb);
+  if not FileExists(ProjectDb) then
+  begin
+    Writeln(Format('Database not found: %s', [ProjectDb]));
+    Exit(2);
+  end;
   var RoOk: Boolean;
-  Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  Store:= OpenReadOnlyStore(ProjectDb, RoOk);
   if not RoOk then Exit(1);
 
   Targets:= Store.FindSymbolsByQualifiedName(AArgs.QName);
   if Length(Targets) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
+  { The library is opened read-only and never written; a library that cannot be
+    opened degrades to "library not open" with one stderr line, never an error. }
+  var LibStores: TArray<ISymbolStore>:= nil;
+  if LibraryDb <> '' then
+  begin
+    var LibOk: Boolean;
+    var LibStore: ISymbolStore:= OpenReadOnlyStore(LibraryDb, LibOk, {AQuiet=}True);
+    if LibOk then LibStores:= [LibStore]
+    else Writeln(ErrOutput, 'NOTE: find-callees: the library index could not be opened (', LibraryDb, '); treated as not open.');
+  end;
+
   Total:= 0;
+  Ext:= Default(TExternalCalleeTally);
+  Oracle:= TLibraryOracle.Create(LibStores);
   var JOut: TJSONArray:= nil;
   if AArgs.AsJson then JOut:= TJSONArray.Create;
   try
@@ -25024,16 +26500,25 @@ begin
           var JObj:= TJSONObject.Create;
           JObj.AddPair('target_qname', QName        );
           JObj.AddPair('confidence'  , E.Confidence  );
+          JObj.AddPair('resolution'  , ResolutionOfConfidence(E.Confidence)); { XERJ item 3: LAST key }
           JOut.AddElement(JObj);
         end
         else Writeln(Format('  %s  [%s]', [QName, E.Confidence]));
         Inc(Total);
       end; // for E
+      EmitExternalCallees(Store, Oracle, Length(LibStores) > 0, T.Id, JOut, Ext);
     end; // for T
     if AArgs.AsJson then Writeln(JOut.Format(2))
-    else if Total = 0 then Writeln('0 callee(s)');
+    else
+    begin
+      if (Total = 0) and (Ext.Listed = 0) then Writeln('0 callee(s)');
+      if (Ext.Listed > 0) or (Ext.NotOpen > 0) then
+        Writeln(Format('%d resolved + %d external%s', [Total, Ext.Listed,
+          (if Ext.NotOpen > 0 then Format('; %d external (library not open)', [Ext.NotOpen]) else '')]));
+    end;
   finally
     JOut.Free;
+    Oracle.Free;
   end; // try
   Result:= 0;
 end; // function
@@ -25214,6 +26699,24 @@ begin
         begin Found:= True; Hit:= E.TargetSymbolId; Break; end;
         Frontier.Enqueue(E.TargetSymbolId);
       end; // for E
+      { RB-5 P1: control also flows from an interface method into the methods
+        that implement it (dispatch_edges 'implements'), one step per hop. }
+      if not Found then
+        for var DL in Store.FindDispatchLinks(Cur, False) do
+        begin
+          if DL.Kind <> 'implements' then Continue;
+          if Visited.ContainsKey(DL.OtherId) then Continue;
+          Visited.Add(DL.OtherId, True);
+          Parent.AddOrSetValue(DL.OtherId, Cur);
+          Depths.AddOrSetValue(DL.OtherId, D + 1);
+          if ToSet.ContainsKey(DL.OtherId) then
+          begin
+            Found:= True;
+            Hit  := DL.OtherId;
+            Break;
+          end;
+          Frontier.Enqueue(DL.OtherId);
+        end; // for DL
     end; // while
 
     if not Found then
@@ -26138,6 +27641,11 @@ begin
   begin
     InBlock:= InBlock or (R.Kind = rkConvert);
     if not InBlock or (R.Kind <> rkMigrate) then Continue;
+    { 1.38 (D2): a plain rule naming uses units is an identifier #migrate,
+      which convert-apply realises }
+    var Plain: TConversionRule:= R;
+    Plain.UnitsAdd:= nil;
+    if (Length(R.UnitsAdd) > 0) and (MigrateRuleRefusal(Plain) = '') then Continue;
     var Why: string:= MigrateRuleRefusal(R);
     if Why <> '' then
       Writeln(Format('line %d: warning: #migrate %s -> %s is not applied by convert-apply -- %s', [R.LineNo, R.Old, R.New, Why]));
@@ -26714,7 +28222,7 @@ begin
   begin
     // ASCII / CRLF file (rules DSL is strict 7-bit ASCII). AppendLine already
     // emitted platform CRLFs on Windows; ANSI keeps the bytes 1:1.
-    TFile.WriteAllText(AArgs.Output, OutText, TEncoding.ANSI);
+    WriteOutputFile(AArgs.Output, OutText);
     Writeln('Wrote ', AArgs.Output);
   end
   else
@@ -28161,6 +29669,15 @@ var
     end;
   end;
 
+  // 1.37.0 (CHAIN H3): the book's single-pass warnings (a chain, a duplicate
+  // From type) join warnings[] as plain text, beside the unreachable and
+  // inferred ones; they never change the exit code.
+  procedure MergeBookChain(var AReport: TApplyReport);
+  begin
+    for var W: TRuleError in BookChainWarnings(Rules) do
+      AReport.Warnings:= AReport.Warnings + [Format('line %d: warning: %s', [W.LineNo, W.Message])];
+  end;
+
   // Owner ruling 2026-10-11: each #convert class settled by INFERENCE becomes
   // one warnings[] line (QualifyInferredText) and its items[] mirror (kind
   // convert-class-inferred); the structured row is JCtx.QualifyFixes.
@@ -28387,6 +29904,7 @@ var
       every JSON exit from here on, warnings[] carries the messages too. }
     MergeUnreachable(JCtx.Report);
     MergeInferred(JCtx.Report);
+    MergeBookChain(JCtx.Report);
     { C13 d: a type no --db resolves is an index gap -- the unit is REFUSED,
       dry run and --apply alike, before any rule error is reported }
     if Length(Unresolved) > 0 then Exit(RefuseUnit(UnresolvedReason(Unresolved)));
@@ -28524,6 +30042,7 @@ var
     JCtx.Ok       := True;
     MergeUnreachable(PlanRes.Report); { text mode prints them in its Warnings block }
     MergeInferred(PlanRes.Report);    { likewise }
+    MergeBookChain(PlanRes.Report);   { likewise }
     AppendInheritedReport(JCtx.InheritedInsts, DfmPath, PlanRes.Report); { likewise }
     { 1.25.0: descendants that still stream / use an instance converted here.
       A warning, never a refusal; only the instances the plan converted count. }
@@ -30052,7 +31571,11 @@ begin
   except
     on E: Exception do begin Writeln(ErrOutput, 'forms-csv: ', E.Message); Exit(1); end;
   end;
-  if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, Csv, TEncoding.ANSI); Writeln('forms-csv: wrote ', AArgs.Output); end
+  if AArgs.Output <> '' then
+  begin
+    WriteOutputFile(AArgs.Output, Csv);
+    Writeln('forms-csv: wrote ', AArgs.Output);
+  end
   else Write(Csv);
   Result:= 0;
 end; // function
@@ -30124,7 +31647,7 @@ begin
   end;
   if AArgs.Output <> '' then
   begin
-    TFile.WriteAllText(AArgs.Output, Txt, TEncoding.ANSI);
+    WriteOutputFile(AArgs.Output, Txt);
     Writeln('menu-tree: wrote ', AArgs.Output);
   end
   else Write(Txt);
@@ -30220,7 +31743,7 @@ begin
   end;
   if AArgs.Output <> '' then
   begin
-    TFile.WriteAllText(AArgs.Output, Txt, TEncoding.ANSI);
+    WriteOutputFile(AArgs.Output, Txt);
     Writeln('menu-drift: wrote ', AArgs.Output);
   end
   else Write(Txt);
@@ -30306,10 +31829,22 @@ begin
   except
     Exit;
   end;
+  Result:= PlatformFromDprojFile(DprojFile);
+end; // function DetectPlatformFromDproj
 
+/// <summary>Reads the active platform of ONE .dproj: its <c>&lt;Platform Condition=...&gt;</c> element.</summary>
+/// <param name="ADproj">Path of the .dproj; an unreadable or platform-less file yields ''.</param>
+/// <returns>'Win32', 'Win64', or '' when the file names neither.</returns>
+function PlatformFromDprojFile(const ADproj: string): string;
+var
+  Xml: string ;
+  P1 : Integer;
+  P2 : Integer;
+begin
+  Result:= '';
   // Parse <Platform Condition="'$(Platform)'==''">Win64</Platform>
   try
-    Xml:= TFile.ReadAllText(DprojFile);
+    Xml:= TFile.ReadAllText(ADproj);
   except
     Exit;
   end;
@@ -30331,7 +31866,7 @@ begin
     P1:= Pos('<Platform Condition=', Xml, P2);
     if P1 = 0 then Break;
   end;
-end; // function DetectPlatformFromDproj
+end; // function PlatformFromDprojFile
 
 // v0.45 Task 9: resolve the DB list for consumer commands (query/lsp/serve)
 // when the user supplied no --db flags.
@@ -30343,6 +31878,44 @@ end; // function DetectPlatformFromDproj
 //      default .\drag-lint.sqlite so existing behaviour is preserved.
 //   4. --project: the list is the project's OWN index (when it exists) plus the
 //      platform library, nothing else (owner ruling 2026-08-13; 1.20.4).
+/// <summary>Where the local-manifest walk starts for a run.</summary>
+/// <param name="AProjectPath">The --project argument, or ''.</param>
+/// <returns>The folder of an existing --project file, else the current directory.</returns>
+function ManifestStartDir(const AProjectPath: string): string;
+begin
+  Result:= GetCurrentDir;
+  if (AProjectPath <> '') and TFile.Exists(AProjectPath) then
+    Result:= ExcludeTrailingPathDelimiter(ExtractFilePath(TPath.GetFullPath(AProjectPath)));
+end;
+
+/// <summary>Loads the manifest a --project run reads: the walk starts at the project's
+/// folder, falling back to the current directory when that manifest has no owner for the
+/// project (so a cwd-only registration keeps working).</summary>
+/// <param name="AEngineDir">The engine exe folder (the engine-level manifest location).</param>
+/// <param name="AProjectPath">The --project argument, or ''.</param>
+/// <returns>The loaded manifest; never nil-like, an empty manifest when none is found.</returns>
+function LoadManifestForProject(const AEngineDir, AProjectPath: string): TIndexManifest;
+var
+  NoClaimants: TArray<string>;
+  NoDb       : string        ;
+begin
+  Result:= TManifestIO.Load(AEngineDir, ManifestStartDir(AProjectPath));
+  if (AProjectPath <> '') and (ManifestStartDir(AProjectPath) <> GetCurrentDir) then
+    if ResolveOwnProjectDb(Result, AProjectPath, NoDb, NoClaimants) = pdmNone then
+      Result:= TManifestIO.Load(AEngineDir, GetCurrentDir);
+end;
+
+var
+  GNotedOnce: string = '';
+
+{ True the FIRST time AKey is seen in this process, so a note printed per
+  ResolveConsumerDbs call (lint-all calls it repeatedly) appears once. }
+function NoteOnce(const AKey: string): Boolean;
+begin
+  Result:= not GNotedOnce.Contains('|' + LowerCase(AKey) + '|');
+  if Result then GNotedOnce:= GNotedOnce + '|' + LowerCase(AKey) + '|';
+end;
+
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>;
 var
   Manifest : TIndexManifest                            ;
@@ -30364,7 +31937,11 @@ begin
   // Try manifest-driven selection.
   try
     EngineDir:= ExtractFilePath(ParamStr(0));
-    Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
+    { 1.20.4 #4b-2: the local-manifest walk starts at the PROJECT's folder when --project
+      names one (as index / refresh-findings do), so a read picks the same DB the write
+      did. Conservative: when that manifest has no owner for the project, fall back to the
+      old cwd walk, so a cwd-only registration keeps working. }
+    Manifest:= LoadManifestForProject(EngineDir, AArgs.ProjectPath);
 
     { Pick platform: CLI --platform > the PROJECT'S OWN folder when --project
       names one > cwd detection > manifest defaultPlatform. Reading only the cwd
@@ -30439,10 +32016,13 @@ begin
     var Kept: TArray<string>:= nil;
     if (ProjDb <> '') and TFile.Exists(ProjDb) then Kept:= [ProjDb]
     else if Length(Claimants) > 1 then
+    begin
+      if NoteOnce('claim|' + ExpandFileName(AArgs.ProjectPath)) then
       Writeln(ErrOutput, Format('NOTE: %d manifest sections claim %s (%s) -- no index owns it, and other ' +
                                 'projects'' indexes are not consulted. Fix the manifest or pass --db.',
-                                [Length(Claimants), AArgs.ProjectPath, string.Join(', ', Claimants)]))
-    else
+                                [Length(Claimants), AArgs.ProjectPath, string.Join(', ', Claimants)]));
+    end
+    else if NoteOnce('noowner|' + ExpandFileName(AArgs.ProjectPath)) then
       Writeln(ErrOutput, Format('NOTE: no index owns %s -- other projects'' indexes are not consulted. ' +
                                 'Build it: drag-lint index --project "%s"', [AArgs.ProjectPath, AArgs.ProjectPath]));
     for D in Result do
@@ -30707,6 +32287,7 @@ var
   Platform : string                                    ;
   Resolved : TArray<string>                            ;
   D        : string                                    ;
+  LibDbs   : TArray<string>                            ;
 begin
   Result:= '';
   try
@@ -30730,8 +32311,15 @@ begin
       Resolver.Free;
     end;
 
+    { ONE ResolvePlan, not one per resolved DB: LibrarySectionDbs walks the whole
+      manifest, and this loop runs over every DB of the platform. Called inside the
+      loop it cost ~0.7 s x N -- 20-25 s per `lint` on a 15-project manifest under
+      load, and INC3 made every `lint` setup resolve the library (InstallPPUnitSource),
+      so the LSP --full-rules child (8 s budget, LintChildTimeoutMs) timed out and fell
+      back to the subset (run_lsp_dlok_filtering_guard, metric rule). }
+    LibDbs:= LibrarySectionDbs(Manifest);
     for D in Resolved do
-      if StartsText('library-', ExtractFileName(D)) and TFile.Exists(D) then Exit(D);
+      if IsLibrarySectionDb(LibDbs, D) and TFile.Exists(D) then Exit(D);
   except
     { A manifest that will not load is not this function's problem to report --
       every caller already treats '' as "no library index" and degrades. }
@@ -32057,6 +33645,24 @@ begin
   end;
 end; // function
 
+/// <summary>selftest ident-words: runs SelfTestIdentWords (concept search splitter).</summary>
+/// <returns>0 and IDENTWORDS-OK on success, 1 and IDENTWORDS-FAIL otherwise.</returns>
+function DoSelfTestIdentWords: Integer;
+var
+  Failure: string;
+begin
+  if SelfTestIdentWords(Failure) then
+  begin
+    Writeln('IDENTWORDS-OK');
+    Result:= 0;
+  end
+  else
+  begin
+    Writeln('IDENTWORDS-FAIL: ', Failure);
+    Result:= 1;
+  end;
+end; // function
+
 function DoSelfTest(const AArgs: TArgs): Integer;
 begin
   if AArgs.SubCommand      = 'manifest-merge' then Result:= DoSelfTestManifestMerge
@@ -32075,10 +33681,11 @@ begin
   else if AArgs.SubCommand = 'own-roots'     then Result:= DoSelfTestOwnRoots     (AArgs)
   else if AArgs.SubCommand = 'studio-root'   then Result:= DoSelfTestStudioRoot
   else if AArgs.SubCommand = 'fact-wrap'     then Result:= DoSelfTestFactWrap
+  else if AArgs.SubCommand = 'ident-words'   then Result:= DoSelfTestIdentWords
   else
   begin
     Writeln('ERROR: unknown selftest subcommand: ', AArgs.SubCommand);
-    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic, own-roots, studio-root, fact-wrap');
+    Writeln('Available: manifest-merge, glob, ignore, files, closure, dbselect, drift, coverage, recreate, unused-locals, harvest, section-db, manifest-save-atomic, own-roots, studio-root, fact-wrap, ident-words');
     Result:= 2;
   end;
 end; // function
@@ -32644,6 +34251,7 @@ begin
             Stage('  ', 'calls',        procedure begin Store.ResolveCallTargets; end);
             Stage('  ', 'dispatch',     procedure begin Store.ResolveDispatch; end);     { 2026-10-26: derived from the edges just written }
             Stage('  ', 'purity',       procedure begin TPurityStage.Run(Store); end);   { Purity v2: verdicts follow the edges; no gate, this block already runs only when files were scanned }
+            Stage('  ', 'search',       procedure begin Store.BuildSymbolSearch; end);   { xj-5: concept-search table, incremental }
           end;
 
           // Recompile + refresh compiler_findings for the whole project when
@@ -33883,6 +35491,35 @@ begin
     end;
 end;
 
+{ LSP-1 CORE: plain `lsp`'s per-file context DB resolver -- the SAME
+  ResolveConsumerDbs + SplitConsumerDbs a `--project X --platform P` read verb
+  runs (so `resolve-dbs --project X --platform P` names the same pair), over a
+  snapshot for the reason MakeConsumerDbResolver gives. AProject = '' asks for
+  the platform library only. }
+function MakeLspContextDbResolver(const pArgs: TArgs): DRagLint.LSP.Server.TLspContextDbResolver;
+var
+  Snapshot: TArgs;
+begin
+  Snapshot:= pArgs;
+  Snapshot.DbPaths:= nil;
+  Snapshot.Path   := '';
+  Snapshot.InFile := '';
+  Result:=
+    function(const AProject, APlatform: string): DRagLint.LSP.Server.TLspDbSet
+    var
+      A     : TArgs;
+      ProjDb: string;
+      LibDb : string;
+    begin
+      A:= Snapshot;
+      A.ProjectPath  := AProject;
+      A.CheckPlatform:= APlatform;
+      SplitConsumerDbs(A, ResolveConsumerDbs(A), ProjDb, LibDb);
+      Result.ProjectDb:= if AProject <> '' then ProjDb else '';
+      Result.LibraryDb:= LibDb;
+    end;
+end;
+
 function Run: Integer;
 const
   SELFTEST_SCHEMA_DB_ARG = 3; // ParamStr index of the DB path after --selftest-schema <sub>
@@ -33931,6 +35568,15 @@ begin
     begin
       Writeln(ErrOutput, Format('ERROR: --rule given more than once (%s). One --rule per run -- ' +
         'run once per rule, or drop --rule to report every enabled rule.', [Args.RuleConflict]));
+      Exit(2);
+    end;
+
+    { --rule takes ONE rule id. A comma list ("a,b,c") matched no rule, so lint-all reported
+      0 findings and the run read as clean; refuse it as loudly as a repeated --rule. }
+    if Args.Rule.Contains(',') then
+    begin
+      Writeln(ErrOutput, Format('ERROR: --rule takes one rule id, not a list ("%s"). ' +
+        'Run once per rule, or drop --rule to report every enabled rule.', [Args.Rule]));
       Exit(2);
     end;
 
@@ -33995,8 +35641,13 @@ begin
           '(--rebuild clears every indexed file from the DB first; --recompile updates it in place).');
         Exit(2);
       end;
-      if Args.IndexAll then Result:= DoIndexAll(Args)
-      else Result:= DoIndex(Args)
+      try
+        if Args.IndexAll then Result:= DoIndexAll(Args)
+        else Result:= DoIndex(Args);
+      finally
+        GFileTxGate:= nil;
+        BatchChannelClose; { DEC-13: every store is closed by now }
+      end
     end
     else if Args.Command = 'query'             then Result:= DoQuery           (Args)
     else if Args.Command = 'rules'             then Result:= DoRules           (Args)
@@ -34004,6 +35655,8 @@ begin
     else if Args.Command = 'allow'             then Result:= DoAllow           (Args)
     else if Args.Command = 'export'            then Result:= DoExport          (Args)
     else if Args.Command = 'top'               then Result:= DoTop             (Args)
+    else if Args.Command = 'gain'              then Result:= DoGain            (Args)
+    else if Args.Command = 'overview'          then Result:= RunOverview       (Args.DbPath, Args.MaxRows, Args.AsJson)
     else if Args.Command = 'import-log'        then Result:= DoImportLog       (Args)
     else if Args.Command = 'graph'             then Result:= DoGraph           (Args)
     else if Args.Command = 'todos'             then Result:= DoTodos           (Args)
@@ -34017,6 +35670,7 @@ begin
     else if Args.Command = 'ask'               then Result:= RunAskVerbFromCommandLine
     else if Args.Command = 'protocol'          then Result:= RunProtocolVerbFromCommandLine
     else if Args.Command = 'mcp-config'        then Result:= RunMcpConfigVerbFromCommandLine
+    else if Args.Command = 'init'              then Result:= RunInitVerbFromCommandLine
     else if Args.Command = 'usages'            then Result:= DoUsages          (Args)
     else if Args.Command = 'slice'             then Result:= DoSlice           (Args)
     else if Args.Command = 'context'           then Result:= DoContext         (Args)
@@ -34028,6 +35682,7 @@ begin
     else if Args.Command = 'sql'               then Result:= DoSql             (Args)
     else if Args.Command = 'wiki'              then Result:= DoWiki            (Args)
     else if Args.Command = 'ide-release'       then Result:= DoIdeRelease      (Args)
+    else if Args.Command = 'project-context'   then Result:= DoProjectContext  (Args)
     else if Args.Command = 'shutdown'          then Result:= DoShutdown        (Args)
     else if Args.Command = 'shared-unit'       then Result:= DoSharedUnit      (Args)
     else if Args.Command = 'info'              then Result:= DoInfo            (Args)
@@ -34050,7 +35705,14 @@ begin
     else if Args.Command = 'ghost-check'       then Result:= DoGhostCheck      (Args)
     else if Args.Command = 'ghost-recover'     then Result:= DoGhostRecover    (Args)
     else if Args.Command = 'check-unit'        then Result:= DoCheckUnit       (Args)
-    else if Args.Command = 'lint-all'          then Result:= DoLintAll         (Args)
+    else if Args.Command = 'lint-all'          then
+    begin
+      try
+        Result:= DoLintAll(Args);
+      finally
+        BatchChannelClose;
+      end;
+    end
   else if Args.Command = 'lint-tree'         then Result:= DoLintTree        (Args)
     else if Args.Command = 'exceptions-sync'   then Result:= DoExceptionsSync  (Args)
     else if Args.Command = 'lint-project'      then Result:= DoLintProject     (Args)
@@ -34150,11 +35812,13 @@ begin
       LSP.FullRules:= Args.LspFullRules;
       if not Args.ProjectFromConfig then LSP.StartupProject:= Args.ProjectPath;
       LSP.StartupPlatform:= Args.CheckPlatform;
+      LSP.ExplicitDbs    := Length(Args.DbPaths) > 0;            { LSP-1 CORE: per-file context sets }
+      LSP.DbResolver     := MakeLspContextDbResolver(Args);
       var Ctl: TControlChannel:= nil;
       try
         { docs\PLAN-maintenance-shutdown-channel.md (W3): the maintenance
           control channel. ControlChannelEnabledFor is THE ONE place that
-          decides which modes listen (lsp only, provisionally). Started after
+          decides which modes listen (lsp, cycles, index, lint-all; DEC-13). Started after
           the stores are open so `status` names what is really held, and
           signalled after LSP.Free so `exiting` never precedes a closed store.
           Failing to listen is reported and is not fatal: an editor without a

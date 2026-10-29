@@ -21,12 +21,15 @@ implementation
 
 procedure WriteVerbReference;
 begin
-  Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]');
+  Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library]');
   Writeln('                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.');
   Writeln('                               A hit is recorded by qualified NAME on refs.external_target -- never as a call_edges row,');
   Writeln('                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the');
   Writeln('                               cross-DB rung runs last), so adding a library can never change an edge that already existed.');
   Writeln('                               Answers only when exactly ONE type and ONE member match; absence beats a guess.');
+  Writeln('                               A value receiver typed by NAME binds too (S.Read with S: TStream -> System.Classes.TStream.Read; refs.receiver_type_text');
+  Writeln('                               records the type). Without the flag, a manifest section opts in with "libraryResolve": true (default false):');
+  Writeln('                               index --all / index --project then open the platform library for the resolve pass only.');
   Writeln('                               WALK SCOPING (any index run): [--exclude-under <dir>]... [--include-only <glob>]...');
   Writeln('                               [--max-file-kb N] [--no-use-ignore] [--no-sql-ms] [--deep|--shallow]');
   Writeln('                               --exclude-under and --include-only are repeatable and prune the walk;');
@@ -36,10 +39,11 @@ begin
   Writeln('                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY');
   Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
   Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
-  Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]]');
+  Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library]');
   Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
-  Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>]');
+  Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library]');
+  Writeln('                               --wait-library <min>: when the platform library a libraryResolve section binds against is NOT READY (rebuilding, built by an older extractor, schema old, never completed), probe every 30 s up to `min` minutes, then continue; --require-library: a not-ready library is ERROR, exit 2. Default: continue, mark the run pending and say so. The library line is printed before the walk; the platform comes from --platform, the project DB, then the .dproj.');
   Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>');
   Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
   Writeln('                               members, the project-local units they transitively use, each one''s sibling');
@@ -96,6 +100,9 @@ begin
   Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous);');
   Writeln('                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];');
   Writeln('                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)');
+  Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3)');
+  Writeln('                               a method reached only THROUGH an interface lists those sites as a separate "via IFoo.Bar dispatch" group;');
+  Writeln('                                 --json rows gain "via" (interface method QName), "via_kind" ("interface") and, when the implements edge is ambiguous, "via_edge" (RB-5)');
   Writeln('  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)');
   Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]');
   Writeln('       ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind <k> --all');
@@ -134,37 +141,43 @@ begin
   Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
   Writeln('  drag-lint query descendants  --of <ancestor> [--db ...] [--json]   (the REVERSE of ancestors: every CLASS descending from <ancestor>, across all scanned DBs. Derived INTERFACES are deliberately excluded -- this backs the conversion editor''s class pickers. exit 1 = no such ancestor)');
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
-  Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
-  Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]');
-  Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks)');
+  Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it)');
+  Writeln('  drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]');
+  Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project');
+  Writeln('                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)');
+  Writeln('                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)');
   Writeln('                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).');
   Writeln('                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:');
   Writeln('                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE''s 8s budget)');
   Writeln('                               [--stand-in-for <realpath>]  (analyse <path>''s TEXT as though it were <realpath>:');
   Writeln('                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,');
   Writeln('                               unit-name and the reported path)');
-  Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
+  Writeln('  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)');
   Writeln('                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.');
   Writeln('                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to');
   Writeln('                               apply every fixable finding in the file. Only rules whose catalog entry has');
   Writeln('                               "fixable": true are ever applied -- see `drag-lint rules --json`.');
-  Writeln('                               --fix-naming: consent, in a batch run, to the opt-in naming fixes (renames across');
-  Writeln('                               every owning project) without listing them in "autofix" in drag-lint-lint.json;');
-  Writeln('                               it also prints "rename-local: <N>" (stderr) for the single-project renames.');
+  Writeln('                               --fix-naming: kept for compatibility, a no-op since 1.37.0 -- every fix, the naming renames (across');
+  Writeln('                               every owning project) included, is ON by default; only "autofix_off": [...] in drag-lint-lint.json withholds one;');
+  Writeln('                               with it the run still prints "rename-local: <N>" (stderr) for the single-project renames.');
   Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
-  Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json] [--output <f>]');
-  Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]');
+  Writeln('  drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value] [--layers <f.json>] [--json] [--output <f>]');
+  Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]');
   Writeln('                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
   Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
-  Writeln('                               --rule <id>: report ONLY that rule (one id per run; a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
+  Writeln('                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
   Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
   Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
   Writeln('                               (its compile closure + their .dfm siblings). Use it when one folder holds');
   Writeln('                               several projects, or when the DB spans more than the project you are reviewing.');
+  Writeln('                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index''s data_flows');
+  Writeln('                               facts from a catalogued source to a sink; catalogues rules\taint-sources|sinks|propagators.json, extended by the');
+  Writeln('                               "taint" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds');
+  Writeln('                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.');
   Writeln('                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.');
   Writeln('                               DRY RUN WITHOUT --apply. This is what the Structure form''s right-click');
   Writeln('                               "Fix all in project" runs. It can rewrite many files at once -- dry-run first.');
@@ -175,7 +188,7 @@ begin
   Writeln('                                 not it found anything; 2 means it could NOT run. --baseline pins the OLD');
   Writeln('                                 side to an edit-episode capture -- without it the OLD side is the live');
   Writeln('                                 index, which is CLI/manual use only.');
-  Writeln('  drag-lint exceptions-sync    [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json]   (materialise the project''s derived exception classes)');
+  Writeln('  drag-lint exceptions-sync    [--profile <name>] [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json]   (materialise the project''s derived exception classes)');
   Writeln('                               Harvests every bare `raise Exception.Create(''literal'')` in the project and declares one class per');
   Writeln('                               DISTINCT message inside a drag-lint:auto managed block in the exceptions unit. DRY RUN WITHOUT --apply.');
   Writeln('                               Opt in with an "exceptions" block in drag-lint-lint.json -- an empty one is enough; key "unit" names');
@@ -185,9 +198,9 @@ begin
   Writeln('                               It is a VERB and not a --fix because its input is project-wide and its output is one file; the CALL-SITE');
   Writeln('                               rewrite is the fix-it half and lives on `lint <file> --fix --fix-rule raise-bare-exception [--apply]`.');
   Writeln('  drag-lint serve              --db <file.sqlite> [--json]   (MCP stdio server)');
-  Writeln('  drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]');
+  Writeln('  drag-lint mcp-config (--claude-code | --vscode | --cursor | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]');
   Writeln('                               writes {"type":"stdio","command":"<engine>","args":["serve"[,"--db","<index>"]]} (+ "env":{} for Claude Code) into');
-  Writeln('                               ~\.claude.json "mcpServers" / %APPDATA%\Code\User\mcp.json "servers": merged, backed up (<file>.bak-<stamp>), idempotent;');
+  Writeln('                               ~\.claude.json "mcpServers" / %APPDATA%\Code\User\mcp.json "servers" / ~\.cursor\mcp.json "mcpServers": merged, backed up (<file>.bak-<stamp>), idempotent;');
   Writeln('                               --remove takes only its own entry out; an entry by that name that runs something else is refused; --dry-run writes nothing;');
   Writeln('                               --home-dir / --appdata-dir move where the default files are looked for (tests)');
   Writeln('  drag-lint protocol register [--handler <drag-lint-open.exe>] [--dry-run] [--force]   (HKCU\Software\Classes\draglint -> the handler; --force accepts a *-wt\ path or replaces a foreign registration)');
@@ -216,6 +229,7 @@ begin
   Writeln('                               to type there: without --resolve-only the <dir> form above widens a project DB into a folder DB)');
   Writeln('  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;');
   Writeln('                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)');
+  Writeln('                               library-first resolve: a section with libraryResolve whose platform library is not READY (missing, rebuilding, stale extractor) is resolved without it; the run marks the DB pending (schema_meta library_resolve_state) and says on stderr that the result is INCOMPLETE. The next index run re-resolves it once the library is ready, no flag needed.');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output <file>]');
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
@@ -224,24 +238,28 @@ begin
   Writeln('  drag-lint diff               --db <old.sqlite> --db <new.sqlite>  [--json]');
   Writeln('  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)');
   Writeln('  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]');
-  Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]');
+  Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json] [--write-back]');
   Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]');
+  Writeln('                               an interface method also lists its implementors; an implementor, the interface sites reaching it');
+  Writeln('                               --format json: "implementors" [QName,...] and "via_dispatch" [{via,kind,sites}] (keys present only when non-empty; RB-5)');
   Writeln('  drag-lint wiring             --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]   (Spring4D DI + DFM event edges)');
   Writeln('  drag-lint wiring             --coverage           [--db <file.sqlite>] [--format text|json]   (DI registrations not resolved to I->T)');
   Writeln('  drag-lint surface            --qname <Foo.TBar>   [--db <file.sqlite>] [--include-impl] [--all-visibility] [--format text|json]');
   Writeln('  drag-lint slice              --qname <Foo.TBar>   [--db <file.sqlite>] [--format text|json]');
-  Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)');
+  Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)');
   Writeln('                               [--max-callers N] [--context N] [--no-docs]');
+  Writeln('                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).');
+  Writeln('                               a method reached only THROUGH an interface also gets "## Callers via interface dispatch (IFoo.Bar): N site(s)" sections, after the direct callers (RB-5)');
   Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
   Writeln('  drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]');
   Writeln('  drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]   (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)');
   Writeln('  drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>]   (third-party dependency rollup)');
   Writeln('  drag-lint schema --db <file.sqlite> [--format text|json] [--json] [--output <file>]   (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)');
   Writeln('  drag-lint query --name-like <substring> [--kind class,interface,...] [--limit N] [--json] --db <file.sqlite>   (SUBSTRING search over symbol NAMES -- the discovery query, for when you do not know the identifier yet; ordered shortest-name-first. Distinct from --name, which is exact with an edit-distance fallback)');
-  Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running `lsp` engines to stand down: close every store, exit 0)');
+  Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)');
   Writeln('                               transport: a Windows NAMED PIPE, never a TCP port -- \\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an');
-  Writeln('                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Only an');
-  Writeln('                               engine started in lsp mode listens (one-shot verbs and `serve` do not). --all (the default) asks every');
+  Writeln('                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in');
+  Writeln('                               `lsp`, `cycles --fix`, `index` (incl. --all) and `lint-all` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings. --all (the default) asks every');
   Writeln('                               reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.');
   Writeln('                               --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps');
   Writeln('                               running (exit 1). --force TerminateProcess''es ONLY an engine that refused or did not answer, and says');
@@ -252,8 +270,9 @@ begin
   Writeln('  drag-lint wiki --term "<phrase>" | --list | --check [--json] [--db <file.sqlite>]   (dl:wiki CONCEPT topics written in doc comments: --term routes a human word or alias ("the scheduler") to the owning symbol, --list prints every topic, --check resolves every SeeCode entry and exits 1 on drift. Authoring format: docs\wiki\Wiki-Blocks-Authoring.md)');
   Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)');
   Writeln('                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict');
-  Writeln('                               (current | resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Two keyed lookups, no COUNT.');
+  Writeln('                               (current | resolve-owed | library-resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Keyed lookups, no COUNT.');
   Writeln('                               text form: one "index: <path>  verdict: <v>" line per --db, then "  remedy: ..." when one is owed.');
+  Writeln('                               library-resolve-owed: the DB was resolved without its platform library (marker schema_meta library_resolve_state = pending); --json adds library_resolve {state, reason, since_unix, library_state}, the text form a library_resolve line.');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
   Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');
@@ -262,12 +281,12 @@ begin
   Writeln('      (--qname and --kind symbol refuse, exit 2, and name the file(s) when the old name is used as an identifier in an .inc file: the index records no identifier references inside {$I} included text)');
   Writeln('      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2, naming the file; other binary or unindexed .dfm files are reported as not rewritten, never skipped silently)');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
-  Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
+  Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
   Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only)');
   Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)');
   Writeln('                                 scope: the compile closure restricted to the project''s own roots (_D-RAG\drag-lint-project.json, same declaration lint-all reads).');
   Writeln('                                 Vendored roots are named and skipped; --document-third-party writes to them too.');
-  Writeln('  drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
+  Writeln('  drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
   Writeln('     batch modes (--unit/--project/document-all) default facts-only: an empty tag is never written, <param> never gets a skeleton, and <summary> appears only when harvested from a nearby // comment; add --stubs to keep a fresh comment that has no facts block');
   Writeln('     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too');
   Writeln('  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)');
@@ -309,13 +328,16 @@ begin
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))');
-  Writeln('  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]');
+  Writeln('  drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]');
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)');
   Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
-  Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--json]   (resolved outgoing calls of routine X)');
+  Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X)');
+  Writeln('                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.');
+  Writeln('                               With no library open the text ends N external (library not open) for the calls one could bind.');
   Writeln('  drag-lint ambiguous-calls [--qname <Foo.Bar>|--in <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)');
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
+  Writeln('                               a hop also follows an interface method to the methods that implement it (dispatch_edges implements; RB-5)');
   Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--rules <file>] [--progress-interval S] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; depth = --depth N (an integer >= 1), else the --rules book''s #depth N (1..10), else 5 -- a K-segment path needs depth >= K-1; a bad --depth or #depth exits 2; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitt' +
@@ -342,9 +364,10 @@ begin
     'CEPT that with --only, when every such instance is one --only left out, the removal is SKIPPED (1.23.0: unit kept; json uses[] action skipped with a reason, a ''line N: warning:'' line, items[] kind unit-rule-skipped; info capability only_skips_unit_rules); USES RECONCILIATION (1.27.0, C9, default on; --no-reconcile-uses = the 1.26.6 rules above, exactly): the converted .pas/.dfm are RE-INDEXED IN MEMORY (the indexer''s own extractor, no DB written, so the dry run shows the --apply plan) and every #unuse / #useswap Old is a WATCH LIST -- the unit is KEPT while a component the converted .dfm still streams has a class declared in it (an unconverted instance, a second component type of that unit, an inherited instance the ancestor has not converted: R26''s refusal becomes this, the --only skipped' +
     ' row is unchanged), REMOVED when only .pas code needs it (its dangling references named, the compile errors are the signal), KEPT when no --db indexes it; presence is scope-alias aware (#unuse DBTables matches Bde.DBTables, #use DB is satisfied by Data.DB); a bare name the conversion INTRODUCES into the .pas gets its declaring unit added -- interface uses when referenced above implementation -- and a name (or To type) two units declare is REPORTED, never picked (add #use <unit> to choose); a To-type tie the book''s #use (or a uses entry of the unit) settles takes that unit, into the INTERFACE uses when the retyped field is declared there, or MOVED there (C9 A8-1); the C13 move is a row; every unit the #convert surface adds (a To type''s unit, a #convert header''s trailing unit) is an add row ' +
     'too (rule #convert, source rule, counted by uses_added; none when already present); json: uses[] action remove|add|skipped|kept|moved with source rule|reconcile|convert and needed_by[] {name,line,section}, uses_kept, uses_moved, uses_unresolved[] {name,line,section,reason ambiguous|not-found,candidates[] {unit,db}}, uses_reconcile on|off|degraded, items[] kinds unit-rule-kept, unit-rule-dangling, unit-rule-unverified, uses-unit-ambiguous (all warnings); after --apply the unit''s OWN project DB -- the one --db that indexes it, a project index holding one .dproj/.dpr -- is refreshed with ''index --project <it> --db <it>'' in a child process (json uses_reindex {status done|skipped|failed|dry-run|off,db,project,ms,reason}; a child still running after 10 minutes is terminated: failed; --no-reindex' +
-    ' skips it; no other DB is ever written); info capability uses_reconcile; inside a #convert block ''#migrate Old -> New'' renames the member at every bound .pas access site of the block''s converted instances (methods, events, properties; json items[] migrate-applied) and ''#migrate Old -> DL_NONE'' wraps each site, inst.Old -> DL_NONE(inst.Old), a deliberate break that does not compile until converted by hand (items[] deliberate-break, field todos); both make pas_uses[] status mapped; a with block, an unverified receiver, a scoped / template / uses-unit form or a member a #link already converts is never rewritten (items[] migrate-check); info capability migrate_members (C18 slice 1); --only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and repo' +
-    'rted (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); --unit may repeat (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built (the run total),units[]: one apply/1 per unit, each equal to that unit''s single run -- its classes_built is the unit''s own}; under --apply a file a unit cannot write fails that unit before anything is written (exit 2); a unit''s refusal or failure never stops the others; exit = the worst unit''s; info cap' +
-    'ability batch_units; 1.33.0: every apply/1 (single or units[]) carries exit_code (that unit''s); a --unit no --db indexes is REFUSED, dry run and --apply alike (reason ''<unit> is not covered by any supplied --db ...''); --progress writes one STDERR line per finished unit, flushed, stdout unchanged, off by default -- {"progress":{"verb":"convert-apply","unit_done":i,"units":N,"unit":"<path>","ok":b,"refused":b,"exit_code":E}} (info capability batch_progress); json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
+    ' skips it; no other DB is ever written); info capability uses_reconcile; inside a #convert block ''#migrate Old -> New'' renames the member at every bound .pas access site of the block''s converted instances (methods, events, properties; json items[] migrate-applied) and ''#migrate Old -> DL_NONE'' wraps each site, inst.Old -> DL_NONE(inst.Old), a deliberate break that does not compile until converted by hand (items[] deliberate-break, field todos); both make pas_uses[] status mapped; a with block, an unverified receiver, a scoped / template form or a member a #link already converts is never rewritten (items[] migrate-check); info capability migrate_members (C18 slice 1); an IDENTIFIER #migrate (file scope, or in a block naming uses units or an enum-value target; 1.38) renames every bare Old to' +
+    'ken in the .pas code -- var/param/field/result types, casts, is/as, generic arguments, enum literals; never comments or strings -- when New resolves in a --db (else items[] migrate-check per site, no rename), maps an enum type pair member by member on the name after the lowercase prefix (an explicit #migrate member line overrides; an unmatched member in use is a migrate-check), never renames a qualified Unit.Old site (migrate-check), and adds the unit declaring New to uses (interface uses when a site is there); info capability migrate_identifiers; --only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); --unit may repea' +
+    't (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built (the run total),units[]: one apply/1 per unit, each equal to that unit''s single run -- its classes_built is the unit''s own}; under --apply a file a unit cannot write fails that unit before anything is written (exit 2); a unit''s refusal or failure never stops the others; exit = the worst unit''s; info capability batch_units; 1.33.0: every apply/1 (single or units[]) carries exit_code (that unit''s); a --unit no --db indexes is REFUSED, d' +
+    'ry run and --apply alike (reason ''<unit> is not covered by any supplied --db ...''); --progress writes one STDERR line per finished unit, flushed, stdout unchanged, off by default -- {"progress":{"verb":"convert-apply","unit_done":i,"units":N,"unit":"<path>","ok":b,"refused":b,"exit_code":E}} (info capability batch_progress); json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
   Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
@@ -357,7 +380,8 @@ begin
   Writeln('    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info (or none)');
   Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
   Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
-  Writeln('    --profile <name>          merge a named enable/disable set from the config');
+  Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
+  Writeln('    --target-compiler <v>     lint / lint-all / rules: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
   Writeln('    --baseline <file>         report only findings absent from the baseline');
   Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
   Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
@@ -390,6 +414,11 @@ begin
   Writeln('');
   Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--json] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)');
   Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry''s ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\_D-RAG\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)');
+  Writeln('  drag-lint init --project <file.dproj> [--dry-run] [--home-dir <dir>] [--appdata-dir <dir>]');
+  Writeln('                               runs register-project --apply, index --project, resolve-dbs --project, then mcp-config --all --db <that index>');
+  Writeln('                               (Claude Code, VS Code and Cursor; an uninstalled client is skipped); --dry-run prints those four commands and runs NOTHING;');
+  Writeln('                               --home-dir / --appdata-dir move where the client files are looked for (tests); a failing step stops the run with its exit code');
+  Writeln('  drag-lint overview           --db <file.sqlite>    [--max-rows N] [--json]   (ONE bounded first-turn call: freshness, counts per kind, units by layer, top fan-in, entry points, forms; a capped section says how many it omitted)');
   Writeln('  drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--format json|--json] (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose,' +
     ' plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -' +
     '> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule,reason}, uses_removed, uses_added; the To type''s unit goes to the INTERFACE uses when the retyped field is declared in the interface, and is MOVED there from an implementation-only use (1.23.0);EVERY #convert block is validated and freshness-checked -- each #link/#default against its own From/To types, each ' +
@@ -406,25 +435,55 @@ begin
     'such instance is one --only left out, the removal is SKIPPED (1.23.0: unit kept; json uses[] action skipped with a reason, a ''line N: warning:'' line, items[] kind unit-rule-skipped; info capability only_skips_unit_rules); USES RECONCILIATION (1.27.0, C9, default on; --no-reconcile-uses = the 1.26.6 rules above, exactly): the converted .pas/.dfm are RE-INDEXED IN MEMORY (the indexer''s own extractor, no DB written, so the dry run shows the --apply plan) and every #unuse / #useswap Old is a WATCH LIST -- the unit is KEPT while a component the converted .dfm still streams has a class declared in it (an unconverted instance, a second component type of that unit, an inherited instance the ancestor has not converted: R26''s refusal becomes this, the --only skipped row is unchanged), REMOVED when o' +
     'nly .pas code needs it (its dangling references named, the compile errors are the signal), KEPT when no --db indexes it; presence is scope-alias aware (#unuse DBTables matches Bde.DBTables, #use DB is satisfied by Data.DB); a bare name the conversion INTRODUCES into the .pas gets its declaring unit added -- interface uses when referenced above implementation -- and a name (or To type) two units declare is REPORTED, never picked (add #use <unit> to choose); a To-type tie the book''s #use (or a uses entry of the unit) settles takes that unit, into the INTERFACE uses when the retyped field is declared there, or MOVED there (C9 A8-1); the C13 move is a row; every unit the #convert surface adds (a To type''s unit, a #convert header''s trailing unit) is an add row too (rule #convert, source rule, c' +
     'ounted by uses_added; none when already present); json: uses[] action remove|add|skipped|kept|moved with source rule|reconcile|convert and needed_by[] {name,line,section}, uses_kept, uses_moved, uses_unresolved[] {name,line,section,reason ambiguous|not-found,candidates[] {unit,db}}, uses_reconcile on|off|degraded, items[] kinds unit-rule-kept, unit-rule-dangling, unit-rule-unverified, uses-unit-ambiguous (all warnings); after --apply the unit''s OWN project DB -- the one --db that indexes it, a project index holding one .dproj/.dpr -- is refreshed with ''index --project <it> --db <it>'' in a child process (json uses_reindex {status done|skipped|failed|dry-run|off,db,project,ms,reason}; a child still running after 10 minutes is terminated: failed; --no-reindex skips it; no other DB is ever wri' +
-    'tten); info capability uses_reconcile; inside a #convert block ''#migrate Old -> New'' renames the member at every bound .pas access site of the block''s converted instances (methods, events, properties; json items[] migrate-applied) and ''#migrate Old -> DL_NONE'' wraps each site, inst.Old -> DL_NONE(inst.Old), a deliberate break that does not compile until converted by hand (items[] deliberate-break, field todos); both make pas_uses[] status mapped with migrate_to New (DL_NONE for a break; DL_NONE is never resolved as a uses unit); a with block, an unverified receiver, a scoped / template / uses-unit form or a member a #link already converts is never rewritten (items[] migrate-check, old_value Old; convert-validate warns on those forms); every migrate item carries the from_type/to_type of its' +
-    ' block; a member reached through a with block is listed on its pas_uses[] row; info capability migrate_members (C18 slice 1); --only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); --unit may repeat (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built (the run total),units[]: one apply/1 per unit, each equal to that ' +
-    'unit''s single run -- its classes_built is the unit''s own}; under --apply a file a unit cannot write fails that unit before anything is written (exit 2); a unit''s refusal or failure never stops the others; exit = the worst unit''s; info capability batch_units; json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
+    'tten); info capability uses_reconcile; inside a #convert block ''#migrate Old -> New'' renames the member at every bound .pas access site of the block''s converted instances (methods, events, properties; json items[] migrate-applied) and ''#migrate Old -> DL_NONE'' wraps each site, inst.Old -> DL_NONE(inst.Old), a deliberate break that does not compile until converted by hand (items[] deliberate-break, field todos); both make pas_uses[] status mapped with migrate_to New (DL_NONE for a break; DL_NONE is never resolved as a uses unit); a with block, an unverified receiver, a scoped / template form or a member a #link already converts is never rewritten (items[] migrate-check, old_value Old; convert-validate warns on those forms); every migrate item carries the from_type/to_type of its block; a me' +
+    'mber reached through a with block is listed on its pas_uses[] row; info capability migrate_members (C18 slice 1); an IDENTIFIER #migrate (file scope, or in a block naming uses units or an enum-value target; 1.38) renames every bare Old token in the .pas code -- var/param/field/result types, casts, is/as, generic arguments, enum literals; never comments or strings -- when New resolves in a --db (else items[] migrate-check per site, no rename), maps an enum type pair member by member on the name after the lowercase prefix (an explicit #migrate member line overrides; an unmatched member in use is a migrate-check), never renames a qualified Unit.Old site (migrate-check), and adds the unit declaring New to uses (interface uses when a site is there); info capability migrate_identifiers; --only n' +
+    'ames match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); --unit may repeat (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built (the run total),units[]: one apply/1 per unit, each equal to that unit''s single run -- its classes_built is the unit''s own}; under --apply a file a unit cannot write fails that unit before anything is' +
+    ' written (exit 2); a unit''s refusal or failure never stops the others; exit = the worst unit''s; info capability batch_units; json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
   Writeln('       see wiki page: convert-apply-migrate');
   Writeln('  drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\TEMP\draglint_cyclefix_<pid>\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out n' +
     'ames another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default win64) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build environment the compile gate calls (de' +
     'fault: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE''s Cancel) kills the build, rolls an --apply back and exits 1 ("cancelled -- rolled back"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry ' +
     'from (default: the manifest''s library for win64; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
   Writeln('       see wiki page: Circular-Uses-Report-cycles-fix-plan');
+  Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment');
+  Writeln('       see wiki page: Document-it');
   Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff] (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5). Exit 0 also when YADF declines the file (its content guard leaves it unchanged; prints "Declined: <file>", not a failure))');
   Writeln('       see wiki page: Format-with-YADF');
+  Writeln('  drag-lint gain [--since yyyy-mm-dd] [--json]');
+  Writeln('       ^ tokens_returned is measured only for context and query --text; the other readers are estimated at 15 tokens per row');
+  Writeln('       ^ The log is per user and best effort: an unwritable LOCALAPPDATA loses lines silently by design');
+  Writeln('       see wiki page: Gain-usage-log');
+  Writeln('  drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]');
+  Writeln('       see wiki page: Format-Whole-Project-with-YADF');
   Writeln('  drag-lint index --project <file.dproj> --db <file.sqlite> [--build-config <Release|Debug|name>]');
   Writeln('       see wiki page: index-build-config');
-  Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
+  Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--watch [--interval N]]');
   Writeln('       see wiki page: Rebuild-Index-for-This-Project');
+  Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
+  Writeln('       see wiki page: Rescan-this-unit');
+  Writeln('  drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]');
+  Writeln('       see wiki page: Copy-Diagnostics-Current-File');
+  Writeln('  drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]');
+  Writeln('       ^ lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.');
+  Writeln('       ^ A vendored folder INSIDE the project folder is linted as your own code until `excludeRoots` names it in `<project>\_D-RAG\drag-lint-project.json`.');
+  Writeln('       see wiki page: Run-Lint-All-Full-Report');
   Writeln('  drag-lint lsp --db <file.sqlite> --full-rules [--no-preprocess]');
   Writeln('       see wiki page: lsp-proxy-merge');
   Writeln('  drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits 32|64] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]');
   Writeln('       see wiki page: lsp-proxy-merge');
+  Writeln('  drag-lint project-context --project <x.dproj|x.dpr> [--platform P] [--config C] [--output <file>] [--json] [--check] (writes <base>.dlcontext.json beside the project: platform, config and the complete effective define set, plus the .dproj SHA-1 for staleness; --check writes nothing and exits 1 saying why when the file is missing or stale; a .dpr with no .dproj exits 2 unless --platform and --config are both given)');
+  Writeln('       see wiki page: project-context');
+  Writeln('  drag-lint query --concept "<words>" [--limit N] [--kind k,...] [--json] --db <db>');
+  Writeln('       ^ approximate matched column: first 5 letters of a word stand in for porter stemming.');
+  Writeln('       ^ no synonyms and no embeddings: remove does not find delete.');
+  Writeln('       ^ exit 3 = this index has no concept-search table yet; run index once (backfills from existing rows, no re-parse).');
+  Writeln('       see wiki page: concept-search');
+  Writeln('  drag-lint query --text "<phrase>" --near <QName> [--hops 1..3] [--hops-uses] [--near-boost] [--db ...] [--json]');
+  Writeln('       ^ The default RESTRICTS: a hit outside N hops is dropped, not demoted; --near-boost keeps it.');
+  Writeln('       ^ A hop is one resolved call edge, callers and callees; --hops 4 is refused (use impact --depth).');
+  Writeln('       see wiki page: query-text-near');
+  Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)');
+  Writeln('       see wiki page: rules');
 end;
 
 procedure WriteFlagAliases;
@@ -446,12 +505,15 @@ begin
   Result := True;
   if pVerb = 'index' then
   begin
-    Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]');
+    Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library]');
     Writeln('                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.');
     Writeln('                               A hit is recorded by qualified NAME on refs.external_target -- never as a call_edges row,');
     Writeln('                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the');
     Writeln('                               cross-DB rung runs last), so adding a library can never change an edge that already existed.');
     Writeln('                               Answers only when exactly ONE type and ONE member match; absence beats a guess.');
+    Writeln('                               A value receiver typed by NAME binds too (S.Read with S: TStream -> System.Classes.TStream.Read; refs.receiver_type_text');
+    Writeln('                               records the type). Without the flag, a manifest section opts in with "libraryResolve": true (default false):');
+    Writeln('                               index --all / index --project then open the platform library for the resolve pass only.');
     Writeln('                               WALK SCOPING (any index run): [--exclude-under <dir>]... [--include-only <glob>]...');
     Writeln('                               [--max-file-kb N] [--no-use-ignore] [--no-sql-ms] [--deep|--shallow]');
     Writeln('                               --exclude-under and --include-only are repeatable and prune the walk;');
@@ -461,10 +523,11 @@ begin
     Writeln('                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY');
     Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
     Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
-    Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]]');
+    Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library]');
     Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
     Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
-    Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>]');
+    Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library]');
+    Writeln('                               --wait-library <min>: when the platform library a libraryResolve section binds against is NOT READY (rebuilding, built by an older extractor, schema old, never completed), probe every 30 s up to `min` minutes, then continue; --require-library: a not-ready library is ERROR, exit 2. Default: continue, mark the run pending and say so. The library line is printed before the walk; the platform comes from --platform, the project DB, then the .dproj.');
     Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>');
     Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
     Writeln('                               members, the project-local units they transitively use, each one''s sibling');
@@ -525,6 +588,9 @@ begin
     Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous);');
     Writeln('                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];');
     Writeln('                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)');
+    Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3)');
+    Writeln('                               a method reached only THROUGH an interface lists those sites as a separate "via IFoo.Bar dispatch" group;');
+    Writeln('                                 --json rows gain "via" (interface method QName), "via_kind" ("interface") and, when the implements edge is ambiguous, "via_edge" (RB-5)');
     Writeln('  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)');
     Writeln('  drag-lint query find         [--doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs] [--kind K] [--name N] [--unit U] [--public] [--db ...]');
     Writeln('       ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind <k> --all');
@@ -584,28 +650,30 @@ begin
   end;
   if pVerb = 'rules' then
   begin
-    Writeln('  drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]   - list every lint rule (catalog)');
+    Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]]   - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance` and needs_compiler / compat_since / target_active; --standard lists only rules labelled under it)');
     Exit;
   end;
   if pVerb = 'lint' then
   begin
-    Writeln('  drag-lint lint  <path>       [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]');
-    Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks)');
+    Writeln('  drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]');
+    Writeln('                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project');
+    Writeln('                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)');
+    Writeln('                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)');
     Writeln('                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).');
     Writeln('                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:');
     Writeln('                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE''s 8s budget)');
     Writeln('                               [--stand-in-for <realpath>]  (analyse <path>''s TEXT as though it were <realpath>:');
     Writeln('                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,');
     Writeln('                               unit-name and the reported path)');
-    Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
+    Writeln('  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr] [--json]');
     Writeln('  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)');
     Writeln('                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.');
     Writeln('                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to');
     Writeln('                               apply every fixable finding in the file. Only rules whose catalog entry has');
     Writeln('                               "fixable": true are ever applied -- see `drag-lint rules --json`.');
-    Writeln('                               --fix-naming: consent, in a batch run, to the opt-in naming fixes (renames across');
-    Writeln('                               every owning project) without listing them in "autofix" in drag-lint-lint.json;');
-    Writeln('                               it also prints "rename-local: <N>" (stderr) for the single-project renames.');
+    Writeln('                               --fix-naming: kept for compatibility, a no-op since 1.37.0 -- every fix, the naming renames (across');
+    Writeln('                               every owning project) included, is ON by default; only "autofix_off": [...] in drag-lint-lint.json withholds one;');
+    Writeln('                               with it the run still prints "rename-local: <N>" (stderr) for the single-project renames.');
     Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
     Exit;
   end;
@@ -621,20 +689,24 @@ begin
   end;
   if pVerb = 'lint-project' then
   begin
-    Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json] [--output <f>]');
+    Writeln('  drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value] [--layers <f.json>] [--json] [--output <f>]');
     Exit;
   end;
   if pVerb = 'lint-all' then
   begin
-    Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]');
+    Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]');
     Writeln('                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
     Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
-    Writeln('                               --rule <id>: report ONLY that rule (one id per run; a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
+    Writeln('                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
     Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
     Writeln('                               --quiet: suppress per-file progress lines written to stderr');
     Writeln('                               --project <.dproj|.dpr>: report ONLY on the units that project compiles');
     Writeln('                               (its compile closure + their .dfm siblings). Use it when one folder holds');
     Writeln('                               several projects, or when the DB spans more than the project you are reviewing.');
+    Writeln('                               taint-sql-injection / taint-command-injection / taint-path-traversal (store-backed): walk the index''s data_flows');
+    Writeln('                               facts from a catalogued source to a sink; catalogues rules\taint-sources|sinks|propagators.json, extended by the');
+    Writeln('                               "taint" object of drag-lint-lint.json: sources sinks propagators sanitizers disable max_depth lib_depth max_rounds');
+    Writeln('                               follow_ambiguous weak_receiver_regex weak_severity_drop max_paths_per_sink second_order.');
     Writeln('                               --fix [--apply]: AUTOFIX every fixable finding across the whole project.');
     Writeln('                               DRY RUN WITHOUT --apply. This is what the Structure form''s right-click');
     Writeln('                               "Fix all in project" runs. It can rewrite many files at once -- dry-run first.');
@@ -653,7 +725,7 @@ begin
   end;
   if pVerb = 'exceptions-sync' then
   begin
-    Writeln('  drag-lint exceptions-sync    [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json]   (materialise the project''s derived exception classes)');
+    Writeln('  drag-lint exceptions-sync    [--profile <name>] [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json]   (materialise the project''s derived exception classes)');
     Writeln('                               Harvests every bare `raise Exception.Create(''literal'')` in the project and declares one class per');
     Writeln('                               DISTINCT message inside a drag-lint:auto managed block in the exceptions unit. DRY RUN WITHOUT --apply.');
     Writeln('                               Opt in with an "exceptions" block in drag-lint-lint.json -- an empty one is enough; key "unit" names');
@@ -671,9 +743,9 @@ begin
   end;
   if pVerb = 'mcp-config' then
   begin
-    Writeln('  drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]');
+    Writeln('  drag-lint mcp-config (--claude-code | --vscode | --cursor | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]');
     Writeln('                               writes {"type":"stdio","command":"<engine>","args":["serve"[,"--db","<index>"]]} (+ "env":{} for Claude Code) into');
-    Writeln('                               ~\.claude.json "mcpServers" / %APPDATA%\Code\User\mcp.json "servers": merged, backed up (<file>.bak-<stamp>), idempotent;');
+    Writeln('                               ~\.claude.json "mcpServers" / %APPDATA%\Code\User\mcp.json "servers" / ~\.cursor\mcp.json "mcpServers": merged, backed up (<file>.bak-<stamp>), idempotent;');
     Writeln('                               --remove takes only its own entry out; an entry by that name that runs something else is refused; --dry-run writes nothing;');
     Writeln('                               --home-dir / --appdata-dir move where the default files are looked for (tests)');
     Exit;
@@ -710,6 +782,7 @@ begin
     Writeln('                               to type there: without --resolve-only the <dir> form above widens a project DB into a folder DB)');
     Writeln('  drag-lint index --all --resolve-only   (the same, across every manifest section -- the only command that reaches them all;');
     Writeln('                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)');
+    Writeln('                               library-first resolve: a section with libraryResolve whose platform library is not READY (missing, rebuilding, stale extractor) is resolved without it; the run marks the DB pending (schema_meta library_resolve_state) and says on stderr that the result is INCOMPLETE. The next index run re-resolves it once the library is ready, no flag needed.');
     Exit;
   end;
   if pVerb = 'export' then
@@ -745,12 +818,14 @@ begin
   end;
   if pVerb = 'hover' then
   begin
-    Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]');
+    Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json] [--write-back]');
     Exit;
   end;
   if pVerb = 'impact' then
   begin
     Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]');
+    Writeln('                               an interface method also lists its implementors; an implementor, the interface sites reaching it');
+    Writeln('                               --format json: "implementors" [QName,...] and "via_dispatch" [{via,kind,sites}] (keys present only when non-empty; RB-5)');
     Exit;
   end;
   if pVerb = 'wiring' then
@@ -771,8 +846,10 @@ begin
   end;
   if pVerb = 'context' then
   begin
-    Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)');
+    Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)');
     Writeln('                               [--max-callers N] [--context N] [--no-docs]');
+    Writeln('                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).');
+    Writeln('                               a method reached only THROUGH an interface also gets "## Callers via interface dispatch (IFoo.Bar): N site(s)" sections, after the direct callers (RB-5)');
     Exit;
   end;
   if pVerb = 'bench-context' then
@@ -803,10 +880,10 @@ begin
   end;
   if pVerb = 'shutdown' then
   begin
-    Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running `lsp` engines to stand down: close every store, exit 0)');
+    Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)');
     Writeln('                               transport: a Windows NAMED PIPE, never a TCP port -- \\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an');
-    Writeln('                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Only an');
-    Writeln('                               engine started in lsp mode listens (one-shot verbs and `serve` do not). --all (the default) asks every');
+    Writeln('                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in');
+    Writeln('                               `lsp`, `cycles --fix`, `index` (incl. --all) and `lint-all` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings. --all (the default) asks every');
     Writeln('                               reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.');
     Writeln('                               --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps');
     Writeln('                               running (exit 1). --force TerminateProcess''es ONLY an engine that refused or did not answer, and says');
@@ -833,8 +910,9 @@ begin
   begin
     Writeln('  drag-lint info [--json] [--db <file.sqlite>]...      (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)');
     Writeln('                               each --db adds an `indexes` entry (--json): stored fingerprints, indexer_stale / resolver_stale, a verdict');
-    Writeln('                               (current | resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Two keyed lookups, no COUNT.');
+    Writeln('                               (current | resolve-owed | library-resolve-owed | reparse-owed | index-newer | missing | unreadable) and the remedy. Keyed lookups, no COUNT.');
     Writeln('                               text form: one "index: <path>  verdict: <v>" line per --db, then "  remedy: ..." when one is owed.');
+    Writeln('                               library-resolve-owed: the DB was resolved without its platform library (marker schema_meta library_resolve_state = pending); --json adds library_resolve {state, reason, since_unix, library_state}, the text form a library_resolve line.');
     Exit;
   end;
   if pVerb = 'fb-snapshot' then
@@ -863,7 +941,7 @@ begin
   end;
   if pVerb = 'document' then
   begin
-    Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
+    Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--profile <name>] [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
     Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only)');
     Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)');
     Writeln('                                 scope: the compile closure restricted to the project''s own roots (_D-RAG\drag-lint-project.json, same declaration lint-all reads).');
@@ -872,7 +950,7 @@ begin
   end;
   if pVerb = 'document-all' then
   begin
-    Writeln('  drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
+    Writeln('  drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
     Writeln('     batch modes (--unit/--project/document-all) default facts-only: an empty tag is never written, <param> never gets a skeleton, and <summary> appears only when harvested from a nearby // comment; add --stubs to keep a fresh comment that has no facts block');
     Writeln('     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too');
     Writeln('  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)');
@@ -986,7 +1064,7 @@ begin
   end;
   if pVerb = 'check-ast' then
   begin
-    Writeln('  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]');
+    Writeln('  drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]');
     Exit;
   end;
   if pVerb = 'dump-refs' then
@@ -1006,7 +1084,9 @@ begin
   end;
   if pVerb = 'find-callees' then
   begin
-    Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--json]   (resolved outgoing calls of routine X)');
+    Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X)');
+    Writeln('                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.');
+    Writeln('                               With no library open the text ends N external (library not open) for the calls one could bind.');
     Exit;
   end;
   if pVerb = 'ambiguous-calls' then
@@ -1017,6 +1097,7 @@ begin
   if pVerb = 'call-path' then
   begin
     Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
+    Writeln('                               a hop also follows an interface method to the methods that implement it (dispatch_edges implements; RB-5)');
     Exit;
   end;
   if pVerb = 'callgraph' then
@@ -1067,9 +1148,10 @@ begin
     'CEPT that with --only, when every such instance is one --only left out, the removal is SKIPPED (1.23.0: unit kept; json uses[] action skipped with a reason, a ''line N: warning:'' line, items[] kind unit-rule-skipped; info capability only_skips_unit_rules); USES RECONCILIATION (1.27.0, C9, default on; --no-reconcile-uses = the 1.26.6 rules above, exactly): the converted .pas/.dfm are RE-INDEXED IN MEMORY (the indexer''s own extractor, no DB written, so the dry run shows the --apply plan) and every #unuse / #useswap Old is a WATCH LIST -- the unit is KEPT while a component the converted .dfm still streams has a class declared in it (an unconverted instance, a second component type of that unit, an inherited instance the ancestor has not converted: R26''s refusal becomes this, the --only skipped' +
     ' row is unchanged), REMOVED when only .pas code needs it (its dangling references named, the compile errors are the signal), KEPT when no --db indexes it; presence is scope-alias aware (#unuse DBTables matches Bde.DBTables, #use DB is satisfied by Data.DB); a bare name the conversion INTRODUCES into the .pas gets its declaring unit added -- interface uses when referenced above implementation -- and a name (or To type) two units declare is REPORTED, never picked (add #use <unit> to choose); a To-type tie the book''s #use (or a uses entry of the unit) settles takes that unit, into the INTERFACE uses when the retyped field is declared there, or MOVED there (C9 A8-1); the C13 move is a row; every unit the #convert surface adds (a To type''s unit, a #convert header''s trailing unit) is an add row ' +
     'too (rule #convert, source rule, counted by uses_added; none when already present); json: uses[] action remove|add|skipped|kept|moved with source rule|reconcile|convert and needed_by[] {name,line,section}, uses_kept, uses_moved, uses_unresolved[] {name,line,section,reason ambiguous|not-found,candidates[] {unit,db}}, uses_reconcile on|off|degraded, items[] kinds unit-rule-kept, unit-rule-dangling, unit-rule-unverified, uses-unit-ambiguous (all warnings); after --apply the unit''s OWN project DB -- the one --db that indexes it, a project index holding one .dproj/.dpr -- is refreshed with ''index --project <it> --db <it>'' in a child process (json uses_reindex {status done|skipped|failed|dry-run|off,db,project,ms,reason}; a child still running after 10 minutes is terminated: failed; --no-reindex' +
-    ' skips it; no other DB is ever written); info capability uses_reconcile; inside a #convert block ''#migrate Old -> New'' renames the member at every bound .pas access site of the block''s converted instances (methods, events, properties; json items[] migrate-applied) and ''#migrate Old -> DL_NONE'' wraps each site, inst.Old -> DL_NONE(inst.Old), a deliberate break that does not compile until converted by hand (items[] deliberate-break, field todos); both make pas_uses[] status mapped; a with block, an unverified receiver, a scoped / template / uses-unit form or a member a #link already converts is never rewritten (items[] migrate-check); info capability migrate_members (C18 slice 1); --only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and repo' +
-    'rted (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); --unit may repeat (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built (the run total),units[]: one apply/1 per unit, each equal to that unit''s single run -- its classes_built is the unit''s own}; under --apply a file a unit cannot write fails that unit before anything is written (exit 2); a unit''s refusal or failure never stops the others; exit = the worst unit''s; info cap' +
-    'ability batch_units; 1.33.0: every apply/1 (single or units[]) carries exit_code (that unit''s); a --unit no --db indexes is REFUSED, dry run and --apply alike (reason ''<unit> is not covered by any supplied --db ...''); --progress writes one STDERR line per finished unit, flushed, stdout unchanged, off by default -- {"progress":{"verb":"convert-apply","unit_done":i,"units":N,"unit":"<path>","ok":b,"refused":b,"exit_code":E}} (info capability batch_progress); json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
+    ' skips it; no other DB is ever written); info capability uses_reconcile; inside a #convert block ''#migrate Old -> New'' renames the member at every bound .pas access site of the block''s converted instances (methods, events, properties; json items[] migrate-applied) and ''#migrate Old -> DL_NONE'' wraps each site, inst.Old -> DL_NONE(inst.Old), a deliberate break that does not compile until converted by hand (items[] deliberate-break, field todos); both make pas_uses[] status mapped; a with block, an unverified receiver, a scoped / template form or a member a #link already converts is never rewritten (items[] migrate-check); info capability migrate_members (C18 slice 1); an IDENTIFIER #migrate (file scope, or in a block naming uses units or an enum-value target; 1.38) renames every bare Old to' +
+    'ken in the .pas code -- var/param/field/result types, casts, is/as, generic arguments, enum literals; never comments or strings -- when New resolves in a --db (else items[] migrate-check per site, no rename), maps an enum type pair member by member on the name after the lowercase prefix (an explicit #migrate member line overrides; an unmatched member in use is a migrate-check), never renames a qualified Unit.Old site (migrate-check), and adds the unit declaring New to uses (interface uses when a site is there); info capability migrate_identifiers; --only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); --unit may repea' +
+    't (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built (the run total),units[]: one apply/1 per unit, each equal to that unit''s single run -- its classes_built is the unit''s own}; under --apply a file a unit cannot write fails that unit before anything is written (exit 2); a unit''s refusal or failure never stops the others; exit = the worst unit''s; info capability batch_units; 1.33.0: every apply/1 (single or units[]) carries exit_code (that unit''s); a --unit no --db indexes is REFUSED, d' +
+    'ry run and --apply alike (reason ''<unit> is not covered by any supplied --db ...''); --progress writes one STDERR line per finished unit, flushed, stdout unchanged, off by default -- {"progress":{"verb":"convert-apply","unit_done":i,"units":N,"unit":"<path>","ok":b,"refused":b,"exit_code":E}} (info capability batch_progress); json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
     Exit;
   end;
   if pVerb = 'glyph-vacuum' then
@@ -1106,7 +1188,8 @@ begin
     Writeln('    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info (or none)');
     Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
     Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
-    Writeln('    --profile <name>          merge a named enable/disable set from the config');
+    Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
+    Writeln('    --target-compiler <v>     lint / lint-all / rules: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
     Writeln('    --baseline <file>         report only findings absent from the baseline');
     Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
     Exit;
@@ -1175,6 +1258,19 @@ begin
   if pVerb = 'menu-drift' then
   begin
     Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry''s ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\_D-RAG\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)');
+    Exit;
+  end;
+  if pVerb = 'init' then
+  begin
+    Writeln('  drag-lint init --project <file.dproj> [--dry-run] [--home-dir <dir>] [--appdata-dir <dir>]');
+    Writeln('                               runs register-project --apply, index --project, resolve-dbs --project, then mcp-config --all --db <that index>');
+    Writeln('                               (Claude Code, VS Code and Cursor; an uninstalled client is skipped); --dry-run prints those four commands and runs NOTHING;');
+    Writeln('                               --home-dir / --appdata-dir move where the client files are looked for (tests); a failing step stops the run with its exit code');
+    Exit;
+  end;
+  if pVerb = 'overview' then
+  begin
+    Writeln('  drag-lint overview           --db <file.sqlite>    [--max-rows N] [--json]   (ONE bounded first-turn call: freshness, counts per kind, units by layer, top fan-in, entry points, forms; a capped section says how many it omitted)');
     Exit;
   end;
   Result := False;

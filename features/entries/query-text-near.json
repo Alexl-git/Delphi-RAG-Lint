@@ -1,0 +1,64 @@
+{
+  "id": "query-text-near",
+  "title": "query --text --near",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.38.0-alpha",
+  "summary": "Keeps only text hits in routines within N call-graph hops of a symbol",
+  "intro": "Read this when a message or constant matches in many places and you only care about the ones near the code you are changing. It restricts a query --text search to routines within 1 to 3 call-graph hops of a seed symbol.",
+  "wikiPage": "query-text-near",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "query",
+      "example": "drag-lint query --text \"<phrase>\" --near <QName> --hops 2 --db <db>",
+      "usage": "drag-lint query --text \"<phrase>\" --near <QName> [--hops 1..3] [--hops-uses] [--near-boost] [--db ...] [--json]",
+      "flags": [
+        {
+          "name": "--text",
+          "arg": "\"<phrase>\""
+        },
+        {
+          "name": "--near",
+          "arg": "<QName>"
+        },
+        {
+          "name": "--hops",
+          "arg": "1..3"
+        },
+        {
+          "name": "--hops-uses"
+        },
+        {
+          "name": "--near-boost"
+        },
+        {
+          "name": "--db"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"],
+  "pitfalls": ["The default RESTRICTS: a hit outside N hops is dropped, not demoted; --near-boost keeps it.", "A hop is one resolved call edge, callers and callees; --hops 4 is refused (use impact --depth)."],
+  "questions": [
+    {
+      "ask": "Which hits of this message are near the routine I am changing?",
+      "command": "drag-lint query --text \"<phrase>\" --near <QName> --hops 2 --db <file.sqlite>"
+    },
+    {
+      "ask": "How do I rank by nearness instead of filtering?",
+      "command": "drag-lint query --text \"<phrase>\" --near <QName> --near-boost --db <file.sqlite>"
+    }
+  ],
+  "verified": {
+    "date": "2026-10-28",
+    "by": "ENGINE",
+    "build": "1.36.0-alpha",
+    "surfaceHash": "a122f7ec700783a420926549b93400971bb5f4f4b0f7c87d9014d5467b5aa622"
+  }
+}

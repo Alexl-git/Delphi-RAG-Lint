@@ -1,0 +1,13 @@
+# Lines 9, 11, 13, 15: inclusive two-sided bounds on the same X, either order,
+# must fire. Line 17 (strict > <: InRange is inclusive), 19 (not the same X),
+# 21 (or), 23 (different variable) must not.
+# Known FP shape: X is not Integer/Int64/Double (Char, enum, string) where
+# InRange has no overload; X with side effects (InRange evaluates it once).
+manual-inrange 9
+manual-inrange 11
+manual-inrange 13
+manual-inrange 15
+!manual-inrange 17
+!manual-inrange 19
+!manual-inrange 21
+!manual-inrange 23

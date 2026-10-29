@@ -64,7 +64,18 @@ try {
   # not know it. Its edits come from BuildExceptionRewriteEdits, appended in
   # FinalizeAndOutput. Guarded by tests/autotest/run_exception_unit_writer.ps1.
   Check 'raise-bare-exception fixable=true' ($byId['raise-bare-exception'].fixable -eq $true)
-  $fixableCount = ($obj.rules | Where-Object { $_.fixable -eq $true }).Count
-  Check 'exactly 23 fixable rules' ($fixableCount -eq 23) "got $fixableCount"
+  # 2026-10-27 (autofix wave A0): the count pin became a LIST pin. The ledger is
+  # tests\autofix\fixable-ids.txt (sorted, one id per line); a lane that adds a fix
+  # appends its id there, so parallel lanes merge line-wise instead of fighting
+  # over one number. The SET is compared, both directions, and the count printed.
+  $listPath = Join-Path $PSScriptRoot 'fixable-ids.txt'
+  $want = @(Get-Content $listPath | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' -and -not $_.StartsWith('#') })
+  $got  = @($obj.rules | Where-Object { $_.fixable -eq $true } | ForEach-Object { $_.id })
+  $missing = @($want | Where-Object { $got -notcontains $_ })
+  $extra   = @($got  | Where-Object { $want -notcontains $_ })
+  Check "every id in fixable-ids.txt is fixable (missing: $($missing -join ', '))" ($missing.Count -eq 0)
+  Check "no fixable rule is absent from fixable-ids.txt (extra: $($extra -join ', '))" ($extra.Count -eq 0)
+  Check 'fixable-ids.txt has no duplicate ids' (@($want | Select-Object -Unique).Count -eq $want.Count)
+  Write-Host ("fixable rules: {0} (fixable-ids.txt: {1})" -f $got.Count, $want.Count)
 } finally { Pop-Location }
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

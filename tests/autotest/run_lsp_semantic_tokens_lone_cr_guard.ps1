@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_semantic_tokens_lone_cr_guard.ps1 -- semantic tokens must sit on the
   line/column an LSP client counts (LSP: CR, LF and CRLF are each a line end).

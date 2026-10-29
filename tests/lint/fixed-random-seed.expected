@@ -1,0 +1,4 @@
+# RandSeed := literal (9) fires; Randomize (10) and a non-literal seed (11) must not
+fixed-random-seed 9
+!fixed-random-seed 10
+!fixed-random-seed 11

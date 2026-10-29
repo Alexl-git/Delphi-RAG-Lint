@@ -46,7 +46,39 @@ type
     class var FProfile   : TDefineProfile;
     class var FProfileSet: Boolean;
     class var FResolver  : TFunc<string, TDefineProfile>;
+    class var FIncCtx    : TDictionary<string, TBytes>; { lane INC2: lowercase full .inc path -> includer-context bytes }
+    class function ProfileFor(const AFile: string): TDefineProfile;
   public
+    /// <summary>Lane INC2: makes ApplyPreprocess return ABytes -- the bytes the
+    /// preprocessor produced for this include file UNDER ITS INCLUDER'S live defines
+    /// (a TPPIncludeSite.Resolved) -- instead of preprocessing the file standalone,
+    /// exactly as the indexer parses an .inc in a project run.</summary>
+    /// <param name="AIncFile">The include file.</param>
+    /// <param name="ABytes">Its includer-context bytes (same length as the file).</param>
+    /// <remarks>Survives Clear (it is not a parse); ClearIncludeContexts drops it. Used
+    /// only while preprocessing is enabled. A context whose transcoded length differs
+    /// from the file's is ignored (offset identity would break).</remarks>
+    class procedure SetIncludeContext(const AIncFile: string; const ABytes: TBytes);
+    /// <summary>Lane INC2: drops every include context SetIncludeContext registered.</summary>
+    class procedure ClearIncludeContexts;
+    /// <summary>Lane INC2: the active, resolved include sites of one host unit,
+    /// preprocessed with the profile ApplyPreprocess would use for it, the host's
+    /// folder, and ASearchPaths -- the 'defines-only' run the indexer makes.</summary>
+    /// <param name="AHostFile">A .pas / .dpr / .dpk file.</param>
+    /// <param name="ASearchPaths">The build's absolute search path (may be empty).</param>
+    /// <returns>The sites in source order, nested ones included; empty when
+    /// preprocessing is off, the file is unreadable or the preprocess raised.</returns>
+    /// <remarks>Never raises (fail-open: no context, the include is linted standalone).</remarks>
+    class function HostIncludeSites(const AHostFile: string; const ASearchPaths: TArray<string>): TArray<TPPIncludeSite>;
+    /// <summary>Lane INC3: the IF / ELSEIF directives of AFile, evaluated in
+    /// active code under the profile ApplyPreprocess would use, whose
+    /// expression names something the symbol table could not resolve.</summary>
+    /// <param name="AFile">A .pas / .dpr / .dpk / .inc file.</param>
+    /// <returns>The directives in source order; empty when preprocessing is
+    /// off, the file is unreadable or the preprocess raised.</returns>
+    /// <remarks>Never raises. Re-reads and re-preprocesses the file (only the
+    /// pp-unresolved-if rule asks).</remarks>
+    class function UnresolvedIfs(const AFile: string): TArray<TPPUnresolvedIf>;
     /// <summary>Installs the per-file profile source ApplyPreprocess consults BEFORE the
     /// process-wide profile from SetPreprocess. nil restores the single profile.</summary>
     /// <param name="AResolver">Returns the profile for a path; an empty Defines array or an
@@ -232,18 +264,17 @@ begin
     property the preprocessor's blank-to-spaces rule relies on. }
   Result:= NormalizeLoneCR(AUtf8);
   if not (FPreprocess and FProfileSet) then Exit;
+  { Lane INC2: an include registered with its includer's context is linted from
+    THOSE bytes -- the ones the indexer parsed -- not preprocessed standalone. }
+  var Ctx: TBytes;
+  if (FIncCtx <> nil) and (AFile <> '') and FIncCtx.TryGetValue(LowerCase(TPath.GetFullPath(AFile)), Ctx) then
+  begin
+    Ctx:= NormalizeLoneCR(EnsureUtf8Bytes(Ctx));
+    if Length(Ctx) = Length(Result) then Exit(Ctx);
+  end;
   try
     var PpOpts: TPPOptions:= TPPOptionsDefault;
-    PpOpts.Profile    := FProfile;
-    { LSP C10: the file's own project profile, when a resolver is installed and has one.
-      An empty answer or a fault keeps the process-wide profile (the pre-C10 treatment). }
-    if Assigned(FResolver) and (AFile <> '') then
-      try
-        var FileProfile: TDefineProfile:= FResolver(AFile);
-        if Length(FileProfile.Defines) > 0 then PpOpts.Profile:= FileProfile;
-      except // dl:ok try-except-swallowed@52aa -- REVIEWED 2026-10-26 fail-open by contract: a resolver fault keeps the process-wide profile
-        on E: Exception do PpOpts.Profile:= FProfile;
-      end;
+    PpOpts.Profile    := ProfileFor(AFile);
     PpOpts.IncludeMode:= 'defines-only';
     PpOpts.BaseDir    := TPath.GetDirectoryName(AFile);
     { Preprocess the NORMALISED bytes (Result), never the raw AUtf8 -- passing
@@ -260,6 +291,65 @@ begin
       threw, and must not also drop the line-ending normalisation, which cannot
       throw and is what keeps reported lines pointing where the editor does. }
     on E: Exception do Result:= NormalizeLoneCR(AUtf8);
+  end;
+end;
+
+class function TAstParseCache.ProfileFor(const AFile: string): TDefineProfile;
+begin
+  Result:= FProfile;
+  { LSP C10: the file's own project profile, when a resolver is installed and has one.
+    An empty answer or a fault keeps the process-wide profile (the pre-C10 treatment). }
+  if Assigned(FResolver) and (AFile <> '') then
+    try
+      var FileProfile: TDefineProfile:= FResolver(AFile);
+      if Length(FileProfile.Defines) > 0 then Result:= FileProfile;
+    except
+      on E: Exception do Result:= FProfile;
+    end;
+end;
+
+class procedure TAstParseCache.SetIncludeContext(const AIncFile: string; const ABytes: TBytes);
+begin
+  if FIncCtx = nil then FIncCtx:= TDictionary<string, TBytes>.Create;
+  FIncCtx.AddOrSetValue(LowerCase(TPath.GetFullPath(AIncFile)), ABytes);
+end;
+
+class procedure TAstParseCache.ClearIncludeContexts;
+begin
+  if FIncCtx <> nil then FIncCtx.Clear;
+end;
+
+class function TAstParseCache.HostIncludeSites(const AHostFile: string; const ASearchPaths: TArray<string>): TArray<TPPIncludeSite>;
+begin
+  Result:= nil;
+  if not (FPreprocess and FProfileSet) then Exit;
+  try
+    var PpOpts: TPPOptions:= TPPOptionsDefault;
+    PpOpts.Profile    := ProfileFor(AHostFile);
+    PpOpts.IncludeMode:= 'defines-only';
+    PpOpts.BaseDir    := TPath.GetDirectoryName(AHostFile);
+    PpOpts.SearchPaths:= ASearchPaths;
+    Preprocess(NormalizeLoneCR(EnsureUtf8Bytes(TFile.ReadAllBytes(AHostFile))), PpOpts, Result);
+  except
+    on E: Exception do Result:= nil;
+  end;
+end;
+
+class function TAstParseCache.UnresolvedIfs(const AFile: string): TArray<TPPUnresolvedIf>;
+var
+  Report: TPPReport;
+begin
+  Result:= nil;
+  if not (FPreprocess and FProfileSet) then Exit;
+  try
+    var PpOpts: TPPOptions:= TPPOptionsDefault;
+    PpOpts.Profile    := ProfileFor(AFile);
+    PpOpts.IncludeMode:= 'defines-only';
+    PpOpts.BaseDir    := TPath.GetDirectoryName(AFile);
+    PreprocessReport(NormalizeLoneCR(EnsureUtf8Bytes(TFile.ReadAllBytes(AFile))), PpOpts, Report);
+    Result:= Report.Unresolved;
+  except // fail-open by contract: an unreadable file reports no directive
+    on E: Exception do Result:= nil;
   end;
 end;
 

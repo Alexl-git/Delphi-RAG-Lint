@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70002
 since: 0.96.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # Call Graph (Butterfly)
@@ -34,8 +34,8 @@ Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltr
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Call Graph (Butterfly)...**
-   1. Put the caret on the routine in the editor
-   2. Choose drag-lint > Uses & Dependencies > Call Graph (Butterfly)...
+   1. Choose drag-lint > Uses & Dependencies > Call Graph (Butterfly)...
+   2. Type the qualified name of the routine in the prompt (the menu item asks for it and does not read the caret; Ctrl+Alt+B opens the same prompt)
    3. The callers (upward wing) and callees (downward wing) open together in the Call Graph view
 
 **Needs:** index

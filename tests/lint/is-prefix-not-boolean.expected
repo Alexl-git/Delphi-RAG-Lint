@@ -1,0 +1,16 @@
+# Is/Has/Can + capital, return type not Boolean-family: declarations (5, 6, 16) -- pinned on the declProc
+# Boolean (7, 8, 15, 17 ByteBool) must not fire; Isolate/Island (lowercase after prefix, 9, 10) and Hash (11)
+# and a procedure (12) must not fire. Known FP shape: IsEmpty: TriState style enums are flagged by design.
+is-prefix-not-boolean 5
+is-prefix-not-boolean 6
+is-prefix-not-boolean 16
+!is-prefix-not-boolean 7
+!is-prefix-not-boolean 8
+!is-prefix-not-boolean 9
+!is-prefix-not-boolean 10
+!is-prefix-not-boolean 11
+!is-prefix-not-boolean 12
+!is-prefix-not-boolean 17
+!is-prefix-not-boolean 18
+!is-prefix-not-boolean 23
+!is-prefix-not-boolean 28

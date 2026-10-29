@@ -40,6 +40,7 @@ uses
   DRagLint.Preprocess.Types in '..\..\src\preprocess\DRagLint.Preprocess.Types.pas',
   DRagLint.Preprocess.Lexer in '..\..\src\preprocess\DRagLint.Preprocess.Lexer.pas',
   DRagLint.Preprocess.Expr in '..\..\src\preprocess\DRagLint.Preprocess.Expr.pas',
+  DRagLint.Preprocess.Decls in '..\..\src\preprocess\DRagLint.Preprocess.Decls.pas',
   DRagLint.Preprocess.Tolerance in '..\..\src\preprocess\DRagLint.Preprocess.Tolerance.pas',
   DRagLint.Preprocess in '..\..\src\preprocess\DRagLint.Preprocess.pas';
 

@@ -1,0 +1,8 @@
+{
+  "id": "stream-read-result-ignored",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "TStream.Read/Write result ignored -- a short transfer goes unnoticed; check the returned count or use ReadBuffer/WriteBuffer.",
+  "warn_capture": "warn",
+  "fix": { "replace": "{recv}.{m}Buffer({a1}, {a2})", "risky": true }
+}

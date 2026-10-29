@@ -329,7 +329,7 @@ To do it: finish Part A (every checklist item), then run `drag-lint cycles --db 
 Fix it (mechanical, compile-gated):
   dry run : drag-lint cycles --fix --project <your.dproj> --db "@@DB@@" --cycle 1
   apply   : drag-lint cycles --fix --project <your.dproj> --db "@@DB@@" --cycle 1 --apply
-  cuts    : the INTERFACE coupling of this cycle (Part A: move globals into new leaf units)
+  cuts    : the INTERFACE coupling of this cycle (Part A: move globals into new leaf units and extract base classes there)
   then    : Part B, optional, after Part A: demoaudit -> democonfig (move globals)
   requires: the project builds with 0 errors before the fix (the dry run checks this)
 

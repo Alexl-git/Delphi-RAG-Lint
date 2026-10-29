@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "context",
-      "usage": "drag-lint context --task \"verb qname\" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a \"## Wiki\" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)",
+      "usage": "drag-lint context --task \"verb qname\" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>] (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a \"## Wiki\" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)",
       "flags": [
         {
           "name": "--task"
@@ -37,10 +37,14 @@
         {
           "name": "--context",
           "arg": "N"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<library.sqlite>"
         }
       ],
       "helpOrder": 39,
-      "help": ["  drag-lint context            --task \"verb qname\" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a \"## Wiki\" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)", "                               [--max-callers N] [--context N] [--no-docs]"]
+      "help": ["  drag-lint context            --task \"verb qname\" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a \"## Wiki\" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)", "                               [--max-callers N] [--context N] [--no-docs]", "                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).", "                               a method reached only THROUGH an interface also gets \"## Callers via interface dispatch (IFoo.Bar): N site(s)\" sections, after the direct callers (RB-5)"]
     }
   ],
   "audience": "both",
@@ -49,6 +53,10 @@
     {
       "ask": "What do I need to read before editing this symbol?",
       "command": "drag-lint context --task \"modify <QName>\" --db <db> --format md"
+    },
+    {
+      "ask": "How many library routines does this routine call, when the project index has no stored library links?",
+      "command": "drag-lint context --task \"modify <QName>\" --db <db> --library-db <library.sqlite>"
     },
     {
       "ask": "Can I get the bundle without doc comments?",
@@ -62,9 +70,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "1969d373cece10036a4eac6e514e280e8162d03221a8a4f892a2127f77804a23"
+    "build": "1.36.0-alpha",
+    "surfaceHash": "7dd90e2a4d32b93cce5f5922135154f78f5cb5c9d5a6ab5558191270c81095f8"
   }
 }

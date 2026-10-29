@@ -4,10 +4,10 @@ title: lint-tree
 summary: "Answers one question lint-all cannot: does an interface edit to this unit reach any dependent?"
 product: DL
 group: linting
-order: 30015
+order: 30018
 since: 1.11.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # lint-tree

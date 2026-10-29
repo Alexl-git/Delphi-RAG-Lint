@@ -16,6 +16,26 @@ uses
   ;
 
 type
+  /// <summary>One entry of a rule sidecar's "fix" key (autofix wave A0,
+  /// 2026-10-27): what the autofix does with the finding's span.</summary>
+  /// <remarks>Grammar (rules\&lt;id&gt;.json): "fix" is ONE object or an ARRAY of
+  /// objects; each is { "when_capture": "&lt;name&gt;" (optional), then exactly one
+  /// of "replace": "&lt;template&gt;" | "delete": "span" | "statement", plus
+  /// optional "uses": "&lt;Unit&gt;" and "risky": true }. The FIRST entry whose
+  /// when_capture is bound in the match (or that has none) and whose template
+  /// expands completely wins; no winner = the finding carries no fix. Templates
+  /// substitute {capture} with the capture's RAW source text (not
+  /// regex-escaped, unlike exclude_if_preceded_by) and may span lines ("\n").
+  /// An object with neither replace nor a known delete value is ignored.</remarks>
+  TSidecarFix = record
+    WhenCapture: string      ;  { '' = always; else applies only when this capture is bound }
+    Kind       : TLintFixKind;  { lfkReplace / lfkDeleteSpan / lfkDeleteStatement }
+    Template   : string      ;  { lfkReplace only }
+    UsesUnit   : string      ;  { '' = none }
+    Risky      : Boolean     ;  { behaviour-changing fix: tagged risky, still applied }
+    NeedsCompiler: Integer   ;  { 1.38 "needs_compiler": a match that binds this entry is dropped under an older --target-compiler; 0 = any }
+  end;
+
   // A loaded external lint rule expressed as a tree-sitter S-expression query.
   // Sister .json file (same basename) supplies metadata: id, severity, message.
   /// <summary><!-- drag-lint:auto sum -->A loaded external lint rule expressed as a
@@ -92,6 +112,9 @@ type
         enclosing routine before the picked node. A pattern naming a capture the match
         did not bind never excludes. }
       FExcludePrecededBy: TArray<string>;
+      { The sidecar "fix" entries (autofix wave A0), in file order; empty = the
+        rule carries no sidecar fix. See TSidecarFix. }
+      FFixes: TArray<TSidecarFix>;
       { True if the picked node (or any ancestor up to the root) is one of the
         node kinds in FExcludeAncestors -- used to suppress a match that sits in
         a structural context the rule should not flag (e.g. an integer literal
@@ -164,6 +187,9 @@ type
       /// </remarks>
       function IsArgumentOfExcludedCallee(const ANode: TTSNode; const ASource: TBytes): Boolean;
       function IsPrecededByExcludedText(const APicked: TTSNode; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes): Boolean;
+      { Expands the first applicable fix entry onto AFinding. False = that entry's
+        needs_compiler is newer than ActiveTargetCompiler: the caller drops the match. }
+      function AttachFix(var AFinding: TLintFinding; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes): Boolean;
     public
       /// <param name="ALanguage"><!-- drag-lint:auto type -->const PTSLanguage</param>
       /// <param name="AQuerySource"><!-- drag-lint:auto type -->const string</param>
@@ -186,6 +212,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
+      /// <summary>Builds the rule around a query compiled elsewhere -- the loader
+      /// compiles every .scm in parallel, then builds the rules in path order.</summary>
+      /// <param name="AQuerySource">The .scm text AQuery was compiled from.</param>
+      /// <param name="AScmPath">Path of the .scm; its base name is the default id.</param>
+      /// <param name="AJsonPath">Sidecar json path; skipped when it does not exist.</param>
+      /// <param name="AQuery">The compiled query, or nil. Ownership passes to the
+      /// rule at entry, so it is freed even when this constructor raises.</param>
+      /// <param name="AErrOff">ts_query_new error offset, reported on failure.</param>
+      /// <param name="AErrType">ts_query_new error type, reported on failure.</param>
+      /// <exception cref="Exception">AQuery is nil or did not compile.</exception>
+      /// <remarks>Same observable effects, in the same order, as Create.</remarks>
+      constructor CreateCompiled(const AQuerySource, AScmPath, AJsonPath: string; const AQuery: TTSQuery; const AErrOff: UInt32; const AErrType: TTSQueryError);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Reads: FQuery</para>
@@ -255,6 +293,8 @@ type
       property SourcePath: string  read FSourcePath;
       property Enabled   : Boolean read FEnabled ;
       property RuleId    : string  read FRuleId  ;
+      /// <summary>The sidecar "fix" entries; empty when the rule has none.</summary>
+      property Fixes     : TArray<TSidecarFix> read FFixes;
   end;
 
   /// <remarks>
@@ -327,10 +367,28 @@ type
 /// </remarks>
 function QueryRuleTimings: TArray<TQueryRuleTiming>;
 
+
+/// <summary>The declared type of AName as seen from byte offset AByte of a
+/// parsed file -- the same scope walk #declared-type? makes.</summary>
+/// <param name="ARoot">Root node of the file's tree.</param>
+/// <param name="ASource">The bytes the tree was parsed from.</param>
+/// <param name="AByte">A byte offset inside the routine that uses AName.</param>
+/// <param name="AName">The identifier to resolve; case-insensitive.</param>
+/// <param name="AType">Out: the declared type text, whitespace removed.</param>
+/// <returns>True when a same-routine local, parameter, inline var or unit-level
+/// var declares AName with an explicit type; False for a field, a with-member,
+/// an untyped inline var or anything else the source does not show.</returns>
+function DeclaredTypeAt(const ARoot: TTSNode; const ASource: TBytes; AByte: UInt32;
+  const AName: string; out AType: string): Boolean;
+
 implementation
 
 uses
   System.Diagnostics       { TStopwatch -- the per-rule .scm timing below }
+  , System.Threading        { TParallel.For -- the loader compiles the .scm queries in parallel }
+  , System.StrUtils        { IndexText -- capture-name lookup for sidecar fixes }
+  , DRagLint.Lint.RuleCatalog { RegisterSidecarFixRule -- a rule with a "fix" key is fixable }
+  , DRagLint.Lint.TargetCompiler { per-entry needs_compiler gate in AttachFix }
   , System.Generics.Defaults { TComparer -- sorting that table by cost }
   , System.RegularExpressionsCore { ERegularExpressionError -- a bad rule regex }
   ;
@@ -582,16 +640,103 @@ begin
   end;
 end;
 
-constructor TQueryRule.Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
+{ Parses a sidecar "fix" value (one object or an array of objects) into its
+  entries, in order; malformed objects are dropped. Grammar: TSidecarFix. }
+function ParseSidecarFix(const AValue: TJSONValue): TArray<TSidecarFix>;
+
+  procedure AddOne(const AObj: TJSONObject);
+  var
+    Fx: TSidecarFix;
+    V : TJSONValue ;
+  begin
+    Fx:= Default(TSidecarFix);
+    V:= AObj.GetValue('when_capture');
+    if V <> nil then Fx.WhenCapture:= Trim(V.Value);
+    V:= AObj.GetValue('uses');
+    if V <> nil then Fx.UsesUnit:= Trim(V.Value);
+    V:= AObj.GetValue('risky');
+    Fx.Risky:= (V <> nil) and SameText(V.Value, 'true');
+    V:= AObj.GetValue('needs_compiler');
+    if V <> nil then Fx.NeedsCompiler:= StrToIntDef(V.Value, 0);
+    if AObj.GetValue('replace') <> nil then
+    begin
+      Fx.Kind    := lfkReplace;
+      Fx.Template:= AObj.GetValue('replace').Value;
+    end
+    else if AObj.GetValue('delete') <> nil then
+    begin
+      V:= AObj.GetValue('delete');
+      if SameText(V.Value, 'span') then Fx.Kind:= lfkDeleteSpan
+      else if SameText(V.Value, 'statement') then Fx.Kind:= lfkDeleteStatement
+      else Exit;   { unknown delete target: the entry is ignored }
+    end
+    else Exit;     { neither replace nor delete: ignored }
+    Result:= Result + [Fx];
+  end;
+
+begin
+  Result:= nil;
+  if AValue is TJSONObject then AddOne(TJSONObject(AValue))
+  else if AValue is TJSONArray then
+    for var Item: TJSONValue in TJSONArray(AValue) do
+      if Item is TJSONObject then AddOne(TJSONObject(Item));
+end;
+
+{ Expands a sidecar fix template: each brace-wrapped capture name becomes the RAW
+  text of that capture (case-insensitive). False when a placeholder is left
+  unbound -- the entry then does not apply, so a half-expanded template is never
+  written. }
+function ExpandFixTemplate(const ATemplate: string; const ANames, ATexts: TArray<string>; out AText: string): Boolean;
+var
+  i   : Integer       ;
+  Ph  : TMatch        ;
+  Last: Integer       ;
+  SB  : TStringBuilder;
+begin
+  AText:= ATemplate;
+  { Every placeholder must be bound BEFORE anything is substituted: a capture's
+    own text may hold a brace comment such as (*x*) written with braces, which
+    must neither count as unbound nor be expanded again. }
+  for Ph in TRegEx.Matches(ATemplate, '\{([A-Za-z_][A-Za-z0-9_]*)\}') do
+    if IndexText(Ph.Groups[1].Value, ANames) < 0 then Exit(False);
+  { one pass over the template, so substituted text is never re-scanned }
+  SB:= TStringBuilder.Create;
+  try
+    Last:= 1;
+    for Ph in TRegEx.Matches(ATemplate, '\{([A-Za-z_][A-Za-z0-9_]*)\}') do
+    begin
+      SB.Append(Copy(ATemplate, Last, Ph.Index - Last));
+      i:= IndexText(Ph.Groups[1].Value, ANames);
+      SB.Append(if i <= High(ATexts) then ATexts[i] else Ph.Value);   { i >= 0: checked above }
+      Last:= Ph.Index + Ph.Length;
+    end;
+    SB.Append(Copy(ATemplate, Last, MaxInt));
+    AText:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+  Result:= True;
+end;
+
+constructor TQueryRule.Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);  // dl:ok missing-inherited-ctor@8f39 -- delegates to CreateCompiled, which calls inherited Create
 var
   ErrOff : UInt32       ;
   ErrType: TTSQueryError;
+begin
+  ErrOff:= 0;
+  ErrType:= TSQueryError(0);
+  CreateCompiled(AQuerySource, AScmPath, AJsonPath, TTSQuery.Create(ALanguage, AQuerySource, ErrOff, ErrType), ErrOff, ErrType);
+end; // constructor
+
+constructor TQueryRule.CreateCompiled(const AQuerySource, AScmPath, AJsonPath: string; const AQuery: TTSQuery; const AErrOff: UInt32; const AErrType: TTSQueryError);
+var
   JSON   : TJSONObject  ;
   RawJson: string       ;
   ExArr  : TJSONArray   ;
   ExVal  : TJSONValue   ;
 begin
   inherited Create;
+  FQuery:= AQuery; { first: Destroy frees it if anything below raises }
   FSourcePath:= AScmPath;
   FId:= TPath.GetFileNameWithoutExtension(AScmPath);
   FSeverity:= 'warning';
@@ -651,18 +796,22 @@ begin
         for ExVal in ExArr do
           if Trim(ExVal.Value) <> '' then
             FRequireFileText:= FRequireFileText + [LowerCase(Trim(ExVal.Value))];
+      { Optional sidecar FIX ("fix", autofix wave A0): see TSidecarFix. }
+      FFixes:= ParseSidecarFix(JSON.GetValue('fix'));
     finally
       JSON.Free;
     end;
   end; // if
-
-  ErrOff:= 0;
-  ErrType:= TSQueryError(0);
-  FQuery:= TTSQuery.Create(ALanguage, AQuerySource, ErrOff, ErrType);
-  if FQuery.Query = nil then
+  if Length(FFixes) > 0 then
   begin
-    raise Exception.CreateFmt( 'tree-sitter query compile failed: rule "%s" (offset %d, errType %d, ' + 'source %s)', [FId, ErrOff, Ord(ErrType), AScmPath]);
+    var AnyRisky: Boolean:= False;
+    for var Fx: TSidecarFix in FFixes do AnyRisky:= AnyRisky or Fx.Risky;
+    RegisterSidecarFixRule(FId, AnyRisky);
   end;
+
+  if (FQuery = nil) or (FQuery.Query = nil) then
+  begin
+   end;
 end; // constructor
 
 destructor TQueryRule.Destroy;
@@ -738,6 +887,9 @@ begin
     begin
       if ANameRx = '' then Exit(True);
       Nm:= Cur.ChildByField('name');
+      { a defProc carries its name on the header (declProc), not on itself }
+      if Nm.IsNull and (ANodeType = 'defProc') then
+        Nm:= Cur.ChildByField('header').ChildByField('name');
       if not Nm.IsNull then
         try
           if TRegEx.IsMatch(NodeText(Nm, ASource), ANameRx) then Exit(True);
@@ -1075,6 +1227,43 @@ begin
   end;
 end;
 
+function DeclaredTypeAt(const ARoot: TTSNode; const ASource: TBytes; AByte: UInt32;
+  const AName: string; out AType: string): Boolean;
+var
+  Cur  : TTSNode        ;
+  Kid  : TTSNode        ;
+  Found: Boolean        ;
+  Cache: TDeclScopeCache;
+begin
+  AType:= '';
+  Result:= False;
+  if ARoot.IsNull or (AName = '') then Exit;
+  { descend to the innermost named node holding AByte }
+  Cur:= ARoot;
+  repeat
+    Found:= False;
+    for Kid in NamedChildrenOf(Cur) do
+    begin
+      if (Kid.StartByte <= AByte) and (AByte < Kid.EndByte) then
+      begin
+        Cur:= Kid;
+        Found:= True;
+        Break;
+      end;
+    end;
+  until not Found;
+  Cache:= TDeclScopeCache.Create;
+  try
+    while not Cur.IsNull do
+    begin
+      if Cache.Find(Cur, ASource, AName, AByte, AType) then Exit(AType <> '');
+      Cur:= Cur.Parent;
+    end;
+  finally
+    Cache.Free;
+  end;
+end;
+
 function EvalDeclaredType(const AMatch: TTSQueryMatch; const ASource: TBytes;
   const AArgs: TArray<TPredicateArg>; ACache: TDeclScopeCache): Boolean;
 const
@@ -1310,6 +1499,7 @@ begin
         Finding.StartCol := Integer(Picked.StartPoint.column) + 1;
         Finding.EndLine  := Integer(Picked.EndPoint  .row   ) + 1;
         Finding.EndCol   := Integer(Picked.EndPoint  .column) + 1;
+        if (Length(FFixes) > 0) and not AttachFix(Finding, Captures, ASource) then Continue;
         FoundList.Add(Finding);
       end; // while
       Result:= FoundList.ToArray;
@@ -1322,6 +1512,40 @@ begin
     if Profiled then NoteRuleTicks(FRuleId, TStopwatch.GetTimeStamp - ProfT0);
   end; // try
 end; // function
+
+{ Autofix wave A0: the FIRST fix entry that applies to this match is expanded
+  onto the finding. An entry applies when its when_capture (if any) is bound
+  and its template expands with no placeholder left over. }
+function TQueryRule.AttachFix(var AFinding: TLintFinding; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes): Boolean;
+var
+  Names: TArray<string>;
+  Texts: TArray<string>;
+  Fx   : TSidecarFix   ;
+  Txt  : string        ;
+  i    : Integer       ;
+begin
+  SetLength(Names, Length(ACaptures));
+  SetLength(Texts, Length(ACaptures));
+  for i:= 0 to High(ACaptures) do
+  begin
+    Names[i]:= FQuery.CaptureNameForID(ACaptures[i].index);
+    Texts[i]:= NodeText(ACaptures[i].node, ASource);
+  end;
+  Result:= True;
+  for Fx in FFixes do
+  begin
+    if (Fx.WhenCapture <> '') and (IndexText(Fx.WhenCapture, Names) < 0) then Continue;
+    { two-way modernize (1.38): the pattern this entry fixes needs a newer
+      compiler than the run targets -- the advice itself is void, drop the match }
+    if IsGatedByTarget(Fx.NeedsCompiler, ActiveTargetCompiler) then Exit(False);
+    Txt:= '';
+    if (Fx.Kind = lfkReplace) and not ExpandFixTemplate(Fx.Template, Names, Texts, Txt) then Continue;
+    AFinding.FixKind:= Fx.Kind;
+    AFinding.FixText:= Txt;
+    AFinding.FixUses:= Fx.UsesUnit;
+    Exit;
+  end;
+end;
 
 { True when ScmPath sits below a sub-directory (relative to ARulesDir) named `rules`. }
 function IsUnderNestedRulesDir(const ARulesDir, AScmPath: string): Boolean;
@@ -1342,45 +1566,102 @@ var
   Files   : TArray<string>   ;
   ScmPath : string           ;
   JsonPath: string           ;
-  Source  : string           ;
   Rule    : TQueryRule       ;
   List    : TList<TQueryRule>;
   Seen    : TDictionary<string, string>;
   FirstAt : string           ;
+  Wall    : TStopwatch       ;
+  SumTicks: Int64            ;
+  Sources : TArray<string>   ;
+  LoadErrs: TArray<string>   ;
+  Queries : TArray<TTSQuery> ;
+  ErrOffs : TArray<UInt32>   ;
+  ErrTypes: TArray<TTSQueryError>;
+  Ticks   : TArray<Int64>    ;
+  Lang    : PTSLanguage      ;
+  I       : Integer          ;
 begin
   SetLength(Result, 0);
   if not TDirectory.Exists(ARulesDir) then Exit;
+  Wall:= TStopwatch.StartNew;
   Files:= TDirectory.GetFiles(ARulesDir, '*.scm', TSearchOption.soAllDirectories);
   // Key = rule id + file name: one id may legitimately span several forms (hardcoded-credential
   // const + assignment), but the same id in the same-named file twice is a stray copy.
   TArray.Sort<string>(Files); // deterministic: first path wins a duplicate
-  List:= TList<TQueryRule>.Create;
-  Seen:= TDictionary<string, string>.Create;
+  { READ + COMPILE IN PARALLEL, BUILD IN ORDER (lane IPERF, 2026-10-28).
+    ts_query_new is the whole cost of this routine -- 95 queries, ~30 ms each and
+    254 ms for the worst, 3.2 s of a 3.8 s single-file lint -- and it is paid by
+    EVERY lint process before the file is even read. Each query compiles against
+    the read-only language independently, so the compiles fan out over the pool.
+    Everything with an observable effect -- the sidecar json, fix registration,
+    the duplicate check, both messages and the result order -- stays in the
+    serial loop below, in sorted-path order, exactly as before.
+    Guard: tests\autotest\run_rule_load_parallel.ps1. }
+  Lang:= ALanguage;
+  SetLength(Sources, Length(Files));
+  SetLength(LoadErrs, Length(Files));
+  SetLength(Queries, Length(Files));
+  SetLength(ErrOffs, Length(Files));
+  SetLength(ErrTypes, Length(Files));
+  SetLength(Ticks, Length(Files));
   try
-    for ScmPath in Files do
-    begin
-      // A nested directory named `rules` is an xcopy accident, never a rule folder.
-      if IsUnderNestedRulesDir(ARulesDir, ScmPath) then Continue;
-      JsonPath:= ChangeFileExt(ScmPath, '.json');
-      try
-        Source:= TFile.ReadAllText(ScmPath, TEncoding.UTF8);
-        Rule:= TQueryRule.Create(ALanguage, Source, ScmPath, JsonPath);
-        if Seen.TryGetValue(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), FirstAt) then
-        begin
-          Writeln(ErrOutput, Format('  RULE-DUPLICATE-ID %s: %s ignored (already loaded from %s)', [Rule.Id, ScmPath, FirstAt]));
-          FreeAndNil(Rule); // dl:ok unprotected-object-free@b455 -- REVIEWED 2026-10-24: nothing between Create and this Free can raise (Format/Writeln on strings); ownership passes to List only at List.Add
-          Continue;
+    TParallel.For(0, High(Files),
+      procedure(AIdx: Integer)
+      begin
+        // A nested directory named `rules` is an xcopy accident, never a rule folder.
+        if IsUnderNestedRulesDir(ARulesDir, Files[AIdx]) then Exit;
+        var T0: Int64:= TStopwatch.GetTimeStamp;
+        try
+          Sources[AIdx]:= TFile.ReadAllText(Files[AIdx], TEncoding.UTF8);
+          Queries[AIdx]:= TTSQuery.Create(Lang, Sources[AIdx], ErrOffs[AIdx], ErrTypes[AIdx]);
+        except  // dl:ok try-except-swallowed@e8d3 -- not swallowed: the message is kept in LoadErrs and printed as RULE-LOAD-FAIL in path order by the serial loop
+          on E: Exception do LoadErrs[AIdx]:= E.Message;
         end;
-        Seen.Add(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), ScmPath);
-        List.Add(Rule);
-      except
-        on E: Exception do Writeln(Format('  RULE-LOAD-FAIL %s: %s', [ScmPath, E.Message]));
+        Ticks[AIdx]:= TStopwatch.GetTimeStamp - T0;
+      end);
+    SumTicks:= 0;
+    List:= TList<TQueryRule>.Create;
+    Seen:= TDictionary<string, string>.Create;
+    try
+      for I:= 0 to High(Files) do
+      begin
+        ScmPath:= Files[I];
+        if IsUnderNestedRulesDir(ARulesDir, ScmPath) then Continue;
+        Inc(SumTicks, Ticks[I]);
+        JsonPath:= ChangeFileExt(ScmPath, '.json');
+        try
+          if LoadErrs[I] <> '' then
+          begin
+            Writeln(Format('  RULE-LOAD-FAIL %s: %s', [ScmPath, LoadErrs[I]]));
+            Continue;
+          end;
+          { Ownership moves to the rule BEFORE the call: CreateCompiled frees the
+            query itself when it raises, so the finally below must not see it. }
+          var Q: TTSQuery:= Queries[I];
+          Queries[I]:= nil;
+          Rule:= TQueryRule.CreateCompiled(Sources[I], ScmPath, JsonPath, Q, ErrOffs[I], ErrTypes[I]);
+          if Seen.TryGetValue(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), FirstAt) then
+          begin
+            Writeln(ErrOutput, Format('  RULE-DUPLICATE-ID %s: %s ignored (already loaded from %s)', [Rule.Id, ScmPath, FirstAt]));
+            FreeAndNil(Rule); // dl:ok unprotected-object-free@b455 -- REVIEWED 2026-10-24: nothing between Create and this Free can raise (Format/Writeln on strings); ownership passes to List only at List.Add
+            Continue;
+          end;
+          Seen.Add(Rule.Id + '|' + LowerCase(ExtractFileName(ScmPath)), ScmPath);
+          List.Add(Rule);
+        except
+          on E: Exception do Writeln(Format('  RULE-LOAD-FAIL %s: %s', [ScmPath, E.Message]));
+        end;
       end;
-    end;
-    Result:= List.ToArray;
+      Result:= List.ToArray;
+      if RuleProfileArmed then
+        Writeln(ErrOutput, Format('[rule-load] %d rules compiled: wall %.3f s, cpu-sum %.3f s',
+          [Length(Result), Wall.Elapsed.TotalSeconds, SumTicks / TStopwatch.Frequency], TFormatSettings.Invariant));
+    finally
+      Seen.Free;
+      List.Free;
+    end; // try
   finally
-    Seen.Free;
-    List.Free;
+    for I:= 0 to High(Queries) do Queries[I].Free; { only a query no rule took over }
   end; // try
 end; // function
 

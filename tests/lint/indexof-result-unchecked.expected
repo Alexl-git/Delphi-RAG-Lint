@@ -1,0 +1,15 @@
+# Hits: the index argument IS an IndexOf/IndexOfName/Pos call (14-19).
+# Non-hits: stored first and tested (the flow form, a LATER rule), a literal index, a comparison.
+indexof-result-unchecked 14
+indexof-result-unchecked 15
+indexof-result-unchecked 16
+indexof-result-unchecked 17
+indexof-result-unchecked 18
+indexof-result-unchecked 19
+!indexof-result-unchecked 27
+!indexof-result-unchecked 28
+!indexof-result-unchecked 29
+!indexof-result-unchecked 30
+!indexof-result-unchecked 31
+!indexof-result-unchecked 32
+!indexof-result-unchecked 33

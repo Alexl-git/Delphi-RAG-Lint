@@ -171,6 +171,42 @@ $r = Invoke-Raw ($q + @('--quiet', '--output-encoding', 'ascii')) $cfgDir
 Check 'the command line beats the defaults file' ((HiCount $r.Out) -eq 0 -and [System.Text.Encoding]::ASCII.GetString($r.Out).Contains($escOdd)) ''
 
 Write-Host ''
+Write-Host ''
+Write-Host 'Files a verb writes (--output) and the lossy-output warning' -ForegroundColor Cyan
+$qf = @('sql', '--query', 'select path from files', '--db', $db, '--json')
+$fA = Join-Path $WorkDir 'out-ascii.json'
+$r = Invoke-Raw ($qf + @('--output', $fA))
+$b = [System.IO.File]::ReadAllBytes($fA)
+Check 'default: --output file is 7-bit ASCII' ((HiCount $b) -eq 0) "($(HiCount $b) byte(s) >127)"
+Check 'default: --output file carries the \uXXXX escape' ([System.Text.Encoding]::ASCII.GetString($b).Contains($escOdd)) ''
+$etxt = [System.Text.Encoding]::ASCII.GetString($r.Err)
+$warn = [regex]::Matches($etxt, 'non-ASCII character\(s\) were written')
+Check 'default: the warning appears exactly once' ($warn.Count -eq 1) "($($warn.Count))"
+$m = [regex]::Match($etxt, '(\d+) non-ASCII character')
+Check 'default: the warning count is positive' ($m.Success -and [int]$m.Groups[1].Value -gt 0) "($($m.Groups[1].Value))"
+Check 'default: the warning names the switch and the config key' ($etxt.Contains('--output-encoding utf8') -and $etxt.Contains('outputEncoding')) ''
+$doc = [System.Text.Encoding]::ASCII.GetString($b) | ConvertFrom-Json
+Check 'default: a JSON file gains lossy_output > 0' ($doc.lossy_output -gt 0) "($($doc.lossy_output))"
+$fU = Join-Path $WorkDir 'out-utf8.json'
+$r = Invoke-Raw ($qf + @('--output', $fU, '--output-encoding', 'utf8'))
+$b = [System.IO.File]::ReadAllBytes($fU)
+Check 'utf8: --output file holds the raw UTF-8 path' (HasBytes $b $utf8Odd) ''
+Check 'utf8: --output file round-trips the exact path' ((Row0 $b ([System.Text.Encoding]::UTF8)) -ceq $unit) ''
+Check 'utf8: NEGATIVE no \u escape in the file' (-not [System.Text.Encoding]::UTF8.GetString($b).Contains($BS + 'u00e9')) ''
+Check 'utf8: NEGATIVE no warning, no lossy_output' (([System.Text.Encoding]::ASCII.GetString($r.Err) -notmatch 'non-ASCII character') -and ([System.Text.Encoding]::UTF8.GetString($b) -notmatch 'lossy_output')) ''
+$fW = Join-Path $WorkDir 'out-utf16.json'
+$r = Invoke-Raw ($qf + @('--output', $fW, '--output-encoding', 'utf16'))
+$b = [System.IO.File]::ReadAllBytes($fW)
+Check 'utf16: --output file round-trips the exact path' ((Row0 $b ([System.Text.Encoding]::Unicode)) -ceq $unit) ''
+$fR = Join-Path $WorkDir 'lint-report.txt'
+$r = Invoke-Raw @('lint', $unit, '--db', $db, '--json', '--output', $fR, '--output-encoding', 'utf8')
+Check 'lint --output (utf8) writes the raw UTF-8 path' (HasBytes ([System.IO.File]::ReadAllBytes($fR)) $utf8Odd) ''
+$r = Invoke-Raw @('sql', '--query', "select 'plain ascii' as v", '--db', $db, '--json', '--output', (Join-Path $WorkDir 'plain.json'))
+Check 'pure-ASCII run: NEGATIVE control, no warning on stderr' ([System.Text.Encoding]::ASCII.GetString($r.Err) -notmatch 'non-ASCII character') ''
+Check 'pure-ASCII run: no lossy_output in the file' (-not [System.IO.File]::ReadAllText((Join-Path $WorkDir 'plain.json')).Contains('lossy_output')) ''
+$r = Invoke-Raw $q
+Check 'stdout-only default run also warns once' ([regex]::Matches([System.Text.Encoding]::ASCII.GetString($r.Err), 'non-ASCII character\(s\) were written').Count -eq 1) ''
+
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
   foreach ($d23 in @("$env:TEMP\drag-lint-output-encoding-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }

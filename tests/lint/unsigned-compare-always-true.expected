@@ -1,0 +1,20 @@
+# Cardinal param (13), Byte (14), Word (15): unsigned compared with 0 is a tautology
+# Signed N (16, 19) and non-zero compares (17, 18) must not fire; field FCount (50) is silent by design
+# G3 extension: compare against the type maximum -- Byte > 255 / <= 255 (20, 21), Word > 65535 / <= 65535 (22, 23),
+# Cardinal > 4294967295 / <= 4294967295 (24, 25); B > 254 (26) and signed N > 255 (27) must not fire
+unsigned-compare-always-true 13
+unsigned-compare-always-true 14
+unsigned-compare-always-true 15
+!unsigned-compare-always-true 16
+!unsigned-compare-always-true 17
+!unsigned-compare-always-true 18
+!unsigned-compare-always-true 19
+unsigned-compare-always-true 20
+unsigned-compare-always-true 21
+unsigned-compare-always-true 22
+unsigned-compare-always-true 23
+unsigned-compare-always-true 24
+unsigned-compare-always-true 25
+!unsigned-compare-always-true 26
+!unsigned-compare-always-true 27
+!unsigned-compare-always-true 50

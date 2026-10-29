@@ -1,3 +1,4 @@
+#Requires -Version 7
 # dl:serial: LSP proxy family. These spawn and reap DelphiLSP/LspStub children and have
 #   been observed interfering with EACH OTHER while strictly SERIALISED (three
 #   battery runs, exactly one of two adjacent proxy guards failing each time,
@@ -80,9 +81,19 @@ function FirstDiff([byte[]]$a, [byte[]]$b) {
 
 # Plays the recorded session into $exe and returns the reply bytes.
 #
-# The wait is "output stopped growing", not a fixed sleep: a fixed sleep long
-# enough for a cold DelphiLSP makes every run pay for the worst case, and one
-# too short truncates the reply and reports it as a mismatch.
+# The wait is "the shutdown reply (id 4, the session's last request) has
+# arrived", not a fixed sleep and not a quiet window. Stdin is closed only after
+# that, and closing it is what makes DelphiLSP exit (see KNOWN AND NOT OUR BUG).
+#
+# 2026-10-28 (lane LSP-3): the previous wait was "output stopped growing for
+# 1500 ms". DelphiLSP answers initialize at once (446 bytes) and then loads the
+# project before it answers hover/completion; on a loaded machine (15 other
+# drag-lint processes, CPU at 100 %) that gap exceeded 1500 ms, stdin was closed
+# mid-session, DelphiLSP crashed on EOF and the stream stopped at 446 of 782
+# bytes. It hit the direct run as often as the proxied one (stub_modes (d)
+# saw CASE A diverge 446 vs 782), so it was the guard's wait, not the relay.
+# A process that exits early, or the 30 s deadline, still ends the wait; case C
+# then names the missing shutdown reply.
 function Play {
   param([string]$exe, [string[]]$argv, [byte[]]$payload)
 
@@ -105,14 +116,12 @@ function Play {
   $p.StandardInput.BaseStream.Write($payload, 0, $payload.Length)
   $p.StandardInput.BaseStream.Flush()
 
-  $last     = -1
-  $stableAt = $null
   $deadline = (Get-Date).AddSeconds(30)
   while ((Get-Date) -lt $deadline) {
     Start-Sleep -Milliseconds 200
-    $len = $outMs.Length
-    if ($len -ne $last) { $last = $len; $stableAt = Get-Date; continue }
-    if ($len -gt 0 -and $stableAt -and ((Get-Date) - $stableAt).TotalMilliseconds -ge 1500) { break }
+    if ($p.HasExited) { break }
+    $seen = [System.Text.Encoding]::ASCII.GetString($outMs.ToArray())
+    if ($seen -match '"id"\s*:\s*4\s*[,}]') { break }
   }
 
   try { $p.StandardInput.BaseStream.Close() } catch { }

@@ -2,5 +2,9 @@
   "id": "boolean-result-returned-directly",
   "severity": "info",
   "message": "Redundant if/else assigning True/False to Result. Write 'Result := <cond>' (or 'Result := not <cond>') directly.",
-  "warn_capture": "warn"
+  "warn_capture": "warn",
+  "fix": [
+    { "when_capture": "c1", "replace": "Result := {c1};" },
+    { "when_capture": "c2", "replace": "Result := not ({c2});" }
+  ]
 }

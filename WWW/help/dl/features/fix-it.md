@@ -4,10 +4,10 @@ title: Fix it
 summary: Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling
 product: DL
 group: linting
-order: 30009
+order: 30011
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # Fix it
@@ -30,6 +30,7 @@ Full flag list: [uses-fix in the CLI reference](../cli.md#uses-fix).
 | `--disable` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--no-preprocess` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |
@@ -72,7 +73,7 @@ either (a stale owning index is reported `index=stale`, not reindexed). With
 [Multi-Project-Rename](multi-project-rename.md)).
 
 Only rules marked fixable can be auto-fixed. `drag-lint rules --json`
-reports a `fixable` field per rule; 23 of the 195 rules are fixable.
+reports a `fixable` field per rule; 110 of the 290 rules are fixable.
 
 ### Unused units (`unused-unit-in-uses`)
 
@@ -102,7 +103,7 @@ drag-lint uses-fix <Unit.pas> --project <App.dproj> --db <App.sqlite> --platform
 * On a NAMING finding (`const-casing`, `type-name-prefix`,
   `local-var-casing`, ...) "Fix it" RENAMES the symbol -- its declaration and
   every use the project index knows about (e.g. `wrStr` -> `WrStr`). Asking for
-  that ONE finding is the opt-in. It needs the project index, and is not
+  that ONE finding is an explicit request and wins even over `"autofix_off"`. It needs the project index, and is not
   offered without one. A naming fix runs a PREVIEW first (nothing written):
   when the unit is compiled by two or more indexed projects, a confirmation
   lists every one of them and the rename happens in all of them or in none --

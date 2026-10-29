@@ -4,10 +4,10 @@ title: Copy Selected Diagnostics
 summary: Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard
 product: DL
 group: linting
-order: 30003
+order: 30005
 since: 1.28.3-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # Copy Selected Diagnostics

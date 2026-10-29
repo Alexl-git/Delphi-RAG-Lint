@@ -133,6 +133,68 @@ begin
   Result:= TEncoding.UTF8.GetString(ASource, StartIdx, Len);
 end;
 
+// EXT-E1 (1.37.0): the text of ANode with every `comment` descendant replaced
+// by ONE space. Comments are tree-sitter extras, so a line comment carrying a
+// review marker after a parameter line, or a brace / paren-star block between
+// parameters, is a child of declArgs and NodeText carried it into
+// symbols.signature (and hover split it into a fake parameter name). The space
+// keeps the tokens on either side apart; callers collapse whitespace anyway.
+// Byte ranges are concatenated BEFORE the UTF-8 decode, so a multi-byte
+// character is never split.
+function NodeTextSansComments(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  Buf : TBytes ;
+  Used: Integer;
+
+  procedure Append(AFrom, ATo: Integer);
+  begin
+    if ATo <= AFrom then Exit;
+    Move(ASource[AFrom], Buf[Used], ATo - AFrom);
+    Inc(Used, ATo - AFrom);
+  end;
+
+  { Appends ANode's bytes from APos to its end, skipping comment subtrees;
+    returns the byte offset reached. }
+  function Walk(const AN: TTSNode; APos: Integer): Integer;
+  var
+    i    : Integer;
+    Child: TTSNode;
+  begin
+    Result:= APos;
+    for i:= 0 to AN.NamedChildCount - 1 do
+    begin
+      Child:= AN.NamedChild(i);
+      if Child.NodeType = 'comment' then
+      begin
+        Append(Result, Integer(Child.StartByte));
+        Buf[Used]:= Ord(' ');
+        Inc(Used);
+        Result:= Integer(Child.EndByte);
+      end
+      else if Child.NamedChildCount > 0 then
+        Result:= Walk(Child, Result);
+    end;
+  end;
+
+var
+  StartIdx: Integer;
+  EndIdx  : Integer;
+  Reached : Integer;
+begin
+  Result:= '';
+  if ANode.IsNull then Exit;
+  StartIdx:= Integer(ANode.StartByte);
+  EndIdx  := Integer(ANode.EndByte  );
+  if (EndIdx - StartIdx <= 0) or (StartIdx < 0) or (EndIdx > Length(ASource)) then Exit;
+  { A comment is never shorter than the one space that replaces it, so the
+    output fits in the input's length. }
+  SetLength(Buf, EndIdx - StartIdx);
+  Used   := 0;
+  Reached:= Walk(ANode, StartIdx);
+  Append(Reached, EndIdx);
+  Result:= TEncoding.UTF8.GetString(Buf, 0, Used);
+end;
+
 function FindNamedChildOfType(const AParent: TTSNode; const AType: string): TTSNode;
 var
   i    : Integer;
@@ -276,6 +338,10 @@ type
       implementation section). Lets us emit a symbol only for TOP-LEVEL
       implementation-only free routines, never for nested local procedures. }
     RoutineDepth: Integer;
+    { 1.26.0 (item 4): index into Symbols of the named routine whose body is being
+      walked (nested routines set their own); -1 outside any routine body. The
+      on E: T do handler variable is emitted as a local_var parented to it. }
+    CurrentRoutineIdx: Integer;
     constructor Create(const ASource: TBytes);
     destructor Destroy; override;
     { X4: True when the last SCOPEDENUMS switch before byte AOffset is ON;
@@ -303,6 +369,7 @@ constructor TWalkState.Create(const ASource: TBytes);
 begin
   inherited Create;
   Source:= ASource;
+  CurrentRoutineIdx:= -1;
   ScopedEnumSwitches:= ScanScopedEnumSwitches(ASource);
   Symbols    := TList<TSymbol      >.Create;
   References := TList<TReference   >.Create;
@@ -483,6 +550,32 @@ begin
   Result:= IsParenRootedReceiver(ANode.ChildByField('lhs'));
 end;
 
+{ Ref-gap G5 support (1.37.0 B-FLOW item 2b): is this node a HARD-CAST shaped
+  receiver -- `TBfShape(pShape)`, a bare identifier called with exactly ONE
+  argument -- or a dotted chain of identifier members rooted in one,
+  `T(X).A.B`? G..G4 all answer False for it, so `Writeln(TBfShape(pShape).Name)`
+  recorded no ref for Name (the as-cast twin was fixed by G4).
+  The parse cannot tell a cast from a one-argument FUNCTION call (`Twin(O).L`)
+  and does not try: it records the receiver text, and the resolver decides --
+  kind 6 types `T(X)` as the cast target when T names a type, kind 11 types
+  `F(X)` by F's declared result, and an unknown head binds nothing. Only a
+  BARE identifier head qualifies: `O.Mk(x).L` (a method call segment) is left
+  to the call stream as before, which keeps this extraction change narrow. }
+function IsHardCastRootedReceiver(const ANode: TTSNode): Boolean;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'exprCall' then
+  begin
+    var E:= ANode.ChildByField('entity');
+    var A:= ANode.ChildByField('args');
+    Exit((not E.IsNull) and (E.NodeType = 'identifier') and (not A.IsNull) and (A.NamedChildCount = 1));
+  end;
+  if ANode.NodeType <> 'exprDot' then Exit;
+  var R:= ANode.ChildByField('rhs');
+  if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+  Result:= IsHardCastRootedReceiver(ANode.ChildByField('lhs'));
+end;
 const
   { T-11: a longer receiver is not recorded at parse ('' -> NULL), and the
     resolver falls back to its line scan for it. }
@@ -761,6 +854,25 @@ begin
   if not Root.IsNull then AState.EmitRef(REF_KIND_RAISE_EXPR, NodeText(Root, AState.Source), Root);
 end; // procedure
 
+{ Item 4: on E: T do declares E for the handler clause. Emitted as a local_var
+  (Signature = the type text as written) parented to the enclosing named routine,
+  range = the handler clause, so E.Message can be typed from it. on T do has no
+  variable and emits nothing. Guard: tests\autotest\run_handler_var_symbol.ps1. }
+procedure EmitHandlerVarSymbol(const ANode: TTSNode; const AState: TWalkState);
+var
+  VarNode, TypeRef: TTSNode;
+  VarName, RoutineQN: string;
+begin
+  if AState.CurrentRoutineIdx < 0 then Exit;
+  VarNode:= ANode.ChildByField('variable');
+  TypeRef:= ANode.ChildByField('exception');
+  if VarNode.IsNull or TypeRef.IsNull then Exit;
+  VarName:= NodeText(VarNode, AState.Source);
+  if VarName = '' then Exit;
+  RoutineQN:= AState.Symbols[AState.CurrentRoutineIdx].QualifiedName;
+  AState.Emit(skLocalVar, VarName, RoutineQN + '.' + VarName, AState.CurrentRoutineIdx, ANode, NodeText(TypeRef, AState.Source));
+end; // procedure
+
 procedure EmitHandlerReference(const ANode: TTSNode; const AState: TWalkState);
 var
   TypeRef, TypeExpr, NameNode: TTSNode;
@@ -950,10 +1062,29 @@ begin
     An EXPRESSION bound -- `array [1..CA*CB]` -- is (range .. (exprBinary ..)),
     which needs nothing here: the exprBinary arm above already reads lhs/rhs once
     Walk reaches it, which is what member B2's recursion arranges. }
+  { INITIALIZER POSITIONS (lane REFTYPE, 2026-10-27). A name used ONLY as an
+    initializer emitted NOTHING: `VERSION = DRAGLINT_VERSION;` (CLI.pas:69) had
+    zero refs, so uses-audit called DRagLint.Core.Model movable to the
+    implementation -- and its autofix would have broken the build. Shapes, from
+    tools\dumpnode, not assumed:
+        const / typed const / var init /    (defaultValue (kEq) (identifier))
+          param default VALUE / enum ordinal
+        array const                         (arrInitializer (identifier) ...)
+        record const                        (recInitializerField (identifier) (identifier))
+    In a recInitializerField the FIRST identifier is the field NAME being
+    initialised, not a usage, so only the value (the last named child) is read.
+    An EXPRESSION initializer (`= A + 1`, `= SizeOf(T)`, `= [a, b]`) needs
+    nothing: its own node already reads through the arms above. }
   else if (NT = 'exprParens') or (NT = 'exprBrackets') or (NT = 'case') or (NT = 'caseLabel')
        or (NT = 'procExternal')
-       or (NT = 'range') or (NT = 'declString') or (NT = 'subrangeType') then
-    ReadAllDirectIdents;
+       or (NT = 'range') or (NT = 'declString') or (NT = 'subrangeType')
+       or (NT = 'defaultValue') or (NT = 'arrInitializer') then
+    ReadAllDirectIdents
+  else if (NT = 'recInitializerField') and (ANode.NamedChildCount >= 2) then
+  begin
+    Op:= ANode.NamedChild(ANode.NamedChildCount - 1);
+    if Op.NodeType = 'identifier' then AState.EmitRef('read', NodeText(Op, AState.Source), Op);
+  end;
 end; // procedure
 
 // v0.40.4: extract the literal string body from a `kIn literalString` pair
@@ -1512,6 +1643,10 @@ begin
           end;
           AState.Emit(skEnumValue, ValName, QName + '.' + ValName, EnumIdx, ValNode, IntToStr(EnumOrd));
           Inc(EnumOrd);
+          { Lane REFTYPE: `roA = RiH` -- the explicit ordinal is a usage of RiH.
+            This walker Exits the dispatch, so walk the defaultValue here. }
+          var EnumDefNode:= FindNamedChildOfType(ValNode, 'defaultValue');
+          if not EnumDefNode.IsNull then Walk(EnumDefNode, AState, AParentSymbolIdx, AParentQualifiedName);
         end;
       end;
     end;
@@ -1665,10 +1800,19 @@ begin
   if TypeName = '' then Exit;
   { A parameter list can wrap across lines; collapse runs of whitespace so the
     stored signature is one readable line, as TypeTextOf already does for fields. }
-  Target:= CollapseWhitespace(NodeText(RefNode, AState.Source));
+  Target:= CollapseWhitespace(NodeTextSansComments(RefNode, AState.Source));
   if AParentQualifiedName <> '' then QName:= AParentQualifiedName + '.' + TypeName
   else QName:= TypeName;
   AState.Emit(skTypeAlias, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, Target, '', '', False, False, '', '', True, GenParams);
+  { Lane REFTYPE (2026-10-27): the SIGNATURE is a type use. This handler Exits
+    the dispatch, so nothing else visits the declProcRef -- the parameter and
+    result types of `TStoreOpener = reference to function(..): ISymbolStore`
+    emitted no type_use, and uses-audit called DRagLint.Core.Interfaces movable
+    to the implementation. Walk the children (args, result type) exactly as a
+    method-impl header does; no other walker reaches them, so this cannot
+    double-emit (run_reftype_refs.ps1 asserts one row per name). }
+  for var ci:= 0 to RefNode.NamedChildCount - 1 do
+    Walk(RefNode.NamedChild(ci), AState, AParentSymbolIdx, AParentQualifiedName);
   Result:= True;
 end; // function
 
@@ -1856,7 +2000,7 @@ begin
   Result:= '';
   T:= ANode.ChildByField('type');
   if T.IsNull then Exit;
-  Raw:= NodeText(T, ASource);
+  Raw:= NodeTextSansComments(T, ASource);
   { collapse runs of whitespace to single spaces so multi-line types read well }
   PrevSpace:= False;
   for i:= 1 to Length(Raw) do
@@ -1961,12 +2105,13 @@ begin
   { defaultValue is a grammar FIELD: `defaultValue: (defaultValue (kEq) <expr>)`.
     kEq is a NAMED node in this grammar -- four separate bugs in this file came
     from assuming keyword tokens are anonymous -- so the value is the first
-    named child that is not it, not simply child 0. }
+    named child that is not it (and not a comment extra, which a trailing //  after
+    the =  makes the FIRST child), not simply child 0. }
   ValNode:= Default(TTSNode);
   DefNode:= ANode.ChildByField('defaultValue');
   if not DefNode.IsNull then
     for i:= 0 to DefNode.NamedChildCount - 1 do
-      if DefNode.NamedChild(i).NodeType <> 'kEq' then
+      if (DefNode.NamedChild(i).NodeType <> 'kEq') and (DefNode.NamedChild(i).NodeType <> 'comment') then
       begin
         ValNode:= DefNode.NamedChild(i);
         Break;
@@ -1974,7 +2119,7 @@ begin
 
   if not ValNode.IsNull then
   begin
-    ValText:= CollapseWs(NodeText(ValNode, ASource));
+    ValText:= CollapseWs(NodeTextSansComments(ValNode, ASource));
     if Length(ValText) > MAX_VALUE_TEXT then ValText:= Copy(ValText, 1, MAX_VALUE_TEXT) + '...';
 
     { Infer only from a literal, where the node type IS the answer. Anything
@@ -2044,7 +2189,7 @@ var
 begin
   ArgsText:= '';
   ArgsNode:= ANode.ChildByField('args');
-  if not ArgsNode.IsNull then ArgsText:= CollapseWs(NodeText(ArgsNode, ASource));
+  if not ArgsNode.IsNull then ArgsText:= CollapseWs(NodeTextSansComments(ArgsNode, ASource));
   RetType:= TypeTextOf(ANode, ASource);
   if RetType <> '' then
   begin
@@ -2766,28 +2911,50 @@ begin
     Exit;
   end;
 
-  // declField: emit a field symbol (always inside a class/record/interface).
-  if NodeType = 'declField' then
+  { declField: emit a field symbol per NAME (always inside a class/record/
+    interface). declFieldNoSemi is the same list as the LAST field of a section
+    written without its `;` (`N3, N4: string end`) and gets the same treatment.
+
+    Lane gaps/multiname: the grammar's `name` field is delimited1, so
+    `A1, A2, A3: string;` carries three identifier children under one field
+    name, and ChildByField('name') returns only the first -- names 2..n had no
+    row, and declFieldNoSemi was never matched at all. Every name before the
+    `type` child is a field. The FIRST name keeps the whole-declaration span it
+    always had (single-name fields are byte-identical); names 2..n start at
+    their own identifier and share the declaration's end and type text.
+    Pinned by tests\autotest\run_multiname_fields.ps1. }
+  if (NodeType = 'declField') or (NodeType = 'declFieldNoSemi') then
   begin
-    var FNameNode:= ANode.ChildByField('name');
-    if not FNameNode.IsNull then
+    var FTypeNode:= ANode.ChildByField('type');
+    var FTypeText:= TypeTextOf(ANode, AState.Source);
+    var FFirst:= True;
+    for i:= 0 to ANode.NamedChildCount - 1 do
     begin
+      var FNameNode:= ANode.NamedChild(i);
+      if FNameNode.NodeType <> 'identifier' then Continue;
+      if (not FTypeNode.IsNull) and
+         ((FNameNode.StartPoint.row > FTypeNode.StartPoint.row) or
+          ((FNameNode.StartPoint.row = FTypeNode.StartPoint.row) and (FNameNode.StartPoint.column >= FTypeNode.StartPoint.column))) then Break;
       var FName:= NodeText(FNameNode, AState.Source);
-      if FName <> '' then
+      if FName = '' then Continue;
+      var FQName:= if AParentQualifiedName <> '' then AParentQualifiedName + '.' + FName else FName;
+      { v22: a FIELD carries vis_explicit too. Wiring only the routine emit
+        site left every field in an unlabelled section reading True -- which is
+        the wrong answer for exactly the population the column exists to
+        describe, since a published component field is the commonest case of
+        all. Caught by run_default_section_visibility.ps1: DefaultMethod said
+        False while FDefaultField, three lines above it in the same section,
+        said True. }
+      var FIdx:= AState.Emit(skField, FName, FQName, AParentSymbolIdx, ANode, FTypeText, AState.CurrentVisibility,
+                             '', False, False, '', '', AState.CurrentVisExplicit);
+      if not FFirst then
       begin
-        var FQName: string;
-        if AParentQualifiedName <> '' then FQName:= AParentQualifiedName + '.' + FName
-        else FQName:= FName;
-        { v22: a FIELD carries vis_explicit too. Wiring only the routine emit
-          site left every field in an unlabelled section reading True -- which is
-          the wrong answer for exactly the population the column exists to
-          describe, since a published component field is the commonest case of
-          all. Caught by run_default_section_visibility.ps1: DefaultMethod said
-          False while FDefaultField, three lines above it in the same section,
-          said True. }
-        AState.Emit(skField, FName, FQName, AParentSymbolIdx, ANode, TypeTextOf(ANode, AState.Source), AState.CurrentVisibility,
-                    '', False, False, '', '', AState.CurrentVisExplicit);
+        var FSym:= AState.Symbols[FIdx];
+        FSym.StartLine:= Integer(FNameNode.StartPoint.row   ) + 1;
+        FSym.StartCol := Integer(FNameNode.StartPoint.column) + 1;
+        AState.Symbols[FIdx]:= FSym;
       end;
+      FFirst:= False;
     end;
     // Walk children so the field's type is visited and emits a type_use ref.
     for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
@@ -2857,7 +3024,10 @@ begin
         var KQName: string;
         if AParentQualifiedName <> '' then KQName:= AParentQualifiedName + '.' + KName
         else KQName:= KName;
-        AState.Emit(skConstDecl, KName, KQName, AParentSymbolIdx, ANode, ConstSignatureOf(ANode, AState.Source));
+        { EXT-E4: a TYPED constant (a `type` field) carries the 'typed' modifier;
+          the signature text stays as it was, so no consumer re-pins. }
+        var KMods: string:= if ANode.ChildByField('type').IsNull then '' else 'typed';
+        AState.Emit(skConstDecl, KName, KQName, AParentSymbolIdx, ANode, ConstSignatureOf(ANode, AState.Source), KMods);
       end;
     end;
     // Walk children so a typed const's type emits a type_use ref.
@@ -2912,6 +3082,11 @@ begin
       else VQName:= VName;
       AState.Emit(skVarDecl, VName, VQName, AParentSymbolIdx, VChild, VTypeText);
     end;
+    { Lane REFTYPE: `GInit: Integer = RiJ;` -- the initializer is a usage. Only
+      the type was walked above, so a global's initial value emitted nothing. }
+    for i:= 0 to ANode.NamedChildCount - 1 do
+      if ANode.NamedChild(i).NodeType = 'defaultValue' then
+        Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;
   end; // if
 
@@ -3095,9 +3270,12 @@ begin
     if not BodyNode.IsNull then
     begin
       Inc(AState.RoutineDepth);
+      var SavedRoutineIdx:= AState.CurrentRoutineIdx;
+      AState.CurrentRoutineIdx:= SelfIdx;
       try
         Walk(BodyNode, AState, AParentSymbolIdx, AParentQualifiedName);
       finally
+        AState.CurrentRoutineIdx:= SavedRoutineIdx;
         Dec(AState.RoutineDepth);
       end;
     end;
@@ -3207,6 +3385,7 @@ begin
   { XT-RAISE: raise / handler facts (deep scan only, the same gate as the
     'read' the raise already gets). Additive arms, no Exit: the default
     recursion and every existing handler still see these nodes. }
+  if NodeType = 'exceptionHandler' then EmitHandlerVarSymbol(ANode, AState);
   if AState.EmitUsageRefs then
   begin
     if NodeType = 'raise' then EmitRaiseReference(ANode, AState)
@@ -3325,6 +3504,15 @@ begin
         var RG4:= ANode.ChildByField('rhs');
         if (not RG4.IsNull) and (RG4.NodeType = 'identifier') then
           AState.EmitRef('member-access', NodeText(RG4, AState.Source), RG4, ReceiverTextOf(ANode, AState.Source));
+      end;
+      // Ref-gap G5 (1.37.0 item 2b): the same capture when the receiver is a
+      // HARD CAST -- `TBfShape(pShape).Name`, `T(X).A.B`. See
+      // IsHardCastRootedReceiver; the resolver tells a cast from a call.
+      if IsHardCastRootedReceiver(L) then
+      begin
+        var RG5:= ANode.ChildByField('rhs');
+        if (not RG5.IsNull) and (RG5.NodeType = 'identifier') then
+          AState.EmitRef('member-access', NodeText(RG5, AState.Source), RG5, ReceiverTextOf(ANode, AState.Source));
       end;
       for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
       Exit;

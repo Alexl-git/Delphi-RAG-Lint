@@ -50,7 +50,14 @@ type
   /// </remarks>
   TDefineProfile = record
     Defines       : TArray<string>;
+    /// <summary>Lowercased name -> integer for {$IF NAME op N}; a later pair for
+    /// the same name wins (lane INC2: a valued DCC_Define such as DEBUG2=3, and the
+    /// compiler's CompilerVersion / RTLVersion).</summary>
     NumericDefines: TArray<TPair<string, Integer>>;
+    /// <summary>Lane INC2: compiler switch states for {$IFOPT X+}: a lowercased
+    /// switch letter -> True for '+'; a later pair for the same letter wins. Empty
+    /// = every {$IFOPT} is False (the pre-INC2 behaviour).</summary>
+    Switches      : TArray<TPair<string, Boolean>>;
   end;
 
   /// <summary>PP-Task-6: options carrier for a Preprocess run that handles
@@ -76,6 +83,10 @@ type
   /// array[..]-of-T last record field) get the ';' by REPLACING one adjacent
   /// whitespace byte -- offset-identity preserved trivially. Default False
   /// (opt-in, matching preprocess.js options.tolerances).
+  /// SearchPaths (lane INC) are absolute directories a relative include name is
+  /// tried in AFTER BaseDir and BEFORE the NearSearch widening -- the build's
+  /// own search path, as dcc resolves an include. Empty (the default) keeps the
+  /// BaseDir + NearSearch behaviour unchanged.
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Preprocess.Types.pas), DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Preprocess.Types.TPPOptionsDefault (DRagLint.Preprocess.Types.pas) (+3 more)</para>
@@ -88,6 +99,7 @@ type
     BaseDir    : string        ;
     NearSearch : Boolean       ;
     Tolerances : Boolean       ;
+    SearchPaths: TArray<string>;
   end;
 
   /// <summary>N-06: one ACTIVE, RESOLVED {$I}/{$INCLUDE} site met by a

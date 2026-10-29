@@ -1,0 +1,13 @@
+# Hits: bare X.Create(..) on a declared local (40, 41) or parameter (51).
+# Non-hits: field receivers (28, 33; decl-type? is silent for fields = documented gap), inherited Create (22, 27),
+# X := TFoo.Create (48, 49), TFoo.Create on a type name (50).
+constructor-call-on-instance 40
+constructor-call-on-instance 41
+constructor-call-on-instance 51
+!constructor-call-on-instance 22
+!constructor-call-on-instance 27
+!constructor-call-on-instance 28
+!constructor-call-on-instance 33
+!constructor-call-on-instance 48
+!constructor-call-on-instance 49
+!constructor-call-on-instance 50

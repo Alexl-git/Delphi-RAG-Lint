@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_switch_params_guard.ps1 -- `drag-lint-switch --delphi --on` must be
   able to register the PARAMETERS the IDE launches the server with.

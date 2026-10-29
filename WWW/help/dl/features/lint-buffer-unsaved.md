@@ -4,10 +4,10 @@ title: Lint Buffer (Unsaved)
 summary: Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first
 product: DL
 group: linting
-order: 30012
+order: 30015
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # Lint Buffer (Unsaved)
@@ -28,6 +28,7 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--disable` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--no-preprocess` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |

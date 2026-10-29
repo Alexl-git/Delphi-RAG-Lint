@@ -1,4 +1,4 @@
-﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</ProjectGuid>
         <ProjectVersion>20.5</ProjectVersion>
@@ -74,6 +74,8 @@
         <DCCReference Include="designide.dcp"/>
         <DCCReference Include="DragLint.Plugin.Wizard.pas"/>
         <DCCReference Include="DragLint.Plugin.LspClient.pas"/>
+        <DCCReference Include="DragLint.Plugin.LspWriteQueue.pas"/>
+        <DCCReference Include="DragLint.Plugin.HoverGate.pas"/>
         <DCCReference Include="DragLint.Plugin.Editor.pas"/>
         <DCCReference Include="DragLint.Plugin.ProjectNotifier.pas"/>
         <DCCReference Include="DragLint.Plugin.Settings.pas"/>
@@ -127,6 +129,8 @@
         <DCCReference Include="DragLint.Plugin.Providers.pas"/>
         <DCCReference Include="DragLint.Plugin.LiveDiagnostics.pas"/>
         <DCCReference Include="DragLint.Plugin.LintOutputParse.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.UsesInsert.pas"/>
+        <DCCReference Include="DragLint.Plugin.MissingUses.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.JobObject.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.GhostText.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.EngineHold.pas"/>
@@ -152,6 +156,7 @@
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Manifest.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.JsonFile.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.ContextDefaults.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.LintBudget.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.StudioEnv.pas"/>
         <DCCReference Include="DragLint.Plugin.OptionsFrames.pas">

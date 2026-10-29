@@ -2,7 +2,7 @@ try {
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $repo
-$exe = (Resolve-Path "third_party\dll-win64\drag-lint.exe").Path
+$exe = (Resolve-Path $(if ($env:DRAGLINT_TEST_EXE) { $env:DRAGLINT_TEST_EXE } else { "third_party\dll-win64\drag-lint.exe" })).Path
 $fx  = (Resolve-Path "tests\ergonomics\pipeline_fixture.pas").Path
 $pass = 0; $fail = 0
 function Ok($n,$c){ if($c){$script:pass++; Write-Host "PASS  $n"} else {$script:fail++; Write-Host "FAIL  $n"} }
@@ -13,6 +13,7 @@ $j = $null; try { $j = $sarif | ConvertFrom-Json } catch {}
 Ok "sarif parses"            ($j -ne $null)
 Ok "sarif version 2.1.0"     ($j.version -eq '2.1.0')
 Ok "sarif has used-before-assignment" ($sarif -match 'used-before-assignment')
+Ok "sarif carries a CERT taxonomy and a relationship for used-before-assignment (EXP33-C)" ((@($j.runs[0].taxonomies | Where-Object { $_.name -eq 'CERT' }).Count -eq 1) -and (@($j.runs[0].tool.driver.rules | Where-Object { $_.id -eq 'used-before-assignment' -and @($_.relationships).Count -ge 1 }).Count -eq 1))
 
 # 2. --fail-on: warning-level finding.
 & $exe lint $fx --fail-on error  2>$null | Out-Null; $ecErr  = $LASTEXITCODE

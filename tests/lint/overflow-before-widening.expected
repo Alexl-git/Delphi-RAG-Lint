@@ -1,0 +1,12 @@
+# Integer*Integer (15), Cardinal*Cardinal (16), Integer*Word into Double (17), shl (18): the product is formed in 32 bits, then widened
+# Non-hits: Int64(A)*B (27), sum (28), narrow target (29), literal operand (30), both wrapped (31); fields (45) silent by design
+overflow-before-widening 15
+overflow-before-widening 16
+overflow-before-widening 17
+overflow-before-widening 18
+!overflow-before-widening 27
+!overflow-before-widening 28
+!overflow-before-widening 29
+!overflow-before-widening 30
+!overflow-before-widening 31
+!overflow-before-widening 45

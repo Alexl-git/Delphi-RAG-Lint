@@ -1,0 +1,13 @@
+# Hits: while loops whose condition reads only locals/params the body never changes.
+# FP shapes (non-hits): field changed by a callee (TBox.Run), variable modified in
+# the body (Inc / assignment), variable passed to a call (possible var parameter),
+# loop left through Break / Exit, and a condition containing a call.
+loop-condition-invariant 31
+loop-condition-invariant 42
+!loop-condition-invariant 22
+!loop-condition-invariant 51
+!loop-condition-invariant 62
+!loop-condition-invariant 72
+!loop-condition-invariant 82
+!loop-condition-invariant 93
+!loop-condition-invariant 99

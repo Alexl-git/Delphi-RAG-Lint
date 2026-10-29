@@ -214,6 +214,7 @@ Check 'RESIDUAL: line 56 cmdPlain (untypable with target) is still bound to the 
 Write-Host ''
 Write-Host 'THE FINDING' -ForegroundColor Cyan
 $dup = HitAt $onOut 56
+# positive-control: enum-read-inside-with
 Check 'UNDECIDABLE TARGET: with D do C := cmdPlain fires once' ($dup.Count -eq 1) ("got " + $dup.Count + " of " + $lines.Count + " total")
 Check 'and it names the with-target member that wins' (($dup -join ' ') -match 'TEwDup\.cmdPlain') ''
 Check 'and it names the enum value it is NOT' (($dup -join ' ') -match 'TEwCmd\.cmdPlain') ''

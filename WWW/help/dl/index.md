@@ -16,6 +16,7 @@ Build and maintain the per-project and library indexes.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [Auto-Document Whole Project](features/auto-document-whole-project.md) | Writes DocInsight documentation into every public declaration a project owns | 0.1.0-alpha |
+| [Include-file indexing and IF evaluation](features/inc-indexing.md) | Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint | 1.37.0-alpha |
 | [Index a project against its active build config](features/index-build-config.md) | Parses a project index against the project's active build config (the .dproj Config marker or delphilsp.json) instead of a fixed Release, with an override flag | 1.35.1-alpha |
 | [migrate-dbs](features/migrate-dbs.md) | Moves project index databases into each project's own D-RAG folder, matching the current index layout | 1.3.0-alpha |
 | [pp-profile](features/pp-profile.md) | Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line | 0.92.0-alpha |
@@ -34,23 +35,26 @@ Find symbols, callers, callees, text and types in the index.
 | [call-path](features/call-path.md) | Finds the shortest resolved call path from one symbol to another | 0.91.0-alpha |
 | [Class Surface](features/class-surface.md) | Shows the public surface of a class: its members and signatures, without the method bodies | 0.1.0-alpha |
 | [Compiler Hints](features/compiler-hints.md) | Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity | 0.1.0-alpha |
+| [query --concept](features/concept-search.md) | Ranked BM25 concept search over identifier words and doc-comment prose | 1.38.0-alpha |
 | [context](features/context.md) | Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers | 0.6.0-alpha |
-| [find-callees](features/find-callees.md) | Lists the resolved outgoing calls of one routine | 0.91.0-alpha |
+| [find-callees](features/find-callees.md) | Lists the resolved outgoing calls of one routine, plus the library-bound ones | 0.91.0-alpha |
 | [Find Undocumented (public)](features/find-undocumented-public.md) | Uses query find to list indexed symbols filtered by documentation state, kind, or visibility | 0.1.0-alpha |
 | [find-unit](features/find-unit.md) | Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause | 0.69.0-alpha |
 | [Find Usages](features/find-usages.md) | Lists every reference to the symbol under the editor caret across the indexed project | 0.33.0-alpha |
 | [Find Usages](features/find-usages-context.md) | Lists references to the symbol represented by a Structure-tree node | 0.33.0-alpha |
+| [Gain (counted savings)](features/gain-usage-log.md) | Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day | 1.38.0-alpha |
 | [Go to Declaration](features/go-to-declaration.md) | Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node | 0.43.0-alpha |
 | [Go to Definition](features/go-to-definition.md) | Jumps the editor caret to the declaration of the symbol under the cursor | 0.47.0-alpha |
 | [Go to Implementation](features/go-to-implementation.md) | Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node | 0.43.0-alpha |
 | [helpers-of](features/helpers-of.md) | Lists record/class helper edges targeting a given type, anywhere in the index | 0.94.0-alpha |
-| [Hover at Cursor](features/hover-at-cursor.md) | Shows a hover card for the symbol under the editor caret: signature, documentation, and callers | 0.7.0-alpha |
+| [Hover at Cursor](features/hover-at-cursor.md) | Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers | 0.7.0-alpha |
 | [outline](features/outline.md) | Prints the file-scoped symbol outline for one Pascal unit | 0.86.0-alpha |
 | [query ancestors](features/query-ancestors.md) | Resolves the transitive class/interface hierarchy of a type | 0.1.0-alpha |
 | [query descendants](features/query-descendants.md) | The reverse of query ancestors: lists every class that descends from a given ancestor, across all scanned databases | 1.2.2-alpha |
 | [query find-callers](features/query-find-callers.md) | Lists callers of a routine by name, with an option to restrict results to precise, resolved callers | 0.1.0-alpha |
 | [query --kind --all](features/query-kind-all.md) | Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap | 1.19.1-alpha |
 | [query --name-like](features/query-name-like.md) | Case-insensitive substring search over symbol names | 1.8.0-alpha |
+| [query --text --near](features/query-text-near.md) | Keeps only text hits in routines within N call-graph hops of a symbol | 1.38.0-alpha |
 | [query type-usage](features/query-type-usage.md) | Answers one question, of a list of type names, about one file | 0.1.0-alpha |
 | [query typecat](features/query-typecat.md) | Resolves a type's category -- float, string, class, interface, and so on | 0.66.0-alpha |
 | [query unit-usage](features/query-unit-usage.md) | Shows which files reference a unit, or - with --in - which of its exports one file actually uses | 1.12.0-alpha |
@@ -69,6 +73,8 @@ Rules, autofix, suppression markers and project-wide checks.
 
 | Feature | What it does | Since |
 | --- | --- | --- |
+| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 111 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
+| [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) | Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field | 1.37.0-alpha |
 | [Copy All Diagnostics](features/copy-all-diagnostics.md) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form | 0.1.0-alpha |
 | [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md) | Puts the current file's lint findings onto the clipboard | 0.1.0-alpha |
 | [Copy Selected Diagnostics](features/copy-selected-diagnostics.md) | Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard | 1.28.3-alpha |
@@ -80,6 +86,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Fix it](features/fix-it.md) | Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling | 0.1.0-alpha |
 | [Format Whole Project with YADF](features/format-whole-project-with-yadf.md) | Runs YADF formatting across a project's files, with indexing involved as part of the same action | 0.1.0-alpha |
 | [Format with YADF](features/format-with-yadf.md) | Reformats one Pascal unit by driving the external YADF formatter | 0.16.0-alpha |
+| [Gap-wave lint rules](features/gap-wave-rules.md) | About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave | 1.37.0-alpha |
 | [Lint Buffer (Unsaved)](features/lint-buffer-unsaved.md) | Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first | 0.1.0-alpha |
 | [lint-project](features/lint-project.md) | Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol | 0.48.0-alpha |
 | [Lint rules](features/lint-rules.md) | Every lint rule the engine ships, imported from rules --json | 0.2.0-alpha |
@@ -89,6 +96,9 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Run AST Checks](features/run-ast-checks.md) | Runs drag-lint's AST-level checks against a file | 0.31.0-alpha |
 | [Run Diagnostics (didSave)](features/run-diagnostics-didsave.md) | Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification | 0.22.0-alpha |
 | [Run Lint All (Full Report)](features/run-lint-all-full-report.md) | Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check | 0.61.0-alpha |
+| [Taint analysis (SQL, command, path)](features/taint-analysis.md) | taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink | 1.37.0-alpha |
+| [Target compiler (--target-compiler)](features/target-compiler.md) | Names the oldest compiler the code must compile on; modernize findings whose advice needs a newer compiler are not reported | 1.38.0-alpha |
+| [Type-level dl:ok review](features/type-level-review-marker.md) | One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit | 1.38.0-alpha |
 | [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md) | type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter | 1.31.4-alpha |
 
 ## Documentation
@@ -137,7 +147,7 @@ Rule-driven migration of legacy component types.
 | Feature | What it does | Since |
 | --- | --- | --- |
 | [convert-apply](features/convert-apply.md) | Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add | 1.2.0-alpha |
-| [convert-apply #migrate (member rename / DL_NONE)](features/convert-apply-migrate.md) | #migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site | 1.22.0-alpha |
+| [convert-apply #migrate (member, type and enum rename / DL_NONE)](features/convert-apply-migrate.md) | #migrate renames or DL_NONE-breaks a member at its .pas access sites; at file scope (or with a uses unit) it renames a type, enum or identifier | 1.22.0-alpha |
 | [convert-scaffold](features/convert-scaffold.md) | Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type | 1.1.0-alpha |
 | [convert-validate](features/convert-validate.md) | Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees | 1.1.0-alpha |
 | [Progress window and busy guard](features/convrules-busy-guard.md) | ConvRulesEditor shows a cancellable progress window for long engine calls and refuses Save, Add, Convert and Delete while one runs | 1.35.0-alpha |
@@ -236,15 +246,17 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [Help line (DL page)](features/ide-help-line.md) | Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root | 1.33.0-alpha |
 | [IDE Menu Reference](features/ide-menu-reference.md) | What every item in the drag-lint menu does | 1.4.0-alpha |
 | [ide-release](features/ide-release.md) | Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request | 1.13.0-alpha |
+| [init: one command from a project to a wired AI client](features/init-wiring.md) | Registers a project in the manifest, indexes it, finds its index and wires Claude Code, VS Code and Cursor to serve it, in one command | 1.38.0-alpha |
 | [Installation](features/installation.md) | Getting the CLI, the IDE plugin, or the LSP running | 0.21.0-alpha |
 | [lsp](features/lsp.md) | Starts the LSP (Language Server Protocol) stdio server | 0.6.0-alpha |
 | [LSP full rule set on save](features/lsp-full-rules.md) | Runs the full lint rule set on save so the editor shows what the CLI shows | 1.33.0-alpha |
 | [LSP protocol extensions](features/lsp-protocol-extensions.md) | Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index | 1.33.0-alpha |
 | [LSP proxy merge](features/lsp-proxy-merge.md) | Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session | 1.33.0-alpha |
 | [Switch VS Code Delphi MCP entry](features/lsp-switch-vscode.md) | Turns the VS Code Delphi MCP entry off and on with a backup | 1.33.0-alpha |
-| [Register the MCP server (Claude Code, VS Code)](features/mcp-config-writer.md) | Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable | 1.26.1-alpha |
+| [Register the MCP server (Claude Code, VS Code, Cursor)](features/mcp-config-writer.md) | Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable | 1.26.1-alpha |
 | [MCP server](features/mcp-server.md) | Exposes the index to MCP clients as 15 tools | 0.4.0-alpha |
-| [Output encoding (--output-encoding)](features/output-encoding.md) | Chooses the bytes every verb writes to stdout and stderr: 7-bit ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM | 1.35.0-alpha |
+| [Output encoding (--output-encoding)](features/output-encoding.md) | Chooses the bytes verbs write to stdout, stderr and --output files: ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; lossy ascii warns once | 1.35.0-alpha |
+| [project-context](features/project-context.md) | Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness | 1.38.0-alpha |
 | [serve](features/serve.md) | Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index | 0.4.0-alpha |
 | [Setup installer](features/setup-installer.md) | One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF | 1.28.3-alpha |
 | [workspace add](features/workspace-add.md) | Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it | 0.6.0-alpha |
@@ -268,6 +280,14 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [Library Drift Check](features/library-drift-check.md) | Flags registered library roots that have source on disk but nothing in the index | 0.47.0-alpha |
 | [Maintenance](features/maintenance.md) | Indexes, the manifest, reindexing, and what to do when something looks wrong | 1.4.0-alpha |
 | [Open Plugin Log](features/open-plugin-log.md) | Opens the drag-lint plugin's own log file | 0.39.0-alpha |
-| [shutdown](features/shutdown.md) | Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them | 0.6.0-alpha |
+| [shutdown](features/shutdown.md) | Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced | 0.6.0-alpha |
 | [sql](features/sql.md) | Runs one read-only SQL statement against an index database and prints the result set | 0.40.5-alpha |
+
+## Uses and Dependencies
+
+Which units a unit needs, where they go in uses, and the cycles they make.
+
+| Feature | What it does | Since |
+| --- | --- | --- |
+| [Missing unit in uses (unit-missing-from-uses)](features/unit-missing-from-uses.md) | Lint rule: names the unit that declares an undeclared identifier and adds it to the interface or implementation uses clause, cycle-checked | 1.38.0-alpha |
 

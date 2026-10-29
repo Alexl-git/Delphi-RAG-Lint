@@ -1,20 +1,20 @@
 ---
 id: convert-apply-migrate
-title: "convert-apply #migrate (member rename / DL_NONE)"
-summary: "#migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site"
+title: "convert-apply #migrate (member, type and enum rename / DL_NONE)"
+summary: "#migrate renames or DL_NONE-breaks a member at its .pas access sites; at file scope (or with a uses unit) it renames a type, enum or identifier"
 product: DL
 group: component-conversion
 order: 60002
 since: 1.22.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
-# convert-apply #migrate (member rename / DL_NONE)
+# convert-apply #migrate (member, type and enum rename / DL_NONE)
 
-#migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site.
+#migrate renames or DL_NONE-breaks a member at its .pas access sites; at file scope (or with a uses unit) it renames a type, enum or identifier.
 
-Read this when a component conversion changes the names of methods, events or properties the code uses. Inside a #convert block, #migrate Old -> New renames the member at every bound access site in the .pas; Old -> DL_NONE marks the site for hand conversion instead.
+Read this when a component conversion changes the names of methods, events or properties the code uses. Inside a #convert block, #migrate Old -> New renames the member at every bound access site in the .pas; Old -> DL_NONE marks the site for hand conversion instead. A #migrate at file scope (or naming a uses unit) renames a type or enum identifier in the code -- declarations, casts, is/as, generic arguments, enum literals -- maps enum members by name, adds the new unit to uses, and warns on every site it does not rename.
 
 ## How to run it
 
@@ -75,6 +75,33 @@ A member reached through `with btnTop do`, a site whose receiver the index
 cannot tie to the converted field, a scoped or template `#migrate` (slice 2),
 and a member a `#link` already converts -- each is a `migrate-check` warning.
 
+### Types, enums and other identifiers (1.38)
+A `#migrate` at FILE scope (before the first `#convert`), or one inside a block
+that names a uses unit or whose target is an enum value, renames an IDENTIFIER
+in the code, not a member of a converted instance:
+```text
+#migrate TDBScreenCursor -> TFDGUIxScreenCursor, FireDAC.UI.Intf
+#migrate dcrOther -> gcrNone        { explicit member line: overrides the name match }
+```
+* Every bare `Old` token outside comments and string literals is renamed: var,
+  param, field and result types, casts, `is` / `as`, generic arguments, enum
+  literals. `items[]` kind `migrate-applied` (no instance).
+* The target `New` must resolve in a supplied `--db` (the platform library or
+  the project index); otherwise each site is a `migrate-check` and nothing is
+  renamed. The `Old` side is trusted: a type no index knows any more is still
+  renamed.
+* Two enums: each member of `Old` is mapped to the member of `New` with the
+  same name after the lowercase prefix (`dcrHourGlass` -> `gcrHourGlass`),
+  never by ordinal. An explicit `#migrate` member line wins. A member with no
+  counterpart that the unit uses is a `migrate-check` on its line.
+* A qualified site (`Data.DB.TUpdateKind`, `obj.Old`) is a `migrate-check`,
+  not rewritten; `TEnumOld.member` (the From enum as qualifier) is renamed.
+* `Old` declared in the unit itself, or converted by a `#convert`, is a
+  `migrate-check` per site.
+* The unit declaring `New` is added to uses (the interface uses when a site is
+  there).
+Gate: `info --json` -> `capabilities.migrate_identifiers: true`.
+Guard: `tests\autotest\run_convert_apply_migrate_type.ps1`.
 ### Gate
 `drag-lint info --json` -> `capabilities.migrate_members: true`.
 Contract for the converter editor: `docs/NOTICE-2026-10-19-c18-slice1-migrate.md`.

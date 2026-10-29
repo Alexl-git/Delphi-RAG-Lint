@@ -1,0 +1,4 @@
+# No "disallowed" block in the config: all three disallowed-* rules are silent.
+!disallowed-method
+!disallowed-type
+!disallowed-name

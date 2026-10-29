@@ -4,10 +4,10 @@ title: Index a project against its active build config
 summary: Parses a project index against the project's active build config (the .dproj Config marker or delphilsp.json) instead of a fixed Release, with an override flag
 product: DL
 group: indexing
-order: 10002
+order: 10003
 since: 1.35.1-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # Index a project against its active build config

@@ -4,10 +4,10 @@ title: query type-usage
 summary: Answers one question, of a list of type names, about one file
 product: DL
 group: search-navigation
-order: 20021
+order: 20024
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # query type-usage

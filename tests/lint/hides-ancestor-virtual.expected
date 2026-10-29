@@ -1,0 +1,14 @@
+# Hits (lines of the offending declProc name in the class body): Run/Paint/Quiet in TLeaf.
+# Silent: Tick override, Plain (ancestor method is static), message handler, TLeafOk
+# (override/reintroduce/overload), TStranger (ancestor unresolved without an index).
+hides-ancestor-virtual 29
+hides-ancestor-virtual 30
+hides-ancestor-virtual 33
+!hides-ancestor-virtual 31
+!hides-ancestor-virtual 32
+!hides-ancestor-virtual 34
+!hides-ancestor-virtual 40
+!hides-ancestor-virtual 41
+!hides-ancestor-virtual 42
+!hides-ancestor-virtual 39
+!hides-ancestor-virtual 47

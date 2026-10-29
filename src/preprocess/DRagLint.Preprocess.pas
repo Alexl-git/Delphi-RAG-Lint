@@ -65,7 +65,27 @@ interface
 uses
   System.SysUtils,
   System.Generics.Collections,
-  DRagLint.Preprocess.Types;
+  DRagLint.Preprocess.Types,
+  DRagLint.Preprocess.Decls;
+
+type
+  /// <summary>Lane INC3: an IF / ELSEIF directive, evaluated in active code,
+  /// whose expression names something the symbol table could not resolve.
+  /// The directive was taken as False.</summary>
+  TPPUnresolvedIf = record
+    Line : Integer;          // 1-based line of the directive
+    Col  : Integer;          // 1-based column of the directive
+    Expr : string;           // the directive's expression text
+    Names: TArray<string>;   // the unresolved names, first-seen order
+  end;
+
+  /// <summary>Lane INC3: everything a preprocess run learned besides its bytes.</summary>
+  TPPReport = record
+    Sites     : TArray<TPPIncludeSite>;   // as Preprocess(..., out ASites)
+    Unresolved: TArray<TPPUnresolvedIf>;  // top-level file only (not inside includes)
+    Exported  : TArray<TPPDecl>;          // the file's interface declarations
+    UsedUnits : TArray<string>;           // the active uses clauses, source order
+  end;
 
 /// <summary>Runs the compiler-directive preprocessor over AUtf8 under the given
 /// define profile, returning a byte buffer of identical length where inactive
@@ -137,6 +157,22 @@ function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions): TBytes; ov
 function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions;
   out ASites: TArray<TPPIncludeSite>): TBytes; overload;
 
+/// <summary>Lane INC3: the TPPOptions preprocess that also reports what the
+/// run learned -- include sites, IF directives with unresolved names, the
+/// file's exported declarations and its uses clause.</summary>
+/// <param name="AUtf8">The source file as UTF-8 bytes. Not modified.</param>
+/// <param name="AOptions">As for Preprocess(AUtf8, AOptions).</param>
+/// <param name="AReport">Receives the report (see TPPReport).</param>
+/// <returns>Bytes identical to Preprocess(AUtf8, AOptions).</returns>
+/// <remarks>IF expressions are evaluated against the constants declared
+/// earlier in the active text, then against the units of the uses clause
+/// through the installed PPUnitSource (none installed = same-file only).
+/// Setting the environment variable DRAGLINT_PP_TRACE to a file path appends
+/// one TSV line per evaluated IF (base dir, line, result, result without the
+/// symbol table, unresolved names, expression) -- a measurement aid.</remarks>
+function PreprocessReport(const AUtf8: TBytes; const AOptions: TPPOptions;
+  out AReport: TPPReport): TBytes;
+
 implementation
 
 uses
@@ -164,8 +200,21 @@ var
   // widened search cheap. No invalidation -- acceptable for a preprocessor
   // utility's process lifetime. Created lazily; freed in the unit finalization.
   GSubdirCache: TDictionary<string, TArray<string>> = nil;
+  // Lane INC3: DRAGLINT_PP_TRACE target ('' = off), read once; GTraceLock
+  // serialises the appends.
+  GTracePath: string = '';
+  GTraceLock: TObject = nil;
 
 type
+  // Lane INC3: per-run state shared BY REFERENCE through the include recursion
+  // (like the define tables): the declaration scanner, the name lookup built
+  // over it, and the unresolved-IF sink.
+  TPPRunCtx = record
+    Scanner   : TPPDeclScanner;
+    Lookup    : TPPNameLookup;
+    Unresolved: TList<TPPUnresolvedIf>;
+  end;
+
   // One nested-IF state frame (preprocess.js stack entries):
   //   Active        -- is THIS frame emitting text right now?
   //   TakenBranch   -- has any THEN/ELSEIF branch of this IF already been taken?
@@ -240,14 +289,17 @@ end;
 // its immediate subdirs -- stopping when the filesystem root is reached. Returns
 // the resolved absolute path if it exists, '' otherwise (caller blanks the
 // directive; offsets stay 1:1). An empty ABaseDir or an unresolvable name yields
-// ''. A rooted AName is honored as-is.
-function ResolveInclude(const AName, ABaseDir: string; ANearSearch: Boolean): string;
+// ''. A rooted AName is honored as-is. Lane INC: ASearchPaths (the build's
+// search path) are tried after ABaseDir and before the widened search.
+function ResolveInclude(const AName, ABaseDir: string; ANearSearch: Boolean;
+  const ASearchPaths: TArray<string>): string;
 var
   P    : string ;
   Dir  : string ;
   Sub  : string ;
   Lvl  : Integer;
   Parent: string;
+  SP   : string ;
 begin
   Result:= '';
   if (AName = '') or (ABaseDir = '') then Exit;
@@ -260,32 +312,113 @@ begin
     Exit;
   end;
 
-  // Pass 1: ABaseDir itself (the strict, pre-#2 behavior).
-  Result:= TryResolveIn(AName, ABaseDir);
-  if Result <> '' then Exit;
-  if not ANearSearch then Exit;
+  // Pass 1: ABaseDir itself (the strict, pre-#2 behavior); pass 1b (lane INC):
+  // then the build's search path, in order.
+  for SP in [ABaseDir] + ASearchPaths do
+  begin
+    if SP = '' then Continue;
+    Result:= TryResolveIn(AName, SP);
+    if Result <> '' then Exit;
+  end;
 
   // Pass 2: nearest-first widened search. Level 0 = ABaseDir's immediate subdirs
   // (ABaseDir itself was already tried above). Levels 1..SEARCH_LEVELS = the
   // parent dir itself + its immediate subdirs. Stop when GetDirectoryName no
-  // longer changes (filesystem root).
+  // longer changes (filesystem root). Skipped entirely when not ANearSearch.
   Dir:= TPath.GetFullPath(ABaseDir);
-  for Lvl:= 0 to SEARCH_LEVELS do
+  if ANearSearch then
   begin
-    if Lvl > 0 then
+    for Lvl:= 0 to SEARCH_LEVELS do
     begin
-      Result:= TryResolveIn(AName, Dir);
-      if Result <> '' then Exit;
+      if Lvl > 0 then
+      begin
+        Result:= TryResolveIn(AName, Dir);
+        if Result <> '' then Exit;
+      end;
+      for Sub in SubdirsOf(Dir) do
+      begin
+        Result:= TryResolveIn(AName, Sub);
+        if Result <> '' then Exit;
+      end;
+      Parent:= TPath.GetDirectoryName(Dir);
+      if (Parent = '') or (Parent = Dir) then Break;
+      Dir:= Parent;
     end;
-    for Sub in SubdirsOf(Dir) do
-    begin
-      Result:= TryResolveIn(AName, Sub);
-      if Result <> '' then Exit;
-    end;
-    Parent:= TPath.GetDirectoryName(Dir);
-    if (Parent = '') or (Parent = Dir) then Break;
-    Dir:= Parent;
   end;
+end;
+
+// Lane INC2: a directive's opening bytes (brace + dollar), and the length of
+// that frame plus the closing brace -- what is cut to get the directive body.
+const
+  DIRECTIVE_OPEN      = #123'$';
+  DIRECTIVE_FRAME_LEN = 3;
+
+// Lane INC2: the long names of the switch directives {$IFOPT} can test, and
+// the letter each one sets ({$RANGECHECKS ON} = {$R+}). Parallel arrays.
+const
+  SWITCH_LONG_NAMES: array[0..19] of string = (
+    'booleval', 'assertions', 'debuginfo', 'importeddata', 'longstrings',
+    'iochecks', 'writeableconst', 'localsymbols', 'typeinfo', 'optimization',
+    'openstrings', 'overflowchecks', 'rangechecks', 'typedaddress', 'safedivide',
+    'varstringchecks', 'stackframes', 'extendedsyntax', 'referenceinfo', 'definitioninfo');
+  SWITCH_LONG_LETTERS: array[0..19] of string = (
+    'b', 'c', 'd', 'g', 'h', 'i', 'j', 'l', 'm', 'o',
+    'p', 'q', 'r', 't', 'u', 'v', 'w', 'x', 'y', 'y');
+
+// Lane INC2: applies one switch directive body (the text between the dollar
+// and the closing brace) to ASwitches: a letter list 'R+' / 'R-,Q+' or a long
+// form 'RANGECHECKS ON'. Anything else ({$R file.res}, {$WARN ...}) is left
+// alone. dcc applies a switch in source order, so the caller calls this for
+// active directives only.
+procedure ApplySwitchText(const AText: string; ASwitches: TDictionary<string, Boolean>);
+var
+  Parts: TArray<string>;
+  Part : string;
+  LongName: string;
+  Rest : string;
+  Sp   : Integer;
+  K    : Integer;
+begin
+  Parts:= Trim(AText).Split([',']);
+  if Length(Parts) = 0 then Exit;
+  // Letter list: every part is exactly <letter><sign>.
+  var IsList: Boolean:= True;
+  for Part in Parts do
+    if not ((Length(Trim(Part)) = 2) and CharInSet(Trim(Part)[1], ['A'..'Z', 'a'..'z'])
+            and CharInSet(Trim(Part)[2], ['+', '-'])) then IsList:= False;
+  if IsList then
+  begin
+    for Part in Parts do
+      ASwitches.AddOrSetValue(LowerCase(Trim(Part)[1]), Trim(Part)[2] = '+');
+    Exit;
+  end;
+  // Long form: NAME ON|OFF.
+  Rest:= Trim(AText);
+  Sp:= Pos(' ', Rest);
+  if Sp = 0 then Exit;
+  LongName:= LowerCase(Copy(Rest, 1, Sp - 1));
+  Rest := LowerCase(Trim(Copy(Rest, Sp + 1, MaxInt)));
+  if (Rest <> 'on') and (Rest <> 'off') then Exit;
+  for K:= Low(SWITCH_LONG_NAMES) to High(SWITCH_LONG_NAMES) do
+    if LongName = SWITCH_LONG_NAMES[K] then
+    begin
+      ASwitches.AddOrSetValue(SWITCH_LONG_LETTERS[K], Rest = 'on');
+      Exit;
+    end;
+end;
+
+// Lane INC2: {$IFOPT X+} / {$IFOPT X-} against the live switch states. A
+// letter no profile or directive set is False either way (conservative, the
+// pre-INC2 answer for every IFOPT).
+function EvalIfOpt(const AArgs: string; ASwitches: TDictionary<string, Boolean>): Boolean;
+var
+  A : string;
+  On: Boolean;
+begin
+  A:= Trim(AArgs);
+  if (Length(A) < 2) or not CharInSet(A[2], ['+', '-']) then Exit(False);
+  if not ASwitches.TryGetValue(LowerCase(A[1]), On) then Exit(False);
+  Result:= On = (A[2] = '+');
 end;
 
 // The recursive worker (the faithful port of preprocess.js's preprocess()).
@@ -300,10 +433,13 @@ procedure PreprocessInto(
   const ABytes: TBytes;
   ADefines: TDictionary<string, Boolean>;
   ANumeric: TDictionary<string, Integer>;
+  ASwitches: TDictionary<string, Boolean>;
   const AIncludeMode, ABaseDir: string;
   ANearSearch: Boolean;
+  const ASearchPaths: TArray<string>;
   ADepth: Integer;
   ASites: TList<TPPIncludeSite>;
+  const ACtx: TPPRunCtx;
   var AOut: TBytes;
   var AOutPos: Integer);
 var
@@ -332,6 +468,43 @@ var
     begin
       AOut[AOutPos]:= 32;
       Inc(AOutPos);
+    end;
+  end;
+
+  // Lane INC3: evaluate an IF / ELSEIF expression against the run's symbol
+  // table; an unresolved name (top-level file only) is recorded for the
+  // pp-unresolved-if hint, and the trace line written when one is wanted.
+  function EvalIf(const AChunk: TPPChunk): Boolean;
+  var
+    Unres: TArray<string>;
+    U    : TPPUnresolvedIf;
+    K    : Integer;
+  begin
+    Result:= EvalPPExprScoped(AChunk.Args, ADefines, ANumeric, ACtx.Lookup, Unres);
+    if (Length(Unres) > 0) and (ADepth = 0) then
+    begin
+      U:= Default(TPPUnresolvedIf);
+      U.Line:= AChunk.Line + 1;
+      K:= AChunk.SrcStart;
+      while (K > 0) and (Bytes[K - 1] <> LF_BYTE) do
+        Dec(K);
+      U.Col  := AChunk.SrcStart - K + 1;
+      U.Expr := AChunk.Args;
+      U.Names:= Unres;
+      ACtx.Unresolved.Add(U);
+    end;
+    if GTracePath <> '' then
+    begin
+      var Bare: TArray<string>;
+      var BareResult: Boolean:= EvalPPExprScoped(AChunk.Args, ADefines, ANumeric, nil, Bare);
+      TMonitor.Enter(GTraceLock);
+      try
+        TFile.AppendAllText(GTracePath, Format('%s'#9'%d'#9'%s'#9'%s'#9'%s'#9'%s'#13#10,
+          [ABaseDir, AChunk.Line + 1, BoolToStr(Result, True), BoolToStr(BareResult, True),
+           string.Join(',', Unres), AChunk.Args.Replace(#9, ' ').Replace(#13, ' ').Replace(#10, ' ')]));
+      finally
+        TMonitor.Exit(GTraceLock);
+      end;
     end;
   end;
 
@@ -375,7 +548,7 @@ var
     SiteIdx  : Integer;
     K        : Integer;
   begin
-    Resolved:= ResolveInclude(AName, ABaseDir, ANearSearch);
+    Resolved:= ResolveInclude(AName, ABaseDir, ANearSearch, ASearchPaths);
     if Resolved = '' then Exit; // unresolved -> nothing to apply (blank only)
     SubBytes:= TFile.ReadAllBytes(Resolved);
     SetLength(SubOut, Length(SubBytes)); // throwaway (child text is discarded)
@@ -400,8 +573,8 @@ var
     // child's BaseDir is the resolved include's own directory, and NearSearch is
     // threaded through so a nested {$I} resolves nearest-first from there too.
     PreprocessInto(
-      SubBytes, ADefines, ANumeric, AIncludeMode,
-      TPath.GetDirectoryName(Resolved), ANearSearch, ADepth + 1, ASites, SubOut, SubPos);
+      SubBytes, ADefines, ANumeric, ASwitches, AIncludeMode,
+      TPath.GetDirectoryName(Resolved), ANearSearch, ASearchPaths, ADepth + 1, ASites, ACtx, SubOut, SubPos);
     if SiteIdx >= 0 then
     begin
       Site:= ASites[SiteIdx];
@@ -448,6 +621,11 @@ begin
   begin
     if C.Kind = ckText then
     begin
+      // Lane INC2: a passthrough directive may be a compiler switch ({$R-}).
+      if (Length(C.Value) > DIRECTIVE_FRAME_LEN) and C.Value.StartsWith(DIRECTIVE_OPEN) and EffectivelyActive then
+        ApplySwitchText(Copy(C.Value, Length(DIRECTIVE_OPEN) + 1, Length(C.Value) - DIRECTIVE_FRAME_LEN), ASwitches);
+      // Lane INC3: only ACTIVE text declares anything an IF can see.
+      if EffectivelyActive then ACtx.Scanner.Feed(C.Value);
       BlankifyOrEmit(C.SrcStart, C.SrcEnd);
       Continue;
     end;
@@ -470,12 +648,14 @@ begin
 
     if (C.Dir = 'ifdef') or (C.Dir = 'ifndef') or (C.Dir = 'if') or (C.Dir = 'ifopt') then
     begin
-      var Cond: Boolean;
-      if C.Dir = 'ifdef' then Cond:= ADefines.ContainsKey(LowerCase(C.Args))
-      else if C.Dir = 'ifndef' then Cond:= not ADefines.ContainsKey(LowerCase(C.Args))
-      else if C.Dir = 'if' then Cond:= EvalPPExpr(C.Args, ADefines, ANumeric)
-      else Cond:= False; // ifopt -- conservative
       var OuterInactive: Boolean:= not EffectivelyActive;
+      // Lane INC3: dcc never evaluates an IF inside an inactive branch, and its
+      // outcome cannot matter there (Active needs not OuterInactive; the ELSE
+      // stays off through AnyOuterFalse) -- so neither do we.
+      var Cond: Boolean:= if C.Dir = 'ifdef' then ADefines.ContainsKey(LowerCase(C.Args))
+        else if C.Dir = 'ifndef' then not ADefines.ContainsKey(LowerCase(C.Args))
+        else if C.Dir = 'if' then (not OuterInactive) and EvalIf(C)
+        else EvalIfOpt(C.Args, ASwitches); // lane INC2
       SetLength(Stack, Length(Stack) + 1);
       Stack[High(Stack)].Active       := Cond and (not OuterInactive);
       Stack[High(Stack)].TakenBranch  := Cond;
@@ -501,7 +681,7 @@ begin
         Stack[High(Stack)].Active:= False
       else
       begin
-        var Cond2: Boolean:= EvalPPExpr(C.Args, ADefines, ANumeric);
+        var Cond2: Boolean:= (not Stack[High(Stack)].AnyOuterFalse) and EvalIf(C);
         Stack[High(Stack)].Active:= Cond2 and (not Stack[High(Stack)].AnyOuterFalse);
         if Cond2 then Stack[High(Stack)].TakenBranch:= True;
       end;
@@ -512,6 +692,14 @@ begin
     if (C.Dir = 'endif') or (C.Dir = 'ifend') then
     begin
       if Length(Stack) > 1 then SetLength(Stack, Length(Stack) - 1);
+      BlankifyDirective(C.SrcStart, C.SrcEnd);
+      Continue;
+    end;
+
+    // Lane INC2: {$I+} / {$I-} is the IOCHECKS switch, not an include.
+    if (C.Dir = 'i') and (C.Args <> '') and CharInSet(C.Args[1], ['+', '-']) then
+    begin
+      if EffectivelyActive then ApplySwitchText('I' + C.Args, ASwitches);
       BlankifyDirective(C.SrcStart, C.SrcEnd);
       Continue;
     end;
@@ -539,12 +727,17 @@ end;
 // N-06: the shared body of both TPPOptions overloads; ASites may be nil (no
 // site collection -- the original behavior).
 function PreprocessWithSites(const AUtf8: TBytes; const AOptions: TPPOptions;
-  ASites: TList<TPPIncludeSite>): TBytes;
+  ASites: TList<TPPIncludeSite>; var AReport: TPPReport): TBytes;
 var
+  Ctx    : TPPRunCtx;
+  Src    : IPPUnitSource;
+  Lookup : TPPNameLookup;
   Defines: TDictionary<string, Boolean>;
   Numeric: TDictionary<string, Integer>;
+  Switches: TDictionary<string, Boolean>;
   D      : string           ;
   P      : TPair<string, Integer>;
+  S      : TPair<string, Boolean>;
   OutPos : Integer          ;
 begin
   SetLength(Result, Length(AUtf8));
@@ -552,13 +745,59 @@ begin
 
   Defines:= TDictionary<string, Boolean>.Create;
   Numeric:= TDictionary<string, Integer>.Create;
+  Switches:= TDictionary<string, Boolean>.Create;
+  Ctx:= Default(TPPRunCtx);
+  Ctx.Scanner   := TPPDeclScanner.Create;
+  Ctx.Unresolved:= TList<TPPUnresolvedIf>.Create;
+  Src:= PPUnitSource;
   try
+    { Lane INC3: an IF name resolves in the constants declared earlier in the
+      active text, then in the uses-clause units (last listed first, as dcc
+      searches them), then in System. A dotted name asks its unit directly. }
+    Lookup:=
+      function(const AName: string; out AValue: TPPValue): TPPNameKind
+      var
+        D: TPPDecl;
+        P: Integer;
+        U: TArray<string>;
+      begin
+        AValue:= Default(TPPValue);
+        P:= LastDelimiter('.', AName);
+        if P > 0 then
+        begin
+          if Src = nil then Exit(pnkUnknown);
+          Exit(Src.LookupInUnit(Copy(AName, 1, P - 1), Copy(AName, P + 1, MaxInt), AValue));
+        end;
+        if Ctx.Scanner.TryGet(AName, D) then
+        begin
+          if D.IsTypedConst then Exit(pnkTypedConst);
+          if not (D.IsTrueConst and D.HasValue) then Exit(pnkDeclared);
+          AValue:= D.Value;
+          Exit(pnkConst);
+        end;
+        if Src = nil then Exit(pnkUnknown);
+        U:= Ctx.Scanner.UsedUnits;
+        for var I: Integer:= High(U) downto 0 do
+        begin
+          Result:= Src.LookupInUnit(U[I], AName, AValue);
+          if Result <> pnkUnknown then Exit;
+        end;
+        Result:= Src.LookupInUnit('System', AName, AValue);
+      end;
+    Ctx.Lookup:= Lookup;
+    Ctx.Scanner.OnEvalConst:=
+      function(const AExpr: string; out AValue: TPPValue): Boolean
+      begin
+        Result:= TryEvalPPConst(AExpr, Defines, Numeric, Lookup, AValue);
+      end;
     // Seed the live defines set from the profile ONCE (already lowercased); the
     // recursion then SHARES these instances (never re-seeds per include).
     for D in AOptions.Profile.Defines do
       if D <> '' then Defines.AddOrSetValue(LowerCase(D), True);
     for P in AOptions.Profile.NumericDefines do
       Numeric.AddOrSetValue(LowerCase(P.Key), P.Value);
+    for S in AOptions.Profile.Switches do // lane INC2: {$IFOPT} states, later wins
+      Switches.AddOrSetValue(LowerCase(S.Key), S.Value);
 
     { P1 (extractor 1.19.0-alpha): a Delphi 12+ multi-line string literal is
       neutralised BEFORE the directive lexer sees it -- unconditionally, unlike
@@ -567,9 +806,20 @@ begin
       the offset-identity invariant is untouched; a file without such a literal
       is passed through as the very same array. }
     PreprocessInto(
-      NeutralizeMultilineStrings(AUtf8), Defines, Numeric, AOptions.IncludeMode, AOptions.BaseDir,
-      AOptions.NearSearch, 0, ASites, Result, OutPos);
+      NeutralizeMultilineStrings(AUtf8), Defines, Numeric, Switches, AOptions.IncludeMode, AOptions.BaseDir,
+      AOptions.NearSearch, AOptions.SearchPaths, 0, ASites, Ctx, Result, OutPos);
+    AReport.Unresolved:= Ctx.Unresolved.ToArray;
+    AReport.Exported  := Ctx.Scanner.ExportedDecls;
+    AReport.UsedUnits := Ctx.Scanner.UsedUnits;
   finally
+    // The two closures share one frame that holds Lookup: clear every
+    // reference or the frame keeps itself alive.
+    Ctx.Scanner.OnEvalConst:= nil;
+    Ctx.Lookup:= nil;
+    Lookup:= nil;
+    Ctx.Unresolved.Free;
+    Ctx.Scanner.Free;
+    Switches.Free;
     Numeric.Free;
     Defines.Free;
   end;
@@ -584,8 +834,26 @@ begin
 end;
 
 function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions): TBytes; overload;
+var
+  Report: TPPReport;
 begin
-  Result:= PreprocessWithSites(AUtf8, AOptions, nil);
+  Report:= Default(TPPReport);
+  Result:= PreprocessWithSites(AUtf8, AOptions, nil, Report);
+end;
+
+function PreprocessReport(const AUtf8: TBytes; const AOptions: TPPOptions;
+  out AReport: TPPReport): TBytes;
+var
+  Sites: TList<TPPIncludeSite>;
+begin
+  AReport:= Default(TPPReport);
+  Sites:= TList<TPPIncludeSite>.Create;
+  try
+    Result:= PreprocessWithSites(AUtf8, AOptions, Sites, AReport);
+    AReport.Sites:= Sites.ToArray;
+  finally
+    Sites.Free;
+  end;
 end;
 
 function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions;
@@ -595,7 +863,8 @@ var
 begin
   Sites:= TList<TPPIncludeSite>.Create;
   try
-    Result:= PreprocessWithSites(AUtf8, AOptions, Sites);
+    var Report: TPPReport:= Default(TPPReport);
+    Result:= PreprocessWithSites(AUtf8, AOptions, Sites, Report);
     ASites:= Sites.ToArray;
   finally
     Sites.Free;
@@ -619,7 +888,10 @@ begin
 end;
 
 initialization
+  GTracePath:= GetEnvironmentVariable('DRAGLINT_PP_TRACE');
+  GTraceLock:= TObject.Create;
 finalization
+  GTraceLock.Free;
   // Release the process-lifetime subdir cache (v1.2.1 port change #2). Lazily
   // created in SubdirsOf; may be nil if the widened search was never used.
   GSubdirCache.Free;

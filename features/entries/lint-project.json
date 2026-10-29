@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "lint-project",
-      "usage": "drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json] [--output <f>]",
+      "usage": "drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value] [--layers <f.json>] [--json] [--output <f>]",
       "flags": [
         {
           "name": "--db",
@@ -30,7 +30,7 @@
         }
       ],
       "helpOrder": 18,
-      "help": ["  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted] [--layers <f.json>] [--json] [--output <f>]"]
+      "help": ["  drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value] [--layers <f.json>] [--json] [--output <f>]"]
     },
     {
       "type": "ide-menu",
@@ -51,9 +51,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-25",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.35.0-alpha",
-    "surfaceHash": "7eb351cba8ceb4330465f1f643478ba2bab6cd120335ef23a16f1ba69248921a"
+    "build": "1.36.0-alpha",
+    "surfaceHash": "a6d73f94b45f5e7c2d714d244c72a263121d6454e874e4fa9200d86710701331"
   }
 }

@@ -13,3 +13,9 @@
 ; job is emitting `// TODO -oYADF` into other people's code, is full of it.
 ((comment) @warn
   (#match? @warn "\\b(TODO|FIXME|HACK|XXX|BUG)\\b"))
+
+; Merged todo-left (clippy todo!/unimplemented!): `raise ENotImplemented...`
+; is an unfinished-work marker just like a TODO comment. Matches the raise of
+; ENotImplemented.Create(..) or a bare ENotImplemented.
+((raise (exprCall entity: (exprDot lhs: (identifier) @exc)) ) @warn
+  (#eq? @exc "ENotImplemented"))

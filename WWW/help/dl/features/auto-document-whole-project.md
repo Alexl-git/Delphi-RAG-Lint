@@ -7,7 +7,7 @@ group: indexing
 order: 10001
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # Auto-Document Whole Project
@@ -29,7 +29,9 @@ Full flag list: [document in the CLI reference](../cli.md#document).
 | `--db` | `<file.sqlite>` |  |  |
 | `--watch` |  |  |  |
 | `--interval` | `N` |  |  |
-| `--library-db` | `<lib.sqlite>` | consult another index for calls THIS one cannot resolve. |  |
+| `--library-db` | `<lib.sqlite>` | consult another index for calls THIS one cannot resolve (value receivers typed by name bind too; the manifest key libraryResolve opts a section in). |  |
+| `--wait-library` | `<min>` | when the platform library of a libraryResolve section is NOT READY, probe every 30 s up to `min` minutes, then continue (marked pending). |  |
+| `--require-library` |  | a not-ready platform library is ERROR, exit 2, instead of continuing against the project only. |  |
 | `--max-file-kb` | `N` |  |  |
 | `--no-use-ignore` |  |  |  |
 | `--no-sql-ms` |  |  |  |

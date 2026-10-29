@@ -22,6 +22,7 @@ interface
 
 uses
   System.SysUtils,
+  System.Generics.Collections,
   DRagLint.Preprocess.Types;
 
 type
@@ -41,7 +42,9 @@ type
     /// <summary>Lowercased, deduped defines, platform built-ins included.</summary>
     Profile : TDefineProfile;
     /// <summary>8 lowercase hex of SHA1 over the sorted lowercased Defines joined
-    /// by ';'; '' for built-ins.</summary>
+    /// by ';' -- lane INC2: then '#' and the sorted effective 'name=value' numerics and
+    /// '$x+' / '$x-' switch states -- so a value or switch change re-parses; '' for
+    /// built-ins.</summary>
     Digest  : string;
     /// <summary>Human-readable remarks, e.g. 'config marker absent -> Release'.</summary>
     Notes   : TArray<string>;
@@ -59,14 +62,19 @@ function ReadDprojActiveSelection(const ADproj: string; out APlatform, AConfig: 
 /// <summary>Reads &lt;base&gt;.delphilsp.json beside ADproj: the -D tokens of
 /// settings.dccOptions (split on spaces outside double quotes; each -D value split
 /// on ';', empties dropped, lowercased) and the platform from settings.dllname
-/// ('dcc32*' -> Win32, 'dcc64*' -> Win64).</summary>
+/// ('dcc32*' -> Win32, 'dcc64*' -> Win64). Lane INC2: a valued token (-DDEBUG2=3)
+/// defines its NAME and adds the integer value to ANumeric; a -$X+ / -$X- switch
+/// option lands in ASwitches.</summary>
 /// <param name="ADproj">Path of the .dproj; the JSON is its sibling.</param>
 /// <param name="APlatform">Receives 'Win32' or 'Win64'.</param>
-/// <param name="ADefines">Receives the lowercased -D symbols (deduped).</param>
+/// <param name="ADefines">Receives the lowercased -D symbols (deduped, without values).</param>
+/// <param name="ANumeric">Receives lowercased name / integer value of each valued -D token.</param>
+/// <param name="ASwitches">Receives lowercased letter / on of each -$ switch option, in order.</param>
 /// <returns>True when the file exists, parses and names a dcc32/dcc64 dllname;
 /// False otherwise (ADefines nil).</returns>
 /// <remarks>Never raises.</remarks>
-function ReadDelphiLspDefines(const ADproj: string; out APlatform: string; out ADefines: TArray<string>): Boolean;
+function ReadDelphiLspDefines(const ADproj: string; out APlatform: string; out ADefines: TArray<string>;
+  out ANumeric: TArray<TPair<string, Integer>>; out ASwitches: TArray<TPair<string, Boolean>>): Boolean;
 
 /// <summary>The active build of one project. Platform = APlatformOverride, else
 /// the .dproj marker, else delphilsp.json dllname, else 'Win64'. Config =
@@ -128,7 +136,6 @@ uses
   System.JSON,
   System.Hash,
   System.RegularExpressions,
-  System.Generics.Collections,
   System.SyncObjs,
   DRagLint.Preprocess.Profile,
   DRagLint.Index.Manifest,
@@ -143,6 +150,8 @@ const
   PLATFORM_MARKER  = '<Platform\s+Condition="''\$\(Platform\)''==''''"\s*>\s*([^<]+?)\s*</Platform>';
   DEFINE_SWITCH    = '-D';
   DEFINE_SWITCH_LEN = 2;
+  SWITCH_OPTION    = '-$'; // a dcc switch option: -$R+
+  SWITCH_OPTION_LEN = 4;
 
 function NormPlatform(const APlatform: string): string;
 begin
@@ -209,7 +218,8 @@ begin
   end;
 end;
 
-function ReadDelphiLspDefines(const ADproj: string; out APlatform: string; out ADefines: TArray<string>): Boolean;
+function ReadDelphiLspDefines(const ADproj: string; out APlatform: string; out ADefines: TArray<string>;
+  out ANumeric: TArray<TPair<string, Integer>>; out ASwitches: TArray<TPair<string, Boolean>>): Boolean;
 var
   Json    : TJSONValue;
   Settings: TJSONValue;
@@ -218,12 +228,16 @@ var
   Tok     : string;
   Part    : string;
   Sym     : string;
+  Val     : string;
+  Num     : Integer;
   Seen    : TDictionary<string, Byte>;
   List    : TList<string>;
 begin
   Result := False;
   APlatform := '';
   ADefines := nil;
+  ANumeric := nil;
+  ASwitches := nil;
   try
     Json := TJSONObject.ParseJSONValue(ReadTextSafe(ChangeFileExt(ADproj, '.delphilsp.json')));
     if Json = nil then Exit;
@@ -241,10 +255,19 @@ begin
       try
         for Tok in SplitOptions(Options) do
         begin
+          // Lane INC2: -$R+ / -$O- set a compiler switch.
+          if (Length(Tok) = SWITCH_OPTION_LEN) and Tok.StartsWith(SWITCH_OPTION) and CharInSet(Tok[SWITCH_OPTION_LEN], ['+', '-']) then
+          begin
+            ASwitches := ASwitches + [TPair<string, Boolean>.Create(LowerCase(Tok[SWITCH_OPTION_LEN - 1]), Tok[SWITCH_OPTION_LEN] = '+')];
+            Continue;
+          end;
           if not Tok.StartsWith(DEFINE_SWITCH) then Continue;
           for Part in Copy(Tok, DEFINE_SWITCH_LEN + 1, MaxInt).Split([';']) do
           begin
-            Sym := LowerCase(Trim(Part));
+            // Lane INC2: -DDEBUG2=3 defines DEBUG2 with the value 3.
+            if SplitDefineToken(Part, Sym, Val) and TryStrToInt(Val, Num) then
+              ANumeric := ANumeric + [TPair<string, Integer>.Create(LowerCase(Sym), Num)];
+            Sym := LowerCase(Sym);
             if (Sym = '') or Seen.ContainsKey(Sym) then Continue;
             Seen.Add(Sym, 0);
             List.Add(Sym);
@@ -263,15 +286,39 @@ begin
     Result := False;
     APlatform := '';
     ADefines := nil;
+    ANumeric := nil;
+    ASwitches := nil;
   end;
 end;
 
-function DigestOf(const ADefines: TArray<string>): string;
+// The digest the indexer fingerprint bills (cfg=/defs= limb). Lane INC2: the
+// EFFECTIVE values (last pair per name wins) and switch states are part of it,
+// so DEBUG2=3 -> DEBUG2=4 or a DCC_RangeChecking flip re-parses the project.
+function DigestOf(const AProfile: TDefineProfile): string;
 var
-  Sorted: TArray<string>;
+  Sorted : TArray<string>;
+  Nums   : TDictionary<string, Integer>;
+  Sws    : TDictionary<string, Boolean>;
+  Extra  : TArray<string>;
+  N      : TPair<string, Integer>;
+  S      : TPair<string, Boolean>;
 begin
-  Sorted := Copy(ADefines, 0, Length(ADefines));
+  Sorted := Copy(AProfile.Defines, 0, Length(AProfile.Defines));
   TArray.Sort<string>(Sorted);
+  Extra := nil;
+  Nums := TDictionary<string, Integer>.Create;
+  Sws  := TDictionary<string, Boolean>.Create;
+  try
+    for N in AProfile.NumericDefines do Nums.AddOrSetValue(LowerCase(N.Key), N.Value);
+    for S in AProfile.Switches do Sws.AddOrSetValue(LowerCase(S.Key), S.Value);
+    for N in Nums do Extra := Extra + [Format('%s=%d', [N.Key, N.Value])];
+    for S in Sws do Extra := Extra + ['$' + S.Key + (if S.Value then '+' else '-')];
+  finally
+    Sws.Free;
+    Nums.Free;
+  end;
+  TArray.Sort<string>(Extra);
+  if Length(Extra) > 0 then Sorted := Sorted + ['#'] + Extra;
   Result := Copy(THashSHA1.GetHashString(string.Join(';', Sorted)), 1, DIGEST_LEN).ToLower;
 end;
 
@@ -310,6 +357,8 @@ var
   MarkPlat, MarkCfg: string;
   LspPlat : string;
   LspDefs : TArray<string>;
+  LspNums : TArray<TPair<string, Integer>>;
+  LspSws  : TArray<TPair<string, Boolean>>;
   HaveLsp : Boolean;
   Notes   : TList<string>;
 begin
@@ -319,14 +368,14 @@ begin
   begin
     Result.Platform := NormPlatform(APlatformOverride);
     Result.Source   := dsBuiltins;
-    Result.Profile.Defines := PlatformBuiltins(Result.Platform);
+    Result.Profile := BuiltinsProfile(Result.Platform);
     Exit;
   end;
   Notes := TList<string>.Create;
   try
     Result.Dproj := ADproj;
     ReadDprojActiveSelection(ADproj, MarkPlat, MarkCfg);
-    HaveLsp := ReadDelphiLspDefines(ADproj, LspPlat, LspDefs);
+    HaveLsp := ReadDelphiLspDefines(ADproj, LspPlat, LspDefs, LspNums, LspSws);
     if not HaveLsp then Notes.Add('delphilsp.json absent or unreadable');
 
     // Platform: override, else .dproj marker, else JSON dllname, else Win64 (D4 + D1).
@@ -356,13 +405,16 @@ begin
       Result.Source := dsDelphiLsp;
       Result.Config := ''; // the IDE's effective set, not a named config
       Result.Profile.Defines := UnionWithBuiltins(Result.Platform, LspDefs);
+      // Lane INC2: the compiler's values first, the JSON's -D values / -$ switches over them.
+      Result.Profile.NumericDefines := CompilerNumerics + LspNums;
+      Result.Profile.Switches := CompilerDefaultSwitches + LspSws;
     end
     else
     begin
       Result.Source := dsDproj;
       Result.Profile := ProfileFromDproj(ADproj, Result.Platform, Result.Config);
     end;
-    Result.Digest := DigestOf(Result.Profile.Defines);
+    Result.Digest := DigestOf(Result.Profile);
     Result.Notes  := Notes.ToArray;
   finally
     Notes.Free;

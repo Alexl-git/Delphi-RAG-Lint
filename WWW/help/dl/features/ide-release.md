@@ -7,7 +7,7 @@ group: editor-integration
 order: 110008
 since: 1.13.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # ide-release
@@ -154,6 +154,34 @@ backoff, which absorbs it.
 The VS Code client is unaffected -- since extension v1.4 it runs its own
 private copy of the engine and never touches the deployed binary. See
 EDITORS.
+
+### The full update sequence (DEC-13, 2026-10-28)
+
+Replacing a running engine -- the installer swapping an old install, or
+`build\stage-engine.ps1` deploying a fresh build -- is a CHANNEL stop first and
+a kill only as the last resort:
+
+1. `drag-lint ide-release --seconds N` -- the IDE plugin stops respawning.
+2. The maintenance verb with `--all --wait 30` (see the shutdown feature page) --
+   every engine of this user that listens on the control channel is asked to
+   stand down: `lsp`, `cycles --fix`, and (since DEC-13) the long one-shot runs
+   `index` (single root, `--project`, `--all` with its `--jobs` pool) and `lint-all`.
+   * `index` stops BETWEEN FILES, at the storage layer's file-transaction gate:
+     no file row is half written, the WAL is checkpointed and the connection
+     closed (no `-wal`/`-shm` sidecar), the resolver stamp is cleared so the
+     resume re-derives every edge, and the process exits **4** (stood down, did
+     not finish). The same command resumes.
+   * `lint-all` stops between files, prints the findings so far marked PARTIAL
+     on stderr, exits **4**; project-wide rules did not run.
+   * `sql` does not listen: one guarded SELECT, a kill is harmless.
+3. Anything still holding the image after the wait: `stage-engine.ps1` refuses
+   when an `index` run is still alive (it did not comply), and otherwise kills
+   only the processes running the target image, then retries the copy.
+4. The installer (`installer\drag-lint.iss`, `PrepareToInstall`) runs steps 1-2
+   against the previous install's `drag-lint.exe` before Restart Manager is
+   consulted; an old engine without the channel is a no-op.
+
+Guard: `tests\autotest\run_control_channel_guard.ps1` (sections W and ST).
 
 ---
 

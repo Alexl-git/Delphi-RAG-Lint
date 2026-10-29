@@ -179,7 +179,7 @@ begin
   Inc_.Add(AProjectFile);
   Result.AddPair('include', Inc_);
   { Matches what every existing per-project section carries. useIgnoreFiles
-    honours .drag-lint-ignore; sqlOnlyMS keeps the MS*.sql convention. }
+    honours .gitignore / .hgignore files found during the walk; sqlOnlyMS keeps the MS*.sql convention. }
   Result.AddPair('useIgnoreFiles', TJSONBool.Create(True));
   Result.AddPair('sqlOnlyMS'     , TJSONBool.Create(True));
 end;

@@ -10,7 +10,8 @@ interface
 
 uses
   System.SysUtils, System.StrUtils, System.Generics.Collections, System.Generics.Defaults,
-  System.JSON, System.IOUtils, System.Hash;
+  System.JSON, System.IOUtils, System.Hash,
+  DRagLint.Lint.Compliance;
 
 const
   { THE complexity thresholds. ONE definition, read by BOTH the rule catalog
@@ -100,7 +101,12 @@ const
     'boolean-flag-parameter', 'commented-out-code', 'string-equality-comparison',
     'nil-comparison', 'public-writable-field', 'loop-control-flag',
     'mutable-global-variable', 'default-encoding-io', 'split-variable',
-    'separate-query-from-modifier', 'ifdef-undefined-symbol', 'review-marker-reason-unreviewed'];
+    'separate-query-from-modifier', 'ifdef-undefined-symbol', 'review-marker-reason-unreviewed',
+    { clippy-parity wave (L0): OFF-by-default new built-ins }
+    'else-after-exit', 'missing-const-param', 'local-shadows-field', 'method-could-be-static',
+    'too-many-bool-fields', 'index-loop-to-for-in',
+    { gap-rules wave (G0): OFF-by-default new built-ins }
+    'copy-paste-assignment', 'unused-loop-variable', 'virtual-never-overridden'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -115,6 +121,12 @@ const
 
     duplicate-code is deliberately NOT here. It is block-scoped rather than
     routine-scoped and carries no single metric its review is about. }
+  /// <summary>The rule category of the downgrade ("compat") rules: a finding
+  /// reports a construct the run's --target-compiler cannot compile, its fix
+  /// rewrites it to classic syntax (two-way modernize, 1.38; the rules
+  /// themselves arrive in 1.38.1).</summary>
+  COMPAT_CATEGORY = 'compat';
+
   ROUTINE_METRIC_RULES: TArray<string> = [
     'too-many-exit-points', 'cyclomatic-complexity', 'cognitive-complexity',
     'method-too-long', 'too-many-locals', 'too-many-parameters', 'deep-nesting'];
@@ -147,7 +159,22 @@ type
     DefaultSeverity: string;  // 'hint' | 'info' | 'warning' | 'error'
     Source         : string;  // 'builtin' | 'scm'
     DefaultEnabled : Boolean;
+    HasSidecarFix  : Boolean; // .scm only: its sidecar .json carries a "fix" key (autofix wave A0)
     Params         : TArray<TRuleParam>;
+    Compliance     : TComplianceLabels;  // rules\compliance.json row; empty when unlabelled
+    /// <summary>Oldest CompilerVersion that accepts this rule's ADVICE / fix
+    /// output (two-way modernize, 1.38); 0 = any compiler.</summary>
+    /// <remarks>Sidecar key "needs_compiler", or B()'s ANeedsCompiler. Under a
+    /// --target-compiler older than this the rule's findings are not reported
+    /// (TTargetRuleGate.Drops). A per-fix-entry "needs_compiler" (one pattern
+    /// of a rule, e.g. nonminimal-bool's `not in`) is NOT reflected here --
+    /// TQueryRule drops just the matches that bound that entry.</remarks>
+    NeedsCompiler  : Integer;
+    /// <summary>For a rule of category <see cref="COMPAT_CATEGORY"/>: the
+    /// CompilerVersion that introduced the construct it reports; 0 otherwise.</summary>
+    /// <remarks>Sidecar key "compat_since". Such a rule ships OFF and is switched
+    /// ON for a run whose target is older (TTargetRuleGate.ForcesOn).</remarks>
+    CompatSince    : Integer;
   end;
 
   /// <summary>Per-category and total rule counts for the catalog summary.</summary>
@@ -171,6 +198,8 @@ type
   /// </remarks>
   TRuleCatalog = class
   public
+    /// <summary>Set by the last <see cref="BuildCatalog"/>: the compliance.json error text, '' when fine.</summary>
+    class var ComplianceError: string;
     /// <summary>The in-code registry of all built-in rules (no .scm).</summary>
     /// <returns><!-- drag-lint:auto -->TArray&lt;TRuleInfo&gt; -- Observed: L.ToArray.</returns>
     /// <remarks>
@@ -191,6 +220,11 @@ type
     /// (category, id). When ACategory&lt;&gt;'' only that category is returned.</summary>
     /// <param name="ARulesDir"><!-- drag-lint:auto type -->const string = ''</param>
     /// <param name="ACategory"><!-- drag-lint:auto type -->const string = ''</param>
+    /// <param name="AWithLabels">True (default): fill each rule's Compliance from
+    /// rules\compliance.json and set ComplianceError. False: skip that file entirely --
+    /// Compliance stays empty and ComplianceError is left untouched -- for a caller that
+    /// only needs the rule ids (the review-marker pass), which saves the compliance.json
+    /// parse.</param>
     /// <returns><!-- drag-lint:auto -->TArray&lt;TRuleInfo&gt; -- Observed: Res.ToArray.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -206,7 +240,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BuildCatalog(const ARulesDir: string = '';
-      const ACategory: string = ''): TArray<TRuleInfo>; static;
+      const ACategory: string = ''; AWithLabels: Boolean = True): TArray<TRuleInfo>; static;
     /// <summary>Totals + per-category counts over ACatalog.</summary>
     /// <param name="ACatalog"><!-- drag-lint:auto type -->const TArray&lt;TRuleInfo&gt;</param>
     /// <returns><!-- drag-lint:auto type -->TCatalogSummary</returns>
@@ -309,10 +343,74 @@ function MarkerExpectedHash(const ALines: TArray<string>; const ARuleId: string;
 /// MarkerExpectedHash (where the hash is taken), so the three agree. Pure.</remarks>
 function DocCommentMarkerLine(const ALines: TArray<string>; ALine: Integer): Integer;
 
+/// <summary>Records that rule AId carries a sidecar "fix" key, so the autofix
+/// registry reports it fixable (autofix wave A0, 2026-10-27).</summary>
+/// <param name="AId">The rule id; compared case-insensitively.</param>
+/// <param name="ARisky">True when any of its fix entries is "risky": true.</param>
+/// <remarks>Called by BuildCatalog for every sidecar it reads and by
+/// TQueryRule.Create for every rule it loads, so `rules --json` and `lint --fix`
+/// agree without either loading the other. Process-wide; thread-safe. A second
+/// call for the same id ORs ARisky in.</remarks>
+procedure RegisterSidecarFixRule(const AId: string; ARisky: Boolean);
+
+/// <summary>Has rule AId been registered as carrying a sidecar fix?</summary>
+/// <param name="AId">The rule id; compared case-insensitively.</param>
+/// <param name="ARisky">Out: True when its fix is registered risky.</param>
+/// <returns>True when RegisterSidecarFixRule was called for AId in this process.</returns>
+function IsSidecarFixRule(const AId: string; out ARisky: Boolean): Boolean;
+
+
 implementation
 
 uses
   DRagLint.Lint.ReviewMarker;
+
+var
+  { id -> risky. Guarded by TMonitor on itself; created in initialization. }
+  GSidecarFixes: TDictionary<string, Boolean>;
+
+procedure RegisterSidecarFixRule(const AId: string; ARisky: Boolean);
+var
+  Prior: Boolean;
+begin
+  if AId = '' then Exit;
+  TMonitor.Enter(GSidecarFixes);
+  try
+    if GSidecarFixes.TryGetValue(AId, Prior) then ARisky:= ARisky or Prior;
+    GSidecarFixes.AddOrSetValue(AId, ARisky);
+  finally
+    TMonitor.Exit(GSidecarFixes);
+  end;
+end;
+
+function IsSidecarFixRule(const AId: string; out ARisky: Boolean): Boolean;
+begin
+  TMonitor.Enter(GSidecarFixes);
+  try
+    Result:= GSidecarFixes.TryGetValue(AId, ARisky);
+    if not Result then ARisky:= False;
+  finally
+    TMonitor.Exit(GSidecarFixes);
+  end;
+end;
+
+
+{ True when a sidecar "fix" value (object or array of objects) has an entry
+  marked "risky": true. }
+function SidecarFixIsRisky(const AFix: TJSONValue): Boolean;
+var
+  V: TJSONValue;
+begin
+  Result:= False;
+  if AFix is TJSONObject then
+  begin
+    V:= TJSONObject(AFix).GetValue('risky');
+    Exit((V <> nil) and SameText(V.Value, 'true'));
+  end;
+  if AFix is TJSONArray then
+    for var Item: TJSONValue in TJSONArray(AFix) do
+      if SidecarFixIsRisky(Item) then Exit(True);
+end;
 
 function MarkerExpectedHash(const ALines: TArray<string>; const ARuleId: string;
   AStartLine, AMetric: Integer): string;
@@ -359,11 +457,14 @@ class function TRuleCatalog.BuiltinRegistry: TArray<TRuleInfo>;
 var
   L: TList<TRuleInfo>;
   procedure B(const AId, ACat, ASev, ATitle: string; AEnabled: Boolean = True;
-    const AParams: TArray<TRuleParam> = nil);
+    const AParams: TArray<TRuleParam> = nil; ANeedsCompiler: Integer = 0; ACompatSince: Integer = 0);
   var R: TRuleInfo;
   begin
+    R:= Default(TRuleInfo);
     R.Id:= AId; R.Category:= ACat; R.DefaultSeverity:= ASev; R.Title:= ATitle;
     R.Source:= 'builtin'; R.DefaultEnabled:= AEnabled; R.Params:= AParams;
+    R.NeedsCompiler:= ANeedsCompiler;
+    R.CompatSince  := ACompatSince;
     L.Add(R);
   end;
 begin
@@ -621,7 +722,8 @@ begin
     B('with-hides-outer-symbol', 'bug-patterns', 'warning', 'A bare name inside a with body binds to the with-target while an outer scope declares the same name -- the compiler never warns'); { ON by default on the owner's explicit ruling 2026-08-30 ("Even 1 out of 100 might be really useful. I did spend a lot of time few months ago exactly because of such an error"), which WITHDREW the plan's 300-finding volume gate. The PRECISION gate stayed: the rule is silent whenever the with-target type, the member surface or the outer declaration cannot be proven, and TObject members are excluded on both sides }
     B('enum-read-inside-with', 'bug-patterns', 'warning', 'A bare name inside a with body names an enum value AND a member of the with-target -- the compiler binds the member, drag-lint''s index records the enum value'); { ON by default (2026-09-23, INBOX-lint-rules-from-new-facts section 1).
       SINCE RESOLVER 1.8.0 the index models with scope and binds such a read to the member whenever it can type the with-target, so this rule reports only the RESIDUAL: a with-target the resolver cannot type (a library class, an ambiguous type name) but this rule can, through its by-name surfaces over the project AND library indexes. It cannot flood: it needs BOTH a same-named member on a with-target AND the index's own binding of that exact identifier to an enum_value -- the bare "enum read inside a with-bearing routine" population (178 sites on ORM3 CLIENT) is silent by construction, and so are scoped-enum and library enum values the index never bound. Every finding is a real name collision the compiler resolves silently. Emitted by TAstChecker.CheckWithHiding, sharing its with-target surfaces. }
-    B('enum-bare-read-scoped', 'bug-patterns', 'warning', 'A bare name spelled like a value of a visible $SCOPEDENUMS ON enum -- warning when it binds to another symbol of that name and the types say the enum may be meant (that symbol, or the site target, is of the enum type), hint when it stays unbound and nothing else carries the name (E2003); write TEnum.Value');
+    B('unit-missing-from-uses', 'structure', 'warning', 'An identifier no declaration in scope explains but that a unit the file does not use declares in its interface -- names the unit and the uses clause to add it to (interface when the name is used there, else implementation; cycle-checked)');
+  B('enum-bare-read-scoped', 'bug-patterns', 'warning', 'A bare name spelled like a value of a visible $SCOPEDENUMS ON enum -- warning when it binds to another symbol of that name and the types say the enum may be meant (that symbol, or the site target, is of the enum type), hint when it stays unbound and nothing else carries the name (E2003); write TEnum.Value');
        { ON by default. X4 2026-10-25; RETARGETED 2026-10-26 (owner ruling, lane XT-SCOPED) after E14 made
          the resolver decline the bare scoped read, which left the old target (an index binding to the scoped
          value) with no input. Visible = the enum is declared in the same file or in a unit the file uses; a
@@ -639,6 +741,9 @@ begin
     B('uses-global-census', 'project-wide', 'info', 'How many of a used unit''s globals and consts this unit actually draws, against how many that unit declares -- acknowledge a travels-together pair with // dl:unit <unit> accepted', True); { ON by default since 2026-08-30 on the owner's ruling (see global-only-uses-edge above). A census rather than a defect report, but a small one -- and `// dl:census-ok <unit>` is the acknowledgement path for a pair that legitimately travels together. Still gated on OptedIn in TProjectLintRules.Run for its cost (1.26 s full refs scan); the gate now defaults to KEEPING it. }
     B('enum-helper-separate-units', 'project-wide', 'warning', 'Enum helper (record/class helper) is declared in a different unit than its target enum -- consider co-locating'); { ON by default (explicit user decision, enum-helper-generator milestone 2026-07-07) -- diverges from the recent OFF-by-default convention for advisory rules; whole-DB helper edge (type_helpers, v15) via ISymbolStore.FindHelpersOfTypeSymbol (symbol-identity match, Task 9b), no heritage string-parsing }
     B('enum-ordinal-persisted', 'project-wide', 'warning', 'An enum whose ordinal crosses a stream / pipe / dataset / registry boundary (an ordinal cast TEnum(x) or Ord(v) in a routine that also calls a sink from rules\enum-persist-sinks.txt) has values with implicit ordinals -- inserting or reordering a value silently changes stored data; pin each value (= N)'); { ON by default (owner ruling 2026-10-25, lane X6): 3 findings on ORM3, 0 on DataCopy; fully pinned enums never fire }
+    { --- lane B-ENUM (INBOX-lint-rules-from-new-facts-2026-09-23 rules 2 + 3) --- }
+    B('enum-ordinal-cast', 'bug-patterns', 'warning', 'A hard-coded enum ordinal -- a literal cast to an enum type TEnum(5), an enum''s ordinal compared with a literal (Ord(X) = 3), or case Ord(X) of with literal labels; inserting or reordering a value silently changes the meaning. Ord() against Ord(), a negative sentinel TEnum(-1) and an enum whose values are all pinned (= N) are exempt; one dl:ok on the enum TYPE line reviews every cast of it'); { ON by default (B-ENUM 2026-10-28): 11 findings, 11/11 true positives -- 10 on ORM3 CLIENT (TContrMode(0..4) in uPLANLIST), 1 on the engine tree (TSQueryError(0)); pinned TCommandID (Ord(ACmd) >= 200) and TDocCommentKind(-1) sentinels exempt by design }
+    B('unused-enum-value', 'project-wide', 'hint', 'An enum value nothing in the project names, in an enum type with no implicit use (Low/High, Succ/Pred, casts, Ord, RTTI, a streamed property) -- one finding per value, the decision per type. A filler value named for its own ordinal (Dummy0 at 0) is exempt; one dl:ok on the TYPE line reviews every value'); { ON by default (ENUMRULES 2026-10-28, owner): B-ENUM measured 0 on ORM3 CLIENT and the engine tree (every candidate type has a real implicit use); filler padding and type-level dl:ok keep the owner's DB-ordinal enums silent }
 
     { --- purity v2 (spec 2026-09-15 section 14) --- BOTH OFF BY DEFAULT until
       the corpus counts are audited. They read the `purity` resolve stage's
@@ -662,6 +767,11 @@ begin
       'info': a Debug-only effect is a real behavioural difference between the
       two builds, not a style point. }
     B('assert-with-side-effect',      'project-wide', 'warning', 'A routine with a PROVEN effect (writes a field, a global, a parameter or frees storage) is called inside Assert -- release builds compile Assert out, so the effect happens in Debug only', False);
+    { --- lane B-EFFECT (1.37.0): three more readers of the stored purity / ui_affinity facts,
+      all OFF and OptedIn-gated like assert-with-side-effect (10-sample gates in the lane REPORT). }
+    B('side-effect-in-short-circuit',  'project-wide', 'info', 'A routine with a PROVEN effect is called in the right operand of a Boolean and/or -- short-circuit evaluation skips it whenever the left operand decides the result', False);
+    B('property-getter-with-effect',   'project-wide', 'info', 'A property''s read accessor is a method with a PROVEN self-field or global write (lazy initialisers and memos exempt) -- reading a property should not change state', False);
+    B('ui-access-in-thread-transitive', 'project-wide', 'warning', 'A TThread.Execute reaches, through resolved calls not marshalled by Synchronize/Queue, a routine that touches the UI -- the call path is printed', False);
 
     { --- documentation (ADF milestone) --- }
     B('missing-doc', 'documentation', 'warning', 'Public declaration has no DocInsight doc-comment', False); // OFF by default -- fires 1302x on drag-lint's own first-run wave; opt in via "enabled"
@@ -689,7 +799,7 @@ begin
       volume was measured and put to the user before the raise. Report-only --
       there is nothing a fix could write, since the whole point is that the
       meaning is not in the code (ruling D-3). }
-    B('doc-param-no-description', 'documentation', 'warning', 'A <param> tag is present but has no description -- the parameter''s meaning is still undocumented'); { ON by default; marked fixable via FIXABLE_RULE_IDS -- its --fix applies only the safe subset (facts-block refresh + missing param/returns stubs), never rewriting hand prose }
+    B('doc-param-no-description', 'documentation', 'warning', 'A <param> tag is present but has no description -- the parameter''s meaning is still undocumented'); { ON by default; NOT fixable (lane A5B, 2026-10-27): the finding asks for prose only a human can write -- a stub description would still read as empty to the rule. doc-drift's --fix refreshes the facts block of the same decl }
 
     { --- metrics (CK class metrics; v0.78) --- }
     B('too-many-children', 'metrics', 'info', 'Class has too many direct subclasses (NOC)', True, [MkParam('threshold','int','10')]);
@@ -704,6 +814,61 @@ begin
     B('fan-in', 'metrics', 'info', 'Class is referenced by too many other classes (afferent coupling Ca)', False, [MkParam('threshold','int','20')]);
     B('instability', 'metrics', 'info', 'Class instability (I=Ce/(Ca+Ce)) is high -- unstable: depends on many, nothing depends on it', False, [MkParam('threshold','int','80'), MkParam('instability-floor','int','5')]);
 
+    { --- clippy-parity wave (2026-10-27): ids registered up front by lane L0; the
+      checker for each lives in its own src\diagnostics unit (stub until its lane
+      lands). Titles say WHAT and WHY in one sentence. --- }
+    B('loop-condition-invariant', 'bug-patterns', 'warning', 'Loop condition never changes inside the body -- the loop cannot end or never runs again');
+    B('for-bound-modified-in-body', 'bug-patterns', 'warning', 'For-loop bound or counter variable is modified in the body -- Delphi evaluates the bound once, so the change has no effect');
+    B('infinite-loop-no-exit', 'bug-patterns', 'warning', 'Loop with a constant-true condition has no Exit/Break/raise -- it can never terminate');
+    B('redundant-continue-exit', 'dead-code', 'hint', 'Continue or Exit as the last statement of a loop or routine does nothing -- remove it');
+    B('else-after-exit', 'refactoring', 'hint', 'else after a branch that ends in Exit/raise/Continue/Break -- drop the else to cut nesting', False);
+    B('unconditional-recursion', 'bug-patterns', 'warning', 'Routine calls itself on every path -- it recurses until the stack overflows');
+    B('bad-bit-mask', 'bug-patterns', 'warning', 'Bit-mask test that is always true or always false (e.g. X and 0 or X or -1 compared) -- the mask is wrong');
+    B('invalid-regex-literal', 'bug-patterns', 'warning', 'Regular-expression literal does not compile -- the call will raise at run time');
+    B('double-dictionary-lookup', 'refactoring', 'info', 'ContainsKey followed by an indexed read looks the key up twice -- use TryGetValue');
+    B('case-same-branches', 'dead-code', 'info', 'Case branches have identical bodies -- merge the labels or the branches are a copy-paste error');
+    B('misleading-indentation', 'bug-patterns', 'warning', 'Statement is indented as if it were controlled by the preceding if/while/for but is not -- likely a missing begin/end');
+    B('missing-const-param', 'refactoring', 'hint', 'Parameter is never modified, assigned or passed as var -- declare it const to avoid a copy or refcount', False);
+    B('local-shadows-field', 'structure', 'info', 'Local variable or parameter has the same name as a field of the class -- it hides the field and invites mistakes', False);
+    B('method-could-be-static', 'refactoring', 'hint', 'Method never uses Self or any instance member -- make it a class function or a free routine', False);
+    B('large-stack-local', 'complexity', 'info', 'Local variable is very large -- it can overflow the thread stack; allocate it on the heap', True, [MkParam('threshold','int','65536')]);
+    B('too-many-bool-fields', 'refactoring', 'info', 'Class has many Boolean fields -- they are probably a state machine or a set of flags in disguise', False, [MkParam('threshold','int','5')]);
+    B('inline-on-large-routine', 'complexity', 'hint', 'inline on a long or try-containing routine -- the compiler will not inline it or code bloat outweighs the gain', True, [MkParam('threshold','int','20')]);
+    B('wait-while-holding-lock', 'bug-patterns', 'warning', 'Blocking call (Synchronize, WaitFor, Sleep, SendMessage, dialog) while a lock is held -- risk of deadlock');
+    B('disallowed-method', 'policy', 'warning', 'Call to a method the project configuration disallows -- see the configured reason');
+    B('disallowed-type', 'policy', 'warning', 'Use of a type the project configuration disallows -- see the configured reason');
+    B('disallowed-name', 'policy', 'warning', 'Use of an identifier the project configuration disallows -- see the configured reason');
+    B('index-loop-to-for-in', 'modernize', 'hint', 'Index loop only reads Items[I] -- a for..in loop is shorter and cannot go out of range', False);
+    B('duplicate-unit-on-search-path', 'structure', 'warning', 'Two files with the same unit name are on the search path -- the compiler may pick the wrong one');
+    { gap-rules wave (G0): the 22 built-in ids of lanes G4-G8 }
+    B('field-created-not-freed', 'resource-lifetime', 'warning', 'Field created in a constructor is never freed by any method of the class -- the object leaks when the owner is destroyed');
+    B('free-of-owned-item', 'resource-lifetime', 'warning', 'Item freed by hand although its OwnsObjects container frees it too -- double free');
+    B('mismatched-alloc-free', 'resource-lifetime', 'warning', 'Memory released by a call from a different family than the one that allocated it (GetMem/Dispose, New/FreeMem, ...) -- heap corruption');
+    B('freeonterminate-then-wait', 'resource-lifetime', 'warning', 'WaitFor or Free on a thread that has FreeOnTerminate set -- the thread may already be gone');
+    B('begin-end-pair-not-in-finally', 'bug-patterns', 'warning', 'BeginUpdate/EndUpdate style pair whose closing call is missing or not in a finally -- an exception leaves the resource held');
+    B('nil-check-after-dereference', 'bug-patterns', 'warning', 'Reference is dereferenced and only afterwards tested against nil -- either the use is too early or the check is redundant');
+    B('address-of-local-returned', 'bug-patterns', 'warning', 'Address of a local variable or by-value parameter is returned -- it dangles once the routine exits');
+    B('constant-index-out-of-range', 'bug-patterns', 'warning', 'Literal index outside the declared array bounds (or S[0] on a 1-based string) -- range error or memory overrun');
+    B('copy-paste-assignment', 'bug-patterns', 'hint', 'Run of similar assignments where one right-hand side repeats another -- likely a copy-paste typo', False);
+    B('exception-escapes-thread', 'bug-patterns', 'warning', 'Thread body has no top-level try..except -- an unhandled exception silently ends the thread');
+    B('raise-in-destructor', 'bug-patterns', 'warning', 'raise inside a destructor -- an exception during cleanup aborts the rest of the teardown and leaks');
+    B('network-client-without-timeout', 'security', 'warning', 'Network client created without any timeout set -- a stalled peer blocks the caller indefinitely');
+    B('closure-captures-loop-local', 'bug-patterns', 'warning', 'Anonymous method captures a local assigned inside the loop and runs later -- every closure sees the last value');
+    B('hides-ancestor-virtual', 'bug-patterns', 'warning', 'Method has the same name as an ancestor virtual method but is neither override nor reintroduce -- the ancestor method is hidden');
+    B('needless-exit', 'dead-code', 'hint', 'Exit as the last statement of a routine does nothing -- remove it');
+    B('free-of-parameter', 'resource-lifetime', 'warning', 'Free of a by-value or const parameter -- the caller''s reference now dangles');
+    B('property-accessor-name', 'naming', 'info', 'Property accessor is not named F<Prop> / Get<Prop> / Set<Prop> -- the convention makes accessors findable');
+    B('unused-loop-variable', 'dead-code', 'hint', 'for-loop counter is never used in the body -- the loop only repeats; check the intent', False);
+    B('dfm-event-handler-missing', 'project-wide', 'warning', 'A .dfm names an event handler that the form class and its ancestors do not declare -- the form fails to load');
+    B('dfm-password-edit-unmasked', 'security', 'info', 'Edit control named like a password field has no PasswordChar -- the secret is shown on screen');
+    B('uses-movable-to-implementation', 'project-wide', 'hint', 'Interface uses entry is needed only by the implementation section -- move it to cut coupling and compile time');
+    B('virtual-never-overridden', 'project-wide', 'hint', 'Virtual method with no override anywhere in the project -- the virtual dispatch buys nothing', False);
+    { taint wave T2: store-backed interprocedural taint (DRagLint.Lint.TaintRules; catalogues rules\taint-*.json) }
+    B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');
+    B('taint-command-injection', 'security', 'error', 'Tainted data reaches a process launch sink -- a catalogued source flows across routines into ShellExecute / CreateProcess / WinExec (CWE-78)');
+    B('taint-path-traversal', 'security', 'warning', 'Tainted data reaches a file-system path sink -- a catalogued source flows across routines into a file / directory API (CWE-22)');
+    { lane INC3: the preprocessor's IF symbol table (DRagLint.Diagnostics.PpChecks) }
+    B('pp-unresolved-if', 'bug-patterns', 'hint', '$IF names a constant the index cannot resolve -- the directive was taken as False, so the wrong branch (and include) may be indexed');
     Result:= L.ToArray;
   finally
     L.Free;
@@ -738,7 +903,7 @@ begin
     Result:= 'other';  { writeln-in-source, outputdebugstring, compiler-magic-comments, assert-call, inherited-bare, concat-in-loop }
 end;
 
-class function TRuleCatalog.BuildCatalog(const ARulesDir, ACategory: string): TArray<TRuleInfo>;
+class function TRuleCatalog.BuildCatalog(const ARulesDir, ACategory: string; AWithLabels: Boolean): TArray<TRuleInfo>;
 var
   Dir   : string;
   ById  : TDictionary<string, TRuleInfo>;
@@ -752,9 +917,12 @@ var
   Sc    : TRuleInfo;
   Res   : TList<TRuleInfo>;
   Id    : string;
+  Labels: TComplianceTable;
 begin
   if ARulesDir <> '' then Dir:= ARulesDir
   else Dir:= TPath.Combine(TPath.GetDirectoryName(ParamStr(0)), 'rules');
+  Labels:= nil;
+  if AWithLabels then Labels:= TComplianceTable.Shared(ARulesDir, ComplianceError);
 
   ById:= TDictionary<string, TRuleInfo>.Create;
   Order:= TList<string>.Create;
@@ -769,6 +937,7 @@ begin
       Files:= TDirectory.GetFiles(Dir, '*.json', TSearchOption.soAllDirectories);
       for F in Files do
       begin
+        if SameText(TPath.GetFileName(F), 'compliance.json') then Continue; { label data, not a rule sidecar }
         Raw:= '';
         try Raw:= TFile.ReadAllText(F, TEncoding.UTF8); except Continue; end;
         Root:= TJSONObject.ParseJSONValue(Raw);
@@ -780,7 +949,9 @@ begin
           if (Id = '') or ById.ContainsKey(Id) then Continue; { builtin/dup wins }
           Sc.Id:= Id;
           Sc.Source:= 'scm';
-          Sc.Category:= ScmCategory(Id);
+          if (Obj.GetValue('category') <> nil) and (Obj.GetValue('category').Value <> '') then
+            Sc.Category:= Obj.GetValue('category').Value  { optional sidecar key; lets a rule file name its own category (e.g. modernize, policy) }
+          else Sc.Category:= ScmCategory(Id);
           if Obj.GetValue('severity') <> nil then Sc.DefaultSeverity:= Obj.GetValue('severity').Value
           else Sc.DefaultSeverity:= 'warning';
           if Obj.GetValue('message') <> nil then Sc.Title:= Obj.GetValue('message').Value
@@ -796,6 +967,13 @@ begin
             showed it ON. The catalogue is what a user reads to find out what
             runs; it does not get to disagree with what runs. }
           if MatchStr(Id, BUILTIN_RULES_OFF_BY_DEFAULT) then Sc.DefaultEnabled:= False;
+          { autofix wave A0: a "fix" key makes the rule fixable -- registered so
+            IsFixableRule (DRagLint.Lint.Autofix) answers for it }
+          Sc.HasSidecarFix:= Obj.GetValue('fix') <> nil;
+          if Sc.HasSidecarFix then RegisterSidecarFixRule(Id, SidecarFixIsRisky(Obj.GetValue('fix')));
+          { two-way modernize (1.38): the target-compiler gate's two inputs }
+          Sc.NeedsCompiler:= if Obj.GetValue('needs_compiler') <> nil then StrToIntDef(Obj.GetValue('needs_compiler').Value, 0) else 0;
+          Sc.CompatSince  := if Obj.GetValue('compat_since') <> nil then StrToIntDef(Obj.GetValue('compat_since').Value, 0) else 0;
           Sc.Params:= nil;
           ById.Add(Id, Sc); Order.Add(Id);
         finally
@@ -810,6 +988,7 @@ begin
       for Id in Order do
       begin
         R:= ById[Id];
+        if Labels <> nil then Labels.TryGet(R.Id, R.Compliance);
         if (ACategory = '') or SameText(R.Category, ACategory) then Res.Add(R);
       end;
       Res.Sort(TComparer<TRuleInfo>.Construct(
@@ -854,5 +1033,11 @@ begin
     Counts.Free;
   end;
 end;
+
+initialization
+  GSidecarFixes:= TDictionary<string, Boolean>.Create(TIStringComparer.Ordinal);
+
+finalization
+  GSidecarFixes.Free;
 
 end.

@@ -1,0 +1,8 @@
+{
+  "id": "halt-in-library",
+  "severity": "warning",
+  "category": "other",
+  "message": "Halt/ExitProcess in a unit ends the whole process from code no caller can see -- raise an exception or return an error and let the main program decide.",
+  "warn_capture": "warn",
+  "require_ancestor": ["unit"]
+}

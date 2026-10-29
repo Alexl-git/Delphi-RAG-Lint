@@ -1,0 +1,10 @@
+# Hits: lines 8 and 9 (7+ digit decimal literal without a separator).
+# Non-hits: 14 (6 digits), 15 (already separated), 16 (hex), 17 (short).
+# Known FP shapes: IDs, timestamps and error codes that read fine as one run;
+# the rule is hint-level and exists only for the modernize category.
+unreadable-literal 9
+unreadable-literal 10
+!unreadable-literal 15
+!unreadable-literal 16
+!unreadable-literal 17
+!unreadable-literal 18

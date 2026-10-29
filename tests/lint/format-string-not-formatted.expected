@@ -1,0 +1,9 @@
+# Calls at 12-14 carry a literal with no specifier. 20-24 must not fire: specifier, escaped %% (still a format string), non-literal, concatenation (known FP shape skipped), percent only in args.
+format-string-not-formatted 12
+format-string-not-formatted 13
+format-string-not-formatted 14
+!format-string-not-formatted 20
+!format-string-not-formatted 21
+!format-string-not-formatted 22
+!format-string-not-formatted 23
+!format-string-not-formatted 24

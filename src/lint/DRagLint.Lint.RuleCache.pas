@@ -218,6 +218,8 @@ begin
   Result.AddPair('metric'      , TJSONNumber.Create(F.Metric));
   Result.AddPair('related_file', F.RelatedFile);
   Result.AddPair('related_line', TJSONNumber.Create(F.RelatedLine));
+  Result.AddPair('scope_file'  , F.ScopeFile);
+  Result.AddPair('scope_line'  , TJSONNumber.Create(F.ScopeLine));
 end;
 
 { Every field is REQUIRED: GetValue<T> raises on a missing one, and TryLoad turns
@@ -239,6 +241,8 @@ begin
   Result.Metric     := O.GetValue<Integer>('metric'      );
   Result.RelatedFile:= O.GetValue<string >('related_file');
   Result.RelatedLine:= O.GetValue<Integer>('related_line');
+  Result.ScopeFile  := O.GetValue<string >('scope_file'  );
+  Result.ScopeLine  := O.GetValue<Integer>('scope_line'  );
 end;
 
 class function TRuleCache.TryLoad(const AProjectDb: string; out AEntry: TRuleCacheEntry; out AWhy: string): Boolean;

@@ -1,0 +1,14 @@
+# not (A = B), not (A <> B), not (A in S) must fire (lines 9, 11, 13).
+# not (A < B) (15: NaN-safe), plain <> (19), not Odd (21) and not (X or Y)
+# (23) must not fire. Line 17 is not (A = B) and ...: the parens still wrap a
+# bare equality, so it fires.
+# not (A in S) is 'A not in S' since Delphi 13. Known FP shape:
+# operator-overloaded = on records where <> may differ.
+nonminimal-bool 9
+nonminimal-bool 11
+nonminimal-bool 13
+!nonminimal-bool 15
+nonminimal-bool 17
+!nonminimal-bool 19
+!nonminimal-bool 21
+!nonminimal-bool 23

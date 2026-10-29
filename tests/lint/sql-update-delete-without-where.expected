@@ -1,0 +1,18 @@
+# Hits: a single literal (no +) assigned to .SQL.Text/.CommandText or passed whole to ExecSQL/
+# ExecuteDirect, starting with UPDATE or DELETE and containing no WHERE (12-17).
+# Non-hits: WHERE present (22, 29), SELECT (23), TRUNCATE (24), concatenation (25), SQL.Add (27, 28), INSERT (30).
+sql-update-delete-without-where 12
+sql-update-delete-without-where 13
+sql-update-delete-without-where 14
+sql-update-delete-without-where 15
+sql-update-delete-without-where 16
+sql-update-delete-without-where 17
+!sql-update-delete-without-where 22
+!sql-update-delete-without-where 23
+!sql-update-delete-without-where 24
+!sql-update-delete-without-where 25
+!sql-update-delete-without-where 26
+!sql-update-delete-without-where 27
+!sql-update-delete-without-where 28
+!sql-update-delete-without-where 29
+!sql-update-delete-without-where 30

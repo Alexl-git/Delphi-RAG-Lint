@@ -1,6 +1,6 @@
 {
   "id": "empty-conditional",
   "severity": "warning",
-  "message": "Empty then/else branch is a no-op -- likely a stray ';' after 'then'/'else'.",
+  "message": "Empty then/else branch is a no-op -- a stray ';' after 'then'/'else', a missing statement, or an empty begin..end.",
   "warn_capture": "warn"
 }

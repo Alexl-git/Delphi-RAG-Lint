@@ -1,0 +1,7 @@
+{
+  "id": "ignored-must-use-result",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "The result of this call is its error report (False / 0 on failure) and is discarded -- test it, or raise via Win32Check / RaiseLastOSError.",
+  "warn_capture": "warn"
+}

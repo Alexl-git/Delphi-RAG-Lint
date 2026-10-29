@@ -1,0 +1,14 @@
+# Lines 9, 11, 13 (Pos > 0, <> 0, = 0) -> Contains and 15 (Pos = 1) ->
+# StartsStr must fire. Lines 17 (> 1), 19 (= 2), 21 (other function), 23
+# (already Contains) must not.
+# Known FP shape: Pos with a 3rd offset argument (PosEx semantics) and AnsiPos;
+# Pos on a non-string via custom overloads.
+pos-for-contains 9
+pos-for-contains 11
+pos-for-contains 13
+pos-for-contains 15
+!pos-for-contains 17
+!pos-for-contains 19
+!pos-for-contains 21
+!pos-for-contains 23
+!pos-for-contains 25

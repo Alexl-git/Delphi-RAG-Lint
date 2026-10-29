@@ -1,0 +1,10 @@
+# Hits: local/inline var named like a field of own class or same-file ancestor; a PARAMETER named like such a field (85, message "parameter X hides field").
+# FP shapes silent: different name (also for a parameter, 90), qualified Self.Count, unrelated class, free routine.
+local-shadows-field 42
+local-shadows-field 49
+local-shadows-field 56
+local-shadows-field 85
+!local-shadows-field 62
+!local-shadows-field 74
+!local-shadows-field 81
+!local-shadows-field 90

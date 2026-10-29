@@ -1,0 +1,9 @@
+# Hits: read ReadName (21), write StoreSize (22).
+# Silent: F<Prop> / Get<Prop> names (23, 24, 25), an accessor shared by two properties (26, 27).
+property-accessor-name 21
+property-accessor-name 22
+!property-accessor-name 23
+!property-accessor-name 24
+!property-accessor-name 25
+!property-accessor-name 26
+!property-accessor-name 27

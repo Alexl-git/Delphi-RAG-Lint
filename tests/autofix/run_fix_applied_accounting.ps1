@@ -40,17 +40,54 @@ try {
   # NO-EDIT: a fixable RULE targeted where the finding is filtered out (wrong line)
   # produces no edit -> the finding is not in Targeted, so it is simply absent.
   # The invariant we lock: applied is never true for a finding that produced no edit.
-  # Target a NON-fixable finding (write-only-local at line 9) with --apply: it is in
-  # Targeted (rule filter off), fixable=false, and applied must be false (no edit).
-  Copy-Item $fixture $target -Force
-  $raw3 = & $exePath lint --file $target --fix --fix-line 9 --json --apply 2>$null | Out-String
+  # Target a NON-fixable finding (used-before-assignment on gating.pas line 12 -- write-only-local,
+  # the old control, is fixable since autofix lane A3) with --apply: it is in Targeted (rule
+  # filter off), fixable=false, and applied must be false (no edit).
+  $target3 = Join-Path $scratch 'gating.pas'
+  Copy-Item (Join-Path $PSScriptRoot 'fixtures\gating\gating.pas') $target3 -Force
+  $raw3 = & $exePath lint --file $target3 --fix --fix-line 12 --json --apply 2>$null | Out-String
   $arr3 = $null; try { $arr3 = ($raw3 | ConvertFrom-Json) } catch { $arr3 = $null }
   if ($null -ne $arr3 -and $arr3 -isnot [System.Array]) { $arr3 = @($arr3) }
-  $t3 = $arr3 | Where-Object { $_.rule -eq 'write-only-local' } | Select-Object -First 1
+  $t3 = $arr3 | Where-Object { $_.rule -eq 'used-before-assignment' } | Select-Object -First 1
   Check 'no-edit: non-fixable finding present' ($null -ne $t3)
   if ($null -ne $t3) {
     Check 'no-edit: fixable=false'          ($t3.fixable -eq $false)
     Check 'no-edit: applied=false (no edit)' ($t3.applied -eq $false)
+  }
+
+  # OFF-LINE EDITS (lane DIRLINT, 2026-10-27): a fix whose edits are ALL away from
+  # the finding's line -- field-created-not-freed inserts FreeAndNil before
+  # `inherited` in the destructor and adds System.SysUtils to a uses clause --
+  # must still report applied=true. The row used to be matched to an edit by
+  # (file, StartLine), so such a fixer reported applied=false while the file
+  # changed, and lanes padded fixers with identity edits on the finding's span.
+  $dtorSrc = Join-Path $PSScriptRoot 'fixtures\field-created-not-freed\dtor.pas'
+  $dtor    = Join-Path $scratch 'dtor.pas'
+  $dtorTxt = [IO.File]::ReadAllText($dtorSrc).Replace("implementation`r`n`r`nuses`r`n  System.SysUtils;`r`n", "implementation`r`n")
+  [IO.File]::WriteAllText($dtor, $dtorTxt, [Text.Encoding]::ASCII)
+  Check 'off-line: fixture has no System.SysUtils' (-not $dtorTxt.Contains('System.SysUtils'))
+  $raw4 = & $exePath lint --file $dtor --fix --fix-rule field-created-not-freed --json --apply --no-backup 2>$null | Out-String
+  $arr4 = $null; try { $arr4 = @($raw4 | ConvertFrom-Json) } catch { $arr4 = $null }
+  $t4 = $arr4 | Where-Object { $_.rule -eq 'field-created-not-freed' } | Select-Object -First 1
+  Check 'off-line: finding present' ($null -ne $t4)
+  $after = [IO.File]::ReadAllText($dtor)
+  Check 'off-line: FreeAndNil inserted'        ($after.Contains('FreeAndNil(FX);'))
+  Check 'off-line: System.SysUtils added'      ($after.Contains('System.SysUtils'))
+  if ($null -ne $t4) { Check 'off-line: applied=true' ($t4.applied -eq $true) }
+
+  # The fixes that edit ABOVE (or around) the finding's line (lane A3 + A5 + G4):
+  # each must report applied=true on its own fixture AND change the file.
+  foreach ($id in @('create-inside-try', 'field-by-name-in-loop', 'swap-without-temp', 'unprotected-object-free',
+                    'doc-orphan-block', 'begin-end-pair-not-in-finally')) {
+    $fx = Get-ChildItem (Join-Path $PSScriptRoot "fixtures\$id") -Filter '*.pas' | Where-Object { $_.Name -notlike '*.fixed.pas' } | Select-Object -First 1
+    if ($null -eq $fx) { Check "off-line ${id}: fixture present" $false; continue }
+    $tgt = Join-Path $scratch "$id-$($fx.Name)"
+    Copy-Item $fx.FullName $tgt -Force
+    $before = [IO.File]::ReadAllText($tgt)
+    $rawX = & $exePath lint --file $tgt --fix --fix-rule $id --json --apply --no-backup 2>$null | Out-String
+    $arrX = $null; try { $arrX = @($rawX | ConvertFrom-Json) } catch { $arrX = $null }
+    $appX = @($arrX | Where-Object { $_.rule -eq $id -and $_.applied -eq $true })
+    Check "off-line ${id}: applied=true and the file changed" (($appX.Count -ge 1) -and ([IO.File]::ReadAllText($tgt) -ne $before))
   }
 } finally { Pop-Location }
 if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

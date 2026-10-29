@@ -36,8 +36,8 @@ type
   /// expansion of a library section).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]declaration (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.IndexSectionCommand (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LibrarySectionDbs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.PlanToJson (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.SectionLabel (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.SelectableSectionLabels (DRagLint.CLI.pas), [drag-lint]DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), [drag-lint]DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas), [drag-lint]DRagLint.Index.Plan.CollectRootsByName (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Index.Plan.CollectRootsExcept (DRagLint.Index.Plan.pas),
-  /// [drag-lint]DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <para>Used by: [drag-lint]declaration (DRagLint.CLI.pas), [drag-lint]declaration (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestRecreate (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.IndexSectionCommand (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LibrarySectionDbs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.PlanToJson (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.SectionLabel (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.SelectableSectionLabels (DRagLint.CLI.pas), [drag-lint]DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), [drag-lint]DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas), [drag-lint]DRagLint.Index.Plan.CollectRootsByName (DRagLint.Index.Plan.pas),
+  /// [drag-lint]DRagLint.Index.Plan.CollectRootsExcept (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas)</para>
   /// <para>Used in units: Config.IndexesFrame, [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Index.Coverage, [drag-lint]DRagLint.Index.DbSelect, [drag-lint]DRagLint.Index.Plan, [drag-lint]DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -58,6 +58,9 @@ type
     DedupExcludeRoots: TArray<string>;
     /// <summary>Walk filter derived from global + per-section settings.</summary>
     Filter: TWalkFilter;
+    /// <summary>The section's "libraryResolve" opt-in (item 4): open the platform library as an
+    /// extra store for this section's call-resolve pass. False for library sections.</summary>
+    LibraryResolve: Boolean;
   end; // record
 
   /// <summary>Complete concrete build plan resolved from a TIndexManifest.</summary>
@@ -94,16 +97,16 @@ type
 /// Not thread-safe; call from a single thread.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), DRagLint.CLI.LibrarySectionDbs (DRagLint.CLI.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas) (+3 more)</para>
-/// <para>Calls: Default, DRagLint.Index.Manifest.ExpandSectionDb, DRagLint.Index.Manifest.TIndexManifest.FindSection, DRagLint.Index.Plan.BuildFilter, DRagLint.Index.Plan.ClassifyMode, DRagLint.Index.Plan.CollectRootsByName, DRagLint.Index.Plan.CollectRootsExcept, DRagLint.Index.Plan.ExpandDbPath, DRagLint.Index.Plan.PlatformAllowed, DRagLint.Index.Plan.ResolveRoots, DRagLint.Project.Resolver.TProjectResolver.EnumRegistryPlatforms, DRagLint.Project.Resolver.TProjectResolver.ReadPlatformLibraryPaths</para>
+/// <para>Calls: Default, DRagLint.Index.Manifest.ExpandSectionDb, DRagLint.Index.Manifest.TIndexManifest.FindSection, DRagLint.Index.Plan.AppendUnique, DRagLint.Index.Plan.BuildFilter, DRagLint.Index.Plan.ClassifyMode, DRagLint.Index.Plan.CollectRootsByName, DRagLint.Index.Plan.CollectRootsExcept, DRagLint.Index.Plan.ExpandDbPath, DRagLint.Index.Plan.PlatformAllowed, DRagLint.Index.Plan.ResolveRoots, DRagLint.Project.Resolver.TProjectResolver.EnumRegistryPlatforms, DRagLint.Project.Resolver.TProjectResolver.ReadPlatformLibraryPaths</para>
 /// <para>Returns: Default(TIndexPlan)</para>
-/// <para>Complexity: 13 (cyclomatic, outer body), 126 lines (full implementation)</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 133 lines (full implementation)</para>
 /// <para>Catches: Exception (empty)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Index.Manifest.ExpandSectionDb"/>
 /// <seealso cref="DRagLint.Index.Manifest.TIndexManifest.FindSection"/>
+/// <seealso cref="DRagLint.Index.Plan.AppendUnique"/>
 /// <seealso cref="DRagLint.Index.Plan.BuildFilter"/>
 /// <seealso cref="DRagLint.Index.Plan.ClassifyMode"/>
-/// <seealso cref="DRagLint.Index.Plan.CollectRootsByName"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ResolvePlan(const AManifest: TIndexManifest; const APlatformsFilter: TArray<string>; AResolver: TProjectResolver): TIndexPlan;
@@ -371,6 +374,7 @@ begin
         PS.DbPath:= ExpandSectionDb(AManifest, Sec);
         PS.Roots:= ResolveRoots(Sec, AManifest.RootDir, Mode);
         PS.Filter:= BuildFilter(AManifest, Sec);
+        PS.LibraryResolve:= Sec.LibraryResolve;
         Items.Add(PS);
       end;
     end; // for

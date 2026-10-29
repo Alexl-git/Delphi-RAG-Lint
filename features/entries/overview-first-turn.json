@@ -1,0 +1,48 @@
+{
+  "id": "overview-first-turn",
+  "title": "Overview (first-turn summary)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.38.0-alpha",
+  "summary": "One bounded call: freshness, counts, units by layer, top fan-in, entry points and forms",
+  "intro": "Run this first: overview gives an agent the whole project in one bounded page, with every capped section saying how many rows it left out.",
+  "wikiPage": "Overview-first-turn",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "overview",
+      "example": "drag-lint overview --db <file.sqlite> --max-rows 10",
+      "usage": "drag-lint overview --db <file.sqlite> [--max-rows N] [--json]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--max-rows",
+          "arg": "N"
+        },
+        {
+          "name": "--json"
+        }
+      ],
+      "helpOrder": 103,
+      "help": ["  drag-lint overview           --db <file.sqlite>    [--max-rows N] [--json]   (ONE bounded first-turn call: freshness, counts per kind, units by layer, top fan-in, entry points, forms; a capped section says how many it omitted)"]
+    }
+  ],
+  "audience": "agent",
+  "requires": ["index"],
+  "questions": [
+    {
+      "ask": "What is in this project, and where do I start?",
+      "command": "drag-lint overview --db <file.sqlite>"
+    }
+  ],
+  "verified": {
+    "date": "2026-10-28",
+    "by": "ENGINE",
+    "build": "1.36.0-alpha",
+    "surfaceHash": "f89089fdb7a9a41f3d54b3ef060dec23d32dba5056926258d4d034809748c5a5"
+  }
+}

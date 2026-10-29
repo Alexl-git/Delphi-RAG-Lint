@@ -1,0 +1,7 @@
+{
+  "id": "mixed-case-hex",
+  "severity": "hint",
+  "category": "structure",
+  "message": "Hex literal mixes upper- and lower-case digits -- pick one case so the value reads consistently.",
+  "warn_capture": "warn"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "suboptimal-math",
+  "severity": "hint",
+  "category": "refactoring",
+  "message": "Power(X, 2), Power(X, 0.5) and Sqrt(Sqr(A)+Sqr(B)) have dedicated cheaper and more accurate functions: Sqr, Sqrt, Hypot.",
+  "warn_capture": "warn",
+  "fix": [
+    { "when_capture": "sqx", "replace": "Sqr({sqx})" },
+    { "when_capture": "srx", "replace": "Sqrt({srx})", "risky": true }
+  ]
+}

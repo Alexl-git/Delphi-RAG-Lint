@@ -4,10 +4,10 @@ title: exceptions-sync
 summary: Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites
 product: DL
 group: linting
-order: 30005
+order: 30007
 since: 1.8.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # exceptions-sync
@@ -19,7 +19,7 @@ Read this when a project raises bare Exception.Create with literal messages and 
 ## How to run it
 
 ```text
-drag-lint exceptions-sync [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json] (materialise the project's derived exception classes)
+drag-lint exceptions-sync [--profile <name>] [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json] (materialise the project's derived exception classes)
 ```
 
 Full flag list: [exceptions-sync in the CLI reference](../cli.md#exceptions-sync).

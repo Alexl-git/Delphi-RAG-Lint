@@ -1,0 +1,6 @@
+# lambda handed to TThread.Queue / TTask.Run inside a loop that captures a local assigned in the loop body fires (23, 39); no capture (55), synchronous ForEach (71) and a lambda outside any loop (84) must not
+closure-captures-loop-local 23
+closure-captures-loop-local 39
+!closure-captures-loop-local 55
+!closure-captures-loop-local 71
+!closure-captures-loop-local 84

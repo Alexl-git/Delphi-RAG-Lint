@@ -1,0 +1,11 @@
+{
+  "id": "collapsible-if",
+  "category": "refactoring",
+  "severity": "hint",
+  "message": "Nested if without else can be collapsed into one condition: if A and B then ...",
+  "warn_capture": "warn",
+  "fix": [
+    { "when_capture": "a", "replace": "if ({a}) and ({b}) then {s};" },
+    { "when_capture": "a2", "replace": "if ({a2}) and ({b2}) then {s2};" }
+  ]
+}

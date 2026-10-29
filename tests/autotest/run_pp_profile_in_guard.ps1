@@ -162,7 +162,8 @@ Check 'f myfeature absent'    ($r.Syms -notcontains 'myfeature')
 New-Dproj $Dproj 'Debug'
 $g = @(& $Exe pp-profile --dproj $Dproj --platform Win32 --config Debug 2>&1 | ForEach-Object { "$_" } |
        Where-Object { $_ -notmatch '^\(loaded defaults' })
-Check 'g no header lines'     (-not ($g | Where-Object { $_ -match '=' })) ($g -join ' ')
+# Lane INC2: value lines ('compilerversion=37') follow the symbols; a HEADER line is one of the --in keys.
+Check 'g no header lines'     (-not ($g | Where-Object { $_ -match '^(dproj|platform|config|source|digest)=' })) ($g -join ' ')
 Check 'g myfeature present'   ($g -contains 'myfeature')
 }
 catch { Write-Host "FATAL: $($_.Exception.Message)" -ForegroundColor Red; $script:Failed = $true }

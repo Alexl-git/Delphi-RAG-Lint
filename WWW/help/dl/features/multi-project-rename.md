@@ -4,10 +4,10 @@ title: Rename across every project that compiles a shared unit
 summary: A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects
 product: DL
 group: linting
-order: 30016
+order: 30019
 since: 1.29.0-alpha
 status: shipped
-updated: 1.35.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Rename across every project that compiles a shared unit
@@ -19,7 +19,7 @@ Use it when a naming finding (const-casing, type-name-prefix, ...) sits in a uni
 ## How to run it
 
 ```text
-drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]
+drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]
 ```
 
 Example:
@@ -38,6 +38,7 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--disable` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--no-preprocess` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |
@@ -178,8 +179,10 @@ drag-lint lint --in C:\Projects\DB\ORM3\COMMON\BASICS.PAS --fix --fix-line 48 --
 drag-lint lint --in C:\Projects\DB\ORM3\COMMON\BASICS.PAS --fix --fix-line 48 --fix-rule const-casing --db <db> --apply
 ```
 
-Batch, with explicit consent to the naming fixes (`--fix-naming`; without it a
-batch renames only rules listed in `"autofix": [...]` in `drag-lint-lint.json`):
+Batch (every fix is on by default since 1.37.0; `--fix-naming` is still accepted
+and does nothing; list a rule in `"autofix_off": [...]` in `drag-lint-lint.json`
+to withhold it). The dry run prints `rename: N symbol(s) across M project(s)`
+before `--apply` writes:
 
 ```text
 drag-lint lint --in <f> --fix --fix-naming --db <db>            (preview)
@@ -211,7 +214,7 @@ rename-unindexed: TEST_Foo (C:\Projects\...\_D-RAG\TEST_Foo.sqlite)
 * `rename-dropped-at-write:` -- a rename dropped whole by the write-time check.
 * `autofix: rename refused -- <reason>` -- a single-finding fix that wrote
   nothing; always the last `autofix:` line.
-* `rename-local: <N>` (stderr, `--fix-naming` only) -- naming renames in
+* `rename-local: <N>` (stderr, only with the `--fix-naming` no-op flag) -- naming renames in
   units one project owns.
 
 With `--json`, stdout stays one JSON document (the `rename-*` lines go to

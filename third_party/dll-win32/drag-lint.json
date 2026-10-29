@@ -168,6 +168,14 @@
         "sqlOnlyMS": true
       },
       {
+        "name": "DragLint-Switch",
+        "include": [
+          "C:\\Projects\\Delphi-RAG-lint\\src\\tools\\lsp-switch\\drag-lint-switch.dproj"
+        ],
+        "useIgnoreFiles": true,
+        "sqlOnlyMS": true
+      },
+      {
         "name": "DragLintGraph-Viewer",
         "include": [
           "C:\\Projects\\Delphi-RAG-Lint-Graph\\src\\viewer\\drag_lint_graph.dproj"

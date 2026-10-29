@@ -4,10 +4,10 @@ title: query typecat
 summary: Resolves a type's category -- float, string, class, interface, and so on
 product: DL
 group: search-navigation
-order: 20022
+order: 20025
 since: 0.66.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # query typecat

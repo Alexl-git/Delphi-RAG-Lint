@@ -1,0 +1,12 @@
+# Arm 3 repeats arm 1's body (R:= 10): merge the labels. Reported on the LATER arm.
+case-same-branches 12
+!case-same-branches 10
+!case-same-branches 11
+# Distinct bodies: silent.
+!case-same-branches 15
+!case-same-branches 16
+# Whitespace-insensitive comparison: arm 2 (line 20) equals arm 1.
+case-same-branches 20
+# FP shape: empty arms (a deliberate no-op list) are not reported.
+!case-same-branches 23
+!case-same-branches 24

@@ -1,0 +1,14 @@
+# Hits: member access straight off FindComponent/FindField/FindChildControl (12-15), also through an as-cast (13).
+# Non-hits: Assigned guard (22), result stored then tested (24-26), plain member access (27), bare call (28).
+# FindField is nil-returning on TDataSet (FieldByName is the raising form).
+nil-returning-call-dereferenced 12
+nil-returning-call-dereferenced 13
+nil-returning-call-dereferenced 14
+nil-returning-call-dereferenced 15
+!nil-returning-call-dereferenced 22
+!nil-returning-call-dereferenced 23
+!nil-returning-call-dereferenced 24
+!nil-returning-call-dereferenced 25
+!nil-returning-call-dereferenced 26
+!nil-returning-call-dereferenced 27
+!nil-returning-call-dereferenced 28

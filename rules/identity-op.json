@@ -1,0 +1,8 @@
+{
+  "id": "identity-op",
+  "severity": "info",
+  "category": "dead-code",
+  "message": "Identity operation (x+0, x-0, x*1, x div 1, x shl 0 ...) has no effect or is a constant -- drop it or write the intended value.",
+  "warn_capture": "warn",
+  "fix": { "when_capture": "x", "replace": "{x}" }
+}

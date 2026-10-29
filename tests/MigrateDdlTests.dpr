@@ -38,6 +38,7 @@ uses
   FireDAC.ConsoleUI.Wait,
   FireDAC.Comp.Client,
   DRagLint.Core.Interfaces,
+  DRagLint.Core.Model,
   DRagLint.Storage.SQLite;
 
 var
@@ -117,8 +118,83 @@ begin
   end;
 end;
 
+{ T12: writes three data_flows rows for a method of a class through the store and
+  reads them back through every reader; '' when every expectation holds, else the
+  first broken one. }
+function RoundTripDataFlows(const pPath: string): string;
+var
+  S      : ISymbolStore;
+  Tok    : TFileTxToken;
+  Cls, M : TSymbol;
+  ClsId  : Int64;
+  MId    : Int64;
+  Rows   : TArray<TDataFlowRow>;
+  Got    : TArray<TDataFlowRow>;
+
+  function Row(const pDst: string; pLine, pCol, pIdx: Integer; const pName, pSrc: string;
+    pSrcIdx: Integer): TDataFlowRow;
+  begin
+    Result:= Default(TDataFlowRow);
+    Result.FileId     := 999; { must be IGNORED: the token supplies file_id }
+    Result.SymbolId   := MId;
+    Result.OwnerId    := ClsId;
+    Result.DstKind    := pDst;
+    Result.DstLine    := pLine;
+    Result.DstCol     := pCol;
+    Result.DstIndex   := pIdx;
+    Result.DstName    := pName;
+    Result.DstReceiver:= if pDst = DF_DST_ARG then 'Q' else '';
+    Result.SrcKind    := pSrc;
+    Result.SrcIndex   := pSrcIdx;
+    Result.SrcName    := 'A';
+    Result.ViaLocal   := pDst = DF_DST_FIELD;
+    Result.Cond       := pDst = DF_DST_GLOBAL;
+  end;
+
+begin
+  Result:= '';
+  S:= TSQLiteSymbolStore.Create(pPath);
+  S.Migrate;
+  if not S.HasDataFlows then Exit('HasDataFlows False after Migrate');
+  Tok:= S.OpenFileTx('C:\fx\uT.pas', 1, 'sha', 'pascal');
+  Cls:= Default(TSymbol);
+  Cls.ParentId     := -1;
+  Cls.Kind         := skClass;
+  Cls.Name         := 'TFoo';
+  Cls.QualifiedName:= 'uT.TFoo';
+  ClsId:= S.UpsertSymbol(Tok, Cls);
+  M:= Default(TSymbol);
+  M.ParentId     := ClsId;
+  M.Kind         := skMethod;
+  M.Name         := 'Run';
+  M.QualifiedName:= 'uT.TFoo.Run';
+  MId:= S.UpsertSymbol(Tok, M);
+  Rows:= [Row(DF_DST_ARG, 10, 3, 0, 'ExecSQL', DF_SRC_PARAM, 0),
+          Row(DF_DST_FIELD, 11, 3, -1, 'FSql', DF_SRC_PARAM, 0),
+          Row(DF_DST_GLOBAL, 12, 3, -1, 'GText', DF_SRC_FIELD, -1)];
+  S.PutDataFlows(Tok, Rows);
+  S.CommitFileTx(Tok);
+
+  Got:= S.GetDataFlowsAt(Tok.FileId, 10, 3, '');
+  if Length(Got) <> 1 then Exit(Format('GetDataFlowsAt: %d rows, want 1', [Length(Got)]));
+  if Got[0].FileId <> Tok.FileId then Exit('GetDataFlowsAt: file_id not taken from the token');
+  if (Got[0].DstName <> 'ExecSQL') or (Got[0].DstReceiver <> 'Q') or (Got[0].SrcKind <> DF_SRC_PARAM) or
+     (Got[0].SymbolId <> MId) or (Got[0].OwnerId <> ClsId) then Exit('GetDataFlowsAt: columns do not round-trip');
+  if Length(S.GetDataFlowsAt(Tok.FileId, 10, 3, DF_DST_WRITE)) <> 0 then Exit('GetDataFlowsAt: kind filter ignored');
+  if Length(S.GetDataFlowsOf(MId, '')) <> 3 then Exit('GetDataFlowsOf(all) <> 3');
+  Got:= S.GetDataFlowsOf(MId, DF_DST_FIELD);
+  if (Length(Got) <> 1) or not Got[0].ViaLocal or Got[0].Cond then Exit('GetDataFlowsOf(field) / via_local');
+  if Length(S.GetFieldWriters([ClsId], 'fsql')) <> 1 then Exit('GetFieldWriters: NOCASE match failed');
+  if Length(S.GetFieldWriters([ClsId + 1000], 'FSql')) <> 0 then Exit('GetFieldWriters: owner filter ignored');
+  if Length(S.GetFieldWriters([], 'FSql')) <> 0 then Exit('GetFieldWriters: empty owners must return nothing');
+  Got:= S.GetGlobalWriters('GTEXT', 0);
+  if (Length(Got) <> 1) or not Got[0].Cond then Exit('GetGlobalWriters(any file) / cond');
+  if Length(S.GetGlobalWriters('GText', Tok.FileId + 1000)) <> 0 then Exit('GetGlobalWriters: file filter ignored');
+  S:= nil;
+end;
+
 const
-  SQL_HAS_TRI = 'SELECT COUNT(*) FROM sqlite_master WHERE name = ''string_fts_tri''';
+  SQL_HAS_TRI ='SELECT COUNT(*) FROM sqlite_master WHERE name = ''string_fts_tri''';
   SQL_TRI_TRIGGERS = 'SELECT COUNT(*) FROM sqlite_master WHERE type = ''trigger'' ' +
     'AND name LIKE ''string_literals%'' AND sql LIKE ''%string_fts_tri%''';
   SQL_INSERT_LIT = 'INSERT INTO string_literals(file_id, source, kind, text, ' +
@@ -162,6 +238,14 @@ begin
       Check('T10 three dispatch indexes created', ScalarInt(Conn,
         'SELECT COUNT(*) FROM sqlite_master WHERE type = ''index'' AND name IN ' +
         '(''idx_dispatch_edges_impl'', ''idx_classref_args_class'', ''idx_classref_args_param'')') = 3);
+
+      // T11 (2026-10-27, taint T0): Migrate creates data_flows additively, with the
+      // three indexes whose LEADING columns cover both FK children (file_id, symbol_id).
+      Check('T11 data_flows created', ScalarInt(Conn,
+        'SELECT COUNT(*) FROM sqlite_master WHERE type = ''table'' AND name = ''data_flows''') = 1);
+      Check('T11 three data_flows indexes created', ScalarInt(Conn,
+        'SELECT COUNT(*) FROM sqlite_master WHERE type = ''index'' AND name IN ' +
+        '(''idx_data_flows_dst'', ''idx_data_flows_sym'', ''idx_data_flows_name'')') = 3);
 
       Msg:= RaisedBy(Conn, 'CREATE TABLE IF NOT EXISTS f2_broken (');
       Check('T3 broken DDL raises', Msg <> '');
@@ -243,6 +327,11 @@ begin
     finally
       Conn.Free;
     end;
+
+    // T12 (2026-10-27, taint T0): PutDataFlows -> the four readers, round trip on a
+    // migrated store with FK enforcement ON. The file id comes from the token, not the row.
+    Msg:= RoundTripDataFlows(DbPath2);
+    Check('T12 data_flows round trip', Msg = '', Msg);
   finally
     DeleteFile(DbPath); { returns False when absent -- scratch only }
     DeleteFile(DbPath + '-wal'); { returns False when absent -- scratch only }

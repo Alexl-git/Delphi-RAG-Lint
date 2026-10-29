@@ -13,6 +13,7 @@ uses
   System.IOUtils,
   System.Generics.Collections,
   System.Character,
+  System.RegularExpressions,
   TreeSitter,
   DRagLint.Core.Model,
   DRagLint.Core.Interfaces,
@@ -685,6 +686,71 @@ begin
   end;
 end;
 
+/// <summary>Store-free type classification for used-before-assignment: maps
+/// the lower-cased name of every type this FILE declares to True when EVERY
+/// declaration of that name is a CLASS (a declClass whose shape token is
+/// kClass), else False.</summary>
+/// <param name="ARoot">The parsed file's root node.</param>
+/// <param name="ASrc">The file's source bytes.</param>
+/// <param name="AKinds">Filled in place; the caller owns it.</param>
+/// <remarks>Consulted only when ResolveTypeCategory answers tcUnknown (no store,
+/// or a file the store has not indexed). A same-unit declaration is a fact, not a guess: no `T`-prefix
+/// convention is used, because records and classes share it. A name declared
+/// twice with different shapes (a local `type TFoo = record` shadowing a unit
+/// `TFoo = class`) answers False, so a shadowed name never fires. Records parse
+/// as declClass too (shape token kRecord), as do `object` types; both answer
+/// False.</remarks>
+procedure CollectSameUnitClassKinds(const ARoot: TTSNode; const ASrc: TBytes;
+  AKinds: TDictionary<string, Boolean>);
+
+  function IsClassShape(const ATypeN: TTSNode): Boolean;
+  var I: Integer; T: string; Cls: TTSNode;
+  begin
+    Result := False;
+    if ATypeN.IsNull then Exit;
+    { the `type` field is either the declClass itself or a wrapper holding it
+      (same two shapes AstChecks' class-name collectors accept) }
+    Cls := ATypeN;
+    if Cls.NodeType <> 'declClass' then
+    begin
+      Cls := Default(TTSNode);
+      for I := 0 to ATypeN.ChildCount - 1 do
+        if ATypeN.Child(I).NodeType = 'declClass' then
+        begin
+          Cls := ATypeN.Child(I);
+          Break;
+        end;
+      if Cls.IsNull then Exit;
+    end;
+    for I := 0 to Cls.ChildCount - 1 do
+    begin
+      T := Cls.Child(I).NodeType;
+      if T = 'kClass' then Exit(True);
+      if (T = 'kRecord') or (T = 'kObject') then Exit;
+    end;
+  end;
+
+  procedure Walk(const N: TTSNode);
+  var I: Integer; NmN: TTSNode; Nm: string; IsCls, Prev: Boolean;
+  begin
+    if N.IsNull then Exit;
+    if N.NodeType = 'declType' then
+    begin
+      NmN := N.ChildByField('name');
+      if not NmN.IsNull then
+      begin
+        Nm := LowerCase(Trim(NodeStr(NmN, ASrc)));
+        IsCls := IsClassShape(N.ChildByField('type'));
+        if AKinds.TryGetValue(Nm, Prev) then IsCls := IsCls and Prev;
+        if Nm <> '' then AKinds.AddOrSetValue(Nm, IsCls);
+      end;
+    end;
+    for I := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+  end;
+
+begin
+  Walk(ARoot);
+end;
 /// <summary>Tests whether AConstructorNode (an already-confirmed constructor
 /// call/dot-expr per ExprIsConstructor) transfers ownership of the created
 /// object to a VCL owner, per TComponent's owner-parenting contract: a
@@ -1756,6 +1822,248 @@ begin
   Result := Found;
 end;
 
+{ True when the routine hands local AName to a DOCUMENTED OWNING ADDER of the
+  System.JSON tree: `Arr.AddElement(X)` / `Arr.Add(X)` on a local declared
+  TJSONArray, `Obj.AddPair(N, X)` on a local declared TJSONObject. The container
+  takes ownership of X and frees it with itself, so X is transferred, not leaked.
+
+  WHY THE ESCAPE LATTICE DOES NOT ALREADY CLEAR THIS. Passing X to the call does
+  mark it escaped -- but only on the path through THAT statement. Inside a
+  try..except the CFG also wires every body block to the handler with the
+  block's own OUT state, so the block that creates X and the later block that
+  hands it to the container leave X "open" on the handler edge. That edge is the
+  modelled mid-body exception, not a missed Free (measured: DoSql's JRow, found
+  by the ILC2 lane). The receiver must be a LOCAL of a JSON container type, so
+  `Sub.AddPair('a','b')` (Sub only the receiver) and an unknown receiver stay
+  reported. Absence over a wrong verdict: only ever suppresses. }
+function HandedToJsonOwner(const AProc: TTSNode; const AVars: TRoutineVarTable;
+  const AName: string; const ASrc: TBytes): Boolean;
+var
+  Found: Boolean;
+
+  function ReceiverKind(const ARecv: TTSNode): string;
+  var Ix: Integer;
+  begin
+    Result := '';
+    if ARecv.IsNull or (ARecv.NodeType <> 'identifier') then Exit;
+    Ix := AVars.IndexOf(LowerCase(Trim(NodeStr(ARecv, ASrc))));
+    if Ix < 0 then Exit;
+    Result := LowerCase(Trim(AVars.Get(Ix).TypeText));
+    if Result.StartsWith('system.json.') then Delete(Result, 1, Length('system.json.'));
+  end;
+
+  function HandsNameToOwner(const N: TTSNode): Boolean;
+  var
+    I     : Integer;
+    Ent   : TTSNode;
+    Args  : TTSNode;
+    M, K  : string;
+  begin
+    Result := False;
+    if N.NodeType <> 'exprCall' then Exit;
+    Ent := N.ChildByField('entity');
+    if Ent.IsNull or (Ent.NodeType <> 'exprDot') then Exit;
+    M := LowerCase(Trim(NodeStr(Ent.ChildByField('rhs'), ASrc)));
+    K := ReceiverKind(Ent.ChildByField('lhs'));
+    if not (((K = 'tjsonarray') and ((M = 'addelement') or (M = 'add')))
+            or ((K = 'tjsonobject') and (M = 'addpair'))) then Exit;
+    Args := N.ChildByField('args');
+    if Args.IsNull then Exit;
+    for I := 0 to Args.NamedChildCount - 1 do
+      if (Args.NamedChild(I).NodeType = 'identifier')
+         and SameText(Trim(NodeStr(Args.NamedChild(I), ASrc)), AName) then
+        Exit(True);
+  end;
+
+  procedure Walk(const N: TTSNode);
+  var I: Integer;
+  begin
+    if Found or N.IsNull then Exit;
+    if HandsNameToOwner(N) then
+    begin
+      Found := True;
+      Exit;
+    end;
+    for I := 0 to N.NamedChildCount - 1 do
+    begin
+      Walk(N.NamedChild(I));
+      if Found then Exit;
+    end;
+  end;
+
+begin
+  Found := False;
+  if Trim(AName) <> '' then Walk(AProc);
+  Result := Found;
+end;
+
+{ SHAPE 2 of used-before-assignment: `for j := 0 to NChan - 1 do ... Arr[j]`.
+
+  The loop only visits elements 0..Count-1, i.e. exactly the ones the routine
+  stored before it incremented its count; when the count is still 0 the body
+  never runs. Reporting Arr as "used before assignment" there is noise
+  (GAGEFRM2.pas:788/812/831/2573). Recognised only when ALL of: the item sits in
+  the body of a `for` whose bound is `<name ending in Count/Cnt/Num/Len/Length/
+  Size> - 1`, and the item indexes AName with that loop's control variable.
+  Name-based on the bound by design (a count has no other syntactic signal);
+  `Arr[0]` and any other index stay reported. }
+function ReadIsCountBoundedElement(const AItem: TTSNode; const AName: string;
+  const ASrc: TBytes): Boolean;
+var
+  P, StartN, BodyN, C: TTSNode;
+  LoopVar, Bound, Txt: string;
+  I: Integer;
+begin
+  Result := False;
+  Txt := TRegEx.Replace(LowerCase(NodeStr(AItem, ASrc)), '\s+', '');
+  P := AItem.Parent;
+  while (not P.IsNull) and (not Result) do
+  begin
+    if P.NodeType = 'for' then
+    begin
+      StartN := P.ChildByField('start');
+      BodyN  := P.ChildByField('body');
+      if (not StartN.IsNull) and (not StartN.ChildByField('lhs').IsNull) then
+      begin
+        LoopVar := LowerCase(Trim(NodeStr(StartN.ChildByField('lhs'), ASrc)));
+        for I := 0 to P.NamedChildCount - 1 do
+        begin
+          C := P.NamedChild(I);
+          if (C = StartN) or (C = BodyN) then Continue;
+          Bound := TRegEx.Replace(LowerCase(NodeStr(C, ASrc)), '\s+', '');
+          if TRegEx.IsMatch(Bound, '^[a-z_][a-z0-9_]*(count|cnt|num|len|length|size)-1$')
+             and ContainsAtIdentBoundary(Txt, LowerCase(AName) + '[' + LoopVar + ']') then
+            Result := True;
+        end;
+      end;
+    end;
+    P := P.Parent;
+  end;
+end;
+
+{ SHAPE 1b of used-before-assignment: `AStream.Read(pb[0], 2)`.
+
+  A METHOD call cannot be resolved by name, so the parameter-mode oracle is
+  silent; but every RTL Read / ReadBuffer (TStream, TFileStream, TStringReader,
+  TBinaryReader ...) takes its FIRST argument by `var Buffer` and FILLS it. True
+  when the item contains such a call whose first argument is an element of
+  AName (`AName[...]`). Closed member list, first argument only; kept out of the
+  extraction-hashed Lattices unit on purpose. (MStreams.pas:574.) }
+function ReadIsStreamFillArg(const AItem: TTSNode; const AName: string;
+  const ASrc: TBytes): Boolean;
+var
+  Found: Boolean;
+  LName: string;
+
+  procedure Walk(const N: TTSNode);
+  var I: Integer; Ent, Args: TTSNode; M, A0: string;
+  begin
+    if Found or N.IsNull then Exit;
+    if N.NodeType = 'exprCall' then
+    begin
+      Ent  := N.ChildByField('entity');
+      Args := N.ChildByField('args');
+      if (not Ent.IsNull) and (Ent.NodeType = 'exprDot') and (not Args.IsNull)
+         and (Args.NamedChildCount > 0) then
+      begin
+        M := LowerCase(Trim(NodeStr(Ent.ChildByField('rhs'), ASrc)));
+        A0 := TRegEx.Replace(LowerCase(NodeStr(Args.NamedChild(0), ASrc)), '\s+', '');
+        if ((M = 'read') or (M = 'readbuffer')) and A0.StartsWith(LName + '[') then
+        begin
+          Found := True;
+          Exit;
+        end;
+      end;
+    end;
+    for I := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+  end;
+
+begin
+  Found := False;
+  LName := LowerCase(Trim(AName));
+  Walk(AItem);
+  Result := Found;
+end;
+
+{ SHAPE 3 of used-before-assignment: partial record initialisation.
+
+  True when every mention of AName in the item is a FIELD access `AName.F` and,
+  for each such F, the routine contains an EARLIER assignment `AName.F := ...`.
+  The definite-assignment lattice counts a partial write as defining the whole
+  record, but an exception handler is also fed from the pre-try block (the
+  "raised before anything ran" edge), where nothing is assigned: a handler that
+  reads `HS.HeapErrorCode` after the try body's first statement set exactly that
+  field was reported (uMain.pas:1213). Field-level and textual-order by design;
+  it is applied to the MAY arm only, and a read of a field NOT assigned earlier
+  (or of the whole record) stays reported. }
+function ReadsOnlyFieldsAssignedEarlier(const AItem, ARoutine: TTSNode;
+  const AName: string; const ASrc: TBytes): Boolean;
+var
+  Fields: TList<string>;
+  Bad   : Boolean;
+  LName : string;
+  F     : string;
+
+  procedure Scan(const N: TTSNode);
+  var I: Integer; L: TTSNode; Fld: string;
+  begin
+    if Bad or N.IsNull then Exit;
+    if N.NodeType = 'exprDot' then
+    begin
+      L := N.ChildByField('lhs');
+      if (not L.IsNull) and (L.NodeType = 'identifier')
+         and (LowerCase(Trim(NodeStr(L, ASrc))) = LName) then
+      begin
+        Fld := LowerCase(Trim(NodeStr(N.ChildByField('rhs'), ASrc)));
+        if (Fld <> '') and (Fields.IndexOf(Fld) < 0) then Fields.Add(Fld);
+        Exit;
+      end;
+    end;
+    if (N.NodeType = 'identifier') and (LowerCase(Trim(NodeStr(N, ASrc))) = LName) then
+    begin
+      Bad := True;
+      Exit;
+    end;
+    for I := 0 to N.NamedChildCount - 1 do Scan(N.NamedChild(I));
+  end;
+
+  function AssignedEarlier(const N: TTSNode; const AField: string): Boolean;
+  var I: Integer; Lhs, L: TTSNode;
+  begin
+    Result := False;
+    if N.IsNull or (N.StartByte >= AItem.StartByte) then Exit;
+    if N.NodeType = 'assignment' then
+    begin
+      Lhs := N.ChildByField('lhs');
+      if (not Lhs.IsNull) and (Lhs.NodeType = 'exprDot') then
+      begin
+        L := Lhs.ChildByField('lhs');
+        if (not L.IsNull) and (L.NodeType = 'identifier')
+           and (LowerCase(Trim(NodeStr(L, ASrc))) = LName)
+           and (LowerCase(Trim(NodeStr(Lhs.ChildByField('rhs'), ASrc))) = AField) then
+          Exit(True);
+      end;
+    end;
+    for I := 0 to N.NamedChildCount - 1 do
+      if AssignedEarlier(N.NamedChild(I), AField) then Exit(True);
+  end;
+
+begin
+  Result := False;
+  LName  := LowerCase(Trim(AName));
+  Fields := TList<string>.Create;
+  try
+    Bad := False;
+    Scan(AItem);
+    if Bad or (Fields.Count = 0) then Exit;
+    for F in Fields do
+      if not AssignedEarlier(ARoutine, F) then Exit;
+    Result := True;
+  finally
+    Fields.Free;
+  end;
+end;
+
 { Vars that an EARLIER operand of an `and`/`or` chain assigns via a call argument,
   and which a LATER operand of the same chain may therefore read safely.
 
@@ -2386,6 +2694,9 @@ var
   OwnsOracle: TCallArgOwns;
   RecMethodDef: TRecordMethodDefPredicate;
   ParamMode   : TParamModeLookup;
+  StoreModes  : TParamModeLookup;
+  UnitSigs    : TDictionary<string, TArray<string>>;
+  SameUnitClassKinds: TDictionary<string, Boolean>; { when the store answers tcUnknown }
 
   procedure Emit(const ARule, ASev, AMsg: string; ALine, ACol: Integer);
   var F: TLintFinding;
@@ -2462,10 +2773,28 @@ var
               var QualifiedLocalWrite: Boolean := (BaseIx >= 0)
                  and (AssignmentTargetIndex(It.Node, PF.Src, Vars) < 0)
                  and (Vars.Get(BaseIx).Kind = vkLocal);
-              if QualifiedLocalWrite and (AStore <> nil)
-                 and (Reads.IndexOf(BaseIx) < 0)
-                 and (AStore.ResolveTypeCategory(Vars.Get(BaseIx).TypeText, AFileId) = tcClass) then
-                Reads.Add(BaseIx);
+              { When the store cannot classify the type (no store: `lint <file>`
+                with nothing resolved; or a file the store has not indexed, which
+                is what a fixture or a freshly edited unit is) only a class THIS
+                unit declares qualifies -- see CollectSameUnitClassKinds. }
+              var IsClassBase: Boolean := False;
+              if QualifiedLocalWrite and (Reads.IndexOf(BaseIx) < 0) then
+              begin
+                var Cat: TTypeCategory := tcUnknown;
+                if AStore <> nil then Cat := AStore.ResolveTypeCategory(Vars.Get(BaseIx).TypeText, AFileId);
+                if Cat = tcUnknown then
+                begin
+                  if SameUnitClassKinds = nil then
+                  begin
+                    SameUnitClassKinds := TDictionary<string, Boolean>.Create;
+                    CollectSameUnitClassKinds(PF.Tree.RootNode, PF.Src, SameUnitClassKinds);
+                  end;
+                  IsClassBase := SameUnitClassKinds.TryGetValue(
+                    LowerCase(Trim(Vars.Get(BaseIx).TypeText)), IsClassBase) and IsClassBase;
+                end
+                else IsClassBase := Cat = tcClass;
+              end;
+              if IsClassBase then Reads.Add(BaseIx);
             end
             else
               CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs, RecMethodDef, ParamMode);
@@ -2488,6 +2817,12 @@ var
                 if not CurMust[RIx] then
                 begin
                   ROW := Integer(It.Node.StartPoint.Row) + 1;
+                  { used-before-assignment false-positive shapes 2 and 3 -- see
+                    ReadIsCountBoundedElement / ReadsOnlyFieldsAssignedEarlier.
+                    Shape 3 is MAY-arm only; shape 2 applies to both. }
+                  if ReadIsCountBoundedElement(It.Node, V.Name, PF.Src) then Continue;
+                  if ReadIsStreamFillArg(It.Node, V.Name, PF.Src) then Continue;
+                  if CurMay[RIx] and ReadsOnlyFieldsAssignedEarlier(It.Node, Cfg.RoutineNode, V.Name, PF.Src) then Continue;
                   COL := Integer(It.Node.StartPoint.Column) + 1;
                   { SAME-PREDICATE SUPPRESSION -- see GuardToken above.
 
@@ -3148,7 +3483,9 @@ var
                { the variable is handed to a `finally` -- see FreedInFinallyBlock:
                  what remains open at the exit is the try..except modelling edge,
                  not a missed Free. }
-               and not FreedInFinallyBlock(AProc, Vars.Get(I).Name, PF.Src) then
+               and not FreedInFinallyBlock(AProc, Vars.Get(I).Name, PF.Src)
+               { handed to a documented owning JSON adder -- see HandedToJsonOwner }
+               and not HandedToJsonOwner(AProc, Vars, Vars.Get(I).Name, PF.Src) then
               Emit('object-leak', 'info',
                 Format('Object "%s" may be leaked: created but not freed or transferred on some path.',
                   [Vars.Get(I).Name]), CreateRow[I], CreateCol[I]);
@@ -3332,8 +3669,8 @@ begin
         Key, Sig: string;
         Syms: TArray<TSymbol>;
         Parts: TArray<TParamPart>;
-        M, Seen: TParamMode;
-        Any: Boolean;
+        M, Seen, MethodSeen: TParamMode;
+        Any, MethodAny: Boolean;
         I: Integer;
 
         { A PARAMETER WHOSE TYPE IS A POINTER TELLS US NOTHING ABOUT ITS ARGUMENT.
@@ -3467,6 +3804,8 @@ begin
           if (Length(Syms) = 0) and (ALibStore <> nil) then
             Syms := ALibStore.FindSymbolsByExactName(ACalleeName);
           Any := False; Seen := pmUnknown;
+          MethodAny := False;
+          MethodSeen := pmUnknown;
           for I := 0 to High(Syms) do
           begin
             { ONLY A FREE ROUTINE MAY ANSWER A BARE-NAME CALL. A bare `Foo(...)`
@@ -3485,13 +3824,34 @@ begin
               them -- reporting the buffer as used-before-assignment on the line
               that ALLOCATES it. Note the "all matches must agree" rule did NOT
               save this: there was exactly ONE match and it was the wrong one.
-              Agreement is not resolution. }
-            if not (Syms[I].Kind in [skProcedure, skFunction]) then Continue;
+              Agreement is not resolution.
+
+              A SAME-NAMED METHOD MAY NOT ANSWER, BUT IT MAY VETO. The bare call
+              may be that method of the enclosing class: `Lookup(Name, Info)`
+              inside TBnRun means TBnRun.Lookup(...; out AInfo), while a free
+              Lookup(const AClassQName, AMember: string) in another unit said
+              "const" and reported Info at error severity on the line that
+              fills it (run_uba_method_homonym.ps1). A method whose mode at
+              this position differs makes the call ambiguous -> pmUnknown. }
             if Syms[I].Signature = '' then Continue;
+            if Syms[I].Kind = skMethod then
+            begin
+              if ModeOf(Syms[I].Signature, M) then
+                if not MethodAny then
+                begin
+                  MethodSeen := M;
+                  MethodAny := True;
+                end
+                else if M <> MethodSeen then
+                  MethodSeen := pmUnknown;
+              Continue;
+            end;
+            if not (Syms[I].Kind in [skProcedure, skFunction]) then Continue;
             if not ModeOf(Syms[I].Signature, M) then Continue;
             if not Any then begin Seen := M; Any := True; end
             else if M <> Seen then begin Seen := pmUnknown; Break; end;
           end;
+          if Any and MethodAny and (MethodSeen <> Seen) then Seen := pmUnknown;
           if Any then Result := Seen else Result := pmUnknown;
         finally
           OracleCheckPM(Verifying, Cached, Result, Key);
@@ -3504,11 +3864,69 @@ begin
   else
     ParamMode := nil;
 
+  { SAME-UNIT SIGNATURES, add-only. A free routine declared in THIS file with an
+    untyped `var X` / `out X` (or a typed var/out) parameter writes the matching
+    argument, whether or not a store is open: `FillBuf(pb[0], 2)` then a read of
+    `pb[0]` was reported on the line that fills it. Only var/out is ever
+    answered (everything else stays pmUnknown, i.e. the pre-existing
+    conservative behaviour), and only when every same-named routine in the file
+    agrees at that position, so this can only withdraw a spurious read. }
+  StoreModes := ParamMode;
+  UnitSigs := nil;
+  ParamMode :=
+    function(const ACalleeName: string; AIndex: Integer): TParamMode
+    var
+      Sigs: TArray<string>;
+      Sg  : string;
+      PS  : TArray<TParamPart>;
+      M, Seen: TParamMode;
+      First: Boolean;
+      Mt  : TMatch;
+      Key : string;
+      Cur : TArray<string>;
+    begin
+      Result := pmUnknown;
+      if Assigned(StoreModes) then Result := StoreModes(ACalleeName, AIndex);
+      if (Result <> pmUnknown) or (ACalleeName = '') or (AIndex < 0) then Exit;
+      if UnitSigs = nil then
+      begin
+        UnitSigs := TDictionary<string, TArray<string>>.Create;
+        for Mt in TRegEx.Matches(TEncoding.ANSI.GetString(PF.Src),
+                    '(?im)^[ \t]*(?:class[ \t]+)?(?:procedure|function)[ \t]+(\w+)[ \t]*(\([^)]*\))') do
+        begin
+          Key := LowerCase(Mt.Groups[1].Value);
+          if not UnitSigs.TryGetValue(Key, Cur) then Cur := nil;
+          UnitSigs.AddOrSetValue(Key, Cur + [Mt.Groups[2].Value]);
+        end;
+      end;
+      if not UnitSigs.TryGetValue(LowerCase(ACalleeName), Sigs) then Exit;
+      First := True;
+      Seen  := pmUnknown;
+      for Sg in Sigs do
+      begin
+        PS := ParseSignatureParams(Sg);
+        if AIndex > High(PS) then Exit;
+        if SameText(PS[AIndex].Modifier, 'var') then M := pmVar
+        else if SameText(PS[AIndex].Modifier, 'out') then M := pmOut
+        else Exit;
+        if First then
+        begin
+          Seen  := M;
+          First := False;
+        end
+        else if M <> Seen then Exit;
+      end;
+      Result := Seen;
+    end;
+
+  SameUnitClassKinds := nil; { built on first need, see CheckRoutine }
   try
     Procs := CfgFindProcs(PF.Tree.RootNode);
     for PI := 0 to High(Procs) do CheckRoutine(Procs[PI]);
     Result := Findings.ToArray;
   finally
+    SameUnitClassKinds.Free;
+    UnitSigs.Free;
     Findings.Free;
   end;
 end;

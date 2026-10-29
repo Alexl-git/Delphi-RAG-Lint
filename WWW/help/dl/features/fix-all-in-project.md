@@ -4,10 +4,10 @@ title: Fix all in project
 summary: Applies autofixes for every fixable finding across the whole project, starting from the Structure form
 product: DL
 group: linting
-order: 30006
+order: 30008
 since: 0.61.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # Fix all in project
@@ -26,10 +26,12 @@ Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 | --- | --- | --- | --- |
 | `--db` | `<file.sqlite>` |  |  |
 | `--project` | `<.dproj>` |  |  |
+| `--build-config` | `<name>` |  |  |
 | `--rule` | `<id>` |  |  |
 | `--disable` |  |  |  |
 | `--output` | `<report.txt>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--quiet` |  | suppress per-file progress lines written to stderr |  |
 | `--lint-third-party` |  |  |  |
 | `--no-preprocess` |  |  |  |

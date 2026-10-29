@@ -1,0 +1,7 @@
+{
+  "id": "sql-update-delete-without-where",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "UPDATE/DELETE literal without a WHERE clause changes every row -- add a WHERE, or mark an intended full-table statement with dl:ok.",
+  "warn_capture": "warn"
+}

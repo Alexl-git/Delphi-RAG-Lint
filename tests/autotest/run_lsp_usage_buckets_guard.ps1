@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_usage_buckets_guard.ps1 -- `draglint/usages` files raise / handle refs
   under their own `raises` / `handles` arrays, exactly as the CLI `usages` verb

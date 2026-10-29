@@ -1,0 +1,6 @@
+{
+  "id": "zz-delete-probe",
+  "severity": "hint",
+  "message": "A0 probe: call to ProbeNoop (test-only rule)",
+  "fix": { "delete": "statement" }
+}

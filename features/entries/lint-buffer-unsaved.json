@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "lint",
-      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]",
+      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]",
       "flags": [
         {
           "name": "--rule",
@@ -32,6 +32,9 @@
         },
         {
           "name": "--json"
+        },
+        {
+          "name": "--labels"
         },
         {
           "name": "--no-preprocess"
@@ -66,9 +69,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-27",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "9cf7211fba46bc3bf6f6753381310ae825d7f3252ff82d450641b40d3a4b20c3"
+    "build": "1.36.0-alpha",
+    "surfaceHash": "ff29775a55c4c30feab8dde90acdf1729e78a17b91380a8c3c2fb73986179f27"
   }
 }

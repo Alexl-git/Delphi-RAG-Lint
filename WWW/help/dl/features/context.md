@@ -4,10 +4,10 @@ title: context
 summary: Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers
 product: DL
 group: search-navigation
-order: 20004
+order: 20005
 since: 0.6.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # context
@@ -31,6 +31,7 @@ Full flag list: [context in the CLI reference](../cli.md#context).
 | `--full-surface` |  |  |  |
 | `--max-callers` | `N` |  |  |
 | `--context` | `N` |  |  |
+| `--library-db` | `<library.sqlite>` |  |  |
 
 ## Where to click
 
@@ -69,6 +70,10 @@ drag-lint context --task "modify CustomerOrder.TCustomerOrder.Total" --db C:\Pro
 ```
 This would return `Total`'s doc comment, its class's surface, its own body,
 and a capped list of callers, as markdown.
+
+### Library calls
+
+When the project was indexed with a library (`--library-db`, or `libraryResolve` in the manifest), a routine whose body calls library members gets one extra line above `## Callers`: `Library calls: N (top: a, b, c)`. N counts the calls whose stored `external_target` is set; the top three targets are the most frequent. `--format json` carries the same as `library_calls` (`count`, `top`). A project indexed without a library has no external targets, so the line and the key are both absent. `--library-db <library.sqlite>` (or a second `--db`) opts into a query-time count: calls with no stored link whose receiver is typed by name are bound against the library now (the same binding `find-callees` uses, read-only; a library that cannot be opened is a stderr NOTE and the stored-only count). `library_calls.via` says where the count came from: `stored`, or `oracle` when at least one call was bound at query time. It never attaches a library you did not name.
 
 ### When the phrase is not an identifier
 

@@ -1,0 +1,40 @@
+{
+  "id": "target-compiler",
+  "title": "Target compiler (--target-compiler)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.38.0-alpha",
+  "summary": "Names the oldest compiler the code must compile on; modernize findings whose advice needs a newer compiler are not reported",
+  "intro": "Read this when your code must still build on an older Delphi (12, 10.4, XE7 ...): pass --target-compiler or set target_compiler in drag-lint-lint.json, and lint stops suggesting syntax that compiler cannot take.",
+  "wikiPage": "target-compiler",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "<file.pas> --target-compiler 12"
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "--db <db> --target-compiler 10.4"
+    },
+    {
+      "type": "cli",
+      "verb": "rules",
+      "example": "--json --target-compiler 36"
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Code Quality > Run Lint All (Full Report)..."
+    }
+  ],
+  "audience": "both",
+  "related": ["autofix-wave", "compat-downgrade-fixes"],
+  "verified": {
+    "date": "2026-10-28",
+    "by": "ENGINE",
+    "build": "1.36.0-alpha",
+    "surfaceHash": "d34a6b56b376254d160c438e0c242af3a3b67d4960d378b460299f2ccd190d05"
+  }
+}

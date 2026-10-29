@@ -354,9 +354,26 @@ begin
     if not Result then Exit;
   end;
 end;
+{ DEC-13 (owner 2026-10-28): replacing an engine is a CHANNEL stop first, never a kill.
+  The previous install's engine is asked to hold off its respawn (ide-release) and every
+  running engine (lsp, cycles --fix, index, lint-all) to stand down cleanly (shutdown --all
+  --wait). An index run stops between files with its database consistent; the same command
+  resumes. Whatever does not comply is left to CloseApplications (Restart Manager), the
+  last resort. A missing old engine, or one older than the channel, is simply a no-op. }
+procedure StopRunningEngines;
+var
+  Old: String;
+  Rc: Integer;
+begin
+  Old:= ExpandConstant('{app}\bin\drag-lint.exe');
+  if not FileExists(Old) then Exit;
+  Exec(Old, 'ide-release --seconds 900', '', SW_HIDE, ewWaitUntilTerminated, Rc);
+  Exec(Old, 'shutdown --all --wait 30', '', SW_HIDE, ewWaitUntilTerminated, Rc);
+end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result:= '';
+  StopRunningEngines;
   if (WizardIsComponentSelected('plugin32') or WizardIsComponentSelected('plugin64') or
       WizardIsComponentSelected('yadfot32') or WizardIsComponentSelected('yadfot64')) and IdeRunning then
     Result:= 'RAD Studio is running. Close it first: it keeps the plugin BPL loaded and locked.';

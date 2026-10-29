@@ -4,10 +4,10 @@ title: Fix all reliability (1.31.3)
 summary: Fix all no longer drops every rename for library-root members, shows a wait cursor and refuses a second fix, and keeps E-prefixed exception classes
 product: DL
 group: linting
-order: 30008
+order: 30010
 since: 1.31.3-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Fix all reliability (1.31.3)
@@ -19,7 +19,7 @@ Read this if Fix all used to drop renames, ran twice, or flagged E-prefixed exce
 ## How to run it
 
 ```text
-drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]
+drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]
 ```
 
 Full flag list: [lint in the CLI reference](../cli.md#lint).
@@ -32,6 +32,7 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--disable` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--no-preprocess` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |

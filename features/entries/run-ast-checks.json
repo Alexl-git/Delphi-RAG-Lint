@@ -12,12 +12,12 @@
     {
       "type": "ide-about",
       "caption": "Run AST Checks",
-      "steps": ["Open the file in the editor", "Open the About window (drag-lint > About) and click the Run AST Checks button", "From a shell: `drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]`"]
+      "steps": ["Open the file in the editor", "Open the About window (drag-lint > About) and click the Run AST Checks button", "From a shell: `drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json]`"]
     },
     {
       "type": "cli",
       "verb": "check-ast",
-      "usage": "drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]",
+      "usage": "drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]",
       "flags": [
         {
           "name": "--db",
@@ -32,7 +32,7 @@
         }
       ],
       "helpOrder": 73,
-      "help": ["  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]"]
+      "help": ["  drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]"]
     }
   ],
   "audience": "both",
@@ -47,9 +47,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "975b22774294b38887a7a7f6a7c1c58c7c149151c521777172967957ba730dc1"
+    "build": "1.36.0-alpha",
+    "surfaceHash": "7573ae65ff4b3c53f2f697fe268a25c6e5c4c5902af932faba64694c4b838cbe"
   }
 }

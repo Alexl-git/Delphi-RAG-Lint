@@ -1,0 +1,7 @@
+# bare DLL name that is not a KnownDLL (11, 14, 15) fires; kernel32 (12), a rooted path (13), a non-literal (16) must not
+loadlibrary-relative-name 11
+loadlibrary-relative-name 14
+loadlibrary-relative-name 15
+!loadlibrary-relative-name 12
+!loadlibrary-relative-name 13
+!loadlibrary-relative-name 16

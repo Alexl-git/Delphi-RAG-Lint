@@ -473,6 +473,10 @@ function DistinctUnreachable(const AUnreachable: TArray<TUnreachablePath>): TArr
 /// #convert block as a G image link. That carry is right for identity
 /// alternatives only; the author almost certainly means 'G[count]'. Needs no
 /// property tree. Pure; deterministic; no I/O.
+/// 1.37.0 (CHAIN H3): the book-level single-pass warnings of BookChainWarnings
+/// follow the glyph warning. Their Message starts 'chain:' / 'duplicate From',
+/// so the printed line starts 'line N: warning: chain' / 'line N: warning:
+/// duplicate From' and the ConvRulesEditor can recognise it.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, DRagLint.Convert.GlyphExpr.IsGlyphCountPropName, DRagLint.Convert.Rules.ConvertBlocks, DRagLint.Convert.Rules.IsGlyphImageLink, Format</para>
@@ -482,6 +486,23 @@ function DistinctUnreachable(const AUnreachable: TArray<TUnreachablePath>): TArr
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ConversionRuleWarnings(const ARules: TConversionRuleSet): TArray<TRuleError>;
+
+/// <summary>Single-pass warnings on a book's #convert lines (1.37.0 CHAIN H3):
+/// a chain and a duplicate From type.</summary>
+/// <param name="ARules">The parsed rule set.</param>
+/// <returns>One TRuleError per finding, in source order. A chain: a #convert
+/// whose From type (compared by bare name, case-insensitive, as
+/// convert-apply does) is the To type of another #convert -- Message
+/// 'chain: TB is also a From type (line 1 converts TA -> TB; single pass, TA
+/// ends as TB)', LineNo = the line of the rule whose From is TB. A duplicate:
+/// a #convert repeating an earlier From type -- Message 'duplicate From TA
+/// (line 1 wins)', LineNo = the repeating line. Empty for a clean book.</returns>
+/// <remarks>
+/// convert-apply applies the FIRST #convert per From type once; it does not
+/// feed one conversion's result into the next (INBOX-REPLY-chain1 E1). A
+/// warning never changes an exit code. Pure; deterministic; no I/O.
+/// </remarks>
+function BookChainWarnings(const ARules: TConversionRuleSet): TArray<TRuleError>;
 
 /// <summary>The #link rules convert-apply cannot perform yet because they
 /// carry a glyph expression.</summary>
@@ -1655,6 +1676,58 @@ begin
       W.Message:= Format('link %s <- %s is a straight carry of the source glyph count beside the G-link ' +
         'on line %d -- right only for identity alternatives; write "#link %s <- %s G[count]" instead',
         [R.ToPath, R.FromPath, G.LineNo, R.ToPath, G.FromPath]);
+      Result:= Result + [W];
+      Break;
+    end;
+  end;
+  Result:= Result + BookChainWarnings(ARules);
+end;
+
+function BookChainWarnings(const ARules: TConversionRuleSet): TArray<TRuleError>;
+
+  function Tail(const AType: string): string;
+  begin
+    Result:= AType.Substring(AType.LastIndexOf('.') + 1);
+  end;
+
+var
+  I   : Integer;
+  J   : Integer;
+  W   : TRuleError;
+  Wins: TArray<Integer>; // index of the #convert that wins each rule's From type (itself when first)
+begin
+  Result:= nil;
+  SetLength(Wins, Length(ARules.Rules));
+  for I:= 0 to High(ARules.Rules) do
+  begin
+    Wins[I]:= I;
+    if ARules.Rules[I].Kind <> rkConvert then Continue;
+    for J:= 0 to I - 1 do
+      if (ARules.Rules[J].Kind = rkConvert) and
+         SameText(Tail(ARules.Rules[J].FromType), Tail(ARules.Rules[I].FromType)) then
+      begin
+        Wins[I]:= J;
+        Break;
+      end;
+  end;
+  for I:= 0 to High(ARules.Rules) do
+  begin
+    if ARules.Rules[I].Kind <> rkConvert then Continue;
+    W:= Default(TRuleError);
+    W.LineNo:= ARules.Rules[I].LineNo;
+    if Wins[I] <> I then
+    begin
+      W.Message:= Format('duplicate From %s (line %d wins)', [Tail(ARules.Rules[I].FromType), ARules.Rules[Wins[I]].LineNo]);
+      Result:= Result + [W];
+      Continue;
+    end;
+    for J:= 0 to High(ARules.Rules) do
+    begin
+      if (J = I) or (ARules.Rules[J].Kind <> rkConvert) or (Wins[J] <> J) or
+         not SameText(Tail(ARules.Rules[J].ToType), Tail(ARules.Rules[I].FromType)) then Continue;
+      W.Message:= Format('chain: %s is also a From type (line %d converts %s -> %s; single pass, %s ends as %s)',
+        [Tail(ARules.Rules[I].FromType), ARules.Rules[J].LineNo, Tail(ARules.Rules[J].FromType),
+         Tail(ARules.Rules[J].ToType), Tail(ARules.Rules[J].FromType), Tail(ARules.Rules[J].ToType)]);
       Result:= Result + [W];
       Break;
     end;

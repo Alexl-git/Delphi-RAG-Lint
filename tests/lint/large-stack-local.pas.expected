@@ -1,0 +1,18 @@
+# large-stack-local: a routine-local array (or ShortString) whose static size
+# is larger than 65536 bytes (threshold param, default 65536). Size is computed
+# from literal bounds and well-known element sizes only; unknown element types
+# count as 1 byte (under-report, never over-report).
+# Line 10 Buf: 100000 Integers = 400000 bytes -> FLAGGED.
+large-stack-local 10
+# Line 11 Grid: 300*300 Integers = 360000 bytes -> FLAGGED.
+large-stack-local 11
+# Line 12 Small: 400 bytes -> not flagged.
+!large-stack-local 12
+# Line 13 Edge: 16384 Integers = exactly 65536 bytes (not above threshold) -> not flagged.
+!large-stack-local 13
+# Line 14 string[255]: 256 bytes -> not flagged.
+!large-stack-local 14
+# Line 6 GlobalBuf: unit-level variable lives in static data, not on the stack -> not flagged.
+!large-stack-local 6
+# Line 22 inline var: 100000 bytes on the stack -> FLAGGED.
+large-stack-local 22

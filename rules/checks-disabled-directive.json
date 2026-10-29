@@ -1,0 +1,7 @@
+{
+  "id": "checks-disabled-directive",
+  "severity": "hint",
+  "category": "other",
+  "message": "Compiler safety directive switched off ({$R-} / {$Q-} / {$J+}) -- range/overflow checks stay off for the rest of the unit; scope it with {$R+} afterwards or document why.",
+  "warn_capture": "warn"
+}

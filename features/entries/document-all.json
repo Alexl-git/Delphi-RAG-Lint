@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "document-all",
-      "usage": "drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH] - document every public decl in every indexed unit (no project scope)",
+      "usage": "drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH] - document every public decl in every indexed unit (no project scope)",
       "flags": [
         {
           "name": "--stubs"
@@ -38,7 +38,7 @@
         }
       ],
       "helpOrder": 55,
-      "help": ["  drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)", "     batch modes (--unit/--project/document-all) default facts-only: an empty tag is never written, <param> never gets a skeleton, and <summary> appears only when harvested from a nearby // comment; add --stubs to keep a fresh comment that has no facts block", "     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too", "  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)", "     --strip is also accepted on --qname/--project/document-all (strips just that symbol's doc region, or every file in scope); mutually exclusive with --stubs", "     <seealso cref> links to related symbols (callees + siblings) are emitted BY DEFAULT in every document mode;", "     --no-seealso turns them off. (--seealso is still accepted and does nothing -- it was the opt-in before it became the default.)", "     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent", "     @deprecated is auto-detected from the Pascal 'deprecated' directive on the decl -- no flag needed", "     --migrate-pure: regenerate a stored legacy <para>Pure</para> fact (purity v1). Without it a block whose ONLY difference is that line is left byte-identical, and doc-drift agrees", "     PROJECT TAGS: on a block reconciled across projects (dl:shared, or holding facts this index cannot see) the inbound entries -- Called from:, Used by:, Used in units:, Covered by: --", "       carry the projects that rendered them: Called from: [DataCopy,DataCopyTests]uX.Foo (uX.pas). A run adds/removes only ITS tag (the project's name, recorded in the index;", "       the DB base name for indexes built before 1.18.0); an entry goes when its set empties; untagged legacy entries keep the old rules"]
+      "help": ["  drag-lint document-all [--profile <name>] [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)", "     batch modes (--unit/--project/document-all) default facts-only: an empty tag is never written, <param> never gets a skeleton, and <summary> appears only when harvested from a nearby // comment; add --stubs to keep a fresh comment that has no facts block", "     batch modes also skip TRIVIAL Get*/Set* property accessors (impl body <= docs.accessor_trivial_max_lines, default 2) by default; add --include-accessors to document them too", "  drag-lint document --unit <file.pas> --strip [--apply|--no-backup] [--db PATH]   - REMOVE drag-lint-generated doc tags/blocks (marker-keyed; hand-written docs untouched)", "     --strip is also accepted on --qname/--project/document-all (strips just that symbol's doc region, or every file in scope); mutually exclusive with --stubs", "     <seealso cref> links to related symbols (callees + siblings) are emitted BY DEFAULT in every document mode;", "     --no-seealso turns them off. (--seealso is still accepted and does nothing -- it was the opt-in before it became the default.)", "     add --since [--base-dir <repoRoot>] to emit a git-derived <since> date; degrades silently when git is absent", "     @deprecated is auto-detected from the Pascal 'deprecated' directive on the decl -- no flag needed", "     --migrate-pure: regenerate a stored legacy <para>Pure</para> fact (purity v1). Without it a block whose ONLY difference is that line is left byte-identical, and doc-drift agrees", "     PROJECT TAGS: on a block reconciled across projects (dl:shared, or holding facts this index cannot see) the inbound entries -- Called from:, Used by:, Used in units:, Covered by: --", "       carry the projects that rendered them: Called from: [DataCopy,DataCopyTests]uX.Foo (uX.pas). A run adds/removes only ITS tag (the project's name, recorded in the index;", "       the DB base name for indexes built before 1.18.0); an entry goes when its set empties; untagged legacy entries keep the old rules"]
     },
     {
       "type": "ide-menu",
@@ -58,9 +58,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "4b77ab45470d9413e3fee3214690c9124f534d9e9f2e6f4a82959d9a43cbc596"
+    "build": "1.36.0-alpha",
+    "surfaceHash": "ff5d4373a045f82f9c96f5283a5102ad2255f57f6709969e5cb7e2f5fbd70209"
   }
 }

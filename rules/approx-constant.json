@@ -1,0 +1,8 @@
+{
+  "id": "approx-constant",
+  "severity": "info",
+  "category": "other",
+  "message": "Literal approximates a well-known constant (Pi, E, Sqrt(2), Ln(2), golden ratio) -- use the named constant from System.Math/System for full precision.",
+  "warn_capture": "warn",
+  "fix": { "when_capture": "pi", "replace": "Pi", "risky": true }
+}

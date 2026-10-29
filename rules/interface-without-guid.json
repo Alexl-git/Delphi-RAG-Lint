@@ -1,0 +1,7 @@
+{
+  "id": "interface-without-guid",
+  "severity": "hint",
+  "category": "structure",
+  "message": "Interface declared without a GUID -- Supports / QueryInterface / 'as' cannot ask for it; add ['{...}'] (Ctrl+Shift+G in the IDE).",
+  "warn_capture": "warn"
+}

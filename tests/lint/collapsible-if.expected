@@ -1,0 +1,8 @@
+# Reported on the outer if. 9 and 12 collapse into `if A and B`. 21 (inner else), 26 (second statement in block + outer else), 34 must not fire.
+collapsible-if 9
+collapsible-if 12
+!collapsible-if 21
+!collapsible-if 26
+!collapsible-if 34
+!collapsible-if 36
+!collapsible-if 42

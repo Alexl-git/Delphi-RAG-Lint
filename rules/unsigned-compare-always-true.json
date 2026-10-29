@@ -1,0 +1,7 @@
+{
+  "id": "unsigned-compare-always-true",
+  "severity": "warning",
+  "category": "bug-patterns",
+  "message": "Unsigned value compared with 0 or with its own type maximum (>= 0 / <= 255 on a Byte are always true, < 0 / > 255 always false) -- the test can never decide anything; check for a signed/unsigned mix-up.",
+  "warn_capture": "warn"
+}

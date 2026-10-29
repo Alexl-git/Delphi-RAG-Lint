@@ -1,0 +1,15 @@
+# (X and mask) = value where value has a bit outside mask: never true ($F0 vs $0F).
+bad-bit-mask 9
+!bad-bit-mask 10
+# (X or mask) = value where mask has a bit outside value: never true ($01 vs $00).
+bad-bit-mask 11
+!bad-bit-mask 12
+# <> form with value 1 inside mask 255: no finding.
+!bad-bit-mask 13
+bad-bit-mask 14
+# literal on the left of the comparison is handled.
+bad-bit-mask 15
+# FP shape: a non-literal mask (Y) can not be judged -- must stay silent.
+!bad-bit-mask 16
+# binary literal %1100 vs %0011 handled.
+bad-bit-mask 17

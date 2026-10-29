@@ -1,0 +1,10 @@
+# Hits: the loop variable, or a plain-identifier bound, is assigned / Inc / Dec in the body.
+# Delphi evaluates the bounds once, so changing the bound has no effect on the iteration count.
+# FP shapes (non-hits): body changes an unrelated variable; bound owner member access
+# (List.Count with List.Delete) is a method call, not an assignment to the bound.
+for-bound-modified-in-body 12
+for-bound-modified-in-body 23
+for-bound-modified-in-body 34
+!for-bound-modified-in-body 44
+!for-bound-modified-in-body 53
+!for-bound-modified-in-body 62

@@ -160,6 +160,33 @@ type
     property Managed: TDictionary<string, Boolean> read FManaged;
   end;
 
+  /// <summary>One ranked answer of ISymbolStore.SearchConcept (query --concept):
+  /// a symbol whose identifier words or doc prose match a natural-language
+  /// question.</summary>
+  /// <remarks>Score is the FTS5 bm25() value NEGATED so that larger = better;
+  /// it is comparable only within one result set. Matched names the
+  /// symbol_search columns that contain at least one query term, comma
+  /// separated, from {tokens, summary, remarks}.</remarks>
+  TConceptHit = record
+    /// <summary>symbols.id of the hit.</summary>
+    SymbolId     : Int64;
+    /// <summary>symbols.qualified_name.</summary>
+    QualifiedName: string;
+    /// <summary>symbols.kind (method, function, class, ...).</summary>
+    Kind         : string;
+    /// <summary>files.path of the declaring file.</summary>
+    FilePath     : string;
+    /// <summary>symbols.start_line (1-based).</summary>
+    Line         : Integer;
+    /// <summary>-bm25(symbol_search_fts, 3.0, 2.0, 1.0); larger ranks first.</summary>
+    Score        : Double;
+    /// <summary>Columns that matched: 'tokens', 'summary', 'remarks', comma separated.</summary>
+    Matched      : string;
+    /// <summary>True when every query term matched (the AND pass); False for
+    /// an OR-pass fill row.</summary>
+    AllTerms     : Boolean;
+  end;
+
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildFindings (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.BuildIndexSide (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.NameIsAmbiguous (DRagLint.Analysis.LintTree.pas) (+434 more)</para>
@@ -223,6 +250,15 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
+    /// <summary>Content-hash skip: True when APath is stored with this sha256, whatever its mtime.</summary>
+    /// <param name="APath">The file, as for FileIsUpToDate.</param>
+    /// <param name="ASha">sha256 of the file's current raw bytes.</param>
+    /// <returns>True when the stored row's sha256 equals ASha (the bytes are unchanged even if the mtime moved).</returns>
+    function FileShaMatches(const APath: string; const ASha: string): Boolean;
+    /// <summary>Content-hash skip: stores AMtimeUnix as APath's mtime without touching anything else, so the next run takes the plain up-to-date path.</summary>
+    /// <param name="APath">The file, as for FileIsUpToDate.</param>
+    /// <param name="AMtimeUnix">The file's current mtime, unix seconds.</param>
+    procedure RefreshFileMtime(const APath: string; AMtimeUnix: Int64);
     /// <summary>N-06: True when APath took a uses clause from an include file
     /// (a unit_uses row with origin_path) and that include is now missing or
     /// was modified after APath's last parse -- so the host must be re-parsed
@@ -230,10 +266,21 @@ type
     /// <param name="APath">The host file, as for FileIsUpToDate.</param>
     /// <returns>False for a host with no include rows, an unindexed path, or a
     /// DB without the origin columns.</returns>
-    /// <remarks>Only includes that ALREADY contributed a uses row are watched: an
-    /// include that gains its first uses clause is seen when the host itself
-    /// changes or the run is forced. Read-only.</remarks>
-    function IncludeOriginsChanged(const APath: string): Boolean;    // INBOX 2.2/2.3 (converter-editor team, 2026-08-02): read/write an arbitrary
+    /// <remarks>Lane INC: also watches every include recorded for APath by
+    /// SetFileIncludes (consts, code, defines -- not only uses-bearing ones), so
+    /// in a project DB editing or deleting any include re-parses each includer.
+    /// Read-only.</remarks>
+    function IncludeOriginsChanged(const APath: string): Boolean;
+    /// <summary>Lane INC: records the include files AHostPath took in its last
+    /// parse (every active include, nested ones too), replacing any earlier list.
+    /// IncludeOriginsChanged reads it back.</summary>
+    /// <param name="AHostPath">The host file, as for FileIsUpToDate.</param>
+    /// <param name="AIncludes">Absolute include paths; empty clears the record.</param>
+    /// <remarks>Stored in schema_meta under the key 'file_includes:' plus the
+    /// lowercased stored host path (one row per host, values separated by '|'),
+    /// so no schema change is needed. A row for a host that later leaves the DB
+    /// is inert: it is only read for that host's own path.</remarks>
+    procedure SetFileIncludes(const AHostPath: string; const AIncludes: TArray<string>);    // INBOX 2.2/2.3 (converter-editor team, 2026-08-02): read/write an arbitrary    // INBOX 2.2/2.3 (converter-editor team, 2026-08-02): read/write an arbitrary
     // schema_meta key. Used to carry the INDEXER FINGERPRINT -- see
     // TIndexer.ForceReparse -- so an engine upgrade can invalidate an otherwise
     // byte-identical file. '' when the key (or the table) is absent.
@@ -534,6 +581,24 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FindCallersByName(const ACalleeName: string): TArray<TReference>              ;
+    /// <summary>For each name, the number of DISTINCT call sites FindCallersByName would
+    /// return for it, counted in ONE query per call instead of one materialised row set
+    /// per name.</summary>
+    /// <param name="ANames">Callee names; matched COLLATE NOCASE, like FindCallersByName.
+    /// Duplicates are allowed and each gets its own slot. An empty array answers an empty
+    /// array without touching the database.</param>
+    /// <returns>Result[I] = count of distinct (file, start line) pairs among the refs whose
+    /// name_text equals ANames[I]; same length and order as ANames.</returns>
+    /// <remarks>
+    /// <para>A call site is (file_id, start_line) WITHIN this store -- the same dedup
+    /// draglint/callerCounts applies to FindCallersByName's rows (a `T.Run;` carries both a
+    /// 'call' and a 'member-access' ref on one line). Counting across several stores still
+    /// needs the rows: a site seen by two stores is one site.</para>
+    /// <para>Exists because draglint/callerCounts asked FindCallersByName once per routine
+    /// and resolved a path per returned row: 4.25 million rows and as many path queries for
+    /// DevExpress dxBar.pas, 13 minutes. Read-only; served by idx_refs_name_nocase.</para>
+    /// </remarks>
+    function CountCallerSitesByNames(const ANames: TArray<string>): TArray<Integer>        ;
     /// <summary>Every symbol id that appears as the target of at least one reference.</summary>
     /// <returns>Distinct non-zero refs.symbol_id values; empty if the index has no refs.</returns>
     /// <remarks>
@@ -2011,6 +2076,22 @@ type
     /// </remarks>
     function SearchText(const AQuery: string; AMode: string; const ASource: string; ALimit: Integer;
       const AKind: string = ''): TArray<TStringLitMatch>;
+    /// <summary>The call-graph neighbourhood of one symbol, for
+    /// `query --text --near`: every symbol reachable from the seed within
+    /// AHops hops, CALLERS and CALLEES alike (one hop = one resolved call
+    /// edge), each with the fewest hops that reach it.</summary>
+    /// <param name="ASeedId">symbols.id of the seed; it comes back at hop 0.</param>
+    /// <param name="AHops">Maximum hop count; callers pass 1..3.</param>
+    /// <param name="AUsesEdges">True also adds unit-uses edges: every routine
+    /// (a symbol with an implementation body) of a unit that uses, or is used
+    /// by, a unit within AHops uses-hops of the seed's unit, at that hop.</param>
+    /// <returns>One row per distinct qualified name (overloads collapse to the
+    /// smallest hop); the seed alone when it has no edges.</returns>
+    /// <remarks>Read-only; one recursive CTE over call_edges and refs. Names,
+    /// not ids, are returned because a text hit carries its routine's qualified
+    /// name, not its id.</remarks>
+    function FindSymbolsWithinHops(ASeedId: Int64; AHops: Integer;
+      AUsesEdges: Boolean): TArray<TSymbolHop>;
 
     // v14 (D5): resolved call-target edges (call_edges table).
     /// <summary>Insert or replace the resolved call edge for one ref (ref_id is
@@ -2160,6 +2241,16 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
+    /// <summary>The dispatch_edges rows touching ASymbolId (RB-5 P1).</summary>
+    /// <param name="ASymbolId">An implementing/overriding method (AToBases) or
+    /// a base interface/virtual method (not AToBases).</param>
+    /// <param name="AToBases">True: rows where ASymbolId is the impl, returning
+    /// the BASES. False: rows where it is the base, returning the IMPLEMENTORS.</param>
+    /// <returns>The far-end symbols with edge kind and confidence; empty on a
+    /// database without dispatch_edges.</returns>
+    /// <remarks>Read-only. The callers of a returned base are
+    /// FindResolvedCallers(OtherId); this method never walks them itself.</remarks>
+    function FindDispatchLinks(ASymbolId: Int64; AToBases: Boolean): TArray<TDispatchLink>;
     /// <summary>The complement of GetCallEdgesFromSymbol: every call-site ref
     /// enclosed by AEnclosingSymbolId that has NO call_edges row, i.e. the
     /// calls this index could not resolve (RTL, cross-DB, unknown).</summary>
@@ -2453,6 +2544,51 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure PutEffectFacts(const ARows: TArray<TEffectFactRow>);
+    { ---- data_flows (taint wave T0, 2026-10-27) ------------------------------ }
+    /// <summary>Writes the data_flows rows of ONE routine inside the open file
+    /// transaction (one prepared INSERT per row). Called by the indexer right
+    /// after PutSymbolFacts.</summary>
+    /// <param name="AToken">The open file tx; supplies file_id (each row's FileId is ignored).</param>
+    /// <param name="ARows">The routine's rows (TDataFlowFacts.Collect); may be empty (no-op).
+    /// Every row's SymbolId must be a symbols.id written in this tx.</param>
+    /// <remarks>No delete: a per-file reindex drops the old rows through
+    /// data_flows.symbol_id ON DELETE CASCADE when OpenFileTx deletes the file's
+    /// symbols. A no-op when the table is absent (read-only open of a DB that
+    /// predates it). Part of the extractor guard's emit list.</remarks>
+    procedure PutDataFlows(const AToken: TFileTxToken; const ARows: TArray<TDataFlowRow>);
+    /// <summary>True when this database has the data_flows table (probed once).</summary>
+    /// <returns>False on a DB that predates extractor 1.26.0 and was opened read-only.
+    /// A present-but-EMPTY table means "indexed before 1.26.0": the taint rules print
+    /// ONE stale-index note and report nothing.</returns>
+    function HasDataFlows: Boolean;
+    /// <summary>Rows whose destination is AT one site (an 'arg' / 'write' call or
+    /// member-write ref position, or a field/global/result/outparam write site).</summary>
+    /// <param name="AFileId">files.id of the site.</param>
+    /// <param name="ALine">dst_line (refs.start_line of the site).</param>
+    /// <param name="ACol">dst_col (refs.start_col of the site).</param>
+    /// <param name="ADstKind">A DF_DST_* constant, or '' for every kind.</param>
+    /// <returns>Matching rows ordered by (dst_index, src_kind, src_line, src_col); empty
+    /// when none or when the table is absent.</returns>
+    function GetDataFlowsAt(AFileId: Int64; ALine, ACol: Integer; const ADstKind: string): TArray<TDataFlowRow>;
+    /// <summary>Rows of ONE routine with one destination kind -- the routine's
+    /// summary ('result', 'outparam', 'field', 'global' rows).</summary>
+    /// <param name="ASymbolId">symbols.id of the routine.</param>
+    /// <param name="ADstKind">A DF_DST_* constant, or '' for every kind.</param>
+    /// <returns>Rows ordered by (dst_kind, dst_index, dst_line, dst_col); empty when none.</returns>
+    function GetDataFlowsOf(ASymbolId: Int64; const ADstKind: string): TArray<TDataFlowRow>;
+    /// <summary>Every row writing field AName in a routine owned by one of AOwnerIds
+    /// (the caller passes the class, its ancestors and descendants): dst_kind='field',
+    /// plus dst_kind='write' with an empty dst_receiver -- a bare write of a field the
+    /// owner inherits, which the extractor emits by name.</summary>
+    /// <param name="AOwnerIds">data_flows.owner_id values to match; empty returns nothing.</param>
+    /// <param name="AName">Field name, compared case-insensitively against dst_name.</param>
+    /// <returns>Rows ordered by (file_id, dst_line, dst_col).</returns>
+    function GetFieldWriters(const AOwnerIds: TArray<Int64>; const AName: string): TArray<TDataFlowRow>;
+    /// <summary>Every dst_kind='global' row writing unit variable AName.</summary>
+    /// <param name="AName">Variable name, compared case-insensitively against dst_name.</param>
+    /// <param name="AFileId">Restrict to rows of this files.id; 0 (or less) = every file.</param>
+    /// <returns>Rows ordered by (file_id, dst_line, dst_col).</returns>
+    function GetGlobalWriters(const AName: string; AFileId: Int64): TArray<TDataFlowRow>;
     /// <summary>True when at least one routine with a body has no purity
     /// verdict yet (effect_free IS NULL) -- the gate that makes the `purity`
     /// stage run after a per-file reindex even when the calls stage was
@@ -2471,6 +2607,39 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function PurityNeedsRun: Boolean;
+    /// <summary>Concept-search stage (XERJ item 5): brings the derived
+    /// symbol_search table (and, through its triggers, symbol_search_fts) in
+    /// line with symbols. Deletes rows whose symbol is gone, then inserts one
+    /// row per searchable symbol (kinds in CONCEPT_SEARCH_KINDS) that has none:
+    /// tokens = SplitIdentifierWords(name) + parent name split + lower(name),
+    /// summary/remarks = symbol_docs, else the tag-stripped doc-comment
+    /// literal.</summary>
+    /// <returns>Rows inserted (0 on an up-to-date table, and 0 when the
+    /// sqlite3.dll has no FTS5 -- the table is then never created).</returns>
+    /// <remarks>Derived data only: never touches symbols, refs or any
+    /// extracted row, so it costs no re-parse and no SCHEMA_VERSION bump.
+    /// One transaction. Idempotent. A re-indexed file deletes its symbols,
+    /// whose rows cascade out of symbol_search, so the NOT-EXISTS fill keeps
+    /// incremental runs consistent.</remarks>
+    function BuildSymbolSearch: Integer;
+    /// <summary>True when SearchConcept can answer: FTS5 is available, the
+    /// symbol_search_fts table exists, and symbol_search is non-empty or the
+    /// DB has no searchable symbol.</summary>
+    /// <returns>False on a DB indexed before concept search existed (the
+    /// next `index` run backfills it, no re-parse).</returns>
+    function ConceptSearchReady: Boolean;
+    /// <summary>Ranked natural-language search over identifier words and
+    /// doc prose (query --concept).</summary>
+    /// <param name="AWords">Free text; each word is split like an identifier
+    /// (so "ApplyDelta" and "apply delta" are the same query), lower-cased,
+    /// stop words dropped, and FTS-quoted (no MATCH syntax leaks through).</param>
+    /// <param name="ALimit">Maximum rows returned; values &lt; 1 mean 20.</param>
+    /// <param name="AKinds">Comma-separated symbols.kind filter; '' = all
+    /// searchable kinds.</param>
+    /// <returns>AND-pass hits (every term matched) by score, then OR-pass
+    /// hits not already returned, by score; empty when nothing matches or
+    /// ConceptSearchReady is False.</returns>
+    function SearchConcept(const AWords: string; ALimit: Integer; const AKinds: string = ''): TArray<TConceptHit>;
     /// <summary>Every symbol_facts row, Present = True on each. Bulk read for
     /// the purity stage (one query instead of one per routine).</summary>
     /// <returns>All rows; EffectFree is -1 where the column is NULL or ABSENT (pre-purity DB).</returns>
@@ -2826,6 +2995,23 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
+    /// <summary>Lane INC: turns on include-context indexing for a PROJECT
+    /// run. A host unit's active include sites (nested ones too) are
+    /// remembered; when the walk then reaches that .inc it is parsed from the
+    /// bytes the preprocessor produced UNDER THE HOST'S live defines at the
+    /// directive, not standalone, and it is always re-parsed (its context can
+    /// change while its own bytes do not). Each host also records the includes
+    /// it took (ISymbolStore.SetFileIncludes), so editing or deleting one
+    /// re-parses every includer.</summary>
+    /// <param name="AEnabled">True for a project-scoped run with preprocessing
+    /// on. False (the default) keeps the standalone .inc parse.</param>
+    /// <param name="ASearchPaths">The build's absolute search path; an include
+    /// name is tried there after the includer's own folder.</param>
+    /// <remarks>Call before the walk. The walk must reach a host before its
+    /// includes (ExpandProjectScope orders .inc files last); an .inc reached
+    /// first is parsed standalone. When several hosts include one .inc, the
+    /// first host parsed this run supplies its context.</remarks>
+    procedure SetIncludeContext(AEnabled: Boolean; const ASearchPaths: TArray<string>);
     /// <summary>v23 (spec F2): the facts-inherited post-pass. For every routine
     /// this run analysed that HELD unclassified identifiers, resolves the
     /// owning class's transitive ancestors (GetTransitiveAncestors -- which

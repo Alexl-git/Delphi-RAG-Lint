@@ -35,7 +35,7 @@
         }
       ],
       "helpOrder": 79,
-      "help": ["  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)"]
+      "help": ["  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)", "                               a hop also follows an interface method to the methods that implement it (dispatch_edges implements; RB-5)"]
     },
     {
       "type": "ide-menu",
@@ -56,9 +56,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-10-28",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
+    "build": "1.36.0-alpha",
     "surfaceHash": "86109acb83a18b5048858c4ce221e2cb2706486551e61a6480f0dbf4d2b087ca"
   }
 }

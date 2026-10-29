@@ -4,10 +4,10 @@ title: Copy Diagnostics (Current File)
 summary: Puts the current file's lint findings onto the clipboard
 product: DL
 group: linting
-order: 30002
+order: 30004
 since: 0.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # Copy Diagnostics (Current File)
@@ -28,6 +28,7 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 | `--disable` |  |  |  |
 | `--rules-dir` | `<dir>` |  |  |
 | `--json` |  |  |  |
+| `--labels` |  |  |  |
 | `--no-preprocess` |  |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
 | `--db` | `<index.sqlite>` |  |  |

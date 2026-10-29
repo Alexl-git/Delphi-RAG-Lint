@@ -4,10 +4,10 @@ title: Format with YADF
 summary: Reformats one Pascal unit by driving the external YADF formatter
 product: DL
 group: linting
-order: 30011
+order: 30013
 since: 0.16.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.38.0-alpha
 ---
 
 # Format with YADF

@@ -192,7 +192,7 @@ cannot mean two things a second time.
 
 ## DEC-2 -- Is the raise/handle index fact still wanted?
 
-> **CLOSED 2026-10-25 -- same question as T-09 / walkthrough D14: owner ruled D14 b, STAY PARKED; trigger re-anchored to DEC-1 / a second consumer (INBOX-no-raise-handle-fact-blocks-exception-paths.md).**
+> **REOPENED + done 2026-10-28 (owner).** The 2026-10-25 CLOSED banner is overridden: the channel also covers the long one-shot runs `index` (single root, `--project`, `--all`) and `lint-all` (gate: ControlChannelEnabledFor). `index` stops BETWEEN FILES at the storage layer file-transaction gate (no half-written file row, WAL checkpointed, connection closed, resolver stamp cleared so the resume re-derives edges, exit code 4); `lint-all` stops between files and prints the findings so far as PARTIAL (exit 4). `sql` is NOT widened (one guarded SELECT; a kill is harmless). Owner addition: build\stage-engine.ps1 and the installer ask through the channel first, kill only as the last resort. Wiki: docs\wiki\ide-release.md "The full update sequence".
 
 ### 1. The question in one sentence
 Should the extractor be taught to write refs.kind = 'raise' /

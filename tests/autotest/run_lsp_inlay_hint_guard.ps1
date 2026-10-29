@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
   run_lsp_inlay_hint_guard.ps1 -- `textDocument/inlayHint` parameter names (B6).
 
