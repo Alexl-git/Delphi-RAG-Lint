@@ -37,7 +37,7 @@ Done: 1 finding left on changed lines -- CLI.pas:15496 review-marker-stale: the 
    hash-verify; commit BPL/DCP on main with pathspecs. FYI lsp-a2, www-9b, convrules-editor-c8.
 5. Release prep (no publish): merge rel/138x -> main only on owner go? (main is 1.36-era per earlier handoff; ask). Re-verify article
    WWW\articles\2026-10-29-add-the-missing-uses-unit\index.html vs the deployed exe (delegate, sonnet). Release-day duty: draft product-intro + feature article, message www-9b.
-6. ORM3 hook SUPERSEDE (promised to ocrpdf-e5, due today): C:\Users\alexanderl\hg-hooks\orm3_reindex.py currently SKIPS when the
+6. DROPPED by owner ruling 12:xx: commit reindex hook DISABLED in ~\mercurial.ini (backup .bak-20261029-noreindex); IDE/LSP rescan on save, agents reindex after edits. ocrpdf-e5 told. Old text: ORM3 hook SUPERSEDE (promised to ocrpdf-e5, due today): C:\Users\alexanderl\hg-hooks\orm3_reindex.py currently SKIPS when the
    lock PID is alive. Change: on a live lock ask the old indexer to stop cleanly (1.38 control channel; find the exact verb in
    `drag-lint --help` -- shutdown/ide-release family), kill that PID after 30 s, take the lock, start fresh. Test with two quick runs; log.
    Reply to ocrpdf-e5 when done. (Already told them: Q3 = yes, rows keyed by file_id, incremental re-emits per unit; no schema change.)
