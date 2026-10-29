@@ -73,7 +73,7 @@ Rules, autofix, suppression markers and project-wide checks.
 
 | Feature | What it does | Since |
 | --- | --- | --- |
-| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
+| [Autofix for fixable rules](features/autofix-wave.md) | lint --fix repairs findings of the 111 fixable rules; --json reports per finding whether it was applied; lint accepts a folder | 1.37.0-alpha |
 | [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) | Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field | 1.37.0-alpha |
 | [Copy All Diagnostics](features/copy-all-diagnostics.md) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form | 0.1.0-alpha |
 | [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md) | Puts the current file's lint findings onto the clipboard | 0.1.0-alpha |
@@ -282,4 +282,12 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [Open Plugin Log](features/open-plugin-log.md) | Opens the drag-lint plugin's own log file | 0.39.0-alpha |
 | [shutdown](features/shutdown.md) | Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced | 0.6.0-alpha |
 | [sql](features/sql.md) | Runs one read-only SQL statement against an index database and prints the result set | 0.40.5-alpha |
+
+## Uses and Dependencies
+
+Which units a unit needs, where they go in uses, and the cycles they make.
+
+| Feature | What it does | Since |
+| --- | --- | --- |
+| [Missing unit in uses (unit-missing-from-uses)](features/unit-missing-from-uses.md) | Lint rule: names the unit that declares an undeclared identifier and adds it to the interface or implementation uses clause, cycle-checked | 1.38.0-alpha |
 

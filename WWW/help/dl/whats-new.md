@@ -18,10 +18,11 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [query --text --near](features/query-text-near.md) -- Keeps only text hits in routines within N call-graph hops of a symbol.
 * [Target compiler (--target-compiler)](features/target-compiler.md) -- Names the oldest compiler the code must compile on; modernize findings whose advice needs a newer compiler are not reported.
 * [Type-level dl:ok review](features/type-level-review-marker.md) -- One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit.
+* [Missing unit in uses (unit-missing-from-uses)](features/unit-missing-from-uses.md) -- Lint rule: names the unit that declares an undeclared identifier and adds it to the interface or implementation uses clause, cycle-checked.
 
 ## 1.37.0-alpha
 
-* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+* [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 111 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) -- Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 * [Gap-wave lint rules](features/gap-wave-rules.md) -- About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave.
 * [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.

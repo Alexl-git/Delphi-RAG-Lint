@@ -530,7 +530,7 @@
   {
     "id": "autofix-wave",
     "title": "Autofix for fixable rules",
-    "summary": "lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
+    "summary": "lint --fix repairs findings of the 111 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
     "group": "linting",
     "order": 30001,
     "since": "1.37.0-alpha",
@@ -2278,5 +2278,17 @@
     "menus": [],
     "context": [],
     "verb": "sql"
+  },
+  {
+    "id": "unit-missing-from-uses",
+    "title": "Missing unit in uses (unit-missing-from-uses)",
+    "summary": "Lint rule: names the unit that declares an undeclared identifier and adds it to the interface or implementation uses clause, cycle-checked",
+    "group": "uses-dependencies",
+    "order": 130001,
+    "since": "1.38.0-alpha",
+    "file": "features/unit-missing-from-uses.md",
+    "menus": [],
+    "context": [],
+    "verb": "lint"
   }
 ]

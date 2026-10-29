@@ -1,4 +1,4 @@
-﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</ProjectGuid>
         <ProjectVersion>20.5</ProjectVersion>
@@ -127,6 +127,8 @@
         <DCCReference Include="DragLint.Plugin.Providers.pas"/>
         <DCCReference Include="DragLint.Plugin.LiveDiagnostics.pas"/>
         <DCCReference Include="DragLint.Plugin.LintOutputParse.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.UsesInsert.pas"/>
+        <DCCReference Include="DragLint.Plugin.MissingUses.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.JobObject.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.GhostText.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.EngineHold.pas"/>

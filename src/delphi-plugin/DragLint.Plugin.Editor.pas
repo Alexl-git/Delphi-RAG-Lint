@@ -224,6 +224,8 @@ implementation
 uses
   System.Generics.Collections
   , System.Generics.Defaults
+  , DRagLint.Core.UsesInsert          { TUsesSection: the unit-missing-from-uses quick-fix }
+  , DragLint.Plugin.MissingUses       { Ctrl+Alt+U for unit-missing-from-uses }
   , System.IOUtils
   , System.StrUtils
   , System.DateUtils
@@ -5115,7 +5117,15 @@ procedure InvokeQuickFixUses(Sender: TObject);
 var
   U  : string;
   Ins: string;
+  Sec: TUsesSection;
 begin
+  { unit-missing-from-uses: the engine already chose the clause (and checked the cycle) }
+  if DLCursorMissingUses(U, Sec) then
+  begin
+    if DLAddUnitToUsesSection(U, Sec, Ins) then ShowMessage('drag-lint: added unit to the ' + TUsesText.SectionWord(Sec) + ' uses clause: ' + Ins)
+    else ShowMessage('drag-lint: ' + U + ' is already listed, or no ' + TUsesText.SectionWord(Sec) + ' section was found. Add manually: ' + U);
+    Exit;
+  end;
   if not DLCursorUndeclaredUnit(U) then
   begin
     ShowMessage('drag-lint: no missing-unit suggestion for the line at the cursor.'#13#10 +

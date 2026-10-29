@@ -130,7 +130,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**289 rules. 110 have an auto-fix. 245 are on by default.** 196 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**290 rules. 111 have an auto-fix. 246 are on by default.** 197 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -151,8 +151,8 @@ Rules, autofix, suppression markers and project-wide checks.
 | resource-lifetime | 14 | 7 |
 | review-markers | 5 | 2 |
 | security | 22 | 2 |
-| structure | 12 | 6 |
-| **Total** | **289** | **110** |
+| structure | 13 | 7 |
+| **Total** | **290** | **111** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -172,7 +172,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
 | [Gap-wave lint rules](gap-wave-rules) | `rules` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
-| [Lint rules](rules) | 289 rules, 110 fixable; `rules` |  |
+| [Lint rules](rules) | 290 rules, 111 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
@@ -377,6 +377,14 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [shutdown](Features) | `shutdown` |  |
 | [sql](sql) | `sql` |  |
 | [test-store-freshness](Maintenance) | `test-store-freshness` | internal |
+
+## Uses and Dependencies
+
+Which units a unit needs, where they go in uses, and the cycles they make
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [Missing unit in uses (unit-missing-from-uses)](unit-missing-from-uses) | `lint` |  |
 
 ---
 

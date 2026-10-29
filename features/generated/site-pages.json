@@ -28,8 +28,8 @@
     "version": "1.36.0-alpha"
   },
   "features/autofix-wave.md": {
-    "hash": "1dbf477e04150de0b9c29b12ab42c88407dbec9b8372a2ffd58e32c569413f89",
-    "version": "1.36.0-alpha"
+    "hash": "da9e24e3f9cd08fb7ef02cff05d616bdf6361b38a2c34533f0fee0ba25c282b8",
+    "version": "1.38.0-alpha"
   },
   "features/bench-context.md": {
     "hash": "40753857e02ca31b5cba13964e0852b48e63f39e75e8aaae79ad9869e80a73fb",
@@ -236,8 +236,8 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "b311d7e71e775caeec8a630f2eec23e4162ac9a9439f476f5fb2f163952cd096",
-    "version": "1.36.0-alpha"
+    "hash": "f97967906c613878e0d9f36d71ddfd3ec0fbfa5b6b97f7bbc68616568bbd7ba0",
+    "version": "1.38.0-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
     "hash": "37fbcfa09e39665b420b70b6c797da7549c6ee454223fa9fb6f09a895c8c606f",
@@ -320,16 +320,16 @@
     "version": "1.36.0-alpha"
   },
   "features/fix-all-in-unit.md": {
-    "hash": "4dd7097b3ed7741a904a18f74bd278b34855d2b199b386366236162ce02addb8",
-    "version": "1.36.0-alpha"
+    "hash": "4ee0e8b2073a09264625123ecf1b1c80d57448edabd1ff578a951e27b97bfb5e",
+    "version": "1.38.0-alpha"
   },
   "features/fix-all-reliability.md": {
     "hash": "cde70cfd25cfe18074b4000a3fc877e0cad12b7fc385f15504a1355d3b3ab3ef",
     "version": "1.36.0-alpha"
   },
   "features/fix-it.md": {
-    "hash": "8a91ae951865b0155c98be93322396ddccf25606b6c4f779c387328f73ee609c",
-    "version": "1.36.0-alpha"
+    "hash": "90aaf31d190f68490b9377fd876b2a394d2bf2e03aa4004759f9ba24b535f01f",
+    "version": "1.38.0-alpha"
   },
   "features/format-whole-project-with-yadf.md": {
     "hash": "8a3f8bc8345b863c21c5a9f8e9f8126aef31ba814ecfd58eabfffac3d0972610",
@@ -444,8 +444,8 @@
     "version": "1.36.0-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "13aa755e1cc375ae6a347a2fc887af51522fdbe55cc90c55759c1fa5814c95fa",
-    "version": "1.36.0-alpha"
+    "hash": "c6dbcb535394dc989ac5527554431a40c183997912bd33b8f7d20517b1fa0f66",
+    "version": "1.38.0-alpha"
   },
   "features/lint-tree.md": {
     "hash": "e2e72d7ee0550568b1ed254607ecab33d2c3183cedb18900480439243b671f84",
@@ -624,8 +624,8 @@
     "version": "1.36.0-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "605119fc9e0579917e333dc40bc03724d18cded8c3a1b5647c99615b287a8fa1",
-    "version": "1.36.0-alpha"
+    "hash": "f71c3713b57ae3b309869e0e3b26438882499f023c3a61e65e2ea2fbd9b3c439",
+    "version": "1.38.0-alpha"
   },
   "features/safe-delete.md": {
     "hash": "c7b7d7a85bf7d80476659f16b5dac4e3d93bc1cc0a5162d275b0f714aff0570c",
@@ -714,6 +714,10 @@
   "features/type-name-prefix-origin.md": {
     "hash": "098a722d78de6933e0b6cfc00b986543d00281a6f99921c54a136a20c331f176",
     "version": "1.36.0-alpha"
+  },
+  "features/unit-missing-from-uses.md": {
+    "hash": "d4ec1b6fbf4e23c487ec9d49bf2353e4decfa177f193336b3790f15061914149",
+    "version": "1.38.0-alpha"
   },
   "features/unit-test-stub-symbol.md": {
     "hash": "c80e152ca4109fb565843981d11de11d54b896e817389ad4b28068c49e7e9735",

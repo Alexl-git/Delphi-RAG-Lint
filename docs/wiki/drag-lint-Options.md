@@ -14,7 +14,7 @@ The equivalent standalone command, with the same catalog:
 ```
 drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]
 ```
-As loaded by this dialog, the catalog has 289 rules, 110 of them fixable,
+As loaded by this dialog, the catalog has 290 rules, 110 of them fixable,
 245 on by default, across 18 categories.
 
 ## Reaching it in the IDE
@@ -29,4 +29,4 @@ database.
 ## Example
 Illustrative only: opening drag-lint > drag-lint Options... shows the
 full 289-rule catalog, grouped by its 18 categories, with a toggle per
-rule and a marker for which of the 110 fixable rules have an auto-fix.
+rule and a marker for which of the 111 fixable rules have an auto-fix.

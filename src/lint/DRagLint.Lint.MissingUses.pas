@@ -108,6 +108,7 @@ uses
   System.StrUtils,
   System.Generics.Collections,
   System.RegularExpressions,
+  System.Math,
   DRagLint.Core.LiveDocs,
   DRagLint.Refactor.TextEdit,
   DRagLint.Lint.Autofix;
@@ -115,6 +116,7 @@ uses
 const
   MAX_LISTED_CANDIDATES = 5;
   MAX_CYCLE_VISITS      = 20000;
+  MAX_NESTING           = 32; { routine nesting walked out of before giving up }
 
 type
   TNameInfo = record
@@ -138,7 +140,37 @@ begin
     'Hi', 'Lo', 'Abs', 'Round', 'Trunc', 'Ptr', 'Addr', 'Str', 'Val', 'Concat', 'Insert',
     'Delete', 'Initialize', 'Finalize', 'GetTypeKind', 'IsManagedType', 'HasWeakRef',
     'TypeOf', 'Swap', 'Slice', 'Inherited', 'True', 'False', 'nil', 'Write', 'Writeln',
-    'Read', 'Readln', 'FillChar', 'Move', 'SetString', 'UniqueString', 'Name', 'Value']);
+    'Read', 'Readln', 'FillChar', 'Move', 'SetString', 'UniqueString', 'Name', 'Value', 'MaxInt',
+    'MaxLongint',
+    { built-in types and file routines the compiler supplies to System without a
+      declaration the library index holds }
+    'Pointer', 'Extended', 'LongWord', 'LongInt', 'Cardinal', 'Integer', 'Int64', 'UInt64', 'Byte',
+    'Word', 'ShortInt', 'SmallInt', 'Boolean', 'ByteBool', 'WordBool', 'LongBool', 'Char',
+    'AnsiChar', 'WideChar', 'string', 'AnsiString', 'WideString', 'UnicodeString', 'ShortString',
+    'RawByteString', 'UTF8String', 'Single', 'Double', 'Real', 'Real48', 'Comp', 'Currency',
+    'NativeInt', 'NativeUInt', 'Variant', 'OleVariant', 'PChar', 'PAnsiChar', 'PWideChar', 'Text',
+    'TextFile', 'File', 'AssignFile', 'CloseFile', 'Assign', 'Close', 'Reset', 'Rewrite', 'Append',
+    'Eof', 'Eoln', 'Seek', 'BlockRead', 'BlockWrite', 'FileSize', 'FilePos', 'Erase', 'Rename',
+    'IOResult', 'Flush', 'Truncate', 'ParamStr', 'ParamCount', 'Random', 'Randomize', 'Exp', 'Ln',
+    'Sqrt', 'Sqr', 'Sin', 'Cos', 'ArcTan', 'Frac', 'Int', 'Pi', 'UpCase', 'Pos', 'StringOfChar',
+    'Fixed', 'Absolute']);
+end;
+
+{ Names the text itself declares where the index records no symbol -- anonymous
+  method parameters, inline vars, labels: Left, Right: Integer. Any name
+  written before a lone ':' (optionally in a comma list) counts. A case label
+  of an enum value counts too, which only ever silences a finding. }
+procedure AddTextDeclaredNames(const ALines: TArray<string>; ANames: TDictionary<string, Boolean>);
+begin
+  for var L: string in ALines do
+  begin
+    if not L.Contains(':') then Continue;
+    var S: string:= TRegEx.Replace(L, '''[^'']*''', '''''');
+    var C: Integer:= Pos('//', S);
+    if C > 0 then S:= Copy(S, 1, C - 1);
+    for var M: TMatch in TRegEx.Matches(S, '([A-Za-z_][A-Za-z0-9_]*)(?=(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*\s*:(?!=))') do
+      ANames.AddOrSetValue(LowerCase(M.Groups[1].Value), True);
+  end;
 end;
 
 function IsRefKindOfInterest(const AKind: string): Boolean;
@@ -196,7 +228,7 @@ end;
 { True when the line still holds AName at 1-based column ACol. }
 function NameAt(const ALines: TArray<string>; ALine, ACol: Integer; const AName: string): Boolean;
 begin
-  Result:= (ALine >= 1) and (ALine <= Length(ALines)) and (ACol >= 1) and
+  Result:= InRange(ALine, 1, Length(ALines)) and (ACol >= 1) and
     SameText(Copy(ALines[ALine - 1], ACol, Length(AName)), AName);
 end;
 
@@ -270,7 +302,8 @@ begin
   end;
 end;
 
-class function TMissingUsesChecker.Analyze(const AFile: string; const AFileStore: ISymbolStore; AFileId: Int64;
+class function TMissingUsesChecker.Analyze(const AFile: string;  // dl:ok cyclomatic-complexity@162c -- REVIEWED 2026-10-29: the body is the rule's ordered list of precision guards, one Continue each; splitting it scatters the contract the unit header states
+  const AFileStore: ISymbolStore; AFileId: Int64;
   const ALookup: TArray<ISymbolStore>): TArray<TMissingUsesFinding>;
 var
   Lines    : TArray<string>;
@@ -284,6 +317,7 @@ var
   Used     : TArray<string>;
   ThisUnit : string;
   ImplLine : Integer;
+  GuardState: Integer; { 0 not asked, 1 every used unit is indexed, 2 not }
 
   function ParentOf(AStoreIdx: Integer; AId: Int64): TSymbol;
   begin
@@ -316,6 +350,20 @@ var
     end;
   end;
 
+  { True when some lookup store indexes a unit AEntry names, trying the
+    default VCL unit scope names for an unscoped entry (SysUtils). }
+  function KnownUnit(const AEntry: string): Boolean;
+  const
+    SCOPES: array[0..9] of string = ('', 'System.', 'Winapi.', 'Vcl.', 'Data.', 'Xml.', 'Datasnap.',
+      'Soap.', 'Web.', 'System.Win.');
+  begin
+    for var Pfx: string in SCOPES do
+      for var St: ISymbolStore in Stores do
+        for var S: TSymbol in St.FindSymbolsByExactName(Pfx + AEntry) do
+          if (S.Kind = skUnit) and SameText(S.Name, Pfx + AEntry) then Exit(True);
+    Result:= False;
+  end;
+
   function InfoOf(const AName: string): TNameInfo;
   begin
     if Infos.TryGetValue(LowerCase(AName), Result) then Exit;
@@ -340,6 +388,14 @@ var
         if not MatchText(U, Result.Candidates) then Result.Candidates:= Result.Candidates + [U];
       end;
     Result.Candidates:= PlatformFiltered(Result.Candidates, Used);
+    { top-ranked: a re-declaration in a framework (Spring's TBytes alias) loses to the one RTL unit }
+    if Length(Result.Candidates) > 1 then
+    begin
+      var Rtl: TArray<string>:= nil;
+      for var C: string in Result.Candidates do
+        if StartsText('System.', C) then Rtl:= Rtl + [C];
+      if Length(Rtl) = 1 then Result.Candidates:= Rtl;
+    end;
     Infos.Add(LowerCase(AName), Result);
   end;
 
@@ -351,7 +407,7 @@ var
     Result   := Default(TSymbol);
     var Cur: TSymbol:= if AId > 0 then AFileStore.GetSymbolById(AId) else Default(TSymbol);
     var Guard: Integer:= 0;
-    while (Cur.Id > 0) and (Guard < 32) do
+    while (Cur.Id > 0) and (Guard < MAX_NESTING) do
     begin
       Inc(Guard);
       if Cur.Kind in [skMethod, skConstructor, skDestructor] then
@@ -359,8 +415,7 @@ var
         AIsMethod:= True;
         Exit(Cur);
       end;
-      if not (Cur.Kind in [skProcedure, skFunction]) then Exit;
-      Result:= Cur;
+      if Cur.Kind in [skProcedure, skFunction] then Result:= Cur else Exit;
       var P: TSymbol:= if Cur.ParentId > 0 then AFileStore.GetSymbolById(Cur.ParentId) else Default(TSymbol);
       if IsTypeKind(P.Kind) then
       begin
@@ -379,7 +434,7 @@ var
     var A: Integer:= if ARoutine.ImplStartLine > 0 then ARoutine.ImplStartLine else ARoutine.StartLine;
     var B: Integer:= if ARoutine.ImplEndLine > 0 then ARoutine.ImplEndLine else ARoutine.EndLine;
     for var L: Integer:= A to B do
-      if (L >= 1) and (L <= Length(Lines)) then
+      if InRange(L, 1, Length(Lines)) then
       begin
         var T: string:= Lines[L - 1];
         var C: Integer:= Pos('//', T);
@@ -513,18 +568,30 @@ begin
   Order    := TList<string>.Create;
   WithCache:= TDictionary<Int64, Boolean>.Create;
   try
-    ThisUnit:= '';
+    ThisUnit  := '';
+    GuardState:= 0;
     CollectOwnNames;
+    AddTextDeclaredNames(Lines, OwnNames);
     if ThisUnit = '' then Exit;
     for var R: TReference in AFileStore.GetReferencesFromFile(AFileId) do
     begin
       if (R.SymbolId > 0) or (R.ReceiverText <> '') or not IsRefKindOfInterest(R.Kind) then Continue;
       var N: string:= R.NameText;
-      if (N = '') or (Pos('.', N) > 0) or IsIntrinsicName(N) then Continue;
+      if (N = '') or N.Contains('.') or IsIntrinsicName(N) then Continue;
       if OwnNames.ContainsKey(LowerCase(N)) or IsUsed(N) then Continue;
       if not NameAt(Lines, R.StartLine, R.StartCol, N) then Continue; { stale index: say nothing }
       var Info: TNameInfo:= InfoOf(N);
       if Info.InScope or (Length(Info.Candidates) = 0) then Continue;
+      { An unindexed used unit -- or no System at all, i.e. no platform library --
+        could declare any name: judging scope without it is guessing. Asked
+        once, and only when a candidate appears (most files never get here). }
+      if GuardState = 0 then
+      begin
+        GuardState:= 1;
+        for var E: string in Used + ['System'] do
+          if not KnownUnit(E) then GuardState:= 2;
+      end;
+      if GuardState = 2 then Exit;
       if Info.HasAnyMember or Info.HasClassMember then
       begin
         var IsMethod: Boolean;

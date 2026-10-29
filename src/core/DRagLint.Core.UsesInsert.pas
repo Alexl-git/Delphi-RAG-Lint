@@ -115,7 +115,8 @@ type
   end;
 
 const
-  CRLF = #13#10;
+  CRLF         = #13#10;
+  TOKEN_GROWTH = 64; { extra token slots per array growth }
 
 function IsIdentStart(C: Char): Boolean;
 begin
@@ -130,14 +131,14 @@ end;
 { Tokenizes the whole text: identifiers (dotted names joined) and single
   punctuation characters. Comments, directives, strings, char codes and
   numbers produce no token. }
-function Tokenize(const ALines: TArray<string>): TArray<TUTok>;
+function Tokenize(const ALines: TArray<string>): TArray<TUTok>;  // dl:ok cognitive-complexity@682a -- REVIEWED 2026-10-29: a flat lexer state machine (code / brace / paren-star, strings, numbers, idents); each branch is one token class
 var
   State: Integer; { 0 code, 1 inside braces, 2 inside paren-star }
   Count: Integer;
 
   procedure Add(const AText: string; ALine, ACol, AEnd: Integer; AFirst: Boolean);
   begin
-    if Count = Length(Result) then SetLength(Result, Count * 2 + 64);
+    if Count = Length(Result) then SetLength(Result, Count * 2 + TOKEN_GROWTH);
     Result[Count].Text  := AText;
     Result[Count].Line  := ALine;
     Result[Count].Col   := ACol;

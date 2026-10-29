@@ -45,6 +45,29 @@ begin
 end;
 end.
 '@
+Emit 'System.pas' @'
+unit System;
+interface
+implementation
+end.
+'@
+Emit 'uHelper.pas' @'
+unit uHelper;
+interface
+implementation
+end.
+'@
+Emit 'uUnknown.pas' @'
+unit uUnknown;
+interface
+implementation
+uses NoSuchUnit;
+procedure P;
+begin
+  CsSite.Send('x');
+end;
+end.
+'@
 Emit 'uImplUse.pas' @'
 unit uImplUse;
 interface
@@ -60,7 +83,7 @@ Emit 'uIntfUse.pas' @'
 unit uIntfUse;
 interface
 uses
-  SysUtils;
+  uHelper;
 type
   TFoo = class
     F: TCsLogger;
@@ -125,7 +148,7 @@ try {
   & $Exe index --all --config $manifest --only SecMu --jobs 1 2>&1 | Out-Null
   if (-not (Test-Path $db)) { Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
   $impl = @(LintOf 'uImplUse.pas'); $intf = @(LintOf 'uIntfUse.pas'); $already = @(LintOf 'uAlready.pas')
-  $local = @(LintOf 'uLocal.pas'); $cyc = @(LintOf 'uCycA.pas')
+  $local = @(LintOf 'uLocal.pas'); $unknown = @(LintOf 'uUnknown.pas'); $cyc = @(LintOf 'uCycA.pas')
   $all = & $Exe lint-all --db $db --rule unit-missing-from-uses --quiet 2>&1 | Out-String
   $rules = & $Exe rules --json 2>&1 | Out-String
   Write-Host 'FINDINGS' -ForegroundColor Cyan
@@ -133,6 +156,7 @@ try {
   Check 'interface type use -> interface clause' (($intf.Count -eq 1) -and ($intf[0] -match "'TCsLogger' is declared in unit uCsLog -- add it to the interface uses clause")) ($intf -join ' | ')
   Check 'NEG: unit already in uses (and a member after a dot) -> nothing' ($already.Count -eq 0) ($already -join ' | ')
   Check 'NEG: a local of that name -> nothing' ($local.Count -eq 0) ($local -join ' | ')
+  Check 'NEG: an unindexed used unit could declare it -> nothing' ($unknown.Count -eq 0) ($unknown -join ' | ')
   Check 'cycle: interface would close uCycA -> uCycB -> uCycA, implementation offered' (($cyc.Count -eq 1) -and ($cyc[0] -match 'add it to the implementation uses clause') -and ($cyc[0] -match 'circular unit reference: uCycA -> uCycB -> uCycA')) ($cyc -join ' | ')
   Check 'lint-all reports the same rule (impl + intf + cycle = 3)' (([regex]::Matches($all, 'unit-missing-from-uses')).Count -eq 3) ''
   Check 'rules --json lists the rule as fixable' ($rules -match '"id"\s*:\s*"unit-missing-from-uses"[^}]*"fixable"\s*:\s*true') ''
@@ -142,7 +166,7 @@ try {
   $implTxt = [IO.File]::ReadAllText((Join-Path $srcDir 'uImplUse.pas'))
   $intfTxt = [IO.File]::ReadAllText((Join-Path $srcDir 'uIntfUse.pas'))
   Check '--fix creates the implementation clause' ($implTxt.Contains("implementation`r`n`r`nuses`r`n  uCsLog;`r`nprocedure DoIt;")) ($implTxt -replace "`r`n", '\n')
-  Check '--fix extends the interface clause in its own layout' ($intfTxt.Contains("uses`r`n  SysUtils,`r`n  uCsLog;")) ($intfTxt -replace "`r`n", '\n')
+  Check '--fix extends the interface clause in its own layout' ($intfTxt.Contains("uses`r`n  uHelper,`r`n  uCsLog;")) ($intfTxt -replace "`r`n", '\n')
   Check '--fix output stays 7-bit ASCII + CRLF' ((-not ($implTxt -match "[^\x00-\x7F]")) -and (-not ($implTxt -match "[^\r]\n"))) ''
 } finally { Pop-Location }
 if ($script:Failed) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }
