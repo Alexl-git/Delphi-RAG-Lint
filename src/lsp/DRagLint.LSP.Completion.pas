@@ -1486,17 +1486,17 @@ begin
   var FileUri: string:= 'file:///' + StringReplace(AFile, '\', '/', [rfReplaceAll]);
   for var I: Integer:= 0 to ADiagnostics.Count - 1 do
   begin
-    if not (ADiagnostics.Items[I] is TJSONObject) then Continue;
+    if ADiagnostics.Items[I] is not TJSONObject then Continue;
     var Diag: TJSONObject:= ADiagnostics.Items[I] as TJSONObject;
     if not SameText(Diag.GetValue<string>('code', ''), MISSING_USES_RULE) then Continue;
     var DLine: Integer:= Diag.GetValue<Integer>('range.start.line', -1) + 1;
     if (DLine < AStartLine) or (DLine > AEndLine) then Continue;
     var Data: TJSONObject:= Diag.GetValue('data') as TJSONObject;
-    if (Data = nil) or not (Data.GetValue('fixes') is TJSONArray) then Continue;
+    if (Data = nil) or (Data.GetValue('fixes') is not TJSONArray) then Continue;
     var Fixes: TJSONArray:= Data.GetValue('fixes') as TJSONArray;
     for var J: Integer:= 0 to Fixes.Count - 1 do
     begin
-      if not (Fixes.Items[J] is TJSONObject) then Continue;
+      if Fixes.Items[J] is not TJSONObject then Continue;
       var Fx: TJSONObject:= Fixes.Items[J] as TJSONObject;
       var At: TJSONObject:= TJSONObject.Create;
       At.AddPair('line'     , TJSONNumber.Create(Fx.GetValue<Integer>('line', 0)));
