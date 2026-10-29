@@ -336,8 +336,8 @@ begin
   if not ScreenToClient(GGutterAnchorHwnd, Pt) then Exit;
   if Pt.X < GGutterTextLeft then Exit;
   DY:= Pt.Y - GGutterAnchorTopY;
-  if DY >= 0 then ROff:= DY div GGutterLineHeight
-  else ROff:= -((-DY + GGutterLineHeight - 1) div GGutterLineHeight);
+  ROff:= if DY >= 0 then DY div GGutterLineHeight
+         else -((-DY + GGutterLineHeight - 1) div GGutterLineHeight);
   ARow0:= (GGutterAnchorLine + ROff) - 1;
   ACol0:= (Pt.X - GGutterTextLeft) div GGutterCharWidth;
   Result:= ARow0 >= 0;
@@ -651,7 +651,7 @@ begin
       var BoxPt: TPoint:= Pos;
       ScreenToClient(UnderHwnd, BoxPt);
       Anchor:= DLHoverAnchorFor(UnderHwnd, BoxPt.X - FALLBACK_HALF_BOX, 1,
-        BoxPt.Y - FALLBACK_HALF_BOX, 2 * FALLBACK_HALF_BOX, 0, 2 * FALLBACK_HALF_BOX, -1);
+        BoxPt.Y - FALLBACK_HALF_BOX, 2 * FALLBACK_HALF_BOX, 0, 2 * FALLBACK_HALF_BOX);
     end;
 
     { IOTAEditView.Position is 1-based; LSP / diagnostic cache is 0-based }
@@ -702,8 +702,11 @@ begin
             still on that token. Not on an identifier: the fallback box stays. }
           var TokS, TokE: Integer;
           if DLIdentSpanAt(BufferLineText(EditView, MouseRow0 + 1), MouseCol0, TokS, TokE) then
+          begin
             Anchor:= DLHoverAnchorFor(GGutterAnchorHwnd, GGutterTextLeft, GGutterCharWidth,
-              GGutterAnchorTopY + ROff * GGutterLineHeight, GGutterLineHeight, TokS, TokE, MouseRow0);
+              GGutterAnchorTopY + ROff * GGutterLineHeight, GGutterLineHeight, TokS, TokE);
+            Anchor.Row0:= MouseRow0; { the gate's cell rule: same row + column span }
+          end;
         end;
       end;
     end;

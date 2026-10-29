@@ -102,10 +102,9 @@ function DLIdentSpanAt(const ALine: string; ACol0: Integer; out AStart0, AEnd0: 
 /// <param name="AEnd0">0-based column just after the token.</param>
 /// <returns>The anchor; X span = ATextLeft + column * ACharWidth, the exact
 /// inverse of the mapping that turned the pointer into a column.</returns>
-/// <param name="ARow0">0-based buffer row of the token; -1 when unknown (the
-/// gate then skips its cell rule).</param>
-function DLHoverAnchorFor(AHwnd: HWND; ATextLeft, ACharWidth, ALineTopY, ALineHeight, AStart0, AEnd0: Integer;
-  ARow0: Integer): TDLHoverAnchor;
+/// <remarks>Row0 is -1 (unknown: the gate skips its cell rule); a caller that
+/// mapped the token to a buffer row sets Row0 on the result.</remarks>
+function DLHoverAnchorFor(AHwnd: HWND; ATextLeft, ACharWidth, ALineTopY, ALineHeight, AStart0, AEnd0: Integer): TDLHoverAnchor;
 
 implementation
 
@@ -144,15 +143,14 @@ begin
   Result:= True;
 end;
 
-function DLHoverAnchorFor(AHwnd: HWND; ATextLeft, ACharWidth, ALineTopY, ALineHeight, AStart0, AEnd0: Integer;
-  ARow0: Integer): TDLHoverAnchor;
+function DLHoverAnchorFor(AHwnd: HWND; ATextLeft, ACharWidth, ALineTopY, ALineHeight, AStart0, AEnd0: Integer): TDLHoverAnchor;
 begin
   Result.Hwnd       := AHwnd;
   Result.TokenLeftX := ATextLeft + AStart0 * ACharWidth;
   Result.TokenRightX:= ATextLeft + AEnd0   * ACharWidth;
   Result.LineTopY   := ALineTopY;
   Result.LineHeight := ALineHeight;
-  Result.Row0       := ARow0;
+  Result.Row0       := -1;
   Result.StartCol0  := AStart0;
   Result.EndCol0    := AEnd0;
 end;

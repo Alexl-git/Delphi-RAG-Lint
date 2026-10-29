@@ -479,9 +479,6 @@ begin
   try
     Rig.Client.BusyAfterMs := 200;
     Rig.Client.StuckAfterMs:= 60000;
-    Check('B4 draglint/callerCounts is a background method', DLIsBackgroundLspMethod('draglint/callerCounts'));
-    Check('B5 textDocument/codeLens is a background method', DLIsBackgroundLspMethod('textDocument/codeLens'));
-    Check('B6 draglint/hoverBundle is NOT a background method', not DLIsBackgroundLspMethod('draglint/hoverBundle'));
     Rig.Client.RequestAsync('draglint/callerCounts', nil, 60000, nil);
     Pump(400);
     Check('B7 PREMISE the background request is still outstanding', Rig.Client.OutstandingCount = 1, Format('outstanding=%d', [Rig.Client.OutstandingCount]));
@@ -562,7 +559,8 @@ var
   A: TDLHoverAnchor;
 begin
   { Token at columns [4, 10): X span [72, 120). Line band centre 168, +-9.6. }
-  A:= DLHoverAnchorFor(ED, TL, CW, TOP, H, 4, 10, ROW);
+  A:= DLHoverAnchorFor(ED, TL, CW, TOP, H, 4, 10);
+  A.Row0:= ROW;
   Check('G1 anchor X span = text left + column * char width', (A.TokenLeftX = 72) and (A.TokenRightX = 120), Format('%d..%d', [A.TokenLeftX, A.TokenRightX]));
   Check('G2 same window, inside the token, on the line -> show', DLHoverGate(A, ED, Point(90, 168), ROW, 5) = hgvShow);
   Check('G3 the first pixel of the token shows', DLHoverGate(A, ED, Point(72, 168), ROW, 5) = hgvShow);
@@ -580,14 +578,16 @@ begin
   Check('G13 no anchor -> discard', DLHoverGate(A, 0, Point(90, 168), ROW, 5) = hgvNoAnchor);
   { The cell rule (whole-branch review 2026-10-29): same pixels, different
     buffer cell -- a wheel scroll or an edit under a stationary pointer. }
-  A:= DLHoverAnchorFor(ED, TL, CW, TOP, H, 4, 10, ROW);
+  A:= DLHoverAnchorFor(ED, TL, CW, TOP, H, 4, 10);
+  A.Row0:= ROW;
   Check('G14 scrolled: same pixels, another row -> discard', DLHoverGate(A, ED, Point(90, 168), ROW + 3, 5) = hgvOtherCell);
   Check('G15 edited: same row, column left the token -> discard', DLHoverGate(A, ED, Point(90, 168), ROW, 12) = hgvOtherCell);
   Check('G16 the last column of the token shows', DLHoverGate(A, ED, Point(90, 168), ROW, 9) = hgvShow);
   Check('G17 the column just after the token does not', DLHoverGate(A, ED, Point(90, 168), ROW, 10) = hgvOtherCell);
   Check('G18 pointer no longer maps to a cell -> discard', DLHoverGate(A, ED, Point(90, 168), -1, -1) = hgvOtherCell);
   Check('G19 anchor records the row and the column span', (A.Row0 = ROW) and (A.StartCol0 = 4) and (A.EndCol0 = 10));
-  A:= DLHoverAnchorFor(ED, TL, CW, TOP, H, 4, 10, -1);
+  A:= DLHoverAnchorFor(ED, TL, CW, TOP, H, 4, 10);
+  Check('G20a a fresh anchor has no row (fallback)', A.Row0 = -1);
   Check('G20 a fallback anchor (row unknown) skips the cell rule', DLHoverGate(A, ED, Point(90, 168), -1, -1) = hgvShow);end;
 
 { ---- S: identifier span ---- }

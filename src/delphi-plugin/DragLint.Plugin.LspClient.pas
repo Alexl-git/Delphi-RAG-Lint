@@ -53,7 +53,7 @@ type
   TDLOutstanding = record
     /// <summary>GetTickCount64 when it was sent.</summary>
     Sent      : UInt64 ;
-    /// <summary>DLIsBackgroundLspMethod of its method: IsBusy ignores it.</summary>
+    /// <summary>True for a background method (caller counts, code lens): IsBusy ignores it.</summary>
     Background: Boolean;
   end;
 
@@ -181,7 +181,7 @@ type
       /// behind a request the serial engine is still chewing on.</remarks>
       /// <returns>True while the oldest outstanding FOREGROUND request, or the
       /// current stdin write, is older than BusyAfterMs. Background requests
-      /// (DLIsBackgroundLspMethod) never count; a request whose frame could
+      /// (draglint/callerCounts, textDocument/codeLens) never count; a request whose frame could
       /// not be sent is never outstanding.</returns>
       function IsBusy: Boolean;
 
@@ -222,16 +222,6 @@ type
       /// IsStuck True (default 60000).</summary>
       property StuckAfterMs: Cardinal read FStuckAfterMs write FStuckAfterMs;
   end;
-
-/// <summary>True for a request the IDE sends in the BACKGROUND, whose age must
-/// not make the client busy.</summary>
-/// <param name="AMethod">JSON-RPC method name, compared case-sensitively.</param>
-/// <returns>True for draglint/callerCounts and textDocument/codeLens.</returns>
-/// <remarks>Pure. A background request still counts for OutstandingCount and
-/// IsStuck; only IsBusy -- the "do not ask a hover now" signal -- ignores it,
-/// so a slow caller-count pass never starves the hover the engine yields
-/// to.</remarks>
-function DLIsBackgroundLspMethod(const AMethod: string): Boolean;
 
 implementation
 
@@ -999,6 +989,10 @@ begin
   end;
 end;
 
+{ True for a request the IDE sends in the BACKGROUND (draglint/callerCounts,
+  textDocument/codeLens). It still counts for OutstandingCount and IsStuck; only
+  IsBusy -- the "do not ask a hover now" signal -- ignores it, so a slow
+  caller-count pass never starves the hover the engine yields to. }
 function DLIsBackgroundLspMethod(const AMethod: string): Boolean;
 begin
   Result:= (AMethod = 'draglint/callerCounts') or (AMethod = 'textDocument/codeLens');
@@ -1258,11 +1252,13 @@ procedure TDragLintLspClient.WriteFramedMessage(const AJson: string; const ACoal
   (docs\INBOX-ide-hang-on-slow-engine.md section 1). The writer thread in
   DragLint.Plugin.LspWriteQueue now owns the pipe; a full queue drops the frame
   and says so in the log instead of waiting. }
+const
+  LOG_PREVIEW_CHARS = 200; { how much of a frame the debug log quotes }
 var
   Bytes: TBytes;
 begin
   Bytes:= TEncoding.UTF8.GetBytes(AJson);
-  DebugLog(Format('Tx: %d bytes: %s', [Length(Bytes), Copy(AJson, 1, 200)]));
+  DebugLog(Format('Tx: %d bytes: %s', [Length(Bytes), Copy(AJson, 1, LOG_PREVIEW_CHARS)]));
   if FWriter = nil then Exit;
   if not FWriter.Enqueue(TEncoding.UTF8.GetBytes(Format('Content-Length: %d'#13#10#13#10, [Length(Bytes)])) + Bytes, ACoalesceKey) then
     DebugLog('Tx DROPPED -- write queue full or pipe failed (engine not reading stdin?)');
