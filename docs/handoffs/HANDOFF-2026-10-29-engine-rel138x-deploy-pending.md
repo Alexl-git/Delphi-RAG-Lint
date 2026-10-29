@@ -25,6 +25,27 @@ Resumes/closes: HANDOFF-2026-10-29-engine-hang-fix-deploy-pending.md (hang fix D
 ## Re-lint result (12:2x)
 Done: 1 finding left on changed lines -- CLI.pas:15496 review-marker-stale: the new dl:ok concat-in-loop carries no @hash. Re-mark it with the hash the lint message prints (full message in cli2.lint.json), re-lint that file, then step 2.
 
+## DONE 11:58 (session 2): steps 1-4
+- Marker re-marked concat-in-loop@7c9b; changed_lint: on-changed-lines=0. Commit rel138x 3f7c28be.
+- Rebuilt engine + plugin Win32/Win64 (exit 0). Deployed: exe rename-aside -> drag-lint.exe.old-115839 (+ .bak-pre-rel138x),
+  BPL/DCP Win32/Win64 (+ .bak-pre-rel138x), hash-verified; rules\ content-identical (not copied). main 407e5375. FYI sent to lsp-a2, www-9b, convrules-editor-c8.
+- NEXT: step 5 (owner go for merge). Owner request: VS Code Problems go stale after on-disk edits -> proposal: client FileSystemWatcher on Pascal sources -> didChangeWatchedFiles -> re-lint/clear; "Refresh Problems" command (LSP stream).
+
+## DONE 14:37 (session 2, owner away): merge + 3 lanes + redeploy
+- Owner rulings 12:3x: merge for 1.38.0 publish prep; SKIP 1.37.0; everything targets 1.38 (CONVERTER told: re-pin to 1.38, hold for budget);
+  old exes deleted (incl. 1.28-1.31 .bak); "fixable"=111 accepted; no long development (weekly token limit near).
+- main: ab8e60dc merge rel/138x; 896fb465 concat-in-loop per-routine decl scope (CLI.pas 42->12 findings);
+  54e2a09c VS Code: server re-lints Pascal files changed on disk (not open), "Drag-Lint: Refresh Problems", docs\wiki\vscode-extension.md, ext 1.6.1 (.vsix NOT built);
+  5d3e0980 LSP verified vscode-extension; 15897488 purity stage batch symbol load (1-file incremental index 61 s -> 27 s, identical to --rebuild); 1a1338da manifest regen. NOT PUSHED.
+- Battery on main 56/62: 6 known fails (purity_stage case 28 pre-existing; lsp full_rules, inlay_hint, switch, switch_params, switch_vscode).
+  lint-all: 0 real findings on changed lines (7 duplicate-code hits vs the stale rel138x paths in the reused DB copy = artefact).
+- Engine REDEPLOYED 14:36 (hash ok); plugin unchanged since RC. dll-win64\drag-lint.exe.old-143637 still in use -> delete later.
+- WWW drafts ready, uncommitted (missing-uses article verified; new 2026-10-30-what-the-index-saved-you; site.json 290/18/111); www-9b told.
+- stash@{0} = agent:merge-rel138x stale leaks (safe to drop after review); stash@{1} owner P3 (keep).
+- NEXT (owner): push main (approval); token-budget review; IDE test of 1.38; .vsix 1.6.1 package+install (LSP); missing-uses auto mode
+  (add-on-save S; auto-drop needs finalization + class-constructor exclusion, M) -- owner to choose; calls stage 13-55 s/changed file = next speed target (M).
+- Backlog adds: resolve-dbs finds no manifest section for src\cli\drag-lint.dproj; src\cli\_D-RAG\drag-lint.sqlite stale (57/231).
+
 ## Resume point (in order)
 1. Verify the re-lint: scratchpad = C:\TEMP\claude\c--Projects-Delphi-RAG-lint\487fcb1b-6ff5-455e-8e0b-5b5450070ebc\scratchpad\rel ;
    `& "$r\changed_lint.ps1" -Json @("$r\lint\cli2.lint.json")` must show 0 on changed lines and no review-marker-stale/unused

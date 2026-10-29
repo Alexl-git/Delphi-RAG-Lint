@@ -8,7 +8,8 @@ handoff it resumes; several `open` lines are normal. New handoffs are written he
 The legacy `..\RESUME-*.md` files below are gitignored (`docs/RESUME-*`) and exist only in
 the main working tree; their links do not resolve in a fresh clone or worktree.
 
-- 2026-10-29 | engine | rel/138x RC (hang fix + bounded waits + missing-uses + concat FP) built, guards 54/59; lint verify -> commit -> deploy; then ORM3 hook supersede (ocrpdf, due today) | open | [HANDOFF-2026-10-29-engine-rel138x-deploy-pending.md](HANDOFF-2026-10-29-engine-rel138x-deploy-pending.md)
+- 2026-10-29 | engine | 1.38 prep on local main (536 unpushed -- owner pushes), deployed + vsix 1.6.1; owner IDE test -> publish; next = plan A auto uses on save | open | [HANDOFF-2026-10-29-engine-138-prep-done-auto-uses-next.md](HANDOFF-2026-10-29-engine-138-prep-done-auto-uses-next.md)
+- 2026-10-29 | engine | rel/138x RC (hang fix + bounded waits + missing-uses + concat FP) built, guards 54/59; lint verify -> commit -> deploy; then ORM3 hook supersede (ocrpdf, due today) | closed | [HANDOFF-2026-10-29-engine-rel138x-deploy-pending.md](HANDOFF-2026-10-29-engine-rel138x-deploy-pending.md)
 - 2026-10-29 | ENGINE | IDE hang fixes P0-P2 + review fixes on fix/hang-int138; deploy pending (owner go given); missing-uses + index-fill branches ready | closed | [HANDOFF-2026-10-29-engine-hang-fix-deploy-pending](HANDOFF-2026-10-29-engine-hang-fix-deploy-pending.md)
 - 2026-10-29 | ENGINE | 1.38.0-alpha deployed (engine, libraries, 39 DBs, plugin, VSC, installer); owner IDE test | open | HANDOFF-2026-10-29-engine-138-deployed-owner-test.md
 - 2026-10-28 | ENGINE | 1.37 freeze done (ext fc06a64e, stage3 265b14dd), libraries parsing to scratch (ETA 06:00-07:30), int138 37a9975f green; deploy/swap needs owner go | closed | HANDOFF-2026-10-28-engine-freeze-done-libraries-parsing.md
