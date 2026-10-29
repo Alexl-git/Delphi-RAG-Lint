@@ -35,7 +35,7 @@ edge:
 
 | Where | How |
 |---|---|
-| IDE | Put the caret on the flagged line and press **Ctrl+Alt+U** (drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor). The unit goes to the clause the message names; one undo reverts it. |
+| IDE | Put the caret on the flagged line and press **Ctrl+Alt+U**, or choose drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U). The unit goes to the clause the message names; one undo reverts it. |
 | VS Code / any LSP client | The light bulb on the diagnostic: *Add CodeSiteLogging to the implementation uses clause*. |
 | Command line | `drag-lint lint <file> --db <db> --rule unit-missing-from-uses --fix` previews; add `--apply` to write. Every missing unit of the file is added in one edit per clause. |
 
