@@ -376,7 +376,7 @@ begin
       if not SameText(F0.RuleId, UNUSED_UNIT_RULE) or not SameText(F0.FilePath, APath) then Continue;
       if ContainsText(F0.Message, INIT_TIER_TEXT) then Continue;
       var F: TLintFinding:= WithCharColumns(F0, Lines);
-      var M: TMatch:= TRegEx.Match(F.Message, '^Unit ''([A-Za-z_][\w.]*)''');
+      var M: TMatch:= TRegEx.Match(F.Message, '^Unit ''([A-Za-z_][\w.]*)''');  // dl:ok duplicate-code@0039 -- REVIEWED 2026-10-29: deliberately the same guards as DRagLint.Fix.Store.FixUnusedUnits, on the BUFFER text instead of the disk copy; the LSP guard pins byte parity with lint --fix
       if not M.Success or (F.StartLine < 1) or (F.StartLine > Lines.Count) then Continue;
       if not SameText(StringReplace(Copy(Lines[F.StartLine - 1], F.StartCol, F.EndCol - F.StartCol), ' ', '', [rfReplaceAll]),
                       M.Groups[1].Value) then Continue;

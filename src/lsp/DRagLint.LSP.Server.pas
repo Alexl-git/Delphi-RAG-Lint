@@ -1396,7 +1396,7 @@ uses
   DRagLint.Symbol.Describe,  // DescribeDeclaredType: the type a hover shows for a value kind
   DRagLint.Convert.PropTree, // ClearPropertyDeclaredTypeCache: a reopened DB must not answer from old rows
   DRagLint.LSP.Features,  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
-  DRagLint.LSP.UsesOnSave  { KINDS_ON_SAVE: the codeActionKinds initialize advertises }
+  DRagLint.LSP.UsesOnSave  { KINDS_ON_SAVE: the codeActionKinds initialize advertises } // dl:unit DRagLint.LSP.UsesOnSave accepted -- KINDS_ON_SAVE and UNUSED_UNIT_RULE are the protocol kinds and rule id TUsesOnSave builds for, so they travel with it
   ;
 
 const
