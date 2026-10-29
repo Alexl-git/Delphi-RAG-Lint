@@ -26,3 +26,6 @@ dl:ok reason form deferred; doc-literal fix done right (doclit); D5 = upconvert 
 3. Merge gaps/stage3 265b14dd into gaps/int138 (brings ext-plat/doclit/multiname to 1.38), battery.
 4. Prepare (not publish) 1.37.0 from stage3; 1.38 needs only `index --all --resolve-only` after the re-parse.
 5. lf-docs (haiku) on int138; LSP owed items (lsp-a2 waits for owner go); untracked INBOX notes + BACKLOG edit in main tree.
+
+## Update 21:45
+DONE: stage3 merged into int138 (a40f6e1a, one extractor pin 3302e490..a53acc, no bump) + lf-docs (a6986d97); int138 HEAD a6986d97, full battery green. Next actions 3 and the lf-docs half of 5 are done. Minor: two near-identical `index --project` usage lines in generated HelpText (rebuild-index-for-this-project vs rescan-this-unit).
