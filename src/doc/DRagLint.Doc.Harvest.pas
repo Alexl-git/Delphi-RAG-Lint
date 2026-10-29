@@ -622,7 +622,7 @@ var
   T: string;
 begin
   T:= Trim(ALine);
-  Result:= T.StartsWith('//') and (not T.StartsWith('///')) and Trim(Copy(T, 3, MaxInt)).StartsWith('dl:');
+  Result:= T.StartsWith('//') and (not T.StartsWith('///')) and Trim(Copy(T, Length('//') + 1, MaxInt)).StartsWith('dl:');
 end;
 
 function HarvestScan(const ASrcLines: TArray<string>; ADeclLine: Integer): THarvestResult;

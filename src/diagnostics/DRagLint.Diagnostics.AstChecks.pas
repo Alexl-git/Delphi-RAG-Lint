@@ -1886,6 +1886,8 @@ var
 
   { Source row ARow (1-based) as text, without its line break. }
   function SrcRow(ARow: Integer): string;
+  const
+    LF_BYTE = 10;
   var
     S: Integer;
     E: Integer;
@@ -1894,11 +1896,11 @@ var
     S:= 0;
     for R:= 2 to ARow do
     begin
-      while (S < Length(Src)) and (Src[S] <> 10) do Inc(S);
+      while (S < Length(Src)) and (Src[S] <> LF_BYTE) do Inc(S);
       Inc(S);
     end;
     E:= S;
-    while (E < Length(Src)) and (Src[E] <> 10) do Inc(E);
+    while (E < Length(Src)) and (Src[E] <> LF_BYTE) do Inc(E);
     if E <= S then Exit('');
     Result:= TEncoding.UTF8.GetString(Src, S, E - S).TrimRight([#13]);
   end;

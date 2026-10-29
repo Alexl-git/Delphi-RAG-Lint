@@ -1881,7 +1881,11 @@ begin
     else if A = '--no-seealso' then Result.DocSeeAlso:= False  // dl:ok duplicate-code@b5e0 -- REVIEWED 2026-09-23: the ParseArgs shape every flag branch shares (a flag parser is a chain of these by design); the duplicate window moved here when the doc-forget flags were added below
     // AutoDocument (ADF T5): --since opts in the git <since> doc-source; --base-dir
     // sets the repo root for the git lookup (defaults to the file's own dir).
-    else if (A = '--since') and (Result.Command = 'gain') and (i < ParamCount) then begin Inc(i); Result.GainSince:= ParamStr(i); end
+    else if (A = '--since') and (Result.Command = 'gain') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.GainSince:= ParamStr(i);
+    end
     else if A = '--since' then Result.DocSince:= True
     else if A = '--migrate-pure' then Result.DocMigratePure:= True
     else if (A = '--scope') and (i < ParamCount) then
@@ -3892,7 +3896,7 @@ end;
 /// <param name="AStore">The project DB's store (its fingerprint names the platform), or nil.</param>
 /// <param name="AGate">Out: the readiness verdict (re-probed now, quietly) for the marker writer.</param>
 /// <returns>The platform library opened like --library-db (read-only use, never written) when it is
-/// READY; an empty array with a `library: PENDING` line when it is not (continue, mark, say so).</returns>
+/// READY; an empty array when it is not (continue; FinishLibraryResolve marks and says so).</returns>
 /// <remarks>Default OFF: the 2026-10-25 ruling is that no run attaches a library nobody named.
 /// The key is the explicit, per-section, reviewable form of naming it.</remarks>
 function ManifestLibraryStores(ALibraryResolve: Boolean; const APlatformArg, ADproj, AOwnDb: string;
@@ -3906,15 +3910,12 @@ begin
     var LibArgs: TArgs:= Default(TArgs);
     LibArgs.LibraryDbs:= [AGate.LibDb];
     Result:= OpenLibraryStores(LibArgs);
-    if Length(Result) > 0 then Writeln('  library: bound (', AGate.LibDb, ', ', AGate.Why, ')')
-    else AGate.State:= lrUnreadable;
+    if Length(Result) = 0 then AGate.State:= lrUnreadable;
   end;
   if Length(Result) = 0 then
   begin
     if AGate.State = lrMissing then
       Writeln('  NOTE: libraryResolve is on but no library index was found; resolving without it.');
-    Writeln(Format('  library: PENDING (%s) -- stored call edges are project-local; run: drag-lint %s once the %s library is ready',
-      [AGate.Why, IndexRemedyFor(AStore, AOwnDb, {AResolveOnly=}True), AGate.Platform]));
   end;
 end;
 
@@ -5093,7 +5094,11 @@ begin
   if EffJobs <= 1 then
   begin
     FailedNames:= nil;
-    for i:= 0 to High(Plan.Items) do begin if BatchStandDownTaken then Exit(CONTROL_EXIT_STOOD_DOWN); if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly, AArgs.BuildConfig, AArgs.WaitLibraryMin, AArgs.RequireLibrary) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])]; end;
+    for i:= 0 to High(Plan.Items) do
+    begin
+      if BatchStandDownTaken then Exit(CONTROL_EXIT_STOOD_DOWN);
+      if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly, AArgs.BuildConfig, AArgs.WaitLibraryMin, AArgs.RequireLibrary) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])];
+    end;
     Result:= ReportFailedSections(FailedNames, Length(Plan.Items));
     Exit;
   end;
@@ -6994,8 +6999,14 @@ begin
     else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d%s, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, FailedNote, Elapsed]));
     AnyFileFailed:= AnyFileFailed or (TickFailed > 0);
     if not AArgs.Watch then Break;
+    const WATCH_POLL_MS = 100;
+    const MS_PER_SEC = 1000;
     var Slept: Integer:= 0;
-    while (Slept < Interval * 1000) and not BatchStandDownTaken do begin Sleep(100); Inc(Slept, 100); end;
+    while (Slept < Interval * MS_PER_SEC) and not BatchStandDownTaken do
+    begin
+      Sleep(WATCH_POLL_MS);
+      Inc(Slept, WATCH_POLL_MS);
+    end;
     if BatchStandDownTaken then Break; { idle between ticks: nothing open, stop cleanly }
   end; // while
 
@@ -21550,7 +21561,11 @@ begin
     for FileIdx:= 0 to Length(FilePaths) - 1 do
     begin
       if LintDelayMs > 0 then Sleep(LintDelayMs); { test seam, see run_control_channel_guard.ps1 }
-      if BatchStandDownTaken then begin LintStoodAt:= FileIdx; Break; end;
+      if BatchStandDownTaken then
+      begin
+        LintStoodAt:= FileIdx;
+        Break;
+      end;
       PasPath:= FilePaths[FileIdx];
       try
         { Progress output (throttled by percentage) }
@@ -31465,7 +31480,11 @@ begin
   except
     on E: Exception do begin Writeln(ErrOutput, 'forms-csv: ', E.Message); Exit(1); end;
   end;
-  if AArgs.Output <> '' then begin WriteOutputFile(AArgs.Output, Csv); Writeln('forms-csv: wrote ', AArgs.Output); end
+  if AArgs.Output <> '' then
+  begin
+    WriteOutputFile(AArgs.Output, Csv);
+    Writeln('forms-csv: wrote ', AArgs.Output);
+  end
   else Write(Csv);
   Result:= 0;
 end; // function

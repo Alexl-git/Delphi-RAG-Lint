@@ -87,7 +87,7 @@ type
 /// <remarks>Product numbers (6..13) and CompilerVersion numbers (14..37) do not
 /// overlap, so a bare number is never ambiguous. Delphi 2007 (CompilerVersion
 /// 18.5) maps to 18. Pure.</remarks>
-function ParseCompilerToken(const pToken: string; out pVersion: Integer; out pError: string): Boolean;  // dl:ok unused-public-symbol@7528 -- public API: pinned by tests\rules-catalog, called by the LSP context lane
+function ParseCompilerToken(const pToken: string; out pVersion: Integer; out pError: string): Boolean;
 
 /// <summary>Maps a .dproj &lt;ProjectVersion&gt; to the CompilerVersion of the
 /// IDE that saved it.</summary>
@@ -98,7 +98,7 @@ function ParseCompilerToken(const pToken: string; out pVersion: Integer; out pEr
 /// <remarks>Only 20.4 -> 37 is measured on this machine (drag-lint.dproj, Studio
 /// 37); the older rows follow the Embarcadero release history and are pinned by
 /// tests\autotest\run_target_compiler_guard.ps1. Pure.</remarks>
-function ProjectVersionToCompiler(const pProjectVersion: string; out pVersion: Integer): Boolean;  // dl:ok unused-public-symbol@4e5d -- public API: pinned by tests\rules-catalog, called by the LSP context lane
+function ProjectVersionToCompiler(const pProjectVersion: string; out pVersion: Integer): Boolean;
 
 /// <summary>The product name of a CompilerVersion, for messages.</summary>
 /// <param name="pVersion">A CompilerVersion.</param>
@@ -138,7 +138,7 @@ function IsGatedByTarget(pNeedsCompiler, pTarget: Integer): Boolean;
 /// <param name="pCompatSince">compat_since; 0 = not a compat rule.</param>
 /// <param name="pTarget">The run's CompilerVersion.</param>
 /// <returns>(pCompatSince &gt; 0) and (pTarget &lt; pCompatSince).</returns>
-function IsCompatOnForTarget(pCompatSince, pTarget: Integer): Boolean;  // dl:ok unused-public-symbol@402c -- public API: pinned by tests\rules-catalog, called by the LSP context lane
+function IsCompatOnForTarget(pCompatSince, pTarget: Integer): Boolean;
 
 /// <summary>The target compiler of the current run.</summary>
 /// <returns>The value SetActiveTargetCompiler stored; DEFAULT_TARGET_COMPILER

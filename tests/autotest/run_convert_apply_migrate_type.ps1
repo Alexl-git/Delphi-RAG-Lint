@@ -52,7 +52,7 @@ Copy-Item (Join-Path $PSScriptRoot 'fixtures\migrate_type\*') $WorkDir
 function P([string]$n) { return (Join-Path $WorkDir $n) }
 function Text([string]$n) { return [IO.File]::ReadAllText((P $n), [Text.Encoding]::ASCII) }
 $orig = @{}
-foreach ($f in 'CvUse.pas', 'CvUse.dfm', 'CvWarn.pas', 'CvWarn.dfm') { $orig[$f] = [IO.File]::ReadAllBytes((P $f)) }
+foreach ($f in 'CvUse.pas', 'CvUse.dfm', 'CvWarn.pas', 'CvWarn.dfm', 'CvImpl.pas', 'CvImpl.dfm') { $orig[$f] = [IO.File]::ReadAllBytes((P $f)) }
 function Restore { foreach ($k in $orig.Keys) { [IO.File]::WriteAllBytes((P $k), $orig[$k]) } }
 
 $db = P 'fx.sqlite'
@@ -120,6 +120,20 @@ Check 'A6 ... no Old token left in code (only the comment one)' ([regex]::Matche
 Check 'A7 ... CvNew added to the INTERFACE uses' ($t -match '(?s)interface\s+uses[^;]*\bCvNew\b[^;]*;.*implementation') $t
 Check 'A8 ... the #convert field retype still happens' $t.Contains('    F: TNewField;') $t
 
+# ---- uses placement: unit absent from uses, usage only in the implementation section ----
+$ib = $orig['CvImpl.pas']
+$r = Apply 'CvImpl.pas' 'type.rules' @()
+Check 'U1 dry run writes nothing to the unit' ([IO.File]::ReadAllBytes((P 'CvImpl.pas')).Length -eq $ib.Length -and (Text 'CvImpl.pas') -notmatch 'CvNew') (Text 'CvImpl.pas')
+$r = Apply 'CvImpl.pas' 'type.rules' @('--apply', '--no-backup')
+$t = Text 'CvImpl.pas'
+Check 'U2 --apply exits 0 and renames the implementation-only sites' (($r.Code -eq 0) -and $t.Contains('  C: TScreenCursorNew;') -and $t.Contains('C:= scnWait;')) $r.Out
+Check 'U3 ... CvNew added exactly once' ([regex]::Matches($t, '\bCvNew\b').Count -eq 1) $t
+Check 'U4 ... into the IMPLEMENTATION uses, not the interface uses' (($t -match '(?s)implementation\s+uses[^;]*\bCvNew\b[^;]*;') -and -not ($t -match '(?s)interface\s+uses[^;]*\bCvNew\b[^;]*;.*implementation')) $t
+[IO.File]::WriteAllBytes((P 'CvImpl.dfm'), $orig['CvImpl.dfm'])
+Reindex
+$r = Apply 'CvImpl.pas' 'type.rules' @('--apply', '--no-backup')
+$t2 = Text 'CvImpl.pas'
+Check 'U5 second --apply adds nothing more (idempotent)' (($r.Code -eq 0) -and ($t2 -ceq $t) -and ([regex]::Matches($t2, '\bCvNew\b').Count -eq 1)) ("code=$($r.Code) " + $r.Out)
 # ---- idempotence ---------------------------------------------------------------
 [IO.File]::WriteAllBytes((P 'CvUse.dfm'), $orig['CvUse.dfm'])
 Reindex
