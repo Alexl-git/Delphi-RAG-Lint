@@ -8,6 +8,8 @@ handoff it resumes; several `open` lines are normal. New handoffs are written he
 The legacy `..\RESUME-*.md` files below are gitignored (`docs/RESUME-*`) and exist only in
 the main working tree; their links do not resolve in a fresh clone or worktree.
 
+- 2026-10-28 | ENGINE | 1.37 freeze done (ext fc06a64e, stage3 265b14dd), libraries parsing to scratch (ETA 06:00-07:30), int138 37a9975f green; deploy/swap needs owner go | open | HANDOFF-2026-10-28-engine-freeze-done-libraries-parsing.md
+
 ## Standing task lists (not handoffs)
 
 - 2026-10-28 | ENGINE | PRE-REBOOT: freeze pending (gaps/ext 694e0360 + ext-plat + ext-dirword WIP), ~25 1.38 branches READY, 4 WIP lanes; ledger C:\TEMP\claude\lanes\gaps\LEDGER.md | open | [HANDOFF-2026-10-28-engine-prereboot-freeze-and-138-lanes.md](HANDOFF-2026-10-28-engine-prereboot-freeze-and-138-lanes.md)
