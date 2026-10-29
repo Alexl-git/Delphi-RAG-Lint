@@ -116,8 +116,21 @@ type
   path is the FALLBACK, not the norm, and it is deliberately still there: a code
   lens that stops appearing while the server restarts is worse than a slow one. }
 type
+  /// <summary>Receives one file's caller counts on the MAIN thread.</summary>
+  /// <param name="AOk">False when the engine timed out or answered nothing usable.</param>
+  /// <param name="ALines">0-based lines; -1 entries are skipped.</param>
+  /// <param name="ACounts">Caller count per entry of ALines.</param>
+  TCallerCountsDone = reference to procedure(AOk: Boolean; const ALines, ACounts: TArray<Integer>);
+
+  /// <summary>Asynchronous caller-count source (2026-10-29).</summary>
+  /// <returns>True when the hook TOOK the file -- it sent a request whose answer
+  /// arrives through ADone, or it declined for now (busy, one in flight, engine
+  /// starting) and the next activation asks again. False only when no LSP can
+  /// answer, and the cache falls back to its per-method spawns.</returns>
+  /// <remarks>The hook must never wait on the engine: it runs on view activation
+  /// in the IDE main thread.</remarks>
   TCallerCountsHook = reference to function(const AFilePath: string;
-    out ALines, ACounts: TArray<Integer>): Boolean;
+    const ADone: TCallerCountsDone): Boolean;
 
 /// <summary>Installs the LSP-backed caller-count source. Pass nil to remove it
 /// and force the per-method spawn path.</summary>
@@ -489,22 +502,29 @@ begin
     path is kept rather than removed. }
   if Assigned(GCallerCountsHook) then
   begin
-    var HLines, HCounts: TArray<Integer>;
-    if GCallerCountsHook(AFilePath, HLines, HCounts) and (Length(HLines) = Length(HCounts)) then
-    begin
-      Inner:= TDictionary<Integer, string>.Create;
-      for var K: Integer:= 0 to High(HLines) do
+    { 2026-10-29: ASYNC. The answer is stored when it arrives (main thread). A
+      failed or timed-out answer stores an EMPTY entry, so a file whose counts
+      the engine could not produce in time is not asked again on every
+      activation -- the 13-minute callerCounts of the report would otherwise
+      be re-sent each time the user returned to that tab. }
+    if GCallerCountsHook(AFilePath,
+      procedure(AOk: Boolean; const HLines, HCounts: TArray<Integer>)
+      var
+        Inn: TDictionary<Integer, string>;
       begin
-        { The server already reports 0-BASED lines, which is what this cache
-          stores -- the conversion lives on the server so exactly one place
-          knows about the offset. }
-        if HLines[K] < 0 then Continue;
-        if HCounts[K] = 1 then Inner.AddOrSetValue(HLines[K], '[1 caller]')
-        else Inner.AddOrSetValue(HLines[K], Format('[%d callers]', [HCounts[K]]));
-      end;
-      StoreForFile(Key, Inner);
-      Exit;
-    end;
+        Inn:= TDictionary<Integer, string>.Create;
+        if AOk and (Length(HLines) = Length(HCounts)) then
+          for var K: Integer:= 0 to High(HLines) do
+          begin
+            { The server already reports 0-BASED lines, which is what this
+              cache stores -- the conversion lives on the server so exactly one
+              place knows about the offset. }
+            if HLines[K] < 0 then Continue;
+            if HCounts[K] = 1 then Inn.AddOrSetValue(HLines[K], '[1 caller]')
+            else Inn.AddOrSetValue(HLines[K], Format('[%d callers]', [HCounts[K]]));
+          end;
+        StoreForFile(Key, Inn);
+      end) then Exit;
   end;
 
   { Get symbol list via surface }

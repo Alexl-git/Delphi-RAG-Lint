@@ -15,9 +15,17 @@ unit DragLint.Plugin.HoverTracker;
      if both are empty we suppress the popup (no change from v0.35).
 
    Performance:
-     LSP queries are budgeted at 500ms timeout and only fire once per
-     stable (file, line, col) tuple -- see FLastLspKey. Cursor wobble or
-     repeated dwell on the same caret position doesn't requery the LSP.
+     LSP queries only fire once per stable (file, line, col) tuple -- see
+     FLastLspKey. Cursor wobble or repeated dwell on the same position doesn't
+     requery the LSP.
+
+   2026-10-29 (owner: whatever gets stuck in DL must not make the IDE stuck):
+     the dwell no longer waits. ONE async hoverBundle request is in flight at a
+     time; a dwell elsewhere cancels it ($/cancelRequest). The answer is shown
+     only if the pointer is still over the same editor control and the same
+     token (DragLint.Plugin.HoverGate). A busy engine gets no new hover and the
+     status strip says 'drag-lint: engine busy'. The tick also runs the stuck-
+     engine watchdog.
 
    Known limitation (still present):
      Uses caret row, not pixel-to-token mapping. OTAPI doesn't expose
@@ -48,6 +56,7 @@ uses
   , DragLint.Plugin.DockForm     { SelectDockedDiagnosticForLine -- caret -> panel }
   , DragLint.Plugin.StatusBar    { SetDragLintNote -- the 'thinking' note }
   , DragLint.Plugin.Telemetry    { DLT -- item 5: where a dwell fired, and whether it showed }
+  , DragLint.Plugin.HoverGate    { DLHoverGate -- the async answer's show-gate }
   ;
 
 function IdeIsForeground: Boolean;
@@ -93,6 +102,65 @@ begin
   Result:= PtInRect(R, APt);
 end;
 
+{ 2026-10-29: the IDE editor control's window class. WindowFromPoint naming it
+  is what "the mouse is over the editor" means -- the edit window FORM's
+  rectangle also contains docked panes (Project Manager, Structure), which is
+  how popups used to appear over them. }
+const
+  EDITOR_CONTROL_CLASS = 'TEditControl';
+  { Half-size in px of the fallback show-gate box, used before the editor grid
+    has been painted once. }
+  FALLBACK_HALF_BOX = 8;
+  { The dwell popup opens this far below the pointer (unchanged since v0.42). }
+  POPUP_BELOW_PX = 20;
+
+function ClassNameOf(AHwnd: HWND): string;
+var
+  Buf: array[0..255] of Char;
+begin
+  SetString(Result, Buf, GetClassName(AHwnd, Buf, Length(Buf)));
+end;
+
+{ The editor control under the pointer, or 0. The control the gutter painter
+  last drew into counts as one even if its class name were ever to change. }
+function EditorControlAt(const APt: TPoint): HWND;
+var
+  H: HWND;
+begin
+  Result:= 0;
+  H:= WindowFromPoint(APt);
+  if H = 0 then Exit;
+  if (H = GGutterAnchorHwnd) or SameText(ClassNameOf(H), EDITOR_CONTROL_CLASS) then Result:= H;
+end;
+
+{ One line of the view's buffer (1-based row), or '' when unreadable. }
+function BufferLineText(const AView: IOTAEditView; ARow1: Integer): string;
+const
+  LINE_BUF = 1024;
+var
+  CP    : TOTACharPos;
+  Reader: IOTAEditReader;
+  Buf   : array[0..LINE_BUF - 1] of AnsiChar;
+  N     : Integer;
+  Eol   : Integer;
+begin
+  Result:= '';
+  try
+    if (AView = nil) or (AView.Buffer = nil) or (ARow1 < 1) then Exit;
+    CP.Line     := ARow1;
+    CP.CharIndex:= 0;
+    Reader:= AView.Buffer.CreateReader;
+    if Reader = nil then Exit;
+    N:= Reader.GetText(AView.CharPosToPos(CP), Buf, LINE_BUF);
+    if N <= 0 then Exit;
+    Eol:= 0;
+    while (Eol < N) and (Buf[Eol] not in [#10, #13]) do Inc(Eol);
+    SetString(Result, PAnsiChar(@Buf[0]), Eol);
+  except
+    on E: Exception do Result:= '';   { an unreadable buffer is no token: the fallback box applies }
+  end;
+end;
+
 type
   TDragLintHoverHelper = class
     private
@@ -100,35 +168,51 @@ type
       FLastPos           : TPoint ;
       FStableCount       : Integer;
       FHintShown         : Boolean;
-      FLastLspKey        : string ; { v0.40.3: dedupes textDocument/hover firings per stable caret }
-      FLastLspText       : string ; { v0.40.3: cached symbol info for the last stable caret }
+      FLastLspKey        : string ; { v0.40.3: position the cached answer below belongs to }
+      FLastLspText       : string ; { v0.40.3: cached symbol info for FLastLspKey }
       { v(hover bundle): the model + callers that came back with FLastLspText in
-        the SAME request. Cached alongside it, keyed by FLastLspKey, so a dwell
-        that re-shows a cached caret does no engine work at all. FLastBundleOk
-        False means the bundle was unavailable and the legacy per-part path must
-        run -- it is NOT the same as "this symbol has no callers". }
+        the SAME request, cached alongside it so a re-show does no engine work.
+        FLastBundleOk False means only plain markdown is cached -- it is NOT the
+        same as "this symbol has no callers". }
       FLastBundleOk      : Boolean;
       FLastBundleModel   : TDragLintHoverModel        ;
       FLastBundleCallers : TArray<TDragLintCallerInfo>;
-      FLastShownKey      : string ; { v0.42: caret key we already popped; don't re-show it }
-      { v(session 73): last caret LINE the panel selection was driven from, so
-        the tree walk happens on a line CHANGE rather than on every 200 ms tick.
-        -1 = nothing driven yet. Keyed by file too, because line 40 of one unit
-        is not line 40 of the next. }
+      FLastShownKey      : string ; { v0.42: position we already popped; don't re-show it }
+      { v(session 73): last caret LINE the panel selection was driven from. }
       FLastCaretLine     : Integer;
       FLastCaretFile     : string ;
       FLastForegroundFail: Boolean; { v0.40.8b: log the bail-out only once per transition }
+      { 2026-10-29: the ONE hover request in flight (0 = none), the client it
+        went to, and everything the answer needs to decide whether -- and
+        where -- to show. }
+      FInflightId        : Integer                    ;
+      FInflightClient    : TDragLintLspClient         ;
+      FInflightKey       : string                     ;
+      FInflightUri       : string                     ;
+      FInflightRow       : Integer                    ;
+      FInflightCol       : Integer                    ;
+      FInflightPos       : TPoint                     ;
+      FInflightAnchor    : TDLHoverAnchor             ;
+      FInflightDiags     : TArray<TDragLintDiagnostic>;
+      FInflightDiagText  : string                     ;
       procedure OnTick(Sender: TObject);
-      { v(session 73): editor caret line -> drag-lint panel selection. Runs on
-        THIS tick rather than in a tracker of its own, which the note asks for
-        explicitly ("a THIRD tracker should not be added"). Cheap by design --
-        it exits on the first guard unless the caret changed LINE. }
+      { v(session 73): editor caret line -> drag-lint panel selection. }
       procedure DriveCaretPanelSelection;
       procedure ResetState;
+      procedure CancelInflight;
+      procedure OnHoverBundleAnswer(AId: Integer; AStatus: TDLHoverStatus;
+        const AMarkdown, AQName: string; const AModel: TDragLintHoverModel;
+        const ACallers: TArray<TDragLintCallerInfo>);
+      procedure OnHoverTextAnswer(AId: Integer; AStatus: TDLHoverStatus; const AMarkdown: string);
+      procedure GateAndShowInflight;
+      procedure ShowHoverPopup(const APos: TPoint; const AKey, ALspText: string;
+        const AModel: TDragLintHoverModel; const ACallers: TArray<TDragLintCallerInfo>;
+        const ADiags: TArray<TDragLintDiagnostic>; const ADiagText: string);
     public
       constructor Create;
       destructor Destroy; override;
   end;
+
 
 var
   GHelper: TDragLintHoverHelper = nil;
@@ -150,6 +234,8 @@ end;
 destructor TDragLintHoverHelper.Destroy;
 begin
   FTimer.Free;
+  { No answer may arrive for a helper that is gone. }
+  CancelInflight;
   inherited;
 end;
 
@@ -158,6 +244,165 @@ begin
   FStableCount:= 0;
   FHintShown  := False;
 end;
+
+procedure TDragLintHoverHelper.CancelInflight;
+begin
+  { Only cancel against the client the request went to, and only while it is
+    still the live one -- a replaced client has already dropped the callback. }
+  if (FInflightId <> 0) and (FInflightClient <> nil) and (FInflightClient = CurrentLspClient) then
+    FInflightClient.CancelRequest(FInflightId);
+  FInflightId    := 0;
+  FInflightClient:= nil;
+end;
+
+procedure TDragLintHoverHelper.OnHoverBundleAnswer(AId: Integer; AStatus: TDLHoverStatus;
+  const AMarkdown, AQName: string; const AModel: TDragLintHoverModel;
+  const ACallers: TArray<TDragLintCallerInfo>);
+begin
+  try
+    if AId <> FInflightId then Exit;   { superseded: a newer hover owns the slot }
+    DLT('hover', Format('bundle answer id=%d status=%d qname="%s"', [AId, Ord(AStatus), AQName]));
+    FInflightId    := 0;
+    case AStatus of
+      hvsUnsupported:
+        begin
+          { An engine without the bundle: ask the plain hover now, still async. }
+          FInflightId:= RequestHoverTextAsync(FInflightUri, FInflightRow, FInflightCol, OnHoverTextAnswer);
+          if FInflightId = 0 then FInflightClient:= nil;
+          Exit;
+        end;
+      hvsTimeout:
+        begin
+          FInflightClient:= nil;
+          SetDragLintNote('drag-lint: engine busy');
+          Exit;
+        end;
+    end;
+    FInflightClient   := nil;
+    FLastLspKey       := FInflightKey;
+    FLastLspText      := AMarkdown;
+    FLastBundleOk     := AStatus = hvsOk;
+    FLastBundleModel  := AModel;
+    FLastBundleCallers:= ACallers;
+    GateAndShowInflight;
+  except
+    { main-thread callback inside the IDE: never let it raise }
+    on E: Exception do DLT('hover', 'bundle answer raised: ' + E.Message);
+  end;
+end;
+
+procedure TDragLintHoverHelper.OnHoverTextAnswer(AId: Integer; AStatus: TDLHoverStatus; const AMarkdown: string);
+begin
+  try
+    if AId <> FInflightId then Exit;
+    FInflightId    := 0;
+    FInflightClient:= nil;
+    if AStatus = hvsTimeout then
+    begin
+      SetDragLintNote('drag-lint: engine busy');
+      Exit;
+    end;
+    FLastLspKey       := FInflightKey;
+    FLastLspText      := AMarkdown;
+    FLastBundleOk     := False;
+    FLastBundleModel  := Default(TDragLintHoverModel);
+    SetLength(FLastBundleCallers, 0);
+    GateAndShowInflight;
+  except
+    on E: Exception do DLT('hover', 'text answer raised: ' + E.Message);
+  end;
+end;
+
+{ The owner's show-gate (2026-10-29): the answer is shown only while the pointer
+  is still over the editor control the dwell started in AND on the same token
+  -- see DragLint.Plugin.HoverGate. Otherwise it is discarded (and stays cached,
+  so pointing back at the token shows it at once). }
+procedure TDragLintHoverHelper.GateAndShowInflight;
+var
+  NowPt  : TPoint;
+  Client : TPoint;
+  Verdict: TDLHoverGateVerdict;
+begin
+  GetCursorPos(NowPt);
+  Client:= NowPt;
+  if FInflightAnchor.Hwnd <> 0 then ScreenToClient(FInflightAnchor.Hwnd, Client);
+  Verdict:= DLHoverGate(FInflightAnchor, EditorControlAt(NowPt), Client);
+  if (Verdict <> hgvShow) or not IdeIsForeground or not LoadSettings.EnableHoverTooltip then
+  begin
+    DLT('hover', Format('answer discarded: gate=%d (pointer left the token / editor)', [Ord(Verdict)]));
+    SetDragLintNote('');
+    { Re-arm: the next dwell at this spot shows the cached answer. }
+    FHintShown:= False;
+    Exit;
+  end;
+  ShowHoverPopup(NowPt, FInflightKey, FLastLspText, FLastBundleModel,
+    FLastBundleCallers, FInflightDiags, FInflightDiagText);
+end;
+
+procedure TDragLintHoverHelper.ShowHoverPopup(const APos: TPoint; const AKey, ALspText: string;
+  const AModel: TDragLintHoverModel; const ACallers: TArray<TDragLintCallerInfo>;
+  const ADiags: TArray<TDragLintDiagnostic>; const ADiagText: string);
+var
+  Combined    : string;
+  Model       : TDragLintHoverModel;
+  GotModel    : Boolean;
+  DwellCallers: TArray<TDragLintCallerInfo>;
+begin
+  { Combine the two -- symbol info first, diagnostic underneath. }
+  Combined:= ALspText;
+  if ADiagText <> '' then
+  begin
+    if Combined <> '' then Combined:= Combined + #13#10 + '---' + #13#10;
+    Combined:= Combined + ADiagText;
+  end;
+
+  { Item 5 (over-eagerness): one line per dwell that reaches this decision, so a
+    popup "in non-code areas" is locatable (shown=0 is a correct decline). }
+  DLT('hover', Format('dwell %s model=%d lspLen=%d diagLen=%d shown=%d',
+    [AKey, Ord(AModel.QualifiedName <> ''), Length(ALspText), Length(ADiagText), Ord(Combined <> '')]));
+
+  { THE NOTE MUST DIE ON EVERY PATH (2026-08-27: "hover TDeltaBatch forever").
+    "Asked and got nothing back" stays distinguishable from "here is the popup". }
+  if Combined = '' then
+  begin
+    SetDragLintNote('drag-lint: hover -- nothing indexed at the cursor');
+    Exit;
+  end;
+
+  FHintShown:= True;
+  SetLength(DwellCallers, 0);
+  { v0.40.8f: snap-to-symbol -- close any stale popup before showing the new one. }
+  CloseDragLintHover;
+  { v0.94.1: PREFER the structured Help-Insight model; since v(hover-both) the
+    line's findings are carried INTO it as their own section. Without a model
+    (intrinsic, or an engine without the bundle) the string popup shows -- no
+    CLI spawn from this path any more (2026-10-29). }
+  Model   := AModel;
+  GotModel:= Model.QualifiedName <> '';   { only a bundle answer carries one }
+  SetDragLintNote('');   { the popup below IS the answer }
+  if GotModel then
+  begin
+    SetLength(Model.Diagnostics, 0);
+    for var MDI:= 0 to High(ADiags) do
+    begin
+      var MMsg: string:= ADiags[MDI].Message;
+      if ADiags[MDI].Code <> '' then MMsg:= '[' + ADiags[MDI].Code + '] ' + MMsg;
+      if System.Pos('add unit ', LowerCase(ADiags[MDI].Message)) > 0 then MMsg:= MMsg + '   <-- click to add'; // dl:ok concat-in-loop@154f -- one suffix per finding on ONE line (a handful), not an accumulation
+      SetLength(Model.Diagnostics, Length(Model.Diagnostics) + 1);
+      Model.Diagnostics[High(Model.Diagnostics)]:= MMsg;
+    end;
+    { v0.42: dwell popups dismiss against the original mouse point. }
+    ShowDragLintHover(Model, ACallers, APos.X, APos.Y + POPUP_BELOW_PX, True, APos.X, APos.Y);
+  end
+  else
+  begin
+    var DwellHeader: string:= ExtractHoverHeader(Combined);
+    Combined:= StripFirstHeaderLine(Combined);
+    ShowDragLintHover(DwellHeader, Combined, DwellCallers, APos.X, APos.Y + POPUP_BELOW_PX, True, APos.X, APos.Y);
+  end;
+  FLastShownKey:= AKey; { v0.42: don't re-pop this same position }
+end;
+
 
 { v(session 73): caret line -> panel selection.
   docs\INBOX-caret-line-should-select-its-finding-in-the-panel.md.
@@ -217,10 +462,11 @@ var
   CaretCol: Integer                    ;
   Diags   : TArray<TDragLintDiagnostic>;
   LspKey  : string                     ;
-  LspText : string                     ;
   DiagText: string                     ;
-  Combined: string                     ;
   Uri     : string                     ;
+  Client  : TDragLintLspClient         ;
+  Anchor  : TDLHoverAnchor             ;
+  UnderHwnd: HWND                      ;
 begin
   try
     Settings:= LoadSettings;
@@ -235,6 +481,12 @@ begin
           link must not take the tooltip down with it, and vice versa. }
         ;
     end;
+
+    { WATCHDOG (2026-10-29): an engine silent for 60 s with requests pending is
+      restarted through the normal EnsureLspClient path, even while nobody is
+      dwelling -- otherwise a stuck engine would only be noticed by the next
+      feature that needs it. Cheap: two lock-guarded reads per tick. }
+    if (CurrentLspClient <> nil) and CurrentLspClient.IsStuck then EnsureLspClient;
 
     if not Settings.EnableHoverTooltip then
     begin
@@ -260,7 +512,11 @@ begin
       whenever the cursor parks anywhere in the IDE, based on whatever
       symbol the caret happens to sit on -- completely disconnected from
       what the user is pointing at. }
-    if not IsMouseOverEditorView(Pos) then
+    { 2026-10-29: AND the window under the pointer must be the editor control
+      itself. The form rectangle alone also covers docked panes (Project
+      Manager, Structure), which is how popups appeared over them. }
+    UnderHwnd:= EditorControlAt(Pos);
+    if (not IsMouseOverEditorView(Pos)) or (UnderHwnd = 0) then
     begin
       { v0.42: mouse left the editor view -> clear the popup so it never lingers
         over the Project Manager / Messages / other panes. Keep it alive only
@@ -354,6 +610,16 @@ begin
       end; // if
     end; // if
 
+    { Fallback anchor (no painted grid yet): a small box around the dwell
+      point in the control under the pointer -- the answer still has to land
+      where it was asked. Replaced below when the grid is known. }
+    begin
+      var BoxPt: TPoint:= Pos;
+      ScreenToClient(UnderHwnd, BoxPt);
+      Anchor:= DLHoverAnchorFor(UnderHwnd, BoxPt.X - FALLBACK_HALF_BOX, 1,
+        BoxPt.Y - FALLBACK_HALF_BOX, 2 * FALLBACK_HALF_BOX, 0, 2 * FALLBACK_HALF_BOX);
+    end;
+
     { IOTAEditView.Position is 1-based; LSP / diagnostic cache is 0-based }
     CaretRow:= EditView.Position.Row    - 1;
     CaretCol:= EditView.Position.Column - 1;
@@ -397,6 +663,13 @@ begin
         begin
           CaretRow:= MouseRow0;
           CaretCol:= MouseCol0;
+          { 2026-10-29: the show-gate's anchor -- the hovered identifier's span
+            in the SAME grid, so the answer is shown only while the pointer is
+            still on that token. Not on an identifier: the fallback box stays. }
+          var TokS, TokE: Integer;
+          if DLIdentSpanAt(BufferLineText(EditView, MouseRow0 + 1), MouseCol0, TokS, TokE) then
+            Anchor:= DLHoverAnchorFor(GGutterAnchorHwnd, GGutterTextLeft, GGutterCharWidth,
+              GGutterAnchorTopY + ROff * GGutterLineHeight, GGutterLineHeight, TokS, TokE);
         end;
       end;
     end;
@@ -411,181 +684,80 @@ begin
       if System.Pos('add unit ', LowerCase(DiagText)) > 0 then DiagText:= DiagText + '   <-- click to add';
     end;
 
-    { v0.40.3: ALSO query LSP hover at (file, row, col) for symbol info.
-      Dedupe via FLastLspKey so we don't fire on every dwell cycle for
-      the same position. Cache the result so repeated dwell on the same
-      caret reuses it. }
     LspKey:= Format('%s|%d|%d', [FilePath, CaretRow, CaretCol]);
 
-    { v0.42: the dwell uses the CARET position for content but the MOUSE for
-      placement, so wandering the mouse over a docked pane (still inside the
-      editor form rect) for the same caret kept re-popping the same hover.
-      Show a given caret's popup once; only a caret change re-arms it. }
+    { v0.42: show a given position's popup once; only a position change re-arms it. }
     if LspKey = FLastShownKey then
     begin
       FHintShown:= True;
       Exit;
     end;
 
-    if LspKey <> FLastLspKey then
+    { Cached answer for this exact position: show at once, no engine work. }
+    if LspKey = FLastLspKey then
     begin
-      Uri:= 'file:///' + StringReplace(FilePath, '\', '/', [rfReplaceAll]);
-      { Announce BEFORE the request. Only this branch does engine work -- a
-        cached caret re-show is instant and needs no note. Asked for
-        2026-08-19 so a slow hover reads as THINKING rather than absent.
-
-        NAME THE SYMBOL. One string could not distinguish the three states the
-        owner actually needs told apart -- "it saw my identifier and is working"
-        from "it saw nothing to look up" from "it is not running at all":
-
-          drag-lint: hover WindowState...   a request is out for a KNOWN name
-          drag-lint: hover ...              dwelling, but no identifier resolved
-          (cleared)                         answered; the popup IS the answer
-
-        The name CANNOT come from the response: BQName arrives after the call
-        below, and the whole point is to say something before it blocks. So it
-        is read locally at the caret, through the SAME AnnounceHoverStart the
-        menu-invoked hover path uses (Editor.pas) -- ONE formatter, so the two
-        paths can never name the same caret differently. }
-      AnnounceHoverStart;
-      { v(hover bundle): ONE request for markdown + model + callers. This used to
-        be a hover round trip here and three drag-lint.exe spawns later on, all
-        on the main thread while a tooltip was trying to appear. On any miss --
-        an engine that predates the method, a timeout -- fall back to the old
-        markdown-only fetch and let the legacy path rebuild the rest. }
-      var BQName: string;
-      FLastBundleOk:= FetchHoverBundle(Uri, CaretRow, CaretCol,
-        FLastLspText, BQName, FLastBundleModel, FLastBundleCallers);
-      if not FLastBundleOk then
-      begin
-        FLastLspText:= QueryHoverText(Uri, CaretRow, CaretCol, 500);
-        FLastBundleModel:= Default(TDragLintHoverModel);
-        SetLength(FLastBundleCallers, 0);
-      end;
-      FLastLspKey:= LspKey;
-    end;
-    LspText:= FLastLspText;
-
-    { Combine the two -- symbol info first, diagnostic underneath. }
-    Combined:= '';
-    if LspText <> '' then Combined:= LspText;
-    if DiagText <> '' then
-    begin
-      if Combined <> '' then Combined:= Combined + #13#10 + '---' + #13#10;
-      Combined:= Combined + DiagText;
-    end;
-
-    { THE NOTE MUST DIE ON EVERY PATH, NOT JUST THE ONE THAT SHOWS A POPUP.
-
-      This Exit is the common case, not a corner: the server answers
-      `"result":null` for any position that is not a resolvable identifier --
-      whitespace, a keyword, punctuation, or a file no resolved index covers.
-      The clear at the bottom of this routine sits BELOW here, so the note set
-      just before the request stayed on the strip forever, reading as though
-      drag-lint were still working on a symbol it had already given up on.
-
-      Reported from a live IDE, 2026-08-27: "it shows a status message hover
-      TDeltaBatch forever". It had been true since the note was added on
-      2026-08-19 and was simply invisible until the paint fix (fc7731b) and the
-      naming change made the note appear at all -- two fixes that, between them,
-      turned a silent bug into a visible one.
-
-      It does NOT clear to empty. "Asked and got nothing back" is a different
-      state from "asked and here is the popup", and collapsing them loses
-      exactly the distinction the owner asked for: whether the engine is
-      thinking, finished, or has nothing. The commonest cause by far is that no
-      resolved index covers this file, so that is what it says. }
-    { Item 5 (over-eagerness). The owner reports the popup appearing "even in
-      non-code areas", and nothing in the log recorded WHERE a dwell fired or
-      what it found -- so the report could not be turned into a position anyone
-      could go and look at. One line per dwell that reaches this decision makes
-      it locatable: shown=0 is a dwell that correctly declined, and shown=1 at a
-      caret he calls non-code is the defect, with the file:row:col to reproduce
-      it. Logged BEFORE the Exit below, so the declining path is recorded too --
-      logging only the popups would leave the common case invisible. }
-    DLT('hover', Format('dwell %s:%d:%d bundleOk=%d lspLen=%d diagLen=%d shown=%d',
-      [ExtractFileName(FilePath), CaretRow, CaretCol, Ord(FLastBundleOk),
-       Length(LspText), Length(DiagText), Ord(Combined <> '')]));
-
-    if Combined = '' then
-    begin
-      SetDragLintNote('drag-lint: hover -- nothing indexed at the cursor');
+      ShowHoverPopup(Pos, LspKey, FLastLspText, FLastBundleModel, FLastBundleCallers, Diags, DiagText);
       Exit;
     end;
 
-    FHintShown:= True;
-    { v0.40.7: dwell tracker uses the simple 1-arg overload (no callers /
-      no header) because the find-callers shell-out from a 200 ms timer would
-      compound latency. Menu InvokeHover does the full three-section show.
-      v0.40.8c: still extract the header + strip the duplicated first line so
-      the popup looks like Delphi's native Code Insight. Callers list is
-      empty for dwell-fired popups (use the menu Hover at Cursor for those).
-      v0.40.8f: snap-to-symbol -- close any stale popup before showing the
-      new one. Without this the singleton in HoverForm refuses to show
-      because the previous popup is still on screen, leaving the user
-      reading stale data while pointing at a new identifier. }
-    var DwellCallers: TArray<TDragLintCallerInfo>;
-    SetLength(DwellCallers, 0);
-    CloseDragLintHover;
-    { v0.94.1: PREFER the structured Help-Insight model on the DWELL path so a
-      MOUSE hover shows the colored signature + Parameters + Returns. Mine the
-      qname from the RAW LSP markdown (LspText, before StripFirstHeaderLine) and
-      fetch `hover --json`. We try this EVEN when a diagnostic is present -- the
-      structured view is the priority, and since v(hover-both) the diagnostic is
-      no longer sacrificed for it: it is copied onto Model.Diagnostics and drawn
-      as its own section, so the popup shows the symbol AND the finding. On any miss (no
-      qname / json fetch fails) we fall back to the legacy string popup so the
-      user always sees something. Callers skipped here (light for the 200ms
-      timer). Detailed logging tells a live smoke exactly why a fallback fired. }
-    var Model: TDragLintHoverModel;
-    var ModelCallers: TArray<TDragLintCallerInfo>;
-    SetLength(ModelCallers, 0);
-    var GotModel: Boolean:= False;
-    if FLastBundleOk then
+    { 2026-10-29: ONE hover in flight. The same position still waiting: keep
+      waiting. A different one: the old question is superseded -- drop it and
+      tell the engine. }
+    if FInflightId <> 0 then
     begin
-      { Already in hand from the one request above -- no spawn, no second
-        resolution of the same cursor. }
-      Model       := FLastBundleModel  ;
-      ModelCallers:= FLastBundleCallers;
-      GotModel    := Model.QualifiedName <> '';
-    end
-    else if LspText <> '' then
-    begin
-      GotModel:= TryBuildHoverModel(LspText, Model, ModelCallers);
+      if (FInflightKey = LspKey) and (FInflightClient = CurrentLspClient) then
+      begin
+        FHintShown:= True;
+        Exit;
+      end;
+      CancelInflight;
     end;
 
-    SetDragLintNote('');   { the popup below IS the answer }
-    if GotModel then
+    { Diagnostics are local: when the engine cannot be asked they still show. }
+    Client:= EnsureLspClient;
+    if (Client = nil) or Client.IsBusy then
     begin
-      { v(hover-both): carry the line's findings INTO the structured popup.
-        Until now this branch dropped DiagText on the floor -- the comment above
-        called a diagnostic on the hovered line "rare" and pointed the user at
-        the menu Hover for it. It is not rare (a lint finding and the symbol it
-        is about are on the same line by construction), and the effect was that
-        the two useful facts were mutually exclusive: signature OR finding,
-        decided by which code path happened to run. Show both. }
-      SetLength(Model.Diagnostics, 0);
-      for var MDI:= 0 to High(Diags) do
+      if Client <> nil then SetDragLintNote('drag-lint: engine busy');
+      FHintShown:= True;
+      if DiagText <> '' then
       begin
-        var MMsg: string:= Diags[MDI].Message;
-        if Diags[MDI].Code <> '' then MMsg:= '[' + Diags[MDI].Code + '] ' + MMsg;
-        if System.Pos('add unit ', LowerCase(Diags[MDI].Message)) > 0 then MMsg:= MMsg + '   <-- click to add';
-        SetLength(Model.Diagnostics, Length(Model.Diagnostics) + 1);
-        Model.Diagnostics[High(Model.Diagnostics)]:= MMsg;
+        var NoCallers: TArray<TDragLintCallerInfo>;
+        SetLength(NoCallers, 0);
+        ShowHoverPopup(Pos, LspKey, '', Default(TDragLintHoverModel), NoCallers, Diags, DiagText);
       end;
-      { v0.42: dwell popups dismiss against the original mouse point (Pos). }
-      ShowDragLintHover(Model, ModelCallers, Pos.X, Pos.Y + 20, True, Pos.X, Pos.Y);
-    end
-    else
-    begin
-      var DwellHeader: string:= ExtractHoverHeader(Combined);
-      Combined:= StripFirstHeaderLine(Combined);
-      { v0.42: dwell popups dismiss against the original mouse point (Pos), not
-        the wide popup rect -- so a small drift, or leaving the editor, clears
-        them. The popup is still drawn at Pos.Y+20 (below the cursor). }
-      ShowDragLintHover(DwellHeader, Combined, DwellCallers, Pos.X, Pos.Y + 20, True, Pos.X, Pos.Y);
+      Exit;
     end;
-    FLastShownKey:= LspKey; { v0.42: don't re-pop this same caret }
+
+    { Announce BEFORE the request (2026-08-19): a slow hover reads as THINKING
+      rather than absent. Named through the SAME AnnounceHoverStart the menu
+      path uses, so the two paths can never name the same caret differently. }
+    AnnounceHoverStart;
+    Uri:= 'file:///' + StringReplace(FilePath, '\', '/', [rfReplaceAll]);
+
+    FInflightKey     := LspKey;
+    FInflightClient  := Client;
+    FInflightPos     := Pos;
+    FInflightAnchor  := Anchor;
+    FInflightDiags   := Diags;
+    FInflightDiagText:= DiagText;
+    FInflightUri     := Uri;
+    FInflightRow     := CaretRow;
+    FInflightCol     := CaretCol;
+    FHintShown       := True;
+
+    { ONE request for markdown + model + callers; shown when it arrives, if the
+      pointer is still on the token (OnHoverAnswer). No serial fallback round
+      trip and no CLI spawn on this path any more: an engine without the bundle
+      gets the plain textDocument/hover, asked only after the bundle answered
+      with an error. }
+    FInflightId:= if HoverBundleUnsupported then RequestHoverTextAsync(Uri, CaretRow, CaretCol, OnHoverTextAnswer)
+                  else RequestHoverBundleAsync(Uri, CaretRow, CaretCol, OnHoverBundleAnswer);
+    if FInflightId = 0 then
+    begin
+      FInflightClient:= nil;
+      SetDragLintNote('drag-lint: hover not sent -- engine not ready');
+    end;
+
   except
     { Swallow all exceptions: this fires in a VCL timer inside the IDE.
       Any unhandled exception here would surface as an IDE crash or modal

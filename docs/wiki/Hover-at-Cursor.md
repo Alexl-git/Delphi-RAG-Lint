@@ -37,6 +37,21 @@ see [`ask effects`](ask-effects).
 Hovering a forward declaration (`TFoo = class;`) shows the REAL declaration,
 led by `forward declaration -> line N`.
 
+## When the engine is slow
+The IDE never waits for the engine. A hover (the menu command or a mouse
+dwell) is sent and the card appears when the answer arrives:
+
+* A mouse-dwell card is shown only if the pointer is still over the same
+  editor and the same identifier (anywhere along it, and within about half a
+  line above or below). Otherwise the answer is dropped; pointing back at the
+  identifier shows it at once from the cache.
+* Only one dwell hover is asked at a time. Moving to another identifier
+  cancels the previous question.
+* If the engine has left a question unanswered for about 3 seconds, the status
+  strip reads `drag-lint: engine busy` and no new hover is asked; findings on
+  the line still show. An engine silent for 60 seconds with questions pending
+  is restarted automatically.
+
 ## What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the index when
 omitted. An index must still exist. In the IDE, it also needs an open

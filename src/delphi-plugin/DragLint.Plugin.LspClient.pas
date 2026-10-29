@@ -11,6 +11,7 @@ uses
   , System.SyncObjs
   , Winapi.Windows
   , DRagLint.Core.JobObject
+  , DragLint.Plugin.LspWriteQueue
   ;
 
 procedure DebugLog(const AMsg: string); // appends to GetPluginLogPath
@@ -18,6 +19,21 @@ function GetPluginLogPath: string; // single source of truth (v0.40.1)
 
 type
   TLspNotificationHandler = reference to procedure(const AMethod: string; AParams: TJSONValue);
+
+  /// <summary>How an asynchronous request ended.</summary>
+  TDLLspReplyStatus = (
+    lrsResult , { the engine answered with a 'result' member     }
+    lrsError  , { the engine answered with an 'error' member     }
+    lrsTimeout  { no answer within the request's timeout         }
+  );
+
+  /// <summary>Receives the answer to RequestAsync, on the MAIN thread.</summary>
+  /// <param name="AId">The id RequestAsync returned.</param>
+  /// <param name="AStatus">How the request ended.</param>
+  /// <param name="AReply">The FULL JSON-RPC envelope (jsonrpc, id, result |
+  /// error) for lrsResult / lrsError; nil otherwise. Owned by the client and
+  /// freed when the callback returns -- clone anything kept.</param>
+  TLspReplyProc = reference to procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue);
 
   /// <summary>Lifecycle state of the LSP child process, for status display.</summary>
   /// <remarks>Added 2026-08-17. The plugin previously had NO readable connection
@@ -52,11 +68,34 @@ type
         process handle can still report ALIVE while the pipe is gone, so this
         is a SECOND liveness fact, not a duplicate of FProcessHandle. }
       FPipeBroken     : Boolean                         ;
+      { 2026-10-29 (IDE must never wait on the engine): the ONLY path to the
+        engine's stdin. Callers enqueue; a private thread writes. }
+      FWriter         : TDLLspWriteQueue                ;
+      { Asynchronous requests still waiting for an answer, by id. }
+      FAsync          : TDictionary<Integer, TObject>   ;
+      { Cancel flags of async requests, kept past dispatch so a request
+        cancelled while its answer is already queued is still dropped. }
+      FFlags          : TDictionary<Integer, TObject>   ;
+      { Every request sent and not yet answered (sync and async), with the tick
+        it was sent at. A TIMED-OUT request stays here: the serial engine is
+        still working on it, which is exactly what "busy" has to see. }
+      FOutstanding    : TDictionary<Integer, UInt64>    ;
+      FLastRxTick     : UInt64                          ;
+      FTicker         : TThread                         ;
+      FTickerStop     : TEvent                          ;
+      FBusyAfterMs    : Cardinal                        ;
+      FStuckAfterMs   : Cardinal                        ;
       procedure NotePipeError(ALastError: DWORD);
-      procedure WriteFramedMessage(const AJson: string);
+      procedure WriteFramedMessage(const AJson: string; const ACoalesceKey: string = '');
+      function SendRequestFrame(AId: Integer; const AMethod: string; AParams: TJSONValue): Boolean;
+      procedure StartWorkers;
+      procedure StopWorkers(ABudgetMs: Cardinal);
+      procedure CancelAllAsync;
     private
       { Accessible to TLspReaderThread in same unit }
       procedure DispatchMessage(AMsg: TJSONValue);
+      { Accessible to the ticker thread in same unit }
+      procedure ExpireTimedOut;
     public
       constructor Create;
       destructor Destroy; override;
@@ -64,10 +103,88 @@ type
       { v0.40.3: spawn with explicit --db paths. Each path becomes a
       separate "--db <quoted>" cmd-line flag the LSP server iterates. }
       function Start(const AExePath: string; const ADbPaths: TArray<string>): Boolean; overload;
+
+      /// <summary>Runs the client over two pipe handles instead of a spawned
+      /// process -- the seam the non-blocking tests drive.</summary>
+      /// <param name="AStdInWrite">Write end the client sends frames to; owned
+      /// (closed by Stop).</param>
+      /// <param name="AStdOutRead">Read end the client reads frames from; owned
+      /// (closed by Stop).</param>
+      /// <remarks>Start uses the same path after CreateProcess. No process
+      /// handle is set, so IsAlive stays False.</remarks>
+      procedure AttachPipes(AStdInWrite, AStdOutRead: THandle);
+
       procedure Stop;
+
+      /// <summary>Synchronous initialize handshake (45 s budget).</summary>
+      /// <returns>True when the engine answered; State is then dlsConnected.</returns>
+      /// <remarks>BLOCKS the calling thread. Kept for console tests; the IDE uses
+      /// InitializeAsync.</remarks>
       function Initialize: Boolean                                                                        ;
+
+      /// <summary>Sends initialize without waiting; ADone(True) on the main
+      /// thread once the engine answers, ADone(False) on timeout / failure.</summary>
+      /// <param name="ADone">Completion callback; may be nil.</param>
+      /// <remarks>State is dlsStarting until the answer, then dlsConnected or
+      /// dlsFailed.</remarks>
+      procedure InitializeAsync(const ADone: TProc<Boolean>);
+
+      /// <summary>Synchronous request: sends and WAITS up to ATimeoutMs.</summary>
+      /// <param name="AMethod">JSON-RPC method.</param>
+      /// <param name="AParams">Parameters; cloned. nil sends {}.</param>
+      /// <param name="ATimeoutMs">How long to wait for the answer.</param>
+      /// <returns>The full JSON-RPC envelope (caller frees), or nil on timeout.</returns>
+      /// <remarks>BLOCKS the calling thread -- never call it from the IDE main
+      /// thread (owner rule 2026-10-29); use RequestAsync there. The send itself
+      /// never blocks.</remarks>
       function Request(const AMethod: string; AParams: TJSONValue; ATimeoutMs: Integer = 5000): TJSONValue;
-      procedure Notify(const AMethod: string; AParams: TJSONValue);
+
+      /// <summary>Sends a request and returns at once; the answer is delivered
+      /// to AOnReply on the MAIN thread (TThread.ForceQueue).</summary>
+      /// <param name="AMethod">JSON-RPC method.</param>
+      /// <param name="AParams">Parameters; cloned, the caller keeps ownership. nil
+      /// sends {}.</param>
+      /// <param name="ATimeoutMs">After this, AOnReply gets lrsTimeout and a
+      /// $/cancelRequest is sent.</param>
+      /// <param name="AOnReply">Callback; called exactly once unless the request
+      /// is cancelled with CancelRequest or the client is stopped, in which case
+      /// never.</param>
+      /// <returns>The request id (&gt; 0), or 0 when nothing was sent (queue full,
+      /// pipe failed, not attached) -- AOnReply is then never called.</returns>
+      /// <remarks>Never blocks and never waits on the engine.</remarks>
+      function RequestAsync(const AMethod: string; AParams: TJSONValue; ATimeoutMs: Integer; const AOnReply: TLspReplyProc): Integer;
+
+      /// <summary>Drops an asynchronous request: its callback will not run, even
+      /// when the answer is already on its way, and $/cancelRequest is sent.</summary>
+      /// <param name="AId">An id from RequestAsync; 0 and unknown ids are ignored.</param>
+      /// <remarks>Main thread. Never blocks.</remarks>
+      procedure CancelRequest(AId: Integer);
+
+      /// <summary>Queues a notification; never blocks.</summary>
+      /// <param name="AMethod">JSON-RPC method.</param>
+      /// <param name="AParams">Parameters; cloned. nil sends {}.</param>
+      /// <param name="ACoalesceKey">When not empty, replaces a not-yet-written
+      /// notification with the same key (didChange per document).</param>
+      procedure Notify(const AMethod: string; AParams: TJSONValue; const ACoalesceKey: string = '');
+
+      /// <summary>True when the engine has kept a request unanswered, or its
+      /// stdin unread, for longer than BusyAfterMs.</summary>
+      /// <remarks>Callers use it to stop queueing more work (hover, code lens)
+      /// behind a request the serial engine is still chewing on.</remarks>
+      /// <returns>True while the oldest outstanding request, or the current
+      /// stdin write, is older than BusyAfterMs.</returns>
+      function IsBusy: Boolean;
+
+      /// <summary>True when requests are outstanding and the engine has sent
+      /// NOTHING for longer than StuckAfterMs -- the watchdog's restart signal.</summary>
+      /// <returns>True when silence since max(last message, oldest outstanding
+      /// request) exceeds StuckAfterMs, or the stdin write has been blocked that
+      /// long.</returns>
+      function IsStuck: Boolean;
+
+      /// <summary>Requests sent and not yet answered (timed-out ones included).</summary>
+      /// <returns>The count; 0 when idle.</returns>
+      function OutstandingCount: Integer;
 
       /// <summary>True while the spawned server process is still running.</summary>
       /// <returns>False when never started, exited, or the handle is invalid.</returns>
@@ -88,6 +205,12 @@ type
       property StartedAt: TDateTime         read FStartedAt;
       /// <summary>PID of the server process, or 0 when not running.</summary>
       property ProcessId: DWORD             read FProcessId;
+      /// <summary>Age in ms of an unanswered request that makes IsBusy True
+      /// (default 3000).</summary>
+      property BusyAfterMs : Cardinal read FBusyAfterMs  write FBusyAfterMs ;
+      /// <summary>Engine silence in ms, with requests outstanding, that makes
+      /// IsStuck True (default 60000).</summary>
+      property StuckAfterMs: Cardinal read FStuckAfterMs write FStuckAfterMs;
   end;
 
 implementation
@@ -199,6 +322,7 @@ var
   S            : string    ;
 begin
   DebugLog('ReaderThread: started');
+  try
   while not Terminated do
   begin
     { Read header byte-by-byte until CRLFCRLF }
@@ -247,11 +371,141 @@ begin
     JsonStr:= TEncoding.UTF8.GetString(BodyBuf);
     DebugLog(Format('ReaderThread: rx %d bytes: %s', [ContentLength, Copy(JsonStr, 1, 200)]));
     JsonVal:= TJSONObject.ParseJSONValue(JsonStr);
+    { Abandoned by a Stop that ran out of budget: the owner may be gone. }
+    if Terminated then
+    begin
+      JsonVal.Free;
+      Exit;
+    end;
     if JsonVal <> nil then FOwner.DispatchMessage(JsonVal)
     else DebugLog('ReaderThread: JSON parse failed');
   end; // while
+  except
+    on E: Exception do DebugLog('ReaderThread: died: ' + E.ClassName + ': ' + E.Message);
+  end;
   DebugLog('ReaderThread: terminated normally');
 end; // procedure
+
+{ ---- async plumbing ---- }
+
+const
+  { Frames that may wait for the writer. A dwell sends at most one hover and
+    one (coalesced) didChange, so this is far above normal use; it exists so an
+    engine that stopped reading cannot make the queue grow without bound. }
+  WRITE_QUEUE_CAPACITY = 256;
+  { How often the ticker looks for timed-out async requests. }
+  TICK_MS              = 100;
+  DEFAULT_BUSY_MS      = 3000;
+  DEFAULT_STUCK_MS     = 60000;
+  INITIALIZE_TIMEOUT_MS = 45000;
+
+type
+  { Main-thread-only cancel mark shared by the client and the queued delivery
+    closure. Reference-counted so the closure stays safe after the client is
+    gone. }
+  IDLReplyFlag = interface
+    ['{6E0C4D8B-3F1A-4B9E-9C55-0B7E2A6F4D11}']
+    function GetCancelled: Boolean;
+    procedure SetCancelled(AValue: Boolean);
+    function GetDone: Boolean;
+    procedure SetDone(AValue: Boolean);
+    property Cancelled: Boolean read GetCancelled write SetCancelled;
+    property Done     : Boolean read GetDone      write SetDone     ;
+  end;
+
+  TDLReplyFlag = class(TInterfacedObject, IDLReplyFlag)
+    strict private
+      FCancelled: Boolean;
+      FDone     : Boolean;
+    public
+      function GetCancelled: Boolean;
+      procedure SetCancelled(AValue: Boolean);
+      function GetDone: Boolean;
+      procedure SetDone(AValue: Boolean);
+  end;
+
+  { Holder object so the dictionaries can carry an interface + closure. }
+  TDLAsyncEntry = class
+    public
+      Callback: TLspReplyProc; // dl:ok public-field@873a -- implementation-only holder for a dictionary value; no behaviour to encapsulate
+      Deadline: UInt64       ; // dl:ok public-field@320e -- implementation-only holder for a dictionary value; no behaviour to encapsulate
+      Flag    : IDLReplyFlag ; // dl:ok public-field@b0b0 -- implementation-only holder for a dictionary value; no behaviour to encapsulate
+  end;
+
+  TDLFlagHolder = class
+    public
+      Flag: IDLReplyFlag; // dl:ok public-field@b0b0 -- implementation-only holder for a dictionary value; no behaviour to encapsulate
+  end;
+
+  TDLLspTickerThread = class(TThread)
+    strict private
+      FOwner: TDragLintLspClient;
+      FStop : TEvent            ;
+    protected
+      procedure Execute; override;
+    public
+      constructor Create(AOwner: TDragLintLspClient; AStop: TEvent);
+  end;
+
+function TDLReplyFlag.GetCancelled: Boolean;
+begin
+  Result:= FCancelled;
+end;
+
+procedure TDLReplyFlag.SetCancelled(AValue: Boolean);
+begin
+  FCancelled:= AValue;
+end;
+
+function TDLReplyFlag.GetDone: Boolean;
+begin
+  Result:= FDone;
+end;
+
+procedure TDLReplyFlag.SetDone(AValue: Boolean);
+begin
+  FDone:= AValue;
+end;
+
+constructor TDLLspTickerThread.Create(AOwner: TDragLintLspClient; AStop: TEvent);
+begin
+  FOwner:= AOwner;
+  FStop := AStop;
+  FreeOnTerminate:= False;
+  inherited Create(False);
+end;
+
+procedure TDLLspTickerThread.Execute;
+begin
+  try
+    while FStop.WaitFor(TICK_MS) = wrTimeout do FOwner.ExpireTimedOut;
+  except
+    on E: Exception do DebugLog('LSP ticker thread died: ' + E.ClassName + ': ' + E.Message);
+  end;
+end;
+
+{ Hands one answer to the main thread. The closure captures only the callback,
+  the flag and the message -- never the client -- so it is safe to run after the
+  client has been freed. The message is freed here whether or not it ran. }
+procedure DeliverReply(const ACallback: TLspReplyProc; const AFlag: IDLReplyFlag;
+  AId: Integer; AStatus: TDLLspReplyStatus; AMsg: TJSONValue);
+begin
+  TThread.ForceQueue(nil,
+    procedure
+    begin
+      try
+        if (not AFlag.Cancelled) and Assigned(ACallback) then
+        try
+          ACallback(AId, AStatus, AMsg);
+        except
+          on E: Exception do DebugLog(Format('LSP reply callback for id %d raised %s: %s', [AId, E.ClassName, E.Message]));
+        end;
+      finally
+        AFlag.Done:= True;
+        AMsg.Free; // dl:ok free-of-parameter@66b8 -- ownership of AMsg is handed to this routine by contract (see its header)
+      end;
+    end);
+end;
 
 { TDragLintLspClient }
 
@@ -261,6 +515,9 @@ begin
   FLock:= TCriticalSection.Create;
   FPendingRequests:= TDictionary<Integer, TEvent    >.Create;
   FResponses      := TDictionary<Integer, TJSONValue>.Create;
+  FAsync          := TObjectDictionary<Integer, TObject>.Create([doOwnsValues]);
+  FFlags          := TObjectDictionary<Integer, TObject>.Create([doOwnsValues]);
+  FOutstanding    := TDictionary<Integer, UInt64>.Create;
   FNextId       := 1;
   FProcessHandle:= 0;
   FStdInWrite   := INVALID_HANDLE_VALUE;
@@ -270,6 +527,127 @@ begin
   FLastError:= '';
   FStartedAt:= 0;
   FPipeBroken:= False;
+  FBusyAfterMs := DEFAULT_BUSY_MS ;
+  FStuckAfterMs:= DEFAULT_STUCK_MS;
+end;
+
+procedure TDragLintLspClient.StartWorkers;
+begin
+  FLastRxTick:= GetTickCount64;
+  FWriter:= TDLLspWriteQueue.Create(FStdInWrite, WRITE_QUEUE_CAPACITY,
+    procedure(ALastError: DWORD)
+    begin
+      DebugLog(Format('WriteFile FAILED on the writer thread, GetLastError=%d', [ALastError]));
+      NotePipeError(ALastError);
+    end);
+  FTickerStop:= TEvent.Create(nil, True, False, '');
+  FTicker:= TDLLspTickerThread.Create(Self, FTickerStop);
+end;
+
+procedure TDragLintLspClient.StopWorkers(ABudgetMs: Cardinal);
+var
+  T0: UInt64;
+begin
+  T0:= GetTickCount64;
+  if FTicker <> nil then
+  begin
+    FTickerStop.SetEvent;
+    { The ticker never blocks on the engine (it waits on FTickerStop only), but
+      its join is bounded all the same: no infinite WaitFor in a stop. }
+    if WaitForSingleObject(FTicker.Handle, ABudgetMs div 2) = WAIT_OBJECT_0 then
+    begin
+      FreeAndNil(FTicker);
+      FreeAndNil(FTickerStop);
+    end
+    else
+    begin
+      DebugLog('StopWorkers: ticker did not exit in budget -- abandoned');
+      FTicker:= nil;      { leaked with its stop event; it touches nothing once signalled }
+      FTickerStop:= nil;
+    end;
+  end;
+  if FWriter <> nil then
+  begin
+    { Cancels a WriteFile blocked on a full pipe; the join is bounded by what
+      is left of the budget. }
+    var Used: UInt64:= GetTickCount64 - T0;
+    FWriter.JoinBudgetMs:= if Used >= ABudgetMs then 0 else Cardinal(ABudgetMs - Used);
+    FreeAndNil(FWriter);
+  end;
+end;
+
+procedure TDragLintLspClient.AttachPipes(AStdInWrite, AStdOutRead: THandle);
+begin
+  FStdInWrite:= AStdInWrite;
+  FStdOutRead:= AStdOutRead;
+  StartWorkers;
+  FReaderThread:= TLspReaderThread.Create(Self, FStdOutRead);
+end;
+
+{ Called by the ticker thread. Expired async requests leave FAsync (their
+  callback gets lrsTimeout) but NOT FOutstanding: the engine is still working on
+  them, and IsBusy must keep seeing that until it answers. }
+procedure TDragLintLspClient.ExpireTimedOut;
+var
+  Now64  : UInt64              ;
+  Expired: TList<Integer>      ;
+  Id     : Integer             ;
+  Entry  : TDLAsyncEntry       ;
+  Pair   : TPair<Integer, TObject>;
+begin
+  Now64:= GetTickCount64;
+  Expired:= TList<Integer>.Create;
+  try
+    FLock.Enter;
+    try
+      for Pair in FAsync do
+        if TDLAsyncEntry(Pair.Value).Deadline <= Now64 then Expired.Add(Pair.Key);
+      for Id in Expired do
+      begin
+        Entry:= TDLAsyncEntry(FAsync.ExtractPair(Id).Value);
+        try
+          DeliverReply(Entry.Callback, Entry.Flag, Id, lrsTimeout, nil);
+        finally
+          Entry.Free;
+        end;
+      end;
+    finally
+      FLock.Leave;
+    end;
+    for Id in Expired do
+    begin
+      DebugLog(Format('LSP request id %d timed out -- $/cancelRequest sent', [Id]));
+      var P: TJSONObject:= TJSONObject.Create;
+      try
+        P.AddPair('id', TJSONNumber.Create(Id));
+        Notify('$/cancelRequest', P);
+      finally
+        P.Free;
+      end;
+    end;
+  finally
+    Expired.Free;
+  end;
+end;
+
+{ After Stop NO callback runs -- not for requests still waiting, and not for
+  answers already queued to the main thread (their flags are still in FFlags,
+  which is pruned only once a delivery has run). A callback may capture the
+  client or state the caller is about to free with it, so "told lrsFailed
+  later" would be a use-after-free; callers watching for an answer notice the
+  client was replaced instead. }
+procedure TDragLintLspClient.CancelAllAsync;
+var
+  Holder: TObject;
+begin
+  FLock.Enter;
+  try
+    for Holder in FFlags.Values do TDLFlagHolder(Holder).Flag.Cancelled:= True;
+    FAsync.Clear;
+    FFlags.Clear;
+  finally
+    FLock.Leave;
+  end;
 end;
 
 function TDragLintLspClient.IsAlive: Boolean;
@@ -304,6 +682,9 @@ begin
   Stop;
   FPendingRequests.Free;
   FResponses.Free;
+  FAsync.Free;
+  FFlags.Free;
+  FOutstanding.Free;
   FLock.Free;
   inherited Destroy;
 end;
@@ -406,10 +787,7 @@ begin
   FProcessId    := PI.dwProcessId;
   { v0.47: OS force-kills the engine when the IDE process dies (crash/kill too). }
   AssignToDragLintJob(FProcessHandle);
-  FStdInWrite:= hWriteIn;
-  FStdOutRead:= hReadOut;
-
-  FReaderThread:= TLspReaderThread.Create(Self, FStdOutRead);
+  AttachPipes(hWriteIn, hReadOut);
   Result:= True;
   DebugLog('Start: success, reader thread launched');
 end; // function
@@ -427,23 +805,55 @@ procedure TDragLintLspClient.Stop;
   WaitFor returns immediately. Final WaitFor still gets a 2s upper bound
   so even a pathological reader thread can't lock the UI. }
 const
-  WAITFOR_MS = 2000;
+  { 2026-10-29: ONE budget for the whole stop, shared by every wait in it. The
+    old code had three independent 2 s waits plus an unbounded writer; after an
+    engine death RAD Studio took minutes to exit and logged nothing. }
+  STOP_BUDGET_MS = 2000;
 var
-  ReaderHandle: THandle;
-  WaitResult  : DWORD  ;
-begin
-  FState:= dlsDown;
-  { Step 1: kill the child unconditionally first. Forces the write end
-    of stdout closed, which makes the reader thread's ReadFile return. }
-  if FProcessHandle <> 0 then
+  T0      : UInt64;
+  Deadline: UInt64;
+
+  function Left: Cardinal;
+  var
+    N: UInt64;
   begin
-    TerminateProcess(FProcessHandle, 0);
-    { Don't WaitForSingleObject yet -- let the reader thread observe the
-      pipe close first so it can exit cleanly. }
+    N:= GetTickCount64;
+    Result:= if N >= Deadline then 0 else Cardinal(Deadline - N);
   end;
 
-  { Step 2: close stdin and stdout handles. By now ReadFile in the
-    reader will have unblocked (or is about to). }
+  procedure Step(const AWhat: string);
+  begin
+    DebugLog(Format('Stop: %s (+%d ms)', [AWhat, GetTickCount64 - T0]));
+  end;
+
+begin
+  T0:= GetTickCount64;
+  Deadline:= T0 + STOP_BUDGET_MS;
+  FState:= dlsDown;
+  Step(Format('begin (pid=%d pipeBroken=%s)', [FProcessId, BoolToStr(FPipeBroken, True)]));
+  { Step 1: kill the child unconditionally first. Forces the write end of
+    stdout closed, which makes the reader thread's ReadFile return. Nothing is
+    WRITTEN to the engine during a stop -- no closing handshake -- so a dead or
+    deaf engine costs nothing here. }
+  if FProcessHandle <> 0 then TerminateProcess(FProcessHandle, 0);
+  Step('engine terminated');
+
+  { Step 1b: stop the writer and the ticker BEFORE the stdin handle closes --
+    the writer is the only user of it. A WriteFile blocked on a full pipe is
+    cancelled (CancelSynchronousIo), never waited for; every async request
+    still waiting is dropped -- see CancelAllAsync. }
+  StopWorkers(Left);
+  CancelAllAsync;
+  FLock.Enter;
+  try
+    FOutstanding.Clear;
+  finally
+    FLock.Leave;
+  end;
+  Step('writer + ticker stopped');
+
+  { Step 2: close stdin and stdout. A reader blocked in ReadFile on a pipe whose
+    writer is still open (an engine alive but silent) is cancelled first. }
   if FStdInWrite <> INVALID_HANDLE_VALUE then
   begin
     CloseHandle(FStdInWrite);
@@ -451,51 +861,42 @@ begin
   end;
   if FStdOutRead <> INVALID_HANDLE_VALUE then
   begin
+    if FReaderThread <> nil then CancelSynchronousIo(FReaderThread.Handle);
     CloseHandle(FStdOutRead);
     FStdOutRead:= INVALID_HANDLE_VALUE;
   end;
+  Step('pipes closed');
 
-  { Step 3: terminate and join the reader thread. Use Windows
-    WaitForSingleObject directly with a hard timeout -- TThread.WaitFor
-    has no timeout overload and pumping message would re-enter the IDE. }
+  { Step 3: join the reader within what is left of the budget. WaitForSingleObject
+    directly -- TThread.WaitFor has no timeout and pumping messages would
+    re-enter the IDE. A reader still running is abandoned (it checks Terminated
+    before dispatching, so it never touches this object again). }
   if FReaderThread <> nil then
   begin
     FReaderThread.Terminate;
-    ReaderHandle:= FReaderThread.Handle;
-    if ReaderHandle <> 0 then
-    begin
-      WaitResult:= WaitForSingleObject(ReaderHandle, WAITFOR_MS);
-      if WaitResult <> WAIT_OBJECT_0 then DebugLog('Stop: reader thread did not exit within ' + IntToStr(WAITFOR_MS) + 'ms -- leaking it to avoid IDE freeze');
-    end;
-    if WaitForSingleObject(ReaderHandle, 0) = WAIT_OBJECT_0 then
+    if WaitForSingleObject(FReaderThread.Handle, Left) = WAIT_OBJECT_0 then
     begin
       FReaderThread.Free;
-      FReaderThread:= nil;
+      Step('reader joined');
     end
-    else
-    begin
-      { Don't Free -- Destructor calls WaitFor which would block again.
-        Leak the TThread instance; OS will reclaim when child fully exits. }
-      FReaderThread:= nil;
-    end;
-  end; // if
+    else Step('reader did NOT exit in budget -- abandoned to keep the IDE responsive');
+    FReaderThread:= nil;
+  end;
 
-  { Step 4: reap the child and close its handle.
-    v0.40.8h: bumped wait from 200 ms to 2000 ms. The EXE file handle is
-    only released by the kernel after the process fully exits; on a busy
-    machine 200 ms can race the BPL reinstall's AutoPullStagedExe and
-    leave the staged drag-lint.exe still locked. 2 s is more than enough
-    after TerminateProcess; we still have the WAITFOR_MS hard cap above
-    so the IDE can't freeze. }
+  { Step 4: reap the child. v0.40.8h: the exe image lock is released only once
+    the process has fully exited (the BPL reinstall's AutoPullStagedExe races
+    it), so wait -- but only for what is left of the budget. }
   if FProcessHandle <> 0 then
   begin
-    WaitForSingleObject(FProcessHandle, 2000);
+    if WaitForSingleObject(FProcessHandle, Left) = WAIT_OBJECT_0 then Step('engine process reaped')
+    else Step('engine process still exiting -- handle closed anyway');
     CloseHandle(FProcessHandle);
     FProcessHandle:= 0;
   end;
   { Keep ProcessId honest -- a stale PID on a stopped client would send anyone
     reading the diagnose report to a process that is no longer there. }
   FProcessId:= 0;
+  Step('done');
 end; // procedure
 
 function TDragLintLspClient.Initialize: Boolean;
@@ -537,74 +938,259 @@ begin
   end;
 end; // function
 
-function TDragLintLspClient.Request(const AMethod: string; AParams: TJSONValue; ATimeoutMs: Integer): TJSONValue;
+procedure TDragLintLspClient.InitializeAsync(const ADone: TProc<Boolean>);
 var
-  Id : Integer    ;
-  Evt: TEvent     ;
-  Msg: TJSONObject;
+  Params: TJSONObject;
+  Id    : Integer    ;
 begin
-  FLock.Enter;
+  DebugLog('InitializeAsync: sending initialize request');
+  FState:= dlsStarting;
+  Params:= TJSONObject.Create;
   try
-    Id:= FNextId;
-    Inc(FNextId);
-  finally
-    FLock.Leave;
-  end;
-
-  Evt:= TEvent.Create(nil, True, False, '');
-  FLock.Enter;
-  try
-    FPendingRequests.Add(Id, Evt);
-  finally
-    FLock.Leave;
-  end;
-
-  Msg:= TJSONObject.Create;
-  Msg.AddPair('jsonrpc', '2.0');
-  Msg.AddPair('id', TJSONNumber.Create(Id));
-  Msg.AddPair('method', AMethod);
-  if AParams <> nil then Msg.AddPair('params', AParams.Clone as TJSONValue)
-  else Msg.AddPair('params', TJSONObject.Create);
-  try
-    WriteFramedMessage(Msg.ToString);
-  finally
-    Msg.Free;
-  end;
-
-  if Evt.WaitFor(ATimeoutMs) = wrSignaled then
-  begin
-    FLock.Enter;
-    try
-      if FResponses.ContainsKey(Id) then
+    Params.AddPair('processId', TJSONNumber.Create(GetCurrentProcessId));
+    Params.AddPair('capabilities', TJSONObject.Create);
+    { Same 45 s budget as the blocking Initialize (see its v0.42 note), but the
+      IDE no longer waits through it: the answer arrives on the main thread. }
+    Id:= RequestAsync('initialize', Params, INITIALIZE_TIMEOUT_MS,
+      procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue)
       begin
-        Result:= FResponses[Id];
-        FResponses.Remove(Id);
-      end
-      else Result:= nil;
-      FPendingRequests.Remove(Id);
-    finally
-      FLock.Leave;
-    end;
-  end
-  else Result:= nil;
-  Evt.Free;
-end; // function
+        if AStatus = lrsResult then
+        begin
+          DebugLog('InitializeAsync: response received OK');
+          FState    := dlsConnected;
+          FLastError:= '';
+        end
+        else
+        begin
+          DebugLog(Format('InitializeAsync: no usable answer (status %d)', [Ord(AStatus)]));
+          FState    := dlsFailed;
+          FLastError:= 'no initialize response within 45s (the server may still be starting -- check CPU load)';
+        end;
+        if Assigned(ADone) then ADone(AStatus = lrsResult);
+      end);
+  finally
+    Params.Free;
+  end;
+  if Id = 0 then
+  begin
+    FState    := dlsFailed;
+    FLastError:= 'initialize could not be sent (pipe not writable)';
+    if Assigned(ADone) then TThread.ForceQueue(nil, procedure begin ADone(False); end);
+  end;
+end;
 
-procedure TDragLintLspClient.Notify(const AMethod: string; AParams: TJSONValue);
+function TDragLintLspClient.SendRequestFrame(AId: Integer; const AMethod: string; AParams: TJSONValue): Boolean;
 var
   Msg: TJSONObject;
 begin
   Msg:= TJSONObject.Create;
-  Msg.AddPair('jsonrpc', '2.0'  );
-  Msg.AddPair('method' , AMethod);
-  if AParams <> nil then Msg.AddPair('params', AParams.Clone as TJSONValue)
-  else Msg.AddPair('params', TJSONObject.Create);
   try
-    WriteFramedMessage(Msg.ToString);
+    Msg.AddPair('jsonrpc', '2.0');
+    Msg.AddPair('id', TJSONNumber.Create(AId));
+    Msg.AddPair('method', AMethod);
+    if AParams <> nil then Msg.AddPair('params', AParams.Clone as TJSONValue)
+    else Msg.AddPair('params', TJSONObject.Create);
+    var Body: TBytes:= TEncoding.UTF8.GetBytes(Msg.ToString);
+    Result:= (FWriter <> nil) and FWriter.Enqueue(TEncoding.UTF8.GetBytes(Format('Content-Length: %d'#13#10#13#10, [Length(Body)])) + Body);
+    DebugLog(Format('Tx id=%d %s queued=%s', [AId, AMethod, BoolToStr(Result, True)]));
   finally
     Msg.Free;
   end;
 end;
+
+function TDragLintLspClient.Request(const AMethod: string; AParams: TJSONValue; ATimeoutMs: Integer): TJSONValue;
+var
+  Id : Integer;
+  Evt: TEvent ;
+begin
+  Result:= nil;
+  Id    := 0;
+  Evt:= TEvent.Create(nil, True, False, '');
+  try
+    FLock.Enter;
+    try
+      Id:= FNextId;
+      Inc(FNextId);
+      FPendingRequests.Add(Id, Evt);
+      FOutstanding.AddOrSetValue(Id, GetTickCount64);
+    finally
+      FLock.Leave;
+    end;
+
+    if SendRequestFrame(Id, AMethod, AParams) and (Evt.WaitFor(ATimeoutMs) = wrSignaled) then
+    begin
+      FLock.Enter;
+      try
+        if FResponses.TryGetValue(Id, Result) then FResponses.Remove(Id);
+      finally
+        FLock.Leave;
+      end;
+    end;
+  finally
+    FLock.Enter;
+    try
+      FPendingRequests.Remove(Id);
+      { A response that raced the timeout must not leak. }
+      var Late: TJSONValue;
+      if (Result = nil) and FResponses.TryGetValue(Id, Late) then
+      begin
+        FResponses.Remove(Id);
+        Late.Free;
+      end;
+    finally
+      FLock.Leave;
+    end;
+    Evt.Free;
+  end;
+end; // function
+
+function TDragLintLspClient.RequestAsync(const AMethod: string; AParams: TJSONValue; ATimeoutMs: Integer; const AOnReply: TLspReplyProc): Integer;
+var
+  Id    : Integer      ;
+  Entry : TDLAsyncEntry;
+  Holder: TDLFlagHolder;
+begin
+  Result:= 0;
+  if FWriter = nil then Exit;
+  Entry:= TDLAsyncEntry.Create;
+  Entry.Callback:= AOnReply;
+  Entry.Deadline:= GetTickCount64 + UInt64(if ATimeoutMs > 0 then ATimeoutMs else 0);
+  Entry.Flag    := TDLReplyFlag.Create;
+  Holder:= TDLFlagHolder.Create;
+  Holder.Flag:= Entry.Flag;
+  FLock.Enter;
+  try
+    Id:= FNextId;
+    Inc(FNextId);
+    { Prune flags whose delivery already ran -- they can no longer be cancelled. }
+    var Gone: TList<Integer>:= TList<Integer>.Create;
+    try
+      for var Pair in FFlags do
+        if TDLFlagHolder(Pair.Value).Flag.Done then Gone.Add(Pair.Key);
+      for var G in Gone do FFlags.Remove(G);
+    finally
+      Gone.Free;
+    end;
+    FAsync.Add(Id, Entry);
+    FFlags.Add(Id, Holder);
+    FOutstanding.AddOrSetValue(Id, GetTickCount64);
+  finally
+    FLock.Leave;
+  end;
+
+  if not SendRequestFrame(Id, AMethod, AParams) then
+  begin
+    FLock.Enter;
+    try
+      FAsync.Remove(Id);
+      FFlags.Remove(Id);
+      FOutstanding.Remove(Id);
+    finally
+      FLock.Leave;
+    end;
+    Exit;
+  end;
+  Result:= Id;
+end;
+
+procedure TDragLintLspClient.CancelRequest(AId: Integer);
+var
+  Holder: TObject;
+  WasLive: Boolean;
+begin
+  if AId <= 0 then Exit;
+  FLock.Enter;
+  try
+    if FFlags.TryGetValue(AId, Holder) then TDLFlagHolder(Holder).Flag.Cancelled:= True;
+    WasLive:= FAsync.ContainsKey(AId);
+    FAsync.Remove(AId);
+    FFlags.Remove(AId);
+  finally
+    FLock.Leave;
+  end;
+  if not WasLive then Exit;
+  var P: TJSONObject:= TJSONObject.Create;
+  try
+    P.AddPair('id', TJSONNumber.Create(AId));
+    Notify('$/cancelRequest', P);
+  finally
+    P.Free;
+  end;
+end;
+
+procedure TDragLintLspClient.Notify(const AMethod: string; AParams: TJSONValue; const ACoalesceKey: string);
+var
+  Msg: TJSONObject;
+begin
+  Msg:= TJSONObject.Create;
+  try
+    Msg.AddPair('jsonrpc', '2.0'  );
+    Msg.AddPair('method' , AMethod);
+    if AParams <> nil then Msg.AddPair('params', AParams.Clone as TJSONValue)
+    else Msg.AddPair('params', TJSONObject.Create);
+    WriteFramedMessage(Msg.ToString, ACoalesceKey);
+  finally
+    Msg.Free;
+  end;
+end;
+
+function TDragLintLspClient.IsBusy: Boolean;
+var
+  Now64 : UInt64;
+  Oldest: UInt64;
+  Sent  : UInt64;
+begin
+  Now64:= GetTickCount64;
+  Oldest:= Now64;
+  FLock.Enter;
+  try
+    for Sent in FOutstanding.Values do
+      if Sent < Oldest then Oldest:= Sent;
+  finally
+    FLock.Leave;
+  end;
+  Result:= (Now64 - Oldest > FBusyAfterMs) or
+           ((FWriter <> nil) and (FWriter.WriteStalledMs > FBusyAfterMs));
+end;
+
+function TDragLintLspClient.IsStuck: Boolean;
+var
+  Oldest: UInt64;
+  Since : UInt64;
+  Sent  : UInt64;
+begin
+  { Silence is measured from the LATER of "last thing the engine said" and
+    "oldest request still unanswered": an engine idle for ten minutes and then
+    asked something is not stuck the moment it is asked. }
+  Result:= False;
+  FLock.Enter;
+  try
+    if FOutstanding.Count > 0 then
+    begin
+      Oldest:= High(UInt64);
+      for Sent in FOutstanding.Values do
+        if Sent < Oldest then Oldest:= Sent;
+      Since:= if FLastRxTick > Oldest then FLastRxTick else Oldest;
+      Result:= GetTickCount64 - Since > FStuckAfterMs;
+    end;
+  finally
+    FLock.Leave;
+  end;
+  { An engine that stopped READING stdin is stuck whether or not anything was
+    a request. }
+  if (not Result) and (FWriter <> nil) then Result:= FWriter.WriteStalledMs > FStuckAfterMs;
+end;
+
+function TDragLintLspClient.OutstandingCount: Integer;
+begin
+  FLock.Enter;
+  try
+    Result:= FOutstanding.Count;
+  finally
+    FLock.Leave;
+  end;
+end;
+
 
 { ERROR_NO_DATA (232) and ERROR_BROKEN_PIPE (109) both mean the server is no
   longer reading us. Anything else is a transient write problem and is left
@@ -622,40 +1208,20 @@ begin
   DebugLog('LSP pipe is BROKEN -- client marked not alive; EnsureLspClient will restart it');
 end;
 
-procedure TDragLintLspClient.WriteFramedMessage(const AJson: string);
+procedure TDragLintLspClient.WriteFramedMessage(const AJson: string; const ACoalesceKey: string);
+{ 2026-10-29: ENQUEUES, never writes. The blocking WriteFile under FLock that
+  used to live here froze the IDE whenever the engine stopped reading stdin
+  (docs\INBOX-ide-hang-on-slow-engine.md section 1). The writer thread in
+  DragLint.Plugin.LspWriteQueue now owns the pipe; a full queue drops the frame
+  and says so in the log instead of waiting. }
 var
-  Bytes  : TBytes    ;
-  Header : AnsiString;
-  Written: DWORD     ;
-  HdrW   : BOOL      ;
-  BodyW  : BOOL      ;
-  LastErr: DWORD     ;
+  Bytes: TBytes;
 begin
   Bytes:= TEncoding.UTF8.GetBytes(AJson);
-  Header:= AnsiString(Format('Content-Length: %d'#13#10#13#10, [Length(Bytes)]));
   DebugLog(Format('Tx: %d bytes: %s', [Length(Bytes), Copy(AJson, 1, 200)]));
-  FLock.Enter;
-  try
-    HdrW:= WriteFile(FStdInWrite, Header[1], Length(Header), Written, nil);
-    if not HdrW then
-    begin
-      LastErr:= GetLastError;
-      DebugLog(Format('WriteFile(header) FAILED, GetLastError=%d', [LastErr]));
-      NotePipeError(LastErr);
-    end;
-    if Length(Bytes) > 0 then
-    begin
-      BodyW:= WriteFile(FStdInWrite, Bytes[0], Length(Bytes), Written, nil);
-      if not BodyW then
-      begin
-        LastErr:= GetLastError;
-        DebugLog(Format('WriteFile(body) FAILED, GetLastError=%d', [LastErr]));
-        NotePipeError(LastErr);
-      end;
-    end;
-  finally
-    FLock.Leave;
-  end; // try
+  if FWriter = nil then Exit;
+  if not FWriter.Enqueue(TEncoding.UTF8.GetBytes(Format('Content-Length: %d'#13#10#13#10, [Length(Bytes)])) + Bytes, ACoalesceKey) then
+    DebugLog('Tx DROPPED -- write queue full or pipe failed (engine not reading stdin?)');
 end; // procedure
 
 procedure TDragLintLspClient.DispatchMessage(AMsg: TJSONValue);
@@ -666,7 +1232,16 @@ var
   MethodVal: TJSONValue;
   ParamsVal: TJSONValue;
   MethodStr: string    ;
+  Entry    : TObject   ;
+  Status   : TDLLspReplyStatus;
 begin
+  FLock.Enter;
+  try
+    FLastRxTick:= GetTickCount64;
+  finally
+    FLock.Leave;
+  end;
+
   IdVal:= (AMsg as TJSONObject).GetValue('id');
   if IdVal <> nil then
   begin
@@ -674,14 +1249,22 @@ begin
     if ((AMsg as TJSONObject).GetValue('result') <> nil) or ((AMsg as TJSONObject).GetValue('error') <> nil) then
     begin
       Id:= (IdVal as TJSONNumber).AsInt;
+      Status:= if (AMsg as TJSONObject).GetValue('error') <> nil then lrsError else lrsResult;
       FLock.Enter;
       try
+        FOutstanding.Remove(Id);
         if FPendingRequests.TryGetValue(Id, Evt) then
         begin
           FResponses.AddOrSetValue(Id, AMsg);
           Evt.SetEvent;
         end
-        else AMsg.Free;
+        else if FAsync.TryGetValue(Id, Entry) then
+        begin
+          { Ownership of AMsg passes to the delivery closure. }
+          DeliverReply(TDLAsyncEntry(Entry).Callback, TDLAsyncEntry(Entry).Flag, Id, Status, AMsg);
+          FAsync.Remove(Id);
+        end
+        else AMsg.Free; // dl:ok free-of-parameter@2db8 -- the reader thread hands ownership of every parsed message to this routine
       finally
         FLock.Leave;
       end;
@@ -700,8 +1283,9 @@ begin
   { We do NOT free AMsg here when it's a notification and we called the handler,
     because the caller may hold references. For safety, free it now since the
     handler is synchronous and done by the time we return. }
-  AMsg.Free;
+  AMsg.Free; // dl:ok free-of-parameter@66b8 -- the reader thread hands ownership of every parsed message to this routine
 end; // procedure
+
 
 initialization
 
