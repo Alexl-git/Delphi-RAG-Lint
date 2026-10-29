@@ -886,6 +886,8 @@ type
       /// <summary>C1: runs `ParamStr(0) lint "AFile" --json` out-of-process and returns its stdout.</summary>
       /// <param name="AFile">Absolute path of the saved file.</param>
       /// <param name="AJson">Receives lint's stdout when the run succeeded.</param>
+      /// <param name="ARule">When non-empty, passed as `--rule` so the child computes that rule only
+      /// (auto uses on save asks for unused-unit-in-uses alone).</param>
       /// <returns>True when the child exited 0 within LintChildTimeoutMs (8 s, 16 s for a library-owned file); False on a spawn
       /// failure, a timeout (the child is terminated) or a non-zero exit.</returns>
       /// <remarks>
@@ -907,7 +909,19 @@ type
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHover"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      function RunFullRulesLint(const AFile: string; out AJson: string): Boolean;
+      function RunFullRulesLint(const AFile: string; out AJson: string; const ARule: string = ''): Boolean;
+      /// <summary>Auto uses on save: the source.removeUnusedImports action for APath, or nil.</summary>
+      /// <param name="APath">The file the codeAction request names.</param>
+      /// <param name="ABufferText">The editor's text, ANSI-decoded as the indexer decodes bytes.</param>
+      /// <returns>A new action the caller owns; nil when the drop gate is closed, the child
+      /// lint fails, or nothing is removable.</returns>
+      /// <remarks>The gate (buffer hash = indexed hash AND whole index fresh) is checked
+      /// BEFORE the child lint runs, so a closed gate costs one hash lookup and one
+      /// stat sweep. Only warning-level findings are removed: an info-level one names a unit
+      /// with an initialization section. The findings are recomputed by the child from the fresh index, never
+      /// taken from the client: its diagnostics may predate the reference just typed.
+      /// The verdict goes to stderr as `uses-on-save: drop gate buffer=.. fresh=.. directive=..`.</remarks>
+      function BuildRemoveUnusedSourceAction(const APath, ABufferText: string): TJSONObject;
       /// <summary>Stores the client's live buffer text (full sync) so position
       /// lookups see unsaved edits. See TLiveDocuments for why.</summary>
       /// <param name="AParams"><!-- drag-lint:auto type -->const TJSONObject</param>
@@ -4632,6 +4646,57 @@ begin
   end; // try
 end; // procedure
 
+{ True when the request's context.only names AKind or a parent of it ('source'
+  covers 'source.removeUnusedImports'). No `only` = an ordinary light-bulb request. }
+function CodeActionKindRequested(const AContext: TJSONObject; const AKind: string): Boolean;
+begin
+  Result:= False;
+  if (AContext = nil) or (AContext.GetValue('only') is not TJSONArray) then Exit;
+  for var V: TJSONValue in TJSONArray(AContext.GetValue('only')) do
+    if SameText(V.Value, AKind) or StartsText(V.Value + '.', AKind) then Exit(True);
+end;
+
+function TLSPServer.BuildRemoveUnusedSourceAction(const APath, ABufferText: string): TJSONObject;
+begin
+  Result:= nil;
+  var Owner: ISymbolStore:= nil;
+  for var St: ISymbolStore in FStores do
+    if (St <> nil) and (St.FindFileIdByPath(APath) > 0) then
+    begin
+      Owner:= St;
+      Break;
+    end;
+  var Gate: TDropGate:= TUsesOnSave.ComputeDropGate(Owner, APath, ABufferText);
+  Writeln(ErrOutput, Format('drag-lint LSP: uses-on-save: drop gate buffer=%s fresh=%s directive=%s (%s)',
+    [BoolToStr(Gate.BufferMatchesIndex, True), BoolToStr(Gate.IndexFresh, True), BoolToStr(Gate.UsesClauseHasDirective, True), APath]));
+  if not (Gate.BufferMatchesIndex and Gate.IndexFresh) then Exit;
+  var LintJson: string;
+  if not RunFullRulesLint(APath, LintJson, UNUSED_UNIT_RULE) then Exit;
+  { D3: an entry of a clause holding a {$ directive is never removed silently }
+  var Keep: TArray<TLintFinding>:= nil;
+  for var F: TLintFinding in TUsesOnSave.UnusedFindingsFromLintJson(LintJson, APath) do
+    if TUsesOnSave.UsesClauseHasDirectiveAt(ABufferText, F.StartLine) then
+      Writeln(ErrOutput, Format('drag-lint LSP: uses-on-save: drop gate buffer=True fresh=True directive=True (%s:%d)', [APath, F.StartLine]))
+    else if not SameText(F.Severity, 'warning') then
+      Continue { info = the unit HAS an initialization section: linked for its side effect, never removed silently }
+    else if TUsesOnSave.RemoveUnusedEntries(APath, ABufferText, [F]) = ABufferText then
+      Continue { the fixer declines it (initialization-section tier, a layout it does not edit) }
+    else
+      Keep:= Keep + [F];
+  if Length(Keep) = 0 then Exit;
+  var FileUri: string:= 'file:///' + StringReplace(APath, '\', '/', [rfReplaceAll]);
+  var Edit: TJSONObject:= TUsesOnSave.TextChangeEdit(FileUri, ABufferText, TUsesOnSave.RemoveUnusedEntries(APath, ABufferText, Keep));
+  if Edit = nil then Exit;
+  var Diags: TJSONArray:= TJSONArray.Create;
+  try
+    for var F: TLintFinding in Keep do Diags.AddElement(TUsesOnSave.DiagnosticOfFinding(F));
+    Result:= TUsesOnSave.RemoveUnusedImportAction(Diags, Edit, Gate);
+  finally
+    Diags.Free;
+    Edit.Free;
+  end;
+end;
+
 procedure TLSPServer.HandleCodeAction(const AId: TJSONValue; const AParams: TJSONObject);
 var
   Reply    : TJSONObject;
@@ -4715,6 +4780,24 @@ begin
         end;
       finally
         MuDiags.Free;
+      end;
+      { Auto uses on save: the removal quickfix edits the buffer the user is
+        looking at; the silent source.removeUnusedImports action is built only
+        when the client asks for that kind (context.only) -- it spawns a child
+        lint, which a light-bulb request must not pay for. }
+      var FromOverlay: Boolean;
+      var BufText: string:= TEncoding.ANSI.GetString(TLiveDocuments.ReadBytes(Path, FromOverlay));
+      var FileUri: string:= 'file:///' + StringReplace(Path, '\', '/', [rfReplaceAll]);
+      var RmQuick: TJSONArray:= TUsesOnSave.RemoveUnusedQuickfixes(Path, FileUri, BufText, Diags, StartLine, EndLine);
+      try
+        for var J:= 0 to RmQuick.Count - 1 do Actions.AddElement(RmQuick.Items[J].Clone as TJSONValue);
+      finally
+        RmQuick.Free;
+      end;
+      if CodeActionKindRequested(Context, KINDS_ON_SAVE[1]) then
+      begin
+        var RmSrc: TJSONObject:= BuildRemoveUnusedSourceAction(Path, BufText);
+        if RmSrc <> nil then Actions.AddElement(RmSrc);
       end;
       Reply.AddPair('result', Actions);
     finally
@@ -4826,7 +4909,7 @@ begin
   end;
 end; // procedure
 
-function TLSPServer.RunFullRulesLint(const AFile: string; out AJson: string): Boolean;
+function TLSPServer.RunFullRulesLint(const AFile: string; out AJson: string; const ARule: string): Boolean;
 var
   Sa      : TSecurityAttributes;
   TmpPath : string;
@@ -4873,6 +4956,7 @@ begin
     ChildExe:= GetEnvironmentVariable('DRAGLINT_FULLRULES_CHILD_EXE');
     if ChildExe = '' then ChildExe:= ParamStr(0);
     Cmd:= '"' + ChildExe + '" lint "' + AFile + '" --json';
+    if ARule <> '' then Cmd:= Cmd + ' --rule "' + StringReplace(ARule, '"', '', [rfReplaceAll]) + '"';
     for var DbP in FStorePaths do
       if DbP <> '' then Cmd:= Cmd + ' --db "' + DbP + '"';
     { C15: the in-process lint's profile, not a different one; values quoted, a double quote dropped. }
