@@ -206,7 +206,7 @@ begin
   Writeln('  drag-lint protocol register [--handler <drag-lint-open.exe>] [--dry-run] [--force]   (HKCU\Software\Classes\draglint -> the handler; --force accepts a *-wt\ path or replaces a foreign registration)');
   Writeln('  drag-lint protocol unregister [--dry-run] [--force]   (removes the key when it is ours or the legacy PowerShell one; foreign needs --force)');
   Writeln('  drag-lint protocol status [--json]   (prints the registered command and ours|legacy-powershell|foreign|none; exit 0 only when ours)');
-  Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>]');
+  Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>] [--target-compiler <ver|auto>]');
   Writeln('                               --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;');
   Writeln('                               stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.');
   Writeln('                               in lsp mode the engine also listens on a per-user maintenance pipe -- see `drag-lint shutdown`.');
@@ -381,7 +381,7 @@ begin
   Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
   Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
   Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
-  Writeln('    --target-compiler <v>     lint / lint-all / rules: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
+  Writeln('    --target-compiler <v>     lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
   Writeln('    --baseline <file>         report only findings absent from the baseline');
   Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
   Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
@@ -759,7 +759,7 @@ begin
   end;
   if pVerb = 'lsp' then
   begin
-    Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>]');
+    Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>] [--target-compiler <ver|auto>]');
     Writeln('                               --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;');
     Writeln('                               stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.');
     Writeln('                               in lsp mode the engine also listens on a per-user maintenance pipe -- see `drag-lint shutdown`.');
@@ -1189,7 +1189,7 @@ begin
     Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
     Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
     Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
-    Writeln('    --target-compiler <v>     lint / lint-all / rules: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
+    Writeln('    --target-compiler <v>     lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
     Writeln('    --baseline <file>         report only findings absent from the baseline');
     Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
     Exit;

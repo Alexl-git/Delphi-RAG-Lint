@@ -36,6 +36,7 @@ uses
   , DRagLint.Query   .HoverModel{ v(hover bundle): the shared model assembly `hover --format json` uses }
   , DRagLint.LSP     .Context   { S0: ILspServerContext + the feature registry }
   , DRagLint.Project .ContextFile { LSP-1 CORE: .dlcontext.json + central context defaults }
+  , DRagLint.Lint    .TargetCompiler { 1.38: the target-compiler gate of each file's diagnostics }
   ;
 
 type
@@ -219,6 +220,7 @@ type
       FFullRules   : Boolean             ; { C1: --full-rules; OFF by default }
       FStartProject : string             ; { C15: explicit --project the CLI was started with, or '' }
       FStartPlatform: string             ; { C15: explicit --platform the CLI was started with, or '' }
+      FStartupTargetCompiler  : string             ; { 1.38: explicit --target-compiler the CLI was started with, or '' }
       { S0 feature registry: one instance per registered TLspFeature class, owned;
         the method table points into it (not owned). FContext is the adapter
         every feature is handed -- see DRagLint.LSP.Context. }
@@ -271,12 +273,25 @@ type
       FReindex       : TDictionary<string, TReindexRun>; { lower(db) -> run }
       FReindexThreads: TObjectList<TThread>;
       FOpenDocs      : TDictionary<string, string>;      { lower(path) -> uri of every open document }
+      { 1.38 target compiler: the client's targetCompiler (initializationOptions /
+        draglint.setContext / didChangeConfiguration), the last gate built (one
+        catalog walk per distinct target) and the target each open document's
+        diagnostics were last published under. }
+      FClientTarget   : string;
+      FTargetGate     : TTargetRuleGate;
+      FPublishedTarget: TDictionary<string, Integer>;    { lower(path) -> CompilerVersion }
       { Yield (INBOX-ide-hang-on-slow-engine section 2): messages read while a
         long request yielded, to be dispatched by Run before its next read, in
         arrival order. FInputEnded: such a read hit EOF / a cancelled read. }
       FDeferred       : TQueue<TJSONObject>              ;
       FInputEnded     : Boolean                          ;
       FYielding       : Boolean                          ;
+      { 1.38: resolves APath's target compiler (startup > lint config > context),
+        publishes it (SetActiveTargetCompiler) and returns its gate; AError <> ''
+        when the winning token is invalid -- the gate is then the default's. }
+      function  TargetGateFor(const APath: string; const ACtx: TLspFileContext; out AError: string): TTargetRuleGate;
+      { 1.38: re-publishes every open document whose target changed with the context. }
+      procedure RepublishRetargeted;
       procedure StartReindex(const ADb, ADproj: string);
       procedure ReindexFinished(const AKey: string);
       procedure PublishDiagnostics(const AUri, APath: string);
@@ -1188,6 +1203,12 @@ type
       /// <summary>C15: the explicit --platform the CLI was started with ('' when none was typed).</summary>
       /// <remarks>Set by the CLI from its parsed arguments; forwarded like StartupProject.</remarks>
       property StartupPlatform: string read FStartPlatform write FStartPlatform;
+      /// <summary>1.38: the explicit --target-compiler the CLI was started with ('' when none was typed).</summary>
+      /// <remarks>Set by the CLI from its parsed arguments. It beats the lint config's
+      /// target_compiler and the project context's targetCompiler for every file
+      /// (ResolveTargetCompiler's precedence); an invalid token is reported as a
+      /// context notice and the file is linted at the default target.</remarks>
+      property StartupTargetCompiler: string read FStartupTargetCompiler write FStartupTargetCompiler;
       /// <summary>LSP-1 CORE: resolves (project, platform) to its DB pair with the
       /// CLI's resolve-dbs logic; nil = only the startup stores are ever used.</summary>
       /// <remarks>Set by the CLI before Run. Called on the server's own thread.</remarks>
@@ -1425,7 +1446,7 @@ end;
 function HasContextKeys(const AObj: TJSONObject): Boolean;
 begin
   Result:= (AObj <> nil) and ((AObj.GetValue('project') <> nil) or (AObj.GetValue('platform') <> nil)
-    or (AObj.GetValue('config') <> nil));
+    or (AObj.GetValue('config') <> nil) or (AObj.GetValue('targetCompiler') <> nil));
 end;
 
 type
@@ -1640,6 +1661,7 @@ begin
   FReindex       := TDictionary<string, TReindexRun>.Create;
   FReindexThreads:= TObjectList<TThread>.Create({AOwnsObjects=}True);
   FOpenDocs      := TDictionary<string, string>.Create;
+  FPublishedTarget:= TDictionary<string, Integer>.Create;
   FPending := TObjectList<TJSONObject>.Create({AOwnsObjects=}True);
 
   { S0 feature registry: one instance per registered class; the first feature
@@ -1679,6 +1701,7 @@ begin
     if Run.Process <> 0 then CloseHandle(Run.Process);
   FReindex.Free;
   FOpenDocs.Free;
+  FPublishedTarget.Free;
   FStopEvent.Free;
   FWorkLock.Free;
   FPending.Free;
@@ -2770,7 +2793,9 @@ begin
   else if C <> '' then Result.Config:= C
   else Result.Config:= Defaults.Config;
 
-  Result.TargetCompiler:= if HaveCtx and (Ctx.TargetCompiler <> '') then Ctx.TargetCompiler else Defaults.TargetCompiler;
+  { Target compiler (the context value of ResolveTargetCompiler): client > context file > central defaults. }
+  Result.TargetCompiler:= if FClientTarget <> '' then FClientTarget
+    else if HaveCtx and (Ctx.TargetCompiler <> '') then Ctx.TargetCompiler else Defaults.TargetCompiler;
   if HaveCtx then
   begin
     Result.ProjectDbOverride:= Ctx.ProjectDb;
@@ -3143,6 +3168,12 @@ begin
   if ACtx.StaleContextFile <> '' then
     Add('stale-context', Format('drag-lint: %s is stale (its .dproj changed) -- reading the .dproj instead.',
       [ExtractFileName(ACtx.StaleContextFile)]));
+  { 1.38: an invalid target compiler is named, never guessed; the file is linted at the default. }
+  var TargetErr: string;
+  TargetGateFor(APath, ACtx, TargetErr);
+  if TargetErr <> '' then
+    Add('bad-target', Format('drag-lint: %s -- linting %s at the default target %s.',
+      [TargetErr, ExtractFileName(APath), CompilerDisplayName(DEFAULT_TARGET_COMPILER)]));
   if ADbs.LibraryDb = '' then
     Add('no-library', Format('drag-lint: no library index for platform %s -- library answers are refused. '
       + 'Index that library, or set libraries.%s.libraryDb in %s.', [ACtx.Platform, ACtx.Platform, ContextDefaultsFile]));
@@ -3181,6 +3212,34 @@ begin
       else Add('incomplete', Format('drag-lint: %s %s -- answers may be incomplete.', [ExtractFileName(ADbs.ProjectDb), Incomplete]));
   end;
   Result:= Acc;
+end;
+
+function TLSPServer.TargetGateFor(const APath: string; const ACtx: TLspFileContext; out AError: string): TTargetRuleGate;
+var
+  V    : Integer;
+  Dproj: string;
+begin
+  Dproj:= if SameText(ExtractFileExt(ACtx.Project), '.dproj') then ACtx.Project else '';
+  if not ResolveTargetCompiler(FStartupTargetCompiler, TLspCompletion.LintConfigTargetCompiler(APath), ACtx.TargetCompiler,
+           Dproj, V, AError) then
+    V:= DEFAULT_TARGET_COMPILER; { refused: notice (ContextNotice) + the default, never a guess }
+  SetActiveTargetCompiler(V);
+  { One catalog walk per distinct target: the gate is rebuilt only when the target changes. }
+  if FTargetGate.Target <> V then FTargetGate:= TLspCompletion.BuildTargetGate(V);
+  Result:= FTargetGate;
+end;
+
+procedure TLSPServer.RepublishRetargeted;
+var
+  Err: string;
+begin
+  for var Doc in FOpenDocs.ToArray do
+  begin
+    var Was: Integer;
+    if not FPublishedTarget.TryGetValue(Doc.Key, Was) then Continue;
+    var Path: string:= FileFromUri(Doc.Value);
+    if TargetGateFor(Path, FileContext(Path), Err).Target <> Was then PublishDiagnostics(Doc.Value, Path);
+  end;
 end;
 
 procedure TLSPServer.QueueNotification(const AMethod: string; AParams: TJSONObject);
@@ -3245,8 +3304,10 @@ begin
   FClientProject := if Proj <> '' then ExpandFileName(Proj) else '';
   FClientPlatform:= Plat;
   FClientConfig  := Conf;
+  FClientTarget  := JsonStrOf(AObj, 'targetCompiler');
   FCtxCache.Clear;
   QueueContextNotification(FLastOpenPath);
+  RepublishRetargeted;
 end;
 
 procedure TLSPServer.ApplyClientSettingsFile(const AFile: string);
@@ -3271,8 +3332,10 @@ begin
   FClientProject := ExpandFileName(Proj);
   FClientPlatform:= Plat;
   FClientConfig  := '';
+  FClientTarget  := '';
   FCtxCache.Clear;
   QueueContextNotification(FLastOpenPath);
+  RepublishRetargeted;
 end;
 
 function TLSPServer.HandleSetContext(const AId: TJSONValue; const AParams: TJSONObject): Boolean;
@@ -4759,8 +4822,12 @@ var
 begin
   Uri := AUri;
   Path:= APath;
+  { 1.38: the file's target compiler gates its lint findings (startup > config > context). }
+  var TargetErr: string;
+  var Gate: TTargetRuleGate:= TargetGateFor(Path, FileContext(Path), TargetErr);
+  FPublishedTarget.AddOrSetValue(LowerCase(Path), Gate.Target);
   // v0.26: pass FStore so compiler_findings are merged into publishDiagnostics.
-  Diags:= TLspCompletion.BuildDiagnostics(EnsureLinter, Path, FStore);
+  Diags:= TLspCompletion.BuildDiagnostics(EnsureLinter, Path, FStore, Gate);
   if FFullRules then
   begin
     { C1: replace the lint subset (every source='drag-lint' entry) by the full
@@ -4775,7 +4842,8 @@ begin
         if SameText((Diags.Items[K] as TJSONObject).GetValue<string>('source', ''), 'drag-lint') then
           Diags.Remove(K).Free;
       for var J:= 0 to Full.Count - 1 do
-        Diags.AddElement(Full.Items[J].Clone as TJSONValue);
+        if not Gate.Drops((Full.Items[J] as TJSONObject).GetValue<string>('code', '')) then { 1.38 }
+          Diags.AddElement(Full.Items[J].Clone as TJSONValue);
       Full.Free;
     end
     else

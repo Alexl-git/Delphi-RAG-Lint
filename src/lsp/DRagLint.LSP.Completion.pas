@@ -19,6 +19,7 @@ uses
   , DRagLint.Lint       .Config
   , DRagLint.Symbol     .Describe  { one shared type describer -- hover uses it too }
   , DRagLint.Lint       .ReviewMarker
+  , DRagLint.Lint       .TargetCompiler  { TTargetRuleGate: the target-compiler gate of BuildDiagnostics (1.38) }
   ;
 
 type
@@ -182,7 +183,31 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray;
+      class function BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray; overload;
+      /// <summary>BuildDiagnostics under a target-compiler gate (1.38): a lint
+      /// finding the gate drops is not published, and a default-off compat rule
+      /// the gate forces on is published.</summary>
+      /// <param name="ALinter">The linter; nil = no lint findings.</param>
+      /// <param name="AFile">The file to diagnose.</param>
+      /// <param name="AStore">Store for compiler findings and type-aware checks, or nil.</param>
+      /// <param name="AGate">The gate of the file's target compiler (BuildTargetGate).
+      /// Default(TTargetRuleGate) drops nothing and forces nothing on.</param>
+      /// <returns>A new array; the caller owns it.</returns>
+      /// <remarks>The 3-argument overload is this one with an inactive gate, so a
+      /// run at the default target (37) publishes exactly what it did before.</remarks>
+      class function BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore;
+        const AGate: TTargetRuleGate): TJSONArray; overload;
+      /// <summary>The target_compiler of the lint config that governs AFile (the
+      /// up-tree drag-lint-lint.json / drag-lint.json BuildDiagnostics loads).</summary>
+      /// <param name="AFile">A source file.</param>
+      /// <returns>The config's target_compiler token, or '' when no config names one.</returns>
+      class function LintConfigTargetCompiler(const AFile: string): string; static;
+      /// <summary>Builds the rule gate of target compiler pTarget from the rule catalog.</summary>
+      /// <param name="pTarget">A CompilerVersion.</param>
+      /// <returns>The gate; at DEFAULT_TARGET_COMPILER an inactive gate with Target
+      /// set and no catalog read.</returns>
+      /// <remarks>Reads the rules folder; callers cache the result per target.</remarks>
+      class function BuildTargetGate(pTarget: Integer): TTargetRuleGate; static;
       /// <summary>Maps the bare ARRAY that lint <file> --json prints to LSP diagnostics
       /// (C1, lsp --full-rules). Same severity map as BuildDiagnostics, source is
       /// 'drag-lint', code is the rule id.</summary>
@@ -941,6 +966,42 @@ begin
 end;
 
 class function TLspCompletion.BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray;
+begin
+  Result:= BuildDiagnostics(ALinter, AFile, AStore, Default(TTargetRuleGate));
+end;
+
+class function TLspCompletion.LintConfigTargetCompiler(const AFile: string): string;
+begin
+  Result:= TLintConfig.Load(DiscoverLintConfig(AFile), '').TargetCompiler;
+end;
+
+class function TLspCompletion.BuildTargetGate(pTarget: Integer): TTargetRuleGate;
+var
+  Cat  : TArray<TRuleInfo>;
+  Ids  : TArray<string>;
+  Needs: TArray<Integer>;
+  Since: TArray<Integer>;
+  I    : Integer;
+begin
+  Result:= Default(TTargetRuleGate);
+  Result.Target:= pTarget;
+  if pTarget = DEFAULT_TARGET_COMPILER then Exit;
+  { The same catalog walk as the CLI's ApplyRunTargetCompiler. }
+  Cat:= TRuleCatalog.BuildCatalog('', '', False);
+  SetLength(Ids  , Length(Cat));
+  SetLength(Needs, Length(Cat));
+  SetLength(Since, Length(Cat));
+  for I:= 0 to High(Cat) do
+  begin
+    Ids[I]  := Cat[I].Id;
+    Needs[I]:= Cat[I].NeedsCompiler;
+    Since[I]:= Cat[I].CompatSince;
+  end;
+  Result:= TTargetRuleGate.Build(pTarget, Ids, Needs, Since);
+end;
+
+class function TLspCompletion.BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore;
+  const AGate: TTargetRuleGate): TJSONArray;
 var
   Findings: TArray<TLintFinding>;
   F       : TLintFinding        ;
@@ -981,9 +1042,18 @@ var
   var
     DId: string;
   begin
+    { 1.38: a compat rule ships OFF and is ON when the target predates its construct. }
+    if AGate.ForcesOn(ARuleId) then Exit(False);
     for DId in DefOff do
       if SameText(DId, ARuleId) then Exit(True);
     Result:= False;
+  end;
+
+  { True when a finding of ARuleId is published: not gated by the target
+    compiler (1.38), and kept by the config / default-off filter. }
+  function KeepRule(const ARuleId: string): Boolean;
+  begin
+    Result:= not AGate.Drops(ARuleId) and Cfg.ShouldKeep(ARuleId, IsDefaultDisabled(ARuleId));
   end;
 
 begin
@@ -1050,7 +1120,7 @@ begin
     end;
     for F in Findings do
     begin
-      if not Cfg.ShouldKeep(F.RuleId, IsDefaultDisabled(F.RuleId)) then Continue; { config-disabled or off by default }
+      if not KeepRule(F.RuleId) then Continue; { target-gated, config-disabled or off by default }
       { C2: a `dl:ok` / `drag-lint:ignore` marker suppresses here exactly as in
         `lint` -- one predicate, so the gutter cannot keep a squiggle the CLI
         dropped (or the "Mark as reviewed" action would change nothing). }
@@ -1130,7 +1200,7 @@ begin
   if SameText(ExtractFileExt(AFile), '.pas') or SameText(ExtractFileExt(AFile), '.inc') then
     for F in TCloneChecker.Check(AFile) do
     begin
-      if not Cfg.ShouldKeep(F.RuleId, IsDefaultDisabled(F.RuleId)) then Continue; { config-disabled or off by default }
+      if not KeepRule(F.RuleId) then Continue; { target-gated, config-disabled or off by default }
       { I1 (C2): the same marker predicate as the lint loop above and as the CLI --
         a dl:ok duplicate-code on the anchor suppresses, and so does one on the
         PARTNER site (RelatedLine), verified against the partner's own window. }

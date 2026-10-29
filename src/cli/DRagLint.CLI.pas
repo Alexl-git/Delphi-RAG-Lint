@@ -35812,6 +35812,7 @@ begin
       LSP.FullRules:= Args.LspFullRules;
       if not Args.ProjectFromConfig then LSP.StartupProject:= Args.ProjectPath;
       LSP.StartupPlatform:= Args.CheckPlatform;
+      LSP.StartupTargetCompiler:= Args.TargetCompiler; { 1.38: beats config + context per file }
       LSP.ExplicitDbs    := Length(Args.DbPaths) > 0;            { LSP-1 CORE: per-file context sets }
       LSP.DbResolver     := MakeLspContextDbResolver(Args);
       var Ctl: TControlChannel:= nil;
