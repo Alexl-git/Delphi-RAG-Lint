@@ -47,24 +47,12 @@ function EnsureLspClient: TDragLintLspClient;
 /// while the machine was already saturated. Main thread only.</remarks>
 function CurrentLspClient: TDragLintLspClient;
 
-{ v0.40.3: dwell-fire helper used by HoverTracker. Queries LSP hover at
-  the given URI/line/col and returns the extracted hover text, or '' on
-  timeout / no-result / any failure. Safe to call from main thread only.
-  ATimeoutMs is the per-query budget; default 500ms keeps the UI snappy. }
-function QueryHoverText(const AUri: string; ALine, ACol: Integer; ATimeoutMs: Integer = 500): string;
 
 { v0.40.8c: exposed for the dwell tracker so it can produce the same
   "kind   name   --   unit.pas (line)" header that menu InvokeHover does. }
 function ExtractHoverHeader  (const AMarkdown: string): string;
 function StripFirstHeaderLine(const AMarkdown: string): string;
 
-{ v0.94.1: exposed for the dwell tracker so a MOUSE hover shows the same
-  structured Help-Insight model (colored signature + Parameters + Returns +
-  Called-from) as the menu InvokeHover -- not just the plain string popup. Given
-  the RAW LSP hover markdown, mine the qualified name, fetch `hover --json`, and
-  fetch the callers. Returns True + fills AModel/ACallers on success; False
-  (caller shows the string popup) on any miss. }
-function TryBuildHoverModel(const ARawMarkdown: string; out AModel: TDragLintHoverModel; out ACallers: TArray<TDragLintCallerInfo>): Boolean;
 
 /// <summary>The identifier the caret is sitting in (or immediately after) in
 /// the active editor.</summary>
@@ -84,29 +72,65 @@ function IdentifierAtCursor: string;
 /// <remarks>ONE formatter for BOTH hover paths -- the menu-invoked hover and
 /// the dwell tracker. They used to build the string separately, which is how
 /// the same caret comes to read two different ways depending on how the popup
-/// was triggered. Call it immediately BEFORE the request goes out; the request
-/// blocks the main thread, and announcing afterwards would be useless.
+/// was triggered. Call it immediately BEFORE the request goes out; since
+/// 2026-10-29 the request is asynchronous and the note says the answer is coming.
 /// <para>Three states, deliberately distinguishable: a named identifier, a
 /// dwell that resolved no identifier, and (once the caller clears the note) an
 /// answered hover.</para></remarks>
 procedure AnnounceHoverStart;
 
-/// <summary>Fetches hover markdown, the structured model and the CALLED FROM
-/// rows in ONE request to the already-running LSP server.</summary>
+type
+  /// <summary>How an asynchronous hover lookup ended.</summary>
+  TDLHoverStatus = (
+    hvsOk         , { an answer with markdown (the model may still be empty) }
+    hvsEmpty      , { the engine answered, but nothing is indexed there      }
+    hvsUnsupported, { the engine answered with an error (predates the method) }
+    hvsTimeout      { no answer in time -- the engine is busy                  }
+  );
+
+  /// <summary>Receives a hover bundle on the MAIN thread.</summary>
+  /// <param name="AId">The request id RequestHoverBundleAsync returned.</param>
+  /// <param name="AStatus">How the lookup ended; the other arguments are
+  /// meaningful only for hvsOk.</param>
+  TDLHoverBundleDone = reference to procedure(AId: Integer; AStatus: TDLHoverStatus;
+    const AMarkdown, AQName: string; const AModel: TDragLintHoverModel;
+    const ACallers: TArray<TDragLintCallerInfo>);
+
+  /// <summary>Receives plain hover markdown on the MAIN thread.</summary>
+  TDLHoverTextDone = reference to procedure(AId: Integer; AStatus: TDLHoverStatus; const AMarkdown: string);
+
+/// <summary>Asks the running LSP server for hover markdown, the structured
+/// model and the CALLED FROM rows in ONE request, WITHOUT waiting.</summary>
 /// <param name="AUri">Document uri of the hovered file.</param>
 /// <param name="ALine">0-based line, as the LSP counts them.</param>
 /// <param name="ACol">0-based character offset.</param>
-/// <param name="AMarkdown">Receives the raw hover markdown.</param>
-/// <param name="AQName">Receives the qualified name the SERVER resolved.</param>
-/// <param name="AModel">Receives the structured model; empty for an intrinsic.</param>
-/// <param name="ACallers">Receives the rows the caller policy selected.</param>
-/// <returns>False when the bundle is unavailable, in which case the caller must
-/// use the legacy markdown fetch plus TryBuildHoverModel. Never raises.</returns>
-/// <remarks>Replaces four engine round trips with one. See the implementation's
-/// block comment for the measurements that motivated it.</remarks>
-function FetchHoverBundle(const AUri: string; ALine, ACol: Integer;
-  out AMarkdown, AQName: string; out AModel: TDragLintHoverModel;
-  out ACallers: TArray<TDragLintCallerInfo>): Boolean;
+/// <param name="ADone">Called once on the main thread with the parsed answer --
+/// unless the request is cancelled (TDragLintLspClient.CancelRequest) or the
+/// client is stopped first, in which case never.</param>
+/// <returns>The request id (&gt; 0), or 0 when nothing was sent (no connected
+/// client, the bundle is known to be unsupported, the queue refused it); ADone
+/// is then never called.</returns>
+/// <remarks>2026-10-29: replaces the blocking FetchHoverBundle, which held the
+/// IDE main thread for up to 5 s per dwell on a busy engine. Syncs the live
+/// buffer (a queued, coalesced didChange) before asking. An hvsUnsupported
+/// answer latches for the session; later calls return 0 and the caller falls
+/// back to RequestHoverTextAsync. Main thread only; never raises.</remarks>
+function RequestHoverBundleAsync(const AUri: string; ALine, ACol: Integer; const ADone: TDLHoverBundleDone): Integer;
+
+/// <summary>Asks for plain textDocument/hover markdown WITHOUT waiting -- the
+/// fallback for an engine that predates draglint/hoverBundle.</summary>
+/// <param name="AUri">Document uri.</param>
+/// <param name="ALine">0-based line.</param>
+/// <param name="ACol">0-based character offset.</param>
+/// <param name="ADone">Called once on the main thread, unless cancelled.</param>
+/// <returns>The request id, or 0 when nothing was sent.</returns>
+/// <remarks>Main thread only; never raises.</remarks>
+function RequestHoverTextAsync(const AUri: string; ALine, ACol: Integer; const ADone: TDLHoverTextDone): Integer;
+
+/// <summary>True once the engine answered hoverBundle with an error this
+/// session; the dwell then asks RequestHoverTextAsync instead.</summary>
+/// <returns>The session latch.</returns>
+function HoverBundleUnsupported: Boolean;
 
 /// <summary>Spawns ACmdLine via CreateProcessW with merged stdout+stderr
 /// capture and blocks until the child exits (or ATimeoutMs elapses).</summary>
@@ -395,6 +419,24 @@ begin
   );
 end; // procedure
 
+{ ---- teardown trace ---- }
+
+var
+  { Tick of the first teardown line, so every later one carries its offset. }
+  GTeardownT0: UInt64 = 0;
+
+{ One teardown step: to the telemetry log (as before) AND the plugin log, with
+  the ms since teardown began. 2026-10-29: after an engine death RAD Studio took
+  minutes to exit and the plugin log held NOTHING about it -- the steps went to
+  the telemetry log only, so the log the owner reads first was silent. Logged
+  BEFORE the step runs, so the last line names the step that did not return. }
+procedure TDStep(const AMsg: string);
+begin
+  if GTeardownT0 = 0 then GTeardownT0:= GetTickCount64;
+  DLT('teardown', AMsg);
+  DebugLog(Format('teardown +%d ms: %s', [GetTickCount64 - GTeardownT0, AMsg]));
+end;
+
 { ---- shared LSP client ---- }
 
 var
@@ -439,7 +481,7 @@ var
 begin
   if GRootMenuItem = nil then Exit;
   Healthy:= (GLspClient = nil) or
-            ((GLspClient.State = dlsConnected) and GLspClient.IsAlive);
+            ((GLspClient.State in [dlsStarting, dlsConnected]) and GLspClient.IsAlive);
   try
     if Healthy then GRootMenuItem.Caption:= 'drag-lint'
     else GRootMenuItem.Caption:= 'drag-lint (!)';
@@ -520,6 +562,22 @@ begin
     hover. Going through the SAME backoff the create path uses caps it at one
     attempt per LSP_RETRY_SECONDS. The hover that discovers the death is lost;
     the next one after the window gets a fresh server. }
+  { WATCHDOG (2026-10-29). An engine that has kept requests unanswered and said
+    NOTHING for StuckAfterMs (60 s) -- or stopped reading its stdin -- is
+    restarted here, with no back-off: the 60 s of silence already is one, and
+    an engine stuck in a 13-minute request will not come back on its own in
+    any time a user waits for. The next call gets a fresh server. }
+  if (GLspClient <> nil) and (GLspClient.State = dlsConnected) and GLspClient.IsStuck then
+  begin
+    DebugLog(Format('EnsureLspClient: engine silent > %d ms with %d request(s) outstanding -- restarting it',
+      [GLspClient.StuckAfterMs, GLspClient.OutstandingCount]));
+    try GLspClient.Stop; except { a stuck server must not raise on teardown } end;
+    FreeAndNil(GLspClient);
+    GLspRetryAfter:= 0;
+    SetDragLintNote('drag-lint: engine was stuck -- restarted');
+    UpdateLspStatusIndicator;
+  end;
+
   if (GLspClient <> nil) and not GLspClient.IsAlive then
   begin
     DebugLog('EnsureLspClient: existing client is NOT alive -- disposing; retry in '
@@ -612,21 +670,37 @@ begin
       Exit(nil);
     end;
 
-    if not GLspClient.Initialize then
-    begin
-      DebugLog(Format('EnsureLspClient: INITIALIZE did not answer in time. exe=%s log=%s',
-                      [ExePath, LogPath]));
-      GLspClient.Stop;
-      FreeAndNil(GLspClient);
-      GLspRetryAfter:= IncSecond(Now, LSP_RETRY_SECONDS);
-      UpdateLspStatusIndicator;
-      Exit(nil);
-    end;
-
-    { Healthy: clear the back-off and the indicator. }
-    GLspRetryAfter:= 0;
+    { 2026-10-29: the handshake no longer holds the IDE. Initialize used to
+      wait up to 45 s ON THE MAIN THREAD (a large DB migrates on first open);
+      now the answer arrives as a callback. Until it does, this function
+      returns nil -- callers skip the feature for that moment and the status
+      strip says why -- so nothing is ever queued ahead of the handshake. }
+    var Starting: TDragLintLspClient:= GLspClient;
+    SetDragLintNote('drag-lint: engine starting...');
+    Starting.InitializeAsync(
+      procedure(AOk: Boolean)
+      begin
+        if GLspClient <> Starting then Exit;  { replaced meanwhile: not ours }
+        if AOk then
+        begin
+          GLspRetryAfter:= 0;
+          SetDragLintNote('');
+        end
+        else
+        begin
+          DebugLog(Format('EnsureLspClient: INITIALIZE did not answer in time. exe=%s log=%s',
+                          [ExePath, LogPath]));
+          GLspClient.Stop;
+          FreeAndNil(GLspClient);
+          GLspRetryAfter:= IncSecond(Now, LSP_RETRY_SECONDS);
+          SetDragLintNote('drag-lint: engine did not start -- retrying later');
+        end;
+        UpdateLspStatusIndicator;
+      end);
     UpdateLspStatusIndicator;
   end; // if
+  { Only a client that has finished its handshake is handed out. }
+  if GLspClient.State <> dlsConnected then Exit(nil);
   Result:= GLspClient;
 end; // function
 
@@ -769,7 +843,10 @@ begin
       Changes := TJSONArray.Create;
       Changes.AddElement(ChangeOb);
       Params .AddPair('contentChanges', Changes);
-      Client.Notify('textDocument/didChange', Params);
+      { Coalesced per document (2026-10-29): a didChange not yet written is
+        REPLACED by this one, so an engine that stopped reading collects one
+        buffer per unit, not one per dwell. }
+      Client.Notify('textDocument/didChange', Params, 'didChange|' + AUri);
       Result:= True;
     finally
       Params.Free;
@@ -781,54 +858,78 @@ end; // function
 
 { ---- menu action procedures ---- }
 
-function QueryHoverText(const AUri: string; ALine, ACol: Integer; ATimeoutMs: Integer): string;
-(* v0.40.3: shared hover-text extraction used by both InvokeHover (manual
-   Ctrl+Alt+H invocation) and the HoverTracker dwell trigger. Returns
-   empty string on any failure -- caller decides whether to show a popup
-   or fall back to diagnostic-only.
+const
+  { Per-request budget for the async hover calls. Not a wait any more -- only
+    how long until the callback is told hvsTimeout and $/cancelRequest goes out.
+    The client's IsBusy (3 s) stops new hovers long before this. }
+  HOVER_REQUEST_TIMEOUT_MS = 5000;
+  { Same budget for the explicit commands (completion, signature help, go to
+    definition); the silent '.'-trigger gets far less -- a list that pops
+    seconds after the dot is worse than none. }
+  LSP_COMMAND_TIMEOUT_MS       = 5000;
+  COMPLETION_SILENT_TIMEOUT_MS = 1200;
+  { callerCounts on a big library unit can take minutes; the lens gives up
+    after this and the file is not asked again (CodeLensCache). }
+  CALLER_COUNTS_TIMEOUT_MS     = 8000;
+  { Async popups open this far below the pointer, like every other popup here. }
+  POPUP_BELOW_CURSOR_PX        = 20;
 
-   v0.40.5: TDragLintLspClient.Request returns the FULL JSON-RPC envelope
-   (jsonrpc, id, result, error), not just the inner result. Earlier
-   versions of this function looked for 'contents' at the top level and
-   always missed -- the markdown body was inside .result.contents.value. *)
+{ v0.40.5: TDragLintLspClient answers with the FULL JSON-RPC envelope (jsonrpc,
+  id, result, error); the markdown body is inside .result.contents.value. }
+function ExtractHoverMarkdown(AResp: TJSONValue): string;
 var
-  Client     : TDragLintLspClient;
-  Params     : TJSONObject       ;
-  Resp       : TJSONValue        ;
-  ResultVal  : TJSONValue        ;
-  ContentsVal: TJSONValue        ;
+  ResultVal  : TJSONValue;
+  ContentsVal: TJSONValue;
 begin
   Result:= '';
+  if AResp is not TJSONObject then Exit;
+  if not (AResp as TJSONObject).TryGetValue<TJSONValue>('result', ResultVal) then Exit;
+  if ResultVal is not TJSONObject then Exit;
+  if not (ResultVal as TJSONObject).TryGetValue<TJSONValue>('contents', ContentsVal) then Exit;
+  if ContentsVal is TJSONObject then (ContentsVal as TJSONObject).TryGetValue<string>('value', Result)
+  else if ContentsVal is TJSONString then Result:= (ContentsVal as TJSONString).Value;
+end;
+
+function RequestHoverTextAsync(const AUri: string; ALine, ACol: Integer; const ADone: TDLHoverTextDone): Integer;
+{ 2026-10-29: replaces the blocking QueryHoverText. Shared by the menu hover's
+  fallback and the dwell tracker's, for an engine without hoverBundle. }
+var
+  Client: TDragLintLspClient;
+  Params: TJSONObject       ;
+begin
+  Result:= 0;
   try
     Client:= EnsureLspClient;
     if Client = nil then Exit;
-    { v(live-buffer): the position below is the EDITOR's; make the server's copy
-      of the document match it before asking. Without this the server answers
-      about the last SAVED text and returns null for anything just typed. }
     SyncLiveBufferToLsp(AUri);
     Params:= MakeTextDocumentPositionParams(AUri, ALine, ACol);
     try
-      Resp:= Client.Request('textDocument/hover', Params, ATimeoutMs);
+      Result:= Client.RequestAsync('textDocument/hover', Params, HOVER_REQUEST_TIMEOUT_MS,
+        procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue)
+        var
+          Md: string;
+          St: TDLHoverStatus;
+        begin
+          case AStatus of
+            lrsTimeout: St:= hvsTimeout;
+            lrsError  : St:= hvsUnsupported;
+          else
+            begin
+              Md:= ExtractHoverMarkdown(AReply);
+              St:= if Md <> '' then hvsOk else hvsEmpty;
+            end;
+          end;
+          if Assigned(ADone) then ADone(AId, St, Md);
+        end);
     finally
       Params.Free;
     end;
-    if Resp = nil then Exit;
-    try
-      if not (Resp is TJSONObject) then Exit;
-      if not (Resp as TJSONObject).TryGetValue<TJSONValue>('result', ResultVal) then Exit;
-      if ResultVal is TJSONNull then Exit;
-      if not (ResultVal is TJSONObject) then Exit;
-      if not (ResultVal as TJSONObject).TryGetValue<TJSONValue>('contents', ContentsVal) then Exit;
-      if ContentsVal is TJSONObject then (ContentsVal as TJSONObject).TryGetValue<string>('value', Result)
-      else if ContentsVal is TJSONString then Result:= (ContentsVal as TJSONString).Value;
-    finally
-      Resp.Free;
-    end;
   except
-    { Silent -- fires from dwell timer; AVs here would break IDE }
-    Result:= '';
+    { Silent -- fires from the dwell timer; an exception here would break the IDE }
+    Result:= 0;
   end; // try
 end; // function
+
 
 { v0.40.7: forward decls so FetchHoverCallers / InvokeHover compose can call
   helpers defined later in this unit. RunAndCaptureStdout is now declared in the
@@ -1507,395 +1608,345 @@ var
     Deliberately NOT cleared on LSP restart -- a restart respawns the SAME exe. }
   FBundleUnsupported: Boolean = False;
 
-/// <summary>Fetches hover markdown, the structured model and the CALLED FROM
-/// rows in ONE request to the already-running LSP server.</summary>
-/// <param name="AUri">Document uri of the hovered file.</param>
-/// <param name="ALine">0-based line, as the LSP counts them.</param>
-/// <param name="ACol">0-based character offset.</param>
-/// <param name="AMarkdown">Receives the raw hover markdown.</param>
-/// <param name="AQName">Receives the qualified name the SERVER resolved --
-/// authoritative, where the legacy path had to mine it out of the markdown.</param>
-/// <param name="AModel">Receives the structured model; empty for an intrinsic.</param>
-/// <param name="ACallers">Receives the rows the caller policy selected.</param>
-/// <returns>False when the bundle is unavailable for any reason, in which case
-/// the caller must use the legacy spawn path. Never raises.</returns>
-/// <remarks>Main thread, synchronous, short timeout. Row SELECTION stays in
-/// DragLint.Plugin.CallerFilter -- the server returns both row sets unfiltered
-/// and this applies the same pure, guarded policy the spawn path applies.</remarks>
-function FetchHoverBundle(const AUri: string; ALine, ACol: Integer;
-  out AMarkdown, AQName: string; out AModel: TDragLintHoverModel;
-  out ACallers: TArray<TDragLintCallerInfo>): Boolean;
-var
-  Client   : TDragLintLspClient;
-  Params   : TJSONObject       ;
-  Resp     : TJSONValue        ;
-  ResultVal: TJSONValue        ;
-  RObj     : TJSONObject       ;
-  ErrVal   : TJSONValue        ;
-  JArr     : TJSONArray        ;
-  i        : Integer           ;
-  { Item 5 (hover latency). Nine DLT('hover', ...) sites existed and not one
-    recorded an ELAPSED TIME -- they logged qnames and counts -- so the log could
-    never answer "sometimes hover takes too long", however long the owner drove
-    the IDE. GetTickCount64 rather than TStopwatch: Winapi.Windows is already in
-    scope, HoverForm times its grace windows the same way, and the quantities
-    here are hundreds of milliseconds, far above the ~16 ms tick resolution.
-    The 64-bit form specifically -- the linter's gettickcount-wraparound rule
-    caught the 32-bit one here, and it is right: an IDE left open past 49.7 days
-    would start reporting absurd hover timings, which is precisely the kind of
-    number someone would then chase as a real latency regression. }
-  T0       : Cardinal          ;
-  MsSync   : Cardinal          ;
-  MsReq    : Cardinal          ;
+function HoverBundleUnsupported: Boolean;
 begin
-  Result:= False;
+  Result:= FBundleUnsupported;
+end;
+
+/// <summary>Parses one draglint/hoverBundle answer envelope.</summary>
+/// <remarks>The parsing half of the former FetchHoverBundle, unchanged in
+/// substance; the waiting half is gone (RequestHoverBundleAsync). Row SELECTION
+/// stays in DragLint.Plugin.CallerFilter -- the server returns both row sets
+/// unfiltered and this applies the same pure, guarded policy the spawn path
+/// applies. Never raises.</remarks>
+function ParseHoverBundleReply(AResp: TJSONValue; out AMarkdown, AQName: string;
+  out AModel: TDragLintHoverModel; out ACallers: TArray<TDragLintCallerInfo>): TDLHoverStatus;
+var
+  ResultVal: TJSONValue ;
+  RObj     : TJSONObject;
+  ErrVal   : TJSONValue ;
+  JArr     : TJSONArray ;
+  i        : Integer    ;
+begin
+  Result:= hvsEmpty;
   AMarkdown:= '';
   AQName   := '';
   AModel:= Default(TDragLintHoverModel);
   SetLength(ACallers, 0);
-  if FBundleUnsupported then Exit;
-
   try
-    Client:= EnsureLspClient;
-    if Client = nil then Exit;
-    { The position names a spot in the EDITOR's buffer, which diverges from disk
-      on the first keystroke -- sync before asking, exactly as hover does. }
-    T0:= GetTickCount64;
-    SyncLiveBufferToLsp(AUri);
-    MsSync:= GetTickCount64 - T0;
-    Params:= MakeTextDocumentPositionParams(AUri, ALine, ACol);
-    try
-      { Split from the sync deliberately. The owner reports the popup showing the
-        diagnostic first and "the whole info" only after a delay; the diagnostic
-        is served from the local cache, so that delay IS this round-trip. Timing
-        sync and request separately says which of the two is the one to attack --
-        re-uploading a large buffer, or the engine's own answer. }
-      T0:= GetTickCount64;
-      Resp:= Client.Request('draglint/hoverBundle', Params, 5000);
-      MsReq:= GetTickCount64 - T0;
-    finally
-      Params.Free;
+    if AResp is not TJSONObject then Exit;
+
+    { -32601 from an older engine: latch, and never ask again this session. }
+    if (AResp as TJSONObject).TryGetValue<TJSONValue>('error', ErrVal) and (ErrVal <> nil) then
+    begin
+      FBundleUnsupported:= True;
+      DLT('hover', 'hoverBundle unsupported by this engine -- plain hover for the rest of the session');
+      Exit(hvsUnsupported);
     end;
-    if Resp = nil then Exit;
 
-    try
-      if not (Resp is TJSONObject) then Exit;
+    if not (AResp as TJSONObject).TryGetValue<TJSONValue>('result', ResultVal) then Exit;
+    if ResultVal is not TJSONObject then Exit;
+    RObj:= ResultVal as TJSONObject;
 
-      { -32601 from an older engine: latch, and never ask again this session. }
-      if (Resp as TJSONObject).TryGetValue<TJSONValue>('error', ErrVal) and (ErrVal <> nil) then
-      begin
-        FBundleUnsupported:= True;
-        DLT('hover', 'hoverBundle unsupported by this engine -- using spawns for the rest of the session');
-        Exit;
-      end;
+    AMarkdown:= RObj.GetValue<string>('markdown', '');
+    AQName   := RObj.GetValue<string>('qname'   , '');
+    if AMarkdown = '' then Exit;
 
-      if not (Resp as TJSONObject).TryGetValue<TJSONValue>('result', ResultVal) then Exit;
-      if not (ResultVal is TJSONObject) then Exit;
-      RObj:= ResultVal as TJSONObject;
+    { An intrinsic returns markdown with model:null -- a legitimate answer, not
+      a failure, so succeed with an empty model and let the caller show the
+      string popup. Read via GetValue + an `is` test rather than
+      TryGetValue<TJSONObject>: whether the generic form returns False or RAISES
+      on a JSON null is a detail of the RTL's cast. An `is` test cannot be wrong. }
+    var MVal: TJSONValue:= RObj.GetValue('model');
+    if (MVal <> nil) and (MVal is TJSONObject) then
+      ParseHoverModelJson(MVal as TJSONObject, AModel);
 
-      AMarkdown:= RObj.GetValue<string>('markdown', '');
-      AQName   := RObj.GetValue<string>('qname'   , '');
-      if AMarkdown = '' then Exit;
+    { Both row sets, handed to the SAME pure policy the spawn path uses. }
+    var ResolvedRows: TDLCallerRows;
+    var NameRows    : TDLCallerRows;
+    SetLength(ResolvedRows, 0);
+    SetLength(NameRows    , 0);
 
-      { An intrinsic returns markdown with model:null -- a legitimate answer, not
-        a failure, so succeed with an empty model and let the caller show the
-        string popup. Verified against the server 2026-08-19: hovering
-        SetLength yields markdown, model null, both caller arrays empty.
-
-        Read via GetValue + an `is` test rather than TryGetValue<TJSONObject>:
-        whether the generic form returns False or RAISES on a JSON null is a
-        detail of the RTL's cast, and getting it wrong would send every
-        Length()/SetLength() hover down the exception path -- logging
-        "hoverBundle raised" and silently undoing the speedup on some of the
-        most-hovered symbols in any unit. An `is` test cannot be wrong. }
-      var MVal: TJSONValue:= RObj.GetValue('model');
-      if (MVal <> nil) and (MVal is TJSONObject) then
-        ParseHoverModelJson(MVal as TJSONObject, AModel);
-
-      { Both row sets, handed to the SAME pure policy the spawn path uses. }
-      var ResolvedRows: TDLCallerRows;
-      var NameRows    : TDLCallerRows;
-      SetLength(ResolvedRows, 0);
-      SetLength(NameRows    , 0);
-
-      if RObj.TryGetValue<TJSONArray>('resolvedCallers', JArr) then
-        for i:= 0 to JArr.Count - 1 do
-          if JArr.Items[i] is TJSONObject then
-          begin
-            var RO: TJSONObject:= JArr.Items[i] as TJSONObject;
-            var RRow: TDLCallerRow;
-            RRow.FilePath   := RO.GetValue<string> ('file'        , '');
-            RRow.Line       := RO.GetValue<Integer>('line'        , 0 );
-            { v(P7): the BUNDLE carries a resolved row's source line; the spawn
-              path above cannot, because `find-callers --resolved --json` is the
-              cross-machine CLI contract and deliberately emits neither the full
-              path nor the text. Reported from the live IDE 2026-08-19: CALLED
-              FROM rendered bare line numbers whenever SelectCallers chose the
-              resolved set. }
-            RRow.CodeText   := RO.GetValue<string> ('code'        , '');
-            RRow.TargetQName:= RO.GetValue<string> ('target_qname', '');
-            if RRow.TargetQName <> '' then
-            begin
-              SetLength(ResolvedRows, Length(ResolvedRows) + 1);
-              ResolvedRows[High(ResolvedRows)]:= RRow;
-            end;
-          end;
-
-      if RObj.TryGetValue<TJSONArray>('nameCallers', JArr) then
-        for i:= 0 to JArr.Count - 1 do
-          if JArr.Items[i] is TJSONObject then
-          begin
-            var NObj: TJSONObject:= JArr.Items[i] as TJSONObject;
-            var NRow: TDLCallerRow;
-            NRow.FilePath   := NObj.GetValue<string> ('file', '');
-            NRow.Line       := NObj.GetValue<Integer>('line', 0 );
-            NRow.CodeText   := NObj.GetValue<string> ('code', '');
-            NRow.TargetQName:= '';
-            if NRow.FilePath <> '' then
-            begin
-              SetLength(NameRows, Length(NameRows) + 1);
-              NameRows[High(NameRows)]:= NRow;
-            end;
-          end;
-
-      { ClassQual: the class segment of the resolved qname -- what the policy
-        uses to drop same-named Creates belonging to other classes. }
-      var ClassQual: string:= AQName;
-      var DotP: Integer:= LastDelimiter('.', AQName);
-      if DotP > 1 then
-      begin
-        var Head: string:= Copy(AQName, 1, DotP - 1);
-        var Dot2: Integer:= LastDelimiter('.', Head);
-        if Dot2 > 0 then ClassQual:= Copy(AQName, Dot2 + 1, MaxInt);
-      end;
-
-      var Src   : TDLCallerSource;
-      var Picked: TDLCallerRows:= SelectCallers(ResolvedRows, NameRows, AQName, ClassQual, Src);
-      DLT('hover', Format('bundle qname="%s" resolved=%d name=%d -> %d (source=%d) syncMs=%d reqMs=%d',
-        [AQName, Length(ResolvedRows), Length(NameRows), Length(Picked), Ord(Src),
-         MsSync, MsReq]));
-
-      { De-duplicate by (file,line): a call site emits two refs (call + member). }
-      SetLength(ACallers, 0);
-      for i:= 0 to High(Picked) do
-      begin
-        var Info: TDragLintCallerInfo;
-        Info.FilePath:= Picked[i].FilePath;
-        Info.Line    := Picked[i].Line    ;
-        Info.CodeText:= Picked[i].CodeText;
-        var Dup: Boolean:= False;
-        for var k:= 0 to High(ACallers) do
-          if (ACallers[k].Line = Info.Line) and SameText(ACallers[k].FilePath, Info.FilePath) then
-          begin
-            Dup:= True;
-            Break;
-          end;
-        if not Dup then
+    if RObj.TryGetValue<TJSONArray>('resolvedCallers', JArr) then
+      for i:= 0 to JArr.Count - 1 do
+        if JArr.Items[i] is TJSONObject then
         begin
-          SetLength(ACallers, Length(ACallers) + 1);
-          ACallers[High(ACallers)]:= Info;
-        end;
-      end;
+          var RO: TJSONObject:= JArr.Items[i] as TJSONObject;
+          var RRow: TDLCallerRow;
+          RRow.FilePath   := RO.GetValue<string> ('file'        , '');
+          RRow.Line       := RO.GetValue<Integer>('line'        , 0 );
+          { v(P7): the BUNDLE carries a resolved row's source line. }
+          RRow.CodeText   := RO.GetValue<string> ('code'        , '');
+          RRow.TargetQName:= RO.GetValue<string> ('target_qname', '');
+          if RRow.TargetQName <> '' then
+          begin
+            SetLength(ResolvedRows, Length(ResolvedRows) + 1);
+            ResolvedRows[High(ResolvedRows)]:= RRow;
+          end;
+        end; // dl:ok duplicate-code@4b27 -- the resolved and the by-name caller rows are parsed by two near-identical loops on purpose (different required field); moved verbatim from FetchHoverBundle
 
-      Result:= True;
-    finally
-      Resp.Free;
-    end; // try
+    if RObj.TryGetValue<TJSONArray>('nameCallers', JArr) then
+      for i:= 0 to JArr.Count - 1 do
+        if JArr.Items[i] is TJSONObject then
+        begin
+          var NObj: TJSONObject:= JArr.Items[i] as TJSONObject;
+          var NRow: TDLCallerRow;
+          NRow.FilePath   := NObj.GetValue<string> ('file', '');
+          NRow.Line       := NObj.GetValue<Integer>('line', 0 );
+          NRow.CodeText   := NObj.GetValue<string> ('code', '');
+          NRow.TargetQName:= '';
+          if NRow.FilePath <> '' then
+          begin
+            SetLength(NameRows, Length(NameRows) + 1);
+            NameRows[High(NameRows)]:= NRow;
+          end;
+        end;
+
+    { ClassQual: the class segment of the resolved qname -- what the policy
+      uses to drop same-named Creates belonging to other classes. }
+    var ClassQual: string:= AQName;
+    var DotP: Integer:= LastDelimiter('.', AQName);
+    if DotP > 1 then
+    begin
+      var Head: string:= Copy(AQName, 1, DotP - 1);
+      var Dot2: Integer:= LastDelimiter('.', Head);
+      if Dot2 > 0 then ClassQual:= Copy(AQName, Dot2 + 1, MaxInt);
+    end;
+
+    var Src   : TDLCallerSource;
+    var Picked: TDLCallerRows:= SelectCallers(ResolvedRows, NameRows, AQName, ClassQual, Src);
+    DLT('hover', Format('bundle qname="%s" resolved=%d name=%d -> %d (source=%d)',
+      [AQName, Length(ResolvedRows), Length(NameRows), Length(Picked), Ord(Src)]));
+
+    { De-duplicate by (file,line): a call site emits two refs (call + member). }
+    for i:= 0 to High(Picked) do
+    begin
+      var Info: TDragLintCallerInfo;
+      Info.FilePath:= Picked[i].FilePath;
+      Info.Line    := Picked[i].Line    ;
+      Info.CodeText:= Picked[i].CodeText;
+      var Dup: Boolean:= False;
+      for var k:= 0 to High(ACallers) do
+        if (ACallers[k].Line = Info.Line) and SameText(ACallers[k].FilePath, Info.FilePath) then
+        begin
+          Dup:= True;
+          Break;
+        end;
+      if not Dup then
+      begin
+        SetLength(ACallers, Length(ACallers) + 1);
+        ACallers[High(ACallers)]:= Info;
+      end;
+    end;
+
+    Result:= hvsOk;
   except
-    { Fires from the dwell timer; an exception here would break the IDE. Report
-      failure so the legacy path still produces a popup. }
     on E: Exception do
     begin
-      DLT('hover', 'hoverBundle raised: ' + E.Message);
-      Result:= False;
+      DLT('hover', 'hoverBundle parse raised: ' + E.Message);
+      Result:= hvsEmpty;
     end;
   end; // try
 end; // function
 
-function TryBuildHoverModel(const ARawMarkdown: string; out AModel: TDragLintHoverModel; out ACallers: TArray<TDragLintCallerInfo>): Boolean;
-{ v0.94.1: shared by the menu InvokeHover AND the dwell HoverTracker so a MOUSE
-  hover shows the same colored structured model + Called-from grid. Mine the
-  qname from the raw LSP markdown, resolve the exe + active DBs (guarded), fetch
-  `hover --json`, then fetch callers by the qname's last segment. }
-var
-  QName  : string          ;
-  ExePath: string          ;
-  DbList : TArray<string>  ;
-begin
-  Result:= False;
-  AModel:= Default(TDragLintHoverModel);
-  SetLength(ACallers, 0);
-  QName:= ExtractHoverQname(ARawMarkdown);
-  if QName = '' then Exit;
-  ExePath:= DLExe64;
-  try
-    DbList:= ResolveActiveIndexDbs(LoadSettings);
-  except
-    SetLength(DbList, 0);
-  end;
-  Result:= FetchHoverModel(ExePath, QName, DbList, AModel);
-  if not Result then Exit;
 
-  { Called-from: resolved callers of THIS specific symbol, by its FULL qualified
-    name (not the bare last segment -- that matched every same-named routine and
-    scanned the library index by name). Guarded inside FetchHoverCallers; empty
-    on any miss so the grid just hides. }
-  ACallers:= FetchHoverCallers(ExePath, QName, DbList);
-end;
+function RequestHoverBundleAsync(const AUri: string; ALine, ACol: Integer; const ADone: TDLHoverBundleDone): Integer;
+var
+  Client: TDragLintLspClient;
+  Params: TJSONObject       ;
+  T0    : UInt64            ;
+begin
+  Result:= 0;
+  if FBundleUnsupported then Exit;
+  try
+    Client:= EnsureLspClient;
+    if Client = nil then Exit;
+    { The position names a spot in the EDITOR's buffer, which diverges from disk
+      on the first keystroke -- sync before asking. Queued and coalesced, so it
+      costs a buffer read and a compare, not a round trip. }
+    SyncLiveBufferToLsp(AUri);
+    T0:= GetTickCount64;
+    Params:= MakeTextDocumentPositionParams(AUri, ALine, ACol);
+    try
+      Result:= Client.RequestAsync('draglint/hoverBundle', Params, HOVER_REQUEST_TIMEOUT_MS,
+        procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue)
+        var
+          Md, QN : string;
+          Model  : TDragLintHoverModel;
+          Callers: TArray<TDragLintCallerInfo>;
+          St     : TDLHoverStatus;
+        begin
+          if AStatus = lrsTimeout then
+          begin
+            DLT('hover', Format('hoverBundle id=%d timed out after %d ms', [AId, GetTickCount64 - T0]));
+            St:= hvsTimeout;
+            Model:= Default(TDragLintHoverModel);
+            SetLength(Callers, 0);
+          end
+          else
+          begin
+            St:= ParseHoverBundleReply(AReply, Md, QN, Model, Callers);
+            DLT('hover', Format('hoverBundle id=%d answered in %d ms status=%d', [AId, GetTickCount64 - T0, Ord(St)]));
+          end;
+          if Assigned(ADone) then ADone(AId, St, Md, QN, Model, Callers);
+        end);
+    finally
+      Params.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      DLT('hover', 'RequestHoverBundleAsync raised: ' + E.Message);
+      Result:= 0;
+    end;
+  end; // try
+end; // function
+
+
+
+{ The menu hover's plain-markdown path, for an engine without hoverBundle. The
+  compose below (header + callers + `hover --json` spawn) is the pre-bundle
+  behaviour kept verbatim; it runs only after the async answer arrived, and only
+  on such an old engine. }
+procedure InvokeHoverPlain(const AUri: string; ALine, ACol: Integer);
+begin
+  if RequestHoverTextAsync(AUri, ALine, ACol,
+    procedure(AId: Integer; AStatus: TDLHoverStatus; const AMarkdown: string)
+    var
+      HoverText  : string                     ;
+      RawMarkdown: string                     ;
+      QName      : string                     ;
+      Model      : TDragLintHoverModel        ;
+      P          : TPoint                     ;
+      SymName    : string                     ;
+      Header     : string                     ;
+      Callers    : TArray<TDragLintCallerInfo>;
+      ExePath    : string                     ;
+      DbList     : TArray<string>             ;
+    begin
+      SetDragLintNote('');
+      if AStatus = hvsTimeout then
+      begin
+        SetDragLintNote('drag-lint: hover timed out -- engine busy');
+        Exit;
+      end;
+      HoverText:= AMarkdown;
+      if HoverText = '' then HoverText:= '(no hover info at the cursor)';
+      { v0.95 (Task 8): keep the RAW markdown (before StripFirstHeaderLine mutates
+        HoverText below) so we can mine the fully-qualified name for hover --json. }
+      RawMarkdown:= HoverText;
+      { v0.40.5: copy the rendered text to the clipboard so users can paste it
+        back when the popup is too transient to screenshot. }
+      try
+        Vcl.Clipbrd.Clipboard.AsText:= HoverText;
+      except
+        on E: Exception do DLT('hover', 'clipboard update failed: ' + E.Message);
+      end;
+      Header   := ExtractHoverHeader  (HoverText);
+      HoverText:= StripFirstHeaderLine(HoverText);
+      SymName := IdentifierAtCursor;
+      ExePath:= DLExe64;
+      try
+        DbList:= ResolveActiveIndexDbs(LoadSettings);
+      except
+        on E: Exception do
+        begin
+          DLT('hover', 'resolving index DBs raised: ' + E.Message);
+          SetLength(DbList, 0);
+        end;
+      end;
+      Callers:= FetchHoverCallers(ExePath, SymName, DbList);
+      DLT('hover', Format('sym="%s" dbs=%d callers=%d hdr="%s" bodyLen=%d', [SymName, Length(DbList), Length(Callers), Header, Length(HoverText)]));
+      CloseDragLintHover;
+      GetCursorPos(P);
+      QName:= ExtractHoverQname(RawMarkdown);
+      if (QName <> '') and FetchHoverModel(ExePath, QName, DbList, Model) then
+      begin
+        DLT('hover', Format('structured qname="%s" params=%d returns=%d ret="%s"', [Model.QualifiedName, Length(Model.Params), Length(Model.Returns), Model.ReturnType]));
+        ShowDragLintHover(Model, Callers, P.X, P.Y + POPUP_BELOW_CURSOR_PX);
+      end
+      else
+      begin
+        DLT('hover', Format('string-fallback qname="%s"', [QName]));
+        ShowDragLintHover(Header, HoverText, Callers, P.X, P.Y + POPUP_BELOW_CURSOR_PX);
+      end;
+    end) = 0 then SetDragLintNote('drag-lint: hover not sent -- engine not ready');
+end; // procedure
 
 procedure InvokeHover(Sender: TObject);
+{ 2026-10-29: ASYNC. The request goes out and this returns; the popup appears
+  when the answer arrives, at the mouse position of that moment (the user asked
+  explicitly, so no show-gate). Nothing here waits on the engine. }
 var
-  Client     : TDragLintLspClient         ;
-  Uri        : string                     ;
-  Line       : Integer                    ;
-  Col        : Integer                    ;
-  Params     : TJSONObject                ;
-  Resp       : TJSONValue                 ;
-  HoverText  : string                     ;
-  RawMarkdown: string                     ;
-  QName      : string                     ;
-  Model      : TDragLintHoverModel        ;
-  ContentsVal: TJSONValue                 ;
-  P          : TPoint                     ;
-  SymName    : string                     ;
-  Header     : string                     ;
-  Callers    : TArray<TDragLintCallerInfo>;
-  Settings   : TDragLintSettings          ;
-  ExePath    : string                     ;
-  DbList     : TArray<string>             ;
+  Uri : string ;
+  Line: Integer;
+  Col : Integer;
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then
   begin
     ShowMessage('drag-lint: No active editor view.');
     Exit;
   end;
-  Client:= EnsureLspClient;
-  if Client = nil then Exit;
+  if EnsureLspClient = nil then
+  begin
+    SetDragLintNote('drag-lint: hover -- engine not ready');
+    Exit;
+  end;
 
-  { Tell the user we started BEFORE the request goes out -- that is the whole
-    point of the note; announcing after the answer arrives would be useless. }
+  { Tell the user we started BEFORE the request goes out. }
   AnnounceHoverStart;
 
-  { v(hover bundle): ONE request for everything the popup needs. The block below
-    -- a hover round trip plus three drag-lint.exe spawns -- is kept verbatim as
-    the fallback for an engine that predates the method. }
-  var BMd, BQName: string;
-  var BModel  : TDragLintHoverModel        ;
-  var BCallers: TArray<TDragLintCallerInfo>;
-  if FetchHoverBundle(Uri, Line, Col, BMd, BQName, BModel, BCallers) then
-  begin
-    CloseDragLintHover;
-    GetCursorPos(P);
-    { The clipboard copy is part of the contract: a popup too transient to
-      screenshot can still be pasted back into a bug report. }
-    try
-      Vcl.Clipbrd.Clipboard.AsText:= BMd;
-    except
-      { clipboard update failure -- silently ignore }
-    end;
-    SetDragLintNote('');   { the popup is the answer; the note has done its job }
-    if BModel.QualifiedName <> '' then
+  if RequestHoverBundleAsync(Uri, Line, Col,
+    procedure(AId: Integer; AStatus: TDLHoverStatus; const AMarkdown, AQName: string;
+      const AModel: TDragLintHoverModel; const ACallers: TArray<TDragLintCallerInfo>)
+    var
+      P: TPoint;
     begin
-      DLT('hover', Format('bundle structured qname="%s" params=%d returns=%d callers=%d',
-        [BModel.QualifiedName, Length(BModel.Params), Length(BModel.Returns), Length(BCallers)]));
-      ShowDragLintHover(BModel, BCallers, P.X, P.Y + 20);
-    end
-    else
-    begin
-      { An intrinsic: markdown but no indexed symbol. Same string popup the
-        legacy path would show, built from the same markdown. }
-      DLT('hover', Format('bundle string-fallback qname="%s"', [BQName]));
-      ShowDragLintHover(ExtractHoverHeader(BMd), StripFirstHeaderLine(BMd), BCallers, P.X, P.Y + 20);
-    end;
-    Exit;
-  end;
+      case AStatus of
+        hvsUnsupported:
+          begin
+            InvokeHoverPlain(Uri, Line, Col);
+            Exit;
+          end;
+        hvsTimeout:
+          begin
+            SetDragLintNote('drag-lint: hover timed out -- engine busy');
+            Exit;
+          end;
+        hvsEmpty:
+          begin
+            SetDragLintNote('drag-lint: hover -- nothing indexed at the cursor');
+            Exit;
+          end;
+      end;
+      CloseDragLintHover;
+      GetCursorPos(P);
+      { The clipboard copy is part of the contract: a popup too transient to
+        screenshot can still be pasted back into a bug report. }
+      try
+        Vcl.Clipbrd.Clipboard.AsText:= AMarkdown;
+      except
+        on E: Exception do DLT('hover', 'clipboard update failed: ' + E.Message);
+      end;
+      SetDragLintNote('');   { the popup is the answer; the note has done its job }
+      if AModel.QualifiedName <> '' then
+      begin
+        DLT('hover', Format('bundle structured qname="%s" params=%d returns=%d callers=%d',
+          [AModel.QualifiedName, Length(AModel.Params), Length(AModel.Returns), Length(ACallers)]));
+        ShowDragLintHover(AModel, ACallers, P.X, P.Y + POPUP_BELOW_CURSOR_PX);
+      end
+      else
+      begin
+        { An intrinsic: markdown but no indexed symbol. }
+        DLT('hover', Format('bundle string-fallback qname="%s"', [AQName]));
+        ShowDragLintHover(ExtractHoverHeader(AMarkdown), StripFirstHeaderLine(AMarkdown), ACallers, P.X, P.Y + POPUP_BELOW_CURSOR_PX);
+      end;
+    end) <> 0 then Exit;
 
-  Params:= MakeTextDocumentPositionParams(Uri, Line, Col);
-  try
-    Resp:= Client.Request('textDocument/hover', Params, 5000);
-  finally
-    Params.Free;
-  end;
-
-  if Resp = nil then
-  begin
-    ShowMessage('drag-lint hover: request timed out or no result.');
-    Exit;
-  end;
-
-  try
-    { v0.40.5: walk the FULL JSON-RPC envelope: .result.contents.value
-      Earlier code stopped at .contents and always missed, so the
-      Resp.Format(2) raw-JSON fallback was always what users saw.
-      Now: extract markdown body or string; only fall back when extraction
-      genuinely fails (server returned an error, etc.). }
-    HoverText:= '';
-    var ResultVal: TJSONValue;
-    if (Resp is TJSONObject) and (Resp as TJSONObject).TryGetValue<TJSONValue>('result', ResultVal) and (ResultVal is TJSONObject) and
-    (ResultVal as TJSONObject).TryGetValue<TJSONValue>('contents', ContentsVal) then
-    begin
-      if ContentsVal is TJSONObject then (ContentsVal as TJSONObject).TryGetValue<string>('value', HoverText)
-      else if ContentsVal is TJSONString then HoverText:= (ContentsVal as TJSONString).Value;
-    end;
-
-    if HoverText = '' then HoverText:= '(no hover info: ' + Resp.Format(2) + ')';
-
-    { v0.95 (Task 8): keep the RAW markdown (before StripFirstHeaderLine mutates
-      HoverText below) so we can mine the fully-qualified name for hover --json. }
-    RawMarkdown:= HoverText;
-
-    { v0.40.5: dump every hover invocation to the debug log + copy the
-      rendered text to the clipboard so users can paste it back when the
-      popup is too transient to screenshot. Logging happens BEFORE the
-      popup shows; clipboard is set unconditionally so even a Hover that
-      immediately closes leaves the text behind. }
-    try
-      Vcl.Clipbrd.Clipboard.AsText:= HoverText;
-    except
-      { clipboard update failure -- silently ignore }
-    end;
-
-    { v0.40.7: compose the three-section popup.
-      v0.40.8c: header includes unit.pas (line); body drops the dup'd first line. }
-    Header   := ExtractHoverHeader  (HoverText);
-    HoverText:= StripFirstHeaderLine(HoverText);
-    SymName := IdentifierAtCursor;
-    Settings:= LoadSettings;
-    ExePath:= DLExe64;
-    try
-      DbList:= ResolveActiveIndexDbs(Settings);
-    except
-      SetLength(DbList, 0);
-    end;
-    Callers:= FetchHoverCallers(ExePath, SymName, DbList);
-    DLT('hover', Format('sym="%s" dbs=%d callers=%d hdr="%s" bodyLen=%d', [SymName, Length(DbList), Length(Callers), Header, Length(HoverText)]));
-
-    { v0.40.6: menu invocation is explicit -- replace any current popup. }
-    SetDragLintNote('');   { cleared on the fallback path too, or it strands }
-    CloseDragLintHover;
-    GetCursorPos(P);
-
-    { v0.95 (Task 8): PREFER the structured Help-Insight popup. Mine the
-      fully-qualified name from the raw LSP markdown, then fetch the structured
-      `hover --json` model. On success show the colored signature + Parameters +
-      Returns view; on ANY miss (no qname parsed, exe missing, non-zero exit,
-      unparseable output) fall back to the EXACT legacy string popup below so
-      the manual hover always shows something. }
-    QName:= ExtractHoverQname(RawMarkdown);
-    if (QName <> '') and FetchHoverModel(ExePath, QName, DbList, Model) then
-    begin
-      DLT('hover', Format('structured qname="%s" params=%d returns=%d ret="%s"', [Model.QualifiedName, Length(Model.Params), Length(Model.Returns), Model.ReturnType]));
-      ShowDragLintHover(Model, Callers, P.X, P.Y + 20);
-    end
-    else
-    begin
-      DLT('hover', Format('string-fallback qname="%s"', [QName]));
-      ShowDragLintHover(Header, HoverText, Callers, P.X, P.Y + 20);
-    end;
-  finally
-    Resp.Free;
-  end; // try
+  { Bundle known unsupported (or refused): the plain path. }
+  InvokeHoverPlain(Uri, Line, Col);
 end; // procedure
+
 
 { Insert a chosen completion item at the caret, replacing the identifier prefix
   already typed.
@@ -1967,18 +2018,28 @@ end; // procedure
   pop the list when there are items, with a short timeout so a slow/stuck engine
   never blocks typing. ASilent = False = manual invoke (menu/shortcut), keeps the
   informative dialogs. }
-procedure DoCompletion(ASilent: Boolean);
+{ True while the active editor's caret is still where a request was asked.
+  An async answer for a caret that has since moved (the user kept typing) is
+  stale: completion would insert at the wrong place, a signature would describe
+  the wrong call. }
+function CaretStillAt(const AUri: string; ALine, ACol: Integer): Boolean;
 var
-  Client : TDragLintLspClient;
-  Uri    : string            ;
-  Line   : Integer           ;
-  Col    : Integer           ;
-  Params : TJSONObject       ;
-  Resp   : TJSONValue        ;
-  RespObj: TJSONObject       ;
-  Items  : TJSONArray        ;
-  ResultV: TJSONValue        ;
-  P      : TPoint            ;
+  U   : string ;
+  L, C: Integer;
+begin
+  Result:= GetActiveEditorInfo(U, L, C) and SameText(U, AUri) and (L = ALine) and (C = ACol);
+end;
+
+procedure DoCompletion(ASilent: Boolean); // dl:ok too-many-exit-points@1c31 -- guard clauses of an async reply handler: timeout, moved caret, no items, silent empty list
+{ 2026-10-29: ASYNC -- the list pops when the answer arrives, if the caret has
+  not moved. The silent '.'-trigger is not even sent while the engine is busy:
+  it would only queue behind the request the engine is stuck on. }
+var
+  Client: TDragLintLspClient;
+  Uri   : string            ;
+  Line  : Integer           ;
+  Col   : Integer           ;
+  Params: TJSONObject       ;
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then
   begin
@@ -1987,6 +2048,11 @@ begin
   end;
   Client:= EnsureLspClient;
   if Client = nil then Exit;
+  if Client.IsBusy then
+  begin
+    SetDragLintNote('drag-lint: engine busy');
+    Exit;
+  end;
 
   { v(live-buffer): completion is the path that needs this MOST -- the dot that
     triggers it has by definition just been typed, so on the disk copy it does
@@ -1994,57 +2060,65 @@ begin
   SyncLiveBufferToLsp(Uri);
   Params:= MakeTextDocumentPositionParams(Uri, Line, Col);
   try
-    Resp:= Client.Request('textDocument/completion', Params, (if ASilent then 1200 else 5000));
+    Client.RequestAsync('textDocument/completion', Params, (if ASilent then COMPLETION_SILENT_TIMEOUT_MS else LSP_COMMAND_TIMEOUT_MS),
+      procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue)
+      var
+        RespObj: TJSONObject;
+        Items  : TJSONArray ;
+        ResultV: TJSONValue ;
+        P      : TPoint     ;
+      begin
+        if AReply = nil then
+        begin
+          if not ASilent then SetDragLintNote('drag-lint: completion timed out -- engine busy');
+          Exit;
+        end;
+        if not CaretStillAt(Uri, Line, Col) then
+        begin
+          DLT('completion', 'answer arrived after the caret moved -- dropped');
+          Exit;
+        end;
+        Items:= nil;
+        // Shape 1: top-level array
+        // Shape 2: { items:[...] } or { result:{ items:[...] } }
+        if AReply is TJSONArray then Items:= AReply as TJSONArray
+        else if AReply is TJSONObject then
+        begin
+          RespObj:= AReply as TJSONObject;
+          if not RespObj.TryGetValue<TJSONArray>('items', Items) then
+          begin
+            if RespObj.TryGetValue<TJSONValue>('result', ResultV) then
+            begin
+              if ResultV is TJSONArray then Items:= ResultV as TJSONArray
+              else if ResultV is TJSONObject then (ResultV as TJSONObject).TryGetValue<TJSONArray>('items', Items);
+            end;
+          end;
+        end;
+
+        if Items = nil then
+        begin
+          DLT('completion', Format('silent=%s -> NO items array', [BoolToStr(ASilent, True)]));
+          if not ASilent then ShowMessage('drag-lint completion:'#13#10 + AReply.Format(2));
+          Exit;
+        end;
+        DLT('completion', Format('silent=%s -> %d item(s)', [BoolToStr(ASilent, True), Items.Count]));
+        { auto-trigger: never pop an empty list. }
+        if ASilent and (Items.Count = 0) then Exit;
+
+        GetCursorPos(P);
+        ShowDragLintCompletion(
+          Items, P.X, P.Y + POPUP_BELOW_CURSOR_PX,
+          procedure(const ATxt: string)
+          begin
+            InsertCompletionAtCursor(ATxt);
+          end
+        );
+      end);
   finally
     Params.Free;
   end;
-
-  if Resp = nil then
-  begin
-    if not ASilent then ShowMessage('drag-lint completion: request timed out or no result.');
-    Exit;
-  end;
-  try
-    Items:= nil;
-
-    // Shape 1: top-level array
-    // Shape 2: { items:[...] } or { result:{ items:[...] } }
-    if Resp is TJSONArray then Items:= Resp as TJSONArray
-    else if Resp is TJSONObject then
-    begin
-      RespObj:= Resp as TJSONObject;
-      if not RespObj.TryGetValue<TJSONArray>('items', Items) then
-      begin
-        if RespObj.TryGetValue<TJSONValue>('result', ResultV) then
-        begin
-          if ResultV is TJSONArray then Items:= ResultV as TJSONArray
-          else if ResultV is TJSONObject then (ResultV as TJSONObject).TryGetValue<TJSONArray>('items', Items);
-        end;
-      end;
-    end;
-
-    if Items = nil then
-    begin
-      DLT('completion', Format('silent=%s -> NO items array', [BoolToStr(ASilent, True)]));
-      if not ASilent then ShowMessage('drag-lint completion:'#13#10 + Resp.Format(2));
-      Exit;
-    end;
-    DLT('completion', Format('silent=%s -> %d item(s)', [BoolToStr(ASilent, True), Items.Count]));
-    { auto-trigger: never pop an empty list. }
-    if ASilent and (Items.Count = 0) then Exit;
-
-    GetCursorPos(P);
-    ShowDragLintCompletion(
-      Items, P.X, P.Y + 20,
-      procedure(const ATxt: string)
-      begin
-        InsertCompletionAtCursor(ATxt);
-      end
-    );
-  finally
-    Resp.Free;
-  end; // try
 end; // procedure
+
 
 procedure InvokeCompletion(Sender: TObject);
 begin
@@ -2057,20 +2131,13 @@ begin
 end;
 
 procedure InvokeSignatureHelp(Sender: TObject);
+{ 2026-10-29: ASYNC; shown when the answer arrives, if the caret has not moved. }
 var
-  Client     : TDragLintLspClient;
-  Uri        : string            ;
-  Line       : Integer           ;
-  Col        : Integer           ;
-  Params     : TJSONObject       ;
-  Resp       : TJSONValue        ;
-  RespObj    : TJSONObject       ;
-  SigsArr    : TJSONArray        ;
-  ActiveSig  : Integer           ;
-  ActiveParam: Integer           ;
-  SigObj     : TJSONObject       ;
-  SigLabel   : string            ;
-  P          : TPoint            ;
+  Client: TDragLintLspClient;
+  Uri   : string            ;
+  Line  : Integer           ;
+  Col   : Integer           ;
+  Params: TJSONObject       ;
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then
   begin
@@ -2082,52 +2149,60 @@ begin
 
   Params:= MakeTextDocumentPositionParams(Uri, Line, Col);
   try
-    Resp:= Client.Request('textDocument/signatureHelp', Params, 5000);
+    Client.RequestAsync('textDocument/signatureHelp', Params, LSP_COMMAND_TIMEOUT_MS,
+      procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue)
+      var
+        RespObj    : TJSONObject;
+        SigsArr    : TJSONArray ;
+        ActiveSig  : Integer    ;
+        ActiveParam: Integer    ;
+        SigObj     : TJSONObject;
+        SigLabel   : string     ;
+        P          : TPoint     ;
+      begin
+        if AReply = nil then
+        begin
+          SetDragLintNote('drag-lint: signature help timed out -- engine busy');
+          Exit;
+        end;
+        if not CaretStillAt(Uri, Line, Col) then Exit;
+        SigLabel   := '';
+        ActiveParam:= 0;
+
+        if AReply is TJSONObject then
+        begin
+          RespObj:= AReply as TJSONObject;
+          ActiveSig:= 0;
+          RespObj.TryGetValue<Integer>('activeSignature', ActiveSig  );
+          RespObj.TryGetValue<Integer>('activeParameter', ActiveParam);
+
+          if RespObj.TryGetValue<TJSONArray>('signatures', SigsArr) and (SigsArr.Count > 0) then
+          begin
+            if ActiveSig >= SigsArr.Count then ActiveSig:= 0;
+            if SigsArr.Items[ActiveSig] is TJSONObject then
+            begin
+              SigObj:= SigsArr.Items[ActiveSig] as TJSONObject;
+              SigObj.TryGetValue<string>('label', SigLabel);
+              { Per-signature activeParameter overrides the top-level one }
+              SigObj.TryGetValue<Integer>('activeParameter', ActiveParam);
+            end;
+          end;
+        end;
+
+        if SigLabel = '' then
+        begin
+          ShowMessage('drag-lint signatureHelp:'#13#10 + AReply.Format(2));
+          Exit;
+        end;
+
+        GetCursorPos(P);
+        ShowDragLintSignature(SigLabel, ActiveParam, P.X, P.Y + POPUP_BELOW_CURSOR_PX);
+      end);
   finally
     Params.Free;
   end;
-
-  if Resp = nil then
-  begin
-    ShowMessage('drag-lint signatureHelp: request timed out or no result.');
-    Exit;
-  end;
-  try
-    SigLabel   := '';
-    ActiveParam:= 0;
-
-    if Resp is TJSONObject then
-    begin
-      RespObj:= Resp as TJSONObject;
-      ActiveSig:= 0;
-      RespObj.TryGetValue<Integer>('activeSignature', ActiveSig  );
-      RespObj.TryGetValue<Integer>('activeParameter', ActiveParam);
-
-      if RespObj.TryGetValue<TJSONArray>('signatures', SigsArr) and (SigsArr.Count > 0) then
-      begin
-        if ActiveSig >= SigsArr.Count then ActiveSig:= 0;
-        if SigsArr.Items[ActiveSig] is TJSONObject then
-        begin
-          SigObj:= SigsArr.Items[ActiveSig] as TJSONObject;
-          SigObj.TryGetValue<string>('label', SigLabel);
-          { Per-signature activeParameter overrides the top-level one }
-          SigObj.TryGetValue<Integer>('activeParameter', ActiveParam);
-        end;
-      end;
-    end; // if
-
-    if SigLabel = '' then
-    begin
-      ShowMessage('drag-lint signatureHelp:'#13#10 + Resp.Format(2));
-      Exit;
-    end;
-
-    GetCursorPos(P);
-    ShowDragLintSignature(SigLabel, ActiveParam, P.X, P.Y + 20);
-  finally
-    Resp.Free;
-  end; // try
 end; // procedure
+
 
 procedure InvokeAbout(Sender: TObject);
 begin
@@ -5363,65 +5438,78 @@ begin
 end;
 
 procedure InvokeGoToDefinition(Sender: TObject);
+{ 2026-10-29: ASYNC; the jump (or the pick list) happens when the answer arrives. }
 var
-  Uri    : string; Line, Col: Integer;
-  Client : TDragLintLspClient        ;
-  Params : TJSONObject               ;
-  Resp   : TJSONValue                ;
-  ResVal : TJSONValue                ;
-  Arr    : TJSONArray                ;
-  Loc    : TJSONObject               ;
-  Rng    : TJSONObject               ;
-  St     : TJSONObject               ;
-  i      : Integer                   ;
-  DefPath: string; DefLn: Integer    ;
-  Labels : TArray<string>            ;
-  Chosen : Integer                   ;
+  Uri   : string; Line, Col: Integer; // dl:ok duplicate-code@5799 -- the request/try/finally shape every async LSP command shares; each callback differs
+  Client: TDragLintLspClient        ;
+  Params: TJSONObject               ;
 begin
-  if not GetActiveEditorInfo(Uri, Line, Col) then begin ShowMessage('drag-lint: no active editor view.'); Exit; end;
+  if not GetActiveEditorInfo(Uri, Line, Col) then
+  begin
+    ShowMessage('drag-lint: no active editor view.');
+    Exit;
+  end;
   Client:= EnsureLspClient;
   if Client = nil then Exit;
   Params:= MakeTextDocumentPositionParams(Uri, Line, Col);
   try
-    Resp:= Client.Request('textDocument/definition', Params, 5000);
+    Client.RequestAsync('textDocument/definition', Params, LSP_COMMAND_TIMEOUT_MS,
+      procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue)
+      var
+        ResVal : TJSONValue    ;
+        Arr    : TJSONArray    ;
+        Loc    : TJSONObject   ;
+        Rng    : TJSONObject   ;
+        St     : TJSONObject   ;
+        i      : Integer       ;
+        DefPath: string        ;
+        DefLn  : Integer       ;
+        Labels : TArray<string>;
+        Chosen : Integer       ;
+      begin
+        if AReply = nil then
+        begin
+          SetDragLintNote('drag-lint: definition lookup timed out -- engine busy');
+          Exit;
+        end;
+        Arr:= nil;
+        if AReply is TJSONArray then Arr:= AReply as TJSONArray
+        else if (AReply is TJSONObject) and (AReply as TJSONObject).TryGetValue<TJSONValue>('result', ResVal) and (ResVal is TJSONArray) then Arr:= ResVal as TJSONArray;
+        if (Arr = nil) or (Arr.Count = 0) then
+        begin
+          ShowMessage('drag-lint: definition not found.');
+          Exit;
+        end;
+
+        { One definition -> jump straight there. More than one (e.g. ToUpper:
+          TStringHelper + TCharHelper + ...) -> let the user pick which. }
+        if Arr.Count = 1 then
+        begin
+          DLGotoLocation(Arr.Items[0] as TJSONObject);
+          Exit;
+        end;
+
+        SetLength(Labels, Arr.Count);
+        for i:= 0 to Arr.Count - 1 do
+        begin
+          Loc:= Arr.Items[i] as TJSONObject;
+          DefPath:= '';
+          DefLn  := 1;
+          Loc.TryGetValue<string>('uri', DefPath);
+          DefPath:= DLUriToPath(DefPath);
+          if Loc.TryGetValue<TJSONObject>('range', Rng) and Rng.TryGetValue<TJSONObject>('start', St) then DefLn:= St.GetValue<Integer>('line') + 1;
+          Labels[i]:= Format('%s  (line %d)', [ExtractFileName(DefPath), DefLn]);
+        end;
+
+        Chosen:= DLPickFromList('drag-lint: Go To Definition',
+          Format('%d definitions found -- choose one:', [Arr.Count]), Labels);
+        if Chosen >= 0 then DLGotoLocation(Arr.Items[Chosen] as TJSONObject);
+      end);
   finally
     Params.Free;
   end;
-  if Resp = nil then begin ShowMessage('drag-lint: definition lookup timed out.'); Exit; end;
-  try
-    Arr:= nil;
-    if Resp is TJSONArray then Arr:= Resp as TJSONArray
-    else if (Resp is TJSONObject) and (Resp as TJSONObject).TryGetValue<TJSONValue>('result', ResVal) and (ResVal is TJSONArray) then Arr:= ResVal as TJSONArray;
-    if (Arr = nil) or (Arr.Count = 0) then begin ShowMessage('drag-lint: definition not found.'); Exit; end;
-
-    { One definition -> jump straight there (unchanged behaviour). More than one
-      (e.g. ToUpper: TStringHelper + TCharHelper + TCharacter + ...) -> let the
-      user pick which, instead of silently taking the first. The LSP Location only
-      carries uri+range, so each row is labelled "unit(line,col)". }
-    if Arr.Count = 1 then
-    begin
-      DLGotoLocation(Arr.Items[0] as TJSONObject);
-      Exit;
-    end;
-
-    SetLength(Labels, Arr.Count);
-    for i:= 0 to Arr.Count - 1 do
-    begin
-      Loc:= Arr.Items[i] as TJSONObject;
-      DefPath:= ''; DefLn:= 1;
-      Loc.TryGetValue<string>('uri', DefPath);
-      DefPath:= DLUriToPath(DefPath);
-      if Loc.TryGetValue<TJSONObject>('range', Rng) and Rng.TryGetValue<TJSONObject>('start', St) then DefLn:= St.GetValue<Integer>('line') + 1;
-      Labels[i]:= Format('%s  (line %d)', [ExtractFileName(DefPath), DefLn]);
-    end;
-
-    Chosen:= DLPickFromList('drag-lint: Go To Definition',
-      Format('%d definitions found -- choose one:', [Arr.Count]), Labels);
-    if Chosen >= 0 then DLGotoLocation(Arr.Items[Chosen] as TJSONObject);
-  finally
-    Resp.Free;
-  end; // try
 end; // procedure
+
 
 { ---- Inspect / Quality / Generate / Export ---- }
 
@@ -5665,54 +5753,108 @@ end;
   Returns False on ANY doubt -- no client, server down, malformed reply -- and
   the cache then does exactly what it did before. Never raises: it runs off the
   view-activation path, and a code lens is not worth an exception dialog. }
-function LspCallerCounts(const AFilePath: string; out ALines, ACounts: TArray<Integer>): Boolean;
+var
+  { The one callerCounts request in flight, and the client it went to. A
+    request to a client that has since been replaced will never answer (Stop
+    drops its callback), so "in flight" is only believed for the SAME client. }
+  GCallerCountsId    : Integer            = 0;
+  GCallerCountsClient: TDragLintLspClient = nil;
+
+function LspCallerCounts(const AFilePath: string; const ADone: TCallerCountsDone): Boolean; // dl:ok deep-nesting@199d -- the depth is the anonymous reply handler nested in the request; splitting it out would separate the parse from the one request it serves
+{ 2026-10-29: ASYNC, one at a time, and never while the engine is busy. The
+  synchronous version waited 8 s on the main thread at every view activation;
+  on a big library unit the engine then spent 13 minutes on it while every
+  hover queued behind (docs\INBOX-ide-hang-on-slow-engine.md section 2).
+  Returns True when the request was SENT or deliberately DECLINED (one already
+  in flight, engine busy or still starting -- the next activation asks again);
+  False only when no LSP client can exist, and the cache then falls back. }
 var
   Cli   : TDragLintLspClient;
   Params: TJSONObject       ;
-  Reply : TJSONValue        ;
-  Arr   : TJSONArray        ;
-  I     : Integer           ;
+  Id    : Integer           ;
 begin
-  Result:= False;
-  SetLength(ALines , 0);
-  SetLength(ACounts, 0);
   try
     Cli:= EnsureLspClient;
-    if (Cli = nil) or (not Cli.IsAlive) then Exit;
+    if Cli = nil then
+    begin
+      Result:= CurrentLspClient <> nil;   { starting: decline, do not spawn }
+      Exit;
+    end;
+    Result:= True;
+    if (GCallerCountsId <> 0) and (GCallerCountsClient = Cli) then Exit;
+    if Cli.IsBusy then Exit;
 
     Params:= TJSONObject.Create;
     try
       var Td: TJSONObject:= TJSONObject.Create;
-      { Same shape the rest of this unit sends (see line ~547): 'file:///' plus
-        the path with forward slashes. }
+      { Same shape the rest of this unit sends: 'file:///' plus the path with
+        forward slashes. }
       Td.AddPair('uri', 'file:///' + StringReplace(AFilePath, '\', '/', [rfReplaceAll]));
       Params.AddPair('textDocument', Td);
-      Reply:= Cli.Request('draglint/callerCounts', Params, 8000);
+      Id:= Cli.RequestAsync('draglint/callerCounts', Params, CALLER_COUNTS_TIMEOUT_MS,
+        procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue)
+        var
+          Arr    : TJSONArray;
+          Lines  : TArray<Integer>;
+          Counts : TArray<Integer>;
+          Ok     : Boolean;
+        begin
+          if AId = GCallerCountsId then
+          begin
+            GCallerCountsId    := 0;
+            GCallerCountsClient:= nil;
+          end;
+          Ok:= False;
+          SetLength(Lines , 0);
+          SetLength(Counts, 0);
+          try
+            if AReply is TJSONObject then
+            begin
+              { The counts live under 'result' in the JSON-RPC envelope; a
+                top-level 'counts' is accepted too (the shape the synchronous
+                reader looked for). }
+              Arr:= nil;
+              if not (AReply as TJSONObject).TryGetValue<TJSONArray>('result.counts', Arr) then
+                (AReply as TJSONObject).TryGetValue<TJSONArray>('counts', Arr);
+              if Arr <> nil then
+              begin
+                SetLength(Lines , Arr.Count);
+                SetLength(Counts, Arr.Count);
+                Ok:= True;
+                for var I:= 0 to Arr.Count - 1 do
+                  if Arr.Items[I] is TJSONObject then
+                  begin
+                    Lines [I]:= (Arr.Items[I] as TJSONObject).GetValue<Integer>('line' , -1);
+                    Counts[I]:= (Arr.Items[I] as TJSONObject).GetValue<Integer>('count', 0 );
+                  end
+                  else Lines[I]:= -1;
+              end;
+            end;
+          except
+            on E: Exception do
+            begin
+              DLT('codelens', 'callerCounts parse raised: ' + E.Message);
+              Ok:= False;
+            end;
+          end;
+          if AStatus = lrsTimeout then DLT('codelens', Format('callerCounts timed out for %s -- lens left empty', [ExtractFileName(AFilePath)]));
+          ADone(Ok, Lines, Counts);
+          ForceGutterRepaint;
+        end);
     finally
       Params.Free;
     end;
-    if Reply = nil then Exit;
-    try
-      Arr:= (Reply as TJSONObject).GetValue('counts') as TJSONArray;
-      if Arr = nil then Exit;
-      SetLength(ALines , Arr.Count);
-      SetLength(ACounts, Arr.Count);
-      for I:= 0 to Arr.Count - 1 do
-      begin
-        var O: TJSONObject:= Arr.Items[I] as TJSONObject;
-        if O = nil then Exit;
-        ALines [I]:= O.GetValue<Integer>('line' );
-        ACounts[I]:= O.GetValue<Integer>('count');
-      end;
-      Result:= True;
-    finally
-      Reply.Free;
+    if Id <> 0 then
+    begin
+      GCallerCountsId    := Id;
+      GCallerCountsClient:= Cli;
     end;
   except
-    { A code lens must never surface an exception. Falling back is the answer. }
+    { A code lens must never surface an exception. }
     Result:= False;
   end;
 end;
+
 
 function RegisterProjectInManifest(const AProjectFile: string): Boolean;
 var
@@ -6944,33 +7086,33 @@ begin
           before the step is entered, and the LAST teardown line in
           drag-lint-telemetry.log therefore NAMES the step that did not return.
           Reaching COMPLETE means this procedure is not the culprit. }
-        DLT('teardown', 'ENTER UnregisterDragLintMenu (called from finalization)');
+        TDStep('ENTER UnregisterDragLintMenu (called from finalization)');
         { v0.40.8d: close hover popup before tearing down notifiers, otherwise
     its 150 ms watch timer can fire after the BPL's HoverForm DCU has
     been unloaded -- observed as an IDE crash on Uninstall. }
-        DLT('teardown', '-> CloseDragLintHover');
+        TDStep('-> CloseDragLintHover');
         try CloseDragLintHover; except end;
-        DLT('teardown', '-> StopAutoComplete');
+        TDStep('-> StopAutoComplete');
         try StopAutoComplete; except end;
-        DLT('teardown', '-> StopLiveDiagnostics');
+        TDStep('-> StopLiveDiagnostics');
         try StopLiveDiagnostics; except end;
         { v0.43: tear down the dedicated Graph window first so its frame dtor
     terminates the embedded drag_lint_graph.exe before the BPL unloads. }
-        DLT('teardown', '-> UnregisterDragLintGraph');
+        TDStep('-> UnregisterDragLintGraph');
         try UnregisterDragLintGraph; except end;
-        DLT('teardown', '-> StopHoverTracker (NO try/except)');
+        TDStep('-> StopHoverTracker (NO try/except)');
         StopHoverTracker;
-        DLT('teardown', '-> UnregisterDragLintEditViewNotifier (NO try/except)');
+        TDStep('-> UnregisterDragLintEditViewNotifier (NO try/except)');
         UnregisterDragLintEditViewNotifier;
-        DLT('teardown', '-> UnregisterDragLintKeystrokes (NO try/except)');
+        TDStep('-> UnregisterDragLintKeystrokes (NO try/except)');
         UnregisterDragLintKeystrokes;
-        DLT('teardown', '-> UnregisterProjectNotifier (NO try/except)');
+        TDStep('-> UnregisterProjectNotifier (NO try/except)');
         UnregisterProjectNotifier;
 
         { Close the structure form and usages form if still open }
-        DLT('teardown', '-> HideDragLintStructure (NO try/except)');
+        TDStep('-> HideDragLintStructure (NO try/except)');
         HideDragLintStructure;
-        DLT('teardown', '-> HideFindUsages (NO try/except)');
+        TDStep('-> HideFindUsages (NO try/except)');
         HideFindUsages;
 
         { Session 27: drop the status-indicator reference BEFORE anything can
@@ -6983,13 +7125,13 @@ begin
         { Close the About window -- it holds no OTA references, but leaving a
           form alive across a BPL unload is how the other teardown bugs here
           started. }
-        DLT('teardown', '-> CloseAboutDialog');
+        TDStep('-> CloseAboutDialog');
         try CloseAboutDialog; except end;
 
         { v1.7 B3: close the ghost-text socket BEFORE anything else is torn
           down. It owns a thread blocked in accept, and a BPL unloaded with a
           live thread in its code segment is a crash, not a leak. }
-        DLT('teardown', '-> GGhostText.Stop (closes listening socket, joins accept thread)');
+        TDStep('-> GGhostText.Stop (closes listening socket, joins accept thread)');
         if GGhostText <> nil then
         begin
           try GGhostText.Stop; except end;
@@ -6997,7 +7139,7 @@ begin
         end;
 
         { Stop LSP client first }
-        DLT('teardown', '-> GLspClient.Stop (TerminateProcess + 2s wait)');
+        TDStep('-> GLspClient.Stop (TerminateProcess; whole stop bounded to 2 s)');
         if GLspClient <> nil then
         begin
           GLspClient.Stop;
@@ -7007,13 +7149,13 @@ begin
     menu, so GMenuItems won't reach it). Freeing removes it from the IDE menu --
     this is what stops a duplicate/stale entry surviving an uninstall. Do it
     before GWrappers so its OnClick wrapper isn't dangling. }
-        DLT('teardown', '-> FreeAndNil tool-window items and menus');
+        TDStep('-> FreeAndNil tool-window items and menus');
         FreeAndNil(GDockToolWinItem );
         FreeAndNil(GGraphToolWinItem);
         { Wrappers hold the OnClick method pointers; free them before the menu items }
         FreeAndNil(GWrappers );
         FreeAndNil(GMenuItems);
-        DLT('teardown', 'COMPLETE -- teardown returned normally');
+        TDStep('COMPLETE -- teardown returned normally');
       end; // procedure
 
     initialization
@@ -7031,9 +7173,9 @@ finalization
   holds an IDE notifier or interface turns that into a NAMED unit: the last
   'begin' with no matching 'end' is where it died. Cheap, and it is the only
   thing that makes a shutdown AV diagnosable after the fact. }
-  DLT('teardown', 'Editor: finalization BEGIN');
+  TDStep('Editor: finalization BEGIN');
 UnregisterDragLintMenu;
 
-  DLT('teardown', 'Editor: finalization END');
+  TDStep('Editor: finalization END');
 
 end.

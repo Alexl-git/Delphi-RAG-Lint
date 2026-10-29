@@ -174,12 +174,19 @@ implementation
 
 uses
   System.Math
+  , Winapi.Windows
   , DragLint.Plugin.ProcRun  // dl:unit DragLint.Plugin.ProcRun accepted -- PROCRUN_TIMED_OUT_EXIT_CODE is the runner's own result code; the job reads it to report a timeout
   { The gate's only new dependency. Core.EngineHold reads a sentinel file
     and touches no process and no ToolsAPI, so the unit still compiles
     headless -- which the harness for this gate depends on. }
   , DRagLint.Core.EngineHold
   ;
+
+const
+  { Upper bound on the worker join at destruction (IDE exit). The running job's
+    child is killed within one poll slice, so a healthy worker is back in well
+    under this; anything slower is abandoned rather than holding bds.exe open. }
+  JOB_QUEUE_JOIN_MS = 2000;
 
 const
   { How long the worker sleeps between re-checks while the engine is held.
@@ -281,7 +288,15 @@ begin
   if FWake <> nil then FWake.SetEvent;
   if FWorker <> nil then
   begin
-    FWorker.WaitFor;
+    { 2026-10-29: BOUNDED. An unbounded WaitFor here is one of the waits that
+      can keep bds.exe alive for minutes after its window closed. A worker that
+      has not stood down inside the budget is abandoned together with what it
+      touches (deliberate leak) -- a leak at exit, not a hung IDE. }
+    if WaitForSingleObject(FWorker.Handle, JOB_QUEUE_JOIN_MS) <> WAIT_OBJECT_0 then
+    begin
+      OutputDebugString(PChar(Format('drag-lint job queue: worker did not stop within %d ms -- abandoned', [JOB_QUEUE_JOIN_MS]))); // dl:ok outputdebugstring@8872 -- runs during unit finalization at IDE exit, when the plugin log may already be torn down
+      Exit;
+    end;
     FWorker.Free;
   end;
   FPending.Free;
