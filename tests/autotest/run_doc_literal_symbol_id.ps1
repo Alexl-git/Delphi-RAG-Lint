@@ -13,10 +13,19 @@
   (FindDocRegionAbove -> UpsertSymbolDoc). The doc literal now takes THAT
   symbol's id; one attachment rule, not a second one.
 
-  CONTROLS:
-   * a plain string literal inside a method BODY still gets the method;
-   * a // comment above a declaration keeps the containing-scope rule (only
-     'doc' rows are re-attributed).
+  BODY LITERALS (owner ruling 2026-10-28, same re-parse). A string literal in a
+  routine's IMPLEMENTATION body took the symbol whose DECLARATION span covers
+  the line -- for a method that span is in the class, so a body literal landed
+  on the unit. It now takes the innermost routine whose body (impl span)
+  covers it; a local const/var declared inside that body stays more specific;
+  initialization/finalization is not a routine and keeps the containing rule
+  (the section symbol, e.g. DocLit.initialization).
+
+  IMPL DOCS. A /// block directly above a method IMPLEMENTATION, which no
+  declaration claims, belongs to that routine.
+
+  CONTROL: a // comment above a declaration keeps the containing-scope rule
+  (only 'doc' rows are re-attributed by doc position).
 
   Run from a NEUTRAL CWD, pwsh 7.
 #>
@@ -58,6 +67,7 @@ $src = @(
   '  public',
   '    /// <summary>meerkat method doc</summary>',
   '    procedure Run;',
+  '    procedure Stop;',
   '    /// <summary>ibis property doc</summary>',
   '    property Count: Integer read FCount;',
   '  end;',
@@ -72,10 +82,27 @@ $src = @(
   '  WriteLn(''okapi body literal'');',
   'end;',
   '',
-  'procedure UnitLevel;',
+  '/// <summary>heron impl doc</summary>',
+  'procedure TDocHost.Stop;',
   'begin',
   'end;',
   '',
+  'procedure UnitLevel;',
+  'const',
+  '  CLocal = ''lynx local const'';',
+  '',
+  '  procedure Inner;',
+  '  begin',
+  '    WriteLn(''marmot nested literal'');',
+  '  end;',
+  '',
+  'begin',
+  '  Inner;',
+  '  WriteLn(''badger outer literal'');',
+  'end;',
+  '',
+  'initialization',
+  '  WriteLn(''bison init literal'');',
   'end.'
 ) -join "`r`n"
 [IO.File]::WriteAllText((Join-Path $WorkDir 'DocLit.pas'), $src + "`r`n", [Text.Encoding]::ASCII)
@@ -110,6 +137,7 @@ $cases = [ordered]@{
   'meerkat' = 'DocLit.TDocHost.Run'
   'ibis'    = 'DocLit.TDocHost.Count'
   'tapir'   = 'DocLit.UnitLevel'
+  'heron'   = 'DocLit.TDocHost.Stop'
 }
 foreach ($k in $cases.Keys) {
   $got = OwnerOf $k
@@ -117,13 +145,22 @@ foreach ($k in $cases.Keys) {
 }
 
 Write-Host ''
-Write-Host 'CONTROLS -- non-doc literals keep the containing-scope rule' -ForegroundColor Cyan
-# PINS THE PRE-EXISTING containing-scope rule, not an ideal: the line map uses a
-# symbol's Start/EndLine, and a method's span is its DECLARATION in the class, so
-# a literal in the implementation body resolves to the unit (measured on the
-# base, 694e0360). This fix must not move it; changing that rule is separate work.
-$got = OwnerOf 'okapi'
-Check 'a string literal in a method body is NOT re-attributed (containing rule: unit)' ($got -eq 'DocLit') "got=$got"
+Write-Host 'A body literal is owned by the innermost routine BODY' -ForegroundColor Cyan
+$body = [ordered]@{
+  'okapi'  = 'DocLit.TDocHost.Run'
+  'marmot' = 'DocLit.UnitLevel.Inner'
+  'badger' = 'DocLit.UnitLevel'
+  'lynx'   = 'DocLit.UnitLevel.CLocal'
+  # not a routine: keeps the containing rule, which already names the section
+  # symbol (measured on the base; more specific than the unit, so unchanged)
+  'bison'  = 'DocLit.initialization'
+}
+foreach ($k in $body.Keys) {
+  $got = OwnerOf $k
+  Check ("$k literal -> " + $body[$k]) ($got -eq $body[$k]) "got=$got"
+}
+
+Write-Host 'CONTROL -- a // comment is not re-attributed by doc position' -ForegroundColor Cyan
 $got = OwnerOf 'gecko'
 Check 'a // comment above a field -> the containing class (unchanged)' ($got -eq 'DocLit.TDocHost') "got=$got"
 
