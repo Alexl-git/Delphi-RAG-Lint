@@ -164,7 +164,8 @@ function Get-AliasTokenRx([string]$Alias) {
 # are now named -- lint-project --output, check-ast --json, serve --json (error-format switch). 107 -> 104.
 # 103 on 2026-10-27 (fix/help-compare-out-root): compare --out-root is now named on its --help line. 104 -> 103.
 $BaselineCells = 103
-$BaselineVerbs = 24
+# 103/23 on 2026-10-29 (fix/help-out-json-138, replay of 909fc131): re-measured on main 0b8fcc65; cells unchanged, one verb left the table (24 -> 23).
+$BaselineVerbs = 23
 
 $Repo = (Resolve-Path $Repo).Path
 . (Join-Path $Repo 'tests\autotest\lib\CliFlagVerbMap.ps1')
