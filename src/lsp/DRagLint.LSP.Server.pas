@@ -191,6 +191,28 @@ type
       FFeatures       : TObjectList<TLspFeature>         ;
       FFeatureByMethod: TDictionary<string, TLspFeature> ;
       FContext        : ILspServerContext                ;
+      { Yield (INBOX-ide-hang-on-slow-engine section 2): messages read while a
+        long request yielded, to be dispatched by Run before its next read, in
+        arrival order. FInputEnded: such a read hit EOF / a cancelled read. }
+      FDeferred       : TQueue<TJSONObject>              ;
+      FInputEnded     : Boolean                          ;
+      FYielding       : Boolean                          ;
+      /// <summary>Dispatches one JSON-RPC message to its handler.</summary>
+      /// <param name="AMsg">The message; not freed here, the caller owns it.</param>
+      /// <returns>False for `exit` (the loop must end), True otherwise.</returns>
+      function DispatchMessage(const AMsg: TJSONObject): Boolean;
+      /// <summary>True when a whole message can be read from stdin without
+      /// blocking: a pipe with bytes waiting (PeekNamedPipe) or a file not at
+      /// its end. A console or any other handle answers False -- never yield.</summary>
+      function InputPending: Boolean;
+      /// <summary>Called by a long request between its batches: reads every
+      /// message already waiting and dispatches the hover-class ones at once,
+      /// deferring anything else (and everything after it) to Run.</summary>
+      /// <remarks>Single-threaded: it runs INSIDE the long handler, so a served
+      /// hover sees the same stores. Order-preserving: once one message is
+      /// deferred no later one is served early, so a hover can never overtake
+      /// a didChange it was sent after. Not re-entrant (FYielding).</remarks>
+      procedure YieldToPendingRequests;
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (FControl &lt;&gt; nil) and
       /// FControl.StandDownRequested.</returns>
       /// <remarks>
@@ -1143,6 +1165,9 @@ type
       /// <param name="APath">Local path; '' answers an empty array.</param>
       /// <returns>A NEW array, empty for a file no store knows; the caller owns it.</returns>
       /// <remarks>
+      /// <para>Bounded: one CountCallerSitesByNames statement per 64 distinct names, not one
+      /// row set per routine; between statements it calls YieldToPendingRequests, so hovers
+      /// sent meanwhile are answered before this returns.</para>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCallerCounts (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLspServerContextAdapter.CallerCounts (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, IntToStr, LowerCase</para>
@@ -1221,6 +1246,8 @@ const
   LSP_FULL_RULES_REAP_MS = 2000;
   { S8: JSON-RPC internal error, answered when a registered feature raises. }
   LSP_ERR_INTERNAL = -32603;
+  /// <summary>JSON-RPC 'method not found': the answer to a request no handler claims.</summary>
+  LSP_ERR_METHOD_NOT_FOUND = -32601;
 
 type
   { S0: the ILspServerContext a feature is handed. A thin forwarder: every
@@ -1428,10 +1455,14 @@ begin
       if not FFeatureByMethod.ContainsKey(M) then FFeatureByMethod.Add(M, Feature);
   end;
   FContext:= TLspServerContextAdapter.Create(Self);
+  FDeferred:= TQueue<TJSONObject>.Create;
 end; // constructor
 
 destructor TLSPServer.Destroy;
 begin
+  if FDeferred <> nil then
+    while FDeferred.Count > 0 do FDeferred.Dequeue.Free;
+  FDeferred.Free;
   FContext:= nil;
   FFeatureByMethod.Free;
   FFeatures.Free;
@@ -2908,13 +2939,75 @@ begin
 end;
 
 function TLSPServer.ComputeCallerCounts(const APath: string): TJSONArray;
+{ PERFORMANCE (INBOX-ide-hang-on-slow-engine section 2, 2026-10-29). The first
+  version asked FindCallersByName ONCE PER ROUTINE and resolved GetFilePath ONCE
+  PER RETURNED ROW. DevExpress dxBar.pas from the platform library: 4,256
+  routines but 2,740 distinct names (84 `Create`s each re-fetched all 43,001
+  `Create` refs), so 4.25 million rows and 4.25 million one-row path queries --
+  13 minutes, during which the serial loop answered nothing. Now:
+
+    * the work is keyed by (store, lowercased name), so a name is asked ONCE
+      however many routines share it;
+    * a line declared by ONE name in ONE store -- nearly every line -- gets its
+      count from CountCallerSitesByNames, NAME_BATCH names per statement, no
+      rows materialised (dxBar: 413 ms warm);
+    * only a line with several keys (the same file in two stores, S1; or two
+      routines on one line) still unions real sites, once per distinct key set,
+      with each store's file paths cached;
+    * between batches the loop serves waiting hovers (YieldToPendingRequests),
+      so even a cold page cache cannot queue a tooltip behind this. }
+const
+  NAME_BATCH     = 64;   { names per CountCallerSitesByNames statement; a hover waits at most one batch }
+  FILE_KEY_SHIFT = 40;   { Paths key: store index above bit 40, file id below (ids stay far under 2^40) }
 var
-  Arr   : TJSONArray ;
-  Path  : string     ;
-  Syms  : TArray<TSymbol>;
-  St    : ISymbolStore;
-  Sites : TObjectDictionary<Integer, TDictionary<string, Byte>>;   { decl line -> distinct (file:line) call sites }
-  Lines : TDictionary<string, Byte>;
+  Arr     : TJSONArray;
+  Path    : string    ;
+  Decl    : TObjectDictionary<Integer, TStringList>;   { decl line -> distinct 'store:lowername' keys }
+  KeyCount: TDictionary<string, Integer>;              { single-key lines: key -> distinct sites }
+  SetCount: TDictionary<string, Integer>;              { multi-key lines: key set -> distinct sites }
+  Batches : TObjectDictionary<Integer, TList<string>>; { store index -> names to count }
+  Paths   : TDictionary<Int64, string>;                { store index shl 40 + file id -> lowercased path }
+  Lines   : TList<Integer>;
+
+  function StoreOf(const AKey: string): Integer;
+  begin
+    Result:= StrToInt(Copy(AKey, 1, Pos(':', AKey) - 1));
+  end;
+
+  function NameOf(const AKey: string): string;
+  begin
+    Result:= Copy(AKey, Pos(':', AKey) + 1, MaxInt);
+  end;
+
+  { Distinct (path, line) sites over every key of one line -- the S1 dedup. }
+  function UnionCount(const AKeys: TStringList): Integer;
+  var
+    Sites: TDictionary<string, Byte>;
+  begin
+    Sites:= TDictionary<string, Byte>.Create;
+    try
+      for var K: string in AKeys do
+      begin
+        var SI: Integer:= StoreOf(K);
+        var St: ISymbolStore:= FStores[SI];
+        for var R: TReference in St.FindCallersByName(NameOf(K)) do
+        begin
+          var PKey: Int64:= (Int64(SI) shl FILE_KEY_SHIFT) + R.FileId;
+          var P: string;
+          if not Paths.TryGetValue(PKey, P) then
+          begin
+            P:= LowerCase(St.GetFilePath(R.FileId));
+            Paths.Add(PKey, P);
+          end;
+          Sites.AddOrSetValue(P + ':' + IntToStr(R.StartLine), 1);
+        end;
+      end;
+      Result:= Sites.Count;
+    finally
+      Sites.Free;
+    end;
+  end;
+
 begin
   Arr:= TJSONArray.Create;
   try
@@ -2925,61 +3018,90 @@ begin
       client retry something that will never succeed. }
     if Path <> '' then
     begin
-      Sites:= TObjectDictionary<Integer, TDictionary<string, Byte>>.Create([doOwnsValues]);
+      Decl    := TObjectDictionary<Integer, TStringList>.Create([doOwnsValues]);
+      KeyCount:= TDictionary<string, Integer>.Create;
+      SetCount:= TDictionary<string, Integer>.Create;
+      Batches := TObjectDictionary<Integer, TList<string>>.Create([doOwnsValues]);
+      Paths   := TDictionary<Int64, string>.Create;
+      Lines   := TList<Integer>.Create;
       try
-        for St in FStores do
+        { ROUTINES ONLY, keyed per DECLARATION LINE (S1), across every store. }
+        for var SI: Integer:= 0 to High(FStores) do
         begin
-          if St = nil then Continue;
-          Syms:= St.FindSymbolsByFile(Path);
-          for var Sym: TSymbol in Syms do
+          if FStores[SI] = nil then Continue;
+          for var Sym: TSymbol in FStores[SI].FindSymbolsByFile(Path) do
           begin
             if not (Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) then Continue;
             if Sym.StartLine <= 0 then Continue;
-            { ONE PER CALL SITE, not one per reference. FindCallersByName returns
-              BOTH a 'call' and a 'member-access' ref for `T.Thrice;`, so a raw
-              Length() reports three calls as six. The CLI's text output happens
-              to collapse them per line, which is why the plugin's old
-              line-counting parser got the right number -- by accident of the
-              formatting, not by asking for it. Deduplicating on (file, line)
-              asks for it, and keeps a reference that is not a call: a caller the
-              user can navigate to is a caller.
-
-              Counted across EVERY open store, because a caller in another
-              project still calls this routine. }
-            { S1: the distinct sites are kept PER DECLARATION LINE across every
-              store and symbol, so the count equals the number of rows
-              workspace/executeCommand draglint.showCallers answers (which
-              dedups the same way). Summing per-store counts double-counted a
-              site seen in two stores. }
-            if not Sites.TryGetValue(Sym.StartLine, Lines) then
+            var Keys: TStringList;
+            if not Decl.TryGetValue(Sym.StartLine, Keys) then
             begin
-              Lines:= TDictionary<string, Byte>.Create;
-              Sites.Add(Sym.StartLine, Lines);
+              Keys:= TStringList.Create;
+              Keys.Sorted    := True;
+              Keys.Duplicates:= dupIgnore;
+              Decl.Add(Sym.StartLine, Keys);
             end;
-            for var R: TReference in St.FindCallersByName(Sym.Name) do
-              Lines.AddOrSetValue(LowerCase(St.GetFilePath(R.FileId)) + ':' + IntToStr(R.StartLine), 1);
+            Keys.Add(IntToStr(SI) + ':' + LowerCase(Sym.Name));
           end;
         end;
+
+        { The fast path: one key on the line, its count from the aggregate. }
+        for var Keys: TStringList in Decl.Values do
+          if (Keys.Count = 1) and not KeyCount.ContainsKey(Keys[0]) then
+          begin
+            KeyCount.Add(Keys[0], 0);
+            var SI: Integer:= StoreOf(Keys[0]);
+            var Names: TList<string>;
+            if not Batches.TryGetValue(SI, Names) then
+            begin
+              Names:= TList<string>.Create;
+              Batches.Add(SI, Names);
+            end;
+            Names.Add(NameOf(Keys[0]));
+          end;
+        for var SI: Integer in Batches.Keys do
+        begin
+          var Names: TArray<string>:= Batches[SI].ToArray;
+          var B: Integer:= 0;
+          while B < Length(Names) do
+          begin
+            YieldToPendingRequests;
+            var Slice: TArray<string>:= Copy(Names, B, NAME_BATCH);
+            var Got: TArray<Integer>:= FStores[SI].CountCallerSitesByNames(Slice);
+            for var I: Integer:= 0 to High(Slice) do KeyCount[IntToStr(SI) + ':' + Slice[I]]:= Got[I];
+            Inc(B, NAME_BATCH);
+          end;
+        end;
+
+        { The exact path: several keys on the line, union their real sites. }
+        for var Keys: TStringList in Decl.Values do
+          if (Keys.Count > 1) and not SetCount.ContainsKey(Keys.CommaText) then
+          begin
+            YieldToPendingRequests;
+            SetCount.Add(Keys.CommaText, UnionCount(Keys));
+          end;
 
         { S2: SOURCE order, not dictionary enumeration order. }
-        var Keys: TList<Integer>:= TList<Integer>.Create(Sites.Keys);
-        try
-          Keys.Sort;
-          for var Key: Integer in Keys do
-          begin
-            var Item: TJSONObject:= TJSONObject.Create;
-            { 0-BASED, matching LSP convention. The store is 1-based and the
-              plugin's cache is 0-based; converting HERE means exactly one place
-              knows about the offset. }
-            Item.AddPair('line' , TJSONNumber.Create(Key - 1));
-            Item.AddPair('count', TJSONNumber.Create(Sites[Key].Count));
-            Arr.AddElement(Item);
-          end;
-        finally
-          Keys.Free;
+        Lines.AddRange(Decl.Keys);
+        Lines.Sort;
+        for var Line: Integer in Lines do
+        begin
+          var Keys: TStringList:= Decl[Line];
+          var Item: TJSONObject:= TJSONObject.Create;
+          { 0-BASED, matching LSP convention. The store is 1-based and the
+            plugin's cache is 0-based; converting HERE means exactly one place
+            knows about the offset. }
+          Item.AddPair('line' , TJSONNumber.Create(Line - 1));
+          Item.AddPair('count', TJSONNumber.Create(if Keys.Count = 1 then KeyCount[Keys[0]] else SetCount[Keys.CommaText]));
+          Arr.AddElement(Item);
         end;
       finally
-        Sites.Free;
+        Lines.Free;
+        Paths.Free;
+        Batches.Free;
+        SetCount.Free;
+        KeyCount.Free;
+        Decl.Free;
       end;
     end;
   except  // dl:ok bare-except@bb6b -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
@@ -2987,6 +3109,77 @@ begin
     raise;
   end;
   Result:= Arr;
+end;
+
+function TLSPServer.InputPending: Boolean;
+var
+  H    : THandle;
+  Avail: DWORD  ;
+begin
+  Result:= False;
+  if FInputEnded or (FStdIn = nil) then Exit;
+  H:= FStdIn.Handle;
+  case GetFileType(H) of
+    FILE_TYPE_PIPE: Result:= PeekNamedPipe(H, nil, 0, nil, @Avail, nil) and (Avail > 0);
+    { A redirected FILE (the battery's stdin): readable without blocking while
+      the position is short of the end. }
+    FILE_TYPE_DISK: Result:= FStdIn.Position < FStdIn.Size;
+  end;
+end;
+
+procedure TLSPServer.YieldToPendingRequests;
+{ WHY A YIELD AND NOT A WORKER THREAD. A worker would need its own connection to
+  every store (FireDAC connections are not shared across threads), opening a
+  3 GB library DB a second time, and every handler's state made thread-safe.
+  The loop is single-threaded by design; the defect was only that ONE request
+  could hold it for minutes. Serving waiting hovers at batch boundaries bounds
+  hover latency by one batch with no new concurrency at all.
+
+  WHICH METHODS. Read-only, cheap, latency-visible ones: hover, hoverBundle,
+  definition, and $/cancelRequest (a notification with nothing to answer).
+  Everything else -- didChange, shutdown, another callerCounts -- is deferred
+  to Run, and once anything is deferred nothing later is served early. }
+var
+  Msg   : TJSONObject;
+  Method: string     ;
+begin
+  if FYielding or (FDeferred.Count > 0) then Exit;
+  FYielding:= True;
+  try
+    while (FDeferred.Count = 0) and InputPending do
+    begin
+      Msg:= ReadMessage;
+      if Msg = nil then
+      begin
+        FInputEnded:= True;
+        Break;
+      end;
+      Method:= if Msg.GetValue('method') <> nil then Msg.GetValue('method').Value else '';
+      if (Method = 'textDocument/hover') or (Method = 'draglint/hoverBundle') or
+         (Method = 'textDocument/definition') or (Method = '$/cancelRequest') then
+      begin
+        try
+          try
+            DispatchMessage(Msg);
+          except
+            { Isolated like a feature (S8): a hover raising here must not abort
+              the long request it interrupted. stderr only -- stdout is the protocol. }
+            on E: Exception do
+            begin
+              Writeln(ErrOutput, 'drag-lint LSP: ', Method, ' (served during a yield) raised ', E.ClassName, ': ', E.Message);
+              if Msg.GetValue('id') <> nil then
+                SendError(Msg.GetValue('id'), LSP_ERR_INTERNAL, 'internal error in ' + Method + ': ' + E.ClassName + ': ' + E.Message);
+            end;
+          end;
+        finally
+          Msg.Free;
+        end;
+      end
+      else FDeferred.Enqueue(Msg);
+    end;
+  finally
+    FYielding:= False;
+  end;
 end;
 
 procedure TLSPServer.HandleUsages(const AId: TJSONValue; const AParams: TJSONObject);
@@ -3806,14 +3999,68 @@ begin
   end;
 end;
 
-procedure TLSPServer.Run;
+function TLSPServer.DispatchMessage(const AMsg: TJSONObject): Boolean;  // dl:ok cognitive-complexity@152c -- the former Run body moved verbatim: one flat method-name dispatch chain, each branch a one-line delegate
 var
-  Msg      : TJSONObject;
   Method   : string     ;
   Id       : TJSONValue ;
   Params   : TJSONObject;
   ParamsVal: TJSONValue ;
   Feature  : TLspFeature;
+begin
+  Result:= True;
+  Method:= if AMsg.GetValue('method') <> nil then AMsg.GetValue('method').Value else '';
+  Id       := AMsg.GetValue('id'    );
+  ParamsVal:= AMsg.GetValue('params');
+  if ParamsVal is TJSONObject then Params:= TJSONObject(ParamsVal)
+  else Params:= nil;
+
+  if Method      = 'initialize' then HandleInitialize(Id, Params)
+  else if Method = 'initialized' then
+    // notification, no response
+  else if Method = 'shutdown' then HandleShutdown(Id)
+  else if Method = 'exit' then Result:= False
+  else if Method = 'workspace/symbol' then HandleWorkspaceSymbol(Id, Params)
+  else if Method = 'textDocument/definition' then HandleDefinition(Id, Params)
+  else if Method = 'textDocument/references' then HandleReferences(Id, Params)
+  else if Method = 'textDocument/hover' then HandleHover(Id, Params)
+  { Custom, hence the vendor prefix: one reply carrying hover markdown, the
+    structured model and both caller row sets. An engine that predates it
+    answers -32601 through the catch-all below, immediately, so a client can
+    detect absence in one round trip instead of waiting for a timeout. }
+  else if Method = 'draglint/hoverBundle' then HandleHoverBundle(Id, Params)
+  else if Method = 'draglint/callerCounts' then HandleCallerCounts(Id, Params)
+  else if Method = 'draglint/usages' then HandleUsages(Id, Params)
+  else if Method = 'textDocument/completion' then HandleCompletion(Id, Params)
+  else if Method = 'textDocument/signatureHelp' then HandleSignatureHelp(Id, Params)
+  else if Method = 'textDocument/codeAction' then HandleCodeAction(Id, Params)
+  else if Method = 'textDocument/didOpen' then HandleDidOpenOrSave(Params)
+  else if Method = 'textDocument/didSave' then HandleDidOpenOrSave(Params)
+  else if Method = 'textDocument/didChange' then HandleDidChange(Params)
+  else if Method = 'textDocument/didClose' then HandleDidClose(Params)
+  { S0: registered features, tried after every built-in and before the
+    catch-all, so an unknown method still answers -32601. }
+  else if FFeatureByMethod.TryGetValue(Method, Feature) then
+  begin
+    { S8: exception isolation. One feature raising answers THIS request with
+      -32603 (internal error) and leaves the server alive for the next. }
+    try
+      Feature.Handle(FContext, Method, Id, Params);
+    except
+      on E: Exception do
+      begin
+        { stderr only -- stdout is the protocol channel. A notification (Id = nil) has no reply, so this is its only trace. }
+        Writeln(ErrOutput, 'drag-lint LSP: feature ', Method, ' raised ', E.ClassName, ': ', E.Message);
+        if Id <> nil then SendError(Id, LSP_ERR_INTERNAL, 'internal error in ' + Method + ': ' + E.ClassName + ': ' + E.Message);
+      end;
+    end;
+  end
+  else if (Id <> nil) and (Method <> '') then SendError(Id, LSP_ERR_METHOD_NOT_FOUND, 'method not found: ' + Method);
+end;
+
+procedure TLSPServer.Run;
+var
+  Msg   : TJSONObject;
+  Method: string     ;
 begin
   while not FShuttingDown do
   begin
@@ -3824,58 +4071,16 @@ begin
       the listener that cancelling is safe, i.e. the pending I/O is stdin's and
       not a SQLite page read inside a handler. }
     if StandDownTaken then Break;
-    Msg:= ReadMessageGuarded;
+    { Yield: what a long request read but did not serve comes first, in
+      arrival order; an EOF met during a yield ends the loop once it is drained. }
+    Msg:= nil;
+    if FDeferred.Count > 0 then Msg:= FDeferred.Dequeue
+    else if not FInputEnded then Msg:= ReadMessageGuarded;
     if Msg = nil then Break;
     try
-      Method:= '';
-      if Msg.GetValue('method') <> nil then Method:= Msg.GetValue('method').Value;
-      Id       := Msg.GetValue('id'    );
-      ParamsVal:= Msg.GetValue('params');
-      if ParamsVal is TJSONObject then Params:= TJSONObject(ParamsVal)
-      else Params:= nil;
+      Method:= if Msg.GetValue('method') <> nil then Msg.GetValue('method').Value else '';
       if FControl <> nil then FControl.BeginWork(Method);
-
-      if Method      = 'initialize' then HandleInitialize(Id, Params)
-      else if Method = 'initialized' then
-        // notification, no response
-      else if Method = 'shutdown' then HandleShutdown(Id)
-      else if Method = 'exit' then Break
-      else if Method = 'workspace/symbol' then HandleWorkspaceSymbol(Id, Params)
-      else if Method = 'textDocument/definition' then HandleDefinition(Id, Params)
-      else if Method = 'textDocument/references' then HandleReferences(Id, Params)
-      else if Method = 'textDocument/hover' then HandleHover(Id, Params)
-      { Custom, hence the vendor prefix: one reply carrying hover markdown, the
-        structured model and both caller row sets. An engine that predates it
-        answers -32601 through the catch-all below, immediately, so a client can
-        detect absence in one round trip instead of waiting for a timeout. }
-      else if Method = 'draglint/hoverBundle' then HandleHoverBundle(Id, Params)
-      else if Method = 'draglint/callerCounts' then HandleCallerCounts(Id, Params)
-      else if Method = 'draglint/usages' then HandleUsages(Id, Params)
-      else if Method = 'textDocument/completion' then HandleCompletion(Id, Params)
-      else if Method = 'textDocument/signatureHelp' then HandleSignatureHelp(Id, Params)
-      else if Method = 'textDocument/codeAction' then HandleCodeAction(Id, Params)
-      else if Method = 'textDocument/didOpen' then HandleDidOpenOrSave(Params)
-      else if Method = 'textDocument/didSave' then HandleDidOpenOrSave(Params)
-      else if Method = 'textDocument/didChange' then HandleDidChange(Params)
-      else if Method = 'textDocument/didClose' then HandleDidClose(Params)
-      { S0: registered features, tried after every built-in and before the
-        catch-all, so an unknown method still answers -32601. }
-      else if FFeatureByMethod.TryGetValue(Method, Feature) then
-      begin
-        { S8: exception isolation. One feature raising answers THIS request with
-          -32603 (internal error) and leaves the server alive for the next. }
-        try
-          Feature.Handle(FContext, Method, Id, Params);
-        except
-          on E: Exception do
-          begin
-            { stderr only -- stdout is the protocol channel. A notification (Id = nil) has no reply, so this is its only trace. }
-            Writeln(ErrOutput, 'drag-lint LSP: feature ', Method, ' raised ', E.ClassName, ': ', E.Message);
-            if Id <> nil then SendError(Id, LSP_ERR_INTERNAL, 'internal error in ' + Method + ': ' + E.ClassName + ': ' + E.Message);
-          end;
-        end;
-      end
-      else if (Id <> nil) and (Method <> '') then SendError(Id, -32601, 'method not found: ' + Method);
+      if not DispatchMessage(Msg) then Break;
     finally
       if FControl <> nil then FControl.EndWork;
       Msg.Free;
