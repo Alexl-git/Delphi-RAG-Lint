@@ -143,7 +143,7 @@ uses
   FireDAC.Stan.Param,
   DRagLint.Core.Model,
   DRagLint.Analysis.Purity,     { LexCallArguments -- the shared argument lexer }
-  DRagLint.Index.CallResolver;  { SignatureArityRange -- read-only reuse }
+  DRagLint.Index.CallResolver;  { SignatureArityRange, ParamTypeKey -- read-only reuse }
 
 const
   CHAIN_MAX_DEPTH    = 64; // a deeper class chain is a cycle in bad data
@@ -159,80 +159,6 @@ begin
   if not Result then Exit;
   for var i:= 2 to Length(S) do
     if not (IsIdentChar(S[i]) or (S[i] = '.')) then Exit(False);
-end;
-
-/// <summary>The parameter part of a routine signature as a comparable key:
-/// per parameter, its modifier and declared type, lower-case, without names,
-/// default values or whitespace. `(var A: Integer; const B, C: string = 'x')`
-/// gives `var:integer;const:string;const:string;`.</summary>
-/// <remarks>Only the text inside the first top-level parentheses counts, so the
-/// return type never takes part (Delphi overloads cannot differ by it). An
-/// untyped parameter (`var ABuffer`) has an empty type. Parentheses, brackets
-/// and angle brackets nest, so a `;` inside them never splits a group.</remarks>
-function ParamTypeKey(const ASignature: string): string;
-var
-  Depth, Open, Close, Start: Integer;
-  Inner, Names, TypeText, Modifier: string;
-  Groups: TList<string>;
-begin
-  Result:= '';
-  Open:= Pos('(', ASignature);
-  if Open = 0 then Exit;
-  Depth:= 0;
-  Close:= 0;
-  for var i:= Open to Length(ASignature) do
-  begin
-    if CharInSet(ASignature[i], ['(', '[', '<']) then Inc(Depth)
-    else if CharInSet(ASignature[i], [')', ']', '>']) then Dec(Depth);
-    if Depth = 0 then
-    begin
-      Close:= i;
-      Break;
-    end;
-  end;
-  if Close = 0 then Exit;
-  Inner:= Copy(ASignature, Open + 1, Close - Open - 1);
-  Groups:= TList<string>.Create;
-  try
-    Depth:= 0;
-    Start:= 1;
-    for var i:= 1 to Length(Inner) + 1 do
-    begin
-      if (i > Length(Inner)) or ((Depth = 0) and (Inner[i] = ';')) then
-      begin
-        Groups.Add(Trim(Copy(Inner, Start, i - Start)));
-        Start:= i + 1;
-      end
-      else if CharInSet(Inner[i], ['(', '[', '<']) then Inc(Depth)
-      else if CharInSet(Inner[i], [')', ']', '>']) then Dec(Depth);
-    end;
-    for var G in Groups do
-    begin
-      if G = '' then Continue;
-      var Decl:= G;
-      var Eq:= Pos('=', Decl);
-      if Eq > 0 then Decl:= Trim(Copy(Decl, 1, Eq - 1));
-      var Colon:= Pos(':', Decl);
-      Names   := Trim(if Colon > 0 then Copy(Decl, 1, Colon - 1) else Decl);
-      TypeText:= if Colon > 0 then Copy(Decl, Colon + 1, MaxInt) else '';
-      Modifier:= '';
-      var Sp:= Pos(' ', Names);
-      if Sp > 0 then
-      begin
-        var W:= LowerCase(Copy(Names, 1, Sp - 1));
-        if MatchStr(W, ['const', 'var', 'out', 'constref']) then
-        begin
-          Modifier:= W;
-          Names:= Trim(Copy(Names, Sp + 1, MaxInt));
-        end;
-      end;
-      TypeText:= LowerCase(StringReplace(StringReplace(TypeText, ' ', '', [rfReplaceAll]), #9, '', [rfReplaceAll]));
-      for var k:= 1 to Length(Names.Split([','])) do
-        Result:= Result + Modifier + ':' + TypeText + ';';
-    end;
-  finally
-    Groups.Free;
-  end;
 end;
 
 function LastSegment(const S: string): string;

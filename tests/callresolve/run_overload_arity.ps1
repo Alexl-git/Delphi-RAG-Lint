@@ -56,7 +56,10 @@ function Write-Ascii([string]$Path, [string]$Body) {
 
 # Pick/1, Pick/2, Pick/3 mirror YADF's delegating chain. Blend/2 is the control:
 # two overloads of the SAME arity differing only by parameter TYPE, which arity
-# cannot decide and which must therefore stay uncertain. Fill has a DEFAULT
+# cannot decide and which must therefore stay uncertain. Its argument is a CALL
+# (rb5-ovl, 2026-10-28): a bare string literal now decides Blend by argument shape
+# (tests\callresolve\run_overload_argshape.ps1), so the control passes an
+# expression whose shape the narrowing cannot read. Fill has a DEFAULT
 # parameter, so it accepts 1 or 2 arguments.
 Write-Ascii (Join-Path $WorkDir 'arity.pas') @'
 unit arity;
@@ -111,7 +114,7 @@ procedure Drive;
 begin
   Pick('x');
   Fill('y');
-  Blend('z');
+  Blend(Trim('z'));
 end;
 
 procedure DriveMultiline;

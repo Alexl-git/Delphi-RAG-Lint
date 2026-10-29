@@ -689,7 +689,12 @@
 # superseded: 1.16.0-alpha|62f6671dec6f4cc91d69e7c55fbaf2383e7871a7579344cd99fb7961b7d688ab
 #   2026-10-28 lane rb5-gen: BUMP 1.16.0 -> 1.17.0-alpha (RB-5 P2+P3): DispatchResolver writes implements edges for generic
 #   interfaces and narrows same-arity overload ties by parameter type list. Resolve-only: index --all --resolve-only.
-1.17.0-alpha|63857dc5c4821113af9a17cb7c9f8d036d71a178829fe230fd6019d61855d751
+# superseded (same 1.17.0-alpha, re-pinned WITHOUT a bump 2026-10-28, lane rb5-ovl): 1.17.0-alpha|63857dc5c4821113af9a17cb7c9f8d036d71a178829fe230fd6019d61855d751
+#   1.17.0-alpha is rb5-gen's bump and is NOT released yet, so this lane rides on it instead of bumping again: PickFromMatches
+#   now narrows a same-arity overload tie by the SHAPES of the call site's arguments (a literal / [..] / a variable of a
+#   built-in type drops every candidate it cannot be passed to; narrowing only). ParamTypeKey moved from DispatchResolver
+#   into CallResolver unchanged. The remedy is the same one 1.17.0-alpha already demands: index --all --resolve-only.
+1.17.0-alpha|d8ad73bf70159efc64c366d8824c789f3a878f85071dc4ea0eef2f21a9f4ba11
 # superseded (same 1.12.0-alpha, re-pinned WITHOUT a bump 2026-10-18, wave 1.31.5 lane 2 / V-C): Storage.SQLite changed only the scoped-pass BOOKKEEPING -- the one-in-three share latch now divides by the file count from BEFORE the run (FScopeCorpusBefore) instead of CountFiles at the first removal (which already counted this run's new files), new/changed write counters feed the decline REASON text, the FTS5 'AVAILABLE' line is gone, and the '~37 min' warning prints only from 1M refs. No binding rule changed: the latch only chooses scoped vs whole-DB, and the two passes are designed to write the same call edges, so no stored edge is stale. 1.12.0-alpha|e2db1d4d6dd17d7b1687e0cb9f7b27822e71e3299e5d2afed86dd0f329658c7d
 # superseded (same 1.12.0-alpha, never released; E5 review round 1 on the branch -- NearestClassMember: the nearest member of any kind hides a farther field, an unresolved parent ends the walk, interfaces are not walked; new decline reason 'hidden'): 1.12.0-alpha|3cebd6247a15eb7fa8708c80fd73242b4c60d53c9d44a390564efaa12a6b1806
 # superseded: 1.11.0-alpha|7d04a1be5c4bfd0968b01c171996afe597c3b1ad94ae9910e013e044974854bd
