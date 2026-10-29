@@ -4843,6 +4843,18 @@ begin
       if I <= High(FStorePaths) then OwningDb:= FStorePaths[I];
       Break;
     end;
+  { Owner ruling D1 (like the IDE): the child lints against the ACTIVE context's
+    DB set -- its project DB + its platform's library -- exactly the set hover
+    uses (DbSetFor), never every store opened at startup. No active project DB
+    (a loose or unowned file) keeps the startup list. }
+  var ChildDbs: TArray<string>;
+  var CtxDbs: TLspDbSet:= DbSetFor(AFile, FileContext(AFile));
+  if CtxDbs.ProjectDb <> '' then
+  begin
+    ChildDbs:= [CtxDbs.ProjectDb, CtxDbs.LibraryDb];
+    OwningDb:= CtxDbs.ProjectDb;
+  end
+  else ChildDbs:= FStorePaths;
   var Budget: Cardinal:= LintChildTimeoutMs(OwningDb);
   TmpPath:= TPath.GetTempFileName;
   FillChar(Sa, SizeOf(Sa), 0);
@@ -4866,7 +4878,7 @@ begin
     ChildExe:= GetEnvironmentVariable('DRAGLINT_FULLRULES_CHILD_EXE');
     if ChildExe = '' then ChildExe:= ParamStr(0);
     Cmd:= '"' + ChildExe + '" lint "' + AFile + '" --json';
-    for var DbP in FStorePaths do
+    for var DbP in ChildDbs do
       if DbP <> '' then Cmd:= Cmd + ' --db "' + DbP + '"';
     { C15: the in-process lint's profile, not a different one; values quoted, a double quote dropped. }
     if FStartProject <> '' then Cmd:= Cmd + ' --project "' + StringReplace(FStartProject, '"', '', [rfReplaceAll]) + '"';
