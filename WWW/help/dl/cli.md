@@ -1096,7 +1096,7 @@ Described in [lint-tree](features/lint-tree.md).
 Starts the LSP (Language Server Protocol) stdio server.
 
 ```text
-drag-lint lsp --db <file.sqlite> (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>]
+drag-lint lsp --db <file.sqlite> (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>] [--target-compiler <ver|auto>]
 ```
 
 | Flag | Argument | Meaning | Default |
