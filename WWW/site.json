@@ -10,7 +10,7 @@
       "repo": "Alexl-git/Delphi-RAG-Lint",
       "changelog": "https://github.com/Alexl-git/Delphi-RAG-Lint/blob/main/CHANGELOG.md",
       "blurb": "Index, query and lint Delphi code - from the command line and inside RAD Studio.",
-      "facts": { "rules": 195, "categories": 16, "fixable": 23 }
+      "facts": { "rules": 290, "categories": 18, "fixable": 111, "asOf": "as of 2026-10-29, drag-lint 1.38.0-alpha" }
     },
     {
       "id": "yadf",

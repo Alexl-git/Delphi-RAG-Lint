@@ -13,7 +13,7 @@ summary: drag-lint finds circular uses groups, shows them in the RAD Studio IDE,
   <p class="standfirst">drag-lint finds circular uses groups, shows them in the RAD Studio IDE, and can cut one edge for you behind a compile gate that rolls back on failure. This article walks through what you click and what you see first, then what the engine does underneath &mdash; and, just as important, what it refuses to do.</p>
   <div class="byline">
     <span>Delphi 13 Florence &middot; RAD Studio 37.0</span>
-    <span>Real output from drag-lint 1.33.0-alpha and 1.35.0-alpha; behaviour as of 1.35.1-alpha</span>
+    <span>Real output as of 2026-10-29, drag-lint 1.38.0-alpha</span>
   </div>
 </header>
 
@@ -153,22 +153,26 @@ uses
 Nothing to do: after Part A no cycle remains among these units.
 
 Fix it (mechanical, compile-gated):
-  cuts    : the INTERFACE coupling of this cycle (Part A: move globals into new leaf units)
+  dry run : drag-lint cycles --fix --project &lt;your.dproj&gt; --db ... --cycle 1
+  apply   : drag-lint cycles --fix --project &lt;your.dproj&gt; --db ... --cycle 1 --apply
+  cuts    : the INTERFACE coupling of this cycle (Part A: extract base classes into new leaf units)
   requires: the project builds with 0 errors before the fix (the dry run checks this)
 
 Verdict: mechanical (dry run; add --apply to write)
-Shadow tree: ...\draglint_cyclefix_163780\ (deleted at exit; --shadow-out keeps it)
-compile: baseline 5.7 s</code></pre>
-  <p class="cap">Real dry run on a copy of the demo pair with a small project file added, drag-lint 1.35.0-alpha, exit code 0, trimmed where the <code>...</code> are. <code>Customers</code> only keeps orders in a <code>TArray</code> field and takes one as a <code>const</code> parameter; it reads none of <code>TOrder</code>&rsquo;s members. So the plan extracts an empty <code>TOrderBase</code> into a new leaf unit <code>Orders.Untangle</code>, makes <code>TOrder</code> descend from it, and switches <code>FOrders</code> to <code>TArray&lt;TOrderBase&gt;</code>. After that <code>Customers</code> needs nothing from <code>Orders</code>.</p>
+Shadow tree: ...\draglint_cyclefix_49108\ (deleted at exit; --shadow-out keeps it)
+compile: baseline 1.4 s</code></pre>
+  <p class="cap">Real dry run on a copy of the demo pair with a small project file added, exit code 0, trimmed where the <code>...</code> are. <code>Customers</code> only keeps orders in a <code>TArray</code> field and takes one as a <code>const</code> parameter; it reads none of <code>TOrder</code>&rsquo;s members. So the plan extracts an empty <code>TOrderBase</code> into a new leaf unit <code>Orders.Untangle</code>, makes <code>TOrder</code> descend from it, and switches <code>FOrders</code> to <code>TArray&lt;TOrderBase&gt;</code>. After that <code>Customers</code> needs nothing from <code>Orders</code>.</p>
 
-  <p>Part B cuts one edge of a group that is already implementation-only. This is the three-unit group from the repository&rsquo;s larger <code>circular-demo</code> project, on 1.33.0-alpha:</p>
+  <p>Part B cuts one edge of a group that is already implementation-only. This is the three-unit group from the repository&rsquo;s larger <code>circular-demo</code> project (cycle 3 of its three groups, chosen with <code>--cycle 3</code>):</p>
   <pre><code>Fix it (mechanical, compile-gated):
+  dry run : drag-lint cycles --fix --project &lt;your.dproj&gt; --db ... --cycle 3
+  apply   : drag-lint cycles --fix --project &lt;your.dproj&gt; --db ... --cycle 3 --apply
   cuts    : demoblueprint -&gt; demoblueprint.viewmodel (routine-call inversion) (chosen)
   requires: the project builds with 0 errors before the fix (the dry run checks this)
 
 Verdict: mechanical (dry run; add --apply to write)
-Shadow tree: ...\shadow\
-compile: baseline 1.6 s</code></pre>
+Shadow tree: ...\draglint_cyclefix_21344\ (deleted at exit; --shadow-out keeps it)
+compile: baseline 1.3 s</code></pre>
   <p class="cap">Exit code 0. Above this block the dry run prints the whole plan: why the group cycles, which edge it cuts, every edit as current text and new text.</p>
 
   <h3>Step 2: what you accept or refuse</h3>
@@ -185,9 +189,9 @@ Applied: 3 file(s) written, 0 new; compile ok
   backup: ...\DemoBlueprint.Interfaces.pas -&gt; ...\DemoBlueprint.Interfaces.pas.BCK1
 Re-index: done
 Verified: the re-indexed `cycles` output matches the prediction
-compile: baseline 1.4 s, after 1.5 s</code></pre>
+compile: baseline 1.4 s, after 1.8 s</code></pre>
   <p class="cap">Exit code 0. The three-unit group is gone from the re-indexed <code>cycles</code> output; the other two groups of that project were left alone, as the plan predicted.</p>
-  <p>The apply on a copy of the demo pair (1.35.0-alpha) reported <code>Applied: 5 file(s) written, 1 new; compile ok</code> and <code>Verified</code>: the new unit is <code>Orders.Untangle.pas</code>, the other four are the two units, the <code>.dpr</code> and the <code>.dproj</code>. The re-indexed <code>cycles</code> then printed <code>No circular unit dependencies found.</code></p>
+  <p>The apply on a copy of the demo pair reported <code>Applied: 5 file(s) written, 1 new; compile ok</code> and <code>Verified</code>: the new unit is <code>Orders.Untangle.pas</code>, the other four are the two units, the <code>.dpr</code> and the <code>.dproj</code>. The re-indexed <code>cycles</code> then printed <code>No circular unit dependencies found.</code></p>
 </section>
 
 <section>
@@ -361,7 +365,7 @@ initialization
 </section>
 
 <footer>
-  All command output above is real output, with file paths shortened, run on scratch copies of <code>docs\examples\circular-uses-demo</code> and <code>circular-demo</code> from the drag-lint repository: the fix of the demo pair with drag-lint 1.35.0-alpha (a pre-release build of it, which still reported itself as 1.34.1-alpha), everything else with 1.33.0-alpha. Behaviour descriptions follow the drag-lint wiki page &ldquo;Circular Uses Report (cycles + fix plan)&rdquo; and the cycle-fix implementation plan, and were checked against the drag-lint 1.35.1-alpha source.
+  All command output above is real output, with file paths shortened, run on scratch copies of <code>docs\examples\circular-uses-demo</code> and <code>circular-demo</code> from the drag-lint repository: all of it with drag-lint 1.38.0-alpha on 2026-10-29. Behaviour descriptions follow the drag-lint wiki page &ldquo;Circular Uses Report (cycles + fix plan)&rdquo; and the cycle-fix implementation plan, and were checked against the drag-lint 1.38.0-alpha source.
 </footer>
 
 </div>

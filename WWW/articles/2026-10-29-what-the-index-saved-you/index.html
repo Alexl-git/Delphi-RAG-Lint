@@ -1,0 +1,80 @@
+<!--article
+title: What the Index Saved You
+date: 2026-10-29
+slug: what-the-index-saved-you
+summary: The new gain verb adds up what the index answered and what reading the source files instead would have cost, per verb and per day.
+-->
+
+<div class="wrap">
+
+<header class="masthead">
+  <span class="eyebrow">Delphi tooling &middot; the index</span>
+  <h1>What the Index Saved You</h1>
+  <p class="standfirst">An index answers a question with a few lines instead of making you, or your AI assistant, open the files. Until now that was a claim. <code>drag-lint gain</code> counts it.</p>
+  <div class="byline">
+    <span>Delphi 13 Florence &middot; RAD Studio 37.0</span>
+    <span>As of 2026-10-29, drag-lint 1.38.0-alpha</span>
+  </div>
+</header>
+
+<div class="note">
+  <span class="nlabel">Availability</span>
+  <p><code>gain</code> and the usage log are new in <strong>drag-lint 1.38.0-alpha</strong>. The output below is real output of that build, run against the Win32 platform library index (<code>C:\Projects\.drag-lint\library-Win32.sqlite</code>), as of 2026-10-29.</p>
+</div>
+
+<p>The question came out of working on <a href="https://www.htrmicronite.com">Micronite</a>, the quality and production-control software we ship to manufacturers: its code base is big enough that we kept saying the index &ldquo;saves a lot of reading&rdquo;, and nobody had a number. So the readers now keep one.</p>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">01 &mdash; What gets counted</span>
+    <h2>One line per answer</h2>
+  </div>
+  <p>Four reader commands answer from the index: <code>context</code>, <code>query --name</code>, <code>query --text</code> and <code>query find-callers</code>. Each one now appends one best-effort line to a per-user log, <code>%LOCALAPPDATA%\drag-lint\usage.log</code>: what the answer cost in tokens, and how many bytes of source it stood in for (the distinct files the answer drew from). Nothing in the log is your code &mdash; only counts. Set <code>DRAGLINT_USAGE_LOG=0</code> to switch it off. A log that cannot be written never changes a command&rsquo;s output.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">02 &mdash; Three questions</span>
+    <h2>Ask, then add up</h2>
+  </div>
+  <p>Where is <code>TStringList</code>, which resource string says &ldquo;Cannot create file&rdquo;, and what do I need to know before changing <code>TStringList</code>:</p>
+  <pre><code>drag-lint query --name TStringList --db library-Win32.sqlite
+drag-lint query --text "Cannot create file" --db library-Win32.sqlite --limit 3
+drag-lint context --task "modify System.Classes.TStringList" --db library-Win32.sqlite --format markdown</code></pre>
+  <pre><code>class        TStringList                    System.Classes.TStringList  forward at line 828
+1 match(es)</code></pre>
+  <p>The text query returns three file:line hits, for example <code>System.RTLConsts.pas:31:19 [pas/resourcestring] Cannot create file %s -&gt; System.RTLConsts.SFCreateError</code>. The <code>context</code> call returns a bundle of 7,524 estimated tokens: class surface, implementation slice and callers.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">03 &mdash; The total</span>
+    <h2>drag-lint gain</h2>
+  </div>
+  <pre><code>drag-lint gain</code></pre>
+  <pre><code>verb            calls  tokens_returned  tokens_avoided     ratio
+context             1             7524          223742     29.7x
+query               2              118          172365   1460.7x
+TOTAL               3             7642          396108     51.8x
+by day:
+  2026-10-29          3             7642          396108     51.8x</code></pre>
+  <p>Three answers cost 7,642 tokens. The source files they replaced come to about 396,000 tokens (bytes divided by four). <code>--since yyyy-mm-dd</code> limits the report to recent days and <code>--json</code> gives one object with <code>total</code>, <code>by_verb</code> and <code>by_day</code>.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">04 &mdash; Reading it honestly</span>
+    <h2>An estimate, not an invoice</h2>
+  </div>
+  <ul>
+    <li><strong>It is the upper bound.</strong> &ldquo;Avoided&rdquo; assumes the alternative was reading each whole source file. A careful reader opens less. Treat the ratio as an order of magnitude.</li>
+    <li><strong>Tokens returned are partly estimated.</strong> <code>context</code> and <code>query --text</code> are measured; <code>query --name</code> and <code>find-callers</code> are counted at 15 tokens per result row.</li>
+    <li><strong>Small projects give small ratios.</strong> On a two-unit scratch fixture the same three questions saved less than they cost (0.8x overall). The index pays off where the source is big, which is the case it exists for.</li>
+  </ul>
+</section>
+
+<footer>
+  All command output above is real output of drag-lint 1.38.0-alpha (deployed build), run on 2026-10-29 against the Win32 platform library DB (library-Win32.sqlite) with a fresh usage log. The path line that <code>gain</code> prints first is omitted. Behaviour of the log follows the wiki page &ldquo;Gain (counted savings)&rdquo;.
+</footer>
+
+</div>

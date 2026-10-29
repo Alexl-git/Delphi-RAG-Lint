@@ -63,6 +63,8 @@ The build refuses an article whose first 3000 characters of body have no link to
 - "We build drag-lint alongside our main product, Micronite -- quality and production-control software for manufacturers -- and the parsing questions below came straight out of that codebase."
 - "... and the cycle fixer was tried on copies of that product's own client project as well as on the small demos below." (2026-10-23, same opening clause as above -- do not reuse it again)
 - "drag-lint grew out of the code base of Micronite, our quality and production-control software for manufacturers, but the first menu we pointed this feature at was closer to home: drag-lint's own RAD Studio plugin." (2026-10-24)
+- "The question came out of working on Micronite, the quality and production-control software we ship to manufacturers: its code base is big enough that we kept saying the index saves a lot of reading, and nobody had a number." (2026-10-29, what-the-index-saved-you)
+- "The itch came from daily work on Micronite, the quality and production-control software we ship to manufacturers: ..." (2026-10-29)
 
 ## Add an article
 

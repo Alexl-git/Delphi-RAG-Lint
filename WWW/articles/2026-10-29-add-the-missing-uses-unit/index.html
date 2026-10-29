@@ -1,0 +1,130 @@
+<!--article
+title: Add the Missing Uses Unit
+date: 2026-10-29
+slug: add-the-missing-uses-unit
+summary: When you use a name whose unit is not in uses, drag-lint names the declaring unit, picks the right uses clause, checks for a circular reference and fixes it with one keystroke.
+-->
+
+<div class="wrap">
+
+<header class="masthead">
+  <span class="eyebrow">Delphi tooling &middot; uses clauses</span>
+  <h1>Add the Missing Uses Unit</h1>
+  <p class="standfirst">You type <code>CodeSite.Send('x');</code> and the IDE says the identifier is undeclared. It does not say which unit declares it, or which of the two uses clauses should get it. The new <code>unit-missing-from-uses</code> rule does both, and fixes it.</p>
+  <div class="byline">
+    <span>Delphi 13 Florence &middot; RAD Studio 37.0</span>
+    <span>As of 2026-10-29, drag-lint 1.38.0-alpha</span>
+  </div>
+</header>
+
+<div class="note">
+  <span class="nlabel">Availability</span>
+  <p><code>unit-missing-from-uses</code> is new in <strong>drag-lint 1.38.0-alpha</strong>. Every output below is real output of the deployed 1.38.0-alpha build, run on a small scratch fixture.</p>
+</div>
+
+<p>The itch came from daily work on <a href="https://www.htrmicronite.com">Micronite</a>, the quality and production-control software we ship to manufacturers: a logging call, a missing <code>uses</code> entry, and a hunt for the unit name, week after week.</p>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">01 &mdash; The finding</span>
+    <h2>Name the unit, name the clause</h2>
+  </div>
+  <p>The fixture has a <code>CodeSiteLogging</code> unit that declares a global <code>CodeSite</code>, and a unit that uses it without listing it:</p>
+  <pre class="lex"><code>unit uMain;
+interface
+procedure Run;
+implementation
+procedure Run;
+begin
+  CodeSite.Send('x');
+end;
+end.</code></pre>
+  <pre><code>drag-lint lint uMain.pas --db mu.sqlite --rule unit-missing-from-uses</code></pre>
+  <pre><code>uMain.pas:7:3  [warning] unit-missing-from-uses: 'CodeSite' is declared in unit CodeSiteLogging -- add it to the implementation uses clause
+1 finding(s)</code></pre>
+  <p class="cap">The rule uses the project index, so the unit that declares the name is a lookup, not a guess.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">02 &mdash; Which clause</span>
+    <h2>Interface if the interface needs it, else implementation</h2>
+  </div>
+  <p>If the name is used anywhere in the interface section &mdash; a field type, a parameter, a constant &mdash; the unit belongs in the interface <code>uses</code>. Otherwise it goes in the implementation <code>uses</code>, which keeps the dependency out of every unit that uses yours. The first example above is implementation-only. This one needs the interface:</p>
+  <pre class="lex"><code>unit uForm;
+interface
+type
+  TFormLog = class
+    FLog: TCodeSiteLogger;
+  end;
+implementation
+end.</code></pre>
+  <pre><code>uForm.pas:5:11  [warning] unit-missing-from-uses: 'TCodeSiteLogger' is declared in unit CodeSiteLogging -- add it to the interface uses clause</code></pre>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">03 &mdash; The fix</span>
+    <h2>Three ways to apply it</h2>
+  </div>
+  <ul>
+    <li><strong>RAD Studio:</strong> caret on the flagged line, <strong>Ctrl+Alt+U</strong> (menu drag-lint &gt; Uses &amp; Dependencies &gt; Quick-Fix: Add Unit for Undeclared at Cursor). One undo reverts it.</li>
+    <li><strong>VS Code or any LSP client:</strong> the light bulb on the diagnostic offers &ldquo;Add CodeSiteLogging to the implementation uses clause&rdquo;.</li>
+    <li><strong>Command line:</strong> <code>--fix</code> previews, <code>--fix --apply</code> writes (a <code>.bak</code> is kept).</li>
+  </ul>
+  <pre><code>drag-lint lint uMain.pas --db mu.sqlite --rule unit-missing-from-uses --fix</code></pre>
+  <pre><code>  replace lines 4..4 -> "implementation\n\nuses\n  CodeSiteLogging;"
+autofix: 1 fixable finding(s) -- pass --apply to write</code></pre>
+  <p>With <code>--apply</code> the unit becomes:</p>
+  <pre class="lex"><code>unit uMain;
+interface
+procedure Run;
+implementation
+
+uses
+  CodeSiteLogging;
+procedure Run;
+begin
+  CodeSite.Send('x');
+end;
+end.</code></pre>
+  <p class="cap">The section had no <code>uses</code> clause, so one was created. An existing clause keeps its own layout. When one file lacks several units, each clause gets a single edit.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">04 &mdash; The cycle check</span>
+    <h2>Not every interface edge is safe</h2>
+  </div>
+  <p>Say <code>uCycB</code> already uses <code>uCycA</code> in its interface, and now <code>uCycA</code> declares a field of type <code>TCycB</code>. Adding <code>uCycB</code> to <code>uCycA</code>&rsquo;s interface would close a loop and the compiler would stop with E2047. The rule walks the uses graph first:</p>
+  <pre><code>uCycA.pas:5:8  [warning] unit-missing-from-uses: 'TCycB' is declared in unit uCycB -- add it to the implementation uses clause and move its interface use there (the interface uses clause would create a circular unit reference: uCycA -> uCycB -> uCycA)</code></pre>
+  <p>The message recommends the implementation clause and names the cycle path. Its fix preview writes <code>uses uCycB</code> into the implementation section. (The wiki page also documents a second, interface quick-fix marked with a warning; we did not exercise it here.)</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">05 &mdash; Ambiguity</span>
+    <h2>Several candidates are listed, not fixed</h2>
+  </div>
+  <p>If two units declare the same name, guessing would be worse than silence:</p>
+  <pre><code>uAmb.pas:5:8  [warning] unit-missing-from-uses: 'TWidget' is declared in units uAmb1, uAmb2 -- add one of them to the uses clause</code></pre>
+  <p>No fix is offered; you pick the unit.</p>
+</section>
+
+<section>
+  <div class="sec-head">
+    <span class="sec-num">06 &mdash; Limits</span>
+    <h2>Honest edges</h2>
+  </div>
+  <ul>
+    <li><strong>The index must be current.</strong> The finding appears after the unit is reindexed (on save in the IDE). After <code>--fix --apply</code> the CLI itself notes that the index is stale and reports 0 findings until you reindex; after reindexing, both fixed units lint clean.</li>
+    <li><strong>Precision over recall.</strong> A file that uses a unit the index does not know gets no findings, because that unit could declare the name. In our fixture, a unit with <code>uses NoSuchUnit;</code> and an unbound <code>CodeSite</code> reports 0 findings.</li>
+    <li><strong>Deliberately quiet elsewhere.</strong> Per the wiki page, it also stays silent for locals, members after a dot, names that may be inherited, and inactive <code>{$IFDEF}</code> branches. Turn it off with <code>"disabled": ["unit-missing-from-uses"]</code> in <code>drag-lint-lint.json</code>, or review one site with <code>// dl:ok unit-missing-from-uses -- why</code>.</li>
+  </ul>
+</section>
+
+<footer>
+  As of 2026-10-29, all command output above is real output of the deployed drag-lint 1.38.0-alpha, run on a scratch fixture indexed with <code>drag-lint index --all</code>. The fixture uses a stub <code>System.pas</code> instead of a platform library. Informational notes the CLI prints to stderr are omitted. Behaviour not run here follows the wiki page &ldquo;Missing unit in uses&rdquo;.
+</footer>
+
+</div>
