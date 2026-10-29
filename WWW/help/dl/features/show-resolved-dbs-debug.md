@@ -7,7 +7,7 @@ group: indexing
 order: 10010
 since: 0.60.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Show Resolved DBs (debug)

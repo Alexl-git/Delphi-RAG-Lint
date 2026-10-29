@@ -7,7 +7,7 @@ group: indexing
 order: 10007
 since: 0.2.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Rebuild Index for This Project

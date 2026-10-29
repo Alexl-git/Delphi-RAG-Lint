@@ -7,7 +7,7 @@ group: editor-integration
 order: 110008
 since: 1.13.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # ide-release

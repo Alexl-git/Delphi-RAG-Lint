@@ -7,7 +7,7 @@ group: editor-integration
 order: 110016
 since: 1.26.1-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Register the MCP server (Claude Code, VS Code, Cursor)

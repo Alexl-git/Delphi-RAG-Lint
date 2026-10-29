@@ -16,10 +16,24 @@ capability is also exposed as a standalone CLI verb, and over stdio by the
 bundled language server (the [Features](Features) page lists hover among
 the methods `drag-lint lsp` implements):
 ```
-drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json]
+drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json] [--write-back]
 ```
 `--qname` is the fully qualified symbol; `--format` selects plain text,
-markdown, or JSON.
+markdown, or JSON. `--write-back` opens the index writable so a property type
+recovered from an ancestor (below) is stored on the row; without it the hover
+never writes.
+
+## What the card says about types
+
+A property, field, var, const, parameter or local variable shows its declared
+type (`Text: string`). A bare re-publication such as `property Text;` stores no
+type of its own, so the card climbs the ancestors -- the same climb the
+converter's property tree uses, bridging an unlinked ancestor by scope -- and
+names the class that declares it: `Text: string (declared in
+dxBar.TdxBarWindowItem)`. The JSON form carries the same as `type` and
+`declared_in`, and `signature` holds the resolved type. The language server
+opens its indexes read-only, so it keeps the answer in a session cache instead
+of the database.
 
 ## What the card says about effects
 
@@ -36,6 +50,21 @@ see [`ask effects`](ask-effects).
 
 Hovering a forward declaration (`TFoo = class;`) shows the REAL declaration,
 led by `forward declaration -> line N`.
+
+## When the engine is slow
+The IDE never waits for the engine. A hover (the menu command or a mouse
+dwell) is sent and the card appears when the answer arrives:
+
+* A mouse-dwell card is shown only if the pointer is still over the same
+  editor and the same identifier (anywhere along it, and within about half a
+  line above or below). Otherwise the answer is dropped; pointing back at the
+  identifier shows it at once from the cache.
+* Only one dwell hover is asked at a time. Moving to another identifier
+  cancels the previous question.
+* If the engine has left a question unanswered for about 3 seconds, the status
+  strip reads `drag-lint: engine busy` and no new hover is asked; findings on
+  the line still show. An engine silent for 60 seconds with questions pending
+  is restarted automatically.
 
 ## What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the index when

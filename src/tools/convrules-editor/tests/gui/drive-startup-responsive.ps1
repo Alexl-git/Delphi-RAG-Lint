@@ -6,9 +6,13 @@
 # Now the classification waits for the Unit Rules tab (ClassifyDeferred); showing the tab classifies.
 # Usage: pwsh -NoProfile -File drive-startup-responsive.ps1 -Exe <path\ConvRulesEditor.exe>
 #        (a frozen drag-lint.exe beside it; its Win64 library index must answer). Run under gui-lock.ps1.
-# The pre-fix exe FAILS startup.no.library.list (the RED); the positive control
+# The pre-fix exe FAILS startup.no.library.list (the RED); the pre-STARTUP2 exe FAILS startup.form.answers and
+# unitrules.show.answers (the descendant sets / the library list on the main thread); the positive control
 # (unitrules.classified) passes on both: the rows are classified once the list is on screen.
 param([string]$Exe)
+# Longest span (ms) the main thread may leave the busy query unanswered: the progress window appears after 400 ms,
+# one sample waits up to 500 ms per query; a blocked load measured 6500 (sets) and 11500 (library list).
+$MaxBlockedLimitMs = 2000
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
@@ -19,6 +23,11 @@ public static class SR {
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr h);
+  [StructLayout(LayoutKind.Sequential)] public struct RC { public int L, T, R, B; }
+  [StructLayout(LayoutKind.Sequential)] public struct PT { public int X, Y; }
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RC r);
+  [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr h, ref PT p);
   [DllImport("user32.dll", EntryPoint="SendMessageW")] public static extern IntPtr Send(IntPtr h, uint m, IntPtr w, IntPtr l);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern uint RegisterWindowMessage(string s);
@@ -39,6 +48,16 @@ public static class SR {
     return (long)r;
   }
   public static string TxtT(IntPtr h) { var s = new StringBuilder(1024); IntPtr r; SendMessageTimeoutSB(h, 0x000D, (IntPtr)1024, s, 2, 500, out r); return s.ToString(); }
+  /* The LEFTMOST combo box in the second row of the top panel (the From picker): its handle, or 0. Row 2 = client y 60..100 of its parent. */
+  public static IntPtr FromCombo(IntPtr main) {
+    IntPtr best = IntPtr.Zero; int bestX = int.MaxValue;
+    foreach (var c in Kids(main)) {
+      if (Cls(c) != "TComboBox" || !IsWindowVisible(c)) continue;
+      RC rc; GetWindowRect(c, out rc); PT p; p.X = rc.L; p.Y = rc.T; ScreenToClient(GetParent(c), ref p);
+      if (p.Y >= 60 && p.Y <= 100 && p.X < bestX) { bestX = p.X; best = c; }
+    }
+    return best;
+  }
   /* Click the page-control tab captioned NAME (TCM_GETITEMW / TCM_GETITEMRECT through the editor's memory). */
   public static bool ClickTab(IntPtr main, string name) {
     uint pid; GetWindowThreadProcessId(main, out pid);
@@ -94,6 +113,7 @@ public static class SR {
 '@
 $script:pass = 0; $script:fail = 0
 trap { $script:fail++; "FAIL  driver.crash  $($_.Exception.Message) [line $($_.InvocationInfo.ScriptLineNumber)]"; "driver crashed: $script:pass pass / $script:fail fail"; exit 1 }
+. "$PSScriptRoot\vcl-atoms.ps1"; 'NOTE  ' + (VclAtomsReclaim)   # ATOMLOCK: start from a reclaimed atom table (idempotent)
 function Check($name, $cond, $detail = '') { if ($cond -and $env:DRIVE_FORCE_FAIL -ne $name) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Find($parent, $cls) { [SR]::Kids($parent) | Where-Object { [SR]::Cls($_) -eq $cls } }
 function WriteAscii($path, $text) { [IO.File]::WriteAllText($path, ($text -replace "`r?`n", "`r`n"), [Text.ASCIIEncoding]::new()) }
@@ -192,9 +212,10 @@ try {
   "INFO  first responsive $($w.FirstResponsiveMs) ms, settled $($w.SettledMs) ms after the window ($windowMs ms after launch); longest unanswered span $($w.MaxBlockedMs) ms"
   Check 'startup.settled' ($null -ne $w.SettledMs) "settled=$($w.SettledMs) ms"
   Check 'startup.no.library.list' (-not $w.LibList) "(library unit list read at $($w.LibMs) ms)"
-  # Not a check: the --form start-up also loads the TControl/TComponent/TPersistent descendant sets on the main
-  # thread (~6-7 s here, both exes) -- a separate block, reported, not this fix.
-  "INFO  longest unanswered span $($w.MaxBlockedMs) ms (descendant sets of --form included)"
+  # STARTUP2: the --form start-up's TControl/TComponent/TPersistent descendant sets (~6.5 s on library-Win64) ran on
+  # the main thread with no answer at all; they now run behind the progress window, whose modal loop keeps answering
+  # (busy = 2). The pre-STARTUP2 exe FAILS this (the RED): ~6500 ms unanswered.
+  Check 'startup.form.answers' ($w.MaxBlockedMs -lt $MaxBlockedLimitMs) "longest unanswered span $($w.MaxBlockedMs) ms (limit $MaxBlockedLimitMs; descendant sets of --form included)"
   $st = Status $main
   "INFO  status: $st"
 
@@ -212,6 +233,24 @@ try {
   Check 'unitrules.harvest.fed' ($stat -ne '(no harvest row)') "(the request unit's uses reached the Unit Rules list; Find missing box found=$($null -ne $chk))"
   Check 'unitrules.classified' ($stat -in 'library', 'project' -or $stat -like 'via scope*') "Vcl.StdCtrls status='$stat'; status line: $(Status $main)"
   "INFO  tab show: library list read=$($w2.LibList), settled $($w2.SettledMs) ms, longest unanswered span $($w2.MaxBlockedMs) ms"
+  # STARTUP2: showing the tab reads the Win64 library unit list (11.5 s); it now runs behind the progress window
+  # (Cancel works), so the editor keeps answering. The pre-STARTUP2 exe FAILS this (the RED).
+  Check 'unitrules.show.answers' ($w2.LibList -and $w2.MaxBlockedMs -lt $MaxBlockedLimitMs) "library list read=$($w2.LibList), longest unanswered span $($w2.MaxBlockedMs) ms (limit $MaxBlockedLimitMs)"
+
+  # --- 3. LIBDESC: dropping the From picker loads the class lists (library-wide TComponent / TControl descendants).
+  # They used to run on the main thread (no answer at all); now behind the progress window. The pre-LIBDESC exe FAILS this (the RED).
+  $cb = [SR]::FromCombo($main)
+  Check 'classes.combo.found' ($cb -ne [IntPtr]::Zero) 'the From picker (leftmost combo of row 2)'
+  if ($cb -ne [IntPtr]::Zero) {
+    [void][SR]::PostMessage($cb, 0x014F, [IntPtr]1, [IntPtr]::Zero)   # CB_SHOWDROPDOWN -> CBN_DROPDOWN -> CbLoadClasses
+    Start-Sleep -Milliseconds 300
+    $w3 = Watch $p.Id $main 240
+    $w3.Children | ForEach-Object { "INFO  child (classes) $_" }
+    "INFO  class lists: settled $($w3.SettledMs) ms, longest unanswered span $($w3.MaxBlockedMs) ms; status: $(Status $main)"
+    Check 'classes.engine.ran' (@($w3.Children).Count -gt 0) "engine children seen: $(@($w3.Children).Count)"
+    Check 'classes.load.answers' (@($w3.Children).Count -gt 0 -and $w3.MaxBlockedMs -lt $MaxBlockedLimitMs) "longest unanswered span $($w3.MaxBlockedMs) ms (limit $MaxBlockedLimitMs)"
+    Check 'classes.loaded' ((Status $main) -like '*classes available*') "status: $(Status $main)"
+  }
 } finally {
   if ($null -ne $p -and -not $p.HasExited) { $p.Kill($true); [void]$p.WaitForExit(15000) }
   try { [IO.Directory]::Delete($tmp, $true) } catch { }

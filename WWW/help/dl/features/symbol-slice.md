@@ -7,7 +7,7 @@ group: search-navigation
 order: 20031
 since: 0.17.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Symbol Slice

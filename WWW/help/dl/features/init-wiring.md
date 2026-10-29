@@ -7,7 +7,7 @@ group: editor-integration
 order: 110009
 since: 1.38.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # init: one command from a project to a wired AI client

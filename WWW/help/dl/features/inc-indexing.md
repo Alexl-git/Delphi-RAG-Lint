@@ -7,7 +7,7 @@ group: indexing
 order: 10002
 since: 1.37.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Include-file indexing and IF evaluation

@@ -581,6 +581,24 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FindCallersByName(const ACalleeName: string): TArray<TReference>              ;
+    /// <summary>For each name, the number of DISTINCT call sites FindCallersByName would
+    /// return for it, counted in ONE query per call instead of one materialised row set
+    /// per name.</summary>
+    /// <param name="ANames">Callee names; matched COLLATE NOCASE, like FindCallersByName.
+    /// Duplicates are allowed and each gets its own slot. An empty array answers an empty
+    /// array without touching the database.</param>
+    /// <returns>Result[I] = count of distinct (file, start line) pairs among the refs whose
+    /// name_text equals ANames[I]; same length and order as ANames.</returns>
+    /// <remarks>
+    /// <para>A call site is (file_id, start_line) WITHIN this store -- the same dedup
+    /// draglint/callerCounts applies to FindCallersByName's rows (a `T.Run;` carries both a
+    /// 'call' and a 'member-access' ref on one line). Counting across several stores still
+    /// needs the rows: a site seen by two stores is one site.</para>
+    /// <para>Exists because draglint/callerCounts asked FindCallersByName once per routine
+    /// and resolved a path per returned row: 4.25 million rows and as many path queries for
+    /// DevExpress dxBar.pas, 13 minutes. Read-only; served by idx_refs_name_nocase.</para>
+    /// </remarks>
+    function CountCallerSitesByNames(const ANames: TArray<string>): TArray<Integer>        ;
     /// <summary>Every symbol id that appears as the target of at least one reference.</summary>
     /// <returns>Distinct non-zero refs.symbol_id values; empty if the index has no refs.</returns>
     /// <remarks>

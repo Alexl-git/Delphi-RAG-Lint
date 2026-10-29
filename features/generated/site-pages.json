@@ -384,8 +384,8 @@
     "version": "1.36.0-alpha"
   },
   "features/hover-at-cursor.md": {
-    "hash": "e164660c8856d0de9cb269c661ca9d299e11ee75cc72b49b5f509cf7f682ee91",
-    "version": "1.36.0-alpha"
+    "hash": "6c866466e41c8f75813bdfb5f46453886904193b686812d0ded062930f5bee9c",
+    "version": "1.38.0-alpha"
   },
   "features/ide-help-line.md": {
     "hash": "30482c8823d20e8a67adaf94393a3cf53d17d745ff340d2ff49db2e1105944d2",

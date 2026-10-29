@@ -428,6 +428,7 @@ uses
   System.IOUtils
   , System.StrUtils
   , Vcl.Dialogs
+  , ConvRules.InputGate // gateleak: RunNativeDialog, the re-entrancy guard of the Add... dialog
   , Vcl.Graphics
   , ConvRules.InheritanceEngine
   , ConvRules.Glyph
@@ -1317,7 +1318,10 @@ begin
   try
     Dlg.Filter := 'Delphi units and projects (*.pas;*.dpr;*.dproj)|*.pas;*.dpr;*.dproj';
     Dlg.Options:= Dlg.Options + [ofAllowMultiSelect, ofFileMustExist];
-    if Dlg.Execute then
+    // GATELEAK: the dialog's native loop never calls Application.OnMessage, so a WM_COMMAND(Add...)
+    // posted meanwhile reached here again and nested a second Open dialog. AddSources runs after
+    // the dialog is gone: it pumps behind InputGate, which refuses a second Add... there.
+    if RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
       AddSources(Dlg.Files.ToStringArray);
   finally
     Dlg.Free;

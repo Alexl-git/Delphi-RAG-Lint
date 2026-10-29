@@ -7,7 +7,7 @@ group: editor-integration
 order: 110018
 since: 1.35.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Output encoding (--output-encoding)

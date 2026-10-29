@@ -35,8 +35,9 @@ uses
       ConvRules.BlockOps
   , ConvRules.WorkingSet
   , ConvRules.RuleCatalog
-  , ConvRules.TextEncoding
-  ; // CheckApplyIntegrity, the compose gate
+  , ConvRules.TextEncoding // CheckApplyIntegrity, the compose gate
+  , ConvRules.InputGate // gateleak: RunNativeDialog, the re-entrancy guard of the curation file dialogs
+  ;
 
 type
   /// <summary>The modal curation window.</summary>
@@ -931,7 +932,7 @@ begin
     Dlg.Filter:= 'Conversion rules (*.rules)|*.rules|Cast library (*.castlib)|*.castlib|'
       + 'reFind rules (*.txt)|*.txt|All files (*.*)|*.*';
     Dlg.Options:= Dlg.Options + [ofFileMustExist];
-    if not Dlg.Execute then
+    if not RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
       Exit;
     if FSet.IndexOfPath(Dlg.FileName) >= 0 then
     begin
@@ -994,7 +995,7 @@ begin
     Dlg.DefaultExt:= Copy(ExtractFileExt(ADefault), 2, MaxInt);
     Dlg.FileName:= ADefault;
     Dlg.Options:= Dlg.Options - [ofOverwritePrompt]; // we back up, never clobber
-    if Dlg.Execute then
+    if RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
       Result:= Dlg.FileName;
   finally
     Dlg.Free;
@@ -1198,7 +1199,7 @@ begin
     Dlg.Filter:= 'Conversion rules (*.rules)|*.rules|Cast library (*.castlib)|*.castlib|'
       + 'reFind rules (*.txt)|*.txt|All files (*.*)|*.*';
     Dlg.Options:= Dlg.Options + [ofFileMustExist];
-    if not Dlg.Execute then
+    if not RunNativeDialog(function: Boolean begin Result:= Dlg.Execute; end) then
       Exit;
     InPath:= Dlg.FileName;
   finally

@@ -9,7 +9,66 @@ Open it when picking the next converter job, not at session start.
 Sizes S/M/L; model = haiku / sonnet / session (owner rule 2a). **Measure against the tree
 before working on an item.**
 
-## State 2026-10-26 (convrules-editor-31) -- supersedes everything below
+## State 2026-10-28 (convrules-editor-31) -- adds to the 10-26 state below
+
+* **SHIPPED 10-27/28 (ENGINE-merged to local main):** conv/regreview -> 4582c280 (15 registry entries
+  re-verified, curate busy-guard); conv/chainform -> d837c296 (second Rule chains request, GateBusy);
+  conv/libdesc + conv/startup2 -> 84f17966 (class lists + library load behind the progress window).
+  CHAIN-1 T1-T6 and D2 split landed earlier (see 10-27 handoffs). Smoke-test group for 1.37.0
+  (docs\SMOKE-TEST-1.37.0.html, Converter group, 16 steps) written 10-28.
+* **READY conv/dlggap bb1593cc** (gateleak + dlggap + gui-lock token) sent to ENGINE 2026-10-28. A/B vs a
+  main 84f17966 build (C:\TEMP\claude\lanes\1027conv\agent-mainab\ab.txt): unit-picker 3/2 on BOTH,
+  toolbar 41/0 on both, save-encoding A 8/5 vs B 12/3, glyph-link A 5 vs B 7 fails -> not a dlggap
+  regression.
+* **DRVLIB (new, M, next):** the GUI drivers fail on MAIN since libdesc/startup2: an unexpected
+  progress window or "Add unit (#use)" picker is up (unit-picker picker.opens, save-encoding
+  save.nonascii.asks, glyph-link automatch/saveas). First re-run on an IDLE machine (10-28 runs were at
+  100% CPU from engine lanes), then fix the drivers' waits. Also file-menu cleanup crash line 329
+  (temp dir locked; same wait-for-exit fix as 8c74d790), and the convert-encoding 15-min TIMEOUT.
+* **OWNER RULINGS 2026-10-28 (via ENGINE):**
+  * **migtypo HOLD.** Source of the name: vendor `FireDAC_Migrate_BDE.rules:36` spells
+    `TDBScreenCursors`; today's Data.DB has only `TDBScreenCursor` (dcrDefault, dcrHourGlass,
+    dcrSQLWait, dcrOther). The original source is trusted as once compilable; check against an
+    old-platform index (Q2, owner) before changing the vendor spelling.
+  * **MIGTGT (new, M):** a #migrate / rename whose TARGET does not resolve in the platform library DB
+    or the project DB -> warning mark, rename skipped. Type names rename too, not only members.
+  * **ENUMMAP (new, M):** old-vs-new enum member map by the name after the lowercase prefix, never by
+    ordinal (dcrX -> gcrX; gcrNone is ordinal 0); explicit #mapping when matching fails; warn on each
+    unmatched member (dcrOther) the .pas code uses. Needs the old platform indexed (Q2).
+  * **D5 inherited .dfm:** convert ROOT first down the chain. Verified on DMTEST: the child .pas
+    redeclares nothing; the child .dfm also keeps property-less container entries, order-only
+    entries `inherited X: TField [n]` (44 of 52 in dmDrawData.dfm), and collection properties
+    (ParamData) streamed WHOLE. Engine side (type rename via #migrate, `inherited ... [n]` retype,
+    collection rules in the child): INBOX-converter-to-engine-migrate-type-and-inherited-headers.md.
+  * **C8CHAIN (new, M) -- OWNER RULING Q5 2026-10-28, replaces "never blocking":** build an
+    inheritance DEPENDENCY GRAPH over the run's units and walk each chain to the very original
+    (A inherits B inherits C: convert C, B, A). No inherited unit converts before its ancestor is
+    converted. Per ancestor: in the same batch -> order it first; not in the batch -> decide
+    "already converted?" by searching the ancestor for the rule books' From types; still there ->
+    offer to convert the ancestor first and insert it into the batch ahead (root first); none
+    left -> treat as converted. Today `AncestorChain` offers only ancestors whose .dfm declares or
+    re-opens one of the descendant's instances (an intermediate class that re-opens none is
+    skipped), and E7 is a warning with "anyway": both change. Engine already skips a child whose
+    ancestor is unconverted (`ancestor_state` "unconverted").
+  * **Q2 (owner):** Delphi 12 is on this machine (may not run); Delphi 5 is on another VM. Indexing
+    needs only the library SOURCES, not a working IDE: copy D5's `Source\` tree here and index it as
+    a separate library DB for the old-vs-new comparison (MIGTGT / ENUMMAP / migtypo).
+* **conv/dlggap MERGED** by ENGINE (9269c588), owner pushed main 97a99bc4.
+* **DOCSCHECK-C3 (S, after the reboot):** featuregen 1.38 check C3 flags the rule-chains wiki page
+  ("does not yet warn ... planned as CHAIN-2" on a shipped entry; waived as triage). Reword it, or
+  split CHAIN-2 into its own planned entry. Details: C:\TEMP\claude\lanes\gaps\agent-ki-docscheck\REPORT.md.
+* **NEW backlog (from the dlggap lane):**
+  * gui-lock `-Acquire` timeout is ignored by the runners (they loop until exit 0).
+  * drive-book-depth uses fixed sleeps; replace them with WaitIdle.
+  * `HarvestFormTypes` unused locals (lint).
+  * the native MessageBox loop is not gated (ConvRulesEditor.dpr:313): a posted command under a
+    MessageBox is not refused by NativeLoopVerdict (it only gates RunNativeDialog).
+  * Unregistered features (featuregen): Mappings, Glyph, Examine, Unit Rules tab, inherited offer,
+    scope validation, D2 split.
+  * CHAIN-1 E2: the engine matches PAS names case-INsensitively by bare name, while the editor
+    compares exactly. Check, and align the editor.
+
+## State 2026-10-26 (convrules-editor-31) -- historical
 
 * Deep review R1-R7, the test-kit gaps, ENC-a, the re-pin (1.35.0-alpha-20261025-125433) and FG-M are
   CLOSED: lane A 985c3447 (R1, R4 = cancel/stop restores partly reached units, R5), lane B 197fca60 (R2

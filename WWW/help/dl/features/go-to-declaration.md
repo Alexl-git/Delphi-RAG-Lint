@@ -7,7 +7,7 @@ group: search-navigation
 order: 20012
 since: 0.43.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # Go to Declaration

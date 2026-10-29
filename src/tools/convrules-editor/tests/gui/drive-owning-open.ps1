@@ -180,6 +180,7 @@ public static class W {
 '@
 $script:pass = 0; $script:fail = 0
 trap { $script:fail++; "FAIL  driver.crash  $($_.Exception.Message) [line $($_.InvocationInfo.ScriptLineNumber)]"; "driver crashed: $script:pass pass / $script:fail fail"; exit 1 }
+. "$PSScriptRoot\vcl-atoms.ps1"; 'NOTE  ' + (VclAtomsReclaim)   # ATOMLOCK: start from a reclaimed atom table (idempotent)
 function Check($name, $cond, $detail = '') { if ($cond -and $env:DRIVE_FORCE_FAIL -ne $name) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
 function WaitFor($procId, $caption, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
@@ -218,6 +219,32 @@ function DblClickRow($lb, $idx) {
   [void][W]::PostMessage($lb, 0x0203, [IntPtr]1, $lp); [void][W]::PostMessage($lb, 0x0202, [IntPtr]::Zero, $lp)
 }
 
+# STARTUP2: a --form start-up loads the TControl / TComponent / TPersistent class sets behind the progress window
+# (~6 s), and the editor REFUSES a click or menu command made meanwhile (N7/N11 InputGate). Wait until it is idle:
+# no progress window, the main window enabled, and 'ConvRulesEditor.Busy' answering idle, on 2 s of polls.
+Add-Type @"
+using System; using System.Runtime.InteropServices;
+public static class SU {
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern uint RegisterWindowMessage(string s);
+  [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint m, IntPtr w, IntPtr l, uint f, uint ms, out IntPtr r);
+  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
+  /* 2 = busy, 1 = idle, 0 = an editor without the query. No answer within 500 ms = blocked = busy. */
+  public static bool Busy(IntPtr main) {
+    uint msg = RegisterWindowMessage("ConvRulesEditor.Busy"); IntPtr r;
+    if (SendMessageTimeout(main, msg, IntPtr.Zero, IntPtr.Zero, 2, 500, out r) == IntPtr.Zero) return true;
+    return (long)r == 2;
+  }
+}
+"@
+function WaitStartIdle($procId, $main, $sec) {
+  $t0 = Get-Date; $idleSince = $null
+  while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
+    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' }).Count -gt 0) -or -not [SU]::IsWindowEnabled($main) -or [SU]::Busy($main)
+    if ($busy) { $idleSince = $null } elseif ($null -eq $idleSince) { $idleSince = Get-Date } elseif (((Get-Date) - $idleSince).TotalSeconds -ge 2) { return $true }
+    Start-Sleep -Milliseconds 250
+  }
+  return $false
+}
 $tmp = Join-Path $env:TEMP ('owningopen-' + [guid]::NewGuid().ToString('N').Substring(0,8))
 New-Item -ItemType Directory -Path $tmp | Out-Null
 $book1 = Join-Path $tmp 'Book1.rules'
@@ -231,6 +258,7 @@ try {
   $main = [IntPtr]::Zero; $t0 = Get-Date
   while ($main -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500; $main = [W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TConvRulesForm' } | Select-Object -First 1; if ($null -eq $main) { $main = [IntPtr]::Zero } }
   Check 'main.window' ($main -ne [IntPtr]::Zero)
+  if (-not (WaitStartIdle $p.Id $main 90)) { "INFO  start-up: the editor was still busy after 90 s" }
   Start-Sleep -Seconds 2
   [void][W]::ClickTab($main, 'Classes'); Start-Sleep -Milliseconds 500
   # The Classes list is the VISIBLE check list box holding the class rows: the Work list
