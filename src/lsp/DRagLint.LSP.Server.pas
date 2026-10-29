@@ -4290,6 +4290,42 @@ begin
   end;
 end;
 
+function HoverResolvedCallers(const AStore: ISymbolStore; const ABareName: string; const ASel: TSymbol): TQueryCallerRows;
+{ The hover bundle's resolved caller rows from one store: every resolved caller
+  of ABareName, then -- RB-5 (1.38) -- the sites that reach the HOVERED method
+  only through the interface it implements, as `find-callers --resolved` lists
+  them (target_qname = the method, via = the interface method). Without them
+  every such row named the interface as its target, the popup picked none, and
+  a method called only through its interface read "0 callers".
+  BOUNDED: the dispatch walk runs for the hovered QName's own symbols only,
+  never for every same-named target the name query matched.
+  Pinned by run_lsp_hover_via_callers_guard.ps1. }
+var
+  Acc: TList<TQueryCallerRow>;
+begin
+  Result:= ResolvedCallersForName(AStore, ABareName);
+  if ASel.Kind not in [skProcedure, skFunction, skMethod] then Exit;
+  Acc:= TList<TQueryCallerRow>.Create;
+  try
+    Acc.AddRange(Result);
+    for var TS: TSymbol in AStore.FindSymbolsByQualifiedName(ASel.QualifiedName) do
+      if TS.Kind in [skProcedure, skFunction, skMethod] then Acc.AddRange(DispatchCallersOf(AStore, TS.Id));
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+  end;
+end;
+
+procedure AddViaKeys(const AObj: TJSONObject; const ARow: TQueryCallerRow);
+{ RB-5: a via row names the interface method, with the keys and the rule that
+  `find-callers --resolved --json` uses; a direct row gains no key. }
+begin
+  if ARow.Via = '' then Exit;
+  AObj.AddPair('via'     , ARow.Via    );
+  AObj.AddPair('via_kind', ARow.ViaKind);
+  if ARow.ViaEdge = 'ambiguous' then AObj.AddPair('via_edge', ARow.ViaEdge);
+end;
+
 procedure TLSPServer.HandleHoverBundle(const AId: TJSONValue; const AParams: TJSONObject);
 { ONE reply carrying everything the IDE popup used to gather in four round
   trips. See THoverComputation and the unit header of DRagLint.Query.Callers
@@ -4453,7 +4489,7 @@ begin
         every row they could return would be about a same-named routine. }
       if not LocalScoped then
       for var i:= 0 to High(Search) do
-        for var R in ResolvedCallersForName(Search[i], BareName) do
+        for var R in HoverResolvedCallers(Search[i], BareName, Comp.Sel) do
         begin
           var O: TJSONObject:= TJSONObject.Create;
           O.AddPair('caller_qname', R.CallerQName);
@@ -4465,6 +4501,7 @@ begin
           O.AddPair('file'        , RowPath      );
           O.AddPair('confidence'  , R.Confidence );
           O.AddPair('target_qname', R.TargetQName);
+          AddViaKeys(O, R);
 
           { The CALL SITE, not the caller routine's header. R.Line is
             routine-granular -- correct for the CLI, and it makes a hover say
