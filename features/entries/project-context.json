@@ -57,8 +57,9 @@
     "by": "LSP"
   },
   "verified": {
-    "date": "2026-10-28",
+    "date": "2026-10-29",
     "by": "LSP",
-    "build": "1.36.0-alpha"
+    "build": "1.38.0-alpha",
+    "surfaceHash": "f78dd6c88ca1f8429e8bc1dd5cdcead046ed7d578fb6c824e4aeb7dabb6cb2b3"
   }
 }
