@@ -837,6 +837,17 @@ type
     ValueOnly           : Boolean;
   end;
 
+  /// <summary>One dispatch_edges row seen from either end (RB-5 P1).</summary>
+  /// <remarks>OtherId is the symbol at the far end: the BASE (interface or
+  /// virtual method) when asked from an implementor, the IMPLEMENTOR/overrider
+  /// when asked from a base. Kind is 'implements' | 'override'; Confidence is
+  /// 'certain' | 'ambiguous'. Read-only view; the resolver owns the rows.</remarks>
+  TDispatchLink = record
+    OtherId    : Int64 ;
+    OtherQName : string;
+    Kind       : string;
+    Confidence : string;
+  end;
   /// <summary>v14 (D5): one resolved uses-scope edge -- file AFileId can see
   /// (has in its uses graph, directly) the unit whose file is ATargetFileId.
   /// Bulk-read by TCallResolver to build its per-file in-scope set, mirroring
@@ -1879,6 +1890,15 @@ type
     Line       : Integer;
     Col        : Integer;
     ContextText: string ;
+    /// <summary>Qualified name of the interface method this site reaches the
+    /// bundle's target THROUGH (RB-5 P1); empty for a direct caller.</summary>
+    Via        : string ;
+  end;
+
+  /// <summary>Sites reaching a bundle target through one interface method.</summary>
+  TBundleViaTotal = record
+    Via  : string ;
+    Count: Integer;
   end;
 
   // v0.26: compiler diagnostic finding (from dcc64 or msbuild output).
@@ -1920,6 +1940,14 @@ type
     ClassSurface : TArray<TSurfaceLine> ;
     ImplSlice    : TArray<TSliceChunk>  ;
     Callers      : TArray<TBundleCaller>;
+    { RB-5 P1: sites that reach the target only through an interface method it
+      implements (dispatch_edges 'implements'); Via names that method. Rendered
+      as its own section, never mixed into Callers. }
+    ViaCallers   : TArray<TBundleCaller>;
+    { Sites reaching the target through each interface method, BEFORE the
+      AMaxCallers cut, as 'Via=count' pairs in ViaCallers order of first
+      appearance; the cut list above may show fewer. }
+    ViaTotals    : TArray<TBundleViaTotal>;
     ImpactSummary: TArray<TImpactLevel> ;
     { dl:wiki concept topics whose NAME OR ALIAS the task phrase matched.
       Capped at two on purpose: a bundle exists to be small, and a third

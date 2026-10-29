@@ -2180,6 +2180,16 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetCallEdgesFromSymbol(AEnclosingSymbolId: Int64): TArray<TCallEdge>;
+    /// <summary>The dispatch_edges rows touching ASymbolId (RB-5 P1).</summary>
+    /// <param name="ASymbolId">An implementing/overriding method (AToBases) or
+    /// a base interface/virtual method (not AToBases).</param>
+    /// <param name="AToBases">True: rows where ASymbolId is the impl, returning
+    /// the BASES. False: rows where it is the base, returning the IMPLEMENTORS.</param>
+    /// <returns>The far-end symbols with edge kind and confidence; empty on a
+    /// database without dispatch_edges.</returns>
+    /// <remarks>Read-only. The callers of a returned base are
+    /// FindResolvedCallers(OtherId); this method never walks them itself.</remarks>
+    function FindDispatchLinks(ASymbolId: Int64; AToBases: Boolean): TArray<TDispatchLink>;
     /// <summary>The complement of GetCallEdgesFromSymbol: every call-site ref
     /// enclosed by AEnclosingSymbolId that has NO call_edges row, i.e. the
     /// calls this index could not resolve (RTL, cross-DB, unknown).</summary>

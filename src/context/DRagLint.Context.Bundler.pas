@@ -128,6 +128,7 @@ implementation
 uses
   DRagLint.Doc.Regions
   , DRagLint.Doc.Wiki   { TWikiParser -- alias matching for the ## Wiki section }
+  , DRagLint.Query  .Callers { DispatchCallersOf -- the via-interface callers (RB-5 P1) }
   ;
 
 const
@@ -437,6 +438,7 @@ var
   L          : TSurfaceLine      ;
   C          : TSliceChunk       ;
   BC         : TBundleCaller     ;
+  VTot       : TBundleViaTotal   ;
   R          : TReference        ;
 
   { Up to MAX_WIKI_TOPICS topics whose name or alias the task phrase matched.
@@ -671,6 +673,28 @@ begin
     Result.Callers[I]:= BC;
   end;
 
+  { RB-5 P1: sites that reach the target only through the interface method it
+    implements. Same truncation as Callers; the text is the call line, no
+    context window, to keep the bundle small. }
+  VTot:= Default(TBundleViaTotal);
+  if Sym.Kind in [skProcedure, skFunction, skMethod] then
+    for var TgtId in TargetIds do
+      for var VR in DispatchCallersOf(AStore, TgtId) do
+      begin
+        if VR.ViaCount > 0 then
+        begin
+          VTot.Via  := VR.Via     ;
+          VTot.Count:= VR.ViaCount;
+          Result.ViaTotals:= Result.ViaTotals + [VTot];
+        end;
+        if Length(Result.ViaCallers) >= AMaxCallers then Continue;
+        BC:= Default(TBundleCaller);
+        BC.FilePath:= VR.FullPath;
+        BC.Line    := VR.CallSiteLine;
+        BC.Via     := VR.Via;
+        Result.ViaCallers:= Result.ViaCallers + [BC];
+      end;
+
   CollectLibraryCalls(AStore, AOracle, TargetIds, Result.LibraryCallCount, Result.LibraryCallTop, Result.LibraryCallVia);
 
   // Impact summary (for refactor/delete verbs)
@@ -829,6 +853,24 @@ begin
           SB.AppendLine(BC.ContextText);
           SB.AppendLine('  ```');
         end;
+      end;
+    end;
+
+    if Length(ABundle.ViaCallers) > 0 then
+    begin
+      var LastVia: string:= #0;
+      for I:= 0 to High(ABundle.ViaCallers) do
+      begin
+        BC:= ABundle.ViaCallers[I];
+        if BC.Via <> LastVia then
+        begin
+          var Cnt: Integer:= 0;
+          for var VT in ABundle.ViaTotals do
+            if VT.Via = BC.Via then Inc(Cnt, VT.Count);
+          SB.AppendLine(Format('## Callers via interface dispatch (%s): %d site(s)', [BC.Via, Cnt]));
+          LastVia:= BC.Via;
+        end;
+        SB.AppendLine(Format('- %s:%d', [BC.FilePath, BC.Line]));
       end;
     end;
 

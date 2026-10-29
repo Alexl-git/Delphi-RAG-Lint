@@ -122,7 +122,7 @@ Check 'IM2 impact on an implementor: via interface dispatch, 8 site(s)' ($imC -l
 $imJ = (& $exePath impact --qname $IFACE --format json --db $db 2>&1 | Out-String)
 Check 'IM1 json carries an implementors array' ($imJ -match '"implementors"')
 
-$cx = (& $exePath context --task "modify TImplCopy.TransferFile" --db $db --format markdown 2>&1 | Out-String)
+$cx = (& $exePath context --task "modify TImplCopy.TransferFile" --db $db --format markdown --max-callers 20 2>$null | Out-String)
 $ix = $cx.IndexOf("Callers via interface dispatch ($IFACE)")
 Check 'CX1 context has the via section' ($ix -ge 0)
 if ($ix -ge 0) {
@@ -133,9 +133,11 @@ if ($ix -ge 0) {
   Check 'CX1 control: no class-typed line in the via section' (@($got | Where-Object { $classLines -contains $_ }).Count -eq 0)
 }
 
-$cp = (& $exePath call-path --from uIfaceUser.ViaLocal --to $IMPL --db $db 2>&1 | Out-String).Trim()
+$cx5 = (& $exePath context --task "modify TImplCopy.TransferFile" --db $db --format markdown 2>$null | Out-String)
+Check 'CX2 default cap (5): header still reports the true 8 site(s)' ($cx5 -like "*Callers via interface dispatch (${IFACE}): 8 site(s)*")
+$cp = (& $exePath call-path --from uIfaceUser.ViaLocal --to $IMPL --db $db 2>$null | Out-String).Trim()
 Check 'CP1 interface-typed caller reaches the implementor' ($LASTEXITCODE -eq 0 -and $cp -eq "uIfaceUser.ViaLocal -> $IFACE -> $IMPL") $cp
-$cp2 = (& $exePath call-path --from uIfaceUser.ViaClass --to $OTHER --db $db 2>&1 | Out-String).Trim()
+$cp2 = (& $exePath call-path --from uIfaceUser.ViaClass --to $OTHER --db $db 2>$null | Out-String).Trim()
 Check 'CP2 control: class-typed caller does NOT reach the other implementor' ($LASTEXITCODE -eq 1) $cp2
 
 if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }

@@ -8177,7 +8177,7 @@ begin
             Continue; { manifest-resolved: stale DB reported, scan the rest }
           end;
 
-          for var Row in ResolvedCallersForName(Store, AArgs.Name) do
+          for var Row in ResolvedCallersForName(Store, AArgs.Name, True) do
           begin
             if AArgs.AsJson then
             begin
@@ -8197,6 +8197,14 @@ begin
               { 2026-09-16: a PROPERTY/FIELD access carries its mode; routine rows
                 keep the pinned key order exactly (no key when empty). }
               if Row.Mode <> '' then JObj.AddPair('mode', Row.Mode);
+              { RB-5 P1: a site that reaches the target only through the interface
+                method it implements names that method; direct rows gain no key. }
+              if Row.Via <> '' then
+              begin
+                JObj.AddPair('via'     , Row.Via    );
+                JObj.AddPair('via_kind', Row.ViaKind);
+                if Row.ViaEdge = 'ambiguous' then JObj.AddPair('via_edge', Row.ViaEdge);
+              end;
               JOut.AddElement(JObj);
             end
             else
@@ -8217,7 +8225,11 @@ begin
                 if Row.FirstOfTarget then Writeln(Format('  %s:', [Row.TargetQName]));
                 var Tag: string:= Row.Confidence;
                 if Row.Mode <> '' then Tag:= Tag + ', ' + Row.Mode;
-                Writeln(Format('    %s  (%s)  [%s]', [Row.CallerQName, Where, Tag]));
+                { RB-5 P1: the via group gets one header line, its sites sit one level in. }
+                if Row.ViaCount > 0 then
+                  Writeln(Format('    via %s dispatch (%s): %d site(s)%s',
+                    [Row.ViaKind, Row.Via, Row.ViaCount, (if Row.ViaEdge = 'ambiguous' then ' [ambiguous edge]' else '')]));
+                Writeln(Format('%s%s  (%s)  [%s]', [(if Row.Via <> '' then '      ' else '    '), Row.CallerQName, Where, Tag]));
               end;
             end;
             Inc(TotalCallers);
@@ -9933,6 +9945,19 @@ begin
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if (not RoOk) and StaleDbRefusesRun(AArgs, 'impact', AArgs.DbPath) then Exit(2);
   Levels:= Store.FindTransitiveCallers(TargetName, Depth);
+  { RB-5 P1: what dispatches to / from this method. An interface method lists
+    its implementors; an implementor lists the interface sites that reach it. }
+  var DispImpls: TArray<TDispatchLink>:= [];
+  var DispVia  : TQueryCallerRows     := [];
+  var DispSyms : TArray<TSymbol>      := Store.FindSymbolsByQualifiedName(AArgs.QName);
+  if Length(DispSyms) = 0 then DispSyms:= Store.FindSymbolsByExactName(AArgs.QName);
+  for var DS in DispSyms do
+    if DS.Kind in [skProcedure, skFunction, skMethod] then
+    begin
+      for var DL in Store.FindDispatchLinks(DS.Id, False) do
+        if DL.Kind = 'implements' then DispImpls:= DispImpls + [DL];
+      DispVia:= DispVia + DispatchCallersOf(Store, DS.Id);
+    end;
   if SameText(AArgs.Format, 'json') then
   begin
     JRoot:= TJSONObject.Create;
@@ -9948,6 +9973,24 @@ begin
         JArr.AddElement(JLevel);
       end;
       JRoot.AddPair('levels', JArr);
+      if Length(DispImpls) > 0 then
+      begin
+        var JImpls:= TJSONArray.Create;
+        for var DL in DispImpls do JImpls.Add(DL.OtherQName);
+        JRoot.AddPair('implementors', JImpls);
+      end;
+      var JVia: TJSONArray:= nil;
+      for var VR in DispVia do
+        if VR.ViaCount > 0 then
+        begin
+          if JVia = nil then JVia:= TJSONArray.Create;
+          var JV:= TJSONObject.Create;
+          JV.AddPair('via'  , VR.Via);
+          JV.AddPair('kind' , VR.ViaKind);
+          JV.AddPair('sites', TJSONNumber.Create(VR.ViaCount));
+          JVia.AddElement(JV);
+        end;
+      if JVia <> nil then JRoot.AddPair('via_dispatch', JVia);
       Writeln(JRoot.Format(2));
     finally
       JRoot.Free;
@@ -9963,6 +10006,16 @@ begin
       else Writeln(Format('  Depth %d: %3d callers in %d units', [L.Depth, L.CallerCount, L.UnitCount]));
       Prev:= L.CallerCount;
     end;
+    if Length(DispImpls) > 0 then
+    begin
+      Writeln('  implementors (interface dispatch):');
+      for var DL in DispImpls do
+        Writeln(Format('    %s%s', [DL.OtherQName, (if DL.Confidence = 'ambiguous' then ' [ambiguous edge]' else '')]));
+    end;
+    for var VR in DispVia do
+      if VR.ViaCount > 0 then
+        Writeln(Format('  via %s dispatch (%s): %d site(s)%s',
+          [VR.ViaKind, VR.Via, VR.ViaCount, (if VR.ViaEdge = 'ambiguous' then ' [ambiguous edge]' else '')]));
     if Length(Levels) = 0 then begin Writeln('  (no callers)'); Exit (1 ); end;
   end; // else
   Result:= 0;
@@ -25264,6 +25317,24 @@ begin
         begin Found:= True; Hit:= E.TargetSymbolId; Break; end;
         Frontier.Enqueue(E.TargetSymbolId);
       end; // for E
+      { RB-5 P1: control also flows from an interface method into the methods
+        that implement it (dispatch_edges 'implements'), one step per hop. }
+      if not Found then
+        for var DL in Store.FindDispatchLinks(Cur, False) do
+        begin
+          if DL.Kind <> 'implements' then Continue;
+          if Visited.ContainsKey(DL.OtherId) then Continue;
+          Visited.Add(DL.OtherId, True);
+          Parent.AddOrSetValue(DL.OtherId, Cur);
+          Depths.AddOrSetValue(DL.OtherId, D + 1);
+          if ToSet.ContainsKey(DL.OtherId) then
+          begin
+            Found:= True;
+            Hit  := DL.OtherId;
+            Break;
+          end;
+          Frontier.Enqueue(DL.OtherId);
+        end; // for DL
     end; // while
 
     if not Found then
