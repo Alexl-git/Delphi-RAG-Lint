@@ -11821,6 +11821,29 @@
       }
     },
     {
+      "id": "auto-uses-on-save",
+      "title": "Auto uses on save (VS Code)",
+      "group": "uses-dependencies",
+      "owner": "LSP",
+      "status": "shipped",
+      "since": "1.38.0-alpha",
+      "summary": "VS Code adds a missing unit to uses on save (source.addMissingImports); dropping an unused unit on save is opt-in and gated",
+      "intro": "Read this when you want the uses clause to fix itself on save in VS Code. Saving adds the one unambiguous unit that declares an undeclared name; an ambiguous name stays a light-bulb choice. Removal of a dead import on save is off by default (enable it in the [pascal] editor.codeActionsOnSave block) and lands only once the index has caught up with the buffer. There is no while-typing mode.",
+      "wikiPage": "vscode-extension",
+      "surfaces": [
+        {
+          "type": "lsp",
+          "method": "textDocument/codeAction"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-29",
+        "by": "alexanderl",
+        "build": "1.38.0-alpha"
+      }
+    },
+    {
       "id": "unit-missing-from-uses",
       "title": "Missing unit in uses (unit-missing-from-uses)",
       "group": "uses-dependencies",
@@ -11835,9 +11858,14 @@
           "type": "cli",
           "verb": "lint",
           "example": "drag-lint lint uMain.pas --db <db> --rule unit-missing-from-uses --fix --apply"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/codeAction"
         }
       ],
       "audience": "both",
+      "notes": "VS Code on save: the LSP also offers the single-resolution fix as source.addMissingImports (see auto-uses-on-save); an ambiguous name stays quickfix-only",
       "verified": {
         "date": "2026-10-29",
         "by": "alexanderl",

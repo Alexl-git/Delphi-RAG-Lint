@@ -385,7 +385,8 @@ Which units a unit needs, where they go in uses, and the cycles they make
 
 | Feature | Surfaces | Status |
 |---|---|---|
-| [Missing unit in uses (unit-missing-from-uses)](unit-missing-from-uses) | `lint` |  |
+| [Auto uses on save (VS Code)](vscode-extension) | `lsp textDocument/codeAction` |  |
+| [Missing unit in uses (unit-missing-from-uses)](unit-missing-from-uses) | `lint`; `lsp textDocument/codeAction` |  |
 
 ---
 

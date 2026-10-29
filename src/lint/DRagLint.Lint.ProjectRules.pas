@@ -274,6 +274,87 @@ begin
   Result:= (if At > 0 then Copy(pMessage, 1, At - 1) else pMessage) + CycleFixPointer(pProject, pStem);
 end;
 
+{ Index of the first character after the `'...'` literal that opens at AFrom
+  (a doubled quote is an escaped quote; an unterminated literal ends at the line). }
+function SkipPascalString(const ASrc: string; AFrom: Integer): Integer;
+var
+  N: Integer;
+begin
+  N:= Length(ASrc);
+  Result:= AFrom + 1;
+  while Result <= N do
+  begin
+    if ASrc[Result] = '''' then
+    begin
+      if (Result < N) and (ASrc[Result + 1] = '''') then Inc(Result, 2) else Break;
+    end
+    else if CharInSet(ASrc[Result], [#10, #13]) then Break
+    else Inc(Result);
+  end;
+  Inc(Result);
+end;
+/// <summary>Does the Pascal source file declare a `class constructor` or `class destructor`?
+/// Such a unit is linked for its side effect exactly like one with an `initialization`
+/// section, so unused-unit-in-uses must not call its import dead.</summary>
+/// <param name="ASourcePath">Path of the unit's .pas file.</param>
+/// <returns>True when `class` is immediately followed by `constructor` or `destructor` as
+/// identifier tokens outside `//`, `{ }`, `(* *)` comments and `'...'` strings; False
+/// when it does not, or when the file is missing or unreadable.</returns>
+/// <remarks>Pure text scan, no index. The index has no class-method flag on its
+/// constructor / destructor symbols, so this cannot be answered from the DB today.</remarks>
+function UnitDeclaresClassCtorDtor(const ASourcePath: string): Boolean;
+var
+  Src, Word, Prev: string;
+  I, N: Integer;
+begin
+  Result:= False;
+  if not TFile.Exists(ASourcePath) then Exit;
+  try
+    Src:= TFile.ReadAllText(ASourcePath, TEncoding.ANSI);
+  except
+    on EStreamError do Exit;
+    on EInOutError do Exit;
+  end;
+  N:= Length(Src);
+  I:= 1;
+  Prev:= '';
+  while I <= N do
+  begin
+    var C:= Src[I];
+    var C2:= if I < N then Src[I + 1] else #0;
+    if CharInSet(C, ['A'..'Z', 'a'..'z', '_']) then
+    begin
+      var Start:= I;
+      while (I <= N) and CharInSet(Src[I], ['A'..'Z', 'a'..'z', '_', '0'..'9']) do Inc(I);
+      Word:= LowerCase(Copy(Src, Start, I - Start));
+      if (Prev = 'class') and ((Word = 'constructor') or (Word = 'destructor')) then Exit(True);
+      Prev:= Word;
+    end
+    else if (C = '/') and (C2 = '/') then
+      while (I <= N) and not CharInSet(Src[I], [#10, #13]) do Inc(I)
+    else if C = '{' then
+    begin
+      while (I <= N) and (Src[I] <> '}') do Inc(I);
+      Inc(I);
+    end
+    else if (C = '(') and (C2 = '*') then
+    begin
+      var Close:= PosEx('*)', Src, I + 2);
+      I:= if Close = 0 then N + 1 else Close + 2;
+    end
+    else if C = '''' then
+    begin
+      I:= SkipPascalString(Src, I);
+      Prev:= '';
+    end
+    else
+    begin
+      if not CharInSet(C, [' ', #9, #10, #13]) then Prev:= '';
+      Inc(I);
+    end;
+  end;
+end;
+
 function IsSideEffectUnit(const AUnitName: string): Boolean;
 var
   Low: string;
@@ -4104,7 +4185,7 @@ var
   ExportsOfUnit : TObjectDictionary<string, TDictionary<string, Boolean>>;
   { unused-unit-in-uses severity split: unit name -> does it have an
     initialization section? See the finding site for the measurement. }
-  UnitHasInit   : TDictionary<string, Boolean>      ;
+  UnitHasInit   : TDictionary<string, Integer>      ;
   { Per-rule cost attribution, printed only under DRAGLINT_PROFILE. `lint-all`'s
     phase profiler can say "project-rules cost N seconds" but not WHICH of the
     seven rules in this pass spent it, and the answer decided the fix: on YADF,
@@ -4358,38 +4439,55 @@ var
     ExportsOfUnit.Add(AUnitName, Result);
   end;
 
-  { Does the named unit have an `initialization` section?
+  { Does the named unit have an `initialization` or `finalization` section, or a
+    `class constructor` / `class destructor`? All three link the unit for a side
+    effect, so a missing symbol reference proves nothing.
 
     The indexer emits one skInitialization child marker per unit that has one
-    (v0.41), so this is a child scan, not a re-parse -- and it is cached because
+    (v0.41), and a skFinalization child per unit with a finalization section, so
+    those are a child scan, not a re-parse; the class ctor/dtor case is a source
+    scan (UnitDeclaresClassCtorDtor) because the index keeps no class-method flag.
+    Cached because
     unused-unit-in-uses is already the most expensive rule in the pass. }
-  function UnitHasInitialization(const AUnitName: string): Boolean;
-    function LookIn(const AFrom: ISymbolStore; out AFound: Boolean): Boolean;
+  function UnitHasSideEffectSection(const AUnitName: string; out AInitSection: Boolean): Boolean;
+  const
+    CFlagInit = 1;
+    CFlagOther = 2;
+    function LookIn(const AFrom: ISymbolStore; out AFlags: Integer): Boolean;
     var
       U, Ch: TSymbol;
     begin
-      Result:= False; AFound:= False;
+      Result:= False; AFlags:= 0;
       if AFrom = nil then Exit;
       for U in AFrom.FindSymbolsByExactName(AUnitName) do
       begin
         if U.Kind <> skUnit then Continue;
         Result:= True;   { the unit is in THIS store, so its answer is usable }
         for Ch in AFrom.FindAllChildSymbols(U.Id) do
-          if Ch.Kind = skInitialization then begin AFound:= True; Break; end;
+        begin
+          if Ch.Kind = skInitialization then AFlags:= AFlags or CFlagInit;
+          if Ch.Kind = skFinalization then AFlags:= AFlags or CFlagOther;
+        end;
+        if (AFlags = 0) and UnitDeclaresClassCtorDtor(AFrom.GetFilePath(U.FileId)) then AFlags:= CFlagOther;
         Break;
       end;
     end;
   var
-    Cached, Found: Boolean;
+    Flags: Integer;
   begin
-    if UnitHasInit.TryGetValue(AUnitName, Cached) then Exit(Cached);
+    if UnitHasInit.TryGetValue(AUnitName, Flags) then
+    begin
+      AInitSection:= (Flags and CFlagInit) <> 0;
+      Exit(Flags <> 0);
+    end;
     { "Seen in this store" and "has an initialization section" are different
       answers, and collapsing them would make every library unit look
       initialization-free to a project-only run. Ask the library store when the
       project store does not carry the unit at all. }
-    if not LookIn(AStore, Found) then LookIn(ALibraryStore, Found);
-    Result:= Found;
-    UnitHasInit.Add(AUnitName, Result);
+    if not LookIn(AStore, Flags) then LookIn(ALibraryStore, Flags);
+    UnitHasInit.Add(AUnitName, Flags);
+    AInitSection:= (Flags and CFlagInit) <> 0;
+    Result:= Flags <> 0;
   end;
 
   { A referenced name, plus its GENERIC BASE.
@@ -4445,7 +4543,7 @@ begin
   PathOfFile := TDictionary<Int64, string>        .Create;
   UnitIndexed:= TDictionary<string, Boolean>      .Create;
   ExportsOfUnit:= TObjectDictionary<string, TDictionary<string, Boolean>>.Create([doOwnsValues]);
-  UnitHasInit  := TDictionary<string, Boolean>      .Create;
+  UnitHasInit  := TDictionary<string, Integer>      .Create;
   RefdIds    := TDictionary<Int64 , Boolean>      .Create;
   RefdNames  := TDictionary<string, Boolean>      .Create;
   OwnRefFile := nil;
@@ -4733,7 +4831,11 @@ begin
                       so by name. Removing it can break at RUNTIME after a
                       perfectly clean build, which is precisely the finding that
                       must not read as routine. }
-                var HasInit: Boolean:= UnitHasInitialization(U.UnitName);
+                var HasInit: Boolean;
+                { A finalization section or class constructor/destructor links the unit
+                  as surely as an initialization one, but unlike it the finding is not
+                  even informational: the unit is excluded outright (D3). }
+                if UnitHasSideEffectSection(U.UnitName, HasInit) and not HasInit then Continue;
                 if HasInit then UF.Severity:= 'info' else UF.Severity:= 'warning';
                 if HasInit then
                   UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- possible dead import. It HAS an initialization section, so it may still be doing its work through that: removing it can build cleanly and fail at runtime. VERIFY BEFORE REMOVING.', [U.UnitName])

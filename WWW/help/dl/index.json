@@ -2292,11 +2292,23 @@
     "verb": "sql"
   },
   {
+    "id": "auto-uses-on-save",
+    "title": "Auto uses on save (VS Code)",
+    "summary": "VS Code adds a missing unit to uses on save (source.addMissingImports); dropping an unused unit on save is opt-in and gated",
+    "group": "uses-dependencies",
+    "order": 130001,
+    "since": "1.38.0-alpha",
+    "file": "features/auto-uses-on-save.md",
+    "menus": [],
+    "context": [],
+    "verb": ""
+  },
+  {
     "id": "unit-missing-from-uses",
     "title": "Missing unit in uses (unit-missing-from-uses)",
     "summary": "Lint rule: names the unit that declares an undeclared identifier and adds it to the interface or implementation uses clause, cycle-checked",
     "group": "uses-dependencies",
-    "order": 130001,
+    "order": 130002,
     "since": "1.38.0-alpha",
     "file": "features/unit-missing-from-uses.md",
     "menus": [],
