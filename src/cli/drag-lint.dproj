@@ -200,6 +200,7 @@
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.ExecuteCommand.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.DocumentSymbol.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.Ping.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.UsesOnSave.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.JobObject.pas"/>
         <DCCReference Include="DRagLint.Hover.Renderer.pas"/>
         <DCCReference Include="..\core\DRagLint.Hover.Contrast.pas"/>

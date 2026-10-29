@@ -327,6 +327,7 @@ uses
   , System.Math                { Max: the H2 doc-comment marker span }
   , DRagLint.Core.UsesInsert   { TUsesSection / SectionWord: unit-missing-from-uses data }
   , DRagLint.Lint.MissingUses  { unit-missing-from-uses: findings + their uses edits } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
+  , DRagLint.LSP.UsesOnSave    { TUsesOnSave: the source.addMissingImports twin of the quickfix }
   ;
 
 { TLspCompletion }
@@ -1592,6 +1593,10 @@ begin
       Action.AddPair('diagnostics', DiagList);
       Action.AddPair('edit'       , WEdit);
       Result.AddElement(Action);
+      { Auto uses on save (D1): the same edit under source.addMissingImports, only
+        for a single unambiguous fix -- the client applies it without asking. }
+      var SrcAct: TJSONObject:= TUsesOnSave.AddMissingImportAction(Diag, Fixes, WEdit);
+      if SrcAct <> nil then Result.AddElement(SrcAct);
     end;
   end;
 end;

@@ -57,7 +57,7 @@ $serverSource = Get-Content $serverPath -Raw
 $completionSource = Get-Content $completionPath -Raw
 
 Check 'HandleCodeAction is wired in Run dispatch' ($serverSource -match "textDocument/codeAction.*HandleCodeAction")
-Check 'codeActionProvider is enabled in Initialize' ($serverSource -match "codeActionProvider.*TJSONBool.Create\(True\)")
+Check 'codeActionProvider is enabled in Initialize' ($serverSource -match "codeActionProvider.*(TJSONBool.Create\(True\)|CaProvider)")
 Check 'BuildCodeActions creates ChangesMap (URI->TextEdit[] structure)' ($completionSource -match "ChangesMap")
 Check 'ReviewMarker import present in Completion' ($completionSource -match 'DRagLint\.Lint.*\.ReviewMarker')
 Check 'TReviewMarkers.InsertInto is called' ($completionSource -match 'TReviewMarkers\.InsertInto')
