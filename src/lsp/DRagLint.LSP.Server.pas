@@ -1381,7 +1381,8 @@ uses
   DRagLint.Project.DefineProfile,
   DRagLint.Symbol.Describe,  // DescribeDeclaredType: the type a hover shows for a value kind
   DRagLint.Convert.PropTree, // ClearPropertyDeclaredTypeCache: a reopened DB must not answer from old rows
-  DRagLint.LSP.Features  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
+  DRagLint.LSP.Features,  // linked for its feature units' initialization (RegisterLspFeature); no identifier is referenced
+  DRagLint.LSP.UsesOnSave  { KINDS_ON_SAVE: the codeActionKinds initialize advertises }
   ;
 
 const
@@ -1958,7 +1959,13 @@ begin
       because a Delphi source unit is small enough that resending it costs less
       than the range arithmetic costs in correctness risk. }
     Caps.AddPair('textDocumentSync'       , TJSONNumber.Create(1) );
-    Caps.AddPair('codeActionProvider'     , TJSONBool.Create(True));
+    { Auto uses on save: the kinds are listed so editor.codeActionsOnSave can name them. }
+    var CaKinds: TJSONArray:= TJSONArray.Create;
+    CaKinds.Add('quickfix');
+    for var OnSaveKind: string in KINDS_ON_SAVE do CaKinds.Add(OnSaveKind);
+    var CaProvider: TJSONObject:= TJSONObject.Create;
+    CaProvider.AddPair('codeActionKinds', CaKinds);
+    Caps.AddPair('codeActionProvider'     , CaProvider);
     // v0.20: completion provider
     CompProvider          := TJSONObject.Create;
     TriggerCharsCompletion:= TJSONArray .Create;
