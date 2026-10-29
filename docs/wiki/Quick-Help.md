@@ -216,6 +216,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **serve** -- Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index. Read this when you want an AI assistant such as Claude or Cursor to query a drag-lint index: serve starts an MCP stdio server over the database you give it. The IDE does not use it; the IDE uses lsp. [More](serve)
 * **Setup installer** (experimental) -- One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF. `drag-lint-setup-<version>.exe` installs the whole tool set per user or for all users, registers the IDE plugins only where RAD Studio 13 is installed, and uninstalls only what it wrote. [More](Setup-Installer)
 * **Switch VS Code Delphi MCP entry** -- Turns the VS Code Delphi MCP entry off and on with a backup. Read this when VS Code's own Delphi MCP server and drag-lint should not both run. drag-lint-switch removes the entry with a backup and restores it later. [More](lsp-proxy-merge)
+* **VS Code extension: Problems stay current** -- VS Code extension commands, and Problems that follow files an agent edits on disk. Read this when the VS Code Problems panel looks stale or you want to know what each drag-lint command does. Pascal edits made on disk now re-lint on their own. [More](vscode-extension)
 * **workspace add** -- Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it. Read this when you add a new project to a multi-project workspace: it registers a project file in the .drag-lint-workspace.json config that workspace index and workspace status use. [More](workspace-add)
 * **workspace index** -- Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass. Read this when you want to (re)build the indexes of every project in a workspace in one pass instead of one project at a time. [More](workspace-index)
 * **workspace status** -- Reports the status of every project registered in a .drag-lint-workspace.json workspace config. Read this when you want to see at a glance how many files of each workspace project are in the shared index; a project with 0 files is not indexed yet. [More](workspace-status)
@@ -306,6 +307,8 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Show in Call Graph: host 'Structure form' (the caption is verified, the host is declared)
 * Switch VS Code Delphi MCP entry: menu 'drag-lint-switch --vscode --off' inside drag-lint-switch.exe
 * Type-level dl:ok review: procedure docs\wiki\Type-Level-Review-Marker.md
+* VS Code extension: Problems stay current: lsp draglint/refreshDiagnostics
+* VS Code extension: Problems stay current: lsp workspace/didChangeWatchedFiles
 * Where the charts find Graphviz: procedure docs\wiki\Chart-Graphviz-Lookup.md
 * Work list: menu 'View > Work list' inside ConvRulesEditor.exe
 * dl:wiki concept blocks: procedure docs\wiki\Wiki-Blocks-Authoring.md

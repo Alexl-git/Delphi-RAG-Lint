@@ -19,6 +19,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Target compiler (--target-compiler)](features/target-compiler.md) -- Names the oldest compiler the code must compile on; modernize findings whose advice needs a newer compiler are not reported.
 * [Type-level dl:ok review](features/type-level-review-marker.md) -- One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit.
 * [Missing unit in uses (unit-missing-from-uses)](features/unit-missing-from-uses.md) -- Lint rule: names the unit that declares an undeclared identifier and adds it to the interface or implementation uses clause, cycle-checked.
+* [VS Code extension: Problems stay current](features/vscode-extension.md) -- VS Code extension commands, and Problems that follow files an agent edits on disk.
 
 ## 1.37.0-alpha
 

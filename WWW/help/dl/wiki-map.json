@@ -174,6 +174,7 @@
   "target-compiler": "target-compiler",
   "unit-missing-from-uses": "unit-missing-from-uses",
   "usages": "usages",
+  "vscode-extension": "vscode-extension",
   "wiki": "wiki",
   "workspace-add": "workspace-add",
   "workspace-index": "workspace-index",

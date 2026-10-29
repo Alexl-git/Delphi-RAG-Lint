@@ -4,7 +4,7 @@ title: workspace status
 summary: Reports the status of every project registered in a .drag-lint-workspace.json workspace config
 product: DL
 group: editor-integration
-order: 110024
+order: 110025
 since: 0.6.0-alpha
 status: shipped
 updated: 1.38.0-alpha

@@ -345,6 +345,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [serve](serve) | `serve` |  |
 | [Setup installer](Setup-Installer) | procedure: `docs\wiki\Setup-Installer.md` | experimental |
 | [Switch VS Code Delphi MCP entry](lsp-proxy-merge) | `drag-lint-switch.exe` (drag-lint-switch --vscode --off) |  |
+| [VS Code extension: Problems stay current](vscode-extension) | `lsp draglint/refreshDiagnostics`; `lsp workspace/didChangeWatchedFiles` |  |
 | [workspace add](workspace-add) | `workspace add` |  |
 | [workspace index](workspace-index) | `workspace index` |  |
 | [workspace status](workspace-status) | `workspace status` |  |

@@ -1,0 +1,27 @@
+{
+  "id": "vscode-extension",
+  "title": "VS Code extension: Problems stay current",
+  "group": "editor-integration",
+  "owner": "LSP",
+  "status": "shipped",
+  "since": "1.38.0-alpha",
+  "summary": "VS Code extension commands, and Problems that follow files an agent edits on disk",
+  "intro": "Read this when the VS Code Problems panel looks stale or you want to know what each drag-lint command does. Pascal edits made on disk now re-lint on their own.",
+  "wikiPage": "vscode-extension",
+  "surfaces": [
+    {
+      "type": "lsp",
+      "method": "draglint/refreshDiagnostics"
+    },
+    {
+      "type": "lsp",
+      "method": "workspace/didChangeWatchedFiles"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-29",
+    "by": "alexanderl",
+    "build": "1.38.0-alpha"
+  }
+}
