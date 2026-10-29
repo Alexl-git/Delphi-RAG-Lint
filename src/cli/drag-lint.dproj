@@ -156,6 +156,8 @@
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.TaintRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.EnumOrdinalPersisted.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.UsesInsert.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.MissingUses.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.UnusedEnumValue.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.EffectRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.UsesAudit.pas"/>

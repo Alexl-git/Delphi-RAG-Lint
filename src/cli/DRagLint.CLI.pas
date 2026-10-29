@@ -97,6 +97,7 @@ uses
   , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
   , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
   , Winapi.ShellAPI
+  , DRagLint.Lint.MissingUses { unit-missing-from-uses (lint <file> / lint-all) }
   , System.SysUtils
   , System.Classes
   , System.Hash
@@ -15403,7 +15404,7 @@ begin
       if (FlowStore <> nil) and
          (LintRuleWants(NarrowRule, ['with-hides-outer-symbol', 'enum-read-inside-with'])
           or LintRuleWants(NarrowRule, LINT_GATE_FLOW) or LintRuleWants(NarrowRule, LINT_GATE_PROJECT_RULES)
-          or LintRuleWants(NarrowRule, ['type-name-prefix'])) then
+          or LintRuleWants(NarrowRule, ['type-name-prefix', MISSING_USES_RULE])) then
       begin
         var FlowLibDb: string := LintLibraryDb(AArgs);
         { A STALE library index degrades to project-only exactly like an
@@ -15476,6 +15477,9 @@ begin
       { X4: a bare read the index bound to a scoped-enum value (needs the index) }
       if LintRuleWants(NarrowRule, ['enum-bare-read-scoped']) then
         Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(EffPath, FlowStore, FlowFid);
+      { a name declared in a unit the file does not use (project index + library) }
+      if LintRuleWants(NarrowRule, [MISSING_USES_RULE]) then
+        Findings:= Findings + TMissingUsesChecker.Check(EffPath, FlowStore, FlowFid, [FlowStore, FlowLibStore]);
       { B-ENUM: a hard-coded enum ordinal (the index widens what counts as an enum) }
       if LintRuleWants(NarrowRule, [ENUM_ORDINAL_CAST_RULE]) then
         Findings:= Findings + TEnumOrdinalCastChecker.Check(EffPath, FlowStore, FlowFid);
@@ -21722,6 +21726,8 @@ begin
           ScanAdd(30, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(PasPath, Store, LibStore, Store.FindFileIdByPath(PasPath)));
         if LintRuleWants(Nr, ['enum-bare-read-scoped']) then { X4 }
           ScanAdd(30, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped(PasPath, Store, Store.FindFileIdByPath(PasPath)));  // dl:ok magic-literal@099b -- REVIEWED 2026-10-25 profiler scan-slot id of the ScanAdd table, not a quantity
+        if LintRuleWants(Nr, [MISSING_USES_RULE]) then
+          for F in TMissingUsesChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), [Store, LibStore]) do Findings:= Findings + [F];
         if LintRuleWants(Nr, [ENUM_ORDINAL_CAST_RULE]) then { B-ENUM }
           for F in TEnumOrdinalCastChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         { v0.68: naming-convention prefix rules (store-optional; store enables exception-ancestry sub-check, + library store continues the chain) }
