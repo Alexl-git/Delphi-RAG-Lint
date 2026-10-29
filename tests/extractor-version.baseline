@@ -1113,4 +1113,12 @@
 #   reports the binary-DFM diagnostic instead of a text parse error / EEncodingError skip. Controller recomputes at freeze.
 #   Superseded: 1.26.0-alpha|3d37be7645f2d1232d806f2052002081acf22ad7f261d8e05f4fc6181d9f1935
 # 2026-10-28 freeze merge: E1b + xj-7 + ki-exta, 1.26.0-alpha, no bump
-1.26.0-alpha|7dd7877fe935d3ae54d29bfaa453eb233362e9f7a397dfbbd0b9991c8657ab73
+#   Superseded: 1.26.0-alpha|7dd7877fe935d3ae54d29bfaa453eb233362e9f7a397dfbbd0b9991c8657ab73
+# 2026-10-28 lane ext-plat: PlatformBuiltins now covers Win64x, Linux64, OSX64, OSXARM64, Android, Android64,
+#   iOSDevice64, iOSSimARM64 (+ PlatformGroupSuffix); re-pinned within unreleased 1.26.0-alpha, no bump. Controller recomputes at the freeze merge.
+#   Superseded: 1.26.0-alpha|0a258c0449063bf1b56057ea6dbda480550a2202ab44811acdd4398d80250c4d
+# 2026-10-28 lane ext-plat (2): Win32/Win64 built-ins now EXACTLY the dcc32/dcc64 output (Win64 gains cpux64, assembler, weakref,
+#   nativecode, dcc; loses cpux86_64, compiler_version_37); other platforms UNVERIFIED. Re-pinned within unreleased 1.26.0-alpha, no bump.
+#   Superseded: 1.26.0-alpha|0cf33f0abbeec93a4ea58c7f2d25c0a06b510fb5f475070c9f6c745cbc924c18
+# 2026-10-28 FREEZE-FINAL merge ext + ext-plat (interim pin, no bump; final recompute after gaps/doclit):
+1.26.0-alpha|1ce747432049d6a73441ea9d3f7aed5862c58d054f1fbc989283ad3e4043abb4

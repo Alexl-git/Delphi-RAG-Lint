@@ -28,7 +28,7 @@
 
   Assertions (per the brief):
     --platform Win64 --config Release ->
-       CONTAINS win64, mswindows, unicode, compiler_version_37 (builtins)
+       CONTAINS win64, mswindows, unicode, ver370 (builtins)
        CONTAINS release, custom_base (Release + Base DCC_Define)
        NOT      debug (Cfg_1/Debug not selected)
     --config Debug   -> CONTAINS debug, NOT release
@@ -64,7 +64,7 @@ try {
   Check 'Win64/Release CONTAINS win64 (platform builtin)'              ($rel64 -contains 'win64')
   Check 'Win64/Release CONTAINS mswindows (platform builtin)'          ($rel64 -contains 'mswindows')
   Check 'Win64/Release CONTAINS unicode (platform builtin)'            ($rel64 -contains 'unicode')
-  Check 'Win64/Release CONTAINS compiler_version_37 (platform builtin)'($rel64 -contains 'compiler_version_37')
+  Check 'Win64/Release CONTAINS ver370 (platform builtin)'($rel64 -contains 'ver370')
   Check 'Win64/Release CONTAINS release (Cfg_2 DCC_Define)'            ($rel64 -contains 'release')
   Check 'Win64/Release CONTAINS custom_base (Base DCC_Define)'         ($rel64 -contains 'custom_base')
   Check 'Win64/Release NOT debug (Cfg_1 not selected)'                 (-not ($rel64 -contains 'debug'))
