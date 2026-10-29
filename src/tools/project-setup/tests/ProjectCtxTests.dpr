@@ -71,7 +71,7 @@ begin
     lIn.Project := lDpr;
     lIn.SourceFile := lDpr;
     lIn.SourceSha1 := FileSha1Hex(lDpr);
-    lIn.Platform := 'Win64';
+    lIn.PlatformName := 'Win64';
     lIn.Config := 'Debug';
     lIn.Defines := DefaultDefines('Win64', 'Debug');
     lIn.SearchPath := TArray<string>.Create('C:\X\lib', 'C:\X\other');
@@ -83,7 +83,7 @@ begin
     SaveProjectContext(lIn, ContextFileFor(lDpr));
     Check(ContextFileFor(lDpr) = TPath.Combine(lDir, 'App.dlcontext.json'), 'file next to dpr');
     Check(TryLoadProjectContext(ContextFileFor(lDpr), lOut), 'load ok');
-    Check((lOut.Project = lIn.Project) and (lOut.Platform = 'Win64') and (lOut.Config = 'Debug'), 'scalars round trip');
+    Check((lOut.Project = lIn.Project) and (lOut.PlatformName = 'Win64') and (lOut.Config = 'Debug'), 'scalars round trip');
     Check((Length(lOut.Defines) = Length(lIn.Defines)) and Has(lOut.Defines, 'DEBUG'), 'defines round trip');
     Check((Length(lOut.SearchPath) = 2) and (lOut.SearchPath[0] = 'C:\X\lib') and (lOut.SearchPath[1] = lIn.SearchPath[1]), 'searchPath round trip incl. non-ASCII');
     Check((lOut.LibraryDb = lIn.LibraryDb) and (Length(lOut.LibraryRoots) = 1), 'library fields');
@@ -106,7 +106,7 @@ begin
     SetEnvironmentVariable('DRAGLINT_CONTEXT_DEFAULTS', PChar(lFile));
     Check(ContextDefaultsFile = lFile, 'env overrides defaults path');
     Check(TryLoadContextDefaults(lDef), 'defaults load');
-    Check((lDef.Platform = 'Win64') and (lDef.Config = 'Release') and (lDef.TargetCompiler = '37'), 'defaults scalars');
+    Check((lDef.PlatformName = 'Win64') and (lDef.Config = 'Release') and (lDef.TargetCompiler = '37'), 'defaults scalars');
     Check((Length(lDef.Libraries) = 1) and (lDef.Libraries[0].LibraryDb = 'C:\db\w64.sqlite') and (Length(lDef.Libraries[0].LibraryRoots) = 1), 'defaults libraries entry');
     SetEnvironmentVariable('DRAGLINT_CONTEXT_DEFAULTS', PChar(lFile + '.missing'));
     Check(not TryLoadContextDefaults(lDef), 'absent file tolerated');

@@ -2600,7 +2600,7 @@ function DefaultsLibraryDbFor(const ADefaults: TContextDefaults; const APlatform
 begin
   Result:= '';
   for var L: TLibraryDefault in ADefaults.Libraries do
-    if SameText(L.Platform, APlatform) then Exit(L.LibraryDb);
+    if SameText(L.PlatformName, APlatform) then Exit(L.LibraryDb);
 end;
 
 function TLSPServer.Defaults: TContextDefaults;
@@ -2699,13 +2699,13 @@ begin
     central defaults > placeholder. }
   if FStartPlatform <> '' then Result.Platform:= FStartPlatform
   else if FClientPlatform <> '' then Result.Platform:= FClientPlatform
-  else if HaveCtx and (Ctx.Platform <> '') then Result.Platform:= Ctx.Platform
+  else if HaveCtx and (Ctx.PlatformName <> '') then Result.Platform:= Ctx.PlatformName
   else Result.Platform:= P;
   if Result.Platform = '' then
   begin
     Result.PlatformDefaulted:= True;
-    Result.Platform:= if Defaults.Platform <> '' then Defaults.Platform else LSP_PLACEHOLDER_PLATFORM;
-    if (Result.Project = '') and (Defaults.Platform <> '') then Result.Source:= lcsDefaults;
+    Result.Platform:= if Defaults.PlatformName <> '' then Defaults.PlatformName else LSP_PLACEHOLDER_PLATFORM;
+    if (Result.Project = '') and (Defaults.PlatformName <> '') then Result.Source:= lcsDefaults;
   end;
 
   if FClientConfig <> '' then Result.Config:= FClientConfig

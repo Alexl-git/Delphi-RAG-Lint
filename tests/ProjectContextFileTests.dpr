@@ -54,12 +54,12 @@ begin
       '{"schema":1,"platform":"Win32","config":"Debug","targetCompiler":"37",' +
       '"libraries":{"Win64":{"libraryDb":"%TEMP%\\lib.sqlite","libraryRoots":["C:\\rtl"]}}}');
     Check('defaults -> True', TryLoadContextDefaults(Defs));
-    Check('defaults platform', Defs.Platform = 'Win32');
+    Check('defaults platform', Defs.PlatformName = 'Win32');
     Check('defaults targetCompiler', Defs.TargetCompiler = '37');
     Check('defaults one library', Length(Defs.Libraries) = 1);
     if Length(Defs.Libraries) = 1 then
     begin
-      Check('library platform', Defs.Libraries[0].Platform = 'Win64');
+      Check('library platform', Defs.Libraries[0].PlatformName = 'Win64');
       Check('library env expanded', Pos('%', Defs.Libraries[0].LibraryDb) = 0);
       Check('library roots', Length(Defs.Libraries[0].LibraryRoots) = 1);
     end;
@@ -69,7 +69,7 @@ begin
     // positive control: config changes the defines
     Ctx := BuildProjectContext(Dproj, 'Win64', 'Debug');
     Check('Debug has DEBUG', Has(Ctx.Defines, 'DEBUG'));
-    Check('Debug platform', Ctx.Platform = 'Win64');
+    Check('Debug platform', Ctx.PlatformName = 'Win64');
     Check('Win64 has WIN64', Has(Ctx.Defines, 'WIN64'));
     Check('Release lacks DEBUG', not Has(BuildProjectContext(Dproj, 'Win64', 'Release').Defines, 'DEBUG'));
     Check('Win32 lacks WIN64', not Has(BuildProjectContext(Dproj, 'Win32', 'Debug').Defines, 'WIN64'));
@@ -83,7 +83,7 @@ begin
     Check('context file name', ExtractFileName(CtxFile) = 'App.dlcontext.json');
     SaveProjectContext(Ctx, CtxFile);
     Check('loads', TryLoadProjectContext(CtxFile, Back));
-    Check('round trip platform/config', (Back.Platform = Ctx.Platform) and (Back.Config = Ctx.Config));
+    Check('round trip platform/config', (Back.PlatformName = Ctx.PlatformName) and (Back.Config = Ctx.Config));
     Check('round trip defines', Length(Back.Defines) = Length(Ctx.Defines));
     Check('round trip alias', (Length(Back.UnitAliases) = 1) and (Back.UnitAliases[0].Value = 'Winapi.Windows'));
     Check('round trip targetCompiler/libraryDb', (Back.TargetCompiler = '37') and (Back.LibraryDb = Ctx.LibraryDb));
@@ -107,7 +107,7 @@ begin
 
     // .dpr / no project: built-ins, never stale
     Ctx := BuildProjectContext('', 'Win32', 'Debug');
-    Check('built-ins Win32', (Ctx.Platform = 'Win32') and Has(Ctx.Defines, 'WIN32') and (Ctx.SourceFile = ''));
+    Check('built-ins Win32', (Ctx.PlatformName = 'Win32') and Has(Ctx.Defines, 'WIN32') and (Ctx.SourceFile = ''));
   finally
     SetEnvironmentVariable(PChar(CONTEXT_DEFAULTS_ENV), nil);
     TDirectory.Delete(Tmp, True);

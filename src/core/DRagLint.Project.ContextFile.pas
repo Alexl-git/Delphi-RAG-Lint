@@ -27,7 +27,7 @@ type
   /// ResolveActiveBuild(...).Profile.Defines yields them.</remarks>
   TProjectContext = record
     Schema: Integer;
-    Project, Platform, Config: string;
+    Project, PlatformName, Config: string;
     Defines, SearchPath, Namespaces, LibraryRoots: TArray<string>;
     UnitAliases: TArray<TPair<string, string>>;
     LibraryDb, ProjectDb, SourceFile, SourceSha1: string;
@@ -41,14 +41,14 @@ type
 
   /// <summary>Per-platform library override from the central defaults file.</summary>
   TLibraryDefault = record
-    Platform, LibraryDb: string;
+    PlatformName, LibraryDb: string;
     LibraryRoots: TArray<string>;
   end;
 
   /// <summary>The central per-user defaults (context-defaults.json).</summary>
   TContextDefaults = record
     Schema: Integer;
-    Platform, Config, TargetCompiler: string;
+    PlatformName, Config, TargetCompiler: string;
     Libraries: TArray<TLibraryDefault>;
   end;
 
@@ -210,7 +210,7 @@ begin
   if Obj = nil then Exit;
   try
     Obj.TryGetValue<Integer>('schema', ADefaults.Schema);
-    ADefaults.Platform := GetStr(Obj, 'platform');
+    ADefaults.PlatformName := GetStr(Obj, 'platform');
     ADefaults.Config := GetStr(Obj, 'config');
     ADefaults.TargetCompiler := GetStr(Obj, 'targetCompiler');
     if Obj.GetValue('libraries') is TJSONObject then
@@ -223,7 +223,7 @@ begin
           begin
             L := TJSONObject(Libs.Pairs[I].JsonValue);
             Item := Default(TLibraryDefault);
-            Item.Platform := Libs.Pairs[I].JsonString.Value;
+            Item.PlatformName := Libs.Pairs[I].JsonString.Value;
             Item.LibraryDb := ExpandEnvVars(GetStr(L, 'libraryDb'));
             Item.LibraryRoots := GetStrArray(L, 'libraryRoots', True);
             Acc.Add(Item);
@@ -269,7 +269,7 @@ begin
     if ACtx.Schema <> CONTEXT_SCHEMA then Exit;
     ACtx.GeneratedBy := GetStr(Obj, 'generatedBy');
     ACtx.Project := GetStr(Obj, 'project');
-    ACtx.Platform := GetStr(Obj, 'platform');
+    ACtx.PlatformName := GetStr(Obj, 'platform');
     ACtx.Config := GetStr(Obj, 'config');
     ACtx.TargetCompiler := GetStr(Obj, 'targetCompiler');
     ACtx.Defines := GetStrArray(Obj, 'defines', False);
@@ -347,8 +347,8 @@ begin
   else
     Build := ResolveActiveBuild('', APlatform, AConfig, False);
   Result.Project := ADproj;
-  Result.Platform := Build.Platform;
-  if APlatform <> '' then Result.Platform := APlatform;
+  Result.PlatformName := Build.Platform;
+  if APlatform <> '' then Result.PlatformName := APlatform;
   Result.Config := Build.Config;
   if (Result.Config = '') and (AConfig <> '') then Result.Config := AConfig;
   SetLength(Result.Defines, Length(Build.Profile.Defines));
@@ -390,7 +390,7 @@ begin
     Src.AddPair('mtime', Mtime);
     Src.AddPair('sha1', ACtx.SourceSha1);
     Root.AddPair('source', Src);
-    Root.AddPair('platform', ACtx.Platform);
+    Root.AddPair('platform', ACtx.PlatformName);
     Root.AddPair('config', ACtx.Config);
     Root.AddPair('targetCompiler', ACtx.TargetCompiler);
     Root.AddPair('defines', StrArrayToJson(ACtx.Defines));

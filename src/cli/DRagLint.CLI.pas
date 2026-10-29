@@ -17125,8 +17125,8 @@ begin
     else
     begin
       Want:= DRagLint.Project.ContextFile.BuildProjectContext(if Dproj <> '' then Dproj else Proj, AArgs.CheckPlatform, AArgs.ConfigPath);
-      if (AArgs.CheckPlatform <> '') and not SameText(Disk.Platform, Want.Platform) then
-        Why:= 'stale: platform is ' + Disk.Platform + ', asked for ' + Want.Platform
+      if (AArgs.CheckPlatform <> '') and not SameText(Disk.PlatformName, Want.PlatformName) then
+        Why:= 'stale: platform is ' + Disk.PlatformName + ', asked for ' + Want.PlatformName
       else if (AArgs.ConfigPath <> '') and not SameText(Disk.Config, Want.Config) then
         Why:= 'stale: config is ' + Disk.Config + ', asked for ' + Want.Config;
     end;
@@ -17152,7 +17152,7 @@ begin
     end;
   end;
   if AArgs.AsJson then Writeln(TFile.ReadAllText(Target, TEncoding.UTF8))
-  else Writeln(System.SysUtils.Format('wrote %s (%s, %s, %d defines)', [Target, Ctx.Platform, Ctx.Config, Length(Ctx.Defines)]));
+  else Writeln(System.SysUtils.Format('wrote %s (%s, %s, %d defines)', [Target, Ctx.PlatformName, Ctx.Config, Length(Ctx.Defines)]));
   Result:= 0;
 end;
 

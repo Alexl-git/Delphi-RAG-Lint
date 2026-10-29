@@ -34,7 +34,7 @@ begin
   Result := False;
   ALib := Default(TLibraryDefault);
   for L in ADefs.Libraries do
-    if SameText(L.Platform, APlatform) then
+    if SameText(L.PlatformName, APlatform) then
     begin
       ALib := L;
       Exit(True);
@@ -74,7 +74,7 @@ begin
     Wrote := MergeLibraryDefault(DefFile, 'Win32', 'C:\new\library-Win32.sqlite');
     Check('seeded: wrote', Wrote);
     Check('seeded: reader loads it', TryLoadContextDefaults(Defs));
-    Check('seeded: platform kept', Defs.Platform = 'Win32');
+    Check('seeded: platform kept', Defs.PlatformName = 'Win32');
     Check('seeded: config kept', Defs.Config = 'Release');
     Check('seeded: targetCompiler kept', Defs.TargetCompiler = '36');
     Check('seeded: Win32 entry', FindLib(Defs, 'Win32', Lib));

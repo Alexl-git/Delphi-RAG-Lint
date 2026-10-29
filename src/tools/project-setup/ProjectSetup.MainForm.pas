@@ -192,13 +192,13 @@ var
 begin
   if not TryLoadContextDefaults(Def) then
     Exit;
-  if FPlatformCombo.Items.IndexOf(Def.Platform) >= 0 then
-    FPlatformCombo.ItemIndex := FPlatformCombo.Items.IndexOf(Def.Platform);
+  if FPlatformCombo.Items.IndexOf(Def.PlatformName) >= 0 then
+    FPlatformCombo.ItemIndex := FPlatformCombo.Items.IndexOf(Def.PlatformName);
   if Def.Config <> '' then
     FConfigCombo.Text := Def.Config;
   FCompilerEdit.Text := Def.TargetCompiler;
   for Lib in Def.Libraries do
-    if SameText(Lib.Platform, FPlatformCombo.Text) then
+    if SameText(Lib.PlatformName, FPlatformCombo.Text) then
     begin
       FLibraryDbEdit.Text := Lib.LibraryDb;
       FillMemo(FRootsMemo, Lib.LibraryRoots);
@@ -213,8 +213,8 @@ begin
   FStatus.Caption := '';
   if (ProjectFile <> '') and TryLoadProjectContext(ContextFileFor(ProjectFile), Ctx) then
   begin
-    if FPlatformCombo.Items.IndexOf(Ctx.Platform) >= 0 then
-      FPlatformCombo.ItemIndex := FPlatformCombo.Items.IndexOf(Ctx.Platform);
+    if FPlatformCombo.Items.IndexOf(Ctx.PlatformName) >= 0 then
+      FPlatformCombo.ItemIndex := FPlatformCombo.Items.IndexOf(Ctx.PlatformName);
     FConfigCombo.Text := Ctx.Config;
     FillMemo(FDefinesMemo, Ctx.Defines);
     FillMemo(FSearchMemo, Ctx.SearchPath);
@@ -258,7 +258,7 @@ begin
   Ctx.Project := ExpandFileName(ProjectFile);
   Ctx.SourceFile := Ctx.Project;
   Ctx.SourceSha1 := FileSha1Hex(Ctx.Project);
-  Ctx.Platform := FPlatformCombo.Text;
+  Ctx.PlatformName := FPlatformCombo.Text;
   Ctx.Config := Trim(FConfigCombo.Text);
   Ctx.Defines := SplitLines(FDefinesMemo.Text);
   Ctx.SearchPath := SplitLines(FSearchMemo.Text);
