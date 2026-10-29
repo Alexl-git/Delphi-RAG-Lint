@@ -4,7 +4,7 @@ title: Hover at Cursor
 summary: "Shows a hover card for the symbol under the editor caret: signature, documentation, and callers"
 product: DL
 group: search-navigation
-order: 20015
+order: 20016
 since: 0.7.0-alpha
 status: shipped
 updated: 1.36.0-alpha

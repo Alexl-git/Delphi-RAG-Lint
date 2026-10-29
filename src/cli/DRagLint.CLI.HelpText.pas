@@ -408,11 +408,11 @@ begin
   Writeln('');
   Writeln('  drag-lint menu-tree --project <X.dproj> --db <file.sqlite> [--root <QName>] [--with-dfm] [--format text|json|paths] [--json] [--output <f>]   (the menu tree a program BUILDS IN CODE, read statically: helpers recognised by body, click wrappers, callbacks, const-array / case captions; a caption it cannot evaluate is a dynamic node + a note; --with-dfm adds the .dfm menus (DevExpress bars / ribbon / backstage / bar popups, VCL TMainMenu / TPopupMenu) as roots with the code-added links grafted in; exit 0 ran, 2 usage/setup, 3 stale index)');
   Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry''s ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\_D-RAG\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)');
-  Writeln('  drag-lint overview           --db <file.sqlite>    [--max-rows N] [--json]   (ONE bounded first-turn call: freshness, counts per kind, units by layer, top fan-in, entry points, forms; a capped section says how many it omitted)');
   Writeln('  drag-lint init --project <file.dproj> [--dry-run] [--home-dir <dir>] [--appdata-dir <dir>]');
   Writeln('                               runs register-project --apply, index --project, resolve-dbs --project, then mcp-config --all --db <that index>');
   Writeln('                               (Claude Code, VS Code and Cursor; an uninstalled client is skipped); --dry-run prints those four commands and runs NOTHING;');
   Writeln('                               --home-dir / --appdata-dir move where the client files are looked for (tests); a failing step stops the run with its exit code');
+  Writeln('  drag-lint overview           --db <file.sqlite>    [--max-rows N] [--json]   (ONE bounded first-turn call: freshness, counts per kind, units by layer, top fan-in, entry points, forms; a capped section says how many it omitted)');
   Writeln('  drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--format json|--json] (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose,' +
     ' plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -' +
     '> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule,reason}, uses_removed, uses_added; the To type''s unit goes to the INTERFACE uses when the retyped field is declared in the interface, and is MOVED there from an implementation-only use (1.23.0);EVERY #convert block is validated and freshness-checked -- each #link/#default against its own From/To types, each ' +
@@ -463,19 +463,19 @@ begin
   Writeln('       see wiki page: lsp-proxy-merge');
   Writeln('  drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits 32|64] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]');
   Writeln('       see wiki page: lsp-proxy-merge');
-  Writeln('  drag-lint query --text "<phrase>" --near <QName> [--hops 1..3] [--hops-uses] [--near-boost] [--db ...] [--json]');
-  Writeln('       ^ The default RESTRICTS: a hit outside N hops is dropped, not demoted; --near-boost keeps it.');
-  Writeln('       ^ A hop is one resolved call edge, callers and callees; --hops 4 is refused (use impact --depth).');
-  Writeln('       see wiki page: query-text-near');
+  Writeln('  drag-lint project-context --project <x.dproj|x.dpr> [--platform P] [--config C] [--output <file>] [--json] [--check] (writes <base>.dlcontext.json beside the project: platform, config and the complete effective define set, plus the .dproj SHA-1 for staleness; --check writes nothing and exits 1 saying why when the file is missing or stale; a .dpr with no .dproj exits 2 unless --platform and --config are both given)');
+  Writeln('       see wiki page: project-context');
   Writeln('  drag-lint query --concept "<words>" [--limit N] [--kind k,...] [--json] --db <db>');
   Writeln('       ^ approximate matched column: first 5 letters of a word stand in for porter stemming.');
   Writeln('       ^ no synonyms and no embeddings: remove does not find delete.');
   Writeln('       ^ exit 3 = this index has no concept-search table yet; run index once (backfills from existing rows, no re-parse).');
   Writeln('       see wiki page: concept-search');
+  Writeln('  drag-lint query --text "<phrase>" --near <QName> [--hops 1..3] [--hops-uses] [--near-boost] [--db ...] [--json]');
+  Writeln('       ^ The default RESTRICTS: a hit outside N hops is dropped, not demoted; --near-boost keeps it.');
+  Writeln('       ^ A hop is one resolved call edge, callers and callees; --hops 4 is refused (use impact --depth).');
+  Writeln('       see wiki page: query-text-near');
   Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)');
   Writeln('       see wiki page: rules');
-  Writeln('  drag-lint project-context --project <x.dproj|x.dpr> [--platform P] [--config C] [--output <file>] [--json] [--check] (writes <base>.dlcontext.json beside the project: platform, config and the complete effective define set, plus the .dproj SHA-1 for staleness; --check writes nothing and exits 1 saying why when the file is missing or stale; a .dpr with no .dproj exits 2 unless --platform and --config are both given)');
-  Writeln('       see wiki page: project-context');
 end;
 
 procedure WriteFlagAliases;
@@ -1246,17 +1246,17 @@ begin
     Writeln('  drag-lint menu-drift --project <X.dproj> --db <file.sqlite> --registry <features dir> [--with-dfm] [--format text|json] [--json] [--output <f>]   (the code-built menu tree (+ the .dfm menus with --with-dfm) vs the registry''s ide-menu PATHS and app-menu (form, path) surfaces -- an app-menu surface implies --with-dfm; --registry defaults to <project>\_D-RAG\menu-registry: MISSING (renamed? hint), MOVED (now at), UNREGISTERED (skeleton surface), NOTE; exit 0 no drift, 1 drift, 2 usage/setup, 3 stale index)');
     Exit;
   end;
-  if pVerb = 'overview' then
-  begin
-    Writeln('  drag-lint overview           --db <file.sqlite>    [--max-rows N] [--json]   (ONE bounded first-turn call: freshness, counts per kind, units by layer, top fan-in, entry points, forms; a capped section says how many it omitted)');
-    Exit;
-  end;
   if pVerb = 'init' then
   begin
     Writeln('  drag-lint init --project <file.dproj> [--dry-run] [--home-dir <dir>] [--appdata-dir <dir>]');
     Writeln('                               runs register-project --apply, index --project, resolve-dbs --project, then mcp-config --all --db <that index>');
     Writeln('                               (Claude Code, VS Code and Cursor; an uninstalled client is skipped); --dry-run prints those four commands and runs NOTHING;');
     Writeln('                               --home-dir / --appdata-dir move where the client files are looked for (tests); a failing step stops the run with its exit code');
+    Exit;
+  end;
+  if pVerb = 'overview' then
+  begin
+    Writeln('  drag-lint overview           --db <file.sqlite>    [--max-rows N] [--json]   (ONE bounded first-turn call: freshness, counts per kind, units by layer, top fan-in, entry points, forms; a capped section says how many it omitted)');
     Exit;
   end;
   Result := False;

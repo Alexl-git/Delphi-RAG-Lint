@@ -4,7 +4,7 @@ title: Go to Implementation
 summary: Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node
 product: DL
 group: search-navigation
-order: 20013
+order: 20014
 since: 0.43.0-alpha
 status: shipped
 updated: 1.36.0-alpha

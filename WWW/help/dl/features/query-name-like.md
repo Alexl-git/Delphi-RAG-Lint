@@ -4,7 +4,7 @@ title: query --name-like
 summary: Case-insensitive substring search over symbol names
 product: DL
 group: search-navigation
-order: 20021
+order: 20022
 since: 1.8.0-alpha
 status: shipped
 updated: 1.36.0-alpha

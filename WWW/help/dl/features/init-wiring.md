@@ -5,7 +5,7 @@ summary: Registers a project in the manifest, indexes it, finds its index and wi
 product: DL
 group: editor-integration
 order: 110009
-since: 1.37.0-alpha
+since: 1.38.0-alpha
 status: shipped
 updated: 1.36.0-alpha
 ---

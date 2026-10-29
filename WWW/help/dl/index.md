@@ -35,14 +35,14 @@ Find symbols, callers, callees, text and types in the index.
 | [call-path](features/call-path.md) | Finds the shortest resolved call path from one symbol to another | 0.91.0-alpha |
 | [Class Surface](features/class-surface.md) | Shows the public surface of a class: its members and signatures, without the method bodies | 0.1.0-alpha |
 | [Compiler Hints](features/compiler-hints.md) | Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity | 0.1.0-alpha |
-| [query --concept](features/concept-search.md) | Ranked BM25 concept search over identifier words and doc-comment prose | 1.36.0-alpha |
+| [query --concept](features/concept-search.md) | Ranked BM25 concept search over identifier words and doc-comment prose | 1.38.0-alpha |
 | [context](features/context.md) | Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers | 0.6.0-alpha |
 | [find-callees](features/find-callees.md) | Lists the resolved outgoing calls of one routine, plus the library-bound ones | 0.91.0-alpha |
 | [Find Undocumented (public)](features/find-undocumented-public.md) | Uses query find to list indexed symbols filtered by documentation state, kind, or visibility | 0.1.0-alpha |
 | [find-unit](features/find-unit.md) | Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause | 0.69.0-alpha |
 | [Find Usages](features/find-usages.md) | Lists every reference to the symbol under the editor caret across the indexed project | 0.33.0-alpha |
 | [Find Usages](features/find-usages-context.md) | Lists references to the symbol represented by a Structure-tree node | 0.33.0-alpha |
-| [Gain (counted savings)](features/gain-usage-log.md) | Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day | 1.36.0-alpha |
+| [Gain (counted savings)](features/gain-usage-log.md) | Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day | 1.38.0-alpha |
 | [Go to Declaration](features/go-to-declaration.md) | Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node | 0.43.0-alpha |
 | [Go to Definition](features/go-to-definition.md) | Jumps the editor caret to the declaration of the symbol under the cursor | 0.47.0-alpha |
 | [Go to Implementation](features/go-to-implementation.md) | Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node | 0.43.0-alpha |
@@ -54,7 +54,7 @@ Find symbols, callers, callees, text and types in the index.
 | [query find-callers](features/query-find-callers.md) | Lists callers of a routine by name, with an option to restrict results to precise, resolved callers | 0.1.0-alpha |
 | [query --kind --all](features/query-kind-all.md) | Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap | 1.19.1-alpha |
 | [query --name-like](features/query-name-like.md) | Case-insensitive substring search over symbol names | 1.8.0-alpha |
-| [query --text --near](features/query-text-near.md) | Keeps only text hits in routines within N call-graph hops of a symbol | 1.37.0-alpha |
+| [query --text --near](features/query-text-near.md) | Keeps only text hits in routines within N call-graph hops of a symbol | 1.38.0-alpha |
 | [query type-usage](features/query-type-usage.md) | Answers one question, of a list of type names, about one file | 0.1.0-alpha |
 | [query typecat](features/query-typecat.md) | Resolves a type's category -- float, string, class, interface, and so on | 0.66.0-alpha |
 | [query unit-usage](features/query-unit-usage.md) | Shows which files reference a unit, or - with --in - which of its exports one file actually uses | 1.12.0-alpha |
@@ -97,7 +97,8 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Run Diagnostics (didSave)](features/run-diagnostics-didsave.md) | Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification | 0.22.0-alpha |
 | [Run Lint All (Full Report)](features/run-lint-all-full-report.md) | Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check | 0.61.0-alpha |
 | [Taint analysis (SQL, command, path)](features/taint-analysis.md) | taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink | 1.37.0-alpha |
-| [Type-level dl:ok review](features/type-level-review-marker.md) | One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit | 1.36.0-alpha |
+| [Target compiler (--target-compiler)](features/target-compiler.md) | Names the oldest compiler the code must compile on; modernize findings whose advice needs a newer compiler are not reported | 1.38.0-alpha |
+| [Type-level dl:ok review](features/type-level-review-marker.md) | One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit | 1.38.0-alpha |
 | [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md) | type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter | 1.31.4-alpha |
 
 ## Documentation
@@ -245,7 +246,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [Help line (DL page)](features/ide-help-line.md) | Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root | 1.33.0-alpha |
 | [IDE Menu Reference](features/ide-menu-reference.md) | What every item in the drag-lint menu does | 1.4.0-alpha |
 | [ide-release](features/ide-release.md) | Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request | 1.13.0-alpha |
-| [init: one command from a project to a wired AI client](features/init-wiring.md) | Registers a project in the manifest, indexes it, finds its index and wires Claude Code, VS Code and Cursor to serve it, in one command | 1.37.0-alpha |
+| [init: one command from a project to a wired AI client](features/init-wiring.md) | Registers a project in the manifest, indexes it, finds its index and wires Claude Code, VS Code and Cursor to serve it, in one command | 1.38.0-alpha |
 | [Installation](features/installation.md) | Getting the CLI, the IDE plugin, or the LSP running | 0.21.0-alpha |
 | [lsp](features/lsp.md) | Starts the LSP (Language Server Protocol) stdio server | 0.6.0-alpha |
 | [LSP full rule set on save](features/lsp-full-rules.md) | Runs the full lint rule set on save so the editor shows what the CLI shows | 1.33.0-alpha |
@@ -254,8 +255,8 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [Switch VS Code Delphi MCP entry](features/lsp-switch-vscode.md) | Turns the VS Code Delphi MCP entry off and on with a backup | 1.33.0-alpha |
 | [Register the MCP server (Claude Code, VS Code, Cursor)](features/mcp-config-writer.md) | Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable | 1.26.1-alpha |
 | [MCP server](features/mcp-server.md) | Exposes the index to MCP clients as 15 tools | 0.4.0-alpha |
-| [Output encoding (--output-encoding)](features/output-encoding.md) | Chooses the bytes every verb writes to stdout and stderr: 7-bit ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM | 1.35.0-alpha |
-| [project-context](features/project-context.md) | Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness | 1.36.0-alpha |
+| [Output encoding (--output-encoding)](features/output-encoding.md) | Chooses the bytes every verb writes to stdout and stderr: 7-bit ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; --output files obey it and an ascii run that loses characters warns once on stderr | 1.35.0-alpha |
+| [project-context](features/project-context.md) | Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness | 1.38.0-alpha |
 | [serve](features/serve.md) | Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index | 0.4.0-alpha |
 | [Setup installer](features/setup-installer.md) | One Inno Setup installer for the engine, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF | 1.28.3-alpha |
 | [workspace add](features/workspace-add.md) | Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it | 0.6.0-alpha |

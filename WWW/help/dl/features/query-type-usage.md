@@ -4,7 +4,7 @@ title: query type-usage
 summary: Answers one question, of a list of type names, about one file
 product: DL
 group: search-navigation
-order: 20022
+order: 20024
 since: 0.1.0-alpha
 status: shipped
 updated: 1.36.0-alpha

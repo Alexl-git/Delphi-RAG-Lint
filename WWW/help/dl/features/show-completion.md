@@ -4,7 +4,7 @@ title: Show Completion
 summary: Shows an index-backed completion list at the editor caret
 product: DL
 group: search-navigation
-order: 20025
+order: 20027
 since: 0.21.0-alpha
 status: shipped
 updated: 1.36.0-alpha

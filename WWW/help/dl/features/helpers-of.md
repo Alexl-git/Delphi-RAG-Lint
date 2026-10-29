@@ -4,7 +4,7 @@ title: helpers-of
 summary: Lists record/class helper edges targeting a given type, anywhere in the index
 product: DL
 group: search-navigation
-order: 20014
+order: 20015
 since: 0.94.0-alpha
 status: shipped
 updated: 1.36.0-alpha

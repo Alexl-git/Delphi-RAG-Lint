@@ -9,18 +9,23 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.38.0-alpha
+
+* [query --concept](features/concept-search.md) -- Ranked BM25 concept search over identifier words and doc-comment prose.
+* [Gain (counted savings)](features/gain-usage-log.md) -- Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day.
+* [init: one command from a project to a wired AI client](features/init-wiring.md) -- Registers a project in the manifest, indexes it, finds its index and wires Claude Code, VS Code and Cursor to serve it, in one command.
+* [project-context](features/project-context.md) -- Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness.
+* [query --text --near](features/query-text-near.md) -- Keeps only text hits in routines within N call-graph hops of a symbol.
+* [Target compiler (--target-compiler)](features/target-compiler.md) -- Names the oldest compiler the code must compile on; modernize findings whose advice needs a newer compiler are not reported.
+* [Type-level dl:ok review](features/type-level-review-marker.md) -- One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit.
+
 ## 1.37.0-alpha
 
 * [Autofix for fixable rules](features/autofix-wave.md) -- lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md) -- Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
 * [Gap-wave lint rules](features/gap-wave-rules.md) -- About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave.
 * [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.
-* [query --text --near](features/query-text-near.md) -- Keeps only text hits in routines within N call-graph hops of a symbol.
 * [Taint analysis (SQL, command, path)](features/taint-analysis.md) -- taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink.
-
-## 1.36.0-alpha
-
-* [Gain (counted savings)](features/gain-usage-log.md) -- Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day.
 
 ## 1.35.1-alpha
 
@@ -32,7 +37,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Progress window and busy guard](features/convrules-busy-guard.md) -- ConvRulesEditor shows a cancellable progress window for long engine calls and refuses Save, Add, Convert and Delete while one runs.
 * [Rule book and source encoding](features/convrules-encoding.md) -- ConvRulesEditor keeps each book's encoding, asks before a lossy save, and before a Convert whose rules a source cannot hold (raise it, fix the rules, or cancel).
 * [Member migration (#migrate)](features/convrules-migrate-members.md) -- ConvRulesEditor: write #migrate Old -> New or -> DL_NONE (one row, or DL_NONE for all selected rows) into the row's book, or via the block's Members list.
-* [Output encoding (--output-encoding)](features/output-encoding.md) -- Chooses the bytes every verb writes to stdout and stderr: 7-bit ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM.
+* [Output encoding (--output-encoding)](features/output-encoding.md) -- Chooses the bytes every verb writes to stdout and stderr: 7-bit ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; --output files obey it and an ascii run that loses characters warns once on stderr.
 
 ## 1.33.0-alpha
 
@@ -90,7 +95,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 1.26.1-alpha
 
 * [Where the charts find Graphviz](features/chart-engine-dot-lookup.md) -- The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, PATH, then the shared default.
-* [Register the MCP server (Claude Code, VS Code)](features/mcp-config-writer.md) -- Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable.
+* [Register the MCP server (Claude Code, VS Code, Cursor)](features/mcp-config-writer.md) -- Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable.
 
 ## 1.22.0-alpha
 

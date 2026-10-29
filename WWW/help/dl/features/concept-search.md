@@ -5,7 +5,7 @@ summary: Ranked BM25 concept search over identifier words and doc-comment prose
 product: DL
 group: search-navigation
 order: 20004
-since: 1.36.0-alpha
+since: 1.38.0-alpha
 status: shipped
 updated: 1.36.0-alpha
 ---

@@ -4,7 +4,7 @@ title: query unit-usage
 summary: Shows which files reference a unit, or - with --in - which of its exports one file actually uses
 product: DL
 group: search-navigation
-order: 20024
+order: 20026
 since: 1.12.0-alpha
 status: shipped
 updated: 1.36.0-alpha
