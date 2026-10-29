@@ -469,6 +469,8 @@ const
   { Long enough that a genuinely broken engine is not respawned in a loop, short
     enough that a transient failure heals without restarting the IDE. }
   LSP_RETRY_SECONDS = 30;
+  { Ceiling for the async full-compile sweep child; a stuck child is terminated, not waited on. }
+  SWEEP_MAX_WAIT_MS = 30 * 60 * 1000;
 
 { Reflects LSP health in the root menu caption: 'drag-lint' when healthy,
   'drag-lint (!)' when the server is down. Replaces the modal that used to be
@@ -3144,8 +3146,12 @@ begin
              CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
         begin
           { Wait for the sweep to finish (a full rebuild can take minutes on a
-            large project; INFINITE is fine -- we are on a worker thread). }
-          WaitForSingleObject(PI.hProcess, INFINITE);
+            large project) -- bounded: on expiry the child is terminated. }
+          if WaitForSingleObject(PI.hProcess, SWEEP_MAX_WAIT_MS) = WAIT_TIMEOUT then
+          begin
+            TerminateProcess(PI.hProcess, 1);
+            DebugLog('FullCompileSweep(async): TIMEOUT -- child terminated');
+          end;
           CloseHandle(PI.hProcess);
           CloseHandle(PI.hThread );
           DebugLog('FullCompileSweep(async): DONE -- refreshing IDE display');

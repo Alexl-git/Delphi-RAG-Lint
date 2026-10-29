@@ -193,6 +193,10 @@ const
   { How long a graceful cancel waits for the child's control pipe to accept the request. }
   PROCRUN_STANDDOWN_CONNECT_MS = 2000;
 
+  { Bounded join of the stand-down thread when a run ends (the request itself is bounded, so this
+    only trips when the control pipe misbehaves); on expiry the thread is detached, never waited on. }
+  PROCRUN_STANDDOWN_JOIN_MS = 5000;
+
   { How often KillTree re-asks the job whether its members are gone. }
   PROCRUN_KILL_POLL_MS = 10;
 
@@ -590,8 +594,10 @@ begin
     { the child is gone (exited or killed), so its pipe is: the request has returned or fails now }
     if StandDown <> nil then
     begin
-      StandDown.WaitFor;
-      StandDown.Free;
+      if WaitForSingleObject(StandDown.Handle, PROCRUN_STANDDOWN_JOIN_MS) = WAIT_OBJECT_0 then
+        StandDown.Free
+      else
+        StandDown.FreeOnTerminate:= True; { detach: a leaked thread beats a hung IDE }
     end;
     { Unregistered BEFORE the job is closed: a KillProcess from now on falls
       back to the direct child, which has exited. }
