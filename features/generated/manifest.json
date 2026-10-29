@@ -968,10 +968,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-28",
+        "date": "2026-10-29",
         "by": "ENGINE",
-        "build": "1.36.0-alpha",
-        "surfaceHash": "7dd90e2a4d32b93cce5f5922135154f78f5cb5c9d5a6ab5558191270c81095f8"
+        "build": "1.38.0-alpha",
+        "surfaceHash": "586ac7407bd95c8d9823c15e485cb1b87c308d10854689a3f549d7842ea72a6d"
       }
     },
     {
@@ -11869,8 +11869,9 @@
       "notes": "VS Code on save: the LSP also offers the single-resolution fix as source.addMissingImports (see auto-uses-on-save); an ambiguous name stays quickfix-only",
       "verified": {
         "date": "2026-10-29",
-        "by": "alexanderl",
-        "build": "1.38.0-alpha"
+        "by": "ENGINE",
+        "build": "1.38.0-alpha",
+        "surfaceHash": "6f4c14c21b6dfd95fdfb33a01f7dd4838b4f12bb00027d43328cfdf903e4c106"
       }
     }
   ],
