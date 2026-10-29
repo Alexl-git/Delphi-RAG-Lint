@@ -8,7 +8,8 @@ handoff it resumes; several `open` lines are normal. New handoffs are written he
 The legacy `..\RESUME-*.md` files below are gitignored (`docs/RESUME-*`) and exist only in
 the main working tree; their links do not resolve in a fresh clone or worktree.
 
-- 2026-10-28 | ENGINE | 1.37 freeze done (ext fc06a64e, stage3 265b14dd), libraries parsing to scratch (ETA 06:00-07:30), int138 37a9975f green; deploy/swap needs owner go | open | HANDOFF-2026-10-28-engine-freeze-done-libraries-parsing.md
+- 2026-10-29 | ENGINE | 1.38.0-alpha deployed (engine, libraries, 39 DBs, plugin, VSC, installer); owner IDE test | open | HANDOFF-2026-10-29-engine-138-deployed-owner-test.md
+- 2026-10-28 | ENGINE | 1.37 freeze done (ext fc06a64e, stage3 265b14dd), libraries parsing to scratch (ETA 06:00-07:30), int138 37a9975f green; deploy/swap needs owner go | closed | HANDOFF-2026-10-28-engine-freeze-done-libraries-parsing.md
 
 ## Standing task lists (not handoffs)
 
