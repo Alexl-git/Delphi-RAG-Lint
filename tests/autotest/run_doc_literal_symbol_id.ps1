@@ -1,0 +1,133 @@
+<#
+  run_doc_literal_symbol_id.ps1 -- a /// doc-comment literal belongs to the
+  declaration it DOCUMENTS, not to the scope that contains it.
+
+  THE DEFECT. Every `kind = 'doc'` row in string_literals took its symbol_id from
+  the containing-symbol line map, like a string literal does. A /// block sits
+  ABOVE its declaration, so the line is inside the enclosing class (for a member)
+  or the unit (for a type or a unit-level routine): symbol_id named the scope,
+  never the documented symbol. Readers that want "the doc text of X"
+  (query --text --near, query --concept) had to work around it.
+
+  THE FIX. The indexer already decides which declaration a doc region documents
+  (FindDocRegionAbove -> UpsertSymbolDoc). The doc literal now takes THAT
+  symbol's id; one attachment rule, not a second one.
+
+  CONTROLS:
+   * a plain string literal inside a method BODY still gets the method;
+   * a // comment above a declaration keeps the containing-scope rule (only
+     'doc' rows are re-attributed).
+
+  Run from a NEUTRAL CWD, pwsh 7.
+#>
+[CmdletBinding()]
+param(
+  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$WorkDir = ''
+)
+$ErrorActionPreference = 'Stop'
+$script:Failed = $false
+function Check($n, $ok, $d = '') {
+  $s = if ($ok) { 'PASS' } else { 'FAIL' }
+  $c = if ($ok) { 'Green' } else { 'Red' }
+  Write-Host ("  [{0}] {1} {2}" -f $s, $n, $d) -ForegroundColor $c
+  if (-not $ok) { $script:Failed = $true }
+}
+
+$exePath = (Resolve-Path $Exe).Path
+if ($WorkDir -eq '') {
+  $WorkDir = Join-Path ([IO.Path]::GetTempPath()) ("doclit_" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+}
+New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
+$db = Join-Path $WorkDir 'doclit.sqlite'
+
+# Each marker word occurs exactly ONCE.
+$src = @(
+  'unit DocLit;',
+  '',
+  'interface',
+  '',
+  'type',
+  '  /// <summary>wombat type doc</summary>',
+  '  TDocHost = class',
+  '  private',
+  '    /// <summary>walrus field doc</summary>',
+  '    FCount: Integer;',
+  '    // gecko plain comment above a field',
+  '    FOther: Integer;',
+  '  public',
+  '    /// <summary>meerkat method doc</summary>',
+  '    procedure Run;',
+  '    /// <summary>ibis property doc</summary>',
+  '    property Count: Integer read FCount;',
+  '  end;',
+  '',
+  '/// <summary>tapir routine doc</summary>',
+  'procedure UnitLevel;',
+  '',
+  'implementation',
+  '',
+  'procedure TDocHost.Run;',
+  'begin',
+  '  WriteLn(''okapi body literal'');',
+  'end;',
+  '',
+  'procedure UnitLevel;',
+  'begin',
+  'end;',
+  '',
+  'end.'
+) -join "`r`n"
+[IO.File]::WriteAllText((Join-Path $WorkDir 'DocLit.pas'), $src + "`r`n", [Text.Encoding]::ASCII)
+
+# Fresh scratch DB, directory scan: not a project DB, so no widening concern.
+$idxOut = & $exePath index $WorkDir --db $db 2>&1
+$idxExit = $LASTEXITCODE
+Check 'the fixture indexed' ($idxExit -eq 0 -and (Test-Path $db)) "exit=$idxExit"
+if (-not (Test-Path $db)) {
+  Write-Host ($idxOut -join "`n") -ForegroundColor DarkGray
+  Write-Host 'FAIL' -ForegroundColor Red; exit 1
+}
+
+# Owner of the literal whose text contains $Word: qualified_name or '' (NULL / no row).
+# sql --json rows are POSITIONAL arrays -- read by column index, never $row.name.
+function OwnerOf([string]$Word) {
+  $q = "SELECT COALESCE(s.qualified_name, '') AS q FROM string_literals sl " +
+       "LEFT JOIN symbols s ON s.id = sl.symbol_id WHERE sl.text LIKE '%$Word%'"
+  $raw = (& $exePath sql --query $q --db $db --json 2>$null) -join "`n"
+  if (-not $raw.Trim()) { return '<no output>' }
+  $d = $raw | ConvertFrom-Json
+  $rows = @($d.rows)
+  if ($rows.Count -ne 1) { return "<$($rows.Count) rows>" }
+  return [string]$rows[0][0]
+}
+
+Write-Host ''
+Write-Host 'A /// literal is owned by the declaration it documents' -ForegroundColor Cyan
+$cases = [ordered]@{
+  'wombat'  = 'DocLit.TDocHost'
+  'walrus'  = 'DocLit.TDocHost.FCount'
+  'meerkat' = 'DocLit.TDocHost.Run'
+  'ibis'    = 'DocLit.TDocHost.Count'
+  'tapir'   = 'DocLit.UnitLevel'
+}
+foreach ($k in $cases.Keys) {
+  $got = OwnerOf $k
+  Check ("$k doc -> " + $cases[$k]) ($got -eq $cases[$k]) "got=$got"
+}
+
+Write-Host ''
+Write-Host 'CONTROLS -- non-doc literals keep the containing-scope rule' -ForegroundColor Cyan
+# PINS THE PRE-EXISTING containing-scope rule, not an ideal: the line map uses a
+# symbol's Start/EndLine, and a method's span is its DECLARATION in the class, so
+# a literal in the implementation body resolves to the unit (measured on the
+# base, 694e0360). This fix must not move it; changing that rule is separate work.
+$got = OwnerOf 'okapi'
+Check 'a string literal in a method body is NOT re-attributed (containing rule: unit)' ($got -eq 'DocLit') "got=$got"
+$got = OwnerOf 'gecko'
+Check 'a // comment above a field -> the containing class (unchanged)' ($got -eq 'DocLit.TDocHost') "got=$got"
+
+try { [IO.Directory]::Delete($WorkDir, $true) } catch { }
+
+Write-Host ''
+if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
