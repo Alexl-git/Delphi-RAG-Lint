@@ -88,6 +88,8 @@ contains
   DragLint.Plugin.Providers in 'DragLint.Plugin.Providers.pas',
   DragLint.Plugin.LiveDiagnostics in 'DragLint.Plugin.LiveDiagnostics.pas',
   DragLint.Plugin.LintOutputParse in 'DragLint.Plugin.LintOutputParse.pas',
+  DRagLint.Core.UsesInsert in '..\core\DRagLint.Core.UsesInsert.pas',
+  DragLint.Plugin.MissingUses in 'DragLint.Plugin.MissingUses.pas',
   DRagLint.Core.JobObject in '..\core\DRagLint.Core.JobObject.pas',
   DRagLint.Core.GhostText in '..\core\DRagLint.Core.GhostText.pas',
   DRagLint.Core.EngineHold in '..\core\DRagLint.Core.EngineHold.pas',

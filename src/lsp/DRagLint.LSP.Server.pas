@@ -1370,6 +1370,7 @@ implementation
 
 uses
   System.StrUtils, { LSP-1 CORE: MatchText }
+  DRagLint.Lint.MissingUses, { MISSING_USES_RULE: publish + codeAction }
   DRagLint.Project.DefineProfile,
   DRagLint.Symbol.Describe,  // DescribeDeclaredType: the type a hover shows for a value kind
   DRagLint.Convert.PropTree, // ClearPropertyDeclaredTypeCache: a reopened DB must not answer from old rows
@@ -4683,6 +4684,22 @@ begin
     try
       { Build code actions for the given range and diagnostics. }
       Actions:= TLspCompletion.BuildCodeActions(Path, StartLine, StartCol, EndLine, EndCol, Diags);
+      { unit-missing-from-uses quick-fixes, recomputed from the stores rather than read
+        from the client's copy (a client may drop diagnostic data), placed first. }
+      var MuDiags: TJSONArray:= TLspCompletion.BuildMissingUsesDiagnostics(Path, StoresForFile(Path));
+      try
+        var MuActs: TJSONArray:= TLspCompletion.BuildMissingUsesActions(Path, StartLine, EndLine, MuDiags);
+        try
+          for var J:= 0 to Actions.Count - 1 do MuActs.AddElement(Actions.Items[J].Clone as TJSONValue);
+          Actions.Free;
+          Actions:= MuActs;
+          MuActs := nil;
+        finally
+          MuActs.Free;
+        end;
+      finally
+        MuDiags.Free;
+      end;
       Reply.AddPair('result', Actions);
     finally
       if Context = nil then Diags.Free; { only free if we built it; context owns it }
@@ -4755,6 +4772,20 @@ begin
     else
       Writeln(ErrOutput, 'drag-lint lsp: full-rules fallback to the subset (timeout, failed run or invalid JSON): ', Path);
     Writeln(ErrOutput, Format('drag-lint lsp: full-rules %s %d ms %d findings', [Path, GetTickCount64 - Started, Diags.Count]));
+  end;
+  { unit-missing-from-uses needs the file's project store AND the platform library
+    (StoresForFile), which BuildDiagnostics' single store cannot give it; built here,
+    with the uses edits as data for the codeAction. Replaces any copy the --full-rules
+    child produced (that one carries no data). }
+  var MissingUses: TJSONArray:= TLspCompletion.BuildMissingUsesDiagnostics(Path, StoresForFile(Path));
+  try
+    for var K:= Diags.Count - 1 downto 0 do
+      if SameText((Diags.Items[K] as TJSONObject).GetValue<string>('code', ''), MISSING_USES_RULE) then
+        Diags.Remove(K).Free;
+    for var J:= 0 to MissingUses.Count - 1 do
+      Diags.AddElement(MissingUses.Items[J].Clone as TJSONValue);
+  finally
+    MissingUses.Free;
   end;
   { No store owns the file (e.g. another worktree's copy): its findings are not backed by
     a project index, so say so in the source tag. Owned files keep 'drag-lint'. }

@@ -172,6 +172,7 @@
   "sql": "sql",
   "taint-analysis": "taint-analysis",
   "target-compiler": "target-compiler",
+  "unit-missing-from-uses": "unit-missing-from-uses",
   "usages": "usages",
   "wiki": "wiki",
   "workspace-add": "workspace-add",

@@ -1,7 +1,7 @@
 ---
 id: autofix-wave
 title: Autofix for fixable rules
-summary: lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder
+summary: lint --fix repairs findings of the 111 fixable rules; --json reports per finding whether it was applied; lint accepts a folder
 product: DL
 group: linting
 order: 30001
@@ -12,7 +12,7 @@ updated: 1.38.0-alpha
 
 # Autofix for fixable rules
 
-lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
+lint --fix repairs findings of the 111 fixable rules; --json reports per finding whether it was applied; lint accepts a folder.
 
 Read this when you want drag-lint to repair findings instead of only reporting them. A dry run shows the edits, --apply writes them, and the JSON result says for each finding whether a fix was applied.
 
@@ -26,7 +26,7 @@ No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 
-`drag-lint lint --fix` repairs the findings of the 110 fixable lint rules (`drag-lint rules --json` marks them `fixable`). The fixers are grouped: expression-level, statement and block, declaration and directive, hygiene, and store-backed ones that consult the index.
+`drag-lint lint --fix` repairs the findings of the 111 fixable lint rules (`drag-lint rules --json` marks them `fixable`). The fixers are grouped: expression-level, statement and block, declaration and directive, hygiene, and store-backed ones that consult the index.
 
 ### Running it from the CLI
 ```text

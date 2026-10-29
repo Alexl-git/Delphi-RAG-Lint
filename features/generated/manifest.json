@@ -75,6 +75,12 @@
       "title": "Maintenance and diagnostics",
       "order": 120,
       "summary": "Which databases cover what, drift checks, raw dumps, self-tests."
+    },
+    {
+      "id": "uses-dependencies",
+      "title": "Uses and Dependencies",
+      "order": 130,
+      "summary": "Which units a unit needs, where they go in uses, and the cycles they make"
     }
   ],
   "teams": [
@@ -2584,7 +2590,7 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.37.0-alpha",
-      "summary": "lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
+      "summary": "lint --fix repairs findings of the 111 fixable rules; --json reports per finding whether it was applied; lint accepts a folder",
       "intro": "Read this when you want drag-lint to repair findings instead of only reporting them. A dry run shows the edits, --apply writes them, and the JSON result says for each finding whether a fix was applied.",
       "wikiPage": "autofix-wave",
       "surfaces": [
@@ -11785,6 +11791,30 @@
         "build": "1.35.1-alpha",
         "surfaceHash": "233a758c69f464298b1cf5f57e96d6f6be4fbd8f197a6e4d8e041a8c7c7967c1"
       }
+    },
+    {
+      "id": "unit-missing-from-uses",
+      "title": "Missing unit in uses (unit-missing-from-uses)",
+      "group": "uses-dependencies",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.38.0-alpha",
+      "summary": "Lint rule: names the unit that declares an undeclared identifier and adds it to the interface or implementation uses clause, cycle-checked",
+      "intro": "Read this when the IDE says Undeclared identifier for a name another unit declares (CodeSite without CodeSiteLogging in uses). The rule names the unit and the clause -- interface when the name is used there, else implementation -- checks the new uses edge for a circular unit reference first, and fixes it from Ctrl+Alt+U, the LSP light bulb or lint --fix --apply.",
+      "wikiPage": "unit-missing-from-uses",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint uMain.pas --db <db> --rule unit-missing-from-uses --fix --apply"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-10-29",
+        "by": "alexanderl",
+        "build": "1.38.0-alpha"
+      }
     }
   ],
   "families": {
@@ -16808,6 +16838,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "undocumented-check-suppression"
+      },
+      {
+        "id": "rule.unit-missing-from-uses",
+        "title": "unit-missing-from-uses",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "An identifier no declaration in scope explains but that a unit the file does not use declares in its interface -- names the uni... (structure, warning, fixable)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule unit-missing-from-uses"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "unit-missing-from-uses"
       },
       {
         "id": "rule.unit-name-matches-file",

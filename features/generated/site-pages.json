@@ -28,7 +28,7 @@
     "version": "1.38.0-alpha"
   },
   "features/autofix-wave.md": {
-    "hash": "1dbf477e04150de0b9c29b12ab42c88407dbec9b8372a2ffd58e32c569413f89",
+    "hash": "da9e24e3f9cd08fb7ef02cff05d616bdf6361b38a2c34533f0fee0ba25c282b8",
     "version": "1.38.0-alpha"
   },
   "features/bench-context.md": {
@@ -236,7 +236,7 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "b311d7e71e775caeec8a630f2eec23e4162ac9a9439f476f5fb2f163952cd096",
+    "hash": "c6c6d081289f887220eedfd36407d160d4db2e1468dd9cc7e27e42a4e51a3de0",
     "version": "1.38.0-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
@@ -320,7 +320,7 @@
     "version": "1.38.0-alpha"
   },
   "features/fix-all-in-unit.md": {
-    "hash": "4dd7097b3ed7741a904a18f74bd278b34855d2b199b386366236162ce02addb8",
+    "hash": "4ee0e8b2073a09264625123ecf1b1c80d57448edabd1ff578a951e27b97bfb5e",
     "version": "1.38.0-alpha"
   },
   "features/fix-all-reliability.md": {
@@ -328,7 +328,7 @@
     "version": "1.38.0-alpha"
   },
   "features/fix-it.md": {
-    "hash": "8a91ae951865b0155c98be93322396ddccf25606b6c4f779c387328f73ee609c",
+    "hash": "90aaf31d190f68490b9377fd876b2a394d2bf2e03aa4004759f9ba24b535f01f",
     "version": "1.38.0-alpha"
   },
   "features/format-whole-project-with-yadf.md": {
@@ -444,7 +444,7 @@
     "version": "1.38.0-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "13aa755e1cc375ae6a347a2fc887af51522fdbe55cc90c55759c1fa5814c95fa",
+    "hash": "da3c7d5ebe2622b6a42fe7dfff79b0ed75862b4c132e30d259408218def322e7",
     "version": "1.38.0-alpha"
   },
   "features/lint-tree.md": {
@@ -624,7 +624,7 @@
     "version": "1.38.0-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "605119fc9e0579917e333dc40bc03724d18cded8c3a1b5647c99615b287a8fa1",
+    "hash": "a7691730de0938e92192a7d22f686b581b59172342caa6f1c7398f34aad9ef3f",
     "version": "1.38.0-alpha"
   },
   "features/safe-delete.md": {
@@ -713,6 +713,10 @@
   },
   "features/type-name-prefix-origin.md": {
     "hash": "098a722d78de6933e0b6cfc00b986543d00281a6f99921c54a136a20c331f176",
+    "version": "1.38.0-alpha"
+  },
+  "features/unit-missing-from-uses.md": {
+    "hash": "26f0bdb35d95c0a04edc918493d7864637ac407c285c287bae92e39e90093502",
     "version": "1.38.0-alpha"
   },
   "features/unit-test-stub-symbol.md": {

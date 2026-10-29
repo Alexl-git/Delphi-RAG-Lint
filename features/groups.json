@@ -11,6 +11,7 @@
     { "id": "compiler", "title": "Compiler integration", "order": 90, "summary": "Compile, fold compiler output into findings, preprocess." },
     { "id": "database", "title": "Database and Firebird", "order": 100, "summary": "SQL scripts, live schema snapshots, ORM links." },
     { "id": "editor-integration", "title": "Editor integration", "order": 110, "summary": "The RAD Studio plugin, the language server, MCP and workspaces." },
-    { "id": "maintenance", "title": "Maintenance and diagnostics", "order": 120, "summary": "Which databases cover what, drift checks, raw dumps, self-tests." }
+    { "id": "maintenance", "title": "Maintenance and diagnostics", "order": 120, "summary": "Which databases cover what, drift checks, raw dumps, self-tests." },
+    { "id": "uses-dependencies", "title": "Uses and Dependencies", "order": 130, "summary": "Which units a unit needs, where they go in uses, and the cycles they make" }
   ]
 }

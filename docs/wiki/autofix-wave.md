@@ -1,6 +1,6 @@
 # Autofix for fixable rules
 
-`drag-lint lint --fix` repairs the findings of the 110 fixable lint rules (`drag-lint rules --json` marks them `fixable`). The fixers are grouped: expression-level, statement and block, declaration and directive, hygiene, and store-backed ones that consult the index.
+`drag-lint lint --fix` repairs the findings of the 111 fixable lint rules (`drag-lint rules --json` marks them `fixable`). The fixers are grouped: expression-level, statement and block, declaration and directive, hygiene, and store-backed ones that consult the index.
 
 ## Running it from the CLI
 ```

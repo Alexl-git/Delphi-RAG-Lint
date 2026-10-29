@@ -1,0 +1,24 @@
+{
+  "id": "unit-missing-from-uses",
+  "title": "Missing unit in uses (unit-missing-from-uses)",
+  "group": "uses-dependencies",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.38.0-alpha",
+  "summary": "Lint rule: names the unit that declares an undeclared identifier and adds it to the interface or implementation uses clause, cycle-checked",
+  "intro": "Read this when the IDE says Undeclared identifier for a name another unit declares (CodeSite without CodeSiteLogging in uses). The rule names the unit and the clause -- interface when the name is used there, else implementation -- checks the new uses edge for a circular unit reference first, and fixes it from Ctrl+Alt+U, the LSP light bulb or lint --fix --apply.",
+  "wikiPage": "unit-missing-from-uses",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint uMain.pas --db <db> --rule unit-missing-from-uses --fix --apply"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-10-29",
+    "by": "alexanderl",
+    "build": "1.38.0-alpha"
+  }
+}
