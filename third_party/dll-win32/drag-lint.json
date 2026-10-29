@@ -31,7 +31,8 @@
           "C:\\Projects\\DB\\ORM3\\CLIENT\\Micronite2027.dproj"
         ],
         "useIgnoreFiles": true,
-        "sqlOnlyMS": true
+        "sqlOnlyMS": true,
+        "libraryResolve": true
       },
       {
         "name": "ORM3-MicroniteMW1Service",
@@ -39,7 +40,8 @@
           "C:\\Projects\\DB\\ORM3\\SERVER\\MicroniteMW1Service.dproj"
         ],
         "useIgnoreFiles": true,
-        "sqlOnlyMS": true
+        "sqlOnlyMS": true,
+        "libraryResolve": true
       },
       {
         "name": "ORM3-Interfaces",
