@@ -966,6 +966,34 @@ begin
   LibJson:= LibJson + Format(',"caller_resolution":{"exact":%d,"ambiguous":%d,"external":%d,"name-only":%d}',
     [ResTally.Exact, ResTally.Ambiguous, ResTally.External, ResTally.NameOnly]);
 
+  { RB-5 (1.38): the sites that reach the target only through its interface, as
+    impact's "via_dispatch" shape (an array of via/kind/sites objects); the key is present only
+    when non-empty. Totals for one interface method are summed (two target ids
+    of one QName can report the same via). DispatchCallersOf walks 'implements'
+    edges only, so kind is 'interface'. Pinned by run_context_via_callers_guard.ps1. }
+  if Length(ABundle.ViaTotals) > 0 then
+  begin
+    var ViaNames: TArray<string>:= nil;
+    var ViaSites: TArray<Integer>:= nil;
+    for var VT in ABundle.ViaTotals do
+    begin
+      var At: Integer:= -1;
+      for I:= 0 to High(ViaNames) do
+        if ViaNames[I] = VT.Via then At:= I;
+      if At < 0 then
+      begin
+        ViaNames:= ViaNames + [VT.Via];
+        ViaSites:= ViaSites + [0];
+        At:= High(ViaNames);
+      end;
+      Inc(ViaSites[At], VT.Count);
+    end;
+    var ViaJson: TArray<string>:= nil;
+    for I:= 0 to High(ViaNames) do
+      ViaJson:= ViaJson + [Format('{"via":"%s","kind":"interface","sites":%d}', [JsonEscape(ViaNames[I]), ViaSites[I]])];
+    LibJson:= LibJson + ',"via_dispatch":[' + string.Join(',', ViaJson) + ']';
+  end;
+
   Result:= Format(
     '{"task":"%s","verb":"%s","qname":"%s","resolved":%s,"token_estimate":%d,' +
     '"has_doc":%s,"caller_count":%d,"surface_lines":%d,"slice_chunks":%d,"wiki":[%s]%s,"omitted":%d,"cap":%d}', [
