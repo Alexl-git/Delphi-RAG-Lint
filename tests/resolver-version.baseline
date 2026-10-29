@@ -698,7 +698,15 @@
 #   into CallResolver unchanged. The remedy is the same one 1.17.0-alpha already demands: index --all --resolve-only.
 # superseded (same 1.17.0-alpha, rb5-ovl branch pin): 1.17.0-alpha|d8ad73bf70159efc64c366d8824c789f3a878f85071dc4ea0eef2f21a9f4ba11
 #   2026-10-28 lane rb5-int: int138 (ki-purity) and the RB-5 branches both bumped 1.16.0 -> 1.17.0-alpha. ONE 1.17.0-alpha kept, para notes merged in Core.Model; re-pinned ONCE after merging rb5-ovl + rb5-cons (no second bump).
-1.17.0-alpha|7c0bbfbe1228c9f24a98c08df2697e4d3d612949f98fcf66b7a8a05c25a79239
+# 2026-10-29: hash refreshed WITHOUT a bump (1.17.0-alpha stays). PurityStage.pas
+#   preloads each file's symbols into its SymbolById cache (FindSymbolsByFile, same
+#   SELECT * + ReadSymbolFromQuery as GetSymbolById) and adds DRAGLINT_PROFILE
+#   counters; GetSymbolById uses one prepared statement. Nothing derived changes:
+#   a one-file incremental vs a --rebuild of this repo's cli project matched on
+#   7338 purity verdicts, 29192 call edges and symbol/ref counts (0 diffs), and
+#   run_purity_symbol_lookup_cost.ps1 E1 checks the same on a fixture.
+#   Superseded: 1.17.0-alpha|7c0bbfbe1228c9f24a98c08df2697e4d3d612949f98fcf66b7a8a05c25a79239
+1.17.0-alpha|f01d53e853e628f84efcf50f9c32e16d46227b59343acb6ac0cbcce50b722a32
 # superseded (same 1.12.0-alpha, re-pinned WITHOUT a bump 2026-10-18, wave 1.31.5 lane 2 / V-C): Storage.SQLite changed only the scoped-pass BOOKKEEPING -- the one-in-three share latch now divides by the file count from BEFORE the run (FScopeCorpusBefore) instead of CountFiles at the first removal (which already counted this run's new files), new/changed write counters feed the decline REASON text, the FTS5 'AVAILABLE' line is gone, and the '~37 min' warning prints only from 1M refs. No binding rule changed: the latch only chooses scoped vs whole-DB, and the two passes are designed to write the same call edges, so no stored edge is stale. 1.12.0-alpha|e2db1d4d6dd17d7b1687e0cb9f7b27822e71e3299e5d2afed86dd0f329658c7d
 # superseded (same 1.12.0-alpha, never released; E5 review round 1 on the branch -- NearestClassMember: the nearest member of any kind hides a farther field, an unresolved parent ends the walk, interfaces are not walked; new decline reason 'hidden'): 1.12.0-alpha|3cebd6247a15eb7fa8708c80fd73242b4c60d53c9d44a390564efaa12a6b1806
 # superseded: 1.11.0-alpha|7d04a1be5c4bfd0968b01c171996afe597c3b1ad94ae9910e013e044974854bd

@@ -204,6 +204,7 @@ type
       FQFindByDocContains    : TFDQuery     ;
       FQListDocumentedSymbols: TFDQuery     ;
       FQFindContaining       : TFDQuery     ;
+    FQGetSymbolById        : TFDQuery     ; { 2026-10-29: one prepared lookup; was a TFDQuery per call (0.55 ms each) }
       FQFindFileId           : TFDQuery     ;
       FQFindChildByName      : TFDQuery     ;
       FQFindEnclRoutine      : TFDQuery     ;
@@ -4261,6 +4262,7 @@ begin
   FQFindByDocContains.Free;
   FQListDocumentedSymbols.Free;
   FQFindContaining.Free;
+  FQGetSymbolById.Free;
   FQFindFileId.Free;
   FQFindChildByName.Free;
   FQFindEnclRoutine.Free;
@@ -5519,6 +5521,8 @@ begin
   FQListDocumentedSymbols:= NewQuery( 'SELECT s.* FROM symbols s ' + 'INNER JOIN symbol_docs d ON d.symbol_id = s.id ' + 'LIMIT :lim');
 
   FQFindContaining:= NewQuery( 'SELECT * FROM symbols ' + 'WHERE file_id = :fid AND start_line <= :line AND end_line >= :line ' + 'ORDER BY start_line DESC LIMIT 1');
+
+  FQGetSymbolById:= NewQuery('SELECT * FROM symbols WHERE id = :id LIMIT 1');
 
   FQFindFileId:= NewQuery( 'SELECT id FROM files ' + 'WHERE path = :p OR LOWER(path) = LOWER(:p) LIMIT 1');
 
@@ -10585,6 +10589,24 @@ var
   Q: TFDQuery;
 begin
   Result:= Default(TSymbol);
+  { The prepared statement once PrepareStatements has run: a lookup is then
+    bind + step + read. The purity stage alone makes one per distinct ref
+    target -- 55,693 on this repo's own project, 30.7 s at the old 0.55 ms of
+    per-call TFDQuery setup, on EVERY index run that wrote a file.
+    run_purity_symbol_lookup_cost.ps1. Same SQL and row mapper as the fallback
+    below, so the row returned is identical. }
+  if FQGetSymbolById <> nil then
+  begin
+    if FQGetSymbolById.Active then FQGetSymbolById.Close;
+    FQGetSymbolById.ParamByName('id').AsLargeInt:= AId;
+    FQGetSymbolById.Open;
+    try
+      if not FQGetSymbolById.IsEmpty then Result:= ReadSymbolFromQuery(FQGetSymbolById);
+    finally
+      FQGetSymbolById.Close;
+    end;
+    Exit;
+  end;
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
