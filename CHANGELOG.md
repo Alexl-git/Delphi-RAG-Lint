@@ -8,7 +8,7 @@ breaking changes** until v1.0.
 ### Planned
 - Downgrade fixes: `compat` rules (`compat_since`) that rewrite syntax the `--target-compiler` cannot take back to classic syntax -- `if` expression, `is not`, `not in`, `Contains`, `InRange`, digit separators, inline `var`. Registry entry `compat-downgrade-fixes`.
 
-## v1.38.0-alpha -- unreleased
+## v1.38.0-alpha -- 2026-10-29 (owner IDE test build; not yet released)
 
 ### Added
 - Interface dispatch (RB-5, resolver 1.17.0-alpha): `find-callers` lists the sites that reach a method only THROUGH the interface method it implements as a separate `via <IFoo.Bar> dispatch` group; `--json` rows gain `via`, `via_kind` (`interface`) and, for an ambiguous `implements` edge, `via_edge` (before `resolution`). `impact` lists an interface method's implementors and an implementor's interface sites (`--format json`: `implementors`, `via_dispatch`); `context` adds `## Callers via interface dispatch` sections; `call-path` follows an interface method to its implementors. The resolver now writes `implements` edges for GENERIC interfaces (`IStore<T>`) and narrows same-arity overload ties by parameter types / argument shapes. Remedy for existing DBs: `index --all --resolve-only` (no re-parse).
