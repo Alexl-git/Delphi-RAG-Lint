@@ -165,7 +165,7 @@ try {
   if ($null -ne $initRaw) {
     $init = $initRaw | ConvertFrom-Json
     Check 'E2 it advertises codeActionProvider' `
-          ($true -eq $init.result.capabilities.codeActionProvider) `
+          (($true -eq $init.result.capabilities.codeActionProvider) -or (@($init.result.capabilities.codeActionProvider.codeActionKinds) -contains 'quickfix')) `
           "capabilities.codeActionProvider = $($init.result.capabilities.codeActionProvider)"
 
     Send-Lsp @{ jsonrpc = '2.0'; method = 'initialized'; params = @{} }

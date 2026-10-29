@@ -160,6 +160,7 @@ uses
   DRagLint.LSP.Feature.ExecuteCommand in '..\lsp\DRagLint.LSP.Feature.ExecuteCommand.pas',
   DRagLint.LSP.Feature.DocumentSymbol in '..\lsp\DRagLint.LSP.Feature.DocumentSymbol.pas',
   DRagLint.LSP.Feature.Ping in '..\lsp\DRagLint.LSP.Feature.Ping.pas',
+  DRagLint.LSP.UsesOnSave in '..\lsp\DRagLint.LSP.UsesOnSave.pas',
   DRagLint.Core.JobObject in '..\core\DRagLint.Core.JobObject.pas',
   DRagLint.Hover.Renderer in 'DRagLint.Hover.Renderer.pas',
   DRagLint.Hover.Contrast in '..\core\DRagLint.Hover.Contrast.pas',
