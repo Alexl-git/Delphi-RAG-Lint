@@ -1168,6 +1168,24 @@ begin
     if (L >= 0) and (L <= High(AMap)) and (AMap[L] = 0) then AMap[L]:= ASymId;
 end;
 
+{ doclit (body literals): pick the owner of a literal whose line lies in the
+  body of routine ARoutineId. AContainingId is the declaration-span answer
+  (0 = none). The routine wins unless AContainingId is a symbol declared at or
+  after the routine's ImplStartLine -- a local const/var/nested declaration
+  inside that body, which is more specific. AIdToIdx maps a db id to its index
+  in ASymbols (built once per file, so this is O(1) per literal); an id it does
+  not know keeps the routine. }
+function PreferBodyRoutine(AContainingId, ARoutineId: Int64; const ASymbols: TArray<TSymbol>;
+  const AIdToIdx: TDictionary<Int64, Integer>): Int64;
+var
+  ContIdx, RoutIdx: Integer;
+begin
+  Result:= ARoutineId;
+  if (AContainingId <= 0) or (AContainingId = ARoutineId) then Exit;
+  if not (AIdToIdx.TryGetValue(AContainingId, ContIdx) and AIdToIdx.TryGetValue(ARoutineId, RoutIdx)) then Exit;
+  if (ASymbols[RoutIdx].ImplStartLine > 0) and (ASymbols[ContIdx].StartLine >= ASymbols[RoutIdx].ImplStartLine) then
+    Result:= AContainingId;
+end;
 function TIndexer.SliceBodyLines(const ALines: TArray<string>; AFromLine, AToLine: Integer): TArray<string>;
 var
   Lo, Hi, J: Integer;
@@ -1220,6 +1238,7 @@ var
   Lit           : TStringLiteral             ;
   EnclId        : Int64                      ; { X-23: containing symbol id of one literal (0 = none) }
   ContainingByLine: TArray<Int64>            ; { X-23: line -> containing symbol id, built once per file (see BuildContainingLineMap) }
+  IdToIdx       : TDictionary<Int64, Integer>; { doclit: db id -> index in ParseRes.Symbols, literals pass only }
   DocOwnerByLine: TArray<Int64>              ; { doclit: line -> id of the symbol whose doc region covers it (0 = none); first symbol wins }
   SourceLines   : TArray<string>             ; { v(ADP2 T2): SourceText split once, reused per routine's facts pass }
   Facts         : TSymbolFacts               ; { v(ADP2 T2) }
@@ -1466,6 +1485,22 @@ begin
             PaintDocOwner(DocOwnerByLine, DocRegion, NewSymId);
           end;
         end; // for
+        { doclit: a /// block directly above a routine IMPLEMENTATION (the
+          `procedure TFoo.Bar;` header in the implementation section) documents
+          that routine too. Second pass, so a region a DECLARATION already
+          claimed above keeps its owner (PaintDocOwner is first-wins). Same
+          FindDocRegionAbove window and intervening-declaration guard; only the
+          string_literals owner is painted -- symbol_docs is unchanged. }
+        for I:= 0 to High(ParseRes.Symbols) do
+        begin
+          Sym:= ParseRes.Symbols[I];
+          if not (Sym.Kind in [skMethod, skFunction, skProcedure, skConstructor, skDestructor]) then Continue;
+          if (Sym.ImplStartLine <= 0) or (Sym.ImplStartLine = Sym.StartLine) then Continue;
+          var ImplSymId: Int64;
+          if not IdxToId.TryGetValue(I, ImplSymId) then Continue;
+          DocRegion:= FindDocRegionAbove(DocRegions, Sym.ImplStartLine, FDocConfig.AllowBlankLineGap, FDocConfig.CaptureLooseComments, SymStartLines);
+          if DocRegion.Kind <> TDocCommentKind(-1) then PaintDocOwner(DocOwnerByLine, DocRegion, ImplSymId);
+        end;
         Inc(GProfSymbols, ProfNow - TProf);
         TProf:= ProfNow;
         // v13 (v0.82): attribute each ref to the innermost routine whose impl
@@ -1510,6 +1545,9 @@ begin
         { X-23: answer the containing symbol from a line map; SQL only for a tie
           or a line outside the map (see BuildContainingLineMap). }
         ContainingByLine:= if Length(ParseRes.Literals) > 0 then BuildContainingLineMap(ParseRes.Symbols, IdxToId, Length(SourceLines) + 2) else nil;
+        IdToIdx:= TDictionary<Int64, Integer>.Create;
+        try
+          for var Pair in IdxToId do IdToIdx.AddOrSetValue(Pair.Value, Pair.Key);
         for I:= 0 to High(ParseRes.Literals) do
         begin
           Lit:= ParseRes.Literals[I];
@@ -1518,6 +1556,15 @@ begin
             EnclId:= ContainingByLine[Lit.StartLine]
           else
             EnclId:= FStore.FindContainingSymbol(Token.FileId, Lit.StartLine).Id;
+          { doclit (body literals): the containing map answers by DECLARATION
+            span, and a method's declaration is in its class, so a literal in
+            the implementation body landed on the unit. The innermost routine
+            whose BODY covers the line (EnclosingByLine, the refs' own rule) owns
+            it -- unless the containing symbol is itself declared inside that
+            body (a local const/var), which is more specific. A line in no body
+            (initialization/finalization, unit-level consts) is unchanged. }
+          if (Lit.StartLine >= 0) and (Lit.StartLine <= High(EnclosingByLine)) and (EnclosingByLine[Lit.StartLine] > 0) then
+            EnclId:= PreferBodyRoutine(EnclId, EnclosingByLine[Lit.StartLine], ParseRes.Symbols, IdToIdx);
           { doclit: a /// line is owned by the declaration it DOCUMENTS (the same
             FindDocRegionAbove decision that wrote symbol_docs above), not by the
             scope it sits in. A /// block no declaration claims keeps the
@@ -1527,6 +1574,9 @@ begin
             EnclId:= DocOwnerByLine[Lit.StartLine];
           if EnclId > 0 then Lit.SymbolId:= EnclId;
           FStore.UpsertStringLiteral(Token, Lit);
+        end;
+        finally
+          IdToIdx.Free;
         end;
         // v(ADP2 T2): index-time analysis facts -- one symbol_facts row per
         // routine-kind symbol that HAS a body (ImplStartLine > 0). Runs last
