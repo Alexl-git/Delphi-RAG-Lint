@@ -22,6 +22,9 @@ Resumes/closes: HANDOFF-2026-10-29-engine-hang-fix-deploy-pending.md (hang fix D
   - Plugin MissingUses.pas:37 used-unit-not-resolvable ToolsAPI: index-scope (designide not indexed; 31 identical pre-existing) -- left, justify in report.
 - A re-lint was running in background: incremental reindex + lint-all of scratchpad\rel\lint\cli.sqlite -> cli2.lint.json.
 
+## Re-lint result (12:2x)
+Done: 1 finding left on changed lines -- CLI.pas:15496 review-marker-stale: the new dl:ok concat-in-loop carries no @hash. Re-mark it with the hash the lint message prints (full message in cli2.lint.json), re-lint that file, then step 2.
+
 ## Resume point (in order)
 1. Verify the re-lint: scratchpad = C:\TEMP\claude\c--Projects-Delphi-RAG-lint\487fcb1b-6ff5-455e-8e0b-5b5450070ebc\scratchpad\rel ;
    `& "$r\changed_lint.ps1" -Json @("$r\lint\cli2.lint.json")` must show 0 on changed lines and no review-marker-stale/unused
