@@ -3664,19 +3664,57 @@ var
   NonString: TDictionary<string, Boolean>; { 'line:col' of a proven non-string target }
   HasConcat: Boolean;
 
+  { True when ATypeText names a container that is never a string. }
+  function IsContainerType(const ATypeText: string): Boolean;
+  var
+    L: string;
+  begin
+    L:= LowerCase(Trim(ATypeText));
+    Result:= L.StartsWith('tarray<') or L.StartsWith('array of') or L.StartsWith('set of') or (L = 'tbytes');
+  end;
+
+  { The target text of the type alias ATypeName (`type TRows = TArray<TRow>;`),
+    or '' when ATypeName is not an alias the store knows. The store's own alias
+    chase ends at an intrinsic, so a generic-container alias stays tcUnknown;
+    this walks the alias chain (capped, cycle-safe) to the container text. }
+  function AliasContainerTarget(const ATypeName: string): string;
+  const
+    MAX_ALIAS_HOPS = 8;
+  var
+    Cur: string;
+    Hop: Integer;
+    S  : TSymbol;
+    Hit: Boolean;
+  begin
+    Result:= '';
+    Cur:= Trim(ATypeName);
+    for Hop:= 1 to MAX_ALIAS_HOPS do
+    begin
+      if IsContainerType(Cur) then Exit(Cur);
+      Hit:= False;
+      for S in AStore.FindSymbolsByExactName(Cur) do
+        if S.Kind = skTypeAlias then
+        begin
+          Cur:= Trim(S.Signature);
+          Hit:= True;
+          Break;
+        end;
+      if not Hit then Exit;
+    end;
+  end;
+
   { True only when ATypeText is known and cannot be a string. }
   function ProvenNonString(const ATypeText: string): Boolean;
   var
-    L: string;
     C: TTypeCategory;
   begin
     Result:= False;
     if (ATypeText = '') or (ATypeText = AMBIGUOUS_DECL_TYPE) then Exit;
     C:= AStore.ResolveTypeCategory(ATypeText, AFileId);
     if C <> tcUnknown then Exit(C in NON_STRING_CATEGORIES);
-    { No category for container types: a dynamic array or a set is never a string. }
-    L:= LowerCase(Trim(ATypeText));
-    Result:= L.StartsWith('tarray<') or L.StartsWith('array of') or L.StartsWith('set of') or (L = 'tbytes');
+    { No category for container types: a dynamic array or a set is never a string,
+      directly or through a type alias (`TRows = TArray<TRow>`). }
+    Result:= IsContainerType(ATypeText) or (AliasContainerTarget(ATypeText) <> '');
   end;
 
   { Records every `X := X + Y` whose X is proven non-string. AReturnType is the
