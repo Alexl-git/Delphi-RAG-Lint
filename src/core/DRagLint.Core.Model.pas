@@ -961,6 +961,18 @@ type
     ReceiverText     : string;
   end;
 
+const
+  /// <summary>Prefix of TResolvedCaller.Confidence on a name-bucket candidate
+  /// whose refs.receiver_type_text names a project class or record unrelated to
+  /// the target's owner; the type name follows the prefix.</summary>
+  /// <remarks>Set only by ISymbolStore.FindUnresolvedNameCallers when it is
+  /// given an owner type. The store MARKS rather than drops such a candidate so
+  /// that the doc-facts builder skips it through the same C14 gate that reports
+  /// every skipped edge on stderr; a candidate dropped inside the store would
+  /// vanish unreported.</remarks>
+  CALLER_CONFIDENCE_FOREIGN_TYPED = 'foreign-typed:';
+
+type
   /// <summary>2026-09-23 (enum-value-ref-binding): one enum_value declaration as
   /// the enum-value resolve stream sees it (ISymbolStore.GetEnumValueSymbols).
   /// OwnerTypeId is the class/record/interface that DECLARES the enum when the
