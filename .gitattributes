@@ -50,3 +50,11 @@ tests/preprocess/fixtures/tolerance/*.expected -text
 
 # featuregen golden fixtures: exact bytes (CRLF) are the regression pin; never let autocrlf rewrite them
 src/tools/featuregen/tests/fixtures/** -text
+
+# GitHub language bar (linguist): count PRODUCT code only. Test runners, test drivers, fixtures and the
+# charts\src PowerShell prototype (superseded by src\charts\*.pas; kept as the parity oracle) are excluded
+# from the language statistics ONLY -- diffs, search and checkout are unaffected.
+tests/**                linguist-detectable=false
+src/tools/*/tests/**    linguist-detectable=false
+charts/src/**           linguist-detectable=false
+WWW/tests/**            linguist-detectable=false
