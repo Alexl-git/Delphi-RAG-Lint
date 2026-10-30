@@ -2,6 +2,11 @@
 
 [![Release](https://img.shields.io/github/v/release/Alexl-git/Delphi-RAG-Lint?include_prereleases)](https://github.com/Alexl-git/Delphi-RAG-Lint/releases)
 [![License](https://img.shields.io/github/license/Alexl-git/Delphi-RAG-Lint)](LICENSE)
+[![Website](https://img.shields.io/badge/website-delphi--rag--lint.com-blue)](https://www.delphi-rag-lint.com)
+
+> **The website is the up-to-date source:** **[www.delphi-rag-lint.com](https://www.delphi-rag-lint.com)** --
+> [help](https://www.delphi-rag-lint.com/help/), [articles](https://www.delphi-rag-lint.com/articles/) and
+> [downloads](https://www.delphi-rag-lint.com/downloads/). This README can lag behind it.
 
 > **Alpha / work in progress.** This is an early alpha under active, daily
 > development -- expect rough edges, unfinished corners, and breaking changes
