@@ -463,6 +463,19 @@ Check 'compile-check --project Hello2 (unregistered) compiled and caches into it
 $cu = Invoke-Engine $exe1 $root @('compile-check', 'proj\uGreet.pas', '--format', 'json') 300
 Check 'compile-check <unit> with no project does not cache through a FOLDER match, and says so' ($cu.Text -match 'no database resolved for this target') ($cu.Text.Trim())
 Check 'compile-check left Hello.sqlite alone' ($helloStamp -eq (Get-Stamp $helloDb)) "$helloStamp -> $(Get-Stamp $helloDb)"
+# bl139 (1.39): a relative target WITH a dir part ('proj\uGreet.pas') used to have dcc's
+# 'proj\uGreet.pas' joined onto ExtractFilePath(target) = 'proj\' -> '<root>\proj\proj\uGreet.pas'.
+# Every finding path must name a file that exists and never repeat the directory. Not
+# vacuous: at least one finding must come back (uGreet's unused local), else FAIL.
+function Get-FindingFiles([string]$Out) {
+  $line = ($Out -split "`r?`n") | Where-Object { $_ -match '^\s*\[' } | Select-Object -First 1
+  if (-not $line) { return ,@() }
+  return ,@((ConvertFrom-Json $line) | ForEach-Object { [string]$_.file })
+}
+$files = Get-FindingFiles $cu.Out
+$bad = @($files | Where-Object { ($_ -match '(?i)\\proj\\proj\\') -or (-not (Test-Path -LiteralPath $_)) })
+Check 'compile-check proj\uGreet.pas: finding paths are real files, no repeated directory' `
+  (($files.Count -gt 0) -and ($bad.Count -eq 0)) "files=[$($files -join '; ')] bad=[$($bad -join '; ')]"
 $cr = Invoke-Engine $exe1 $root @('compile-check', 'proj\Hello.dpr', '--format', 'json') 300
 # Not vacuous: the compile must have RUN (a JSON findings array came back) and the cache
 # write must have MOVED Hello.sqlite -- a run that failed before resolving a DB

@@ -22924,8 +22924,17 @@ begin
     begin
       Rec:= F; { F is the for-in loop var (read-only) -- mutate a copy }
       P:= StringReplace(Rec.RawPath, '/', '\', [rfReplaceAll]);
-      if (P <> '') and (BaseDir <> '') and (not TPath.IsPathRooted(P)) then
-      try P:= TPath.GetFullPath(TPath.Combine(BaseDir, P)); except end;
+      { bl139: only a BARE name ('uMain.pas', the msbuild wrapper's project file) is
+        relative to the project dir. A relative path that already has a dir part
+        ('proj\uGreet.pas') is relative to the CWD the compiler ran in -- joining the
+        base onto it repeated the directory ('proj\proj\uGreet.pas'). }
+      if (P <> '') and (not TPath.IsPathRooted(P)) then
+      try
+        if ExtractFilePath(P) <> '' then P:= TPath.GetFullPath(P)
+        else if BaseDir <> '' then P:= TPath.GetFullPath(TPath.Combine(BaseDir, P));
+      except
+        { keep P as reported: a malformed path is still shown, never dropped }
+      end;
       Rec.RawPath:= P;
       { msbuild appends " [<full>\<project>.dproj]" to every message -- strip ONLY
         that trailing project-file reference, not a legitimate bracketed tail such
@@ -23027,6 +23036,7 @@ end;
 function DoCompileCheck(const AArgs: TArgs): Integer;
 var
   Target   : string             ;
+  FullTarget: string            ;
   DbPath   : string             ;
   Store    : ISymbolStore       ;
   Res      : TCompileCheckResult;
@@ -23044,12 +23054,17 @@ begin
   if Target = '' then begin Writeln('Usage: drag-lint compile-check <target.dproj or target.pas> ' + '[--db PATH] [--format json|text]'); Exit(2); end;
 
   Writeln('Compiling: ', Target);
-  Res:= TCompileChecker.Run(Target);
+  { bl139: dcc64 handed a RELATIVE target with a dir part ('proj\uGreet.pas')
+    reports 'proj\proj\uGreet.pas' -- it prefixes the target's dir onto the path as
+    given. Handed the absolute target it reports CWD-relative paths, which
+    NormalizeFindings resolves. So the compiler always gets the full path. }
+  FullTarget:= StringReplace(Target, '/', '\', [rfReplaceAll]);
+  try FullTarget:= TPath.GetFullPath(FullTarget); except { keep as given } end;
+  Res:= TCompileChecker.Run(FullTarget);
   { v0.47: absolutize relative paths + drop msbuild's duplicate lines.
     Normalize '/' -> '\' first so ExtractFilePath yields the real project dir for
     a forward-slash target (else bare project findings absolutize to CWD). }
-  Res.Findings:= NormalizeFindings(Res.Findings,
-    ExtractFilePath(StringReplace(Target, '/', '\', [rfReplaceAll])));
+  Res.Findings:= NormalizeFindings(Res.Findings, ExtractFilePath(FullTarget));
 
   ErrCount:= 0; WarnCount:= 0; HintCount:= 0;
   for F in Res.Findings do
