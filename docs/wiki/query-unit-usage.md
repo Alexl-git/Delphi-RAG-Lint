@@ -18,6 +18,9 @@ drag-lint query unit-usage --in <file.pas> --unit <UnitName> [--db ...] [--json]
 * `--in` is the source file to examine.
 * `--unit` is the unit whose exports you are asking about, spelled as the `uses`
   clause spells it (`System.IniFiles`, not `IniFiles`).
+* Without `--in`, `--limit N` lists the first N importing files and says how many
+  there are (last line in text, stderr with `--json`); the summary keeps the full
+  counts.
 
 ## It usually needs TWO databases
 

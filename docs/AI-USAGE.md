@@ -107,7 +107,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 * `query --name U --exact` against a **project** DB answers MEMBERSHIP in both
   directions: a project DB is exactly the compile closure, so a miss is a real
   answer, not a lookup failure.
-* `query unit-usage` without `--in` answers the project-wide question (which files
+* `query unit-usage` without `--in` (`--limit N`: the first N importers, full counts kept) answers the project-wide question (which files
   reference the unit, and which merely IMPORT it); with `--in` it answers about one
   file. Its candidate set is the uses graph, since in Delphi you cannot name an
   export without a uses entry. For an RTL/VCL/third-party unit whose exports live
@@ -417,8 +417,8 @@ define further codes.
 | `query hints` | stored lint hints (`--name <code>`, `--rule <severity>`) |
 | `resolve-uses --name X` | which unit to add to `uses` (won't suggest implementation-only symbols) |
 | `find-unit --name X --in F` | add the declaring unit to F's `uses` clause |
-| `usages --name X` | every read/write/use of X (`--width narrow\|wide\|very-wide`) |
-| `outline --in F.pas` | all symbols declared in one file. Since extractor 1.17.0 that includes nested-routine locals and inline `var` / `for var` declarations, emitted as `local_var` symbols parented to the INNERMOST routine (`U.T.M.Nested.I`). A forward stub row is tagged `[forward -> line N]` (`forward_target_line` in JSON); both rows are listed. |
+| `usages --name X` | every read/write/use of X (`--width narrow\|wide\|very-wide`; `--limit N` keeps the first N rows of each JSON group -- declarations included -- and adds `limit` and `totals`, the full counts) |
+| `outline --in F.pas` | all symbols declared in one file (`--kind <k[,k...]>` keeps only those kinds, `--no-locals` drops `local_var` and `param` -- most of a large unit's rows -- and `--limit N` prints the first N and says how many matched; without them every row, as the IDE reads it). Since extractor 1.17.0 that includes nested-routine locals and inline `var` / `for var` declarations, emitted as `local_var` symbols parented to the INNERMOST routine (`U.T.M.Nested.I`). A forward stub row is tagged `[forward -> line N]` (`forward_target_line` in JSON); both rows are listed. |
 | `compare --old R --command "<id> -Target T -Project P"` / `--in U.pas --line L [--update-doc]` | is this report still true? Reruns the report's COMMAND (in-process, no PowerShell) against the current index and diffs the normalised text (forms CSV by row, chart by nodes and edges). Exit 0 same, 1 differs, 2 usage/setup, 3 stale index (the new run never accepts a stale index). `--new F` (two saved outputs, no rerun) / `--question ID --target T` / `--old-db` / `--db F` / `--auto` / `--save` / `--snapshot-dir D` / `--show` / `--format text\|json\|html` / `--open`; `--format json` is schema `compare/1`. Page: [compare](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) |
 | `ask <id> --target T --project P` / `--in U.pas` / `--db D` | one report question (26 ids) as text: the DocInsight remarks block the IDE Reports menu copies, or `--plain` for the plain answer (header, COMMAND, BUNDLE, INDEX, text). Every question is answered in-process on the live index; no PowerShell is needed. Exit 0 answered, 1 refused, 2 usage/setup, 3 stale index (stderr prints the incremental reindex command; `--allow-stale` answers anyway). `--to B` / `--server-db` / `--sql-db` / `--counterpart-db` / `--depth` / `--cap` / `--surface-cap` / `--control` / `--mode` / `--max-rows` / `--out-root` / `--pairs-file` / `--open` / `--resolve-only`. Page: [ask](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ask) |
 | `surface --qname U.T` | class surface / member signatures (`--include-impl`, `--all-visibility`) |
