@@ -175,6 +175,7 @@
   "unit-missing-from-uses": "unit-missing-from-uses",
   "usages": "usages",
   "vscode-extension": "auto-uses-on-save",
+  "warm-rule-cache": "warm-rule-cache",
   "wiki": "wiki",
   "workspace-add": "workspace-add",
   "workspace-index": "workspace-index",

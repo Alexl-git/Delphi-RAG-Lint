@@ -9,6 +9,10 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.39.0-alpha
+
+* [warm-rule-cache](features/warm-rule-cache.md) -- Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm).
+
 ## 1.38.0-alpha
 
 * [Auto uses on save (VS Code)](features/auto-uses-on-save.md) -- VS Code adds a missing unit to uses on save (source.addMissingImports); dropping an unused unit on save is opt-in and gated.

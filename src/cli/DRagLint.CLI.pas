@@ -1833,7 +1833,11 @@ begin
       Inc(i);
       Result.WaitLibraryMin:= StrToIntDef(ParamStr(i), 0);
     end
-    else if (A = '--rule-cache-warm') and (i < ParamCount) then begin Inc(i); Result.RuleCacheWarm:= LowerCase(ParamStr(i)); end
+    else if (A = '--rule-cache-warm') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.RuleCacheWarm:= LowerCase(ParamStr(i));
+    end
     else if A = '--detached' then Result.WarmDetached:= True
     { LSP TRANSPORT FLAGS -- ACCEPTED AND IGNORED, NOT REJECTED.
       vscode-languageclient appends a transport flag to argv from the client's
@@ -5263,6 +5267,7 @@ begin
       if AArgs.ResolveOnly  then ChildCmdLine:= ChildCmdLine + ' --resolve-only';
       if AArgs.ForceReparse then ChildCmdLine:= ChildCmdLine + ' --force-reparse';
       if AArgs.MaxFileKBSet then ChildCmdLine:= ChildCmdLine + ' --max-file-kb ' + IntToStr(AArgs.MaxFileKB);
+      if AArgs.RuleCacheWarm <> '' then ChildCmdLine:= ChildCmdLine + ' --rule-cache-warm ' + AArgs.RuleCacheWarm;
       { The child writes to the SAME stdout/stderr, so it must write the same bytes. }
       if CurrentOutputEncoding <> oeAscii then
         ChildCmdLine:= ChildCmdLine + ' ' + OUTPUT_ENCODING_SWITCH + ' ' + OutputEncodingName(CurrentOutputEncoding);
@@ -14533,15 +14538,43 @@ begin
       SysErrorMessage(GetLastError) + '); the next lint fills it');
 end;
 
-/// <summary>`warm-rule-cache --db &lt;project.sqlite&gt; [--library-db &lt;lib.sqlite&gt;]`:
-/// fills the `lint &lt;file&gt;` rule cache for a project index now.</summary>
-/// <param name="AArgs">--db is required; --library-db as for `index`.</param>
-/// <returns>0 when it ran (warming never fails: a problem is one warning line,
-/// and the next lint fills lazily); 2 without a --db that exists.</returns>
-/// <remarks>What an index run starts in the background (with --detached, which
-/// also sends the output to NUL); by hand it is the synchronous warm.</remarks>
 function WarmQueryImageName(hProcess: THandle; dwFlags: DWORD; lpExeName: PWideChar;
   var lpdwSize: DWORD): BOOL; stdcall; external kernel32 name 'QueryFullProcessImageNameW';
+
+{ True when A and B name the SAME FILE on disk, compared by volume serial and
+  file index rather than by spelling: QueryFullProcessImageName gives the long
+  path, while ParamStr(0) keeps whatever spelling the engine was started by --
+  an 8.3 short path, or a path through a junction -- so a text compare called
+  the engine's own previous warm "another program" and left it running. When
+  either file cannot be opened, the spellings are compared after expansion. }
+function SameFileIdentity(const A, B: string): Boolean;
+
+  function Identify(const APath: string; out AInfo: TByHandleFileInformation): Boolean;
+  var
+    H: THandle;
+  begin
+    Result:= False;
+    AInfo:= Default(TByHandleFileInformation);
+    H:= CreateFile(PChar(APath), 0, FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE,
+      nil, OPEN_EXISTING, 0, 0);
+    if H = INVALID_HANDLE_VALUE then Exit;
+    try
+      Result:= GetFileInformationByHandle(H, AInfo);
+    finally
+      CloseHandle(H);
+    end;
+  end;
+
+var
+  IA, IB: TByHandleFileInformation;
+begin
+  Result:=
+    if Identify(A, IA) and Identify(B, IB) then
+      (IA.dwVolumeSerialNumber = IB.dwVolumeSerialNumber)
+        and (IA.nFileIndexHigh = IB.nFileIndexHigh) and (IA.nFileIndexLow = IB.nFileIndexLow)
+    else
+      SameText(ExpandFileName(A), ExpandFileName(B));
+end;
 
 { ONE BACKGROUND WARM PER DATABASE. Every index run starts a warm, and a warm
   of a large project takes minutes, so an edit-index loop would pile them up --
@@ -14551,6 +14584,9 @@ function WarmQueryImageName(hProcess: THandle; dwFlags: DWORD; lpExeName: PWideC
   Only a process running THIS engine's image is stopped: a pid the OS has since
   given to another program is left alone. }
 procedure StopStaleWarm(const AMarker: string);
+const
+  IMAGE_NAME_CHARS = MAX_PATH * 4; // QueryFullProcessImageName takes long (\\?\) paths
+  STOP_WAIT_MS     = 5000;         // how long the stopped warm gets to release the index
 var
   Pid : Cardinal          ;
   H   : THandle           ;
@@ -14561,22 +14597,29 @@ begin
   try
     Pid:= StrToIntDef(Trim(TFile.ReadAllText(AMarker)), 0);
   except
-    on E: EInOutError do Exit; { another warm is rewriting it: nothing to stop }
+    on E: EInOutError do Pid:= 0; { another warm is rewriting it: nothing to stop }
   end;
   if (Pid = 0) or (Pid = GetCurrentProcessId) then Exit;
   H:= OpenProcess(PROCESS_TERMINATE or SYNCHRONIZE or PROCESS_QUERY_LIMITED_INFORMATION_ACCESS, False, Pid);
   if H = 0 then Exit; { already gone }
   try
-    SetLength(Name, MAX_PATH * 4);
+    SetLength(Name, IMAGE_NAME_CHARS);
     Len:= Length(Name);
-    if not WarmQueryImageName(H, 0, @Name[0], Len) then Exit;
-    if not SameText(string(PChar(@Name[0])), ParamStr(0)) then Exit;
-    if TerminateProcess(H, 1) then WaitForSingleObject(H, 5000);
+    if WarmQueryImageName(H, 0, @Name[0], Len) and SameFileIdentity(string(PChar(@Name[0])), ParamStr(0))
+      and TerminateProcess(H, 1) then
+      WaitForSingleObject(H, STOP_WAIT_MS);
   finally
     CloseHandle(H);
   end;
 end;
 
+/// <summary>`warm-rule-cache --db &lt;project.sqlite&gt; [--library-db &lt;lib.sqlite&gt;]`:
+/// fills the `lint &lt;file&gt;` rule cache for a project index now.</summary>
+/// <param name="AArgs">--db is required; --library-db as for `index`.</param>
+/// <returns>0 when it ran (warming never fails: a problem is one warning line,
+/// and the next lint fills lazily); 2 without a --db that exists.</returns>
+/// <remarks>What an index run starts in the background (with --detached, which
+/// also sends the output to NUL); by hand it is the synchronous warm.</remarks>
 function DoWarmRuleCache(const AArgs: TArgs): Integer;
 begin
   if (AArgs.DbPath = '') or not TFile.Exists(AArgs.DbPath) then
@@ -14600,9 +14643,12 @@ begin
   finally
     if AArgs.WarmDetached and (Marker <> '') then
     try
-      if TFile.Exists(Marker) and (Trim(TFile.ReadAllText(Marker)) = Mine) then TFile.Delete(Marker);
+      { No TFile.Exists gate: a missing marker raises in ReadAllText and lands
+        below, the same as one a newer warm rewrote. }
+      if Trim(TFile.ReadAllText(Marker)) = Mine then TFile.Delete(Marker);
     except
-      on E: Exception do ; { a newer warm owns it now }
+      { gone, or a newer warm owns it now: not ours to delete }
+      on E: Exception do Writeln('rule-cache: warm marker left alone: ' + E.Message);
     end;
   end;
   Result:= 0;
@@ -35688,20 +35734,24 @@ var
   OutEnc: TOutputEncoding;
   OutEncText: string;
 begin
+  { A background warm (WarmRuleCacheAfterIndex) has no console: writing to its
+    invalid std handles would raise. NUL, before anything -- ParseArgs itself
+    can print (the defaults-file note) -- and before InstallOutputEncoding, which
+    opens and flushes both files: on the invalid handles that killed the detached
+    warm before it wrote anything. }
+  if SameText(ParamStr(1), 'warm-rule-cache') and HasSwitch('--detached') then
+  begin
+    AssignFile(Output, 'NUL');
+    Rewrite(Output);
+    AssignFile(ErrOutput, 'NUL');
+    Rewrite(ErrOutput);
+  end;
   { --output-encoding FIRST, before anything is written: the config banner and
     every ParseArgs note go out in it. Default ascii (owner ruling 2026-10-26);
     a bad value leaves ascii here and ParseArgs refuses it (exit 3). }
   OutputEncodingOnCommandLine(OutEnc, OutEncText);
   InstallOutputEncoding(OutEnc);
   if (ParamStr(1) = '--selftest-fts5') then Exit(DoSelfTestFts5);
-  { A background warm (WarmRuleCacheAfterIndex) has no console: writing to its
-    invalid std handles would raise. NUL, before anything -- ParseArgs itself
-    can print (the defaults-file note). }
-  if SameText(ParamStr(1), 'warm-rule-cache') and HasSwitch('--detached') then
-  begin
-    AssignFile(Output, 'NUL'); Rewrite(Output);
-    AssignFile(ErrOutput, 'NUL'); Rewrite(ErrOutput);
-  end;
   if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(SELFTEST_SCHEMA_DB_ARG)));
   try
     Args:= ParseArgs;

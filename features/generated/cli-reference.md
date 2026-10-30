@@ -899,6 +899,7 @@ drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-
 | `--recompile` |  |  |  |
 | `--rebuild` |  |  |  |
 | `--dry-run` |  |  |  |
+| `--rule-cache-warm` | `background\|wait\|off` |  |  |
 
 Described in:
 
@@ -1801,6 +1802,22 @@ drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-exter
 | `--name` | `<pattern>` |  |  |
 
 Described in [Uses Report (CSV)](../../docs/wiki/Uses-Report-CSV.md).
+
+### warm-rule-cache
+
+Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm).
+
+```text
+drag-lint warm-rule-cache --db <project.sqlite> [--library-db <lib.sqlite>] [--detached]
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<project.sqlite>` |  |  |
+| `--library-db` | `<lib.sqlite>` |  |  |
+| `--detached` |  |  |  |
+
+Described in [warm-rule-cache](../../docs/wiki/warm-rule-cache.md).
 
 ### wiki
 

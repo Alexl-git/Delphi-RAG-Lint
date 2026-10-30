@@ -100,6 +100,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Target compiler (--target-compiler)](features/target-compiler.md) | Names the oldest compiler the code must compile on; modernize findings whose advice needs a newer compiler are not reported | 1.38.0-alpha |
 | [Type-level dl:ok review](features/type-level-review-marker.md) | One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit | 1.38.0-alpha |
 | [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md) | type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter | 1.31.4-alpha |
+| [warm-rule-cache](features/warm-rule-cache.md) | Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm) | 1.39.0-alpha |
 
 ## Documentation
 

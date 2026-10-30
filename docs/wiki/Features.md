@@ -184,6 +184,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Target compiler (--target-compiler)](target-compiler) | `lint`; `lint-all`; `rules`; drag-lint > Code Quality > Run Lint All (Full Report)... |  |
 | [Type-level dl:ok review](Type-Level-Review-Marker) | procedure: `docs\wiki\Type-Level-Review-Marker.md` |  |
 | [type-name-prefix: expected letter from the ancestor chain](Type-Name-Prefix-Origin) | `lint`; `lint-all`; `lint` |  |
+| [warm-rule-cache](warm-rule-cache) | `warm-rule-cache` |  |
 
 ## Documentation
 

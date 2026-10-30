@@ -3,6 +3,16 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.39.0-alpha -- planned
+
+### Added
+- `index --rule-cache-warm background|wait|off` and the `warm-rule-cache --db <project.sqlite> [--library-db <lib.sqlite>] [--detached]` verb (Jonathas Paiva, PR #1). The `lint <file>` rule-cache warm that ends every project index run recomputes the whole-project rules and ran in full on every run (252 s on a 2,218-file closure against a 1-7 s index); `background` hands it to a DETACHED engine and the run returns at once, `off` skips it, `wait` (the default) is the previous behaviour; `DRAGLINT_RULE_CACHE_WARM=<mode>` sets the default (a bad value exits 2 naming its source). One background warm per index: a newer one stops the older, named by `<db>.rule-cache-warm.pid`, only when that pid runs the same engine file. Applies to each project section of `index --all`. Guard `tests\autotest\run_rule_cache_warm_background.ps1` (B0-B14).
+
+### Fixed (review of PR #1, before it shipped)
+- `index --all --jobs N` passes `--rule-cache-warm` to each section's child, which re-parses its own arguments; before, a `--jobs 2` run warmed in the run (guard B13).
+- The detached warm sends its output to NUL BEFORE the output encoding is installed; on 1.38 the encoding install hit the no-console handles first and the warm died before writing anything (guard B2).
+- A previous warm is recognised as the same engine by FILE IDENTITY (volume + file index), not by path text: an engine started by its 8.3 short path or through a junction left its own earlier warm running (guard B14).
+
 ## v1.38.1-alpha -- planned
 
 ### Planned

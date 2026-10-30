@@ -28,6 +28,8 @@
     B10 ... and never a process of another program that reuses the recorded pid
     B11 DRAGLINT_RULE_CACHE_WARM=background sets the default; the flag still wins
     B12 DRAGLINT_RULE_CACHE_WARM with another value: exit 2, naming the variable
+    B13 index --all --jobs 2 passes --rule-cache-warm to each section child (--jobs 1 = control)
+    B14 a warm started by the engine's 8.3 short path still stops the previous one
 
   Run from a NEUTRAL CWD, pwsh 7.
 #>
@@ -212,6 +214,51 @@ $env:DRAGLINT_RULE_CACHE_WARM = 'later'
 $out12 = & $exePath index --project $dpr --db $db --library-db $lib 2>&1 | Out-String
 Check 'B12 DRAGLINT_RULE_CACHE_WARM=later: exit 2, naming the variable' (($LASTEXITCODE -eq 2) -and ($out12 -match 'DRAGLINT_RULE_CACHE_WARM takes background, wait or off')) $out12
 $env:DRAGLINT_RULE_CACHE_WARM = $null
+
+# --- B13: index --all --jobs N hands the mode to each section's child -----------
+# The child re-parses its own arguments, so a flag left off its command line
+# does not exist over there: without it a `--jobs 2` run warmed IN the run.
+# --jobs 1 (the parent indexes the section itself) is the positive control.
+$cfg = Join-Path $WorkDir 'manifest.drag-lint.json'
+Write-Ascii $cfg @'
+{
+  "indexes": {
+    "outDir": "out",
+    "sections": [
+      { "name": "WarmSection", "db": "warm.sqlite", "include": ["proj\\Proj.dpr"] }
+    ]
+  }
+}
+'@
+function WaitWarm($o) {
+  if ($o -match 'rule-cache: warming in the background \(pid (\d+)\)') {
+    $p = [int]$Matches[1]; $dl = (Get-Date).AddSeconds(120)
+    while ((Get-Date) -lt $dl -and (Get-Process -Id $p -ErrorAction SilentlyContinue)) { Start-Sleep -Milliseconds 250 }
+  }
+}
+$out13a = & $exePath index --all --config $cfg --only WarmSection --jobs 1 --rule-cache-warm background 2>&1 | Out-String
+Check 'B13 control: index --all --jobs 1 --rule-cache-warm background warms in the background' (($LASTEXITCODE -eq 0) -and ($out13a -match 'warming in the background \(pid \d+\)') -and ($out13a -notmatch 'rule-cache: warmed \d+ finding')) (($out13a -split "`n" | Where-Object { $_ -match 'rule-cache|ERROR' }) -join ' | ')
+WaitWarm $out13a
+$out13 = & $exePath index --all --config $cfg --only WarmSection --jobs 2 --rule-cache-warm background 2>&1 | Out-String
+Check 'B13 index --all --jobs 2 --rule-cache-warm background: the section child warms in the background too' (($LASTEXITCODE -eq 0) -and ($out13 -match 'warming in the background \(pid \d+\)') -and ($out13 -notmatch 'rule-cache: warmed \d+ finding')) (($out13 -split "`n" | Where-Object { $_ -match 'rule-cache|ERROR' }) -join ' | ')
+WaitWarm $out13
+
+# --- B14: the same engine started under another SPELLING is still the same image --
+# QueryFullProcessImageName reports the long path; a warm started by its 8.3
+# short path has that short spelling in ParamStr(0). A text compare called its
+# own previous warm "another program" and left it running.
+$shortExe = (New-Object -ComObject Scripting.FileSystemObject).GetFile($exePath).ShortPath
+if ($shortExe -ieq $exePath) {
+  Write-Host '[SKIP] B14 no 8.3 short name for the engine path on this volume' -ForegroundColor Yellow
+} else {
+  $stale14 = Start-Process -FilePath $exePath -ArgumentList @('index', "`"$libDir`"", '--db', "`"$watchDb`"", '--watch', '--interval', '60') -WindowStyle Hidden -PassThru
+  Start-Sleep -Seconds 2
+  [IO.File]::WriteAllText($marker, "$($stale14.Id)")
+  $null = & $shortExe warm-rule-cache --detached --db $db --library-db $lib 2>&1 | Out-String
+  $stale14.Refresh()
+  Check 'B14 a warm started by the 8.3 short path stops the previous warm (long-path image)' ($stale14.HasExited) "pid $($stale14.Id) still running; short=$shortExe"
+  if (-not $stale14.HasExited) { Stop-Process -Id $stale14.Id -Force -ErrorAction SilentlyContinue }
+}
 }
 finally {
   $env:DRAGLINT_RULE_CACHE_DIR = $null

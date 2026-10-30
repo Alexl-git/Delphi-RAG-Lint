@@ -16,7 +16,7 @@ It runs in this process and prints `rule-cache: warmed N finding(s) in Xs`.
 Without a `--db` that exists it exits 2. `--detached` is the form an index run
 starts: every line of output goes to NUL, since that process has no console.
 
-A project `index` run (and each project section of `index --all`) runs the
+A project `index` run (and each project section of `index --all`, the `--jobs N` children included) runs the
 same warm before it returns, or hands it to a detached background process:
 
 ```
@@ -32,7 +32,7 @@ keeps the index OPEN until it ends, and Windows will not delete an open file, so
 script that deletes the index right after indexing keeps `wait`. The warm writes
 the cache only if no index changed while it ran, and until it finishes the next
 `lint <file>` fills the cache itself. A newer background warm of the same index
-stops the older one, whose answer would be stale anyway.
+stops the older one, whose answer would be stale anyway. Only a process running the same engine FILE is stopped -- compared by volume and file index, so an engine started by its 8.3 short path or through a junction is still recognised.
 
 ## Reaching it in the IDE
 

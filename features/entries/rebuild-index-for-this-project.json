@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "index",
-      "usage": "drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--watch [--interval N]]",
+      "usage": "drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--rule-cache-warm background|wait|off] [--watch [--interval N]]",
       "flags": [
         {
           "name": "--project",
@@ -39,6 +39,10 @@
         {
           "name": "--wait-library",
           "arg": "<min>"
+        },
+        {
+          "name": "--rule-cache-warm",
+          "arg": "background|wait|off"
         },
         {
           "name": "--require-library"
