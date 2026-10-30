@@ -83,6 +83,7 @@ $OwnRunner = @{
     'ifdef-undefined-symbol'    = 'tests\autotest\run_ifdef_undefined_symbol.ps1'
     'platform-divergent-define' = 'tests\autotest\run_platform_divergent_define.ps1'
     'assert-with-side-effect'   = 'tests\lint-project\assert-side-effect\run_assert_side_effect.ps1'
+    'unit-missing-from-uses'    = 'tests\autotest\run_unit_missing_from_uses.ps1'
 }
 function HasOwnRunner([string]$Id, [hashtable]$Map = $OwnRunner) {
   if (-not $Map.ContainsKey($Id)) { return $false }

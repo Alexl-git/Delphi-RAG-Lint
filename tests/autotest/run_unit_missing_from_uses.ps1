@@ -152,6 +152,7 @@ try {
   $all = & $Exe lint-all --db $db --rule unit-missing-from-uses --quiet 2>&1 | Out-String
   $rules = & $Exe rules --json 2>&1 | Out-String
   Write-Host 'FINDINGS' -ForegroundColor Cyan
+  # positive-control: unit-missing-from-uses
   Check 'impl-only use -> one finding, implementation clause' (($impl.Count -eq 1) -and ($impl[0] -match "uImplUse\.pas:7:3") -and ($impl[0] -match "'CsSite' is declared in unit uCsLog -- add it to the implementation uses clause")) ($impl -join ' | ')
   Check 'interface type use -> interface clause' (($intf.Count -eq 1) -and ($intf[0] -match "'TCsLogger' is declared in unit uCsLog -- add it to the interface uses clause")) ($intf -join ' | ')
   Check 'NEG: unit already in uses (and a member after a dot) -> nothing' ($already.Count -eq 0) ($already -join ' | ')

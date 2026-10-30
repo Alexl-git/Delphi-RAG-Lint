@@ -250,6 +250,7 @@
   "unbalanced-begin-end": {},
   "unconditional-recursion": {"cwe": ["CWE-674"], "misra": ["MISRA-C-2012-R17.2"]},
   "undocumented-check-suppression": {},
+  "unit-missing-from-uses": {},
   "unit-name-matches-file": {},
   "unit-not-in-dpr": {},
   "unit-not-in-library": {},

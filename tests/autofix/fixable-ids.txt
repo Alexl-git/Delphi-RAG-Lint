@@ -25,6 +25,7 @@ redundant-parentheses
 reserved-word-casing
 self-assignment
 type-name-prefix
+unit-missing-from-uses
 unused-local
 uppercase-compare
 uppercase-compare-always-false
