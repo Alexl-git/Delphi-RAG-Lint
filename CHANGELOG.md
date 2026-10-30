@@ -3,11 +3,12 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
-## v1.39.0-alpha -- planned
+## v1.39.0-alpha -- 2026-10-30
 
 Extractor 1.27.0-alpha: every index re-parses once.
 
 ### Added
+- IDE plugin About window: a link at the top ("For help and additional information refer to: https://www.delphi-rag-lint.com") and a Website (Help) button open the website.
 - Property types filled at index time (prop-types): a re-published property (`property Foo;` in a descendant) gets the full declared type of its CLASS ancestor at index time, never a cached miss; `hover --write-back` is retired (exit 3).
 - Preprocessing for the TARGET Delphi, from outside PR #8 (Jonathas Paiva): `VER<N>0` / `CompilerVersion` / `RTLVersion` follow `--target-compiler`, else the `--project` .dproj ProjectVersion, else the installed RAD Studio (`cv=<N>` fingerprint limb when not 37). Overloads pair with their bodies by parameter SHAPE; under `index`, symbol_facts come from the preprocessed parse.
 - `index --all` preprocesses each section for ITS OWN Delphi (.dproj ProjectVersion), also in `--jobs` children, which now carry `--target-compiler`; from outside PR #11 (Jonathas Paiva), re-implemented.

@@ -357,7 +357,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 
 | Feature | Surfaces | Status |
 |---|---|---|
-| [About and Status](About-and-Status) | drag-lint > About; `info`; About window: Check for Updates; About window: Close; About window: Copy Diagnostics (Current File); About window: Copy Report; About window: Diagnose Current State; About window: Import Build Log...; About window: Lint Buffer (Unsaved); About window: Open Plugin Log; About window: Recover Buffer-Compile Files; About window: Refresh; About window: Run AST Checks; About window: Run Diagnostics (didSave) |  |
+| [About and Status](About-and-Status) | drag-lint > About; `info`; About window: Check for Updates; About window: Close; About window: For help and additional information refer to:; About window: Website (Help); About window: Copy Diagnostics (Current File); About window: Copy Report; About window: Diagnose Current State; About window: Import Build Log...; About window: Lint Buffer (Unsaved); About window: Open Plugin Log; About window: Recover Buffer-Compile Files; About window: Refresh; About window: Run AST Checks; About window: Run Diagnostics (didSave) |  |
 | [ambiguous-calls](ambiguous-calls) | `ambiguous-calls` |  |
 | [bench-context](bench-context) | `bench-context` |  |
 | [contrast-selftest](Maintenance) | `contrast-selftest` | internal |

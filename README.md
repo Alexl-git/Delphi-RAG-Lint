@@ -2,7 +2,7 @@
 
 [![Release](https://img.shields.io/github/v/release/Alexl-git/Delphi-RAG-Lint?include_prereleases)](https://github.com/Alexl-git/Delphi-RAG-Lint/releases)
 [![License](https://img.shields.io/github/license/Alexl-git/Delphi-RAG-Lint)](LICENSE)
-[![Website](https://img.shields.io/badge/website-delphi--rag--lint.com-blue)](https://www.delphi-rag-lint.com)
+[![Website](https://img.shields.io/static/v1?label=website&message=delphi-rag-lint.com&color=blue)](https://www.delphi-rag-lint.com)
 
 > **The website is the up-to-date source:** **[www.delphi-rag-lint.com](https://www.delphi-rag-lint.com)** --
 > [help](https://www.delphi-rag-lint.com/help/), [articles](https://www.delphi-rag-lint.com/articles/) and

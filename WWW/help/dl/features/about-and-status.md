@@ -7,7 +7,7 @@ group: maintenance
 order: 120001
 since: 0.15.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.38.0-alpha
 ---
 
 # About and Status
@@ -43,6 +43,12 @@ Full flag list: [info in the CLI reference](../cli.md#info).
 * drag-lint About window, button **Close**
    1. Choose drag-lint > About
    2. Click Close to dismiss the window
+* drag-lint About window, button **For help and additional information refer to:**
+   1. Choose drag-lint > About
+   2. Click the website link at the top of the window to open https://www.delphi-rag-lint.com
+* drag-lint About window, button **Website (Help)**
+   1. Choose drag-lint > About
+   2. Click Website (Help), or the link at the top of the window, to open https://www.delphi-rag-lint.com for help, articles and downloads
 * drag-lint About window, button **Copy Diagnostics (Current File)**
    1. Choose drag-lint > About
    2. Click Copy Diagnostics (Current File) to put the current file's findings on the clipboard

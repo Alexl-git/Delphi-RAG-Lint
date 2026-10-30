@@ -1,5 +1,5 @@
 {
-  "product": "1.38.0-alpha",
+  "product": "1.39.0-alpha",
   "extractor": "1.27.0-alpha",
   "resolver": "1.17.0-alpha",
   "schema": 23,
@@ -10843,6 +10843,16 @@
         },
         {
           "type": "ide-about",
+          "caption": "For help and additional information refer to:",
+          "steps": ["Choose drag-lint > About", "Click the website link at the top of the window to open https://www.delphi-rag-lint.com"]
+        },
+        {
+          "type": "ide-about",
+          "caption": "Website (Help)",
+          "steps": ["Choose drag-lint > About", "Click Website (Help), or the link at the top of the window, to open https://www.delphi-rag-lint.com for help, articles and downloads"]
+        },
+        {
+          "type": "ide-about",
           "caption": "Copy Diagnostics (Current File)",
           "steps": ["Choose drag-lint > About", "Click Copy Diagnostics (Current File) to put the current file's findings on the clipboard"]
         },
@@ -10904,10 +10914,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-30",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "cb3db7489723f53586c20f3eed91d49c4579b1d2c106eea91c4c4702e7f4232f"
+        "build": "1.38.0-alpha",
+        "surfaceHash": "e5072ebe21a0d1d32611dc9892a6bcd5e28762a83912ef15d7b397b0d1e3f038"
       },
       "homeOrder": 60
     },

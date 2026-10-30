@@ -58,6 +58,7 @@ type
       procedure DoCopyReport(Sender: TObject);
       procedure DoCloseClick(Sender: TObject);
       procedure DoCheckUpdates(Sender: TObject);
+      procedure DoOpenWebsite (Sender: TObject);
       procedure DoAfterFix  (Sender: TObject);
       procedure AddButton(const ACaption: string; AHandler: TNotifyEvent;
                           var ALeft: Integer; var ATop: Integer);
@@ -92,6 +93,7 @@ uses
   , DragLint.Plugin.Updates
   , DragLint.Plugin.Theme
   , DragLint.Plugin.Editor
+  , Winapi.ShellAPI
   ;
 
 type
@@ -143,6 +145,9 @@ const
   BTN_W     = 232;
   BTN_H     = 27;
   BTN_GAP   = 6;
+  { Help, articles and downloads live on the website; the About box points
+    there so a user with a question has one place to start. }
+  DL_WEBSITE_URL = 'https://www.delphi-rag-lint.com';
 
 constructor TDLActionWrapper.Create(AProc: TDLPlainProc);
 begin
@@ -434,10 +439,24 @@ procedure TDragLintAboutForm.BuildContent;
 var
   Conn: TDiagLines;
   Idx : TDiagLines;
+  Web : TLabel;
 begin
   ClearContent;
   Screen.Cursor:= crHourGlass;
   try
+    Web:= TLabel.Create(Self);
+    Web.Parent    := FScroll;
+    Web.Left      := MARGIN;
+    Web.Top       := FNextTop;
+    Web.Caption   := 'For help and additional information refer to: ' + DL_WEBSITE_URL;
+    Web.Font.Color:= ThemedStatusColor(clHotLight);
+    Web.Font.Style:= [fsUnderline];
+    Web.Cursor    := crHandPoint;
+    Web.Hint      := 'Open ' + DL_WEBSITE_URL + ' in the browser';
+    Web.ShowHint  := True;
+    Web.OnClick   := DoOpenWebsite;
+    Inc(FNextTop, ROW_H + GROUP_GAP);
+
     RenderGroup('Versions', DiagVersions);
     { Same author, same GitHub account, and this plugin already drives YADF --
       so "which YADF is the IDE actually loading" belongs on the one screen
@@ -537,8 +556,16 @@ begin
     opened. An About box that blocks on a socket is an About box that hangs the
     IDE on a train. }
   AddButton('Check for Updates'      , DoCheckUpdates, L, T);
+  AddButton('Website (Help)'         , DoOpenWebsite , L, T);
 
   AddButton('Close', DoCloseClick, L, T);
+end;
+
+{ Opens the website in the default browser. Explicit click only -- like Check
+  for Updates, nothing here reaches the network because the window opened. }
+procedure TDragLintAboutForm.DoOpenWebsite(Sender: TObject);
+begin
+  ShellExecute(0, 'open', PChar(DL_WEBSITE_URL), nil, nil, SW_SHOWNORMAL);
 end;
 
 { Ask GitHub for the latest release of every component and report the outcome.
