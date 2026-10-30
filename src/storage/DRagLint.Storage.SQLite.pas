@@ -347,16 +347,19 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ProbeExists(const ASQL: string): Boolean;
-      /// <summary>Item 4 type filter of the Called-from name bucket: removes from AList (and the parallel
-      /// ARtyList) every candidate whose receiver_type_text names a type that resolves in THIS store and is
-      /// neither the owner, nor one of its ancestors, nor one of its descendants.</summary>
+      /// <summary>Item 4 type filter of the Called-from name bucket: MARKS in AList every candidate whose
+      /// receiver_type_text names a class or record that this store declares and that is neither the owner,
+      /// nor one of its ancestors, nor one of its descendants, by setting its Confidence to
+      /// CALLER_CONFIDENCE_FOREIGN_TYPED followed by that type name.</summary>
       /// <param name="AOwnerTypeName">The target's owning type (leaf name).</param>
-      /// <param name="AList">Candidates; filtered in place.</param>
+      /// <param name="AList">Candidates; marked in place, never shortened.</param>
       /// <param name="ARtyList">receiver_type_text per candidate, same order and length as AList.</param>
-      /// <remarks>Keeps (unknown is not foreign): an empty or NULL type text, a text with pending segments
-      /// ('T.seg'), and a type this store does not declare (a library type). Ancestors are kept because a
-      /// call through a base type reaches the owner's override. Not thread-safe.</remarks>
-      procedure DropForeignTypedCallers(const AOwnerTypeName: string; AList: TList<TResolvedCaller>; ARtyList: TList<string>);
+      /// <remarks>Leaves unmarked (unknown is not foreign): an empty or NULL type text, a text with pending
+      /// segments ('T.seg'), an interface (the call may dispatch to the owner), an alias, and a type this
+      /// store does not declare (a library type). Ancestors are kept because a call through a base type
+      /// reaches the owner's override. Marked, not removed, so that the doc-facts C14 gate skips the
+      /// candidate AND reports it on stderr. Not thread-safe.</remarks>
+      procedure MarkForeignTypedCallers(const AOwnerTypeName: string; AList: TList<TResolvedCaller>; ARtyList: TList<string>);
       /// <summary>True when ResolveCallTargets may restrict itself to the refs
       /// this instance's writes can have affected.</summary>
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ScopedResolveDeclineReason
@@ -7206,8 +7209,8 @@ begin
       Q.Next;
     end; // while
     Q.Close;
-    { item 4 TYPE FILTER -- see FoldForeignTypedCallers. }
-    if (Trim(AOwnerTypeName) <> '') and not UnknownRty then DropForeignTypedCallers(AOwnerTypeName, List, RtyList);
+    { item 4 TYPE FILTER -- see MarkForeignTypedCallers. }
+    if (Trim(AOwnerTypeName) <> '') and not UnknownRty then MarkForeignTypedCallers(AOwnerTypeName, List, RtyList);
     Result:= List.ToArray;
   finally
     Q.Free;
@@ -7216,7 +7219,7 @@ begin
   end; // try
 end; // function
 
-procedure TSQLiteSymbolStore.DropForeignTypedCallers(const AOwnerTypeName: string; AList: TList<TResolvedCaller>; ARtyList: TList<string>);
+procedure TSQLiteSymbolStore.MarkForeignTypedCallers(const AOwnerTypeName: string; AList: TList<TResolvedCaller>; ARtyList: TList<string>);
 var
   Related : TStringList;
   Declared: TDictionary<string, Boolean>;
@@ -7241,7 +7244,9 @@ var
   function DeclaredHere(const ATypeName: string): Boolean;
   begin
     if Declared.TryGetValue(LowerCase(ATypeName), Result) then Exit;
-    Q.SQL.Text:= 'SELECT 1 FROM symbols WHERE name = :t COLLATE NOCASE AND kind IN (''class'',''interface'',''record'',''type'') LIMIT 1';
+    { class / record only, as the C14 gate: an interface call may dispatch to the owner, and an alias
+      ('type') may name the owner through a unit this index lacks. }
+    Q.SQL.Text:= 'SELECT 1 FROM symbols WHERE name = :t COLLATE NOCASE AND kind IN (''class'',''record'') LIMIT 1';
     Q.ParamByName('t').AsWideString:= ATypeName;
     Q.Open;
     try
@@ -7285,9 +7290,11 @@ begin
              '  JOIN a ON s.name = a.name COLLATE NOCASE) SELECT name FROM a');
       end;
       if Related.IndexOf(Rty) >= 0 then Continue;
-      if not DeclaredHere(Rty) then Continue; { a library type: unknown is not foreign }
-      AList.Delete(i);
-      ARtyList.Delete(i);
+      if not DeclaredHere(Rty) then Continue; { a library type, an interface or an alias: unknown is not foreign }
+      { MARKED, not deleted: the C14 gate in Doc.Facts skips it and reports it on stderr. }
+      var R: TResolvedCaller:= AList[i];
+      R.Confidence:= CALLER_CONFIDENCE_FOREIGN_TYPED + Rty;
+      AList[i]:= R;
     end;
   finally
     Q.Free;

@@ -3130,6 +3130,150 @@ begin
   end;
 end;
 
+type
+  { Scanner state of JoinParamListSource. }
+  THeadingScan = (hsCode, hsBrace, hsStar, hsString);
+
+// One step of JoinParamListSource over ALine[AIdx] in code or a string literal.
+// Appends what the char contributes to AOut, opens a comment or string, and
+// tracks the paren depth. Returns the number of chars consumed.
+function HeadingCodeStep(const ALine: string; AIdx: Integer; var AState: THeadingScan;
+  var ADirective: Boolean; var ADepth: Integer; AOut: TStringBuilder): Integer;
+var
+  Ch  : Char;
+  Next: Char;
+begin
+  Result:= 1;
+  Ch    := ALine[AIdx];
+  Next  := (if AIdx < Length(ALine) then ALine[AIdx + 1] else #0);
+  if AState = hsString then
+  begin
+    AOut.Append(Ch);
+    if Ch = '''' then AState:= hsCode;
+    Exit;
+  end;
+  if Ch = '{' then
+  begin
+    AState    := hsBrace;
+    ADirective:= Next = '$';
+    if not ADirective then AOut.Append(Ch);
+  end
+  else if (Ch = '(') and (Next = '*') then
+  begin
+    AState    := hsStar;
+    ADirective:= (AIdx + 1 < Length(ALine)) and (ALine[AIdx + 2] = '$');
+    if not ADirective then AOut.Append('(*');
+    Result:= 2;
+  end
+  else if (Ch = '/') and (Next = '/') then
+  begin
+    // bounded at its line break: a joined text would otherwise lose the end
+    AOut.Append('{').Append(StringReplace(Copy(ALine, AIdx + 2, MaxInt), '}', ' ', [rfReplaceAll])).Append('}');
+    Result:= Length(ALine) - AIdx + 1;
+  end
+  else
+  begin
+    if Ch = '''' then AState:= hsString
+    else if Ch = '(' then Inc(ADepth)
+    else if Ch = ')' then Dec(ADepth);
+    AOut.Append(Ch);
+  end;
+end;
+
+// One step of JoinParamListSource over ALine[AIdx] inside a { } or (* *)
+// comment. A directive's text is dropped whole. Returns the chars consumed.
+function HeadingCommentStep(const ALine: string; AIdx: Integer; var AState: THeadingScan;
+  ADirective: Boolean; AOut: TStringBuilder): Integer;
+var
+  Closes: Boolean;
+begin
+  Result:= 1;
+  if AState = hsBrace then Closes:= ALine[AIdx] = '}'
+  else
+  begin
+    Closes:= (ALine[AIdx] = '*') and (AIdx < Length(ALine)) and (ALine[AIdx + 1] = ')');
+    if Closes then Result:= 2;
+  end;
+  if not ADirective then AOut.Append(Copy(ALine, AIdx, Result));
+  if Closes then AState:= hsCode;
+end;
+
+// The source text of a parameter list, from the '(' at column AFirstCol of
+// line ADeclLine to its matching ')', lines joined with a space, comments kept,
+// // comments rewritten as { } comments, compiler directives dropped. '' when
+// the list does not close within MAX_HEADING_LINES lines.
+function JoinParamListSource(const ALines: TArray<string>; ADeclLine, AFirstCol: Integer): string;
+const
+  MAX_HEADING_LINES = 64; { a heading longer than this is not worth the scan }
+var
+  Acc   : TStringBuilder;
+  State : THeadingScan  ;
+  IsDir : Boolean       ;
+  Depth : Integer       ;
+  LineNo: Integer       ;
+  Idx   : Integer       ;
+begin
+  Result:= '';
+  Acc   := TStringBuilder.Create;
+  try
+    State := hsCode;
+    IsDir := False;
+    Depth := 0;
+    Idx   := AFirstCol;
+    for LineNo:= ADeclLine to Min(ADeclLine + MAX_HEADING_LINES - 1, Length(ALines)) do
+    begin
+      if State = hsString then State:= hsCode; { a string literal ends with its line }
+      while Idx <= Length(ALines[LineNo - 1]) do
+      begin
+        if State in [hsBrace, hsStar] then
+          Inc(Idx, HeadingCommentStep(ALines[LineNo - 1], Idx, State, IsDir, Acc))
+        else
+        begin
+          Inc(Idx, HeadingCodeStep(ALines[LineNo - 1], Idx, State, IsDir, Depth, Acc));
+          if (State = hsCode) and (Depth = 0) then Exit(Acc.ToString);
+        end;
+      end;
+      Acc.Append(' ');
+      Idx:= 1;
+    end;
+  finally
+    Acc.Free;
+  end;
+end;
+
+// The parameter list of the routine declared at ADeclLine of ALines, WITH the
+// comments the author wrote inside it, as '(...)' -- or '' when the source
+// cannot be trusted to be the declaration ASig was indexed from.
+//
+// WHY: since EXT-E1 (07b5334d, extractor 1.37) the indexer strips comment nodes
+// from symbols.signature, so the comments ruling D-3 harvests per-parameter
+// meaning from are no longer in the index. They are still in the source.
+//
+// The source supplies the COMMENTS only; whether it is the right text is decided
+// against the index: the list with every comment blanked must equal the indexed
+// parameter list, whitespace aside. A moved line, a stale index, an overload on
+// the same line or a {$IFDEF} branch the indexer dropped all fail that test and
+// yield ''.
+function SourceParamListWithComments(const ALines: TArray<string>; ADeclLine: Integer;
+  const AName, ASig: string): string;
+var
+  M     : TMatch;
+  Joined: string;
+  Bare  : string;
+begin
+  Result:= '';
+  if (ADeclLine < 1) or (ADeclLine > Length(ALines)) or (AName = '') then Exit;
+  M:= TRegEx.Match(ALines[ADeclLine - 1],
+        '(^|[^A-Za-z0-9_])' + TRegEx.Escape(AName) + '\s*(<[^>]*>)?\s*\(', [roIgnoreCase]);
+  if not M.Success then Exit;
+  Joined:= JoinParamListSource(ALines, ADeclLine, M.Index + M.Length - 1);
+  if Joined = '' then Exit;
+  ExtractPascalComments(Joined, Bare);
+  if TRegEx.Replace(ExtractParamList(Bare), '\s', '') =
+     TRegEx.Replace(ExtractParamList(ASig), '\s', '') then
+    Result:= Joined;
+end;
+
 function MineParamNotes(const ASig: string): TArray<TDocParamNote>;
 var
   ParamList: string        ;
@@ -4003,7 +4147,11 @@ var
   var
     Foreign: string;
   begin
-    Foreign:= ForeignReceiverType(AOwningStore, ARC, OwnerTypeLeaf(ASym.Kind, ASym.QualifiedName));
+    { The store's item-4 type filter MARKS a receiver_type_text it proved foreign (see
+      CALLER_CONFIDENCE_FOREIGN_TYPED) so that it is skipped AND reported here, like every C14 skip. }
+    Foreign:= (if ARC.Confidence.StartsWith(CALLER_CONFIDENCE_FOREIGN_TYPED)
+               then Copy(ARC.Confidence, Length(CALLER_CONFIDENCE_FOREIGN_TYPED) + 1, MaxInt)
+               else ForeignReceiverType(AOwningStore, ARC, OwnerTypeLeaf(ASym.Kind, ASym.QualifiedName)));
     Result := Foreign <> '';
     if Result then
       Skipped:= Skipped + [Format('%s (%s): receiver %s is a %s, not %s or a descendant',
@@ -4061,6 +4209,14 @@ begin
   // does not depend on this: a parameter with no note still gets a <param> tag,
   // with an empty body.
   Result.ParamNotes:= MineParamNotes(ASym.Signature);
+  // v(b138): an index built since EXT-E1 carries no comments in the signature,
+  // so the notes come from the declaration's source lines, checked against it.
+  if (Result.ParamNotes = nil) and ASym.Signature.Contains('(') then
+  begin
+    var SrcParams: string:= SourceParamListWithComments(SourceLines(AStore.GetFilePath(ASym.FileId)),
+                                                        ASym.StartLine, ASym.Name, ASym.Signature);
+    if SrcParams <> '' then Result.ParamNotes:= MineParamNotes(SrcParams);
+  end;
   Result.ParamTypes:= MineParamTypes(ASym.Signature);
 
   // Called from: RESOLVED caller refs -> display 'EnclosingQName (file)'.
