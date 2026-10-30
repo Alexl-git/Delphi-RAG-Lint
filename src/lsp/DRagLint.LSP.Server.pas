@@ -317,6 +317,9 @@ type
       function  HandleSetContext(const AId: TJSONValue; const AParams: TJSONObject): Boolean;
       procedure HandleDidChangeConfiguration(const AParams: TJSONObject);
       function  ContextFooter(const APath: string): string;
+      { battery-138: hover and draglint/hoverBundle append the SAME footer, so the
+        bundle's markdown stays byte-identical to textDocument/hover (R5). }
+      function  WithContextFooter(const AParams: TJSONObject; const AMd: string): string;
       /// <summary>Dispatches one JSON-RPC message to its handler.</summary>
       /// <param name="AMsg">The message; not freed here, the caller owns it.</param>
       /// <returns>False for `exit` (the loop must end), True otherwise.</returns>
@@ -2896,6 +2899,9 @@ begin
     the context file's libraryDb > central libraries.<platform>.libraryDb >
     resolve-dbs. None -> '' and the caller refuses library answers. }
   if FExplicitDbs or not UseResolver then Result.LibraryDb:= StartupLibraryFor(ACtx.Platform);
+  { battery-138: explicit --db flags are the whole universe (see ExplicitDbs) --
+    a context file or the central defaults never add a library nobody named. }
+  if FExplicitDbs then Exit;
   if Result.LibraryDb = '' then Result.LibraryDb:= ACtx.LibraryDbOverride;
   if Result.LibraryDb = '' then Result.LibraryDb:= DefaultsLibraryDbFor(Defaults, ACtx.Platform);
   if (Result.LibraryDb = '') and UseResolver then Result.LibraryDb:= Resolved.LibraryDb;
@@ -3900,6 +3906,17 @@ begin
   Result:= True;
 end; // function
 
+function TLSPServer.WithContextFooter(const AParams: TJSONObject; const AMd: string): string;
+var
+  FooterPath: string;
+  FooterLine, FooterCol: Integer;
+begin
+  { LSP-1 CORE: the footer names the context the answer came from (SPEC 3). }
+  Result:= AMd;
+  if PositionParams(AParams, FooterPath, FooterLine, FooterCol) then
+    Result:= Result + #10#10'---'#10#10 + ContextFooter(FooterPath);
+end;
+
 procedure TLSPServer.HandleHover(const AId: TJSONValue; const AParams: TJSONObject);
 { A thin envelope over ComputeHover. Every rule about WHICH symbol a position
   means now lives in one place, so `draglint/hoverBundle` cannot describe a
@@ -3914,11 +3931,7 @@ begin
     SendResult(AId, nil); { result: null }
     Exit;
   end;
-  { LSP-1 CORE: the footer names the context the answer came from (SPEC 3). }
-  var FooterPath: string;
-  var FooterLine, FooterCol: Integer;
-  if PositionParams(AParams, FooterPath, FooterLine, FooterCol) then
-    Comp.MdValue:= Comp.MdValue + #10#10'---'#10#10 + ContextFooter(FooterPath);
+  Comp.MdValue:= WithContextFooter(AParams, Comp.MdValue);
   HoverObj:= TJSONObject.Create;
   Contents:= TJSONObject.Create;
   Contents.AddPair('kind'    , 'markdown' );
@@ -4478,7 +4491,7 @@ begin
     end;
 
     Res:= TJSONObject.Create;
-    Res.AddPair('markdown', Comp.MdValue);
+    Res.AddPair('markdown', WithContextFooter(AParams, Comp.MdValue));
 
     if not Comp.HasSymbol then
     begin

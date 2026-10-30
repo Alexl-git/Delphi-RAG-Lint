@@ -220,7 +220,12 @@ Check 'did not report a decoy parameter' `
 # hover shares the resolver, so it is asserted here rather than assumed.
 Write-Host ''
 Write-Host 'CASE 2: declaring type in a SEPARATE index' -ForegroundColor Cyan
-$dbL = Join-Path $WorkDir 'lib.sqlite'
+# Since 5ba03b06 (LSP-1 CORE, owner ruling D1) a file is answered from its own
+# project's index + the platform library only, so the separate index is NAMED
+# library-Win64.sqlite (the real report's shape). The user's central context
+# defaults would pick the platform; a fixture path keeps it the Win64 placeholder.
+$env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $WorkDir 'no-defaults.json'
+$dbL = Join-Path $WorkDir 'library-Win64.sqlite'
 $dbA = Join-Path $WorkDir 'app.sqlite'
 & $Exe index $libDir --db $dbL 2>&1 | Out-Null
 & $Exe index $appDir --db $dbA 2>&1 | Out-Null
@@ -265,6 +270,7 @@ Check 'hovering the trailing semicolon yields no symbol' `
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
+  $env:DRAGLINT_CONTEXT_DEFAULTS = $null
   # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
   foreach ($d23 in @("$env:TEMP\drag-lint-hover-member-guard-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
 }
