@@ -7,6 +7,13 @@ breaking changes** until v2.0.
 
 Extractor 1.27.0-alpha: every index re-parses once.
 
+### Known issues (fixes planned for 1.39.1)
+- A background rule-cache warm (`--rule-cache-warm`) is not stopped by `shutdown --all`, keeps the exe image locked, and `index` does not stop a stale warm of the same database.
+- `index --watch` holds the database writer lock for its whole lifetime, so a second `index` (LSP or agent reindex) on that database exits 2 until the watch ends.
+- `serve` (MCP): an exception inside a tools call may send a second reply for the same request id (unconfirmed).
+- `--version` shows `1.39.0-alpha`; the planned `1.39.0-alpha+x1.27` form (extractor version as build metadata) is not in this build.
+- Some test-battery scripts fail on this build (dataflow facts, docs-sync, exe freshness, explicit `--db` strictness, featuregen, flag/verb map, index exit codes, resolver version guard); each is being triaged and fixed in 1.39.1.
+
 ### Added
 - IDE plugin About window: a link at the top ("For help and additional information refer to: https://www.delphi-rag-lint.com") and a Website (Help) button open the website.
 - Property types filled at index time (prop-types): a re-published property (`property Foo;` in a descendant) gets the full declared type of its CLASS ancestor at index time, never a cached miss; `hover --write-back` is retired (exit 3).
