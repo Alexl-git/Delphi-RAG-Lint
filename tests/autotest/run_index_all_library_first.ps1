@@ -56,7 +56,9 @@ try {
 
   Push-Location C:\TEMP
   try {
-    foreach ($p in 'Win32','Win64') { & $exe index $lib --db (Join-Path $out "library-$p.sqlite") 2>&1 | Out-Null }
+    # --platform per DB: since 749165a8 the readiness probe checks the library's plat= stamp, and an
+    # unstamped-platform build of library-Win32 reads as "this is the win64 library, not Win32" (missing).
+    foreach ($p in 'Win32','Win64') { & $exe index $lib --db (Join-Path $out "library-$p.sqlite") --platform $p 2>&1 | Out-Null }
     Check 'fixture libraries built' ((Test-Path (Join-Path $out 'library-Win32.sqlite')) -and (Test-Path (Join-Path $out 'library-Win64.sqlite')))
 
     # 1. ORDER
@@ -78,6 +80,7 @@ try {
     # 3. explicit --platform wins
     $txt = (& $exe index --all --only Proj64 --platform Win32 --force-reparse 2>&1 | Out-String)
     Check 'explicit --platform Win32 wins over the .dproj' ($txt -match '\+ library-db .*library-Win32\.sqlite') $txt
+    Check 'explicit --platform Win32: the pre-walk library: line names library-Win32 too' (($txt -match '(?m)^library: .*library-Win32\.sqlite') -and ($txt -notmatch '(?m)^library: .*library-Win64\.sqlite')) (($txt -split '\r?\n' | Where-Object { $_ -match '^library: ' }) -join ' | ')
 
     # 4. unknown platform -> visible NOTE
     $txt = (& $exe index --all --only ProjNo 2>&1 | Out-String)

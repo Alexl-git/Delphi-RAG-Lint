@@ -426,12 +426,21 @@ $helloStamp = Get-Stamp $helloDb   # the registered re-index legitimately touche
 # -------------------------------------------------------------------------------
 Write-Host ''
 Write-Host '6d) .drag-lint.json "db" counts as an explicit --db' -ForegroundColor Cyan
-Write-Ascii (Join-Path $cfg '.drag-lint.json') ((@{ db = $cfgDb } | ConvertTo-Json))
+# 585d7a3d (INBOX 2026-09-29 4b-1, guard run_index_cwd_config_db_anchor.ps1): a CWD "db"
+# key redirects only a write UNDER that file's folder. So the config that decides the
+# write lives in proj\ (the target's own tree), and the sibling cfg\ one must be ignored.
+$projCfg = Join-Path $proj '.drag-lint.json'
+Write-Ascii $projCfg ((@{ db = $cfgDb } | ConvertTo-Json))
 $hello2Stamp = Get-Stamp $hello2Db
-$rc = Invoke-Engine $exe1 $cfg @('index', '--project', (Join-Path $proj 'Hello2.dpr'))
+$rc = Invoke-Engine $exe1 $proj @('index', '--project', (Join-Path $proj 'Hello2.dpr'))
 Check 'index --project Hello2 from a folder with .drag-lint.json {db: x.sqlite} writes x.sqlite' `
   ((Test-SamePath (Get-DatabaseLine $rc.Text) $cfgDb) -and (Test-Path $cfgDb)) "exit=$($rc.Code) Database=[$(Get-DatabaseLine $rc.Text)]"
 Check 'Hello2.sqlite untouched when the config names another db' ($hello2Stamp -eq (Get-Stamp $hello2Db)) "$hello2Stamp -> $(Get-Stamp $hello2Db)"
+[IO.File]::Delete($projCfg)
+Write-Ascii (Join-Path $cfg '.drag-lint.json') ((@{ db = $cfgDb } | ConvertTo-Json))
+$rs = Invoke-Engine $exe1 $cfg @('index', '--project', (Join-Path $proj 'Hello2.dpr'))
+Check 'a SIBLING folder''s config db is ignored with a warning (4b-1) -> Hello2''s own DB' `
+  ((Test-SamePath (Get-DatabaseLine $rs.Text) $hello2Db) -and ($rs.Text -match 'ignoring the "db" key of')) "exit=$($rs.Code) Database=[$(Get-DatabaseLine $rs.Text)]"
 $rcl = Invoke-Engine $exe1 $cfg @('index', '--project', (Join-Path $proj 'Hello2.dpr'), '--db', $hello2Db)
 Check 'control: a command-line --db REPLACES the config db' (Test-SamePath (Get-DatabaseLine $rcl.Text) $hello2Db) "Database=[$(Get-DatabaseLine $rcl.Text)]"
 $hello2Stamp = Get-Stamp $hello2Db
@@ -447,7 +456,10 @@ $rf = Invoke-Engine $exe1 $root @('refresh-findings', '--project', 'proj\Hello2.
 Check 'refresh-findings --project Hello2 (no --db) resolved a DB (not the usage/no-db exit 2)' ($rf.Code -ne 2) "exit=$($rf.Code) $($rf.Text.Trim())"
 Check 'refresh-findings left Hello.sqlite alone' ($helloStamp -eq (Get-Stamp $helloDb)) "$helloStamp -> $(Get-Stamp $helloDb)"
 $cp = Invoke-Engine $exe1 $root @('compile-check', 'proj\Hello2.dpr', '--project', 'proj\Hello2.dpr', '--format', 'json') 300
-Check 'compile-check --project Hello2 (unregistered) does not cache, and says so' ($cp.Text -match 'no database resolved for this target') ($cp.Text.Trim())
+# 0e354449 (1.20.4 #4b-3, guard run_cli_followups_guard.ps1): an unregistered project caches
+# into its OWN _D-RAG\<base>.sqlite when that file exists -- Hello2.sqlite does (section 6).
+Check 'compile-check --project Hello2 (unregistered) compiled and caches into its own DB (no skip warning)' `
+  (($cp.Out -match '(?m)^\s*\[') -and ($cp.Text -notmatch 'no database resolved for this target')) ($cp.Text.Trim())
 $cu = Invoke-Engine $exe1 $root @('compile-check', 'proj\uGreet.pas', '--format', 'json') 300
 Check 'compile-check <unit> with no project does not cache through a FOLDER match, and says so' ($cu.Text -match 'no database resolved for this target') ($cu.Text.Trim())
 Check 'compile-check left Hello.sqlite alone' ($helloStamp -eq (Get-Stamp $helloDb)) "$helloStamp -> $(Get-Stamp $helloDb)"

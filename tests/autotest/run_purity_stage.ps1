@@ -151,8 +151,11 @@ if ($null -eq $py) {
 }
 
 Write-Host 'PER-FILE REINDEX RESTORES THE COLUMNS (acceptance 28)' -ForegroundColor Cyan
-# touch one file so the walk re-parses it (rows recreated with NULL columns), then assert nothing is NULL after the run
+# change one file so the walk re-parses it (rows recreated with NULL columns), then assert nothing is NULL after the run.
+# A bare mtime touch no longer re-parses: 97f47cef (xerj item 7) skips a file whose sha256 still
+# matches. So the CONTENT changes -- a trailing comment after `end.`, no declaration moves.
 $f = Join-Path $src 'uEffects.pas'
+[System.IO.File]::AppendAllText($f, "// acceptance 28: content changed`r`n", [Text.Encoding]::ASCII)
 [System.IO.File]::SetLastWriteTimeUtc($f, (Get-Date).ToUniversalTime().AddSeconds(5))
 $out2 = Run-Index @()
 $nulls = (& $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc,0) > 0 AND effect_free IS NULL" 2>&1) -join "`n"

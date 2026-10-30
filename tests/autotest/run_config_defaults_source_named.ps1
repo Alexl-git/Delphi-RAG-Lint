@@ -17,7 +17,7 @@
     A. config db missing      -> exit 2, the ERROR names the config file and its "db" key.
     B. CONTROL: command-line --db missing -> exit 2, ERROR keeps the explicit-db
        wording and names NO config file (so A is not vacuous).
-    C. index --project from a config-db folder -> the line after `Database:`
+    C. index --project (target under the config folder) -> the line after `Database:`
        names the config file; the Database: line itself is unchanged.
     D. CONTROL: index with a command-line --db -> no config-source line.
     E. broken config + document --apply      -> exit 2, refusing to write.
@@ -92,11 +92,20 @@ $cfg2   = Join-Path $WorkDir 'cfgA'
 New-Item -ItemType Directory -Force $cfg2 | Out-Null
 $cfg2F  = Join-Path $cfg2 '.drag-lint.json'
 Write-Ascii $cfg2F '{"db": "A.sqlite"}'
-$c = RunIn $cfg2 @('index', '--project', (Join-Path $proj 'P.dpr'))
+# 585d7a3d (4b-1, guard run_index_cwd_config_db_anchor.ps1): a CWD "db" key decides only a
+# write UNDER that file's folder, so the project indexed here lives inside cfgA.
+$projA = Join-Path $cfg2 'p'
+New-Item -ItemType Directory -Force (Join-Path $projA 'sub') | Out-Null
+Copy-Item (Join-Path $proj 'P.dpr') $projA
+Copy-Item $u1 (Join-Path $projA 'sub')
+$c = RunIn $cfg2 @('index', '--project', (Join-Path $projA 'P.dpr'))
 $cl = @($c.Out -split "`r?`n")
 $ci = [Array]::FindIndex($cl, [Predicate[string]]{ param($x) $x -match '^Database:\s' })
 Check 'C1 exit 0, Database: A.sqlite' (($c.Code -eq 0) -and ($ci -ge 0) -and ($cl[$ci] -match '^Database:\s+A\.sqlite\s*$')) "exit=$($c.Code) [$(if ($ci -ge 0) { $cl[$ci] })]"
-Check 'C2 the next line names the defaults file' (($ci -ge 0) -and ($ci + 1 -lt $cl.Count) -and $cl[$ci + 1].Contains($cfg2F)) "[$(if ($ci -ge 0 -and $ci + 1 -lt $cl.Count) { $cl[$ci + 1] })]"
+# stderr (the "(loaded defaults ...)" banner, the pipe notice) interleaves with stdout in
+# the merged stream, so the source line is matched by content, not as the very next line.
+$cSrc = @($cl | Where-Object { $_.Contains('"db" key of') -and $_.Contains($cfg2F) }) | Select-Object -First 1
+Check 'C2 a line names the defaults file as the source of the db' ([bool]$cSrc) "[$cSrc]"
 
 Write-Host 'D. CONTROL: the same index with a command-line --db' -ForegroundColor Cyan
 $d = RunIn $cfg2 @('index', '--project', (Join-Path $proj 'P.dpr'), '--db', (Join-Path $WorkDir 'd.sqlite'))

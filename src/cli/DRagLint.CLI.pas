@@ -4107,8 +4107,12 @@ begin
       refuse when asked); the resolve stage below re-probes. }
     var ItemDproj: string:= '';
     if (AItem.Mode = smClosure) and (Length(AItem.Roots) > 0) then ItemDproj:= AItem.Roots[0];
+    { lf-order: the section's library platform, computed ONCE (SectionLibraryPlatform may print a NOTE)
+      and used by this pre-walk gate AND the resolve stage below. With AItem.Platform here the gate fell
+      back to the project DB's plat= stamp and named library-Win64 while `--platform Win32` bound Win32. }
+    var SecPlatform: string:= if AItem.LibraryResolve and (AItem.Mode <> smLibrary) then SectionLibraryPlatform(AItem) else AItem.Platform;
     var PreGate: TLibraryGate:= EvaluateLibraryGate(AItem.LibraryResolve and (AItem.Mode <> smLibrary), '',
-      AItem.Platform, ItemDproj, AItem.DbPath, Store, LibraryGateOptions(AWaitLibraryMin, ARequireLibrary, True));
+      SecPlatform, ItemDproj, AItem.DbPath, Store, LibraryGateOptions(AWaitLibraryMin, ARequireLibrary, True));
     if PreGate.Refuse then Exit(False);
 
     { THE OPENING HALF OF A PAIR. The section already announces how it ENDED;
@@ -4448,8 +4452,7 @@ begin
       fix meant to prevent it. ClearCallEdges also nulls refs.symbol_id. }
     if ResolverStale or AResolveOnly then Store.ClearCallEdges;
     { Library-first resolve: a DB marked `pending` whose library is ready now re-resolves even when no file changed. }
-    { lf-order: the section's library platform, computed once (SectionLibraryPlatform may print a NOTE). }
-    var SecPlatform: string:= if AItem.LibraryResolve and (AItem.Mode <> smLibrary) then SectionLibraryPlatform(AItem) else AItem.Platform;
+    { SecPlatform: computed once, before the pre-walk gate (lf-order). }
     var LibRun: TLibraryRun:= PlanLibraryResolve(Store, AItem.LibraryResolve and (AItem.Mode <> smLibrary), SecPlatform, AItem.DbPath);
     var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) or
        Store.CallEdgesNeedRebuild or ResolverStale or AResolveOnly or LibRun.Decision.RunPass;

@@ -811,7 +811,8 @@ begin
 
   if (FQuery = nil) or (FQuery.Query = nil) then
   begin
-   end;
+    raise Exception.CreateFmt( 'tree-sitter query compile failed: rule "%s" (offset %d, errType %d, ' + 'source %s)', [FId, AErrOff, Ord(AErrType), AScmPath]); // dl:ok raise-bare-exception@0a61 -- REVIEWED 2026-10-30: a rule-load failure is only shown as text by the loader (RULE-LOAD-FAIL), which catches Exception; a subclass would add nothing for any caller
+  end;
 end; // constructor
 
 destructor TQueryRule.Destroy;
