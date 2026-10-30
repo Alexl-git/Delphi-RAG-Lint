@@ -336,5 +336,13 @@ uses
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin
+  { ONE number format, whatever the machine's locale. Every figure the engine
+    PRINTS -- stage timings, "Done. ... 58.13s", section summaries, contrast
+    ratios -- went through Format/FloatToStr with the OS separators, so a pt-BR
+    machine wrote "done in 0,3s" and every parser of that output (the battery's
+    own stage-marker, summary and contrast checks among them) read nothing.
+    Decimal '.', thousands ','. Dates keep the OS format; nothing parses them. }
+  FormatSettings.DecimalSeparator := '.';
+  FormatSettings.ThousandSeparator := ',';
   ExitCode := DRagLint.CLI.Run;
 end.

@@ -90,6 +90,19 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > reason and both migrate commands on stderr). A stale index cannot answer, so it
 > is refused rather than skipped -- reindex it (`index --project <x.dproj> --db
 > <db>`, or `index <dir> --db <db>` for a library index) or drop it from the list.
+>
+> **Exit codes of the read-only verbs follow grep -- `1` is an ANSWER.**
+>
+> | code | meaning |
+> |---|---|
+> | `0` | answered, with results |
+> | `1` | answered, and the answer is EMPTY or NOT FOUND -- `query --name/--qname/--text/find`, `query find-callers`, `ancestors`, `descendants`, `context`, `call-path`, `reverse-calltree`. A valid result, not an error: a shell tool that reports a non-zero exit as a failure is wrong here |
+> | `2` | usage error (including an unknown `callgraph --format`), or a `--db` that is missing or at an OLD SCHEMA -- nothing was answered. Also a manifest-resolved list whose EVERY database is stale |
+> | `3` | FATAL: an unrecognised flag or an unexpected exception (message on stderr); also a stdout pipe the reader closed early (`| head`) -- a truncated run never exits 0, so pipefail / CI cannot read it as clean |
+>
+> These answer `0` even when empty: `find-callees` (once `--qname` resolves),
+> `usages`, `outline`, `ambiguous-calls`, `query name-like|type-usage|unit-usage`.
+> `lint` / `lint-all` use the opposite polarity: `1` = findings survived (see `--fail-on`).
 
 
 **The traps, because each one turns a correct command into a silent zero:**
@@ -172,6 +185,9 @@ published while `modifiers` says `public` for both.
      a NOTE and replaces that closure wholesale. An untagged DB is accepted.
    - The **mode is chosen per run**: `--recompile` (default, incremental) or
      `--rebuild` (from scratch).
+   - The run prints its scope **capped at 20 paths** plus the count, then the
+     stage lines and a `Done.` summary. `--dry-run` lists every scope entry and
+     indexes nothing -- use it when you need the whole closure.
    - `--scan-libraries` to index the installed RTL/VCL/DevExpress/Spring4D.
    - `--watch [--interval N]` to keep it fresh as you edit.
    - **On-disk convention:** a project's own DB lives at
@@ -436,9 +452,9 @@ define further codes.
 | `context --task "verb qname"` | curated context bundle (doc + surface + body + callers); `--full-surface` only for form/DFM work; `--max-callers N` caps the caller list and `--context N` the source lines around each; `--library-db <lib>` adds query-time library-bound calls to the Library calls count (json `library_calls.via` stored|oracle). Adds a `## Wiki` section when the task phrase matches a `dl:wiki` alias (suppressed by `--no-docs`). **A qname that resolves to nothing now exits 1 and says `NOT FOUND`** -- it used to render an empty bundle at exit 0 |
 | `impact --qname U.T.M` | transitive caller blast radius (`--depth N`); an interface method also lists its implementors, an implementor the interface sites reaching it (`--format json`: `implementors`, `via_dispatch`) |
 | `wiring --qname IIntf\|TForm` | Spring4D DI edges + DFM event handlers (`--coverage` for unresolved DI registrations) |
-| `find-callees --qname U.T.M [--db P --db LIB \| --library-db LIB]` | resolved outgoing calls of a routine; library-bound callees follow, marked `(library`, in text, and as `{"external": true, "via": "edge"\|"oracle", "receiver_type": ...}` rows in `--json` (`edge` = stored `refs.external_target`, `oracle` = bound at read time against the named library). With no library open the text ends `M external (library not open)` |
+| `find-callees --qname U.T.M [--db P --db LIB \| --library-db LIB]` | resolved outgoing calls of a routine, one line per call SITE (a target called N times repeats N times; distinct callees: `callgraph --qname U.T.M --direction callees --depth 1`); library-bound callees follow, marked `(library`, in text, and as `{"external": true, "via": "edge"\|"oracle", "receiver_type": ...}` rows in `--json` (`edge` = stored `refs.external_target`, `oracle` = bound at read time against the named library). With no library open the text ends `M external (library not open)` |
 | `call-path --from A --to B` | shortest resolved call path A -> ... -> B (`--max-depth N`; exit 1 = no path) |
-| `callgraph --qname X` | N-deep resolved call tree (`--direction callers\|callees`, `--depth N`; cycle-guarded) |
+| `callgraph --qname X` | N-deep resolved call tree (`--direction callers\|callees`, `--depth N`, `--json` or `--format text\|json`; cycle-guarded; `--format dot\|mermaid` is refused -- use `reverse-calltree`) |
 | `reverse-calltree --qname X` | N-deep call tree with call sites (`--direction callers\|callees`, default callers = *upward* "who calls X"; `--depth N`, `--format text\|json\|dot\|mermaid`) |
 | `butterfly --qname X` | composes callers (upward wing) + callees (downward wing) into one chart (`--depth N`, `--format dot\|mermaid\|text\|json`, default `dot`; static-export counterpart to the in-IDE butterfly tab) |
 | `proptree --qname X` | recursive deep-property enumerator: flattened dotted paths of a class's own + inherited properties, recursing into class-typed types down to `TPersistent` (`--depth N`, else the `#depth N` of the `--rules <book>`, else 5 -- a K-segment path needs depth >= K-1; a bad value exits 2; `--no-to-persistent`, `--refs-as-leaves` leaves `TComponent`-typed properties unexpanded -- references, not owned sub-objects; `--no-write-back` makes the query read-only, otherwise types the ancestry-bridge recovers are memoised back into the index; `--min-visibility published\|public`, `--format text\|json`; `--progress-interval S` (off by default: one JSON line on STDERR at most every S seconds while the tree is built -- `{"progress":{"elapsed_s","verb","class","depth","max_depth","classes_done","classes_queued","nodes"}}`; stdout unchanged; every stderr line is flushed BEFORE the stdout document, which is written in one piece -- a merged pipe reads notes, then the whole document; cancel = kill the process), rejected by convert-apply / convert-validate with exit 3; JSON schema `proptree/2` -- adds per-leaf `is_writable`/`visibility`/`member_kind` + class-accurate `type`, additive over `proptree/1`) |
@@ -1274,7 +1290,7 @@ either miss rules or fail a build on the wrong threshold:
 | `--enable id1,id2` | turn named rules ON for this run, over their catalog default. **Some rules ship OFF because they flood on LEGACY code** -- `magic-literal`, `multiple-statements-per-line`, `commented-out-code`. That is a property of the old code, not of yours: code written today should pass them, so pass `--enable` when linting NEW work and hold it to the whole standard. |
 | `--profile <name>` | apply a named rule profile from `drag-lint-lint.json` instead of listing ids by hand. |
 | `--target-compiler <ver\|auto>` | (index, 1.39.0) the Delphi the PREPROCESSOR describes -- VER<N>0, CompilerVersion, RTLVersion; default: the `--project` .dproj ProjectVersion (`index --all`: each section's own .dproj, also in `--jobs` children), then the installed RAD Studio, then 37; a non-37 target adds `cv=<N>` to the indexer fingerprint. (lint / lint-all / rules, 1.38.0) the oldest compiler the code must compile on: `13`, `12`, `10.4`, `XE7`, a CompilerVersion (`36`) or `auto` (the `.dproj` ProjectVersion, with `--project`). Modernize findings whose advice needs a newer compiler are not reported (`is-not-operator` / `ifthen-to-if-expression` 37, `unreadable-literal` 35, `pos-for-contains` Contains 24, `nonminimal-bool` `not in` 37); the inline-`var` fixes (33) keep the finding and skip the edit. Config key `"target_compiler"` (profile-overridable); the command line wins; default 37 changes nothing. An unknown token or an unmappable ProjectVersion exits 2. Sidecar keys `needs_compiler` / `compat_since`: rules/README.md. |
-| `--fail-on <level>` | the exit-code threshold -- `error`, `warning`, `info` or `hint`. This is what makes a lint run a BUILD GATE rather than a report; without it a wall of warnings still exits 0. |
+| `--fail-on <level>` | the exit-code threshold -- `error`, `warning`, `info`, `hint` or `none`. **Without it, ANY surviving finding exits 1** (a single hint included; the same as `--fail-on hint`) and only a clean run exits 0. `--fail-on error` makes a build gate that ignores warnings; `--fail-on none` always exits 0, which is how to run lint as a pure REPORT. |
 
 **ON by default, new in 1.34.1:** `line-too-long` (structure, warning) flags any line over 1020 characters -- dcc64 37.0 compiles such a line only at some file offsets (F2069). Split the line, or review it with `dl:ok`.
 

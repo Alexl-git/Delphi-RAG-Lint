@@ -32,7 +32,7 @@
         }
       ],
       "helpOrder": 77,
-      "help": ["  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X)", "                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.", "                               With no library open the text ends N external (library not open) for the calls one could bind."]
+      "help": ["  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X: one line per call SITE, so a target called N times repeats N times; distinct callees: callgraph --qname X --direction callees --depth 1)", "                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.", "                               With no library open the text ends N external (library not open) for the calls one could bind."]
     },
     {
       "type": "ide-menu",
@@ -57,9 +57,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-28",
+    "date": "2026-10-30",
     "by": "ENGINE",
-    "build": "1.36.0-alpha",
-    "surfaceHash": "b3998e6800368f6c9f191af5c2d3b51b3696ad30dc5bcd7d3b8e8482458ddc83"
+    "build": "1.38.0-alpha",
+    "surfaceHash": "449250a9739dc5505b5756d493f22aecd9db71a0ec9bb5a9fc37f1a7371cbad7"
   }
 }

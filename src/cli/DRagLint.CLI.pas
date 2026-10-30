@@ -875,6 +875,19 @@ begin
   Writeln('  skipped. Migrate it -- "index --project <x.dproj> --db <db>" for a project index,');
   Writeln('  "index <dir> --db <db>" for a library one -- or drop it from the list.');
   Writeln('');
+  Writeln('Exit codes of the read-only query verbs (grep-style):');
+  Writeln('  0  answered, with results.');
+  Writeln('  1  answered, and the answer is EMPTY or NOT FOUND -- a valid result, not an error.');
+  Writeln('     query --name/--qname/--text/find, query find-callers, ancestors, descendants,');
+  Writeln('     context, call-path and reverse-calltree answer this way.');
+  Writeln('  2  usage error, or a --db that is missing or at an OLD SCHEMA: nothing was answered.');
+  Writeln('     So is a manifest-resolved list whose every database is stale.');
+  Writeln('  3  FATAL: an unrecognised flag or an unexpected exception (message on stderr).');
+  Writeln('     A stdout pipe the reader closed early (| head) is FATAL 3 too: a truncated run never exits 0.');
+  Writeln('  These answer 0 even when EMPTY: find-callees (once --qname resolves), usages,');
+  Writeln('  outline, ambiguous-calls, query name-like|type-usage|unit-usage.');
+  Writeln('  lint / lint-all use the opposite polarity: 1 = findings survived (see --fail-on).');
+  Writeln('');
   Writeln('Defaults:');
   Writeln('  --db   no default. A verb with no --db resolves its database from the');
   Writeln('         manifest (see resolve-dbs); if none resolves it FAILS rather');
@@ -2059,94 +2072,54 @@ begin
   else Result:= '  [' + AResolution + ']';
 end; // function
 
-procedure PrintReferences(const AStore: ISymbolStore; const ARefs: TArray<TReference>; AsJson: Boolean);
+/// <summary>Appends one JSON object per reference to AJArr: id, kind,
+///  name_text, file_path, start/end line and column, plus `context` when the
+///  row carries source lines (--context N) and `resolution` (LAST key) when known.</summary>
+/// <param name="AStore">The store that owns ARefs -- file ids are per store.</param>
+/// <param name="ARefs">The rows to render.</param>
+/// <param name="AJArr">The ONE array the whole answer goes into.</param>
+/// <remarks>Appending rather than printing is the point. The old printer wrote a
+///  complete array per database, so `find-callers --json` over two --db emitted
+///  two arrays back to back -- not a JSON document -- and printed NOTHING at all
+///  when no database had a hit.</remarks>
+procedure AppendReferencesJson(const AStore: ISymbolStore; const ARefs: TArray<TReference>; AJArr: TJSONArray);
 var
-  JArr: TJSONArray ;
   JObj: TJSONObject;
   R   : TReference ;
-  Path: string     ;
 begin
-  if AsJson then
+  for R in ARefs do
   begin
-    JArr:= TJSONArray.Create;
-    try
-      for R in ARefs do
-      begin
-        Path:= AStore.GetFilePath(R.FileId);
-        JObj:= TJSONObject.Create;
-        JObj.AddPair('id', TJSONNumber.Create(R.Id));
-        JObj.AddPair('kind'     , R.Kind    );
-        JObj.AddPair('name_text', R.NameText);
-        JObj.AddPair('file_path', Path);
-        JObj.AddPair('start_line', TJSONNumber.Create(R.StartLine));
-        JObj.AddPair('start_col' , TJSONNumber.Create(R.StartCol ));
-        JObj.AddPair('end_line'  , TJSONNumber.Create(R.EndLine  ));
-        JObj.AddPair('end_col'   , TJSONNumber.Create(R.EndCol   ));
-        if R.Resolution <> '' then JObj.AddPair('resolution', R.Resolution); { XERJ item 3: LAST key }
-        JArr.AddElement(JObj);
-      end;
-      Writeln(JArr.Format(2));
-    finally
-      JArr.Free;
-    end; // try
-  end // if
-  else
-  begin
-    var Tally: TResolutionTally:= Default(TResolutionTally);
-    for R in ARefs do
-    begin
-      Path:= AStore.GetFilePath(R.FileId);
-      Writeln(Format('%s:%d:%d  %s%s', [Path, R.StartLine, R.StartCol, R.NameText, ResolutionSuffix(R.Resolution)]));
-      Tally.Add(R.Resolution);
-    end;
-    Writeln(Format('%d caller(s)%s', [Length(ARefs), (if Tally.ToText <> '' then ' (' + Tally.ToText + ')' else '')]));
+    JObj:= TJSONObject.Create;
+    JObj.AddPair('id', TJSONNumber.Create(R.Id));
+    JObj.AddPair('kind'     , R.Kind    );
+    JObj.AddPair('name_text', R.NameText);
+    JObj.AddPair('file_path', AStore.GetFilePath(R.FileId));
+    JObj.AddPair('start_line', TJSONNumber.Create(R.StartLine));
+    JObj.AddPair('start_col' , TJSONNumber.Create(R.StartCol ));
+    JObj.AddPair('end_line'  , TJSONNumber.Create(R.EndLine  ));
+    JObj.AddPair('end_col'   , TJSONNumber.Create(R.EndCol   ));
+    if R.ContextText <> '' then JObj.AddPair('context', R.ContextText);
+    if R.Resolution <> '' then JObj.AddPair('resolution', R.Resolution); { XERJ item 3: LAST key }
+    AJArr.AddElement(JObj);
   end;
 end; // procedure
 
-// v0.17: Print references with optional context lines
-procedure PrintReferencesWithContext(const AStore: ISymbolStore; const ARefs: TArray<TReference>; AContextLines: Integer; AsJson: Boolean);
+/// <summary>Prints one `path:line:col  name[  [resolution]]` line per reference,
+///  each followed by its indented source lines when the row carries them (--context N).</summary>
+/// <param name="AStore">The store that owns ARefs.</param>
+/// <param name="ARefs">The rows to render.</param>
+/// <param name="ATally">Accumulates the resolution of every printed row.</param>
+/// <remarks>No total line: the caller prints ONE "N caller(s)" for the whole
+///  answer, where the old printer wrote one per database.</remarks>
+procedure PrintReferenceLines(const AStore: ISymbolStore; const ARefs: TArray<TReference>; var ATally: TResolutionTally);
 var
-  JArr: TJSONArray ;
-  JObj: TJSONObject;
-  R   : TReference ;
-  Path: string     ;
+  R: TReference;
 begin
-  if AsJson then
+  for R in ARefs do
   begin
-    JArr:= TJSONArray.Create;
-    try
-      for R in ARefs do
-      begin
-        Path:= AStore.GetFilePath(R.FileId);
-        JObj:= TJSONObject.Create;
-        JObj.AddPair('id', TJSONNumber.Create(R.Id));
-        JObj.AddPair('kind'     , R.Kind    );
-        JObj.AddPair('name_text', R.NameText);
-        JObj.AddPair('file_path', Path);
-        JObj.AddPair('start_line', TJSONNumber.Create(R.StartLine));
-        JObj.AddPair('start_col' , TJSONNumber.Create(R.StartCol ));
-        JObj.AddPair('end_line'  , TJSONNumber.Create(R.EndLine  ));
-        JObj.AddPair('end_col'   , TJSONNumber.Create(R.EndCol   ));
-        if R.ContextText <> '' then JObj.AddPair('context', R.ContextText);
-        if R.Resolution <> '' then JObj.AddPair('resolution', R.Resolution); { XERJ item 3: LAST key }
-        JArr.AddElement(JObj);
-      end;
-      Writeln(JArr.Format(2));
-    finally
-      JArr.Free;
-    end; // try
-  end // if
-  else
-  begin
-    var Tally: TResolutionTally:= Default(TResolutionTally);
-    for R in ARefs do
-    begin
-      Path:= AStore.GetFilePath(R.FileId);
-      Writeln(Format('%s:%d:%d  %s%s', [Path, R.StartLine, R.StartCol, R.NameText, ResolutionSuffix(R.Resolution)]));
-      if R.ContextText <> '' then begin Writeln('  ' + StringReplace(R.ContextText, sLineBreak, sLineBreak + '  ', [rfReplaceAll])); end;
-      Tally.Add(R.Resolution);
-    end;
-    Writeln(Format('%d caller(s)%s', [Length(ARefs), (if Tally.ToText <> '' then ' (' + Tally.ToText + ')' else '')]));
+    Writeln(Format('%s:%d:%d  %s%s', [AStore.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.NameText, ResolutionSuffix(R.Resolution)]));
+    if R.ContextText <> '' then Writeln('  ' + StringReplace(R.ContextText, sLineBreak, sLineBreak + '  ', [rfReplaceAll]));
+    ATally.Add(R.Resolution);
   end;
 end; // procedure
 
@@ -2365,6 +2338,7 @@ begin
     try-except-swallowed). The older reader at the folder refusal still wraps it;
     that predates this and is left alone deliberately. }
   var ScanType: string:= AStore.GetMetaValue(SCAN_TYPE_KEY);
+  var OutOfClosure: Integer:= StrToIntDef(AStore.GetMetaValue(OUT_OF_CLOSURE_KEY), 0);
 
   if (Rep.Verdict = fvStale) and SameText(ScanType, SCAN_TYPE_PROJECT) then
   begin
@@ -2392,7 +2366,6 @@ begin
       reader to skim every freshness warning, including the ones that matter.
       So when the DB knows it has such rows, the note names the only remedy
       that actually works for them. }
-    var OutOfClosure: Integer:= StrToIntDef(AStore.GetMetaValue(OUT_OF_CLOSURE_KEY), 0);
     if OutOfClosure > 0 then
       Writeln(ErrOutput, Format(
         'drag-lint: note: %d of those indexed file(s) lie OUTSIDE this project''s compile closure.' +
@@ -2404,6 +2377,19 @@ begin
   begin
     Note:= FreshnessNote(Rep, ADbPath);
     if Note <> '' then Writeln(ErrOutput, Note);
+
+    { A CURRENT INDEX CAN STILL ANSWER WITH ROWS THAT ARE NOT THE PROJECT'S
+      (Gitea drag-lint#8). The rows outside the closure are not stale when no
+      file changed, so the note above stays silent -- and they still take part
+      in every answer: a .dpr copied from another folder counted as one more
+      unit-usage user, a deleted unit that every `uses` resolved to. index
+      --project reports the count on every run, but whoever only QUERIES never
+      sees that output. The database knows; the reader must too. }
+    if (OutOfClosure > 0) and SameText(ScanType, SCAN_TYPE_PROJECT) then
+      Writeln(ErrOutput, Format(
+        'drag-lint: note: %d indexed file(s) lie OUTSIDE this project''s compile closure and may appear in answers.' +
+        ' index --project never evicts them; drop them with: drag-lint index --project <file.dproj> --db %s --rebuild',
+        [OutOfClosure, ADbPath]));
   end;
 
   { THE RESOLVE PASS IS A SECOND FRESHNESS QUESTION, AND IT HAD NO VOICE.
@@ -2430,16 +2416,21 @@ begin
     index is OLDER than this build and is exactly the downgrade when it is NEWER
     -- and the old `Prev <> Cur` gave that advice for both (ENG-2). An index
     newer than this build is refused by RefuseIfEngineOlderThanDb anyway, so
-    the note says so rather than advising a command that would fail. }
+    the note says so rather than advising a command that would fail.
+
+    THE ENGINE IS NAMED BY ITS PRODUCT VERSION, THE EDGES BY THE RESOLVER'S
+    (Gitea drag-lint#19). "this build is r=1.19.0-alpha" read as the version of
+    the exe while `--version` said 1.18.0-alpha. }
   var PrevVer: string:= ResolverVersionOfFingerprint(Prev);
+  var Engine : string:= 'drag-lint ' + DRAGLINT_VERSION;
   if Prev = '' then
-    Writeln(ErrOutput, Format('  resolver: this index carries NO resolver stamp (current %s) -- its edges will be re-derived on the next index run.', [Cur]))
+    Writeln(ErrOutput, Format('  resolver: this index carries NO resolver stamp; this engine (%s) resolves with %s -- its edges will be re-derived on the next index run.', [Engine, Cur]))
   else if (PrevVer <> '') and (CompareDottedVersions(DRAGLINT_RESOLVER_VERSION, PrevVer) < 0) then
-    Writeln(ErrOutput, Format('  resolver: edges were derived by a NEWER resolver (%s) than this build (%s) -- reads are fine; ' +
-      'an index run with this engine is refused. Use the engine that resolved it.', [Prev, Cur]))
+    Writeln(ErrOutput, Format('  resolver: edges were derived by a NEWER resolver (%s) than this engine''s (%s, resolver %s) -- reads are fine; ' +
+      'an index run with this engine is refused. Use the engine that resolved it.', [Prev, Engine, Cur]))
   else if Prev <> Cur then
-    Writeln(ErrOutput, Format('  resolver: edges were derived by %s, this build is %s -- re-derive with `%s` (minutes, not a re-parse).',
-      [Prev, Cur, IndexRemedyFor(AStore, ADbPath, {AResolveOnly=}True)]));
+    Writeln(ErrOutput, Format('  resolver: edges were derived by resolver %s; this engine (%s) resolves with %s -- re-derive with `%s` (minutes, not a re-parse).',
+      [Prev, Engine, Cur, IndexRemedyFor(AStore, ADbPath, {AResolveOnly=}True)]));
 
   { LIBRARY-FIRST RESOLVE: a DB marked `pending` was resolved without its platform library, so
     callers/callees into the library are missing. A reader never writes the marker and never
@@ -2447,6 +2438,12 @@ begin
   var LibMarker: TLibraryMarker:= LibraryMarkerFromJson(AStore.GetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY));
   if LibMarker.State = LIBSTATE_PENDING then
     Writeln(ErrOutput, LibraryPendingNote(LibMarker, ADbPath, 'drag-lint ' + IndexRemedyFor(AStore, ADbPath, {AResolveOnly=}True)));
+
+  { Every note above is written BEFORE the verb's first stdout line, and most
+    are longer than the RTL's 128-byte text buffer, which only flushes per line
+    on a console. With stdout and stderr on one pipe (bash, cmd `2>&1`) the tail
+    of a note was printed after the results (#27 in plans\correcoes). }
+  Flush(ErrOutput);
 end;
 
 function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Boolean = False): ISymbolStore;
@@ -3305,6 +3302,28 @@ begin
     end;
     Writeln(AIndent, APaths[i]);
   end;
+end; // procedure
+
+/// <summary>Prints the scan scope of an index run -- the compile closure or the
+///  resolved library folders -- under its already-printed headline.</summary>
+/// <param name="APaths">The scope entries, in walk order.</param>
+/// <param name="AFull">True under --dry-run: every entry is printed, because
+///  there the list IS the answer (and run_index_project_scope.ps1 parses it).</param>
+/// <remarks>A real run caps the list at SWEEP_SAMPLE_MAX. The uncapped listing
+///  printed all 2,249 paths of a project closure before every incremental run
+///  -- over 100k tokens of output for an agent that only needed the summary
+///  lines at the end -- so the count stays, the sample makes the scope
+///  recognisable, and --dry-run is named as the way to see all of it.</remarks>
+procedure PrintScopeListing(const APaths: TArray<string>; AFull: Boolean);
+begin
+  if AFull then
+  begin
+    for var P: string in APaths do Writeln('  ', P);
+    Exit;
+  end;
+  PrintSweepSample(APaths, '  ');
+  if Length(APaths) > SWEEP_SAMPLE_MAX then
+    Writeln(Format('  (--dry-run lists all %d)', [Length(APaths)]));
 end; // procedure
 
 { PER-FILE ISOLATION -- index one file, surviving a failure in it.
@@ -5550,6 +5569,32 @@ begin
   if not Result then Flush(ErrOutput);
 end;
 
+/// <summary>True when at least one of the databases is at the current schema.</summary>
+/// <param name="APaths">Existing database files, as ResolveConsumerDbs returned them.</param>
+/// <returns>True on the first store at the current schema; False when every store
+///  is stale or cannot be opened.</returns>
+/// <remarks>Opens each store directly rather than through OpenReadOnlyStore, so
+///  the probe prints neither the schema note nor the freshness note -- the verb's
+///  own loop prints them once when it opens the store for real. A store the probe
+///  cannot open (zero-byte, corrupt, locked) counts as not current and the probe
+///  moves on: a probe must not turn one bad manifest database into a FATAL.</remarks>
+function AnyDbSchemaCurrent(const APaths: TArray<string>): Boolean;
+var
+  Found   : Integer;
+  Expected: Integer;
+begin
+  for var P: string in APaths do
+  begin
+    try
+      var Probe: ISymbolStore:= TSQLiteSymbolStore.Create(P, {AReadOnly=}True);
+      if Probe.IsSchemaCurrent(Found, Expected) then Exit(True);
+    except  // dl:ok try-except-swallowed@5384 -- probe only: an unopenable store counts as not current; the verb's own open reports it
+      on E: Exception do Continue;
+    end; // try
+  end;
+  Result:= False;
+end; // function
+
 /// <summary>Decides what a STALE-SCHEMA database means for the run in hand: a
 /// refusal when the operator named it with --db, a skip when the manifest chose
 /// it. Reports the refusal on stderr; the caller must Exit(2) on True.</summary>
@@ -6558,7 +6603,7 @@ begin
       Resolver.Free;
     end;
     Writeln(Format('Resolved %d unique library/browsing folders:', [Length(Folders)]));
-    for F in Folders do Writeln('  ', F);
+    PrintScopeListing(Folders, AArgs.DryRun);
   end
   else if AArgs.ProjectPath <> '' then
   begin
@@ -6660,7 +6705,7 @@ begin
       so prune was never the mechanism for it. Out-of-scope eviction, below,
       is -- and it takes Folders as its in-scope set. }
     Writeln(Format('Compile closure: %d file(s):', [Length(Folders)]));
-    for F in Folders do Writeln('  ', F);
+    PrintScopeListing(Folders, AArgs.DryRun);
   end
   else Folders:= [AArgs.Path];
 
@@ -7395,8 +7440,9 @@ begin
   begin
     Writeln(Format('%-12s %-30s %s', ['kind', 'name', 'qualified_name']));
     Writeln(StringOfChar('-', 75));
-    for Sym in ASymbols do
+    for i:= 0 to High(ASymbols) do
     begin
+      Sym:= ASymbols[i];
       Line:= Format('%-12s %-30s %s', [Sym.Kind.ToText, Sym.DisplayName, Sym.QualifiedName]);
       if Sym.Signature <> '' then { gap #1/#2: show sig, distinguish overloads }
       begin
@@ -7406,6 +7452,12 @@ begin
         if (Sym.Signature[1] = '(') or (Sym.Signature[1] = ':') then Line:= Line + ' ' + Sym.Signature
         else Line:= Line + ' : ' + Sym.Signature;
       end;
+      { WHERE it is, as (path:line) -- the text form used to name the symbol and
+        never its file, so every answer needed a second search to open it. Placed
+        BEFORE the [impl-only] / forward-at suffixes, which consumers match at the
+        end of the row. }
+      if (i <= High(AFilePaths)) and (AFilePaths[i] <> '') then
+        Line:= Line + Format('  (%s:%d)', [AFilePaths[i], Sym.StartLine]);
       if Sym.Section = 'implementation' then { gap #3: not usable from other units }
         Line:= Line + '  [impl-only]';
       if Sym.ForwardLine > 0 then { C2.5: the stub was folded into this row }
@@ -7523,7 +7575,7 @@ end;
 
 // v0.16: query find --doc-tag X | --doc-contains Y | --decl-contains Z | --no-docs [--kind K] [--public]
 // Output per result: "<qualified_name>  [<kind>]  <file_path>:<start_line>"
-// Exit 0 if any results, 1 if none.
+// Exit 0 if any results, 1 if none, 2 on usage error or a missing/stale db.
 function DoQueryFind(const AArgs: TArgs): Integer;
 var
   Store   : ISymbolStore   ;
@@ -7586,7 +7638,7 @@ begin
 
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
-  if not RoOk then Exit(1);
+  if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
 
   if AArgs.DeclContains <> '' then Exit(QueryFindByDecl(AArgs, Store));
 
@@ -9141,6 +9193,18 @@ begin
     end;
   end;
   for DbPath in PathsToScan do SizeGuardCheck(DbPath, EffSizeGuardMB, AArgs.Force32);
+  { Exit 1 is this verb's EMPTY answer. Every loop below skips a stale store of a
+    MANIFEST-resolved list (an explicit one is refused per store by
+    StaleDbRefusesRun), so a list whose every store is stale answered nothing and
+    then printed "0 caller(s)" / zero hits and exited 1 -- a stale index read as
+    a real empty answer. Refuse it with 2 instead. }
+  if (Length(AArgs.DbPaths) = 0) and (Length(PathsToScan) > 0) and not AnyDbSchemaCurrent(PathsToScan) then
+  begin
+    Writeln(ErrOutput, 'ERROR: query: every database the manifest resolved is at an OLD SCHEMA -- nothing was answered.');
+    Writeln(ErrOutput, '       Migrate them: drag-lint index --project <x.dproj> --db <db> (project index)');
+    Writeln(ErrOutput, '                 or: drag-lint index <dir> --db <db>              (library index)');
+    Exit(2);
+  end;
 
   SetLength(AllSymbols, 0);
   SetLength(AllRefs   , 0);
@@ -9168,7 +9232,7 @@ begin
         having to spawn this exe. Only the RENDERING lives here now, and it is
         unchanged: per-target headers in the text form, callbacks without one,
         and a JSON key order of
-        caller_qname,file,confidence,target_qname[,line][,caller_line][,mode]
+        caller_qname,file,confidence,target_qname[,line][,caller_line][,mode][,path]
         with caller_line OMITTED when the enclosing symbol is unknown.
         Pinned by run_query_callers_shared_guard.ps1. }
       var TotalCallers:= 0;
@@ -9265,36 +9329,46 @@ begin
       Exit;
     end; // if AArgs.Resolved
 
+    { ONE answer across every store: a single JSON array (`[]` when empty) or
+      the rows of every store followed by ONE total line. Printing per store
+      emitted an array per --db -- not a JSON document -- and nothing at all
+      under --json when no store had a hit. }
     var TotalRefs:= 0;
     var RefFiles: TArray<string>:= nil;
-    for DbPath in PathsToScan do
-    begin
-      var RoOk: Boolean;
-      Store:= OpenReadOnlyStore(DbPath, RoOk);
-      if not RoOk then
+    var RefTally: TResolutionTally:= Default(TResolutionTally);
+    var JRefs: TJSONArray:= nil;
+    if AArgs.AsJson then JRefs:= TJSONArray.Create;
+    try
+      for DbPath in PathsToScan do
       begin
-        if StaleDbRefusesRun(AArgs, 'query', DbPath) then Exit(2);
-        Continue; { manifest-resolved: stale DB reported, scan the rest }
-      end;
-      // v0.17: use context variant if --context N is provided
-      if AArgs.ContextLines > 0 then Refs:= Store.FindCallersByNameWithContext(AArgs.Name, AArgs.ContextLines)
-      else Refs:= Store.FindCallersByName(AArgs.Name);
-      Refs:= DropRefsThatCannotBeCallers(Store, Refs);
-      Refs:= CollapseRefsAtSameSite(Refs); { one row per call site -- see the note on the function }
-      if Length(Refs) > 0 then
-      begin
-        if AArgs.ContextLines > 0 then PrintReferencesWithContext(Store, Refs, AArgs.ContextLines, AArgs.AsJson)
-        else PrintReferences(Store, Refs, AArgs.AsJson);
+        var RoOk: Boolean;
+        Store:= OpenReadOnlyStore(DbPath, RoOk);
+        if not RoOk then
+        begin
+          if StaleDbRefusesRun(AArgs, 'query', DbPath) then Exit(2);
+          Continue; { manifest-resolved: stale DB reported, scan the rest }
+        end;
+        // v0.17: use context variant if --context N is provided
+        if AArgs.ContextLines > 0 then Refs:= Store.FindCallersByNameWithContext(AArgs.Name, AArgs.ContextLines)
+        else Refs:= Store.FindCallersByName(AArgs.Name);
+        Refs:= DropRefsThatCannotBeCallers(Store, Refs);
+        Refs:= CollapseRefsAtSameSite(Refs); { one row per call site -- see the note on the function }
+        if AArgs.AsJson then AppendReferencesJson(Store, Refs, JRefs)
+        else PrintReferenceLines(Store, Refs, RefTally);
         Inc(TotalRefs, Length(Refs));
         for var Rf: TReference in Refs do RefFiles:= RefFiles + [Store.GetFilePath(Rf.FileId)];
+      end; // for
+      if AArgs.AsJson then Writeln(JRefs.Format(2))
+      else
+      begin
+        Writeln(Format('%d caller(s)%s', [TotalRefs, (if RefTally.ToText <> '' then ' (' + RefTally.ToText + ')' else '')]));
+        if TotalRefs = 0 then
+          Writeln(ErrOutput, 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --name ', AArgs.Name);
       end;
-    end; // for
+    finally
+      JRefs.Free;
+    end; // try
     if TotalRefs > 0 then LogReaderUsage('find-callers', PathsToScan[0], TotalRefs * USAGE_TOKENS_PER_ROW, RefFiles);
-    if (TotalRefs = 0) and (not AArgs.AsJson) then
-    begin
-      Writeln('0 caller(s)');
-      Writeln(ErrOutput, 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --name ', AArgs.Name);
-    end;
     if TotalRefs = 0 then Result:= 1
     else Result:= 0;
     Exit;
@@ -9472,7 +9546,7 @@ begin
     if AArgs.Name = '' then begin Writeln('ERROR: query typecat requires --name <type>'); Exit (2 ); end;
     var RoOk: Boolean;
     Store:= OpenReadOnlyStore(PathsToScan[0], RoOk);
-    if not RoOk then Exit(1);
+    if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
     var Cat:= Store.ResolveTypeCategory(AArgs.Name, 0).ToText;
     if AArgs.AsJson then
     begin
@@ -11055,7 +11129,7 @@ end; // function
 // Reads start_line..end_line of the class symbol from the source file and
 // prints each line. For a well-formed Delphi unit the class symbol spans only
 // the interface-section declaration, so no implementation bodies leak through.
-// Exit 2 on usage error, 1 if symbol not found or wrong kind, 0 on success.
+// Exit 2 on usage error or a missing/stale db, 1 if symbol not found or wrong kind, 0 on success.
 function DoSurface(const AArgs: TArgs): Integer;
 var
   Store: ISymbolStore        ;
@@ -11075,7 +11149,7 @@ begin
 
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
-  if not RoOk then Exit(1);
+  if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
 
   // Validate that the symbol exists and is a class/record/interface.
   Syms:= Store.FindSymbolsByQualifiedName(AArgs.QName);
@@ -16292,6 +16366,7 @@ begin
     plugin's diagnostic stream are untouched.
     See docs\INBOX-ide-per-unit-view-omits-79pct-of-lint-all.md. }
   if (not AArgs.AsJson) and (not AArgs.Quiet) then
+  begin
     if FlowIsLibrary then
       Writeln(ErrOutput,
         'drag-lint: note: this file is a platform-library unit, so the project rules ' +
@@ -16310,6 +16385,12 @@ begin
         'drag-lint: note: no index covers this file, so the store-backed and project ' +
         'rules did NOT run -- pass --db <index.sqlite> for parity with lint-all. ' +
         'A 0 above does not mean they are clean.');
+    { Both notes are longer than the RTL's 128-byte text buffer, which flushes
+      per line only on a console: with stdout and stderr on one pipe the note
+      was cut at byte 128 and its tail printed after the findings (Gitea
+      drag-lint#6). }
+    Flush(ErrOutput);
+  end;
 
   { REPORT THE REAL PATH. Every finding so far names the materialised snapshot,
     which exists only inside this process's temp directory. A consumer -- the
@@ -16377,7 +16458,7 @@ end; // function
 // RSV-R2: with --library-db (or a second --db), the "Library calls" count also
 // includes calls whose receiver type the library oracle binds now (read-only,
 // degrades to the stored-only count when the library cannot be opened).
-// Exit 2 on usage error, 1 if symbol not found, 0 on success.
+// Exit 2 on usage error or a missing/stale db, 1 if symbol not found, 0 on success.
 function DoContext(const AArgs: TArgs): Integer;
 var
   Store     : ISymbolStore  ;
@@ -16394,7 +16475,7 @@ begin
   if not TFile.Exists(ProjectDb) then begin Writeln(Format('Database not found: %s', [ProjectDb])); Exit(2); end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(ProjectDb, RoOk);
-  if not RoOk then Exit(1);
+  if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
   { The library is opened read-only and never written; one that cannot be opened is
     a stderr NOTE and the stored-only count, never an error (as find-callees). }
   Oracle:= nil;
@@ -26124,7 +26205,7 @@ end; // function
 /// name is resolved from enclosing_symbol_id (empty when 0/NULL). Used to verify
 /// per-file enclosing-method attribution (refs.enclosing_symbol_id).</summary>
 /// <param name="AArgs">Parsed CLI args; Target is the source file, DbPath the index.</param>
-/// <returns>0 on success, 2 on usage error / missing file / file not indexed.</returns>
+/// <returns>0 on success, 2 on usage error / missing file / file not indexed / stale db.</returns>
 function DoDumpRefs(const AArgs: TArgs): Integer;
 var
   Store : ISymbolStore      ;
@@ -26137,7 +26218,7 @@ begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
-  if not RoOk then Exit(1);
+  if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
   FileId:= Store.FindFileIdByPath(TPath.GetFullPath(AArgs.Target));
   if FileId <= 0 then FileId:= Store.FindFileIdByPath(AArgs.Target);
   if FileId <= 0 then begin Writeln(Format('File not indexed: %s', [AArgs.Target])); Exit(2); end;
@@ -26181,7 +26262,7 @@ end;
 /// <param name="AArgs">Parsed CLI args; QName is the symbol, DbPath the index,
 /// AsJson selects the JSON-per-line format.</param>
 /// <returns>0 on success (findings printed, or none), 1 when the symbol is not
-/// found / has no doc-comment, 2 on usage error / missing db.</returns>
+/// found / has no doc-comment, 2 on usage error / missing or stale db.</returns>
 function DoDocDrift(const AArgs: TArgs): Integer;
 var
   Store   : ISymbolStore              ;
@@ -26197,7 +26278,7 @@ begin
   if AArgs.QName = '' then begin Writeln('Usage: drag-lint doc-drift --qname X --db PATH [--json]'); Exit(2); end;
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
-  if not RoOk then Exit(1);
+  if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
   TSharedFacts.ProjectTag:= ProjectTagFor(Store, AArgs.DbPath, AArgs); { D27: the index's recorded project, not its file name }
 
   Doc:= DRagLint.Doc.Document.TDocumenter.ExistingDocFor(Store, AArgs.QName, Sym, Found, HasDoc);
@@ -26732,7 +26813,7 @@ end; // function
 /// qualified name (empty when the symbol is missing). Used to verify the
 /// ResolveCallTargets pass populates call_edges with the right resolutions.</summary>
 /// <param name="AArgs">Parsed CLI args; DbPath is the index to dump.</param>
-/// <returns>0 on success, 2 on usage error / missing db.</returns>
+/// <returns>0 on success, 2 on usage error / missing or stale db.</returns>
 function DoDumpCallEdges(const AArgs: TArgs): Integer;
 var
   Store: ISymbolStore     ;
@@ -26743,7 +26824,7 @@ begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
-  if not RoOk then Exit(1);
+  if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
   Edges:= Store.DumpAllCallEdges;
   for E in Edges do
   begin
@@ -26861,7 +26942,7 @@ end;
 /// <param name="AArgs">Parsed CLI args; QName is the calling routine, DbPath the index.</param>
 /// <returns>0 when the store opened OK and --qname resolved to at least one symbol
 /// (even with zero callees); 1 if --qname does not resolve to any symbol; 2 on
-/// usage error / missing db.</returns>
+/// usage error / missing or stale db.</returns>
 function DoFindCallees(const AArgs: TArgs): Integer;
 var
   Store  : ISymbolStore     ;
@@ -26888,7 +26969,7 @@ begin
   end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(ProjectDb, RoOk);
-  if not RoOk then Exit(1);
+  if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
 
   Targets:= Store.FindSymbolsByQualifiedName(AArgs.QName);
   if Length(Targets) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
@@ -26957,7 +27038,7 @@ end; // function
 /// <param name="AArgs">Parsed CLI args; QName and/or InFile (--file/--in) scope
 /// the query, DbPath is the index.</param>
 /// <returns>0 whenever the store opened OK, regardless of result count (empty
-/// is a valid answer); 2 on usage error / missing db.</returns>
+/// is a valid answer); 2 on usage error / missing or stale db.</returns>
 function DoAmbiguousCalls(const AArgs: TArgs): Integer;
 var
   Store: ISymbolStore          ;
@@ -26967,7 +27048,7 @@ begin
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
-  if not RoOk then Exit(1);
+  if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
 
   Rows:= Store.GetAmbiguousCalls(AArgs.QName, AArgs.InFile);
 
@@ -27340,7 +27421,7 @@ var
   Rid    : Int64                     ;
 begin
   if AArgs.QName = '' then
-  begin Writeln('Usage: drag-lint callgraph --qname X [--direction callers|callees] [--depth N] [--json] --db PATH'); Exit(2); end;
+  begin Writeln('Usage: drag-lint callgraph --qname X [--direction callers|callees] [--depth N] [--json|--format text|json] --db PATH'); Exit(2); end;
   if not FileExists(AArgs.DbPath) then begin Writeln(Format('Database not found: %s', [AArgs.DbPath])); Exit(2); end;
 
   Dir:= LowerCase(Trim(AArgs.Direction));
@@ -27352,6 +27433,19 @@ begin
   Depth:= AArgs.Depth;
   if Depth < 0 then Depth:= 0;
 
+  { --format WAS PARSED AND NEVER READ (Gitea drag-lint#16): `--format dot`
+    printed the text tree with exit 0, so a caller asking for a graph got
+    something else and no sign of it. json is the --json the other verbs also
+    accept as --format json; text is the default; anything else is refused
+    and pointed at the verb that does draw graphs. }
+  var Fmt: string:= LowerCase(Trim(AArgs.Format));
+  if (Fmt <> '') and (Fmt <> 'text') and (Fmt <> 'json') then
+  begin
+    Writeln(ErrOutput, Format('ERROR: callgraph --format must be text|json (got "%s"); ' +
+      'for dot or mermaid use: drag-lint reverse-calltree --qname X --direction %s --format %s', [AArgs.Format, Dir, Fmt]));
+    Exit(2);
+  end;
+
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if not RoOk then Exit(2); // store-open/corruption failure = 2 (distinct from unresolved-qname = 1)
@@ -27359,7 +27453,7 @@ begin
   RootIds:= ResolveEndpointIds(Store, AArgs.QName);
   if Length(RootIds) = 0 then begin ReportNotFound(AArgs, Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
 
-  if AArgs.AsJson then
+  if AArgs.AsJson or (Fmt = 'json') then
   begin
     var JRoots:= TJSONArray.Create;
     try
@@ -30857,15 +30951,24 @@ var
     Result.AddPair('summary', BuildSummaryJson(ATree.Summary));
   end; // function
 
-  procedure RenderNodeChart(const ANode: TRCallNode; ABuf: TStringBuilder; AIsDot: Boolean);
+  { An edge always points from the CALLER to the CALLEE. The children of a
+    callers tree are callers (Kid -> ANode); the children of a callees tree --
+    stored in the same Callers field -- are callees, so the arrow turns round
+    (ANode -> Kid). Without that the callees graph claimed every callee called
+    the root (Gitea drag-lint#14); butterfly's callees wing already did this. }
+  procedure RenderNodeChart(const ANode: TRCallNode; ABuf: TStringBuilder; AIsDot: Boolean; ACalleeTree: Boolean);
   var
-    Kid: TRCallNode;
+    Kid : TRCallNode;
+    From: string    ;
+    Dest: string    ;
   begin
     for Kid in ANode.Callers do
     begin
-      if AIsDot then ABuf.AppendLine(Format('  "%s" -> "%s";', [Kid.QName, ANode.QName]))
-      else ABuf.AppendLine(Format('  %s --> %s', [SanitizeId(Kid.QName), SanitizeId(ANode.QName)]));
-      if not Kid.Cycle then RenderNodeChart(Kid, ABuf, AIsDot);
+      if ACalleeTree then begin From:= ANode.QName; Dest:= Kid.QName;   end
+      else                begin From:= Kid.QName;   Dest:= ANode.QName; end;
+      if AIsDot then ABuf.AppendLine(Format('  "%s" -> "%s";', [From, Dest]))
+      else ABuf.AppendLine(Format('  %s --> %s', [SanitizeId(From), SanitizeId(Dest)]));
+      if not Kid.Cycle then RenderNodeChart(Kid, ABuf, AIsDot, ACalleeTree);
     end;
   end; // procedure
 
@@ -30954,7 +31057,7 @@ begin
           Buf.AppendLine('%% Generated by drag-lint reverse-calltree');
           Buf.AppendLine('graph LR');
         end;
-        for var T in Trees do RenderNodeChart(T.Root, Buf, Fmt = 'dot');
+        for var T in Trees do RenderNodeChart(T.Root, Buf, Fmt = 'dot', Dir = 'callees');
         if Fmt = 'dot' then Buf.AppendLine('}');
         Writeln(Buf.ToString);
       finally
@@ -36352,6 +36455,10 @@ begin
   except
     on E: Exception do
     begin
+      { A CLOSED STDOUT PIPE STAYS A FATAL 3 (owner ruling 2026-10-30, PR #4 review).
+        `lint x.pas | head` with findings would otherwise exit 0, and a pipefail/CI
+        step would read a truncated run as a clean one. A reader that stops early
+        gets a nonzero exit by design. Pinned by run_closed_pipe_keeps_exit3.ps1. }
       { ErrOutput, NOT stdout. For `lsp` and `serve` stdout IS the JSON-RPC
         transport -- both branches above say so in as many words -- so the bare
         Writeln that used to be here injected the ONE line explaining the death

@@ -36,7 +36,7 @@
         }
       ],
       "helpOrder": 3,
-      "help": ["  drag-lint query find-callers --name  <callee-name>  [--context N] [--resolved] [--db ...] [--json]", "                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous);", "                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];", "                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)", "                               --json: every row ends with \"resolution\": exact|ambiguous|external|name-only (derived; XERJ item 3)", "                               a method reached only THROUGH an interface lists those sites as a separate \"via IFoo.Bar dispatch\" group;", "                                 --json rows gain \"via\" (interface method QName), \"via_kind\" (\"interface\") and, when the implements edge is ambiguous, \"via_edge\" (RB-5)", "  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)"]
+      "help": ["  drag-lint query find-callers --name  <callee-name>  [--context N] [--resolved] [--db ...] [--json]", "                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous);", "                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];", "                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)", "                               EXIT 0 = callers listed, 1 = ZERO callers (a valid answer, not an error;", "                               --json prints []), 2 = usage error or a missing/stale --db. See \"Exit codes\" below.", "                               --json: every row ends with \"resolution\": exact|ambiguous|external|name-only (derived; XERJ item 3)", "                               a method reached only THROUGH an interface lists those sites as a separate \"via IFoo.Bar dispatch\" group;", "                                 --json rows gain \"via\" (interface method QName), \"via_kind\" (\"interface\") and, when the implements edge is ambiguous, \"via_edge\" (RB-5)", "  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)"]
     },
     {
       "type": "ide-menu",
@@ -58,9 +58,9 @@
   ],
   "notes": "issued by the plugin from TDragLintCodeLensCache.PopulateOnce (DragLint.Plugin.CodeLensCache.pas)",
   "verified": {
-    "date": "2026-10-28",
+    "date": "2026-10-30",
     "by": "ENGINE",
-    "build": "1.36.0-alpha",
-    "surfaceHash": "31f91e9d0e1ce10f617bb69631f77151ab395096a2701a1be4f61113ad42a0cf"
+    "build": "1.38.0-alpha",
+    "surfaceHash": "c05627943670fa6bcda3cc869512f7beb28ef4b882ac627ab6dc4e7b32865ef4"
   }
 }

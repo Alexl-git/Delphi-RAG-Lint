@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "callgraph",
-      "usage": "drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json] (N-deep resolved call tree; cycle-guarded)",
+      "usage": "drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json|--format text|json] (N-deep resolved call tree; cycle-guarded)",
       "flags": [
         {
           "name": "--qname",
@@ -34,7 +34,7 @@
         }
       ],
       "helpOrder": 80,
-      "help": ["  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)"]
+      "help": ["  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json|--format text|json]   (N-deep resolved call tree; cycle-guarded; another --format exits 2 -- dot/mermaid: reverse-calltree)"]
     },
     {
       "type": "ide-menu",
@@ -55,9 +55,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-30",
     "by": "ENGINE",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "ffe27bf5ea9c67b4f435dc1b9949649ece906554e8f16d0dab7a50d41d6020db"
+    "build": "1.38.0-alpha",
+    "surfaceHash": "51333b0ebe764effa6e717fc9627eab58a49dd2e2a2794753ee6f78d3512f747"
   }
 }
