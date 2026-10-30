@@ -40,9 +40,16 @@ begin
   Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
   Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
   Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library] [--target-compiler <ver|auto>]');
+  Writeln('                               [--rule-cache-warm background|wait|off]   after a project index (also each project');
+  Writeln('                               section of index --all) the `lint <file>` rule cache is warmed: wait (the default)');
+  Writeln('                               in this run; background = in a DETACHED process, so the run returns at once (the');
+  Writeln('                               warm recomputes the whole-project rules -- minutes on a large project); off = not at');
+  Writeln('                               all. DRAGLINT_RULE_CACHE_WARM=<mode> sets the default. A background warm keeps the');
+  Writeln('                               index OPEN until it ends, so a script that deletes the index right after should keep');
+  Writeln('                               wait; a newer background warm of the same index stops the older one.');
   Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
-  Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library]');
+  Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library] [--rule-cache-warm background|wait|off]');
   Writeln('                               --wait-library <min>: when the platform library a libraryResolve section binds against is NOT READY (rebuilding, built by an older extractor, schema old, never completed), probe every 30 s up to `min` minutes, then continue; --require-library: a not-ready library is ERROR, exit 2. Default: continue, mark the run pending and say so. The library line is printed before the walk; the platform comes from --platform, the project DB, then the .dproj.');
   Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>');
   Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
@@ -240,6 +247,9 @@ begin
   Writeln('                               use it to repair indexes stamped by a build that skipped the pass, which no later build can detect)');
   Writeln('                               library-first resolve: a section with libraryResolve whose platform library is not READY (missing, rebuilding, stale extractor) is resolved without it; the run marks the DB pending (schema_meta library_resolve_state) and says on stderr that the result is INCOMPLETE. The next index run re-resolves it once the library is ready, no flag needed.');
   Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output <file>]');
+  Writeln('  drag-lint warm-rule-cache --db <project.sqlite> [--library-db <lib.sqlite>] [--detached]   (fill the `lint <file>` rule');
+  Writeln('                               cache for a project index now, in this process; what index starts in the background.');
+  Writeln('                               --detached: the form index uses -- every line of output goes to NUL)');
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
   Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]');
@@ -467,7 +477,7 @@ begin
   Writeln('       see wiki page: Format-Whole-Project-with-YADF');
   Writeln('  drag-lint index --project <file.dproj> --db <file.sqlite> [--build-config <Release|Debug|name>]');
   Writeln('       see wiki page: index-build-config');
-  Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--watch [--interval N]] [--target-compiler <ver|auto>]');
+  Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--rule-cache-warm background|wait|off] [--watch [--interval N]] [--target-compiler <ver|auto>]');
   Writeln('       see wiki page: Rebuild-Index-for-This-Project');
   Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
   Writeln('       see wiki page: Rescan-this-unit');
@@ -536,9 +546,16 @@ begin
     Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
     Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
     Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library] [--target-compiler <ver|auto>]');
+    Writeln('                               [--rule-cache-warm background|wait|off]   after a project index (also each project');
+    Writeln('                               section of index --all) the `lint <file>` rule cache is warmed: wait (the default)');
+    Writeln('                               in this run; background = in a DETACHED process, so the run returns at once (the');
+    Writeln('                               warm recomputes the whole-project rules -- minutes on a large project); off = not at');
+    Writeln('                               all. DRAGLINT_RULE_CACHE_WARM=<mode> sets the default. A background warm keeps the');
+    Writeln('                               index OPEN until it ends, so a script that deletes the index right after should keep');
+    Writeln('                               wait; a newer background warm of the same index stops the older one.');
     Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
     Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
-    Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library]');
+    Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library] [--rule-cache-warm background|wait|off]');
     Writeln('                               --wait-library <min>: when the platform library a libraryResolve section binds against is NOT READY (rebuilding, built by an older extractor, schema old, never completed), probe every 30 s up to `min` minutes, then continue; --require-library: a not-ready library is ERROR, exit 2. Default: continue, mark the run pending and say so. The library line is printed before the walk; the platform comes from --platform, the project DB, then the .dproj.');
     Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>');
     Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
@@ -810,6 +827,13 @@ begin
   begin
     Writeln('  drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output <file>]');
     Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
+    Exit;
+  end;
+  if pVerb = 'warm-rule-cache' then
+  begin
+    Writeln('  drag-lint warm-rule-cache --db <project.sqlite> [--library-db <lib.sqlite>] [--detached]   (fill the `lint <file>` rule');
+    Writeln('                               cache for a project index now, in this process; what index starts in the background.');
+    Writeln('                               --detached: the form index uses -- every line of output goes to NUL)');
     Exit;
   end;
   if pVerb = 'top' then
