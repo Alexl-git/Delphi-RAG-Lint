@@ -12,7 +12,6 @@ Extractor 1.27.0-alpha: every index re-parses once.
 - Preprocessing for the TARGET Delphi, from outside PR #8 (Jonathas Paiva): `VER<N>0` / `CompilerVersion` / `RTLVersion` follow `--target-compiler`, else the `--project` .dproj ProjectVersion, else the installed RAD Studio (`cv=<N>` fingerprint limb when not 37). Overloads pair with their bodies by parameter SHAPE; under `index`, symbol_facts come from the preprocessed parse.
 - `index --all` preprocesses each section for ITS OWN Delphi (.dproj ProjectVersion), also in `--jobs` children, which now carry `--target-compiler`; from outside PR #11 (Jonathas Paiva), re-implemented.
 - LSP: with an explicit `--db` list that names no `library-<Platform>.sqlite`, the active platform's library falls back to the context defaults (that platform only; notice `library from context defaults`).
-
 - `index --rule-cache-warm background|wait|off` and the `warm-rule-cache --db <project.sqlite> [--library-db <lib.sqlite>] [--detached]` verb (Jonathas Paiva, PR #1). The `lint <file>` rule-cache warm that ends every project index run recomputes the whole-project rules and ran in full on every run (252 s on a 2,218-file closure against a 1-7 s index); `background` hands it to a DETACHED engine and the run returns at once, `off` skips it, `wait` (the default) is the previous behaviour; `DRAGLINT_RULE_CACHE_WARM=<mode>` sets the default (a bad value exits 2 naming its source). One background warm per index: a newer one stops the older, named by `<db>.rule-cache-warm.pid`, only when that pid runs the same engine file. Applies to each project section of `index --all`. Guard `tests\autotest\run_rule_cache_warm_background.ps1` (B0-B14).
 
 ### Changed
@@ -54,6 +53,33 @@ Extractor 1.27.0-alpha: every index re-parses once.
 - `index --all --jobs N` passes `--rule-cache-warm` to each section's child, which re-parses its own arguments; before, a `--jobs 2` run warmed in the run (guard B13).
 - The detached warm sends its output to NUL BEFORE the output encoding is installed; on 1.38 the encoding install hit the no-console handles first and the warm died before writing anything (guard B2).
 - A previous warm is recognised as the same engine by FILE IDENTITY (volume + file index), not by path text: an engine started by its 8.3 short path or through a junction left its own earlier warm running (guard B14).
+
+### MCP
+- **`find_callers` answers from the call graph.** It matched refs by NAME with no
+  kind filter, so writes, same-named locals and any other identifier counted as callers.
+  It now returns the callers `query find-callers --resolved` returns (the shared
+  `DRagLint.Query.Callers`), callbacks marked; only when nothing resolves does it fall
+  back to the name match, filtered as the CLI filters it and SAID to be a name match.
+  `DropRefsThatCannotBeCallers` and `CollapseRefsAtSameSite` moved from the CLI into
+  that unit so both paths filter alike.
+- **A read of a same-named local is no longer a callback reach** -- in `find_callers`,
+  `query find-callers --resolved` and the hover alike (the shared
+  `ResolvedCallersForName`): `if Run > 0` in a routine with a local `Run` was listed as a
+  `[callback]` of every routine named Run. The CLI still lists a local's writes when the
+  name has one (D31); the MCP tool, which answers "who calls this method", leaves local
+  and parameter targets out.
+- **`get_context_bundle` returns the content.** It, and `context --format json`,
+  returned only counts. The JSON now adds `doc`, `surface`, `slice`, `callers` and
+  `impact` after the unchanged summary keys.
+- **A tool that raises no longer ends the server.** There was no `except` in the
+  unit: an exception reached the CLI's top-level handler and the process exited. The call
+  now answers `isError: true` with the reason, and the next call is served.
+- **Read-only, no Migrate, old schema refused, freshness said.** `serve --db` and a
+  per-call `"db"` opened the shared index for WRITING and migrated it on every open. Both
+  now open it read-only like the CLI's read verbs, refuse an old schema naming it, and add
+  the freshness note as a second text item when files changed since indexing.
+- Guard: `tests\autotest\run_mcp_answers.ps1` (M1-M6; red before).
+- Maintainer check (review 2026-10-30): `rename_symbol` with `dry_run=false` still rewrites the declaring and the calling unit with the store opened read-only, and leaves the index DB byte-identical (the 1.38 engine changed it). Guard `run_mcp_answers.ps1` M7, the dry run as its positive control.
 
 ### Churn after the re-parse (expected, not a regression)
 - `type_use` rows grow: one walk now emits the header type references of every implementation routine header.

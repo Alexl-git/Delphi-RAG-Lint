@@ -14,7 +14,7 @@ updated: 1.38.0-alpha
 
 Exposes the index to MCP clients as 15 tools.
 
-The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 15 tools.
+The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 15 tools. It opens every index read-only (an old schema is refused, never migrated), find_callers answers from the call graph, a tool that fails answers isError instead of ending the server, and a stale index adds a freshness note.
 
 ## Details
 

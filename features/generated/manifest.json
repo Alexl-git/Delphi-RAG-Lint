@@ -10148,7 +10148,7 @@
       "status": "shipped",
       "since": "0.4.0-alpha",
       "summary": "Exposes the index to MCP clients as 15 tools",
-      "intro": "The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 15 tools.",
+      "intro": "The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 15 tools. It opens every index read-only (an old schema is refused, never migrated), find_callers answers from the call graph, a tool that fails answers isError instead of ending the server, and a stale index adds a freshness note.",
       "wikiPage": "Register-MCP-Server",
       "surfaces": [
         {
@@ -10229,9 +10229,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-10-30",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.38.0-alpha",
         "surfaceHash": "571f67ee00609eb5090ddcc08c35e1ada4d9f2c50a5b8b3b1b7d1a4624cfae1e"
       }
     },

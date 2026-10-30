@@ -129,6 +129,7 @@ implementation
 uses
   DRagLint.Doc.Regions
   , DRagLint.Doc.Wiki   { TWikiParser -- alias matching for the ## Wiki section }
+  , System.JSON         { RenderJson's content keys -- escaped by the JSON writer }
   ;
 
 const
@@ -1002,6 +1003,51 @@ begin
       ABundle.TokenEstimate, IfThen(ABundle.HasDoc, 'true', 'false'), Length(ABundle.Callers),
       Length(ABundle.ClassSurface), Length(ABundle.ImplSlice), Wiki, LibJson,
       Ord(ABundle.TotalCallers > Length(ABundle.Callers)) * (ABundle.TotalCallers - Length(ABundle.Callers)), ABundle.CallerCap]);
+
+  { THE CONTENT, NOT ONLY ITS COUNTS (Gitea #32, 2026-10-15). The MCP tool
+    get_context_bundle -- whose description promises the doc, the class
+    surface, the implementation slice and the callers -- and `context --format
+    json` returned the counts above and nothing to read. The same content the
+    markdown form prints now follows them; every key above keeps its place and
+    meaning, so a consumer of the summary is untouched. }
+  var Extra: TJSONObject:= TJSONObject.Create;
+  try
+    if ABundle.HasDoc then
+    begin
+      var JDoc: TJSONObject:= TJSONObject.Create;
+      JDoc.AddPair('summary', ABundle.Doc.Summary);
+      if ABundle.Doc.Remarks     <> '' then JDoc.AddPair('remarks', ABundle.Doc.Remarks);
+      if ABundle.Doc.ReturnsText <> '' then JDoc.AddPair('returns', ABundle.Doc.ReturnsText);
+      JDoc.AddPair('raw', ABundle.Doc.RawBlock);
+      Extra.AddPair('doc', JDoc);
+    end;
+    var JSurface: TJSONArray:= TJSONArray.Create;
+    for var SL: TSurfaceLine in ABundle.ClassSurface do
+      JSurface.AddElement(TJSONObject.Create.AddPair('kind', SL.Kind)
+        .AddPair('line', TJSONNumber.Create(SL.StartLine)).AddPair('text', SL.Text));
+    Extra.AddPair('surface', JSurface);
+    var JSlice: TJSONArray:= TJSONArray.Create;
+    for var SC: TSliceChunk in ABundle.ImplSlice do
+      JSlice.AddElement(TJSONObject.Create.AddPair('kind', SC.Kind)
+        .AddPair('start_line', TJSONNumber.Create(SC.StartLine))
+        .AddPair('end_line', TJSONNumber.Create(SC.EndLine)).AddPair('text', SC.Text));
+    Extra.AddPair('slice', JSlice);
+    var JCallers: TJSONArray:= TJSONArray.Create;
+    for var BC: TBundleCaller in ABundle.Callers do
+      JCallers.AddElement(TJSONObject.Create.AddPair('file', BC.FilePath)
+        .AddPair('line', TJSONNumber.Create(BC.Line)).AddPair('col', TJSONNumber.Create(BC.Col))
+        .AddPair('context', BC.ContextText));
+    Extra.AddPair('callers', JCallers);
+    var JImpact: TJSONArray:= TJSONArray.Create;
+    for var IL: TImpactLevel in ABundle.ImpactSummary do
+      JImpact.AddElement(TJSONObject.Create.AddPair('depth', TJSONNumber.Create(IL.Depth))
+        .AddPair('callers', TJSONNumber.Create(IL.CallerCount)).AddPair('units', TJSONNumber.Create(IL.UnitCount)));
+    Extra.AddPair('impact', JImpact);
+    var Tail: string:= Extra.ToJSON;  // an object: its keys are spliced in after the summary keys
+    Result:= Copy(Result, 1, Length(Result) - 1) + ',' + Copy(Tail, 2, MaxInt);
+  finally
+    Extra.Free;
+  end;
 end; // function
 
 end.
