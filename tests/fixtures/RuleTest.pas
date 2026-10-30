@@ -74,11 +74,11 @@ begin
   if B = False then WriteLn('no');
 end;
 
-{ v0.35: redundant-as-tobject }
-procedure AsObjectExample;
+{ v0.35: redundant-as-tobject -- a declared class-typed operand (6ec32b41: unknown/interface operands no longer fire) }
+procedure AsObjectExample(Sender: TObject);
 var Obj: TObject;
 begin
-  Obj := TStringList.Create as TObject;
+  Obj := Sender as TObject;
   Obj.Free;
 end;
 
