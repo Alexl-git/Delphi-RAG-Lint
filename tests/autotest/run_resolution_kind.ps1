@@ -7,6 +7,8 @@
     external   refs.external_target set (the callee lives in a library DB)
     name-only  no edge, no external target: the row was matched by NAME alone
   Surfaces: find-callers --resolved, find-callers (name path), find-callees, usages, context.
+  Overloads (rb5-ovl, 63096549): W.Pick('a') / W.Pick(1) are decided by argument shape -> exact;
+  W.Pick(Trim('a')) cannot be -> ambiguous.
   POSITIVE CONTROLS: one answer (find-callers --name Solo) holds an exact AND a name-only row, so a
   stub that stamps one constant on every row fails; each of the four kinds is seen at least once.
   Run with a worktree exe; the script changes to a neutral CWD (C:\TEMP) itself.
@@ -101,6 +103,7 @@ begin
     W.Solo;
     W.Pick('a');
     W.Pick(1);
+    W.Pick(Trim('a'));
     Missing(3);
   finally
     W.Free;
@@ -126,7 +129,11 @@ end.
   Check 'resolved Solo: one row, resolution=exact' (($rows.Count -eq 1) -and ($rows[0].resolution -ceq 'exact')) "got=$((Kinds $rows) -join ',')"
   Check 'resolved Solo: resolution is the LAST key of the row' ($raw -match '"resolution":\s*"exact"\s*\}') 'key order'
   $pk = @((JsonOf @('query','find-callers','--name','Pick','--resolved','--json','--db',$Db)) | ConvertFrom-Json)
-  Check 'resolved Pick: overload calls are ambiguous' (($pk.Count -ge 1) -and (@($pk | Where-Object { $_.resolution -cne 'ambiguous' }).Count -eq 0)) "got=$((Kinds $pk) -join ',')"
+  # rb5-ovl (63096549, 2026-10-28) narrows a same-arity overload tie by ARGUMENT SHAPE: the
+  # string / integer literal calls now resolve exact; the call-shaped argument (Trim(..)) is a
+  # shape the narrowing cannot read, so that site must stay ambiguous (the ambiguous control).
+  $pkk = (@($pk | ForEach-Object { $_.resolution }) | Sort-Object) -join ','
+  Check 'resolved Pick: literal-argument overload calls are exact, an unreadable-shape call stays ambiguous' ($pkk -ceq 'ambiguous,exact,exact') "got=$pkk"
   $cb = @((JsonOf @('query','find-callers','--name','A_Predicate','--resolved','--json','--db',$Db)) | ConvertFrom-Json)
   Check 'resolved A_Predicate: a callback reach is name-only' ((@($cb | Where-Object { $_.confidence -ceq 'callback' -and $_.resolution -ceq 'name-only' })).Count -ge 1) "got=$((Kinds $cb) -join ',')"
   $tx = (& $Exe query find-callers --name Pick --resolved --db $Db 2>$null | Out-String)
