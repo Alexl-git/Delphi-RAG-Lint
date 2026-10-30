@@ -2901,7 +2901,14 @@ begin
   if FExplicitDbs or not UseResolver then Result.LibraryDb:= StartupLibraryFor(ACtx.Platform);
   { battery-138: explicit --db flags are the whole universe (see ExplicitDbs) --
     a context file or the central defaults never add a library nobody named. }
-  if FExplicitDbs then Exit;
+  { 1.39 (lsp-libfb): no listed library-<platform> -> fall back to the central defaults'
+    library for the ACTIVE platform only (ContextNotice says so). }
+  if FExplicitDbs then
+  begin
+    if Result.LibraryDb = '' then Result.LibraryDb:= DefaultsLibraryDbFor(Defaults, ACtx.Platform);
+    if (Result.LibraryDb <> '') and not TFile.Exists(Result.LibraryDb) then Result.LibraryDb:= '';
+    Exit;
+  end;
   if Result.LibraryDb = '' then Result.LibraryDb:= ACtx.LibraryDbOverride;
   if Result.LibraryDb = '' then Result.LibraryDb:= DefaultsLibraryDbFor(Defaults, ACtx.Platform);
   if (Result.LibraryDb = '') and UseResolver then Result.LibraryDb:= Resolved.LibraryDb;
@@ -3220,6 +3227,9 @@ begin
   if TargetErr <> '' then
     Add('bad-target', Format('drag-lint: %s -- linting %s at the default target %s.',
       [TargetErr, ExtractFileName(APath), CompilerDisplayName(DEFAULT_TARGET_COMPILER)]));
+  if FExplicitDbs and (ADbs.LibraryDb <> '') and (StartupLibraryFor(ACtx.Platform) = '') then
+    Add('library-fallback', Format('drag-lint: using the %s library from context defaults (%s) -- no library-%s store was listed in dragLint.databases.',
+      [ACtx.Platform, ExtractFileName(ADbs.LibraryDb), ACtx.Platform]));
   if ADbs.LibraryDb = '' then
     Add('no-library', Format('drag-lint: no library index for platform %s -- library answers are refused. '
       + 'Index that library, or set libraries.%s.libraryDb in %s.', [ACtx.Platform, ACtx.Platform, ContextDefaultsFile]));
