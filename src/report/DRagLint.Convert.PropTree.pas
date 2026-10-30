@@ -1762,11 +1762,12 @@ begin
     // Effective visibility. A plain field's Modifiers is always populated
     // by the parser (declField stamps AState.CurrentVisibility, same as
     // declProp) -- read directly. A class CONST's Modifiers is NEVER
-    // populated (verified empirically -- see ResolveConstVisibilityByProximity's
-    // comment) -- recovered from the nearest visibility-bearing sibling.
-    FVis:= Trim(Fld.Modifiers);
-    if (FVis = '') and (Fld.Kind = skConstDecl) then
-      FVis:= ResolveConstVisibilityByProximity(AClass, Fld);
+    // populated with a visibility (verified empirically -- see
+    // ResolveConstVisibilityByProximity's comment) -- recovered from the nearest
+    // visibility-bearing sibling. Since EXT-E4 (1ca04f79) a TYPED const's
+    // Modifiers is 'typed', which is not a visibility either, so a const is
+    // ALWAYS recovered, whatever its Modifiers holds.
+    FVis:= if Fld.Kind = skConstDecl then ResolveConstVisibilityByProximity(AClass, Fld) else Trim(Fld.Modifiers);
     if FVis = 'strict private'        then FVis:= 'private'
     else if FVis = 'strict protected' then FVis:= 'protected';
     if FVis = 'private' then // e.g. a const whose recovered section is private
