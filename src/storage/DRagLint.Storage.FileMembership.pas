@@ -320,7 +320,8 @@ function HeaderSaysWal(const APath: string): Boolean;
 implementation
 
 uses
-  System.SysUtils
+  Winapi.Windows { GetLongPathName: DbMembership's 8.3 fallback (#26); first, so SysUtils wins on shared names }
+  , System.SysUtils
   , System.Classes
   , System.IOUtils
   , FireDAC.Stan.Option { TFDTxIsolation: xiSnapshot }
@@ -442,6 +443,17 @@ begin
   end; // try
 end; // function
 
+{ The canonical long spelling of an existing path (#26), or the path itself. }
+function LongPathForLookup(const APath: string): string;
+var
+  Buf: array[0..MAX_PATH * 4] of Char;  // dl:ok magic-literal@b0c6 -- REVIEWED 2026-10-30: buffer headroom for an extended-length long path, not a quantity
+  N  : DWORD;
+begin
+  N:= GetLongPathName(PChar(APath), @Buf[0], Length(Buf));
+  if (N = 0) or (Integer(N) >= Length(Buf)) then Exit(APath);
+  SetString(Result, PChar(@Buf[0]), N);
+end;
+
 function DbMembership(const ADbPath, AFilePath: string; out AReason: string): TDbMembership;
 var
   Conn : TFDConnection;
@@ -504,6 +516,30 @@ begin
             Q.Open;
             Found:= not Q.Eof;
             Q.Close;
+          end;
+
+          { Only on a miss, THE OTHER SPELLING OF THE SAME FILE (Gitea
+            drag-lint#26): a path can mix 8.3 short components with long ones
+            (C:\Users\JONATH~1.SIL\... from %TEMP%), the index stores whatever
+            mix it was given, and a lookup arrives in another. The rows with the
+            same file name are compared by canonical LONG path -- the same rule
+            as TSQLiteSymbolStore.FindFileIdByPath, which the flow store uses. }
+          if (not Found) and TFile.Exists(AFilePath) then
+          begin
+            Q.Close;
+            var WantLong: string:= LongPathForLookup(NP);
+            Q.SQL.Text:= 'SELECT path FROM files WHERE path LIKE :n ESCAPE ''!''';
+            Q.ParamByName('n').AsString:= '%' +
+              StringReplace(StringReplace(StringReplace(ExtractFileName(NP), '!', '!!', [rfReplaceAll]),
+                '%', '!%', [rfReplaceAll]), '_', '!_', [rfReplaceAll]);
+            Q.Open;
+            while (not Found) and not Q.Eof do
+            begin
+              var Cand: string:= Q.Fields[0].AsString;
+              if SameText(ExtractFileName(Cand), ExtractFileName(NP)) and TFile.Exists(Cand)
+                 and SameText(LongPathForLookup(Cand), WantLong) then Found:= True;
+              Q.Next;
+            end;
           end;
           Result:= if Found then dmMember else dmNotMember;
 

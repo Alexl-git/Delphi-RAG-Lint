@@ -3629,6 +3629,7 @@ implementation
 
 uses
   System.Generics.Defaults
+  , Winapi.Windows            { GetLongPathName / GetShortPathName: FindFileIdByPath's 8.3 fallback (#26) }
   , System.StrUtils
   , System.Character
   , System.IOUtils
@@ -10953,6 +10954,18 @@ begin
   end;
 end;
 
+{ The canonical long spelling of an existing path (every 8.3 component
+  expanded), or the path itself when Windows cannot answer. See #26 below. }
+function LongPathOf(const APath: string): string;
+var
+  Buf: array[0..MAX_PATH * 4] of Char;  // dl:ok magic-literal@b0c6 -- REVIEWED 2026-10-30: buffer headroom for an extended-length long path, not a quantity
+  N  : DWORD;
+begin
+  N:= GetLongPathName(PChar(APath), @Buf[0], Length(Buf));
+  if (N = 0) or (Integer(N) >= Length(Buf)) then Exit(APath);
+  SetString(Result, PChar(@Buf[0]), N);
+end;
+
 function TSQLiteSymbolStore.FindFileIdByPath(const APath: string): Int64;
 var
   NormPath: string;
@@ -10978,6 +10991,41 @@ begin
       if not FQFindFileId.IsEmpty then Result:= FQFindFileId.Fields[0].AsLargeInt;
     finally
       FQFindFileId.Close;
+    end;
+  end;
+  { THE OTHER SPELLING OF THE SAME FILE (Gitea drag-lint#26). Windows names a
+    file by its long path and by 8.3 short components (C:\Users\JONATH~1.SIL\...
+    for C:\Users\jonathas.silva\...), and a path can MIX them: an index stores
+    paths as the run that built it was given, %TEMP% hands out a short first
+    component on some machines, and the rest of the path stays long. A later
+    lookup arrives in another mix (a process CWD is reported long), so the two
+    never matched as text: convert-apply said "MyForm.pas is not covered by any
+    supplied --db" about a file the --db held, converted nothing, wrote no
+    backup and exited 0. Swapping the lookup to all-long or all-short cannot
+    reach a mixed row, so on a miss the rows with the same FILE NAME are
+    compared by their canonical LONG path. Only an existing path has a long
+    form; a path that does not exist keeps the miss. }
+  if (Result = -1) and FileExists(APath) then
+  begin
+    var WantLong: string:= LongPathOf(APath);
+    var QName: TFDQuery:= TFDQuery.Create(nil);
+    try
+      QName.Connection:= FConn;
+      QName.SQL.Text:= 'SELECT id, path FROM files WHERE path LIKE :n ESCAPE ''!''';
+      QName.ParamByName('n').AsString:= '%' +
+        StringReplace(StringReplace(StringReplace(ExtractFileName(APath), '!', '!!', [rfReplaceAll]),
+          '%', '!%', [rfReplaceAll]), '_', '!_', [rfReplaceAll]);
+      QName.Open;
+      while (Result = -1) and not QName.Eof do
+      begin
+        var Cand: string:= QName.Fields[1].AsString;
+        if SameText(ExtractFileName(Cand), ExtractFileName(APath)) and FileExists(Cand)
+           and SameText(LongPathOf(Cand), WantLong) then
+          Result:= QName.Fields[0].AsLargeInt;
+        QName.Next;
+      end;
+    finally
+      QName.Free;
     end;
   end;
 end; // function

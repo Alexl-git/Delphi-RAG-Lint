@@ -18,6 +18,35 @@ Extractor 1.27.0-alpha: every index re-parses once.
 - Lint, from outside PRs #5 / #6 (Jonathas Paiva): inline variables in the type map; numeric sums no longer flagged by `concat-in-loop`; inline const literals; the exception-prefix rule works without an index; battery environment gaps end in SKIP and load-sensitive runners run serially.
 
 ### Fixed
+- **A file is found in the index whatever mix of long and 8.3 short path components names it**
+  (no version constant moves). Jonathas Paiva (PR #7). Windows names a file both by its long path
+  and by 8.3 short components (`C:\Users\JONATH~1.SIL\...`), and a path can MIX them: an index stores
+  paths as its run was given them -- `%TEMP%` hands out a short first component on some machines --
+  and a later lookup arrives in another mix (a process CWD is reported long). Both lookups compared
+  text, so `convert-apply` said "MyForm.pas is not covered by any supplied --db" about a file the
+  `--db` held, converted nothing, wrote no backup and exited 0, and `lint --db` ran store-free. On a
+  miss, `TSQLiteSymbolStore.FindFileIdByPath` and `DbContainsFile` now compare the rows with the same
+  file name by canonical LONG path. Stored paths are not rewritten. `run_convert_apply` and
+  `run_convert_apply_multidb` go green. Guard: `tests\autotest\run_file_lookup_8dot3.ps1`
+  (SKIPs where the volume makes no 8.3 names).
+- **One `index` run per database, refused at the start**. Two runs on the
+  ProjectA database met on 2026-10-09: the second parsed every file and only then died with `database
+  is locked` (exit 3), and while they overlapped the index answered with a third of its rows. A run now
+  holds `<db>.indexing.lock` (no sharing, delete-on-close, released by the OS however the process
+  ends); a second `index` on the same database exits 2 at once. Readers never take it. Guard:
+  `tests\autotest\run_index_concurrent_lock.ps1`. Jonathas Paiva (PR #7).
+- **`index <folder> --db <projectDb> --rebuild` no longer empties the project index before refusing**
+ . The folder-into-project refusal ran after `Migrate`, the fingerprint stamp and
+  `--rebuild`'s `ClearAllFiles`, so it exited 2 with `--rebuild: cleared N indexed file(s)` already
+  printed -- measured 2 -> 0 files on a fixture. The refusal is now decided first, from a read-only
+  look at `scan_type`, before anything writes. Guard:
+  `tests\autotest\run_index_folder_refusal_before_write.ps1`. Jonathas Paiva (PR #7).
+- **The one-writer lock (PR #7) leaves `index --dry-run` alone and names a lock that is still being deleted**.
+  `--dry-run` writes nothing (an in-memory store), so it no longer takes `<db>.indexing.lock` and no
+  longer exits 2 beside a live writer. A lock file whose delete is still pending (its holder closed it while a
+  scanner held it open) answered ACCESS_DENIED and was reported as "cannot create the lock file ... Access
+  is denied"; the run now retries for ~2 s and then says another run is just finishing. Maintainer follow-up to
+  Jonathas Paiva (PR #7). Guard: `tests\autotest\run_index_lock_dryrun_pending.ps1`.
 - E2010 on a RAD Studio 13 build: three `if C then X else nil` expressions rewritten as typed statements (reported by Jonathas Paiva). `convert-apply` pas_uses no longer reports a typed const's `typed` modifier as its visibility.
 - `compile-check` with a relative target that has a directory (`proj\uGreet.pas`) printed finding paths with the directory repeated (dcc64 prefixes it); the compiler now gets the full path and only bare names join the project dir.
 
