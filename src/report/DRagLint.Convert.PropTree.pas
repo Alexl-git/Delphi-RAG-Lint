@@ -402,11 +402,64 @@ function ResolvePropertyDeclaredType(const AStore: ISymbolStore;
 /// changed rows. Thread-safe.</remarks>
 procedure ClearPropertyDeclaredTypeCache;
 
+type
+  /// <summary>What one FillBarePropertyTypes pass did.</summary>
+  TPropTypeFillStats = record
+    /// <summary>Bare re-publication rows the pass examined.</summary>
+    Candidates: Integer;
+    /// <summary>Rows whose stored type was written (new or changed).</summary>
+    Filled    : Integer;
+    /// <summary>Candidates no ancestor in the store declares a type for.</summary>
+    Unresolved: Integer;
+    /// <summary>Candidates that needed the bridged climb (an unresolved
+    /// ancestor edge on the way).</summary>
+    Bridged   : Integer;
+  end;
+
+/// <summary>The index-time post-pass: stores the declared type of every bare
+/// re-published property ('published property Text;') on its own row, so no
+/// reader (hover, the read-only LSP, a library DB) has to climb at run time.</summary>
+/// <param name="AStore">A WRITABLE store whose ancestry is already resolved
+/// (run after the ancestry link stage). A read-only store fills nothing.</param>
+/// <param name="ASinceUnix">0 = re-check every bare row (first fill, format
+/// bump). Otherwise only the rows ISymbolStore.FindPropertyFillCandidates scopes
+/// to files parsed at or after this time (and same-named rows of the
+/// properties those files declare) -- the incremental cost.</param>
+/// <returns>Candidates examined, rows written, rows left unresolved.</returns>
+/// <remarks>
+/// A row is bare when it has no accessor (prop_access empty) and its signature
+/// is empty or a memo (': T', the one format MemoizePropertyType writes; the
+/// extractor never emits a leading colon). Accessor-less rows WITH an
+/// extracted type (dispinterface properties) declare their type and are left
+/// alone. The declaring class is the nearest RESOLVED ancestor whose same-named
+/// row declares a type (a walk of GetTransitiveAncestors); only when
+/// an unresolved ancestor edge breaks the chain does the pass fall back to
+/// TPropMemberResolver.ResolveDeclaredPropertyType (the converter's bridged
+/// climb, not a copy). The FULL type ('TDictionary&lt;string, Integer&gt;'
+/// intact) is read from the declaring row, so a stale memo on an intermediate re-publication can
+/// never be copied down. Writes go through ISymbolStore.MemoizePropertyType
+/// and only when the stored type differs. Not an extraction change: no
+/// DRAGLINT_EXTRACTOR_VERSION bump. Not thread-safe; call from the indexing
+/// thread.
+/// </remarks>
+function FillBarePropertyTypes(const AStore: ISymbolStore;
+  ASinceUnix: Int64): TPropTypeFillStats;
+
+const
+  /// <summary>schema_meta key the indexer stamps after a FillBarePropertyTypes
+  /// run; a run that parsed nothing skips the pass while it reads
+  /// PROP_TYPES_FORMAT.</summary>
+  PROP_TYPES_META_KEY = 'prop_types_filled';
+  /// <summary>Version of the stored fill, the prefix of the marker value
+  /// '&lt;format&gt;;&lt;unix start of the last pass&gt;'. Bump when the stored form or the resolution
+  /// changes, so every index is re-filled (and fully re-bridged) on its next run.</summary>
+  PROP_TYPES_FORMAT   = '1';
+
 implementation
 
 uses
   System.IOUtils,  { TFile -- still used elsewhere in this unit }
-  System.StrUtils; { PosEx }
+  System.StrUtils; { PosEx, MatchStr }
 
 type
   /// <summary>What a property declaration says about its `default`.</summary>
@@ -1966,6 +2019,200 @@ begin
     GDeclTypeCache.Clear;
   finally
     TMonitor.Exit(GDeclTypeLock);
+  end;
+end;
+
+// True when a property row's signature is a DECLARED type (extracted), not
+// empty and not a ': T' memo.
+function SignatureDeclaresType(const ASignature: string): Boolean;
+var
+  S: string;
+begin
+  S     := Trim(ASignature);
+  Result:= (S <> '') and not S.StartsWith(':');
+end;
+
+// The WHOLE type a property signature names -- 'TDictionary<string, Integer>'
+// intact, unlike ParseTypeToken (which stops at the first blank). Accepts the
+// extracted form ('T'), the memo form (': T') and a full declaration tail
+// ('[I: Integer]: T read F; default'): skips a leading index-parameter list,
+// then reads to the first ';' or accessor/storage keyword at bracket depth 0.
+// '' when nothing is left.
+function FullPropTypeOf(const ASignature: string): string;
+const
+  STOP_WORDS: array[0..9] of string = ('read', 'write', 'index', 'default', 'stored',
+    'nodefault', 'implements', 'readonly', 'writeonly', 'dispid');
+var
+  S    : string ;
+  I    : Integer;
+  Depth: Integer;
+  Word : string ;
+  J    : Integer;
+begin
+  S:= Trim(ASignature);
+  if S.StartsWith('[') then
+  begin
+    Depth:= 0;
+    for I:= 1 to Length(S) do
+    begin
+      if S[I] = '[' then Inc(Depth)
+      else if S[I] = ']' then
+      begin
+        Dec(Depth);
+        if Depth = 0 then
+        begin
+          S:= Trim(Copy(S, I + 1, MaxInt));
+          Break;
+        end;
+      end;
+    end;
+  end;
+  if S.StartsWith(':') then S:= Trim(Copy(S, 2, MaxInt));
+  Depth:= 0;
+  for I:= 1 to Length(S) do
+  begin
+    case S[I] of
+      '<', '[', '(': Inc(Depth);
+      '>', ']', ')': Dec(Depth);
+      ';': if Depth <= 0 then Exit(Trim(Copy(S, 1, I - 1)));
+      ' ', #9:
+        if Depth <= 0 then
+        begin
+          J:= I + 1;
+          while (J <= Length(S)) and CharInSet(S[J], ['A'..'Z', 'a'..'z']) do Inc(J);
+          Word:= LowerCase(Copy(S, I + 1, J - I - 1));
+          if MatchStr(Word, STOP_WORDS) then Exit(Trim(Copy(S, 1, I - 1)));
+        end;
+    end;
+  end;
+  Result:= Trim(S);
+end;
+
+function FillBarePropertyTypes(const AStore: ISymbolStore;
+  ASinceUnix: Int64): TPropTypeFillStats;
+var
+  Props   : TArray<TSymbol>                           ;
+  Rows    : TDictionary<string, TSymbol>              ; // 'ownerId|lowername' -> that owner's row (Id 0 = none)
+  AncCache: TDictionary<Int64, TArray<TTypeAncestor>> ;
+  Classes : TDictionary<Int64, TSymbol>               ;
+  Known   : TDictionary<string, Boolean>              ; // ancestor name -> any symbol of that name exists
+  Resolver: TPropMemberResolver                       ;
+  P       : TSymbol                                   ;
+  Cls     : TSymbol                                   ;
+  Decl    : TSymbol                                   ;
+  Row     : TSymbol                                   ;
+  Anc     : TArray<TTypeAncestor>                     ;
+  A       : TTypeAncestor                             ;
+  Own     : string                                    ;
+  Tok     : string                                    ;
+
+  // AOwner's own row named AName (cached; Id 0 when it has none).
+  function RowOn(AOwnerId: Int64; const AName: string): TSymbol;
+  var
+    Key: string;
+  begin
+    Key:= IntToStr(AOwnerId) + '|' + LowerCase(AName);
+    if not Rows.TryGetValue(Key, Result) then
+    begin
+      Result:= AStore.FindChildSymbolByName(AOwnerId, AName);
+      Rows.Add(Key, Result);
+    end;
+  end;
+
+  { Necessary condition for the bridge to add anything: one of the UNRESOLVED
+    ancestor names names SOME symbol of this store (the bridge resolves the
+    name, alias-chasing, to a class). Without it the bridged climb is skipped:
+    it could only decline. }
+  function CanBridge(const AAnc: TArray<TTypeAncestor>): Boolean;
+  var
+    X   : TTypeAncestor;
+    Bare: string       ;
+    Hit : Boolean      ;
+  begin
+    for X in AAnc do
+    begin
+      if X.Resolved and (X.SymbolId > 0) then Continue;
+      Bare:= X.Name;
+      if Bare.Contains('<') then Bare:= Copy(Bare, 1, Pos('<', Bare) - 1);
+      if LastDelimiter('.', Bare) > 0 then Bare:= Copy(Bare, LastDelimiter('.', Bare) + 1, MaxInt);
+      Bare:= Trim(Bare);
+      if Bare = '' then Continue;
+      if not Known.TryGetValue(LowerCase(Bare), Hit) then
+      begin
+        Hit:= Length(AStore.FindSymbolsByExactName(Bare)) > 0;
+        Known.Add(LowerCase(Bare), Hit);
+      end;
+      if Hit then Exit(True);
+    end;
+    Result:= False;
+  end;
+
+begin
+  Result:= Default(TPropTypeFillStats);
+  if AStore = nil then Exit;
+  Props   := AStore.FindPropertyFillCandidates(ASinceUnix);
+  Rows    := TDictionary<string, TSymbol>.Create;
+  AncCache:= TDictionary<Int64, TArray<TTypeAncestor>>.Create;
+  Classes := TDictionary<Int64, TSymbol>.Create;
+  Known   := TDictionary<string, Boolean>.Create;
+  Resolver:= TPropMemberResolver.Create(AStore, Default(TPropTreeOptions));
+  try
+    for P in Props do
+    begin
+      Own:= FullPropTypeOf(P.Signature);
+      Inc(Result.Candidates);
+      Tok:= '';
+      { Fast path: the nearest RESOLVED ancestor whose same-named row DECLARES
+        a type (memos and re-publications on the way are stepped over, so a
+        stale memo is never copied down). }
+      if not AncCache.TryGetValue(P.ParentId, Anc) then
+      begin
+        Anc:= AStore.GetTransitiveAncestors(P.ParentId);
+        AncCache.Add(P.ParentId, Anc);
+      end;
+      for A in Anc do
+        if A.Resolved and (A.SymbolId > 0) then
+        begin
+          Row:= RowOn(A.SymbolId, P.Name);
+          if (Row.Id > 0) and (Row.Kind = skProperty) and SignatureDeclaresType(Row.Signature) then
+          begin
+            Tok:= FullPropTypeOf(Row.Signature);
+            Break;
+          end;
+        end;
+      { Slow path, only across an UNRESOLVED ancestor edge: the converter's
+        climb (bridge included). Its token is cut at a blank, so only the
+        class it ends on is used and the FULL type is read from that row. }
+      if Tok = '' then
+      begin
+        if not Classes.TryGetValue(P.ParentId, Cls) then
+        begin
+          Cls:= AStore.GetSymbolById(P.ParentId);
+          Classes.Add(P.ParentId, Cls);
+        end;
+        if (Cls.Id > 0) and (Cls.Kind = skClass) and CanBridge(Anc) then
+        begin
+          Inc(Result.Bridged);
+          Resolver.ResolveDeclaredPropertyType(Cls, P.Name, Decl);
+          if Decl.Id > 0 then
+          begin
+            Row:= RowOn(Decl.Id, P.Name);
+            if (Row.Id > 0) and (Row.Kind = skProperty) then Tok:= FullPropTypeOf(Row.Signature);
+          end;
+        end;
+      end;
+      { A miss stores nothing: no empty or guessed type is ever persisted. }
+      if Tok = '' then
+        Inc(Result.Unresolved)
+      else if (Tok <> Own) and AStore.MemoizePropertyType(P.Id, Tok) then
+        Inc(Result.Filled);
+    end;
+  finally
+    Resolver.Free;
+    Known.Free;
+    Classes.Free;
+    AncCache.Free;
+    Rows.Free;
   end;
 end;
 

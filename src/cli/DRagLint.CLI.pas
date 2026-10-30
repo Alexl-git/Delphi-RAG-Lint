@@ -717,7 +717,6 @@ type
     // open that never mutates the DB. A writable open that fails falls back to
     // read-only automatically (resolution still works; memoization skipped).
     NoWriteBack   : Boolean; // proptree: force read-only, no memoization (default False = auto write-back)
-    WriteBack     : Boolean; // hover --write-back: open writable so a recovered property type is memoized (default False = read-only)
     // proptree/2 (Task 2, R2): --min-visibility published|public filters emitted
     // leaves by EFFECTIVE (most-derived) visibility. '' (default/unset) = emit
     // ALL leaves, exactly as proptree/1 did (back-compat).
@@ -1341,7 +1340,6 @@ begin
   Result.ToPersistent       := True;       // proptree: stop ancestor climb at TPersistent/TObject unless --no-to-persistent
   Result.RefsAsLeaves       := False;      // proptree: expand TComponent refs (legacy); --refs-as-leaves treats them as leaves
   Result.NoWriteBack        := False;      // proptree: auto write-back ON; --no-write-back forces read-only
-  Result.WriteBack          := False;      // hover: read-only unless --write-back
   Result.MinVisibility      := '';        // proptree: --min-visibility unset = emit ALL leaves (back-compat)
   Result.FromBlockFile      := '';        // convert-reemit: --from-block <file>
   if ParamCount > 0 then Result.Command:= ParamStr(1); { LoadConfigDefaults keys on the verb }
@@ -1666,7 +1664,6 @@ begin
     else if A = '--no-to-persistent' then Result.ToPersistent:= False // proptree: climb past TPersistent/TObject
     else if A = '--refs-as-leaves' then Result.RefsAsLeaves:= True // proptree: TComponent-typed props are reference leaves
     else if A = '--no-write-back' then Result.NoWriteBack:= True // proptree: force read-only (no memoization)
-    else if A = '--write-back' then Result.WriteBack:= True // hover: memoize a recovered property type  // dl:ok duplicate-code@417f -- REVIEWED 2026-10-29: the ParseArgs one-flag arm chain; the 100-token window matches the --deep/--no-preprocess arms by shape, there is no shared logic to extract
     else if (A = '--min-visibility') and (i < ParamCount) then begin Inc(i); Result.MinVisibility:= ParamStr(i); end // proptree/2: --min-visibility published|public
     else if (A = '--surface') and (i < ParamCount) then begin Inc(i); Result.Surface:= ParamStr(i); end // convert-scaffold (Task 5): --surface dfm|pas
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
@@ -3468,7 +3465,7 @@ begin
 end;
 
 /// <summary>Runs the post-walk LINK stages, in their one valid order:
-/// uses-targets, ancestry, facts-inherited, helpers.</summary>
+/// uses-targets, ancestry, facts-inherited, helpers, prop-types.</summary>
 /// <param name="AIndent">Leading whitespace for the stage lines (see Stage).</param>
 /// <param name="AStore">The store the walk just wrote; must not be nil.</param>
 /// <param name="AIndexer">The indexer that parsed THIS run; must not be nil. Its
@@ -3490,6 +3487,33 @@ begin
   Stage(AIndent, 'ancestry',        procedure begin AStore.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
   Stage(AIndent, 'facts-inherited', procedure begin AIndexer.ApplyInheritedFieldFacts; end);
   Stage(AIndent, 'helpers',         procedure begin AStore.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
+  { 2026-10-29: store the declared type of every bare re-published property
+    ('published property Text;') so hover / the read-only LSP / library DBs
+    need no runtime climb. Needs resolved ancestry, so it runs last. An index
+    built before this pass existed is filled by its next plain `index` run.
+    The marker is '<format>;<unix time the last pass started>'. A matching
+    format on a run that parsed nothing skips the stage; a run that parsed
+    re-checks only the bare rows its changes can affect (files parsed since
+    that time, and same-named rows of the properties they declare); no marker
+    or another format re-checks every bare row. }
+  var Marker   := AStore.GetMetaValue(PROP_TYPES_META_KEY);
+  var FormatOk := Marker.StartsWith(PROP_TYPES_FORMAT + ';');
+  var Since: Int64:= 0;
+  if FormatOk then Since:= StrToInt64Def(Copy(Marker, Length(PROP_TYPES_FORMAT) + 2, MaxInt), 0);
+  if (AIndexer.ParsedFiles = 0) and FormatOk then
+    Writeln(AIndent + 'stage: prop-types -- skipped, no file changed and this index already holds the filled types.')
+  else
+    Stage(AIndent, 'prop-types', procedure
+      var
+        S    : TPropTypeFillStats;
+        Start: Int64;
+      begin
+        Start:= DateTimeToUnix(Now, False);
+        S:= FillBarePropertyTypes(AStore, Since);
+        AStore.SetMetaValue(PROP_TYPES_META_KEY, PROP_TYPES_FORMAT + ';' + IntToStr(Start));
+        Writeln(Format('%s  prop-types: %d bare re-publication(s), %d filled, %d unresolved, %d bridged',
+                       [AIndent, S.Candidates, S.Filled, S.Unresolved, S.Bridged]));
+      end);
 end;
 
 { ---------------------------------------------------------------------------
@@ -10595,7 +10619,7 @@ begin
   if not ExplicitDbsExist(AArgs, 'hover') then Exit(2);
   if AArgs.QName = '' then
   begin
-    Writeln('Usage: drag-lint hover --qname <Foo.Bar> [--db <path>] ' + '[--format md|plain|json] [--write-back]');
+    Writeln('Usage: drag-lint hover --qname <Foo.Bar> [--db <path>] ' + '[--format md|plain|json]');
     Exit(2);
   end;
 
@@ -10620,14 +10644,9 @@ begin
   begin
     if not TFile.Exists(Db) then Continue;
     var RoOk: Boolean;
-    { --write-back: open WRITABLE so a property type recovered from an ancestor
-      is memoized onto the row (DRagLint.Convert.PropTree.ResolvePropertyDeclaredType).
-      A writable open that fails falls back to read-only -- memoization is
-      best-effort, the hover itself never depends on it. }
-    Store:= nil;
-    if AArgs.WriteBack then Store:= OpenWritableStore(Db, RoOk);
-    if Store = nil then Store:= OpenReadOnlyStore(Db, RoOk)
-    else if not RoOk then Store:= OpenReadOnlyStore(Db, RoOk);
+    { Read-only: a re-published property's type is stored by index (the
+      prop-types stage), so hover never needs to write. }
+    Store:= OpenReadOnlyStore(Db, RoOk);
     if not RoOk then
     begin
       if StaleDbRefusesRun(AArgs, 'hover', Db) then Exit(2);
