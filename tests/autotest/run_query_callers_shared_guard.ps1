@@ -205,16 +205,24 @@ if ($null -ne $jsonRaw) {
 # assertion of "expect 2 headers" was written first and failed against correct
 # code; the expectation was wrong, not the code.
 #
-# So this pins the CURRENT truth (one header, both rows under it) and will fail
-# loudly if overload resolution ever becomes type-precise -- at which point the
-# per-target grouping starts to matter and this case becomes a real control.
+# So this pinned the truth of the day (one header, both rows under it) and was
+# written to fail loudly if overload resolution ever became type-precise.
+#
+# UPDATE 2026-10-30: it did. rb5-ovl (63096549, 2026-10-28, "same-arity overload
+# ties narrowed by ARGUMENT SHAPE") resolves `W.Pick('a')` to Pick(string) and
+# `W.Pick(1)` to Pick(Integer), both certain. Two targets now have callers, so
+# the per-target grouping matters and this case IS the real control: name-grouping
+# would print ONE header here; FirstOfTarget must print TWO, one row under each.
 $ovTxt = (& $Exe query find-callers --name Pick --resolved --db $Db 2>$null | Out-String)
 $ovHeaders = ([regex]::Matches($ovTxt, '(?m)^\s+\S*TWorker\.Pick:\s*$')).Count
 $ovRowLines = ([regex]::Matches($ovTxt, '(?m)^\s+\S*C_Driver\s+\(')).Count
 Check 'OVERLOADS: both call sites are reported' ($ovRowLines -eq 2) `
   "rows=$ovRowLines in: $($ovTxt.Trim())"
-Check 'OVERLOADS: headers match the number of TARGETS that have callers' ($ovHeaders -eq 1) `
-  "headers=$ovHeaders (1 = the resolver still collapses ambiguous overloads onto one target; if this becomes 2, overload resolution got precise and that is the news)"
+Check 'OVERLOADS: headers match the number of TARGETS that have callers' ($ovHeaders -eq 2) `
+  "headers=$ovHeaders (2 = one per overload since rb5-ovl 63096549; 1 = runs merged by name, or the resolver collapsed the overloads again)"
+$ovCertain = ([regex]::Matches($ovTxt, '(?m)^\s+\S*C_Driver\s+\(.*\[certain\]')).Count
+Check 'OVERLOADS: both literal-argument call sites resolve certain (argument shape)' ($ovCertain -eq 2) `
+  "certain=$ovCertain"
 
 $ovJson = ResolvedJson 'Pick'
 if ($null -ne $ovJson) {
