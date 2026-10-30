@@ -15,6 +15,9 @@
         -- the positive control: the reply the client must get
     S2  utf8 : byte-identical to S1
     S3  utf16: byte-identical to S1 (no NUL bytes) -- RED before the fix
+    S4  a request is READ as UTF-8: a raw UTF-8 e-acute in the method name comes
+        back as that character in the -32601 message -- RED before 1.39 (stdin was
+        read in the ANSI code page: C3 A9 became two characters)
 
   Run from a NEUTRAL CWD, pwsh 7.
 #>
@@ -58,6 +61,14 @@ foreach ($enc in 'utf8', 'utf16') {
   $nul = ($w | Where-Object { $_ -eq 0 }).Count
   Check ("S{0} {1}: the same UTF-8 bytes as ascii (no re-encoding)" -f @{ utf8 = 2; utf16 = 3 }[$enc], $enc) $same "bytes=$($w.Length) (ascii $($ascii.Length)), NUL bytes=$nul"
 }
+
+# S4: the request side. The method name carries U+00E9 as its raw UTF-8 bytes (C3 A9).
+$name = 'no_such_m' + [char]0xE9 + 'thod'
+[System.IO.File]::WriteAllText($req, '{"jsonrpc":"2.0","id":8,"method":"' + $name + '"}' + "`n", (New-Object System.Text.UTF8Encoding($false)))
+$w = Get-Wire 'ascii'
+$msg = $null
+try { $msg = ([System.Text.Encoding]::UTF8.GetString($w) | ConvertFrom-Json).error.message } catch { }
+Check 'S4 a UTF-8 request is decoded as UTF-8 (method name echoed intact)' ($msg -ceq ('method not found: ' + $name)) "message=$msg"
 }
 catch { Write-Host "[FAIL] harness: $_" -ForegroundColor Red; $fail = $true }
 finally { if (Test-Path $WorkDir) { [System.IO.Directory]::Delete($WorkDir, $true) } }

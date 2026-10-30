@@ -1552,6 +1552,9 @@ var
   Parsed: TJSONValue ;
   Uri   : string     ;
 begin
+  // A request is UTF-8 (MCP frames stdio as UTF-8), the same as SendRaw's replies;
+  // the default Input code page is ANSI and turned C3 A9 into two characters.
+  SetTextCodePage(Input, CP_UTF8);
   while not Eof(Input) do
   begin
     ReadLn(Input, Line);
