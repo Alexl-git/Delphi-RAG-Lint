@@ -101,13 +101,14 @@ end.
 
 $db = Join-Path $WorkDir 'hints.sqlite'
 & $Exe index $src --db $db 2>&1 | Out-Null
-# S5: a defaults file whose Win64 library declares a second `Add`.
+# S5: a defaults file whose WIN32 library declares a second `Add` (1.39 lsp-libfb: the active Win64 platform
+# would now fall back to a Win64 defaults library, so the never-another-platform leak is what S5 pins).
 $libSrc = Join-Path $WorkDir 'lib'; New-Item -ItemType Directory $libSrc | Out-Null
 WriteAnsi (Join-Path $libSrc 'uLibAdd.pas') "unit uLibAdd;`r`ninterface`r`nprocedure Add(pOther: Integer);`r`nimplementation`r`nprocedure Add(pOther: Integer);`r`nbegin`r`nend;`r`nend.`r`n"
 $libDb = Join-Path $WorkDir 'defaults-lib.sqlite'
 & $Exe index $libSrc --db $libDb 2>&1 | Out-Null
 $defaultsFile = Join-Path $WorkDir 'defaults.json'
-[System.IO.File]::WriteAllText($defaultsFile, (@{ schema = 1; platform = 'Win64'; libraries = @{ Win64 = @{ libraryDb = $libDb } } } | ConvertTo-Json -Depth 5), (New-Object System.Text.ASCIIEncoding))
+[System.IO.File]::WriteAllText($defaultsFile, (@{ schema = 1; platform = 'Win64'; libraries = @{ Win32 = @{ libraryDb = $libDb } } } | ConvertTo-Json -Depth 5), (New-Object System.Text.ASCIIEncoding))
 $env:DRAGLINT_CONTEXT_DEFAULTS = $defaultsFile
 Check 'S5: defaults library built' (Test-Path $libDb)
 Check 'fixture indexed' (Test-Path $db)

@@ -14,7 +14,7 @@ updated: 1.38.0-alpha
 
 Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness.
 
-Read this when the language server or a tool must know which platform and configuration a project is built for without guessing. project-context resolves the .dproj (or, for a .dpr with no .dproj, the platform and config you pass) and writes the context file next to the project. --check writes nothing and exits 1 with the reason when the file is missing or stale.
+Read this when the language server or a tool must know which platform and configuration a project is built for without guessing. project-context resolves the .dproj (or, for a .dpr with no .dproj, the platform and config you pass) and writes the context file next to the project. --check writes nothing and exits 1 with the reason when the file is missing or stale. With explicit --db and no listed library for the platform, the server falls back to the central-defaults library.
 
 ## How to run it
 
@@ -100,6 +100,15 @@ the IDE starts: the `library-<Platform>.sqlite` under the manifest `indexes.outD
 that file exists. It changes nothing else in the file (your `platform`, `config`,
 `targetCompiler` and `libraryRoots` stay), does not rewrite an unchanged value, and leaves a
 file that is not valid JSON alone. Each outcome is in the plugin log under `ctxdefaults`.
+
+#### Library fallback under explicit `--db` (1.39)
+
+With explicit `--db` flags (the VS Code `dragLint.databases` list) only a listed `library-<Platform>.sqlite`
+counts as the library. If none is listed for the file's active platform, the language server falls back to
+`libraries.<Platform>.libraryDb` of these defaults for that platform only, never another platform's, and the
+`draglint/context` notice reads `using the <Platform> library from context defaults`. A listed library wins and
+gives no notice; no library for the platform at all keeps the "no library index" notice. A `.dlcontext.json`
+`projectDb` override is unchanged. Guard: `tests\autotest\run_lsp_library_fallback_guard.ps1`.
 
 ---
 

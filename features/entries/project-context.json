@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.38.0-alpha",
   "summary": "Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness",
-  "intro": "Read this when the language server or a tool must know which platform and configuration a project is built for without guessing. project-context resolves the .dproj (or, for a .dpr with no .dproj, the platform and config you pass) and writes the context file next to the project. --check writes nothing and exits 1 with the reason when the file is missing or stale.",
+  "intro": "Read this when the language server or a tool must know which platform and configuration a project is built for without guessing. project-context resolves the .dproj (or, for a .dpr with no .dproj, the platform and config you pass) and writes the context file next to the project. --check writes nothing and exits 1 with the reason when the file is missing or stale. With explicit --db and no listed library for the platform, the server falls back to the central-defaults library.",
   "wikiPage": "project-context",
   "surfaces": [
     {
@@ -57,7 +57,7 @@
     "by": "LSP"
   },
   "verified": {
-    "date": "2026-10-29",
+    "date": "2026-10-30",
     "by": "LSP",
     "build": "1.38.0-alpha",
     "surfaceHash": "f78dd6c88ca1f8429e8bc1dd5cdcead046ed7d578fb6c824e4aeb7dabb6cb2b3"

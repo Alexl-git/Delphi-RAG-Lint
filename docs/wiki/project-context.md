@@ -53,3 +53,12 @@ the IDE starts: the `library-<Platform>.sqlite` under the manifest `indexes.outD
 that file exists. It changes nothing else in the file (your `platform`, `config`,
 `targetCompiler` and `libraryRoots` stay), does not rewrite an unchanged value, and leaves a
 file that is not valid JSON alone. Each outcome is in the plugin log under `ctxdefaults`.
+
+### Library fallback under explicit `--db` (1.39)
+
+With explicit `--db` flags (the VS Code `dragLint.databases` list) only a listed `library-<Platform>.sqlite`
+counts as the library. If none is listed for the file's active platform, the language server falls back to
+`libraries.<Platform>.libraryDb` of these defaults for that platform only, never another platform's, and the
+`draglint/context` notice reads `using the <Platform> library from context defaults`. A listed library wins and
+gives no notice; no library for the platform at all keeps the "no library index" notice. A `.dlcontext.json`
+`projectDb` override is unchanged. Guard: `tests\autotest\run_lsp_library_fallback_guard.ps1`.
