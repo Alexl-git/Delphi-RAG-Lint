@@ -718,7 +718,7 @@ begin
   Result:= True;
 end;
 
-constructor TQueryRule.Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);  // dl:ok missing-inherited-ctor@8f39 -- delegates to CreateCompiled, which calls inherited Create
+constructor TQueryRule.Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
 var
   ErrOff : UInt32       ;
   ErrType: TTSQueryError;
