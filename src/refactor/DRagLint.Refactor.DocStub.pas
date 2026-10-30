@@ -68,7 +68,8 @@ function ExtractParamList(const ASig: string): string;
 /// comment text as parameter text.</summary>
 /// <param name="ASig">The indexed signature, e.g. <c>'(const A: Integer): Integer'</c>.
 /// For a declaration split over several lines the index JOINS the lines with a
-/// space and keeps their comments.</param>
+/// space. Since EXT-E1 (07b5334d) the extractor strips comment nodes from the
+/// indexed signature; a database written before that still holds them.</param>
 /// <param name="AName">The routine's bare name. The source line at ADeclLine
 /// must name it, followed by its <c>(</c>, before that line is trusted.</param>
 /// <param name="AFilePath">The declaring unit; read only when ASig holds a

@@ -102,6 +102,7 @@ type
   public
     procedure DoOld(X: Integer);
     function OldOnly: Integer;
+    const TypedK: Integer = 7;
   published
     property Picture: TSrcPic read FPicture write FPicture;
     property Caption: string read FCaption write FCaption;
@@ -194,6 +195,7 @@ begin
   N := OldGlobal(N);
   pic1.OnPaint := nil;
   pic1.MidOnly;
+  N := pic1.TypedK;
 end;
 
 end.
@@ -302,8 +304,13 @@ Check 'G3 ... the same names the remove row already gives as needed_by (one anal
   ((@(@($r.J.uses | Where-Object { $_.action -eq 'remove' -and $_.unit -eq 'LibOld' })[0].needed_by | ForEach-Object { $_.name }) | Sort-Object) -join ',') -eq 'OLD_MAX,OldGlobal' `
   ($r.J.uses | ConvertTo-Json -Depth 5 -Compress)
 
-Check 'N1 nothing else: exactly 10 rows -- no row for Data (reached through pic1.Picture, not an instance)' `
-  ((@($r.J.pas_uses).Count -eq 10) -and ($null -eq (Row $r 'pic1' 'Data'))) (($r.J.pas_uses | ForEach-Object { "$($_.instance).$($_.member)=$($_.status)" }) -join ' ')
+Check 'N1 nothing else: exactly 11 rows -- no row for Data (reached through pic1.Picture, not an instance)' `
+  ((@($r.J.pas_uses).Count -eq 11) -and ($null -eq (Row $r 'pic1' 'Data'))) (($r.J.pas_uses | ForEach-Object { "$($_.instance).$($_.member)=$($_.status)" }) -join ' ')
+
+# T1 a TYPED class const has Modifiers 'typed' (EXT-E4, 1ca04f79) -- not a visibility; the row says '' (unknown), never 'typed' (cf. 14746d88 in PropTree).
+$x = Row $r 'pic1' 'TypedK'
+Check 'V2 typed const pic1.TypedK: kind const, visibility is not ''typed'' (unknown = empty)' `
+  (($null -ne $x) -and ($x.kind -eq 'const') -and ([string]$x.visibility -eq '')) (Show $x)
 
 # ---- discrimination: the same member, no #link -> same-name -----------------
 $r2 = J 'F1Form.pas' 'p2.rules'
@@ -336,13 +343,13 @@ Check 'E1 POSITIVE CONTROL: E0Form converts and its pas_uses is an EMPTY array, 
 
 # ---- --no-reconcile-uses: the member rows stay, the global rows go ----------
 $n = J 'F1Form.pas' 'p.rules' @('--no-reconcile-uses')
-Check 'R1 --no-reconcile-uses: 8 member rows, no global-dangling row (that verdict is the reconciliation''s)' `
-  ((@($n.J.pas_uses).Count -eq 8) -and (@($n.J.pas_uses | Where-Object { $_.status -eq 'global-dangling' }).Count -eq 0)) (($n.J.pas_uses | ForEach-Object { "$($_.member)=$($_.status)" }) -join ' ')
+Check 'R1 --no-reconcile-uses: 9 member rows, no global-dangling row (that verdict is the reconciliation''s)' `
+  ((@($n.J.pas_uses).Count -eq 9) -and (@($n.J.pas_uses | Where-Object { $_.status -eq 'global-dangling' }).Count -eq 0)) (($n.J.pas_uses | ForEach-Object { "$($_.member)=$($_.status)" }) -join ' ')
 
 # ---- text mode --------------------------------------------------------------
 $t = Run 'F1Form.pas' 'p.rules'
 Check 'T1 text: the summary line counts every status' `
-  ($t.Out -match '(?m)^pas uses: 4 unmapped, 2 global-dangling, 2 same-name, 1 mapped, 1 cast-refused, 0 not-rewritten\s*$') $t.Out
+  ($t.Out -match '(?m)^pas uses: 5 unmapped, 2 global-dangling, 2 same-name, 1 mapped, 1 cast-refused, 0 not-rewritten\s*$') $t.Out
 Check 'T2 text: each unmapped member is listed with its lines' `
   (($t.Out -match '(?m)^  unmapped pic1\.DoOld \(method, public, TPicOld in LibOld\) -- lines 26, 28\s*$') -and
    ($t.Out -match '(?m)^  unmapped pic1\.MidOnly \(method, public, TOldMid in LibOld\) -- line 31\s*$')) $t.Out
@@ -367,7 +374,7 @@ Check 'W4 text: the summary counts not-rewritten and lists each such member with
 # ---- --apply reports the same rows ------------------------------------------
 $a = J 'F1Form.pas' 'p.rules' @('--apply', '--no-backup', '--no-reindex')
 Check 'A1 --apply: exit 0 and pas_uses equals the dry run''s' `
-  (($a.Code -eq 0) -and (@($a.J.pas_uses).Count -eq 10) -and (($a.J.pas_uses | ConvertTo-Json -Depth 5 -Compress) -eq ($r.J.pas_uses | ConvertTo-Json -Depth 5 -Compress))) `
+  (($a.Code -eq 0) -and (@($a.J.pas_uses).Count -eq 11) -and (($a.J.pas_uses | ConvertTo-Json -Depth 5 -Compress) -eq ($r.J.pas_uses | ConvertTo-Json -Depth 5 -Compress))) `
   ("apply: " + ($a.J.pas_uses | ConvertTo-Json -Depth 5 -Compress))
 
 # ---- SAME-NAMED CLASSES: the From class comes through the UNIT'S SCOPE ------

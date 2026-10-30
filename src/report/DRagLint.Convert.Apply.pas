@@ -5035,7 +5035,8 @@ var
       if Hit.Found then
       begin
         R.Kind         := PasUseKind(Hit.Member.Kind, Hit.Member.Name, True);
-        R.Visibility   := Trim(Hit.Member.Modifiers);
+        { A const's Modifiers is never a visibility ('typed' since EXT-E4, 1ca04f79; see 14746d88): report unknown ('') rather than 'typed'. }
+        R.Visibility   := if Hit.Member.Kind = skConstDecl then '' else Trim(Hit.Member.Modifiers);
         R.DeclaredIn   := Hit.Owner;
         R.DeclaringUnit:= Hit.DeclUnit;
       end

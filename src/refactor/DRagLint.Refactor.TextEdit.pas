@@ -639,8 +639,12 @@ begin
 end;
 
 class function TTextFileFormat.ReadFile(const APath: string; out AText: string): TTextFileFormat;
+var
+  Bytes: TBytes;
 begin
-  Result:= Decode(if TFile.Exists(APath) then TFile.ReadAllBytes(APath) else nil, AText);
+  Bytes:= nil;
+  if TFile.Exists(APath) then Bytes:= TFile.ReadAllBytes(APath);
+  Result:= Decode(Bytes, AText);
 end;
 
 class function TTextFileFormat.LineBreakOf(const AText: string): string;
