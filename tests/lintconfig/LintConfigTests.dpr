@@ -171,26 +171,27 @@ begin
     Check('disabling an autofix rule keeps IsAutoFix true (independent)',
       Cfg.IsAutoFix('redundant-cast'));
 
-    // 3. AddAutoFix + round-trip via writer
+    // 3. AddAutoFix works in memory; the WRITER drops the retired "autofix" key
+    // (490be45a, 1.37.0: every autofix is default-ON, "autofix_off" is the only
+    // brake) and round-trips "autofix_off" instead.
     Cfg2:= TLintConfig.Load(Path, '');
     Cfg2.AddAutoFix(['self-assignment']);
     Check('AddAutoFix adds without removing prior', Cfg2.IsAutoFix('redundant-cast'));
     Check('AddAutoFix adds new id', Cfg2.IsAutoFix('self-assignment'));
+    Check('AutoFixIds length 2', Length(Cfg2.AutoFixIds) = 2);
+    Cfg2.SetAutoFixOff(['redundant-cast']);
 
     Json:= TLintConfigWriter.ToJson(Cfg2);
-    Check('serialized json contains autofix key', Pos('"autofix"', Json) > 0);
-    Check('serialized json contains redundant-cast', Pos('redundant-cast', Json) > 0);
-    Check('serialized json contains self-assignment', Pos('self-assignment', Json) > 0);
+    Check('serialized json drops the retired autofix key', Pos('"autofix"', Json) = 0);
+    Check('serialized json contains autofix_off key', Pos('"autofix_off"', Json) > 0);
+    Check('serialized json contains the brake rule id', Pos('redundant-cast', Json) > 0);
+    Check('serialized json does not leak the autofix-only id', Pos('self-assignment', Json) = 0);
 
     TFile.WriteAllText(Path, Json, TEncoding.UTF8);
     Cfg2:= TLintConfig.Load(Path, '');
-    Check('reload after round-trip: redundant-cast still autofix', Cfg2.IsAutoFix('redundant-cast'));
-    Check('reload after round-trip: self-assignment still autofix', Cfg2.IsAutoFix('self-assignment'));
-    Check('reload after round-trip: unrelated rule not autofix',
-      not Cfg2.IsAutoFix('some-other-rule'));
-
-    // 4. AutoFixIds returns both
-    Check('AutoFixIds length 2', Length(Cfg2.AutoFixIds) = 2);
+    Check('reload after round-trip: autofix_off redundant-cast kept', Cfg2.IsAutoFixOff('redundant-cast'));
+    Check('reload after round-trip: unrelated rule not autofix_off', not Cfg2.IsAutoFixOff('self-assignment'));
+    Check('reload after round-trip: retired autofix list is gone', Length(Cfg2.AutoFixIds) = 0);
   finally
     if TFile.Exists(Path) then TFile.Delete(Path);
   end;

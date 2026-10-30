@@ -222,16 +222,19 @@ begin
   if Length(M) = 1 then
     Check('10h prose reason kept whole', M[0].Reason = 'the dl:ok grammar says so');
 
-  { 10i: allow on a two-comment line merges into ONE marker and keeps both reasons. }
+  { 10i: allow on a two-comment line keeps EACH comment and its reason (f4fa2a9b, F2: the old
+    merge-into-one-marker joined reasons with "; " so every rule claimed every reason). Only the
+    comment already naming the rule is rewritten (hash refreshed); the other is byte for byte. }
   var Merged: string:= TReviewMarkers.InsertInto(
     'x; // dl:ok bare-except@7f3a -- one  // dl:ok deep-nesting -- two', 'deep-nesting', '', 'bb02');
-  Check('10i merged line has one dl:ok tag', OccurrenceCount(Merged, 'dl:ok') = 1);
+  Check('10i both dl:ok comments kept', OccurrenceCount(Merged, 'dl:ok') = 2);
+  Check('10i untouched comment byte for byte', Pos('// dl:ok bare-except@7f3a -- one  ', Merged) > 0);
   M:= TReviewMarkers.Parse(Merged);
   Check('10i merged entries', Length(M) = 2);
   if Length(M) = 2 then
   begin
     Check('10i refreshed hash', M[1].Hash = 'bb02');
-    Check('10i both reasons kept', M[0].Reason = 'one; two');
+    Check('10i reasons stay with their own rule', (M[0].Reason = 'one') and (M[1].Reason = 'two'));
   end;
 end;
 
