@@ -381,7 +381,7 @@ begin
   Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
   Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
   Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
-  Writeln('    --target-compiler <v>     index: the Delphi the PREPROCESSOR describes (VER<N>0, CompilerVersion, RTLVersion; default: --project''s ProjectVersion, then the installed RAD Studio, then 37). lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
+  Writeln('    --target-compiler <v>     index: the Delphi the PREPROCESSOR describes (VER<N>0, CompilerVersion, RTLVersion; default: --project''s ProjectVersion (index --all: each section''s own .dproj), then the installed RAD Studio, then 37). lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
   Writeln('    --baseline <file>         report only findings absent from the baseline');
   Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
   Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
@@ -1189,7 +1189,7 @@ begin
     Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
     Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
     Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
-    Writeln('    --target-compiler <v>     index: the Delphi the PREPROCESSOR describes (VER<N>0, CompilerVersion, RTLVersion; default: --project''s ProjectVersion, then the installed RAD Studio, then 37). lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
+    Writeln('    --target-compiler <v>     index: the Delphi the PREPROCESSOR describes (VER<N>0, CompilerVersion, RTLVersion; default: --project''s ProjectVersion (index --all: each section''s own .dproj), then the installed RAD Studio, then 37). lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
     Writeln('    --baseline <file>         report only findings absent from the baseline');
     Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
     Exit;

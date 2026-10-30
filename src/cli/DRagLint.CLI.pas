@@ -4875,6 +4875,34 @@ begin
     ControlRequest(ControlPipeNameFor(GetProcessId(AHandles[K])), CONTROL_MSG_SHUTDOWN, CONNECT_MS, Reply, Err);
   end;
 end;
+/// <summary>x11 (idea: outside PR #11, Jonathas Paiva, "the project's own
+/// Delphi"): sets the PREPROCESSOR's CompilerVersion (VER&lt;N&gt;0,
+/// CompilerVersion, RTLVersion) for ONE manifest section of `index --all`.
+/// --target-compiler wins (already applied run-wide by
+/// ApplyPreprocessCompilerVersion, so nothing is changed); else the
+/// ProjectVersion of the section's .dproj (a .dpr root: its sibling .dproj);
+/// else the installed RAD Studio.</summary>
+/// <param name="AItem">The plan section about to be built.</param>
+/// <param name="AArgs">The parsed command line (--target-compiler).</param>
+/// <remarks>Process-wide state: call it before EACH BuildPlanItem of a
+/// sequential loop, so a section never inherits the previous section's
+/// Delphi. A `--jobs N` child runs that same loop for its one section.
+/// Silent: an unmappable ProjectVersion falls back to the installed Delphi.</remarks>
+procedure ApplySectionCompilerVersion(const AItem: TPlanSection; const AArgs: TArgs);
+var
+  V    : Integer;
+  Err  : string ;
+  Dproj: string ;
+begin
+  if Trim(AArgs.TargetCompiler) <> '' then Exit;
+  Dproj:= '';
+  if (AItem.Mode = smClosure) and (Length(AItem.Roots) > 0) then Dproj:= AItem.Roots[0];
+  if SameText(ExtractFileExt(Dproj), '.dpr') then Dproj:= ChangeFileExt(Dproj, '.dproj');
+  if not (SameText(ExtractFileExt(Dproj), '.dproj') and TFile.Exists(Dproj)
+    and ResolveTargetCompiler(TARGET_COMPILER_AUTO, '', '', Dproj, V, Err)) then
+    V:= CompilerVersionOfStudioRoot(TStudioEnv.RootOrEmpty);
+  SetTargetCompilerVersion(V);
+end;
 // v0.45: index --all [--config <path>] [--dry-run [--json]] [--only <Secs>] [--platform <P>]
 // Loads the manifest (from --config if given, else TManifestIO.Load(enginedir, cwd)),
 // validates it, resolves the build plan, optionally filters by --only / --platform,
@@ -5128,6 +5156,7 @@ begin
     for i:= 0 to High(Plan.Items) do
     begin
       if BatchStandDownTaken then Exit(CONTROL_EXIT_STOOD_DOWN);
+      ApplySectionCompilerVersion(Plan.Items[i], AArgs);
       if not BuildPlanItem(Plan.Items[i], AArgs.Docs, not AArgs.NoPreprocess, AArgs.ForceReparse, AArgs.Rebuild, AArgs.NoPrune, AArgs.ResolveOnly, AArgs.BuildConfig, AArgs.WaitLibraryMin, AArgs.RequireLibrary) then FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])];
     end;
     Result:= ReportFailedSections(FailedNames, Length(Plan.Items));
@@ -5282,6 +5311,9 @@ begin
       if AArgs.ResolveOnly  then ChildCmdLine:= ChildCmdLine + ' --resolve-only';
       if AArgs.ForceReparse then ChildCmdLine:= ChildCmdLine + ' --force-reparse';
       if AArgs.MaxFileKBSet then ChildCmdLine:= ChildCmdLine + ' --max-file-kb ' + IntToStr(AArgs.MaxFileKB);
+      { x11: and --target-compiler -- without it a child preprocessed its section for
+        the section's ProjectVersion, not for the target the caller named. }
+      if Trim(AArgs.TargetCompiler) <> '' then ChildCmdLine:= ChildCmdLine + ' --target-compiler "' + Trim(AArgs.TargetCompiler) + '"';
       { The child writes to the SAME stdout/stderr, so it must write the same bytes. }
       if CurrentOutputEncoding <> oeAscii then
         ChildCmdLine:= ChildCmdLine + ' ' + OUTPUT_ENCODING_SWITCH + ' ' + OutputEncodingName(CurrentOutputEncoding);
@@ -12316,8 +12348,8 @@ var
 /// <param name="AArgs">The parsed command line.</param>
 /// <remarks>Silent: an unknown token or ProjectVersion leaves the installed
 /// Delphi's number in place (lint / lint-all / rules refuse a bad
-/// --target-compiler themselves in ApplyRunTargetCompiler). The per-section
-/// projects of `index --all` are NOT consulted here (open, PR #11 scope).</remarks>
+/// --target-compiler themselves in ApplyRunTargetCompiler). Each section
+/// of `index --all` takes its own .dproj's: ApplySectionCompilerVersion (x11).</remarks>
 procedure ApplyPreprocessCompilerVersion(const AArgs: TArgs);
 var
   V  : Integer;
