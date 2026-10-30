@@ -311,7 +311,7 @@ begin
   if not TFile.Exists(ASourcePath) then Exit;
   try
     Src:= TFile.ReadAllText(ASourcePath, TEncoding.ANSI);
-  except
+  except  // dl:ok try-except-swallowed@66ef -- by contract (see <returns>): a missing or unreadable file answers False, so the import is judged on the index alone
     on EStreamError do Exit;
     on EInOutError do Exit;
   end;
@@ -4457,7 +4457,8 @@ var
     var
       U, Ch: TSymbol;
     begin
-      Result:= False; AFlags:= 0;
+      Result:= False;
+      AFlags:= 0;
       if AFrom = nil then Exit;
       for U in AFrom.FindSymbolsByExactName(AUnitName) do
       begin
