@@ -19,3 +19,15 @@ magic-literal 18
 # Line 22 '99: Total := 2' -- case label 99 (caseLabel parent); 99 is not in
 # the exempt-value set either -> proves the case-label exempt context.
 !magic-literal 22
+# Lines 33-35 (procedure Q): INLINE constants (10.3+), simple, typed and
+# compound. The grammar puts them in their own node, constInline, with no
+# defaultValue wrapper and no declConst, so both exemption lists missed them
+# (Gitea drag-lint#2) -> exempt, not flagged.
+!magic-literal 33
+!magic-literal 34
+!magic-literal 35
+# Line 36 'var W := 5' -- an inline VARIABLE initializer is not a constant
+# -> still flagged.
+magic-literal 36
+# Line 37 'V := 37 + ...' -- a magic literal in code right after them -> flagged.
+magic-literal 37

@@ -1,3 +1,4 @@
+# dl:serial: build_fixture_exe.bat compiles T2..T7 with dcc64 and copies the engine DLLs into the shared tests\fixtures folder -- under -Jobs it races the other fixture runners
 <#
   run_doctests_v021.ps1 -- makes the legacy `.bat` doctest suite visible to the
   battery.
@@ -73,7 +74,13 @@ $out = if (Test-Path $log) { Get-Content $log } else { @() }
 Remove-Item Env:\EXE -ErrorAction SilentlyContinue
 
 $sections = @($out | Where-Object { $_ -match '^=== T\d+' })
-$fails    = @($out | Where-Object { $_ -match '^FAIL' })
+# A fixture that `type`s a server reply with no trailing newline prints its
+# `FAIL: ...` on the SAME line as that reply (T12, T24: `{...}FAIL: enriched
+# hover missing`), so a `^FAIL` match missed them and the wrapper reported
+# "0 FAIL line(s)" beside a failing exit code (backlog L#30). The marker is
+# matched anywhere; each failure is shown from its `FAIL:` on.
+$fails    = @($out | Where-Object { $_ -match '(^|[^A-Za-z])FAIL:' } |
+                     ForEach-Object { $_.Substring($_.IndexOf('FAIL:')) })
 
 Check 'driver exits 0' ($p.ExitCode -eq 0) ("exit={0}; {1} FAIL line(s): {2}" -f $p.ExitCode, $fails.Count, (($fails | Select-Object -First 6) -join ' | '))
 

@@ -117,6 +117,10 @@ for q in ("PropAccFix.TAccBase.RO","PropAccFix.TAccBase.RW","PropAccFix.TAccBase
     print(q, pa(q))
 c.close()
 '@
+# The historical default, else the first python on PATH (backlog #30: a fixed
+# C:\Python314 made this runner fail or skip on any other machine).
+if (-not (Test-Path $Python)) { $pyCmd = Get-Command python -ErrorAction SilentlyContinue | Select-Object -First 1; if ($pyCmd) { $Python = $pyCmd.Source } }
+if (-not (Test-Path $Python)) { Write-Host "SKIP: no python found ($Python, nor on PATH) -- the DB rows cannot be read" -ForegroundColor Yellow; exit 77 }
 $rows = & $Python $chk $db
 $pa = @{}
 foreach ($line in $rows) {

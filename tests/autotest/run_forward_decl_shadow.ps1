@@ -1,3 +1,5 @@
+# dl:serial: indexes a fixture and reads it back through python -- under -Jobs 8 its precondition
+#   read back NO rows (2026-10-15) and the same run passed serially; Gitea drag-lint#41.
 <#
   run_forward_decl_shadow.ps1 -- a FORWARD-DECLARATION stub must never shadow
   the real declaration of the same class in a BY-NAME lookup.

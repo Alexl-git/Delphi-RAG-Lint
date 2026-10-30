@@ -137,9 +137,15 @@ Check 'C>P comes BEFORE P>C in the trace' (($iCP -ge 0) -and ($iPC -gt $iCP)) "C
 
 Write-Host ''
 Write-Host 'OFF BY DEFAULT' -ForegroundColor Cyan
-$stray = Get-ChildItem $WorkDir -Filter '*.trace' -File | Where-Object { $_.FullName -ne $trace }
+# The requested trace by its RESOLVED path (Gitea drag-lint#24). $trace is built
+# from $env:TEMP, which can be an 8.3 short path (C:\Users\JONATH~1.SIL\...),
+# while Get-ChildItem lists the long one (C:\Users\jonathas.silva\...): compared
+# as text the two never matched, the file --trace asked for was counted as a
+# stray, and this check failed on such a machine with no stray file at all.
+$traceFull = if (Test-Path -LiteralPath $trace) { (Get-Item -LiteralPath $trace).FullName } else { $trace }
+$stray = @(Get-ChildItem $WorkDir -Filter '*.trace' -File | Where-Object { $_.FullName -ne $traceFull })
 Check 'no trace file appears without --trace' ($stray.Count -eq 0) `
-  'a diagnostic that writes to disk unasked is a surprise in a live IDE session'
+  ('a diagnostic that writes to disk unasked is a surprise in a live IDE session' + $(if ($stray.Count) { ' -- found: ' + (($stray | ForEach-Object { $_.FullName }) -join ', ') } else { '' }))
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

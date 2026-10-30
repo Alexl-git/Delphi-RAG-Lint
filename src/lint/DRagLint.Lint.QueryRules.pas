@@ -1027,6 +1027,154 @@ begin
   end; // try
 end;
 
+{ (#not-declared-numeric? @id) -- 2026-10-09, Gitea drag-lint#7.
+
+  concat-in-loop matched `X := X + Y` by shape alone, and a variable operand
+  cannot be typed from the tree: `Total := Total + Qty` (Currency) and
+  `S := S + Word` are the same subtree. Sampled on the production code, ~40% of its
+  findings were numeric sums (Integer, Int64, Currency, Double), all told to
+  "use TStringList".
+
+  This answers from the DECLARATION, scoped to the routine the assignment sits
+  in: its `var` sections, its parameters, its inline `var X: T`, and -- for
+  `Result` -- its return type; then the enclosing routine's, for a nested one.
+  The name's type must be written and unique there; anything else (a field, a
+  global, an inline `var X := e`, two different declarations) is UNKNOWN, and
+  unknown keeps the finding. Only a declared numeric type drops it, so a real
+  string accumulation can never be hidden by this. Char is not numeric here:
+  Char + Char is a string. }
+function DeclaredTypeInRoutine(const AId: TTSNode; const ASource: TBytes): string;  // dl:ok too-many-exit-points@a74e -- REVIEWED 2026-10-30: guard clauses of a scope walk (no id, no name, lambda, Result, unique/ambiguous hit); a single exit would nest every guard
+const
+  UNKNOWN = ''; { not declared with a single written type in reach }
+var
+  Name: string;
+
+  { Every written type of Name declared directly in ADef (not in a nested
+    defProc). Adds '' for an untyped inline declaration. }
+  procedure Collect(const N: TTSNode; ATypes: TStrings; ATop: Boolean);
+  var J: Integer; Ch, T, Kid: TTSNode; TypeStart: Integer;
+  begin
+    if N.IsNull then Exit;
+    if (not ATop) and ((N.NodeType = 'defProc') or (N.NodeType = 'lambda')) then Exit;
+    if (N.NodeType = 'declVar') or (N.NodeType = 'declArg') then
+    begin
+      T:= N.ChildByField('type');
+      if not T.IsNull then
+      begin
+        TypeStart:= Integer(T.StartByte);
+        for J:= 0 to Integer(N.NamedChildCount) - 1 do
+        begin
+          Ch:= N.NamedChild(J);
+          if (Ch.NodeType = 'identifier') and (Integer(Ch.StartByte) < TypeStart)
+             and SameText(NodeText(Ch, ASource), Name) then ATypes.Add(Trim(NodeText(T, ASource)));
+        end;
+      end;
+    end
+    else if (N.NodeType = 'varDef') or (N.NodeType = 'varAssignDef') then
+    begin
+      Ch:= N.ChildByField('name');
+      if Ch.IsNull then
+        for J:= 0 to Integer(N.NamedChildCount) - 1 do
+          if N.NamedChild(J).NodeType = 'identifier' then
+          begin
+            Ch:= N.NamedChild(J);
+            Break;
+          end;
+      if (not Ch.IsNull) and SameText(NodeText(Ch, ASource), Name) then
+      begin
+        T:= N.ChildByField('type');
+        if T.IsNull then
+          for J:= 0 to Integer(N.NamedChildCount) - 1 do
+            if N.NamedChild(J).NodeType = 'type' then
+            begin
+              T:= N.NamedChild(J);
+              Break;
+            end;
+        if T.IsNull then ATypes.Add('') else ATypes.Add(Trim(NodeText(T, ASource)));
+      end;
+    end;
+    { NamedChildrenOf, not NamedChild(I): O(n) on a wide block (see there). }
+    for Kid in NamedChildrenOf(N) do Collect(Kid, ATypes, False);
+  end;
+
+var
+  Cur  : TTSNode;
+  Hdr  : TTSNode;
+  I    : Integer;
+  Types: TStringList;
+begin
+  Result:= UNKNOWN;
+  if AId.IsNull then Exit;
+  Name:= NodeText(AId, ASource);
+  if Name = '' then Exit;
+  Cur:= AId.Parent;
+  while not Cur.IsNull do
+  begin
+    if Cur.NodeType = 'lambda' then Exit; { an anonymous method's own scope: not modelled }
+    if Cur.NodeType = 'defProc' then
+    begin
+      Hdr:= Default(TTSNode);
+      for I:= 0 to Integer(Cur.NamedChildCount) - 1 do
+        if Cur.NamedChild(I).NodeType = 'declProc' then
+        begin
+          Hdr:= Cur.NamedChild(I);
+          Break;
+        end;
+      if SameText(Name, 'Result') then
+      begin
+        if not Hdr.IsNull then
+        begin
+          var RT: TTSNode:= Hdr.ChildByField('type');
+          if not RT.IsNull then Result:= Trim(NodeText(RT, ASource));
+        end;
+        Exit;
+      end;
+      Types:= TStringList.Create;
+      try
+        Types.CaseSensitive:= False;
+        Types.Duplicates:= dupIgnore;
+        Types.Sorted:= True;
+        Collect(Cur, Types, True);
+        if Types.Count = 1 then Exit(Types[0]); { '' when the only declaration is untyped }
+        if Types.Count > 1 then Exit(UNKNOWN);
+      finally
+        Types.Free;
+      end;
+      { not declared here: an enclosing routine's local, or a field/global }
+    end;
+    Cur:= Cur.Parent;
+  end;
+end;
+
+function IsNumericTypeText(const AType: string): Boolean;
+const
+  NUMERIC: array[0..27] of string = (
+    'integer', 'cardinal', 'shortint', 'smallint', 'longint', 'int64', 'byte', 'word',
+    'longword', 'uint64', 'nativeint', 'nativeuint', 'int8', 'int16', 'int32', 'uint8',
+    'uint16', 'uint32', 'single', 'double', 'extended', 'real', 'real48', 'currency',
+    'comp', 'tdatetime', 'tdate', 'ttime');
+var
+  T: string;
+  S: string;
+begin
+  T:= LowerCase(Trim(AType));
+  if LastDelimiter('.', T) > 0 then T:= Copy(T, LastDelimiter('.', T) + 1, MaxInt); { System.Integer }
+  for S in NUMERIC do
+    if T = S then Exit(True);
+  Result:= False;
+end;
+
+function EvalDeclaredNumeric(const AMatch: TTSQueryMatch; const ASource: TBytes;
+  const AArgs: TArray<TPredicateArg>; ANegated: Boolean): Boolean;
+const
+  OP_AND_CAPTURE = 2;
+  CAP_ARG        = 1;
+begin
+  if (Length(AArgs) <> OP_AND_CAPTURE) or not AArgs[CAP_ARG].IsCapture then Exit(True);
+  Result:= IsNumericTypeText(DeclaredTypeInRoutine(ResolveCaptureNode(AMatch, AArgs[CAP_ARG].CaptureIndex), ASource));
+  if ANegated then Result:= not Result;
+end;
+
 { The `type` field text of ADecl with all whitespace removed (`^ Char` ->
   `^Char`), or '' when the declaration carries no explicit type -- an
   inferred inline `var X := Expr`. }
@@ -1370,6 +1518,8 @@ begin
   if (Op = 'reset-in-loop?') or (Op = 'not-reset-in-loop?') then
     Exit(EvalResetInLoop(AMatch, ASource, AArgs, Op = 'not-reset-in-loop?'));
 
+  if (Op = 'declared-numeric?') or (Op = 'not-declared-numeric?') then
+    Exit(EvalDeclaredNumeric(AMatch, ASource, AArgs, Op = 'not-declared-numeric?'));
   if Op = 'declared-type?' then
     Exit(EvalDeclaredType(AMatch, ASource, AArgs, ACache));
 

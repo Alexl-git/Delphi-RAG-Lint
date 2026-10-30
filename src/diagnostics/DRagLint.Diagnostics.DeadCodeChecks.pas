@@ -1741,7 +1741,12 @@ var
         if not LitPrnt.IsNull then LitPT:= LitPrnt.NodeType;
         var IsExempt: Boolean :=
           (LitPT = 'defaultValue') or (LitPT = 'caseLabel') or (LitPT = 'range')
-          or (LitPT = 'arrInitializer') or (LitPT = 'recInitializer') or (LitPT = 'recInitializerField');
+          or (LitPT = 'arrInitializer') or (LitPT = 'recInitializer') or (LitPT = 'recInitializerField')
+          { An INLINE `const X = 3;` (10.3+) is its own node, constInline, with the
+            value as a direct child -- no defaultValue wrapper and no declConst, so
+            both lists missed it and the literal that IS the named constant was
+            reported (Gitea drag-lint#2). redundant-parentheses already knew. }
+          or (LitPT = 'constInline');
         { a defaults table (N-12): the literal is the WHOLE rhs of an assignment
           to a named field (`Result.MaxLen := 180`) -- the field name states its
           meaning as a const name would. Part of an rhs, or a plain local
@@ -1758,7 +1763,7 @@ var
           begin
             var AncT: string := Anc.NodeType;
             if (AncT = 'defaultValue') or (AncT = 'declConst') or (AncT = 'declConsts')
-               or (AncT = 'declEnumValue') then
+               or (AncT = 'declEnumValue') or (AncT = 'constInline') then
             begin
               IsExempt := True;
               Break;

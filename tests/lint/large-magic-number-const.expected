@@ -4,3 +4,5 @@
 # The same literal in executable code MUST still fire.
 large-magic-number 18
 large-magic-number 19
+# An INLINE constant's value (constInline, Gitea drag-lint#2) must not be flagged either.
+!large-magic-number 25

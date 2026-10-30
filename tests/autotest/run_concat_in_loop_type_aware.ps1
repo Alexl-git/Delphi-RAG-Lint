@@ -302,9 +302,9 @@ foreach ($s in $surfaces.GetEnumerator()) {
 }
 
 Write-Host ''
-Write-Host 'Without a store nothing changes (the .scm rule stays type-blind there)' -ForegroundColor Cyan
+Write-Host 'Without a store the .scm rule answers from the DECLARATION alone (drag-lint#7)' -ForegroundColor Cyan
 $noStore = FiredText @(& $Exe lint $pas 2>$null)
-Check 'lint (no --db): Integer Total := Total + Count still fires' ($noStore -contains $ln.IntegerVar) ("fired=[" + ($noStore -join ', ') + "]")
+Check 'lint (no --db): Integer Total := Total + Count (declared in the routine) no longer fires' (-not ($noStore -contains $ln.IntegerVar)) ("fired=[" + ($noStore -join ', ') + "]")
 
 Write-Host ''
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir -ErrorAction SilentlyContinue }

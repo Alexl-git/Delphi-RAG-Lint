@@ -7,6 +7,8 @@ REM and -E"%HERE%" hit the Windows trap where a TRAILING BACKSLASH before a
 REM closing quote escapes it, swallowing the next argument. %HERE% and the src
 REM paths contain no spaces so they need no quotes; %IDELIB% does but has no
 REM trailing backslash, so it is quoted whole. Do not "tidy" this.
+REM src\core: the kill-on-close job object (DRagLint.Core.JobObject) moved
+REM out of the plugin in f71ec3bb and LspClient uses it (backlog L#30).
 call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat" >NUL
 REM -NU: DCUs go to a private folder, never beside the sources in src\ -- a stray
 REM src\*.dcu is reused by any later build that searches that directory.
