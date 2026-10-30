@@ -4162,8 +4162,23 @@ begin
       Writeln(ErrOutput, Format('ERROR: index: cannot create the lock file %s: %s', [LockPath, SysErrorMessage(Err)]));
     Exit(False);
   end;
-  GIndexLocks.Add(Key, H); { held until exit; the OS closes and deletes it }
+  GIndexLocks.Add(Key, H); { held until exit or ReleaseIndexLock; the OS closes and deletes it }
   Result:= True;
+end;
+
+{ Gives back the lock AcquireIndexLock took for ADbPath (no-op when this process
+  holds none). Called once a run has released its WRITE connection: the rule-cache
+  warm that follows only reads, and holding the lock through it (minutes on a large
+  project) made a save-reindex or agent reindex of the same database exit 2
+  (whole-branch review of 1.39). }
+procedure ReleaseIndexLock(const ADbPath: string);
+begin
+  if GIndexLocks = nil then Exit;
+  var Key: string:= LowerCase(TPath.GetFullPath(ADbPath));
+  var H: THandle;
+  if not GIndexLocks.TryGetValue(Key, H) then Exit;
+  CloseHandle(H);
+  GIndexLocks.Remove(Key);
 end;
 
 { The refusal text for `index <folder>` aimed at a PROJECT database, shared by
@@ -4751,12 +4766,13 @@ begin
     { Warm the `lint <file>` rule cache for a PROJECT section, after releasing this
       section's write connection (see the same block in DoIndex). A library
       section has no project rules to cache. }
+    Indexer:= nil; { it holds its own reference to the store -- see DoIndex }
+    Store:= nil;
+    { The section's writes are over: the next section, or another run, may index
+      this database now (a sequential --all held every section's lock to the end). }
+    ReleaseIndexLock(AItem.DbPath);
     if AItem.Mode = smClosure then
-    begin
-      Indexer:= nil; { it holds its own reference to the store -- see DoIndex }
-      Store:= nil;
       WarmRuleCacheAfterIndex(AItem.DbPath, RuleCacheLibraryDb(Default(TArgs)));
-    end;
     Result:= SectionFailedFiles = 0;
   except
     on E: Exception do
@@ -7262,6 +7278,7 @@ begin
       would leave the write connection open through the warm (whole-branch review). }
     Indexer:= nil;
     Store:= nil;
+    ReleaseIndexLock(ResolvedDb); { the warm only reads }
     WarmRuleCacheAfterIndex(ResolvedDb, RuleCacheLibraryDb(AArgs));
   end;
   Result:= if AnyFileFailed then 1 else 0;
@@ -12552,20 +12569,31 @@ var
 /// ProjectVersion), then the ProjectVersion of --project's .dproj, then the
 /// installed RAD Studio (set at start-up from TStudioEnv), then 37.</summary>
 /// <param name="AArgs">The parsed command line.</param>
-/// <remarks>Silent: an unknown token or ProjectVersion leaves the installed
-/// Delphi's number in place (lint / lint-all / rules refuse a bad
-/// --target-compiler themselves in ApplyRunTargetCompiler). Each section
-/// of `index --all` takes its own .dproj's: ApplySectionCompilerVersion (x11).</remarks>
-procedure ApplyPreprocessCompilerVersion(const AArgs: TArgs);
+/// <returns>False after printing the refusal to stderr when an EXPLICIT
+/// --target-compiler version token (not "auto") cannot be resolved (the run then exits 2, as lint / lint-all /
+/// rules always did); True otherwise.</returns>
+/// <remarks>A ProjectVersion that maps to nothing stays silent and leaves the
+/// installed Delphi's number in place. Each section of `index --all` takes its own
+/// .dproj's: ApplySectionCompilerVersion (x11).</remarks>
+function ApplyPreprocessCompilerVersion(const AArgs: TArgs): Boolean;
 var
   V  : Integer;
   Err: string ;
   Tok: string ;
 begin
+  Result:= True;
   Tok:= Trim(AArgs.TargetCompiler);
+  var Explicit: Boolean:= Tok <> '';
   if (Tok = '') and SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then Tok:= TARGET_COMPILER_AUTO;
   if Tok = '' then Exit;
-  if ResolveTargetCompiler(Tok, '', '', AArgs.ProjectPath, V, Err) then SetTargetCompilerVersion(V);
+  if ResolveTargetCompiler(Tok, '', '', AArgs.ProjectPath, V, Err) then SetTargetCompilerVersion(V)
+  else if Explicit and not SameText(Tok, TARGET_COMPILER_AUTO) then { an unmappable "auto" stays silent: index --all resolves it per section }
+  begin
+    { whole-branch review 1.39: `index --target-compiler 99` used to run silently at
+      the installed Delphi and stamp that cv= into the fingerprint. }
+    Writeln(ErrOutput, 'drag-lint: ' + Err);
+    Result:= False;
+  end;
 end;
 
 /// <summary>Resolves the run's target compiler, publishes it
@@ -14800,6 +14828,10 @@ begin
   end;
   if GRuleCacheWarm <> 'background' then
   begin
+    { Test hook (run_index_lock_released_before_warm): stretch the window between
+      the end of the writes and the warm so a second run can be started inside it. }
+    var WarmDelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_WARM_DELAY_MS'), 0);
+    if WarmDelayMs > 0 then Sleep(WarmDelayMs);  // dl:ok sleep-in-vcl@acdc -- REVIEWED 2026-10-30: console CLI test hook, off unless the env var is set
     WarmRuleCache(AProjectDb, ALibraryDb);
     Exit;
   end;
@@ -36080,7 +36112,7 @@ begin
   SetTargetCompilerVersion(CompilerVersionOfStudioRoot(TStudioEnv.RootOrEmpty));
   try
     Args:= ParseArgs;
-    ApplyPreprocessCompilerVersion(Args);
+    if not ApplyPreprocessCompilerVersion(Args) then Exit(2);
     if Args.ShowHelp then
     begin
       if Args.HelpVerb <> '' then PrintMenuVerbHelp(Args.HelpVerb)

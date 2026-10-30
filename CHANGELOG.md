@@ -29,6 +29,7 @@ Extractor 1.27.0-alpha: every index re-parses once.
 - `query --name` text rows carry `(path:line)` before the `[impl-only]` / forward suffixes; the MCP `find_symbol` tool returns `path:line:col` (Jonathas Paiva (PR #4)). Guard `tests\autotest\run_output_locations.ps1`. Left out at review: the PR's `path` JSON key and full-path text rows on `query find-callers --resolved` (`resolution` stays the LAST key by owner ruling; `file` stays the file name, and plugin / compare scripts parse the text rows).
 
 ### Fixed
+- `index --target-compiler <token>` refuses a version token it cannot resolve with exit 2, as lint / lint-all / rules do; it used to index at the installed Delphi and stamp that `cv=` (guard `run_index_target_compiler_bad_token.ps1`). `auto` that maps to nothing stays silent.
 - `serve` reads each request as UTF-8 (MCP frames stdio as UTF-8). It read stdin in the ANSI code page, so a non-ASCII character in a request (an e-acute sent as C3 A9) reached the tool as two characters; found reviewing PR #3. Guard: `tests\autotest\run_serve_wire_utf8.ps1` S4.
 - **A file is found in the index whatever mix of long and 8.3 short path components names it**
   (no version constant moves). Jonathas Paiva (PR #7). Windows names a file both by its long path
@@ -45,7 +46,7 @@ Extractor 1.27.0-alpha: every index re-parses once.
   ProjectA database met on 2026-10-09: the second parsed every file and only then died with `database
   is locked` (exit 3), and while they overlapped the index answered with a third of its rows. A run now
   holds `<db>.indexing.lock` (no sharing, delete-on-close, released by the OS however the process
-  ends); a second `index` on the same database exits 2 at once. Readers never take it. Guard:
+  ends); a second `index` on the same database exits 2 at once (inside `index --all` that section is reported FAILED and the run exits 1). Readers never take it, and a run gives the lock back as soon as its writes end -- before the rule-cache warm, and after each `index --all` section (guard `run_index_lock_released_before_warm.ps1`). Guard:
   `tests\autotest\run_index_concurrent_lock.ps1`. Jonathas Paiva (PR #7).
 - **`index <folder> --db <projectDb> --rebuild` no longer empties the project index before refusing**
  . The folder-into-project refusal ran after `Migrate`, the fingerprint stamp and

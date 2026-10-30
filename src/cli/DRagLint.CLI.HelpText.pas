@@ -49,7 +49,7 @@ begin
   Writeln('                               wait; a newer background warm of the same index stops the older one.');
   Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
-  Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library] [--rule-cache-warm background|wait|off]');
+  Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library] [--rule-cache-warm background|wait|off] [--target-compiler <ver|auto>]');
   Writeln('                               --wait-library <min>: when the platform library a libraryResolve section binds against is NOT READY (rebuilding, built by an older extractor, schema old, never completed), probe every 30 s up to `min` minutes, then continue; --require-library: a not-ready library is ERROR, exit 2. Default: continue, mark the run pending and say so. The library line is printed before the walk; the platform comes from --platform, the project DB, then the .dproj.');
   Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>');
   Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
@@ -555,7 +555,7 @@ begin
     Writeln('                               wait; a newer background warm of the same index stops the older one.');
     Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
     Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
-    Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library] [--rule-cache-warm background|wait|off]');
+    Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library] [--rule-cache-warm background|wait|off] [--target-compiler <ver|auto>]');
     Writeln('                               --wait-library <min>: when the platform library a libraryResolve section binds against is NOT READY (rebuilding, built by an older extractor, schema old, never completed), probe every 30 s up to `min` minutes, then continue; --require-library: a not-ready library is ERROR, exit 2. Default: continue, mark the run pending and say so. The library line is printed before the walk; the platform comes from --platform, the project DB, then the .dproj.');
     Writeln('                               SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>');
     Writeln('                               (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project');
