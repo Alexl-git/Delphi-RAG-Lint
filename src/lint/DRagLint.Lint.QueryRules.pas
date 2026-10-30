@@ -1043,7 +1043,7 @@ end;
   unknown keeps the finding. Only a declared numeric type drops it, so a real
   string accumulation can never be hidden by this. Char is not numeric here:
   Char + Char is a string. }
-function DeclaredTypeInRoutine(const AId: TTSNode; const ASource: TBytes): string;
+function DeclaredTypeInRoutine(const AId: TTSNode; const ASource: TBytes): string;  // dl:ok too-many-exit-points@a74e -- REVIEWED 2026-10-30: guard clauses of a scope walk (no id, no name, lambda, Result, unique/ambiguous hit); a single exit would nest every guard
 const
   UNKNOWN = ''; { not declared with a single written type in reach }
 var
@@ -1052,7 +1052,7 @@ var
   { Every written type of Name declared directly in ADef (not in a nested
     defProc). Adds '' for an untyped inline declaration. }
   procedure Collect(const N: TTSNode; ATypes: TStrings; ATop: Boolean);
-  var I, J: Integer; Ch, T: TTSNode; TypeStart: Integer;
+  var J: Integer; Ch, T, Kid: TTSNode; TypeStart: Integer;
   begin
     if N.IsNull then Exit;
     if (not ATop) and ((N.NodeType = 'defProc') or (N.NodeType = 'lambda')) then Exit;
@@ -1075,17 +1075,26 @@ var
       Ch:= N.ChildByField('name');
       if Ch.IsNull then
         for J:= 0 to Integer(N.NamedChildCount) - 1 do
-          if N.NamedChild(J).NodeType = 'identifier' then begin Ch:= N.NamedChild(J); Break; end;
+          if N.NamedChild(J).NodeType = 'identifier' then
+          begin
+            Ch:= N.NamedChild(J);
+            Break;
+          end;
       if (not Ch.IsNull) and SameText(NodeText(Ch, ASource), Name) then
       begin
         T:= N.ChildByField('type');
         if T.IsNull then
           for J:= 0 to Integer(N.NamedChildCount) - 1 do
-            if N.NamedChild(J).NodeType = 'type' then begin T:= N.NamedChild(J); Break; end;
+            if N.NamedChild(J).NodeType = 'type' then
+            begin
+              T:= N.NamedChild(J);
+              Break;
+            end;
         if T.IsNull then ATypes.Add('') else ATypes.Add(Trim(NodeText(T, ASource)));
       end;
     end;
-    for I:= 0 to Integer(N.NamedChildCount) - 1 do Collect(N.NamedChild(I), ATypes, False);
+    { NamedChildrenOf, not NamedChild(I): O(n) on a wide block (see there). }
+    for Kid in NamedChildrenOf(N) do Collect(Kid, ATypes, False);
   end;
 
 var
@@ -1106,7 +1115,11 @@ begin
     begin
       Hdr:= Default(TTSNode);
       for I:= 0 to Integer(Cur.NamedChildCount) - 1 do
-        if Cur.NamedChild(I).NodeType = 'declProc' then begin Hdr:= Cur.NamedChild(I); Break; end;
+        if Cur.NamedChild(I).NodeType = 'declProc' then
+        begin
+          Hdr:= Cur.NamedChild(I);
+          Break;
+        end;
       if SameText(Name, 'Result') then
       begin
         if not Hdr.IsNull then

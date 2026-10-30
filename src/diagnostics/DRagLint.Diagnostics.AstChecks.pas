@@ -1107,7 +1107,11 @@ begin
     TypeNode:= N.ChildByField('type');
     if TypeNode.IsNull and IsInline then
       for J:= 0 to N.NamedChildCount - 1 do
-        if N.NamedChild(J).NodeType = 'type' then begin TypeNode:= N.NamedChild(J); Break; end;
+        if N.NamedChild(J).NodeType = 'type' then
+        begin
+          TypeNode:= N.NamedChild(J);
+          Break;
+        end;
     if TypeNode.IsNull and IsInline then
     begin
       { `for var X in` / `var X := e`: declared, type not written -- unknown. }

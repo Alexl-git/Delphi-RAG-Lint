@@ -16,13 +16,18 @@
     2. BadExc = class(Exception): asked for the "E" prefix, not "T"   <- THE FIX
     3. CONTROL: Widget = class(TObject) and EWidget = class(TObject)
        still asked for "T" (an E-name does not make a class an exception)
-    4. CONTROL: EX = class(Engine) still asked for "T" (Engine is not an
-       exception-style name: E + lower case)
+    4. EX = class(Engine): NO verdict store-free. Engine is outside the
+       index, so the origin is unknown and the rule stays silent rather than
+       guess a letter from a name (main d5c20ad3, three-valued class origin;
+       docs\INBOX-type-name-prefix-exception-ancestry.md). Check 3 is the
+       live control that the rule is still on.
     5. CONTROL: with --db the same fixture gives the same answers
+    6. with --db: TEdiReader = class(EDIParser), EDIParser = class(TObject):
+       no finding; EdiWriter on the same chain asked for "T", not "E"
 
   RED-CHECK: against the pre-fix build 1, 2 and 5 FAIL -- 5 because EAbort is
   RTL and not in the fixture's index, so even WITH --db EAbortLike was told
-  "T"; 3 and 4 pass on both builds.
+  "T"; 3 passes on both builds.
 #>
 [CmdletBinding()]
 param(
@@ -78,6 +83,9 @@ type
   Widget = class(TObject);
   EWidget = class(TObject);
   EX = class(Engine);
+  EDIParser = class(TObject);
+  TEdiReader = class(EDIParser);
+  EdiWriter = class(EDIParser);
 
 implementation
 
@@ -104,7 +112,7 @@ $w = About $h 'Widget'; $ew = About $h 'EWidget'
 Check '3. CONTROL: Widget and EWidget (class(TObject)) still asked for "T"' `
   (($w.Count -ge 1) -and ($w[0] -match '"T" prefix') -and ($ew.Count -eq 1) -and ($ew[0] -match '"T" prefix')) "w=$($w -join ' | ') ew=$($ew -join ' | ')"
 $ex = About $h 'EX'
-Check '4. CONTROL: EX = class(Engine) still asked for "T"' (($ex.Count -eq 1) -and ($ex[0] -match '"T" prefix')) ($ex -join ' | ')
+Check '4. EX = class(Engine): unknown origin store-free, no verdict (d5c20ad3)' ($ex.Count -eq 0) ($ex -join ' | ')
 
 Write-Host ''
 Write-Host '=== with --db (CONTROL) ===' -ForegroundColor Cyan
@@ -117,6 +125,13 @@ $badDb = About $hd 'BadExc'
 Check '5. CONTROL: with --db the same answers' `
   (($excDb.Count -eq 0) -and ($badDb.Count -eq 1) -and ($badDb[0] -match '"E" prefix') -and ((About $hd 'EWidget').Count -eq 1)) "exc=$($excDb -join ' | ') bad=$($badDb -join ' | ')"
 
+# 6. The store PROVES EDIParser is a plain class (an E-style NAME, TObject
+#    ancestry): a descendant is never taken for an exception by its ancestor's
+#    written name. TEdiReader is correct as written; EdiWriter is asked for "T",
+#    not "E" -- the positive control that the rule still fires on this chain.
+$rd = About $hd 'TEdiReader'; $wr = About $hd 'EdiWriter'
+Check '6. with --db: class(EDIParser) where EDIParser = class(TObject) is a plain class' `
+  (($rd.Count -eq 0) -and ($wr.Count -eq 1) -and ($wr[0] -match '"T" prefix')) "reader=$($rd -join ' | ') writer=$($wr -join ' | ')"
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green

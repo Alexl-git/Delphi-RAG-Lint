@@ -1,3 +1,4 @@
+# dl:serial: build_fixture_exe.bat compiles T2..T7 with dcc64 and copies the engine DLLs into the shared tests\fixtures folder -- under -Jobs it races the other fixture runners
 <#
   run_doctests_v021.ps1 -- makes the legacy `.bat` doctest suite visible to the
   battery.
