@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
-breaking changes** until v1.0.
+breaking changes** until v2.0.
 
 ## v1.39.0-alpha -- planned
 
