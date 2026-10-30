@@ -30,6 +30,12 @@ breaking changes** until v1.0.
   printed -- measured 2 -> 0 files on a fixture. The refusal is now decided first, from a read-only
   look at `scan_type`, before anything writes. Guard:
   `tests\autotest\run_index_folder_refusal_before_write.ps1`. Jonathas Paiva (PR #7).
+- **The one-writer lock (PR #7) leaves `index --dry-run` alone and names a lock that is still being deleted**.
+  `--dry-run` writes nothing (an in-memory store), so it no longer takes `<db>.indexing.lock` and no
+  longer exits 2 beside a live writer. A lock file whose delete is still pending (its holder closed it while a
+  scanner held it open) answered ACCESS_DENIED and was reported as "cannot create the lock file ... Access
+  is denied"; the run now retries for ~2 s and then says another run is just finishing. Maintainer follow-up to
+  Jonathas Paiva (PR #7). Guard: `tests\autotest\run_index_lock_dryrun_pending.ps1`.
 
 ## v1.38.1-alpha -- planned
 

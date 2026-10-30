@@ -4055,6 +4055,11 @@ function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: st
 
 var GIndexLocks: TDictionary<string, THandle> = nil;
 
+const
+  { A delete-pending lock file is retried this often, this far apart (~2 s). }
+  INDEX_LOCK_PENDING_TRIES    = 20;
+  INDEX_LOCK_PENDING_SLEEP_MS = 100;
+
 { ONE INDEX RUN PER DATABASE, REFUSED AT THE START (Gitea drag-lint#17).
 
   Two `index` runs on one database used to find each other only at the END:
@@ -4075,15 +4080,30 @@ begin
   var Key: string:= LowerCase(TPath.GetFullPath(ADbPath));
   if GIndexLocks.ContainsKey(Key) then Exit(True);
   var LockPath: string:= ADbPath + '.indexing.lock';
-  var H: THandle:= CreateFile(PChar(LockPath), GENERIC_WRITE, 0, nil, OPEN_ALWAYS,
-    FILE_ATTRIBUTE_NORMAL or FILE_FLAG_DELETE_ON_CLOSE, 0);
+  { A lock file whose delete is still PENDING -- its holder closed it while a
+    scanner or the search indexer still had it open -- answers ACCESS_DENIED
+    until that last handle goes. Retry for a moment before calling it a failure. }
+  var H: THandle:= INVALID_HANDLE_VALUE;
+  var Err: DWORD:= ERROR_SUCCESS;
+  for var Attempt: Integer:= 1 to INDEX_LOCK_PENDING_TRIES do
+  begin
+    H:= CreateFile(PChar(LockPath), GENERIC_WRITE, 0, nil, OPEN_ALWAYS,
+      FILE_ATTRIBUTE_NORMAL or FILE_FLAG_DELETE_ON_CLOSE, 0);
+    if H <> INVALID_HANDLE_VALUE then Break;
+    Err:= GetLastError;
+    if (Err <> ERROR_ACCESS_DENIED) or (Attempt = INDEX_LOCK_PENDING_TRIES) then Break;
+    Sleep(INDEX_LOCK_PENDING_SLEEP_MS);  // dl:ok sleep-in-vcl@acdc -- REVIEWED 2026-10-30: console CLI, no VCL message loop; a 100 ms wait between lock retries
+  end;
   if H = INVALID_HANDLE_VALUE then
   begin
-    var Err: DWORD:= GetLastError;
     if Err = ERROR_SHARING_VIOLATION then
       Writeln(ErrOutput, Format('ERROR: index: another index run is writing %s (its lock %s is held). ' +
         'Wait for it to finish -- two runs on one database end with "database is locked" after parsing everything.',
         [ADbPath, LockPath]))
+    else if Err = ERROR_ACCESS_DENIED then
+      Writeln(ErrOutput, Format('ERROR: index: the lock file %s is still being deleted -- another index run on %s ' +
+        'is just finishing, or a scanner holds the file open. Retry in a moment. (%s)',
+        [LockPath, ADbPath, SysErrorMessage(Err)]))
     else
       Writeln(ErrOutput, Format('ERROR: index: cannot create the lock file %s: %s', [LockPath, SysErrorMessage(Err)]));
     Exit(False);
@@ -6260,7 +6280,7 @@ begin
     try
       var Peek: ISymbolStore:= TSQLiteSymbolStore.Create(ResolvedDb, {AReadOnly=}True);
       PeekScanType:= Peek.GetMetaValue(SCAN_TYPE_KEY);
-    except
+    except  // dl:ok bare-except@75f9 -- REVIEWED 2026-10-30: read-only peek; any failure means not-known-to-be-a-project-DB and the later checks report it
       PeekScanType:= ''; { unreadable here: the checks below report it as before }
     end;
     if SameText(PeekScanType, SCAN_TYPE_PROJECT) then
@@ -6270,7 +6290,9 @@ begin
     end;
   end;
 
-  if not AcquireIndexLock(ResolvedDb) then Exit(2); { #17: another run owns this database }
+  { #17: another run owns this database. --dry-run writes nothing (an in-memory
+    store), so it never takes the lock and runs beside a writer. }
+  if (not AArgs.DryRun) and (not AcquireIndexLock(ResolvedDb)) then Exit(2);
   Store:= TSQLiteSymbolStore.Create(if AArgs.DryRun then ':memory:' else ResolvedDb);
   { Ruling 1: never downgrade. Before Migrate, so a refusal leaves the file
     byte-identical. Exit 2, the code every other refusal in this verb uses. }

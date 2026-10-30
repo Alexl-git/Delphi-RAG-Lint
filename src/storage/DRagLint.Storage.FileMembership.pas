@@ -446,7 +446,7 @@ end; // function
 { The canonical long spelling of an existing path (#26), or the path itself. }
 function LongPathForLookup(const APath: string): string;
 var
-  Buf: array[0..MAX_PATH * 4] of Char;
+  Buf: array[0..MAX_PATH * 4] of Char;  // dl:ok magic-literal@b0c6 -- REVIEWED 2026-10-30: buffer headroom for an extended-length long path, not a quantity
   N  : DWORD;
 begin
   N:= GetLongPathName(PChar(APath), @Buf[0], Length(Buf));

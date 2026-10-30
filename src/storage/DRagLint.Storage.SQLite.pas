@@ -10633,7 +10633,7 @@ end;
   expanded), or the path itself when Windows cannot answer. See #26 below. }
 function LongPathOf(const APath: string): string;
 var
-  Buf: array[0..MAX_PATH * 4] of Char;
+  Buf: array[0..MAX_PATH * 4] of Char;  // dl:ok magic-literal@b0c6 -- REVIEWED 2026-10-30: buffer headroom for an extended-length long path, not a quantity
   N  : DWORD;
 begin
   N:= GetLongPathName(PChar(APath), @Buf[0], Length(Buf));
