@@ -953,6 +953,23 @@ var
   Wi          : TWorkItem     ;
   BaseName    : string        ;
   ProjSource  : string        ; // lane INC: the .dpr/.dpk whose own includes are scanned too
+  UnitFileMemo: TDictionary<string, string>; // unit name AS WRITTEN -> FindUnitFile's answer
+
+  { FindUnitFile over SearchArr, once per name (PR #10, Jonathas Paiva). The walk
+    asks for the same library units -- System.SysUtils, Vcl.Forms, Windows -- from
+    nearly every member, and each ask is a TFile.Exists per search directory until
+    one hits (all of them for a name no directory holds). SearchArr is fixed before
+    the first ask, so the answer for a name cannot change within one Resolve. Keyed
+    by the name EXACTLY as written: FindUnitFile's path carries the written case,
+    and that path is what reaches Files. }
+  function FindUnitFileOnce(const AName: string): string;
+  begin
+    if not UnitFileMemo.TryGetValue(AName, Result) then
+    begin
+      Result:= FindUnitFile(AName, SearchArr);
+      UnitFileMemo.Add(AName, Result);
+    end;
+  end;
 
   procedure EnqueueFile(const AAbsPath, AUsingUnit: string);
   var
@@ -1018,6 +1035,7 @@ begin
   UnitNames    := TStringList.Create;
   UnitFilePaths:= TStringList.Create;
   DprojRefFiles:= TStringList.Create;
+  UnitFileMemo := TDictionary<string, string>.Create;
   try
     // --- Step 1: build search paths -------------------------------------------
     // Always include the project base directory first
@@ -1107,7 +1125,7 @@ begin
         if TFile.Exists(UF) then ResolvedFile:= UF;
       end;
 
-      if ResolvedFile = '' then ResolvedFile:= FindUnitFile(UN, SearchArr);
+      if ResolvedFile = '' then ResolvedFile:= FindUnitFileOnce(UN);
 
       if (ResolvedFile <> '') and not IsLibraryFile(ResolvedFile) then
       begin
@@ -1155,7 +1173,7 @@ begin
       for SubName in SubUses do
       begin
         if SubName = '' then Continue;
-        ResolvedFile:= FindUnitFile(SubName, SearchArr);
+        ResolvedFile:= FindUnitFileOnce(SubName);
         // Also try relative to the unit's own directory (not always on path)
         if (ResolvedFile = '') and TFile.Exists(TPath.Combine(UnitDir, SubName + '.pas')) then ResolvedFile:= TPath.GetFullPath( TPath.Combine(UnitDir, SubName + '.pas'));
 
@@ -1178,6 +1196,7 @@ begin
     Result.UsedBy  := UsedByList.ToArray;
     Result.SearchPaths:= SearchArr;
   finally
+    UnitFileMemo.Free;
     DprojRefFiles.Free;
     UnitFilePaths.Free;
     UnitNames.Free;

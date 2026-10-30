@@ -506,6 +506,12 @@ type
                              out AAst: TSymbolFactsAst): TSymbolFacts; static;
   end;
 
+/// <summary>Forgets every per-FILE memo the facts analyses keep between
+/// routines. The indexer calls it once a file's facts pass is over, beside
+/// TAstParseCache.Clear, so a file re-indexed later in the same process can
+/// never be answered from rows its previous pass read.</summary>
+procedure ResetSymbolFactsFileCaches;
+
 implementation
 
 uses
@@ -517,6 +523,7 @@ uses
   , DRagLint.Analysis.Flow.Lattices    { ADP2 T4: TRoutineVarTable -- a same-named local/param/Result shadows a field, never misclassified as one }
   , DRagLint.Diagnostics.AstChecks     { ADP2 T3: TAstChecker.CyclomaticOf -- ONE shared formula with the lint rule }
   , DRagLint.Parser.DFM                { ADP2 T6: TDfmEventBinding/ExtractDfmEventBindings -- the paired-.dfm event-wiring extractor }
+  , System.Diagnostics                { TStopwatch -- DRAGLINT_PROFILE per-analysis split of the indexer's facts phase }
   ;
 
 { v0.85 PERF -- memoize FindAllChildSymbols(ParentId).
@@ -544,6 +551,114 @@ begin
   GKidsCache      := AStore.FindAllChildSymbols(AParentId);
   GKidsCacheParent:= AParentId;
   Result          := GKidsCache;
+end;
+
+{ 2026-09-28 PERF -- IsUiTypeName's memo, lifted from ONE ROUTINE to ONE FILE.
+
+  AnalyzeUiAffinity built a fresh name -> is-UI dictionary per routine, so every
+  method of a form re-asked the store about the same field types: one
+  FindSymbolsByExactName per type and per heritage hop, re-materialising the same
+  rows. Measured on a 122-file subset it was the costliest analysis of the facts
+  pass (5.85 s of 13.5 s).
+
+  The answer is a function of the type name and the stored symbols only, and the
+  symbols cannot change during one file's facts pass (same argument as
+  ChildSymbolsCached above), so a per-file memo returns exactly what the
+  per-routine one did. It must NOT outlive the file: a later file can add the
+  class that makes an unresolvable name resolvable, so a run-wide memo would
+  answer differently from a fresh index. Keyed by file id AND path, and cleared
+  by ResetSymbolFactsFileCaches at the end of every file. NOT THREAD-SAFE -- see
+  the note on GProcsCache. }
+var
+  GUiTypeCache      : TDictionary<string, Boolean>;
+  GUiTypeCacheFileId: Int64 = -1;
+  GUiTypeCachePath  : string;
+
+function UiTypeCacheFor(const ASym: TSymbol; const AFilePath: string): TDictionary<string, Boolean>;
+begin
+  if GUiTypeCache = nil then GUiTypeCache:= TDictionary<string, Boolean>.Create;
+  if (ASym.FileId <> GUiTypeCacheFileId) or (AFilePath <> GUiTypeCachePath) then
+  begin
+    GUiTypeCache.Clear;
+    GUiTypeCacheFileId:= ASym.FileId;
+    GUiTypeCachePath  := AFilePath;
+  end;
+  Result:= GUiTypeCache;
+end;
+
+{ 2026-09-28 PERF -- the owning class's FIELD MAPS, built once per class
+  instead of once per routine.
+
+  AnalyzeReadsWrites, AnalyzeUiAffinity and AnalyzeReturnsOwner each walked
+  EVERY child of the owning class to build a lowercased-name -> field map, once
+  per ROUTINE. ChildSymbolsCached already made the child LIST free; building
+  the map from it was still O(children) per routine, so a form class with
+  thousands of children and hundreds of methods paid O(methods x children) three
+  times over -- the largest remaining share of the facts pass at scale.
+
+  Same map, by construction: it is built from the same ChildSymbolsCached list
+  by the same loop (first spelling of a name wins), and for the reason that list
+  may be cached -- the rows cannot change during one file's facts pass -- so
+  may the map. Single-entry per parent id, like GKidsCache, and dropped by
+  ResetSymbolFactsFileCaches. Callers only READ the maps and must not free them. }
+var
+  GFieldNamesParent: Int64 = -1;
+  GFieldNames      : TDictionary<string, string>;                  { lower name -> declared name }
+  GFieldTypesParent: Int64 = -1;
+  GFieldTypes      : TDictionary<string, TPair<string, string>>;  { lower name -> (declared name, type text) }
+
+function FieldNamesCached(const AStore: ISymbolStore; AParentId: Int64): TDictionary<string, string>;
+var
+  Kid : TSymbol;
+  LKey: string ;
+begin
+  if GFieldNames = nil then GFieldNames:= TDictionary<string, string>.Create;
+  if (AParentId <> GFieldNamesParent) or (AParentId <= 0) then
+  begin
+    GFieldNames.Clear;
+    GFieldNamesParent:= AParentId;
+    if AParentId > 0 then
+      for Kid in ChildSymbolsCached(AStore, AParentId) do
+        if Kid.Kind = skField then
+        begin
+          LKey:= LowerCase(Kid.Name);
+          if not GFieldNames.ContainsKey(LKey) then GFieldNames.Add(LKey, Kid.Name);
+        end;
+  end;
+  Result:= GFieldNames;
+end;
+
+function FieldTypesCached(const AStore: ISymbolStore; AParentId: Int64): TDictionary<string, TPair<string, string>>;
+var
+  Kid : TSymbol;
+  LKey: string ;
+begin
+  if GFieldTypes = nil then GFieldTypes:= TDictionary<string, TPair<string, string>>.Create;
+  if (AParentId <> GFieldTypesParent) or (AParentId <= 0) then
+  begin
+    GFieldTypes.Clear;
+    GFieldTypesParent:= AParentId;
+    if AParentId > 0 then
+      for Kid in ChildSymbolsCached(AStore, AParentId) do
+        if Kid.Kind = skField then
+        begin
+          LKey:= LowerCase(Kid.Name);
+          if not GFieldTypes.ContainsKey(LKey) then
+            GFieldTypes.Add(LKey, TPair<string, string>.Create(Kid.Name, Kid.Signature));
+        end;
+  end;
+  Result:= GFieldTypes;
+end;
+
+procedure ResetSymbolFactsFileCaches;
+begin
+  if GUiTypeCache <> nil then GUiTypeCache.Clear;
+  GUiTypeCacheFileId:= -1;
+  GUiTypeCachePath  := '';
+  GFieldNamesParent := -1;
+  GFieldTypesParent := -1;
+  if GFieldNames <> nil then GFieldNames.Clear;
+  if GFieldTypes <> nil then GFieldTypes.Clear;
 end;
 
 function SymbolFactsCsvJoin(const AItems: TArray<string>): string;
@@ -889,15 +1004,11 @@ end;
 // capped CSVs. A free routine (ASym.ParentId <= 0) yields '' for both CSVs
 // and empty arrays -- the renderer then omits the whole Reads/Writes line.
 procedure AnalyzeReadsWrites(const AProc, ABody: TTSNode; const ASrc: TBytes;  // dl:ok too-many-parameters@036e -- pre-existing (12 before the v23 sweep dropped AFilePath, 11 now): the two own + two held out-arrays are the F1 contract with ApplyInheritedFieldFacts; grouping them into a record is a separate refactor
-  const ASym: TSymbol; const AStore: ISymbolStore;
+  const ASym: TSymbol; const AStore: ISymbolStore; AVars: TRoutineVarTable;
   out AReadsCsv, AWritesCsv: string;
   out AOwnReads, AOwnWrites, AHeldReads, AHeldWrites: TArray<string>);
 var
   Fields                 : TDictionary<string, string>;
-  Kids                   : TArray<TSymbol>;
-  Kid                    : TSymbol;
-  LKey                   : string;
-  Vars                   : TRoutineVarTable;
   Reads, Writes          : TList<string>;
   UnresReads, UnresWrites: TList<string>;
 begin
@@ -914,24 +1025,16 @@ begin
   // FindFileIdByPath/FindEnclosingRoutineByImpl re-resolution needed.
   if ASym.ParentId <= 0 then Exit; // free routine (no owning class) -- nothing to classify
 
-  Fields     := TDictionary<string, string>.Create;
+  Fields     := FieldNamesCached(AStore, ASym.ParentId); { per class, not per routine -- see GFieldNames }
   Reads      := TList<string>.Create;
   Writes     := TList<string>.Create;
   UnresReads := TList<string>.Create;
   UnresWrites:= TList<string>.Create;
-  Vars       := nil;
   try
-    Kids:= ChildSymbolsCached(AStore, ASym.ParentId); { was a per-routine store round-trip }
-    for Kid in Kids do
-      if Kid.Kind = skField then
-      begin
-        LKey:= LowerCase(Kid.Name);
-        if not Fields.ContainsKey(LKey) then Fields.Add(LKey, Kid.Name);
-      end;
     // v23: no early exit on Fields.Count = 0 -- the owning class may have no
     // own fields and still inherit some; the held lists carry the candidates.
-    Vars:= TRoutineVarTable.Build(AProc, ASrc); // params/locals/Result shadow same-named fields
-    WalkFieldRW(ABody, ASrc, Fields, Vars, Reads, Writes, UnresReads, UnresWrites);
+    // AVars: params/locals/Result shadow same-named fields (built once by Analyze).
+    WalkFieldRW(ABody, ASrc, Fields, AVars, Reads, Writes, UnresReads, UnresWrites);
 
     AReadsCsv  := JoinCappedDisplay(Reads, FIELD_RW_CAP);
     AWritesCsv := JoinCappedDisplay(Writes, FIELD_RW_CAP);
@@ -940,12 +1043,10 @@ begin
     AHeldReads := UnresReads.ToArray;
     AHeldWrites:= UnresWrites.ToArray;
   finally
-    Vars.Free;
     UnresWrites.Free;
     UnresReads.Free;
     Writes.Free;
     Reads.Free;
-    Fields.Free;
   end;
 end;
 
@@ -1085,21 +1186,17 @@ end;
 // WalkMutatedParams' header (immediately above) for the derivation rules and
 // for what is deliberately not detected. AProc/ABody are the SAME nodes Analyze
 // already matched -- no second AST scan.
-function AnalyzeMutatesParams(const AProc, ABody: TTSNode; const ASrc: TBytes): string;
+function AnalyzeMutatesParams(const ABody: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable): string;
 var
-  Vars: TRoutineVarTable;
-  Hits: TList<string>   ;
+  Hits: TList<string>;
 begin
   Result:= '';
   if ABody.IsNull then Exit;
-  Vars:= nil;
   Hits:= TList<string>.Create;
   try
-    Vars:= TRoutineVarTable.Build(AProc, ASrc);
-    WalkMutatedParams(ABody, ASrc, Vars, Hits);
+    WalkMutatedParams(ABody, ASrc, AVars, Hits);
     Result:= JoinCappedDisplay(Hits, FIELD_RW_CAP);
   finally
-    Vars.Free;
     Hits.Free;
   end;
 end;
@@ -1312,47 +1409,28 @@ end;
 // added yet is invisible), so a thread-safety claim built on it would be false
 // exactly when it mattered most. tests\autodoc\run_doc_p3_ui.ps1 asserts the
 // words 'thread-safe'/'thread safe' appear in no generated block, permanently.
-function AnalyzeUiAffinity(const AProc, ABody: TTSNode; const ASrc: TBytes;
-  const ASym: TSymbol; const AStore: ISymbolStore): string;
+function AnalyzeUiAffinity(const ABody: TTSNode; const ASrc: TBytes;
+  const ASym: TSymbol; const AStore: ISymbolStore; const AFilePath: string; AVars: TRoutineVarTable): string;
 var
-  Vars  : TRoutineVarTable                        ;
   Fields: TDictionary<string, TPair<string, string>>;
   Cache : TDictionary<string, Boolean>            ;
   Hits  : TList<string>                           ;
-  Kids  : TArray<TSymbol>                         ;
-  Kid   : TSymbol                                 ;
-  LKey  : string                                  ;
 begin
   Result:= '';
   if ABody.IsNull then Exit;
-  Vars  := nil;
-  Fields:= TDictionary<string, TPair<string, string>>.Create;
-  Cache := TDictionary<string, Boolean>.Create;
+  Cache := UiTypeCacheFor(ASym, AFilePath); { per FILE, not per routine -- see GUiTypeCache }
   Hits  := TList<string>.Create;
   try
     // Own-class fields only, the same scope AnalyzeReadsWrites uses (see its
     // header for why inherited fields are out of scope): display name + the
-    // declared type text, which for a field symbol lives in Signature.
-    if ASym.ParentId > 0 then
-    begin
-      Kids:= ChildSymbolsCached(AStore, ASym.ParentId); { was a per-routine store round-trip }
-      for Kid in Kids do
-        if Kid.Kind = skField then
-        begin
-          LKey:= LowerCase(Kid.Name);
-          if not Fields.ContainsKey(LKey) then
-            Fields.Add(LKey, TPair<string, string>.Create(Kid.Name, Kid.Signature));
-        end;
-    end;
-
-    Vars:= TRoutineVarTable.Build(AProc, ASrc);
-    WalkUiTouches(ABody, ASrc, AStore, Vars, Fields, Cache, Hits);
+    // declared type text, which for a field symbol lives in Signature. Empty
+    // for a free routine (ParentId <= 0). Per class, not per routine -- see
+    // GFieldTypes.
+    Fields:= FieldTypesCached(AStore, ASym.ParentId);
+    WalkUiTouches(ABody, ASrc, AStore, AVars, Fields, Cache, Hits);
     Result:= JoinCappedDisplay(Hits, FIELD_RW_CAP);
   finally
     Hits.Free;
-    Cache.Free;
-    Fields.Free;
-    Vars.Free;
   end;
 end;
 
@@ -3056,8 +3134,8 @@ end;
 // each step's own rules. AProc/ABody are the SAME defProc/body nodes
 // Analyze already matched for Cyclomatic/AnalyzeReadsWrites/
 // AnalyzeSqlTables -- no second AST scan.
-function AnalyzeReturnsOwner(const AProc, ABody: TTSNode; const ASrc: TBytes;
-  const ASym: TSymbol; const AStore: ISymbolStore): string;
+function AnalyzeReturnsOwner(const ABody: TTSNode; const ASrc: TBytes;  // dl:ok too-many-exit-points@2d69 -- REVIEWED 2026-09-30: the nine guard exits predate the index-throughput change, which only threaded the shared TRoutineVarTable through this signature
+  const ASym: TSymbol; const AStore: ISymbolStore; AVars: TRoutineVarTable): string;
 var
   RetTypeName: string             ;
   Vars       : TRoutineVarTable    ;
@@ -3065,9 +3143,6 @@ var
   Sites      : TList<TTSNode>      ;
   Disposed   : Boolean             ;
   Fields     : TDictionary<string, string>;
-  Kids       : TArray<TSymbol>     ;
-  Kid        : TSymbol             ;
-  LKey       : string              ;
   Verdict    : string              ;
   Cat        : string              ;
   I          : Integer             ;
@@ -3086,8 +3161,7 @@ begin
   RetTypeName:= ParseReturnType(ASym.Signature);
   if RetTypeName = '' then Exit;
 
-  Vars  := TRoutineVarTable.Build(AProc, ASrc);
-  Fields:= TDictionary<string, string>.Create;
+  Vars  := AVars; { built once per routine by Analyze }
   Sites := TList<TTSNode>.Create;
   try
     ResultIdx:= Vars.IndexOf('result');
@@ -3104,17 +3178,9 @@ begin
     // AnalyzeReadsWrites (above) already uses. A free routine (ASym.ParentId
     // <= 0) simply has no fields to borrow from -- every bare-identifier
     // site then classifies 'unknown' (not a field, and if also not a
-    // parameter) and the unanimity check below naturally omits.
-    if ASym.ParentId > 0 then
-    begin
-      Kids:= ChildSymbolsCached(AStore, ASym.ParentId); { was a per-routine store round-trip }
-      for Kid in Kids do
-        if Kid.Kind = skField then
-        begin
-          LKey:= LowerCase(Kid.Name);
-          if not Fields.ContainsKey(LKey) then Fields.Add(LKey, Kid.Name);
-        end;
-    end;
+    // parameter) and the unanimity check below naturally omits. Per class,
+    // not per routine -- see GFieldNames.
+    Fields:= FieldNamesCached(AStore, ASym.ParentId);
 
     // Unanimity: every site must classify to the SAME non-'unknown'
     // category. A single 'unknown' site, or ANY disagreement between two
@@ -3140,9 +3206,7 @@ begin
 
     Result:= Verdict;
   finally
-    Sites.Free;
-    Fields.Free;
-    Vars.Free;
+    Sites.Free; { Vars and Fields are shared -- Analyze and the class-field cache own them }
   end;
 end;
 
@@ -3182,13 +3246,49 @@ begin
   Result         := GProcsCache;
 end;
 
+{ PERF INSTRUMENTATION (2026-09-28) -- the indexer's INDEX PROFILE reports the
+  whole facts pass as one number (147 s of a 1,661 s loop on a 2,245-file
+  closure), which says nothing about WHICH analysis spends it. These split it
+  per analysis, under the same DRAGLINT_PROFILE switch and the same
+  print-at-exit-on-stderr rule, so a normal run stays byte-identical. Cost when
+  unarmed: two QueryPerformanceCounter reads per analysis per routine. }
+const
+  FP_PARSE = 0; FP_PROCS = 1; FP_DFM = 2; FP_CYCLO = 3; FP_RW = 4; FP_PARAMS = 5;
+  FP_UI = 6; FP_TOUCH = 7; FP_SQL = 8; FP_OWNER = 9;
+  FP_NAMES: array[0..9] of string = ('ast re-parse', 'find procs', 'dfm event', 'cyclomatic',
+    'reads/writes', 'mutates params', 'ui affinity', 'touches', 'sql tables', 'returns owner');
+var
+  GFactsProf: array[0..9] of Int64;
+
+procedure FactsProfAdd(ASlot: Integer; var AMark: Int64); inline;
+var
+  Now: Int64;
+begin
+  Now:= TStopwatch.GetTimeStamp;
+  Inc(GFactsProf[ASlot], Now - AMark);
+  AMark:= Now;
+end;
+
+procedure WriteFactsProfile;
+var
+  K: Integer;
+begin
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') = '' then Exit;
+  if GFactsProf[FP_PARSE] = 0 then Exit;
+  Writeln(ErrOutput, 'FACTS PROFILE');
+  for K:= 0 to High(GFactsProf) do
+    Writeln(ErrOutput, Format('  %-16s %8.2f s', [FP_NAMES[K], GFactsProf[K] / TStopwatch.Frequency]));
+end;
+
 class function TSymbolFactsAnalyzer.Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore;
   out AAst: TSymbolFactsAst): TSymbolFacts;
 var
+  Mark : Int64           ;
   PF   : TParsedFile     ;
   Procs: TArray<TTSNode> ;
   Proc : TTSNode         ;
   Body : TTSNode         ;
+  Vars : TRoutineVarTable;
 begin
   // Every fact field starts at Default(TSymbolFacts)'s zero value; Task 3
   // (ADP2) fills in Cyclomatic/BodyLoc below. Tasks 4/6 (ADP2) fill in
@@ -3210,7 +3310,9 @@ begin
   // need ASym's OWN .pas file AST at all (it needs the SIBLING .dfm's own
   // tree, via AnalyzeDfmEvent/DfmEventMapFor), so it must not be skipped
   // just because AFilePath's OWN parse happens to fail (PF.Tree = nil).
+  Mark:= TStopwatch.GetTimeStamp;
   Result.DfmEvent:= AnalyzeDfmEvent(ASym, AFilePath);
+  FactsProfAdd(FP_DFM, Mark);
 
   // Cyclomatic: find the defProc node whose OWN StartPoint matches
   // ASym.ImplStartLine -- the EXACT provenance the parser used to stamp
@@ -3227,9 +3329,11 @@ begin
   // positional (point-based) node lookup is exposed by the TTSNode API, and
   // this walk is accepted as index-time cost (see the Phase 2 design).
   PF:= TAstParseCache.Get(AFilePath);
+  FactsProfAdd(FP_PARSE, Mark);
   if PF.Tree <> nil then
   begin
     Procs:= ProcsForFile(AFilePath, PF); { was CfgFindProcs(PF.Tree.RootNode) per routine }
+    FactsProfAdd(FP_PROCS, Mark);
     for Proc in Procs do
       if Integer(Proc.StartPoint.Row) + 1 = ASym.ImplStartLine then
       begin
@@ -3239,37 +3343,55 @@ begin
         AAst.Body := Body;
         AAst.Src  := PF.Src;
         Result.Cyclomatic:= TAstChecker.CyclomaticOf(Body);
+        FactsProfAdd(FP_CYCLO, Mark);
+        { 2026-09-28 PERF: the routine's var table, built ONCE here and read by
+          the four analyses below. Each used to build its own from the same
+          Proc -- four identical walks of the declaration section per routine.
+          None of them mutates it (they only IndexOf/Get), and every one of them
+          exits on a null Body before touching it, which is why it is built only
+          for a non-null Body. }
+        if Body.IsNull then Vars:= nil else Vars:= TRoutineVarTable.Build(Proc, PF.Src);
+        try
         // ADP2 T4: Reads/Writes fields -- the SAME matched Proc/Body, no 2nd
         // AST scan. See AnalyzeReadsWrites' header comment (above, this
         // unit's implementation section) for the field-set + classification
         // rules.
-        AnalyzeReadsWrites(Proc, Body, PF.Src, ASym, AStore, Result.ReadsFields, Result.WritesFields,
+        AnalyzeReadsWrites(Proc, Body, PF.Src, ASym, AStore, Vars, Result.ReadsFields, Result.WritesFields,
           Result.OwnReads, Result.OwnWrites, Result.HeldReads, Result.HeldWrites);
+        FactsProfAdd(FP_RW, Mark);
         // v(ADP3 T11): var/out parameter writes -- same matched Proc/Body, no
         // 2nd AST scan. Complements the line above: that one resolves against
         // the owning class's FIELDS, this one against the routine's own
         // parameter list, so a free routine is covered too. See
         // WalkMutatedParams' header for the classification rules.
-        Result.MutatesParams:= AnalyzeMutatesParams(Proc, Body, PF.Src);
+        Result.MutatesParams:= AnalyzeMutatesParams(Body, PF.Src, Vars);
+        FactsProfAdd(FP_PARAMS, Mark);
         // v(ADP3 T12): UI affinity -- same matched Proc/Body, no 2nd AST scan.
         // POSITIVE FINDINGS ONLY; see AnalyzeUiAffinity's header for why the
         // empty result must never be rendered as a thread-safety claim.
-        Result.UiAffinity:= AnalyzeUiAffinity(Proc, Body, PF.Src, ASym, AStore);
+        Result.UiAffinity:= AnalyzeUiAffinity(Body, PF.Src, ASym, AStore, AFilePath, Vars);
+        FactsProfAdd(FP_UI, Mark);
         // v(ADP3 T13): external surfaces + transaction verbs -- same matched
         // Body, no 2nd AST scan. Stored as 'resources|transactions'; see
         // AnalyzeTouches' header for the wire format and the match-shape rules.
         Result.Touches:= AnalyzeTouches(Body, PF.Src);
+        FactsProfAdd(FP_TOUCH, Mark);
         // ADP2 T7: SQL tables touched -- same matched Body node, no 2nd AST
         // scan. See AnalyzeSqlTables' header comment (above, this unit's
         // implementation section) for the full literal-concatenation +
         // conservative FROM/JOIN/INSERT/UPDATE/DELETE table-name extraction
         // pipeline.
         AnalyzeSqlTables(Body, PF.Src, Result.SqlReads, Result.SqlWrites);
+        FactsProfAdd(FP_SQL, Mark);
         // ADP2 T8: returned-object ownership -- same matched Proc/Body, no
         // 2nd AST scan. See AnalyzeReturnsOwner's header comment (above,
         // this unit's implementation section) for the full site-collection
         // + unanimity + object-type-gate ruleset.
-        Result.ReturnsOwner:= AnalyzeReturnsOwner(Proc, Body, PF.Src, ASym, AStore);
+        Result.ReturnsOwner:= AnalyzeReturnsOwner(Body, PF.Src, ASym, AStore, Vars);
+        FactsProfAdd(FP_OWNER, Mark);
+        finally
+          Vars.Free;
+        end; // try
         Break;
       end;
     // No matching defProc: Cyclomatic stays 0 and Reads/WritesFields/
@@ -3703,5 +3825,13 @@ begin
     Names.Free;
   end;
 end;
+
+initialization
+
+finalization
+  WriteFactsProfile;
+  GUiTypeCache.Free;
+  GFieldNames.Free;
+  GFieldTypes.Free;
 
 end.

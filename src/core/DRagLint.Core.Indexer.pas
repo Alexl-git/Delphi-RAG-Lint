@@ -391,6 +391,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure IndexFile(const AFilePath: string);
+      { The body of IndexFile; IndexFile itself times it for DRAGLINT_PROFILE. }
+      procedure IndexFileBody(const AFilePath: string);
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: FSkippedUpToDate.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -1052,6 +1054,9 @@ var
   GProfParse, GProfDocScan, GProfSymbols, GProfRefs,
   GProfUses, GProfLiterals, GProfFacts, GProfCommit, GProfFiles,
   GProfPre, GProfOpenTx: Int64;
+  { Whole IndexFile calls, split by outcome: files left as they were (the stamp
+    checks of an incremental run) and files parsed (everything, buckets or not). }
+  GProfWholeSkipped, GProfWholeParsed, GProfSkippedFiles: Int64;
 
 function ProfNow: Int64; inline;
 begin
@@ -1224,6 +1229,19 @@ begin
 end;
 
 procedure TIndexer.IndexFile(const AFilePath: string);
+begin
+  var T:= ProfNow;
+  var Parsed:= FParsedFiles;
+  IndexFileBody(AFilePath);
+  if FParsedFiles > Parsed then Inc(GProfWholeParsed, ProfNow - T)
+  else
+  begin
+    Inc(GProfWholeSkipped, ProfNow - T);
+    Inc(GProfSkippedFiles);
+  end;
+end;
+
+procedure TIndexer.IndexFileBody(const AFilePath: string);
 var
   Parser        : IParser                    ;
   Source        : TBytes                     ; { raw on-disk bytes: sha/mtime/up-to-date }
@@ -1290,6 +1308,30 @@ begin
       Exit;
     end;
   end;
+  { STAMP FAST PATH (2026-10-14). The up-to-date test below needs the file's
+    SHA, so every run read and hashed every file of the scope -- 1.3 s of a
+    nothing-changed run over 2,218 files. A row that recorded the size of the
+    bytes it hashed answers first: same write time and same size, the file is
+    taken as unchanged without a read, as make and git's index take it. A row
+    without a size (written before this) falls through to the full test, which
+    records the size for next time. A rewrite that keeps both the second and
+    the byte count is the one change this does not see. }
+  { Same guards as the full test below: an .inc carrying its host's context
+    (Lane INC) and a file whose include origins moved (N-06) never skip here. }
+  Mtime:= DateTimeToUnix(TFile.GetLastWriteTime(AFilePath), False);
+  var MayResume: Boolean:= (FResumeFingerprint <> '') and
+                           SameStr(FStore.FileIndexedFingerprint(AFilePath), FResumeFingerprint);
+  var IncCtx: TBytes:= nil;
+  var HasIncCtx: Boolean:= FIncludeContext and FPreprocessEnabled
+    and SameText(ExtractFileExt(AFilePath), '.inc')
+    and FIncContexts.TryGetValue(LowerCase(TPath.GetFullPath(AFilePath)), IncCtx);
+  if (not HasIncCtx) and ((not FForceReparse) or MayResume)
+    and FStore.FileStampIsCurrent(AFilePath, Mtime, TFile.GetSize(AFilePath))
+    and not FStore.IncludeOriginsChanged(AFilePath) then
+  begin
+    Inc(FSkippedUpToDate);
+    Exit;
+  end;
   var TPre: Int64:= ProfNow;
   Source:= TFile.ReadAllBytes(AFilePath);
   // Sha/Mtime/up-to-date stay computed over the RAW on-disk bytes so file
@@ -1297,7 +1339,6 @@ begin
   // v0.86 encoding fix (changing the sha basis would invalidate every already
   // indexed file's stored sha -> forced mass reindex).
   Sha:= THashSHA2.GetHashString(TEncoding.ANSI.GetString(Source));
-  Mtime:= DateTimeToUnix(TFile.GetLastWriteTime(AFilePath), False);
   // v0.4: incremental skip. If the file's already in the DB with the same
   // mtime and sha256, nothing to do - the parser would emit the same
   // symbols. Saves a parse + the per-file transaction.
@@ -1318,16 +1359,11 @@ begin
     --force-reparse and --rebuild, which therefore skip nothing, and '' can never
     equal a stored stamp because FileIndexedFingerprint returns '' for
     "unknown". Both halves fail toward re-parsing. }
-  var MayResume: Boolean:= (FResumeFingerprint <> '') and
-                           SameStr(FStore.FileIndexedFingerprint(AFilePath), FResumeFingerprint);
   { Lane INC: an .inc whose host was parsed THIS run carries that host's
     context (the bytes the preprocessor produced under the host's live defines
     at the directive). Its context can change while its own bytes do not, so it
-    is always re-parsed -- and it is only here because its host was. }
-  var IncCtx: TBytes:= nil;
-  var HasIncCtx: Boolean:= FIncludeContext and FPreprocessEnabled
-    and SameText(ExtractFileExt(AFilePath), '.inc')
-    and FIncContexts.TryGetValue(LowerCase(TPath.GetFullPath(AFilePath)), IncCtx);
+    is always re-parsed -- and it is only here because its host was. HasIncCtx
+    and MayResume are computed above, before the stamp fast path. }
   // N-06: ...unless an include it took a uses clause from changed since its parse.
   { Content-hash skip (xerj item 7): the bytes are what the parse depends on, so a
     file whose sha256 matches but whose mtime moved (git checkout, touch, copy) is as
@@ -1338,6 +1374,7 @@ begin
     and not FStore.IncludeOriginsChanged(AFilePath) then
   begin
     if not FStore.FileIsUpToDate(AFilePath, Mtime, Sha) then FStore.RefreshFileMtime(AFilePath, Mtime);
+    FStore.RecordFileSize(AFilePath, Length(Source)); { arms the stamp fast path above }
     Inc(FSkippedUpToDate);
     Exit;
   end;
@@ -1454,6 +1491,7 @@ begin
   try
     TProf:= ProfNow;
     Token:= FStore.OpenFileTx(AFilePath, Mtime, Sha, Parser.LanguageName);
+    FStore.RecordFileSize(AFilePath, Length(Source)); { in the file's transaction: the bytes just hashed }
     // v0.16: clear stale doc rows for this file before emitting fresh ones
     // (OpenFileTx already cleared symbols and refs).
     FStore.DeleteFileDocs(Token.FileId);
@@ -1724,6 +1762,7 @@ begin
       TAstParseCache.Clear;
       DfFieldsByParent.Free;
       DfCallees.Free; { lane ARGOUT }
+      ResetSymbolFactsFileCaches; { the facts analyses' per-file memos end with the file too }
       IdxToId.Free;
       // v(ADP3 T4e): flush the progress stream once per file, so an abnormal
       // termination cannot swallow COMPLETED lines from the tail of this log.
@@ -1930,8 +1969,11 @@ var
   end;
 begin
   if GetEnvironmentVariable('DRAGLINT_PROFILE') = '' then Exit;
-  if GProfFiles = 0 then Exit;
   Freq:= TStopwatch.Frequency;
+  if GProfSkippedFiles > 0 then
+    Writeln(ErrOutput, Format('INDEX WALK: %d file(s) left as they were in %.2f s; parsed file(s), whole: %.2f s',
+                              [GProfSkippedFiles, GProfWholeSkipped / Freq, GProfWholeParsed / Freq]));
+  if GProfFiles = 0 then Exit;
   Writeln(ErrOutput, Format('INDEX PROFILE (%d files)', [GProfFiles]));
   Line('read/pre'  , GProfPre     );
   Line('parse'     , GProfParse   );

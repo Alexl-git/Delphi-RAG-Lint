@@ -1152,4 +1152,14 @@
 #   Re-pinned WITHIN unreleased 1.27.0-alpha the same day (comment-only edit in Core.Indexer.pas,
 #   the stale 'extractor 1.20.0' label; then Preprocess.Profile InRange lint fix, same behaviour): 1.27.0-alpha|f3e091987358acb0559609745d1ec775b6b8c040db540ad6721a945e529a4a0a
 #     and 1.27.0-alpha|eebd8969e40d03083771eea4ac08d59e8948bb12c9f5e498810962191e87753c
-1.27.0-alpha|35f9307e8fd629d94b905b249ebed2db165ad338d534f08e20826ab7bc4a3e54
+# 2026-10-30 lane p10 (outside PR #10 re-split, Jonathas Paiva): re-pinned WITHIN 1.26.0-alpha, no bump -- no
+#   emitted row changes. Core.Indexer: a stamp fast path (mtime + recorded files.size -> skip without reading,
+#   same Lane INC / N-06 guards as the full test) and RecordFileSize; Doc.SymbolFacts: per-routine var table
+#   built once and shared, per-class field maps and a per-file UI-type memo (same maps, same order, dropped at
+#   file end), DRAGLINT_PROFILE split; Index.Closure: FindUnitFile memoised per Resolve (SearchArr fixed).
+#   Verified: main vs p10 full --rebuild of src\cli\drag-lint.dproj, every table row-equal (lane p10 report).
+#   Superseded: 1.26.0-alpha|3302e490166911801893376a90ca2bfa592e1e09b70260a65f5bc35469a53acc
+# 2026-10-30 int139: x11 (x139 bump) + p10 merged into feat/int139; ONE combined pin under the x139 bump 1.27.0-alpha.
+#   p10 alone changes no emitted row (its re-pin reason above stands); the version bump is x139's.
+#   Superseded: 1.27.0-alpha|35f9307e8fd629d94b905b249ebed2db165ad338d534f08e20826ab7bc4a3e54 (x139) and 1.26.0-alpha|0b2f6c1970e63ef2b752d4c4c1049fe0be7b35bbe94bcb0abd3a4331f61d4e25 (p10)
+1.27.0-alpha|5ae6c31f4ae6f70b545c92c643e006f946ef6d4f5080958bafc6916bba13beb9

@@ -214,6 +214,13 @@ type
       FQFindCompilerFindings : TFDQuery     ;
       FQInsertCompilerFinding: TFDQuery     ;
       FFts5Available         : Boolean     ; // set by Migrate; False when sqlite3.dll lacks fts5
+      FFtsDeferChecked       : Boolean     ; // the first OpenFileTx has decided whether this load defers the FTS5 indexes
+      FFtsDeferred           : Boolean     ; // sync triggers dropped; FinishDeferredTextIndex owes a rebuild
+      FFtsTargeted           : Boolean     ; // deferred, and temp.dl_fts_gone/dl_fts_files say exactly what changed
+      FBatchOpen             : Boolean     ; // BeginFileBatch's outer transaction is open
+      FBatchFiles            : Integer     ; // files opened in the current group
+      FBatchStamp            : Int64       ; // TStopwatch time stamp at which the current group began
+      FQFileStamp            : TFDQuery    ; // FileStampIsCurrent
       FTrigramAvailable      : Boolean     ; // set by Migrate; False when fts5 lacks the trigram tokenizer (SQLite < 3.34): string_fts_tri absent, --substring unsupported
       FReadOnly              : Boolean     ; // v0.86 Task 4: opened read-only (no DDL/writes)
       FStatementsPrepared    : Boolean     ; // guard: PrepareStatements is idempotent (constructor may prepare a schema-current DB before Migrate)
@@ -1050,6 +1057,34 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
+      /// <summary>Implements ISymbolStore.FileStampIsCurrent.</summary>
+      /// <param name="APath">The file, any spelling; matched as the files row is.</param>
+      /// <param name="AMtimeUnix">The file's write time, Unix seconds.</param>
+      /// <param name="ASize">The file's byte size.</param>
+      /// <returns>True when the row records both; False for a row with no size.</returns>
+      function FileStampIsCurrent(const APath: string; AMtimeUnix, ASize: Int64): Boolean;
+      /// <summary>Implements ISymbolStore.RecordFileSize.</summary>
+      /// <param name="APath">The file, any spelling.</param>
+      /// <param name="ASize">The byte size of the content the row describes.</param>
+      procedure RecordFileSize(const APath: string; ASize: Int64);
+      /// <summary>Starts a bulk load with the string_literals FTS5 sync triggers
+      /// dropped, recording the owed rebuild in schema_meta in the same
+      /// transaction.</summary>
+      /// <remarks>Best-effort: a failure leaves the triggers in place and the load
+      /// proceeds row by row, which is slower and equally correct.</remarks>
+      procedure BeginDeferredTextIndex;
+      /// <summary>Starts an incremental load with the sync triggers dropped, recording
+      /// in two temp tables every literal row it deletes and every file it
+      /// rewrites, so FinishDeferredTextIndex can patch the FTS5 indexes with set
+      /// statements instead of rebuilding them.</summary>
+      procedure BeginTargetedTextIndex;
+      /// <summary>Brings the FTS5 indexes in step with string_literals and restores
+      /// the sync triggers when this store deferred them, or when a load that did
+      /// died before finishing and left the schema_meta debt behind. A targeted
+      /// load is patched; anything else is rebuilt.</summary>
+      /// <exception cref="Exception">Re-raised after a rollback when the patch or
+      /// rebuild fails; the schema_meta debt stays for the next writer.</exception>
+      procedure FinishDeferredTextIndex;
       function FileShaMatches(const APath: string; const ASha: string): Boolean;
       procedure RefreshFileMtime(const APath: string; AMtimeUnix: Int64);
       function IncludeOriginsChanged(const APath: string): Boolean;
@@ -1148,6 +1183,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure Checkpoint                                                                                                  ;
+      /// <summary>Implements ISymbolStore.BeginFileBatch.</summary>
+      procedure BeginFileBatch                                                                                              ;
+      /// <summary>Implements ISymbolStore.EndFileBatch.</summary>
+      /// <exception cref="Exception">Re-raised after a rollback when the commit fails.</exception>
+      procedure EndFileBatch                                                                                                ;
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AMtimeUnix"><!-- drag-lint:auto type -->Int64</param>
       /// <param name="ASha"><!-- drag-lint:auto type -->const string</param>
@@ -4241,6 +4281,7 @@ begin
   FLateAncCache.Free;
   FQInsertFile.Free;
   FQUpsertFile.Free;
+  FQFileStamp.Free;
   FQInsertSymbol.Free;
   FQInsertTrigram.Free;
   FQInsertRef.Free;
@@ -4286,6 +4327,13 @@ begin
   FFlowOracles.Free;
   if Assigned(FConn) then
   begin
+    { A walk that never reached Checkpoint (IndexDictionary releases its store
+      without one) still owes its FTS5 rebuild. A failure here is left to the
+      schema_meta debt, which the next writer's Migrate settles. }
+    if FBatchOpen and FConn.Connected then
+      try EndFileBatch; except end;  // dl:ok empty-except, try-except-swallowed -- REVIEWED 2026-10-30 (PR #10): a destructor must not raise; EndFileBatch has already rolled the batch back when it fails
+    if FFtsDeferred and FConn.Connected then
+      try FinishDeferredTextIndex; except end;  // dl:ok empty-except, try-except-swallowed -- REVIEWED 2026-10-30 (PR #10): a destructor must not raise; a rebuild left pending is redone by the next writer (FTS_REBUILD_PENDING_KEY)
     if FConn.Connected then FConn.Close;
     FConn.Free;
   end;
@@ -4642,6 +4690,16 @@ begin
                 '(needs 3.34+); --substring text search is unavailable, --any-order and exact still work.');
       end;
     end;
+    { PR #10: a deferred load that died before its rebuild left the FTS5 indexes
+      short of the rows it wrote, and the DDL above has just put the sync
+      triggers back, so from here on nothing would ever notice. Settle the debt. }
+    try
+      FinishDeferredTextIndex;
+    except
+      on E: Exception do
+        Writeln(ErrOutput, 'WARNING: the text-search index owes a rebuild and it failed (',
+                E.ClassName, ': ', E.Message, '); the next writer retries.');
+    end;
   end
   else
   begin
@@ -4715,6 +4773,18 @@ begin
     existing databases acquire the index the next time anything touches them --
     no reindex, no migration step for the user. }
   TryExec('CREATE INDEX IF NOT EXISTS idx_refs_name_nocase ON refs(name_text COLLATE NOCASE)');
+  { PR #10 (2026-10-14): the per-file lookups of an index run -- up-to-date,
+    re-stamp, fingerprint, upsert, file id -- all match a path case-
+    insensitively. They were written "path = :p OR LOWER(path) = LOWER(:p)", and
+    the OR made SQLite scan files once per lookup. The first branch implies the
+    second, so the lookups now say only "LOWER(path) = LOWER(:p)", which this
+    expression index answers. Same rows; an older engine is unaffected. }
+  TryExec('CREATE INDEX IF NOT EXISTS idx_files_path_lower ON files(LOWER(path))');
+  { PR #10 (2026-10-14): the byte size of the content a files row describes, so
+    the indexer can take an unchanged write time and size as "up to date"
+    without reading the file (STAMP FAST PATH in TIndexer.IndexFile). NULL on a
+    row written before; such a row takes the full test once and is filled. }
+  TryExec('ALTER TABLE files ADD COLUMN size INTEGER');
   { v16: per-file last-successful-compile timestamp (Unix seconds). NULL = never
     compiled. Additive column; ALTER onto pre-v16 files tables for the same
     reason as the symbols/refs columns above. Read by the freshness engine to
@@ -4955,6 +5025,16 @@ begin
   TryExec('CREATE INDEX IF NOT EXISTS idx_call_edges_receiver ON call_edges(receiver_type_symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_symbol_facts_symbol ON symbol_facts(symbol_id)'          );
   TryExec('CREATE INDEX IF NOT EXISTS idx_symbol_docs_symbol  ON symbol_docs(symbol_id)'           );
+  { PR #10 (2026-09-28) -- six more unindexed FK child columns. Every deleted
+    parent full-scanned the child table: member_accesses.receiver_type_symbol_id
+    alone made index --rebuild's ClearAllFiles take 1,314 s on a 2,245-file
+    project DB. Additive, idempotent, no bump. }
+  TryExec('CREATE INDEX IF NOT EXISTS idx_member_accesses_receiver ON member_accesses(receiver_type_symbol_id)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_type_helpers_target_sym  ON type_helpers(target_symbol_id)'           );
+  TryExec('CREATE INDEX IF NOT EXISTS idx_di_bindings_file         ON di_bindings(file_id)'                     );
+  TryExec('CREATE INDEX IF NOT EXISTS idx_compiler_findings_file   ON compiler_findings(file_id)'               );
+  TryExec('CREATE INDEX IF NOT EXISTS idx_fb_relations_table_sym   ON fb_relations(sql_table_symbol_id)'        );
+  TryExec('CREATE INDEX IF NOT EXISTS idx_fb_columns_column_sym    ON fb_columns(sql_column_symbol_id)'         );
 
   { QUERY STATISTICS. Without sqlite_stat1 the planner has no selectivity data
     and picks a join order from built-in heuristics -- which are version
@@ -5284,8 +5364,9 @@ begin
   // this change is re-spelled the first time its file is re-indexed. Duplicates
   // are merged by CanonicalizeFilePaths during Migrate, BEFORE any of this runs,
   // so this UPDATE can never match two rows and collide on the UNIQUE.
+  FQFileStamp:= NewQuery('SELECT 1 FROM files WHERE LOWER(path) = LOWER(:p) AND mtime_unix = :m AND size = :z');
   FQUpsertFile:= NewQuery( 'UPDATE files SET path=:path, mtime_unix=:mtime, sha256=:sha, ' +
-    'parsed_at=:parsed, language=:lang WHERE path=:path OR LOWER(path)=LOWER(:path)');
+    'parsed_at=:parsed, language=:lang WHERE LOWER(path) = LOWER(:path)');
   FQInsertFile:= NewQuery( 'INSERT OR IGNORE INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol:= NewQuery(
     'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, heritage, is_virtual, is_helper, start_line, start_col, end_line, end_col, ' +
@@ -5531,7 +5612,7 @@ begin
 
   FQGetSymbolById:= NewQuery('SELECT * FROM symbols WHERE id = :id LIMIT 1');
 
-  FQFindFileId:= NewQuery( 'SELECT id FROM files ' + 'WHERE path = :p OR LOWER(path) = LOWER(:p) LIMIT 1');
+  FQFindFileId:= NewQuery( 'SELECT id FROM files ' + 'WHERE LOWER(path) = LOWER(:p) LIMIT 1');
 
   FQFindChildByName:= NewQuery( 'SELECT * FROM symbols WHERE parent_id = :pid AND name = :name LIMIT 1');
 
@@ -5664,7 +5745,7 @@ begin
       before B6 can still hold a legacy spelling, and answering "not up to date"
       for a file that IS up to date would silently re-parse the whole corpus on
       every run. }
-    Q.SQL.Text:= 'SELECT 1 FROM files WHERE (path = :p OR LOWER(path) = LOWER(:p)) ' +
+    Q.SQL.Text:= 'SELECT 1 FROM files WHERE LOWER(path) = LOWER(:p) ' +
                  'AND mtime_unix = :m AND sha256 = :s';
     Q.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
     Q.ParamByName('m').AsLargeInt:= AMtimeUnix;
@@ -5676,6 +5757,26 @@ begin
   end;
 end; // function
 
+function TSQLiteSymbolStore.FileStampIsCurrent(const APath: string; AMtimeUnix, ASize: Int64): Boolean;
+begin
+  FQFileStamp.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
+  FQFileStamp.ParamByName('m').AsLargeInt  := AMtimeUnix;
+  FQFileStamp.ParamByName('z').AsLargeInt  := ASize;
+  FQFileStamp.Open;
+  try
+    Result:= not FQFileStamp.IsEmpty;
+  finally
+    FQFileStamp.Close;
+  end;
+end; // function
+
+procedure TSQLiteSymbolStore.RecordFileSize(const APath: string; ASize: Int64);
+begin
+  if FReadOnly then Exit;
+  FConn.ExecSQL('UPDATE files SET size = ? WHERE LOWER(path) = LOWER(?) AND (size IS NULL OR size <> ?)',
+                [ASize, NormalizeStoredPath(APath), ASize]);
+end; // procedure
+
 function TSQLiteSymbolStore.FileShaMatches(const APath: string; const ASha: string): Boolean;
 var
   Q: TFDQuery;
@@ -5683,7 +5784,7 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:= 'SELECT 1 FROM files WHERE (path = :p OR LOWER(path) = LOWER(:p)) AND sha256 = :s';
+    Q.SQL.Text:= 'SELECT 1 FROM files WHERE LOWER(path) = LOWER(:p) AND sha256 = :s';
     Q.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
     Q.ParamByName('s').AsWideString:= ASha;
     Q.Open;
@@ -5700,7 +5801,7 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:= 'UPDATE files SET mtime_unix = :m WHERE (path = :p OR LOWER(path) = LOWER(:p))';
+    Q.SQL.Text:= 'UPDATE files SET mtime_unix = :m WHERE LOWER(path) = LOWER(:p)';
     Q.ParamByName('p').AsWideString:= NormalizeStoredPath(APath);
     Q.ParamByName('m').AsLargeInt:= AMtimeUnix;
     Q.ExecSQL;
@@ -5831,6 +5932,183 @@ begin
   end;
 end; // procedure
 
+{ DEFERRED TEXT INDEX (PR #10, Jonathas Paiva, 2026-09-28 / 2026-10-14).
+
+  string_fts and string_fts_tri are external-content FTS5 indexes kept in step
+  with string_literals by three triggers, one FTS5 write per row per index, and
+  FTS5 flushes a new segment at every statement boundary. On a bulk load that is
+  the most expensive thing the walk does (662 s of a 1,661 s per-file loop on a
+  2,245-file closure, superlinear), while one 'rebuild' of the finished table
+  costs ~11 s with identical fts5vocab content.
+
+  So a load that starts from an EMPTY string_literals table -- a new database, or
+  --rebuild via ClearAllFiles -- drops the triggers and rebuilds once at the end.
+  An incremental load into a populated table defers too, and keeps a receipt
+  instead of the triggers (BeginTargetedTextIndex): DeleteStringLiteralsForFile
+  -- the one path every literal delete takes -- copies the rows it is about to
+  delete into temp.dl_fts_gone and the file into temp.dl_fts_files.
+  FinishDeferredTextIndex then issues, per index, one 'delete' of the gone rows
+  and one insert of the current rows of those files. Both temp tables share the
+  file's transaction, so a rolled-back file takes its receipt with it. Past
+  FTS_TARGETED_MAX_ROWS rows, or after anything that deleted literals without a
+  receipt (ClearAllFiles), it rebuilds. string_fts_tri is touched only when the
+  trigram tokenizer is available (FTrigramAvailable, B2).
+
+  CRASH SAFETY is the schema_meta key, written in the SAME transaction that drops
+  the triggers and deleted in the same transaction that restores them. A process
+  that dies in between leaves the key, and the next writer's Migrate settles it
+  by rebuilding. }
+const
+  FTS_REBUILD_PENDING_KEY = 'fts_rebuild_pending';
+  { a targeted patch of ~36k rows costs 2.6 s and a rebuild of ~770k rows ~12 s,
+    so the crossover is a few hundred thousand rows; stay well under. }
+  FTS_TARGETED_MAX_ROWS   = 150000;
+
+procedure TSQLiteSymbolStore.BeginDeferredTextIndex;
+begin
+  if FFtsDeferred or FReadOnly or (not FFts5Available) then Exit;
+  FConn.StartTransaction;
+  try
+    FConn.ExecSQL('INSERT OR REPLACE INTO schema_meta(key, value) VALUES (?, ''1'')', [FTS_REBUILD_PENDING_KEY]);
+    FConn.ExecSQL('DROP TRIGGER IF EXISTS string_literals_ai');
+    FConn.ExecSQL('DROP TRIGGER IF EXISTS string_literals_ad');
+    FConn.ExecSQL('DROP TRIGGER IF EXISTS string_literals_au');
+    FConn.Commit;
+  except  // dl:ok bare-except, try-except-swallowed -- REVIEWED 2026-10-30 (PR #10): a failed trigger DROP keeps the triggers: the load stays correct, only not deferred
+    FConn.Rollback;
+    Exit;
+  end;
+  FFtsDeferred:= True;
+end; // procedure
+
+procedure TSQLiteSymbolStore.BeginTargetedTextIndex;
+begin
+  BeginDeferredTextIndex;
+  if not FFtsDeferred then Exit; { triggers still live: row-by-row, correct anyway }
+  FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_fts_gone (id INTEGER PRIMARY KEY, text TEXT NOT NULL)');
+  FConn.ExecSQL('CREATE TEMP TABLE IF NOT EXISTS dl_fts_files (f INTEGER PRIMARY KEY)');
+  FConn.ExecSQL('DELETE FROM temp.dl_fts_gone');
+  FConn.ExecSQL('DELETE FROM temp.dl_fts_files');
+  FFtsTargeted:= True;
+end; // procedure
+
+procedure TSQLiteSymbolStore.FinishDeferredTextIndex;
+var
+  I      : Integer;
+  Indexes: TArray<string>;
+begin
+  if FReadOnly or (not FFts5Available) then Exit;
+  if (not FFtsDeferred) and (GetMetaValue(FTS_REBUILD_PENDING_KEY) = '') then Exit;
+  Indexes:= ['string_fts'];
+  if FTrigramAvailable then Indexes:= Indexes + ['string_fts_tri'];
+  var Started: Int64:= TStopwatch.GetTimeStamp;
+  var Rows   : Int64:= -1;
+  if FFtsTargeted and FFtsDeferred then
+    Rows:= FConn.ExecSQLScalar('SELECT (SELECT COUNT(*) FROM temp.dl_fts_gone) + ' +
+                               '(SELECT COUNT(*) FROM string_literals WHERE file_id IN (SELECT f FROM temp.dl_fts_files))');
+  var Patch: Boolean:= (Rows >= 0) and (Rows <= FTS_TARGETED_MAX_ROWS);
+  FConn.StartTransaction;
+  try
+    { Another writer's Migrate may have put the triggers back (and rebuilt) while
+      this load ran; its rows are then already indexed, and a patch would index
+      them twice. Rebuild instead -- always correct. }
+    if Patch and (Integer(FConn.ExecSQLScalar(
+        'SELECT COUNT(*) FROM sqlite_master WHERE type = ''trigger'' AND name = ''string_literals_ai''')) > 0) then
+      Patch:= False;
+    for var Fts: string in Indexes do
+      if Patch then
+      begin
+        FConn.ExecSQL(Format('INSERT INTO %0:s(%0:s, rowid, text) SELECT ''delete'', id, text FROM temp.dl_fts_gone', [Fts]));
+        FConn.ExecSQL(Format('INSERT INTO %0:s(rowid, text) SELECT id, text FROM string_literals ' +
+                             'WHERE file_id IN (SELECT f FROM temp.dl_fts_files)', [Fts]));
+      end
+      else FConn.ExecSQL(Format('INSERT INTO %0:s(%0:s) VALUES (''rebuild'')', [Fts]));
+    { The same triggers Migrate installs for this tokenizer set. }
+    if FTrigramAvailable then
+      for I:= SCHEMA_DDL_FTS5_FIRST to High(SCHEMA_DDL) do FConn.ExecSQL(SCHEMA_DDL[I])
+    else
+      for I:= Low(SCHEMA_DDL_NOTRI_TRIGGERS) to High(SCHEMA_DDL_NOTRI_TRIGGERS) do FConn.ExecSQL(SCHEMA_DDL_NOTRI_TRIGGERS[I]);
+    FConn.ExecSQL('DELETE FROM schema_meta WHERE key = ?', [FTS_REBUILD_PENDING_KEY]);
+    FConn.Commit;
+  except
+    on E: Exception do
+    begin
+      FConn.Rollback;
+      raise;
+    end;
+  end;
+  FFtsDeferred:= False;
+  FFtsTargeted:= False;
+  var Which: string:= if FTrigramAvailable then 'both text indexes' else 'the text index';
+  if Patch then ResolveLog(Format('fts        patched %s: %d literal row(s) out and in  [%.1fs]',
+                                  [Which, Rows, ResolveSecs(Started)]))
+  else ResolveLog(Format('fts        rebuilt %s  [%.1fs]', [Which, ResolveSecs(Started)]));
+end; // procedure
+
+{ FILE BATCH (PR #10, 2026-09-28).
+
+  One COMMIT per file was the second-largest cost of a walk: 437 s of a 1,661 s
+  per-file loop on a 2,245-file closure. Every file inserts into the same few hot
+  B-trees, so consecutive commits keep re-dirtying the same pages and appending
+  them to the WAL again.
+
+  Inside a batch the per-file StartTransaction / Commit / Rollback that
+  OpenFileTx, CommitFileTx and RollbackFileTx already issue are NESTED, and
+  FireDAC (TxOptions.EnableNested, default True) runs a nested transaction on
+  SQLite as SAVEPOINT / RELEASE / ROLLBACK TO. So a file that fails still undoes
+  only itself. The outer transaction is committed at the start of the first file
+  past a group limit, when no file savepoint is open. }
+const
+  FILE_BATCH_MAX_FILES = 256 ; { files per group }
+  MS_PER_SECOND        = 1000;
+  FILE_BATCH_MAX_MS    = 5000; { or this long, whichever comes first, so readers and a resume never lag far }
+
+procedure TSQLiteSymbolStore.BeginFileBatch;
+begin
+  if FBatchOpen or FReadOnly then Exit;
+  FConn.StartTransaction;
+  FBatchOpen := True;
+  FBatchFiles:= 0;
+  FBatchStamp:= TStopwatch.GetTimeStamp;
+end; // procedure
+
+procedure TSQLiteSymbolStore.EndFileBatch;
+begin
+  if not FBatchOpen then Exit;
+  FBatchOpen:= False;
+  try
+    FConn.Commit;
+  except
+    on E: Exception do
+    begin
+      FConn.Rollback; { never leave the outer transaction open behind a closed batch }
+      raise;
+    end;
+  end;
+end; // procedure
+
+{ Called by OpenFileTx before it opens the file's own (nested) transaction. }
+procedure RollFileBatch(AConn: TFDConnection; var AFiles: Integer; var AStamp: Int64);
+begin
+  if (AFiles >= FILE_BATCH_MAX_FILES) or
+     ((TStopwatch.GetTimeStamp - AStamp) * MS_PER_SECOND >= FILE_BATCH_MAX_MS * TStopwatch.Frequency) then
+  begin
+    AConn.Commit;
+    AConn.StartTransaction;
+    AFiles:= 0;
+    AStamp:= TStopwatch.GetTimeStamp;
+  end;
+  Inc(AFiles);
+end; // procedure
+
+{ True when string_literals holds no row at all -- the load that follows is then
+  a bulk one, and the FTS5 indexes are cheaper rebuilt than maintained. }
+function StringLiteralsEmpty(AConn: TFDConnection): Boolean;
+begin
+  Result:= Integer(AConn.ExecSQLScalar('SELECT EXISTS (SELECT 1 FROM string_literals)')) = 0;
+end; // function
+
+
 // Item 1a (2026-09-03): fold the WAL back into the main file so a completed run
 // leaves a database that is self-contained on disk.
 //
@@ -5891,6 +6169,22 @@ procedure TSQLiteSymbolStore.Checkpoint;
   end;
 
 begin
+  { PR #10: before the copy, so the batch's last group and the rebuilt FTS5
+    pages land in the main file too. }
+  try
+    EndFileBatch;
+  except
+    on E: Exception do
+      Writeln(ErrOutput, 'WARNING: the last file batch failed to commit (',
+              E.ClassName, ': ', E.Message, '); its files re-parse on the next run.');
+  end;
+  try
+    FinishDeferredTextIndex;
+  except
+    on E: Exception do
+      Writeln(ErrOutput, 'WARNING: the text-search index rebuild failed (',
+              E.ClassName, ': ', E.Message, '); the next writer retries.');
+  end;
   try
     RunPragma('PRAGMA wal_checkpoint(FULL)');
   except
@@ -5965,8 +6259,23 @@ var
   Q : TFDQuery;
   NP: string  ;
 begin
+  { PR #10 FILE BATCH: the gate may run with the batch open. Every file in it
+    is complete (its savepoint released), and the stand-down path closes the
+    store through CloseForStandDown -> Checkpoint -> EndFileBatch, which commits
+    them; so the gate's no-half-written-file guarantee holds. }
   if Assigned(GFileTxGate) then GFileTxGate(Self); { DEC-13: between files, no tx open }
   NP:= NormalizeStoredPath(APath);
+  { Decided at the first file of a FILE BATCH (a CLI walk): see DEFERRED TEXT
+    INDEX above Checkpoint. A writer outside a batch (the LSP, a one-file
+    reindex) keeps the live triggers, as before. }
+  if FBatchOpen and not FFtsDeferChecked then
+  begin
+    FFtsDeferChecked:= True;
+    if FFts5Available and (not FReadOnly) then
+      if StringLiteralsEmpty(FConn) then BeginDeferredTextIndex
+      else BeginTargetedTextIndex;
+  end;
+  if FBatchOpen then RollFileBatch(FConn, FBatchFiles, FBatchStamp); { see FILE BATCH above Checkpoint }
   { V-C: the corpus size BEFORE this run's first write -- read ahead of the
     upsert, which would otherwise count the run's first new file as old. }
   if FScopeCorpusBefore < 0 then FScopeCorpusBefore:= CountFiles;
@@ -6000,7 +6309,7 @@ begin
         again, a byte-exact read here would raise "File row not found after
         upsert" rather than silently duplicating, and this keeps both halves
         answering the same question. }
-      Q.SQL.Text:= 'SELECT id FROM files WHERE path = :path OR LOWER(path) = LOWER(:path) LIMIT 1';
+      Q.SQL.Text:= 'SELECT id FROM files WHERE LOWER(path) = LOWER(:path) LIMIT 1';
       Q.ParamByName('path').AsWideString:= NP;
       Q.Open;
       if Q.IsEmpty then raise Exception.CreateFmt('File row not found after upsert: %s', [NP]);
@@ -8072,6 +8381,12 @@ end;
 procedure TSQLiteSymbolStore.DeleteStringLiteralsForFile(AFileId: Int64);
 begin
   if not FFts5Available then Exit; // same guard as UpsertStringLiteral
+  if FFtsTargeted then { the receipt -- see DEFERRED TEXT INDEX above Checkpoint }
+  begin
+    FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_fts_gone(id, text) ' +
+                  'SELECT id, text FROM string_literals WHERE file_id = ?', [AFileId]);
+    FConn.ExecSQL('INSERT OR IGNORE INTO temp.dl_fts_files(f) VALUES (?)', [AFileId]);
+  end;
   FQDeleteFileStringLiterals.ParamByName('fid').AsLargeInt:= AFileId;
   FQDeleteFileStringLiterals.ExecSQL;  // triggers cascade the FTS 'delete'
 end;
@@ -8396,9 +8711,15 @@ begin
     is also what it wants -- every ref is new. }
   FScopeWhole:= True;
   FScopeWholeWhy:= 'the index was cleared (--rebuild), so every ref is new';
+  { PR #10: the walk that follows is a bulk load into an empty table, so defer
+    the FTS5 indexes now rather than at its first file: the DELETE below then
+    costs no FTS5 write per row either, and the closing rebuild empties them. }
+  BeginDeferredTextIndex;
+  FFtsDeferChecked:= True;
+  FFtsTargeted:= False; { the DELETE below keeps no receipt, so the end must rebuild }
   FConn.StartTransaction;
   try
-    FConn.ExecSQL('DELETE FROM string_literals'); { fire the FTS5 sync triggers }
+    FConn.ExecSQL('DELETE FROM string_literals'); { FTS5 sync triggers fire unless deferred above }
     FConn.ExecSQL('DELETE FROM files');           { cascades everything else    }
     SetMetaValue(REBUILD_IN_PROGRESS_META_KEY, '1'); { same commit as the clear }
     FConn.Commit;
@@ -8903,7 +9224,7 @@ begin
       cannot disagree about which row a file is. The skip decision reads both;
       if they resolved paths differently a file could be "up to date" and
       "unstamped" at the same time and would re-parse forever. }
-    Q.SQL.Text:= 'SELECT indexed_at_fingerprint FROM files ' + 'WHERE (path = :p OR LOWER(path) = LOWER(:p)) LIMIT 1';
+    Q.SQL.Text:= 'SELECT indexed_at_fingerprint FROM files ' + 'WHERE LOWER(path) = LOWER(:p) LIMIT 1';
     Q.ParamByName('p').AsWideString:= NormalizeStoredPath(AFilePath);
     Q.Open;
     if (not Q.IsEmpty) and (not Q.Fields[0].IsNull) then Result:= Q.Fields[0].AsString;
