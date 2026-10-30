@@ -1544,7 +1544,8 @@ begin
         FStore.DeleteStringLiteralsForFile(Token.FileId);
         { X-23: answer the containing symbol from a line map; SQL only for a tie
           or a line outside the map (see BuildContainingLineMap). }
-        ContainingByLine:= if Length(ParseRes.Literals) > 0 then BuildContainingLineMap(ParseRes.Symbols, IdxToId, Length(SourceLines) + 2) else nil;
+        ContainingByLine:= nil;
+        if Length(ParseRes.Literals) > 0 then ContainingByLine:= BuildContainingLineMap(ParseRes.Symbols, IdxToId, Length(SourceLines) + 2);
         IdToIdx:= TDictionary<Int64, Integer>.Create;
         try
           for var Pair in IdxToId do IdToIdx.AddOrSetValue(Pair.Value, Pair.Key);

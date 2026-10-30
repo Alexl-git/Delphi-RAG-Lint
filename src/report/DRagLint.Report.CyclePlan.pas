@@ -3889,7 +3889,8 @@ end;
   BuildBase runs (F5 / B4 site rules over that unit); nil for any other need, or without pViaBase. }
 function TCyclePlanner.BaseCut(const pSym: TSymbol; const pFrom: string; pViaBase: Boolean): TArray<Int64>;
 begin
-  Result:= if pViaBase and (pSym.Kind = skClass) then [FidOfStem(pFrom)] else nil;
+  Result:= nil;
+  if pViaBase and (pSym.Kind = skClass) then Result:= [FidOfStem(pFrom)];
 end;
 
 { B4-f: every implementation edge no recipe cut, whose needs include a class, is evaluated again with the
