@@ -329,9 +329,10 @@ finally { Pop-Location }
 #
 # Drives `textDocument/completion` the way Get-HoverValue drives hover. The
 # server reads an unopened document from DISK (TLiveDocuments.Readable falls
-# back to TFile.Exists), so no didOpen is needed; the probe unit is NOT indexed
-# -- the stores queried are the fixture's db, the probe only supplies the line
-# the caret sits on. Returns the labels of every item; '<no-reply>' when id 2
+# back to TFile.Exists), so no didOpen is needed. The probe IS indexed, into
+# $dbE beside a copy of the fixture: since 5ba03b06 (LSP-1 CORE, owner ruling D1)
+# a file no store owns is answered from an ephemeral index + the platform library
+# only, so an unindexed probe would never reach the fixture's db. Returns the labels of every item; '<no-reply>' when id 2
 # never answered.
 function Get-CompletionLabels([string]$Db, [string]$File, [int]$Line0, [int]$Char0) {
   $uri = 'file:///' + ($File -replace '\\', '/')
@@ -382,6 +383,10 @@ end.
 "@
   $probeFile = Join-Path $probeDir 'fwprobe.pas'
   WriteAnsi $probeFile $probe
+  Copy-Item (Join-Path $srcDir 'fwstub.pas') (Join-Path $probeDir 'fwstub.pas')
+  $dbE = Join-Path $WorkDir 'fwprobe.sqlite'
+  & $Exe index $probeDir --db $dbE 2>&1 | Out-Null
+  Check 'probe index built (owns the probe)' (Test-Path $dbE)
   $pl = [System.IO.File]::ReadAllLines($probeFile)
   $fooLine0 = -1; $onlyLine0 = -1
   for ($i = 0; $i -lt $pl.Count; $i++) {
@@ -390,13 +395,13 @@ end.
   }
   Check 'probe anchors located' (($fooLine0 -ge 0) -and ($onlyLine0 -ge 0)) "foo=$fooLine0 only=$onlyLine0"
   # caret at END of the line, right after the typed prefix (0-based character = line length)
-  $labels = @(Get-CompletionLabels $db $probeFile $fooLine0 $pl[$fooLine0].Length)
+  $labels = @(Get-CompletionLabels $dbE $probeFile $fooLine0 $pl[$fooLine0].Length)
   Check 'completion answered' (($labels.Count -ge 1) -and ($labels[0] -ne '<no-reply>')) "labels=[$($labels -join ',')]"
   $fooItems = @($labels | Where-Object { $_ -eq 'TFoo' })
   Check 'S1 completion: exactly ONE TFoo item for prefix TFo (stub folded)' ($fooItems.Count -eq 1) "TFoo items=$($fooItems.Count) labels=[$($labels -join ',')]"
   # POSITIVE CONTROL: a lone stub is a class and is offered once -- proves the
   # probe reaches the prefix reader and that the fold drops only PAIRED stubs.
-  $labelsOnly = @(Get-CompletionLabels $db $probeFile $onlyLine0 $pl[$onlyLine0].Length)
+  $labelsOnly = @(Get-CompletionLabels $dbE $probeFile $onlyLine0 $pl[$onlyLine0].Length)
   $onlyItems = @($labelsOnly | Where-Object { $_ -eq 'TOnlyStub' })
   Check 'S2 control: exactly ONE TOnlyStub item for prefix TOnly' ($onlyItems.Count -eq 1) "TOnlyStub items=$($onlyItems.Count) labels=[$($labelsOnly -join ',')]"
 }

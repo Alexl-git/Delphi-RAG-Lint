@@ -249,7 +249,12 @@ foreach ($e in $expected) {
 # ---- case 2: type in a DIFFERENT database (pins defect B) ----
 Write-Host ''
 Write-Host 'CASE 2: type in a SEPARATE index (pins the single-store lookup)' -ForegroundColor Cyan
-$dbT = Join-Path $WorkDir 'types.sqlite'
+# Since 5ba03b06 (LSP-1 CORE, owner ruling D1) a file is answered from its own
+# project's index + the platform library only, so the separate index is NAMED
+# library-Win64.sqlite (the real report's shape). The user's central context
+# defaults would pick the platform; a fixture path keeps it the Win64 placeholder.
+$env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $WorkDir 'no-defaults.json'
+$dbT = Join-Path $WorkDir 'library-Win64.sqlite'
 $dbU = Join-Path $WorkDir 'usage.sqlite'
 & $Exe index $typesDir --db $dbT 2>&1 | Out-Null
 & $Exe index $usageDir --db $dbU 2>&1 | Out-Null
@@ -393,6 +398,7 @@ Check 'does not offer a member that exists nowhere' (-not ($got1 -contains 'NoSu
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
+  $env:DRAGLINT_CONTEXT_DEFAULTS = $null
   # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
   foreach ($d23 in @("$env:TEMP\drag-lint-completion-member-guard-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }
 }

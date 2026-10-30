@@ -21,6 +21,12 @@
     (no call) answers [].
 
     AN UNKNOWN FILE answers [] (not an error).
+
+    EXPLICIT --db IS THE WHOLE UNIVERSE (S5, battery-138): the central context
+    defaults name a library that ALSO declares a routine `Add`. `lsp --db
+    hints.sqlite` must not join it -- if it did, `Add` would be ambiguous and
+    every Add hint would vanish (measured: 0 hints on a machine whose real
+    defaults name C:\Projects\.drag-lint\library-Win64.sqlite).
 #>
 [CmdletBinding()]
 param(
@@ -95,6 +101,15 @@ end.
 
 $db = Join-Path $WorkDir 'hints.sqlite'
 & $Exe index $src --db $db 2>&1 | Out-Null
+# S5: a defaults file whose Win64 library declares a second `Add`.
+$libSrc = Join-Path $WorkDir 'lib'; New-Item -ItemType Directory $libSrc | Out-Null
+WriteAnsi (Join-Path $libSrc 'uLibAdd.pas') "unit uLibAdd;`r`ninterface`r`nprocedure Add(pOther: Integer);`r`nimplementation`r`nprocedure Add(pOther: Integer);`r`nbegin`r`nend;`r`nend.`r`n"
+$libDb = Join-Path $WorkDir 'defaults-lib.sqlite'
+& $Exe index $libSrc --db $libDb 2>&1 | Out-Null
+$defaultsFile = Join-Path $WorkDir 'defaults.json'
+[System.IO.File]::WriteAllText($defaultsFile, (@{ schema = 1; platform = 'Win64'; libraries = @{ Win64 = @{ libraryDb = $libDb } } } | ConvertTo-Json -Depth 5), (New-Object System.Text.ASCIIEncoding))
+$env:DRAGLINT_CONTEXT_DEFAULTS = $defaultsFile
+Check 'S5: defaults library built' (Test-Path $libDb)
 Check 'fixture indexed' (Test-Path $db)
 
 $lines = [System.IO.File]::ReadAllLines($file)
@@ -168,5 +183,6 @@ if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green
 exit 0
 } finally {
+  $env:DRAGLINT_CONTEXT_DEFAULTS = $null
   if (Test-Path $WorkDir) { try { [System.IO.Directory]::Delete($WorkDir, $true) } catch { } }
 }
