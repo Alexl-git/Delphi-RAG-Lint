@@ -31,6 +31,7 @@ breaking changes** until v1.0.
   now open it read-only like the CLI's read verbs, refuse an old schema naming it, and add
   the freshness note as a second text item when files changed since indexing.
 - Guard: `tests\autotest\run_mcp_answers.ps1` (M1-M6; red before).
+- Maintainer check (review 2026-10-30): `rename_symbol` with `dry_run=false` still rewrites the declaring and the calling unit with the store opened read-only, and leaves the index DB byte-identical (the 1.38 engine changed it). Guard `run_mcp_answers.ps1` M7, the dry run as its positive control.
 
 ## v1.38.1-alpha -- planned
 

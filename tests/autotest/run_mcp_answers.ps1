@@ -16,6 +16,9 @@
         (slice, surface, callers, impact), keeping the summary keys
     M5  (#34) when a file changed after indexing, the answer carries the
         freshness note as a second text item (the first stays the answer)
+    M7  (review 2026-10-30) rename_symbol dry_run=false still rewrites the
+        sources (declaring + calling unit) with the store opened read-only, and
+        leaves the index DB byte-identical; the dry run is the positive control
 
   M4 needs python on PATH (it ages the schema of a copy); SKIP 77 otherwise
   for that arm only. Run from a NEUTRAL CWD, pwsh 7.
@@ -129,13 +132,13 @@ $env:DRAGLINT_RULE_CACHE = $null
 Check 'SANITY: fixture indexed' ($LASTEXITCODE -eq 0) $idx
 
 # One serve session per request list: stdin from a file, one JSON reply per line.
-function Invoke-Serve([string[]]$Requests, [string]$Tag) {
+function Invoke-Serve([string[]]$Requests, [string]$Tag, [string]$Db = $db) {
   $in  = Join-Path $WorkDir "$Tag.in.jsonl"
   $out = Join-Path $WorkDir "$Tag.out.jsonl"
   $err = Join-Path $WorkDir "$Tag.err.txt"
   $all = @('{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}') + $Requests
   [IO.File]::WriteAllText($in, (($all -join "`n") + "`n"), [Text.Encoding]::ASCII)
-  $p = Start-Process $exePath -ArgumentList 'serve', '--db', "`"$db`"" -WorkingDirectory $WorkDir `
+  $p = Start-Process $exePath -ArgumentList 'serve', '--db', "`"$Db`"" -WorkingDirectory $WorkDir `
          -RedirectStandardInput $in -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru
   if (-not $p.WaitForExit(60000)) { $p.Kill(); }
   $replies = @{}
@@ -195,6 +198,32 @@ if ($python) {
 } else {
   Write-Host 'SKIP: python not on PATH -- M4 not run' -ForegroundColor Yellow
 }
+
+# --- M7: rename_symbol still WRITES SOURCES while the store is read-only ------------
+# serve opens every store read-only now (M4); rename_symbol with dry_run=false is the
+# one tool that changes files. It must still apply its edits, and must not touch the
+# index. Own copy of the fixture + own DB, so M5's mtime trick cannot make the
+# rename refuse as stale. Positive control: the dry run leaves the files unchanged.
+$src7 = Join-Path $WorkDir 'src7'
+Copy-Item $src $src7 -Recurse
+$db7 = Join-Path $WorkDir 'p7.sqlite'
+$env:DRAGLINT_RULE_CACHE = '0'
+$idx7 = & $exePath index --project (Join-Path $src7 'P.dpr') --db $db7 2>&1 | Out-String
+$env:DRAGLINT_RULE_CACHE = $null
+Check 'M7 SANITY: rename fixture indexed' ($LASTEXITCODE -eq 0) $idx7
+$lib7 = Join-Path $src7 'uLib.pas'; $use7 = Join-Path $src7 'uUse.pas'
+$dbHash = (Get-FileHash $db7 -Algorithm SHA256).Hash
+$r7d = Invoke-Serve @((Call 1 'rename_symbol' @{ qname = 'uLib.Helper'; to = 'HelperRenamed'; dry_run = $true })) 'm7d' $db7
+$j7d = try { (Text $r7d['1']) | ConvertFrom-Json } catch { $null }
+Check 'M7 control: the dry run lists edits and applies none' ($j7d -and $j7d.applied -eq $false -and @($j7d.edits).Count -ge 2) (Text $r7d['1'])
+Check 'M7 control: ... and the sources are untouched' (-not (Select-String -Path $lib7, $use7 -Pattern 'HelperRenamed' -Quiet)) ''
+$r7 = Invoke-Serve @((Call 1 'rename_symbol' @{ qname = 'uLib.Helper'; to = 'HelperRenamed'; dry_run = $false })) 'm7' $db7
+$t7 = Text $r7['1']
+$j7 = try { $t7 | ConvertFrom-Json } catch { $null }
+Check 'M7 rename_symbol dry_run=false answers applied, no error' ($r7['1'] -and -not $r7['1'].error -and $r7['1'].result.isError -ne $true -and $j7 -and $j7.applied -eq $true -and -not $j7.error -and $j7.files_touched -ge 2) ($r7['1'] | ConvertTo-Json -Depth 6 -Compress)
+Check 'M7 ... the declaring unit is rewritten' ((Get-Content $lib7 -Raw) -match 'procedure HelperRenamed;' -and (Get-Content $lib7 -Raw) -notmatch '\bHelper;') (Get-Content $lib7 -Raw)
+Check 'M7 ... and so is the calling unit' ((Get-Content $use7 -Raw) -match 'then HelperRenamed;') (Get-Content $use7 -Raw)
+Check 'M7 ... and the index DB is byte-identical (read-only store)' ((Get-FileHash $db7 -Algorithm SHA256).Hash -eq $dbHash) ''
 
 # --- M5: a changed file -> the freshness note, as a second item ---------------------
 (Get-Item (Join-Path $src 'uUse.pas')).LastWriteTime = (Get-Date).AddMinutes(5)

@@ -680,7 +680,7 @@ end;
 function CollapseRefsAtSameSite(const ARefs: TArray<TReference>): TArray<TReference>;
   function KindRank(const AKind: string): Integer;
   begin
-    if SameText(AKind, 'call'         ) then Exit(3);
+    if SameText(AKind, 'call'         ) then Exit(3); // dl:ok magic-literal@ab99 -- a rank, ordered by these three lines
     if SameText(AKind, 'member-access') then Exit(2);
     if SameText(AKind, 'read'         ) then Exit(1);
     Result:= 0;

@@ -418,6 +418,11 @@ uses
   , DRagLint.Index.Freshness { Gitea #34: the freshness note of the store a tool reads }
   ;
 
+const
+  { JSON-RPC 2.0 implementation-defined server error: the tool could not answer
+    (no store, store refused). }
+  JSONRPC_SERVER_ERROR = -32000;
+
 constructor TMCPServer.Create(const ADbPaths: TArray<string>);
 var
   I: Integer;
@@ -819,7 +824,7 @@ begin
         var Syms: TArray<TSymbol>:= FStore.FindSymbolsByQualifiedName(Row.TargetQName);
         IsLocal:= Length(Syms) > 0;
         for var Sym in Syms do
-          if not (Sym.Kind in [skLocalVar, skParam]) then IsLocal:= False;
+          if Sym.Kind not in [skLocalVar, skParam] then IsLocal:= False;
         LocalTarget.Add(Row.TargetQName, IsLocal);
       end;
       if not IsLocal then Routines:= Routines + [Row];
@@ -877,12 +882,10 @@ begin
     to. The name match, with the filters `query find-callers` applies, SAID to
     be a name match: it can still hold homonyms. }
   var Refs: TArray<TReference>;
-  if AContext > 0 then Refs:= FStore.FindCallersByNameWithContext(LastSeg, AContext)
-  else Refs:= FStore.FindCallersByName(LastSeg);
+  Refs:= if AContext > 0 then FStore.FindCallersByNameWithContext(LastSeg, AContext) else FStore.FindCallersByName(LastSeg);
   Refs:= CollapseRefsAtSameSite(DropRefsThatCannotBeCallers(FStore, Refs));
   Result:= 'No caller resolved through the call graph; references by NAME (may include homonyms):' + sLineBreak;
-  if AContext > 0 then Result:= Result + FormatReferencesWithContext(Refs)
-  else Result:= Result + FormatReferences(Refs);
+  Result:= Result + (if AContext > 0 then FormatReferencesWithContext(Refs) else FormatReferences(Refs));
 end;
 
 function TMCPServer.NoStoreMessage: string;
@@ -1069,7 +1072,6 @@ var
   Name      : string              ;
   QName     : string              ;
   Symbols   : TArray<TSymbol>     ;
-  Refs      : TArray<TReference>  ;
   Findings  : TArray<TLintFinding>;
   LintPath  : string              ;
 begin
@@ -1088,7 +1090,7 @@ begin
       if Length(FDbPaths) > 0 then FCallNote:= NoteFor(FDbPaths[0], FStore);
       if FStore = nil then
       begin
-        SendError(AId, -32000, NoStoreMessage);
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
         Exit;
       end;
       Name := '';
@@ -1112,7 +1114,7 @@ begin
     begin
       if FStore = nil then
       begin
-        SendError(AId, -32000, NoStoreMessage);
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
         Exit;
       end;
       if Args.GetValue('name') = nil then
@@ -1148,7 +1150,7 @@ begin
       var CallStore:= ResolveStore(Args);
       if CallStore = nil then
       begin
-        SendError(AId, -32000, NoStoreMessage);
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
         Exit;
       end;
       var QNameVal:= '';
@@ -1172,7 +1174,7 @@ begin
       var CallStore2:= ResolveStore(Args);
       if CallStore2 = nil then
       begin
-        SendError(AId, -32000, NoStoreMessage);
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
         Exit;
       end;
       var TagVal:= '';
@@ -1190,7 +1192,7 @@ begin
       var CallStore3:= ResolveStore(Args);
       if CallStore3 = nil then
       begin
-        SendError(AId, -32000, NoStoreMessage);
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
         Exit;
       end;
       var KindVal:= '';
@@ -1205,7 +1207,7 @@ begin
       var ImpStore:= ResolveStore(Args);
       if ImpStore = nil then
       begin
-        SendError(AId, -32000, NoStoreMessage);
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
         Exit;
       end;
       var ImpQName:= '';
@@ -1228,7 +1230,7 @@ begin
       var WStore:= ResolveStore(Args);
       if WStore = nil then
       begin
-        SendError(AId, -32000, NoStoreMessage);
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
         Exit;
       end;
       var WQName:= '';
@@ -1250,7 +1252,7 @@ begin
       var SurfStore:= ResolveStore(Args);
       if SurfStore = nil then
       begin
-        SendError(AId, -32000, NoStoreMessage);
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
         Exit;
       end;
       var SurfQName:= '';
@@ -1272,7 +1274,7 @@ begin
       var SliceStore:= ResolveStore(Args);
       if SliceStore = nil then
       begin
-        SendError(AId, -32000, NoStoreMessage);
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
         Exit;
       end;
       var SliceQName:= '';
@@ -1290,7 +1292,7 @@ begin
       var BundleStore:= ResolveStore(Args);
       if BundleStore = nil then
       begin
-        SendError(AId, -32000, NoStoreMessage);
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
         Exit;
       end;
 
@@ -1344,7 +1346,7 @@ begin
       var TAPosStore:= ResolveStore(Args);
       if TAPosStore = nil then
       begin
-        SendError(AId, -32000, NoStoreMessage);
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
         Exit;
       end;
       var TAPosFile:= '';
@@ -1371,7 +1373,7 @@ begin
       var RenStore:= ResolveStore(Args);
       if RenStore = nil then
       begin
-        SendError(AId, -32000, NoStoreMessage);
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
         Exit;
       end;
       var RenQName := '';
