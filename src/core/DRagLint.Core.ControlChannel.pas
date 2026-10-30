@@ -90,7 +90,7 @@ const
 /// <summary>THE ONE GATE: does an engine running <paramref name="ACommand"/>
 /// open a control channel?</summary>
 /// <param name="ACommand">The CLI verb the engine was started with.</param>
-/// <returns>True for <c>lsp</c>, <c>cycles</c>, <c>index</c> and <c>lint-all</c>.</returns>
+/// <returns>True for <c>lsp</c>, <c>cycles</c>, <c>index</c>, <c>lint-all</c> and <c>warm-rule-cache</c>.</returns>
 /// <remarks>
 /// PROVISIONAL ANSWER to the plan's open owner question (Q1, session
 /// 93): honoured by every running engine, or only by one in <c>lsp</c> mode?
@@ -110,6 +110,7 @@ const
 /// means: kill the build it waits on, roll every written file back and exit 1
 /// with "cancelled -- rolled back" (not 0: the run did not finish).</para>
 /// <para>WIDENED 2026-10-28 (DEC-13 reopened, owner): <c>index</c> (single root, `--project`, `--all`) and `lint-all` listen too, started by the Do* verb through BatchChannelOpen. A stand-down is taken BETWEEN FILES (index: the storage layer's file-transaction gate, so no file row is ever half written) or between files of the lint scan (lint-all stops and prints the findings so far). Exit code CONTROL_EXIT_STOOD_DOWN.</para>
+/// <para>WIDENED 2026-10-30 (1.39.1, known issue of 1.39.0): <c>warm-rule-cache</c> listens, started by DRagLint.CLI.DoWarmRuleCache. A warm only reads and its result is disposable, so a stand-down is taken AT ONCE by a watcher thread (no safe point to wait for) and the process exits CONTROL_EXIT_STOOD_DOWN; shutdown and an index of the same database stop it, and the engine image is free again.</para>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
 /// <para>Calls: SameText</para>
@@ -548,7 +549,7 @@ begin
   { PROVISIONAL -- see the interface remarks. `lsp`, `cycles` (its --fix run), and (DEC-13, 2026-10-28)
     the long one-shot runs `index` and `lint-all`. }
   Result:= SameText(ACommand, 'lsp') or SameText(ACommand, 'cycles') or SameText(ACommand, 'index')
-    or SameText(ACommand, 'lint-all');
+    or SameText(ACommand, 'lint-all') or SameText(ACommand, 'warm-rule-cache');
 end;
 
 { ---- batch channel (DEC-13) ---------------------------------------------- }

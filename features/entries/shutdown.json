@@ -33,7 +33,7 @@
         }
       ],
       "helpOrder": 45,
-      "help": ["  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)", "                               transport: a Windows NAMED PIPE, never a TCP port -- \\\\.\\pipe\\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an", "                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in", "                               `lsp`, `cycles --fix`, `index` (incl. --all) and `lint-all` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings. --all (the default) asks every", "                               reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.", "                               --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps", "                               running (exit 1). --force TerminateProcess'es ONLY an engine that refused or did not answer, and says", "                               ESCALATING when it does. Every honoured or refused request is audited on the engine's stderr and in", "                               %LOCALAPPDATA%\\drag-lint\\control-channel-audit.log (who asked: pid + exe, when)."]
+      "help": ["  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)", "                               transport: a Windows NAMED PIPE, never a TCP port -- \\\\.\\pipe\\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an", "                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in", "                               `lsp`, `cycles --fix`, `index` (incl. --all), `lint-all` and `warm-rule-cache` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings; a warm stops at once (exit 4). --all (the default) asks every", "                               reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.", "                               --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps", "                               running (exit 1). --force TerminateProcess'es ONLY an engine that refused or did not answer, and says", "                               ESCALATING when it does. Every honoured or refused request is audited on the engine's stderr and in", "                               %LOCALAPPDATA%\\drag-lint\\control-channel-audit.log (who asked: pid + exe, when)."]
     }
   ],
   "audience": "both",
@@ -54,9 +54,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-28",
+    "date": "2026-10-30",
     "by": "ENGINE",
-    "build": "1.36.0-alpha",
-    "surfaceHash": "8ba4649409adec2cb508df4209125d229d8eaf8183d7f6e3491e34000166125f"
+    "build": "1.39.0-alpha",
+    "surfaceHash": "1ec133398b13dd5b6640e87d8b3604d65295b5cbb4698cfb41f2b46682d8a72d"
   }
 }

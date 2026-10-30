@@ -752,8 +752,8 @@
     "version": "1.38.0-alpha"
   },
   "features/warm-rule-cache.md": {
-    "hash": "73024da6f4920ad64d621a1904162248616fba5f9bc69ecd4820a2936f4bb77c",
-    "version": "1.38.0-alpha"
+    "hash": "c0504d21a0cd8b4c6b8a2283fa8012a8a3593e1c036dd006c87843aab9bc781f",
+    "version": "1.39.0-alpha"
   },
   "features/wiki-blocks-authoring.md": {
     "hash": "e5bf2e31c8b93a2689a7681ba9c8dc1f4328edbd5150ccb3fec5127f8c146a72",

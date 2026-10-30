@@ -118,6 +118,10 @@ try {
     Start-Sleep -Milliseconds 500
     $hit = Get-Ticks | Select-Object -Skip 1 | Where-Object { $_ -match 'uU5\.pas ->' -and $_ -match '(?m)^Done\. Files:' } | Select-Object -First 1
   }
+  # W4/W5 need idle ticks. Since 1.39.1 a line reaches the log as it is written (it used to wait for
+  # 128 bytes), so the edit lands right after tick 1 and the hit can come with ONE idle tick before it:
+  # let two more ticks run after the hit instead of relying on that lag.
+  if ($hit) { $null = Wait-Done ((Count-Done) + 2) 30 }
 }
 finally {
   # Stop the watching engine (cmd's child) by PID, then cmd itself.

@@ -4110,6 +4110,13 @@ function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: st
 var GIndexLocks: TDictionary<string, THandle> = nil;
 
 const
+  { <db>.rule-cache-warm.pid: the pid of the background warm of that database. }
+  RULE_CACHE_WARM_MARKER_SUFFIX = '.rule-cache-warm.pid';
+
+{ Defined beside DoWarmRuleCache; AcquireIndexLock stops a stale warm of the database it takes. }
+procedure StopStaleWarm(const AMarker: string); forward;
+
+const
   { A delete-pending lock file is retried this often, this far apart (~2 s). }
   INDEX_LOCK_PENDING_TRIES    = 20;
   INDEX_LOCK_PENDING_SLEEP_MS = 100;
@@ -4128,7 +4135,7 @@ const
   behind -- the failure mode a PID file would have. Readers (query, lint ...)
   never take it; only the writers that index do. The same process asking again
   for a database it already holds is told yes. }
-function AcquireIndexLock(const ADbPath: string): Boolean;
+function AcquireIndexLock(const ADbPath: string; AQuiet: Boolean = False): Boolean;
 begin
   if GIndexLocks = nil then GIndexLocks:= TDictionary<string, THandle>.Create;
   var Key: string:= LowerCase(TPath.GetFullPath(ADbPath));
@@ -4150,6 +4157,7 @@ begin
   end;
   if H = INVALID_HANDLE_VALUE then
   begin
+    if AQuiet then Exit(False); { the caller words the refusal (index --watch skips a tick) }
     if Err = ERROR_SHARING_VIOLATION then
       Writeln(ErrOutput, Format('ERROR: index: another index run is writing %s (its lock %s is held). ' +
         'Wait for it to finish -- two runs on one database end with "database is locked" after parsing everything.',
@@ -4163,6 +4171,9 @@ begin
     Exit(False);
   end;
   GIndexLocks.Add(Key, H); { held until exit or ReleaseIndexLock; the OS closes and deletes it }
+  { 1.39.1: a background warm of this database computes on what this run is about
+    to rewrite, and would only find its key moved at the end -- stop it now. }
+  StopStaleWarm(ADbPath + RULE_CACHE_WARM_MARKER_SUFFIX);
   Result:= True;
 end;
 
@@ -4179,6 +4190,22 @@ begin
   if not GIndexLocks.TryGetValue(Key, H) then Exit;
   CloseHandle(H);
   GIndexLocks.Remove(Key);
+end;
+
+{ The idle wait of `index --watch` between ticks: AIntervalSec seconds, cut short by a
+  maintenance stand-down. Returns True when one was taken (the watch must stop). }
+function WatchIdle(AIntervalSec: Integer): Boolean;
+const
+  WATCH_POLL_MS = 100;
+  MS_PER_SEC    = 1000;
+begin
+  var Slept: Integer:= 0;
+  while (Slept < AIntervalSec * MS_PER_SEC) and not BatchStandDownTaken do
+  begin
+    Sleep(WATCH_POLL_MS);  // dl:ok sleep-in-vcl@da43 -- REVIEWED 2026-10-30: console CLI, no VCL message loop; the --watch idle wait
+    Inc(Slept, WATCH_POLL_MS);
+  end;
+  Result:= BatchStandDownTaken;
 end;
 
 { The refusal text for `index <folder>` aimed at a PROJECT database, shared by
@@ -6871,6 +6898,15 @@ begin
 
   while True do
   begin
+    { 1.39.1: --watch holds the one-writer lock only DURING a tick (it held it for its whole
+      lifetime, so every other `index` of the database exited 2 until the watch ended).
+      A tick whose lock another run holds is skipped, not failed: the next one catches up. }
+    if AArgs.Watch and (not AArgs.DryRun) and not AcquireIndexLock(ResolvedDb, {AQuiet=}True) then
+    begin
+      Writeln(Format('[%s] tick skipped: another index run is writing %s; next try in %ds', [FormatDateTime('hh:nn:ss', Now), ResolvedDb, Interval]));
+      if WatchIdle(Interval) then Break;
+      Continue;
+    end;
     StartTime:= Now;
     { Indexer.ParsedFiles is CUMULATIVE over the indexer's life, and --watch keeps
       one indexer: measured against 0, every idle tick after the first "parsed"
@@ -7256,15 +7292,8 @@ begin
     else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d%s, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, FailedNote, Elapsed]));
     AnyFileFailed:= AnyFileFailed or (TickFailed > 0);
     if not AArgs.Watch then Break;
-    const WATCH_POLL_MS = 100;
-    const MS_PER_SEC = 1000;
-    var Slept: Integer:= 0;
-    while (Slept < Interval * MS_PER_SEC) and not BatchStandDownTaken do
-    begin
-      Sleep(WATCH_POLL_MS);
-      Inc(Slept, WATCH_POLL_MS);
-    end;
-    if BatchStandDownTaken then Break; { idle between ticks: nothing open, stop cleanly }
+    ReleaseIndexLock(ResolvedDb); { 1.39.1: between ticks another index may write }
+    if WatchIdle(Interval) then Break; { idle between ticks: nothing open, stop cleanly }
   end; // while
 
   { WARM THE `lint <file>` RULE CACHE for a project index, AFTER releasing the
@@ -14889,11 +14918,17 @@ end;
   but the newest throws its result away (the index moved under it). The newest
   therefore stops the previous one, named by AMarker (<db>.rule-cache-warm.pid).
   Only a process running THIS engine's image is stopped: a pid the OS has since
-  given to another program is left alone. }
+  given to another program is left alone.
+  1.39.1: an `index` of the database calls this too (AcquireIndexLock), and a warm
+  of ANOTHER engine image is asked first over its control channel -- but only
+  when that engine's status names this database and nothing else, the shape of a
+  warm; an LSP engine that inherited the pid holds a library beside it. }
 procedure StopStaleWarm(const AMarker: string);
 const
   IMAGE_NAME_CHARS = MAX_PATH * 4; // QueryFullProcessImageName takes long (\\?\) paths
   STOP_WAIT_MS     = 5000;         // how long the stopped warm gets to release the index
+  ASK_CONNECT_MS   = 1000;         // WaitNamedPipe for the warm's control pipe
+  STATUS_DB_FIELD  = 4;            // status<TAB>pid<TAB>version<TAB>extractor<TAB>db
 var
   Pid : Cardinal          ;
   H   : THandle           ;
@@ -14907,6 +14942,26 @@ begin
     on E: EInOutError do Pid:= 0; { another warm is rewriting it: nothing to stop }
   end;
   if (Pid = 0) or (Pid = GetCurrentProcessId) then Exit;
+  var Db: string:= ExpandFileName(Copy(AMarker, 1, Length(AMarker) - Length(RULE_CACHE_WARM_MARKER_SUFFIX)));
+  var Pipe: string:= ControlPipeNameFor(Pid);
+  var Reply, Err: string;
+  if ControlRequest(Pipe, CONTROL_MSG_STATUS, ASK_CONNECT_MS, Reply, Err) then
+  begin
+    var Fields: TArray<string>:= Reply.Split([#9]);
+    if (Length(Fields) = STATUS_DB_FIELD + 1) and SameText(ExpandFileName(Fields[STATUS_DB_FIELD]), Db)
+      and ControlRequest(Pipe, CONTROL_MSG_SHUTDOWN + #9 + IntToStr(STOP_WAIT_MS), ASK_CONNECT_MS, Reply, Err)
+      and StartsText(CONTROL_REPLY_EXITING, Reply) then
+    begin
+      H:= OpenProcess(SYNCHRONIZE, False, Pid);
+      if H <> 0 then
+      try
+        WaitForSingleObject(H, STOP_WAIT_MS);
+      finally
+        CloseHandle(H);
+      end;
+      Exit;
+    end;
+  end;
   H:= OpenProcess(PROCESS_TERMINATE or SYNCHRONIZE or PROCESS_QUERY_LIMITED_INFORMATION_ACCESS, False, Pid);
   if H = 0 then Exit; { already gone }
   try
@@ -14934,7 +14989,7 @@ begin
     Writeln(ErrOutput, 'ERROR: warm-rule-cache needs --db <project index> that exists.');
     Exit(2);
   end;
-  var Marker: string:= AArgs.DbPath + '.rule-cache-warm.pid';
+  var Marker: string:= AArgs.DbPath + RULE_CACHE_WARM_MARKER_SUFFIX;
   var Mine  : string:= IntToStr(GetCurrentProcessId);
   if AArgs.WarmDetached then
   begin
@@ -14945,9 +15000,70 @@ begin
       on E: Exception do Marker:= ''; { an unwritable folder costs only the de-duplication }
     end;
   end;
+  { 1.39.1: listen for `shutdown` (and an index of this database, StopStaleWarm).
+    The warm has no safe point to wait for -- it only reads, and its result is
+    disposable -- so the watcher takes a request at once and ends the process. }
+  var Ctl    : TControlChannel:= nil;
+  var Watcher: TThread        := nil;
+  var Quit   : TEvent         := TEvent.Create(nil, {ManualReset=}True, False, '');
   try
+    if ControlChannelEnabledFor('warm-rule-cache') then
+    begin
+      Ctl:= TControlChannel.Create([ExpandFileName(AArgs.DbPath)], DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+      var CtlErr: string;
+      if not Ctl.Start(CtlErr) then
+      begin
+        Writeln('rule-cache: control channel NOT started (' + CtlErr + '); shutdown cannot reach this warm');
+        FreeAndNil(Ctl);
+      end;
+    end;
+    if Ctl <> nil then
+    begin
+      var WCtl: TControlChannel:= Ctl;
+      var WMarker: string:= Marker;
+      Watcher:= TThread.CreateAnonymousThread(
+        procedure
+        const
+          TAKE_RETRY_MS = 25; { a request withdrawn in the same instant: look again }
+        begin
+          var Handles: array[0..1] of THandle;
+          Handles[0]:= WCtl.RequestEvent;
+          Handles[1]:= Quit.Handle;
+          while WaitForMultipleObjects(Length(Handles), @Handles[0], False, INFINITE) = WAIT_OBJECT_0 do
+          begin
+            if not WCtl.StandDownRequested then
+            begin
+              Sleep(TAKE_RETRY_MS);  // dl:ok sleep-in-vcl@7ddd -- REVIEWED 2026-10-30: worker thread of a console warm, no message loop
+              Continue;
+            end;
+            WCtl.StandDownComplete; { nothing to close: the read-only store dies with the process }
+            WCtl.Free;              { waits for the listener to write `exiting` }
+            if WMarker <> '' then
+            try
+              if Trim(TFile.ReadAllText(WMarker)) = Mine then TFile.Delete(WMarker);
+            except
+              on E: Exception do Writeln('rule-cache: warm marker left alone: ' + E.Message); { gone, or a newer warm owns it }
+            end;
+            ExitProcess(CONTROL_EXIT_STOOD_DOWN);  // dl:ok halt-in-library@795e -- REVIEWED 2026-10-30: the warm-rule-cache verb's own watcher thread; Halt would run finalization beside the busy main thread
+          end;
+        end);
+      Watcher.FreeOnTerminate:= False;
+      Watcher.Start;
+    end;
+    { Test seam (run_warm_and_watch_release): keep the warm alive long enough to
+      be asked. Inert unless the variable names a positive number of ms. }
+    var HoldMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_WARM_HOLD_MS'), 0);
+    if HoldMs > 0 then Sleep(HoldMs);  // dl:ok sleep-in-vcl@58cc -- REVIEWED 2026-10-30: console CLI test hook, off unless the env var is set
     WarmRuleCache(AArgs.DbPath, RuleCacheLibraryDb(AArgs));
   finally
+    Quit.SetEvent;
+    if Watcher <> nil then
+    begin
+      Watcher.WaitFor;
+      Watcher.Free;
+    end;
+    Ctl.Free;
+    Quit.Free;
     if AArgs.WarmDetached and (Marker <> '') then
     try
       { No TFile.Exists gate: a missing marker raises in ReadAllText and lands

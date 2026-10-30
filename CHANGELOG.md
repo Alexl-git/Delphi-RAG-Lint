@@ -3,6 +3,20 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.39.1-alpha -- unreleased
+
+Fix cycle for the 1.39.0 known issues and the battery fails. No version constant moves (no extractor or resolver change).
+
+### Fixed
+- A background rule-cache warm (`warm-rule-cache --detached`, what `index --rule-cache-warm background` starts) now opens the maintenance control channel: `shutdown` (with or without `--db`) lists and stops it at once (exit 4), so it no longer keeps the engine image locked until it ends. An `index` of the same database stops a stale warm when it takes the writer lock: asked over its channel when that engine's status names only this database, else stopped when it runs the same engine file (the 1.39.0 rule). Guard `tests\autotest\run_warm_and_watch_release.ps1` (W0-W5).
+- `index --watch` holds `<db>.indexing.lock` only DURING a tick; between ticks a second `index` of that database (IDE save-reindex, agent reindex) runs instead of exiting 2. A tick whose lock another run holds is skipped with one line (`tick skipped: another index run is writing ...`) and the next tick catches up. Guard `run_warm_and_watch_release.ps1` (W6-W8).
+- `index --all --jobs N`: the section children share the parent's stdout, and the RTL's 128-byte text buffer sent a long line out in pieces, so children tore each other's lines (a stage line spliced into a section summary; battery `run_index_file_failure_exit` A2, intermittent). Standard output and error now use a 16 KB buffer, so a line reaches the handle in one write.
+- Test battery (1.39.0 fails, none of them an engine regression): `run_dataflow_facts` restamps the CURRENT extractor version instead of a pinned `1.26.0-alpha`; `run_project_context_guard` measures this tree's build, not the main tree's deployed exe (the cause of the `run_exe_freshness` fail); `run_explicit_db_strict` T8 runs a private engine copy without the engine-dir `drag-lint.json`, whose built sections made the list "not all stale" (control V8 added); `run_index_inc_value_defines` asserts the PR #8 behaviour (ProjectVersion 19.5 preprocesses at CompilerVersion 35) with a `--target-compiler 37` positive control; `run_flag_verb_map` pins `--target-compiler` as a pre-dispatch flag; `run_resolver_version_guard` classifies `FindPropertyFillCandidates` (prop-types stage, own `PROP_TYPES_FORMAT` stamp) as not resolve surface; the featuregen frozen help reference re-freezes the twelve help lines 1.39 changed on purpose (`index` x3, `shutdown`, `usages`, `outline` x2, `query unit-usage`, `hover`, `find-callees`, `callgraph`, `--fail-on`); `run_watch_scope_reset` lets two ticks run after its edit is picked up (it relied on the old 128-byte output lag for its idle ticks). `run_docs_sync_guard` was already green on main (564ed9b0).
+
+### Known issues
+- `--version` still shows `1.39.0-alpha` (the `+x1.27` build-metadata form waits for the owner's consumer audit).
+- Withdrawn from 1.39.0: "`serve` (MCP): an exception inside a tools call may send a second reply". Not reproduced: every reply in `DispatchToolsCall` ends its path, a failed write is swallowed, and ten malformed or failing calls each got exactly one reply.
+
 ## v1.39.0-alpha -- 2026-10-30
 
 Extractor 1.27.0-alpha: every index re-parses once.

@@ -296,10 +296,19 @@ begin
   end;
 end;
 
+const
+  { One std-stream buffer: a Writeln up to this many bytes reaches the handle in ONE
+    write. With the RTL's 128-byte TTextRec buffer a longer line went out in pieces,
+    and `index --all --jobs N` children -- which share the parent's stdout -- tore each
+    other's lines mid-line (1.39.0 battery: run_index_file_failure_exit A2 found a stage
+    line spliced into a section summary). Paired with the per-statement flush in InstallOn. }
+  STD_TEXT_BUF_BYTES = 16384;
+
 var
   { The RTL's own write routine for a std stream, captured on first install;
     the utf8 mode restores it. }
   TextOutOriginal: Pointer = nil;
+  GStdBuf: array[0..1, 0..STD_TEXT_BUF_BYTES - 1] of Byte;
 
 procedure InstallOn(var pText: Text);
 begin
@@ -308,9 +317,15 @@ begin
   { Only a std stream: a Text redirected to a file (AssignFile(Output, 'NUL'))
     keeps its own routine. }
   if TTextRec(pText).Name[0] <> #0 then Exit;
+  { Flushed just above, so the buffer is empty and may be swapped. }
+  SetTextBuf(pText, GStdBuf[if @pText = @ErrOutput then 1 else 0], STD_TEXT_BUF_BYTES);
   SetTextCodePage(pText, CP_UTF8);
   if GEncoding = oeUtf8 then TTextRec(pText).InOutFunc:= TextOutOriginal
   else TTextRec(pText).InOutFunc:= @ReencodingTextOut;
+  { Flush at the end of every Write / Writeln statement, as the RTL does only for a
+    CONSOLE (FlushFunc is a no-op for a pipe or file): with the larger buffer above a
+    line would otherwise sit unwritten until 16 KB had gathered. }
+  TTextRec(pText).FlushFunc:= TTextRec(pText).InOutFunc;
 end;
 
 procedure InstallOutputEncoding(pEncoding: TOutputEncoding);

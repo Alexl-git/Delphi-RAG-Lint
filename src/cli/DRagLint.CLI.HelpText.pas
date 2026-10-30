@@ -278,7 +278,7 @@ begin
   Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)');
   Writeln('                               transport: a Windows NAMED PIPE, never a TCP port -- \\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an');
   Writeln('                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in');
-  Writeln('                               `lsp`, `cycles --fix`, `index` (incl. --all) and `lint-all` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings. --all (the default) asks every');
+  Writeln('                               `lsp`, `cycles --fix`, `index` (incl. --all), `lint-all` and `warm-rule-cache` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings; a warm stops at once (exit 4). --all (the default) asks every');
   Writeln('                               reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.');
   Writeln('                               --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps');
   Writeln('                               running (exit 1). --force TerminateProcess''es ONLY an engine that refused or did not answer, and says');
@@ -928,7 +928,7 @@ begin
     Writeln('  drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)');
     Writeln('                               transport: a Windows NAMED PIPE, never a TCP port -- \\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an');
     Writeln('                               explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in');
-    Writeln('                               `lsp`, `cycles --fix`, `index` (incl. --all) and `lint-all` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings. --all (the default) asks every');
+    Writeln('                               `lsp`, `cycles --fix`, `index` (incl. --all), `lint-all` and `warm-rule-cache` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings; a warm stops at once (exit 4). --all (the default) asks every');
     Writeln('                               reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.');
     Writeln('                               --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps');
     Writeln('                               running (exit 1). --force TerminateProcess''es ONLY an engine that refused or did not answer, and says');
