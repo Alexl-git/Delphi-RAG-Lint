@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "index",
-      "usage": "drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--watch [--interval N]]",
+      "usage": "drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--watch [--interval N]] [--target-compiler <ver|auto>]",
       "flags": [
         {
           "name": "--project",
@@ -65,9 +65,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-28",
+    "date": "2026-10-30",
     "by": "ENGINE",
-    "build": "1.36.0-alpha",
-    "surfaceHash": "b434462e550bbffd411947f4e9d6cfe33cb1333cc5b224f96362a4ca1595d957"
+    "build": "1.38.0-alpha",
+    "surfaceHash": "9883677e685a4253f20c617addc3985571fd1e495c06effda5bc7d989b51c9cb"
   }
 }

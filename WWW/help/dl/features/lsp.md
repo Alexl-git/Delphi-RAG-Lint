@@ -252,7 +252,7 @@ First hit wins, per field:
 5. `%LOCALAPPDATA%\drag-lint\context-defaults.json` (read only; `DRAGLINT_CONTEXT_DEFAULTS` overrides the path);
 6. the placeholder `Win64`.
 
-The library DB for the platform: an explicit `--db library-<Platform>.sqlite`, else the context file's `libraryDb`, else `libraries.<Platform>.libraryDb` in the defaults file, else what `resolve-dbs` resolves. No library DB for the platform -> library answers are refused, never taken from another platform. Opened sets (project DB + library DB) are kept in an LRU of 3.
+The library DB for the platform: an explicit `--db library-<Platform>.sqlite`, else the context file's `libraryDb`, else `libraries.<Platform>.libraryDb` in the defaults file, else what `resolve-dbs` resolves. An explicit `--db` list that names no `library-<Platform>.sqlite` does not shut the library out: the active platform's library still comes from the context defaults (that platform only; the notice says `library from context defaults`). No library DB for the platform -> library answers are refused, never taken from another platform. Opened sets (project DB + library DB) are kept in an LRU of 3.
 
 What you see:
 

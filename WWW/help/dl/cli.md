@@ -914,6 +914,7 @@ Described in:
 * [Index a project against its active build config](features/index-build-config.md)
 * [Rebuild Index for This Project](features/rebuild-index-for-this-project.md)
 * [Rescan this unit](features/rescan-this-unit.md)
+* [Target compiler (--target-compiler)](features/target-compiler.md)
 
 ### info
 

@@ -17,7 +17,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [init: one command from a project to a wired AI client](features/init-wiring.md) -- Registers a project in the manifest, indexes it, finds its index and wires Claude Code, VS Code and Cursor to serve it, in one command.
 * [project-context](features/project-context.md) -- Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness.
 * [query --text --near](features/query-text-near.md) -- Keeps only text hits in routines within N call-graph hops of a symbol.
-* [Target compiler (--target-compiler)](features/target-compiler.md) -- Names the oldest compiler the code must compile on; modernize findings whose advice needs a newer compiler are not reported.
+* [Target compiler (--target-compiler)](features/target-compiler.md) -- Names the Delphi the code is for: lint drops advice needing a newer compiler; index parses `VER<N>0` / `CompilerVersion` branches for it.
 * [Type-level dl:ok review](features/type-level-review-marker.md) -- One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit.
 * [Missing unit in uses (unit-missing-from-uses)](features/unit-missing-from-uses.md) -- Lint rule: names the unit that declares an undeclared identifier and adds it to the interface or implementation uses clause, cycle-checked.
 * [VS Code extension: Problems stay current](features/vscode-extension.md) -- VS Code extension commands, and Problems that follow files an agent edits on disk.

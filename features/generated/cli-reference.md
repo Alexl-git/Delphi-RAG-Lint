@@ -907,6 +907,7 @@ Described in:
 * [Index a project against its active build config](../../docs/wiki/index-build-config.md)
 * [Rebuild Index for This Project](../../docs/wiki/Rebuild-Index-for-This-Project.md)
 * [Rescan this unit](../../docs/wiki/Rescan-this-unit.md)
+* [Target compiler (--target-compiler)](../../docs/wiki/target-compiler.md)
 
 ### info
 

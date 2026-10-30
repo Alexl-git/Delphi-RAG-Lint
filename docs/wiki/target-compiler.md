@@ -21,6 +21,14 @@ Accepted tokens: product versions `13`, `12`, `12.2`, `11`, `10.4`, `10.3`, `10.
 
 Order of precedence: command line, then the config (after `--profile`), then the project context file's `targetCompiler`, then 37.
 
+## When indexing (1.39)
+```
+drag-lint index --project <x.dproj> --db <db>                       (VER<N>0 from the .dproj ProjectVersion)
+drag-lint index --project <x.dproj> --db <db> --target-compiler 10.3 (VER330, whatever the .dproj says)
+drag-lint index --all [--jobs N]                                    (each section from ITS OWN .dproj)
+```
+The indexer's preprocessor defines `VER<N>0`, `CompilerVersion` and `RTLVersion` for the Delphi the code is parsed for, so `{$IFDEF VER330}` / `{$IF CompilerVersion >= 35}` branches parse as that compiler would take them. Precedence: `--target-compiler`, then the `<ProjectVersion>` of the `--project` `.dproj`, then the installed RAD Studio. `index --all` applies this per section (a `.dpr` root uses its sibling `.dproj`; a section without one gets the installed Delphi, never the previous section's), in `--jobs N` children too. A non-37 target adds a `cv=<N>` limb to the indexer fingerprint, so changing it re-parses that index. From outside PRs #8 and #11 (Jonathas Paiva).
+
 ## What is gated
 | rule | what its advice needs | gated below |
 |---|---|---|

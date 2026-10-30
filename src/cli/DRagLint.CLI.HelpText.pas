@@ -457,7 +457,7 @@ begin
   Writeln('       see wiki page: Format-Whole-Project-with-YADF');
   Writeln('  drag-lint index --project <file.dproj> --db <file.sqlite> [--build-config <Release|Debug|name>]');
   Writeln('       see wiki page: index-build-config');
-  Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--watch [--interval N]]');
+  Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--watch [--interval N]] [--target-compiler <ver|auto>]');
   Writeln('       see wiki page: Rebuild-Index-for-This-Project');
   Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
   Writeln('       see wiki page: Rescan-this-unit');

@@ -181,7 +181,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | About window: Run Diagnostics (didSave) |  |
 | [Run Lint All (Full Report)](Run-Lint-All-Full-Report) | drag-lint > Code Quality > Run Lint All (Full Report)...; `lint-all` |  |
 | [Taint analysis (SQL, command, path)](taint-analysis) | `lint-all` |  |
-| [Target compiler (--target-compiler)](target-compiler) | `lint`; `lint-all`; `rules`; drag-lint > Code Quality > Run Lint All (Full Report)... |  |
+| [Target compiler (--target-compiler)](target-compiler) | `lint`; `lint-all`; `rules`; `index`; drag-lint > Code Quality > Run Lint All (Full Report)... |  |
 | [Type-level dl:ok review](Type-Level-Review-Marker) | procedure: `docs\wiki\Type-Level-Review-Marker.md` |  |
 | [type-name-prefix: expected letter from the ancestor chain](Type-Name-Prefix-Origin) | `lint`; `lint-all`; `lint` |  |
 

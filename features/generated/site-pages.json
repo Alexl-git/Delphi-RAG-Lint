@@ -388,7 +388,7 @@
     "version": "1.38.0-alpha"
   },
   "features/hover-at-cursor.md": {
-    "hash": "6c866466e41c8f75813bdfb5f46453886904193b686812d0ded062930f5bee9c",
+    "hash": "cc1e7b8b3ac9a52034b0db3dda9aa79f7d54e0e9aa356d8e7090f352c8f27c83",
     "version": "1.38.0-alpha"
   },
   "features/ide-help-line.md": {
@@ -472,7 +472,7 @@
     "version": "1.38.0-alpha"
   },
   "features/lsp.md": {
-    "hash": "0d5642d28af4845f51b3faff96f9fc8215726d9dc776da0d401cce8b7aff1bcf",
+    "hash": "df9918b087459bf28d5e907242fdd5547412e0c9d3ccc674d7ddbd8f801d2b4d",
     "version": "1.38.0-alpha"
   },
   "features/maintenance.md": {
@@ -700,7 +700,7 @@
     "version": "1.38.0-alpha"
   },
   "features/target-compiler.md": {
-    "hash": "6cb7802910c29f40fe5fd33d19a8d510a15bc42a7d7d8b9ddfa06b3f99a36a33",
+    "hash": "4fbf30eb0feed63ee3b4c8d1a7f5d6c4c8c66ccde92e05521214e069027fdde4",
     "version": "1.38.0-alpha"
   },
   "features/top-symbols-fan-in.md": {

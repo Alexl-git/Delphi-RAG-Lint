@@ -818,7 +818,7 @@
   {
     "id": "target-compiler",
     "title": "Target compiler (--target-compiler)",
-    "summary": "Names the oldest compiler the code must compile on; modernize findings whose advice needs a newer compiler are not reported",
+    "summary": "Names the Delphi the code is for: lint drops advice needing a newer compiler; index parses `VER<N>0` / `CompilerVersion` branches for it",
     "group": "linting",
     "order": 30025,
     "since": "1.38.0-alpha",

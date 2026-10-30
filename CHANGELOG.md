@@ -3,10 +3,29 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## v1.38.1-alpha -- planned
+## v1.39.0-alpha -- planned
+
+Extractor 1.27.0-alpha: every index re-parses once.
+
+### Added
+- Property types filled at index time (prop-types): a re-published property (`property Foo;` in a descendant) gets the full declared type of its CLASS ancestor at index time, never a cached miss; `hover --write-back` is retired (exit 3).
+- Preprocessing for the TARGET Delphi, from outside PR #8 (Jonathas Paiva): `VER<N>0` / `CompilerVersion` / `RTLVersion` follow `--target-compiler`, else the `--project` .dproj ProjectVersion, else the installed RAD Studio (`cv=<N>` fingerprint limb when not 37). Overloads pair with their bodies by parameter SHAPE; under `index`, symbol_facts come from the preprocessed parse.
+- `index --all` preprocesses each section for ITS OWN Delphi (.dproj ProjectVersion), also in `--jobs` children, which now carry `--target-compiler`; from outside PR #11 (Jonathas Paiva), re-implemented.
+- LSP: with an explicit `--db` list that names no `library-<Platform>.sqlite`, the active platform's library falls back to the context defaults (that platform only; notice `library from context defaults`).
 
 ### Changed
-- Index throughput, from outside PR #10 (Jonathas Paiva), re-split onto main without PR #9 (lane p10): string_literals FTS5 triggers deferred during a CLI walk -- one rebuild after a bulk load, a targeted patch after an incremental one (crash debt in schema_meta `fts_rebuild_pending`, settled by the next writer); file transactions batched as savepoints under one outer transaction (256 files or 5 s); six missing FK child indexes and `idx_files_path_lower`; a stamp fast path (`files.size` + mtime, no read; same .inc-context / include-origin guards as the full test); facts-pass memos; FindUnitFile memoised per closure walk. No extractor or resolver bump: a full `--rebuild` is row-for-row identical to main. Deferred from #10: symbol-id reuse + scoped call widening, scoped purity + canonical witness (resolver bump), closure_cache, calls-pending mark, resolver file-cache bound. Guards: run_index_stamp_fast_path, run_fts_targeted_patch.
+- Index throughput, from outside PR #10 (Jonathas Paiva), re-split onto main without PR #9 (lane p10): string_literals FTS5 triggers deferred during a CLI walk -- one rebuild after a bulk load, a targeted patch after an incremental one (crash debt in schema_meta `fts_rebuild_pending`, settled by the next writer); file transactions batched as savepoints under one outer transaction (256 files or 5 s); six missing FK child indexes and `idx_files_path_lower`; a stamp fast path (`files.size` + mtime, no read; same .inc-context / include-origin guards as the full test); facts-pass memos; FindUnitFile memoised per closure walk. p10 alone needs no extractor or resolver bump (a full `--rebuild` is row-for-row identical to main; the 1.39 bump is prop-types/#8's). Deferred from #10: symbol-id reuse + scoped call widening, scoped purity + canonical witness (resolver bump), closure_cache, calls-pending mark, resolver file-cache bound. Guards: run_index_stamp_fast_path, run_fts_targeted_patch.
+- Lint, from outside PRs #5 / #6 (Jonathas Paiva): inline variables in the type map; numeric sums no longer flagged by `concat-in-loop`; inline const literals; the exception-prefix rule works without an index; battery environment gaps end in SKIP and load-sensitive runners run serially.
+
+### Fixed
+- E2010 on a RAD Studio 13 build: three `if C then X else nil` expressions rewritten as typed statements (reported by Jonathas Paiva). `convert-apply` pas_uses no longer reports a typed const's `typed` modifier as its visibility.
+- `compile-check` with a relative target that has a directory (`proj\uGreet.pas`) printed finding paths with the directory repeated (dcc64 prefixes it); the compiler now gets the full path and only bare names join the project dir.
+
+### Churn after the re-parse (expected, not a regression)
+- `type_use` rows grow: one walk now emits the header type references of every implementation routine header.
+- autodoc `Used by:` lists can change on the next autodoc run: overloads now pair with the right bodies, so callers attach to the right overload.
+
+## v1.38.1-alpha -- planned
 
 ### Planned
 - Downgrade fixes: `compat` rules (`compat_since`) that rewrite syntax the `--target-compiler` cannot take back to classic syntax -- `if` expression, `is not`, `not in`, `Contains`, `InRange`, digit separators, inline `var`. Registry entry `compat-downgrade-fixes`.
