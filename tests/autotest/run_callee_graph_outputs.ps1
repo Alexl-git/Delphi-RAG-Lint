@@ -157,7 +157,7 @@ Check '9. README: find-callees row says per call site and names callgraph' `
   ($readme -match '(?m)^\| \[`find-callees`\].*call site.*callgraph --qname <X> --direction callees --depth 1') ''
 $ai = Get-Content -LiteralPath (Join-Path $root 'docs\AI-USAGE.md') -Raw
 Check '10. AI-USAGE: find-callees row says per call SITE and names callgraph' `
-  ($ai -match '(?m)^\| `find-callees --qname U\.T\.M` \|.*call SITE.*callgraph --qname U\.T\.M --direction callees --depth 1') ''
+  ($ai -match '(?m)^\| `find-callees --qname U\.T\.M[^`]*` \|.*call SITE.*callgraph --qname U\.T\.M --direction callees --depth 1') ''
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

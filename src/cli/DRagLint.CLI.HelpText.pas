@@ -50,6 +50,8 @@ begin
   Writeln('                               .dfm, its {$I} includes, and the project file -- and NOTHING else. A loose');
   Writeln('                               .pas nobody references, and anything on a Delphi Library/Browsing path, stay');
   Writeln('                               OUT. A FOLDER target indexes the whole tree instead.');
+  Writeln('                               The scope (closure files, or library folders) is printed CAPPED at 20');
+  Writeln('                               entries plus the count; --dry-run lists every entry and indexes nothing.');
   Writeln('                               MODE is CHOSEN PER RUN. [--recompile] (DEFAULT) updates the index in place;');
   Writeln('                               [--rebuild] first empties it of source, then walks. It deletes ROWS, not the');
   Writeln('                               .sqlite: schema, migrations and settings survive and no open handle is');
@@ -100,6 +102,8 @@ begin
   Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous);');
   Writeln('                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];');
   Writeln('                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)');
+  Writeln('                               EXIT 0 = callers listed, 1 = ZERO callers (a valid answer, not an error;');
+  Writeln('                               --json prints []), 2 = usage error or a missing/stale --db. See "Exit codes" below.');
   Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3)');
   Writeln('                               a method reached only THROUGH an interface lists those sites as a separate "via IFoo.Bar dispatch" group;');
   Writeln('                                 --json rows gain "via" (interface method QName), "via_kind" ("interface") and, when the implements edge is ambiguous, "via_edge" (RB-5)');
@@ -332,13 +336,13 @@ begin
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)');
   Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
-  Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X)');
+  Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X: one line per call SITE, so a target called N times repeats N times; distinct callees: callgraph --qname X --direction callees --depth 1)');
   Writeln('                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.');
   Writeln('                               With no library open the text ends N external (library not open) for the calls one could bind.');
   Writeln('  drag-lint ambiguous-calls [--qname <Foo.Bar>|--in <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)');
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
   Writeln('                               a hop also follows an interface method to the methods that implement it (dispatch_edges implements; RB-5)');
-  Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
+  Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json|--format text|json]   (N-deep resolved call tree; cycle-guarded; another --format exits 2 -- dot/mermaid: reverse-calltree)');
   Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--rules <file>] [--progress-interval S] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; depth = --depth N (an integer >= 1), else the --rules book''s #depth N (1..10), else 5 -- a K-segment path needs depth >= K-1; a bad --depth or #depth exits 2; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitt' +
     'ed leaves by effective visibility, default = all, schema proptree/2; --progress-interval S: see PROGRESS below)');
@@ -377,7 +381,8 @@ begin
   Writeln('');
   Writeln('  Output/CI (lint, lint-all, check-ast):');
   Writeln('    --format sarif            emit SARIF 2.1.0 (in addition to text|json)');
-  Writeln('    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info (or none)');
+  Writeln('    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info|hint (none: always 0).');
+  Writeln('                              Without it ANY surviving finding exits 1 (= --fail-on hint); only a clean run exits 0.');
   Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
   Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
   Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
@@ -534,6 +539,8 @@ begin
     Writeln('                               .dfm, its {$I} includes, and the project file -- and NOTHING else. A loose');
     Writeln('                               .pas nobody references, and anything on a Delphi Library/Browsing path, stay');
     Writeln('                               OUT. A FOLDER target indexes the whole tree instead.');
+    Writeln('                               The scope (closure files, or library folders) is printed CAPPED at 20');
+    Writeln('                               entries plus the count; --dry-run lists every entry and indexes nothing.');
     Writeln('                               MODE is CHOSEN PER RUN. [--recompile] (DEFAULT) updates the index in place;');
     Writeln('                               [--rebuild] first empties it of source, then walks. It deletes ROWS, not the');
     Writeln('                               .sqlite: schema, migrations and settings survive and no open handle is');
@@ -588,6 +595,8 @@ begin
     Writeln('                               --resolved: precise callers via resolved call_edges (grouped by target, certain|ambiguous);');
     Writeln('                                 a PROPERTY/FIELD name lists its bound accesses [certain, read|write];');
     Writeln('                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)');
+    Writeln('                               EXIT 0 = callers listed, 1 = ZERO callers (a valid answer, not an error;');
+    Writeln('                               --json prints []), 2 = usage error or a missing/stale --db. See "Exit codes" below.');
     Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3)');
     Writeln('                               a method reached only THROUGH an interface lists those sites as a separate "via IFoo.Bar dispatch" group;');
     Writeln('                                 --json rows gain "via" (interface method QName), "via_kind" ("interface") and, when the implements edge is ambiguous, "via_edge" (RB-5)');
@@ -1084,7 +1093,7 @@ begin
   end;
   if pVerb = 'find-callees' then
   begin
-    Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X)');
+    Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X: one line per call SITE, so a target called N times repeats N times; distinct callees: callgraph --qname X --direction callees --depth 1)');
     Writeln('                               library-bound callees follow, marked (library; --json rows carry external:true and via edge|oracle.');
     Writeln('                               With no library open the text ends N external (library not open) for the calls one could bind.');
     Exit;
@@ -1102,7 +1111,7 @@ begin
   end;
   if pVerb = 'callgraph' then
   begin
-    Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)');
+    Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json|--format text|json]   (N-deep resolved call tree; cycle-guarded; another --format exits 2 -- dot/mermaid: reverse-calltree)');
     Exit;
   end;
   if pVerb = 'reverse-calltree' then
@@ -1185,7 +1194,8 @@ begin
     Writeln('');
     Writeln('  Output/CI (lint, lint-all, check-ast):');
     Writeln('    --format sarif            emit SARIF 2.1.0 (in addition to text|json)');
-    Writeln('    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info (or none)');
+    Writeln('    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info|hint (none: always 0).');
+    Writeln('                              Without it ANY surviving finding exits 1 (= --fail-on hint); only a clean run exits 0.');
     Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
     Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
     Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');

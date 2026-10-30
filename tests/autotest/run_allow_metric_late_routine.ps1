@@ -21,10 +21,13 @@
 
   CASES, all dry-run (nothing is written):
     D   allow --fix-rule deep-nesting on the last routine -> a marker is shown   <- FIX
-    C   the same for cyclomatic-complexity                                        <- FIX
+    C   CONTROL: cyclomatic-complexity there is REFUSED -- lint reports none
     K   CONTROL: lint reports deep-nesting on that routine's header
-    E   CONTROL: allow on the FIRST routine works on both builds
-  RED-CHECK: on the pre-fix exe D and C fail; K and E pass on both.
+    E   CONTROL: too-many-parameters on the first routine is REFUSED likewise
+  MAINTAINER NOTE (2026-10-30): main fixed this before the PR landed, through
+  RoutineMetricFindings at LINT's thresholds (B-10/B-11), so a review is written
+  only where lint reports the finding. The PR's C/E expected threshold-1 markers;
+  they now pin the refusal instead. RED-CHECK: on a pre-B-10 exe D fails.
 #>
 [CmdletBinding()]
 param(
@@ -97,10 +100,10 @@ $d = Run @('allow', $pas, '--fix-line', "$deepLine", '--fix-rule', 'deep-nesting
 Check 'D allow deep-nesting on the last routine shows a marker' (($d.Code -eq 0) -and ($d.Text -match 'dl:ok deep-nesting@')) $d.Text
 
 $c = Run @('allow', $pas, '--fix-line', "$deepLine", '--fix-rule', 'cyclomatic-complexity')
-Check 'C allow cyclomatic-complexity on the last routine shows a marker' (($c.Code -eq 0) -and ($c.Text -match 'dl:ok cyclomatic-complexity@')) $c.Text
+Check 'C CONTROL: allow cyclomatic-complexity where lint reports none is REFUSED (main measures at lint thresholds)' (($c.Code -ne 0) -and ($c.Text -match 'Refusing to write')) $c.Text
 
 $e = Run @('allow', $pas, '--fix-line', '4', '--fix-rule', 'too-many-parameters')
-Check 'E CONTROL: allow too-many-parameters on the first routine' (($e.Code -eq 0) -and ($e.Text -match 'dl:ok too-many-parameters@')) $e.Text
+Check 'E CONTROL: allow too-many-parameters on a 2-parameter routine is REFUSED (no lint finding there)' (($e.Code -ne 0) -and ($e.Text -match 'Refusing to write')) $e.Text
 
 Check 'the fixture was not modified (dry-run only)' (-not ((Get-Content $pas -Raw) -match 'dl:ok')) ''
 

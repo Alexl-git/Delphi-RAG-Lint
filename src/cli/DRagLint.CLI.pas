@@ -881,6 +881,7 @@ begin
   Writeln('  2  usage error, or a --db that is missing or at an OLD SCHEMA: nothing was answered.');
   Writeln('     So is a manifest-resolved list whose every database is stale.');
   Writeln('  3  FATAL: an unrecognised flag or an unexpected exception (message on stderr).');
+  Writeln('     A stdout pipe the reader closed early (| head) is FATAL 3 too: a truncated run never exits 0.');
   Writeln('  These answer 0 even when EMPTY: find-callees (once --qname resolves), usages,');
   Writeln('  outline, ambiguous-calls, query name-like|type-usage|unit-usage.');
   Writeln('  lint / lint-all use the opposite polarity: 1 = findings survived (see --fail-on).');
@@ -5412,6 +5413,32 @@ begin
   if not Result then Flush(ErrOutput);
 end;
 
+/// <summary>True when at least one of the databases is at the current schema.</summary>
+/// <param name="APaths">Existing database files, as ResolveConsumerDbs returned them.</param>
+/// <returns>True on the first store at the current schema; False when every store
+///  is stale or cannot be opened.</returns>
+/// <remarks>Opens each store directly rather than through OpenReadOnlyStore, so
+///  the probe prints neither the schema note nor the freshness note -- the verb's
+///  own loop prints them once when it opens the store for real. A store the probe
+///  cannot open (zero-byte, corrupt, locked) counts as not current and the probe
+///  moves on: a probe must not turn one bad manifest database into a FATAL.</remarks>
+function AnyDbSchemaCurrent(const APaths: TArray<string>): Boolean;
+var
+  Found   : Integer;
+  Expected: Integer;
+begin
+  for var P: string in APaths do
+  begin
+    try
+      var Probe: ISymbolStore:= TSQLiteSymbolStore.Create(P, {AReadOnly=}True);
+      if Probe.IsSchemaCurrent(Found, Expected) then Exit(True);
+    except  // dl:ok try-except-swallowed@5384 -- probe only: an unopenable store counts as not current; the verb's own open reports it
+      on E: Exception do Continue;
+    end; // try
+  end;
+  Result:= False;
+end; // function
+
 /// <summary>Decides what a STALE-SCHEMA database means for the run in hand: a
 /// refusal when the operator named it with --db, a skip when the manifest chose
 /// it. Reports the refusal on stderr; the caller must Exit(2) on True.</summary>
@@ -5446,24 +5473,6 @@ end;
 /// stderr by OpenReadOnlyStore / OpenWritableStore, so this adds the VERDICT and
 /// the REPAIR, not the diagnosis.</para>
 /// </remarks>
-/// <summary>True when at least one of the databases is at the current schema.</summary>
-/// <param name="APaths">Existing database files, as ResolveConsumerDbs returned them.</param>
-/// <remarks>Opens each store directly rather than through OpenReadOnlyStore, so
-///  the probe prints neither the schema note nor the freshness note -- the verb's
-///  own loop prints them once when it opens the store for real.</remarks>
-function AnyDbSchemaCurrent(const APaths: TArray<string>): Boolean;
-var
-  Found   : Integer;
-  Expected: Integer;
-begin
-  for var P: string in APaths do
-  begin
-    var Probe: ISymbolStore:= TSQLiteSymbolStore.Create(P, {AReadOnly=}True);
-    if Probe.IsSchemaCurrent(Found, Expected) then Exit(True);
-  end;
-  Result:= False;
-end; // function
-
 function StaleDbRefusesRun(const AArgs: TArgs; const AVerb, ADbPath: string): Boolean;
 begin
   Result:= Length(AArgs.DbPaths) > 0;
@@ -35994,20 +36003,10 @@ begin
   except
     on E: Exception do
     begin
-      { THE READER LEFT, THE QUERY DID NOT FAIL (Gitea drag-lint#15). A consumer
-        that stops reading early -- `| head`, `| Select-Object -First 12` --
-        closes the pipe, and the next Writeln raised EInOutError 232
-        (ERROR_NO_DATA) or 109 (ERROR_BROKEN_PIPE). That printed FATAL and
-        exited 3, so an agent saw a failed query whose first lines it had
-        already read correctly. Like a Unix tool on SIGPIPE: stop quietly. The
-        pending bytes are dropped so the RTL's own flush at shutdown does not
-        hit the same closed pipe. }
-      if (E is EInOutError) and ((EInOutError(E).ErrorCode = ERROR_NO_DATA) or
-                                 (EInOutError(E).ErrorCode = ERROR_BROKEN_PIPE)) then
-      begin
-        TTextRec(Output).BufPos:= 0;
-        Exit(0);
-      end;
+      { A CLOSED STDOUT PIPE STAYS A FATAL 3 (owner ruling 2026-10-30, PR #4 review).
+        `lint x.pas | head` with findings would otherwise exit 0, and a pipefail/CI
+        step would read a truncated run as a clean one. A reader that stops early
+        gets a nonzero exit by design. Pinned by run_closed_pipe_keeps_exit3.ps1. }
       { ErrOutput, NOT stdout. For `lsp` and `serve` stdout IS the JSON-RPC
         transport -- both branches above say so in as many words -- so the bare
         Writeln that used to be here injected the ONE line explaining the death

@@ -97,8 +97,8 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > |---|---|
 > | `0` | answered, with results |
 > | `1` | answered, and the answer is EMPTY or NOT FOUND -- `query --name/--qname/--text/find`, `query find-callers`, `ancestors`, `descendants`, `context`, `call-path`, `reverse-calltree`. A valid result, not an error: a shell tool that reports a non-zero exit as a failure is wrong here |
-> | `2` | usage error, or a `--db` that is missing or at an OLD SCHEMA -- nothing was answered. Also a manifest-resolved list whose EVERY database is stale |
-> | `3` | FATAL: an unrecognised flag or an unexpected exception (message on stderr) |
+> | `2` | usage error (including an unknown `callgraph --format`), or a `--db` that is missing or at an OLD SCHEMA -- nothing was answered. Also a manifest-resolved list whose EVERY database is stale |
+> | `3` | FATAL: an unrecognised flag or an unexpected exception (message on stderr); also a stdout pipe the reader closed early (`| head`) -- a truncated run never exits 0, so pipefail / CI cannot read it as clean |
 >
 > These answer `0` even when empty: `find-callees` (once `--qname` resolves),
 > `usages`, `outline`, `ambiguous-calls`, `query name-like|type-usage|unit-usage`.

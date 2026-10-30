@@ -81,7 +81,7 @@ Qualified reads (`TEnum.Value`) are unaffected.
 | `0` | at least one caller listed |
 | `1` | **zero callers** -- a valid answer, not an error. Text prints `0 caller(s)`; `--json` prints `[]` (with or without `--resolved`) |
 | `2` | usage error (no `--name`), or a `--db` that is missing or at an old schema; also a manifest-resolved list whose every database is stale |
-| `3` | fatal: an unrecognised flag or an exception (message on stderr) |
+| `3` | fatal: an unrecognised flag or an exception (message on stderr); also a stdout pipe closed early by the reader (`| head`) |
 
 Zero callers is exit `1` on purpose (grep's convention): it is the only signal a
 script has for "nothing calls this" without parsing the text. A handler wired

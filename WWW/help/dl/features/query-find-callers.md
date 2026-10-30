@@ -58,6 +58,9 @@ drag-lint query find-callers --name <callee-name> [--context N] [--resolved] [--
 TFoo.Bar` silently returns 0 rows; `--name Bar` returns the call sites.
 `--context N` adds N lines of surrounding source.
 
+Several `--db` give ONE answer: `--json` is a single array holding every
+database's rows, and the text form ends with one `N caller(s)` total.
+
 ### Plain vs `--resolved`
 
 Without `--resolved` the answer is every site whose NAME matches -- complete,
@@ -113,6 +116,19 @@ bound to the value since resolver E14 (1.36.0); lint rule `enum-bare-read-scoped
 reports it -- a warning when the name binds to another symbol and the types say
 the enum may be meant, a hint when unbound.
 Qualified reads (`TEnum.Value`) are unaffected.
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | at least one caller listed |
+| `1` | **zero callers** -- a valid answer, not an error. Text prints `0 caller(s)`; `--json` prints `[]` (with or without `--resolved`) |
+| `2` | usage error (no `--name`), or a `--db` that is missing or at an old schema; also a manifest-resolved list whose every database is stale |
+| `3` | fatal: an unrecognised flag or an exception (message on stderr); also a stdout pipe closed early by the reader (`| head`) |
+
+Zero callers is exit `1` on purpose (grep's convention): it is the only signal a
+script has for "nothing calls this" without parsing the text. A handler wired
+only from a `.dfm` has no call site, so it answers `1` too.
 
 ### What it needs
 

@@ -160,7 +160,9 @@ $newNote = '^drag-lint: note: (\d+) indexed file\(s\) lie OUTSIDE this project.s
 
 Write-Host ''
 Write-Host '=== seeding: P2 then P1 into ONE db, then P1 again (current index) ===' -ForegroundColor Cyan
-$s2 = RunCap @('index','--project',$p2,'--db',$db)
+# A FOLDER scan seeds P2's rows: since 1.31.2 `index --project` refuses a DB another
+# project tagged, and a folder scan carries no tag, so P1 still lands on top of it.
+$s2 = RunCap @('index',$bDir,'--db',$db)
 Check 'seed: P2 indexes' ($s2.Code -eq 0) "exit=$($s2.Code)"
 $s1 = RunCap @('index','--project',$p1,'--db',$db)
 Check 'seed: P1 indexes' ($s1.Code -eq 0) "exit=$($s1.Code)"

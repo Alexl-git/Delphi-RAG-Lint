@@ -3,6 +3,27 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.39.0-alpha -- planned
+
+### Changed
+- **Exit codes, a behaviour change scripts may notice** (Jonathas Paiva (PR #4)). The read-only verbs follow grep: `0` answered with results, `1` answered EMPTY / NOT FOUND, `2` usage error or a missing / OLD-SCHEMA `--db`, `3` FATAL. Documented in `--help` ("Exit codes of the read-only query verbs"), README, `docs\AI-USAGE.md` and `docs\wiki\query-find-callers.md`.
+  - `1 -> 2`: a single `--db` that fails the read-only open (old schema) on `query find`, `query typecat`, `surface`, `context`, `dump-refs`, `doc-drift`, `dump-call-edges`, `find-callees`, `ambiguous-calls`. `1` stays reserved for an empty answer. Guard `tests\autotest\run_explicit_db_strict.ps1` (T5 stale matrix, T8/P8).
+  - `1 -> 2`: every `query` form when the MANIFEST resolved a list whose every database is at an old schema (it printed `0 caller(s)` and exited 1). A database the probe cannot open counts as stale and is skipped, never a FATAL. Guard `run_explicit_db_strict.ps1` (T8).
+  - `0 -> 2`: `callgraph --format` other than `text` / `json` (the flag was parsed and ignored; `--format dot` printed the text tree). `--format json` equals `--json`; dot / mermaid: `reverse-calltree`. Guard `tests\autotest\run_callee_graph_outputs.ps1`.
+  - NOT changed, by owner ruling (2026-10-30): a stdout pipe the reader closes early (`| head`) stays FATAL `3` -- PR #4 proposed `0`, which would let `lint x.pas | head` with findings read as clean under pipefail / CI. Pinned by `tests\autotest\run_closed_pipe_keeps_exit3.ps1`.
+- `index --project` / `index --scan-libraries-*` print their scope CAPPED at 20 entries plus `... and N more`; `--dry-run` still lists every entry (Jonathas Paiva (PR #4)). Guard `tests\autotest\run_index_scope_listing_cap.ps1`.
+- Numbers print with `.` decimals and `,` thousands on every machine (stage timings, `Done.`, section summaries, contrast ratios): the engine sets them at startup. This also means a numeric flag value is parsed with `.` whatever the OS locale (Jonathas Paiva (PR #4)).
+- `query --name` text rows carry `(path:line)` before the `[impl-only]` / forward suffixes; the MCP `find_symbol` tool returns `path:line:col` (Jonathas Paiva (PR #4)). Guard `tests\autotest\run_output_locations.ps1`. Left out at review: the PR's `path` JSON key and full-path text rows on `query find-callers --resolved` (`resolution` stays the LAST key by owner ruling; `file` stays the file name, and plugin / compare scripts parse the text rows).
+
+### Fixed
+- Name-based `query find-callers` answers ONCE across every `--db`: one JSON array (`[]` when empty -- it printed nothing; exit stays `1`), or every store's rows plus ONE `N caller(s)` total (with the resolution tally) instead of one per store (Jonathas Paiva (PR #4)). Guard `tests\autotest\run_find_callers_json_one_document.ps1`.
+- A query on a project index says once, on stderr, when the index holds files OUTSIDE the project's compile closure -- the current-index branch of the freshness note never read `out_of_closure_count` (Jonathas Paiva (PR #4)). Guard `tests\autotest\run_query_notes_out_of_closure.ps1`.
+- stderr notes (freshness, resolver, `lint`'s closing note) are flushed before stdout, so a merged `2>&1` stream no longer cuts a note at byte 128 (Jonathas Paiva (PR #4)). Guards `run_query_notes_out_of_closure.ps1` (6c), `tests\autotest\run_lint_note_not_interleaved.ps1`.
+- `reverse-calltree --direction callees --format dot|mermaid` draws caller -> callee (Jonathas Paiva (PR #4)). Guard `run_callee_graph_outputs.ps1`.
+- The resolver freshness note names the engine by its product version and the edges by the resolver's (Jonathas Paiva (PR #4)). Guard `tests\autotest\run_resolver_note_names_versions.ps1`.
+- Docs: `lint` without `--fail-on` exits 1 on ANY surviving finding (the docs said 0); `find-callees` prints one line per call SITE -- distinct list: `callgraph --qname X --direction callees --depth 1` (Jonathas Paiva (PR #4)).
+- `build\stage-engine.ps1` never launches a fresh file that is not an executable image (no `MZ` header): the battery left a modal "Unsupported 16-Bit Application" box on screen (Jonathas Paiva (PR #4)). Guard: a new check in `tests\autotest\run_engine_hold.ps1`.
+
 ## v1.38.1-alpha -- planned
 
 ### Planned

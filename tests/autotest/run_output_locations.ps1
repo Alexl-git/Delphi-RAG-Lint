@@ -6,15 +6,12 @@
   without a usable location, so each one needed a second search to open it:
     * `query --name X` (text) printed kind, name, qualified name, signature --
       never the file or the line;
-    * `query find-callers --resolved` printed and emitted the file NAME only
-      (`UImageStore.pas:628`, JSON `"file": "UImageStore.pas"`);
     * the MCP `find_symbol` tool, whose description promises file:line:col,
       returned `line L:C` and no file.
 
   THE FIX. The text row gains `(path:line)` BEFORE the [impl-only] / forward
-  suffixes; the resolved JSON gains a `path` key LAST (the pinned key order and
-  the file-name `file` key are unchanged) and the text form prints the full
-  path; find_symbol returns `path:line:col`.
+  suffixes; find_symbol returns `path:line:col`. (The PR's resolved-caller `path` key
+  was left out at review -- see the find-callers section below.)
 
   Usage: pwsh -File tests/autotest/run_output_locations.ps1 [-Exe <path>]
 #>
@@ -93,19 +90,21 @@ Check 'CONTROL: the location sits BEFORE the [impl-only] suffix, which stays at 
   (($qi -match ('\(' + $esc + ':' + $hiddenDecl + '\)')) -and ($qi -match '\[impl-only\]\s*$')) "got: $qi"
 
 Write-Host ''
-Write-Host 'find-callers --resolved' -ForegroundColor Cyan
+Write-Host 'find-callers --resolved (UNCHANGED on purpose)' -ForegroundColor Cyan
+# PR #4 also proposed a `path` key and full-path text rows here. Left out at
+# maintainer review (2026-10-30): `resolution` is the LAST key by owner ruling
+# (XERJ item 3, pinned by run_query_callers_shared_guard.ps1) and the plugin /
+# compare scripts parse the file-NAME text rows. These checks pin that contract.
 $j = (& $Exe query find-callers --name Target --resolved --json --db $db 2>$null) -join "`n"
 $rows = @(ConvertFrom-Json -InputObject $j)
 Check 'one resolved caller' ($rows.Count -eq 1) "json: $j"
 if ($rows.Count -eq 1) {
-  Check 'ASSERT: json carries the FULL path under `path`' ($rows[0].path -eq $unit) "path=$($rows[0].path)"
-  Check 'CONTROL: `file` is still the file NAME (the contract consumers diff on)' ($rows[0].file -eq 'uWhere.pas') "file=$($rows[0].file)"
-  Check 'CONTROL: `path` is the LAST key, so the pinned order is untouched' `
-    ((@($rows[0].PSObject.Properties.Name) | Select-Object -Last 1) -eq 'path') "keys=$(@($rows[0].PSObject.Properties.Name) -join ',')"
+  Check 'CONTROL: `file` is the file NAME (the contract consumers diff on)' ($rows[0].file -eq 'uWhere.pas') "file=$($rows[0].file)"
+  Check 'CONTROL: `resolution` is the LAST key and there is no `path` key' `
+    (((@($rows[0].PSObject.Properties.Name) | Select-Object -Last 1) -eq 'resolution') -and -not ($rows[0].PSObject.Properties.Name -contains 'path')) "keys=$(@($rows[0].PSObject.Properties.Name) -join ',')"
 }
 $t = (& $Exe query find-callers --name Target --resolved --db $db 2>$null) -join "`n"
-Check 'ASSERT: the text row prints (full path:site line)' ($t -match ('\(' + $esc + ':' + $callSite + '\)')) "got: $t"
-
+Check 'CONTROL: the text row prints (file name:site line)' ($t -match ('\(uWhere\.pas:' + $callSite + '\)')) "got: $t"
 Write-Host ''
 Write-Host 'MCP find_symbol' -ForegroundColor Cyan
 $req = Join-Path $WorkDir 'mcp.json'

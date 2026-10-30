@@ -138,7 +138,7 @@ Described in [call-path](../../docs/wiki/call-path.md).
 Prints an N-deep resolved call tree for a symbol, in either direction.
 
 ```text
-drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json] (N-deep resolved call tree; cycle-guarded)
+drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json|--format text|json] (N-deep resolved call tree; cycle-guarded)
 ```
 
 | Flag | Argument | Meaning | Default |

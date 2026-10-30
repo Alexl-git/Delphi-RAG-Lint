@@ -235,6 +235,14 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > Non-ANSI characters in paths are stored in the index intact (they were `?`
 > before 2026-10-26).
 
+> **Exit codes of the read-only verbs follow grep -- `1` is an ANSWER.** `0` = answered with
+> results; `1` = answered, EMPTY or NOT FOUND (`query`, `query find-callers` -- `--json` prints
+> `[]` --, `ancestors`, `descendants`, `context`, `call-path`, `reverse-calltree`); `2` = usage
+> error, an unknown `callgraph --format`, or a `--db` that is missing or at an OLD SCHEMA (also a
+> manifest-resolved list whose every database is stale) -- nothing was answered; `3` = FATAL,
+> including a stdout pipe the reader closed early (`| head`), so a truncated run never reads as
+> clean. `lint` / `lint-all` use the opposite polarity: `1` = findings survived (`--fail-on`).
+
 
 **The traps, because each one turns a correct command into a silent zero:**
 

@@ -100,9 +100,9 @@ Check 'ASSERT: --context keeps ONE document, rows carry context' `
 Write-Host ''
 Write-Host 'two --db, text' -ForegroundColor Cyan
 $r = Run @('query','find-callers','--name','Touch','--db',$dbA,'--db',$dbB)
-$totals = @($r.Out -split "`n" | Where-Object { $_ -match '^\d+ caller\(s\)$' })
+$totals = @($r.Out -split "`n" | Where-Object { $_ -match '^\d+ caller\(s\)( \(.*\))?$' })  # main appends the XERJ resolution tally
 Check 'ASSERT: ONE total line for the whole answer' ($totals.Count -eq 1) "total lines: $($totals -join ' | ')"
-Check 'ASSERT: the total counts both stores' ($totals -contains '2 caller(s)') ''
+Check 'ASSERT: the total counts both stores' (@($totals | Where-Object { $_ -match '^2 caller\(s\)' }).Count -eq 1) ''
 
 Write-Host ''
 Write-Host 'no hit anywhere' -ForegroundColor Cyan
