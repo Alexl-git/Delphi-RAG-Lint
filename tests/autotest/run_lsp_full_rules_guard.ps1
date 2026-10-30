@@ -23,7 +23,7 @@ param(
   [string]$OffBaseline = "$PSScriptRoot\fixtures\lsp\c1-off-baseline.txt",
   [switch]$CaptureOffBaseline,
   [switch]$AllowChildExeSkip, # only for an OLD engine (pre lane S): one that ignores DRAGLINT_FULLRULES_CHILD_EXE SKIPs instead of FAILing
-  [string]$WorkDir     = "$env:TEMP\drag-lint-lsp-full-rules-$PID"
+  [string]$WorkDir     = "$env:TEMP\drag-lint-lsp-fr-$PID"
 )
 try {
 $ErrorActionPreference = 'Stop'
@@ -95,7 +95,7 @@ Check 'CONTROL: `lint --json` reports missing-inherited-ctor on the fixture' ($c
 
 $off = RunLsp $Exe $DirtyF @() 'off'
 Check 'flag OFF: missing-inherited-ctor is NOT published (baseline shape)' ($off.Codes -notcontains 'missing-inherited-ctor') ''
-Check 'flag OFF: no full-rules cost line on stderr' ($off.Err -notmatch 'full-rules') ''
+Check 'flag OFF: no full-rules cost line on stderr' ($off.Err -notmatch 'drag-lint lsp: full-rules .+ \d+ ms \d+ findings') ''
 
 $on = RunLsp $Exe $DirtyF @('--full-rules') 'on'
 Check 'flag ON: missing-inherited-ctor IS published' ($on.Codes -contains 'missing-inherited-ctor') ''

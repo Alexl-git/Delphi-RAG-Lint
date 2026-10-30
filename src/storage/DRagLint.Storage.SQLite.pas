@@ -10109,103 +10109,105 @@ begin
   Q        := TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:= 'SELECT s.id, s.name, p.name AS pname, d.summary AS dsum, d.remarks AS drem, s.file_id, s.start_line ' +
-                 'FROM symbols s LEFT JOIN symbols p ON p.id = s.parent_id ' +
-                 'LEFT JOIN symbol_docs d ON d.symbol_id = s.id ' +
-                 'WHERE s.kind IN (' + CONCEPT_SEARCH_KINDS + ') ' +
-                 'AND NOT EXISTS (SELECT 1 FROM symbol_search x WHERE x.symbol_id = s.id)';
-    Q.Open;
-    FldId   := Q.FieldByName('id');
-    FldName := Q.FieldByName('name');
-    FldPName:= Q.FieldByName('pname');
-    FldDSum := Q.FieldByName('dsum');
-    FldDRem := Q.FieldByName('drem');
-    FldFile := Q.FieldByName('file_id');
-    FldStart:= Q.FieldByName('start_line');
-    while not Q.Eof do
-    begin
-      Name      := FldName.AsString;
-      Parent    := FldPName.AsString;
-      DocSummary:= ConceptStripDocMarkup(FldDSum.AsString);
-      R.Id       := FldId.AsLargeInt;
-      R.FileId   := FldFile.AsInteger;
-      R.StartLine:= FldStart.AsInteger;
-      R.Tokens   := (SplitIdentifierWords(Name) + ' ' + SplitIdentifierWords(Parent) + ' ' + Name.ToLower).Trim;
-      R.Summary  := DocSummary;
-      R.Remarks  := ConceptStripDocMarkup(FldDRem.AsString);
-      if R.Tokens = '' then R.Tokens:= Name.ToLower;
-      Rows.Add(R);
-      FileSet.AddOrSetValue(R.FileId, True);
-      Q.Next;
-    end; // while
-    Q.Close;
-    { Positional doc attribution for the rows symbol_docs left without a summary. }
-    if Rows.Count > 0 then
-    begin
-      FileIds:= FileSet.Keys.ToArray;
-      FileFilter:= '';
-      if Length(FileIds) <= MAX_IN_FILES then
-      begin
-        SetLength(IdText, Length(FileIds));
-        for I:= 0 to High(FileIds) do IdText[I]:= IntToStr(FileIds[I]);
-        FileFilter:= ' AND file_id IN (' + string.Join(',', IdText) + ')';
-      end;
-      Q.SQL.Text:= 'SELECT DISTINCT file_id, start_line FROM symbols WHERE 1 = 1' + FileFilter + ' ORDER BY file_id, start_line';  // dl:ok sql-injection-concat@7486 -- FileFilter is built only from IntToStr of file ids read from the DB
+    { ITEM 12: the transaction opens BEFORE the candidate reads (BEGIN IMMEDIATE via ConnectWriter);
+      a second writer re-issuing symbol ids in between made the symbol_search insert fail its FK. }
+    FConn.StartTransaction;
+    try
+      Q.SQL.Text:= 'SELECT s.id, s.name, p.name AS pname, d.summary AS dsum, d.remarks AS drem, s.file_id, s.start_line ' +
+                   'FROM symbols s LEFT JOIN symbols p ON p.id = s.parent_id ' +
+                   'LEFT JOIN symbol_docs d ON d.symbol_id = s.id ' +
+                   'WHERE s.kind IN (' + CONCEPT_SEARCH_KINDS + ') ' +
+                   'AND NOT EXISTS (SELECT 1 FROM symbol_search x WHERE x.symbol_id = s.id)';
       Q.Open;
-      while not Q.Eof do
-      begin
-        LitFile:= Q.Fields[0].AsInteger;
-        if not Starts.ContainsKey(LitFile) then Starts.Add(LitFile, TList<Integer>.Create);
-        Starts[LitFile].Add(Q.Fields[1].AsInteger);
-        Q.Next;
-      end; // while
-      Q.Close;
-      Q.SQL.Text:= 'SELECT file_id, start_line, end_line, text FROM string_literals ' +
-                   'WHERE kind = ''doc''' + FileFilter + ' ORDER BY file_id, start_line';
-      Q.Open;
-      CurFile:= -1;
-      BlockEnd:= -1;
+      FldId   := Q.FieldByName('id');
+      FldName := Q.FieldByName('name');
+      FldPName:= Q.FieldByName('pname');
+      FldDSum := Q.FieldByName('dsum');
+      FldDRem := Q.FieldByName('drem');
       FldFile := Q.FieldByName('file_id');
       FldStart:= Q.FieldByName('start_line');
-      FldEnd  := Q.FieldByName('end_line');
-      FldText := Q.FieldByName('text');
       while not Q.Eof do
       begin
-        LitFile := FldFile.AsInteger;
-        LitStart:= FldStart.AsInteger;
-        LitEnd  := FldEnd.AsInteger;
-        if (LitFile <> CurFile) or (LitStart > BlockEnd + 1) then
-        begin
-          FlushBlock;
-          CurFile:= LitFile;
-        end;
-        if Block.Length > 0 then Block.Append(' ');
-        Block.Append(FldText.AsString);
-        BlockEnd := LitEnd;
+        Name      := FldName.AsString;
+        Parent    := FldPName.AsString;
+        DocSummary:= ConceptStripDocMarkup(FldDSum.AsString);
+        R.Id       := FldId.AsLargeInt;
+        R.FileId   := FldFile.AsInteger;
+        R.StartLine:= FldStart.AsInteger;
+        R.Tokens   := (SplitIdentifierWords(Name) + ' ' + SplitIdentifierWords(Parent) + ' ' + Name.ToLower).Trim;
+        R.Summary  := DocSummary;
+        R.Remarks  := ConceptStripDocMarkup(FldDRem.AsString);
+        if R.Tokens = '' then R.Tokens:= Name.ToLower;
+        Rows.Add(R);
+        FileSet.AddOrSetValue(R.FileId, True);
         Q.Next;
       end; // while
-      FlushBlock;
       Q.Close;
-      for I:= 0 to Rows.Count - 1 do
-        if (Rows[I].Summary = '') and DocByDecl.TryGetValue(IntToStr(Rows[I].FileId) + ':' + IntToStr(Rows[I].StartLine), BlockText) then
+      { Positional doc attribution for the rows symbol_docs left without a summary. }
+      if Rows.Count > 0 then
+      begin
+        FileIds:= FileSet.Keys.ToArray;
+        FileFilter:= '';
+        if Length(FileIds) <= MAX_IN_FILES then
         begin
-          R:= Rows[I];
-          R.Summary:= ConceptStripDocMarkup(BlockText);
-          Rows[I]:= R;
+          SetLength(IdText, Length(FileIds));
+          for I:= 0 to High(FileIds) do IdText[I]:= IntToStr(FileIds[I]);
+          FileFilter:= ' AND file_id IN (' + string.Join(',', IdText) + ')';
         end;
-    end;
-    Ins:= TFDQuery.Create(nil);
-    try
-      Ins.Connection:= FConn;
-      Ins.SQL.Text:= 'INSERT INTO symbol_search(symbol_id, tokens, summary, remarks) ' +
-                     'VALUES (:sid, :tok, :sum, :rem)';
-      Ins.ParamByName('sid').DataType:= ftLargeint;
-      Ins.ParamByName('tok').DataType:= ftWideMemo;
-      Ins.ParamByName('sum').DataType:= ftWideMemo;
-      Ins.ParamByName('rem').DataType:= ftWideMemo;
-      Ins.Prepare;
-      FConn.StartTransaction;
+        Q.SQL.Text:= 'SELECT DISTINCT file_id, start_line FROM symbols WHERE 1 = 1' + FileFilter + ' ORDER BY file_id, start_line';  // dl:ok sql-injection-concat@7486 -- FileFilter is built only from IntToStr of file ids read from the DB
+        Q.Open;
+        while not Q.Eof do
+        begin
+          LitFile:= Q.Fields[0].AsInteger;
+          if not Starts.ContainsKey(LitFile) then Starts.Add(LitFile, TList<Integer>.Create);
+          Starts[LitFile].Add(Q.Fields[1].AsInteger);
+          Q.Next;
+        end; // while
+        Q.Close;
+        Q.SQL.Text:= 'SELECT file_id, start_line, end_line, text FROM string_literals ' +
+                     'WHERE kind = ''doc''' + FileFilter + ' ORDER BY file_id, start_line';
+        Q.Open;
+        CurFile:= -1;
+        BlockEnd:= -1;
+        FldFile := Q.FieldByName('file_id');
+        FldStart:= Q.FieldByName('start_line');
+        FldEnd  := Q.FieldByName('end_line');
+        FldText := Q.FieldByName('text');
+        while not Q.Eof do
+        begin
+          LitFile := FldFile.AsInteger;
+          LitStart:= FldStart.AsInteger;
+          LitEnd  := FldEnd.AsInteger;
+          if (LitFile <> CurFile) or (LitStart > BlockEnd + 1) then
+          begin
+            FlushBlock;
+            CurFile:= LitFile;
+          end;
+          if Block.Length > 0 then Block.Append(' ');
+          Block.Append(FldText.AsString);
+          BlockEnd := LitEnd;
+          Q.Next;
+        end; // while
+        FlushBlock;
+        Q.Close;
+        for I:= 0 to Rows.Count - 1 do
+          if (Rows[I].Summary = '') and DocByDecl.TryGetValue(IntToStr(Rows[I].FileId) + ':' + IntToStr(Rows[I].StartLine), BlockText) then
+          begin
+            R:= Rows[I];
+            R.Summary:= ConceptStripDocMarkup(BlockText);
+            Rows[I]:= R;
+          end;
+      end;
+      Ins:= TFDQuery.Create(nil);
       try
+        Ins.Connection:= FConn;
+        Ins.SQL.Text:= 'INSERT INTO symbol_search(symbol_id, tokens, summary, remarks) ' +
+                       'VALUES (:sid, :tok, :sum, :rem)';
+        Ins.ParamByName('sid').DataType:= ftLargeint;
+        Ins.ParamByName('tok').DataType:= ftWideMemo;
+        Ins.ParamByName('sum').DataType:= ftWideMemo;
+        Ins.ParamByName('rem').DataType:= ftWideMemo;
+        Ins.Prepare;
         Q.SQL.Text:= 'DELETE FROM symbol_search WHERE symbol_id NOT IN (SELECT id FROM symbols)';
         Q.ExecSQL;
         for R in Rows do  // dl:ok duplicate-code@b0f0 -- the prepared-insert-in-one-transaction shape PutEffectFacts also uses; PutEffectFacts is a hashed emit routine, so sharing a helper with it would bill an extractor re-parse
@@ -10217,13 +10219,13 @@ begin
           Ins.ExecSQL;
         end; // for
         FConn.Commit;
-      except  // dl:ok bare-except@4bef -- rollback then RE-RAISE: nothing is swallowed, any failure must undo the partial write
-        FConn.Rollback;
-        raise;
-      end;
-    finally
-      Ins.Free;
-    end; // try
+      finally
+        Ins.Free;
+      end; // try
+    except  // dl:ok bare-except@4bef -- rollback then RE-RAISE: nothing is swallowed, any failure must undo the partial write
+      FConn.Rollback;
+      raise;
+    end;
     Result:= Rows.Count;
   finally
     Q.Free;

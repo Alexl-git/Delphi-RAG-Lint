@@ -224,7 +224,9 @@ function Normalise([string]$json) {
     $res = [pscustomobject]@{ counts = @($res.counts | Sort-Object line, count) }
   }
   $j = ConvertTo-Json -InputObject $res -Compress -Depth 20
-  return ($j -replace 'file:///[^"]*?/src/', 'file:///<SRC>/')
+  $j = $j -replace 'file:///[^"]*?/src/', 'file:///<SRC>/'
+  # the hover footer names the per-run context-defaults file (28322391); blank it.
+  return ($j -replace 'libraries\.Win64\.libraryDb in [^"]*?\.json', 'libraries.Win64.libraryDb in <DEFAULTS>')
 }
 $current = [ordered]@{}
 foreach ($id in 4..9) { $current["$id"] = Normalise $raw[$id] }
