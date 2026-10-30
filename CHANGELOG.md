@@ -29,7 +29,7 @@ Extractor 1.27.0-alpha: every index re-parses once.
 - `query --name` text rows carry `(path:line)` before the `[impl-only]` / forward suffixes; the MCP `find_symbol` tool returns `path:line:col` (Jonathas Paiva (PR #4)). Guard `tests\autotest\run_output_locations.ps1`. Left out at review: the PR's `path` JSON key and full-path text rows on `query find-callers --resolved` (`resolution` stays the LAST key by owner ruling; `file` stays the file name, and plugin / compare scripts parse the text rows).
 
 ### Fixed
-- `serve` reads each request as UTF-8 (MCP frames stdio as UTF-8). It read stdin in the ANSI code page, so a non-ASCII character in a request (`é` sent as C3 A9) reached the tool as two characters; found reviewing PR #3. Guard: `tests\autotest\run_serve_wire_utf8.ps1` S4.
+- `serve` reads each request as UTF-8 (MCP frames stdio as UTF-8). It read stdin in the ANSI code page, so a non-ASCII character in a request (an e-acute sent as C3 A9) reached the tool as two characters; found reviewing PR #3. Guard: `tests\autotest\run_serve_wire_utf8.ps1` S4.
 - **A file is found in the index whatever mix of long and 8.3 short path components names it**
   (no version constant moves). Jonathas Paiva (PR #7). Windows names a file both by its long path
   and by 8.3 short components (`C:\Users\JONATH~1.SIL\...`), and a path can MIX them: an index stores
