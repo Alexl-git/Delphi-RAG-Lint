@@ -1557,7 +1557,7 @@
         {
           "type": "cli",
           "verb": "outline",
-          "usage": "drag-lint outline --in <path.pas> [--db <path>] [--format text|json] [--json]",
+          "usage": "drag-lint outline --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]",
           "flags": [
             {
               "name": "--in",
@@ -1572,10 +1572,21 @@
             },
             {
               "name": "--json"
+            },
+            {
+              "name": "--kind",
+              "arg": "<k[,k...]>"
+            },
+            {
+              "name": "--no-locals"
+            },
+            {
+              "name": "--limit",
+              "arg": "N"
             }
           ],
           "helpOrder": 6,
-          "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json]", "                               unit outline; backs the IDE Structure form."]
+          "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]", "                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:", "                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large", "                               unit's outline); --limit N prints the first N rows and says how many matched."]
         },
         {
           "type": "ide-menu",
@@ -1595,10 +1606,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-10-30",
         "by": "ENGINE",
-        "build": "1.35.0-alpha",
-        "surfaceHash": "d1d20b3a34a76dd6d2b5868ad178cc0976c2d06608b5a358b6edfd192999c921"
+        "build": "1.38.0-alpha",
+        "surfaceHash": "52b9c5c2d37e2765ff46220081dc307cacf0209ee68e91c51cca42bd3fd71234"
       }
     },
     {
@@ -2162,7 +2173,7 @@
           "type": "cli",
           "verb": "query",
           "sub": "unit-usage",
-          "usage": "drag-lint query unit-usage --unit <UnitName> [--in <file.pas>] [--db ...] [--json]",
+          "usage": "drag-lint query unit-usage --unit <UnitName> [--in <file.pas>] [--db ...] [--json] [--limit N]",
           "flags": [
             {
               "name": "--unit",
@@ -2177,10 +2188,14 @@
             },
             {
               "name": "--json"
+            },
+            {
+              "name": "--limit",
+              "arg": "N"
             }
           ],
           "helpOrder": 10,
-          "help": ["  drag-lint query unit-usage   --unit <UnitName> [--in <file.pas>] [--db ...] [--json]", "                               WITH --in: of that unit's exports, which does THIS file reference? Empty = dead import.", "                               WITHOUT --in: which files reference the unit at all, and which merely IMPORT it.", "                               The candidate set is the uses graph -- in Delphi you cannot name an export without a uses entry."]
+          "help": ["  drag-lint query unit-usage   --unit <UnitName> [--in <file.pas>] [--db ...] [--json] [--limit N]", "                               WITH --in: of that unit's exports, which does THIS file reference? Empty = dead import.", "                               WITHOUT --in: which files reference the unit at all, and which merely IMPORT it.", "                               The candidate set is the uses graph -- in Delphi you cannot name an export without a uses entry.", "                               --limit N (without --in) lists the first N importing files and says how many there are."]
         }
       ],
       "audience": "both",
@@ -2201,10 +2216,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-10-30",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "44e4e30e2283257467bc89293b7dfdfc0a85ced9267ed19c86c6b342f552818c"
+        "build": "1.38.0-alpha",
+        "surfaceHash": "2eb662e88e7f7626593f287da0d3024ce126a4284916a44cd970751ce5d423d5"
       }
     },
     {
@@ -2471,7 +2486,7 @@
         {
           "type": "cli",
           "verb": "usages",
-          "usage": "drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]",
+          "usage": "drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N]",
           "flags": [
             {
               "name": "--name",
@@ -2493,10 +2508,14 @@
             },
             {
               "name": "--json"
+            },
+            {
+              "name": "--limit",
+              "arg": "N"
             }
           ],
           "helpOrder": 5,
-          "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view."]
+          "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view.", "                               --limit N keeps the first N rows of each JSON group (declarations included) and adds", "                               \"limit\" and \"totals\" (the full counts); without it nothing is capped."]
         },
         {
           "type": "ide-menu",
@@ -2516,10 +2535,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-10-30",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "49c04262fe8263d0117c1a77b7f12eb470dc65ebafe0099897d3503881ff2787"
+        "build": "1.38.0-alpha",
+        "surfaceHash": "836b63f5bd194044f8024d7160d368bde3bbce8686e1fa09452da477b3083288"
       }
     },
     {

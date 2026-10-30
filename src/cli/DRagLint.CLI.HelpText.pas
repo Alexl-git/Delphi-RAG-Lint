@@ -108,10 +108,14 @@ begin
   Writeln('       ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind <k> --all');
   Writeln('       ^ --decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`)');
   Writeln('         -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.');
-  Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');
+  Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N]');
   Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
-  Writeln('  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json]');
-  Writeln('                               unit outline; backs the IDE Structure form.');
+  Writeln('                               --limit N keeps the first N rows of each JSON group (declarations included) and adds');
+  Writeln('                               "limit" and "totals" (the full counts); without it nothing is capped.');
+  Writeln('  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]');
+  Writeln('                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:');
+  Writeln('                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large');
+  Writeln('                               unit''s outline); --limit N prints the first N rows and says how many matched.');
   Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]');
   Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
   Writeln('                               [--format text|json|html] [--output <file>] [--open] [--out-root <dir>]');
@@ -134,10 +138,11 @@ begin
   Writeln('                               a STRING LITERAL is correctly not a reference -- which is the difference');
   Writeln('                               from grep. Name-keyed: a project type sharing an RTL name is');
   Writeln('                               indistinguishable, and the output says so.');
-  Writeln('  drag-lint query unit-usage   --unit <UnitName> [--in <file.pas>] [--db ...] [--json]');
+  Writeln('  drag-lint query unit-usage   --unit <UnitName> [--in <file.pas>] [--db ...] [--json] [--limit N]');
   Writeln('                               WITH --in: of that unit''s exports, which does THIS file reference? Empty = dead import.');
   Writeln('                               WITHOUT --in: which files reference the unit at all, and which merely IMPORT it.');
   Writeln('                               The candidate set is the uses graph -- in Delphi you cannot name an export without a uses entry.');
+  Writeln('                               --limit N (without --in) lists the first N importing files and says how many there are.');
   Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
   Writeln('  drag-lint query descendants  --of <ancestor> [--db ...] [--json]   (the REVERSE of ancestors: every CLASS descending from <ancestor>, across all scanned DBs. Derived INTERFACES are deliberately excluded -- this backs the conversion editor''s class pickers. exit 1 = no such ancestor)');
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
@@ -484,6 +489,8 @@ begin
   Writeln('       see wiki page: query-text-near');
   Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)');
   Writeln('       see wiki page: rules');
+  Writeln('  drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');
+  Writeln('       see wiki page: Find-Usages-context');
 end;
 
 procedure WriteFlagAliases;
@@ -603,10 +610,11 @@ begin
     Writeln('                               a STRING LITERAL is correctly not a reference -- which is the difference');
     Writeln('                               from grep. Name-keyed: a project type sharing an RTL name is');
     Writeln('                               indistinguishable, and the output says so.');
-    Writeln('  drag-lint query unit-usage   --unit <UnitName> [--in <file.pas>] [--db ...] [--json]');
+    Writeln('  drag-lint query unit-usage   --unit <UnitName> [--in <file.pas>] [--db ...] [--json] [--limit N]');
     Writeln('                               WITH --in: of that unit''s exports, which does THIS file reference? Empty = dead import.');
     Writeln('                               WITHOUT --in: which files reference the unit at all, and which merely IMPORT it.');
     Writeln('                               The candidate set is the uses graph -- in Delphi you cannot name an export without a uses entry.');
+    Writeln('                               --limit N (without --in) lists the first N importing files and says how many there are.');
     Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
     Writeln('  drag-lint query descendants  --of <ancestor> [--db ...] [--json]   (the REVERSE of ancestors: every CLASS descending from <ancestor>, across all scanned DBs. Derived INTERFACES are deliberately excluded -- this backs the conversion editor''s class pickers. exit 1 = no such ancestor)');
     Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
@@ -615,14 +623,18 @@ begin
   end;
   if pVerb = 'usages' then
   begin
-    Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');
+    Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N]');
     Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
+    Writeln('                               --limit N keeps the first N rows of each JSON group (declarations included) and adds');
+    Writeln('                               "limit" and "totals" (the full counts); without it nothing is capped.');
     Exit;
   end;
   if pVerb = 'outline' then
   begin
-    Writeln('  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json]');
-    Writeln('                               unit outline; backs the IDE Structure form.');
+    Writeln('  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]');
+    Writeln('                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:');
+    Writeln('                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large');
+    Writeln('                               unit''s outline); --limit N prints the first N rows and says how many matched.');
     Exit;
   end;
   if pVerb = 'compare' then

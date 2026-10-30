@@ -7921,7 +7921,7 @@ begin
     begin
       Result:= A;
       for var CI: Integer:= 1 to Length(Result) do
-        if CharInSet(Result[CI], ['A'..'Z']) then Result[CI]:= Char(Ord(Result[CI]) + 32);
+        if CharInSet(Result[CI], ['A'..'Z']) then Result[CI]:= Char(Ord(Result[CI]) - Ord('A') + Ord('a'));
     end;
   for var XI: Integer:= High(ExportSyms) downto 0 do
     ExportIdx.AddOrSetValue(AsciiLower(ExportSyms[XI].Name), XI);
@@ -8007,7 +8007,7 @@ begin
             { ReceiverNamesType's own reading of the receiver: the text before any
               generic argument list, trimmed; an empty base matches nothing. }
             var RecvBase: string:= Trim(R.ReceiverText);
-            if Pos('<', RecvBase) > 0 then RecvBase:= Trim(Copy(RecvBase, 1, Pos('<', RecvBase) - 1));
+            if RecvBase.Contains('<') then RecvBase:= Trim(Copy(RecvBase, 1, Pos('<', RecvBase) - 1));
             if (RecvBase = '') or not ExportIdx.TryGetValue(AsciiLower(RecvBase), ByRecv) then ByRecv:= MaxInt;
             var Hit1: Integer:= Min(ByName, ByRecv);
             if Hit1 = MaxInt then Continue;

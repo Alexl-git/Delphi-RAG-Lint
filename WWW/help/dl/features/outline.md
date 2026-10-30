@@ -28,6 +28,9 @@ Full flag list: [outline in the CLI reference](../cli.md#outline).
 | `--db` | `<path>` |  |  |
 | `--format` |  |  |  |
 | `--json` |  |  |  |
+| `--kind` | `<k[,k...]>` |  |  |
+| `--no-locals` |  |  |  |
+| `--limit` | `N` |  |  |
 
 ## Where to click
 
@@ -45,10 +48,21 @@ feeds the Structure tree.
 ### Running it from the CLI
 ```text
 drag-lint outline --in <path.pas> [--db <path>] [--format text|json]
+                  [--kind <k[,k...]>] [--no-locals] [--limit N]
 ```
 `--in <path.pas>` is the unit to outline. `--db <path>` is optional;
 without it the database is resolved **from the file being read**. `--format`
 selects `text` or `json`.
+
+The outline lists every symbol, locals and parameters included -- a large unit
+runs to thousands of rows. Three options narrow it, and without them nothing is
+left out (the IDE's Structure form reads it whole):
+
+* `--kind <k[,k...]>` keeps only those kinds, spelled as the outline prints them
+  (`class`, `method`, `field`, `property`, ...);
+* `--no-locals` drops the `local_var` and `param` rows;
+* `--limit N` prints the first N rows and says how many matched -- on the last
+  line in text, on stderr with `--format json` (the array stays the document).
 
 ### How the database is resolved
 

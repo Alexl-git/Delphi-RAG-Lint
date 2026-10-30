@@ -9270,18 +9270,13 @@ begin
     SQLite refuses CREATE TEMP TABLE there. File ids are integers; names are
     quoted with '' doubled. lower() folds A-Z only -- exactly what SameText
     folds, which is the comparison this replaces. }
-  Ids:= '';
-  for var Id: Int64 in AFileIds do
-  begin
-    if Ids <> '' then Ids:= Ids + ',';
-    Ids:= Ids + IntToStr(Id);
-  end;
-  Names:= '';
-  for var N: string in ALowerNames do
-  begin
-    if Names <> '' then Names:= Names + ',';
-    Names:= Names + '''' + StringReplace(N, '''', '''''', [rfReplaceAll]) + '''';
-  end;
+  var Parts: TArray<string>;
+  SetLength(Parts, Length(AFileIds));
+  for var I:= 0 to High(AFileIds) do Parts[I]:= IntToStr(AFileIds[I]);
+  Ids:= string.Join(',', Parts);
+  SetLength(Parts, Length(ALowerNames));
+  for var I:= 0 to High(ALowerNames) do Parts[I]:= QuotedStr(ALowerNames[I]);
+  Names:= string.Join(',', Parts);
   List:= TList<TReference>.Create;
   Q:= TFDQuery.Create(nil);
   try
@@ -9295,21 +9290,31 @@ begin
       '     '' '' || char(9) || char(10) || char(13))) IN (' + Names + '))) ' +
       'ORDER BY file_id, start_line, start_col';
     Q.Open;
+    var FId       := Q.FieldByName('id');
+    var FSymbolId := Q.FieldByName('symbol_id');
+    var FFileId   := Q.FieldByName('file_id');
+    var FKind     := Q.FieldByName('kind');
+    var FNameText := Q.FieldByName('name_text');
+    var FStartLine:= Q.FieldByName('start_line');
+    var FStartCol := Q.FieldByName('start_col');
+    var FEndLine  := Q.FieldByName('end_line');
+    var FEndCol   := Q.FieldByName('end_col');
+    var FEnclosing:= Q.FieldByName('enclosing_symbol_id');
+    var FReceiver := Q.FieldByName('receiver_text');
     while not Q.Eof do
     begin
       R:= Default(TReference);
-      R.Id       := Q.FieldByName('id').AsLargeInt;
-      if not Q.FieldByName('symbol_id').IsNull then R.SymbolId:= Q.FieldByName('symbol_id').AsLargeInt;
-      R.FileId   := Q.FieldByName('file_id').AsLargeInt;
-      R.Kind     := Q.FieldByName('kind').AsString;
-      R.NameText := Q.FieldByName('name_text').AsString;
-      R.StartLine:= Q.FieldByName('start_line').AsInteger;
-      R.StartCol := Q.FieldByName('start_col').AsInteger;
-      R.EndLine  := Q.FieldByName('end_line').AsInteger;
-      R.EndCol   := Q.FieldByName('end_col').AsInteger;
-      if not Q.FieldByName('enclosing_symbol_id').IsNull then
-        R.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
-      if not Q.FieldByName('receiver_text').IsNull then R.ReceiverText:= Q.FieldByName('receiver_text').AsString;
+      R.Id       := FId.AsLargeInt;
+      if not FSymbolId.IsNull then R.SymbolId:= FSymbolId.AsLargeInt;
+      R.FileId   := FFileId.AsLargeInt;
+      R.Kind     := FKind.AsString;
+      R.NameText := FNameText.AsString;
+      R.StartLine:= FStartLine.AsInteger;
+      R.StartCol := FStartCol.AsInteger;
+      R.EndLine  := FEndLine.AsInteger;
+      R.EndCol   := FEndCol.AsInteger;
+      if not FEnclosing.IsNull then R.EnclosingSymbolId:= FEnclosing.AsLargeInt;
+      if not FReceiver.IsNull then R.ReceiverText:= FReceiver.AsString;
       List.Add(R);
       Q.Next;
     end;

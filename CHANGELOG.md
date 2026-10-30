@@ -3,6 +3,16 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.39.0-alpha -- planned
+
+### Added
+- `outline --kind <k[,k...]>`, `--no-locals` and `--limit N`; `usages --limit N` (JSON: the first N rows of each group, `declarations` included, plus `limit` and `totals`); `query unit-usage --limit N` (the first N importers, full counts kept). Without the flags every answer is unchanged. Guard `run_output_caps.ps1`. Thanks to Jonathas Paiva (PR #3).
+
+### Changed
+- `query unit-usage` reads only the refs that can name an export (`ISymbolStore.FindRefsNamingInFiles`, filtered in SQLite) and matches them through a dictionary: 13 s -> under 1 s on a unit with 208 importers, answers byte-identical. Guard `run_unit_usage_reads_only_matches.ps1`. Thanks to Jonathas Paiva (PR #3).
+
+### Fixed
+- `serve` (MCP stdio) writes its replies as UTF-8 bytes whatever `--output-encoding` says; under `--output-encoding utf16` (or `"outputEncoding": "utf16"`) every reply went out as UTF-16LE. Guard `run_serve_wire_utf8.ps1`. Thanks to Jonathas Paiva (PR #3).
 ## v1.38.1-alpha -- planned
 
 ### Planned
