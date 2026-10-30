@@ -1,4 +1,4 @@
-  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library]
+  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library] [--target-compiler <ver|auto>]
                                --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.
                                A hit is recorded by qualified NAME on refs.external_target -- never as a call_edges row,
                                because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the
@@ -13,10 +13,10 @@
                                its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY
                                .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read
                                from by default. --deep also records usage refs (--shallow is the default).
-  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library]
+  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library] [--target-compiler <ver|auto>]
   drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)
   drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)
-  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library]
+  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library] [--rule-cache-warm background|wait|off] [--target-compiler <ver|auto>]
                                SCAN TYPE is DECLARED BY THE TARGET, not by a flag. --project <.dproj|.dpr|.dpk>
                                (or a .dpr/.dproj manifest include) indexes the COMPILE CLOSURE: the project
                                members, the project-local units they transitively use, each one's sibling
@@ -75,10 +75,10 @@
        ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind <k> --all
        ^ --decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`)
          -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.
-  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]
+  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N]
                                grouped usage report; backs the IDE Symbol Search dialog's Usages view.
-  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json]
-                               unit outline; backs the IDE Structure form.
+  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]
+                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:
   drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]
                                [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]
                                [--format text|json|html] [--output <file>] [--open] [--out-root <dir>]
@@ -101,7 +101,7 @@
                                a STRING LITERAL is correctly not a reference -- which is the difference
                                from grep. Name-keyed: a project type sharing an RTL name is
                                indistinguishable, and the output says so.
-  drag-lint query unit-usage   --unit <UnitName> [--in <file.pas>] [--db ...] [--json]
+  drag-lint query unit-usage   --unit <UnitName> [--in <file.pas>] [--db ...] [--json] [--limit N]
                                WITH --in: of that unit's exports, which does THIS file reference? Empty = dead import.
                                WITHOUT --in: which files reference the unit at all, and which merely IMPORT it.
                                The candidate set is the uses graph -- in Delphi you cannot name an export without a uses entry.
@@ -196,7 +196,7 @@
   drag-lint diff               --db <old.sqlite> --db <new.sqlite>  [--json]
   drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)
   drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]
-  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json] [--write-back]
+  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]
   drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]
   drag-lint wiring             --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]   (Spring4D DI + DFM event edges)
   drag-lint wiring             --coverage           [--db <file.sqlite>] [--format text|json]   (DI registrations not resolved to I->T)
@@ -213,7 +213,7 @@
   drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force]   (ask running engines to stand down: close every store, exit 0; `index` and `lint-all` runs exit 4)
                                transport: a Windows NAMED PIPE, never a TCP port -- \\.\pipe\drag-lint-ctl-<sid>-s<session>-p<pid>, created with an
                                explicit DACL for the creating user only, so another user or session cannot signal your engines. Engines in
-                               `lsp`, `cycles --fix`, `index` (incl. --all) and `lint-all` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings. --all (the default) asks every
+                               `lsp`, `cycles --fix`, `index` (incl. --all), `lint-all` and `warm-rule-cache` mode listen (`serve` and other one-shot verbs do not): an index run stops between files, database consistent, same command resumes; lint-all prints PARTIAL findings; a warm stops at once (exit 4). --all (the default) asks every
                                reachable engine; --db keeps only engines holding that index; --dry-run lists them and changes nothing.
                                --wait (default 5 s) bounds the graceful wait per engine: one inside a request answers BUSY and keeps
                                running (exit 1). --force TerminateProcess'es ONLY an engine that refused or did not answer, and says
@@ -282,10 +282,10 @@
   drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)
   drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)
   drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)
-  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X)
+  drag-lint find-callees --qname <Foo.Bar> --db PATH [--db LIBRARY | --library-db LIBRARY] [--json]   (resolved outgoing calls of routine X: one line per call SITE, so a target called N times repeats N times; distinct callees: callgraph --qname X --direction callees --depth 1)
   drag-lint ambiguous-calls [--qname <Foo.Bar>|--in <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)
   drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)
-  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json]   (N-deep resolved call tree; cycle-guarded)
+  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json|--format text|json]   (N-deep resolved call tree; cycle-guarded; another --format exits 2 -- dot/mermaid: reverse-calltree)
   drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)
   drag-lint proptree --qname <X> [--depth N] [--rules <file>] [--progress-interval S] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class's own+inherited properties, recursing into class-typed types; depth = --depth N (an integer >= 1), else the --rules book's #depth N (1..10), else 5 -- a K-segment path needs depth >= K-1; a bad --depth or #depth exits 2; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2; --progress-interval S: see PROGRESS below)
   drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth and the book's #depth are ignored here (and by the hidden convert-reemit), though a bad #depth (not 1..10, or a second one) is a line N error, and so is a From-only header ('#convert TFoo -> ' or '#convert TFoo': '#convert TFoo has no To type'; '#useswap X -> ': '#useswap X has no replacement unit'); and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; 'line N: warning:' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code; a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: 'line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility' -- only a segment naming no member is "not found" (exit 1); without BOTH --from and --to the book is only PARSED -- no path is checked -- and a 'NOTE:' line on stderr says so; a #warn path or {Prop} placeholder, or a #check-ref ToPath, naming no member is a line N error, and so is a malformed #warn / #check-ref (1.26.5); no JSON mode)
@@ -301,7 +301,7 @@
 
   Output/CI (lint, lint-all, check-ast):
     --format sarif            emit SARIF 2.1.0 (in addition to text|json)
-    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info (or none)
+    --fail-on <level>         exit nonzero iff a surviving finding is >= error|warning|info|hint (none: always 0).
     --config <file>           drag-lint-lint.json (else auto-discovered in CWD)
     --enable id1,id2          re-include disabled / off-by-default rules
     --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)

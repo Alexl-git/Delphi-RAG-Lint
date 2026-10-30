@@ -278,3 +278,14 @@ EXCLUDE preferarity
 # Resolves a type at a CURSOR for the LSP. Despite living under src\resolver it
 # takes no part in the index resolve pass and writes nothing.
 EXCLUDE resolvetypeat
+
+# The prop-types stage reader (1.39.0, 2026-10-29). Its only caller is
+# DRagLint.Convert.PropTree.FillBarePropertyTypes, the post-walk `prop-types`
+# stage (DRagLint.CLI, after helpers). That stage writes the declared type of a
+# bare re-published property into SYMBOLS -- none of the four resolve tables
+# above -- and carries its OWN staleness stamp (schema_meta PROP_TYPES_META_KEY,
+# format PROP_TYPES_FORMAT: another format re-checks every bare row). No resolve
+# writer calls it (find-callers: 1 caller, FillBarePropertyTypes), so a change to
+# it must move PROP_TYPES_FORMAT, never the resolver stamp. Matched the
+# vocabulary only through "Candidates". Classified 2026-10-30 (fix/1391).
+EXCLUDE findpropertyfillcandidates

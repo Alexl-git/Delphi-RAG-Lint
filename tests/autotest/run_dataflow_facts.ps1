@@ -180,21 +180,26 @@ $schema = (& $Exe schema --db $db 2>&1 | Out-String)
 Check '`schema` lists data_flows' ($schema -match 'data_flows')
 
 Write-Host 'Pre-1.26 DB re-parses' -ForegroundColor Cyan
+# Restamp the CURRENT extractor version as 1.25.0. A literal '1.26.0-alpha' here matched nothing once the
+# extractor moved to 1.27 (1.39.0), so the DB stayed current, nothing re-parsed and the check failed.
+$modelPas = Join-Path $PSScriptRoot '..\..\src\core\DRagLint.Core.Model.pas'
+$curExtractor = [regex]::Match([IO.File]::ReadAllText($modelPas), "DRAGLINT_EXTRACTOR_VERSION\s*(?::\s*string\s*)?=\s*'([^']+)'").Groups[1].Value
+Check 'the current extractor version is read from DRagLint.Core.Model.pas (fixture input)' ($curExtractor -match '^\d+\.\d+\.\d+') "got '$curExtractor'"
 $fp = @'
 import sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
 keys = [r[0] for r in c.execute("select key from schema_meta where key like '%fingerprint%' and key not like 'resolver%'")]
 for k in keys:
     v = c.execute('select value from schema_meta where key = ?', (k,)).fetchone()[0]
-    c.execute('update schema_meta set value = ? where key = ?', (v.replace('1.26.0-alpha', '1.25.0-alpha'), k))
-c.execute("update files set indexed_at_fingerprint = replace(indexed_at_fingerprint, '1.26.0-alpha', '1.25.0-alpha')")
+    c.execute('update schema_meta set value = ? where key = ?', (v.replace(sys.argv[2], '1.25.0-alpha'), k))
+c.execute("update files set indexed_at_fingerprint = replace(indexed_at_fingerprint, ?, '1.25.0-alpha')", (sys.argv[2],))
 c.execute('delete from data_flows')
 c.commit()
 print(len(keys), c.execute('select count(*) from data_flows').fetchone()[0])
 '@
 $fpFile = Join-Path $WorkDir 'fp.py'
 $fp | Set-Content $fpFile -Encoding ascii
-$fpOut = (& python $fpFile $db) -join ' '
+$fpOut = (& python $fpFile $db $curExtractor) -join ' '
 & $Exe index $SrcDir --db $db 2>&1 | Out-Null
 $r3 = Read-Facts
 Check 'a DB stamped 1.25.0 (rows emptied) re-parses and gets its rows back' (($fpOut -match '^[1-9]\d* 0$') -and ($total1 -gt 0 -and $r3.total -eq $total1)) "fingerprint keys/rows after wipe=$fpOut, rows after index=$($r3.total) (expected $total1)"

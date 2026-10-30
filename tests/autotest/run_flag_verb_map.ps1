@@ -439,10 +439,13 @@ Write-Host ("      [NOTE] cross-verb (pre-dispatch) flags, excluded: " + (($glob
 # 2026-10-26 (FLAG lane): '--file' left the pinned list because it is an ALIAS of
 # --in (features\flag-aliases.json) and the set is now folded to canonical
 # spellings -- the same option, still exempt, counted once.
-$ExpectedGlobalFlags = @('--db', '--dir', '--in', '--platform', '--project')
+# 2026-10-30 (1.39.1): '--target-compiler' JOINED, deliberately. PR #8 (extractor 1.27) has Run read it
+# BEFORE dispatch -- VER<N>0 / CompilerVersion for every parse follow the target Delphi -- so it is a
+# pre-dispatch flag like --platform, read for every verb (CHANGELOG 1.39.0 Added, 'Preprocessing for the TARGET Delphi').
+$ExpectedGlobalFlags = @('--db', '--dir', '--in', '--platform', '--project', '--target-compiler')
 $globalDiff = @(Compare-Object -ReferenceObject $ExpectedGlobalFlags -DifferenceObject @($globalFlags | Sort-Object) |
                 ForEach-Object { '{0}{1}' -f $(if ($_.SideIndicator -eq '=>') { '+' } else { '-' }), $_.InputObject })
-Check 'cross-verb flag set is exactly the pinned set (--db --dir --in --platform --project)' ($globalDiff.Count -eq 0) `
+Check 'cross-verb flag set is exactly the pinned set (--db --dir --in --platform --project --target-compiler)' ($globalDiff.Count -eq 0) `
   ("difference: " + ($globalDiff -join ' ') + " -- update `$ExpectedGlobalFlags only as a deliberate reclassification")
 
 # check 9 of run_docs_sync_guard.ps1 owns "accepted but in --help nowhere" (F1)

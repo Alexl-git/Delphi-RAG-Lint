@@ -580,8 +580,17 @@ if ($havePython) {
   # the stale store, then printed "0 caller(s)" / zero hits and exited 1 -- the
   # code for a real EMPTY answer. It must refuse with 2. The list comes from a
   # local .drag-lint.json found by walking up from the working directory.
+  # A PRIVATE ENGINE COPY, no drag-lint.json beside it. The engine-dir manifest (third_party\dll-win64\
+  # drag-lint.json, tracked) is merged with the local one, and on a machine where its sections are BUILT
+  # the list is no longer "every store stale": T8 answered from C:\Projects\...\drag-lint.sqlite and exited 0
+  # (1.39.0 battery). The premise is a list from the local .drag-lint.json alone, so the engine must carry none.
+  $t8Engine = Join-Path $WorkDir 't8-engine'
+  New-Item -ItemType Directory $t8Engine -Force | Out-Null
+  Copy-Item -LiteralPath $exePath -Destination $t8Engine
+  Get-ChildItem -LiteralPath (Split-Path $exePath) -Filter *.dll | Copy-Item -Destination $t8Engine
+  $t8Exe = Join-Path $t8Engine (Split-Path $exePath -Leaf)
   function Run-InDir([string]$Dir, [string[]]$VerbArgs) {
-    $p = Start-Process -FilePath $exePath -ArgumentList $VerbArgs -NoNewWindow -PassThru `
+    $p = Start-Process -FilePath $t8Exe -ArgumentList $VerbArgs -NoNewWindow -PassThru `
           -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory $Dir
     if (-not $p.WaitForExit(90000)) { try { $p.Kill($true) } catch {}; return @{ Code=-1; Out=''; Err='(timed out)' } }
     return @{ Code = $p.ExitCode
@@ -599,11 +608,15 @@ if ($havePython) {
   $staleDir = New-ManifestDir 'mf-stale' $dbV12
   $okDir    = New-ManifestDir 'mf-ok'    $dbA
   $t8 = @(); $p8 = @()
+  Reset-StaleDb
+  $rv = Run-InDir $staleDir @('resolve-dbs')
+  $rvDbs = @($rv.Out -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -like '*.sqlite' })
+  Check 'V8 CONTROL the T8 engine resolves the local manifest''s list ONLY (v12.sqlite)' (($rvDbs.Count -eq 1) -and ($rvDbs[0] -ieq $dbV12)) ($rvDbs -join '; ')
   foreach ($a in @(@('query','find-callers','--name','Touch'), @('query','--name','TAlphaBase'))) {
     $label = $a -join ' '
     Reset-StaleDb
     $r = Run-InDir $staleDir $a
-    if ($r.Code -ne 2) { $t8 += ("{0}=exit{1}" -f $label, $r.Code) }
+    if ($r.Code -ne 2) { $t8 += ("{0}=exit{1} [out: {2}] [err: {3}]" -f $label, $r.Code, ($r.Out.Trim() -replace '\s+', ' ' | ForEach-Object { $_.Substring(0, [Math]::Min(300, $_.Length)) }), ($r.Err.Trim() -replace '\s+', ' ' | ForEach-Object { $_.Substring(0, [Math]::Min(300, $_.Length)) })) }
     elseif ($r.Err -notmatch 'OLD SCHEMA') { $t8 += ("{0}=no-reason-on-stderr" -f $label) }
     $g = Run-InDir $okDir $a
     if ($g.Code -ge 2) { $p8 += ("{0}=exit{1}" -f $label, $g.Code) }

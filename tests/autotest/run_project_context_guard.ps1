@@ -9,10 +9,11 @@
   with the setup hint and with --platform and --config writes from built-ins.
   Never touches the user's real files: everything lives in a temp folder.
 
-  -Exe  path of drag-lint.exe (default: the deployed engine).
+  -Exe  path of drag-lint.exe (default: this tree's build output -- an absolute path to the main
+        tree's deployed engine measured another binary in every worktree; run_exe_freshness caught it).
 #>
 param(
-  [string]$Exe = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
+  [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
 )
 $ErrorActionPreference = 'Stop'
 $repo = Resolve-Path (Join-Path $PSScriptRoot '..\..')

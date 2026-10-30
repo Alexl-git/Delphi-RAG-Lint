@@ -46,8 +46,8 @@ function Run([string[]]$argv, [string]$tag) {
   [IO.File]::WriteAllText((Join-Path $WorkDir "$tag.log"), $o)
   return $o
 }
-function Index([string]$p, [string]$db, [string]$tag) {
-  return Run @('index', '--project', $p, '--db', $db, '--platform', 'win64', '--library-db', 'none') $tag
+function Index([string]$p, [string]$db, [string]$tag, [string[]]$extra = @()) {
+  return Run (@('index', '--project', $p, '--db', $db, '--platform', 'win64', '--library-db', 'none') + $extra) $tag
 }
 # sql --json rows are POSITIONAL arrays (see feedback_sql_json_rows_are_positional).
 function Col0([string]$db, [string]$q) {
@@ -78,7 +78,13 @@ Check '{$IF Defined(FEATX) and (DEBUG2 > 1)}: C.INC indexed' (Has $inc 'C.INC')
 Check '{$IFDEF DEBUG2} (a value define is defined): D.INC indexed' (Has $inc 'D.INC')
 Check '{$IFOPT R+} under DCC_RangeChecking=true: ROn.inc indexed, ROff.inc not' ((Has $inc 'ROn.inc') -and -not (Has $inc 'ROff.inc'))
 Check '{$R-} then {$IFOPT R-}: RLocal.inc indexed (in-source switch)' (Has $inc 'RLocal.inc')
-Check '{$IF CompilerVersion >= 37}: CV.inc indexed' (Has $inc 'CV.inc')
+# 1.39.0 (PR #8): without --target-compiler, index --project preprocesses for the .dproj's OWN Delphi.
+# VDef.dproj says ProjectVersion 19.5 = Delphi 11 = CompilerVersion 35, so CV.inc is NOT selected there;
+# before 1.39 the installed compiler's 37 was used and this check asserted the opposite.
+Check '{$IF CompilerVersion >= 37} under ProjectVersion 19.5 (CompilerVersion 35): CV.inc NOT indexed' (-not (Has $inc 'CV.inc')) ("fingerprint: $(Fp $db)")
+$dbCv = Join-Path $WorkDir 'v37.sqlite'
+$null = Index $proj $dbCv 'idx37' @('--target-compiler', '37')
+Check '{$IF CompilerVersion >= 37} with --target-compiler 37: CV.inc indexed (positive control)' (Has (IncLeaves $dbCv) 'CV.inc') ("fingerprint: $(Fp $dbCv)")
 
 # ---- flip the value: the fingerprint flips, the other include is indexed ---------------
 $fp0 = Fp $db
