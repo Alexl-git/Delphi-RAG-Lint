@@ -27,7 +27,6 @@ Full flag list: [hover in the CLI reference](../cli.md#hover).
 | `--qname` | `<Foo.Bar>` |  |  |
 | `--db` | `<file.sqlite>` |  |  |
 | `--format` |  |  |  |
-| `--write-back` |  |  |  |
 
 ## Where to click
 
@@ -49,24 +48,32 @@ capability is also exposed as a standalone CLI verb, and over stdio by the
 bundled language server (the Features page lists hover among
 the methods `drag-lint lsp` implements):
 ```text
-drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json] [--write-back]
+drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json]
 ```
 `--qname` is the fully qualified symbol; `--format` selects plain text,
-markdown, or JSON. `--write-back` opens the index writable so a property type
-recovered from an ancestor (below) is stored on the row; without it the hover
-never writes.
+markdown, or JSON. Hover never writes the index.
 
 ### What the card says about types
 
 A property, field, var, const, parameter or local variable shows its declared
 type (`Text: string`). A bare re-publication such as `property Text;` stores no
-type of its own, so the card climbs the ancestors -- the same climb the
-converter's property tree uses, bridging an unlinked ancestor by scope -- and
-names the class that declares it: `Text: string (declared in
-dxBar.TdxBarWindowItem)`. The JSON form carries the same as `type` and
-`declared_in`, and `signature` holds the resolved type. The language server
-opens its indexes read-only, so it keeps the answer in a session cache instead
-of the database.
+type in the source, so `index` fills it in: its last link stage, `prop-types`,
+takes the type from the nearest ancestor that declares it (bridging an unlinked
+ancestor by scope, the converter's climb) and stores it on the row as
+`: <type>`, generics intact (`TDictionary<string, Integer>`); a type it cannot
+find is never stored. A run that parsed files re-checks the bare rows of those
+files plus every same-named row of the properties they declare, so editing the
+ancestor's type updates the re-publications in unchanged units too (renaming or
+removing the declaring property, or re-parenting a class, is seen after a
+`--rebuild`); a run that parsed nothing skips the
+stage once the index carries its `prop_types_filled` marker, so an index built
+by an older engine is filled by its next plain `index` run. The card names the
+declaring class: `Text: string (declared in dxBar.TdxBarWindowItem)`. The JSON
+form carries the same as `type` and `declared_in`, and `signature` holds the
+type. Hover and the language server (which opens its indexes read-only) read
+the stored type; the ancestor name is found per session and cached.
+(`hover --write-back`, the 2026-10-29 opt-in that stored the type at hover time,
+was removed the same day: the index-time fill made it redundant.)
 
 ### What the card says about effects
 

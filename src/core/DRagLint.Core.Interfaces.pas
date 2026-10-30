@@ -1749,6 +1749,18 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function MemoizePropertyType(ASymbolId: Int64; const ATypeName: string): Boolean;
+    /// <summary>The bare re-published property rows the index-time type fill
+    /// (DRagLint.Convert.PropTree.FillBarePropertyTypes) must (re)check: no
+    /// accessor, and a signature that is empty or a ': T' memo.</summary>
+    /// <param name="ASinceUnix">0 = every such row. Otherwise only rows a
+    /// change since that time can affect: rows of files parsed at or after it,
+    /// plus rows whose name matches a property DECLARED (typed, not a memo) in
+    /// such a file.</param>
+    /// <returns>The rows, in id order.</returns>
+    /// <remarks>Read-only. A rename/removal of the declaring property or a
+    /// re-parented class is not seen by the name filter; a --rebuild (or a
+    /// fill-format bump) re-checks everything.</remarks>
+    function FindPropertyFillCandidates(ASinceUnix: Int64): TArray<TSymbol>;
     /// <summary>The innermost routine (procedure/function/method/constructor/
     /// destructor) whose IMPLEMENTATION BODY span (impl_start_line..impl_end_line)
     /// contains ALine in AFileId. Empty (Id=0) when the line is in no routine body.

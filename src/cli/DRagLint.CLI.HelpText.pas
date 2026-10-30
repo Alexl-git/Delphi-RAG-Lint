@@ -21,7 +21,7 @@ implementation
 
 procedure WriteVerbReference;
 begin
-  Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library]');
+  Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library] [--target-compiler <ver|auto>]');
   Writeln('                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.');
   Writeln('                               A hit is recorded by qualified NAME on refs.external_target -- never as a call_edges row,');
   Writeln('                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the');
@@ -39,7 +39,7 @@ begin
   Writeln('                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY');
   Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
   Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
-  Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library]');
+  Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library] [--target-compiler <ver|auto>]');
   Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
   Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
   Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library]');
@@ -238,7 +238,7 @@ begin
   Writeln('  drag-lint diff               --db <old.sqlite> --db <new.sqlite>  [--json]');
   Writeln('  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)');
   Writeln('  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]');
-  Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json] [--write-back]');
+  Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]');
   Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]');
   Writeln('                               an interface method also lists its implementors; an implementor, the interface sites reaching it');
   Writeln('                               --format json: "implementors" [QName,...] and "via_dispatch" [{via,kind,sites}] (keys present only when non-empty; RB-5)');
@@ -381,7 +381,7 @@ begin
   Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
   Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
   Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
-  Writeln('    --target-compiler <v>     lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
+  Writeln('    --target-compiler <v>     index: the Delphi the PREPROCESSOR describes (VER<N>0, CompilerVersion, RTLVersion; default: --project''s ProjectVersion (index --all: each section''s own .dproj), then the installed RAD Studio, then 37). lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
   Writeln('    --baseline <file>         report only findings absent from the baseline');
   Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
   Writeln('  drag-lint workspace index  [--config <.drag-lint-workspace.json>]');
@@ -505,7 +505,7 @@ begin
   Result := True;
   if pVerb = 'index' then
   begin
-    Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library]');
+    Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library] [--target-compiler <ver|auto>]');
     Writeln('                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.');
     Writeln('                               A hit is recorded by qualified NAME on refs.external_target -- never as a call_edges row,');
     Writeln('                               because target_symbol_id is a NOT NULL FK into this db. A LOCAL answer always wins (the');
@@ -523,7 +523,7 @@ begin
     Writeln('                               its subtree; --no-use-ignore does not change that. --no-sql-ms indexes EVERY');
     Writeln('                               .sql file, not just the MS*.sql migration scripts CREATE EXCEPTION text is read');
     Writeln('                               from by default. --deep also records usage refs (--shallow is the default).');
-    Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library]');
+    Writeln('  drag-lint index --project <file.dproj>              [--db <file.sqlite>] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--no-preprocess] [--dry-run] [--watch [--interval N]] [--wait-library <min>] [--require-library] [--target-compiler <ver|auto>]');
     Writeln('  drag-lint index --scan-libraries-win                [--db <file.sqlite>] [--dry-run]   (Win32+Win64 Library+Browsing paths)');
     Writeln('  drag-lint index --scan-libraries-all                [--db <file.sqlite>] [--dry-run]   (every platform: +Android/iOS/Linux/OSX)');
     Writeln('  drag-lint index --all [--config <path>] [--only <Sec1,Sec2>] [--platform win32|win64] [--recompile|--rebuild] [--build-config <Release|Debug|name>] [--dry-run [--json]] [--jobs <n>] [--wait-library <min>] [--require-library]');
@@ -818,7 +818,7 @@ begin
   end;
   if pVerb = 'hover' then
   begin
-    Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json] [--write-back]');
+    Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]');
     Exit;
   end;
   if pVerb = 'impact' then
@@ -1189,7 +1189,7 @@ begin
     Writeln('    --config <file>           drag-lint-lint.json (else auto-discovered in CWD)');
     Writeln('    --enable id1,id2          re-include disabled / off-by-default rules');
     Writeln('    --profile <name>          merge a named enable/disable set from the config; built-in: cwe, cert, misra, cwe-top25 (rules labelled under that standard, severity floor warning; a config profile of the same name wins)');
-    Writeln('    --target-compiler <v>     lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
+    Writeln('    --target-compiler <v>     index: the Delphi the PREPROCESSOR describes (VER<N>0, CompilerVersion, RTLVersion; default: --project''s ProjectVersion (index --all: each section''s own .dproj), then the installed RAD Studio, then 37). lint / lint-all / rules / lsp: the oldest compiler the code must compile on -- 13, 12, 11, 10.4, 10.3, XE7 ..., a CompilerVersion (37, 36 ...) or auto (the .dproj ProjectVersion); modernize findings whose fix needs a newer compiler are not reported; default 37 = Delphi 13 (config key target_compiler, profile-overridable)');
     Writeln('    --baseline <file>         report only findings absent from the baseline');
     Writeln('    --write-baseline <file>   record current findings as the baseline and exit 0');
     Exit;

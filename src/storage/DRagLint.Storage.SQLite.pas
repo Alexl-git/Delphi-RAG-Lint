@@ -3032,6 +3032,10 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function MemoizePropertyType(ASymbolId: Int64; const ATypeName: string): Boolean;
+      /// <summary>See ISymbolStore.FindPropertyFillCandidates.</summary>
+      /// <param name="ASinceUnix">0 = all bare rows; else the change scope.</param>
+      /// <returns>Bare re-published property rows, in id order.</returns>
+      function FindPropertyFillCandidates(ASinceUnix: Int64): TArray<TSymbol>;
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
       /// <returns><!-- drag-lint:auto -->TSymbol -- Observed: Default(TSymbol);
@@ -11478,6 +11482,46 @@ begin
     end;
   finally
     Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.FindPropertyFillCandidates(ASinceUnix: Int64): TArray<TSymbol>;
+var
+  Q  : TFDQuery       ;
+  Acc: TList<TSymbol> ;
+begin
+  Acc:= TList<TSymbol>.Create;
+  Q  := TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    // A bare row: no accessor, signature empty or a ': T' memo (the extractor
+    // never writes a leading colon). Both texts are literals: no input in SQL.
+    if ASinceUnix <= 0 then
+      Q.SQL.Text:= 'SELECT s.* FROM symbols s WHERE s.kind = ''property'' ' +
+        'AND COALESCE(s.prop_access, '''') = '''' ' +
+        'AND (COALESCE(s.signature, '''') = '''' OR s.signature LIKE '': %'') ORDER BY s.id'
+    else
+    begin
+      Q.SQL.Text:= 'SELECT s.* FROM symbols s WHERE s.kind = ''property'' ' +
+        'AND COALESCE(s.prop_access, '''') = '''' ' +
+        'AND (COALESCE(s.signature, '''') = '''' OR s.signature LIKE '': %'') ' +
+        'AND (s.file_id IN (SELECT f.id FROM files f WHERE f.parsed_at >= :since) ' +
+        '  OR LOWER(s.name) IN (SELECT LOWER(d.name) FROM symbols d JOIN files f ON f.id = d.file_id ' +
+        '     WHERE f.parsed_at >= :since AND d.kind = ''property'' ' +
+        '       AND COALESCE(d.signature, '''') <> '''' AND d.signature NOT LIKE '':%'')) ' +
+        'ORDER BY s.id';
+      Q.ParamByName('since').AsLargeInt:= ASinceUnix;
+    end;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Acc.Add(ReadSymbolFromQuery(Q));
+      Q.Next;
+    end;
+    Result:= Acc.ToArray;
+  finally
+    Q.Free;
+    Acc.Free;
   end;
 end;
 
