@@ -36,8 +36,19 @@ function Check($n, $ok, $d = '') {
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
 $Exe = (Resolve-Path $Exe).Path
-$env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $env:TEMP 'drag-lint-no-context-defaults.json'  # LSP-1 CORE: hover/notice text never depends on the user's real defaults
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
+# LSP-1 CORE: hover/notice text never depends on the user's real defaults. The defaults file is
+# the guard's OWN and names a tiny private Win64 library DB: without it the library comes from
+# resolve-dbs, i.e. from whichever drag-lint.json manifest sits beside the exe under test, and
+# the OFF-path frames (a "no library index" showMessage + context notice) differed between a
+# deployed exe (manifest -> library found) and a build-dir exe (none) -- 1174 vs 1638 bytes.
+$LibSrc = Join-Path $WorkDir 'libsrc'; New-Item -ItemType Directory -Force $LibSrc | Out-Null
+[IO.File]::WriteAllText((Join-Path $LibSrc 'FxLib.pas'), "unit FxLib;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`nend.`r`n", [Text.Encoding]::ASCII)
+$LibDb = Join-Path $WorkDir 'library-Win64.sqlite'
+& $Exe index $LibSrc --db $LibDb 2>&1 | Out-Null
+if (-not (Test-Path $LibDb)) { Write-Host 'FATAL: index produced no library DB' -ForegroundColor Red; exit 2 }
+$env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $WorkDir 'context-defaults.json'
+[IO.File]::WriteAllText($env:DRAGLINT_CONTEXT_DEFAULTS, (@{ libraries = @{ Win64 = @{ libraryDb = $LibDb } } } | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding($false)))
 
 # Fixture: missing-inherited-ctor and code-after-exit are built-in rules ON by default
 # that BuildDiagnostics does not run. The clean one has neither.
@@ -94,7 +105,9 @@ Check 'flag ON: source is drag-lint (unowned)' ($on.Out -match '"source":"drag-l
 $m = [regex]::Match($on.Err, 'drag-lint lsp: full-rules (.+) (\d+) ms (\d+) findings')
 Check 'flag ON: stderr carries the cost line with numeric ms and count' $m.Success ("[" + $m.Value + "]")
 Check 'flag ON: reported finding count equals the published diagnostic count' `
-  ($m.Success -and ([int]$m.Groups[3].Value) -eq @([regex]::Matches($on.Out, '"source":"')).Count) ''
+  ($m.Success -and ([int]$m.Groups[3].Value) -eq @([regex]::Matches($on.Out, '"source":"drag-lint')).Count) ''
+# ("source":"drag-lint, not "source":" -- the draglint/context frame (LSP-1 CORE 5ba03b06) carries
+#  "source":"placeholder", which is not a diagnostic.)
 
 $on2 = RunLsp $Exe $DirtyF @('--full-rules') 'on2'
 $m2 = [regex]::Match($on2.Err, 'full-rules (.+) (\d+) ms (\d+) findings')
