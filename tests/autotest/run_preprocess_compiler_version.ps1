@@ -10,7 +10,7 @@
       reads an unknown identifier as False, so EVERY {$IF CompilerVersion >= N}
       took its ELSE branch, on every compiler.
 
-  THE FIX (extractor 1.20.0-alpha). The CLI derives the target CompilerVersion
+  THE FIX (extractor 1.27.0-alpha). The CLI derives the target CompilerVersion
   from the RAD Studio root it resolves ($BDS first): ...\Studio\20.0 -> 33,
   ...\Studio\37.0 -> 37. The built-ins say VER<N>0 / compiler_version_<N>, and
   every profile carries CompilerVersion and RTLVersion as numbers. A non-default
@@ -70,10 +70,10 @@ implementation
 end.
 '@
 
-function IndexWith([string]$Bds, [string]$Name) {
+function IndexWith([string]$Bds, [string]$Name, [string[]]$Extra = @()) {
   $env:BDS = $Bds
   $db = Join-Path $WorkDir "$Name.sqlite"
-  & $Exe index (Join-Path $WorkDir 'src') --db $db --quiet 2>&1 | Out-Null
+  & $Exe index (Join-Path $WorkDir 'src') --db $db --quiet @Extra 2>&1 | Out-Null
   $code = $LASTEXITCODE
   $has = @{}
   foreach ($n in @('ModernApi', 'AncientApi', 'RioOnly', 'FlorenceOnly')) {
@@ -99,6 +99,15 @@ Check 'ASSERT: CompilerVersion is 37 -> ModernApi' ($flo.Has.ModernApi -and -not
 Check 'ASSERT: VER370, not VER330, for a 13 root' ($flo.Has.FlorenceOnly -and -not $flo.Has.RioOnly) ''
 
 Write-Host ''
+Write-Host 'BDS = ...\Studio\37.0 (Delphi 13 installed) + --target-compiler 10.3' -ForegroundColor Cyan
+# x139: the explicit target beats the installed Delphi -- a 10.3 project indexed
+# on a Delphi 13 box must still see VER330 / CompilerVersion 33.
+$tc = IndexWith 'C:\FakeEmbarcadero\Studio\37.0' 'target103' @('--target-compiler', '10.3')
+Check 'index exits 0' ($tc.Code -eq 0) "exit=$($tc.Code)"
+Check 'ASSERT: --target-compiler 10.3 defines VER330 on a 13 box (RioOnly)' $tc.Has.RioOnly ''
+Check 'ASSERT: ... and not VER370 (FlorenceOnly absent)' (-not $tc.Has.FlorenceOnly) ''
+Check 'ASSERT: CompilerVersion 33 >= 30 -> ModernApi' ($tc.Has.ModernApi -and -not $tc.Has.AncientApi) ''
+Write-Host ''
 Write-Host 'fingerprint' -ForegroundColor Cyan
 $py = Join-Path $WorkDir 'fp.py'
 Write-Ascii $py @'
@@ -109,6 +118,8 @@ $fpRio = ((python $py $rio.Db) -join '').Trim()
 $fpFlo = ((python $py $flo.Db) -join '').Trim()
 Check 'ASSERT: a 10.3 index is stamped cv=33' ($fpRio -match ';cv=33$') $fpRio
 Check 'CONTROL: a Delphi 13 index keeps the stamp it always had (no cv= limb)' ($fpFlo -notmatch 'cv=') $fpFlo
+$fpTc = ((python $py $tc.Db) -join '').Trim()
+Check 'ASSERT: a --target-compiler 10.3 index is stamped cv=33' ($fpTc -match ';cv=33$') $fpTc
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'RESULT: FAIL' -ForegroundColor Red; exit 1 }

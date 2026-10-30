@@ -10,7 +10,7 @@
   routine whose inactive first branch holds the logic got that branch's
   cyclomatic complexity, reads/writes and SQL, and its active branch's none.
 
-  THE FIX (extractor 1.20.0-alpha). TIndexer.SetPreprocess hands the same switch
+  THE FIX (extractor 1.27.0-alpha). TIndexer.SetPreprocess hands the same switch
   and profile to TAstParseCache.
 
   Usage: pwsh -File tests/autotest/run_index_facts_use_preprocessed_parse.ps1 [-Exe <path>]

@@ -1149,4 +1149,7 @@
 #   when not 37); one walk emits header type_use refs for every impl header. Every
 #   index re-parses once.
 #   Superseded: 1.26.0-alpha|3302e490166911801893376a90ca2bfa592e1e09b70260a65f5bc35469a53acc
-1.27.0-alpha|f3e091987358acb0559609745d1ec775b6b8c040db540ad6721a945e529a4a0a
+#   Re-pinned WITHIN unreleased 1.27.0-alpha the same day (comment-only edit in Core.Indexer.pas,
+#   the stale 'extractor 1.20.0' label; then Preprocess.Profile InRange lint fix, same behaviour): 1.27.0-alpha|f3e091987358acb0559609745d1ec775b6b8c040db540ad6721a945e529a4a0a
+#     and 1.27.0-alpha|eebd8969e40d03083771eea4ac08d59e8948bb12c9f5e498810962191e87753c
+1.27.0-alpha|35f9307e8fd629d94b905b249ebed2db165ad338d534f08e20826ab7bc4a3e54

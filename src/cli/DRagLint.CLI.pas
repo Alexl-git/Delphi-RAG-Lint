@@ -12308,6 +12308,28 @@ var
     ApplyRunTargetCompiler, or a run at the default target, takes no new path. }
   GRunTargetGate: TTargetRuleGate;
 
+/// <summary>PR #8 / x139: the CompilerVersion the PREPROCESSOR describes
+/// (VER&lt;N&gt;0, CompilerVersion, RTLVersion) for this run. First source that
+/// names one wins: --target-compiler (a version token; "auto" reads --project's
+/// ProjectVersion), then the ProjectVersion of --project's .dproj, then the
+/// installed RAD Studio (set at start-up from TStudioEnv), then 37.</summary>
+/// <param name="AArgs">The parsed command line.</param>
+/// <remarks>Silent: an unknown token or ProjectVersion leaves the installed
+/// Delphi's number in place (lint / lint-all / rules refuse a bad
+/// --target-compiler themselves in ApplyRunTargetCompiler). The per-section
+/// projects of `index --all` are NOT consulted here (open, PR #11 scope).</remarks>
+procedure ApplyPreprocessCompilerVersion(const AArgs: TArgs);
+var
+  V  : Integer;
+  Err: string ;
+  Tok: string ;
+begin
+  Tok:= Trim(AArgs.TargetCompiler);
+  if (Tok = '') and SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then Tok:= TARGET_COMPILER_AUTO;
+  if Tok = '' then Exit;
+  if ResolveTargetCompiler(Tok, '', '', AArgs.ProjectPath, V, Err) then SetTargetCompilerVersion(V);
+end;
+
 /// <summary>Resolves the run's target compiler, publishes it
 /// (SetActiveTargetCompiler) and builds GRunTargetGate from the rule catalog.</summary>
 /// <param name="AArgs">--target-compiler, and --project for "auto".</param>
@@ -35571,6 +35593,7 @@ begin
   SetTargetCompilerVersion(CompilerVersionOfStudioRoot(TStudioEnv.RootOrEmpty));
   try
     Args:= ParseArgs;
+    ApplyPreprocessCompilerVersion(Args);
     if Args.ShowHelp then
     begin
       if Args.HelpVerb <> '' then PrintMenuVerbHelp(Args.HelpVerb)

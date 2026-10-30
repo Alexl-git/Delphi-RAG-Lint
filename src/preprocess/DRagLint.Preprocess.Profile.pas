@@ -263,6 +263,7 @@ uses
   System.Classes,
   System.StrUtils,
   System.IOUtils,
+  System.Math,
   System.RegularExpressions;
 
 // The MSBuild recursion token that terminates every DCC_Define list -- dropped
@@ -315,7 +316,7 @@ begin
   Dot := Pos('.', Leaf);
   if Dot > 0 then Leaf:= Copy(Leaf, 1, Dot - 1);
   if not TryStrToInt(Leaf, Bds) then Exit;
-  if (Bds >= BDS_FIRST_OFFSET) and (Bds <= BDS_LAST_OFFSET) then Result:= Bds + BDS_COMPILER_OFFSET
+  if InRange(Bds, BDS_FIRST_OFFSET, BDS_LAST_OFFSET) then Result:= Bds + BDS_COMPILER_OFFSET
   else if Bds >= DEFAULT_COMPILER_VERSION then Result:= Bds;
 end;
 

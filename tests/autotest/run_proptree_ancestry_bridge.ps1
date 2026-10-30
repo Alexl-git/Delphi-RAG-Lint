@@ -325,6 +325,24 @@ Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE; $($indexOut -jo
 $dbPristine = Join-Path $WorkDir 'bridge_pristine.sqlite'
 Copy-Item $db $dbPristine -Force
 
+# Since 54ca1379 (feat(index): fill re-published property types at index time)
+# every index run ends with the prop-types stage, which already stores ': TAlign'
+# on the bare re-publications -- so a fresh index gives proptree nothing left to
+# memoize and the write-back POSITIVE CONTROL below could never go green. Clear
+# the stage's memos in the pristine copy: it then stands for an index written
+# before that stage existed (or a row the stage could not fill), which is
+# exactly the DB a proptree write-back still changes.
+$script:PyClear = Join-Path $WorkDir 'clear_memos.py'
+Write-Ascii $script:PyClear @'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+n = con.execute("UPDATE symbols SET signature='' WHERE kind='property' "
+                "AND COALESCE(prop_access,'')='' AND signature LIKE ':%'").rowcount
+con.commit(); con.close(); print(n)
+'@
+$clearedMemos = [int]((python $script:PyClear $dbPristine) -join '').Trim()
+Check 'pristine copy: the prop-types memos were cleared (the probe has rows to write)' ($clearedMemos -gt 0) "cleared=$clearedMemos"
+
 function Get-Tree([string]$Database, [string]$QName) {
   Push-Location $WorkDir
   try {

@@ -2170,8 +2170,11 @@ begin
         Anc:= AStore.GetTransitiveAncestors(P.ParentId);
         AncCache.Add(P.ParentId, Anc);
       end;
+      { CLASS ancestors only, as ClassChain / ResolveInheritedType: an interface
+        in the heritage list may declare a same-named property of an unrelated
+        type (run_proptree_polymorphic.ps1, TInterfaceDerived). }
       for A in Anc do
-        if A.Resolved and (A.SymbolId > 0) then
+        if A.Resolved and (A.SymbolId > 0) and (A.Kind = 'class') then
         begin
           Row:= RowOn(A.SymbolId, P.Name);
           if (Row.Id > 0) and (Row.Kind = skProperty) and SignatureDeclaresType(Row.Signature) then
