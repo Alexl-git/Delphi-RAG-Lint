@@ -852,6 +852,18 @@
     "verb": "lint"
   },
   {
+    "id": "warm-rule-cache",
+    "title": "warm-rule-cache",
+    "summary": "Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm)",
+    "group": "linting",
+    "order": 30028,
+    "since": "1.39.0-alpha",
+    "file": "features/warm-rule-cache.md",
+    "menus": [],
+    "context": [],
+    "verb": "warm-rule-cache"
+  },
+  {
     "id": "doc-comment-stub-symbol",
     "title": "Doc Comment Stub (symbol)",
     "summary": "Uses generate-docs to produce a doc-comment stub for one qualified symbol",

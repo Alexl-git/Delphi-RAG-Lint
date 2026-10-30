@@ -1,0 +1,51 @@
+{
+  "id": "warm-rule-cache",
+  "title": "warm-rule-cache",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.39.0-alpha",
+  "summary": "Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm)",
+  "intro": "Computes the whole-project lint rules (circular-uses, enum-helper-separate-units, duplicate-global-decl) for a project index and stores them, so the next lint of any unit in it is a cache hit. Every project index run warms it before it returns; --rule-cache-warm background starts it in a detached process instead (the run returns at once), off skips it, and DRAGLINT_RULE_CACHE_WARM sets the default. Run it by hand when you want the cache warm right now. It needs a project index and writes only if no index changed while it ran. Contributed by Jonathas Paiva (PR #1).",
+  "wikiPage": "warm-rule-cache",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "warm-rule-cache",
+      "usage": "drag-lint warm-rule-cache --db <project.sqlite> [--library-db <lib.sqlite>] [--detached]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<project.sqlite>"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<lib.sqlite>"
+        },
+        {
+          "name": "--detached"
+        }
+      ],
+      "helpOrder": 26,
+      "help": ["  drag-lint warm-rule-cache --db <project.sqlite> [--library-db <lib.sqlite>] [--detached]   (fill the `lint <file>` rule", "                               cache for a project index now, in this process; what index starts in the background.", "                               --detached: the form index uses -- every line of output goes to NUL)"]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"],
+  "questions": [
+    {
+      "ask": "How do I make a project index run return without waiting for the lint rule-cache warm?",
+      "command": "drag-lint index --project <X.dproj> --rule-cache-warm background"
+    },
+    {
+      "ask": "How do I warm the lint rule cache of a project index by hand?",
+      "command": "drag-lint warm-rule-cache --db <project.sqlite>"
+    }
+  ],
+  "verified": {
+    "date": "2026-10-30",
+    "by": "ENGINE",
+    "build": "1.38.0-alpha",
+    "surfaceHash": "b1f00d80ab1b4be410e5ec2d0d9fdf011c19aa4e6821470b1eac32d0970bef3d"
+  }
+}

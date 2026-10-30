@@ -30,6 +30,7 @@ Full flag list: [index in the CLI reference](../cli.md#index).
 | `--rebuild` |  |  |  |
 | `--dry-run` |  |  |  |
 | `--wait-library` | `<min>` |  |  |
+| `--rule-cache-warm` | `background\|wait\|off` |  |  |
 | `--require-library` |  |  |  |
 | `--watch` |  |  |  |
 | `--interval` | `N` |  |  |

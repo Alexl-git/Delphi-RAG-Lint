@@ -588,7 +588,7 @@
     "version": "1.35.1-alpha"
   },
   "features/rebuild-index-for-this-project.md": {
-    "hash": "fec8d91b71751b7a6aaeb47178f9290622f32aadc7a1434d7ab9c12def042e00",
+    "hash": "f4332bfa761c453978eafdcef299d214e2b741c1b76929b91051c6a87cb6ba30",
     "version": "1.38.0-alpha"
   },
   "features/reconcile-project-members-dpr-dproj.md": {
@@ -749,6 +749,10 @@
   },
   "features/vscode-extension.md": {
     "hash": "0541a2b797d4c366c69e44cc0fbcea48e7b3a12ed5a1c06c3f2feab3bcd09ffe",
+    "version": "1.38.0-alpha"
+  },
+  "features/warm-rule-cache.md": {
+    "hash": "73024da6f4920ad64d621a1904162248616fba5f9bc69ecd4820a2936f4bb77c",
     "version": "1.38.0-alpha"
   },
   "features/wiki-blocks-authoring.md": {

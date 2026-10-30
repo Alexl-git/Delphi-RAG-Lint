@@ -590,6 +590,8 @@ type
     ResolveOnly : Boolean; // index --resolve-only: re-derive edges, skip the walk
     WaitLibraryMin : Integer; // index --wait-library <minutes>: poll a not-ready platform library, then continue
     RequireLibrary : Boolean; // index --require-library: a not-ready platform library is ERROR, exit 2
+    RuleCacheWarm: string; // index --rule-cache-warm background|wait|off ('' = DRAGLINT_RULE_CACHE_WARM, else wait)
+    WarmDetached : Boolean; // warm-rule-cache --detached: spawned by an index run, no console
     // v0.47: ghost-check -- compile the project with one unit's content replaced
     // by an unsaved buffer, with a guaranteed restore. Track 3 sub-project B
     // Task 2: convert-apply's --unit (the .pas being converted) ALSO reuses
@@ -972,6 +974,7 @@ function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
 function ManifestStartDir(const AProjectPath: string): string; forward;
 function LoadManifestForProject(const AEngineDir, AProjectPath: string): TIndexManifest; forward;
 procedure WarmRuleCache(const AProjectDb, ALibraryDb: string); forward;
+procedure WarmRuleCacheAfterIndex(const AProjectDb, ALibraryDb: string); forward;
 function RuleCacheLibraryDb(const AArgs: TArgs): string; forward;
 { Declared here because ResolveReadDbsForFileWith (used by `outline`, well above
   the implementation) needs it, and the implementation sits beside the manifest
@@ -1827,6 +1830,12 @@ begin
       Inc(i);
       Result.WaitLibraryMin:= StrToIntDef(ParamStr(i), 0);
     end
+    else if (A = '--rule-cache-warm') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.RuleCacheWarm:= LowerCase(ParamStr(i));
+    end
+    else if A = '--detached' then Result.WarmDetached:= True
     { LSP TRANSPORT FLAGS -- ACCEPTED AND IGNORED, NOT REJECTED.
       vscode-languageclient appends a transport flag to argv from the client's
       `transport:` declaration (node/main.js: `args.push('--stdio')`), so the
@@ -4725,7 +4734,7 @@ begin
     begin
       Indexer:= nil; { it holds its own reference to the store -- see DoIndex }
       Store:= nil;
-      WarmRuleCache(AItem.DbPath, RuleCacheLibraryDb(Default(TArgs)));
+      WarmRuleCacheAfterIndex(AItem.DbPath, RuleCacheLibraryDb(Default(TArgs)));
     end;
     Result:= SectionFailedFiles = 0;
   except
@@ -5402,6 +5411,7 @@ begin
       { x11: and --target-compiler -- without it a child preprocessed its section for
         the section's ProjectVersion, not for the target the caller named. }
       if Trim(AArgs.TargetCompiler) <> '' then ChildCmdLine:= ChildCmdLine + ' --target-compiler "' + Trim(AArgs.TargetCompiler) + '"';
+      if AArgs.RuleCacheWarm <> '' then ChildCmdLine:= ChildCmdLine + ' --rule-cache-warm ' + AArgs.RuleCacheWarm;
       { The child writes to the SAME stdout/stderr, so it must write the same bytes. }
       if CurrentOutputEncoding <> oeAscii then
         ChildCmdLine:= ChildCmdLine + ' ' + OUTPUT_ENCODING_SWITCH + ' ' + OutputEncodingName(CurrentOutputEncoding);
@@ -7205,7 +7215,7 @@ begin
       would leave the write connection open through the warm (whole-branch review). }
     Indexer:= nil;
     Store:= nil;
-    WarmRuleCache(ResolvedDb, RuleCacheLibraryDb(AArgs));
+    WarmRuleCacheAfterIndex(ResolvedDb, RuleCacheLibraryDb(AArgs));
   end;
   Result:= if AnyFileFailed then 1 else 0;
 end; // function
@@ -14652,6 +14662,199 @@ begin
   except
     on E: Exception do Writeln('WARNING: rule-cache not warmed: ' + E.ClassName + ': ' + E.Message);
   end;
+end;
+
+var
+  { How an index run warms the rule cache (--rule-cache-warm, else
+    DRAGLINT_RULE_CACHE_WARM): 'wait' (the default, also ''), 'background' or
+    'off'. Set once by Run for `index`; the --all section builder has no TArgs
+    of its own, so it reads this too. }
+  GRuleCacheWarm: string = '';
+
+{ Starts this engine again as a DETACHED process running ACmdArgs, with NO
+  handle inherited: an inherited stdout pipe would keep the CALLER waiting for
+  EOF until the child exits -- exactly the wait the background warm removes.
+  The child has no console, so it sends its own output to NUL (see Run).
+  Breaks away from the caller's job when the job allows it, so a harness that
+  kills its job on exit does not take the warm down with it. }
+function StartDetachedSelf(const ACmdArgs: string; out APid: Cardinal): Boolean;
+const
+  CREATE_BREAKAWAY_FROM_JOB = $01000000;
+var
+  SI : TStartupInfoW      ;
+  PI : TProcessInformation;
+  Cmd: string             ;
+  Buf: array of WideChar  ;
+begin
+  APid:= 0;
+  Cmd:= '"' + ParamStr(0) + '" ' + ACmdArgs;
+  SetLength(Buf, Length(Cmd) + 1);
+  Move(PChar(Cmd)^, Buf[0], (Length(Cmd) + 1) * SizeOf(WideChar));
+  ZeroMemory(@SI, SizeOf(SI));
+  SI.cb:= SizeOf(SI);
+  ZeroMemory(@PI, SizeOf(PI));
+  Result:= CreateProcessW(nil, @Buf[0], nil, nil, False,
+    DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP or CREATE_BREAKAWAY_FROM_JOB, nil, nil, SI, PI);
+  if not Result then { a job without JOB_OBJECT_LIMIT_BREAKAWAY_OK refuses the breakaway }
+    Result:= CreateProcessW(nil, @Buf[0], nil, nil, False,
+      DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP, nil, nil, SI, PI);
+  if not Result then Exit;
+  APid:= PI.dwProcessId;
+  CloseHandle(PI.hThread);
+  CloseHandle(PI.hProcess);
+end; // function
+
+/// <summary>Warms the rule cache after an index run, the way --rule-cache-warm says.</summary>
+/// <param name="AProjectDb">The project index just written; its write connection is released.</param>
+/// <param name="ALibraryDb">RuleCacheLibraryDb for the run, or ''.</param>
+/// <remarks>WHY A BACKGROUND MODE (2026-10-15). The warm recomputes the three
+/// CACHED_RULES over the whole project, and its key is the index's file stat, which
+/// every index run moves -- so it runs in full on every run, nothing changed
+/// included: 252 s on the 2,218-file ProjectA closure, against an index of 1 to 7 s.
+/// 'background' hands it to a detached child that computes exactly what WarmRuleCache
+/// computes and keeps its rule of writing only if no index moved meanwhile.
+/// WHY NOT THE DEFAULT. The child holds the index OPEN until it ends, and Windows
+/// refuses to delete an open file: tools\score-cycle-playbook.ps1 indexes a scratch
+/// DB, reads it and deletes it, and under load the delete failed while the warm still
+/// ran (the battery's run_score_cycle_playbook_selftest). 'wait' -- the previous
+/// behaviour -- stays the default; 'off' skips the warm.</remarks>
+procedure WarmRuleCacheAfterIndex(const AProjectDb, ALibraryDb: string);
+begin
+  if not TRuleCache.Enabled then Exit;
+  if GRuleCacheWarm = 'off' then
+  begin
+    Writeln('rule-cache: not warmed (--rule-cache-warm off); the next lint fills it');
+    Exit;
+  end;
+  if GRuleCacheWarm <> 'background' then
+  begin
+    WarmRuleCache(AProjectDb, ALibraryDb);
+    Exit;
+  end;
+  var CmdArgs: string:= 'warm-rule-cache --detached --db "' + AProjectDb + '"';
+  if ALibraryDb <> '' then CmdArgs:= CmdArgs + ' --library-db "' + ALibraryDb + '"';
+  var Pid: Cardinal;
+  if StartDetachedSelf(CmdArgs, Pid) then
+    Writeln(Format('rule-cache: warming in the background (pid %d); until it finishes the next lint fills it', [Pid]))
+  else
+    Writeln('WARNING: rule-cache not warmed: the background warm could not start (' +
+      SysErrorMessage(GetLastError) + '); the next lint fills it');
+end;
+
+function WarmQueryImageName(hProcess: THandle; dwFlags: DWORD; lpExeName: PWideChar;
+  var lpdwSize: DWORD): BOOL; stdcall; external kernel32 name 'QueryFullProcessImageNameW';
+
+{ True when A and B name the SAME FILE on disk, compared by volume serial and
+  file index rather than by spelling: QueryFullProcessImageName gives the long
+  path, while ParamStr(0) keeps whatever spelling the engine was started by --
+  an 8.3 short path, or a path through a junction -- so a text compare called
+  the engine's own previous warm "another program" and left it running. When
+  either file cannot be opened, the spellings are compared after expansion. }
+function SameFileIdentity(const A, B: string): Boolean;
+
+  function Identify(const APath: string; out AInfo: TByHandleFileInformation): Boolean;
+  var
+    H: THandle;
+  begin
+    Result:= False;
+    AInfo:= Default(TByHandleFileInformation);
+    H:= CreateFile(PChar(APath), 0, FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE,
+      nil, OPEN_EXISTING, 0, 0);
+    if H = INVALID_HANDLE_VALUE then Exit;
+    try
+      Result:= GetFileInformationByHandle(H, AInfo);
+    finally
+      CloseHandle(H);
+    end;
+  end;
+
+var
+  IA, IB: TByHandleFileInformation;
+begin
+  Result:=
+    if Identify(A, IA) and Identify(B, IB) then
+      (IA.dwVolumeSerialNumber = IB.dwVolumeSerialNumber)
+        and (IA.nFileIndexHigh = IB.nFileIndexHigh) and (IA.nFileIndexLow = IB.nFileIndexLow)
+    else
+      SameText(ExpandFileName(A), ExpandFileName(B));
+end;
+
+{ ONE BACKGROUND WARM PER DATABASE. Every index run starts a warm, and a warm
+  of a large project takes minutes, so an edit-index loop would pile them up --
+  measured 2026-10-15: three alive at once after three runs -- and every one
+  but the newest throws its result away (the index moved under it). The newest
+  therefore stops the previous one, named by AMarker (<db>.rule-cache-warm.pid).
+  Only a process running THIS engine's image is stopped: a pid the OS has since
+  given to another program is left alone. }
+procedure StopStaleWarm(const AMarker: string);
+const
+  IMAGE_NAME_CHARS = MAX_PATH * 4; // QueryFullProcessImageName takes long (\\?\) paths
+  STOP_WAIT_MS     = 5000;         // how long the stopped warm gets to release the index
+var
+  Pid : Cardinal          ;
+  H   : THandle           ;
+  Len : DWORD             ;
+  Name: array of WideChar ;
+begin
+  if not TFile.Exists(AMarker) then Exit;
+  try
+    Pid:= StrToIntDef(Trim(TFile.ReadAllText(AMarker)), 0);
+  except
+    on E: EInOutError do Pid:= 0; { another warm is rewriting it: nothing to stop }
+  end;
+  if (Pid = 0) or (Pid = GetCurrentProcessId) then Exit;
+  H:= OpenProcess(PROCESS_TERMINATE or SYNCHRONIZE or PROCESS_QUERY_LIMITED_INFORMATION_ACCESS, False, Pid);
+  if H = 0 then Exit; { already gone }
+  try
+    SetLength(Name, IMAGE_NAME_CHARS);
+    Len:= Length(Name);
+    if WarmQueryImageName(H, 0, @Name[0], Len) and SameFileIdentity(string(PChar(@Name[0])), ParamStr(0))
+      and TerminateProcess(H, 1) then
+      WaitForSingleObject(H, STOP_WAIT_MS);
+  finally
+    CloseHandle(H);
+  end;
+end;
+
+/// <summary>`warm-rule-cache --db &lt;project.sqlite&gt; [--library-db &lt;lib.sqlite&gt;]`:
+/// fills the `lint &lt;file&gt;` rule cache for a project index now.</summary>
+/// <param name="AArgs">--db is required; --library-db as for `index`.</param>
+/// <returns>0 when it ran (warming never fails: a problem is one warning line,
+/// and the next lint fills lazily); 2 without a --db that exists.</returns>
+/// <remarks>What an index run starts in the background (with --detached, which
+/// also sends the output to NUL); by hand it is the synchronous warm.</remarks>
+function DoWarmRuleCache(const AArgs: TArgs): Integer;
+begin
+  if (AArgs.DbPath = '') or not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln(ErrOutput, 'ERROR: warm-rule-cache needs --db <project index> that exists.');
+    Exit(2);
+  end;
+  var Marker: string:= AArgs.DbPath + '.rule-cache-warm.pid';
+  var Mine  : string:= IntToStr(GetCurrentProcessId);
+  if AArgs.WarmDetached then
+  begin
+    StopStaleWarm(Marker);
+    try
+      TFile.WriteAllText(Marker, Mine);
+    except
+      on E: Exception do Marker:= ''; { an unwritable folder costs only the de-duplication }
+    end;
+  end;
+  try
+    WarmRuleCache(AArgs.DbPath, RuleCacheLibraryDb(AArgs));
+  finally
+    if AArgs.WarmDetached and (Marker <> '') then
+    try
+      { No TFile.Exists gate: a missing marker raises in ReadAllText and lands
+        below, the same as one a newer warm rewrote. }
+      if Trim(TFile.ReadAllText(Marker)) = Mine then TFile.Delete(Marker);
+    except
+      { gone, or a newer warm owns it now: not ours to delete }
+      on E: Exception do Writeln('rule-cache: warm marker left alone: ' + E.Message);
+    end;
+  end;
+  Result:= 0;
 end;
 
 { The rule a lint run may NARROW its checkers to: ARule, except '' for a
@@ -35749,6 +35952,18 @@ var
   OutEnc: TOutputEncoding;
   OutEncText: string;
 begin
+  { A background warm (WarmRuleCacheAfterIndex) has no console: writing to its
+    invalid std handles would raise. NUL, before anything -- ParseArgs itself
+    can print (the defaults-file note) -- and before InstallOutputEncoding, which
+    opens and flushes both files: on the invalid handles that killed the detached
+    warm before it wrote anything. }
+  if SameText(ParamStr(1), 'warm-rule-cache') and HasSwitch('--detached') then
+  begin
+    AssignFile(Output, 'NUL');
+    Rewrite(Output);
+    AssignFile(ErrOutput, 'NUL');
+    Rewrite(ErrOutput);
+  end;
   { --output-encoding FIRST, before anything is written: the config banner and
     every ParseArgs note go out in it. Default ascii (owner ruling 2026-10-26);
     a bad value leaves ascii here and ParseArgs refuses it (exit 3). }
@@ -35869,6 +36084,19 @@ begin
           '(--rebuild clears every indexed file from the DB first; --recompile updates it in place).');
         Exit(2);
       end;
+      var WarmMode: string:= Args.RuleCacheWarm;
+      var WarmFrom: string:= '--rule-cache-warm';
+      if WarmMode = '' then
+      begin
+        WarmMode:= LowerCase(Trim(GetEnvironmentVariable('DRAGLINT_RULE_CACHE_WARM')));
+        WarmFrom:= 'DRAGLINT_RULE_CACHE_WARM';
+      end;
+      if not MatchText(WarmMode, ['', 'background', 'wait', 'off']) then
+      begin
+        Writeln(ErrOutput, 'ERROR: ' + WarmFrom + ' takes background, wait or off (got "' + WarmMode + '").');
+        Exit(2);
+      end;
+      GRuleCacheWarm:= WarmMode;
       try
         if Args.IndexAll then Result:= DoIndexAll(Args)
         else Result:= DoIndex(Args);
@@ -35877,6 +36105,7 @@ begin
         BatchChannelClose; { DEC-13: every store is closed by now }
       end
     end
+    else if Args.Command = 'warm-rule-cache' then Result:= DoWarmRuleCache(Args)
     else if Args.Command = 'query'             then Result:= DoQuery           (Args)
     else if Args.Command = 'rules'             then Result:= DoRules           (Args)
     else if Args.Command = 'lint'              then Result:= DoLint            (Args)
