@@ -252,8 +252,8 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
   directions: a project DB is exactly the compile closure, so a miss is a real
   answer, not a lookup failure.
 * `query unit-usage` without `--in` answers the project-wide question (which files
-  reference the unit, and which merely IMPORT it); with `--in` it answers about one
-  file. Its candidate set is the uses graph, since in Delphi you cannot name an
+  reference the unit, and which merely IMPORT it; `--limit N` lists the first N and
+  keeps the full counts); with `--in` it answers about one file. Its candidate set is the uses graph, since in Delphi you cannot name an
   export without a uses entry. For an RTL/VCL/third-party unit whose exports live
   in the platform library index, the project DB alone still answers the
   project-wide form: you get the importer list with the `uses` line, and an
@@ -955,8 +955,8 @@ Win64 build.
 | `query descendants` `--of <a>` | The reverse of `ancestors`: every **class** descending from `<a>`, across all scanned DBs. Derived interfaces are excluded by design (this backs the conversion editor's class pickers) | `--json` (exit 1 = no such ancestor) |
 | [`query typecat`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-typecat) `--name <t>` | Resolve a type's category (class/interface/float/string/...) | |
 | `query hints` | List stored compiler hints/warnings | `--name <code>`, `--rule <severity>` |
-| [`usages`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/usages) `--name <n>` | Grouped usage report (backs the IDE Symbol Search dialog) | `--width narrow\|wide\|very-wide`, `--depth N` |
-| [`outline`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/outline) `--in <f.pas>` | Unit outline (backs the IDE Structure form) | `--format text\|json` |
+| [`usages`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/usages) `--name <n>` | Grouped usage report (backs the IDE Symbol Search dialog) | `--width narrow\|wide\|very-wide`, `--depth N`, `--limit N` (JSON: first N rows per group, declarations included, plus `limit` and `totals`) |
+| [`outline`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/outline) `--in <f.pas>` | Unit outline (backs the IDE Structure form) | `--format text\|json`, `--kind <k[,k...]>` (only those kinds), `--no-locals` (drop `local_var` / `param`), `--limit N` (first N rows, and how many matched) |
 | [`compare`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) `--old <report\|csv\|bundle> [--command "<id> ..."]` / `--in <U.pas> --line <L>` | Rerun a saved report's question and show before / delta / after (exit 0 same, 1 differs, 2 setup, 3 stale index) | `--new <f>` (two saved outputs), `--question <id> --target <T>`, `--update-doc`, `--old-db`, `--db <f>`, `--auto`, `--save`, `--snapshot-dir <dir>`, `--show`, `--format text\|json\|html`, `--open` |
 | [`ask`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ask) `<question> --target <T> [--project <P.dproj>\|--in <U.pas>\|--db <idx>]` | Ask one report question (the 26 chart questions) and print the answer: the DocInsight remarks block the Reports menu copies, or the plain answer. All 26 questions answer in-process in the engine (exit 0 answered, 1 refused, 2 setup, 3 stale index) | `--to <B>`, `--server-db`, `--sql-db`, `--counterpart-db`, `--depth N`, `--cap N`, `--surface-cap N`, `--control <C>`, `--mode write\|read\|both`, `--max-rows N`, `--out-root <dir>`, `--pairs-file <f>`, `--allow-stale`, `--plain`, `--open`, `--resolve-only` |
 | `hover --qname <q>` | Hover card for a symbol (incl. declared type; a re-published property names its declaring ancestor) | `--format plain\|md\|json` |

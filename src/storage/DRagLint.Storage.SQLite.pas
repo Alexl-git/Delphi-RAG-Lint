@@ -2087,6 +2087,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetReferencesFromFile(AFileId: Int64): TArray<TReference>                     ;
+      function FindRefsNamingInFiles(const AFileIds: TArray<Int64>; const ALowerNames: TArray<string>): TArray<TReference>;
       /// <returns><!-- drag-lint:auto -->Int64 -- Observed:
       /// FQCountSymbols.FieldByName('n').AsLargeInt.</returns>
       /// <remarks>
@@ -9572,6 +9573,76 @@ begin
         Q.Next;
       end;
       Q.Close;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.FindRefsNamingInFiles(const AFileIds: TArray<Int64>;
+  const ALowerNames: TArray<string>): TArray<TReference>;
+var
+  Q     : TFDQuery         ;
+  List  : TList<TReference>;
+  R     : TReference       ;
+  Ids   : string           ;
+  Names : string           ;
+begin
+  Result:= nil;
+  if (Length(AFileIds) = 0) or (Length(ALowerNames) = 0) then Exit;
+  { Inline lists, not temp tables: a read verb opens the store query_only, and
+    SQLite refuses CREATE TEMP TABLE there. File ids are integers; names are
+    quoted with '' doubled. lower() folds A-Z only -- exactly what SameText
+    folds, which is the comparison this replaces. }
+  var Parts: TArray<string>;
+  SetLength(Parts, Length(AFileIds));
+  for var I:= 0 to High(AFileIds) do Parts[I]:= IntToStr(AFileIds[I]);
+  Ids:= string.Join(',', Parts);
+  SetLength(Parts, Length(ALowerNames));
+  for var I:= 0 to High(ALowerNames) do Parts[I]:= QuotedStr(ALowerNames[I]);
+  Names:= string.Join(',', Parts);
+  List:= TList<TReference>.Create;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:=
+      'SELECT id, symbol_id, file_id, kind, name_text, start_line, start_col, end_line, end_col, ' +
+      '       enclosing_symbol_id, receiver_text FROM refs ' +
+      'WHERE file_id IN (' + Ids + ') AND (lower(name_text) IN (' + Names + ') OR ' +
+      '  (receiver_text IS NOT NULL AND lower(trim(CASE WHEN instr(receiver_text, ''<'') > 0 ' +
+      '     THEN substr(receiver_text, 1, instr(receiver_text, ''<'') - 1) ELSE receiver_text END, ' +
+      '     '' '' || char(9) || char(10) || char(13))) IN (' + Names + '))) ' +
+      'ORDER BY file_id, start_line, start_col';
+    Q.Open;
+    var FId       := Q.FieldByName('id');
+    var FSymbolId := Q.FieldByName('symbol_id');
+    var FFileId   := Q.FieldByName('file_id');
+    var FKind     := Q.FieldByName('kind');
+    var FNameText := Q.FieldByName('name_text');
+    var FStartLine:= Q.FieldByName('start_line');
+    var FStartCol := Q.FieldByName('start_col');
+    var FEndLine  := Q.FieldByName('end_line');
+    var FEndCol   := Q.FieldByName('end_col');
+    var FEnclosing:= Q.FieldByName('enclosing_symbol_id');
+    var FReceiver := Q.FieldByName('receiver_text');
+    while not Q.Eof do
+    begin
+      R:= Default(TReference);
+      R.Id       := FId.AsLargeInt;
+      if not FSymbolId.IsNull then R.SymbolId:= FSymbolId.AsLargeInt;
+      R.FileId   := FFileId.AsLargeInt;
+      R.Kind     := FKind.AsString;
+      R.NameText := FNameText.AsString;
+      R.StartLine:= FStartLine.AsInteger;
+      R.StartCol := FStartCol.AsInteger;
+      R.EndLine  := FEndLine.AsInteger;
+      R.EndCol   := FEndCol.AsInteger;
+      if not FEnclosing.IsNull then R.EnclosingSymbolId:= FEnclosing.AsLargeInt;
+      if not FReceiver.IsNull then R.ReceiverText:= FReceiver.AsString;
+      List.Add(R);
+      Q.Next;
     end;
     Result:= List.ToArray;
   finally

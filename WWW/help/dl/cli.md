@@ -1207,7 +1207,7 @@ Described in [migrate-dbs](features/migrate-dbs.md).
 Prints the file-scoped symbol outline for one Pascal unit.
 
 ```text
-drag-lint outline --in <path.pas> [--db <path>] [--format text|json] [--json]
+drag-lint outline --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1216,6 +1216,9 @@ drag-lint outline --in <path.pas> [--db <path>] [--format text|json] [--json]
 | `--db` | `<path>` |  |  |
 | `--format` |  |  |  |
 | `--json` |  |  |  |
+| `--kind` | `<k[,k...]>` |  |  |
+| `--no-locals` |  |  |  |
+| `--limit` | `N` |  |  |
 
 Described in [outline](features/outline.md).
 
@@ -1360,7 +1363,7 @@ drag-lint query descendants --of <ancestor> [--db ...] [--json] (the REVERSE of 
 drag-lint query find-callers --name <callee-name> [--context N] [--resolved] [--db ...] [--json]
 drag-lint query type-usage --in <file.pas> (--names A,B,C | --names-file <f>) [--db ...] [--json]
 drag-lint query typecat --name <type> [--db ...] [--json] (resolve type category: float/string/class/interface/...)
-drag-lint query unit-usage --unit <UnitName> [--in <file.pas>] [--db ...] [--json]
+drag-lint query unit-usage --unit <UnitName> [--in <file.pas>] [--db ...] [--json] [--limit N]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1747,6 +1750,7 @@ drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--dep
 | `--depth` | `N` |  |  |
 | `--format` |  |  |  |
 | `--json` |  |  |  |
+| `--limit` | `N` |  |  |
 
 Described in:
 

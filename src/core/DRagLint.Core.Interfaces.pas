@@ -765,6 +765,15 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetReferencesFromFile(AFileId: Int64): TArray<TReference>                     ; { v0.43: uses-audit }
+    /// <summary>The refs in AFileIds whose NAME, or whose receiver's base type
+    /// (the receiver text before any generic argument list), is one of
+    /// ALowerNames -- compared ASCII-case-insensitively, as SameText compares.</summary>
+    /// <param name="AFileIds">The files to read; empty returns nothing.</param>
+    /// <param name="ALowerNames">The names, already lowered A-Z only.</param>
+    /// <returns>Matching refs (receiver_text read), by file, line and column.</returns>
+    /// <remarks>Gitea drag-lint#39: `query unit-usage` read EVERY ref of every
+    /// importing file to keep a few; the filter now runs inside SQLite.</remarks>
+    function FindRefsNamingInFiles(const AFileIds: TArray<Int64>; const ALowerNames: TArray<string>): TArray<TReference>;
     /// <returns><!-- drag-lint:auto type -->Int64</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->

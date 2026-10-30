@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "outline",
-      "usage": "drag-lint outline --in <path.pas> [--db <path>] [--format text|json] [--json]",
+      "usage": "drag-lint outline --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]",
       "flags": [
         {
           "name": "--in",
@@ -27,10 +27,21 @@
         },
         {
           "name": "--json"
+        },
+        {
+          "name": "--kind",
+          "arg": "<k[,k...]>"
+        },
+        {
+          "name": "--no-locals"
+        },
+        {
+          "name": "--limit",
+          "arg": "N"
         }
       ],
       "helpOrder": 6,
-      "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json]", "                               unit outline; backs the IDE Structure form."]
+      "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]", "                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:", "                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large", "                               unit's outline); --limit N prints the first N rows and says how many matched."]
     },
     {
       "type": "ide-menu",
@@ -50,9 +61,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-10-30",
     "by": "ENGINE",
-    "build": "1.35.0-alpha",
-    "surfaceHash": "d1d20b3a34a76dd6d2b5868ad178cc0976c2d06608b5a358b6edfd192999c921"
+    "build": "1.38.0-alpha",
+    "surfaceHash": "52b9c5c2d37e2765ff46220081dc307cacf0209ee68e91c51cca42bd3fd71234"
   }
 }

@@ -504,7 +504,7 @@
     "version": "1.35.1-alpha"
   },
   "features/outline.md": {
-    "hash": "ae77126e810b40f770a9cc59b8ac9059273a2888afefdfda67410b20573d88c0",
+    "hash": "93d1dcd9af6ae433ae9f69e5263ededeec9a1ac13b7547d958bc10a40c2a085f",
     "version": "1.38.0-alpha"
   },
   "features/output-encoding.md": {
@@ -572,7 +572,7 @@
     "version": "1.38.0-alpha"
   },
   "features/query-unit-usage.md": {
-    "hash": "32b9d2bc921a146c0bb5296c36f32082f862e81ad1be66d5f10d90110dc742a3",
+    "hash": "4fc2622ffaf20c6a87de1c2e6171f78910505049981585a62140ee73d714ec13",
     "version": "1.38.0-alpha"
   },
   "features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md": {
@@ -728,7 +728,7 @@
     "version": "1.35.1-alpha"
   },
   "features/usages.md": {
-    "hash": "a085dcf969c4138d057d633e4b836de868818c8fab11e8f955a50d5b517dd31f",
+    "hash": "85cd31de92f54ab083ccffd7f1287c65f55dbf86e2ecd80d25a40752406c5348",
     "version": "1.38.0-alpha"
   },
   "features/uses-audit-interface-impl-moves-unused-this-unit.md": {

@@ -413,7 +413,8 @@ type
 implementation
 
 uses
-  DRagLint.Doc.Regions
+  Winapi.Windows
+  , DRagLint.Doc.Regions
   , DRagLint.Query.Callers   { Gitea #31: the CLI's resolved callers and name filters }
   , DRagLint.Index.Freshness { Gitea #34: the freshness note of the store a tool reads }
   ;
@@ -476,13 +477,24 @@ end;
 
 procedure TMCPServer.SendRaw(const AText: string);
 var
-  Bytes: TBytes;
+  Bytes  : TBytes;
+  Done   : DWORD ;
+  Written: DWORD ;
 begin
-  // Write directly to stdout as UTF-8, manually flushed. Avoids the
-  // Delphi RTL TextFile layer's interpretation of newlines.
+  // UTF-8 BYTES straight to the stdout handle, after whatever the text layer
+  // holds. Not through Write: that re-encodes to the Output code page, which is
+  // UTF-8 itself under --output-encoding utf8 and would encode twice (Gitea #35).
+  // GetStdHandle, not TTextRec(Output).Handle: the RTL opens Output on its first
+  // write, so before one that handle is 0.
   Bytes:= TEncoding.UTF8.GetBytes(AText + #10);
-  System.Write(StringOf(Bytes));
   Flush(Output);
+  Done:= 0;
+  while Done < DWORD(Length(Bytes)) do
+  begin
+    // a failed write is a client that closed the pipe: nobody is left to answer
+    if not WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), Bytes[Done], DWORD(Length(Bytes)) - Done, Written, nil) or (Written = 0) then Exit;
+    Inc(Done, Written);
+  end;
 end;
 
 procedure TMCPServer.SendResult(const AId: TJSONValue; const AResult: TJSONValue);

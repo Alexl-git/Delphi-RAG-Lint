@@ -30,6 +30,7 @@ Full flag list: [usages in the CLI reference](../cli.md#usages).
 | `--depth` | `N` |  |  |
 | `--format` |  |  |  |
 | `--json` |  |  |  |
+| `--limit` | `N` |  |  |
 
 ## Where to click
 
@@ -46,8 +47,10 @@ backs the "Usages" search kind in the Symbol Search dialog.
 
 ### Running it from the CLI
 ```text
-drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json]
+drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json] [--limit N]
 ```
+`--limit N` keeps the first N rows of each JSON group and adds `"limit"` and
+`"totals"` (every group's full count); `declarations` is a group too, so it is capped like the others. Without it the document is unchanged.
 `--name <X>` is the symbol to search for. `--width` controls report width
 (`narrow`, `wide`, or `very-wide`). `--depth N` is in the usage line with no
 further description -- not documented. `--format json` is the only format the
