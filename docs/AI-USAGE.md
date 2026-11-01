@@ -46,6 +46,14 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 | Record that a finding was reviewed | `drag-lint allow <U.pas> --fix-line <L> --fix-rule <id> --apply` |
 | Repair what the linter can repair | `drag-lint lint-all --db <db> --fix` (preview), then `--fix --apply` |
 
+> **A git worktree is a different project, on purpose.** The manifest keys on the
+> absolute .dproj path, so a worktree (e.g. C:\Projects\Delphi-RAG-lint-wt\<lane>\src\cli\drag-lint.dproj)
+> resolves to out-of-scope and never to the main checkout's DB: mapping it onto
+> the main DB would answer with the wrong tree and let a lane's index writes land in
+> the shared DB. Index a worktree into a COPY: drag-lint index --project <wt>\...\x.dproj --db <scratch.sqlite>,
+> or give it a private manifest section via --config. Reads of the main checkout
+> (C:\Projects\Delphi-RAG-lint\src\...) resolve normally (sections DragLint-Cli, DragLint-Switch, ...).
+
 > **Pass only databases `resolve-dbs` printed.** An explicit `--db` that does not
 > exist is exit 2, never a narrower answer: the verb names the path and its
 > position on stderr and returns nothing. Match on the EXIT CODE, not the prose.
