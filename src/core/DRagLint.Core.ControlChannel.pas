@@ -464,9 +464,10 @@ const
 /// <param name="ADbs">Databases the run writes or reads -- what status reports.</param>
 /// <param name="AVersion">DRAGLINT_VERSION.</param>
 /// <param name="AExtractor">DRAGLINT_EXTRACTOR_VERSION.</param>
+/// <param name="ASilent">True under a machine-readable output format: the 'listening' line is not written (stderr stays empty on the success path); the channel still opens. A failure to open is still said.</param>
 /// <returns>True when listening. False when the verb does not listen, a channel is already open, or the pipe could not be created (said on stderr; the run proceeds without it).</returns>
 /// <remarks>Main thread only. Pair with BatchChannelClose in a finally.</remarks>
-function BatchChannelOpen(const ACommand: string; const ADbs: TArray<string>; const AVersion, AExtractor: string): Boolean;
+function BatchChannelOpen(const ACommand: string; const ADbs: TArray<string>; const AVersion, AExtractor: string; ASilent: Boolean = False): Boolean;
 
 /// <summary>True once a maintenance stand-down request has been taken by this batch run.</summary>
 /// <returns>True when the run must stop at its next safe point; sticky once true.</returns>
@@ -568,7 +569,7 @@ var
   GBatchChannel: TControlChannel;
   GBatchTaken  : Boolean;
 
-function BatchChannelOpen(const ACommand: string; const ADbs: TArray<string>; const AVersion, AExtractor: string): Boolean;
+function BatchChannelOpen(const ACommand: string; const ADbs: TArray<string>; const AVersion, AExtractor: string; ASilent: Boolean): Boolean;
 var
   Err: string;
 begin
@@ -578,7 +579,8 @@ begin
   GBatchChannel:= TControlChannel.Create(ADbs, AVersion, AExtractor, ACommand);
   if GBatchChannel.Start(Err) then
   begin
-    Writeln(ErrOutput, 'drag-lint ', ACommand, ': control channel listening on ', GBatchChannel.PipeName, ' (accepts status and shutdown)');
+    if not ASilent then
+      Writeln(ErrOutput, 'drag-lint ', ACommand, ': control channel listening on ', GBatchChannel.PipeName, ' (accepts status and shutdown)');
     Exit(True);
   end;
   Writeln(ErrOutput, 'drag-lint ', ACommand, ': control channel NOT started: ', Err);

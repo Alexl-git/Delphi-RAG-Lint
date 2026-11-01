@@ -150,6 +150,10 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
   surface staleness without reading stderr (`stale` is `false` for an index too
   old to carry the freshness stamp, exactly as the note is silent then).
 
+  `lint-all --json` (and `--format json|sarif`) writes NOTHING to stderr on the success path (no
+  progress lines, no control-channel line, no scope notes), so a `2>&1` capture is still one
+  parseable document; errors and warnings stay on stderr.
+
 Add `--json` to any query for machine-readable output.
 
 A symbol row carries `directives` (schema v22): every routine directive in

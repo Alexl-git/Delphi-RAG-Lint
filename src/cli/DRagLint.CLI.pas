@@ -833,6 +833,8 @@ begin
   Writeln('  changed since this index was built" line means REINDEX FIRST -- the answer may be stale.');
   Writeln('  That note is on stderr, never in a JSON document; the reverse-calltree, butterfly, callgraph,');
   Writeln('  sql, schema and deps-report envelopes also carry "stale" and "stale_files".');
+  Writeln('  lint-all --json / --format json|sarif: stdout is one document and the success path writes NOTHING');
+  Writeln('  to stderr (no progress, no control-channel line), so a 2>&1 capture still parses.');
   Writeln('');
   Writeln('Usage:');
   { The verb reference below is GENERATED (featuregen build --all) from the cli surfaces of features\entries: each surface carries
@@ -9935,7 +9937,7 @@ begin
     Writer.Flush;
     if AArgs.Output <> '' then
     begin
-      TFile.WriteAllText(AArgs.Output, Buf.DataString, TEncoding.UTF8);
+      WriteOutputFile(AArgs.Output, Buf.DataString); { ENC-OUT: follows --output-encoding }
       Writeln(Format('Wrote %d enum value row(s) (%d enums) to %s', [Length(Rows), 0 { let user grep -c 'INSERT' for now }, AArgs.Output]));
     end
     else Write(Buf.DataString);
@@ -10210,7 +10212,7 @@ begin
               Sb.AppendLine('');
             end; // if
 
-            TFile.WriteAllText(OutPath, Sb.ToString, TEncoding.UTF8);
+            WriteOutputFile(OutPath, Sb.ToString); { ENC-OUT: follows --output-encoding }
             Inc(WrittenCount);
           finally
             Sb.Free;
@@ -10584,7 +10586,7 @@ begin
     if Format = 'dot' then Buf.AppendLine('}');
 
     Output:= Buf.ToString;
-    if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, Output); Writeln('Wrote ', AArgs.Output); end
+    if AArgs.Output <> '' then begin WriteOutputFile(AArgs.Output, Output); Writeln('Wrote ', AArgs.Output); end
     else Writeln(Output);
   finally
     Buf.Free;
@@ -12732,6 +12734,18 @@ procedure EmitStatusLine(const AArgs: TArgs; const AText: string);
 begin
   if IsMachineReadableOutput(AArgs) then begin Writeln(ErrOutput, AText); Flush(ErrOutput); end
   else Writeln(AText);
+end; // procedure
+
+/// <summary>Writes one purely informational note (progress, scope, skip counts) to stdout on the text
+/// path and NOWHERE under a machine-readable format (--json, --format json|sarif).</summary>
+/// <param name="AArgs">Parsed CLI args; decides whether the note is written.</param>
+/// <param name="AText">The line, without a trailing newline.</param>
+/// <remarks>LINTJSON-STDERR: a consumer that merges stdout and stderr (2&gt;&amp;1) must still get ONE
+/// parseable document, so on the success path stderr stays empty under JSON. ERROR and WARNING lines
+/// keep using EmitStatusLine (stderr); only notes whose absence loses no failure information use this.</remarks>
+procedure EmitNoteLine(const AArgs: TArgs; const AText: string);
+begin
+  if not IsMachineReadableOutput(AArgs) then Writeln(AText);
 end; // procedure
 
 /// <summary>Shared output tail for the finding-producing commands. Applies line
@@ -16861,7 +16875,7 @@ var
   AllFiles    : TList<TFileMeta>                       ;
   StemToGlobal: TDictionary<string, Integer>           ; { stem -> index into AllFiles }
   Edges       : TDictionary<Integer, TArray<TUsesEdge>>; { source = global file index }
-  CsvOut      : TStreamWriter                          ;
+  CsvOut      : TStringWriter                          ;
   MaxDepth    : Integer                                ;
   RootPattern : string                                 ;
 
@@ -17160,7 +17174,7 @@ begin
       Exit(2);
     end;
 
-    CsvOut:= TStreamWriter.Create(AArgs.Output, False, TEncoding.UTF8);
+    CsvOut:= TStringWriter.Create; { ENC-OUT: buffered, written once through WriteOutputFile }
     EmitCsvHeader;
 
     RowCount    := 0;
@@ -17172,7 +17186,7 @@ begin
       WalkBfs(GlobalIdx, RowCount);
       Inc(SourceCount);
     end;
-    CsvOut.Flush;
+    WriteOutputFile(AArgs.Output, CsvOut.ToString);
 
     Writeln(Format('uses-report: %d source units, %d rows written to %s', [SourceCount, RowCount, AArgs.Output]));
   finally
@@ -22048,7 +22062,7 @@ var
     Pct: Integer;
   begin
     Prof.Phase(AName);
-    if AArgs.Quiet then Exit;
+    if AArgs.Quiet or IsMachineReadableOutput(AArgs) then Exit;
     Inc(TailPhase);
     { Ceiling division so the FIRST phase already moves the bar off the scan
       ceiling; the last lands on 99. 100 is reserved for "finished". }
@@ -22202,7 +22216,7 @@ begin
   begin
     var UnscopedTag: string:= Trim(Store.GetMetaValue(PROJECT_TAG_KEY));
     if UnscopedTag <> '' then
-      EmitStatusLine(AArgs, Format('lint-all: NOTE: %s is the index of project %s, but no project folder could be ' +
+      EmitNoteLine(AArgs, Format('lint-all: NOTE: %s is the index of project %s, but no project folder could be ' +
         'derived for it (no _D-RAG parent, no manifest section), so no ownership scoping was applied -- every ' +
         'indexed unit is reported, third-party ones included. Pass --project <%s.dproj> to scope the run.',
         [ProjectDb, UnscopedTag, UnscopedTag]));
@@ -22238,20 +22252,20 @@ begin
   end;
   { The banner is prose: on --json / --format sarif it belongs on stderr, or the
     document it precedes will not parse (docs\INBOX-lint-all-json-stdout-banner.md). }
-  EmitStatusLine(AArgs, Format('lint-all: scanning %d .pas file(s)', [Length(FilePaths)]));
+  EmitNoteLine(AArgs, Format('lint-all: scanning %d .pas file(s)', [Length(FilePaths)]));
   { Say what was skipped. A scope filter that reports nothing is indistinguishable
     from a clean codebase -- the same failure this session hit when a silent
     no-op reindex made a stale-DB run look like a successful one. }
   if ExcludedCount > 0 then
-    EmitStatusLine(AArgs, Format('lint-all: %d file(s) skipped by exclude_paths', [ExcludedCount]));
+    EmitNoteLine(AArgs, Format('lint-all: %d file(s) skipped by exclude_paths', [ExcludedCount]));
   { A scope filter that reports nothing is indistinguishable from a clean
     codebase. Name what was dropped, grouped, and say how to include it.
     SkipLines is built once (BuildSkippedThirdPartyLines) and reused below by
     the report-writing closure, so the console and the report file cannot
     say different things -- see Fix 1, 2026-08-11 review. }
   var SkipLines: TArray<string>:= BuildSkippedThirdPartyLines(SkippedThird, Own);
-  for var SkLine: string in SkipLines do EmitStatusLine(AArgs, SkLine);
-  for var OwnLine: string in OwnRootsDefaultNote(Own, Length(SkippedThird)) do EmitStatusLine(AArgs, OwnLine);
+  for var SkLine: string in SkipLines do EmitNoteLine(AArgs, SkLine);
+  for var OwnLine: string in OwnRootsDefaultNote(Own, Length(SkippedThird)) do EmitNoteLine(AArgs, OwnLine);
 
   { Per-file rules: external .scm rules + all built-in AST checks.
 
@@ -22265,7 +22279,7 @@ begin
   var Nr: string:= LintNarrowRule(AArgs.Rule);
   if not AArgs.NoPreprocess then InstallLintIncludeContexts(Store, FilePaths, AArgs.ProjectPath);
   { DEC-13: lint-all listens for a maintenance stand-down; the scan stops between files. }
-  BatchChannelOpen('lint-all', TArray<string>.Create(ExpandFileName(ProjectDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+  BatchChannelOpen('lint-all', TArray<string>.Create(ExpandFileName(ProjectDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, IsMachineReadableOutput(AArgs));
   var LintStoodAt: Integer:= -1;
   var LintDelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_LINT_FILE_DELAY_MS'), 0);
   Prof.Phase(Format('per-file scan (%d files)', [Length(FilePaths)]));
@@ -22287,7 +22301,7 @@ begin
       PasPath:= FilePaths[FileIdx];
       try
         { Progress output (throttled by percentage) }
-        if (not AArgs.Quiet) then
+        if (not AArgs.Quiet) and (not IsMachineReadableOutput(AArgs)) then
         begin
           { Scaled to LINTALL_SCAN_PCT, not 100: the scan is not the whole run,
             and reporting 100 here is what made the bar sit still. }
@@ -22903,7 +22917,7 @@ begin
     var InScope: TArray<TLintFinding>:= nil;
     for F in Findings do
       if (F.FilePath = '') or ScopeSet.ContainsKey(ScopeKey(F.FilePath)) then InScope:= InScope + [F];
-    EmitStatusLine(AArgs, Format('lint-all: --project %s -- %d of %d finding(s) belong to the project''s %d source file(s)',
+    EmitNoteLine(AArgs, Format('lint-all: --project %s -- %d of %d finding(s) belong to the project''s %d source file(s)',
       [ExtractFileName(AArgs.ProjectPath), Length(InScope), Length(Findings), ScopeSet.Count]));
     Findings:= InScope;
     FreeAndNil(ScopeSet);
@@ -23074,7 +23088,7 @@ begin
     emitted exactly once, here, so a reader (and the IDE bar) can treat it as a
     completion signal rather than as "the scan loop ended", which is what it
     used to mean. }
-  if not AArgs.Quiet then
+  if (not AArgs.Quiet) and (not IsMachineReadableOutput(AArgs)) then
   begin
     Writeln(ErrOutput, 'lint-all: 100% done');
     Flush(ErrOutput);
@@ -31468,7 +31482,7 @@ begin
       RenderNodeChart(ForwardTree.Root, Buf, Fmt = 'dot', True);  // callees wing: X -> callee
       if Fmt = 'dot' then Buf.AppendLine('}');
 
-      if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, Buf.ToString, TEncoding.UTF8); Writeln('Wrote ', AArgs.Output); end
+      if AArgs.Output <> '' then begin WriteOutputFile(AArgs.Output, Buf.ToString); Writeln('Wrote ', AArgs.Output); end
       else Writeln(Buf.ToString);
     finally
       Buf.Free;
@@ -31484,7 +31498,7 @@ begin
       JOut.AddPair('callees', BuildTreeJson(ForwardTree));
       AddStalenessPairs(JOut, StoreDb); { ENG-3 }
       var OutStr: string:= JOut.Format(2);
-      if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, OutStr, TEncoding.UTF8); Writeln('Wrote ', AArgs.Output); end
+      if AArgs.Output <> '' then begin WriteOutputFile(AArgs.Output, OutStr); Writeln('Wrote ', AArgs.Output); end
       else Writeln(OutStr);
     finally
       JOut.Free;
@@ -31498,7 +31512,7 @@ begin
       RenderNodeText(ReverseTree.Root, '  ', Lines);
       Lines.Add('CALLEES (downward):');
       RenderNodeText(ForwardTree.Root, '  ', Lines);
-      if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, Lines.Text, TEncoding.UTF8); Writeln('Wrote ', AArgs.Output); end
+      if AArgs.Output <> '' then begin WriteOutputFile(AArgs.Output, Lines.Text); Writeln('Wrote ', AArgs.Output); end
       else Writeln(Lines.Text);
     finally
       Lines.Free;
