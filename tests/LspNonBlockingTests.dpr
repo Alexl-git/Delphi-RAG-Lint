@@ -23,7 +23,10 @@ program LspNonBlockingTests;
      and stores the labels when the slow children finish (IDE-HANG, 1.40).
   K  StructureCache.RefreshSymbolsAsync returns at once; the late outline is
      delivered to the LATEST callback, cached, and never to a freed cache.
-     H and K spawn THIS exe as a fake, slow drag-lint (FakeEngineMain).
+  R  RefactorForm.RunRefactorCliAsync (rename / extract-method dialogs) returns
+     at once, delivers a late answer, and a HUNG child is stopped by the stall
+     budget with its own exit code instead of freezing anything.
+     H, K and R spawn THIS exe as a fake, slow drag-lint (FakeEngineMain).
 
   Every "does not block" assertion runs the call on a worker thread and waits
   with a deadline, so a regression FAILS here instead of hanging the battery.
@@ -41,7 +44,9 @@ uses
   DragLint.Plugin.LspClient in '..\src\delphi-plugin\DragLint.Plugin.LspClient.pas',
   DragLint.Plugin.HoverGate in '..\src\delphi-plugin\DragLint.Plugin.HoverGate.pas',
   DragLint.Plugin.CodeLensCache in '..\src\delphi-plugin\DragLint.Plugin.CodeLensCache.pas',
-  DragLint.Plugin.StructureCache in '..\src\delphi-plugin\DragLint.Plugin.StructureCache.pas';
+  DragLint.Plugin.StructureCache in '..\src\delphi-plugin\DragLint.Plugin.StructureCache.pas',
+  DragLint.Plugin.ProcRun in '..\src\delphi-plugin\DragLint.Plugin.ProcRun.pas',
+  DragLint.Plugin.RefactorForm in '..\src\delphi-plugin\DragLint.Plugin.RefactorForm.pas';
 
 const
   BIG_FRAME   = 64 * 1024;
@@ -50,7 +55,9 @@ const
   JOIN_LIMIT_MS  = 3000;  { a worker that is not back by now is blocked }
   LATE_REPLY_MS  = 700;   { the fake engine's delay before answering 'late' }
   FAKE_SLOW_MS   = 1500;  { the fake drag-lint's think time per spawned run }
-  LATE_WAIT_MS   = 15000; { how long H / K pump for the late answer }
+  LATE_WAIT_MS   = 15000; { how long H / K / R pump for the late answer }
+  FAKE_HANG_MS   = 60000; { the fake 'hang' verb's silence }
+  HANG_STALL_MS  = 1500;  { R3's stall budget }
 
 var
   GPass, GFail: Integer;
@@ -654,11 +661,17 @@ var
   Verb: string;
 begin
   Verb:= ParamStr(1);
-  Result:= (Verb = 'surface') or (Verb = 'query') or (Verb = 'outline');
+  Result:= (Verb = 'surface') or (Verb = 'query') or (Verb = 'outline') or (Verb = 'rename') or (Verb = 'hang');
   if not Result then Exit;
+  if Verb = 'hang' then
+  begin
+    Sleep(FAKE_HANG_MS);   { no output, no CPU: the hung shape a stall budget must stop }
+    Exit;
+  end;
   Sleep(FAKE_SLOW_MS);
   if Verb = 'surface' then Writeln('function  FakeUnit.TFoo.Bar  C:\fake\FakeUnit.pas:7')
   else if Verb = 'query' then Writeln('3 result(s)')
+  else if Verb = 'rename' then Writeln('fake rename: 2 site(s)')
   else Writeln('[{"kind":"function","name":"Bar","qname":"FakeUnit.TFoo.Bar","line":7,"signature":""}]');
   Flush(Output);
 end;
@@ -749,6 +762,32 @@ begin
   Check('K6 a cache freed mid-fetch gets no callback (and no access violation)', Latest = 0, IntToStr(Latest));
 end;
 
+procedure TestRefactorAsync;
+var
+  T0    : UInt64 ;
+  Took  : UInt64 ;
+  Calls : Integer;
+  Code  : Integer;
+  Output: string ;
+begin
+  Calls:= 0; Code:= 0;
+  T0:= GetTickCount64;
+  RunRefactorCliAsync(Format('"%s" rename --qname "X.Y" --to "Z" --dry-run', [ParamStr(0)]),
+    procedure(AExitCode: Integer; const AOutput: string) begin Inc(Calls); Code:= AExitCode; Output:= AOutput; end);
+  Took:= GetTickCount64 - T0;
+  Check('R1 RunRefactorCliAsync (slow engine) returns at once', Took < BLOCK_LIMIT_MS, Format('%d ms', [Took]));
+  Check('R2 ... the late answer is delivered once, with exit code and output',
+    PumpUntil(LATE_WAIT_MS, function: Boolean begin Result:= Calls > 0; end) and (Calls = 1) and (Code = 0) and (Pos('fake rename: 2 site(s)', Output) > 0),
+    Format('calls=%d code=%d out=%s', [Calls, Code, Trim(Output)]));
+
+  Calls:= 0; Code:= 0;
+  RunRefactorCliAsync(Format('"%s" hang', [ParamStr(0)]),
+    procedure(AExitCode: Integer; const AOutput: string) begin Inc(Calls); Code:= AExitCode; end, HANG_STALL_MS);
+  Check('R3 a HUNG child is stopped by the stall budget and reported (timed-out exit), not waited on for good',
+    PumpUntil(LATE_WAIT_MS, function: Boolean begin Result:= Calls > 0; end) and (Code = PROCRUN_TIMED_OUT_EXIT_CODE),
+    Format('calls=%d code=%d', [Calls, Code]));
+end;
+
 procedure TestIdentSpan;
 var
   S, E: Integer;
@@ -770,6 +809,7 @@ begin
   try
     TestCodeLensFallbackNonBlocking;
     TestStructureAsync;
+    TestRefactorAsync;
     TestGate;
     TestIdentSpan;
     TestSendFailureNotOutstanding;

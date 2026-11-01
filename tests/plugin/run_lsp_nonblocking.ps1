@@ -115,6 +115,12 @@ try {
     ($cl.Contains('TThread.CreateAnonymousThread(') -and $cl.Contains('RunCaptureStdout(') -and -not $cl.Contains('ReadFile(')) ''
   Check 'W17 EditViewNotifier: a late code-lens answer repaints the gutter' `
     ($ev -match 'PopulateOnce\(FilePath, S\.ExePath, DbPath, procedure begin ForceGutterRepaint; end\)') ''
+  $rf = [IO.File]::ReadAllText((Join-Path $plugin 'DragLint.Plugin.RefactorForm.pas'))
+  $rfRuns = [regex]::Matches($rf, '\bRunAsync\((Rename|Extract)CmdLine\((True|False)\)').Count
+  Check 'W19 RefactorForm: preview + apply of both dialogs run the CLI off the main thread (no ReadFile / WaitForSingleObject left)' `
+    (($rfRuns -eq 4) -and -not $rf.Contains('ReadFile(') -and -not $rf.Contains('WaitForSingleObject(') -and $rf.Contains('RunCaptureStdout(')) "runs=$rfRuns"
+  Check 'W20 RefactorForm: neither dialog can close while a run is in flight (the answer is shown, never dropped)' `
+    ([regex]::Matches($rf, 'Form\.OnCloseQuery := Handler\.DoCloseQuery;').Count -eq 2 -and $rf.Contains('CanClose:= not FBusy;')) ''
   foreach ($q in @(@{n='JobQueue';c='WORKER_IDLE_RECHECK_MS'}, @{n='LspWriteQueue';c='WRITER_IDLE_RECHECK_MS'})) {
     $qt = [IO.File]::ReadAllText((Join-Path $plugin "DragLint.Plugin.$($q.n).pas"))
     $inf = [regex]::Matches($qt, 'WaitFor\(\s*INFINITE\s*\)').Count
