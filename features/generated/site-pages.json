@@ -431,6 +431,10 @@
     "hash": "0640e807953bf4cf1e85ec32f105f7b1f51698f6de876fd908770597d0fb3ebd",
     "version": "1.38.0-alpha"
   },
+  "features/interface-implementors.md": {
+    "hash": "e0d801ece60248aa24272c231992f96dae13d5e494936b97078ed6ace9cbf143",
+    "version": "1.39.2-alpha"
+  },
   "features/library-drift-check.md": {
     "hash": "8ff987bc65e3523a93b325c1f1b0f5f67f6857c447837c3d54fe0d84abcea9c1",
     "version": "1.35.1-alpha"
@@ -488,8 +492,8 @@
     "version": "1.38.0-alpha"
   },
   "features/menu-tree.md": {
-    "hash": "46e5bcd5b02ff8efeb252d651741c2af11d2638ec4a12861e6e2911b5bba6d65",
-    "version": "1.35.1-alpha"
+    "hash": "6f28a23a23cd48ed42dfb830cd1fdf189c73470c5b39f172086642466f9da971",
+    "version": "1.39.2-alpha"
   },
   "features/migrate-dbs.md": {
     "hash": "15eec2a26d6415419dd8f690dde552cb56165f581f7ff9b910a32016f18c051b",
@@ -612,12 +616,12 @@
     "version": "1.38.0-alpha"
   },
   "features/reverse-call-tree-clickable-messages-window.md": {
-    "hash": "f2ae1602409dbd775f5d2f6200a5e5824fa5bd630b0500c569acb5f71ab21a32",
-    "version": "1.35.1-alpha"
+    "hash": "034920cd395ef61f74703cefc8fba2676370e9370252d016cf9221049c74237e",
+    "version": "1.39.2-alpha"
   },
   "features/reverse-call-tree-who-calls-this-n-deep.md": {
-    "hash": "5846e38f5fd0e2624d3b31a8b14f4907aefa349773a366c756d208eead327b23",
-    "version": "1.35.1-alpha"
+    "hash": "ede0882074093cdedaa0841b6ff9407bdfed57c35fc1229e93b4277af1c97144",
+    "version": "1.39.2-alpha"
   },
   "features/run-ast-checks.md": {
     "hash": "1c70f22717df223f9fda1f66caab391273a6ec628ca9a96d70a1a26facf5ce5b",
@@ -636,8 +640,8 @@
     "version": "1.35.1-alpha"
   },
   "features/scan-todos-fixmes.md": {
-    "hash": "477ce195ee30cf037a6bb4b3400984d7334c717f4d441b53df6ebbd41814f26e",
-    "version": "1.35.1-alpha"
+    "hash": "17d0ce0d5abd3c3776e2fdb2929356183ed9d20357e33577d0e91ac51a4b9019",
+    "version": "1.39.2-alpha"
   },
   "features/schema.md": {
     "hash": "39f9e426f35f174f548ea1533c06f453cddeb3b4c14b90b61cfc938249a451fd",
@@ -660,8 +664,8 @@
     "version": "1.38.0-alpha"
   },
   "features/show-in-call-graph.md": {
-    "hash": "ed96e793296f4e5c4cf3977908df9006542759841a4296d5c3fe2eecdfafc647",
-    "version": "1.35.1-alpha"
+    "hash": "79a8a0bf7afe73f12d5c68b3afae4eae722fcc44959713802f321fd1c81c1120",
+    "version": "1.39.2-alpha"
   },
   "features/show-resolved-dbs-debug.md": {
     "hash": "149e61636a7cd65dc9007cb9b21b9803c50575c1c6d9f967d45bfc89edc83922",
@@ -676,8 +680,8 @@
     "version": "1.38.0-alpha"
   },
   "features/show-wiring-spring4d-di-dfm-events.md": {
-    "hash": "f132dc3db1651c7f4b8252547bc39a021a27e189f52e6700a1c5dbcbf623cdf9",
-    "version": "1.38.0-alpha"
+    "hash": "d00285481e1e644e4353c9d3e73501f4cf82fb89a84a07ea30939b78d3325743",
+    "version": "1.39.2-alpha"
   },
   "features/shutdown.md": {
     "hash": "d8e803ca650676d93990b3196602833aaaaeffc8aa8cd3cd99935ecead72ed24",
@@ -704,8 +708,8 @@
     "version": "1.38.0-alpha"
   },
   "features/top-symbols-fan-in.md": {
-    "hash": "95be9f054cbe7332efcd6cd080abd56c2e0b1ed7c3662ff7e99437cac96e1fba",
-    "version": "1.35.1-alpha"
+    "hash": "89593fd59c451fd477b34d958a233b11b76051b4bcdcf0262bd878aca6088d8a",
+    "version": "1.39.2-alpha"
   },
   "features/type-at-cursor.md": {
     "hash": "782cc919f2818815fb082b84d9e7f4ed29363a8eaec0fbab64e6e68f0ed4f2a9",
@@ -744,8 +748,8 @@
     "version": "1.35.1-alpha"
   },
   "features/uses-report-csv.md": {
-    "hash": "8c03bcf2601c15a01b7b91c0dc90f2aa3f79e89eecc4a4fdd1d0f22eda6c47c3",
-    "version": "1.35.1-alpha"
+    "hash": "1f24632dea15dbe402ab2a7d12c770f291f7139085a82adb999d78397cda5175",
+    "version": "1.39.2-alpha"
   },
   "features/vscode-extension.md": {
     "hash": "0541a2b797d4c366c69e44cc0fbcea48e7b3a12ed5a1c06c3f2feab3bcd09ffe",

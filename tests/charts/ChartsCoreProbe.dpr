@@ -84,6 +84,7 @@ uses
   , DRagLint.Charts.Q.WhoCalls in '..\..\src\charts\DRagLint.Charts.Q.WhoCalls.pas'
   , DRagLint.Charts.Q.Butterfly in '..\..\src\charts\DRagLint.Charts.Q.Butterfly.pas'
   , DRagLint.Charts.Q.Hierarchy in '..\..\src\charts\DRagLint.Charts.Q.Hierarchy.pas'
+  , DRagLint.Charts.Q.Implementors in '..\..\src\charts\DRagLint.Charts.Q.Implementors.pas'
   , DRagLint.Charts.Q.Wiring in '..\..\src\charts\DRagLint.Charts.Q.Wiring.pas'
   , DRagLint.Charts.Q.Path in '..\..\src\charts\DRagLint.Charts.Q.Path.pas'
   , DRagLint.Charts.Q.Architecture in '..\..\src\charts\DRagLint.Charts.Q.Architecture.pas'

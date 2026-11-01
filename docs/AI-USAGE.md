@@ -114,6 +114,12 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
   `via_kind` (`interface`) and, when the `implements` edge is ambiguous, `via_edge`, all placed before `resolution`.
   `impact` lists an interface method's implementors (`--format json`: `implementors`, `via_dispatch` [of via, kind, sites]),
   `context` adds `## Callers via interface dispatch` sections (JSON: a `via_dispatch` array of `{via, kind, sites}`), and `call-path` follows an interface method to its implementors.
+* `implementors --target <IFoo|IFoo.Bar|TFoo|TFoo.Bar>` is the interface report (1.40): which classes implement an
+  interface and how (`lists` / `via` a derived interface / `inherited` / `delegated` by an `implements` property), which
+  method answers an interface method in each class (resolution clauses `IJob.Execute = RunJob` included), the call/read/write
+  sites of an interface member (attributed to the member, RB-5), a class's interfaces and what answers each member, and for a
+  class method the members it answers (`--uses`: the sites reaching it). `--json` = `implementors/1`; `--format dot|mermaid`;
+  `--library-db` adds library implementor counts (`--include-library` lists them). Chart: `ask implementors`. MCP: `get_implementors`.
 * `find-unit` for an **RTL / VCL / third-party** symbol needs the **platform
   library** database (`resolve-dbs --platform win64`), not a project DB - a
   project DB holds only that project's own units.
@@ -451,6 +457,7 @@ define further codes.
 |------|--------------|
 | `context --task "verb qname"` | curated context bundle (doc + surface + body + callers); `--full-surface` only for form/DFM work; `--max-callers N` caps the caller list and `--context N` the source lines around each; `--library-db <lib>` adds query-time library-bound calls to the Library calls count (json `library_calls.via` stored|oracle). Adds a `## Wiki` section when the task phrase matches a `dl:wiki` alias (suppressed by `--no-docs`). **A qname that resolves to nothing now exits 1 and says `NOT FOUND`** -- it used to render an empty bundle at exit 0 |
 | `impact --qname U.T.M` | transitive caller blast radius (`--depth N`); an interface method also lists its implementors, an implementor the interface sites reaching it (`--format json`: `implementors`, `via_dispatch`) |
+| `implementors --target IFoo\|IFoo.Bar\|TFoo\|TFoo.Bar` | interface report: implementing classes (lists / via / inherited / delegated), the method answering each interface method per class, member call/use sites (RB-5); `--uses`, `--max-sites N`, `--library-db` + `--include-library`, `--format text\|json\|dot\|mermaid` |
 | `wiring --qname IIntf\|TForm` | Spring4D DI edges + DFM event handlers (`--coverage` for unresolved DI registrations) |
 | `find-callees --qname U.T.M [--db P --db LIB \| --library-db LIB]` | resolved outgoing calls of a routine, one line per call SITE (a target called N times repeats N times; distinct callees: `callgraph --qname U.T.M --direction callees --depth 1`); library-bound callees follow, marked `(library`, in text, and as `{"external": true, "via": "edge"\|"oracle", "receiver_type": ...}` rows in `--json` (`edge` = stored `refs.external_target`, `oracle` = bound at read time against the named library). With no library open the text ends `M external (library not open)` |
 | `call-path --from A --to B` | shortest resolved call path A -> ... -> B (`--max-depth N`; exit 1 = no path) |
@@ -889,6 +896,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `hover` | [Hover at Cursor](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Hover-at-Cursor) | Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers |  |
 | `ide-release` | [ide-release](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ide-release) | Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request |  |
 | `impact` | [Impact / Blast Radius (symbol)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Impact-Blast-Radius-symbol) | Reports what would be affected if a chosen symbol changes -- the set of code to retest |  |
+| `implementors` | [Interface Implementors Report](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/interface-implementors) | Who implements an interface, which method answers each interface method in each class, and who calls or uses an interface member |  |
 | `import-log` | [Import Build Log](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Import-Build-Log) | Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings | index |
 | `index` | [Auto-Document Whole Project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Auto-Document-Whole-Project) | Writes DocInsight documentation into every public declaration a project owns |  |
 | `index` | [Format Whole Project with YADF](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Format-Whole-Project-with-YADF) | Runs YADF formatting across a project's files, with indexing involved as part of the same action |  |
@@ -1026,6 +1034,7 @@ of the CLI -- exactly **15 tools**:
 | `find_undocumented` | public symbols with no doc comment |
 | `get_symbol_doc` | doc comment for a symbol |
 | `get_impact` | transitive caller impact |
+| `get_implementors` | Interface report (`implementors/1`): implementing classes, answering methods per class, member call/use sites |
 | `get_wiring` | Spring4D DI edges (impl class + lifetime + resolve-sites) and DFM event handlers, by interface or form name |
 | `get_surface` | class surface (signatures) |
 | `get_slice` | a symbol's source body |

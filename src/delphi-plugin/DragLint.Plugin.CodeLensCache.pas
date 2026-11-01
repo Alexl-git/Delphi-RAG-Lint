@@ -6,6 +6,8 @@ unit DragLint.Plugin.CodeLensCache;
   declarations, then for each method shells drag-lint query find-callers
   to get the caller count.  Results are stored as a map:
     lowercase(filepath) -> (0-based line number -> "[N callers]" label)
+  1.40 (ifrpt): an interface or interface method also gets "[N implementors]",
+  from the 'implementors' array of the same draglint/callerCounts reply.
 
   PaintLine reads from the cache only -- no subprocess calls during paint.
   Cache is invalidated (file entry dropped) on BufferSaved via
@@ -132,8 +134,10 @@ type
   /// <summary>Receives one file's caller counts on the MAIN thread.</summary>
   /// <param name="AOk">False when the engine timed out or answered nothing usable.</param>
   /// <param name="ALines">0-based lines; -1 entries are skipped.</param>
-  /// <param name="ACounts">Caller count per entry of ALines.</param>
-  TCallerCountsDone = reference to procedure(AOk: Boolean; const ALines, ACounts: TArray<Integer>);
+  /// <param name="ACounts">Caller count per entry of ALines; -1 = no caller label (an
+  /// interface line that only carries implementors).</param>
+  /// <param name="AImpls">Implementor count per entry of ALines (1.40): 0 = none.</param>
+  TCallerCountsDone = reference to procedure(AOk: Boolean; const ALines, ACounts, AImpls: TArray<Integer>);
 
   /// <summary>Asynchronous caller-count source (2026-10-29).</summary>
   /// <returns>True when the hook TOOK the file -- it sent a request whose answer
@@ -522,7 +526,7 @@ begin
       activation -- the 13-minute callerCounts of the report would otherwise
       be re-sent each time the user returned to that tab. }
     if GCallerCountsHook(AFilePath,
-      procedure(AOk: Boolean; const HLines, HCounts: TArray<Integer>)
+      procedure(AOk: Boolean; const HLines, HCounts, HImpls: TArray<Integer>)
       var
         Inn: TDictionary<Integer, string>;
       begin
@@ -534,8 +538,13 @@ begin
               cache stores -- the conversion lives on the server so exactly one
               place knows about the offset. }
             if HLines[K] < 0 then Continue;
-            if HCounts[K] = 1 then Inn.AddOrSetValue(HLines[K], '[1 caller]')
-            else Inn.AddOrSetValue(HLines[K], Format('[%d callers]', [HCounts[K]]));
+            var Lbl:= '';
+            if HCounts[K] = 1 then Lbl:= '[1 caller]'
+            else if HCounts[K] >= 0 then Lbl:= Format('[%d callers]', [HCounts[K]]);
+            var NImpl:= if K <= High(HImpls) then HImpls[K] else 0;
+            if NImpl > 0 then
+              Lbl:= Lbl + (if Lbl = '' then '' else ' ') + (if NImpl = 1 then '[1 implementor]' else Format('[%d implementors]', [NImpl]));
+            if Lbl <> '' then Inn.AddOrSetValue(HLines[K], Lbl);
           end;
         StoreForFile(Key, Inn);
       end) then Exit;

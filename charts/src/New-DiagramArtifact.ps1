@@ -47,11 +47,13 @@ param(
   # months later. The literal 'project' IS the selection for those two.
   [Parameter(Mandatory)][Alias('Qname','Unit','Form','Interface','Type')][string] $Target,
   [Parameter(Mandatory)][string] $DbPath,
+  # 'implementors' (1.40) is answered in-process by `drag-lint ask` only -- there is no Emit-Implementors.ps1
   [ValidateSet('butterfly','deps','who-calls','what-it-calls','who-writes','who-reads',
                'hierarchy','class-surface','event-wiring','touches-tables',
                'lifecycle','cycles','wiring','effects','architecture',
                'protocol-trace','crosses-boundary','shown-where','change-impact','tested-by',
-               'exception-paths','consumers','feeds-from','lands-where','round-trip','path')]
+               'exception-paths','consumers','feeds-from','lands-where','round-trip','path',
+               'implementors')]
   [string] $Question = 'butterfly',
   # crosses-boundary only: the other half of the system, so the far side of a
   # protocol command can be named. Optional -- without it the chart shows one side

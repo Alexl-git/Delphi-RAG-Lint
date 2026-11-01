@@ -1,6 +1,6 @@
 # Interface report (`implementors`) -- design
 
-Status: DRAFT for owner review, 2026-11-01. Lane `ifrpt` (1.40, branch `lane/x129-ifrpt`).
+Status: APPROVED 2026-11-01 (owner rulings in section 10). Lane `ifrpt` (1.40, branch `lane/x129-ifrpt`).
 Sibling lane: `call` (`lane/x129-call`: METHRES-DISPATCH, RB5-IFACE, GAP-CALLERS).
 No code in this lane until the owner rules on section 9.
 
@@ -187,3 +187,12 @@ D4 Library scope: default to project-declared implementors only, interfaces from
    (IInterface, IUnknown, COM) answered as counts unless `--include-library`?
 D5 IDE scope for 1.40: plugin Reports entry + LSP `textDocument/implementation` fix only, or
    also the "N implementors" code lens and the MCP tool?
+
+## 10. Owner rulings (2026-11-01)
+
+* D1: verb `implementors` + `ask implementors` chart, one engine.
+* D2: delegation goes into the x129 batch; lane `call` indexes it. This lane labels it until then.
+* D3: the fake resolution-clause method is dropped (lane `call`). This lane labels the clause until then.
+* D4: project implementors by default; library implementors as counts unless `--include-library`.
+* D5: ALL surfaces: plugin Reports entry, LSP go-to-implementation reads the implements rows (T6),
+  an "N implementors" code lens, an MCP `get_implementors` tool, and the `get_wiring` description fixed.

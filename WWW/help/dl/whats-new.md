@@ -9,6 +9,10 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.39.2-alpha
+
+* [Interface Implementors Report](features/interface-implementors.md) -- Who implements an interface, which method answers each interface method in each class, and who calls or uses an interface member.
+
 ## 1.39.0-alpha
 
 * [warm-rule-cache](features/warm-rule-cache.md) -- Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm).

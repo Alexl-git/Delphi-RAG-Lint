@@ -75,13 +75,14 @@ const
   REPORT_DOC_MAX_LINE = DOCINSIGHT_MAX_LINE;
 
   /// <summary>Number of questions in REPORT_QUESTIONS.</summary>
-  REPORT_QUESTION_COUNT = 26;
+  REPORT_QUESTION_COUNT = 27;
 
   /// <summary>Every question of charts\src\New-DiagramArtifact.ps1's
   /// ValidateSet, in menu order within each group. Grouping follows the "You
   /// select" section of docs\wiki\ask-&lt;question&gt;.md.</summary>
   /// <remarks>tests\plugin\run_reports_text.ps1 compares this list two-way
-  /// against the ValidateSet, so the two cannot drift silently.</remarks>
+  /// against the ValidateSet, so the two cannot drift silently. 'implementors'
+  /// (1.40) is answered in-process only; it is in the ValidateSet as a catalog entry.</remarks>
   REPORT_QUESTIONS: array[0..REPORT_QUESTION_COUNT - 1] of TReportQuestion = (
     (Id: 'butterfly'       ; Caption: 'Callers and callees (butterfly chart)...'              ; Kind: rtkRoutine),
     (Id: 'who-calls'       ; Caption: 'Who calls this routine...'                             ; Kind: rtkRoutine),
@@ -102,6 +103,7 @@ const
     (Id: 'class-surface'   ; Caption: 'What this type exposes (class surface)...'             ; Kind: rtkType   ),
     (Id: 'hierarchy'       ; Caption: 'Ancestors and descendants (hierarchy)...'              ; Kind: rtkType   ),
     (Id: 'wiring'          ; Caption: 'Who registers and resolves this interface...'          ; Kind: rtkType   ),
+    (Id: 'implementors'    ; Caption: 'Who implements this interface (implementors)...'       ; Kind: rtkType   ),
     (Id: 'event-wiring'    ; Caption: 'Which handler runs on which event (form)...'           ; Kind: rtkType   ),
     (Id: 'lifecycle'       ; Caption: 'Form lifecycle (create -> show -> destroy)...'         ; Kind: rtkType   ),
     (Id: 'deps'            ; Caption: 'Dependencies of this unit...'                          ; Kind: rtkUnit   ),

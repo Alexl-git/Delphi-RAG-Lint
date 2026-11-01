@@ -142,6 +142,7 @@
   "index-build-config": "index-build-config",
   "info": "info",
   "init-verb": "init-wiring",
+  "interface-implementors": "interface-implementors",
   "link-orm": "link-orm",
   "lint-project": "lint-project",
   "lint-tree": "lint-tree",

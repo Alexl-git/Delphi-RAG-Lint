@@ -258,6 +258,12 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
   `via_kind` (`interface`) and, when the `implements` edge is ambiguous, `via_edge`, all placed before `resolution`.
   `impact` lists an interface method's implementors (`--format json`: `implementors`, `via_dispatch` [of via, kind, sites]),
   `context` adds `## Callers via interface dispatch` sections (JSON: a `via_dispatch` array of `{via, kind, sites}`), and `call-path` follows an interface method to its implementors.
+* `implementors --target <IFoo|IFoo.Bar|TFoo|TFoo.Bar>` is the interface report (1.40): which classes implement an
+  interface and how (`lists` / `via` a derived interface / `inherited` / `delegated` by an `implements` property), which
+  method answers an interface method in each class (resolution clauses `IJob.Execute = RunJob` included), the call/read/write
+  sites of an interface member (attributed to the member, RB-5), a class's interfaces and what answers each member, and for a
+  class method the members it answers (`--uses`: the sites reaching it; `--max-sites N` caps the list). `--json` = `implementors/1`; `--format dot|mermaid`;
+  `--library-db` adds library implementor counts (`--include-library` lists them). Chart: `ask implementors`. MCP: `get_implementors`.
 * `find-unit` for an **RTL / VCL / third-party** symbol needs the **platform
   library** database (`resolve-dbs --platform win64`), not a project DB - a
   project DB holds only that project's own units.
@@ -826,8 +832,8 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 17 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
-| [Graphs and reports](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#graphs-and-reports) | 22 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#graphs-and-reports) |
-| [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 6 (+ 26 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
+| [Graphs and reports](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#graphs-and-reports) | 23 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#graphs-and-reports) |
+| [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 6 (+ 27 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
 | [Compiler integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#compiler-integration) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#compiler-integration) |
 | [Database and Firebird](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#database-and-firebird) | 2 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#database-and-firebird) |
 | [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 25 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
@@ -1228,6 +1234,7 @@ CLI-only verbs).
 | `find_by_doc_tag` | Symbols tagged `deprecated`, or carrying a `since` annotation |
 | `find_undocumented` | Symbols with no doc comment; filter by `kind` / `public_only` |
 | `get_impact` | Transitive blast radius of a symbol: callers/units affected, per depth level |
+| `get_implementors` | Interface report (`implementors/1`): who implements an interface, which method answers each interface method per class, and the member's call/use sites |
 | `get_wiring` | Spring4D DI edges (interface -> impl class + lifetime + resolve-sites) plus DFM event handlers for a form |
 | `get_surface` | Public interface (declaration lines) of a class/record; `include_impl` / `all_visibility` widen it |
 | `get_slice` | Minimal self-contained source slice (header + class decl + method bodies) for a class |
