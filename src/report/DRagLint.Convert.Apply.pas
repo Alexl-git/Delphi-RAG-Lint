@@ -3466,7 +3466,7 @@ begin
   List:= TList<string>.Create;
   try
     for K in Kids do
-      if K.Kind = skConstructor then List.Add(K.Name);
+      if (K.Kind = skConstructor) and not K.IsClassMethod then List.Add(K.Name); { 1.40: a class constructor builds no instance }
     if List.Count > 0 then Result:= List.ToArray;
   finally
     List.Free;

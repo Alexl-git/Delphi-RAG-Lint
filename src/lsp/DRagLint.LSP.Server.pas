@@ -2435,6 +2435,8 @@ begin
     skParam    : Keyword:= '';
     else Keyword:= ASym.Kind.ToText;
   end; // case
+  { 1.40 (CLASSCTOR-KIND): 'class constructor Create', as declared. }
+  if ASym.IsClassMethod and (Keyword <> '') then Keyword:= 'class ' + Keyword;
 
   case ASym.Kind of
     skFunction, skProcedure, skConstructor, skDestructor, skMethod:

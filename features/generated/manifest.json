@@ -1587,7 +1587,7 @@
             }
           ],
           "helpOrder": 6,
-          "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]", "                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:", "                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large", "                               unit's outline); --limit N prints the first N rows and says how many matched."]
+          "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]", "                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:", "                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large", "                               unit's outline); --limit N prints the first N rows and says how many matched.", "                               A routine row ends [impl A-B] (its body) and a class routine [class]; json: impl_start_line,", "                               impl_end_line, end_line, is_class_method."]
         },
         {
           "type": "ide-menu",

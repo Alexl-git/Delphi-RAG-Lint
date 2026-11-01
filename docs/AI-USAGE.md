@@ -159,6 +159,12 @@ declares none; the field being ABSENT means the engine or index predates v22, so
 absent and empty are different answers. `vis_explicit` is `false` only for a
 member in a class's unlabelled leading section, which under `$M+` is actually
 published while `modifiers` says `public` for both.
+`is_class_method` (1.40) is `true` for a routine declared with `class`: a
+class constructor / destructor carries kind `constructor` / `destructor` with
+`is_class_method: true`; class procedures, functions and operators stay kind
+`method`. The text row is tagged `[class]`, `hover` names it `class constructor`.
+A routine with a body also carries `[impl A-B]` in the text row (`impl_start_line` /
+`impl_end_line` in JSON, 0 = no body; `start_line` stays the declaration).
 ---
 
 ## 1. Setup (once)
@@ -434,7 +440,7 @@ define further codes.
 | `resolve-uses --name X` | which unit to add to `uses` (won't suggest implementation-only symbols) |
 | `find-unit --name X --in F` | add the declaring unit to F's `uses` clause |
 | `usages --name X` | every read/write/use of X (`--width narrow\|wide\|very-wide`; `--limit N` keeps the first N rows of each JSON group -- declarations included -- and adds `limit` and `totals`, the full counts) |
-| `outline --in F.pas` | all symbols declared in one file (`--kind <k[,k...]>` keeps only those kinds, `--no-locals` drops `local_var` and `param` -- most of a large unit's rows -- and `--limit N` prints the first N and says how many matched; without them every row, as the IDE reads it). Since extractor 1.17.0 that includes nested-routine locals and inline `var` / `for var` declarations, emitted as `local_var` symbols parented to the INNERMOST routine (`U.T.M.Nested.I`). A forward stub row is tagged `[forward -> line N]` (`forward_target_line` in JSON); both rows are listed. |
+| `outline --in F.pas` | all symbols declared in one file (`--kind <k[,k...]>` keeps only those kinds, `--no-locals` drops `local_var` and `param` -- most of a large unit's rows -- and `--limit N` prints the first N and says how many matched; without them every row, as the IDE reads it). Since extractor 1.17.0 that includes nested-routine locals and inline `var` / `for var` declarations, emitted as `local_var` symbols parented to the INNERMOST routine (`U.T.M.Nested.I`). A forward stub row is tagged `[forward -> line N]` (`forward_target_line` in JSON); both rows are listed. A routine with a body is tagged `[impl A-B]` (JSON `impl_start_line` / `impl_end_line`, plus `end_line`; 1.40) and a `class` routine `[class]` (JSON `is_class_method`). |
 | `compare --old R --command "<id> -Target T -Project P"` / `--in U.pas --line L [--update-doc]` | is this report still true? Reruns the report's COMMAND (in-process, no PowerShell) against the current index and diffs the normalised text (forms CSV by row, chart by nodes and edges). Exit 0 same, 1 differs, 2 usage/setup, 3 stale index (the new run never accepts a stale index). `--new F` (two saved outputs, no rerun) / `--question ID --target T` / `--old-db` / `--db F` / `--auto` / `--save` / `--snapshot-dir D` / `--show` / `--format text\|json\|html` / `--open`; `--format json` is schema `compare/1`. Page: [compare](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) |
 | `ask <id> --target T --project P` / `--in U.pas` / `--db D` | one report question (26 ids) as text: the DocInsight remarks block the IDE Reports menu copies, or `--plain` for the plain answer (header, COMMAND, BUNDLE, INDEX, text). Every question is answered in-process on the live index; no PowerShell is needed. Exit 0 answered, 1 refused, 2 usage/setup, 3 stale index (stderr prints the incremental reindex command; `--allow-stale` answers anyway). `--to B` / `--server-db` / `--sql-db` / `--counterpart-db` / `--depth` / `--cap` / `--surface-cap` / `--control` / `--mode` / `--max-rows` / `--out-root` / `--pairs-file` / `--open` / `--resolve-only`. Page: [ask](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ask) |
 | `surface --qname U.T` | class surface / member signatures (`--include-impl`, `--all-visibility`) |

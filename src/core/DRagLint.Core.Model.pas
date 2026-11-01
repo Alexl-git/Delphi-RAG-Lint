@@ -525,6 +525,15 @@ type
     // name (e.g. 'TColor'), not an ancestor list (helpers have no ancestors).
     // The resolve pass (ResolveHelpers) reads this to populate type_helpers.
     IsHelper     : Boolean     ;
+    /// <summary>True when this routine was declared with the `class` keyword:
+    /// class constructor / destructor / procedure / function / operator.
+    /// False for an instance routine and for every non-routine symbol.</summary>
+    /// <remarks>Stored as symbols.is_class_method (1.40, CLASSCTOR-KIND). A class
+    /// constructor / destructor carries Kind skConstructor / skDestructor; the
+    /// other class routines stay skMethod (run_ctor_dtor_kind_guard case C). So
+    /// "class constructor" is Kind = skConstructor AND IsClassMethod. A row
+    /// written before the column existed reads back False until re-parsed.</remarks>
+    IsClassMethod: Boolean     ;
     // v22 (PLAN-routine-directives-in-index.md): EVERY routine directive --
     // virtual dynamic override abstract overload reintroduce final static
     // assembler export inline deprecated platform experimental message stdcall

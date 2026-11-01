@@ -4925,6 +4925,10 @@ begin
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_ancestors_name   ON type_ancestors(ancestor_name)');
   { v23 (extractor batch): see Schema.pas 22 -> 23. }
   TryExec('ALTER TABLE symbols ADD COLUMN generic_params TEXT');
+  { 1.40 (CLASSCTOR-KIND): 1 for a routine declared with `class`; see Schema.pas.
+    Additive and read with FindField, so NO SCHEMA_VERSION bump of its own: a
+    pre-1.40 row reads 0 until the extractor bump re-parses it. }
+  TryExec('ALTER TABLE symbols ADD COLUMN is_class_method INTEGER');
   TryExec('ALTER TABLE type_ancestors ADD COLUMN ancestor_type_args TEXT');
   { v15: first-class helper-target edges. Similar to type_ancestors, one row
     per helper declaration (record/class helper for T) linked to its target type.
@@ -5372,7 +5376,7 @@ begin
   FQInsertFile:= NewQuery( 'INSERT OR IGNORE INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol:= NewQuery(
     'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, heritage, is_virtual, is_helper, start_line, start_col, end_line, end_col, ' +
-    '  impl_start_line, impl_end_line, prop_access, directives, vis_explicit, generic_params) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, :ish, ' + '  :sl, :sc, :el, :ec, :isl, :iel, :pa, :dirs, :vexp, :gp)');
+    '  impl_start_line, impl_end_line, prop_access, directives, vis_explicit, generic_params, is_class_method) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, :ish, ' + '  :sl, :sc, :el, :ec, :isl, :iel, :pa, :dirs, :vexp, :gp, :iscm)');
   FQInsertTrigram:= NewQuery( 'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' + 'VALUES (:tg, :sid)');
   FQInsertRef:= NewQuery(
     'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col, enclosing_symbol_id, receiver_text) ' +
@@ -6403,6 +6407,7 @@ begin
   FQInsertSymbol.ParamByName('gp'   ).DataType := ftString;
   if ASymbol.GenericParams <> '' then FQInsertSymbol.ParamByName('gp').AsWideString:= ASymbol.GenericParams
   else FQInsertSymbol.ParamByName('gp').Clear;
+  FQInsertSymbol.ParamByName('iscm' ).AsInteger:= Ord(ASymbol.IsClassMethod); { 1.40: always 0/1, NULL only on an older row }
   FQInsertSymbol.ExecSQL;
   Result:= FConn.GetLastAutoGenValue('');
   // Populate trigram index alongside each symbol insert so fuzzy queries
@@ -9277,6 +9282,8 @@ begin
   Result.GenericParams:= '';
   if AQ.FindField('generic_params') <> nil then { v23: tolerate pre-v23 databases }
     Result.GenericParams:= AQ.FieldByName('generic_params').AsString;
+  if AQ.FindField('is_class_method') <> nil then { 1.40: tolerate older databases; NULL -> False }
+    Result.IsClassMethod:= AQ.FieldByName('is_class_method').AsInteger <> 0;
   Result  .StartLine:= AQ.FieldByName('start_line').AsInteger;
   Result  .StartCol := AQ.FieldByName('start_col' ).AsInteger;
   Result  .EndLine  := AQ.FieldByName('end_line'  ).AsInteger;

@@ -722,7 +722,8 @@ begin
     building a full fact set: this is a stub generator, and TDocFactsBuilder.Build
     is orders of magnitude more work than the answer is worth. }
   HasReturn:= SignatureDeclaresReturn(Sig) or SignatureHasReturn(Sig)
-              or (Sym.Kind in [skFunction, skConstructor]);
+              or (Sym.Kind = skFunction)
+              or ((Sym.Kind = skConstructor) and not Sym.IsClassMethod); { 1.40: a class constructor returns nothing }
 
   Sb:= TStringBuilder.Create;
   try

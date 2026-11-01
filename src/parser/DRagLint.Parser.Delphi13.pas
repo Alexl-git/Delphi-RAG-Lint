@@ -2382,6 +2382,7 @@ var
   Modifiers: string     ;
   Kind     : TSymbolKind;
   RoutineIdx: Integer   ;
+  IsClassRoutine: Boolean;
 begin
   Result:= -1;   { emitted nothing, unless we reach the Emit below }
   NameNode:= ANode.ChildByField('name');
@@ -2409,10 +2410,21 @@ begin
     and the structure view across the product test class members for skMethod;
     splitting those into skProcedure/skFunction is a far wider change with no
     reported symptom behind it. Only the two genuinely missing kinds are added. }
+  { 1.40 (CLASSCTOR-KIND): a class routine's FIRST child is the `class`
+    keyword, and the kind token follows it. Reading Child(0) alone stored every
+    `class constructor` / `class destructor` as a plain method, with nothing
+    to tell it from `procedure Create`. Step over kClass, and say so in
+    IsClassMethod (set on the emitted row below). }
   Kind:= skProcedure;
+  IsClassRoutine:= False;
   if ANode.ChildCount > 0 then
   begin
     FirstTok:= ANode.Child(0);
+    if (FirstTok.NodeType = 'kClass') and (ANode.ChildCount > 1) then
+    begin
+      IsClassRoutine:= True;
+      FirstTok:= ANode.Child(1);
+    end;
     if FirstTok.NodeType      = 'kFunction'    then Kind:= skFunction
     else if FirstTok.NodeType = 'kConstructor' then Kind:= skConstructor
     else if FirstTok.NodeType = 'kDestructor'  then Kind:= skDestructor;
@@ -2436,6 +2448,12 @@ begin
     them. AAsMethod still gates is_virtual, whose v12 meaning is unchanged. }
   RoutineIdx:= AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, ProcSignatureOf(ANode, AState.Source), Modifiers, '', AAsMethod and ProcIsVirtual(ANode),
                            False, '', ProcDirectivesOf(ANode), (not AAsMethod) or AState.CurrentVisExplicit, GenParams);
+  if IsClassRoutine then
+  begin
+    var ClassSym: TSymbol:= AState.Symbols[RoutineIdx];
+    ClassSym.IsClassMethod:= True;
+    AState.Symbols[RoutineIdx]:= ClassSym;
+  end;
   Result:= RoutineIdx;
   // v14 (D5, Task 2): emit each formal parameter as an skParam symbol parented
   // to this routine (RoutineIdx). Nested procs never reach WalkDeclProc (their

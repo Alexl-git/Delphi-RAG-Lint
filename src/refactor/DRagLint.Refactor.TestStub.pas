@@ -277,7 +277,8 @@ begin
 
   ATarget.RoutineName:= Chosen.Name;
   if ATarget.RoutineName = '' then ATarget.RoutineName:= LastSegment(AQName, '.');
-  ATarget.IsFunction := Chosen.Kind in [skFunction, skMethod, skConstructor];
+  { 1.40: a class constructor (skConstructor + IsClassMethod) returns nothing. }
+  ATarget.IsFunction := (Chosen.Kind in [skFunction, skMethod]) or ((Chosen.Kind = skConstructor) and not Chosen.IsClassMethod);
 
   { The parent decides free-routine vs method. This is the whole fix. }
   if Chosen.ParentId <> 0 then
