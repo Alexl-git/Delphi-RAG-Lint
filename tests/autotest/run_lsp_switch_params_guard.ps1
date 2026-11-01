@@ -47,6 +47,7 @@ function Check($n, $ok, $d = '') {
   if (-not $ok) { $script:Failed = $true }
 }
 
+if (-not (Test-Path $Exe)) { & "$PSScriptRoot\prepare_battery.ps1" -Only switch | Out-Host }
 if (-not (Test-Path $Exe)) {
   # Not built in this tree. Say so loudly rather than passing vacuously: a
   # guard that skips when its subject is missing is a guard that never fails.

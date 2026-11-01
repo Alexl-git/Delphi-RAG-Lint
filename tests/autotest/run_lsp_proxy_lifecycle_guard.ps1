@@ -144,6 +144,8 @@ function Wait-Gone([int]$procPid, [int]$timeoutMs = 8000) {
 Write-Host 'run_lsp_proxy_lifecycle_guard -- the relay never orphans DelphiLSP' -ForegroundColor Cyan
 
 # A fresh worktree has no LspStubServer.exe (untracked): build it, as run_battery.ps1 would (ki-verify, 0930 #3).
+. (Join-Path $PSScriptRoot 'lib\EngineCompanions.ps1')
+[void](Initialize-EngineCompanions -Exe $Exe)
 if ((Test-Path $Exe) -and -not (Test-Path $Stub)) { & "$PSScriptRoot\prepare_battery.ps1" -Exe $Exe -Only stub | Out-Host }
 foreach ($need in @($Exe, $Stub)) {
   if (-not (Test-Path $need)) {

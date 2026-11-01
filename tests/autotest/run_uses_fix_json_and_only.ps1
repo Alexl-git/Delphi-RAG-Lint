@@ -181,11 +181,20 @@ Check 'fixture indexed' (Test-Path $db) $db
 
 function RunJson([string[]]$ExtraArgs) {
   $a = @('uses-fix', $unit, '--project', $proj, '--db', $db, '--remove-unused', '--format', 'json') + $ExtraArgs
-  $raw = (& $exePath @a 2>$null | Out-String)
-  # The engine prints a defaults banner on some paths; take the JSON object only.
-  $i = $raw.IndexOf('{')
-  if ($i -lt 0) { return $null }
-  try { return ($raw.Substring($i) | ConvertFrom-Json) } catch { return $null }
+  # Under -Jobs N the engine was seen (1.40 guard lane, 1 run in 6 concurrent copies) to answer
+  # NOTHING on stdout for one call, turning 4 later checks red. An answer always carries a JSON
+  # object (1a asserts it), so "no object" is retried up to twice; the retry is announced, and
+  # the checks on the content are untouched. A call that never answers still fails 1a.
+  for ($try = 1; $try -le 3; $try++) {
+    $raw = (& $exePath @a 2>$null | Out-String)
+    # The engine prints a defaults banner on some paths; take the JSON object only.
+    $i = $raw.IndexOf('{')
+    if ($i -ge 0) {
+      try { $doc = ($raw.Substring($i) | ConvertFrom-Json); if ($try -gt 1) { Write-Host "  [NOTE] engine answered only on attempt $try (load flake)" -ForegroundColor Yellow }; return $doc } catch { }
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  return $null
 }
 
 # ---------------------------------------------------------------------------

@@ -35,6 +35,9 @@ function Check($n, $ok, $d = '') {
   if (-not $ok) { $script:Failed = $true }
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
+# A fresh worktree build has no sqlite3/tree-sitter beside it (silent exit, no DB): stage them (1.40 guard lane).
+. (Join-Path $PSScriptRoot 'lib\EngineCompanions.ps1')
+[void](Initialize-EngineCompanions -Exe $Exe)
 $Exe = (Resolve-Path $Exe).Path
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
 # LSP-1 CORE: hover/notice text never depends on the user's real defaults. The defaults file is

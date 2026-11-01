@@ -30,6 +30,7 @@ function Check($n, $ok, $d = '') {
   Write-Host ("  [{0}] {1} {2}" -f $s, $n, $d) -ForegroundColor $c
   if (-not $ok) { $script:Failed = $true }
 }
+if (-not (Test-Path $Exe)) { & "$PSScriptRoot\prepare_battery.ps1" -Only switch | Out-Host }
 if (-not (Test-Path $Exe)) {
   Write-Host "FATAL: drag-lint-switch.exe not found: $Exe" -ForegroundColor Red
   exit 2

@@ -43,6 +43,7 @@ function Check($n, $ok, $d = '') {
   if (-not $ok) { $script:Failed = $true }
 }
 
+if (-not (Test-Path $Exe)) { & "$PSScriptRoot\prepare_battery.ps1" -Only switch | Out-Host }
 if (-not (Test-Path $Exe)) {
   Write-Host "SKIP: drag-lint-switch.exe not found at $Exe -- build it with build\build_lsp_switch.bat" -ForegroundColor Yellow
   # exit 77 = SKIP in tests\run_battery.ps1: reported by name with this reason, never a PASS (backlog #30).

@@ -1,6 +1,6 @@
 @echo off
 REM Manually build tree-sitter-delphi13.dll for Win32 via cl.exe.
-call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars32.bat" >NUL 2>NUL
+call "%~dp0_vsenv.bat" 32 >NUL 2>NUL
 cd /D "C:\Projects\Delphi-RAG-lint\build"
 cl /nologo /O2 /LD /MD /D_CRT_SECURE_NO_WARNINGS /wd4146 /wd4244 /wd4267 /wd4090 ^
    /I "C:\Projects\tree-sitter-delphi13\node_modules\tree-sitter\vendor\tree-sitter\lib\include" ^

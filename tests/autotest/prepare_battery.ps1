@@ -35,7 +35,7 @@ param(
   [switch]$SkipSelfIndex,
   # -Only calls,stub : build just those prerequisites (a standalone guard runner needs two, not the
   # doctest/plugin/self-index set). Implies -SkipSelfIndex.
-  [ValidateSet('calls','stub')][string[]]$Only
+  [ValidateSet('calls','stub','switch')][string[]]$Only
 )
 if ($Only) { $SkipSelfIndex = $true }
 $ErrorActionPreference = 'Continue'
@@ -44,6 +44,9 @@ $rsvars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 $work  = Join-Path $env:TEMP ("draglint-prepare-" + $PID)
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 $script:missing = New-Object System.Collections.Generic.List[string]
+# The engine must be runnable (sqlite3/tree-sitter beside it) before any step below indexes with it.
+. (Join-Path $PSScriptRoot 'lib\EngineCompanions.ps1')
+[void](Initialize-EngineCompanions -Exe $Exe)
 
 function Say([string]$m) { Write-Host "[prepare_battery] $m" }
 
@@ -88,12 +91,13 @@ if ((-not $Only) -or ($Only -contains 'stub')) { Need $stub 'LspStubServer.exe' 
   $null = Invoke-Wrapped 'stub' ('dcc64 -NU"{0}" -E"{1}" -U"{2}" "{3}\LspStubServer.dpr"' -f $dcu, (Join-Path $stubDir 'Win64\Debug'), $stubDir, $stubDir)
 } }
 
-if (-not $Only) {
-# --- drag-lint-switch.exe --------------------------------------------------
+# --- drag-lint-switch.exe (also -Only switch: the three lsp_switch guards self-prepare it) ----
 $sw = Join-Path $root 'src\tools\lsp-switch\Win64\Debug\drag-lint-switch.exe'
-Need $sw 'drag-lint-switch.exe' {
+if ((-not $Only) -or ($Only -contains 'switch')) { Need $sw 'drag-lint-switch.exe' {
   $null = Invoke-Wrapped 'switch' 'msbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal src\tools\lsp-switch\drag-lint-switch.dproj'
-}
+} }
+
+if (-not $Only) {
 
 # --- drag-lint-open.exe (X-06) ---------------------------------------------
 # Staged (copied from the main checkout / dll-win64), never built here; the same helper the
