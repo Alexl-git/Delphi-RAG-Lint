@@ -218,6 +218,7 @@ type
       FShuttingDown: Boolean             ;
       FControl     : TControlChannel     ; { nil = no channel (every mode but lsp); not owned }
       FFullRules   : Boolean             ; { C1: --full-rules; OFF by default }
+      FFullRulesSuperseded: Boolean      ; { the last RunFullRulesLint child was discarded because a newer save of the same file was waiting }
       FStartProject : string             ; { C15: explicit --project the CLI was started with, or '' }
       FStartPlatform: string             ; { C15: explicit --platform the CLI was started with, or '' }
       FStartupTargetCompiler  : string             ; { 1.38: explicit --target-compiler the CLI was started with, or '' }
@@ -917,10 +918,12 @@ type
       /// <param name="AJson">Receives lint's stdout when the run succeeded.</param>
       /// <param name="ARule">When non-empty, passed as `--rule` so the child computes that rule only
       /// (auto uses on save asks for unused-unit-in-uses alone).</param>
-      /// <returns>True when the child exited 0 within LintChildTimeoutMs (8 s, 16 s for a library-owned file); False on a spawn
-      /// failure, a timeout (the child is terminated) or a non-zero exit.</returns>
+      /// <returns>True when the child exited 0 or 1 with a JSON array. The budget (LintChildTimeoutMs: 8 s, 16 s for a library-owned file) is a
+      /// STALL budget: a child still printing or burning CPU is never killed, however long it takes; False on a spawn failure, a stall
+      /// (no output and no CPU for the whole budget; the child is terminated), a child superseded by a newer save of the same file
+      /// (terminated, FFullRulesSuperseded) or a bad exit.</returns>
       /// <remarks>
-      /// Blocks the calling thread for at most the timeout. The child never inherits the
+      /// Blocks the calling thread while the child makes progress (hovers are served between slices). The child never inherits the
       /// server's stdin/stdout: its handles are a temp file and NUL.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)</para>
@@ -939,6 +942,21 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function RunFullRulesLint(const AFile: string; out AJson: string; const ARule: string = ''): Boolean;
+      /// <summary>True when a didSave/didOpen of AFile is already waiting in the deferred queue (a NEWER save of the same file).</summary>
+      /// <param name="AFile">Absolute path of the file whose lint child is running.</param>
+      /// <returns>True when that child's result would be stale on arrival.</returns>
+      /// <remarks>Single-threaded: reads FDeferred, which only the stdio loop (and the yield inside it) fills.</remarks>
+      function NewerSavePending(const AFile: string): Boolean;
+      /// <summary>Waits for the lint --json child of --full-rules under a STALL budget (owner ruling 2026-11-01).</summary>
+      /// <param name="AProcess">The child process.</param>
+      /// <param name="AOut">The child's stdout file handle (its growth is progress).</param>
+      /// <param name="ABudget">Stall budget in ms: the child is given up on only after this long with no output and no CPU.</param>
+      /// <param name="AFile">The linted file; a newer save of it supersedes the child.</param>
+      /// <param name="ASupersedable">False for rule-scoped runs (code action), which are never superseded.</param>
+      /// <returns>True when the child exited by itself; False on a stall or when superseded (FFullRulesSuperseded tells which).
+      /// The caller terminates the child on False.</returns>
+      /// <remarks>Between 200 ms slices it serves waiting hovers (YieldToPendingRequests), so a slow child never freezes the editor.</remarks>
+      function WaitFullRulesChild(AProcess, AOut: THandle; ABudget: Cardinal; const AFile: string; ASupersedable: Boolean): Boolean;
       /// <summary>Auto uses on save: the source.removeUnusedImports action for APath, or nil.</summary>
       /// <param name="APath">The file the codeAction request names.</param>
       /// <param name="ABufferText">The editor's text, ANSI-decoded as the indexer decodes bytes.</param>
@@ -1440,6 +1458,10 @@ const
     the same function the IDE plugin's live runner asks, so the two cannot drift. }
   { Bounded wait for the killed child to be reaped after TerminateProcess. }
   LSP_FULL_RULES_REAP_MS = 2000;
+  { Slice of the child wait: how often progress, hovers and a newer save are looked at. }
+  LSP_FULL_RULES_POLL_MS = 200;
+  { Child CPU (100 ns units) that counts as progress between two looks: 50 ms (Windows charges CPU in ticks). }
+  LSP_FULL_RULES_CPU_PROGRESS_100NS = 50 * 10000;
   { S8: JSON-RPC internal error, answered when a registered feature raises. }
   LSP_ERR_INTERNAL = -32603;
   /// <summary>JSON-RPC 'method not found': the answer to a request no handler claims.</summary>
@@ -5037,8 +5059,10 @@ begin
           Diags.AddElement(Full.Items[J].Clone as TJSONValue);
       Full.Free;
     end
+    else if FFullRulesSuperseded then
+      Writeln(ErrOutput, 'drag-lint lsp: full-rules superseded by a newer save, result discarded: ', Path)
     else
-      Writeln(ErrOutput, 'drag-lint lsp: full-rules fallback to the subset (timeout, failed run or invalid JSON): ', Path);
+      Writeln(ErrOutput, 'drag-lint lsp: full-rules fallback to the subset (stalled, failed run or invalid JSON): ', Path);
     Writeln(ErrOutput, Format('drag-lint lsp: full-rules %s %d ms %d findings', [Path, GetTickCount64 - Started, Diags.Count]));
   end;
   { unit-missing-from-uses needs the file's project store AND the platform library
@@ -5078,6 +5102,60 @@ begin
   end;
 end; // procedure
 
+function TLSPServer.NewerSavePending(const AFile: string): Boolean;
+begin
+  for var Msg: TJSONObject in FDeferred do
+  begin
+    var Method: string:= if Msg.GetValue('method') <> nil then Msg.GetValue('method').Value else '';
+    if (Method <> 'textDocument/didSave') and (Method <> 'textDocument/didOpen') then Continue;
+    var Params: TJSONObject:= Msg.GetValue('params') as TJSONObject;
+    var Doc: TJSONObject:= if Params <> nil then Params.GetValue('textDocument') as TJSONObject else nil;
+    if (Doc <> nil) and (Doc.GetValue('uri') <> nil) and SameText(FileFromUri(Doc.GetValue('uri').Value), AFile) then Exit(True);
+  end;
+  Result:= False;
+end; // function
+
+function TLSPServer.WaitFullRulesChild(AProcess, AOut: THandle; ABudget: Cardinal; const AFile: string; ASupersedable: Boolean): Boolean;
+var
+  Deadline: UInt64    ;
+  LastSize: DWORD     ;
+  Size    : DWORD     ;
+  CpuMark : Int64     ;
+  Cpu     : Int64     ;
+  CreateT, ExitT, KernelT, UserT: TFileTime;
+begin
+  FFullRulesSuperseded:= False;
+  LastSize:= 0;
+  CpuMark := 0;
+  Deadline:= GetTickCount64 + ABudget;
+  while WaitForSingleObject(AProcess, LSP_FULL_RULES_POLL_MS) <> WAIT_OBJECT_0 do
+  begin
+    YieldToPendingRequests;
+    if ASupersedable and NewerSavePending(AFile) then
+    begin
+      FFullRulesSuperseded:= True;
+      Exit(False);
+    end;
+    Size:= GetFileSize(AOut, nil);
+    if (Size <> INVALID_FILE_SIZE) and (Size > LastSize) then
+    begin
+      LastSize:= Size;
+      Deadline:= GetTickCount64 + ABudget;
+    end;
+    if GetProcessTimes(AProcess, CreateT, ExitT, KernelT, UserT) then
+    begin
+      { a FILETIME is the little-endian 64-bit count of 100 ns units }
+      Cpu:= PInt64(@UserT)^ + PInt64(@KernelT)^;
+      if Cpu - CpuMark >= LSP_FULL_RULES_CPU_PROGRESS_100NS then
+      begin
+        CpuMark:= Cpu;
+        Deadline:= GetTickCount64 + ABudget;
+      end;
+    end;
+    if GetTickCount64 >= Deadline then Exit(False);
+  end;
+  Result:= True;
+end; // function
 function TLSPServer.RunFullRulesLint(const AFile: string; out AJson: string; const ARule: string): Boolean;
 var
   Sa      : TSecurityAttributes;
@@ -5136,7 +5214,7 @@ begin
       (timeout, bad JSON) through this variable; it is never set in production. }
     ChildExe:= GetEnvironmentVariable('DRAGLINT_FULLRULES_CHILD_EXE');
     if ChildExe = '' then ChildExe:= ParamStr(0);
-    Cmd:= '"' + ChildExe + '" lint "' + AFile + '" --json';
+    Cmd:= '"' + ChildExe + '" lint "' + AFile + '" --json --output-encoding utf8'; { the engine writes 7-bit ASCII by default; the read below is UTF-8 }
     if ARule <> '' then Cmd:= Cmd + ' --rule "' + StringReplace(ARule, '"', '', [rfReplaceAll]) + '"';
     for var DbP in ChildDbs do
       if DbP <> '' then Cmd:= Cmd + ' --db "' + DbP + '"';
@@ -5146,7 +5224,7 @@ begin
     UniqueString(Cmd);
     if not CreateProcess(PChar(ChildExe), PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, Si, Pi) then Exit;
     try
-      if WaitForSingleObject(Pi.hProcess, Budget) <> WAIT_OBJECT_0 then
+      if not WaitFullRulesChild(Pi.hProcess, HOut, Budget, AFile, ARule = '') then
       begin
         TerminateProcess(Pi.hProcess, 1);
         WaitForSingleObject(Pi.hProcess, LSP_FULL_RULES_REAP_MS);
