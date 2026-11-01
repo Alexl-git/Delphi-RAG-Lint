@@ -3629,6 +3629,7 @@ const
 implementation
 
 uses
+  DRagLint.Core.FileTime,
   System.Generics.Defaults
   , Winapi.Windows            { GetLongPathName / GetShortPathName: FindFileIdByPath's 8.3 fallback (#26) }
   , System.StrUtils
@@ -5847,7 +5848,7 @@ begin
   for var Inc_ in List.Split([FILE_INCLUDES_SEP]) do
   begin
     if Inc_ = '' then Continue;
-    if (not TFile.Exists(Inc_)) or (DateTimeToUnix(TFile.GetLastWriteTime(Inc_), False) > ParsedAt) then
+    if (not TFile.Exists(Inc_)) or (FileMTimeUnix(Inc_) > ParsedAt) then
       Exit(True);
   end;
 end;
@@ -5888,7 +5889,7 @@ begin
     begin
       var Inc_: string:= Q.Fields[0].AsString;
       if (not TFile.Exists(Inc_))
-        or (DateTimeToUnix(TFile.GetLastWriteTime(Inc_), False) > Q.Fields[1].AsLargeInt) then
+        or (FileMTimeUnix(Inc_) > Q.Fields[1].AsLargeInt) then
         Exit(True);
       Q.Next;
     end;
@@ -6288,7 +6289,7 @@ begin
     FQUpsertFile.ParamByName('path'  ).AsWideString   := NP;
     FQUpsertFile.ParamByName('mtime' ).AsLargeInt := AMtimeUnix;
     FQUpsertFile.ParamByName('sha'   ).AsWideString   := ASha;
-    FQUpsertFile.ParamByName('parsed').AsLargeInt := DateTimeToUnix(Now, False);
+    FQUpsertFile.ParamByName('parsed').AsLargeInt := NowUnixUtc;
     FQUpsertFile.ParamByName('lang'  ).AsWideString   := ALanguage;
     FQUpsertFile.ExecSQL;
     if FQUpsertFile.RowsAffected = 0 then
@@ -6297,7 +6298,7 @@ begin
       FQInsertFile.ParamByName('path'  ).AsWideString   := NP;
       FQInsertFile.ParamByName('mtime' ).AsLargeInt := AMtimeUnix;
       FQInsertFile.ParamByName('sha'   ).AsWideString   := ASha;
-      FQInsertFile.ParamByName('parsed').AsLargeInt := DateTimeToUnix(Now, False);
+      FQInsertFile.ParamByName('parsed').AsLargeInt := NowUnixUtc;
       FQInsertFile.ParamByName('lang'  ).AsWideString   := ALanguage;
       FQInsertFile.ExecSQL;
     end;
@@ -12119,7 +12120,7 @@ begin
   FQInsertCompilerFinding.ParamByName('lno' ).AsInteger:= AFinding.LineNo;
   FQInsertCompilerFinding.ParamByName('cno' ).AsInteger:= AFinding.ColNo;
   FQInsertCompilerFinding.ParamByName('msg' ).AsWideString := AFinding.Message;
-  FQInsertCompilerFinding.ParamByName('iat').AsLargeInt:= System.DateUtils.DateTimeToUnix(Now, False);
+  FQInsertCompilerFinding.ParamByName('iat').AsLargeInt:= NowUnixUtc;
   FQInsertCompilerFinding.ExecSQL;
 end;
 

@@ -144,7 +144,8 @@ function EngineIsHeld(out ASecondsLeft: Integer): Boolean;
 implementation
 
 uses
-  System.SysUtils
+  Winapi.Windows
+  , System.SysUtils
   , System.IOUtils
   , System.DateUtils
   ;
@@ -177,8 +178,13 @@ end;
   ambiguous for one hour every autumn and an hour wrong every spring, and this
   file is read by a different process than the one that wrote it. }
 function NowEpochUtc: Int64;
+var
+  ST: TSystemTime;
 begin
-  Result:= DateTimeToUnix(TTimeZone.Local.ToUniversalTime(Now), {AInputIsUTC=}True);
+  { The OS's UTC clock: TTimeZone.ToUniversalTime(Now) is an hour off for the whole of a DST-transition
+    day (lane 140-cli DST). }
+  GetSystemTime(ST);
+  Result:= DateTimeToUnix(SystemTimeToDateTime(ST), {AInputIsUTC=}True);
 end;
 
 function HoldEngine(ASeconds: Integer; out AError: string): Boolean;

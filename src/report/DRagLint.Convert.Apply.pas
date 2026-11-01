@@ -1393,6 +1393,7 @@ function MigrateRuleRefusal(const ARule: TConversionRule): string;
 implementation
 
 uses
+  DRagLint.Core.FileTime,
   System.StrUtils,
   System.Generics.Defaults,
   System.IOUtils,
@@ -3629,7 +3630,7 @@ var
 begin
   RawBytes := TFile.ReadAllBytes(APath);
   Sha      := THashSHA2.GetHashString(TEncoding.ANSI.GetString(RawBytes));
-  MtimeUnix:= DateTimeToUnix(TFile.GetLastWriteTime(APath), False);
+  MtimeUnix:= FileMTimeUnix(APath);
   Result   := AStore.FileIsUpToDate(APath, MtimeUnix, Sha);
 end;
 

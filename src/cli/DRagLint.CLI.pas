@@ -92,6 +92,7 @@ function Run: Integer;
 implementation
 
 uses
+  DRagLint.Core.FileTime,
   Winapi.Windows
   , DRagLint.Core.CliError
   , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
@@ -3540,7 +3541,7 @@ begin
         S    : TPropTypeFillStats;
         Start: Int64;
       begin
-        Start:= DateTimeToUnix(Now, False);
+        Start:= NowUnixUtc;
         S:= FillBarePropertyTypes(AStore, Since);
         AStore.SetMetaValue(PROP_TYPES_META_KEY, PROP_TYPES_FORMAT + ';' + IntToStr(Start));
         Writeln(Format('%s  prop-types: %d bare re-publication(s), %d filled, %d unresolved, %d bridged',
@@ -4055,7 +4056,7 @@ begin
     if ARun.Old.State <> '' then AStore.SetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY, '');
     Exit;
   end;
-  var NowUnix: Int64:= DateTimeToUnix(Now, False);
+  var NowUnix: Int64:= NowUnixUtc;
   M:= Default(TLibraryMarker);
   M.Platform     := ARun.Platform;
   M.LibraryDb    := ARun.LibDb;
@@ -6335,7 +6336,7 @@ begin
     different question -- "was this DB ever completed by an engine that records
     freshness at all" -- which is what lets a pre-upgrade index report UNKNOWN
     instead of being judged against evidence it never stored. }
-  AStore.SetMetaValue(INDEXED_AT_KEY, IntToStr(DateTimeToUnix(Now, False)));
+  AStore.SetMetaValue(INDEXED_AT_KEY, IntToStr(NowUnixUtc));
   { The RESOLVER stamp rides the same guarantee, and for the same reason: it is
     written only after a run whose resolve pass completed. See
     ResolverFingerprint for why it is separate from the indexer one. }
@@ -10066,7 +10067,7 @@ begin
     begin
       NewEntry:= TJSONObject.Create;
       NewEntry.AddPair('path', AbsPath);
-      NewEntry.AddPair('ts', TJSONNumber.Create( DateTimeToUnix(Now, False) * Int64(1000)));
+      NewEntry.AddPair('ts', TJSONNumber.Create( NowUnixUtc * Int64(1000)));
       Vaults.AddPair(NewVaultId, NewEntry);
       Stream:= TStringStream.Create(Cfg.ToJson, TEncoding.UTF8);
       try
@@ -10404,7 +10405,7 @@ begin
     FileQ.Params.ParamByName('p' ).DataType:= ftString;
     FileQ.Params.ParamByName('p2').DataType:= ftString;
 
-    ImportedAt:= DateTimeToUnix(Now, False);
+    ImportedAt:= NowUnixUtc;
     Lines:= TFile.ReadAllLines(LogPath);
     Count      := 0;
     MatchedFile:= 0;
@@ -11638,6 +11639,19 @@ begin
 
   PathsToScan:= AArgs.DbPaths;
   if Length(PathsToScan) = 0 then PathsToScan:= [AArgs.DbPath];
+
+  { NO DATABASE AT ALL is an error, not an empty answer (USAGES-NAME, 1.40): the loop below skips
+    a missing file, so with nothing resolved it printed "calls: 0" and exited 0 -- while the same
+    question to `query find-callers` said "database not found". Mirror that: exit 2. }
+  var AnyDb: Boolean:= False;
+  for DbPath in PathsToScan do
+    if TFile.Exists(DbPath) then AnyDb:= True;
+  if not AnyDb then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('Run "drag-lint index <path>" first, or pass --db <file.sqlite>.');
+    Exit(2);
+  end;
 
   JRoot:= TJSONObject.Create;
   JDecls := TJSONArray.Create; JReads := TJSONArray.Create;
@@ -23816,7 +23830,7 @@ begin
         FidList.Add(Rec);
       end;
 
-      NowUnix:= DateTimeToUnix(Now, False);
+      NowUnix:= NowUnixUtc;
       StampedCount:= 0;
       FindingCount:= 0;
       for FileId in Covered.Keys do
