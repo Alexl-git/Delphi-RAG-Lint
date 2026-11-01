@@ -44,6 +44,7 @@ unit U1;
 interface
 
 procedure Foo;
+procedure Bar(const S: string);
 
 implementation
 
@@ -51,6 +52,16 @@ procedure Foo;
 var
   Unused: Integer;
 begin
+end;
+
+{ a real data flow, so the index carries data_flows facts and no 'taint: ... no data_flows' note is due }
+procedure Bar(const S: string);
+var
+  T: string;
+begin
+  T := S + 'x';
+  Writeln(T);
+  Bar(T);
 end;
 
 end.
@@ -83,10 +94,16 @@ foreach ($r in $runs) {
   if ($r.progress) { Check "$($r.n): stdout has findings (control)" ((ConvertFrom-Json $t -Depth 100).Count -gt 0) }
   Check "$($r.n): no 'lint-all:' text on stdout" ($x.Out -notmatch 'lint-all:')
   if ($r.progress) {
-    Check "$($r.n): progress is on stderr (control)" (($x.Err -match 'lint-all: scanning') -and ($x.Err -match '\d+%'))
-    Check "$($r.n): merged streams do NOT parse (negative control)" (-not (Parses ($x.Err + $x.Out)))
+    # LINTJSON-STDERR (1.40): under a JSON format the success path writes NOTHING to stderr, so a consumer that
+    # merges the streams (2>&1) still gets one parseable document.
+    Check "$($r.n): stderr is empty on the success path" ($x.Err.Trim().Length -eq 0) "stderr=[$($x.Err.Trim())]"
+    Check "$($r.n): merged streams parse as JSON" (Parses ($x.Err + $x.Out).Trim())
   }
 }
+# Positive control: the SAME run without --json still reports progress on stderr (the silence is keyed on the JSON flag).
+$x = Run @('lint-all', '--db', $db)
+Check 'control: text mode still reports progress on stderr' (($x.Err -match 'lint-all: scanning|lint-all: \[') -and ($x.Err -match '\d+%'))
+Check 'control: text mode does not parse as JSON (the parse check can fail)' (-not (Parses ($x.Err + $x.Out)))
 $x = Run @('lint', (Join-Path $fx 'U1.pas'), '--json')
 Check 'lint <file> --json: stdout parses' ((Parses $x.Out.Trim()) -and ($x.Out.Trim().StartsWith('[')))
 if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
