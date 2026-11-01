@@ -459,7 +459,7 @@ type
     public
       Callback: TLspReplyProc; // dl:ok public-field@873a -- implementation-only holder for a dictionary value; no behaviour to encapsulate
       Deadline: UInt64       ; // dl:ok public-field@320e -- implementation-only holder for a dictionary value; no behaviour to encapsulate
-      Late    : Boolean      ; // dl:ok public-field -- implementation-only holder for a dictionary value; True once the lrsTimeout notice went out
+      Late    : Boolean      ; // dl:ok public-field@d74f -- implementation-only holder for a dictionary value; True once the lrsTimeout notice went out
       Flag    : IDLReplyFlag ; // dl:ok public-field@b0b0 -- implementation-only holder for a dictionary value; no behaviour to encapsulate
   end;
 
@@ -631,8 +631,7 @@ var
 begin
   if FProcessHandle = 0 then Exit;
   if not GetProcessTimes(FProcessHandle, CreateT, ExitT, KernelT, UserT) then Exit;
-  Cpu:= Int64((UInt64(UserT.dwHighDateTime) shl 32) or UserT.dwLowDateTime) +
-        Int64((UInt64(KernelT.dwHighDateTime) shl 32) or KernelT.dwLowDateTime);
+  Cpu:= PInt64(@UserT)^ + PInt64(@KernelT)^; { FILETIME = little-endian 64-bit 100 ns count }
   if Cpu - FLastCpu100ns < CPU_PROGRESS_100NS then Exit;
   FLastCpu100ns:= Cpu;
   FLastCpuTick := ANow;

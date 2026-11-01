@@ -307,8 +307,8 @@ begin
   if (AJob <> 0) and QueryInformationJobObject(AJob, JobObjectBasicAccountingInformation, @Info, SizeOf(Info), nil) then
     Exit(Info.TotalUserTime + Info.TotalKernelTime);
   if not GetProcessTimes(AProcess, CreateT, ExitT, KernelT, UserT) then Exit(0);
-  Result:= Int64((UInt64(UserT.dwHighDateTime) shl 32) or UserT.dwLowDateTime) +
-           Int64((UInt64(KernelT.dwHighDateTime) shl 32) or KernelT.dwLowDateTime);
+  { a FILETIME is the little-endian 64-bit count of 100 ns units }
+  Result:= PInt64(@UserT)^ + PInt64(@KernelT)^;
 end;
 
 { Milliseconds left until ADeadline (High(UInt64) = none -> INFINITE). }
