@@ -3803,6 +3803,30 @@
       }
     },
     {
+      "id": "read-never-assigned",
+      "title": "Read but never assigned (lint rule)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.39.2-alpha",
+      "summary": "Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates",
+      "intro": "Read this to see what read-never-assigned reports and what it treats as an assignment. It runs in lint-all and lint-project over a project index; hard-cast writes, var / out arguments, property write accessors, DFM-streamed fields, absolute, initialisers and initialization sections all count.",
+      "wikiPage": "read-never-assigned",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule read-never-assigned"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-01",
+        "by": "alexanderl",
+        "build": "1.39.2-alpha"
+      }
+    },
+    {
       "id": "multi-project-rename",
       "title": "Rename across every project that compiles a shared unit",
       "group": "linting",
@@ -16083,6 +16107,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "raise-in-finally"
+      },
+      {
+        "id": "rule.read-never-assigned",
+        "title": "read-never-assigned",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A field or global variable is read but nothing in the project assigns or creates it -- every read sees 0 / nil / empty. Writes throug... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule read-never-assigned"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "read-never-assigned"
       },
       {
         "id": "rule.redundant-as-tobject",

@@ -164,6 +164,7 @@
   "query-type-usage": "query-type-usage",
   "query-typecat": "query-typecat",
   "query-unit-usage": "query-unit-usage",
+  "read-never-assigned": "read-never-assigned",
   "rules": "lint-rules",
   "safe-delete": "safe-delete",
   "schema": "schema",

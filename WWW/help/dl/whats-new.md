@@ -9,6 +9,10 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.39.2-alpha
+
+* [Read but never assigned (lint rule)](features/read-never-assigned.md) -- Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates.
+
 ## 1.39.0-alpha
 
 * [warm-rule-cache](features/warm-rule-cache.md) -- Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm).

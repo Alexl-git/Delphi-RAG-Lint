@@ -14351,14 +14351,14 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak');
-  LINT_GATE_PROJECT_RULES: array[0..25] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..26] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
     'assert-with-side-effect', 'enum-helper-separate-units', 'repeated-type-switch',
     'unused-unit-in-uses', 'god-class', 'enum-ordinal-persisted', 'duplicate-unit-on-search-path',
     'dfm-event-handler-missing', 'dfm-password-edit-unmasked', 'uses-movable-to-implementation', 'virtual-never-overridden',
-    'unused-enum-value',
+    'unused-enum-value', 'read-never-assigned',
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
@@ -14366,11 +14366,11 @@ const
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..12] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..13] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
-    'unused-enum-value',
+    'unused-enum-value', 'read-never-assigned',
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
@@ -22678,6 +22678,8 @@ begin
       OptIn:= OptIn + ['virtual-never-overridden'];
     if Cfg.ShouldKeep('unused-enum-value', {ADefaultDisabled=}False) then   { B-ENUM; ON since ENUMRULES 2026-10-28 }
       OptIn:= OptIn + ['unused-enum-value'];
+    if Cfg.ShouldKeep('read-never-assigned', {ADefaultDisabled=}False) then   { owner request #5b, 1.40 lane flow }
+      OptIn:= OptIn + ['read-never-assigned'];
     { --rule <id> opts <id> in, as it does for lint and lint-project (D4). }
     if AArgs.Rule <> '' then OptIn:= OptIn + [AArgs.Rule];
     { D17: entered only when --rule can be one of its ids, and HANDED the
@@ -23166,6 +23168,8 @@ begin
       OptIn2:= OptIn2 + ['virtual-never-overridden'];
     if LoadLintConfig(AArgs).ShouldKeep('unused-enum-value', {ADefaultDisabled=}False) then   { B-ENUM; ON since ENUMRULES 2026-10-28 }
       OptIn2:= OptIn2 + ['unused-enum-value'];
+    if LoadLintConfig(AArgs).ShouldKeep('read-never-assigned', {ADefaultDisabled=}False) then   { owner request #5b, 1.40 lane flow }
+      OptIn2:= OptIn2 + ['read-never-assigned'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that
       was a real divergence rather than a tidiness point: global-only-uses-edge

@@ -1040,6 +1040,7 @@ Described in:
 
 * [Compliance labels (CWE, CERT, MISRA)](../../docs/wiki/compliance-labels.md)
 * [Fix all in project](../../docs/wiki/Fix-all-in-project.md)
+* [Read but never assigned (lint rule)](../../docs/wiki/read-never-assigned.md)
 * [Run Lint All (Full Report)](../../docs/wiki/Run-Lint-All-Full-Report.md)
 * [Taint analysis (SQL, command, path)](../../docs/wiki/taint-analysis.md)
 * [Target compiler (--target-compiler)](../../docs/wiki/target-compiler.md)
