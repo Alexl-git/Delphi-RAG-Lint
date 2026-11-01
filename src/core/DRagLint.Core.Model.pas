@@ -14,7 +14,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.39.1-alpha';
+  DRAGLINT_VERSION = '1.39.2-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -179,7 +179,15 @@ const
       CompilerVersion / RTLVersion follow it.
     Guards: run_overload_impl_shape.ps1, run_index_facts_use_preprocessed_parse.ps1,
     run_preprocess_compiler_version.ps1. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.27.0-alpha';
+  { 1.27.0 -> 1.28.0 (2026-11-01, release 1.39.2): the grammar DLL is rebuilt from
+    tree-sitter-delphi13 v1.4.0 (12088ad), which changes the trees every file
+    parses to: the 69 directive words parse as names in a name position (aliased
+    identifier -- `Message: string;` and `Platform = Integer;` were ERROR nodes);
+    `var X: T library;` carries a kLibrary child; Delphi 12+ multi-line strings
+    ('''...''') are a token of their own and an ordinary '...' string no longer
+    runs past end of line. No extractor code change rides on it (a multi-name
+    declaration already emitted every name: run_extractor_multi_name_fields.ps1). }
+  DRAGLINT_EXTRACTOR_VERSION = '1.28.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.

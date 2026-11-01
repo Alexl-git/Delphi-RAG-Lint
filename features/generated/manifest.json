@@ -1,6 +1,6 @@
 {
-  "product": "1.39.1-alpha",
-  "extractor": "1.27.0-alpha",
+  "product": "1.39.2-alpha",
+  "extractor": "1.28.0-alpha",
   "resolver": "1.17.0-alpha",
   "schema": 23,
   "groups": [

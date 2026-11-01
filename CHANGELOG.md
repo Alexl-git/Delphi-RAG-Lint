@@ -3,6 +3,16 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.39.2-alpha -- 2026-11-01
+
+Extractor 1.28.0-alpha: every index re-parses once (the grammar changed).
+
+### Changed
+- Grammar: tree-sitter-delphi13 v1.4.0 (12088ad). The 69 directive words (`message`, `platform`, `index`, `name`, `default`, `read`, `deprecated` ...) parse as ordinary names wherever a name stands (`Message: string;`, `Platform = Integer;` were parse errors); `var X: T library;` parses (kLibrary hint); Delphi 12+ multi-line strings (`'''`...`'''`) are their own token and an ordinary `'...'` string stops at end of line, so an unterminated string is a local error instead of swallowing the rest of the file. The parser DLLs in `third_party\dll`, `dll-win32`, `dll-win64` are rebuilt from it.
+
+### Not changed (checked)
+- A comma list of names (`A, B: Integer;` in a record, class, class var, var, parameter or local list) already emitted a symbol per name under the old and the new grammar (docs\INBOX-extractor-multi-name-field-list.md did not reproduce); guard `run_extractor_multi_name_fields.ps1` pins it.
+- The preprocessor's multi-line string neutralisation stays: the directive lexer still needs it (an `{$IFDEF}` written inside a multi-line string must not become a live directive), and the v1.4.0 grammar parses the neutralised literal.
 ## v1.39.1-alpha -- 2026-10-31
 
 Fix cycle for the 1.39.0 known issues and the battery fails. Extractor (1.27.0-alpha) and resolver unchanged: an index built by 1.39.0 is current.
