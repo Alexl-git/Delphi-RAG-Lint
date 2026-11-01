@@ -48,10 +48,15 @@ type
       FOrder   : TList<string>                                    ;
       FMaxFiles: Integer                                          ;
       FLock    : TCriticalSection                                 ;
+      { Keys whose fallback spawn pass is running on a worker. Under FLock. }
+      FInFlight: TDictionary<string, Boolean>                     ;
 
       { Both assume FLock is already held. }
       procedure TouchLocked(const AKey: string);
       procedure EvictLocked;
+    private
+      { Main thread: clears AKey's in-flight mark and stores AInner (nil = store nothing). }
+      procedure FinishFallback(const AKey: string; AInner: TDictionary<Integer, string>);
     public
       /// <summary>Creates the cache with a bound on how many files it retains.</summary>
       /// <param name="AMaxFiles">File ceiling; values below 1 are clamped to 1.
@@ -86,12 +91,20 @@ type
       { Drop the cached entry for AFilePath so the next Populate re-runs. }
       procedure InvalidateFile(const AFilePath: string);
 
-      { Shells out once per file.  Discovers method declarations via
-      "drag-lint surface", then queries caller count for each method via
-      "drag-lint query find-callers".  Cached result is stored
-      synchronously (called from EditorViewActivated, off the paint path).
-      If AExePath or ADbPath is empty the call is a no-op. }
-      procedure PopulateOnce(const AFilePath, AExePath, ADbPath: string);
+      /// <summary>Fills the caller-count labels of one file, once: through the
+      /// LSP hook when one can answer, else by spawning "drag-lint surface" and
+      /// one "query find-callers" per method.</summary>
+      /// <param name="AFilePath">The source file; empty = no-op.</param>
+      /// <param name="AExePath">Path to drag-lint.exe; empty = no-op.</param>
+      /// <param name="ADbPath">The project database; empty = no-op.</param>
+      /// <param name="AOnStored">Optional; called on the MAIN thread once a
+      /// fallback pass has stored its labels (the caller repaints the gutter).</param>
+      /// <remarks>Never waits on the engine (2026-11-01, IDE-HANG): it runs on view
+      /// activation in the IDE main thread. The spawn fallback runs on a worker
+      /// thread -- one per file at a time -- and stores its answer on the main
+      /// thread when the last child finishes, however late. Each child is
+      /// bounded by a STALL budget (ProcRun.RunCaptureStdout), not a wall clock.</remarks>
+      procedure PopulateOnce(const AFilePath, AExePath, ADbPath: string; const AOnStored: TProc = nil);
 
       procedure Clear;
   end;
@@ -144,12 +157,23 @@ uses
   Winapi.Windows
   , System.Classes
   , System.IOUtils
+  , DragLint.Plugin.ProcRun   { RunCaptureStdout -- stall-bounded spawn }
+  , DragLint.Plugin.Telemetry { DLT }
   ;
+
+const
+  { STALL budget per spawned child (ProcRun semantics): killed only after this
+    long with neither output nor CPU. The old 15 s wall clock came AFTER an
+    unbounded ReadFile, so a hung child blocked forever. }
+  CODELENS_SPAWN_STALL_MS = 15000;
 
 { ---- module-level singleton ---- }
 
 var
   GCodeLensCache: TDragLintCodeLensCache = nil;
+  { Every live cache instance; main thread only. A late fallback answer is
+    stored only into an instance still listed here. }
+  GLiveLensCaches: TList<TDragLintCodeLensCache> = nil;
 
 function CodeLensCache: TDragLintCodeLensCache;
 begin
@@ -159,61 +183,13 @@ end;
 
 { ---- helper: spawn and capture stdout+stderr ---- }
 
+{ 2026-11-01 (PLUG-INFWAIT): delegates to ProcRun. The copy that lived here read
+  the pipe with an unbounded ReadFile BEFORE its 15 s wait, so a child that hung
+  without closing its output blocked the caller for good. True when the child
+  started (its output, however partial, is in AOutput). }
 function RunCapture(const ACmdLine: string; out AOutput: string): Boolean;
-var
-  SA       : TSecurityAttributes       ;
-  ReadPipe : THandle                   ;
-  WritePipe: THandle                   ;
-  SI       : TStartupInfoW             ;
-  PI       : TProcessInformation       ;
-  Buf      : array[0..4095] of AnsiChar;
-  BytesRead: DWORD                     ;
-  WideCmd  : string                    ;
-  SB       : TStringBuilder            ;
 begin
-  Result := False;
-  AOutput:= '';
-  SA.nLength:= SizeOf(SA);
-  SA.bInheritHandle:= True;
-  SA.lpSecurityDescriptor:= nil;
-  if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then Exit;
-  try
-    SetHandleInformation(ReadPipe, HANDLE_FLAG_INHERIT, 0);
-    FillChar(SI, SizeOf(SI), 0);
-    SI.cb:= SizeOf(SI);
-    SI.dwFlags   := STARTF_USESTDHANDLES;
-    SI.hStdOutput:= WritePipe;
-    SI.hStdError := WritePipe;
-    SI.hStdInput:= GetStdHandle(STD_INPUT_HANDLE);
-    FillChar(PI, SizeOf(PI), 0);
-    WideCmd:= ACmdLine;
-    UniqueString(WideCmd);
-    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
-    begin
-      CloseHandle(WritePipe);
-      Exit;
-    end;
-    CloseHandle(WritePipe);
-    SB:= TStringBuilder.Create;
-    try
-      repeat
-        BytesRead:= 0;
-        if not ReadFile(ReadPipe, Buf[0], SizeOf(Buf) - 1, BytesRead, nil) then Break;
-        if BytesRead = 0 then Break;
-        Buf[BytesRead]:= #0;
-        SB.Append(string(AnsiString(Buf)));
-      until False;
-      AOutput:= SB.ToString;
-    finally
-      SB.Free;
-    end;
-    WaitForSingleObject(PI.hProcess, 15000);
-    CloseHandle(PI.hProcess);
-    CloseHandle(PI.hThread );
-    Result:= True;
-  finally
-    CloseHandle(ReadPipe);
-  end; // try
+  Result:= RunCaptureStdout(ACmdLine, AOutput, CODELENS_SPAWN_STALL_MS) <> -1;
 end; // function
 
 { ---- parse "drag-lint surface" output to extract method names + lines ----
@@ -341,18 +317,24 @@ begin
     immediately evict what it just stored, which reads as "the cache is broken"
     rather than "the cap was misconfigured". }
   if AMaxFiles < 1 then FMaxFiles:= 1 else FMaxFiles:= AMaxFiles;
-  FLock:= TCriticalSection.Create;
+  FLock    := TCriticalSection.Create;
+  FInFlight:= TDictionary<string, Boolean>.Create;
+  if GLiveLensCaches <> nil then GLiveLensCaches.Add(Self);
 end;
 
 destructor TDragLintCodeLensCache.Destroy;
 var
   Inner: TDictionary<Integer, string>;
 begin
+  { A fallback pass still running stores nothing once this instance is gone:
+    its main-thread completion checks GLiveLensCaches first. }
+  if GLiveLensCaches <> nil then GLiveLensCaches.Remove(Self);
   FLock.Enter;
   try
     for Inner in FByFile.Values do Inner.Free;
     FByFile.Free;
     FOrder.Free;
+    FInFlight.Free;
   finally
     FLock.Leave;
   end;
@@ -464,23 +446,55 @@ begin
   end;
 end;
 
-procedure TDragLintCodeLensCache.PopulateOnce( const AFilePath, AExePath, ADbPath: string);
+{ The per-method spawn pass of the fallback. Runs on a WORKER thread and
+  touches nothing shared. Returns the line->label map (the caller owns it), or
+  nil when "surface" could not even start (nothing is stored then, so the next
+  activation tries again -- as before). }
+function SpawnCallerCounts(const AFilePath, AExePath, ADbPath: string): TDictionary<Integer, string>;
 var
-  Key      : string                      ;
-  HaveIt   : Boolean                     ;
-  UnitName : string                      ;
-  SurfCmd  : string                      ;
-  SurfOut  : string                      ;
-  Methods  : TArray<TMethodEntry>        ;
-  M        : TMethodEntry                ;
-  CallerCmd: string                      ;
-  CallerOut: string                      ;
-  Count    : Integer                     ;
-  Inner    : TDictionary<Integer, string>;
-  ZeroLine : Integer                     ;
+  UnitName : string              ;
+  SurfCmd  : string              ;
+  SurfOut  : string              ;
+  Methods  : TArray<TMethodEntry>;
+  M        : TMethodEntry        ;
+  CallerCmd: string              ;
+  CallerOut: string              ;
+  Count    : Integer             ;
 begin
-  if (AExePath = '') or (ADbPath = '') then Exit;
-  if AFilePath = '' then Exit;
+  Result:= nil;
+  UnitName:= TPath.GetFileNameWithoutExtension(AFilePath);
+  SurfCmd:= Format('"%s" surface --qname "%s" --db "%s"', [AExePath, UnitName, ADbPath]);
+  if not RunCapture(SurfCmd, SurfOut) then Exit;
+  Methods:= ParseSurfaceForMethods(SurfOut);
+  { An empty map is stored too, so a file with no methods is not re-shelled. }
+  Result:= TDictionary<Integer, string>.Create;
+  try
+    for M in Methods do
+    begin
+      CallerCmd:= Format('"%s" query find-callers --name "%s" --db "%s"', [AExePath, M.Name, ADbPath]);
+      CallerOut:= '';
+      RunCapture(CallerCmd, CallerOut);
+      Count:= ParseCallerCount(CallerOut);
+      { Store on 0-based line (surface returns 1-based) }
+      if M.Line > 0 then
+        Result.AddOrSetValue(M.Line - 1, if Count = 1 then '[1 caller]' else Format('[%d callers]', [Count]));
+    end;
+  except
+    on Exception do
+    begin
+      FreeAndNil(Result);
+      raise;
+    end;
+  end;
+end; // function
+
+procedure TDragLintCodeLensCache.PopulateOnce( const AFilePath, AExePath, ADbPath: string; const AOnStored: TProc);
+var
+  Key   : string                ;
+  HaveIt: Boolean               ;
+  Inst  : TDragLintCodeLensCache;
+begin
+  if (AExePath = '') or (ADbPath = '') or (AFilePath = '') then Exit;
 
   Key:= LowerCase(AFilePath);
 
@@ -527,36 +541,55 @@ begin
       end) then Exit;
   end;
 
-  { Get symbol list via surface }
-  UnitName:= TPath.GetFileNameWithoutExtension(AFilePath);
-  SurfCmd:= Format('"%s" surface --qname "%s" --db "%s"', [AExePath, UnitName, ADbPath]);
-  if not RunCapture(SurfCmd, SurfOut) then Exit;
-  Methods:= ParseSurfaceForMethods(SurfOut);
-  if Length(Methods) = 0 then
-  begin
-    { Store empty inner dict so we don't re-shell }
-    StoreForFile(Key, TDictionary<Integer, string>.Create);
-    Exit;
+  { THE FALLBACK, off the main thread (2026-11-01, IDE-HANG). It used to run
+    here synchronously: one process per method, each awaited, on view
+    activation -- 136 routines at ~165 ms is 20+ s of frozen IDE, and a child
+    that hung froze it for good. One pass per file at a time. }
+  FLock.Enter;
+  try
+    if FInFlight.ContainsKey(Key) then Exit;
+    FInFlight.Add(Key, True);
+  finally
+    FLock.Leave;
   end;
-
-  Inner:= TDictionary<Integer, string>.Create;
-  for M in Methods do
-  begin
-    CallerCmd:= Format('"%s" query find-callers --name "%s" --db "%s"', [AExePath, M.Name, ADbPath]);
-    CallerOut:= '';
-    RunCapture(CallerCmd, CallerOut);
-    Count:= ParseCallerCount(CallerOut);
-    if M.Line > 0 then
+  Inst:= Self;
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      Res: TDictionary<Integer, string>;
     begin
-      { Store on 0-based line (surface returns 1-based) }
-      ZeroLine:= M.Line - 1;
-      if Count = 1 then Inner.AddOrSetValue(ZeroLine, '[1 caller]')
-      else Inner.AddOrSetValue(ZeroLine, Format('[%d callers]', [Count]));
-    end;
-  end;
-
-  StoreForFile(Key, Inner);
+      Res:= nil;
+      try
+        Res:= SpawnCallerCounts(AFilePath, AExePath, ADbPath);
+      except
+        { A raise mid-pass stores nothing (the next activation retries); the
+          completion below must still run, or the in-flight mark stays set. }
+        on E: Exception do DLT('codelens', 'fallback pass raised: ' + E.Message);
+      end;
+      TThread.Queue(nil,
+        procedure
+        begin
+          if (GLiveLensCaches = nil) or not GLiveLensCaches.Contains(Inst) then
+          begin
+            Res.Free;
+            Exit;
+          end;
+          Inst.FinishFallback(Key, Res);
+          if (Res <> nil) and Assigned(AOnStored) then AOnStored();
+        end);
+    end).Start;
 end; // procedure
+
+procedure TDragLintCodeLensCache.FinishFallback(const AKey: string; AInner: TDictionary<Integer, string>);
+begin
+  FLock.Enter;
+  try
+    FInFlight.Remove(AKey);
+  finally
+    FLock.Leave;
+  end;
+  if AInner <> nil then StoreForFile(AKey, AInner);
+end;
 
 procedure TDragLintCodeLensCache.Clear;
 var
@@ -573,8 +606,10 @@ begin
 end;
 
 initialization
+GLiveLensCaches:= TList<TDragLintCodeLensCache>.Create;
 
 finalization
 FreeAndNil(GCodeLensCache);
+FreeAndNil(GLiveLensCaches);
 
 end.

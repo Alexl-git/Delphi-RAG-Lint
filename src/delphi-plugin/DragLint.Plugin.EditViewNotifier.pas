@@ -688,7 +688,8 @@ begin
   var ProjDir : string:= TPath.GetDirectoryName(FilePath);
   var ProjName: string:= ExtractFileName(ExcludeTrailingPathDelimiter(ProjDir));
   DbPath:= ResolveDbPath(S.DbPathTemplate, ProjDir, ProjName);
-  CodeLensCache.PopulateOnce(FilePath, S.ExePath, DbPath);
+  { A late fallback answer repaints the gutter so its labels appear. }
+  CodeLensCache.PopulateOnce(FilePath, S.ExePath, DbPath, procedure begin ForceGutterRepaint; end);
 end; // procedure
 
 procedure ForceGutterRepaint;
