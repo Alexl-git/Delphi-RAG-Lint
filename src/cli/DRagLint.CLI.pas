@@ -4194,6 +4194,32 @@ begin
   GIndexLocks.Remove(Key);
 end;
 
+/// <summary>Refuses a WRITING verb whose database came only from a "db" key of a
+/// .drag-lint.json found by walking up from the CWD, when the target it writes for is
+/// not under that file's folder (1.40 CFG-DBREDIRECT; INBOX 2026-09-29 4b-1).</summary>
+/// <param name="AVerb">The verb, for the message.</param>
+/// <param name="AArgs">The parsed arguments; DbFromConfig / DbConfigFile say where the db came from.</param>
+/// <param name="ATarget">The project or folder the verb writes for; '' when it has none
+/// (then a config db is never accepted: a destructive verb must act on a database the
+/// user named).</param>
+/// <returns>True when the verb must stop (the ERROR is already on stderr; exit 2).</returns>
+/// <remarks>`index` has its own, softer rule (it ignores the key with a WARNING and goes on);
+/// these verbs have no fallback database, so they stop. --db on the command line always wins.</remarks>
+function ConfigDbRedirectsWrite(const AVerb: string; const AArgs: TArgs; const ATarget: string): Boolean;
+begin
+  Result:= False;
+  if not AArgs.DbFromConfig then Exit;
+  if ATarget <> '' then
+  begin
+    var CfgDir: string:= IncludeTrailingPathDelimiter(TPath.GetFullPath(ExtractFilePath(AArgs.DbConfigFile)));
+    if IncludeTrailingPathDelimiter(TPath.GetFullPath(ATarget)).StartsWith(CfgDir, True) then Exit;
+  end;
+  Writeln(ErrOutput, Format('ERROR: %s: refusing to write the database named by the "db" key of %s -- ' +
+    'that file''s tree does not own this target. Pass --db <file.sqlite> to choose the database.',
+    [AVerb, AArgs.DbConfigFile]));
+  Result:= True;
+end;
+
 { The idle wait of `index --watch` between ticks: AIntervalSec seconds, cut short by a
   maintenance stand-down. Returns True when one was taken (the watch must stop). }
 function WatchIdle(AIntervalSec: Integer): Boolean;
@@ -16795,6 +16821,9 @@ begin
   if Length(AArgs.DbPaths) > 0 then DbPath:= AArgs.DbPaths[0]
   else DbPath:= AArgs.DbPath;
   if DbPath = '' then begin Writeln(ErrOutput, 'fb-snapshot: --db <sql.sqlite> required'); Exit(2); end;
+  { 1.40 IDX-LOCK: this verb writes the index -- take <db>.indexing.lock like `index` does. }
+  if ConfigDbRedirectsWrite('fb-snapshot', AArgs, '') then Exit(2);
+  if not AcquireIndexLock(DbPath) then Exit(2);
   Store:= TSQLiteSymbolStore.Create(DbPath);
   try
     Store.Migrate;
@@ -23885,6 +23914,9 @@ begin
     Exit(2);
   end;
 
+  { 1.40 IDX-LOCK: the recompile writes findings into the index -- take <db>.indexing.lock. }
+  if (Length(AArgs.DbPaths) > 0) and ConfigDbRedirectsWrite('refresh-findings', AArgs, AArgs.ProjectPath) then Exit(2);
+  if not AcquireIndexLock(DbPath) then Exit(2);
   Store:= TSQLiteSymbolStore.Create(DbPath);
   Store.Migrate;
 
@@ -31561,6 +31593,9 @@ begin
     Exit(2);
   end;
 
+  { 1.40 IDX-LOCK: purge MUTATES the index -- take <db>.indexing.lock like `index` does. }
+  if ConfigDbRedirectsWrite('purge-locals', AArgs, '') then Exit(2);
+  if not AcquireIndexLock(AArgs.DbPath) then Exit(2);
   SizeBefore:= TFile.GetSize(AArgs.DbPath);
   { Read-WRITE open (purge MUTATES) -- same path as index/rename/safe-delete, NOT
     the query_only OpenReadOnlyStore used by read verbs. Migrate ensures the
@@ -34896,6 +34931,9 @@ begin
         // Migrate bootstraps a missing DB file -- acceptable; reconcile's job is
         // to ensure coherence. ONE connection is shared by the scan (TIndexer)
         // and the recompile (RefreshProjectFindingsCore) -- no second store.
+        { 1.40 IDX-LOCK: this phase rescans and recompiles INTO the index -- take <db>.indexing.lock. }
+        if ConfigDbRedirectsWrite('reconcile-project', AArgs, ProjectFile) then Exit(2);
+        if not AcquireIndexLock(CohDbPath) then Exit(2);
         Store:= TSQLiteSymbolStore.Create(CohDbPath);
         Store.Migrate;
         HaveCoh:= True;
