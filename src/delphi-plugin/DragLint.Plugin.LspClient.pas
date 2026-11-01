@@ -24,10 +24,16 @@ type
   TDLLspReplyStatus = (
     lrsResult , { the engine answered with a 'result' member     }
     lrsError  , { the engine answered with an 'error' member     }
-    lrsTimeout  { no answer within the request's timeout         }
+    lrsTimeout  { NOT FINAL: the request's budget passed and the  }
+                { engine is still working; the answer follows    }
   );
 
   /// <summary>Receives the answer to RequestAsync, on the MAIN thread.</summary>
+  /// <remarks>Late results (owner ruling 2026-11-01): when the budget passes the
+  /// callback runs ONCE with lrsTimeout -- a notice that the answer is late, so
+  /// the caller can show it as pending -- and AGAIN with lrsResult / lrsError
+  /// when the answer arrives. A caller that no longer wants it (superseded by a
+  /// newer request) calls CancelRequest; nothing else drops a late answer.</remarks>
   /// <param name="AId">The id RequestAsync returned.</param>
   /// <param name="AStatus">How the request ended.</param>
   /// <param name="AReply">The FULL JSON-RPC envelope (jsonrpc, id, result |
@@ -89,6 +95,10 @@ type
         still working on it, which is exactly what "busy" has to see. }
       FOutstanding    : TDictionary<Integer, TDLOutstanding>;
       FLastRxTick     : UInt64                          ;
+      { Engine CPU (100 ns) at the last progress mark, and the tick of that mark:
+        an engine burning CPU is working, however long it stays silent. }
+      FLastCpu100ns   : Int64                           ;
+      FLastCpuTick    : UInt64                          ;
       FTicker         : TThread                         ;
       FTickerStop     : TEvent                          ;
       FBusyAfterMs    : Cardinal                        ;
@@ -104,6 +114,7 @@ type
       procedure DispatchMessage(AMsg: TJSONValue);
       { Accessible to the ticker thread in same unit }
       procedure ExpireTimedOut;
+      procedure SampleEngineCpu(ANow: UInt64);
     public
       constructor Create;
       destructor Destroy; override;
@@ -152,11 +163,12 @@ type
       /// <param name="AMethod">JSON-RPC method.</param>
       /// <param name="AParams">Parameters; cloned, the caller keeps ownership. nil
       /// sends {}.</param>
-      /// <param name="ATimeoutMs">After this, AOnReply gets lrsTimeout and a
-      /// $/cancelRequest is sent.</param>
-      /// <param name="AOnReply">Callback; called exactly once unless the request
-      /// is cancelled with CancelRequest or the client is stopped, in which case
-      /// never.</param>
+      /// <param name="ATimeoutMs">After this, AOnReply gets an lrsTimeout NOTICE
+      /// (the answer is late) and the request stays live: no $/cancelRequest is
+      /// sent and the answer is still delivered when it arrives.</param>
+      /// <param name="AOnReply">Callback; called once with the answer
+      /// (lrsResult / lrsError), preceded by one lrsTimeout notice when the answer
+      /// is late; never again after CancelRequest or Stop.</param>
       /// <returns>The request id (&gt; 0), or 0 when nothing was sent (queue full,
       /// pipe failed, not attached) -- AOnReply is then never called.</returns>
       /// <remarks>Never blocks and never waits on the engine.</remarks>
@@ -185,11 +197,16 @@ type
       /// not be sent is never outstanding.</returns>
       function IsBusy: Boolean;
 
-      /// <summary>True when requests are outstanding and the engine has sent
-      /// NOTHING for longer than StuckAfterMs -- the watchdog's restart signal.</summary>
-      /// <returns>True when silence since max(last message, oldest outstanding
-      /// request) exceeds StuckAfterMs, or the stdin write has been blocked that
-      /// long.</returns>
+      /// <summary>True when requests are outstanding and the engine has made NO
+      /// PROGRESS for longer than StuckAfterMs -- sent nothing AND burnt no CPU --
+      /// the watchdog's restart signal for a HUNG engine.</summary>
+      /// <returns>True when the time since max(last message, last CPU progress,
+      /// oldest outstanding request) exceeds StuckAfterMs, or the stdin write has
+      /// been blocked that long.</returns>
+      /// <remarks>fix/late-results (owner ruling 2026-11-01): a slow engine that is
+      /// working must never be restarted -- that loses every late result. CPU is
+      /// sampled by the ticker from the server process handle; a client attached
+      /// to bare pipes (tests) has none and falls back to silence alone.</remarks>
       function IsStuck: Boolean;
 
       /// <summary>Requests sent and not yet answered (timed-out ones included).</summary>
@@ -218,8 +235,8 @@ type
       /// <summary>Age in ms of an unanswered request that makes IsBusy True
       /// (default 3000).</summary>
       property BusyAfterMs : Cardinal read FBusyAfterMs  write FBusyAfterMs ;
-      /// <summary>Engine silence in ms, with requests outstanding, that makes
-      /// IsStuck True (default 60000).</summary>
+      /// <summary>Time in ms without progress (no message, no CPU), with requests
+      /// outstanding, that makes IsStuck True (default 180000).</summary>
       property StuckAfterMs: Cardinal read FStuckAfterMs write FStuckAfterMs;
   end;
 
@@ -406,7 +423,10 @@ const
   { How often the ticker looks for timed-out async requests. }
   TICK_MS              = 100;
   DEFAULT_BUSY_MS      = 3000;
-  DEFAULT_STUCK_MS     = 60000;
+  DEFAULT_STUCK_MS     = 180000;
+  { Engine CPU (100 ns units) since the last mark that counts as progress: 50 ms,
+    above the clock-tick noise an idle process is charged. }
+  CPU_PROGRESS_100NS   = 50 * 10000;
   INITIALIZE_TIMEOUT_MS = 45000;
 
 type
@@ -439,6 +459,7 @@ type
     public
       Callback: TLspReplyProc; // dl:ok public-field@873a -- implementation-only holder for a dictionary value; no behaviour to encapsulate
       Deadline: UInt64       ; // dl:ok public-field@320e -- implementation-only holder for a dictionary value; no behaviour to encapsulate
+      Late    : Boolean      ; // dl:ok public-field -- implementation-only holder for a dictionary value; True once the lrsTimeout notice went out
       Flag    : IDLReplyFlag ; // dl:ok public-field@b0b0 -- implementation-only holder for a dictionary value; no behaviour to encapsulate
   end;
 
@@ -498,7 +519,7 @@ end;
   the flag and the message -- never the client -- so it is safe to run after the
   client has been freed. The message is freed here whether or not it ran. }
 procedure DeliverReply(const ACallback: TLspReplyProc; const AFlag: IDLReplyFlag;
-  AId: Integer; AStatus: TDLLspReplyStatus; AMsg: TJSONValue);
+  AId: Integer; AStatus: TDLLspReplyStatus; AMsg: TJSONValue; AFinal: Boolean = True);
 begin
   TThread.ForceQueue(nil,
     procedure
@@ -511,7 +532,8 @@ begin
           on E: Exception do DebugLog(Format('LSP reply callback for id %d raised %s: %s', [AId, E.ClassName, E.Message]));
         end;
       finally
-        AFlag.Done:= True;
+        { a late notice is not the end: the flag must stay cancellable }
+        if AFinal then AFlag.Done:= True;
         AMsg.Free; // dl:ok free-of-parameter@66b8 -- ownership of AMsg is handed to this routine by contract (see its header)
       end;
     end);
@@ -594,9 +616,28 @@ begin
   FReaderThread:= TLspReaderThread.Create(Self, FStdOutRead);
 end;
 
-{ Called by the ticker thread. Expired async requests leave FAsync (their
-  callback gets lrsTimeout) but NOT FOutstanding: the engine is still working on
-  them, and IsBusy must keep seeing that until it answers. }
+{ Called by the ticker thread. An async request past its budget gets ONE
+  lrsTimeout notice and STAYS in FAsync and FOutstanding (owner ruling
+  2026-11-01, fix/late-results): the engine is still working on it, its answer
+  is delivered when it arrives, and the engine is not told to stop. A hung
+  engine is the watchdog's business (IsStuck), not a per-request clock. }
+{ Under FLock, from the ticker: moves the CPU progress mark when the server
+  process has burnt CPU_PROGRESS_100NS since the last one. No process handle
+  (pipes attached directly) = no sample. }
+procedure TDragLintLspClient.SampleEngineCpu(ANow: UInt64);
+var
+  CreateT, ExitT, KernelT, UserT: TFileTime;
+  Cpu                           : Int64    ;
+begin
+  if FProcessHandle = 0 then Exit;
+  if not GetProcessTimes(FProcessHandle, CreateT, ExitT, KernelT, UserT) then Exit;
+  Cpu:= Int64((UInt64(UserT.dwHighDateTime) shl 32) or UserT.dwLowDateTime) +
+        Int64((UInt64(KernelT.dwHighDateTime) shl 32) or KernelT.dwLowDateTime);
+  if Cpu - FLastCpu100ns < CPU_PROGRESS_100NS then Exit;
+  FLastCpu100ns:= Cpu;
+  FLastCpuTick := ANow;
+end;
+
 procedure TDragLintLspClient.ExpireTimedOut;
 var
   Now64  : UInt64              ;
@@ -610,31 +651,19 @@ begin
   try
     FLock.Enter;
     try
+      SampleEngineCpu(Now64);
       for Pair in FAsync do
-        if TDLAsyncEntry(Pair.Value).Deadline <= Now64 then Expired.Add(Pair.Key);
+        if (not TDLAsyncEntry(Pair.Value).Late) and (TDLAsyncEntry(Pair.Value).Deadline <= Now64) then Expired.Add(Pair.Key);
       for Id in Expired do
       begin
-        Entry:= TDLAsyncEntry(FAsync.ExtractPair(Id).Value);
-        try
-          DeliverReply(Entry.Callback, Entry.Flag, Id, lrsTimeout, nil);
-        finally
-          Entry.Free;
-        end;
+        Entry:= TDLAsyncEntry(FAsync[Id]);
+        Entry.Late:= True;
+        DeliverReply(Entry.Callback, Entry.Flag, Id, lrsTimeout, nil, False);
       end;
     finally
       FLock.Leave;
     end;
-    for Id in Expired do
-    begin
-      DebugLog(Format('LSP request id %d timed out -- $/cancelRequest sent', [Id]));
-      var P: TJSONObject:= TJSONObject.Create;
-      try
-        P.AddPair('id', TJSONNumber.Create(Id));
-        Notify('$/cancelRequest', P);
-      finally
-        P.Free;
-      end;
-    end;
+    for Id in Expired do DebugLog(Format('LSP request id %d past its budget -- late, still waiting for the answer', [Id]));
   finally
     Expired.Free;
   end;
@@ -964,6 +993,15 @@ begin
     Id:= RequestAsync('initialize', Params, INITIALIZE_TIMEOUT_MS,
       procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue)
       begin
+        { LATE, not failed (fix/late-results): on 2026-08-17 the engine answered
+          at 101 s. The handshake keeps waiting; ADone runs on the answer. A
+          hung engine is the watchdog's (IsStuck covers dlsStarting). }
+        if AStatus = lrsTimeout then
+        begin
+          DebugLog('InitializeAsync: no answer within 45 s -- late, still waiting');
+          FLastError:= 'initialize is late (the server is still starting -- check CPU load); still waiting';
+          Exit;
+        end;
         if AStatus = lrsResult then
         begin
           DebugLog('InitializeAsync: response received OK');
@@ -974,7 +1012,7 @@ begin
         begin
           DebugLog(Format('InitializeAsync: no usable answer (status %d)', [Ord(AStatus)]));
           FState    := dlsFailed;
-          FLastError:= 'no initialize response within 45s (the server may still be starting -- check CPU load)';
+          FLastError:= 'initialize answered with an error';
         end;
         if Assigned(ADone) then ADone(AStatus = lrsResult);
       end);
@@ -1209,6 +1247,7 @@ begin
       for Sent in FOutstanding.Values do
         if Sent.Sent < Oldest then Oldest:= Sent.Sent;
       Since:= if FLastRxTick > Oldest then FLastRxTick else Oldest;
+      if FLastCpuTick > Since then Since:= FLastCpuTick;
       Result:= GetTickCount64 - Since > FStuckAfterMs;
     end;
   finally

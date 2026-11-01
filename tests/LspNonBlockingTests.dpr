@@ -41,6 +41,7 @@ const
   PIPE_BUFFER = 4096;
   BLOCK_LIMIT_MS = 500;   { "never blocks" = returns well inside this }
   JOIN_LIMIT_MS  = 3000;  { a worker that is not back by now is blocked }
+  LATE_REPLY_MS  = 700;   { the fake engine's delay before answering 'late' }
 
 var
   GPass, GFail: Integer;
@@ -273,7 +274,9 @@ begin
           FLock.Leave;
         end;
         { 'slow' and 'draglint/callerCounts' are never answered: the engine is
-          "still working on it" (a foreground and a background request). }
+          "still working on it" (a foreground and a background request).
+          'late' is answered LATE_REPLY_MS after it arrived -- past its budget. }
+        if (Id > 0) and (M = 'late') then Sleep(LATE_REPLY_MS);
         if (Id > 0) and (M <> 'slow') and (M <> 'draglint/callerCounts') then Reply(Id, M);
       finally
         V.Free;
@@ -399,9 +402,50 @@ begin
       procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue) begin Ran:= True; St:= AStatus; end);
     Pump(800);
     Check('C9 an unanswered request times out to lrsTimeout', Ran and (St = lrsTimeout));
-    Check('C10 ... and the engine is sent $/cancelRequest for it', Pos(Format('$/cancelRequest|0|%d', [Id]), Rig.Engine.Seen) > 0, Rig.Engine.Seen);
+    { owner ruling 2026-11-01: a request past its budget is LATE, not dead --
+      the engine keeps working on it and nothing tells it to stop. }
+    Check('C10 ... and the engine is NOT sent $/cancelRequest for it', Pos(Format('$/cancelRequest|0|%d', [Id]), Rig.Engine.Seen) = 0, Rig.Engine.Seen);
     Check('C11 IsBusy while the engine still owes that answer', Rig.Client.IsBusy);
     Check('C12 IsStuck once the engine has been silent past StuckAfterMs', Rig.Client.IsStuck);
+  finally
+    CloseRig(Rig);
+  end;
+end;
+
+{ fix/late-results (owner ruling 2026-11-01): an answer that arrives after the
+  budget is DELIVERED, after the lrsTimeout notice -- never dropped. A request
+  superseded (CancelRequest) after its notice still never sees its answer. }
+procedure TestLateResultDelivered;
+var
+  Rig      : TRig;
+  Statuses : string;
+  Echo     : string;
+  Id, IdS  : Integer;
+  RanS     : Integer;
+begin
+  Rig:= OpenRig;
+  try
+    Statuses:= ''; Echo:= '';
+    Id:= Rig.Client.RequestAsync('late', nil, 200,
+      procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue)
+      begin
+        Statuses:= Statuses + IntToStr(Ord(AStatus));
+        if AReply <> nil then Echo:= AReply.GetValue<string>('result.echo', '');
+      end);
+    Pump(LATE_REPLY_MS + 800);
+    Check('L1 a late answer reaches the callback after the lrsTimeout notice (timeout, then result)',
+      Statuses = IntToStr(Ord(lrsTimeout)) + IntToStr(Ord(lrsResult)), 'statuses=' + Statuses);
+    Check('L2 ... carrying the engine''s answer', Echo = 'late', 'echo=' + Echo);
+    Check('L3 ... and the engine was never told to cancel it', Pos(Format('$/cancelRequest|0|%d', [Id]), Rig.Engine.Seen) = 0, Rig.Engine.Seen);
+    Check('L4 nothing is owed once it answered', Rig.Client.OutstandingCount = 0, IntToStr(Rig.Client.OutstandingCount));
+
+    RanS:= 0;
+    IdS:= Rig.Client.RequestAsync('late', nil, 200,
+      procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue) begin Inc(RanS); end);
+    Pump(400);                          { the notice has run }
+    Rig.Client.CancelRequest(IdS);      { superseded by a newer request }
+    Pump(LATE_REPLY_MS + 400);
+    Check('L5 a request superseded after its notice never sees its late answer', RanS = 1, 'calls=' + IntToStr(RanS));
   finally
     CloseRig(Rig);
   end;
@@ -621,6 +665,7 @@ begin
       TestAsyncReply;
       TestSupersededDropped;
       TestTimeoutBusyStuck;
+      TestLateResultDelivered;
       TestBackgroundNotBusy;
       TestNotifyWhenEngineStopsReading;
       TestTeardownBudget;

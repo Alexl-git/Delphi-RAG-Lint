@@ -54,6 +54,14 @@ type
     destructor  Destroy; override;
   end;
 
+const
+  /// <summary>Appended to a note whose answer is LATE (fix/late-results, owner
+  /// ruling 2026-11-01): the engine is still working and the result will be
+  /// shown when it arrives -- never "timed out", which read as "lost".</summary>
+  DL_NOTE_LATE_SUFFIX = ' is late -- engine busy; it will show when it arrives';
+  /// <summary>The note a late hover shows until its answer arrives.</summary>
+  DL_NOTE_HOVER_LATE = 'drag-lint: hover' + DL_NOTE_LATE_SUFFIX;
+
 /// <summary>Shows a short transient note on every live drag-lint status
 /// strip -- e.g. 'drag-lint: hover WindowState'.</summary>
 /// <param name="AText">The note. An empty string clears it.</param>

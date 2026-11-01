@@ -571,7 +571,7 @@ begin
     restarted here, with no back-off: the 60 s of silence already is one, and
     an engine stuck in a 13-minute request will not come back on its own in
     any time a user waits for. The next call gets a fresh server. }
-  if (GLspClient <> nil) and (GLspClient.State = dlsConnected) and GLspClient.IsStuck then
+  if (GLspClient <> nil) and (GLspClient.State in [dlsStarting, dlsConnected]) and GLspClient.IsStuck then
   begin
     DebugLog(Format('EnsureLspClient: engine silent > %d ms with %d request(s) outstanding -- restarting it',
       [GLspClient.StuckAfterMs, GLspClient.OutstandingCount]));
@@ -1782,7 +1782,7 @@ begin
         begin
           if AStatus = lrsTimeout then
           begin
-            DLT('hover', Format('hoverBundle id=%d timed out after %d ms', [AId, GetTickCount64 - T0]));
+            DLT('hover', Format('hoverBundle id=%d late after %d ms -- still waiting for the answer', [AId, GetTickCount64 - T0]));
             St:= hvsTimeout;
             Model:= Default(TDragLintHoverModel);
             SetLength(Callers, 0);
@@ -1831,7 +1831,7 @@ begin
       SetDragLintNote('');
       if AStatus = hvsTimeout then
       begin
-        SetDragLintNote('drag-lint: hover timed out -- engine busy');
+        SetDragLintNote(DL_NOTE_HOVER_LATE); { the answer follows; shown then }
         Exit;
       end;
       HoverText:= AMarkdown;
@@ -1914,7 +1914,7 @@ begin
           end;
         hvsTimeout:
           begin
-            SetDragLintNote('drag-lint: hover timed out -- engine busy');
+            SetDragLintNote(DL_NOTE_HOVER_LATE); { the answer follows; shown then }
             Exit;
           end;
         hvsEmpty:
@@ -2074,7 +2074,8 @@ begin
       begin
         if AReply = nil then
         begin
-          if not ASilent then SetDragLintNote('drag-lint: completion timed out -- engine busy');
+          { late: this runs again with the answer, shown if the caret has not moved }
+          if not ASilent then SetDragLintNote('drag-lint: completion' + DL_NOTE_LATE_SUFFIX);
           Exit;
         end;
         if not CaretStillAt(Uri, Line, Col) then
@@ -2166,7 +2167,7 @@ begin
       begin
         if AReply = nil then
         begin
-          SetDragLintNote('drag-lint: signature help timed out -- engine busy');
+          SetDragLintNote('drag-lint: signature help' + DL_NOTE_LATE_SUFFIX); { answer follows }
           Exit;
         end;
         if not CaretStillAt(Uri, Line, Col) then Exit;
@@ -5459,6 +5460,7 @@ var
   Uri   : string; Line, Col: Integer; // dl:ok duplicate-code@5799 -- the request/try/finally shape every async LSP command shares; each callback differs
   Client: TDragLintLspClient        ;
   Params: TJSONObject               ;
+  Late  : Boolean                   ; { set by the lrsTimeout notice; captured by the callback }
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then
   begin
@@ -5467,6 +5469,7 @@ begin
   end;
   Client:= EnsureLspClient;
   if Client = nil then Exit;
+  Late:= False;
   Params:= MakeTextDocumentPositionParams(Uri, Line, Col);
   try
     Client.RequestAsync('textDocument/definition', Params, LSP_COMMAND_TIMEOUT_MS,
@@ -5485,9 +5488,13 @@ begin
       begin
         if AReply = nil then
         begin
-          SetDragLintNote('drag-lint: definition lookup timed out -- engine busy');
+          Late:= True;
+          SetDragLintNote('drag-lint: definition lookup' + DL_NOTE_LATE_SUFFIX);
           Exit;
         end;
+        { a late jump only while the caret is still where it was asked: one that
+          moved on has superseded it }
+        if Late and not CaretStillAt(Uri, Line, Col) then Exit;
         Arr:= nil;
         if AReply is TJSONArray then Arr:= AReply as TJSONArray
         else if (AReply is TJSONObject) and (AReply as TJSONObject).TryGetValue<TJSONValue>('result', ResVal) and (ResVal is TJSONArray) then Arr:= ResVal as TJSONArray;
@@ -5819,6 +5826,11 @@ begin
           Counts : TArray<Integer>;
           Ok     : Boolean;
         begin
+          if AStatus = lrsTimeout then
+          begin
+            DLT('codelens', Format('callerCounts late for %s -- slot kept, counts merged when they arrive', [ExtractFileName(AFilePath)]));
+            Exit;
+          end;
           if AId = GCallerCountsId then
           begin
             GCallerCountsId    := 0;
@@ -5857,7 +5869,6 @@ begin
               Ok:= False;
             end;
           end;
-          if AStatus = lrsTimeout then DLT('codelens', Format('callerCounts timed out for %s -- lens left empty', [ExtractFileName(AFilePath)]));
           ADone(Ok, Lines, Counts);
           ForceGutterRepaint;
         end);

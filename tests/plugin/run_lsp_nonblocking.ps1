@@ -88,6 +88,22 @@ try {
     ($ht.Contains('.IsBusy') -and $ht.Contains("'drag-lint: engine busy'")) ''
   Check 'W7 the watchdog restarts a stuck engine through EnsureLspClient' ($ed.Contains('.IsStuck') -and $ht.Contains('.IsStuck')) ''
   Check 'W8 didChange is coalesced per document' ($ed.Contains("'didChange|' + AUri")) ''
+  # fix/late-results (owner ruling 2026-11-01): an lrsTimeout / hvsTimeout is a
+  # LATE notice, not the end -- every consumer keeps its slot open and takes the
+  # answer when it arrives (the C-side L1-L5 prove the client delivers it).
+  $lc = [IO.File]::ReadAllText((Join-Path $plugin 'DragLint.Plugin.LspClient.pas'))
+  $htLate = [regex]::Matches($ht, '(?s)if AStatus = hvsTimeout then\s*begin\s*SetDragLintNote\(DL_NOTE_HOVER_LATE\);\s*Exit;\s*end;\s*FInflightId\s*:= 0').Count
+  Check 'W9 HoverTracker: a late hover keeps its in-flight slot, so the answer is still shown (bundle + text)' ($htLate -eq 2) "count=$htLate"
+  Check 'W10 Editor: a late callerCounts keeps its slot and merges the counts when they arrive' `
+    ($ed -match '(?s)procedure\(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue\)\s*var\s*Arr\s*: TJSONArray;.*?begin\s*if AStatus = lrsTimeout then\s*begin[^;]*;\s*Exit;\s*end;\s*if AId = GCallerCountsId') ''
+  Check 'W11 LspClient: a late initialize does not fail the handshake (ADone only on the answer)' `
+    ($lc -match "(?s)RequestAsync\('initialize'.*?begin\s*(\{[^}]*\}\s*)?if AStatus = lrsTimeout then\s*begin.*?Exit;\s*end;") ''
+  Check 'W12 Editor: no "timed out -- engine busy" note survives; late answers are announced as late' `
+    (-not $ed.Contains('timed out -- engine busy') -and ([regex]::Matches($ed, 'DL_NOTE_LATE_SUFFIX|DL_NOTE_HOVER_LATE').Count -ge 5)) ''
+  Check 'W13 the watchdog also covers an engine hung in its handshake (dlsStarting)' `
+    ($ed -match 'GLspClient\.State in \[dlsStarting, dlsConnected\]\) and GLspClient\.IsStuck') ''
+  Check 'W14 Editor: a late definition only jumps while the caret is still where it was asked' `
+    ($ed -match "(?s)'textDocument/definition'.*?if Late and not CaretStillAt\(Uri, Line, Col\) then Exit;") ''
 }
 catch {
   Check "runner: $($_.Exception.Message)" $false

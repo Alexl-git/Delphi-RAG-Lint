@@ -33,11 +33,14 @@ uses
   DragLint.Plugin.JobQueue;
 
 const
-  /// <summary>Ceiling for one save-time reindex. Generous against the measured
-  /// 1.21 s because the cost scales with how much changed, and a timeout kills
-  /// a run that was doing real work; the queue's coalescing, not this, is what
-  /// keeps the load down.</summary>
-  INDEX_JOB_TIMEOUT_MS = 120000;
+  /// <summary>STALL budget for one reindex (fix/late-results, owner ruling
+  /// 2026-11-01): the run is killed only after this long with neither output nor
+  /// CPU from the engine's tree -- a hung engine. A reindex that is working runs
+  /// to completion however slow the machine is (the 120 s WALL clock this used
+  /// to be ended "Reindex Micronite2027" with exit -2 twice on 2026-11-01).
+  /// Ten minutes because an engine waiting for another process's writer lock
+  /// burns no CPU and must not be mistaken for a hung one.</summary>
+  INDEX_JOB_TIMEOUT_MS = 600000;
 
 /// <summary>The command line for an incremental, save-time project reindex.</summary>
 /// <param name="AExePath">Full path to drag-lint.exe.</param>

@@ -533,7 +533,7 @@ begin
     Res:= Trim(Copy(Res, LastDelimiter(#10, Res) + 1, MaxInt));
   end
   else if ExitCode = PROCRUN_TIMED_OUT_EXIT_CODE then
-    Res:= Res + Format(': timed out after %d s', [AJob.TimeoutMs div MSecsPerSec])
+    Res:= Res + Format(': hung -- no progress for %d s, killed', [AJob.TimeoutMs div MSecsPerSec])
   else if (ExitCode = PROCRUN_CANCELLED_EXIT_CODE) or Cancelled then
     Res:= Res + ': cancelled' { Cancelled: the engine stood down by itself and exited with its own code }
   else if ExitCode = 2 then

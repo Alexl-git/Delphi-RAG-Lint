@@ -262,6 +262,13 @@ begin
   try
     if AId <> FInflightId then Exit;   { superseded: a newer hover owns the slot }
     DLT('hover', Format('bundle answer id=%d status=%d qname="%s"', [AId, Ord(AStatus), AQName]));
+    { LATE, not lost (fix/late-results): the slot stays ours, and the answer is
+      shown when it arrives if the pointer is still on the token (the gate). }
+    if AStatus = hvsTimeout then
+    begin
+      SetDragLintNote(DL_NOTE_HOVER_LATE);
+      Exit;
+    end;
     FInflightId    := 0;
     case AStatus of
       hvsUnsupported:
@@ -269,12 +276,6 @@ begin
           { An engine without the bundle: ask the plain hover now, still async. }
           FInflightId:= RequestHoverTextAsync(FInflightUri, FInflightRow, FInflightCol, OnHoverTextAnswer);
           if FInflightId = 0 then FInflightClient:= nil;
-          Exit;
-        end;
-      hvsTimeout:
-        begin
-          FInflightClient:= nil;
-          SetDragLintNote('drag-lint: engine busy');
           Exit;
         end;
     end;
@@ -295,13 +296,13 @@ procedure TDragLintHoverHelper.OnHoverTextAnswer(AId: Integer; AStatus: TDLHover
 begin
   try
     if AId <> FInflightId then Exit;
-    FInflightId    := 0;
-    FInflightClient:= nil;
     if AStatus = hvsTimeout then
     begin
-      SetDragLintNote('drag-lint: engine busy');
+      SetDragLintNote(DL_NOTE_HOVER_LATE);
       Exit;
     end;
+    FInflightId    := 0;
+    FInflightClient:= nil;
     FLastLspKey       := FInflightKey;
     FLastLspText      := AMarkdown;
     FLastBundleOk     := False;

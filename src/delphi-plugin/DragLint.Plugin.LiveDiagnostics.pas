@@ -438,7 +438,9 @@ begin
   var LintPid: DWORD:= 0;
   { LSP C13: LiveDbs[0] is the index the engine's lint picks (the first --db that
     contains the file -- every candidate does, by resolve-dbs membership), so a
-    library-owned RTL/VCL file gets the 16 s library budget, a project file 8 s. }
+    library-owned RTL/VCL file gets the 16 s library budget, a project file 8 s.
+    fix/late-results: a STALL budget (ProcRun) -- a lint that is working runs to
+    its end however slow the machine; only a supersede (gen check) drops it. }
   var LintExit: Integer:= RunCaptureStdoutCancellable(Cmd, Output, LintChildTimeoutMs(if Length(LiveDbs) > 0 then LiveDbs[0] else ''), 0, GLintProc, LintPid);
   TMonitor.Enter(GLintProcLock);
   try
@@ -451,7 +453,7 @@ begin
   if LintExit < 0 then
   begin
     GLintRunFailed:= True;
-    LiveLog(Format('lint: run did not finish (exit %d: -2 timed out, -3 cancelled, else spawn failed) -- no answer', [LintExit]));
+    LiveLog(Format('lint: run did not finish (exit %d: -2 hung -- no output or CPU for the whole stall budget, -3 cancelled, else spawn failed) -- no answer', [LintExit]));
     Exit;
   end;
   if LintExit = PROCRUN_KILLED_EXIT_CODE then
@@ -1053,7 +1055,7 @@ begin
               else if RunFailed then
               begin
                 LiveLog('runner: lint did not finish -- previous findings kept, nothing published');
-                GLiveStatus:= 'drag-lint: ' + ExtractFileName(FilePath) + ' -- lint did not finish (timed out?)';
+                GLiveStatus:= 'drag-lint: ' + ExtractFileName(FilePath) + ' -- lint did not finish (engine hung or failed)';
               end
               else
               begin
