@@ -147,10 +147,10 @@ end;
 
 function NowUnixUtc: Int64;
 var
-  FT: TFileTime;
+  Stamp: TFileTime;
 begin
-  GetSystemTimeAsFileTime(FT);
-  Result:= FileTimeToUnix(FT);
+  GetSystemTimeAsFileTime(Stamp);
+  Result:= FileTimeToUnix(Stamp);
 end;
 
 function FileMTimeUnix(const APath: string): Int64;
