@@ -1897,6 +1897,23 @@ type
     /// </remarks>
     function ResolveEnumCast(const ARef: TReference; out AReason: string): Int64;
 
+    /// <summary>GAP-CALLERS (1.40): the TYPE a bare `read` of a type name
+    /// names -- the class in `TStore.Create(..)` / `TStore.ClassName`, or a
+    /// class-reference value `C:= TStore;` -- certain or nothing.</summary>
+    /// <param name="ARef">A `read` ref the value / member streams left unbound.
+    /// FileId, NameText, StartLine, StartCol and EnclosingSymbolId are consulted.</param>
+    /// <param name="AReason">OUT: '' when the ref bound; otherwise ResolveTypeUse's
+    /// decline reasons ('qualified', 'ambiguous', 'not-found', 'generic', ...).</param>
+    /// <returns>The type's symbol id, or 0.</returns>
+    /// <remarks>
+    /// Same lookup and scope order as ResolveTypeUse; not counted into
+    /// TypeUseStats. A unit-qualified `U.TStore` is declined, not guessed.
+    /// Identity only -- the caller writes refs.symbol_id and no call_edges row,
+    /// so the constructor call itself stays the callee of the `call` ref and
+    /// `usages` of the class counts these sites as reads.
+    /// </remarks>
+    function ResolveTypeRead(const ARef: TReference; out AReason: string): Int64;
+
     /// <summary>Per-run counters of the type_use pass.</summary>
     /// <remarks>Cumulative over the resolver's lifetime.</remarks>
     property TypeUseStats: TTypeUseStats read FTypeUseStats;
@@ -7172,6 +7189,11 @@ begin
     Result := 0;
     AReason:= 'not-enum';
   end;
+end;
+
+function TCallResolver.ResolveTypeRead(const ARef: TReference; out AReason: string): Int64;
+begin
+  Result:= LookupTypeName(ARef, AReason);
 end;
 
 function TCallResolver.LookupTypeName(const ARef: TReference; out AReason: string): Int64;
