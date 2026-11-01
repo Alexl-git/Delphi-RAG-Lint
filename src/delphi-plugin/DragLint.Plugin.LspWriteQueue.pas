@@ -122,6 +122,10 @@ const
     retries inside it. }
   JOIN_TOTAL_MS = 2000;
   JOIN_SLICE_MS = 50  ;
+  { PLUG-INFWAIT (2026-11-01): the idle writer's wait slice (was INFINITE). It
+    re-checks FStopping at least this often, so a stop that misses its wake
+    cannot strand the thread; an empty TakeNext just waits again. }
+  WRITER_IDLE_RECHECK_MS = 1000;
 
 type
   TDLLspWriterThread = class(TThread)
@@ -295,7 +299,7 @@ var
 begin
   while True do
   begin
-    FWake.WaitFor(INFINITE);
+    FWake.WaitFor(WRITER_IDLE_RECHECK_MS);
     FLock.Enter;
     try
       if FStopping then Exit;

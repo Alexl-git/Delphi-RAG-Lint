@@ -19,6 +19,11 @@ program LspNonBlockingTests;
      an old BACKGROUND request (callerCounts / codeLens) never makes the client
      busy, a foreground one does.
   S  DLIdentSpanAt (pure).
+  H  CodeLensCache.PopulateOnce's spawn fallback (no LSP hook) returns at once
+     and stores the labels when the slow children finish (IDE-HANG, 1.40).
+  K  StructureCache.RefreshSymbolsAsync returns at once; the late outline is
+     delivered to the LATEST callback, cached, and never to a freed cache.
+     H and K spawn THIS exe as a fake, slow drag-lint (FakeEngineMain).
 
   Every "does not block" assertion runs the call on a worker thread and waits
   with a deadline, so a regression FAILS here instead of hanging the battery.
@@ -34,7 +39,9 @@ uses
   Winapi.Windows,
   DragLint.Plugin.LspWriteQueue in '..\src\delphi-plugin\DragLint.Plugin.LspWriteQueue.pas',
   DragLint.Plugin.LspClient in '..\src\delphi-plugin\DragLint.Plugin.LspClient.pas',
-  DragLint.Plugin.HoverGate in '..\src\delphi-plugin\DragLint.Plugin.HoverGate.pas';
+  DragLint.Plugin.HoverGate in '..\src\delphi-plugin\DragLint.Plugin.HoverGate.pas',
+  DragLint.Plugin.CodeLensCache in '..\src\delphi-plugin\DragLint.Plugin.CodeLensCache.pas',
+  DragLint.Plugin.StructureCache in '..\src\delphi-plugin\DragLint.Plugin.StructureCache.pas';
 
 const
   BIG_FRAME   = 64 * 1024;
@@ -42,6 +49,8 @@ const
   BLOCK_LIMIT_MS = 500;   { "never blocks" = returns well inside this }
   JOIN_LIMIT_MS  = 3000;  { a worker that is not back by now is blocked }
   LATE_REPLY_MS  = 700;   { the fake engine's delay before answering 'late' }
+  FAKE_SLOW_MS   = 1500;  { the fake drag-lint's think time per spawned run }
+  LATE_WAIT_MS   = 15000; { how long H / K pump for the late answer }
 
 var
   GPass, GFail: Integer;
@@ -636,6 +645,110 @@ begin
 
 { ---- S: identifier span ---- }
 
+{ ---- H / K: the CLI-spawn paths of the IDE never wait on the engine ---- }
+
+{ This exe doubles as a fake drag-lint: "surface", "query" and "outline" answer
+  after FAKE_SLOW_MS, in the shapes the plugin parses. True when it ran as one. }
+function FakeEngineMain: Boolean;
+var
+  Verb: string;
+begin
+  Verb:= ParamStr(1);
+  Result:= (Verb = 'surface') or (Verb = 'query') or (Verb = 'outline');
+  if not Result then Exit;
+  Sleep(FAKE_SLOW_MS);
+  if Verb = 'surface' then Writeln('function  FakeUnit.TFoo.Bar  C:\fake\FakeUnit.pas:7')
+  else if Verb = 'query' then Writeln('3 result(s)')
+  else Writeln('[{"kind":"function","name":"Bar","qname":"FakeUnit.TFoo.Bar","line":7,"signature":""}]');
+  Flush(Output);
+end;
+
+function PumpUntil(ALimitMs: Cardinal; const ADone: TFunc<Boolean>): Boolean;
+var
+  T0: UInt64;
+begin
+  T0:= GetTickCount64;
+  repeat
+    CheckSynchronize(10);
+    if ADone() then Exit(True);
+  until GetTickCount64 - T0 >= ALimitMs;
+  Result:= False;
+end;
+
+procedure TestCodeLensFallbackNonBlocking;
+const
+  FILE_PATH = 'C:\fake\FakeUnit.pas';
+var
+  C      : TDragLintCodeLensCache;
+  T0     : UInt64;
+  Took   : UInt64;
+  Stored : Integer;
+begin
+  SetCallerCountsHook(nil);   { no LSP: the spawn fallback is the path under test }
+  Stored:= 0;
+  C:= TDragLintCodeLensCache.Create;
+  try
+    T0:= GetTickCount64;
+    C.PopulateOnce(FILE_PATH, ParamStr(0), 'C:\fake\fake.sqlite', procedure begin Inc(Stored); end);
+    Took:= GetTickCount64 - T0;
+    Check('H1 PopulateOnce (spawn fallback, slow engine) returns at once', Took < BLOCK_LIMIT_MS, Format('%d ms', [Took]));
+    C.PopulateOnce(FILE_PATH, ParamStr(0), 'C:\fake\fake.sqlite', procedure begin Inc(Stored, 100); end);
+    Check('H2 ... the late labels are stored when the slow children finish',
+      PumpUntil(LATE_WAIT_MS, function: Boolean begin Result:= C.GetForLine(FILE_PATH, 6) <> ''; end),
+      'label=' + C.GetForLine(FILE_PATH, 6));
+    Check('H3 ... with the parsed caller count', C.GetForLine(FILE_PATH, 6) = '[3 callers]', C.GetForLine(FILE_PATH, 6));
+    Pump(200);
+    Check('H4 ... AOnStored ran once; a second call while in flight started no second pass', Stored = 1, IntToStr(Stored));
+  finally
+    C.Free;
+  end;
+end;
+
+procedure TestStructureAsync;
+const
+  FILE_PATH = 'C:\fake\FakeUnit.pas';
+var
+  C      : TDragLintStructureCache;
+  T0     : UInt64;
+  Took   : UInt64;
+  First  : Integer;
+  Latest : Integer;
+  GotSyms: TArray<TSymbolInfo>;
+  Started: Boolean;
+  Again  : Boolean;
+  Cached : TArray<TSymbolInfo>;
+begin
+  First:= 0; Latest:= 0;
+  C:= TDragLintStructureCache.Create;
+  try
+    T0:= GetTickCount64;
+    Started:= C.RefreshSymbolsAsync(FILE_PATH, ParamStr(0), '',
+      procedure(const AFile: string; const ASyms: TArray<TSymbolInfo>) begin Inc(First); end);
+    Took:= GetTickCount64 - T0;
+    Check('K1 RefreshSymbolsAsync (slow engine) returns at once and starts a fetch', Started and (Took < BLOCK_LIMIT_MS), Format('%d ms started=%s', [Took, BoolToStr(Started, True)]));
+    Again:= C.RefreshSymbolsAsync(FILE_PATH, ParamStr(0), '',
+      procedure(const AFile: string; const ASyms: TArray<TSymbolInfo>) begin Inc(Latest); GotSyms:= ASyms; end);
+    Check('K2 ... a second call while in flight stacks no second engine run', not Again);
+    Check('K3 ... the late outline reaches the LATEST callback',
+      PumpUntil(LATE_WAIT_MS, function: Boolean begin Result:= Latest > 0; end), Format('first=%d latest=%d', [First, Latest]));
+    Check('K4 ... once, with the parsed symbol; the replaced callback never runs',
+      (Latest = 1) and (First = 0) and (Length(GotSyms) = 1) and (GotSyms[0].Name = 'Bar') and (GotSyms[0].Line = 7),
+      Format('first=%d latest=%d n=%d', [First, Latest, Length(GotSyms)]));
+    Check('K5 ... and is cached', C.TryGetSymbols(FILE_PATH, Cached) and (Length(Cached) = 1));
+  finally
+    C.Free;
+  end;
+
+  { A cache freed while its fetch runs: the answer must not touch it. }
+  Latest:= 0;
+  C:= TDragLintStructureCache.Create;
+  C.RefreshSymbolsAsync(FILE_PATH, ParamStr(0), '',
+    procedure(const AFile: string; const ASyms: TArray<TSymbolInfo>) begin Inc(Latest); end);
+  C.Free;
+  Pump(FAKE_SLOW_MS + 1500);
+  Check('K6 a cache freed mid-fetch gets no callback (and no access violation)', Latest = 0, IntToStr(Latest));
+end;
+
 procedure TestIdentSpan;
 var
   S, E: Integer;
@@ -652,8 +765,11 @@ begin
 end;
 
 begin
+  if FakeEngineMain then ExitProcess(0);
   GPass:= 0; GFail:= 0;
   try
+    TestCodeLensFallbackNonBlocking;
+    TestStructureAsync;
     TestGate;
     TestIdentSpan;
     TestSendFailureNotOutstanding;
