@@ -104,6 +104,23 @@ try {
     ($ed -match 'GLspClient\.State in \[dlsStarting, dlsConnected\]\) and GLspClient\.IsStuck') ''
   Check 'W14 Editor: a late definition only jumps while the caret is still where it was asked' `
     ($ed -match "(?s)'textDocument/definition'.*?if Late and not CaretStillAt\(Uri, Line, Col\) then Exit;") ''
+  # 1.40 lane hang (IDE-HANG residue + PLUG-INFWAIT): the CLI-spawn paths left on
+  # the main thread, and the two INFINITE idle waits. H / K above prove the
+  # mechanics; these pin that the IDE units use them.
+  $sf = [IO.File]::ReadAllText((Join-Path $plugin 'DragLint.Plugin.StructureForm.pas'))
+  $ev = [IO.File]::ReadAllText((Join-Path $plugin 'DragLint.Plugin.EditViewNotifier.pas'))
+  Check 'W15 StructureForm: the outline is fetched async (RefreshSymbolsAsync), never by the blocking GetSymbolsForFile' `
+    ($sf.Contains('.RefreshSymbolsAsync(') -and -not $sf.Contains('.GetSymbolsForFile(')) ''
+  Check 'W16 CodeLensCache: the spawn fallback runs on a worker and each child is stall-bounded (no raw ReadFile loop)' `
+    ($cl.Contains('TThread.CreateAnonymousThread(') -and $cl.Contains('RunCaptureStdout(') -and -not $cl.Contains('ReadFile(')) ''
+  Check 'W17 EditViewNotifier: a late code-lens answer repaints the gutter' `
+    ($ev -match 'PopulateOnce\(FilePath, S\.ExePath, DbPath, procedure begin ForceGutterRepaint; end\)') ''
+  foreach ($q in @(@{n='JobQueue';c='WORKER_IDLE_RECHECK_MS'}, @{n='LspWriteQueue';c='WRITER_IDLE_RECHECK_MS'})) {
+    $qt = [IO.File]::ReadAllText((Join-Path $plugin "DragLint.Plugin.$($q.n).pas"))
+    $inf = [regex]::Matches($qt, 'WaitFor\(\s*INFINITE\s*\)').Count
+    Check "W18 $($q.n): no INFINITE wait; the idle loop waits in bounded slices ($($q.c))" `
+      (($inf -eq 0) -and $qt.Contains("FWake.WaitFor($($q.c))")) "infinite=$inf"
+  }
 }
 catch {
   Check "runner: $($_.Exception.Message)" $false

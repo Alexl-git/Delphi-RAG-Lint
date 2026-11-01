@@ -196,6 +196,13 @@ const
     it simply re-peeks, finds the hold, and waits again. }
   HOLD_RECHECK_MS = 5000;
 
+  { PLUG-INFWAIT (2026-11-01): the idle worker's wait slice. It used to wait
+    INFINITE on FWake; now it wakes at least this often, re-peeks the queue and
+    re-checks FShutdown, so a lost wake or a shutdown flag set without a
+    SetEvent can never strand a job or pin the thread. An idle pass is one
+    lock and a Count test. }
+  WORKER_IDLE_RECHECK_MS = 1000;
+
 type
   TQueueWorker = class(TThread)
   private
@@ -661,7 +668,7 @@ var
 begin
   while not FShutdown do
   begin
-    FWake.WaitFor(INFINITE);
+    FWake.WaitFor(WORKER_IDLE_RECHECK_MS);   { bounded: an empty peek just waits again }
     if FShutdown then Break;
     repeat
       { PEEK first -- under the lock, without removing -- so the gate below

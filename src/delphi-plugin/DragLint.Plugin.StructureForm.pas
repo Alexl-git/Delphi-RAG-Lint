@@ -686,15 +686,28 @@ begin
 
   { Re-shell once; cache the results so the filter re-renders without re-running
     drag-lint on every keystroke. }
-  StructureCache.InvalidateForFile(AFilePath);
+  { 2026-11-01 (IDE-HANG): the outline is fetched OFF the main thread. The tree
+    shows what is cached for this file now (empty on a first visit) and is
+    rebuilt when the engine answers -- however late -- if this form still
+    shows that file. The old synchronous call froze the IDE on every tab
+    switch for as long as the engine took (docs\INBOX-ide-hang-on-slow-engine.md). }
   FDiags:= Cache.GetForFile(AFilePath);
   ExePath:= ResolveExePath;
   DbPath := ResolveDbForOpenFile(AFilePath); { explicit: do not depend on the mirror being set first }
-  FSyms:= StructureCache.GetSymbolsForFile(AFilePath, ExePath, DbPath);
+  StructureCache.TryGetSymbols(AFilePath, FSyms);
+  var Me: TObject:= Self;
+  StructureCache.RefreshSymbolsAsync(AFilePath, ExePath, DbPath,
+    procedure(const AFile: string; const ASymbols: TArray<TSymbolInfo>)
+    begin
+      if (TObject(GStructureForm) <> Me) or not SameText(AFile, FCurrentFile) then Exit;
+      FSyms:= ASymbols;
+      DLT('structure', Format('RefreshForFile %s -> %d sym(s) (engine answered)', [ExtractFileName(AFile), Length(FSyms)]));
+      BuildTree(FSearch.Text);
+    end);
 
   DLT(
-    'structure', Format('RefreshForFile %s -> %d diag(s), %d sym(s) [exe=%s db=%s]', [ExtractFileName(AFilePath), Length(FDiags), Length(FSyms), ExtractFileName(ExePath),
-        ExtractFileName(DbPath)]));
+    'structure', Format('RefreshForFile %s -> %d diag(s), %d cached sym(s), outline requested [exe=%s db=%s]', [ExtractFileName(AFilePath), Length(FDiags), Length(FSyms),
+        ExtractFileName(ExePath), ExtractFileName(DbPath)]));
   BuildTree(FSearch.Text);
 end; // procedure
 
