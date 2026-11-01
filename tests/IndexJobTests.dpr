@@ -281,6 +281,20 @@ begin
   end;
 end;
 
+procedure TestIndexBusyResult;
+const
+  LOCK_MSG = 'ERROR: index: another index run is writing x.sqlite (its lock x.sqlite.indexing.lock is held). Wait.';
+begin
+  Check('9a exit 2 + lock refusal text -> "index busy, will retry", not "failed"',
+        ReindexResultText(2, LOCK_MSG) = 'reindex: index busy, will retry');
+  Check('9b the finishing-lock variant is busy too',
+        ReindexResultText(2, 'ERROR: index: the lock file x is still being deleted -- another index run on y is just finishing') = 'reindex: index busy, will retry');
+  Check('9c POSITIVE CONTROL: exit 2 without the lock text is a failure',
+        ReindexResultText(2, 'usage: index needs --project') = 'reindex: failed');
+  Check('9d exit 0 is done', ReindexResultText(0, '') = 'reindex: done');
+  Check('9e exit 3 keeps its code', ReindexResultText(3, LOCK_MSG) = 'reindex: failed (exit 3)');
+end;
+
 begin  GPass:= 0;
   GFail:= 0;
   Writeln('IndexJobTests');
@@ -295,6 +309,7 @@ begin  GPass:= 0;
     TestFileFallbackJob;
     TestSaveReindexAction;
     TestOneRelintPerReindex;
+    TestIndexBusyResult;
   except
     on E: Exception do
     begin
