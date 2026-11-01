@@ -55,7 +55,7 @@ type
 /// AStore.FindFileIdByPath resolves the files row (Indexed = FileId > 0).
 /// When Indexed, IndexFresh compares AStore.GetFileMTime against the
 /// on-disk mtime computed the same way the indexer does
-/// (DateTimeToUnix(TFile.GetLastWriteTime(...), False)); if UnitPath no
+/// (FileMTimeUnix(...)); if UnitPath no
 /// longer exists on disk, IndexFresh is False rather than raising.
 /// CompiledFresh compares AStore.GetFileCompiledAt against the SAME
 /// GetFileMTime value (read once and reused). When not Indexed, IndexFresh
@@ -110,6 +110,9 @@ function SanitizeProjectTag(const AName: string): string;
 function ProjectTagConflicts(const AStoredTag, AProjectFile: string): Boolean;
 
 implementation
+uses
+  DRagLint.Core.FileTime;
+
 
 function ProjectTagConflicts(const AStoredTag, AProjectFile: string): Boolean;
 begin
@@ -154,7 +157,7 @@ begin
     try
       if TFile.Exists(AMembers[I].UnitPath) then
       begin
-        DiskMTime:= DateTimeToUnix(TFile.GetLastWriteTime(AMembers[I].UnitPath), False);
+        DiskMTime:= FileMTimeUnix(AMembers[I].UnitPath);
         HasDiskMTime:= True;
       end;
     except

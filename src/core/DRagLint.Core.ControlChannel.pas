@@ -773,8 +773,13 @@ end;
 { ---- audit --------------------------------------------------------------- }
 
 function NowIso: string;
+var
+  ST: TSystemTime;
 begin
-  Result:= FormatDateTime('yyyy-mm-dd"T"hh:nn:ss"Z"', TTimeZone.Local.ToUniversalTime(Now));
+  { The OS's UTC clock, not TTimeZone.ToUniversalTime(Now): the RTL conversion is an hour off for the
+    whole of a DST-transition day (lane 140-cli DST). }
+  GetSystemTime(ST);
+  Result:= FormatDateTime('yyyy-mm-dd"T"hh:nn:ss"Z"', SystemTimeToDateTime(ST));
 end;
 
 { ONE WriteFile per line, straight to the stderr handle: the listener runs on

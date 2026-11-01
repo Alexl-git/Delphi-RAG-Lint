@@ -223,6 +223,7 @@ function WithCycleFixPointer(const pMessage, pProject, pStem: string): string;
 implementation
 
 uses
+  DRagLint.Core.FileTime,
   DRagLint.Report.CycleEdge, { BareUsesBinding / ProjectUnitScopes -- circular-uses binds a bare
                                uses name exactly as the cycles graph does (A3-b) }
   DRagLint.Lint.EnumOrdinalPersisted, { CollectEnumOrdinalPersisted -- lane X6 }
@@ -2744,7 +2745,7 @@ var
     Result:= 0;
     try
       if TFile.Exists(AFile) then
-        Result:= DateTimeToUnix(TFile.GetLastWriteTime(AFile), False);
+        Result:= FileMTimeUnix(AFile);
     except
       { A file we cannot date is a file we cannot call stale. Named rather than
         bare so a genuine failure is distinguishable from the absent-file case

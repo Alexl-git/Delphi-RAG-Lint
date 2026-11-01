@@ -567,6 +567,7 @@ function DirPrunedByFilter(const ADir: string; const AFilter: TWalkFilter): Bool
 implementation
 
 uses
+  DRagLint.Core.FileTime,
   DRagLint.Doc.SymbolFacts        // dl:unit DRagLint.Doc.SymbolFacts accepted -- v(ADP2 T2): TSymbolFactsAnalyzer, the index-time symbol_facts pass; v23: FIELD_RW_CAP + JoinCappedDisplay travel with it so the facts-inherited post-pass re-joins by the SAME cap rule the parse-time string used
   , DRagLint.Diagnostics.ParseCache { v(ADP2 T3): TAstParseCache.Clear -- bound the per-file tree cache }
   , DRagLint.Index.IncludeUses     { N-06: uses clauses written inside a depth-0 include }
@@ -1318,7 +1319,7 @@ begin
     the byte count is the one change this does not see. }
   { Same guards as the full test below: an .inc carrying its host's context
     (Lane INC) and a file whose include origins moved (N-06) never skip here. }
-  Mtime:= DateTimeToUnix(TFile.GetLastWriteTime(AFilePath), False);
+  Mtime:= FileMTimeUnix(AFilePath);
   var MayResume: Boolean:= (FResumeFingerprint <> '') and
                            SameStr(FStore.FileIndexedFingerprint(AFilePath), FResumeFingerprint);
   var IncCtx: TBytes:= nil;

@@ -381,6 +381,7 @@ procedure ReportCycleFixError(const pOpts: TCycleFixOptions; const pMessage: str
 implementation
 
 uses
+  DRagLint.Core.FileTime,
   System.Classes, System.IOUtils, System.JSON, System.DateUtils, System.Hash,
   System.StrUtils, System.RegularExpressions, System.Diagnostics, System.Math, Winapi.Windows,
   DRagLint.Convert.Backup, DRagLint.Core.StudioEnv,
@@ -453,7 +454,7 @@ function FileStampIsCurrent(const pStore: ISymbolStore; const pPath: string): Bo
 begin
   if not TFile.Exists(pPath) then Exit(False);
   var Sha  := THashSHA2.GetHashString(TEncoding.ANSI.GetString(TFile.ReadAllBytes(pPath)));
-  var Mtime:= DateTimeToUnix(TFile.GetLastWriteTime(pPath), False);
+  var Mtime:= FileMTimeUnix(pPath);
   Result:= pStore.FileIsUpToDate(pPath, Mtime, Sha);
 end;
 

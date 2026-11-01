@@ -104,6 +104,7 @@ function UnescapeDataString(const pText: string): string;
 implementation
 
 uses
+  DRagLint.Core.FileTime,
   Winapi.Windows, System.Classes, System.IOUtils, System.StrUtils, System.Character, System.DateUtils,
   System.Generics.Collections, System.Generics.Defaults, System.RegularExpressions, DRagLint.Charts.Text
   , DRagLint.Charts.Tools // dl:unit DRagLint.Charts.Tools accepted -- the clone-guard override's variable name travels with the guard (CloneDb) that reads it
@@ -808,7 +809,7 @@ begin
   var IsText:= Chart.TracePath <> '';
   MoveOver(Chart.TracePath, TPath.Combine(Dir, TRACE_DLGRAPH));
 
-  var Generated:= FormatDateTime(ISO_UTC, TTimeZone.Local.ToUniversalTime(Now));
+  var Generated:= FormatDateTime(ISO_UTC, NowUtc);
   var Regenerate:= RegenerateText(pArgs);
   TFile.WriteAllText(TPath.Combine(Dir, META_JSON), MetaJson(pArgs, Chart, LeftLabel, RightLabel, Generated, Regenerate),
     TEncoding.ASCII);

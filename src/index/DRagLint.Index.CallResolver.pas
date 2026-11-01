@@ -2017,6 +2017,7 @@ type
 implementation
 
 uses
+  DRagLint.Core.FileTime,
   System.Math,     // Min -- ResolveAccessor's declaring-line range
   System.StrUtils, // B1: StartsText / SplitString, used by SignatureArityRange
   System.RegularExpressions, // rb5-ovl: ArgShapeOfText's number literals
@@ -2743,7 +2744,7 @@ begin
       // ANSI: source files are strict 7-bit ASCII / CP125x, matching Doc.Facts.
       Txt  := TEncoding.ANSI.GetString(Bytes);
       if not FStore.FileIsUpToDate(Path,
-               DateTimeToUnix(TFile.GetLastWriteTime(Path), False),
+               FileMTimeUnix(Path),
                THashSHA2.GetHashString(Txt)) then
         FStaleFiles.AddOrSetValue(AFileId, True);
       Result.Text:= Txt;

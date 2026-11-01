@@ -111,6 +111,7 @@ function FileSha1Hex(const AFile: string): string;
 implementation
 
 uses
+  DRagLint.Core.FileTime,
   System.Classes,
   System.IOUtils,
   System.Hash,
@@ -380,7 +381,7 @@ begin
     if Gen = '' then Gen := 'drag-lint project-context';
     Root.AddPair('schema', TJSONNumber.Create(CONTEXT_SCHEMA));
     Root.AddPair('generatedBy', Gen);
-    Root.AddPair('generatedAt', IsoUtc(TTimeZone.Local.ToUniversalTime(Now)));
+    Root.AddPair('generatedAt', IsoUtc(NowUtc));
     Root.AddPair('project', ACtx.Project);
     Mtime := '';
     if (ACtx.SourceFile <> '') and TFile.Exists(ACtx.SourceFile) then
