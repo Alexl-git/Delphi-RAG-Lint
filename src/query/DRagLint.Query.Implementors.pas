@@ -74,15 +74,22 @@ type
     IncludeLibrary : Boolean;      // list the library's implementors as rows, not only a count
     LibraryStore   : ISymbolStore; // nil = no library
     /// <summary>The defaults: no sites, cap 50, no library.</summary>
+    /// <returns>The default options.</returns>
     class function Defaults: TImplementorsOptions; static;
   end;
 
   /// <summary>The target names nothing the report can answer, or several symbols.</summary>
   EImplementorsTarget = class(Exception)
+  strict private
+    FAmbiguous: Boolean;
   public
+    /// <summary>Creates the error.</summary>
+    /// <param name="pMsg">The message: what was asked and what matched.</param>
+    /// <param name="pAmbiguous">True: several symbols matched; False: none did.</param>
+    constructor CreateFor(const pMsg: string; pAmbiguous: Boolean);
     /// <summary>True when the name matched several symbols (exit 2), False when it
     /// matched none (exit 1).</summary>
-    Ambiguous: Boolean;
+    property Ambiguous: Boolean read FAmbiguous write FAmbiguous;
   end;
 
 /// <summary>Builds the interface report for pTarget.</summary>
@@ -163,6 +170,12 @@ const
   NOTE_CLAUSE = 'resolution clause';
   NOTE_NO_METHOD = 'no method of that name in the class chain (library ancestor or index gap)';
   KIND_INTERFACE = 'interface';
+
+constructor EImplementorsTarget.CreateFor(const pMsg: string; pAmbiguous: Boolean);
+begin
+  inherited Create(pMsg);
+  FAmbiguous:= pAmbiguous;
+end;
 
 class function TImplementorsOptions.Defaults: TImplementorsOptions;
 begin
@@ -416,7 +429,8 @@ begin
   Result:= (P.Kind = skInterface) or ((P.Kind = skClass) and IsRoutineKind(pSym.Kind));
 end;
 
-function ResolveTarget(const pStore: ISymbolStore; const pTarget: string): TSymbol;
+{ Every reportable symbol pTarget names: qualified first, then a bare or partly qualified suffix. }
+function TargetCandidates(const pStore: ISymbolStore; const pTarget: string): TArray<TSymbol>;
 var
   Hits: TArray<TSymbol>;
 begin
@@ -431,35 +445,30 @@ begin
       if Reportable(pStore, S) and ((Bare = pTarget) or EndsText(Suffix, S.QualifiedName)) then
         Hits:= Hits + [S];
   end;
-  if Length(Hits) = 1 then Exit(Hits[0]);
-  var E: EImplementorsTarget;
-  if Length(Hits) = 0 then
-  begin
-    E:= EImplementorsTarget.Create(pTarget + ': no interface, interface member, class or class method of that name in this index');
-    E.Ambiguous:= False;
-    raise E;
-  end;
-  var Names: TArray<string>:= [];
-  for var H in Hits do Names:= Names + [H.QualifiedName];
-  E:= EImplementorsTarget.Create(pTarget + ' is ambiguous -- qualify it: ' + string.Join(', ', Names));
-  E.Ambiguous:= True;
-  raise E;
+  Result:= Hits;
+end;
+
+
+procedure AddSite(const pOptions: TImplementorsOptions; const pMode, pPath: string; pLine: Integer;
+  const pEnclosing, pVia: string; var pReport: TImplementorsReport);
+begin
+  Inc(pReport.SitesTotal);
+  if (pOptions.MaxSites > 0) and (Length(pReport.Sites) >= pOptions.MaxSites) then Exit;
+  var S:= Default(TImplSite);
+  S.Mode:= if pMode = '' then 'call' else pMode;  // a resolved call edge carries no mode; member accesses do
+  S.FilePath:= pPath;
+  S.Line:= pLine;
+  S.Enclosing:= pEnclosing;
+  S.Via:= pVia;
+  pReport.Sites:= pReport.Sites + [S];
 end;
 
 procedure AddSitesOf(const pCtx: TCtx; const pMember: TSymbol; const pOptions: TImplementorsOptions;
   var pReport: TImplementorsReport);
 begin
   for var RC in pCtx.Store.FindResolvedCallers(pMember.Id) do
-  begin
-    Inc(pReport.SitesTotal);
-    if (pOptions.MaxSites > 0) and (Length(pReport.Sites) >= pOptions.MaxSites) then Continue;
-    var S:= Default(TImplSite);
-    S.Mode:= if RC.Mode = '' then 'call' else RC.Mode;  // a resolved call edge carries no mode; member accesses do
-    S.FilePath:= RC.FullPath;
-    S.Line:= RC.CallSiteLine;
-    S.Enclosing:= RC.EnclosingQName;
-    pReport.Sites:= pReport.Sites + [S];
-  end;
+    AddSite(pOptions, RC.Mode, RC.FullPath, RC.CallSiteLine, RC.EnclosingQName, '', pReport);
+
 end;
 
 procedure AddLibrary(const pIntf: TSymbol; const pOptions: TImplementorsOptions;
@@ -573,17 +582,8 @@ begin
   end;
   if not pOptions.WithUses then Exit;
   for var Row in DispatchCallersOf(pCtx.Store, pMethod.Id) do
-  begin
-    Inc(pReport.SitesTotal);
-    if (pOptions.MaxSites > 0) and (Length(pReport.Sites) >= pOptions.MaxSites) then Continue;
-    var S:= Default(TImplSite);
-    S.Mode:= if Row.Mode = '' then 'call' else Row.Mode;
-    S.FilePath:= Row.FullPath;
-    S.Line:= Row.CallSiteLine;
-    S.Enclosing:= Row.CallerQName;
-    S.Via:= Row.Via;
-    pReport.Sites:= pReport.Sites + [S];
-  end;
+    AddSite(pOptions, Row.Mode, Row.FullPath, Row.CallSiteLine, Row.CallerQName, Row.Via, pReport);
+
 end;
 
 function BuildImplementorsReport(const pStore: ISymbolStore; const pTarget: string;
@@ -591,7 +591,16 @@ function BuildImplementorsReport(const pStore: ISymbolStore; const pTarget: stri
 begin
   Result:= Default(TImplementorsReport);
   Result.LibraryImplementors:= -1;
-  var T:= ResolveTarget(pStore, pTarget.Trim);
+  var Hits:= TargetCandidates(pStore, pTarget.Trim);
+  if Length(Hits) <> 1 then
+  begin
+    var Names: TArray<string>:= [];
+    for var H in Hits do Names:= Names + [H.QualifiedName];
+    raise EImplementorsTarget.CreateFor(if Length(Hits) = 0
+      then pTarget + ': no interface, interface member, class or class method of that name in this index'
+      else pTarget + ' is ambiguous -- qualify it: ' + string.Join(', ', Names), Length(Hits) > 1);
+  end;
+  var T:= Hits[0];
   var Ctx:= TCtx.Create(pStore);
   try
     var Parent:= pStore.GetSymbolById(T.ParentId);
@@ -682,8 +691,11 @@ begin
       Exit;
     end;
   except
-    Result.Free;
-    raise;
+    on Exception do
+    begin
+      Result.Free;
+      raise;
+    end;
   end;
 end;
 
@@ -740,8 +752,11 @@ begin
     Result.AddPair('notes', JN);
     for var N in pReport.Notes do JN.Add(N);
   except
-    Result.Free;
-    raise;
+    on Exception do
+    begin
+      Result.Free;
+      raise;
+    end;
   end;
 end;
 

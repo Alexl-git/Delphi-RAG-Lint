@@ -172,7 +172,7 @@ begin
       AddLoc(ALocs, SymbolUri(ACtx, AStore, C), C.StartLine - 1, C.StartCol - 1);
     Exit(True);
   end;
-  if not (ASym.Kind in [skProcedure, skFunction, skMethod]) or (AStore.GetSymbolById(ASym.ParentId).Kind <> skInterface) then Exit;
+  if (ASym.Kind not in [skProcedure, skFunction, skMethod]) or (AStore.GetSymbolById(ASym.ParentId).Kind <> skInterface) then Exit;
   for var M: TSymbol in ImplementingMethodsOf(AStore, ASym) do
     if M.ImplStartLine > 0 then AddLoc(ALocs, SymbolUri(ACtx, AStore, M), M.ImplStartLine - 1, 0)
     else AddLoc(ALocs, SymbolUri(ACtx, AStore, M), M.StartLine - 1, M.StartCol - 1);

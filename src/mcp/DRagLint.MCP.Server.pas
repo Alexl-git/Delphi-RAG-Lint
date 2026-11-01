@@ -424,6 +424,7 @@ const
   { JSON-RPC 2.0 implementation-defined server error: the tool could not answer
     (no store, store refused). }
   JSONRPC_SERVER_ERROR = -32000;
+  JSONRPC_INVALID_PARAMS = -32602; { get_implementors: a missing or unknown qname }
 
 constructor TMCPServer.Create(const ADbPaths: TArray<string>);
 var
@@ -1266,7 +1267,7 @@ begin
       if Args.GetValue('qname') <> nil then IQName:= Args.GetValue('qname').Value;
       if IQName = '' then
       begin
-        SendError(AId, -32602, 'get_implementors requires qname');
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'get_implementors requires qname');
         Exit;
       end;
       var IOpts:= TImplementorsOptions.Defaults;
@@ -1278,7 +1279,7 @@ begin
       except
         on E: EImplementorsTarget do
         begin
-          SendError(AId, -32602, E.Message);
+          SendError(AId, JSONRPC_INVALID_PARAMS, E.Message);
           Exit;
         end;
       end;

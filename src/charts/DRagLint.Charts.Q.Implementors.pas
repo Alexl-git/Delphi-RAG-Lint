@@ -41,10 +41,11 @@ begin
   end;
   var Msgs: TArray<string>;
   var Base:= TRegEx.Replace(Report.TargetQName, '[^A-Za-z0-9]', '_') + '_implementors';
+  { RowHref is already XML-escaped, as the HTML-like label's TD HREF needs. }
   Result.Layout:= DotLayout(pArgs.Dot, ImplementorsReportToChart(Report, False,
     function(pFile: string; pLine: Integer): string
     begin
-      Result:= RowHref(pFile, pLine);  // already XML-escaped, as the HTML-like label needs
+      Result:= RowHref(pFile, pLine);
     end), pOutDir, Base, Msgs);
   Result.LeftCount:= Length(Report.Implementors);
   Result.RightCount:= Report.SitesTotal;
