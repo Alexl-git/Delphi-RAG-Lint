@@ -5445,9 +5445,11 @@ begin
     try
       Method:= if Msg.GetValue('method') <> nil then Msg.GetValue('method').Value else '';
       if FControl <> nil then FControl.BeginWork(Method);
+      BeatBegin(Method); { 1.40 heartbeat: every request is an action; the engine code it runs reports its steps }
       if not DispatchMessage(Msg) then Break;
     finally
       if FControl <> nil then FControl.EndWork;
+      BeatBegin(''); { idle }
       try
         FlushPending; { LSP-1 CORE: notices + draglint/context queued by this message }
       finally

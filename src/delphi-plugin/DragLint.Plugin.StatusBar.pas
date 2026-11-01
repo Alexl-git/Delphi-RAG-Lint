@@ -40,6 +40,9 @@ type
       can check it is still ours and not stomp a note somebody else set. }
     FHoldTick: Integer     ;
     FHoldText: string      ;
+    { 1.40 heartbeat: the running engine job's own status (ProcRunBeatText) as last shown -- a change of it
+      alone repaints the strip, so a slow job visibly progresses instead of looking hung. }
+    FBeat    : string      ;
     procedure PollEngineHold;
     procedure HandleTimer (Sender: TObject);
     procedure HandleCancel(Sender: TObject);
@@ -81,6 +84,10 @@ const
 procedure SetDragLintNote(const AText: string);
 
 implementation
+
+uses
+  DragLint.Plugin.ProcRun { ProcRunBeatText -- 1.40: the running engine child's own status }
+  ;
 
 const
   { The strip's one-line row: the state label, bar, depth and Cancel live here. }
@@ -299,7 +306,9 @@ begin
   PollEngineHold;
 
   S:= JobQueue.GetState;
-  if FHasLast and StatesEqual(S, FLast) then Exit;
+  var Beat: string:= if S.Running then ProcRunBeatText else '';
+  if FHasLast and StatesEqual(S, FLast) and (Beat = FBeat) then Exit;
+  FBeat   := Beat;
   FLast   := S;
   FHasLast:= True;
   ApplyState(S);
@@ -327,7 +336,7 @@ begin
       FStateLbl.Caption:= AState.CurrentTitle + '  ' + IntToStr(AState.Percent) + '%'
                         + (if AState.Phase <> '' then '  ' + AState.Phase else '')
     else
-      FStateLbl.Caption:= AState.CurrentTitle + '  ...';
+      FStateLbl.Caption:= AState.CurrentTitle + '  ' + (if FBeat <> '' then '[' + FBeat + ']' else '...');
     if not FBar.Visible then FBar.Visible:= True;
     if AState.Percent < 0 then
       FBar.Style:= pbstMarquee
