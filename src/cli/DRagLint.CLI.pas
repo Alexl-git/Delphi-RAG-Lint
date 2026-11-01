@@ -21558,6 +21558,7 @@ end; // procedure
 
 procedure TLintPhaseProfiler.Phase(const AName: string);
 begin
+  BeatStep(AName); { 1.40 heartbeat: every lint-all phase, profiled or not }
   if not FActive then Exit;
   CloseOpenPhase;
   FOpen:= AName;
@@ -22342,6 +22343,7 @@ begin
         Break;
       end;
       PasPath:= FilePaths[FileIdx];
+      BeatProgress(FileIdx + 1, Length(FilePaths)); { 1.40 heartbeat }
       try
         { Progress output (throttled by percentage) }
         if (not AArgs.Quiet) and (not IsMachineReadableOutput(AArgs)) then
@@ -36413,6 +36415,9 @@ begin
       RECORDS -- once theirs is, and a DB not named after its project stops
       tagging entries with its own file name. }
     TSharedFacts.ProjectTag:= if Length(Args.DbPaths) > 1 then '' else ProjectTagOfDb(Args.DbPath);
+    { 1.40 heartbeat: the verbs the IDE waits on publish their status record on a status-only pipe; it closes
+      at exit (the unit's finalization). Advisory -- a run without one is judged the old way. }
+    BeatChannelOpen(Args.Command, DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
     if Args.Command = 'index' then
     begin
       { The MODE flags name opposite intents, so passing both is a usage error

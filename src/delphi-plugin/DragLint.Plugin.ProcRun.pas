@@ -75,7 +75,11 @@ type
 /// 2026-11-01): the child's process tree is killed only after this long with NO
 /// progress -- no output read and no CPU burnt by the tree (the hung shape). A
 /// child that keeps working runs to its own end however long it takes; a slow
-/// machine never loses a result to a wall clock. &lt;=0 = no budget.</param>
+/// machine never loses a result to a wall clock. 1.40: once the child answers a
+/// HEARTBEAT (an engine verb that reports, see DRagLint.Core.ControlChannel
+/// BeatChannelOpen), progress is output or its status CHANGING; CPU no longer
+/// counts, so an engine spinning with a frozen status is killed and a silent idle
+/// one whose status moves is kept. &lt;=0 = no budget.</param>
 /// <param name="ACancel">Optional manual-reset event handle (0 = none). Once it
 /// is signalled the child's process tree is killed and the call returns; if it
 /// is signalled before the call, nothing is spawned. The caller owns it.</param>
@@ -170,6 +174,13 @@ procedure CloseProcessHandle(var AHandle: THandle);
 function RunCaptureStreaming(const ACmdLine: string; AOnLine: TOnLineProc; out AExitCode: Integer;
   ATimeoutMs: Integer; ACancel: THandle = 0): Boolean;
 
+/// <summary>Progress text of the engine child a runner is waiting on right now, from its heartbeat (1.40):
+/// e.g. <c>index: resolve calls 120</c>. For the IDE's status strip.</summary>
+/// <returns>The newest heartbeat any running RunCore received, as BeatDisplayText; '' when no run in
+/// progress has answered one (an older engine, a wrapper, a verb that does not report).</returns>
+/// <remarks>Thread-safe; never blocks on a child (it reads what the run loops already fetched).</remarks>
+function ProcRunBeatText: string;
+
 implementation
 
 uses
@@ -215,6 +226,15 @@ const
     even starved by other programs -- crosses it within seconds. }
   PROCRUN_CPU_PROGRESS_100NS = 50 * 10000;
 
+  { 1.40 heartbeat: how often RunCore asks the child's heartbeat pipe for its status, and how long one ask
+    may wait for the pipe. The listener answers at once, so the ask costs well under a millisecond; a child
+    with no pipe fails it at once (ERROR_FILE_NOT_FOUND). The stall budget is minutes for every engine job,
+    so a 2 s poll is far finer than the decision it feeds. }
+  PROCRUN_BEAT_POLL_MS    = 2000;
+  PROCRUN_BEAT_CONNECT_MS = 250;
+  { Minimum asks per stall budget (a short budget polls faster than PROCRUN_BEAT_POLL_MS). }
+  PROCRUN_BEAT_PER_BUDGET = 4;
+
 type
   { JOBOBJECT_BASIC_PROCESS_ID_LIST with room for PROCRUN_KILL_MAX_HELD ids. }
   TJobPidList = record
@@ -247,6 +267,44 @@ var
     TREE. Guarded by GJobsLock; both live for the unit's lifetime. }
   GJobsLock: TObject = nil;
   GJobs    : TDictionary<THandle, THandle> = nil;
+
+  { 1.40: the newest heartbeat a running RunCore received, and whose it is (0 = none). Guarded by GJobsLock. }
+  GBeatText: string = '';
+  GBeatPid : DWORD  = 0;
+
+procedure PublishBeat(APid: DWORD; const AText: string);
+begin
+  TMonitor.Enter(GJobsLock);
+  try
+    GBeatText:= AText;
+    GBeatPid := APid;
+  finally
+    TMonitor.Exit(GJobsLock);
+  end;
+end;
+
+{ The run of APid is over: its text goes, unless a newer run already replaced it. }
+procedure WithdrawBeat(APid: DWORD);
+begin
+  TMonitor.Enter(GJobsLock);
+  try
+    if GBeatPid <> APid then Exit;
+    GBeatText:= '';
+    GBeatPid := 0;
+  finally
+    TMonitor.Exit(GJobsLock);
+  end;
+end;
+
+function ProcRunBeatText: string;
+begin
+  TMonitor.Enter(GJobsLock);
+  try
+    Result:= GBeatText;
+  finally
+    TMonitor.Exit(GJobsLock);
+  end;
+end;
 
 procedure RegisterJob(AProcess, AJob: THandle);
 begin
@@ -410,10 +468,11 @@ begin
 end;
 
 { The line RunCore appends to AOutput on a timeout. }
-function TimedOutText(ATimeoutMs: Integer): string;
+function TimedOutText(ATimeoutMs: Integer; ABeatSeen: Boolean): string;
 begin
-  Result:= Format('drag-lint plugin: timed out after %d s without progress (no output, no CPU) -- hung; the child process tree was killed',
-                  [(ATimeoutMs + MSecsPerSec div 2) div MSecsPerSec]);
+  Result:= Format('drag-lint plugin: timed out after %d s without progress (%s) -- hung; the child process tree was killed',
+                  [(ATimeoutMs + MSecsPerSec div 2) div MSecsPerSec,
+                   if ABeatSeen then 'its heartbeat status did not change' else 'no output, no CPU']);
 end;
 
 { The line RunCore appends to AOutput on a cancel. }
@@ -462,7 +521,8 @@ end;
   event are checked on every pass. Since fix/late-results (owner ruling
   2026-11-01) the budget is a STALL budget: every chunk read and every
   PROCRUN_CPU_PROGRESS_100NS of tree CPU moves the deadline, so only a child
-  with neither output nor CPU for ATimeoutMs is killed; an idle pass parks on the child's handle
+  with neither output nor CPU for ATimeoutMs is killed -- 1.40: for a child with a
+  heartbeat, neither output nor a status change (CheckBeat); an idle pass parks on the child's handle
   for PROCRUN_POLL_MS. On expiry or cancel the whole job -- the child and
   everything it spawned -- is terminated.
 
@@ -492,18 +552,44 @@ var
   CpuMark   : Int64              ; { tree CPU time at the last progress mark }
   Rc        : Integer            ;
   Slice     : DWORD              ;
+  BeatSeen  : Boolean            ; { 1.40: the child answered a heartbeat at least once }
+  BeatSeq   : Int64              ; { the status counter of its last answer }
+  NextBeat  : UInt64             ; { when to ask again }
 
-  { Progress (output read, or CPU burnt) moves the stall deadline. Once a
-    stand-down has begun the deadline is the end of its grace and never moves. }
+  { Progress (output read, CPU burnt, or -- once the child has a heartbeat -- its status changed) moves
+    the stall deadline. Once a stand-down has begun the deadline is the end of its grace and never moves. }
   procedure NoteProgress;
   begin
     if (ATimeoutMs > 0) and (StandDown = nil) then Deadline:= GetTickCount64 + UInt64(ATimeoutMs);
   end;
 
+  { 1.40 heartbeat (owner design 2026-11-01): every PROCRUN_BEAT_POLL_MS ask the child for its status. A
+    CHANGED status (seq) is progress; an unchanged one, or no answer from a child that answered before, is
+    not -- so a frozen engine is killed when the stall budget runs out however busy its CPU is. }
+  procedure CheckBeat;
+  var
+    B: TEngineBeat;
+  begin
+    if GetTickCount64 < NextBeat then Exit;
+    { At least four asks per stall budget: a change is only SEEN when asked, so a poll as long as the
+      budget would race the deadline (a short-budget job killed while its status moves). }
+    NextBeat:= GetTickCount64 + UInt64(if (ATimeoutMs > 0) and (ATimeoutMs div PROCRUN_BEAT_PER_BUDGET < PROCRUN_BEAT_POLL_MS)
+                                       then ATimeoutMs div PROCRUN_BEAT_PER_BUDGET else PROCRUN_BEAT_POLL_MS);
+    if not RequestEngineBeat(PI.dwProcessId, PROCRUN_BEAT_CONNECT_MS, B) then Exit;
+    if (not BeatSeen) or (B.Seq <> BeatSeq) then NoteProgress;
+    BeatSeen:= True;
+    BeatSeq := B.Seq;
+    PublishBeat(PI.dwProcessId, BeatDisplayText(B));
+  end;
+
+  { CPU is progress only for a child WITHOUT a heartbeat (an older engine, a wrapper, a non-engine exe):
+    a child that reports its status is alive exactly when the status moves. }
   procedure CheckCpu;
   var
     Cpu: Int64;
   begin
+    CheckBeat;
+    if BeatSeen then Exit;
     Cpu:= TreeCpu100ns(PI.hProcess, Job);
     if Cpu - CpuMark < PROCRUN_CPU_PROGRESS_100NS then Exit;
     CpuMark:= Cpu;
@@ -585,6 +671,9 @@ begin
     CloseHandle(WritePipe);
     Deadline:= if ATimeoutMs > 0 then GetTickCount64 + UInt64(ATimeoutMs) else High(UInt64);
     CpuMark := 0;
+    BeatSeen:= False;
+    BeatSeq := 0;
+    NextBeat:= 0;
     SB:= TStringBuilder.Create;
     try
       repeat
@@ -607,6 +696,7 @@ begin
         if not ReadFile(ReadPipe, Buf[0], Avail, BytesRead, nil) then Break;
         if BytesRead = 0 then Break;
         NoteProgress;
+        CheckBeat; { a chatty child is alive by its output; this only keeps the UI's progress text fresh }
         Buf[BytesRead]:= #0;
         if Assigned(AOnChunk) then AOnChunk(AnsiString(Buf))
         else SB.Append(string(AnsiString(Buf)));
@@ -629,7 +719,7 @@ begin
       begin
         KillTree(PI.hProcess, Job, PROCRUN_KILL_WAIT_MS);
         if (SB.Length > 0) and (SB.Chars[SB.Length - 1] <> #10) then SB.AppendLine;
-        if Stop = PROCRUN_TIMED_OUT_EXIT_CODE then SB.Append(TimedOutText(ATimeoutMs))
+        if Stop = PROCRUN_TIMED_OUT_EXIT_CODE then SB.Append(TimedOutText(ATimeoutMs, BeatSeen))
         else if StandDown <> nil then SB.Append(StandDownKilledText(AStandDownGraceMs))
         else SB.Append(CancelledText);
         Result:= Stop;
@@ -648,6 +738,7 @@ begin
     if AHandleOut = nil then CloseHandle(PI.hProcess);
     CloseHandle(PI.hThread );
   finally
+    if PI.dwProcessId <> 0 then WithdrawBeat(PI.dwProcessId);
     { the child is gone (exited or killed), so its pipe is: the request has returned or fails now }
     if StandDown <> nil then
     begin
@@ -748,8 +839,10 @@ begin
   if not Result then Exit;
   { The partial line at EOF, then the notice a stopped run ends with. }
   if LineBuffer <> '' then AOnLine(string(LineBuffer));
-  if AExitCode = PROCRUN_TIMED_OUT_EXIT_CODE then AOnLine(TimedOutText(ATimeoutMs))
-  else if AExitCode = PROCRUN_CANCELLED_EXIT_CODE then AOnLine(CancelledText);
+  { With a chunk sink RunCore's AOutput holds nothing but that notice (1.40: it alone knows whether the
+    child had a heartbeat, which the timeout notice names). }
+  if (AExitCode = PROCRUN_TIMED_OUT_EXIT_CODE) or (AExitCode = PROCRUN_CANCELLED_EXIT_CODE) then
+    AOnLine(Trim(Unused));
 end;
 
 initialization

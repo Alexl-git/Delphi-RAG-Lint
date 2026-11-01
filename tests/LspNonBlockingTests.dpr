@@ -428,6 +428,44 @@ begin
   end;
 end;
 
+{ 1.40 heartbeat (owner design 2026-11-01): once the engine answers a heartbeat,
+  its STATUS changing is progress and nothing else is. An engine silent on stdio
+  whose status keeps moving is slow, not stuck; one that keeps answering with a
+  frozen status is stuck. NoteEngineBeat is what the ticker calls with each
+  answer of the heartbeat pipe; a bare-pipe rig has no pid, so the test calls it. }
+procedure TestHeartbeatStuck;
+var
+  Rig: TRig;
+  Seq: Int64;
+  T0 : UInt64;
+begin
+  Rig:= OpenRig;
+  try
+    Rig.Client.StuckAfterMs:= 600;
+    Rig.Client.RequestAsync('slow', nil, 60000,
+      procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue) begin end);
+    Seq:= 0;
+    T0:= GetTickCount64;
+    while GetTickCount64 - T0 < 1500 do
+    begin
+      Inc(Seq);
+      Rig.Client.NoteEngineBeat(Seq, 'index: parse ' + IntToStr(Seq));
+      Sleep(150);
+    end;
+    Check('HB1 an engine silent on stdio for 2.5x StuckAfterMs whose status ADVANCES is not stuck', not Rig.Client.IsStuck);
+    Check('HB2 EngineBeatText shows its last status', Rig.Client.EngineBeatText = 'index: parse ' + IntToStr(Seq), Rig.Client.EngineBeatText);
+    T0:= GetTickCount64;
+    while GetTickCount64 - T0 < 1000 do
+    begin
+      Rig.Client.NoteEngineBeat(Seq, 'index: parse ' + IntToStr(Seq)); { answers, but the status is frozen }
+      Sleep(150);
+    end;
+    Check('HB3 an engine that keeps answering with a FROZEN status is stuck after StuckAfterMs', Rig.Client.IsStuck);
+  finally
+    CloseRig(Rig);
+  end;
+end;
+
 { fix/late-results (owner ruling 2026-11-01): an answer that arrives after the
   budget is DELIVERED, after the lrsTimeout notice -- never dropped. A request
   superseded (CancelRequest) after its notice still never sees its answer. }
@@ -821,6 +859,7 @@ begin
       TestAsyncReply;
       TestSupersededDropped;
       TestTimeoutBusyStuck;
+      TestHeartbeatStuck;
       TestLateResultDelivered;
       TestBackgroundNotBusy;
       TestNotifyWhenEngineStopsReading;

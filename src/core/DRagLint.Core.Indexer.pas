@@ -572,6 +572,7 @@ uses
   , DRagLint.Diagnostics.ParseCache { v(ADP2 T3): TAstParseCache.Clear -- bound the per-file tree cache }
   , DRagLint.Index.IncludeUses     { N-06: uses clauses written inside a depth-0 include }
   , DRagLint.Index.DataFlowFacts   { taint T1: the per-routine data_flows rows, written beside symbol_facts }
+  , DRagLint.Core.ControlChannel   { 1.40 heartbeat: BeatProgress per indexed file }
   ;
 
 constructor TIndexer.Create(const AStore: ISymbolStore; const AParsers: TArray<IParser>; const ADocConfig: TDocConfig);
@@ -925,6 +926,8 @@ begin
     reaches a human watching the run without entering any suite's captured
     stdout. }
   Writeln(Format('  %s -> %d symbols, %d refs, %d errors', [APath, ASymbols, ARefs, AErrors]));
+  { 1.40 heartbeat: one more file, for every walk shape (a project walk has no total). }
+  BeatProgress(-1, if FProgressTotal > 0 then FProgressTotal else -1);
 
   { No denominator means no counter, and that is not an oversight. Only the
     FOLDER walk (IndexFolder -- i.e. smFolderTree/smLibrary sections, and an

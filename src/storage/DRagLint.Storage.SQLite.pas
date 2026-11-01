@@ -3648,6 +3648,7 @@ uses
   , DRagLint.Core.ForwardStub   { C2.5: FoldForwardStubs -- a forward stub is not a class }
   , DRagLint.Index.DispatchResolver { 2026-10-26: ResolveDispatch }
   , FireDAC.Stan.Error          { F2: EFDDBEngineException -- ExecAdditiveDDL's one tolerated failure }
+  , DRagLint.Core.ControlChannel { 1.40 heartbeat: BeatStep / BeatProgress from the resolve pass }
   ;
 
 var
@@ -3691,6 +3692,7 @@ const
   diagnostic line. Losing the line is the strictly better failure. }
 procedure ResolveLog(const AText: string);
 begin
+  BeatProgress; { 1.40 heartbeat: every resolve line is a step done }
   try
     Writeln(ErrOutput, 'resolve: ' + AText);
     Flush(ErrOutput);
@@ -14993,9 +14995,12 @@ procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymb
   prepared FQInsertCallEdge; its AToken is unused (call_edges stores no file id),
   so a default token is passed. The whole loop runs in one transaction: thousands
   of refs at per-row autocommit would be pathologically slow. }
+const
+  RESOLVE_BEAT_EVERY = 1024; { refs per heartbeat report: cheap, and well under a second apart }
 var
   Resolver  : TCallResolver ;
   Q         : TFDQuery      ;
+  BeatRefs  : Int64         ; { refs streamed this pass, for the heartbeat }
   UpdRcv    : TFDQuery      ; { v20: prepared refs.receiver_text writer }
   QIsRoutine: TFDQuery      ; { v20b: is the resolved target a routine kind? }
   QTwin     : TFDQuery      ; { v20b: is there a co-located real 'call' ref?  }
@@ -15341,6 +15346,8 @@ begin
       else
         ClearCallEdges; // rebuild every edge each run (like ResolveAncestry's DELETE)
       SkippedStaleRcv:= 0;
+      BeatStep('resolve calls');
+      BeatRefs:= 0;
       Q.Open;
       while not Q.Eof do
       begin
@@ -15361,6 +15368,8 @@ begin
         if not Q.FieldByName('receiver_text').IsNull then
           Ref.ReceiverText:= Q.FieldByName('receiver_text').AsString;
 
+        Inc(BeatRefs);
+        if BeatRefs mod RESOLVE_BEAT_EVERY = 0 then BeatProgress; { 1.40 heartbeat: the 37-minute pass is not silent }
         if Profiled then TMark:= TStopwatch.GetTimeStamp;
         UnitValuesBefore:= Resolver.UnitValueBound;
         Edge:= Resolver.ResolveOne(Ref);
