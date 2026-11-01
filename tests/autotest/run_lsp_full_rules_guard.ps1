@@ -66,12 +66,12 @@ function Frame($obj) {
   $j = $obj | ConvertTo-Json -Depth 20 -Compress
   return "Content-Length: $([Text.Encoding]::UTF8.GetByteCount($j))`r`n`r`n$j"
 }
-function RunLsp([string]$Engine, [string]$PasFile, [string[]]$Flags, [string]$Tag) {
+function RunLsp([string]$Engine, [string]$PasFile, [string[]]$Flags, [string]$Tag, [int]$Saves = 1) {
   $uri = 'file:///' + ($PasFile -replace '\\', '/')
   $msgs = @(
     (Frame @{ jsonrpc='2.0'; id=1; method='initialize'; params=@{ processId=$null; rootUri=$null; capabilities=@{} } })
     (Frame @{ jsonrpc='2.0'; method='initialized'; params=@{} })
-    (Frame @{ jsonrpc='2.0'; method='textDocument/didSave'; params=@{ textDocument=@{ uri=$uri } } })
+    (1..$Saves | ForEach-Object { Frame @{ jsonrpc='2.0'; method='textDocument/didSave'; params=@{ textDocument=@{ uri=$uri } } } })
     (Frame @{ jsonrpc='2.0'; id=99; method='shutdown'; params=@{} })
     (Frame @{ jsonrpc='2.0'; method='exit'; params=@{} })
   )
@@ -186,6 +186,22 @@ function RunStub([string]$Mode, [string]$Tag) {
   $r.Seconds = $sw.Elapsed.TotalSeconds
   return $r
 }
+function RunStubMode([string]$Mode, [string]$Tag, [int]$Saves = 1) {
+  $marker = Join-Path $stubDir "$Tag.marker"
+  $env:DRAGLINT_FULLRULES_CHILD_EXE = $stubExe
+  $env:STUB_MODE = $Mode
+  $env:STUB_MARKER = $marker
+  try {
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $r = RunLsp $Exe $DirtyF @('--full-rules') $Tag $Saves
+    $sw.Stop()
+  } finally {
+    Remove-Item Env:DRAGLINT_FULLRULES_CHILD_EXE, Env:STUB_MODE, Env:STUB_MARKER, Env:STUB_JSON_FILE, Env:STUB_SLEEP_MS -ErrorAction SilentlyContinue
+  }
+  $r.Marker  = Test-Path $marker
+  $r.Seconds = $sw.Elapsed.TotalSeconds
+  return $r
+}
 if (-not $stubOk) {
   # the stub is part of the guard, not of the engine: no compiler or a compile failure is a FAIL, never a SKIP
   Check 'T1 the stub child compiled (csc.exe found and FullRulesChildStub.cs built)' $false ('csc=' + $csc)
@@ -212,6 +228,32 @@ if (-not $stubOk) {
     Check 'T1 timeout: a publishDiagnostics frame is still sent (subset)' ($to.Out -match '"diagnostics":\[') ''
     Check 'T1 timeout: no full-rules-only rule id is published' (($to.Codes -notcontains 'missing-inherited-ctor') -and ($to.Codes -notcontains 'zz-stub-rule')) ''
     Check 'T1 timeout: the timed-out child was terminated (no orphan stub)' (-not (Get-Process -Name FullRulesChildStub -ErrorAction SilentlyContinue)) ''
+
+    # ---- 1.40 lsp lane: the child budget is a STALL budget (owner ruling 2026-11-01) ----
+    # burnemit = a child that burns CPU for longer than the whole budget and THEN answers: working, so it must live and its findings arrive.
+    $env:STUB_SLEEP_MS = [string](($budgetS + 4) * 1000)
+    $env:STUB_JSON_FILE = $emitF
+    $sl = RunStubMode 'burnemit' 'stub-slow'
+    Check 'L1 slow-but-working child (CPU busy for budget+4 s): findings ARRIVE (not killed at the budget)' ($sl.Codes -contains 'zz-stub-rule') ("{0:N1} s" -f $sl.Seconds)
+    Check 'L1 slow-but-working child: no fallback to the subset' ($sl.Err -notmatch 'full-rules fallback to the subset') ''
+    Check 'L1 slow-but-working child: it really ran longer than the old wall-clock budget' ($sl.Seconds -gt $budgetS) ("{0:N1} s > {1} s" -f $sl.Seconds, $budgetS)
+    # supersede: the first save's child burns; a second save of the SAME file is already waiting -> the first is discarded (killed), the second answers at once.
+    $env:STUB_SLEEP_MS = '30000'   # BOTH children burn 30 s; only the first is cut short, so the run takes ~31 s, not 60+ s
+    $env:STUB_JSON_FILE = $emitF
+    $sp = RunStubMode 'burnemit' 'stub-supersede' 2
+    Check 'S1 superseded child: stderr says the first save was superseded' ($sp.Err -match 'full-rules superseded') ''
+    Check 'S1 superseded child: the newer save is not held for the first child (killed, not waited out)' ($sp.Seconds -lt 50) ("{0:N1} s < 50 s (two un-superseded 30 s burns take 60+ s)" -f $sp.Seconds)
+    Check 'S1 superseded child: the newer save''s findings are published' ($sp.Codes -contains 'zz-stub-rule') ''
+    Check 'S1 superseded child: no orphan stub' (-not (Get-Process -Name FullRulesChildStub -ErrorAction SilentlyContinue)) ''
+    # silent child (no output, no CPU) is still killed after the budget: covered by T1 timeout above.
+    # encoding: the child is asked for UTF-8 and the stub answers a non-ASCII rule id only then.
+    $utfF = Join-Path $stubDir 'utf8.json'
+    [IO.File]::WriteAllText($utfF, ($arr -replace 'missing-inherited-ctor', 'zz-stub-@@E@@'), [Text.Encoding]::ASCII)
+    $env:STUB_JSON_FILE = $utfF
+    $u8 = RunStubMode 'emit' 'stub-utf8'
+    $e9 = [string][char]0xE9
+    Check 'E1 non-ASCII finding text round-trips (child run with --output-encoding utf8)' ($u8.Out -match ('zz-stub-(' + $e9 + '|\\u00e9)')) ''
+    Check 'E1 CONTROL: without utf8 the stub would have answered ''?'' (the flag is what makes the difference)' ($u8.Out -notmatch 'zz-stub-\?') ''
 
     $bj = RunStub 'badjson' 'stub-badjson'
     Check 'T1 invalid JSON: the child ran' $bj.Marker ''

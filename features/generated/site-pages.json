@@ -456,8 +456,8 @@
     "version": "1.38.0-alpha"
   },
   "features/lsp-full-rules.md": {
-    "hash": "e95d0db9e9e7b306c3d85f7f4f84a2babc2d290813ff1220d8cfd0a54d6af9aa",
-    "version": "1.38.0-alpha"
+    "hash": "7ff38992810904ad3d4aa13775ac7ba2e8ed44551c766d2896f22f263a8fa5b5",
+    "version": "1.39.2-alpha"
   },
   "features/lsp-protocol-extensions.md": {
     "hash": "96413311fb96a5c019ee7ce34e632e87bd2b9f7a43daf46d89e78a99d1e475be",

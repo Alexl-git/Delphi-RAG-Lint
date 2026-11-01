@@ -16,7 +16,20 @@ static class FullRulesChildStub {
     if (mode == "sleep") { Thread.Sleep(60000); return 0; }
     if (mode == "badjson") { Console.Out.Write("this is not json"); return 0; }
     if (mode == "slowemit") { Thread.Sleep(Int32.Parse(Environment.GetEnvironmentVariable("STUB_SLEEP_MS"))); mode = "emit"; }
-    if (mode == "emit") { Console.Out.Write(File.ReadAllText(Environment.GetEnvironmentVariable("STUB_JSON_FILE"))); return 1; }
+    // 1.40 lsp lane: burnemit = a SLOW but WORKING child (burns CPU STUB_SLEEP_MS, then emits); a stall budget must not kill it.
+    if (mode == "burnemit") {
+      var sw = System.Diagnostics.Stopwatch.StartNew(); long x = 0;
+      while (sw.ElapsedMilliseconds < Int32.Parse(Environment.GetEnvironmentVariable("STUB_SLEEP_MS"))) x++;
+      mode = "emit";
+    }
+    if (mode == "emit") {
+      string json = File.ReadAllText(Environment.GetEnvironmentVariable("STUB_JSON_FILE"));
+      // @@E@@ = a non-ASCII char (e-acute): written as UTF-8 only when the caller asked --output-encoding utf8, else '?' like the real engine's ascii default
+      bool utf8 = String.Join(" ", Environment.GetCommandLineArgs()).Contains("--output-encoding utf8");
+      byte[] bytes = new System.Text.UTF8Encoding(false).GetBytes(json.Replace("@@E@@", utf8 ? "\u00e9" : "?"));
+      using (var so = Console.OpenStandardOutput()) so.Write(bytes, 0, bytes.Length);
+      return 1;
+    }
     return 3;
   }
 }
