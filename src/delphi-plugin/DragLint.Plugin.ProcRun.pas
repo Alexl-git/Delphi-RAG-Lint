@@ -47,7 +47,8 @@ const
   PROCRUN_KILL_WAIT_MS = 5000;
 
   /// <summary>What RunCaptureStdout and RunCaptureStdoutCancellable return
-  /// when ATimeoutMs elapsed while the child was still running (B-19). By then
+  /// when the child made no progress for ATimeoutMs (B-19; a stall budget since
+  /// fix/late-results, not a wall clock). By then
   /// the child's whole process tree has been killed and AOutput ends with a
   /// 'timed out after N s' line. Negative like a spawn failure, so a caller
   /// testing &lt; 0 already treats it as "no result"; compare with this
@@ -70,9 +71,11 @@ type
 /// <param name="ACmdLine">Full command line, as CreateProcessW takes it.</param>
 /// <param name="AOutput">Receives everything the child wrote to stdout and
 /// stderr, interleaved.</param>
-/// <param name="ATimeoutMs">Deadline for the WHOLE run, in milliseconds,
-/// enforced while the output is being read: on expiry the child's process tree
-/// is killed. &lt;=0 = no deadline.</param>
+/// <param name="ATimeoutMs">STALL budget, in milliseconds (owner ruling
+/// 2026-11-01): the child's process tree is killed only after this long with NO
+/// progress -- no output read and no CPU burnt by the tree (the hung shape). A
+/// child that keeps working runs to its own end however long it takes; a slow
+/// machine never loses a result to a wall clock. &lt;=0 = no budget.</param>
 /// <param name="ACancel">Optional manual-reset event handle (0 = none). Once it
 /// is signalled the child's process tree is killed and the call returns; if it
 /// is signalled before the call, nothing is spawned. The caller owns it.</param>
@@ -98,8 +101,8 @@ function RunCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutM
 /// <param name="ACmdLine">Full command line, as CreateProcessW takes it.</param>
 /// <param name="AOutput">Receives stdout and stderr, interleaved. MEANINGLESS
 /// on a run that was superseded -- discard it rather than parse it.</param>
-/// <param name="ATimeoutMs">Deadline for the whole run, as for RunCaptureStdout;
-/// &lt;=0 = no deadline.</param>
+/// <param name="ATimeoutMs">Stall budget, as for RunCaptureStdout;
+/// &lt;=0 = no budget.</param>
 /// <param name="APriority">Priority class for the child: 0 to inherit the
 /// parent's, BELOW_NORMAL_PRIORITY_CLASS for background work.</param>
 /// <param name="AHandle">Receives the process handle as soon as the child
@@ -157,9 +160,9 @@ procedure CloseProcessHandle(var AHandle: THandle);
 /// <param name="AExitCode">The child exit code; PROCRUN_TIMED_OUT_EXIT_CODE
 /// when the deadline expired; PROCRUN_CANCELLED_EXIT_CODE when ACancel was
 /// signalled; -1 if the child could not be started.</param>
-/// <param name="ATimeoutMs">Deadline for the WHOLE run, as for
-/// RunCaptureStdout: on expiry the child's process tree is killed. &lt;=0 = no
-/// deadline. Required, so every caller decides (1.31.6: it had none).</param>
+/// <param name="ATimeoutMs">Stall budget, as for RunCaptureStdout: the tree is
+/// killed only after this long without output or CPU. &lt;=0 = no budget.
+/// Required, so every caller decides (1.31.6: it had none).</param>
 /// <param name="ACancel">Optional cancel event, as for RunCaptureStdout.</param>
 /// <returns>True if the child ran (including a run that timed out or was
 /// cancelled); False if it was not started -- a spawn failure or a cancel that
@@ -204,6 +207,13 @@ const
     WaitForMultipleObjects ceiling (MAXIMUM_WAIT_OBJECTS). An engine run's tree
     is a handful of processes. }
   PROCRUN_KILL_MAX_HELD = MAXIMUM_WAIT_OBJECTS;
+
+  { CPU time (100 ns units) the child's tree must burn since the last progress
+    mark to count as progress: 50 ms. Windows charges CPU in clock ticks, so a
+    sleeping child (ping between echoes) is occasionally charged a tick; a
+    threshold keeps that noise from reading as work, while a working engine --
+    even starved by other programs -- crosses it within seconds. }
+  PROCRUN_CPU_PROGRESS_100NS = 50 * 10000;
 
 type
   { JOBOBJECT_BASIC_PROCESS_ID_LIST with room for PROCRUN_KILL_MAX_HELD ids. }
@@ -285,6 +295,20 @@ begin
   FillChar(Info, SizeOf(Info), 0);
   if not QueryInformationJobObject(AJob, JobObjectBasicAccountingInformation, @Info, SizeOf(Info), nil) then Exit(True);
   Result:= Info.ActiveProcesses = 0;
+end;
+
+{ CPU time (user + kernel, 100 ns units) burnt so far by AJob's whole tree --
+  terminated members included -- or, with no job, by AProcess alone. }
+function TreeCpu100ns(AProcess, AJob: THandle): Int64;
+var
+  Info                               : TJobAccounting;
+  CreateT, ExitT, KernelT, UserT     : TFileTime     ;
+begin
+  if (AJob <> 0) and QueryInformationJobObject(AJob, JobObjectBasicAccountingInformation, @Info, SizeOf(Info), nil) then
+    Exit(Info.TotalUserTime + Info.TotalKernelTime);
+  if not GetProcessTimes(AProcess, CreateT, ExitT, KernelT, UserT) then Exit(0);
+  Result:= Int64((UInt64(UserT.dwHighDateTime) shl 32) or UserT.dwLowDateTime) +
+           Int64((UInt64(KernelT.dwHighDateTime) shl 32) or KernelT.dwLowDateTime);
 end;
 
 { Milliseconds left until ADeadline (High(UInt64) = none -> INFINITE). }
@@ -388,7 +412,7 @@ end;
 { The line RunCore appends to AOutput on a timeout. }
 function TimedOutText(ATimeoutMs: Integer): string;
 begin
-  Result:= Format('drag-lint plugin: timed out after %d s; the child process tree was killed',
+  Result:= Format('drag-lint plugin: timed out after %d s without progress (no output, no CPU) -- hung; the child process tree was killed',
                   [(ATimeoutMs + MSecsPerSec div 2) div MSecsPerSec]);
 end;
 
@@ -433,9 +457,12 @@ end;
                        KillProcess on it kills the tree.
   AOnChunk  <> nil  -> each chunk read goes there instead of into AOutput.
 
-  THE DEADLINE COVERS THE WHOLE RUN (B-19), and so does ACancel (1.31.6): the
+  THE BUDGET COVERS THE WHOLE RUN (B-19), and so does ACancel (1.31.6): the
   pipe is peeked, read only when it holds data, and the clock and the cancel
-  event are checked on every pass; an idle pass parks on the child's handle
+  event are checked on every pass. Since fix/late-results (owner ruling
+  2026-11-01) the budget is a STALL budget: every chunk read and every
+  PROCRUN_CPU_PROGRESS_100NS of tree CPU moves the deadline, so only a child
+  with neither output nor CPU for ATimeoutMs is killed; an idle pass parks on the child's handle
   for PROCRUN_POLL_MS. On expiry or cancel the whole job -- the child and
   everything it spawned -- is terminated.
 
@@ -462,6 +489,26 @@ var
   Stop      : Integer            ; { 0, PROCRUN_TIMED_OUT_EXIT_CODE or PROCRUN_CANCELLED_EXIT_CODE }
   Registered: Boolean            ;
   StandDown : TThread            ; { the stand-down request in flight; nil = none asked }
+  CpuMark   : Int64              ; { tree CPU time at the last progress mark }
+  Rc        : Integer            ;
+  Slice     : DWORD              ;
+
+  { Progress (output read, or CPU burnt) moves the stall deadline. Once a
+    stand-down has begun the deadline is the end of its grace and never moves. }
+  procedure NoteProgress;
+  begin
+    if (ATimeoutMs > 0) and (StandDown = nil) then Deadline:= GetTickCount64 + UInt64(ATimeoutMs);
+  end;
+
+  procedure CheckCpu;
+  var
+    Cpu: Int64;
+  begin
+    Cpu:= TreeCpu100ns(PI.hProcess, Job);
+    if Cpu - CpuMark < PROCRUN_CPU_PROGRESS_100NS then Exit;
+    CpuMark:= Cpu;
+    NoteProgress;
+  end;
 
   { A graceful cancel (AStandDownGraceMs > 0): the first cancel starts the stand-down and moves the
     deadline to the end of the grace; from then the cancel is ignored and the deadline means "kill". }
@@ -537,6 +584,7 @@ begin
     ResumeThread(PI.hThread);
     CloseHandle(WritePipe);
     Deadline:= if ATimeoutMs > 0 then GetTickCount64 + UInt64(ATimeoutMs) else High(UInt64);
+    CpuMark := 0;
     SB:= TStringBuilder.Create;
     try
       repeat
@@ -549,25 +597,34 @@ begin
         begin
           { Idle. Once the child has exited its handle is signalled, and the
             slice becomes a plain sleep while a grandchild still holding the
-            pipe finishes. }
+            pipe finishes. A silent child that burns CPU is working. }
           if WaitForSingleObject(PI.hProcess, PROCRUN_POLL_MS) = WAIT_OBJECT_0 then Sleep(PROCRUN_POLL_MS);
+          CheckCpu;
           Continue;
         end;
         if Avail > SizeOf(Buf) - 1 then Avail:= SizeOf(Buf) - 1;
         BytesRead:= 0;
         if not ReadFile(ReadPipe, Buf[0], Avail, BytesRead, nil) then Break;
         if BytesRead = 0 then Break;
+        NoteProgress;
         Buf[BytesRead]:= #0;
         if Assigned(AOnChunk) then AOnChunk(AnsiString(Buf))
         else SB.Append(string(AnsiString(Buf)));
       until False;
       { EOF is normally the exit, but a child can close its stdout and keep
-        running: the exit is bounded by what is left of the deadline, and by
-        the cancel. }
-      if Stop = 0 then Stop:= Reason(WaitExitOrCancel(PI.hProcess, if StandDown = nil then ACancel else 0, MsLeft(Deadline)));
-      { a stand-down that began in the wait just above: the grace runs from here }
-      if (Stop = 0) and (StandDown <> nil) and (WaitForSingleObject(PI.hProcess, 0) <> WAIT_OBJECT_0) then
-        Stop:= Reason(WaitExitOrCancel(PI.hProcess, 0, MsLeft(Deadline)));
+        running: the exit is bounded by the stall budget (CPU still counts as
+        progress), by the cancel, and -- once one began -- by the stand-down
+        grace. Waited in slices so the CPU can be looked at. }
+      while Stop = 0 do
+      begin
+        CheckCpu;
+        Slice:= MsLeft(Deadline);
+        if Slice > PROCRUN_POLL_MS then Slice:= PROCRUN_POLL_MS;
+        Rc:= WaitExitOrCancel(PI.hProcess, if StandDown = nil then ACancel else 0, Slice);
+        if Rc = 0 then Break; { exited }
+        if (Rc = PROCRUN_TIMED_OUT_EXIT_CODE) and (MsLeft(Deadline) > 0) then Continue; { only the slice ended }
+        Stop:= Reason(Rc);
+      end;
       if Stop <> 0 then
       begin
         KillTree(PI.hProcess, Job, PROCRUN_KILL_WAIT_MS);

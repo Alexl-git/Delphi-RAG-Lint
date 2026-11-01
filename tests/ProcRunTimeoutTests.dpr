@@ -17,13 +17,16 @@ program ProcRunTimeoutTests;
       gone -- cmd.exe AND its ping.exe grandchild. A kill of the direct
       child alone leaves the grandchild holding the pipe's write end, which
       is exactly the parked-in-ReadFile shape this bug is about.
-    4 a CHATTY child (ping prints every second) past its deadline: same
-      bound. A read loop that only checks the clock when the pipe is idle
-      would never time out here.
-    5 ONE sleeping child (ping -n 4) under a 1 s deadline is killed, output
-      kept; the same command under a 30 s deadline exits 0 (positive control).
+    4 a CHATTY child (ping prints every second) past its budget is NOT
+      killed (owner ruling 2026-11-01): output is progress, so it runs to its
+      own exit 0 with every line kept.
+    5 ONE silent sleeping child (cmd /c ping -n 4 >nul) under a 1 s budget is
+      killed; the same command under a 30 s budget exits 0 (positive control).
     6 an 8 MB burst (cmd /c type) arrives whole and is not throttled by the
       idle poll slice of the bounded read loop.
+    7 a SILENT but CPU-busy child past its budget is NOT killed: CPU time is
+      progress too. Only a child with neither output nor CPU for the whole
+      budget is hung.
 
   The grandchild is found by parent PID (Toolhelp) while the run is still in
   progress and held open by handle, so its PID cannot be reused under the
@@ -51,6 +54,8 @@ const
   CBigLineLen       = 100;
   CBigRunMs         = 120000;
   CBigBoundMs       = 8000;     { at 100% CPU: 4 KB pipe 15.4 s, 1 MB pipe 3.4 s }
+  CChattyPings      = 5;        { ~4 s of output, a line about every second }
+  CBusySeconds      = 5;        { a silent CPU spin well past the 2 s budget }
 
 var
   GPass, GFail: Integer;
@@ -94,6 +99,19 @@ begin
       until not Process32NextW(Snap, Entry);
   finally
     CloseHandle(Snap);
+  end;
+end;
+
+function CountOf(const ANeedle, AHay: string): Integer;
+var
+  P: Integer;
+begin
+  Result:= 0;
+  P:= Pos(ANeedle, AHay);
+  while P > 0 do
+  begin
+    Inc(Result);
+    P:= Pos(ANeedle, AHay, P + Length(ANeedle));
   end;
 end;
 
@@ -173,25 +191,40 @@ begin
   end;
 end;
 
+{ 4 (owner ruling 2026-11-01, fix/late-results): the budget is a STALL budget,
+  not a wall clock. A child that keeps writing (ping prints a line about every
+  second) runs PAST the 2 s budget to its own end: exit 0, every reply kept, no
+  timeout notice. Before the fix it was killed at 2 s and its result lost. }
 procedure TestChattyChild;
 var
   Outp: string ;
   Rc  : Integer;
-  SW  : TStopwatch;
 begin
-  SW:= TStopwatch.StartNew;
-  Rc:= RunCaptureStdout(Format('"%s" -n 12 127.0.0.1', [SysExe('ping.exe')]), Outp, CTimeoutMs);
-  SW.Stop;
-  Check('4a chatty child returns within timeout + 2 s', SW.ElapsedMilliseconds <= CTimeoutMs + CSlackMs,
-        Format('elapsed=%d ms', [SW.ElapsedMilliseconds]));
-  Check('4b chatty timeout reported distinctly', Rc = CExpectedTimedOut, Format('rc=%d', [Rc]));
-  Check('4c output read before the deadline is kept', Pos('127.0.0.1', Outp) > 0, 'output=' + Outp);
+  Rc:= RunCaptureStdout(Format('"%s" -n %d 127.0.0.1', [SysExe('ping.exe'), CChattyPings]), Outp, CTimeoutMs);
+  Check('4a chatty child runs past the stall budget to its own exit 0', Rc = 0, Format('rc=%d', [Rc]));
+  Check('4b every reply is kept', CountOf('TTL=', Outp) = CChattyPings, 'output=' + Outp);
+  Check('4c no timeout notice', Pos('timed out', Outp) = 0, 'output=' + Outp);
 end;
 
-{ 5: ONE sleeping child under two deadlines. Under CTimeoutMs it is killed and
-  reports the timeout; under CLongTimeoutMs the very same command line ends on
-  its own, exit 0, no timeout notice. The control is what proves 5a-5c come
-  from the deadline and not from a child that cannot run here. }
+{ 7 (fix/late-results): a child that writes NOTHING but is busy on the CPU is
+  working, not hung -- it too runs past the stall budget to its own end. }
+procedure TestBusySilentChild;
+var
+  Outp: string ;
+  Rc  : Integer;
+begin
+  Rc:= RunCaptureStdout(Format('"%s" -NoProfile -NonInteractive -Command "$e=[DateTime]::Now.AddSeconds(%d); while([DateTime]::Now -lt $e){}; exit 7"',
+                               [TPath.Combine(GetEnvironmentVariable('SystemRoot'), 'System32\WindowsPowerShell\v1.0\powershell.exe'), CBusySeconds]),
+                        Outp, CTimeoutMs);
+  Check('7a CPU-busy silent child runs past the stall budget to its own exit code', Rc = 7, Format('rc=%d output=%s', [Rc, Outp]));
+  Check('7b no timeout notice', Pos('timed out', Outp) = 0, 'output=' + Outp);
+end;
+
+{ 5: ONE SILENT sleeping child (no output, no CPU -- the hung shape) under two
+  stall budgets. Under CShortTimeoutMs it is killed and reports the timeout;
+  under CLongTimeoutMs the very same command line ends on its own, exit 0, no
+  timeout notice. The control is what proves 5a-5c come from the budget and
+  not from a child that cannot run here. }
 procedure TestSleeperBothWays;
 var
   Cmd : string ;
@@ -199,14 +232,14 @@ var
   Rc  : Integer;
   SW  : TStopwatch;
 begin
-  Cmd:= Format('"%s" -n %d 127.0.0.1', [SysExe('ping.exe'), CSleeperPings]);
+  Cmd:= Format('"%s" /c "%s" -n %d 127.0.0.1 >nul', [SysExe('cmd.exe'), SysExe('ping.exe'), CSleeperPings]);
   SW:= TStopwatch.StartNew;
   Rc:= RunCaptureStdout(Cmd, Outp, CShortTimeoutMs);
   SW.Stop;
-  Check('5a sleeper past a short deadline returns within it + 2 s',
+  Check('5a silent sleeper past a short stall budget returns within it + 2 s',
         SW.ElapsedMilliseconds <= CShortTimeoutMs + CSlackMs, Format('elapsed=%d ms', [SW.ElapsedMilliseconds]));
   Check('5b sleeper reports the timeout', Rc = CExpectedTimedOut, Format('rc=%d', [Rc]));
-  Check('5c sleeper output read before the kill is kept', Pos('127.0.0.1', Outp) > 0, 'output=' + Outp);  // dl:ok hardcoded-ip-address@8ae1 -- the loopback the test child pings, matched in its own output; not a host to configure
+  Check('5c the notice names the stall', Pos('without progress', Outp) > 0, 'output=' + Outp);
   Rc:= RunCaptureStdout(Cmd, Outp, CLongTimeoutMs);
   Check('5d control: same sleeper under a long deadline exits 0', Rc = 0, Format('rc=%d', [Rc]));
   Check('5e control: no timeout notice', Pos('timed out', Outp) = 0, 'output=' + Outp);
@@ -257,6 +290,7 @@ begin
     TestChattyChild;
     TestSleeperBothWays;
     TestThroughput;
+    TestBusySilentChild;
   except
     on E: Exception do begin Inc(GFail); Writeln('FAIL  exception: ', E.ClassName, ': ', E.Message); end;
   end;
