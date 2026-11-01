@@ -130,7 +130,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**290 rules. 111 have an auto-fix. 246 are on by default.** 197 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**291 rules. 111 have an auto-fix. 247 are on by default.** 198 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -146,13 +146,13 @@ Rules, autofix, suppression markers and project-wide checks.
 | other | 11 | 3 |
 | platform | 10 | 4 |
 | policy | 3 | - |
-| project-wide | 30 | 6 |
+| project-wide | 31 | 6 |
 | refactoring | 20 | 8 |
 | resource-lifetime | 14 | 7 |
 | review-markers | 5 | 2 |
 | security | 22 | 2 |
 | structure | 13 | 7 |
-| **Total** | **290** | **111** |
+| **Total** | **291** | **111** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -172,7 +172,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
 | [Gap-wave lint rules](gap-wave-rules) | `rules` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
-| [Lint rules](rules) | 290 rules, 111 fixable; `rules` |  |
+| [Lint rules](rules) | 291 rules, 111 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |

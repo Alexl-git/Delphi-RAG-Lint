@@ -599,6 +599,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [unsafe-typecast-without-is](rules#unsafe-typecast-without-is) -- bug-patterns, warning, fixable
 * [unsigned-compare-always-true](rules#unsigned-compare-always-true) -- bug-patterns, warning
 * [unused-enum-value](rules#unused-enum-value) -- project-wide, hint
+* [unused-global](rules#unused-global) -- project-wide, hint
 * [unused-local](rules#unused-local) -- dead-code, hint, fixable
 * [unused-loop-variable](rules#unused-loop-variable) -- dead-code, hint
 * [unused-parameter](rules#unused-parameter) -- dead-code, warning
