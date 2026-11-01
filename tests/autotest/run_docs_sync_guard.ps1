@@ -195,6 +195,9 @@ Write-Host '== documented CLI surface vs the real one ==' -ForegroundColor Cyan
 Check 'engine exe present' (Test-Path -LiteralPath $Exe) $Exe
 if (-not (Test-Path -LiteralPath $Exe)) { Write-Host 'DOCS SYNC GUARD: FAIL' -ForegroundColor Red; exit 1 }
 $Exe = (Resolve-Path $Exe).Path
+# <exe-dir>\rules is a gitignored copy of rules\ that goes stale (113 vs 197): sync it first (RULES-STALE-DIR).
+. (Join-Path $PSScriptRoot 'lib\EngineCompanions.ps1')
+[void](Initialize-EngineCompanions -Exe $Exe)
 
 # ---------------------------------------------------------------------------
 # CHECK 1 -- every accepted verb is in --help
@@ -290,7 +293,10 @@ function Test-IsRealVerb([string]$Verb) {
   $p = Start-Process -FilePath $script:Exe -ArgumentList $Verb -WorkingDirectory $script:probeDir `
          -PassThru -WindowStyle Hidden `
          -RedirectStandardInput $script:probeIn -RedirectStandardOutput $o -RedirectStandardError $e
-  if (-not $p.WaitForExit(20000)) { try { $p.Kill($true) } catch { }; $p.WaitForExit() }
+  # 60 s, not 20: under a loaded box (17 lanes) a cold start of a real verb exceeded 20 s and the kill
+  # left no 'unknown command' text, which misclassified a fake token as a REAL verb. A genuinely
+  # hung probe is still killed; only the allowance grew.
+  if (-not $p.WaitForExit(60000)) { try { $p.Kill($true) } catch { }; $p.WaitForExit() }
   $txt = ([System.IO.File]::ReadAllText($o) + [System.IO.File]::ReadAllText($e))
   return ($txt -notmatch 'unknown command')
 }

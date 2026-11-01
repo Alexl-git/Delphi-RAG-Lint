@@ -58,6 +58,8 @@ function HasProp($obj, $name) {
 }
 
 if (-not (Test-Path $Exe))    { Write-Host "FATAL: exe not found: $Exe"    -ForegroundColor Red; exit 2 }
+. (Join-Path $PSScriptRoot 'lib\EngineCompanions.ps1')
+[void](Initialize-EngineCompanions -Exe $Exe)
 if (-not (Test-Path $Source)) { Write-Host "FATAL: source not found: $Source" -ForegroundColor Red; exit 2 }
 if (-not (Test-Path $Model))  { Write-Host "FATAL: source not found: $Model"  -ForegroundColor Red; exit 2 }
 # A fresh worktree has no tests\calls.sqlite (untracked): build it, as run_battery.ps1 would (ki-verify, 0930 #3).
