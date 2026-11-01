@@ -71,7 +71,9 @@ type
     /// so the two rules never double-report the same declaration). Restricted
     /// to the kinds CDD requires doc-comments on: types (class/interface/
     /// record/enum), routines (procedure/function/method/constructor/
-    /// destructor), and properties. Never raises.
+    /// destructor), and properties. A symbol declared in the IMPLEMENTATION
+    /// section (unit-level helper routines and types no other unit can use)
+    /// is not public surface and is skipped. Never raises.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.DocRules.IsDocumentableKind, Format</para>
@@ -340,6 +342,7 @@ begin
         the one unit the per-file verb was asked about. }
       if (AFileId > 0) and (Sym.FileId <> AFileId) then Continue;
       if not IsDocumentableKind(Sym.Kind) then Continue;
+      if SameText(Trim(Sym.Section), 'implementation') then Continue;
       F:= Default(TLintFinding);
       F.RuleId  := 'missing-doc';
       F.Severity:= 'warning';
