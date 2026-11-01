@@ -28,7 +28,14 @@ uses
 const
   /// <summary>The rules whose answer depends only on the project and library
   /// indexes, and so may be served from this cache.</summary>
-  CACHED_RULES: array[0..2] of string = ('circular-uses', 'enum-helper-separate-units', 'duplicate-global-decl');
+  /// <remarks>enum-ordinal-persisted and dfm-event-handler-missing joined on 2026-11-01:
+  /// both scan every file of the index (4.9 s + 2.6 s on ORM3 Micronite2027), and recomputing
+  /// them on every IDE lint pushed COMMON\BASICS.PAS past the live runner's 8 s budget.
+  /// enum-ordinal-persisted also reads the enum's DECLARATION text from disk; a disk edit
+  /// with no reindex is the one case its cached answer can trail (its line numbers come from
+  /// the index either way).</remarks>
+  CACHED_RULES: array[0..4] of string = ('circular-uses', 'enum-helper-separate-units', 'duplicate-global-decl',
+    'enum-ordinal-persisted', 'dfm-event-handler-missing');
 
 type
   /// <summary>What an entry is valid for: the engine build, the project index and

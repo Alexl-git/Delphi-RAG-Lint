@@ -217,6 +217,16 @@ var
   GLintProc    : THandle = 0;
   GLintProcLock: TObject = nil; { created in initialization; TMonitor-locked }
 
+{ Set by TLintDiagnosticProvider when its engine child did NOT finish (timeout,
+  spawn failure, cancel: LintExit < 0). Per THREAD because the provider runs on
+  the runner's anonymous worker thread, which clears it before
+  AggregateDiagnostics and reads it after. A run that did not finish is NO answer,
+  not an answer of zero: publishing its [] as dlpLive took the gutter BY PRESENCE
+  and hid the LSP overlay (ORM3 COMMON\BASICS.PAS, 2026-11-01: 0 shown, 15 real).
+  Pinned by tests\plugin\run_live_lint_failure_keeps_findings.ps1. }
+threadvar
+  GLintRunFailed: Boolean;
+
 /// <summary>Marks the running live lint as superseded: bumps the generation
 /// and terminates the lint child if one is running.</summary>
 /// <remarks>MAIN THREAD. Does not wait for the child to exit -- the worker
@@ -440,7 +450,8 @@ begin
   CloseProcessHandle(LintHandle);
   if LintExit < 0 then
   begin
-    LiveLog('lint: spawn FAILED (engine not found?)');
+    GLintRunFailed:= True;
+    LiveLog(Format('lint: run did not finish (exit %d: -2 timed out, -3 cancelled, else spawn failed) -- no answer', [LintExit]));
     Exit;
   end;
   if LintExit = PROCRUN_KILLED_EXIT_CODE then
@@ -1001,14 +1012,18 @@ begin
       procedure
       var Ctx: TDragLintDiagContext;
       Diags: TDragLintDiagItems;
+      RunFailed: Boolean;
       begin
+        RunFailed:= False;
         try
           Ctx:= Default(TDragLintDiagContext);
           Ctx.FilePath  := FilePath;
           Ctx.BufferPath:= Tmp;
           Ctx.ExePath   := Exe;
           Ctx.ActiveProjectDb:= ActiveDb;
+          GLintRunFailed:= False;
           Diags:= AggregateDiagnostics(Ctx); { runs the lint -- background }
+          RunFailed:= GLintRunFailed;
           LiveLog(Format('runner: aggregated %d diag(s)', [Length(Diags)]));
         except
           on E: Exception do
@@ -1033,6 +1048,13 @@ begin
                 the current buffer after the normal debounce. }
               if FireGen <> GLintGen then
                 LiveLog(Format('runner: result for gen %d discarded (now gen %d)', [FireGen, GLintGen]))
+              { The lint did not finish: keep what the gutter shows (the previous
+                live set, else the LSP overlay) instead of publishing a zero. }
+              else if RunFailed then
+              begin
+                LiveLog('runner: lint did not finish -- previous findings kept, nothing published');
+                GLiveStatus:= 'drag-lint: ' + ExtractFileName(FilePath) + ' -- lint did not finish (timed out?)';
+              end
               else
               begin
                 PublishToCache(FilePath, Diags);

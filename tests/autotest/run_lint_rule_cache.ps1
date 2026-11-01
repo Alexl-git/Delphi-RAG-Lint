@@ -349,7 +349,7 @@ Check 'C11 ...with correct findings' (@(Compare-Object $off['uCycA.pas'] (Tuples
 
 # --- C12: a run that needs none of the cached rules writes nothing ------------------
 CacheFiles | Remove-Item -Force
-$p12 = LintOne 'uCycA.pas' @('--disable','circular-uses,enum-helper-separate-units,duplicate-global-decl')
+$p12 = LintOne 'uCycA.pas' @('--disable','circular-uses,enum-helper-separate-units,duplicate-global-decl,enum-ordinal-persisted,dfm-event-handler-missing')
 Check 'C12 a run needing none of the cached rules writes no (empty) entry' ((CacheFiles).Count -eq 0) "files: $((CacheFiles).Count); $(($p12.Prof -split "`n" | Where-Object { $_ -match 'rule-cache' }) -join ' / ')"
 
 # --- C3/C5: edit + index --project -> warmed HIT, and the NEW answer ----------------

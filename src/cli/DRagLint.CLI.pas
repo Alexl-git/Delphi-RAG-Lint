@@ -14695,7 +14695,7 @@ end;
 /// <param name="AKept">RuleKeptByRun for this run.</param>
 /// <returns>A function from a whole-graph rule id to its findings over the whole index.</returns>
 /// <remarks>
-/// The three CACHED_RULES are resolved once, on first use, through
+/// The CACHED_RULES are resolved once, on first use, through
 /// ResolveRuleCacheEntry. repeated-type-switch is never cached -- it parses the
 /// SOURCE files, so no index stat can tell when its answer moved -- and is
 /// computed live only when AKept says the run keeps it (a marker or an opt-in),
@@ -14751,7 +14751,7 @@ end;
 /// writing, so the next `lint &lt;file&gt;` is a hit.</summary>
 /// <param name="AProjectDb">The project index; the caller's write connection must be released.</param>
 /// <param name="ALibraryDb">RuleCacheLibraryDb for the run, or ''.</param>
-/// <remarks>Opens both indexes read-only and computes the three CACHED_RULES. Writes
+/// <remarks>Opens both indexes read-only and computes the CACHED_RULES. Writes
 /// only if no index changed while it ran (same check as a lint run). NEVER fails the
 /// index run: every problem is one warning line, and the next lint fills lazily.</remarks>
 procedure WarmRuleCache(const AProjectDb, ALibraryDb: string);

@@ -116,11 +116,13 @@ type
                        const AOptInRules: TArray<string> = nil;
                        const AOnlyFileId: Int64 = 0;
                        const AWholeGraph: TFunc<string, TArray<TLintFinding>> = nil): TArray<TLintFinding>;
-    /// <summary>Computes ONE of the four whole-graph rules over AStore, exactly as Run does.</summary>
-    /// <param name="ARuleId">circular-uses, duplicate-global-decl, enum-helper-separate-units
-    /// or repeated-type-switch; any other id yields no findings.</param>
+    /// <summary>Computes ONE of the six whole-graph rules over AStore, exactly as Run does.</summary>
+    /// <param name="ARuleId">circular-uses, duplicate-global-decl, enum-helper-separate-units,
+    /// repeated-type-switch, enum-ordinal-persisted or dfm-event-handler-missing; any other id
+    /// yields no findings.</param>
     /// <param name="AStore">The project index; nil yields no findings.</param>
-    /// <param name="ALibraryStore">The library index or nil (read by duplicate-global-decl only).</param>
+    /// <param name="ALibraryStore">The library index or nil (read by duplicate-global-decl and
+    /// dfm-event-handler-missing only).</param>
     /// <returns>That rule's findings over the whole index.</returns>
     /// <remarks>Exists so the `lint &lt;file&gt;` rule cache can compute live on a miss and
     /// the indexer can warm it. Never raises.</remarks>
@@ -4512,7 +4514,7 @@ var
     if Lt > 1 then ASet.AddOrSetValue(LowerCase(Copy(AName, 1, Lt - 1)), True);
   end;
 
-  { The four whole-graph sites ask AWholeGraph when the caller supplied one (the
+  { The whole-graph sites ask AWholeGraph when the caller supplied one (the
     `lint <file>` rule cache); otherwise they compute here, exactly as before. }
   function WholeGraph(const AId: string): TArray<TLintFinding>;
   begin
@@ -4653,7 +4655,7 @@ begin
     { enum-ordinal-persisted (lane X6): ON by default, NOT OptedIn-gated -- one
       refs read per file that names a sink, symbols by kind, no per-row query. }
     if WantRule('enum-ordinal-persisted') then
-      for var Eo in CollectEnumOrdinalPersisted(AStore) do Findings.Add(Eo);
+      for var Eo in WholeGraph('enum-ordinal-persisted') do Findings.Add(Eo);
     { unused-enum-value (lane B-ENUM; ON since ENUMRULES 2026-10-28, the caller opts it in) and OptedIn-gated --
       a refs read per file, which a post-hoc config filter would hide while still charging for it. }
     if WantRule(UNUSED_ENUM_VALUE_RULE) and OptedIn(UNUSED_ENUM_VALUE_RULE) then
@@ -4663,7 +4665,7 @@ begin
       engine 114 / ORM3 243, and the engine dogfood --fix --apply builds); virtual-never-overridden
       scans every file's symbols, so it is OFF by default and OptedIn-gated. }
     if WantRule('dfm-event-handler-missing') then
-      for var Hf in CollectDfmEventHandlerMissing(AStore, ALibraryStore) do Findings.Add(Hf);
+      for var Hf in WholeGraph('dfm-event-handler-missing') do Findings.Add(Hf);
     if WantRule('dfm-password-edit-unmasked') then
       for var Pw in CollectDfmPasswordEditUnmasked(AStore) do Findings.Add(Pw);
     if WantRule('uses-movable-to-implementation') then
@@ -5081,7 +5083,9 @@ begin
   if      SameText(ARuleId, 'circular-uses'             ) then Result:= CollectCircularUses(AStore)
   else if SameText(ARuleId, 'duplicate-global-decl'     ) then Result:= CollectDuplicateGlobalDecls(AStore, ALibraryStore)
   else if SameText(ARuleId, 'enum-helper-separate-units') then Result:= CollectEnumHelperSeparateUnits(AStore)
-  else if SameText(ARuleId, 'repeated-type-switch'      ) then Result:= CollectRepeatedTypeSwitch(AStore);
+  else if SameText(ARuleId, 'repeated-type-switch'      ) then Result:= CollectRepeatedTypeSwitch(AStore)
+  else if SameText(ARuleId, 'enum-ordinal-persisted'    ) then Result:= CollectEnumOrdinalPersisted(AStore)
+  else if SameText(ARuleId, 'dfm-event-handler-missing' ) then Result:= CollectDfmEventHandlerMissing(AStore, ALibraryStore);
 end;
 
 class function TProjectLintRules.CheckLayering(const AStore: ISymbolStore; const AConfigPath: string): TArray<TLintFinding>;
