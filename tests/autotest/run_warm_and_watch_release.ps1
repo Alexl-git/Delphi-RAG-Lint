@@ -17,6 +17,7 @@
   WHAT THIS ASSERTS
     W0 CONTROL: a held warm (DRAGLINT_TEST_WARM_HOLD_MS) is alive and wrote its marker
     W1 `shutdown --db <db>` (the --all discovery, filtered) lists the warm's pid and exits 0            <- K1
+    W1b ... labelled with its real role (warm-rule-cache), not 'lsp'  <- 1.39.1
     W2 ... and the warm process is gone afterwards                  <- K1
     W3 CONTROL: the stand-in "stale warm" (same engine image) is alive before the index
     W4 `index --project` of that database stops the stale warm      <- K2
@@ -103,6 +104,8 @@ Check 'W0 CONTROL: the held warm is alive and wrote its marker' ($ok0 -and -not 
 $sd = & $Exe shutdown --db $db --wait 10 2>&1 | Out-String
 $sdCode = $LASTEXITCODE
 Check 'W1 shutdown (--db filter of --all) lists the warm and exits 0' (($sdCode -eq 0) -and ($sd -match "pid $($warm.Id)\b")) "exit=$sdCode $($sd.Trim() -replace '\s+', ' ')"
+# 1.39.1: the listing names the engine's real role; it used to print 'lsp' for every engine.
+Check 'W1b ... and labels it warm-rule-cache, not lsp' ($sd -match "(?m)^\s*pid $($warm.Id)\s+warm-rule-cache\s") "$(($sd -split '\r?\n' | Where-Object { $_ -match "pid $($warm.Id)\b" } | Select-Object -First 1))"
 $gone = Wait-Until { $warm.HasExited } 15
 Check 'W2 ... and the warm process is gone' $gone "exited=$($warm.HasExited)"
 

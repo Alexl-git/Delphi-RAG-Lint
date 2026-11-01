@@ -201,9 +201,15 @@ type
   end;
 
 const
-  { .dproj <ProjectVersion> -> CompilerVersion. 20.4 is measured (Studio 37);
-    the rest follow the release history. An unlisted value refuses. }
-  PROJECT_VERSIONS: array[0..17] of TProjectVersionRow = (
+  { .dproj <ProjectVersion> -> CompilerVersion. 20.4 and 20.5 are measured
+    (Studio 37 wrote 20.4 from 2026-04, 20.5 from 2026-10 -- M2022\Micronite.dproj,
+    dclDragLintWizard.dproj cd9fa7ee); 19.3 / 20.1 / 20.2 / 20.3 match the
+    DUnitX D11Alexandria / D12Athens experts, BuildD12 and RADStudio12Demos
+    projects on the build box; the rest follow the release history. An unlisted
+    value refuses. The ONLY ProjectVersion table: index, pp-profile and lint
+    "auto" all read it through ResolveTargetCompiler (1.39.1). }
+  PROJECT_VERSIONS: array[0..18] of TProjectVersionRow = (
+    (ProjectVersion: '20.5'; Version: 37),
     (ProjectVersion: '20.4'; Version: 37),
     (ProjectVersion: '20.3'; Version: 36),
     (ProjectVersion: '20.2'; Version: 36),

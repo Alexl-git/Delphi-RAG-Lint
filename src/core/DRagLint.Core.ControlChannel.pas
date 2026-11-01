@@ -79,6 +79,12 @@ const
   CONTROL_REPLY_EXITING   = 'exiting';
   CONTROL_REPLY_BUSY      = 'busy';
   CONTROL_REPLY_UNKNOWN   = 'unknown';
+  /// <summary>1.39.1: the argument of a <c>status</c> request that asks for the engine's ROLE. An engine
+  /// that knows it answers with a <c>role=&lt;verb&gt;</c> field right after the extractor version; a plain
+  /// <c>status</c> (every older client) gets the old reply unchanged, and an older engine ignores the argument.</summary>
+  CONTROL_STATUS_ARG_ROLE = 'role';
+  /// <summary>Prefix of the role field of a status reply (a database path never starts with it).</summary>
+  CONTROL_ROLE_FIELD_PREFIX = 'role=';
   /// <summary>Graceful deadline when the request names none, in ms.</summary>
   CONTROL_DEFAULT_WAIT_MS = 5000;
   /// <summary>Upper clamp on any requested deadline, in ms (10 minutes).</summary>
@@ -248,6 +254,7 @@ type
         FDbs        : TArray<string>;
         FVersion    : string        ;
         FExtractor  : string        ;
+        FRole       : string        ; { the verb hosting the channel: lsp, index, lint-all, cycles, warm-rule-cache }
         FPipeName   : string        ;
         FOwnerSid   : string        ;
         FSD         : Pointer       ; { self-relative SECURITY_DESCRIPTOR from SDDL; LocalFree'd }
@@ -296,6 +303,9 @@ type
       /// <param name="ADbs">Databases the engine holds -- what `status` reports.</param>
       /// <param name="AVersion">DRAGLINT_VERSION.</param>
       /// <param name="AExtractor">DRAGLINT_EXTRACTOR_VERSION.</param>
+      /// <param name="ARole">The verb hosting the channel (lsp, index, lint-all, cycles,
+      /// warm-rule-cache); a `status role` request reports it. '' = not reported (the
+      /// reply keeps its pre-1.39.1 shape).</param>
       /// <exception cref="EInvalidOperation">Not called on the main thread.</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -310,7 +320,7 @@ type
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      constructor Create(const ADbs: TArray<string>; const AVersion, AExtractor: string);
+      constructor Create(const ADbs: TArray<string>; const AVersion, AExtractor: string; const ARole: string = '');
       /// <summary>Stops the listener (bounded wait) and releases the pipe.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -565,7 +575,7 @@ begin
   Result:= False;
   if (GBatchChannel <> nil) or not ControlChannelEnabledFor(ACommand) then Exit;
   GBatchTaken:= False;
-  GBatchChannel:= TControlChannel.Create(ADbs, AVersion, AExtractor);
+  GBatchChannel:= TControlChannel.Create(ADbs, AVersion, AExtractor, ACommand);
   if GBatchChannel.Start(Err) then
   begin
     Writeln(ErrOutput, 'drag-lint ', ACommand, ': control channel listening on ', GBatchChannel.PipeName, ' (accepts status and shutdown)');
@@ -799,7 +809,7 @@ end;
 
 { ---- TControlChannel ----------------------------------------------------- }
 
-constructor TControlChannel.Create(const ADbs: TArray<string>; const AVersion, AExtractor: string);
+constructor TControlChannel.Create(const ADbs: TArray<string>; const AVersion, AExtractor: string; const ARole: string = '');
 begin
   inherited Create;
   if GetCurrentThreadId <> MainThreadID then
@@ -807,6 +817,7 @@ begin
   FDbs      := Copy(ADbs);
   FVersion  := AVersion;
   FExtractor:= AExtractor;
+  FRole     := ARole;
   FState    := ST_IDLE;
   FInRead   := 0;
   FFirstPipe:= INVALID_HANDLE_VALUE;
@@ -1025,6 +1036,9 @@ begin
   if SameText(Verb, CONTROL_MSG_STATUS) then
   begin
     Line:= CONTROL_REPLY_STATUS + #9 + Pid + #9 + FOwner.FVersion + #9 + FOwner.FExtractor;
+    { 1.39.1: the role only when asked, so every older parser of the reply (dbs from field 4 on) is unaffected. }
+    if (Length(Fields) > 1) and SameText(Trim(Fields[1]), CONTROL_STATUS_ARG_ROLE) and (FOwner.FRole <> '') then
+      Line:= Line + #9 + CONTROL_ROLE_FIELD_PREFIX + FOwner.FRole;
     for D in FOwner.FDbs do Line:= Line + #9 + D;
     Reply(APipe, Line);
   end

@@ -65,7 +65,9 @@ function Fp([string]$db) { return (Col0 $db "SELECT value FROM schema_meta WHERE
 $prof = @((Run @('pp-profile', '--dproj', $proj, '--platform', 'Win64', '--config', 'Debug') 'profile') -split "`r?`n" | ForEach-Object { $_.Trim() })
 Check 'pp-profile: debug2 is a define' ($prof -contains 'debug2')
 Check 'pp-profile: debug2=3 is a value line' ($prof -contains 'debug2=3')
-Check 'pp-profile: compilerversion=37 is a value line (compiler built-in)' ($prof -contains 'compilerversion=37')
+# 1.39.1: pp-profile --dproj reports the compiler index --project uses for the same .dproj (19.5 = Delphi 11 = 35),
+# not the installed Delphi -- the two used to disagree (37 vs 35).
+Check 'pp-profile: compilerversion=35 is a value line (VDef.dproj ProjectVersion 19.5, as index)' ($prof -contains 'compilerversion=35')
 Check 'pp-profile: $r+ (DCC_RangeChecking of the Debug config)' ($prof -contains '$r+')
 
 # ---- index: the includes the exact values select -------------------------------------

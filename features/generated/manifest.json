@@ -1,5 +1,5 @@
 {
-  "product": "1.39.0-alpha",
+  "product": "1.39.1-alpha",
   "extractor": "1.27.0-alpha",
   "resolver": "1.17.0-alpha",
   "schema": 23,
@@ -11784,9 +11784,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-30",
+        "date": "2026-10-31",
         "by": "ENGINE",
-        "build": "1.39.0-alpha",
+        "build": "1.39.1-alpha",
         "surfaceHash": "1ec133398b13dd5b6640e87d8b3604d65295b5cbb4698cfb41f2b46682d8a72d"
       }
     },

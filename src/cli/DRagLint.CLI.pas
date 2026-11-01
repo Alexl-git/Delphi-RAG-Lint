@@ -12595,7 +12595,8 @@ var
 /// <summary>PR #8 / x139: the CompilerVersion the PREPROCESSOR describes
 /// (VER&lt;N&gt;0, CompilerVersion, RTLVersion) for this run. First source that
 /// names one wins: --target-compiler (a version token; "auto" reads --project's
-/// ProjectVersion), then the ProjectVersion of --project's .dproj, then the
+/// ProjectVersion), then the ProjectVersion of --project's .dproj (pp-profile
+/// --dproj applies the same rule itself, DoPpProfile -- 1.39.1), then the
 /// installed RAD Studio (set at start-up from TStudioEnv), then 37.</summary>
 /// <param name="AArgs">The parsed command line.</param>
 /// <returns>False after printing the refusal to stderr when an EXPLICIT
@@ -15009,7 +15010,7 @@ begin
   try
     if ControlChannelEnabledFor('warm-rule-cache') then
     begin
-      Ctl:= TControlChannel.Create([ExpandFileName(AArgs.DbPath)], DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+      Ctl:= TControlChannel.Create([ExpandFileName(AArgs.DbPath)], DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, 'warm-rule-cache');
       var CtlErr: string;
       if not Ctl.Start(CtlErr) then
       begin
@@ -18013,9 +18014,10 @@ begin
 end; // function
 
 /// <summary>drag-lint shutdown: asks every reachable engine of THIS user and
-/// session that exposes a maintenance control channel (only engines started
-/// in lsp mode do) to stand down -- close every store and exit 0 -- and
-/// reports which did.</summary>
+/// session that exposes a maintenance control channel (lsp, index, lint-all,
+/// cycles --fix, warm-rule-cache) to stand down -- close every store and exit --
+/// and reports which did. Each engine is listed with its role (`status role`,
+/// 1.39.1); an engine older than 1.39.1 is listed as "engine".</summary>
 /// <param name="AArgs">DbPaths keeps only engines holding one of those
 /// indexes; DryRun lists and changes nothing; WaitSeconds bounds the graceful
 /// wait per engine (default 5); ForceKill escalates to TerminateProcess ONLY
@@ -18039,6 +18041,7 @@ type
     Pipe   : string        ;
     Pid    : Cardinal      ;
     Version: string        ;
+    Role   : string        ;
     Dbs    : TArray<string>;
   end;
 var
@@ -18089,7 +18092,7 @@ begin
   SetLength(Rows, 0);
   for Pipe in Pipes do
   begin
-    if not ControlRequest(Pipe, CONTROL_MSG_STATUS, CONNECT_TIMEOUT_MS, Reply, Err) then
+    if not ControlRequest(Pipe, CONTROL_MSG_STATUS + #9 + CONTROL_STATUS_ARG_ROLE, CONNECT_TIMEOUT_MS, Reply, Err) then
     begin
       Writeln(ErrOutput, 'WARN: ', Pipe, ': no status reply (', Err, ') -- skipped');
       Continue;
@@ -18104,6 +18107,14 @@ begin
     Row.Pid    := StrToIntDef(Fields[1], 0);
     Row.Version:= Fields[2];
     Row.Dbs    := Copy(Fields, STATUS_FIXED_FIELDS, Length(Fields) - STATUS_FIXED_FIELDS);
+    { 1.39.1: the engine's role (index, warm-rule-cache, lsp ...); every engine used to be
+      listed as "lsp". An engine older than 1.39.1 sends none -- shown as "engine". }
+    Row.Role   := 'engine';
+    if (Length(Row.Dbs) > 0) and StartsText(CONTROL_ROLE_FIELD_PREFIX, Row.Dbs[0]) then
+    begin
+      Row.Role:= Copy(Row.Dbs[0], Length(CONTROL_ROLE_FIELD_PREFIX) + 1, MaxInt);
+      Row.Dbs := Copy(Row.Dbs, 1, Length(Row.Dbs) - 1);
+    end;
     if Length(Wanted) > 0 then
     begin
       Holds:= False;
@@ -18131,7 +18142,7 @@ begin
   end;
 
   Writeln(Format('%d engine(s) with a control channel (user %s, session %d):', [Length(Rows), CurrentUserSidString, CurrentSessionId]));
-  for Row in Rows do Writeln(Format('  pid %d  lsp  %s  %s', [Row.Pid, Row.Version, DbList(Row.Dbs)]));
+  for Row in Rows do Writeln(Format('  pid %d  %s  %s  %s', [Row.Pid, Row.Role, Row.Version, DbList(Row.Dbs)]));
   if AArgs.DryRun then
   begin
     Writeln('dry run: nothing asked, nothing changed.');
@@ -26750,7 +26761,17 @@ begin
     Profile:= Build.Profile;
   end
   else if AArgs.PpDproj <> '' then
+  begin
+    { 1.39.1: describe the compiler `index --project` uses for this same .dproj (its
+      ProjectVersion through the one table), not the installed one; an explicit
+      --target-compiler was already applied and wins. }
+    var PvVersion: Integer;
+    var PvErr    : string ;
+    if (Trim(AArgs.TargetCompiler) = '') and SameText(ExtractFileExt(AArgs.PpDproj), '.dproj')
+      and ResolveTargetCompiler(TARGET_COMPILER_AUTO, '', '', AArgs.PpDproj, PvVersion, PvErr) then
+      SetTargetCompilerVersion(PvVersion);
     Profile:= ProfileFromDproj(AArgs.PpDproj, Platform, Config);
+  end;
 
   Defines:= Copy(Profile.Defines, 0, Length(Profile.Defines));
   TArray.Sort<string>(Defines);
@@ -36532,7 +36553,7 @@ begin
           control channel is the pre-W3 state, not a broken one. }
         if ControlChannelEnabledFor(Args.Command) then
         begin
-          Ctl:= TControlChannel.Create(LSP.StorePaths, DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+          Ctl:= TControlChannel.Create(LSP.StorePaths, DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, 'lsp');
           var CtlErr: string;
           if Ctl.Start(CtlErr) then
             Writeln(ErrOutput, 'drag-lint LSP: control channel listening on ', Ctl.PipeName,

@@ -337,6 +337,7 @@ Write-Host 'D: --dry-run lists engine A, does not list the serve engine, changes
 $d = Invoke-Verb @('shutdown', '--dry-run') 'D'
 Check 'D1 verb exits 0' ($d.Exit -eq 0) ("exit $($d.Exit): " + $d.Err)
 Check 'D2 dry run lists engine A by pid' ($d.Out -match ('(?m)^\s*pid\s+' + $A.P.Id + '\b')) $d.Out
+Check 'D2b dry run labels engine A (an lsp) as lsp -- positive control of the role column' ($d.Out -match ('(?m)^\s*pid\s+' + $A.P.Id + '\s+lsp\s')) ''
 Check 'D3 dry run lists the db engine A holds' ($d.Out -match [regex]::Escape($c1)) ''
 Check 'D4 dry run does NOT list the serve engine' ($d.Out -notmatch ('\b' + $Bsrv.P.Id + '\b')) ''
 Check 'D5 dry run says it changed nothing' ($d.Out -match '(?i)dry run') ''
@@ -512,6 +513,7 @@ Check 'W1a index engine announces a control pipe (the gate widened beyond lsp/cy
 $null = WaitUntil { (ErrText $W1) -match '\[\d+/\d+\]' } 20000
 Check 'W1b index is mid-walk when asked (not finished)' (-not $W1.P.HasExited) ''
 $wv = Invoke-Verb @('shutdown', '--db', $w1db, '--wait', '30') 'W1v'
+Check 'W1d 1.39.1: the listing labels the index engine index, not lsp' ($wv.Out -match ('(?m)^\s*pid\s+' + $W1.P.Id + '\s+index\s')) $wv.Out
 Check 'W1c shutdown verb exits 0 and reports the index engine exiting' (($wv.Exit -eq 0) -and ($wv.Out -match ('pid\s+' + $W1.P.Id + '\b.*exiting'))) ($wv.Out + $wv.Err)
 Check 'W1d index process exited by itself with the stand-down code 4 (not killed)' ((WaitUntil { $W1.P.HasExited } 30000) -and ($W1.P.ExitCode -eq 4)) ("code " + $(if ($W1.P.HasExited) { $W1.P.ExitCode } else { 'running' }))
 Check 'W1e no -wal / -shm left behind' ((Sidecars $w1db) -eq '') ("sidecars=" + (Sidecars $w1db))

@@ -1530,7 +1530,9 @@ begin
       Exit;
     end;
   finally
-    if (AParams.GetValue('arguments') = nil) then Args.Free;
+    { 1.39.1: free the stand-in whenever `arguments` was not an object -- missing,
+      a string, an array -- not only when missing (run_mcp_args_leak.ps1). }
+    if ArgsVal is not TJSONObject then Args.Free;
   end; // try
 
   Reply:= TJSONObject.Create;

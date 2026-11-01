@@ -3001,7 +3001,7 @@ function StartStandDownChannel(const pOpts: TCycleFixOptions): TControlChannel;
 begin
   Result:= nil;
   if not ControlChannelEnabledFor('cycles') then Exit;
-  Result:= TControlChannel.Create([ExpandFileName(pOpts.Db)], DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+  Result:= TControlChannel.Create([ExpandFileName(pOpts.Db)], DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, 'cycles');
   var Err: string;
   if not Result.Start(Err) then
   begin
