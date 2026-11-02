@@ -48,8 +48,21 @@ procedure RunRefactorCliAsync(const ACmdLine: string; const ADone: TRefactorRunD
 /// <param name="AExePath">Path to drag-lint.exe.</param>
 /// <param name="ASuggestedNewName">Initial text of the New name field ('' = empty);
 /// the caller passes the bare identifier under the caret so the user edits it.</param>
+/// <param name="AFromFile">File the symbol was picked from ('' = unknown); passed to the rename verb as --in so a not-found answer ranks candidates from that file first.</param>
 /// <remarks>Main thread only. Preview / Apply run the CLI off the main thread.</remarks>
-procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: string; const AExePath: string; const ASuggestedNewName: string = '');
+procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: string; const AExePath: string; const ASuggestedNewName: string = ''; const AFromFile: string = '');
+
+/// <summary>Builds the rename command line the dialog runs.</summary>
+/// <param name="AExePath">drag-lint.exe.</param>
+/// <param name="AQName">Qualified symbol name.</param>
+/// <param name="ANewName">New identifier.</param>
+/// <param name="ADb">Project DB ('' = omit --db).</param>
+/// <param name="AFromFile">Active file ('' = omit --in).</param>
+/// <param name="ADryRun">Append --dry-run.</param>
+/// <param name="ABackup">False appends --no-backup.</param>
+/// <returns>The full command line.</returns>
+/// <remarks>Pure.</remarks>
+function DLRenameCmdLine(const AExePath, AQName, ANewName, ADb, AFromFile: string; ADryRun, ABackup: Boolean): string;
 
 /// <summary>Reads the symbol the typeat verb resolved from its JSON answer.</summary>
 /// <param name="AOutput">Captured text of `typeat ... --format json` (stderr may
@@ -197,11 +210,12 @@ type
       FCbBackup : TCheckBox;
       FExePath  : string   ;
       FProjectDb: string   ;
+      FFromFile : string   ;
       FPreviewOk: Boolean  ;
       function RenameCmdLine(ADryRun: Boolean): string;
     public
       constructor Create(
-        AOwner: TComponent; AForm: TForm; AEdQName, AEdNewName: TEdit; ACbBackup: TCheckBox; AMemo: TMemo; ABtnApply, ABtnClose: TButton; const AExePath, AProjectDb: string
+        AOwner: TComponent; AForm: TForm; AEdQName, AEdNewName: TEdit; ACbBackup: TCheckBox; AMemo: TMemo; ABtnApply, ABtnClose: TButton; const AExePath, AProjectDb, AFromFile: string
       ); reintroduce;
       procedure DoPreview(Sender: TObject);
       procedure DoApply  (Sender: TObject);
@@ -209,7 +223,7 @@ type
   end;
 
 constructor TRefactorHandler.Create(
-  AOwner: TComponent; AForm: TForm; AEdQName, AEdNewName: TEdit; ACbBackup: TCheckBox; AMemo: TMemo; ABtnApply, ABtnClose: TButton; const AExePath, AProjectDb: string);
+  AOwner: TComponent; AForm: TForm; AEdQName, AEdNewName: TEdit; ACbBackup: TCheckBox; AMemo: TMemo; ABtnApply, ABtnClose: TButton; const AExePath, AProjectDb, AFromFile: string);
 begin
   inherited Create(AOwner);
   FForm     := AForm;
@@ -221,15 +235,22 @@ begin
   FBtnClose := ABtnClose;
   FExePath  := AExePath;
   FProjectDb:= AProjectDb;
+  FFromFile := AFromFile;
   FPreviewOk:= False;
+end;
+
+function DLRenameCmdLine(const AExePath, AQName, ANewName, ADb, AFromFile: string; ADryRun, ABackup: Boolean): string;
+begin
+  Result:= Format('"%s" rename --qname "%s" --to "%s"', [AExePath, AQName, ANewName]);
+  if ADb <> '' then Result:= Result + Format(' --db "%s"', [ADb]);
+  if AFromFile <> '' then Result:= Result + Format(' --in "%s"', [AFromFile]);
+  if ADryRun then Result:= Result + ' --dry-run';
+  if not ABackup then Result:= Result + ' --no-backup';
 end;
 
 function TRefactorHandler.RenameCmdLine(ADryRun: Boolean): string;
 begin
-  Result:= Format('"%s" rename --qname "%s" --to "%s"', [FExePath, FEdQName.Text, FEdNewName.Text]);
-  if FProjectDb <> '' then Result:= Result + Format(' --db "%s"', [FProjectDb]);
-  if ADryRun then Result:= Result + ' --dry-run';
-  if not FCbBackup.Checked then Result:= Result + ' --no-backup';
+  Result:= DLRenameCmdLine(FExePath, FEdQName.Text, FEdNewName.Text, FProjectDb, FFromFile, ADryRun, FCbBackup.Checked);
 end;
 
 procedure TRefactorHandler.DoPreview(Sender: TObject);
@@ -305,7 +326,7 @@ begin
   end;
 end;
 
-procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: string; const AExePath: string; const ASuggestedNewName: string);
+procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: string; const AExePath: string; const ASuggestedNewName: string; const AFromFile: string);
 var
   Form      : TForm           ;
   Handler   : TRefactorHandler;
@@ -429,7 +450,7 @@ begin
     btnClose.Cancel:= True;
 
     { Wire handler (owned by Form, freed with it) }
-    Handler:= TRefactorHandler.Create(Form, Form, edQName, edNewName, cbBackup, memOutput, btnApply, btnClose, AExePath, AProjectDb);
+    Handler:= TRefactorHandler.Create(Form, Form, edQName, edNewName, cbBackup, memOutput, btnApply, btnClose, AExePath, AProjectDb, AFromFile);
 
     btnPreview.OnClick:= Handler.DoPreview;
     btnApply  .OnClick:= Handler.DoApply;

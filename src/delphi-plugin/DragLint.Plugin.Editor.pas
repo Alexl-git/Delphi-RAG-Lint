@@ -2403,7 +2403,7 @@ begin
   end;
   if QName = '' then QName:= Bare;
 
-  ShowRefactorDialog(QName, ProjDb, ExePath, Bare);
+  ShowRefactorDialog(QName, ProjDb, ExePath, Bare, ESS.TopView.Buffer.FileName);
 end; // procedure
 
 procedure InvokeFormatYadf(Sender: TObject);

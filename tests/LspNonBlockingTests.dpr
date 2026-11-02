@@ -851,6 +851,12 @@ begin
   Check('T5 not JSON', (DLParseTypeAtResolved('error: no index', Tok) = '') and (Tok = ''));
   Check('T6 malformed JSON', DLParseTypeAtResolved('{"token":', Tok) = '');
   Check('T7 empty output', DLParseTypeAtResolved('', Tok) = '');
+  Check('T8 rename cmdline without --in',
+    DLRenameCmdLine('C:\x\dl.exe', 'A.B.R', 'N', 'C:\p.sqlite', '', True, True) =
+      '"C:\x\dl.exe" rename --qname "A.B.R" --to "N" --db "C:\p.sqlite" --dry-run');
+  Check('T9 rename cmdline with --in, apply, no backup',
+    DLRenameCmdLine('C:\x\dl.exe', 'A.B.R', 'N', 'C:\p.sqlite', 'C:\s\U.pas', False, False) =
+      '"C:\x\dl.exe" rename --qname "A.B.R" --to "N" --db "C:\p.sqlite" --in "C:\s\U.pas" --no-backup');
 end;
 
 begin
