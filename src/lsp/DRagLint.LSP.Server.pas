@@ -33,7 +33,6 @@ uses
   , DRagLint.Doc     .Regions   { v(ADP2 T9): TDocRegions.FormatPhase2FactLines -- the shared formatter }
   , DRagLint.Index   .Manifest  { v(ADP2 T9): LoadDocComplexityMin -- same threshold `document` uses }
   , DRagLint.Query   .Callers   { v(hover bundle): the shared caller queries the CLI also renders from }
-  , DRagLint.Query   .Implementors { 1.40 ifrpt: the implementors counts of draglint/callerCounts }
   , DRagLint.Query   .HoverModel{ v(hover bundle): the shared model assembly `hover --format json` uses }
   , DRagLint.LSP     .Context   { S0: ILspServerContext + the feature registry }
   , DRagLint.Project .ContextFile { LSP-1 CORE: .dlcontext.json + central context defaults }
@@ -1445,6 +1444,7 @@ implementation
 
 uses
   System.StrUtils, { LSP-1 CORE: MatchText }
+  DRagLint.Query.Implementors, { 1.40 ifrpt: the implementors counts of draglint/callerCounts }
   DRagLint.Lint.MissingUses, { MISSING_USES_RULE: publish + codeAction } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
   DRagLint.Project.DefineProfile,
   DRagLint.Symbol.Describe,  // DescribeDeclaredType: the type a hover shows for a value kind

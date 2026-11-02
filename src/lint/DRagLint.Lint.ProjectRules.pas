@@ -229,7 +229,7 @@ uses
   DRagLint.Lint.EnumOrdinalPersisted, { CollectEnumOrdinalPersisted -- lane X6 }
   DRagLint.Lint.UnusedEnumValue, { CollectUnusedEnumValue -- lane B-ENUM }
   DRagLint.Lint.UnusedGlobal, { CollectUnusedGlobal -- 1.40 lane unusedg } // dl:unit DRagLint.Lint.UnusedGlobal accepted -- UNUSED_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectUnusedGlobal, the collector this unit calls
-  DRagLint.Lint.ReadNeverAssigned, { CollectReadNeverAssigned -- owner request #5b }
+  DRagLint.Lint.ReadNeverAssigned, { CollectReadNeverAssigned -- owner request #5b } // dl:unit DRagLint.Lint.ReadNeverAssigned accepted -- READ_NEVER_ASSIGNED_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectReadNeverAssigned, the collector this unit calls
   DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
   DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) }
 

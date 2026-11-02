@@ -1164,4 +1164,6 @@
 #   Superseded: 1.27.0-alpha|35f9307e8fd629d94b905b249ebed2db165ad338d534f08e20826ab7bc4a3e54 (x139) and 1.26.0-alpha|0b2f6c1970e63ef2b752d4c4c1049fe0be7b35bbe94bcb0abd3a4331f61d4e25 (p10)
 # 2026-11-01 x129 (1.40 Phase B): ONE bump 1.28.0 -> 1.29.0 for call (resolution clause row, delegates edges, type-read bind), doc (trailing doc-comment regions), kind (class ctor/dtor kind, is_class_method). 1.28.0 (grammar DLL v1.4.0) changed no hashed source, so the pin stayed at 1.27.0 until now.
 #   Superseded: 1.27.0-alpha|5ae6c31f4ae6f70b545c92c643e006f946ef6d4f5080958bafc6916bba13beb9
-1.29.0-alpha|94f317a8137a363c0c4573d699ba705c9f47424c2f45fda262ed34e1e5a28dd7
+# 2026-11-01 x129 lint round: hash updated WITHOUT a version bump -- DRagLint.Parser.DocComments.pas got only a regenerated drag-lint:auto doc block (doc-drift fix, comment text), no extraction change.
+#   Superseded: 1.29.0-alpha|94f317a8137a363c0c4573d699ba705c9f47424c2f45fda262ed34e1e5a28dd7
+1.29.0-alpha|09250d1e46167658401982dcff1a5ebc1a17aebffd51b48ef41ea1eda01f2122

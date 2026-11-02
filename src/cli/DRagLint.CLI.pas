@@ -1777,8 +1777,12 @@ begin
     else if A = '--project-rules' then Result.ProjectRules:= True
     else if A = '--include-private' then Result.IncludePrivate:= True
     else if (A = '--target') and (i < ParamCount) then begin Inc(i); Result.Target:= ParamStr(i); end
-    else if A = '--uses' then Result.IfrUses:= True
-    else if (A = '--max-sites') and (i < ParamCount) then begin Inc(i); Result.IfrMaxSites:= StrToIntDef(ParamStr(i), -1); end
+    else if A = '--uses' then Result.IfrUses:= True  // dl:ok duplicate-code@9c8e -- REVIEWED 2026-11-01: the argument-parse chain repeats the same else-if flag shape by design; the matched 114-token windows are other flags' lines, nothing extractable
+    else if (A = '--max-sites') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.IfrMaxSites:= StrToIntDef(ParamStr(i), -1);
+    end
     else if A = '--include-library' then Result.IncludeLibrary:= True
     else if (A = '--add-project') and (i < ParamCount) then begin Inc(i); Result.AddProjectName:= ParamStr(i); end
     else if (A = '--shadow') and (i < ParamCount) then begin Inc(i); Result.Shadow:= ParamStr(i); end
@@ -11184,8 +11188,9 @@ begin
       J.Free;
     end;
   end
-  else if Fmt = 'text' then OutText:= ImplementorsReportToText(Report)
-  else OutText:= ImplementorsReportToChart(Report, Fmt = 'mermaid');
+  else
+    OutText:= if Fmt = 'text' then ImplementorsReportToText(Report)
+      else ImplementorsReportToChart(Report, Fmt = 'mermaid');
   if AArgs.Output <> '' then
   begin
     TFile.WriteAllText(AArgs.Output, OutText, TEncoding.UTF8);

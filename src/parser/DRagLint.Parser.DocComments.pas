@@ -28,9 +28,9 @@ type
       /// TList&lt;TDocCommentRegion&gt;.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol (DRagLint.Doc.Document.pas)</para>
-      /// <para>Calls: DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Emit, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.MergeAdjacentSameKind, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Peek, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.StartLineComment</para>
-      /// <para>Complexity: 34 (cyclomatic, outer body), 198 lines (full implementation)</para>
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol (DRagLint.Doc.Document.pas)</para>
+      /// <para>Calls: CharInSet, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Emit, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.MergeAdjacentSameKind, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Peek, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.StartLineComment</para>
+      /// <para>Complexity: 35 (cyclomatic, outer body), 263 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Emit"/>
