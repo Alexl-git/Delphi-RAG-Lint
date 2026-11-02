@@ -1125,7 +1125,8 @@ begin
   // procedure -- so use it first; keep the signature/kind checks as a fallback.
   HasRet := (Facts.ReturnType <> '')
             or SignatureHasReturn(Sig)
-            or (ASym.Kind in [skFunction, skConstructor]);
+            or (ASym.Kind = skFunction)
+            or ((ASym.Kind = skConstructor) and not ASym.IsClassMethod); { 1.40: a class constructor returns nothing }
 
   // v(ADP3 T3g): the prefix carries the DECLARATION's own indentation, copied
   // verbatim. It was the hardcoded literal '/// ' from 26b986c (one of the

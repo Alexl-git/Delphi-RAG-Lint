@@ -7413,6 +7413,18 @@ begin
   Result:= True;
 end; // function
 
+{ 1.40: the text-row suffixes the query and outline views share. `[class]` for a
+  routine declared with `class` (CLASSCTOR-KIND) -- the kind column stays the
+  stored kind so a consumer splitting on it is unaffected; `[impl A-B]` for a
+  routine with a body (GAP-OUTLINE-IMPL), the span query --json already gives
+  as impl_start_line / impl_end_line. '' when neither applies. }
+function ImplAndClassTags(const ASym: TSymbol): string;
+begin
+  Result:= '';
+  if ASym.IsClassMethod then Result:= '  [class]';
+  if ASym.ImplStartLine > 0 then
+    Result:= Result + System.SysUtils.Format('  [impl %d-%d]', [ASym.ImplStartLine, ASym.ImplEndLine]);
+end;
 /// <param name="AFuzzy">True when these rows came from the FUZZY FALLBACK (the
 ///  trigram + Levenshtein path taken only after an exact lookup returned zero
 ///  rows), not from an exact match. Emits <c>"match_kind"</c> in the JSON.</param>
@@ -7482,6 +7494,9 @@ begin
           output reads an absent field as False and passes for the wrong reason.
           Measured exactly that way while writing run_directives_in_index.ps1. }
         JObj.AddPair('is_virtual'    , TJSONBool.Create(Sym.IsVirtual));
+        { 1.40 (CLASSCTOR-KIND): declared with `class`. Always present, so a
+          consumer can tell False from an engine that predates the column. }
+        JObj.AddPair('is_class_method', TJSONBool.Create(Sym.IsClassMethod));
         { v11 (M1): class/interface ancestor list; omitted when empty. }
         if Sym.Heritage <> '' then JObj.AddPair('heritage', Sym.Heritage);
         { interface-section symbols (and members of interface-section types) are
@@ -7533,6 +7548,7 @@ begin
         end of the row. }
       if (i <= High(AFilePaths)) and (AFilePaths[i] <> '') then
         Line:= Line + Format('  (%s:%d)', [AFilePaths[i], Sym.StartLine]);
+      Line:= Line + ImplAndClassTags(Sym); { 1.40: before the end-of-row suffixes, see above }
       if Sym.Section = 'implementation' then { gap #3: not usable from other units }
         Line:= Line + '  [impl-only]';
       if Sym.ForwardLine > 0 then { C2.5: the stub was folded into this row }
@@ -11541,6 +11557,12 @@ begin
         JObj.AddPair('name' , S.Name         );
         JObj.AddPair('qname', S.QualifiedName);
         JObj.AddPair('line', TJSONNumber.Create(S.StartLine));
+        { 1.40 (GAP-OUTLINE-IMPL): the declaration's end and the routine BODY
+          span, as query --json gives them; impl 0 = no body. }
+        JObj.AddPair('end_line', TJSONNumber.Create(S.EndLine));
+        JObj.AddPair('impl_start_line', TJSONNumber.Create(S.ImplStartLine));
+        JObj.AddPair('impl_end_line', TJSONNumber.Create(S.ImplEndLine));
+        JObj.AddPair('is_class_method', TJSONBool.Create(S.IsClassMethod)); { 1.40 (CLASSCTOR-KIND) }
         JObj.AddPair('signature', S.Signature);
         JObj.AddPair('modifiers', S.Modifiers);
         JObj.AddPair('directives', S.Directives); { v22: see the query emitter for why this is unconditional }
@@ -11558,7 +11580,8 @@ begin
     for var Idx in Shown do
     begin
       S:= Syms[Idx];
-      var Row: string:= System.SysUtils.Format('%-10s %-40s %d', [S.Kind.ToText, S.QualifiedName, S.StartLine]);
+      { 1.40: ImplAndClassTags -- GAP-OUTLINE-IMPL / CLASSCTOR-KIND }
+      var Row: string:= System.SysUtils.Format('%-10s %-40s %d', [S.Kind.ToText, S.QualifiedName, S.StartLine]) + ImplAndClassTags(S);
       if StubOf[Idx] >= 0 then Row:= Row + System.SysUtils.Format('  [forward -> line %d]', [Syms[StubOf[Idx]].StartLine]);  // dl:ok concat-in-loop@edfd -- Row is a fresh per-iteration inline local, not an accumulator: at most ONE suffix is appended per row, so there is no O(n^2) growth
       Writeln(Row);
     end;

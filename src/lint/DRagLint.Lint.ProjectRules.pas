@@ -4190,6 +4190,9 @@ var
   { unused-unit-in-uses severity split: unit name -> does it have an
     initialization section? See the finding site for the measurement. }
   UnitHasInit   : TDictionary<string, Integer>      ;
+  { unused-unit-in-uses (1.40, UNUSEDUNIT-INLINE): resolved call target id ->
+    lowercase unit stem when that routine is `inline`, '' otherwise. }
+  InlineUnitOfSym: TDictionary<Int64, string>      ;
   { Per-rule cost attribution, printed only under DRAGLINT_PROFILE. `lint-all`'s
     phase profiler can say "project-rules cost N seconds" but not WHICH of the
     seven rules in this pass spent it, and the answer decided the fix: on YADF,
@@ -4549,6 +4552,7 @@ begin
   UnitIndexed:= TDictionary<string, Boolean>      .Create;
   ExportsOfUnit:= TObjectDictionary<string, TDictionary<string, Boolean>>.Create([doOwnsValues]);
   UnitHasInit  := TDictionary<string, Integer>      .Create;
+  InlineUnitOfSym:= TDictionary<Int64, string>     .Create;
   RefdIds    := TDictionary<Int64 , Boolean>      .Create;
   RefdNames  := TDictionary<string, Boolean>      .Create;
   OwnRefFile := nil;
@@ -4723,7 +4727,28 @@ begin
               AddRefName(RefdUnitStems, Ref.NameText    );
               AddRefName(RefdUnitStems, Ref.ReceiverText);
             end;
-
+            { UNUSEDUNIT-INLINE (1.40): A CALL TO AN `inline` ROUTINE NEEDS ITS
+              UNIT. `I.Gray.At(1)` names nothing GridU exports -- the type arrives
+              through another unit's record field -- yet dcc needs GridU in uses to
+              expand the inline TByteGrid.At (H2443 otherwise). The call ref is
+              already resolved and symbols.directives has carried `inline` since
+              v22, so this is a read, not an extractor change. Recorded under a
+              '#inline:' key, which no identifier can collide with. A NON-inline
+              member call keeps nothing alive: dcc needs no unit for it. }
+            for Ref in Refs do
+              if (Ref.SymbolId > 0) and SameText(Ref.Kind, 'call') then
+              begin
+                var InlUnit: string;
+                if not InlineUnitOfSym.TryGetValue(Ref.SymbolId, InlUnit) then
+                begin
+                  var Callee: TSymbol:= AStore.GetSymbolById(Ref.SymbolId);
+                  InlUnit:= '';
+                  if (Callee.Id > 0) and (' ' + LowerCase(Callee.Directives) + ' ').Contains(' inline ') then
+                    InlUnit:= LowerCase(ChangeFileExt(ExtractFileName(AStore.GetFilePath(Callee.FileId)), ''));
+                  InlineUnitOfSym.Add(Ref.SymbolId, InlUnit);
+                end;
+                if InlUnit <> '' then RefdUnitStems.AddOrSetValue('#inline:' + InlUnit, True);
+              end;
             { B6: A CLASS THE SIBLING .DFM INSTANTIATES IS A USE OF ITS UNIT.
               The .dfm is a separate `files` row with its own id and emits ZERO
               refs of its own, so Fid -- the .PAS id -- could never see it. A
@@ -4775,6 +4800,7 @@ begin
                   UsesAnyExport:= True;
                   Break;
                 end;
+              if (not UsesAnyExport) and RefdUnitStems.ContainsKey('#inline:' + LowerCase(U.UnitName)) then UsesAnyExport:= True; { UNUSEDUNIT-INLINE }
               if not UsesAnyExport then
               begin
                 UF:= Default(TLintFinding);
@@ -5074,6 +5100,7 @@ begin
     UnitIndexed.Free;
     ExportsOfUnit.Free;
     UnitHasInit.Free;
+    InlineUnitOfSym.Free;
     PathOfFile .Free;
     StemsOfName.Free;
     Findings   .Free;

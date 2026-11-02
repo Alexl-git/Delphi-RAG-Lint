@@ -127,6 +127,8 @@ begin
   Writeln('                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:');
   Writeln('                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large');
   Writeln('                               unit''s outline); --limit N prints the first N rows and says how many matched.');
+  Writeln('                               A routine row ends [impl A-B] (its body) and a class routine [class]; json: impl_start_line,');
+  Writeln('                               impl_end_line, end_line, is_class_method.');
   Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]');
   Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
   Writeln('                               [--format text|json|html] [--output <file>] [--open] [--out-root <dir>]');
@@ -661,6 +663,8 @@ begin
     Writeln('                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:');
     Writeln('                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large');
     Writeln('                               unit''s outline); --limit N prints the first N rows and says how many matched.');
+    Writeln('                               A routine row ends [impl A-B] (its body) and a class routine [class]; json: impl_start_line,');
+    Writeln('                               impl_end_line, end_line, is_class_method.');
     Exit;
   end;
   if pVerb = 'compare' then

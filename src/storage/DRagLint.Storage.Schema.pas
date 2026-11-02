@@ -99,7 +99,12 @@ const
     '  vis_explicit    INTEGER,' +
     { v23: generic parameter list as written, brackets stripped; NULL for a
       non-generic symbol. Never a match key -- name is bare. }
-    '  generic_params  TEXT' + ')',
+    '  generic_params  TEXT,' +
+    { 1.40 (CLASSCTOR-KIND): 1 for a routine declared with `class` (class
+      constructor/destructor/procedure/function/operator), 0 otherwise. NULL on
+      a row written before the column existed, read back as 0. Migrate() ALTERs
+      it onto older tables -- the prop_access pattern. }
+    '  is_class_method INTEGER' + ')',
 
     'CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)', 'CREATE INDEX IF NOT EXISTS idx_symbols_qname ON symbols(qualified_name)',
     'CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id)', 'CREATE INDEX IF NOT EXISTS idx_symbols_parent ON symbols(parent_id)',
