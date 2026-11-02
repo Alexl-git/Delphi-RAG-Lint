@@ -2373,6 +2373,41 @@ end; // procedure
   effect may still invoke it as a statement -- the three pre-existing call sites
   do. The result exists for NESTED routines: a nested routine's own children must
   be parented to IT, not to the enclosing class/unit, and that needs its index. }
+{ Interface report D2 (1.40): a delegating property `property Job: IJob read
+  FJob implements IJob, IOther;` records the directive 'implements IJob,IOther'
+  (the token, one space, the names as written, comma-joined, whitespace
+  dropped); '' for every other property. The grammar puts the names as the
+  expressions after kImplements up to the next keyword child or `;`.
+  DispatchResolver turns it into `delegates` edges. Pinned by
+  tests\callresolve\run_implements_delegation.ps1. }
+function PropImplementsDirective(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  i    : Integer;
+  Child: TTSNode;
+  Names: string;
+  Seen : Boolean;
+begin
+  Result:= '';
+  if ANode.ChildByField('implements').IsNull then Exit;
+  Names:= '';
+  Seen := False;
+  for i:= 0 to ANode.ChildCount - 1 do
+  begin
+    Child:= ANode.Child(i);
+    if not Seen then
+    begin
+      Seen:= Child.NodeType = 'kImplements';
+      Continue;
+    end;
+    if (Child.NodeType = ';') or Child.NodeType.StartsWith('k') then Break;
+    if Child.NodeType = ',' then Continue;
+    var N:= StringReplace(StringReplace(StringReplace(NodeText(Child, ASource), ' ', '', [rfReplaceAll]), #13, '', [rfReplaceAll]), #10, '', [rfReplaceAll]);
+    if N = '' then Continue;
+    Names:= if Names = '' then N else Names + ',' + N;
+  end;
+  if Names <> '' then Result:= IMPLEMENTS_DIRECTIVE + ' ' + Names;
+end;
+
 function WalkDeclProc(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string; AAsMethod: Boolean): Integer;
 var
   NameNode : TTSNode    ;
@@ -2394,6 +2429,21 @@ begin
   var GenParams: string;
   SplitGenericName(Seg, MethName, GenParams);
   if MethName = '' then Exit;
+  { METHRES-DISPATCH (1.40): a METHOD-RESOLUTION CLAUSE inside a class,
+    `procedure IJob.Execute = RunJob;`, parses as a declProc whose name is
+    dotted and whose `assign` field holds `= RunJob`. It declares NO member: it
+    routes the interface method to RunJob. Taking the last segment emitted a
+    phantom TJob.Execute that a by-name dispatch join then matched. The clause
+    row keeps the dotted name (`IJob.Execute`), carries `= RunJob` as its
+    signature and the directive `resolution`; DispatchResolver reads those.
+    Pinned by tests\callresolve\run_method_resolution_dispatch.ps1. }
+  var ResAssign:= ANode.ChildByField('assign');
+  var IsResolution:= AAsMethod and (not ResAssign.IsNull) and (Seg <> RawName);
+  if IsResolution then
+  begin
+    MethName := StringReplace(StringReplace(StringReplace(RawName, ' ', '', [rfReplaceAll]), #13, '', [rfReplaceAll]), #10, '', [rfReplaceAll]);
+    GenParams:= '';
+  end;
   { v1.7: A CLASS MEMBER'S KIND WAS ALWAYS skMethod. The kConstructor /
     kDestructor token was inspected only for FREE routines, so every
     constructor and destructor declared inside a class -- which is to say
@@ -2434,6 +2484,14 @@ begin
     overwhelmingly free-routine directives, and an is_virtual-shaped
     `AAsMethod and ...` gate here would have silently excluded every one of
     them. AAsMethod still gates is_virtual, whose v12 meaning is unchanged. }
+  if IsResolution then
+  begin
+    var ResTarget:= Trim(NodeText(ResAssign, AState.Source));
+    if ResTarget.StartsWith('=') then ResTarget:= Trim(Copy(ResTarget, 2, MaxInt));
+    RoutineIdx:= AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, '= ' + ResTarget, Modifiers, '', False,
+                             False, '', Trim(ProcDirectivesOf(ANode) + ' ' + RESOLUTION_DIRECTIVE), AState.CurrentVisExplicit, '');
+    Exit(RoutineIdx);
+  end;
   RoutineIdx:= AState.Emit(Kind, MethName, QName, AParentSymbolIdx, ANode, ProcSignatureOf(ANode, AState.Source), Modifiers, '', AAsMethod and ProcIsVirtual(ANode),
                            False, '', ProcDirectivesOf(ANode), (not AAsMethod) or AState.CurrentVisExplicit, GenParams);
   Result:= RoutineIdx;
@@ -3102,7 +3160,7 @@ begin
         else if PHasSet then PAccess:= 'wo'
         else PAccess:= ''; // bare redeclaration -> NULL -> inherits ancestor's accessors
         AState.Emit(skProperty, PName, PQName, AParentSymbolIdx, ANode, TypeTextOf(ANode, AState.Source), AState.CurrentVisibility, '', False, False, PAccess,
-                    '', AState.CurrentVisExplicit); { v22: same reasoning as the field emit above }
+                    PropImplementsDirective(ANode, AState.Source), AState.CurrentVisExplicit); { v22: same reasoning as the field emit above }
       end;
     end;
     // Walk children so the property's type emits a type_use ref.

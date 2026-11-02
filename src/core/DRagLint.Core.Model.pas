@@ -403,6 +403,22 @@ const
   /// the ghost-compile journal that first created the folder.</summary>
   DRAG_HOME_DIR = '_D-RAG';
 
+  /// <summary>symbols.directives token of a METHOD-RESOLUTION CLAUSE row
+  /// (`procedure IJob.Execute = RunJob;`, METHRES-DISPATCH, 1.40).</summary>
+  /// <remarks>Such a row is NOT a class member: its name is the dotted
+  /// interface-method name as written (`IJob.Execute`), its signature is
+  /// `= RunJob` (the target method's name), and DispatchResolver turns it into
+  /// the `implements` edge IJob.Execute -&gt; RunJob instead of joining by name.</remarks>
+  RESOLUTION_DIRECTIVE = 'resolution';
+
+  /// <summary>symbols.directives prefix of a DELEGATING property
+  /// (`property Job: IJob read FJob implements IJob;`, interface report D2, 1.40).</summary>
+  /// <remarks>The full value is `implements IJob` / `implements IA,IB`: the token,
+  /// one space, the interface names as written, comma-joined. DispatchResolver
+  /// writes one `delegates` dispatch_edges row per name the class lists:
+  /// base = the interface, impl = the property.</remarks>
+  IMPLEMENTS_DIRECTIVE = 'implements';
+
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
