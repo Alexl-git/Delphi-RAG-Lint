@@ -284,7 +284,7 @@ Index-wide rules (need `--db`, run via `drag-lint lint-project`): **`god-class`*
 mark one side `[weak]`/`[unsafe]`), **`layering-violation`** (config-driven architecture enforcement via
 `--layers <file.json>` -- flags forbidden cross-layer `uses`; see CHANGELOG for the config shape).
 
-Plus `field-by-name-in-loop` and `inline-comment-in-multiline-args` from the linter core, and
+Plus `field-by-name-in-loop` from the linter core, and
 `unit-not-in-dpr` (project check).
 
 ### Tip

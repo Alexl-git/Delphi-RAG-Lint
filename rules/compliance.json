@@ -129,7 +129,6 @@
   "infinite-loop-no-exit": {"cwe": ["CWE-835"]},
   "inherited-bare": {},
   "inline-assembly": {"misra": ["MISRA-C-2012-D4.3"]},
-  "inline-comment-in-multiline-args": {},
   "inline-on-large-routine": {},
   "insecure-temp-file": {"cwe": ["CWE-377"]},
   "instability": {},

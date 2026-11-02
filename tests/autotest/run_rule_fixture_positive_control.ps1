@@ -48,7 +48,7 @@ $Allowlist = @(
     'enum-ordinal-persisted', 'fan-in', 'fan-out', 'feature-envy',
     'global-form-variable', 'global-only-uses-edge', 'god-class', 'goto-statement', 'high-coupling',
     'high-response', 'inline-assembly',
-    'inline-comment-in-multiline-args', 'instability', 'interface-reference-cycle',
+    'instability', 'interface-reference-cycle',
     'layering-violation', 'line-too-long', 'local-field-prefix', 'low-cohesion', 'method-too-long',
     'middle-man', 'missing-doc', 'nested-with', 'outputdebugstring', 'parser-error',
     'query-name-with-effect',

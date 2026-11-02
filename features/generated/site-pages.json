@@ -32,8 +32,8 @@
     "version": "1.38.0-alpha"
   },
   "features/autofix-wave.md": {
-    "hash": "da9e24e3f9cd08fb7ef02cff05d616bdf6361b38a2c34533f0fee0ba25c282b8",
-    "version": "1.38.0-alpha"
+    "hash": "1dbf477e04150de0b9c29b12ab42c88407dbec9b8372a2ffd58e32c569413f89",
+    "version": "1.39.2-alpha"
   },
   "features/bench-context.md": {
     "hash": "40753857e02ca31b5cba13964e0852b48e63f39e75e8aaae79ad9869e80a73fb",
@@ -240,7 +240,7 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "6fb2effa61e987064f1d5afc529426e6915f63c006fd9d9c015119b7463f2c74",
+    "hash": "3632953e7fe32a021e6366f29883d4531fb7663027a5fe07b14b17fb05a1c81b",
     "version": "1.39.2-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
@@ -328,7 +328,7 @@
     "version": "1.38.0-alpha"
   },
   "features/fix-all-in-unit.md": {
-    "hash": "30f499364a9b059fe9071f54299212b0269c40726428e263b90d92b47c492d52",
+    "hash": "4edf7f26daef890b70280b66b8df6abefb6173bf712063074fe685f73dd647b0",
     "version": "1.39.2-alpha"
   },
   "features/fix-all-reliability.md": {
@@ -336,7 +336,7 @@
     "version": "1.38.0-alpha"
   },
   "features/fix-it.md": {
-    "hash": "fe510d088039265403a6483b24520bc5e7258eb5f37ded5d727b9aed2146184c",
+    "hash": "9ff7e060ed78f818ad0be9e5aceafa1637d4c0d34300544c21214f87811e1f90",
     "version": "1.39.2-alpha"
   },
   "features/format-whole-project-with-yadf.md": {
@@ -456,7 +456,7 @@
     "version": "1.38.0-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "42fac1d808cd368530a376643f39d5e8425db3090e217d6a4e602a0ce4fac16c",
+    "hash": "3e50cb2d5fbb5f41698a3d142f408ce3a162306892d920ff4265881c6aa3bf3e",
     "version": "1.39.2-alpha"
   },
   "features/lint-tree.md": {
@@ -640,7 +640,7 @@
     "version": "1.39.2-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "b4a1336aa4195c7983b075cb26841924113d036f984f997a145804425554dc60",
+    "hash": "d47031d16c3bf37010103c044304ee2597c9aea5cfc16da8f7f4e36d64954b74",
     "version": "1.39.2-alpha"
   },
   "features/safe-delete.md": {

@@ -40,10 +40,10 @@ type
   /// <para>ckEnum     -- a .castlib 'enum' block (ButtonLayout, ...).</para>
   /// <para>ckValue    -- a .castlib value cast (a 'cast' block with a 'value'
   /// line, StripDB): same type in and out, a different value.</para>
-  /// <para>The members carry no trailing comments on purpose: the linter's
-  /// inline-comment-in-multiline-args rule fires on any '//' inside a
+  /// <para>The members carry no trailing comments on purpose (house style;
+  /// the retired inline-comment-in-multiline-args rule once fired on any '//' inside a
   /// parenthesised list, because a reformatter may reflow the next element up
-  /// into it -- and this folder is now YADF-formatted.</para>
+  /// into it -- and this folder is YADF-formatted).</para>
   /// </remarks>
   TConvKind = (ckIdentity, ckScalar, ckClass, ckEnum, ckValue);
 

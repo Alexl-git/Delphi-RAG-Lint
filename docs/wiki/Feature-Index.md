@@ -470,7 +470,6 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [infinite-loop-no-exit](rules#infinite-loop-no-exit) -- bug-patterns, warning
 * [inherited-bare](rules#inherited-bare) -- other, info, fixable
 * [inline-assembly](rules#inline-assembly) -- platform, info
-* [inline-comment-in-multiline-args](rules#inline-comment-in-multiline-args) -- structure, warning, fixable
 * [inline-on-large-routine](rules#inline-on-large-routine) -- complexity, hint, fixable
 * [insecure-temp-file](rules#insecure-temp-file) -- security, warning
 * [instability](rules#instability) -- metrics, info
