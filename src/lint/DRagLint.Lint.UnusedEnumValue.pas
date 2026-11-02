@@ -164,16 +164,7 @@ var
 
   procedure Report(const AEnum: TSymbol; const AValue: TSymbol);
   begin
-    var Fd: TLintFinding:= Default(TLintFinding);
-    Fd.RuleId    := UNUSED_ENUM_VALUE_RULE;
-    Fd.FileId    := AValue.FileId;
-    Fd.FilePath  := AStore.GetFilePath(AValue.FileId);
-    Fd.StartLine := AValue.StartLine;
-    Fd.EndLine   := AValue.StartLine;
-    Fd.StartCol  := if AValue.StartCol > 0 then AValue.StartCol else 1;
-    Fd.EndCol    := Fd.StartCol + Length(AValue.Name);
-    Fd.Severity  := 'hint';
-    Fd.SymbolName:= AValue.Name;
+    var Fd: TLintFinding:= TLintFinding.AtSymbol(UNUSED_ENUM_VALUE_RULE, AStore.GetFilePath(AValue.FileId), AValue, 'hint');
     { the TYPE scope: one dl:ok on the enum's declaration reviews every value }
     Fd.ScopeFile := AStore.GetFilePath(AEnum.FileId);
     Fd.ScopeLine := AEnum.StartLine;
@@ -248,13 +239,7 @@ begin
     finally
       ByEnum.Free;
     end;
-    Findings.Sort(TComparer<TLintFinding>.Construct(
-      function(const A, B: TLintFinding): Integer
-      begin
-        Result:= CompareText(A.FilePath, B.FilePath);
-        if Result = 0 then Result:= A.StartLine - B.StartLine;
-        if Result = 0 then Result:= A.StartCol - B.StartCol;
-      end));
+    TLintFinding.SortByLocation(Findings);
     Result:= Findings.ToArray;
   finally
     Findings.Free;

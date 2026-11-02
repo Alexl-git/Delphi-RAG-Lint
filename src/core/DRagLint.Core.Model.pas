@@ -2,6 +2,9 @@ unit DRagLint.Core.Model;
 
 interface
 
+uses
+  System.Generics.Collections;
+
 const
   /// <summary>The engine version, in ONE place.</summary>
   /// <remarks>It used to be written twice: DRagLint.CLI's VERSION said
@@ -1425,6 +1428,19 @@ type
       last = sink). Empty for every other rule (zeroed by Default). Serialised to `--format json` as
       `path` only when non-empty (T2) and to SARIF codeFlows (T3); never to the rule cache. }
     Path: TArray<TLintLocation>;
+
+    /// <summary>A finding positioned on a symbol's declaration name.</summary>
+    /// <param name="pRuleId">Rule id the finding reports under.</param>
+    /// <param name="pFilePath">Path of the file declaring pSym (the store resolves it from FileId).</param>
+    /// <param name="pSym">The symbol; its FileId, StartLine and Name anchor the finding.</param>
+    /// <param name="pSeverity">Severity string ('hint', 'warning', ...).</param>
+    /// <returns>A finding on pSym's start line, spanning its name; the column is pSym.StartCol, or 1
+    /// when the index holds none. Message and every other field stay at their Default values.</returns>
+    class function AtSymbol(const pRuleId, pFilePath: string; const pSym: TSymbol;
+      const pSeverity: string): TLintFinding; static;
+    /// <summary>Sorts findings by file path (case-insensitive), then start line, then start column.</summary>
+    /// <param name="pList">The list to sort in place; must not be nil.</param>
+    class procedure SortByLocation(const pList: TList<TLintFinding>); static;
   end;
 
   /// <remarks>
@@ -2797,8 +2813,35 @@ function IncludeUsesRefusal(const AVerb: string; const AUse: TUnitUse; const AHo
 implementation
 
 uses
-  System.SysUtils
+  System.SysUtils,
+  System.Generics.Defaults
   ;
+
+class function TLintFinding.AtSymbol(const pRuleId, pFilePath: string; const pSym: TSymbol;
+  const pSeverity: string): TLintFinding;
+begin
+  Result:= Default(TLintFinding);
+  Result.RuleId    := pRuleId;
+  Result.FileId    := pSym.FileId;
+  Result.FilePath  := pFilePath;
+  Result.StartLine := pSym.StartLine;
+  Result.EndLine   := pSym.StartLine;
+  Result.StartCol  := if pSym.StartCol > 0 then pSym.StartCol else 1;
+  Result.EndCol    := Result.StartCol + Length(pSym.Name);
+  Result.Severity  := pSeverity;
+  Result.SymbolName:= pSym.Name;
+end;
+
+class procedure TLintFinding.SortByLocation(const pList: TList<TLintFinding>);
+begin
+  pList.Sort(TComparer<TLintFinding>.Construct(
+    function(const A, B: TLintFinding): Integer
+    begin
+      Result:= CompareText(A.FilePath, B.FilePath);
+      if Result = 0 then Result:= A.StartLine - B.StartLine;
+      if Result = 0 then Result:= A.StartCol - B.StartCol;
+    end));
+end;
 
 function IncludeUsesRefusal(const AVerb: string; const AUse: TUnitUse; const AHostPath: string): string;
 var

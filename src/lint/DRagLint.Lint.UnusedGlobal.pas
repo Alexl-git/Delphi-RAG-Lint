@@ -183,16 +183,7 @@ var
 
   procedure Report(const ASym: TSymbol);
   begin
-    var Fd: TLintFinding:= Default(TLintFinding);
-    Fd.RuleId    := UNUSED_GLOBAL_RULE;
-    Fd.FileId    := ASym.FileId;
-    Fd.FilePath  := AStore.GetFilePath(ASym.FileId);
-    Fd.StartLine := ASym.StartLine;
-    Fd.EndLine   := ASym.StartLine;
-    Fd.StartCol  := if ASym.StartCol > 0 then ASym.StartCol else 1;
-    Fd.EndCol    := Fd.StartCol + Length(ASym.Name);
-    Fd.Severity  := 'hint';
-    Fd.SymbolName:= ASym.Name;
+    var Fd: TLintFinding:= TLintFinding.AtSymbol(UNUSED_GLOBAL_RULE, AStore.GetFilePath(ASym.FileId), ASym, 'hint');
     Fd.Message   := Format(
       'Unit-level %s %s (%s section) is never named %s -- remove it, or name it where it is meant.',
       [KindOf[ASym.Id], ASym.Name, ASym.Section,
@@ -246,13 +237,7 @@ begin
     finally
       Suspects.Free;
     end;
-    Findings.Sort(TComparer<TLintFinding>.Construct(
-      function(const A, B: TLintFinding): Integer
-      begin
-        Result:= CompareText(A.FilePath, B.FilePath);
-        if Result = 0 then Result:= A.StartLine - B.StartLine;
-        if Result = 0 then Result:= A.StartCol - B.StartCol;
-      end));
+    TLintFinding.SortByLocation(Findings);
     Result:= Findings.ToArray;
   finally
     Findings.Free;

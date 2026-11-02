@@ -378,16 +378,7 @@ var
     Implicit:= CountImplicitOrdinals(DeclTextOf(AEnum), Total);
     if Implicit = 0 then Exit;
     var Site: string:= if AW.CastIn then AW.Sink + ' -> ' + AW.Cast + '()' else AW.Cast + ' -> ' + AW.Sink;
-    var Fd: TLintFinding:= Default(TLintFinding);
-    Fd.RuleId    := ENUM_ORDINAL_PERSISTED_RULE;
-    Fd.FileId    := AEnum.FileId;
-    Fd.FilePath  := AStore.GetFilePath(AEnum.FileId);
-    Fd.StartLine := AEnum.StartLine;
-    Fd.EndLine   := AEnum.StartLine;
-    Fd.StartCol  := if AEnum.StartCol > 0 then AEnum.StartCol else 1;
-    Fd.EndCol    := Fd.StartCol + Length(AEnum.Name);
-    Fd.Severity  := 'warning';
-    Fd.SymbolName:= AEnum.Name;
+    var Fd: TLintFinding:= TLintFinding.AtSymbol(ENUM_ORDINAL_PERSISTED_RULE, AStore.GetFilePath(AEnum.FileId), AEnum, 'warning');
     Fd.Message   := Format(
       '%s crosses a persistence boundary (%s in %s:%d) but %d of %d values have implicit ordinals ' +
       '-- inserting or reordering a value silently changes stored data. Pin each value (= N).',
