@@ -7,7 +7,7 @@ group: search-navigation
 order: 20005
 since: 0.6.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.39.2-alpha
 ---
 
 # context
@@ -58,6 +58,13 @@ Foo.Bar"`). `--format` selects `md`, `json`, or `raw`. `--max-callers N`
 caps how many callers are included. `--context N` is present in the usage
 line; its effect is not documented beyond the flag name. `--no-docs` omits
 doc comments from the bundle.
+
+The class surface is lean by default. For a MEMBER target (a method, field or
+property) it lists the owner's declarations without their comment-only lines
+(`//` and `///`) -- the target's own doc is in `## Doc`, and the other
+members' prose was over 90% of a large class's surface (a 47.5k-token bundle
+fell to a fraction). A TYPE target keeps its members' docs. `--full-surface`
+keeps everything, the DFM component fields of a form class included.
 
 ### What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the index when

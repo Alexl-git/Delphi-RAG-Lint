@@ -1,6 +1,6 @@
 {
   "product": "1.39.2-alpha",
-  "extractor": "1.28.0-alpha",
+  "extractor": "1.29.0-alpha",
   "resolver": "1.17.0-alpha",
   "schema": 23,
   "groups": [
@@ -1607,10 +1607,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-30",
+        "date": "2026-11-01",
         "by": "ENGINE",
-        "build": "1.38.0-alpha",
-        "surfaceHash": "52b9c5c2d37e2765ff46220081dc307cacf0209ee68e91c51cca42bd3fd71234"
+        "build": "1.39.2-alpha",
+        "surfaceHash": "e918ed55cdbef432d18cd5bc032f386c610abe266fb469763a97f3ebfaae811c"
       }
     },
     {
@@ -3822,8 +3822,9 @@
       "audience": "both",
       "verified": {
         "date": "2026-11-01",
-        "by": "alexanderl",
-        "build": "1.39.2-alpha"
+        "by": "ENGINE",
+        "build": "1.39.2-alpha",
+        "surfaceHash": "360982a878a600caf0f2ca7a214d6b7f0220a387e74cda05b94c066a804901d1"
       }
     },
     {

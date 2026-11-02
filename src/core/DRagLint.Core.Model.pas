@@ -190,7 +190,20 @@ const
     ('''...''') are a token of their own and an ordinary '...' string no longer
     runs past end of line. No extractor code change rides on it (a multi-name
     declaration already emitted every name: run_extractor_multi_name_fields.ps1). }
-  DRAGLINT_EXTRACTOR_VERSION = '1.28.0-alpha';
+  { 1.28.0 -> 1.29.0 (2026-11-01, 1.40 Phase B, feat/x129 -- ONE bump for the batch):
+    * call: a method-resolution clause (`procedure IJob.Execute = RunJob;`) is a
+      symbols row 'IJob.Execute' (directives 'resolution', signature '= RunJob'),
+      no phantom method; dispatch_edges gains kind 'delegates' for an
+      `implements` property (directives 'implements IJob'); a 9th calls stream
+      binds `read` refs that name a type (TFoo.Create, C:= TFoo) to the type.
+      Guards: run_method_resolution_dispatch, run_implements_delegation,
+      run_type_read_bind (tests\callresolve).
+    * doc: a trailing doc comment after code opens a new symbol_docs region
+      (Parser.DocComments). Guard run_doc_glued_summary_owner.
+    * kind: class constructor / destructor rows are kind constructor /
+      destructor (were method); new column symbols.is_class_method.
+      Guard run_class_method_flag. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.29.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
