@@ -71,7 +71,7 @@ uses
   , Winapi.Messages
   , Vcl.Graphics
   , System.Generics.Collections
-  , DragLint.Plugin.ProcRun   { RunCaptureStdout -- stall-bounded spawn }
+  , DragLint.Plugin.ProcRun   { RunCaptureStdout -- stall-bounded spawn } // dl:unit DragLint.Plugin.ProcRun accepted -- PROCRUN_TIMED_OUT_EXIT_CODE is the exit code RunCaptureStdout returns on a stall; it travels with the spawn this unit calls
   , DragLint.Plugin.Telemetry { DLT }
   ;
 
