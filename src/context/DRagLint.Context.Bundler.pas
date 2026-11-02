@@ -35,7 +35,9 @@ type
       /// <param name="AIncludeDocs"><!-- drag-lint:auto type -->Boolean</param>
       /// <param name="AIncludeSurface"><!-- drag-lint:auto type -->Boolean</param>
       /// <param name="AIncludeImpl"><!-- drag-lint:auto type -->Boolean</param>
-      /// <param name="AExcludeDfmFields"><!-- drag-lint:auto type -->Boolean = True</param>
+      /// <param name="AExcludeDfmFields">Lean surface (default True; False = <c>--full-surface</c>):
+      /// a class owner's DFM component fields are dropped, and for a MEMBER target
+      /// (not a class/record/interface) so are the surface's comment-only lines.</param>
       /// <param name="ATaskText">The caller's raw task phrase, if any. Matched
       /// against the aliases of every <c>dl:wiki</c> topic in this index; up to
       /// two matches ride along in WikiTopics. Empty (the default) skips the
@@ -194,6 +196,28 @@ begin
       else if InPublished and IsComponentFieldLine(T) then Continue; // drop the DFM component field
       Acc.Add(L);
     end;
+    Result:= Acc.ToArray;
+  finally
+    Acc.Free;
+  end; // try
+end; // function
+
+// GAP-CONTEXT (1.40): drops comment-only lines (first non-blank text `//`,
+// which covers `///` doc blocks) from a class surface. Used for a MEMBER
+// target in lean mode: the surface then carries the owner's SHAPE (its
+// declarations), while the target's own doc is in ## Doc. Measured on
+// `modify TSQLiteSymbolStore.ResolveDispatch`: 2256 of the 2457 surface lines
+// were other members' doc comments (47.5k-token bundle). Multi-line brace
+// comments and trailing comments on a declaration line are kept.
+function StripCommentOnlyLines(const ASurface: TArray<TSurfaceLine>): TArray<TSurfaceLine>;
+var
+  Acc: TList<TSurfaceLine>;
+  L  : TSurfaceLine       ;
+begin
+  Acc:= TList<TSurfaceLine>.Create;
+  try
+    for L in ASurface do
+      if not TrimLeft(L.Text).StartsWith('//') then Acc.Add(L);
     Result:= Acc.ToArray;
   finally
     Acc.Free;
@@ -642,6 +666,12 @@ begin
         filter has nothing to remove there. Guarded by
         tests\autotest\run_context_record_surface.ps1. }
       if AExcludeDfmFields and OwnerIsClass then Result.ClassSurface:= StripDfmFields(Result.ClassSurface);
+      { GAP-CONTEXT (1.40): a MEMBER target's lean surface is declarations only
+        -- see StripCommentOnlyLines. A TYPE target keeps its members' docs (the
+        question it asks), and --full-surface keeps everything. Guarded by
+        tests\autotest\run_context_member_surface_lean.ps1. }
+      if AExcludeDfmFields and (Sym.Kind not in [skClass, skInterface, skRecord]) then
+        Result.ClassSurface:= StripCommentOnlyLines(Result.ClassSurface);
     end;
   end;
 

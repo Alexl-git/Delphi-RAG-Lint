@@ -244,7 +244,8 @@ published while `modifiers` says `public` for both.
 >   It returns the doc + class surface (signatures) + that symbol's own body +
 >   its callers. Add `--full-surface` ONLY when working on a form's
 >   components/DFM/layout (otherwise the auto-generated component fields are
->   stripped to save tokens).
+>   stripped to save tokens). For a MEMBER target the lean surface also drops
+>   comment-only lines (the other members' `///` docs); a TYPE target keeps them.
 >   Pass a QUALIFIED name when you have one. A bare name resolves only when it is
 >   UNAMBIGUOUS; an ambiguous one deliberately returns nothing rather than
 >   guessing, and the header always names the symbol it chose - check it.
