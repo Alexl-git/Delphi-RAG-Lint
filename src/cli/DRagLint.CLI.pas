@@ -11633,6 +11633,8 @@ var
   R    : TReference  ;
   L    : TImpactLevel;
   DeclO: TJSONObject ;
+const
+  USAGES_FALLBACK_DEPTH = 4;
 begin
   if not ExplicitDbsExist(AArgs, 'usages') then Exit(2);
   if AArgs.Name = '' then begin Writeln('Usage: drag-lint usages --name <X> ' + '[--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]'); Exit(2); end;
@@ -11641,7 +11643,7 @@ begin
 
   if Width = 'very-wide' then Depth:= AArgs.Depth
   else Depth:= 2;
-  if Depth <= 0 then Depth:= 4;
+  if Depth <= 0 then Depth:= USAGES_FALLBACK_DEPTH;
 
   PathsToScan:= AArgs.DbPaths;
   if Length(PathsToScan) = 0 then PathsToScan:= [AArgs.DbPath];
@@ -12778,7 +12780,11 @@ end; // function
 /// --json / --format sarif paths, where the line was corrupting the document.</remarks>
 procedure EmitStatusLine(const AArgs: TArgs; const AText: string);
 begin
-  if IsMachineReadableOutput(AArgs) then begin Writeln(ErrOutput, AText); Flush(ErrOutput); end
+  if IsMachineReadableOutput(AArgs) then
+  begin
+    Writeln(ErrOutput, AText);
+    Flush(ErrOutput);
+  end
   else Writeln(AText);
 end; // procedure
 
@@ -16837,7 +16843,11 @@ var
   Stats : TFbSnapshotStats  ;
   DbPath: string            ;
 begin
-  if AArgs.FbConnection = '' then begin Writeln(ErrOutput, 'fb-snapshot: --connection "Database=...;User=...;Password=...;DriverID=FB" required'); Exit(2); end;
+  if AArgs.FbConnection = '' then
+  begin
+    Writeln(ErrOutput, 'fb-snapshot: --connection "Database=...;User=...;Password=...;DriverID=FB" required');
+    Exit(2);
+  end;
   if Length(AArgs.DbPaths) > 0 then DbPath:= AArgs.DbPaths[0]
   else DbPath:= AArgs.DbPath;
   if DbPath = '' then begin Writeln(ErrOutput, 'fb-snapshot: --db <sql.sqlite> required'); Exit(2); end;
@@ -22296,7 +22306,10 @@ begin
     begin
       if Cfg.IsPathExcluded(PasPath) then begin Inc(ExcludedCount); Continue; end;
       if (not AArgs.LintThirdParty) and (not Own.IsOurs(PasPath)) then
-        begin SkippedThird:= SkippedThird + [PasPath]; Continue; end;
+        begin
+          SkippedThird:= SkippedThird + [PasPath];
+          Continue;
+        end;
       if (ScopeSet = nil) or ScopeSet.ContainsKey(ScopeKey(PasPath)) then FilePaths:= FilePaths + [PasPath];
     end;
   end;
