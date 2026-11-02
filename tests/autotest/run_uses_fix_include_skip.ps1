@@ -34,8 +34,16 @@ $iu = Join-Path $WorkDir 'includeuses'; Copy-Item (Resolve-Path "$PSScriptRoot\.
 $proj = Join-Path $iu 'IncUsesX.dproj'
 $db = Join-Path $WorkDir 'iu.sqlite'
 function Run([string[]]$a) {
-  Push-Location $WorkDir
-  try { $o = & $Exe @a 2>&1 | ForEach-Object { "$_" } | Out-String; $rc = $LASTEXITCODE } finally { Pop-Location }
+  # An engine call that exits non-zero with NO output at all is a load flake seen under -Jobs N
+  # (1.40 guard lane); retry it up to twice and say so. Any call that prints something, or exits 0,
+  # is judged as before.
+  for ($try = 1; $try -le 3; $try++) {
+    Push-Location $WorkDir
+    try { $o = & $Exe @a 2>&1 | ForEach-Object { "$_" } | Out-String; $rc = $LASTEXITCODE } finally { Pop-Location }
+    if (($rc -eq 0) -or ($o.Trim().Length -gt 0)) { break }
+    Write-Host "  [NOTE] silent non-zero engine exit on attempt $try ($($a[0])); retrying" -ForegroundColor Yellow
+    Start-Sleep -Milliseconds 500
+  }
   return @{ Out = $o; Rc = $rc }
 }
 function Hash([string]$p) { (Get-FileHash $p -Algorithm SHA256).Hash }

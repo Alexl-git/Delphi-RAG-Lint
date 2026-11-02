@@ -135,6 +135,7 @@ type
 implementation
 
 uses
+  DRagLint.Core.FileTime,
   System.IOUtils,
   System.Hash,
   System.DateUtils,
@@ -576,7 +577,7 @@ begin
     { Same probe as TCallResolver.LinesOf: the index's line/col are only valid
       for the bytes it parsed. ANSI, as the indexer hashed them. }
     Txt:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(Path));
-    if not FStore.FileIsUpToDate(Path, DateTimeToUnix(TFile.GetLastWriteTime(Path), False), THashSHA2.GetHashString(Txt)) then
+    if not FStore.FileIsUpToDate(Path, FileMTimeUnix(Path), THashSHA2.GetHashString(Txt)) then
       FStaleFiles.AddOrSetValue(AFileId, True)
     else
     begin

@@ -131,7 +131,12 @@ function Pump($e) {
 }
 function OutText($e) { Pump $e; return [System.Text.Encoding]::UTF8.GetString($e.Out.ToArray()) }
 function ErrText($e) { Pump $e; return [System.Text.Encoding]::UTF8.GetString($e.Err.ToArray()) }
+# Every WaitUntil below waits for something that MUST happen and returns the moment it does, so a
+# longer allowance costs nothing on a quiet box and only stops a loaded one (17 lanes share it) from
+# timing out before the engine got CPU. x3 (1.40 guard lane). No WaitUntil asserts "did NOT happen".
+$script:WaitScale = 3
 function WaitUntil([scriptblock]$Pred, [int]$Ms) {
+  $Ms = $Ms * $script:WaitScale
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
   while ($sw.ElapsedMilliseconds -lt $Ms) { if (& $Pred) { return $true }; Start-Sleep -Milliseconds 40 }
   return [bool](& $Pred)
@@ -149,7 +154,7 @@ function PipeLeafOf($e, [int]$Ms) {
   if ((ErrText $e) -match 'control channel listening on \\\\\.\\pipe\\(\S+)') { return $Matches[1] }
   return ''
 }
-function Send-Ctl([string]$Leaf, [string]$Msg, [int]$TimeoutMs = 3000) {
+function Send-Ctl([string]$Leaf, [string]$Msg, [int]$TimeoutMs = 10000) {
   $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', $Leaf, [System.IO.Pipes.PipeDirection]::InOut)
   try {
     $c.Connect($TimeoutMs)

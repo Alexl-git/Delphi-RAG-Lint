@@ -262,6 +262,7 @@
   "unsafe-typecast-without-is": {"cwe": ["CWE-704"]},
   "unsigned-compare-always-true": {"cwe": ["CWE-571"], "misra": ["MISRA-C-2012-R14.3"]},
   "unused-enum-value": {"cwe": ["CWE-561"], "weak": ["CWE-561"]},
+  "unused-global": {"cwe": ["CWE-561"], "weak": ["CWE-561"]},
   "unused-local": {"cwe": ["CWE-563"], "misra": ["MISRA-CPP-2008-0-1-3"]},
   "unused-loop-variable": {"cwe": ["CWE-563"], "weak": ["CWE-563"]},
   "unused-parameter": {"misra": ["MISRA-C-2012-R2.7"]},

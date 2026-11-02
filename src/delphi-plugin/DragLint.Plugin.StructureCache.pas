@@ -34,18 +34,53 @@ type
     Signature: string     ; { param list + return type / member type }
   end;
 
+  /// <summary>Receives one file's freshly fetched symbols on the MAIN thread.</summary>
+  /// <param name="AFilePath">The file the fetch was started for, as passed in.</param>
+  /// <param name="ASymbols">The symbols; empty when the engine answered nothing usable.</param>
+  TStructureSymbolsDone = reference to procedure(const AFilePath: string; const ASymbols: TArray<TSymbolInfo>);
+
   TDragLintStructureCache = class
     strict private
-      FByFile: TDictionary<string, TArray<TSymbolInfo>>;
-      FLock  : TCriticalSection                        ;
+      FByFile  : TDictionary<string, TArray<TSymbolInfo>>;
+      { Key -> the callback of the fetch running for it. Main thread only. }
+      FInFlight: TDictionary<string, TStructureSymbolsDone>;
+      FLock    : TCriticalSection                        ;
+    private
+      procedure Deliver(const AKey, AFilePath: string; const ASymbols: TArray<TSymbolInfo>);
     public
       constructor Create;
       destructor Destroy; override;
 
-      { Returns cached symbols for AFilePath, shelling out if not cached.
-      AExePath is the path to drag-lint.exe; ADbPath is the resolved project
-      database to query (empty = let the exe use its default resolution). }
+      /// <summary>Returns cached symbols for AFilePath, shelling out if not cached.</summary>
+      /// <param name="AFilePath">The source file.</param>
+      /// <param name="AExePath">Path to drag-lint.exe.</param>
+      /// <param name="ADbPath">The resolved project database (empty = the exe's default resolution).</param>
+      /// <returns>The file's symbols (cached, or fetched now).</returns>
+      /// <remarks>BLOCKS until the engine answers -- never call it on the IDE main
+      /// thread (docs\INBOX-ide-hang-on-slow-engine.md); the IDE uses
+      /// RefreshSymbolsAsync.</remarks>
       function GetSymbolsForFile(const AFilePath, AExePath, ADbPath: string): TArray<TSymbolInfo>;
+
+      /// <summary>Cached symbols for AFilePath, without spawning anything.</summary>
+      /// <param name="AFilePath">The source file.</param>
+      /// <param name="ASymbols">Receives the cached symbols (empty on a miss).</param>
+      /// <returns>True when the file is cached.</returns>
+      function TryGetSymbols(const AFilePath: string; out ASymbols: TArray<TSymbolInfo>): Boolean;
+
+      /// <summary>Fetches AFilePath's symbols on a worker thread and hands them to
+      /// ADone on the main thread when the engine answers -- however late (owner
+      /// rule: a slow answer is shown, never dropped).</summary>
+      /// <param name="AFilePath">The source file.</param>
+      /// <param name="AExePath">Path to drag-lint.exe.</param>
+      /// <param name="ADbPath">The resolved project database (empty = the exe's default resolution).</param>
+      /// <param name="ADone">Called once, on the main thread, with the answer, which
+      /// is also cached. Not called when the cache is destroyed first.</param>
+      /// <returns>True when a fetch was started; False when one for the same file
+      /// is still running -- ADone then REPLACES that fetch's callback, so the
+      /// latest caller gets the answer and no second engine run is stacked.</returns>
+      /// <remarks>Never waits: returns before the engine is spawned. Call on the
+      /// main thread (the in-flight table is not locked).</remarks>
+      function RefreshSymbolsAsync(const AFilePath, AExePath, ADbPath: string; const ADone: TStructureSymbolsDone): Boolean;
 
       { Drop the cached entry for AFilePath so the next call re-shells. }
       procedure InvalidateForFile(const AFilePath: string);
@@ -69,6 +104,9 @@ uses
 
 var
   GStructureCache: TDragLintStructureCache = nil;
+  { Every live cache instance; main thread only. A late outline answer is
+    delivered only to an instance still listed here. }
+  GLiveCaches: TList<TDragLintStructureCache> = nil;
 
 function StructureCache: TDragLintStructureCache;
 begin
@@ -297,15 +335,101 @@ end; // function
 constructor TDragLintStructureCache.Create;
 begin
   inherited Create;
-  FByFile:= TDictionary<string, TArray<TSymbolInfo>>.Create;
-  FLock:= TCriticalSection.Create;
+  FByFile  := TDictionary<string, TArray<TSymbolInfo>>.Create;
+  FInFlight:= TDictionary<string, TStructureSymbolsDone>.Create;
+  FLock    := TCriticalSection.Create;
+  if GLiveCaches <> nil then GLiveCaches.Add(Self);
 end;
 
 destructor TDragLintStructureCache.Destroy;
 begin
+  { A fetch still running answers into the void: Deliver is only reached for
+    an instance still in GLiveCaches. }
+  if GLiveCaches <> nil then GLiveCaches.Remove(Self);
   FLock.Free;
+  FInFlight.Free;
   FByFile.Free;
   inherited;
+end;
+
+function OutlineCmdLine(const AFilePath, AExePath, ADbPath: string): string;
+begin
+  { v0.42: file-scoped outline as JSON. Pass --db when we have a resolved
+    project database; without it the exe falls back to its own default
+    resolution (.drag-lint.json / drag-lint.sqlite in cwd). }
+  Result:= if ADbPath <> '' then Format('"%s" outline --file "%s" --format json --db "%s"', [AExePath, AFilePath, ADbPath])
+           else Format('"%s" outline --file "%s" --format json', [AExePath, AFilePath]);
+end;
+
+function TDragLintStructureCache.TryGetSymbols(const AFilePath: string; out ASymbols: TArray<TSymbolInfo>): Boolean;
+begin
+  FLock.Enter;
+  try
+    Result:= FByFile.TryGetValue(LowerCase(AFilePath), ASymbols);
+  finally
+    FLock.Leave;
+  end;
+  if not Result then SetLength(ASymbols, 0);
+end;
+
+function TDragLintStructureCache.RefreshSymbolsAsync(const AFilePath, AExePath, ADbPath: string;
+  const ADone: TStructureSymbolsDone): Boolean;
+var
+  Key : string                ;
+  Inst: TDragLintStructureCache;
+  Cmd : string                ;
+begin
+  Key:= LowerCase(AFilePath);
+  Result:= not FInFlight.ContainsKey(Key);
+  FInFlight.AddOrSetValue(Key, ADone);
+  if not Result then Exit;
+  Inst:= Self;
+  Cmd := OutlineCmdLine(AFilePath, AExePath, ADbPath);
+  { 2026-11-01 (IDE-HANG): the worker touches nothing but its locals; the
+    answer goes back to the main thread, where Deliver checks the instance is
+    still alive before it is touched. }
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      Output: string;
+      Syms  : TArray<TSymbolInfo>;
+    begin
+      try
+        RunAndCaptureSurface(Cmd, Output);
+        Syms:= ParseOutlineJson(Output);
+      except
+        on E: Exception do
+        begin
+          DLT('structure', 'outline fetch raised: ' + E.Message);
+          SetLength(Syms, 0);
+        end;
+      end;
+      TThread.Queue(nil,
+        procedure
+        begin
+          if (GLiveCaches <> nil) and GLiveCaches.Contains(Inst) then Inst.Deliver(Key, AFilePath, Syms);
+        end);
+    end).Start;
+end;
+
+procedure TDragLintStructureCache.Deliver(const AKey, AFilePath: string; const ASymbols: TArray<TSymbolInfo>);
+var
+  Done: TStructureSymbolsDone;
+begin
+  FLock.Enter;
+  try
+    FByFile.AddOrSetValue(AKey, ASymbols);
+  finally
+    FLock.Leave;
+  end;
+  if not FInFlight.TryGetValue(AKey, Done) then Exit;
+  FInFlight.Remove(AKey);
+  if Assigned(Done) then
+    try
+      Done(AFilePath, ASymbols);
+    except
+      on E: Exception do DLT('structure', 'outline callback raised: ' + E.Message);
+    end;
 end;
 
 function TDragLintStructureCache.GetSymbolsForFile( const AFilePath, AExePath, ADbPath: string): TArray<TSymbolInfo>;
@@ -332,11 +456,7 @@ begin
     Exit;
   end;
 
-  { v0.42: file-scoped outline as JSON. Pass --db when we have a resolved
-    project database; without it the exe falls back to its own default
-    resolution (.drag-lint.json / drag-lint.sqlite in cwd). }
-  if ADbPath <> '' then CmdLine:= Format('"%s" outline --file "%s" --format json --db "%s"', [AExePath, AFilePath, ADbPath])
-  else CmdLine:= Format('"%s" outline --file "%s" --format json', [AExePath, AFilePath]);
+  CmdLine:= OutlineCmdLine(AFilePath, AExePath, ADbPath);
   RunAndCaptureSurface(CmdLine, Output);
   Symbols:= ParseOutlineJson(Output);
 
@@ -372,8 +492,10 @@ begin
 end;
 
 initialization
+GLiveCaches:= TList<TDragLintStructureCache>.Create;
 
 finalization
 FreeAndNil(GStructureCache);
+FreeAndNil(GLiveCaches);
 
 end.

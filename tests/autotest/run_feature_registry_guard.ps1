@@ -66,6 +66,16 @@ try {
 } finally { [IO.Directory]::Delete($fresh, $true) }
 Write-Host '  [CTRL] the freshness rule refuses a missing and a stale featuregen.exe and accepts a fresh one' -ForegroundColor DarkGray
 if (-not (Test-Path -LiteralPath $engine)) { Write-Host "GUARD BROKEN: engine not found: $engine" -ForegroundColor Red; exit 1 }
+# A worktree build's <exe-dir>\rules goes stale (113 vs 197) and then fails the live-surface check falsely (RULES-STALE-DIR).
+. (Join-Path $PSScriptRoot 'lib\EngineCompanions.ps1')
+[void](Initialize-EngineCompanions -Exe $engine)
+# check B (menu-tree) reads the PLUGIN index, a gitignored per-checkout DB a fresh worktree lacks; the engine's own
+# message says to build it, so do that (this checkout's _D-RAG only, never another tree's DB).
+$plugDb = Join-Path $Repo 'src\delphi-plugin\_D-RAG\dclDragLintWizard.sqlite'
+if (-not (Test-Path -LiteralPath $plugDb)) {
+  [void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $plugDb))
+  & $engine index --project (Join-Path $Repo 'src\delphi-plugin\dclDragLintWizard.dproj') --db $plugDb 2>&1 | Out-Null
+}
 if (Test-Path -LiteralPath $WorkDir) { Remove-Item -LiteralPath $WorkDir -Recurse -Force }
 New-Item -ItemType Directory -Path $WorkDir | Out-Null
 

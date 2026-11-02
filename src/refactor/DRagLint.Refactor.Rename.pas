@@ -79,7 +79,10 @@ type
       /// other BOM-less file is ANSI. Each edit replaces OldName at (Line, Col),
       /// a character column; when the token is not there, the first occurrence
       /// of OldName to the right on that line. A file none of whose edits
-      /// applies is not rewritten, gets no .bak and is not counted.</summary>
+      /// applies is not rewritten, gets no .bak and is not counted.
+      /// All-or-nothing (1.40): the original bytes of every file are held before
+      /// the first write; if any write raises, every file already written is
+      /// restored byte-for-byte and the exception is re-raised.</summary>
       /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TRenameEdit&gt;</param>
       /// <param name="AWriteBackups"><!-- drag-lint:auto type -->Boolean</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: FilesTouched.</returns>
@@ -760,6 +763,9 @@ var
   OldLen : Integer;
   TE     : TTextEdit;
   TEs    : TList<TTextEdit>;
+  Orig   : TDictionary<string, TBytes>;
+  Path   : string;
+  Pair   : TPair<string, TBytes>;
 begin
   { W5-D: no I/O of its own. Each edit is resolved to a character span of the
     file as the shared reader decodes it, then written by TTextEditApplier --
@@ -767,6 +773,7 @@ begin
     in-place editor shares. }
   Cache:= TObjectDictionary<string, TStringList>.Create([doOwnsValues]);
   TEs  := TList<TTextEdit>.Create;
+  Orig := TDictionary<string, TBytes>.Create(TIStringComparer.Ordinal);
   try
     for Edit in AEdits do
     begin
@@ -804,8 +811,28 @@ begin
       TE.ExpectText:= Copy(LineStr, ColIdx + 1, OldLen);
       TEs.Add(TE);
     end;
-    Result:= TTextEditApplier.Apply(TEs.ToArray, AWriteBackups);
+    { Atomic: hold every file's original bytes, restore all of them if a write fails. }
+    for TE in TEs do
+      if not Orig.ContainsKey(TE.FilePath) then Orig.Add(TE.FilePath, TFile.ReadAllBytes(TE.FilePath));
+    try
+      Result:= TTextEditApplier.Apply(TEs.ToArray, AWriteBackups);
+    except
+      on Exception do
+      begin
+        for Pair in Orig do
+        begin
+          Path:= Pair.Key;
+          try
+            TFile.WriteAllBytes(Path, Pair.Value);
+          except  // dl:ok try-except-swallowed@767f -- 1.40: best-effort restore of the other files; the original exception is re-raised below
+            on Exception do ; // dl:ok empty-on-handler@17b2 -- 1.40: same restore; one failed file must not stop the others
+          end;
+        end;
+        raise;
+      end;
+    end;
   finally
+    Orig.Free;
     TEs.Free;
     Cache.Free;
   end;

@@ -4,10 +4,10 @@ title: LSP protocol extensions
 summary: Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index
 product: DL
 group: editor-integration
-order: 110013
+order: 110014
 since: 1.33.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.39.2-alpha
 ---
 
 # LSP protocol extensions

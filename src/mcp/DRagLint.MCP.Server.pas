@@ -45,6 +45,11 @@ type
       { The freshness note of the store this tools/call reads ('' when fresh),
         returned as a SECOND text item so the first stays parseable JSON. }
       FCallNote      : string;
+      { 1.40: the freshness probe is throttled -- one probe per DB per window
+        (DRAGLINT_MCP_PROBE_TTL_MS, default 5000, 0 = every call). }
+      FProbeDb       : string;
+      FProbeTick     : UInt64;
+      FProbeNote     : string;
       /// <summary>Opens ADbPath READ-ONLY, as the CLI's read verbs do: no Migrate,
       /// and an index at an old schema is refused with the reason in AError.</summary>
       function OpenStore(const ADbPath: string; out AError: string): ISymbolStore;
@@ -487,7 +492,11 @@ begin
   // GetStdHandle, not TTextRec(Output).Handle: the RTL opens Output on its first
   // write, so before one that handle is 0.
   Bytes:= TEncoding.UTF8.GetBytes(AText + #10);
-  Flush(Output);
+  try
+    Flush(Output);
+  except  // dl:ok try-except-swallowed@767f -- 1.40: a closed pipe makes Flush raise; the write below reports it by returning
+    on Exception do ; // dl:ok empty-on-handler@17b2 -- 1.40: same; nobody is left to answer
+  end;
   Done:= 0;
   while Done < DWORD(Length(Bytes)) do
   begin
@@ -802,14 +811,30 @@ begin
   end;
 end;
 
+const
+  PROBE_TTL_DEFAULT_MS = 5000; // freshness-probe throttle window
+
 function TMCPServer.NoteFor(const ADbPath: string; const AStore: ISymbolStore): string;
 begin
   Result:= '';
   if (AStore = nil) or (ADbPath = '') then Exit;
-  { Probed on every call, not cached: a session outlives reindexes, and a note
-    that stays after the index caught up is the warning nobody reads again. }
+  { Throttled (1.40): a session outlives reindexes, so the note is re-probed, but
+    at most once per window per DB -- a note that stays after the index caught up
+    is the warning nobody reads again, and the probe stats every source file. }
+  var Ttl: UInt64:= PROBE_TTL_DEFAULT_MS;
+  var TtlEnv: string:= GetEnvironmentVariable('DRAGLINT_MCP_PROBE_TTL_MS');
+  if TtlEnv <> '' then Ttl:= StrToUInt64Def(TtlEnv, PROBE_TTL_DEFAULT_MS);
+  var NowTick: UInt64:= GetTickCount64;
+  if (Ttl > 0) and SameText(FProbeDb, ADbPath) and (FProbeTick <> 0) and (NowTick - FProbeTick < Ttl) then
+  begin
+    Result:= FProbeNote;
+    Exit;
+  end;
   var Rep: TFreshnessReport:= ProbeIndexFreshness(AStore);
   if Rep.Verdict = fvStale then Result:= FreshnessNote(Rep, ADbPath);
+  FProbeDb  := ADbPath;
+  FProbeTick:= NowTick;
+  FProbeNote:= Result;
 end;
 
 function TMCPServer.FindCallersText(const AName: string; AContext: Integer): string;
@@ -1073,7 +1098,11 @@ begin
       var Reply: TJSONObject:= TJSONObject.Create;
       Reply.AddPair('content', TextContent(Format('drag-lint: tool %s failed: %s: %s', [ToolName, E.ClassName, E.Message])));
       Reply.AddPair('isError', TJSONBool.Create(True));
-      SendResult(AId, Reply);
+      try
+        SendResult(AId, Reply);
+      except  // dl:ok try-except-swallowed@767f -- 1.40: the client closed the pipe; the error handler must not raise out of Run
+        on Exception do ; // dl:ok empty-on-handler@17b2 -- 1.40: same; nobody is left to answer
+      end;
     end;
   end;
 end;

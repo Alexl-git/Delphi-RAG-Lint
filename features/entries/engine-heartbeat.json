@@ -1,0 +1,40 @@
+{
+  "id": "engine-heartbeat",
+  "title": "Engine heartbeat: the IDE tells a busy engine from a stuck one",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.40.0-alpha",
+  "summary": "A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving",
+  "intro": "Read this to understand why a long index or lint-all no longer gets killed while it works, and why a frozen engine still is. The engine keeps a status record (action, step, n of total) and answers it on a status-only pipe, drag-lint-beat-*, next to the control pipe. The IDE plugin polls it every two seconds: a changing record counts as progress, a frozen record on a spinning process counts as stuck. The status bar shows it, e.g. 'index parse 120/400'. An old engine or a verb without a beat falls back to the earlier output-or-CPU rule.",
+  "wikiPage": "heartbeat",
+  "surfaces": [
+    {
+      "type": "workflow",
+      "doc": "docs\\wiki\\heartbeat.md"
+    }
+  ],
+  "audience": "both",
+  "aliases": ["beat", "drag-lint-beat", "status record", "stuck engine"],
+  "related": ["hover-at-cursor", "lsp-full-rules"],
+  "questions": [
+    {
+      "ask": "Why was my long index not killed by the IDE, and a frozen one was?",
+      "command": "drag-lint shutdown --dry-run"
+    },
+    {
+      "ask": "What is the engine doing right now?",
+      "command": "see the drag-lint status bar panel in the IDE"
+    }
+  ],
+  "access": "cli-only",
+  "accessReviewed": {
+    "date": "2026-11-01",
+    "by": "ENGINE"
+  },
+  "lastVerified": {
+    "date": "2026-11-01",
+    "by": "ENGINE",
+    "build": "1.39.2-alpha"
+  }
+}

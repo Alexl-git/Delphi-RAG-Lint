@@ -244,6 +244,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [drag-lint Graph (dockable)](features/drag-lint-graph-dockable.md) | Opens the drag-lint graph viewer as a dockable window inside the IDE, so it can sit beside Structure | 0.43.0-alpha |
 | [drag-lint Options](features/drag-lint-options.md) | The plugin's settings dialog for drag-lint: lets you browse and toggle the lint rule catalog | 0.95.0-alpha |
 | [drag-lint Panel (dockable)](features/drag-lint-panel-dockable.md) | Opens the main drag-lint dockable tool window inside the IDE | 0.42.0-alpha |
+| [Engine heartbeat: the IDE tells a busy engine from a stuck one](features/engine-heartbeat.md) | A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving | 1.40.0-alpha |
 | [Help line (DL page)](features/ide-help-line.md) | Type part of a feature name on the DL page, pick a match (with its menu path) and open that feature's help page at the configured help root | 1.33.0-alpha |
 | [IDE Menu Reference](features/ide-menu-reference.md) | What every item in the drag-lint menu does | 1.4.0-alpha |
 | [ide-release](features/ide-release.md) | Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request | 1.13.0-alpha |

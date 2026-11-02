@@ -166,6 +166,17 @@ var
 /// <remarks>Main thread only.</remarks>
 function JobQueueBusy: Boolean;
 
+/// <summary>The bar text a finished reindex job leaves behind.</summary>
+/// <param name="AExitCode">The engine's exit code.</param>
+/// <param name="AOutput">Its captured stdout+stderr; scanned only for the index-lock refusal.</param>
+/// <returns>'reindex: done' for 0; 'reindex: index busy, will retry' for exit 2 whose
+/// output is the index-lock refusal (another run owns the database -- not an error; the
+/// next save or reindex retries); 'reindex: failed' for any other exit 2; otherwise
+/// 'reindex: failed (exit N)'.</returns>
+/// <remarks>Pure. The lock refusal is recognised by the phrase 'another index run',
+/// which both AcquireIndexLock refusals (sharing violation, delete pending) carry.</remarks>
+function ReindexResultText(AExitCode: Integer; const AOutput: string): string;  // dl:ok unused-public-symbol@a063 -- public on purpose: tests\IndexJobTests.dpr (outside the plugin project) pins its wording
+
 { Lazy singleton (create/access on the main thread) + finalization teardown. }
 function JobQueue: TDragLintJobQueue;
 procedure ShutdownJobQueue;
@@ -174,6 +185,7 @@ implementation
 
 uses
   System.Math
+  , System.StrUtils
   , Winapi.Windows
   , DragLint.Plugin.ProcRun  // dl:unit DragLint.Plugin.ProcRun accepted -- PROCRUN_TIMED_OUT_EXIT_CODE is the runner's own result code; the job reads it to report a timeout
   { The gate's only new dependency. Core.EngineHold reads a sentinel file
@@ -196,6 +208,13 @@ const
     it simply re-peeks, finds the hold, and waits again. }
   HOLD_RECHECK_MS = 5000;
 
+  { PLUG-INFWAIT (2026-11-01): the idle worker's wait slice. It used to wait
+    INFINITE on FWake; now it wakes at least this often, re-peeks the queue and
+    re-checks FShutdown, so a lost wake or a shutdown flag set without a
+    SetEvent can never strand a job or pin the thread. An idle pass is one
+    lock and a Count test. }
+  WORKER_IDLE_RECHECK_MS = 1000;
+
 type
   TQueueWorker = class(TThread)
   private
@@ -210,6 +229,18 @@ constructor TQueueWorker.Create(AOwner: TDragLintJobQueue);
 begin
   FOwner:= AOwner;
   inherited Create(False { start now });
+end;
+
+function ReindexResultText(AExitCode: Integer; const AOutput: string): string;
+const
+  EXIT_USAGE_OR_LOCK = 2;
+  LOCK_REFUSAL_PHRASE = 'another index run';
+begin
+  if AExitCode = 0 then Exit('reindex: done');
+  if (AExitCode = EXIT_USAGE_OR_LOCK) and ContainsText(AOutput, LOCK_REFUSAL_PHRASE) then
+    Exit('reindex: index busy, will retry');
+  if AExitCode = EXIT_USAGE_OR_LOCK then Exit('reindex: failed');
+  Result:= Format('reindex: failed (exit %d)', [AExitCode]);
 end;
 
 procedure TQueueWorker.Execute;
@@ -536,12 +567,13 @@ begin
     Res:= Res + Format(': hung -- no progress for %d s, killed', [AJob.TimeoutMs div MSecsPerSec])
   else if (ExitCode = PROCRUN_CANCELLED_EXIT_CODE) or Cancelled then
     Res:= Res + ': cancelled' { Cancelled: the engine stood down by itself and exited with its own code }
-  else if ExitCode = 2 then
-    Res:= Res + ': failed'
   { F1 (2026-10-25): `index` exits 1 when a file failed to index (the run carried
-    on; that file keeps its old rows) and 3 on a fatal -- neither is "done". }
+    on; that file keeps its old rows) and 3 on a fatal -- neither is "done".
+    Exit 2 with the lock refusal is not a failure: another run owns the database. }
   else if (AJob.Kind = jkReindex) and (ExitCode <> 0) then
-    Res:= Res + Format(': failed (exit %d)', [ExitCode])
+    Res:= ReindexResultText(ExitCode, Output)
+  else if ExitCode = 2 then  // dl:ok ifthen-to-if-expression@7e59 -- the other branches of this chain call different routines; one expression would hide the chain
+    Res:= Res + ': failed'
   else
     Res:= Res + ': done';
   SetLastResult(Res);
@@ -661,7 +693,7 @@ var
 begin
   while not FShutdown do
   begin
-    FWake.WaitFor(INFINITE);
+    FWake.WaitFor(WORKER_IDLE_RECHECK_MS);   { bounded: an empty peek just waits again }
     if FShutdown then Break;
     repeat
       { PEEK first -- under the lock, without removing -- so the gate below

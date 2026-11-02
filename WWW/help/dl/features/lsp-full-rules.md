@@ -4,17 +4,17 @@ title: LSP full rule set on save
 summary: Runs the full lint rule set on save so the editor shows what the CLI shows
 product: DL
 group: editor-integration
-order: 110012
+order: 110013
 since: 1.33.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.39.2-alpha
 ---
 
 # LSP full rule set on save
 
 Runs the full lint rule set on save so the editor shows what the CLI shows.
 
-Read this when the editor should publish the same findings as drag-lint lint, including dl:ok markers, instead of the small built-in set. It is the opt-in lsp --full-rules flag of the plain server (its lint child inherits each file's own project defines through --db); it is a separate mode from lsp --proxy, which ignores it.
+Read this when the editor should publish the same findings as drag-lint lint, including dl:ok markers, instead of the small built-in set. It is the opt-in lsp --full-rules flag of the plain server (its lint child inherits each file's own project defines through --db); it is a separate mode from lsp --proxy, which ignores it. A slow machine never loses findings: the lint child is killed only when it makes no progress, and its late findings are still published.
 
 ## How to run it
 

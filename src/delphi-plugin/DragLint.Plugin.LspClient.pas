@@ -99,6 +99,14 @@ type
         an engine burning CPU is working, however long it stays silent. }
       FLastCpu100ns   : Int64                           ;
       FLastCpuTick    : UInt64                          ;
+      { 1.40 heartbeat: once the engine answered one, its status counter (seq) is THE progress signal and
+        CPU no longer counts. FLastBeatTick = when seq last changed; FNextBeatTick = when the ticker asks
+        again. Guarded by FLock, like the CPU mark. }
+      FBeatSeen       : Boolean                         ;
+      FBeatSeq        : Int64                           ;
+      FLastBeatTick   : UInt64                          ;
+      FNextBeatTick   : UInt64                          ;
+      FBeatText       : string                          ;
       FTicker         : TThread                         ;
       FTickerStop     : TEvent                          ;
       FBusyAfterMs    : Cardinal                        ;
@@ -115,6 +123,7 @@ type
       { Accessible to the ticker thread in same unit }
       procedure ExpireTimedOut;
       procedure SampleEngineCpu(ANow: UInt64);
+      procedure SampleEngineBeat(ANow: UInt64);
     public
       constructor Create;
       destructor Destroy; override;
@@ -198,16 +207,33 @@ type
       function IsBusy: Boolean;
 
       /// <summary>True when requests are outstanding and the engine has made NO
-      /// PROGRESS for longer than StuckAfterMs -- sent nothing AND burnt no CPU --
-      /// the watchdog's restart signal for a HUNG engine.</summary>
-      /// <returns>True when the time since max(last message, last CPU progress,
+      /// PROGRESS for longer than StuckAfterMs -- the watchdog's restart signal for
+      /// a HUNG engine. Progress = a message received, or (1.40) its heartbeat
+      /// status CHANGING; for an engine without a heartbeat, CPU burnt.</summary>
+      /// <returns>True when the time since max(last message, last progress mark,
       /// oldest outstanding request) exceeds StuckAfterMs, or the stdin write has
-      /// been blocked that long.</returns>
+      /// been blocked that long. The progress mark is the last heartbeat seq change
+      /// once a beat was seen (CPU is then ignored: an engine spinning with a frozen
+      /// status IS stuck), else the last CPU progress.</returns>
       /// <remarks>fix/late-results (owner ruling 2026-11-01): a slow engine that is
-      /// working must never be restarted -- that loses every late result. CPU is
-      /// sampled by the ticker from the server process handle; a client attached
-      /// to bare pipes (tests) has none and falls back to silence alone.</remarks>
+      /// working must never be restarted -- that loses every late result. The
+      /// ticker asks the engine's heartbeat pipe (DRagLint.Core.ControlChannel
+      /// RequestEngineBeat) every few seconds and samples CPU from the process
+      /// handle; a client attached to bare pipes (tests) has neither unless
+      /// NoteEngineBeat is called, and falls back to silence alone.</remarks>
       function IsStuck: Boolean;
+
+      /// <summary>Records one heartbeat answer of the engine (the ticker calls it; tests call it directly).</summary>
+      /// <param name="ASeq">The status counter the engine reported; a value different from the last one is progress.</param>
+      /// <param name="AText">Display text of the status (BeatDisplayText) -- EngineBeatText.</param>
+      /// <remarks>Thread-safe. The first call switches IsStuck from the CPU rule to the heartbeat rule for the
+      /// rest of this client's life.</remarks>
+      procedure NoteEngineBeat(ASeq: Int64; const AText: string);
+
+      /// <summary>The engine's last reported status for display (e.g. <c>textDocument/hover</c>,
+      /// <c>index: resolve calls 12</c>); '' before the first heartbeat.</summary>
+      /// <returns>The text. Thread-safe.</returns>
+      function EngineBeatText: string;
 
       /// <summary>Requests sent and not yet answered (timed-out ones included).</summary>
       /// <returns>The count; 0 when idle.</returns>
@@ -244,6 +270,7 @@ implementation
 
 uses
   DragLint.Plugin.LogPaths
+  , DRagLint.Core.ControlChannel { 1.40 heartbeat: RequestEngineBeat, BeatDisplayText }
   ;
 
 { ---- Debug log ---- }
@@ -427,6 +454,10 @@ const
   { Engine CPU (100 ns units) since the last mark that counts as progress: 50 ms,
     above the clock-tick noise an idle process is charged. }
   CPU_PROGRESS_100NS   = 50 * 10000;
+  { 1.40 heartbeat: how often the ticker asks the engine for its status, and how long one ask may wait
+    for the pipe (the listener answers at once; a missing pipe fails at once). }
+  BEAT_POLL_MS         = 2000;
+  BEAT_CONNECT_MS      = 200;
   INITIALIZE_TIMEOUT_MS = 45000;
 
 type
@@ -637,6 +668,47 @@ begin
   FLastCpuTick := ANow;
 end;
 
+{ From the ticker, OUTSIDE FLock (the ask is pipe I/O, bounded by BEAT_CONNECT_MS): every BEAT_POLL_MS
+  ask the engine's heartbeat pipe for its status. No process id (pipes attached directly) = no ask. }
+procedure TDragLintLspClient.SampleEngineBeat(ANow: UInt64);
+var
+  Pid: DWORD      ;
+  B  : TEngineBeat;
+begin
+  FLock.Enter;
+  try
+    if (FProcessId = 0) or (ANow < FNextBeatTick) then Exit;
+    FNextBeatTick:= ANow + BEAT_POLL_MS;
+    Pid:= FProcessId;
+  finally
+    FLock.Leave;
+  end;
+  if RequestEngineBeat(Pid, BEAT_CONNECT_MS, B) then NoteEngineBeat(B.Seq, BeatDisplayText(B));
+end;
+
+procedure TDragLintLspClient.NoteEngineBeat(ASeq: Int64; const AText: string);
+begin
+  FLock.Enter;
+  try
+    if (not FBeatSeen) or (ASeq <> FBeatSeq) then FLastBeatTick:= GetTickCount64;
+    FBeatSeen:= True;
+    FBeatSeq := ASeq;
+    FBeatText:= AText;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+function TDragLintLspClient.EngineBeatText: string;
+begin
+  FLock.Enter;
+  try
+    Result:= FBeatText;
+  finally
+    FLock.Leave;
+  end;
+end;
+
 procedure TDragLintLspClient.ExpireTimedOut;
 var
   Now64  : UInt64              ;
@@ -646,6 +718,7 @@ var
   Pair   : TPair<Integer, TObject>;
 begin
   Now64:= GetTickCount64;
+  SampleEngineBeat(Now64);
   Expired:= TList<Integer>.Create;
   try
     FLock.Enter;
@@ -823,6 +896,16 @@ begin
 
   FProcessHandle:= PI.hProcess;
   FProcessId    := PI.dwProcessId;
+  { 1.40: a new engine starts on the CPU rule until IT answers a heartbeat. }
+  FLock.Enter;
+  try
+    FBeatSeen    := False;
+    FBeatSeq     := 0;
+    FBeatText    := '';
+    FNextBeatTick:= 0;
+  finally
+    FLock.Leave;
+  end;
   { v0.47: OS force-kills the engine when the IDE process dies (crash/kill too). }
   AssignToDragLintJob(FProcessHandle);
   AttachPipes(hWriteIn, hReadOut);
@@ -1246,7 +1329,12 @@ begin
       for Sent in FOutstanding.Values do
         if Sent.Sent < Oldest then Oldest:= Sent.Sent;
       Since:= if FLastRxTick > Oldest then FLastRxTick else Oldest;
-      if FLastCpuTick > Since then Since:= FLastCpuTick;
+      { 1.40: with a heartbeat the status change is the progress mark and CPU is ignored. }
+      if FBeatSeen then
+      begin
+        if FLastBeatTick > Since then Since:= FLastBeatTick;
+      end
+      else if FLastCpuTick > Since then Since:= FLastCpuTick;
       Result:= GetTickCount64 - Since > FStuckAfterMs;
     end;
   finally

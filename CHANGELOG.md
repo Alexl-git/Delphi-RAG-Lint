@@ -3,6 +3,30 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.40.0-alpha -- unreleased
+
+Phase A (no extractor change: an index built by 1.39.2 stays current). Versions are NOT bumped on feat/int140.
+
+### Added
+- New project-wide lint rule `unused-global`: an unused global const / var / type (backlog #5a). Rule count 291.
+- `run_rename_field_dirword.ps1`, `run_grammar_dirword_remainder.ps1`: guards for directive words used as record fields / names (grammar 1.4.0 already fixes them; tests only).
+
+### Fixed
+- `lint-all --json` keeps stdout a single JSON document (LINTJSON-STDERR); output-file encoding for the remaining verbs under `--output-encoding` (ENC-OUT remainder, `run_output_file_encoding.ps1`).
+- `missing-doc` no longer reports an implementation-section method whose declaration is documented (GAP-MISSINGDOC).
+- MCP `rename`: the multi-file apply is atomic and the probe step is bounded (MCP-RENAME, MCP-PROBE).
+- LSP: the full-rules child has a stall budget and is superseded by a newer save; the child writes UTF-8 (`--output-encoding utf8`).
+- IDE plugin never blocks the main thread on a slow engine: Structure outline and the no-LSP code-lens fallback run on workers; JobQueue / LspWriteQueue wait in 1 s idle slices (IDE-HANG residue, PLUG-INFWAIT).
+- Hover at cursor: an answer arriving after the deadline is still delivered (late result).
+- `usages --name` with no database now exits 2 with a message instead of searching nothing (USAGES-NAME).
+- Index timestamps are UTC everywhere: new `DRagLint.Core.FileTime` (NowUtc / NowUnixUtc / FileMTimeUnix) replaces local-time stamps in 12 units (DST).
+- Every index writer takes the index lock and refuses a config-redirected database: `purge-locals`, `fb-snapshot`, `refresh-findings`, `reconcile-project --db` (IDX-LOCK, CFG-DBREDIRECT); the plugin shows the refusal text (`ReindexResultText`).
+- Plugin RefactorForm rename/extract preview runs the CLI off the main thread.
+- Engine heartbeat: a status record (action, step, n/total) answered on a status-only pipe drag-lint-beat-*; the plugin (ProcRun, LspClient.IsStuck) kills only an engine whose status stopped moving, and the status bar shows it.
+- Test harness: engine companion DLLs and rules are staged by `tests\autotest\lib\EngineCompanions.ps1`; battery and guard fixes.
+
+### Checked, already fixed on main
+- RESOLVEDBS-DPROJ, LSP-SWITCH-MANIFEST, PROPTYPES-FILL, X26-STDOUT, MISSINGCTOR-FP, CONCAT-LOOP, GAP-RENAME-FIELD, TSITTER-DIRWORD remainder.
 ## v1.39.2-alpha -- 2026-11-01
 
 Extractor 1.28.0-alpha: every index re-parses once (the grammar changed).

@@ -61,6 +61,7 @@ function BuildGainReport(const ALogPath, ASince: string; AAsJson: Boolean): stri
 implementation
 
 uses
+  DRagLint.Core.FileTime,
   System.DateUtils, System.Generics.Collections, System.IOUtils, System.JSON, System.Math;
 
 const
@@ -141,7 +142,7 @@ begin
     if Path = '' then Exit;
     if not ForceDirectories(ExtractFilePath(Path)) then Exit;
     Line:= Format('%s'#9'%s'#9'%s'#9'%d'#9'%d'#9'%d', [
-      FormatDateTime('yyyy-mm-dd"T"hh:nn:ss"Z"', TTimeZone.Local.ToUniversalTime(Now)),
+      FormatDateTime('yyyy-mm-dd"T"hh:nn:ss"Z"', NowUtc),
       Clean(AVerb), Clean(ADbTag), ATokensReturned, AUnitsAvoided, ASourceBytesAvoided]) + sLineBreak;
     TFile.AppendAllText(Path, Line, TEncoding.ASCII);
   except

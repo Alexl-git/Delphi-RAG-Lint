@@ -4,10 +4,10 @@ title: Installation
 summary: Getting the CLI, the IDE plugin, or the LSP running
 product: DL
 group: editor-integration
-order: 110010
+order: 110011
 since: 0.21.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.39.2-alpha
 ---
 
 # Installation

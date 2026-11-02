@@ -92,6 +92,7 @@ function Run: Integer;
 implementation
 
 uses
+  DRagLint.Core.FileTime,
   Winapi.Windows
   , DRagLint.Core.CliError
   , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
@@ -833,6 +834,8 @@ begin
   Writeln('  changed since this index was built" line means REINDEX FIRST -- the answer may be stale.');
   Writeln('  That note is on stderr, never in a JSON document; the reverse-calltree, butterfly, callgraph,');
   Writeln('  sql, schema and deps-report envelopes also carry "stale" and "stale_files".');
+  Writeln('  lint-all --json / --format json|sarif: stdout is one document and the success path writes NOTHING');
+  Writeln('  to stderr (no progress, no control-channel line), so a 2>&1 capture still parses.');
   Writeln('');
   Writeln('Usage:');
   { The verb reference below is GENERATED (featuregen build --all) from the cli surfaces of features\entries: each surface carries
@@ -3538,7 +3541,7 @@ begin
         S    : TPropTypeFillStats;
         Start: Int64;
       begin
-        Start:= DateTimeToUnix(Now, False);
+        Start:= NowUnixUtc;
         S:= FillBarePropertyTypes(AStore, Since);
         AStore.SetMetaValue(PROP_TYPES_META_KEY, PROP_TYPES_FORMAT + ';' + IntToStr(Start));
         Writeln(Format('%s  prop-types: %d bare re-publication(s), %d filled, %d unresolved, %d bridged',
@@ -4053,7 +4056,7 @@ begin
     if ARun.Old.State <> '' then AStore.SetMetaValue(LIBRARY_RESOLVE_STATE_META_KEY, '');
     Exit;
   end;
-  var NowUnix: Int64:= DateTimeToUnix(Now, False);
+  var NowUnix: Int64:= NowUnixUtc;
   M:= Default(TLibraryMarker);
   M.Platform     := ARun.Platform;
   M.LibraryDb    := ARun.LibDb;
@@ -4190,6 +4193,32 @@ begin
   if not GIndexLocks.TryGetValue(Key, H) then Exit;
   CloseHandle(H);
   GIndexLocks.Remove(Key);
+end;
+
+/// <summary>Refuses a WRITING verb whose database came only from a "db" key of a
+/// .drag-lint.json found by walking up from the CWD, when the target it writes for is
+/// not under that file's folder (1.40 CFG-DBREDIRECT; INBOX 2026-09-29 4b-1).</summary>
+/// <param name="AVerb">The verb, for the message.</param>
+/// <param name="AArgs">The parsed arguments; DbFromConfig / DbConfigFile say where the db came from.</param>
+/// <param name="ATarget">The project or folder the verb writes for; '' when it has none
+/// (then a config db is never accepted: a destructive verb must act on a database the
+/// user named).</param>
+/// <returns>True when the verb must stop (the ERROR is already on stderr; exit 2).</returns>
+/// <remarks>`index` has its own, softer rule (it ignores the key with a WARNING and goes on);
+/// these verbs have no fallback database, so they stop. --db on the command line always wins.</remarks>
+function ConfigDbRedirectsWrite(const AVerb: string; const AArgs: TArgs; const ATarget: string): Boolean;
+begin
+  Result:= False;
+  if not AArgs.DbFromConfig then Exit;
+  if ATarget <> '' then
+  begin
+    var CfgDir: string:= IncludeTrailingPathDelimiter(TPath.GetFullPath(ExtractFilePath(AArgs.DbConfigFile)));
+    if IncludeTrailingPathDelimiter(TPath.GetFullPath(ATarget)).StartsWith(CfgDir, True) then Exit;
+  end;
+  Writeln(ErrOutput, Format('ERROR: %s: refusing to write the database named by the "db" key of %s -- ' +
+    'that file''s tree does not own this target. Pass --db <file.sqlite> to choose the database.',
+    [AVerb, AArgs.DbConfigFile]));
+  Result:= True;
 end;
 
 { The idle wait of `index --watch` between ticks: AIntervalSec seconds, cut short by a
@@ -6307,7 +6336,7 @@ begin
     different question -- "was this DB ever completed by an engine that records
     freshness at all" -- which is what lets a pre-upgrade index report UNKNOWN
     instead of being judged against evidence it never stored. }
-  AStore.SetMetaValue(INDEXED_AT_KEY, IntToStr(DateTimeToUnix(Now, False)));
+  AStore.SetMetaValue(INDEXED_AT_KEY, IntToStr(NowUnixUtc));
   { The RESOLVER stamp rides the same guarantee, and for the same reason: it is
     written only after a run whose resolve pass completed. See
     ResolverFingerprint for why it is separate from the indexer one. }
@@ -9935,7 +9964,7 @@ begin
     Writer.Flush;
     if AArgs.Output <> '' then
     begin
-      TFile.WriteAllText(AArgs.Output, Buf.DataString, TEncoding.UTF8);
+      WriteOutputFile(AArgs.Output, Buf.DataString); { ENC-OUT: follows --output-encoding }
       Writeln(Format('Wrote %d enum value row(s) (%d enums) to %s', [Length(Rows), 0 { let user grep -c 'INSERT' for now }, AArgs.Output]));
     end
     else Write(Buf.DataString);
@@ -9978,6 +10007,8 @@ end;
 // non-fatal (Obsidian not installed, registry malformed, etc.); we
 // print a hint and continue.
 procedure OpenInObsidian(const AVaultPath: string);
+const
+  OBS_MS_PER_SEC = 1000; { Obsidian vault timestamps are epoch milliseconds }
 var
   AbsPath          : string       ;
   BaseName         : string       ;
@@ -10038,7 +10069,7 @@ begin
     begin
       NewEntry:= TJSONObject.Create;
       NewEntry.AddPair('path', AbsPath);
-      NewEntry.AddPair('ts', TJSONNumber.Create( DateTimeToUnix(Now, False) * Int64(1000)));
+      NewEntry.AddPair('ts', TJSONNumber.Create( NowUnixUtc * Int64(OBS_MS_PER_SEC)));
       Vaults.AddPair(NewVaultId, NewEntry);
       Stream:= TStringStream.Create(Cfg.ToJson, TEncoding.UTF8);
       try
@@ -10210,7 +10241,7 @@ begin
               Sb.AppendLine('');
             end; // if
 
-            TFile.WriteAllText(OutPath, Sb.ToString, TEncoding.UTF8);
+            WriteOutputFile(OutPath, Sb.ToString); { ENC-OUT: follows --output-encoding }
             Inc(WrittenCount);
           finally
             Sb.Free;
@@ -10376,7 +10407,7 @@ begin
     FileQ.Params.ParamByName('p' ).DataType:= ftString;
     FileQ.Params.ParamByName('p2').DataType:= ftString;
 
-    ImportedAt:= DateTimeToUnix(Now, False);
+    ImportedAt:= NowUnixUtc;
     Lines:= TFile.ReadAllLines(LogPath);
     Count      := 0;
     MatchedFile:= 0;
@@ -10584,7 +10615,11 @@ begin
     if Format = 'dot' then Buf.AppendLine('}');
 
     Output:= Buf.ToString;
-    if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, Output); Writeln('Wrote ', AArgs.Output); end
+    if AArgs.Output <> '' then
+    begin
+      WriteOutputFile(AArgs.Output, Output);
+      Writeln('Wrote ', AArgs.Output);
+    end
     else Writeln(Output);
   finally
     Buf.Free;
@@ -11598,6 +11633,8 @@ var
   R    : TReference  ;
   L    : TImpactLevel;
   DeclO: TJSONObject ;
+const
+  USAGES_FALLBACK_DEPTH = 4;
 begin
   if not ExplicitDbsExist(AArgs, 'usages') then Exit(2);
   if AArgs.Name = '' then begin Writeln('Usage: drag-lint usages --name <X> ' + '[--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]'); Exit(2); end;
@@ -11606,10 +11643,23 @@ begin
 
   if Width = 'very-wide' then Depth:= AArgs.Depth
   else Depth:= 2;
-  if Depth <= 0 then Depth:= 4;
+  if Depth <= 0 then Depth:= USAGES_FALLBACK_DEPTH;
 
   PathsToScan:= AArgs.DbPaths;
   if Length(PathsToScan) = 0 then PathsToScan:= [AArgs.DbPath];
+
+  { NO DATABASE AT ALL is an error, not an empty answer (USAGES-NAME, 1.40): the loop below skips
+    a missing file, so with nothing resolved it printed "calls: 0" and exited 0 -- while the same
+    question to `query find-callers` said "database not found". Mirror that: exit 2. }
+  var AnyDb: Boolean:= False;
+  for DbPath in PathsToScan do
+    if TFile.Exists(DbPath) then AnyDb:= True;
+  if not AnyDb then
+  begin
+    Writeln('ERROR: database not found: ', AArgs.DbPath);
+    Writeln('Run "drag-lint index <path>" first, or pass --db <file.sqlite>.');
+    Exit(2);
+  end;
 
   JRoot:= TJSONObject.Create;
   JDecls := TJSONArray.Create; JReads := TJSONArray.Create;
@@ -12730,8 +12780,24 @@ end; // function
 /// --json / --format sarif paths, where the line was corrupting the document.</remarks>
 procedure EmitStatusLine(const AArgs: TArgs; const AText: string);
 begin
-  if IsMachineReadableOutput(AArgs) then begin Writeln(ErrOutput, AText); Flush(ErrOutput); end
+  if IsMachineReadableOutput(AArgs) then
+  begin
+    Writeln(ErrOutput, AText);
+    Flush(ErrOutput);
+  end
   else Writeln(AText);
+end; // procedure
+
+/// <summary>Writes one purely informational note (progress, scope, skip counts) to stdout on the text
+/// path and NOWHERE under a machine-readable format (--json, --format json|sarif).</summary>
+/// <param name="AArgs">Parsed CLI args; decides whether the note is written.</param>
+/// <param name="AText">The line, without a trailing newline.</param>
+/// <remarks>LINTJSON-STDERR: a consumer that merges stdout and stderr (2&gt;&amp;1) must still get ONE
+/// parseable document, so on the success path stderr stays empty under JSON. ERROR and WARNING lines
+/// keep using EmitStatusLine (stderr); only notes whose absence loses no failure information use this.</remarks>
+procedure EmitNoteLine(const AArgs: TArgs; const AText: string);
+begin
+  if not IsMachineReadableOutput(AArgs) then Writeln(AText);
 end; // procedure
 
 /// <summary>Shared output tail for the finding-producing commands. Applies line
@@ -14351,14 +14417,14 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak');
-  LINT_GATE_PROJECT_RULES: array[0..25] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..26] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
     'assert-with-side-effect', 'enum-helper-separate-units', 'repeated-type-switch',
     'unused-unit-in-uses', 'god-class', 'enum-ordinal-persisted', 'duplicate-unit-on-search-path',
     'dfm-event-handler-missing', 'dfm-password-edit-unmasked', 'uses-movable-to-implementation', 'virtual-never-overridden',
-    'unused-enum-value',
+    'unused-enum-value', 'unused-global',
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
@@ -14366,11 +14432,11 @@ const
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..12] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..13] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
-    'unused-enum-value',
+    'unused-enum-value', 'unused-global',
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
@@ -16777,10 +16843,17 @@ var
   Stats : TFbSnapshotStats  ;
   DbPath: string            ;
 begin
-  if AArgs.FbConnection = '' then begin Writeln(ErrOutput, 'fb-snapshot: --connection "Database=...;User=...;Password=...;DriverID=FB" required'); Exit(2); end;
+  if AArgs.FbConnection = '' then
+  begin
+    Writeln(ErrOutput, 'fb-snapshot: --connection "Database=...;User=...;Password=...;DriverID=FB" required');
+    Exit(2);
+  end;
   if Length(AArgs.DbPaths) > 0 then DbPath:= AArgs.DbPaths[0]
   else DbPath:= AArgs.DbPath;
   if DbPath = '' then begin Writeln(ErrOutput, 'fb-snapshot: --db <sql.sqlite> required'); Exit(2); end;
+  { 1.40 IDX-LOCK: this verb writes the index -- take <db>.indexing.lock like `index` does. }
+  if ConfigDbRedirectsWrite('fb-snapshot', AArgs, '') then Exit(2);
+  if not AcquireIndexLock(DbPath) then Exit(2);
   Store:= TSQLiteSymbolStore.Create(DbPath);
   try
     Store.Migrate;
@@ -16861,7 +16934,7 @@ var
   AllFiles    : TList<TFileMeta>                       ;
   StemToGlobal: TDictionary<string, Integer>           ; { stem -> index into AllFiles }
   Edges       : TDictionary<Integer, TArray<TUsesEdge>>; { source = global file index }
-  CsvOut      : TStreamWriter                          ;
+  CsvOut      : TStringWriter                          ;
   MaxDepth    : Integer                                ;
   RootPattern : string                                 ;
 
@@ -17160,7 +17233,7 @@ begin
       Exit(2);
     end;
 
-    CsvOut:= TStreamWriter.Create(AArgs.Output, False, TEncoding.UTF8);
+    CsvOut:= TStringWriter.Create; { ENC-OUT: buffered, written once through WriteOutputFile }
     EmitCsvHeader;
 
     RowCount    := 0;
@@ -17172,7 +17245,7 @@ begin
       WalkBfs(GlobalIdx, RowCount);
       Inc(SourceCount);
     end;
-    CsvOut.Flush;
+    WriteOutputFile(AArgs.Output, CsvOut.ToString);
 
     Writeln(Format('uses-report: %d source units, %d rows written to %s', [SourceCount, RowCount, AArgs.Output]));
   finally
@@ -21501,6 +21574,7 @@ end; // procedure
 
 procedure TLintPhaseProfiler.Phase(const AName: string);
 begin
+  BeatStep(AName); { 1.40 heartbeat: every lint-all phase, profiled or not }
   if not FActive then Exit;
   CloseOpenPhase;
   FOpen:= AName;
@@ -22048,7 +22122,7 @@ var
     Pct: Integer;
   begin
     Prof.Phase(AName);
-    if AArgs.Quiet then Exit;
+    if AArgs.Quiet or IsMachineReadableOutput(AArgs) then Exit;
     Inc(TailPhase);
     { Ceiling division so the FIRST phase already moves the bar off the scan
       ceiling; the last lands on 99. 100 is reserved for "finished". }
@@ -22202,7 +22276,7 @@ begin
   begin
     var UnscopedTag: string:= Trim(Store.GetMetaValue(PROJECT_TAG_KEY));
     if UnscopedTag <> '' then
-      EmitStatusLine(AArgs, Format('lint-all: NOTE: %s is the index of project %s, but no project folder could be ' +
+      EmitNoteLine(AArgs, Format('lint-all: NOTE: %s is the index of project %s, but no project folder could be ' +
         'derived for it (no _D-RAG parent, no manifest section), so no ownership scoping was applied -- every ' +
         'indexed unit is reported, third-party ones included. Pass --project <%s.dproj> to scope the run.',
         [ProjectDb, UnscopedTag, UnscopedTag]));
@@ -22232,26 +22306,29 @@ begin
     begin
       if Cfg.IsPathExcluded(PasPath) then begin Inc(ExcludedCount); Continue; end;
       if (not AArgs.LintThirdParty) and (not Own.IsOurs(PasPath)) then
-        begin SkippedThird:= SkippedThird + [PasPath]; Continue; end;
+        begin
+          SkippedThird:= SkippedThird + [PasPath];
+          Continue;
+        end;
       if (ScopeSet = nil) or ScopeSet.ContainsKey(ScopeKey(PasPath)) then FilePaths:= FilePaths + [PasPath];
     end;
   end;
   { The banner is prose: on --json / --format sarif it belongs on stderr, or the
     document it precedes will not parse (docs\INBOX-lint-all-json-stdout-banner.md). }
-  EmitStatusLine(AArgs, Format('lint-all: scanning %d .pas file(s)', [Length(FilePaths)]));
+  EmitNoteLine(AArgs, Format('lint-all: scanning %d .pas file(s)', [Length(FilePaths)]));
   { Say what was skipped. A scope filter that reports nothing is indistinguishable
     from a clean codebase -- the same failure this session hit when a silent
     no-op reindex made a stale-DB run look like a successful one. }
   if ExcludedCount > 0 then
-    EmitStatusLine(AArgs, Format('lint-all: %d file(s) skipped by exclude_paths', [ExcludedCount]));
+    EmitNoteLine(AArgs, Format('lint-all: %d file(s) skipped by exclude_paths', [ExcludedCount]));
   { A scope filter that reports nothing is indistinguishable from a clean
     codebase. Name what was dropped, grouped, and say how to include it.
     SkipLines is built once (BuildSkippedThirdPartyLines) and reused below by
     the report-writing closure, so the console and the report file cannot
     say different things -- see Fix 1, 2026-08-11 review. }
   var SkipLines: TArray<string>:= BuildSkippedThirdPartyLines(SkippedThird, Own);
-  for var SkLine: string in SkipLines do EmitStatusLine(AArgs, SkLine);
-  for var OwnLine: string in OwnRootsDefaultNote(Own, Length(SkippedThird)) do EmitStatusLine(AArgs, OwnLine);
+  for var SkLine: string in SkipLines do EmitNoteLine(AArgs, SkLine);
+  for var OwnLine: string in OwnRootsDefaultNote(Own, Length(SkippedThird)) do EmitNoteLine(AArgs, OwnLine);
 
   { Per-file rules: external .scm rules + all built-in AST checks.
 
@@ -22265,7 +22342,7 @@ begin
   var Nr: string:= LintNarrowRule(AArgs.Rule);
   if not AArgs.NoPreprocess then InstallLintIncludeContexts(Store, FilePaths, AArgs.ProjectPath);
   { DEC-13: lint-all listens for a maintenance stand-down; the scan stops between files. }
-  BatchChannelOpen('lint-all', TArray<string>.Create(ExpandFileName(ProjectDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+  BatchChannelOpen('lint-all', TArray<string>.Create(ExpandFileName(ProjectDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, IsMachineReadableOutput(AArgs));
   var LintStoodAt: Integer:= -1;
   var LintDelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_LINT_FILE_DELAY_MS'), 0);
   Prof.Phase(Format('per-file scan (%d files)', [Length(FilePaths)]));
@@ -22285,9 +22362,10 @@ begin
         Break;
       end;
       PasPath:= FilePaths[FileIdx];
+      BeatProgress(FileIdx + 1, Length(FilePaths)); { 1.40 heartbeat }
       try
         { Progress output (throttled by percentage) }
-        if (not AArgs.Quiet) then
+        if (not AArgs.Quiet) and (not IsMachineReadableOutput(AArgs)) then
         begin
           { Scaled to LINTALL_SCAN_PCT, not 100: the scan is not the whole run,
             and reporting 100 here is what made the bar sit still. }
@@ -22678,6 +22756,8 @@ begin
       OptIn:= OptIn + ['virtual-never-overridden'];
     if Cfg.ShouldKeep('unused-enum-value', {ADefaultDisabled=}False) then   { B-ENUM; ON since ENUMRULES 2026-10-28 }
       OptIn:= OptIn + ['unused-enum-value'];
+    if Cfg.ShouldKeep('unused-global', {ADefaultDisabled=}False) then   { 1.40 unusedg }
+      OptIn:= OptIn + ['unused-global'];
     { --rule <id> opts <id> in, as it does for lint and lint-project (D4). }
     if AArgs.Rule <> '' then OptIn:= OptIn + [AArgs.Rule];
     { D17: entered only when --rule can be one of its ids, and HANDED the
@@ -22903,7 +22983,7 @@ begin
     var InScope: TArray<TLintFinding>:= nil;
     for F in Findings do
       if (F.FilePath = '') or ScopeSet.ContainsKey(ScopeKey(F.FilePath)) then InScope:= InScope + [F];
-    EmitStatusLine(AArgs, Format('lint-all: --project %s -- %d of %d finding(s) belong to the project''s %d source file(s)',
+    EmitNoteLine(AArgs, Format('lint-all: --project %s -- %d of %d finding(s) belong to the project''s %d source file(s)',
       [ExtractFileName(AArgs.ProjectPath), Length(InScope), Length(Findings), ScopeSet.Count]));
     Findings:= InScope;
     FreeAndNil(ScopeSet);
@@ -23074,7 +23154,7 @@ begin
     emitted exactly once, here, so a reader (and the IDE bar) can treat it as a
     completion signal rather than as "the scan loop ended", which is what it
     used to mean. }
-  if not AArgs.Quiet then
+  if (not AArgs.Quiet) and (not IsMachineReadableOutput(AArgs)) then
   begin
     Writeln(ErrOutput, 'lint-all: 100% done');
     Flush(ErrOutput);
@@ -23166,6 +23246,8 @@ begin
       OptIn2:= OptIn2 + ['virtual-never-overridden'];
     if LoadLintConfig(AArgs).ShouldKeep('unused-enum-value', {ADefaultDisabled=}False) then   { B-ENUM; ON since ENUMRULES 2026-10-28 }
       OptIn2:= OptIn2 + ['unused-enum-value'];
+    if LoadLintConfig(AArgs).ShouldKeep('unused-global', {ADefaultDisabled=}False) then   { 1.40 unusedg }
+      OptIn2:= OptIn2 + ['unused-global'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that
       was a real divergence rather than a tidiness point: global-only-uses-edge
@@ -23769,7 +23851,7 @@ begin
         FidList.Add(Rec);
       end;
 
-      NowUnix:= DateTimeToUnix(Now, False);
+      NowUnix:= NowUnixUtc;
       StampedCount:= 0;
       FindingCount:= 0;
       for FileId in Covered.Keys do
@@ -23867,6 +23949,9 @@ begin
     Exit(2);
   end;
 
+  { 1.40 IDX-LOCK: the recompile writes findings into the index -- take <db>.indexing.lock. }
+  if (Length(AArgs.DbPaths) > 0) and ConfigDbRedirectsWrite('refresh-findings', AArgs, AArgs.ProjectPath) then Exit(2);
+  if not AcquireIndexLock(DbPath) then Exit(2);
   Store:= TSQLiteSymbolStore.Create(DbPath);
   Store.Migrate;
 
@@ -31468,7 +31553,11 @@ begin
       RenderNodeChart(ForwardTree.Root, Buf, Fmt = 'dot', True);  // callees wing: X -> callee
       if Fmt = 'dot' then Buf.AppendLine('}');
 
-      if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, Buf.ToString, TEncoding.UTF8); Writeln('Wrote ', AArgs.Output); end
+      if AArgs.Output <> '' then
+      begin
+        WriteOutputFile(AArgs.Output, Buf.ToString);
+        Writeln('Wrote ', AArgs.Output);
+      end
       else Writeln(Buf.ToString);
     finally
       Buf.Free;
@@ -31484,7 +31573,11 @@ begin
       JOut.AddPair('callees', BuildTreeJson(ForwardTree));
       AddStalenessPairs(JOut, StoreDb); { ENG-3 }
       var OutStr: string:= JOut.Format(2);
-      if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, OutStr, TEncoding.UTF8); Writeln('Wrote ', AArgs.Output); end
+      if AArgs.Output <> '' then
+      begin
+        WriteOutputFile(AArgs.Output, OutStr);
+        Writeln('Wrote ', AArgs.Output);
+      end
       else Writeln(OutStr);
     finally
       JOut.Free;
@@ -31498,7 +31591,11 @@ begin
       RenderNodeText(ReverseTree.Root, '  ', Lines);
       Lines.Add('CALLEES (downward):');
       RenderNodeText(ForwardTree.Root, '  ', Lines);
-      if AArgs.Output <> '' then begin TFile.WriteAllText(AArgs.Output, Lines.Text, TEncoding.UTF8); Writeln('Wrote ', AArgs.Output); end
+      if AArgs.Output <> '' then
+      begin
+        WriteOutputFile(AArgs.Output, Lines.Text);
+        Writeln('Wrote ', AArgs.Output);
+      end
       else Writeln(Lines.Text);
     finally
       Lines.Free;
@@ -31543,6 +31640,9 @@ begin
     Exit(2);
   end;
 
+  { 1.40 IDX-LOCK: purge MUTATES the index -- take <db>.indexing.lock like `index` does. }
+  if ConfigDbRedirectsWrite('purge-locals', AArgs, '') then Exit(2);
+  if not AcquireIndexLock(AArgs.DbPath) then Exit(2);
   SizeBefore:= TFile.GetSize(AArgs.DbPath);
   { Read-WRITE open (purge MUTATES) -- same path as index/rename/safe-delete, NOT
     the query_only OpenReadOnlyStore used by read verbs. Migrate ensures the
@@ -34878,6 +34978,9 @@ begin
         // Migrate bootstraps a missing DB file -- acceptable; reconcile's job is
         // to ensure coherence. ONE connection is shared by the scan (TIndexer)
         // and the recompile (RefreshProjectFindingsCore) -- no second store.
+        { 1.40 IDX-LOCK: this phase rescans and recompiles INTO the index -- take <db>.indexing.lock. }
+        if ConfigDbRedirectsWrite('reconcile-project', AArgs, ProjectFile) then Exit(2);
+        if not AcquireIndexLock(CohDbPath) then Exit(2);
         Store:= TSQLiteSymbolStore.Create(CohDbPath);
         Store.Migrate;
         HaveCoh:= True;
@@ -36343,6 +36446,9 @@ begin
       RECORDS -- once theirs is, and a DB not named after its project stops
       tagging entries with its own file name. }
     TSharedFacts.ProjectTag:= if Length(Args.DbPaths) > 1 then '' else ProjectTagOfDb(Args.DbPath);
+    { 1.40 heartbeat: the verbs the IDE waits on publish their status record on a status-only pipe; it closes
+      at exit (the unit's finalization). Advisory -- a run without one is judged the old way. }
+    BeatChannelOpen(Args.Command, DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
     if Args.Command = 'index' then
     begin
       { The MODE flags name opposite intents, so passing both is a usage error

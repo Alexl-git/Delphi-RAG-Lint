@@ -594,7 +594,7 @@ $effectiveTimeout = $(if ($Jobs -gt 1) { $TimeoutSec * 2 } else { $TimeoutSec })
 # is max(default, value)), so -TimeoutSec can still only raise it. The runner's
 # checks are untouched. doctests_v021: passes alone, ~1060 s under load (the default
 # 600 s killed it as a TIMEOUT on a busy box).
-$RunnerBudgetSec = @{ 'run_doctests_v021.ps1' = 1800 }
+$RunnerBudgetSec = @{ 'run_doctests_v021.ps1' = 1800; 'run_lint_tests.ps1' = 1200 }
 
 # --- Run ------------------------------------------------------------------
 $results = New-Object System.Collections.Generic.List[object]

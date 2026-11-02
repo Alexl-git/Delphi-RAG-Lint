@@ -42,6 +42,10 @@ unit DRagLint.Core.ControlChannel;
 
   WIRE -- one message per connection, UTF-8, TAB-separated, LF-terminated:
     status                   -> status<TAB>pid<TAB>version<TAB>extractor<TAB>db...
+    status<TAB>role<TAB>beat -> ... extractor<TAB>role=<verb><TAB>beat=<seq|action|step|n|total|age-ms><TAB>db...
+                                (each extra field only when its argument is asked; 1.39.1 role, 1.40 beat)
+    The 1.40 HEARTBEAT pipe (BEAT_PIPE_PREFIX, see "ENGINE HEARTBEAT" below) speaks the same
+    `status` and answers everything else `unknown` -- it is never a stand-down channel.
     shutdown[<TAB>wait-ms]   -> exiting<TAB>pid<TAB>db...   (stores closed; exit 0 follows)
                              -> busy<TAB>pid<TAB>what       (still running; nothing changed)
     anything else            -> unknown<TAB>pid             (still running; nothing changed)
@@ -226,6 +230,92 @@ function ControlRequest(const APipeName, AMessage: string; AConnectTimeoutMs: In
 /// </remarks>
 function ControlAuditLogPath: string;
 
+{ ---- ENGINE HEARTBEAT (1.40, owner design 2026-11-01) ----------------------
+  Every engine action writes (action, step, n/total, timestamp) into ONE
+  process-wide status record; a status-only listener thread -- the heartbeat
+  pipe, BEAT_PIPE_PREFIX -- hands it to whoever asks (the IDE plugin, every few
+  seconds). The plugin's rule: the status CHANGING = slow, keep waiting; the
+  status frozen (or no answer) for N minutes = stuck, only then kill. CPU and
+  output silence no longer decide anything once a beat was seen.
+  WIRE: `status<TAB>beat` -> the usual status reply with one more field,
+  `beat=<seq>|<action>|<step>|<n>|<total>|<age-ms>`, after the role field (if
+  asked) and before the databases. The ctl pipe answers the same request.
+  Design note: C:\TEMP\claude\lanes\140\agent-beat\DESIGN-heartbeat.md;
+  guards tests\autotest\run_engine_heartbeat_guard.ps1 (engine) and
+  tests\plugin\run_procrun_heartbeat.ps1 (plugin). ------------------------- }
+
+const
+  /// <summary>Leaf prefix of a heartbeat (status-only) pipe:
+  /// <c>\\.\pipe\drag-lint-beat-&lt;sid&gt;-s&lt;session&gt;-p&lt;pid&gt;</c>. A DIFFERENT family from
+  /// CONTROL_PIPE_PREFIX on purpose: `shutdown --all` and the staging tools enumerate control pipes only, so a
+  /// verb that merely reports progress never becomes a stand-down target.</summary>
+  BEAT_PIPE_PREFIX = 'drag-lint-beat-';
+  /// <summary>Argument of a <c>status</c> request that asks for the heartbeat field.</summary>
+  CONTROL_STATUS_ARG_BEAT = 'beat';
+  /// <summary>Prefix of the heartbeat field of a status reply (a database path never starts with it).</summary>
+  CONTROL_BEAT_FIELD_PREFIX = 'beat=';
+
+type
+  /// <summary>One snapshot of the engine's status record.</summary>
+  /// <remarks>Seq is the ONLY change test a client may use: it grows by one on every report, so two snapshots
+  /// with the same Seq mean no progress in between, whatever the other fields say.</remarks>
+  TEngineBeat = record
+    /// <summary>Report counter; 0 = nothing reported yet.</summary>
+    Seq   : Int64 ;
+    /// <summary>The verb or LSP method in progress ('' = idle).</summary>
+    Action: string;
+    /// <summary>Phase inside the action ('' = none).</summary>
+    Step  : string;
+    /// <summary>Counter inside the step.</summary>
+    N     : Int64 ;
+    /// <summary>Denominator of N; 0 = unknown.</summary>
+    Total : Int64 ;
+    /// <summary>Milliseconds since the last report, at snapshot time.</summary>
+    AgeMs : Int64 ;
+  end;
+
+/// <summary>Starts a new action in the status record: action AAction, no step, n = total = 0.</summary>
+/// <param name="AAction">The verb or LSP method ('' = idle).</param>
+/// <remarks>Thread-safe; cheap (one critical section). Every Beat* call advances Seq.</remarks>
+procedure BeatBegin(const AAction: string);
+
+/// <summary>Starts a new step inside the current action: n = 0, total = ATotal.</summary>
+/// <param name="AStep">The phase name.</param>
+/// <param name="ATotal">Denominator of the step's counter; 0 = unknown.</param>
+/// <remarks>Thread-safe.</remarks>
+procedure BeatStep(const AStep: string; ATotal: Int64 = 0);
+
+/// <summary>Reports progress inside the current step.</summary>
+/// <param name="AN">The new counter; negative = one more than before.</param>
+/// <param name="ATotal">New denominator; negative = unchanged.</param>
+/// <remarks>Thread-safe; safe to call from hot loops (one critical section, no allocation).</remarks>
+procedure BeatProgress(AN: Int64 = -1; ATotal: Int64 = -1);
+
+/// <summary>One-line human text for a snapshot, e.g. <c>index: resolve 120/400</c>.</summary>
+/// <param name="ABeat">The snapshot.</param>
+/// <returns>The text; 'idle' for an empty action.</returns>
+function BeatDisplayText(const ABeat: TEngineBeat): string; // dl:ok unused-public-symbol@3a03 -- the IDE plugin's API (ProcRun, LspClient): its callers are in the plugin project, not this one
+
+/// <summary>Asks the engine with process id APid for its heartbeat.</summary>
+/// <param name="APid">Engine process id.</param>
+/// <param name="AConnectTimeoutMs">How long to wait for a free pipe instance.</param>
+/// <param name="ABeat">The snapshot on success.</param>
+/// <returns>True when the engine answered with a beat field. False = no heartbeat (no pipe -- an older engine,
+/// a wrapper process, a verb that does not report -- or no answer).</returns>
+/// <remarks>Blocks at most about AConnectTimeoutMs plus the listener's reply (immediate: a status-only
+/// listener does no work). Any thread.</remarks>
+function RequestEngineBeat(APid: Cardinal; AConnectTimeoutMs: Integer; out ABeat: TEngineBeat): Boolean; // dl:ok unused-public-symbol@1794 -- the IDE plugin's API (ProcRun, LspClient): its callers are in the plugin project, not this one
+
+/// <summary>Opens the process-wide heartbeat pipe for verb ACommand and starts the status record's action as
+/// ACommand -- for lsp, index, lint-all, lint and context, the verbs the IDE plugin waits on.</summary>
+/// <param name="ACommand">The CLI verb.</param>
+/// <param name="AVersion">DRAGLINT_VERSION.</param>
+/// <param name="AExtractor">DRAGLINT_EXTRACTOR_VERSION.</param>
+/// <returns>True when listening. False when the verb does not report, a beat pipe is already open, or the pipe
+/// could not be created (the run proceeds without one; nothing is printed -- the heartbeat is advisory).</returns>
+/// <remarks>Main thread only. The pipe closes at unit finalization. Its name: <c>\\.\pipe\drag-lint-beat-&lt;sid&gt;-s&lt;session&gt;-p&lt;pid&gt;</c>.</remarks>
+function BeatChannelOpen(const ACommand, AVersion, AExtractor: string): Boolean;
+
 type
   /// <summary>The engine side of the channel: one listener thread on the
   /// per-user pipe, and the hooks the host loop uses to cooperate.</summary>
@@ -269,6 +359,7 @@ type
         FDone       : TEvent        ; { StandDownComplete }
         FReplied    : TEvent        ; { the listener wrote its final reply }
         FRequested  : TEvent        ; { set while a stand-down request is pending or taken }
+        FStatusOnly : Boolean       ; { 1.40 heartbeat pipe: answers status only; shutdown is `unknown` }
       /// <param name="AError"><!-- drag-lint:auto type -->out string</param>
       /// <returns><!-- drag-lint:auto type -->THandle</returns>
       /// <remarks>
@@ -306,6 +397,9 @@ type
       /// <param name="ARole">The verb hosting the channel (lsp, index, lint-all, cycles,
       /// warm-rule-cache); a `status role` request reports it. '' = not reported (the
       /// reply keeps its pre-1.39.1 shape).</param>
+      /// <param name="AStatusOnly">1.40: True = the HEARTBEAT pipe (BeatPipeNameFor, not ControlPipeNameFor):
+      /// it answers `status` (with the beat field when asked) and nothing else -- a `shutdown` gets `unknown`
+      /// and changes nothing.</param>
       /// <exception cref="EInvalidOperation">Not called on the main thread.</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -320,7 +414,8 @@ type
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      constructor Create(const ADbs: TArray<string>; const AVersion, AExtractor: string; const ARole: string = '');
+      constructor Create(const ADbs: TArray<string>; const AVersion, AExtractor: string; const ARole: string = '';
+        AStatusOnly: Boolean = False);
       /// <summary>Stops the listener (bounded wait) and releases the pipe.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -464,9 +559,10 @@ const
 /// <param name="ADbs">Databases the run writes or reads -- what status reports.</param>
 /// <param name="AVersion">DRAGLINT_VERSION.</param>
 /// <param name="AExtractor">DRAGLINT_EXTRACTOR_VERSION.</param>
+/// <param name="ASilent">True under a machine-readable output format: the 'listening' line is not written (stderr stays empty on the success path); the channel still opens. A failure to open is still said.</param>
 /// <returns>True when listening. False when the verb does not listen, a channel is already open, or the pipe could not be created (said on stderr; the run proceeds without it).</returns>
 /// <remarks>Main thread only. Pair with BatchChannelClose in a finally.</remarks>
-function BatchChannelOpen(const ACommand: string; const ADbs: TArray<string>; const AVersion, AExtractor: string): Boolean;
+function BatchChannelOpen(const ACommand: string; const ADbs: TArray<string>; const AVersion, AExtractor: string; ASilent: Boolean = False): Boolean;
 
 /// <summary>True once a maintenance stand-down request has been taken by this batch run.</summary>
 /// <returns>True when the run must stop at its next safe point; sticky once true.</returns>
@@ -483,6 +579,7 @@ implementation
 uses
   System.IOUtils
   , System.DateUtils
+  , System.StrUtils { MatchText: BeatChannelEnabledFor }
   , DRagLint.Core.OutputEncoding { EncodeForOutput: these lines bypass ErrOutput }
   ;
 
@@ -568,7 +665,7 @@ var
   GBatchChannel: TControlChannel;
   GBatchTaken  : Boolean;
 
-function BatchChannelOpen(const ACommand: string; const ADbs: TArray<string>; const AVersion, AExtractor: string): Boolean;
+function BatchChannelOpen(const ACommand: string; const ADbs: TArray<string>; const AVersion, AExtractor: string; ASilent: Boolean): Boolean;
 var
   Err: string;
 begin
@@ -578,7 +675,8 @@ begin
   GBatchChannel:= TControlChannel.Create(ADbs, AVersion, AExtractor, ACommand);
   if GBatchChannel.Start(Err) then
   begin
-    Writeln(ErrOutput, 'drag-lint ', ACommand, ': control channel listening on ', GBatchChannel.PipeName, ' (accepts status and shutdown)');
+    if not ASilent then
+      Writeln(ErrOutput, 'drag-lint ', ACommand, ': control channel listening on ', GBatchChannel.PipeName, ' (accepts status and shutdown)');
     Exit(True);
   end;
   Writeln(ErrOutput, 'drag-lint ', ACommand, ': control channel NOT started: ', Err);
@@ -602,6 +700,166 @@ end;
 function BatchChannelPipeName: string;
 begin
   if GBatchChannel = nil then Result:= '' else Result:= GBatchChannel.PipeName;
+end;
+
+{ ---- heartbeat (1.40) ------------------------------------------------------ }
+
+const
+  BEAT_SEP = '|';
+
+var
+  GBeatLock   : TCriticalSection; { guards GBeat and GBeatTick; lives for the unit's lifetime }
+  GBeat       : TEngineBeat;      { AgeMs is not kept here: BeatSnapshot computes it from GBeatTick }
+  GBeatTick   : UInt64;           { GetTickCount64 of the last report }
+  GBeatChannel: TControlChannel;  { the status-only listener, nil when this verb does not report }
+
+{ Under GBeatLock: one more report. }
+procedure BeatMarkLocked;
+begin
+  Inc(GBeat.Seq);
+  GBeatTick:= GetTickCount64;
+end;
+
+procedure BeatBegin(const AAction: string);
+begin
+  GBeatLock.Enter;
+  try
+    GBeat.Action:= AAction;
+    GBeat.Step  := '';
+    GBeat.N     := 0;
+    GBeat.Total := 0;
+    BeatMarkLocked;
+  finally
+    GBeatLock.Leave;
+  end;
+end;
+
+procedure BeatStep(const AStep: string; ATotal: Int64 = 0);
+begin
+  GBeatLock.Enter;
+  try
+    GBeat.Step := AStep;
+    GBeat.N    := 0;
+    GBeat.Total:= ATotal;
+    BeatMarkLocked;
+  finally
+    GBeatLock.Leave;
+  end;
+end;
+
+procedure BeatProgress(AN: Int64 = -1; ATotal: Int64 = -1);
+begin
+  GBeatLock.Enter;
+  try
+    GBeat.N:= if AN < 0 then GBeat.N + 1 else AN;
+    if ATotal >= 0 then GBeat.Total:= ATotal;
+    BeatMarkLocked;
+  finally
+    GBeatLock.Leave;
+  end;
+end;
+
+function BeatSnapshot: TEngineBeat;
+begin
+  GBeatLock.Enter;
+  try
+    Result:= GBeat;
+    Result.AgeMs:= if GBeat.Seq = 0 then 0 else Int64(GetTickCount64 - GBeatTick);
+  finally
+    GBeatLock.Leave;
+  end;
+end;
+
+{ A name on the wire: the field separator, TAB and control characters become '_'. }
+function BeatClean(const S: string): string;
+var
+  I: Integer;
+begin
+  Result:= S;
+  for I:= 1 to Length(Result) do
+    if (Result[I] < ' ') or (Result[I] = BEAT_SEP) then Result[I]:= '_';
+end;
+
+function BeatFieldText(const ABeat: TEngineBeat): string;
+begin
+  Result:= CONTROL_BEAT_FIELD_PREFIX + IntToStr(ABeat.Seq) + BEAT_SEP + BeatClean(ABeat.Action) + BEAT_SEP +
+           BeatClean(ABeat.Step) + BEAT_SEP + IntToStr(ABeat.N) + BEAT_SEP + IntToStr(ABeat.Total) + BEAT_SEP +
+           IntToStr(ABeat.AgeMs);
+end;
+
+function ParseBeatReply(const AReply: string; out ABeat: TEngineBeat): Boolean;
+const
+  BEAT_PARTS = 6; { seq, action, step, n, total, age -- in that order }
+  I_SEQ    = 0;
+  I_ACTION = 1;
+  I_STEP   = 2;
+  I_N      = 3;
+  I_TOTAL  = 4;
+  I_AGE    = 5;
+var
+  Field: string;
+  Parts: TArray<string>;
+begin
+  ABeat:= Default(TEngineBeat);
+  for Field in AReply.TrimRight([#13, #10]).Split([#9]) do
+  begin
+    if not Field.StartsWith(CONTROL_BEAT_FIELD_PREFIX, True) then Continue;
+    Parts:= Field.Substring(Length(CONTROL_BEAT_FIELD_PREFIX)).Split([BEAT_SEP]);
+    if Length(Parts) <> BEAT_PARTS then Exit(False);
+    ABeat.Seq   := StrToInt64Def(Parts[I_SEQ], -1);
+    ABeat.Action:= Parts[I_ACTION];
+    ABeat.Step  := Parts[I_STEP];
+    ABeat.N     := StrToInt64Def(Parts[I_N], 0);
+    ABeat.Total := StrToInt64Def(Parts[I_TOTAL], 0);
+    ABeat.AgeMs := StrToInt64Def(Parts[I_AGE], 0);
+    Exit(ABeat.Seq >= 0);
+  end;
+  Result:= False;
+end;
+
+function BeatDisplayText(const ABeat: TEngineBeat): string;
+begin
+  if ABeat.Action = '' then Exit('idle');
+  Result:= ABeat.Action;
+  if ABeat.Step <> '' then Result:= Result + ': ' + ABeat.Step;
+  if ABeat.Total > 0 then Result:= Result + ' ' + IntToStr(ABeat.N) + '/' + IntToStr(ABeat.Total)
+  else if ABeat.N > 0 then Result:= Result + ' ' + IntToStr(ABeat.N);
+end;
+
+function BeatPipeNameFor(APid: Cardinal): string;
+begin
+  Result:= PIPE_PREFIX_FULL + BEAT_PIPE_PREFIX + CurrentUserSidString + '-s' + IntToStr(CurrentSessionId) + '-p' + IntToStr(APid);
+end;
+
+function RequestEngineBeat(APid: Cardinal; AConnectTimeoutMs: Integer; out ABeat: TEngineBeat): Boolean;
+var
+  Reply, Err: string;
+begin
+  ABeat:= Default(TEngineBeat);
+  Result:= ControlRequest(BeatPipeNameFor(APid), CONTROL_MSG_STATUS + #9 + CONTROL_STATUS_ARG_BEAT, AConnectTimeoutMs, Reply, Err)
+           and ParseBeatReply(Reply, ABeat);
+end;
+
+function BeatChannelEnabledFor(const ACommand: string): Boolean;
+begin
+  Result:= MatchText(ACommand, ['lsp', 'index', 'lint-all', 'lint', 'context']);
+end;
+
+function BeatChannelOpen(const ACommand, AVersion, AExtractor: string): Boolean;
+var
+  Err: string;
+begin
+  Result:= False;
+  if (GBeatChannel <> nil) or not BeatChannelEnabledFor(ACommand) then Exit;
+  BeatBegin(ACommand);
+  GBeatChannel:= TControlChannel.Create([], AVersion, AExtractor, ACommand, {AStatusOnly=}True);
+  if GBeatChannel.Start(Err) then Exit(True);
+  FreeAndNil(GBeatChannel); { advisory: a run without a heartbeat is judged the old way by the plugin }
+end;
+
+procedure BeatChannelClose;
+begin
+  FreeAndNil(GBeatChannel);
 end;
 { ---- identity ------------------------------------------------------------ }
 
@@ -773,8 +1031,13 @@ end;
 { ---- audit --------------------------------------------------------------- }
 
 function NowIso: string;
+var
+  ST: TSystemTime;
 begin
-  Result:= FormatDateTime('yyyy-mm-dd"T"hh:nn:ss"Z"', TTimeZone.Local.ToUniversalTime(Now));
+  { The OS's UTC clock, not TTimeZone.ToUniversalTime(Now): the RTL conversion is an hour off for the
+    whole of a DST-transition day (lane 140-cli DST). }
+  GetSystemTime(ST);
+  Result:= FormatDateTime('yyyy-mm-dd"T"hh:nn:ss"Z"', SystemTimeToDateTime(ST));
 end;
 
 { ONE WriteFile per line, straight to the stderr handle: the listener runs on
@@ -809,7 +1072,8 @@ end;
 
 { ---- TControlChannel ----------------------------------------------------- }
 
-constructor TControlChannel.Create(const ADbs: TArray<string>; const AVersion, AExtractor: string; const ARole: string = '');
+constructor TControlChannel.Create(const ADbs: TArray<string>; const AVersion, AExtractor: string; const ARole: string = '';
+  AStatusOnly: Boolean = False);
 begin
   inherited Create;
   if GetCurrentThreadId <> MainThreadID then
@@ -826,7 +1090,8 @@ begin
   FReplied  := TEvent.Create(nil, {ManualReset=}True, False, '');
   FRequested:= TEvent.Create(nil, {ManualReset=}True, False, '');
   FOwnerSid := CurrentUserSidString;
-  FPipeName := ControlPipeNameFor(GetCurrentProcessId);
+  FStatusOnly:= AStatusOnly;
+  FPipeName := if AStatusOnly then BeatPipeNameFor(GetCurrentProcessId) else ControlPipeNameFor(GetCurrentProcessId);
 end;
 
 destructor TControlChannel.Destroy;
@@ -1016,6 +1281,17 @@ begin
   end;
 end;
 
+{ True when a status request's arguments (fields 1..) include AArg. Before 1.40
+  only field 1 was read, so `status<TAB>role` is answered exactly as before. }
+function StatusArgAsked(const AFields: TArray<string>; const AArg: string): Boolean;
+var
+  I: Integer;
+begin
+  for I:= 1 to High(AFields) do
+    if SameText(Trim(AFields[I]), AArg) then Exit(True);
+  Result:= False;
+end;
+
 procedure TControlListener.Serve(APipe: THandle);
 var
   Acc     : TBytes               ;
@@ -1037,12 +1313,14 @@ begin
   begin
     Line:= CONTROL_REPLY_STATUS + #9 + Pid + #9 + FOwner.FVersion + #9 + FOwner.FExtractor;
     { 1.39.1: the role only when asked, so every older parser of the reply (dbs from field 4 on) is unaffected. }
-    if (Length(Fields) > 1) and SameText(Trim(Fields[1]), CONTROL_STATUS_ARG_ROLE) and (FOwner.FRole <> '') then
+    if StatusArgAsked(Fields, CONTROL_STATUS_ARG_ROLE) and (FOwner.FRole <> '') then
       Line:= Line + #9 + CONTROL_ROLE_FIELD_PREFIX + FOwner.FRole;
+    { 1.40: the heartbeat, likewise only when asked. }
+    if StatusArgAsked(Fields, CONTROL_STATUS_ARG_BEAT) then Line:= Line + #9 + BeatFieldText(BeatSnapshot);
     for D in FOwner.FDbs do Line:= Line + #9 + D;
     Reply(APipe, Line);
   end
-  else if SameText(Verb, CONTROL_MSG_SHUTDOWN) then
+  else if SameText(Verb, CONTROL_MSG_SHUTDOWN) and not FOwner.FStatusOnly then
   begin
     WaitMs:= CONTROL_DEFAULT_WAIT_MS;
     if Length(Fields) > 1 then WaitMs:= StrToIntDef(Trim(Fields[1]), CONTROL_DEFAULT_WAIT_MS);
@@ -1163,5 +1441,12 @@ begin
     else AcceptAndServe(Pipe);
   end;
 end;
+
+initialization
+  GBeatLock:= TCriticalSection.Create;
+
+finalization
+  BeatChannelClose;
+  FreeAndNil(GBeatLock);
 
 end.

@@ -19,6 +19,14 @@ program LspNonBlockingTests;
      an old BACKGROUND request (callerCounts / codeLens) never makes the client
      busy, a foreground one does.
   S  DLIdentSpanAt (pure).
+  H  CodeLensCache.PopulateOnce's spawn fallback (no LSP hook) returns at once
+     and stores the labels when the slow children finish (IDE-HANG, 1.40).
+  K  StructureCache.RefreshSymbolsAsync returns at once; the late outline is
+     delivered to the LATEST callback, cached, and never to a freed cache.
+  R  RefactorForm.RunRefactorCliAsync (rename / extract-method dialogs) returns
+     at once, delivers a late answer, and a HUNG child is stopped by the stall
+     budget with its own exit code instead of freezing anything.
+     H, K and R spawn THIS exe as a fake, slow drag-lint (FakeEngineMain).
 
   Every "does not block" assertion runs the call on a worker thread and waits
   with a deadline, so a regression FAILS here instead of hanging the battery.
@@ -34,7 +42,11 @@ uses
   Winapi.Windows,
   DragLint.Plugin.LspWriteQueue in '..\src\delphi-plugin\DragLint.Plugin.LspWriteQueue.pas',
   DragLint.Plugin.LspClient in '..\src\delphi-plugin\DragLint.Plugin.LspClient.pas',
-  DragLint.Plugin.HoverGate in '..\src\delphi-plugin\DragLint.Plugin.HoverGate.pas';
+  DragLint.Plugin.HoverGate in '..\src\delphi-plugin\DragLint.Plugin.HoverGate.pas',
+  DragLint.Plugin.CodeLensCache in '..\src\delphi-plugin\DragLint.Plugin.CodeLensCache.pas',
+  DragLint.Plugin.StructureCache in '..\src\delphi-plugin\DragLint.Plugin.StructureCache.pas',
+  DragLint.Plugin.ProcRun in '..\src\delphi-plugin\DragLint.Plugin.ProcRun.pas',
+  DragLint.Plugin.RefactorForm in '..\src\delphi-plugin\DragLint.Plugin.RefactorForm.pas';
 
 const
   BIG_FRAME   = 64 * 1024;
@@ -42,6 +54,10 @@ const
   BLOCK_LIMIT_MS = 500;   { "never blocks" = returns well inside this }
   JOIN_LIMIT_MS  = 3000;  { a worker that is not back by now is blocked }
   LATE_REPLY_MS  = 700;   { the fake engine's delay before answering 'late' }
+  FAKE_SLOW_MS   = 1500;  { the fake drag-lint's think time per spawned run }
+  LATE_WAIT_MS   = 15000; { how long H / K / R pump for the late answer }
+  FAKE_HANG_MS   = 60000; { the fake 'hang' verb's silence }
+  HANG_STALL_MS  = 1500;  { R3's stall budget }
 
 var
   GPass, GFail: Integer;
@@ -412,6 +428,44 @@ begin
   end;
 end;
 
+{ 1.40 heartbeat (owner design 2026-11-01): once the engine answers a heartbeat,
+  its STATUS changing is progress and nothing else is. An engine silent on stdio
+  whose status keeps moving is slow, not stuck; one that keeps answering with a
+  frozen status is stuck. NoteEngineBeat is what the ticker calls with each
+  answer of the heartbeat pipe; a bare-pipe rig has no pid, so the test calls it. }
+procedure TestHeartbeatStuck;
+var
+  Rig: TRig;
+  Seq: Int64;
+  T0 : UInt64;
+begin
+  Rig:= OpenRig;
+  try
+    Rig.Client.StuckAfterMs:= 600;
+    Rig.Client.RequestAsync('slow', nil, 60000,
+      procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue) begin end);
+    Seq:= 0;
+    T0:= GetTickCount64;
+    while GetTickCount64 - T0 < 1500 do
+    begin
+      Inc(Seq);
+      Rig.Client.NoteEngineBeat(Seq, 'index: parse ' + IntToStr(Seq));
+      Sleep(150);
+    end;
+    Check('HB1 an engine silent on stdio for 2.5x StuckAfterMs whose status ADVANCES is not stuck', not Rig.Client.IsStuck);
+    Check('HB2 EngineBeatText shows its last status', Rig.Client.EngineBeatText = 'index: parse ' + IntToStr(Seq), Rig.Client.EngineBeatText);
+    T0:= GetTickCount64;
+    while GetTickCount64 - T0 < 1000 do
+    begin
+      Rig.Client.NoteEngineBeat(Seq, 'index: parse ' + IntToStr(Seq)); { answers, but the status is frozen }
+      Sleep(150);
+    end;
+    Check('HB3 an engine that keeps answering with a FROZEN status is stuck after StuckAfterMs', Rig.Client.IsStuck);
+  finally
+    CloseRig(Rig);
+  end;
+end;
+
 { fix/late-results (owner ruling 2026-11-01): an answer that arrives after the
   budget is DELIVERED, after the lrsTimeout notice -- never dropped. A request
   superseded (CancelRequest) after its notice still never sees its answer. }
@@ -636,6 +690,142 @@ begin
 
 { ---- S: identifier span ---- }
 
+{ ---- H / K: the CLI-spawn paths of the IDE never wait on the engine ---- }
+
+{ This exe doubles as a fake drag-lint: "surface", "query" and "outline" answer
+  after FAKE_SLOW_MS, in the shapes the plugin parses. True when it ran as one. }
+function FakeEngineMain: Boolean;
+var
+  Verb: string;
+begin
+  Verb:= ParamStr(1);
+  Result:= (Verb = 'surface') or (Verb = 'query') or (Verb = 'outline') or (Verb = 'rename') or (Verb = 'hang');
+  if not Result then Exit;
+  if Verb = 'hang' then
+  begin
+    Sleep(FAKE_HANG_MS);   { no output, no CPU: the hung shape a stall budget must stop }
+    Exit;
+  end;
+  Sleep(FAKE_SLOW_MS);
+  if Verb = 'surface' then Writeln('function  FakeUnit.TFoo.Bar  C:\fake\FakeUnit.pas:7')
+  else if Verb = 'query' then Writeln('3 result(s)')
+  else if Verb = 'rename' then Writeln('fake rename: 2 site(s)')
+  else Writeln('[{"kind":"function","name":"Bar","qname":"FakeUnit.TFoo.Bar","line":7,"signature":""}]');
+  Flush(Output);
+end;
+
+function PumpUntil(ALimitMs: Cardinal; const ADone: TFunc<Boolean>): Boolean;
+var
+  T0: UInt64;
+begin
+  T0:= GetTickCount64;
+  repeat
+    CheckSynchronize(10);
+    if ADone() then Exit(True);
+  until GetTickCount64 - T0 >= ALimitMs;
+  Result:= False;
+end;
+
+procedure TestCodeLensFallbackNonBlocking;
+const
+  FILE_PATH = 'C:\fake\FakeUnit.pas';
+var
+  C      : TDragLintCodeLensCache;
+  T0     : UInt64;
+  Took   : UInt64;
+  Stored : Integer;
+begin
+  SetCallerCountsHook(nil);   { no LSP: the spawn fallback is the path under test }
+  Stored:= 0;
+  C:= TDragLintCodeLensCache.Create;
+  try
+    T0:= GetTickCount64;
+    C.PopulateOnce(FILE_PATH, ParamStr(0), 'C:\fake\fake.sqlite', procedure begin Inc(Stored); end);
+    Took:= GetTickCount64 - T0;
+    Check('H1 PopulateOnce (spawn fallback, slow engine) returns at once', Took < BLOCK_LIMIT_MS, Format('%d ms', [Took]));
+    C.PopulateOnce(FILE_PATH, ParamStr(0), 'C:\fake\fake.sqlite', procedure begin Inc(Stored, 100); end);
+    Check('H2 ... the late labels are stored when the slow children finish',
+      PumpUntil(LATE_WAIT_MS, function: Boolean begin Result:= C.GetForLine(FILE_PATH, 6) <> ''; end),
+      'label=' + C.GetForLine(FILE_PATH, 6));
+    Check('H3 ... with the parsed caller count', C.GetForLine(FILE_PATH, 6) = '[3 callers]', C.GetForLine(FILE_PATH, 6));
+    Pump(200);
+    Check('H4 ... AOnStored ran once; a second call while in flight started no second pass', Stored = 1, IntToStr(Stored));
+  finally
+    C.Free;
+  end;
+end;
+
+procedure TestStructureAsync;
+const
+  FILE_PATH = 'C:\fake\FakeUnit.pas';
+var
+  C      : TDragLintStructureCache;
+  T0     : UInt64;
+  Took   : UInt64;
+  First  : Integer;
+  Latest : Integer;
+  GotSyms: TArray<TSymbolInfo>;
+  Started: Boolean;
+  Again  : Boolean;
+  Cached : TArray<TSymbolInfo>;
+begin
+  First:= 0; Latest:= 0;
+  C:= TDragLintStructureCache.Create;
+  try
+    T0:= GetTickCount64;
+    Started:= C.RefreshSymbolsAsync(FILE_PATH, ParamStr(0), '',
+      procedure(const AFile: string; const ASyms: TArray<TSymbolInfo>) begin Inc(First); end);
+    Took:= GetTickCount64 - T0;
+    Check('K1 RefreshSymbolsAsync (slow engine) returns at once and starts a fetch', Started and (Took < BLOCK_LIMIT_MS), Format('%d ms started=%s', [Took, BoolToStr(Started, True)]));
+    Again:= C.RefreshSymbolsAsync(FILE_PATH, ParamStr(0), '',
+      procedure(const AFile: string; const ASyms: TArray<TSymbolInfo>) begin Inc(Latest); GotSyms:= ASyms; end);
+    Check('K2 ... a second call while in flight stacks no second engine run', not Again);
+    Check('K3 ... the late outline reaches the LATEST callback',
+      PumpUntil(LATE_WAIT_MS, function: Boolean begin Result:= Latest > 0; end), Format('first=%d latest=%d', [First, Latest]));
+    Check('K4 ... once, with the parsed symbol; the replaced callback never runs',
+      (Latest = 1) and (First = 0) and (Length(GotSyms) = 1) and (GotSyms[0].Name = 'Bar') and (GotSyms[0].Line = 7),
+      Format('first=%d latest=%d n=%d', [First, Latest, Length(GotSyms)]));
+    Check('K5 ... and is cached', C.TryGetSymbols(FILE_PATH, Cached) and (Length(Cached) = 1));
+  finally
+    C.Free;
+  end;
+
+  { A cache freed while its fetch runs: the answer must not touch it. }
+  Latest:= 0;
+  C:= TDragLintStructureCache.Create;
+  C.RefreshSymbolsAsync(FILE_PATH, ParamStr(0), '',
+    procedure(const AFile: string; const ASyms: TArray<TSymbolInfo>) begin Inc(Latest); end);
+  C.Free;
+  Pump(FAKE_SLOW_MS + 1500);
+  Check('K6 a cache freed mid-fetch gets no callback (and no access violation)', Latest = 0, IntToStr(Latest));
+end;
+
+procedure TestRefactorAsync;
+var
+  T0    : UInt64 ;
+  Took  : UInt64 ;
+  Calls : Integer;
+  Code  : Integer;
+  Output: string ;
+begin
+  Calls:= 0; Code:= 0;
+  T0:= GetTickCount64;
+  RunRefactorCliAsync(Format('"%s" rename --qname "X.Y" --to "Z" --dry-run', [ParamStr(0)]),
+    procedure(AExitCode: Integer; const AOutput: string) begin Inc(Calls); Code:= AExitCode; Output:= AOutput; end);
+  Took:= GetTickCount64 - T0;
+  Check('R1 RunRefactorCliAsync (slow engine) returns at once', Took < BLOCK_LIMIT_MS, Format('%d ms', [Took]));
+  Check('R2 ... the late answer is delivered once, with exit code and output',
+    PumpUntil(LATE_WAIT_MS, function: Boolean begin Result:= Calls > 0; end) and (Calls = 1) and (Code = 0) and (Pos('fake rename: 2 site(s)', Output) > 0),
+    Format('calls=%d code=%d out=%s', [Calls, Code, Trim(Output)]));
+
+  Calls:= 0; Code:= 0;
+  RunRefactorCliAsync(Format('"%s" hang', [ParamStr(0)]),
+    procedure(AExitCode: Integer; const AOutput: string) begin Inc(Calls); Code:= AExitCode; end, HANG_STALL_MS);
+  Check('R3 a HUNG child is stopped by the stall budget and reported (timed-out exit), not waited on for good',
+    PumpUntil(LATE_WAIT_MS, function: Boolean begin Result:= Calls > 0; end) and (Code = PROCRUN_TIMED_OUT_EXIT_CODE),
+    Format('calls=%d code=%d', [Calls, Code]));
+end;
+
 procedure TestIdentSpan;
 var
   S, E: Integer;
@@ -652,8 +842,12 @@ begin
 end;
 
 begin
+  if FakeEngineMain then ExitProcess(0);
   GPass:= 0; GFail:= 0;
   try
+    TestCodeLensFallbackNonBlocking;
+    TestStructureAsync;
+    TestRefactorAsync;
     TestGate;
     TestIdentSpan;
     TestSendFailureNotOutstanding;
@@ -665,6 +859,7 @@ begin
       TestAsyncReply;
       TestSupersededDropped;
       TestTimeoutBusyStuck;
+      TestHeartbeatStuck;
       TestLateResultDelivered;
       TestBackgroundNotBusy;
       TestNotifyWhenEngineStopsReading;

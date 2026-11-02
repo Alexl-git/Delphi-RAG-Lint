@@ -1493,7 +1493,7 @@
       "status": "shipped",
       "since": "0.7.0-alpha",
       "summary": "Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers",
-      "intro": "Read this to check what a symbol is and who calls it without leaving the line you are on. With the caret on it choose drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line, hover --qname Foo.Bar gives the same card. The IDE never waits for the engine: the card appears when the answer arrives, and a busy engine shows 'drag-lint: engine busy' instead of freezing the editor.",
+      "intro": "Read this to check what a symbol is and who calls it without leaving the line you are on. With the caret on it choose drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line, hover --qname Foo.Bar gives the same card. The IDE never waits for the engine: the card appears when the answer arrives, and a busy engine shows 'drag-lint: engine busy' instead of freezing the editor, and an answer that arrives after that deadline is still delivered as a late result.",
       "wikiPage": "Hover-at-Cursor",
       "surfaces": [
         {
@@ -3676,7 +3676,7 @@
         {
           "type": "cli",
           "verb": "lint-project",
-          "usage": "drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value] [--layers <f.json>] [--json] [--output <f>]",
+          "usage": "drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global] [--layers <f.json>] [--json] [--output <f>]",
           "flags": [
             {
               "name": "--db",
@@ -3694,7 +3694,7 @@
             }
           ],
           "helpOrder": 18,
-          "help": ["  drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value] [--layers <f.json>] [--json] [--output <f>]"]
+          "help": ["  drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global] [--layers <f.json>] [--json] [--output <f>]"]
         },
         {
           "type": "ide-menu",
@@ -9680,6 +9680,41 @@
       }
     },
     {
+      "id": "engine-heartbeat",
+      "title": "Engine heartbeat: the IDE tells a busy engine from a stuck one",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.40.0-alpha",
+      "summary": "A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving",
+      "intro": "Read this to understand why a long index or lint-all no longer gets killed while it works, and why a frozen engine still is. The engine keeps a status record (action, step, n of total) and answers it on a status-only pipe, drag-lint-beat-*, next to the control pipe. The IDE plugin polls it every two seconds: a changing record counts as progress, a frozen record on a spinning process counts as stuck. The status bar shows it, e.g. 'index parse 120/400'. An old engine or a verb without a beat falls back to the earlier output-or-CPU rule.",
+      "wikiPage": "heartbeat",
+      "surfaces": [
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\heartbeat.md"
+        }
+      ],
+      "audience": "both",
+      "aliases": ["beat", "drag-lint-beat", "status record", "stuck engine"],
+      "related": ["hover-at-cursor", "lsp-full-rules"],
+      "questions": [
+        {
+          "ask": "Why was my long index not killed by the IDE, and a frozen one was?",
+          "command": "drag-lint shutdown --dry-run"
+        },
+        {
+          "ask": "What is the engine doing right now?",
+          "command": "see the drag-lint status bar panel in the IDE"
+        }
+      ],
+      "access": "cli-only",
+      "accessReviewed": {
+        "date": "2026-11-01",
+        "by": "ENGINE"
+      }
+    },
+    {
       "id": "ide-help-line",
       "title": "Help line (DL page)",
       "group": "editor-integration",
@@ -9934,7 +9969,7 @@
       "status": "shipped",
       "since": "1.33.0-alpha",
       "summary": "Runs the full lint rule set on save so the editor shows what the CLI shows",
-      "intro": "Read this when the editor should publish the same findings as drag-lint lint, including dl:ok markers, instead of the small built-in set. It is the opt-in lsp --full-rules flag of the plain server (its lint child inherits each file's own project defines through --db); it is a separate mode from lsp --proxy, which ignores it.",
+      "intro": "Read this when the editor should publish the same findings as drag-lint lint, including dl:ok markers, instead of the small built-in set. It is the opt-in lsp --full-rules flag of the plain server (its lint child inherits each file's own project defines through --db); it is a separate mode from lsp --proxy, which ignores it. A slow machine never loses findings: the lint child is killed only when it makes no progress, and its late findings are still published.",
       "wikiPage": "lsp-proxy-merge",
       "surfaces": [
         {
@@ -9967,6 +10002,10 @@
           "command": "drag-lint lint <library unit.pas> --db library-Win64.sqlite"
         },
         {
+          "ask": "Will a slow machine make the editor lose the full-rules findings of a big file?",
+          "command": "drag-lint lsp --db <file.sqlite> --full-rules"
+        },
+        {
           "ask": "How long do the LSP and the IDE live lint wait for one lint run of an RTL file?",
           "command": "drag-lint lsp --db <file.sqlite> --full-rules"
         }
@@ -9977,10 +10016,10 @@
         "by": "LSP"
       },
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-11-01",
         "by": "LSP",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "d160defccb76dffc2cfd38c325a5d3288ab0e19802e00eec07f84f236e10566b"
+        "build": "1.39.2-alpha",
+        "surfaceHash": "382a804739cefb86c690c97b9791c70d40f522947fa32409a1c16ddb8fb67f58"
       }
     },
     {
@@ -17223,6 +17262,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "unused-enum-value"
+      },
+      {
+        "id": "rule.unused-global",
+        "title": "unused-global",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A unit-level const, var or type (interface or implementation section) that no ref names -- implementation-section ones are unit-private... (project-wide, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule unused-global"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "unused-global"
       },
       {
         "id": "rule.unused-local",

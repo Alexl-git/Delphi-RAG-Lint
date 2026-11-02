@@ -18,6 +18,33 @@ uses
   , Vcl.Dialogs
   ;
 
+type
+  /// <summary>Receives one refactor CLI run's result on the MAIN thread.</summary>
+  /// <param name="AExitCode">The child's exit code; ProcRun's PROCRUN_TIMED_OUT_EXIT_CODE
+  /// when it was killed for making no progress; -1 when it could not start.</param>
+  /// <param name="AOutput">stdout and stderr, interleaved (a CLI refusal included).</param>
+  TRefactorRunDone = reference to procedure(AExitCode: Integer; const AOutput: string);
+
+const
+  /// <summary>STALL budget of a refactor CLI run (ProcRun semantics): the child is
+  /// killed only after this long with neither output nor CPU. A run that keeps
+  /// working is never cut short -- its answer is always delivered.</summary>
+  REFACTOR_STALL_MS = 60000;
+
+/// <summary>Runs one drag-lint refactor command line on a worker thread and hands
+/// the result to ADone on the main thread (IDE-HANG, 1.40).</summary>
+/// <param name="ACmdLine">Full command line, as CreateProcessW takes it.</param>
+/// <param name="ADone">Called exactly once, on the main thread, however late.</param>
+/// <param name="AStallMs">Stall budget; defaults to REFACTOR_STALL_MS.</param>
+/// <remarks>Never waits: returns before the child is spawned. The dialogs keep
+/// pumping messages meanwhile and refuse to close until ADone has run.</remarks>
+procedure RunRefactorCliAsync(const ACmdLine: string; const ADone: TRefactorRunDone; AStallMs: Integer = REFACTOR_STALL_MS);  // dl:ok unused-public-symbol@f8e3 -- public as the test seam: LspNonBlockingTests R1-R3 drive it (not in the plugin index)
+
+/// <summary>Shows the drag-lint Rename Symbol preview dialog (modal).</summary>
+/// <param name="ASuggestedQName">Initial symbol qname.</param>
+/// <param name="AProjectDb">Project database ('' = the exe's default resolution).</param>
+/// <param name="AExePath">Path to drag-lint.exe.</param>
+/// <remarks>Main thread only. Preview / Apply run the CLI off the main thread.</remarks>
 procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: string; const AExePath: string);
 
 /// <summary>Shows the drag-lint Extract Method preview dialog for a fixed
@@ -43,24 +70,121 @@ uses
   Winapi.Windows
   , Winapi.Messages
   , Vcl.Graphics
+  , System.Generics.Collections
+  , DragLint.Plugin.ProcRun   { RunCaptureStdout -- stall-bounded spawn } // dl:unit DragLint.Plugin.ProcRun accepted -- PROCRUN_TIMED_OUT_EXIT_CODE is the exit code RunCaptureStdout returns on a stall; it travels with the spawn this unit calls
+  , DragLint.Plugin.Telemetry { DLT }
   ;
+
+const
+  MSEC_PER_SEC = 1000;   { for the stall-budget message }
+
+procedure RunRefactorCliAsync(const ACmdLine: string; const ADone: TRefactorRunDone; AStallMs: Integer);
+begin
+  TThread.CreateAnonymousThread(
+    procedure
+    var
+      Output: string;
+      Code  : Integer;
+    begin
+      Code  := -1;   { what ADone sees if the run raises }
+      Output:= '';
+      try
+        Code:= RunCaptureStdout(ACmdLine, Output, AStallMs);
+      except
+        on E: Exception do
+        begin
+          DLT('refactor', 'refactor run raised ' + E.ClassName + ': ' + E.Message);
+          Output:= 'drag-lint: the run raised ' + E.ClassName + ': ' + E.Message;
+        end;
+      end;
+      { Reached whatever the run did (every Exception is caught above): ADone
+        must run, or the dialog would stay busy for good. }
+      TThread.Queue(nil, procedure begin ADone(Code, Output); end);
+    end).Start;
+end;
+
+{ ---- TCliDialogHandler: the shared busy state of both dialogs ---- }
+
+var
+  { Every live handler; main thread only. A late answer reaches only a handler
+    still listed (its dialog has not been freed). }
+  GLiveHandlers: TList<TObject> = nil;
+
+type
+  TCliDialogHandler = class(TComponent)
+    protected
+      FForm    : TForm  ;
+      FMemo    : TMemo  ;
+      FBtnApply: TButton;
+      FBtnClose: TButton;
+      FBusy    : Boolean;
+      { Starts ACmdLine off the main thread; shows ABusyText and disables Apply
+        and Close until ADone has run. False (nothing started) while busy. }
+      function RunAsync(const ACmdLine, ABusyText: string; const ADone: TRefactorRunDone): Boolean;
+    public
+      constructor Create(AOwner: TComponent); override;
+      destructor Destroy; override;
+      { The dialog cannot close while a run is in flight: its answer -- above
+        all an APPLY's -- must be shown, never dropped. }
+      procedure DoCloseQuery(Sender: TObject; var CanClose: Boolean);
+  end;
+
+constructor TCliDialogHandler.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  if GLiveHandlers <> nil then GLiveHandlers.Add(Self);
+end;
+
+destructor TCliDialogHandler.Destroy;
+begin
+  if GLiveHandlers <> nil then GLiveHandlers.Remove(Self);
+  inherited Destroy;
+end;
+
+function TCliDialogHandler.RunAsync(const ACmdLine, ABusyText: string; const ADone: TRefactorRunDone): Boolean;
+var
+  Me: TObject;
+begin
+  Result:= not FBusy;
+  if not Result then Exit;
+  FBusy:= True;
+  FMemo.Lines.Text := ABusyText;
+  FBtnApply.Enabled:= False;
+  FBtnClose.Enabled:= False;
+  Screen.Cursor    := crAppStart;
+  Me:= Self;
+  RunRefactorCliAsync(ACmdLine,
+    procedure(AExitCode: Integer; const AOutput: string)
+    begin
+      Screen.Cursor:= crDefault;
+      if (GLiveHandlers = nil) or not GLiveHandlers.Contains(Me) then Exit;
+      FBusy:= False;
+      FBtnClose.Enabled:= True;
+      FMemo.Lines.Text:= if AExitCode = PROCRUN_TIMED_OUT_EXIT_CODE then
+                           AOutput + sLineBreak + Format('(drag-lint made no progress for %d s and was stopped)', [REFACTOR_STALL_MS div MSEC_PER_SEC])
+                         else AOutput;
+      ADone(AExitCode, AOutput);
+    end);
+end;
+
+procedure TCliDialogHandler.DoCloseQuery(Sender: TObject; var CanClose: Boolean);
+begin
+  CanClose:= not FBusy;
+end;
+
 
 { ---- TRefactorHandler ---- }
 
 type
-  TRefactorHandler = class(TComponent)
+  TRefactorHandler = class(TCliDialogHandler)
     private
-      FForm     : TForm                                                 ;
-      FEdQName  : TEdit                                                 ;
-      FEdNewName: TEdit                                                 ;
-      FCbBackup : TCheckBox                                             ;
-      FMemo     : TMemo                                                 ;
-      FBtnApply : TButton                                               ;
-      FBtnClose : TButton                                               ;
-      FExePath  : string                                                ;
-      FProjectDb: string                                                ;
-      FPreviewOk: Boolean                                               ;
-      function RunRename(ADryRun: Boolean; out AOutput: string): Boolean;
+      FEdQName  : TEdit    ;
+      FEdNewName: TEdit    ;
+      FCbBackup : TCheckBox;
+      FExePath  : string   ;
+      FProjectDb: string   ;
+      FPreviewOk: Boolean  ;
+      function RenameCmdLine(ADryRun: Boolean): string;
     public
       constructor Create(
         AOwner: TComponent; AForm: TForm; AEdQName, AEdNewName: TEdit; ACbBackup: TCheckBox; AMemo: TMemo; ABtnApply, ABtnClose: TButton; const AExePath, AProjectDb: string
@@ -86,80 +210,15 @@ begin
   FPreviewOk:= False;
 end;
 
-function TRefactorHandler.RunRename(ADryRun: Boolean; out AOutput: string): Boolean;
-var
-  SA       : TSecurityAttributes       ;
-  ReadPipe : THandle                   ;
-  WritePipe: THandle                   ;
-  SI       : TStartupInfoW             ;
-  PI       : TProcessInformation       ;
-  Buf      : array[0..4095] of AnsiChar;
-  BytesRead: DWORD                     ;
-  ExitCode : DWORD                     ;
-  CmdLine  : string                    ;
-  WideCmd  : string                    ;
-  SB       : TStringBuilder            ;
-const
-  TIMEOUT_MS = 60000;
+function TRefactorHandler.RenameCmdLine(ADryRun: Boolean): string;
 begin
-  Result := False;
-  AOutput:= '';
-
-  { Build command line }
-  CmdLine:= Format('"%s" rename --qname "%s" --to "%s"', [FExePath, FEdQName.Text, FEdNewName.Text]);
-  if FProjectDb <> '' then CmdLine:= CmdLine + Format(' --db "%s"', [FProjectDb]);
-  if ADryRun then CmdLine:= CmdLine + ' --dry-run';
-  if not FCbBackup.Checked then CmdLine:= CmdLine + ' --no-backup';
-
-  SA.nLength:= SizeOf(SA);
-  SA.bInheritHandle:= True;
-  SA.lpSecurityDescriptor:= nil;
-  if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then Exit;
-  try
-    SetHandleInformation(ReadPipe, HANDLE_FLAG_INHERIT, 0);
-    FillChar(SI, SizeOf(SI), 0);
-    SI.cb:= SizeOf(SI);
-    SI.dwFlags   := STARTF_USESTDHANDLES;
-    SI.hStdOutput:= WritePipe;
-    SI.hStdError := WritePipe;
-    SI.hStdInput:= GetStdHandle(STD_INPUT_HANDLE);
-    FillChar(PI, SizeOf(PI), 0);
-    WideCmd:= CmdLine;
-    UniqueString(WideCmd);
-    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
-    begin
-      CloseHandle(WritePipe);
-      AOutput:= 'Failed to spawn: ' + CmdLine;
-      Exit;
-    end;
-    CloseHandle(WritePipe);
-    SB:= TStringBuilder.Create;
-    try
-      repeat
-        BytesRead:= 0;
-        if not ReadFile(ReadPipe, Buf[0], SizeOf(Buf) - 1, BytesRead, nil) then Break;
-        if BytesRead = 0 then Break;
-        Buf[BytesRead]:= #0;
-        SB.Append(string(AnsiString(Buf)));
-      until False;
-      AOutput:= SB.ToString;
-    finally
-      SB.Free;
-    end;
-    WaitForSingleObject(PI.hProcess, TIMEOUT_MS);
-    GetExitCodeProcess (PI.hProcess, ExitCode  );
-    CloseHandle(PI.hProcess);
-    CloseHandle(PI.hThread );
-    Result:= (Integer(ExitCode) = 0);
-  finally
-    CloseHandle(ReadPipe);
-  end; // try
-end; // function
+  Result:= Format('"%s" rename --qname "%s" --to "%s"', [FExePath, FEdQName.Text, FEdNewName.Text]);
+  if FProjectDb <> '' then Result:= Result + Format(' --db "%s"', [FProjectDb]);
+  if ADryRun then Result:= Result + ' --dry-run';
+  if not FCbBackup.Checked then Result:= Result + ' --no-backup';
+end;
 
 procedure TRefactorHandler.DoPreview(Sender: TObject);
-var
-  Output: string ;
-  Ok    : Boolean;
 begin
   if Trim(FEdQName.Text) = '' then
   begin
@@ -174,51 +233,42 @@ begin
     Exit;
   end;
 
-  FMemo.Lines.Text:= '(running dry-run...)';
-  FBtnApply.Enabled:= False;
   FPreviewOk:= False;
-  FMemo.Update;
-
-  Ok:= RunRename(True, Output);
-  FMemo.Lines.Text:= Output;
-  FPreviewOk:= Ok;
-  FBtnApply.Enabled:= Ok;
-  FBtnClose.Caption:= 'Cancel';
+  RunAsync(RenameCmdLine(True), '(running dry-run...)',
+    procedure(AExitCode: Integer; const AOutput: string)
+    begin
+      FPreviewOk:= AExitCode = 0;
+      FBtnApply.Enabled:= FPreviewOk;
+      FBtnClose.Caption:= 'Cancel';
+    end);
 end; // procedure
 
 procedure TRefactorHandler.DoApply(Sender: TObject);
-var
-  Output: string ;
-  Ok    : Boolean;
 begin
   if MessageDlg( Format('Apply rename ''%s'' -> ''%s''?'#13#10 + 'This will modify source files on disk.', [FEdQName.Text, FEdNewName.Text]), mtConfirmation, [mbYes, mbNo],
     0) <> mrYes then Exit;
 
-  FMemo.Lines.Text:= '(applying...)';
-  FBtnApply.Enabled:= False;
-  FMemo.Update;
-
-  Ok:= RunRename(False, Output);
-  FMemo.Lines.Text:= Output;
-
-  if Ok then
-  begin
-    FBtnClose.Caption:= 'Close';
-    ShowMessage('drag-lint: Rename applied successfully.');
-    FForm.ModalResult:= mrOk;
-  end
-  else
-  begin
-    FBtnApply.Enabled:= True;
-    ShowMessage('drag-lint: Rename apply failed. See output for details.');
-  end;
+  RunAsync(RenameCmdLine(False), '(applying...)',
+    procedure(AExitCode: Integer; const AOutput: string)
+    begin
+      if AExitCode = 0 then
+      begin
+        FBtnClose.Caption:= 'Close';
+        ShowMessage('drag-lint: Rename applied successfully.');
+        FForm.ModalResult:= mrOk;
+      end
+      else
+      begin
+        FBtnApply.Enabled:= True;
+        ShowMessage('drag-lint: Rename apply failed. See output for details.');
+      end;
+    end);
 end; // procedure
 
 procedure TRefactorHandler.DoClose(Sender: TObject);
 begin
   FForm.ModalResult:= mrCancel;
 end;
-
 { ---- ShowRefactorDialog ---- }
 
 procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: string; const AExePath: string);
@@ -349,6 +399,7 @@ begin
     btnPreview.OnClick:= Handler.DoPreview;
     btnApply  .OnClick:= Handler.DoApply;
     btnClose  .OnClick:= Handler.DoClose;
+    Form.OnCloseQuery := Handler.DoCloseQuery;
 
     Form.ShowModal;
   finally
@@ -359,20 +410,16 @@ end; // procedure
 { ---- TExtractMethodHandler ---- }
 
 type
-  TExtractMethodHandler = class(TComponent)
+  TExtractMethodHandler = class(TCliDialogHandler)
     private
-      FForm     : TForm                                                 ;
-      FEdName   : TEdit                                                 ;
-      FCbBackup : TCheckBox                                             ;
-      FMemo     : TMemo                                                 ;
-      FBtnApply : TButton                                               ;
-      FBtnClose : TButton                                               ;
-      FExePath  : string                                                ;
-      FFilePath : string                                                ;
-      FFromLine : Integer                                               ;
-      FToLine   : Integer                                               ;
-      FApplied  : Boolean                                               ;
-      function RunExtractMethod(ADryRun: Boolean; out AOutput: string): Boolean;
+      FEdName   : TEdit    ;
+      FCbBackup : TCheckBox;
+      FExePath  : string   ;
+      FFilePath : string   ;
+      FFromLine : Integer  ;
+      FToLine   : Integer  ;
+      FApplied  : Boolean  ;
+      function ExtractCmdLine(ADryRun: Boolean): string;
     public
       constructor Create(
         AOwner: TComponent; AForm: TForm; AEdName: TEdit; ACbBackup: TCheckBox; AMemo: TMemo; ABtnApply, ABtnClose: TButton;
@@ -402,87 +449,21 @@ begin
   FApplied := False;
 end;
 
-function TExtractMethodHandler.RunExtractMethod(ADryRun: Boolean; out AOutput: string): Boolean;
-{ Mirrors TRefactorHandler.RunRename: merges stdout+stderr into one pipe so a
-  REFUSED reason (written by the CLI to stderr, exit 2) lands in the same
-  preview memo as a successful dry-run/apply message. }
-var
-  SA       : TSecurityAttributes       ;
-  ReadPipe : THandle                   ;
-  WritePipe: THandle                   ;
-  SI       : TStartupInfoW             ;
-  PI       : TProcessInformation       ;
-  Buf      : array[0..4095] of AnsiChar;
-  BytesRead: DWORD                     ;
-  ExitCode : DWORD                     ;
-  CmdLine  : string                    ;
-  WideCmd  : string                    ;
-  SB       : TStringBuilder            ;
-const
-  TIMEOUT_MS = 60000;
+function TExtractMethodHandler.ExtractCmdLine(ADryRun: Boolean): string;
+{ stdout and stderr share one pipe (RunCaptureStdout), so a REFUSED reason
+  (written by the CLI to stderr, exit 2) lands in the same preview memo as a
+  successful dry-run/apply message. NOTE: unlike the legacy "rename" verb
+  (which writes by default and takes --dry-run to opt OUT), "extract-method"
+  PREVIEWS by default and writes only with an explicit --apply -- so the apply
+  spawn must pass --apply or it silently re-runs the preview and changes nothing. }
 begin
-  Result := False;
-  AOutput:= '';
-
-  { Build command line. NOTE: unlike the legacy "rename" verb (which writes
-    by default and takes --dry-run to opt OUT), "extract-method" PREVIEWS by
-    default and writes only with an explicit --apply -- so the apply spawn
-    must pass --apply or it silently re-runs the preview and changes nothing. }
-  CmdLine:= Format('"%s" extract-method --file "%s" --from-line %d --to-line %d --name "%s"',
+  Result:= Format('"%s" extract-method --file "%s" --from-line %d --to-line %d --name "%s"',
     [FExePath, FFilePath, FFromLine, FToLine, FEdName.Text]);
-  if ADryRun then CmdLine:= CmdLine + ' --dry-run'
-  else CmdLine:= CmdLine + ' --apply';
-  if not FCbBackup.Checked then CmdLine:= CmdLine + ' --no-backup';
-
-  SA.nLength:= SizeOf(SA);
-  SA.bInheritHandle:= True;
-  SA.lpSecurityDescriptor:= nil;
-  if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then Exit;
-  try
-    SetHandleInformation(ReadPipe, HANDLE_FLAG_INHERIT, 0);
-    FillChar(SI, SizeOf(SI), 0);
-    SI.cb:= SizeOf(SI);
-    SI.dwFlags   := STARTF_USESTDHANDLES;
-    SI.hStdOutput:= WritePipe;
-    SI.hStdError := WritePipe;
-    SI.hStdInput:= GetStdHandle(STD_INPUT_HANDLE);
-    FillChar(PI, SizeOf(PI), 0);
-    WideCmd:= CmdLine;
-    UniqueString(WideCmd);
-    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI) then
-    begin
-      CloseHandle(WritePipe);
-      AOutput:= 'Failed to spawn: ' + CmdLine;
-      Exit;
-    end;
-    CloseHandle(WritePipe);
-    SB:= TStringBuilder.Create;
-    try
-      repeat
-        BytesRead:= 0;
-        if not ReadFile(ReadPipe, Buf[0], SizeOf(Buf) - 1, BytesRead, nil) then Break;
-        if BytesRead = 0 then Break;
-        Buf[BytesRead]:= #0;
-        SB.Append(string(AnsiString(Buf)));
-      until False;
-      AOutput:= SB.ToString;
-    finally
-      SB.Free;
-    end;
-    WaitForSingleObject(PI.hProcess, TIMEOUT_MS);
-    GetExitCodeProcess (PI.hProcess, ExitCode  );
-    CloseHandle(PI.hProcess);
-    CloseHandle(PI.hThread );
-    Result:= (Integer(ExitCode) = 0);
-  finally
-    CloseHandle(ReadPipe);
-  end; // try
-end; // function
+  Result:= Result + (if ADryRun then ' --dry-run' else ' --apply');
+  if not FCbBackup.Checked then Result:= Result + ' --no-backup';
+end;
 
 procedure TExtractMethodHandler.DoPreview(Sender: TObject);
-var
-  Output: string ;
-  Ok    : Boolean;
 begin
   if Trim(FEdName.Text) = '' then
   begin
@@ -491,52 +472,43 @@ begin
     Exit;
   end;
 
-  FMemo.Lines.Text:= '(running dry-run...)';
-  FBtnApply.Enabled:= False;
-  FMemo.Update;
-
-  { A REFUSED reason (stderr, exit 2) still lands in Output -- surfaced below
-    exactly like a successful preview. Apply stays disabled unless Ok. }
-  Ok:= RunExtractMethod(True, Output);
-  FMemo.Lines.Text:= Output;
-  FBtnApply.Enabled:= Ok;
-  FBtnClose.Caption:= 'Cancel';
+  { A REFUSED reason (stderr, exit 2) still lands in the memo -- exactly like
+    a successful preview. Apply stays disabled unless the run exited 0. }
+  RunAsync(ExtractCmdLine(True), '(running dry-run...)',
+    procedure(AExitCode: Integer; const AOutput: string)
+    begin
+      FBtnApply.Enabled:= AExitCode = 0;
+      FBtnClose.Caption:= 'Cancel';
+    end);
 end; // procedure
 
 procedure TExtractMethodHandler.DoApply(Sender: TObject);
-var
-  Output: string ;
-  Ok    : Boolean;
 begin
   if MessageDlg( Format('Extract method ''%s'' from lines %d-%d?'#13#10 + 'This will modify the source file on disk.', [FEdName.Text, FFromLine, FToLine]), mtConfirmation,
     [mbYes, mbNo], 0) <> mrYes then Exit;
 
-  FMemo.Lines.Text:= '(applying...)';
-  FBtnApply.Enabled:= False;
-  FMemo.Update;
-
-  Ok:= RunExtractMethod(False, Output);
-  FMemo.Lines.Text:= Output;
-
-  if Ok then
-  begin
-    FApplied:= True;
-    FBtnClose.Caption:= 'Close';
-    ShowMessage('drag-lint: Extract Method applied successfully.');
-    FForm.ModalResult:= mrOk;
-  end
-  else
-  begin
-    FBtnApply.Enabled:= True;
-    ShowMessage('drag-lint: Extract Method apply failed. See output for details.');
-  end;
+  RunAsync(ExtractCmdLine(False), '(applying...)',
+    procedure(AExitCode: Integer; const AOutput: string)
+    begin
+      if AExitCode = 0 then
+      begin
+        FApplied:= True;
+        FBtnClose.Caption:= 'Close';
+        ShowMessage('drag-lint: Extract Method applied successfully.');
+        FForm.ModalResult:= mrOk;
+      end
+      else
+      begin
+        FBtnApply.Enabled:= True;
+        ShowMessage('drag-lint: Extract Method apply failed. See output for details.');
+      end;
+    end);
 end; // procedure
 
 procedure TExtractMethodHandler.DoClose(Sender: TObject);
 begin
   FForm.ModalResult:= mrCancel;
 end;
-
 { ---- ShowExtractMethodDialog ---- }
 
 function ShowExtractMethodDialog(const AFilePath: string; AFromLine, AToLine: Integer; const AExePath: string): Boolean;
@@ -659,6 +631,7 @@ begin
     btnPreview.OnClick:= Handler.DoPreview;
     btnApply  .OnClick:= Handler.DoApply;
     btnClose  .OnClick:= Handler.DoClose;
+    Form.OnCloseQuery := Handler.DoCloseQuery;
 
     Form.ShowModal;
     Result:= Handler.Applied;
@@ -666,5 +639,11 @@ begin
     Form.Free;
   end; // try
 end; // function
+
+initialization
+GLiveHandlers:= TList<TObject>.Create;
+
+finalization
+FreeAndNil(GLiveHandlers);
 
 end.

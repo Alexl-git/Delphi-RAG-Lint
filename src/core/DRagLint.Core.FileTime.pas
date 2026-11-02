@@ -59,10 +59,35 @@ interface
 /// </remarks>
 function TryGetFileMTimeUnix(const APath: string; out AMTimeUnix: Int64): Boolean;
 
+/// <summary>The real UTC clock as a TDateTime, read straight from the OS.</summary>
+/// <returns>UTC now. Never consults a time zone, so it has no daylight-saving day to get wrong.</returns>
+/// <remarks>
+/// WHY NOT `TTimeZone.Local.ToUniversalTime(Now)` / `DateTimeToUnix(Now, False)`: on a transition day
+/// (2026-11-01 here) the RTL converted a plain afternoon `Now` one hour off for the WHOLE day, so
+/// every stamp written by the indexer and every `Z` log line was +1 h (lane 140-cli DST;
+/// pinned by tests\autotest\run_index_utc_stamps.ps1). Thread-safe.
+/// </remarks>
+function NowUtc: TDateTime;
+
+/// <summary>The real UTC clock as unix epoch seconds (what files.parsed_at stores).</summary>
+/// <returns>Whole seconds since 1970-01-01 UTC. Same source as NowUtc.</returns>
+/// <remarks>Thread-safe.</remarks>
+function NowUnixUtc: Int64;
+
+/// <summary>A file's last-write time as unix epoch seconds, UTC, raising like TFile.</summary>
+/// <param name="APath">Full path to an existing file.</param>
+/// <returns>Floor of the file's true UTC epoch -- the value TryGetFileMTimeUnix reports.</returns>
+/// <exception cref="EFileNotFoundException">Raised when the path is missing, a directory, or unreadable.</exception>
+/// <remarks>
+/// Replaces `DateTimeToUnix(TFile.GetLastWriteTime(P), False)`: that round-trips through a LOCAL
+/// TDateTime, which is ambiguous for the repeated hour at DST end (stored +3600 s). This reads the
+/// UTC FILETIME and never touches a time zone.
+/// </remarks>
+function FileMTimeUnix(const APath: string): Int64;
 implementation
 
 uses
-  Winapi.Windows;
+  Winapi.Windows, System.SysUtils;
 
 const
   { 100-ns intervals between 1601-01-01 (the FILETIME epoch) and 1970-01-01. }
@@ -112,4 +137,27 @@ begin
   Result     := True;
 end;
 
+function NowUtc: TDateTime;
+var
+  ST: TSystemTime;
+begin
+  GetSystemTime(ST);
+  Result:= SystemTimeToDateTime(ST);
+end;
+
+function NowUnixUtc: Int64;
+var
+  Stamp: TFileTime;
+begin
+  GetSystemTimeAsFileTime(Stamp);
+  Result:= FileTimeToUnix(Stamp);
+end;
+
+function FileMTimeUnix(const APath: string): Int64;
+begin
+  { Raw FILETIME, NOT TFile.GetLastWriteTimeUtc: that one is measured to round-trip through the LOCAL
+    zone too, so it collapses the repeated DST hour exactly like the call it replaces. }
+  if not TryGetFileMTimeUnix(APath, Result) then
+    raise EFileNotFoundException.CreateFmt('Cannot read the last-write time of %s', [APath]);
+end;
 end.

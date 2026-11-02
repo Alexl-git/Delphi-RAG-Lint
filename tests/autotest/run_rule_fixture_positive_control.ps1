@@ -69,6 +69,8 @@ $Allowlist += @('taint-sql-injection', 'taint-command-injection', 'taint-path-tr
     'duplicate-unit-on-search-path', 'pp-unresolved-if')
 # unused-enum-value -> tests\lint-project\unused-enum-value\run_unused_enum_value.ps1 (project rule, lane B-ENUM)
 $Allowlist += @('unused-enum-value')
+# unused-global -> tests\lint-project\unused-global\run_unused_global.ps1 (project rule, 1.40 lane unusedg)
+$Allowlist += @('unused-global')
 #   side-effect-in-short-circuit, property-getter-with-effect, ui-access-in-thread-transitive
 #     -> tests\lint-project\effect-rules\run_effect_rules.ps1 (lane B-EFFECT, 1.37.0)
 $Allowlist += @('side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive')

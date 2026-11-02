@@ -4,10 +4,10 @@ title: serve
 summary: Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index
 product: DL
 group: editor-integration
-order: 110020
+order: 110021
 since: 0.4.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.39.2-alpha
 ---
 
 # serve
