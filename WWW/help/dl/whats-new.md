@@ -9,6 +9,10 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.40.0-alpha
+
+* [Engine heartbeat: the IDE tells a busy engine from a stuck one](features/engine-heartbeat.md) -- A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving.
+
 ## 1.39.0-alpha
 
 * [warm-rule-cache](features/warm-rule-cache.md) -- Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm).

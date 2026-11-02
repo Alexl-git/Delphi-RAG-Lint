@@ -4,10 +4,10 @@ title: LSP proxy merge
 summary: Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session
 product: DL
 group: editor-integration
-order: 110014
+order: 110015
 since: 1.33.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.39.2-alpha
 ---
 
 # LSP proxy merge

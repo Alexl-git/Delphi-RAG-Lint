@@ -135,6 +135,7 @@
   "ghost-check": "ghost-check",
   "ghost-recover": "ghost-recover",
   "glyph-vacuum": "glyph-vacuum",
+  "heartbeat": "engine-heartbeat",
   "helpers-of": "helpers-of",
   "ide-help-line": "ide-help-line",
   "ide-release": "ide-release",

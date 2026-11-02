@@ -4,10 +4,10 @@ title: project-context
 summary: "Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness"
 product: DL
 group: editor-integration
-order: 110019
+order: 110020
 since: 1.38.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.39.2-alpha
 ---
 
 # project-context

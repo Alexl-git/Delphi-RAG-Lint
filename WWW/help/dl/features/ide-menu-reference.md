@@ -4,10 +4,10 @@ title: IDE Menu Reference
 summary: What every item in the drag-lint menu does
 product: DL
 group: editor-integration
-order: 110007
+order: 110008
 since: 1.4.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.39.2-alpha
 ---
 
 # IDE Menu Reference
