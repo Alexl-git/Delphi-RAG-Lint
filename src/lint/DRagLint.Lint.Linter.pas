@@ -123,14 +123,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.LintFile (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.LintFolder (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.Wants, DRagLint.Lint.Linter.tree_sitter_dfm, DRagLint.Lint.Linter.WalkForFieldByNameInLoop (+9 more)</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.Wants, DRagLint.Lint.Linter.tree_sitter_dfm, DRagLint.Lint.Linter.WalkForFieldByNameInLoop (+9 more)</para>
       /// <para>Complexity: 28 (cyclomatic, outer body), 138 lines (full implementation)</para>
       /// <para>Reads: FOnlyRuleId, FExcUnit, FQueryRules, FLanguage</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
       /// <seealso cref="DRagLint.Lint.Linter.CheckDfmCredentials"/>
-      /// <seealso cref="DRagLint.Lint.Linter.CheckInlineCommentInMultilineArgs"/>
       /// <seealso cref="DRagLint.Lint.Linter.CollectDfmParseErrors"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
@@ -425,164 +424,6 @@ begin
   if (Len <= 0) or (StartIdx < 0) or (EndIdx > Length(ASource)) then Exit;
   Result:= TEncoding.UTF8.GetString(ASource, StartIdx, Len);
 end;
-
-// v0.9: detect `// comment` placed inside a multi-line argument list,
-// set literal, or array literal. YADF (and similar reformatters) will
-// reflow the next element into the comment and silently destroy code.
-//
-// Detection is textual because the hazard is about source layout, not
-// semantics: scan line by line, track paren/bracket depth (ignoring
-// content inside string/char literals and comments themselves), and
-// flag any line where a `//` comment appears while depth > 0 AND the
-// next non-blank line continues the construct (i.e., either another
-// argument or a closing `)`/`]`).
-procedure CheckInlineCommentInMultilineArgs(const ASource: TBytes; const AFilePath: string; AFindings: TList<TLintFinding>);
-type
-  TLineInfo = record
-    Text         : string ;
-    DepthEntry   : Integer; // paren+bracket depth at start of line
-    DepthExit    : Integer; // depth at end of line
-    SlashSlashCol: Integer; // 1-based column of //, or 0 if none
-  end;
-var
-  Lines         : TStringDynArray  ;
-  Infos         : TArray<TLineInfo>;
-  I             : Integer          ;
-  J             : Integer          ;
-  Depth         : Integer          ;
-  Col           : Integer          ;
-  Line          : string           ;
-  C             : Char             ;
-  InStr         : Boolean          ;
-  InCmt         : Boolean          ;
-  InBraceCmt    : Boolean          ;
-  InParenStarCmt: Boolean          ;
-  Finding       : TLintFinding     ;
-  HasNext       : Boolean          ;
-begin
-  if Length(ASource) = 0 then Exit;
-  Lines:= SplitString(StringReplace( TEncoding.UTF8.GetString(ASource), #13#10, #10, [rfReplaceAll]), #10);
-  SetLength(Infos, Length(Lines));
-  Depth         := 0;
-  InBraceCmt    := False;
-  InParenStarCmt:= False;
-  for I:= 0 to High(Lines) do
-  begin
-    Line:= Lines[I];
-    Infos[I].Text         := Line;
-    Infos[I].DepthEntry   := Depth;
-    Infos[I].SlashSlashCol:= 0;
-    InStr:= False;
-    InCmt:= False;
-    Col  := 1;
-    while Col <= Length(Line) do
-    begin
-      C:= Line[Col];
-      if InCmt then Break // // runs to end of line; bail this column
-      else if InBraceCmt then
-      begin
-        if C = '}' then InBraceCmt:= False;
-        Inc(Col);
-      end
-      else if InParenStarCmt then
-      begin
-        if (C = '*') and (Col < Length(Line)) and (Line[Col + 1] = ')') then
-        begin
-          InParenStarCmt:= False;
-          Inc(Col, 2);
-        end
-        else Inc(Col);
-      end
-      else if InStr then
-      begin
-        if C = '''' then InStr:= False;
-        Inc(Col);
-      end
-      else
-      begin
-        if C = '''' then
-        begin
-          InStr:= True;
-          Inc(Col);
-        end
-        else if C = '{' then
-        begin
-          InBraceCmt:= True;
-          Inc(Col);
-        end
-        else if (C = '(') and (Col < Length(Line)) and (Line[Col + 1] = '*') then
-        begin
-          InParenStarCmt:= True;
-          Inc(Col, 2);
-        end
-        else if (C = '/') and (Col < Length(Line)) and (Line[Col + 1] = '/') then
-        begin
-          // Only count `//` as a hazard if it carries a comment payload
-          // (whitespace + at least one non-space). A bare `//` is rare
-          // but harmless; require some text after to flag.
-          if (Col + 2 <= Length(Line)) and (Trim(Copy(Line, Col + 2, Length(Line) - Col - 1)) <> '') then Infos[I].SlashSlashCol:= Col;
-          InCmt:= True;
-          Break;
-        end
-        else if (C = '(') or (C = '[') then
-        begin
-          Inc(Depth);
-          Inc(Col  );
-        end
-        else if (C = ')') or (C = ']') then
-        begin
-          if Depth > 0 then Dec(Depth);
-          Inc(Col);
-        end
-        else Inc(Col);
-      end; // else
-    end; // while
-    Infos[I].DepthExit:= Depth;
-  end; // for
-
-  for I:= 0 to High(Infos) do
-  begin
-    if (Infos[I].SlashSlashCol > 0) and (Infos[I].DepthEntry > 0) then
-    begin
-      // Whole-line comments aren't the YADF hazard; only trailing
-      // (post-value) ones are. Require non-whitespace BEFORE `//`.
-      if Trim(Copy(Infos[I].Text, 1, Infos[I].SlashSlashCol - 1)) = '' then Continue;
-      { A `dl:ok` review marker is written by `drag-lint allow`, never by hand,
-        and it MUST sit on the finding's own line -- that is what attributes it,
-        so there is nowhere else to put it. Flagging it means every allow of a
-        finding inside a multi-line argument list manufactures a NEW finding.
-        Measured on YADF: 87 allows produced 8 of these, all self-inflicted.
-        Only a comment that is ENTIRELY a marker is skipped. A HUMAN comment
-        that merely also carries a marker is still a genuine reflow hazard and
-        still fires -- the payload check, not Parse(), is what draws that line. }
-      if StartsText(REVIEW_MARK, Trim(Copy(Infos[I].Text, Infos[I].SlashSlashCol + 2, MaxInt))) then Continue;
-      // Also skip lines that close out of the multi-line construct -
-      // YADF can't reflow into a comment that has no following sibling.
-      if Infos[I].DepthExit = 0 then Continue;
-      HasNext:= False;
-      for J:= I + 1 to High(Infos) do
-      begin
-        if Trim(Infos[J].Text) <> '' then
-        begin
-          HasNext:= True;
-          Break;
-        end;
-      end;
-      if not HasNext then Continue;
-      Finding:= Default(TLintFinding);
-      Finding.RuleId  := 'inline-comment-in-multiline-args';
-      Finding.Severity:= 'warning';
-      Finding.Message:= '// comment inside multi-line argument/array list - reformatters ' + '(YADF, etc.) may reflow the next element into this comment. ' +
-      'Move the comment above the line or to its own line.';
-      Finding.FilePath:= AFilePath;
-      Finding.StartLine:= I + 1;
-      Finding.StartCol:= Infos[I].SlashSlashCol;
-      Finding.EndLine:= I + 1;
-      Finding.EndCol:= Length(Infos[I].Text) + 1;
-      AFindings.Add(Finding);
-    end; // if
-  end; // for
-end; // begin
 
 { Returns the `FieldByName` name node of a `<expr>.FieldByName(...)` call, or a null
   node when ANode is not such a call. The name node -- not the call -- is what a
@@ -1039,7 +880,7 @@ begin
       if IsDfm then AnyWanted:= Wants('parser-error') or Wants('dfm-hardcoded-credential')
       else
       begin
-        AnyWanted:= Wants('field-by-name-in-loop') or Wants('inline-comment-in-multiline-args')
+        AnyWanted:= Wants('field-by-name-in-loop')
           or ((FExcUnit <> '') and Wants('raise-bare-exception'));
         for var QR: TQueryRule in FQueryRules do
           if Wants(QR.Id) then AnyWanted:= True;
@@ -1081,7 +922,6 @@ begin
         the project has not opted in; its only consumer is the
         raise-bare-exception enrichment. }
       if (FExcUnit <> '') and Wants('raise-bare-exception') then HarvestExceptions(Tree.RootNode, Source, AFilePath);
-      if Wants('inline-comment-in-multiline-args') then CheckInlineCommentInMultilineArgs(Source, AFilePath, Findings);
       // External *.scm rules
       var R: TQueryRule;
       { LITERAL PRE-FILTER -- see TQueryRule.RequiredText.

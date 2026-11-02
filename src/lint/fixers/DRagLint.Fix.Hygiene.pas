@@ -2,10 +2,9 @@ unit DRagLint.Fix.Hygiene;
 
 { Lane A6 -- hygiene fixers of the autofix wave
   (docs\superpowers\plans\2026-10-27-autofix-wave-plan.md): comments, whitespace,
-  review markers and doc tags. Eight rules:
+  review markers and doc tags. Seven rules:
     commented-out-code                delete the comment (whole lines, or a trailing comment)
     doc-param-not-in-signature        delete the /// <param> tag the signature lacks
-    inline-comment-in-multiline-args  hoist a trailing // comment above the statement
     line-too-long                     re-wrap an over-long /// line at blanks (added 2026-10-28, lane B-DOC)
     misleading-indentation            re-indent the statement to its controlling statement
     multiple-statements-per-line      split the line at the statement boundary
@@ -41,8 +40,6 @@ const
   FACT_PARA         = '<para>';
   MARKER_TOKEN = 'dl:ok';
   PARAM_CLOSE  = '</param>';
-  STMT_END_WORDS: array[0..9] of string = ('begin', 'then', 'do', 'else', 'try', 'finally', 'except', 'of',
-    'var', 'const');
 
 { 1-based column of the first `//` that really starts a line comment, scanning past string literals and
   single-line brace and paren-star comments; 0 when there is none or the line opens a comment this scan cannot close. }
@@ -236,65 +233,6 @@ begin
       Result:= [E];
       Exit;
     end;
-end;
-
-{ ALine without its trailing // comment. }
-function CodeOf(const ALine: string): string;
-var
-  C: Integer;
-begin
-  C:= FindLineCommentCol(ALine);
-  Result:= if C > 0 then TrimRight(Copy(ALine, 1, C - 1)) else TrimRight(ALine);
-end;
-
-{ True when ACode ends a statement or opens a block, i.e. the NEXT line starts a fresh statement. }
-function EndsStatement(const ACode: string): Boolean;
-var
-  W: string;
-begin
-  if ACode = '' then Exit(False);
-  if ACode.EndsWith(';') then Exit(True);
-  for W in STMT_END_WORDS do
-    if TRegEx.IsMatch(ACode, '(^|[^A-Za-z0-9_])' + W + '$', [roIgnoreCase]) then Exit(True);
-  Result:= False;
-end;
-
-{ inline-comment-in-multiline-args: moves the trailing `//` comment to its own line above the first line of the
-  statement (indented like it) and trims it off its line. The statement start is the line after the nearest earlier
-  line that ends a statement or opens a block. Declines when no such line exists or the comment is not a trailing
-  one. Two comments in one statement overlap, so the second is skipped and goes on the next run. }
-function FixInlineCommentInMultilineArgs(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
-var
-  Line: string;
-  CCol: Integer;
-  S   : Integer;
-  I   : Integer;
-  Text: string;
-  E   : TTextEdit;
-begin
-  Result:= nil;
-  if (AFinding.StartLine < 2) or (AFinding.StartLine > ALines.Count) then Exit;
-  Line:= ALines[AFinding.StartLine - 1];
-  CCol:= FindLineCommentCol(Line);
-  if (CCol <> AFinding.StartCol) or (Trim(Copy(Line, 1, CCol - 1)) = '') then Exit;
-  S:= 0;
-  for I:= AFinding.StartLine - 1 downto 1 do
-    if EndsStatement(CodeOf(ALines[I - 1])) then
-    begin
-      S:= I + 1;
-      Break;
-    end;
-  while (S >= 1) and (S < AFinding.StartLine) and (Trim(ALines[S - 1]) = '') do Inc(S);
-  if (S < 1) or (S >= AFinding.StartLine) then Exit;
-  Text:= LeadingWs(ALines[S - 1]) + Copy(Line, CCol, MaxInt);
-  for I:= S to AFinding.StartLine - 1 do Text:= Text + #13#10 + ALines[I - 1];
-  Text:= Text + #13#10 + TrimRight(Copy(Line, 1, CCol - 1));
-  E:= NewEdit(AFinding, tekReplaceLines);
-  E.Line      := S;
-  E.EndLine   := AFinding.StartLine;
-  E.ExpectText:= ALines[S - 1];
-  E.Text      := Text;
-  Result:= [E];
 end;
 
 { misleading-indentation: re-indents the flagged statement (all the lines of its span, by the same shift) to the
@@ -536,7 +474,6 @@ initialization
   RegisterFixer('line-too-long', FixLineTooLong);
   RegisterFixer('commented-out-code', FixCommentedOutCode);
   RegisterFixer('doc-param-not-in-signature', FixDocParamNotInSignature);
-  RegisterFixer('inline-comment-in-multiline-args', FixInlineCommentInMultilineArgs);
   RegisterFixer('misleading-indentation', FixMisleadingIndentation);
   RegisterFixer('multiple-statements-per-line', FixMultipleStatementsPerLine);
   RegisterFixer('review-marker-placeholder-hash', FixPlaceholderHash, True);

@@ -11,7 +11,11 @@ Phase A (no extractor change: an index built by 1.39.2 stays current). Versions 
 - New project-wide lint rule `unused-global`: an unused global const / var / type (backlog #5a). Rule count 291.
 - `run_rename_field_dirword.ps1`, `run_grammar_dirword_remainder.ps1`: guards for directive words used as record fields / names (grammar 1.4.0 already fixes them; tests only).
 
+### Removed
+- Rule `inline-comment-in-multiline-args` retired (owner decision, 1.40 IDE test): its premise - that YADF reflows the next element into a trailing `//` comment inside a multi-line argument list - is false (YADF 1.0.20 keeps `'', // c` and `Foo(1, // c` unchanged). The check, its fixer and catalogue/profile/README rows are gone; rule count 292 -> 291 (198 built-in + 93 external, 247 default-on, 110 fixable). Lint rule change only, no extractor bump.
+
 ### Fixed
+- `large-magic-number` no longer reports float literals (`0.1`, `1.5e3`): the query now exempts anything with a `.` or exponent, matching the rule name and message (ORM3 BASICS.PAS 389-391 false positives).
 - `lint-all --json` keeps stdout a single JSON document (LINTJSON-STDERR); output-file encoding for the remaining verbs under `--output-encoding` (ENC-OUT remainder, `run_output_file_encoding.ps1`).
 - `missing-doc` no longer reports an implementation-section method whose declaration is documented (GAP-MISSINGDOC).
 - MCP `rename`: the multi-file apply is atomic and the probe step is bounded (MCP-RENAME, MCP-PROBE).
