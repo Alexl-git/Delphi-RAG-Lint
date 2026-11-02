@@ -23603,7 +23603,7 @@ begin
   if Length(Edits) = 0 then
   begin
     Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName]));
-    var Hint: string:= TRenameRefactoring.NotFoundHint(Store, AArgs.QName);
+    var Hint: string:= TRenameRefactoring.NotFoundHint(Store, AArgs.QName, AArgs.InFile);
     if Hint <> '' then Writeln(Hint);
     Exit(1);
   end;
