@@ -5824,6 +5824,7 @@ begin
           Arr    : TJSONArray;
           Lines  : TArray<Integer>;
           Counts : TArray<Integer>;
+          Impls  : TArray<Integer>;
           Ok     : Boolean;
         begin
           if AStatus = lrsTimeout then
@@ -5839,6 +5840,7 @@ begin
           Ok:= False;
           SetLength(Lines , 0);
           SetLength(Counts, 0);
+          SetLength(Impls , 0);
           try
             if AReply is TJSONObject then
             begin
@@ -5860,6 +5862,29 @@ begin
                     Counts[I]:= (Arr.Items[I] as TJSONObject).GetValue<Integer>('count', 0 );
                   end
                   else Lines[I]:= -1;
+                SetLength(Impls, Length(Lines));
+                { 1.40 ifrpt: 'implementors' = an array of (line, count) objects -- merged onto a caller line, or a
+                  line of its own with no caller label (count -1). An older engine sends none. }
+                var IArr: TJSONArray:= nil;
+                if not (AReply as TJSONObject).TryGetValue<TJSONArray>('result.implementors', IArr) then
+                  (AReply as TJSONObject).TryGetValue<TJSONArray>('implementors', IArr);
+                if IArr <> nil then
+                  for var J:= 0 to IArr.Count - 1 do
+                    if IArr.Items[J] is TJSONObject then
+                    begin
+                      var ILine:= (IArr.Items[J] as TJSONObject).GetValue<Integer>('line' , -1);
+                      var ICnt := (IArr.Items[J] as TJSONObject).GetValue<Integer>('count', 0 );
+                      var Hit:= -1;
+                      for var K:= 0 to High(Lines) do
+                        if Lines[K] = ILine then Hit:= K;
+                      if Hit < 0 then
+                      begin
+                        Lines := Lines  + [ILine];
+                        Counts:= Counts + [-1];
+                        Impls := Impls  + [ICnt];
+                      end
+                      else Impls[Hit]:= ICnt;
+                    end;
               end;
             end;
           except
@@ -5869,7 +5894,7 @@ begin
               Ok:= False;
             end;
           end;
-          ADone(Ok, Lines, Counts);
+          ADone(Ok, Lines, Counts, Impls);
           ForceGutterRepaint;
         end);
     finally

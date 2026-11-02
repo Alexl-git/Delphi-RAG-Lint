@@ -420,6 +420,7 @@ implementation
 uses
   Winapi.Windows
   , DRagLint.Doc.Regions
+  , DRagLint.Query.Implementors { get_implementors (interface report, 1.40) }
   , DRagLint.Query.Callers   { Gitea #31: the CLI's resolved callers and name filters }
   , DRagLint.Index.Freshness { Gitea #34: the freshness note of the store a tool reads }
   ;
@@ -428,6 +429,7 @@ const
   { JSON-RPC 2.0 implementation-defined server error: the tool could not answer
     (no store, store refused). }
   JSONRPC_SERVER_ERROR = -32000;
+  JSONRPC_INVALID_PARAMS = -32602; { get_implementors: a missing or unknown qname }
 
 constructor TMCPServer.Create(const ADbPaths: TArray<string>);
 var
@@ -631,9 +633,22 @@ begin
         + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '},"required":["qname"]}'));
 
   Tools.AddElement(ToolDescriptor(
+      'get_implementors', 'The interface report: for an interface, the classes implementing it (directly, '
+        + 'through a derived interface, inherited from an ancestor class, or by implements delegation); for an '
+        + 'interface method, the method answering it in each class (resolution clauses included); for an '
+        + 'interface member, its call/read/write sites (attributed to the interface member); for a class, the '
+        + 'interfaces it implements and what answers each member; for a class method, the interface members it '
+        + 'answers. Returns the implementors/1 JSON document of `drag-lint implementors --json`.',
+      '{"type":"object","properties":{' + '"qname":{"type":"string","description":"Interface, interface member, class or class method (qualified, IFoo.Bar, or bare)"},'
+        + '"uses":{"type":"boolean","description":"Add call/use sites (always on for interface members)"},'
+        + '"max_sites":{"type":"integer","description":"Cap on the listed sites (default 50; sites_total is the full count)"},'
+        + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '},"required":["qname"]}'));
+
+  Tools.AddElement(ToolDescriptor(
       'get_wiring', 'Return framework-aware wiring edges for a name: Spring4D DI ' + 'implementations (interface -> impl class + lifetime) and resolve-sites, '
         + 'plus DFM event handlers (a form''s methods bound to component events). ' + 'Pass an interface name for DI, or a form/class name for event handlers. '
-        + 'Answers "who implements IFoo / where is it resolved / what handles this ' + 'form''s events" in one call.',
+        + 'Answers "which class does the container bind IFoo to / where is it resolved / what handles this ' + 'form''s events" in one call. '
+        + 'Spring4D registrations only: for every class that implements an interface, use get_implementors.',
       '{"type":"object","properties":{' + '"qname":{"type":"string","description":"Interface name (DI) or form/class name (DFM handlers)"},'
         + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '},"required":["qname"]}'));
 
@@ -1269,8 +1284,42 @@ begin
       var ImpLevels:= ImpStore.FindTransitiveCallers(ImpName, ImpDepth);
       ResultText:= FormatImpactAsJson(ImpQName, ImpLevels);
     end // if
-    else if ToolName = 'get_wiring' then
+    else if ToolName = 'get_implementors' then
     begin
+      var IStore:= ResolveStore(Args);
+      if IStore = nil then
+      begin
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
+        Exit;
+      end;
+      var IQName:= '';
+      if Args.GetValue('qname') <> nil then IQName:= Args.GetValue('qname').Value;
+      if IQName = '' then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'get_implementors requires qname');
+        Exit;
+      end;
+      var IOpts:= TImplementorsOptions.Defaults;
+      if Args.GetValue('uses') <> nil then IOpts.WithUses:= SameText(Args.GetValue('uses').Value, 'true');
+      if Args.GetValue('max_sites') <> nil then IOpts.MaxSites:= StrToIntDef(Args.GetValue('max_sites').Value, IOpts.MaxSites);
+      var IReport: TImplementorsReport;
+      try
+        IReport:= BuildImplementorsReport(IStore, IQName, IOpts);
+      except
+        on E: EImplementorsTarget do
+        begin
+          SendError(AId, JSONRPC_INVALID_PARAMS, E.Message);
+          Exit;
+        end;
+      end;
+      var IJson:= ImplementorsReportToJson(IReport);
+      try
+        ResultText:= IJson.ToJSON;
+      finally
+        IJson.Free;
+      end;
+    end // if
+    else if ToolName = 'get_wiring' then    begin
       var WStore:= ResolveStore(Args);
       if WStore = nil then
       begin

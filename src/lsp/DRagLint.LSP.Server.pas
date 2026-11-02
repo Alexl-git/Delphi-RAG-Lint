@@ -33,6 +33,7 @@ uses
   , DRagLint.Doc     .Regions   { v(ADP2 T9): TDocRegions.FormatPhase2FactLines -- the shared formatter }
   , DRagLint.Index   .Manifest  { v(ADP2 T9): LoadDocComplexityMin -- same threshold `document` uses }
   , DRagLint.Query   .Callers   { v(hover bundle): the shared caller queries the CLI also renders from }
+  , DRagLint.Query   .Implementors { 1.40 ifrpt: the implementors counts of draglint/callerCounts }
   , DRagLint.Query   .HoverModel{ v(hover bundle): the shared model assembly `hover --format json` uses }
   , DRagLint.LSP     .Context   { S0: ILspServerContext + the feature registry }
   , DRagLint.Project .ContextFile { LSP-1 CORE: .dlcontext.json + central context defaults }
@@ -4045,6 +4046,8 @@ begin
   Res:= TJSONObject.Create;
   try
     Res.AddPair('counts', ComputeCallerCounts(FileFromUri(Uri)));
+    { 1.40 ifrpt: the "N implementors" lens of interfaces and interface methods (0-based lines). }
+    Res.AddPair('implementors', ImplementorCountsForFile(StoresForFile(FileFromUri(Uri)), FileFromUri(Uri)));
   except  // dl:ok bare-except@56ea -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
     Res.Free;
     raise;

@@ -270,6 +270,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [Find Dead Code](Find-Dead-Code) | drag-lint > Code Quality > Find Dead Code...; `find-deadcode` |  |
 | [Forms for testers (CSV)](Generate-Test-Helper-CSV) | drag-lint > Reports > Forms for testers (CSV)...; `forms-csv` |  |
 | [Impact / Blast Radius (symbol)](Impact-Blast-Radius-symbol) | drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...; `impact` |  |
+| [Interface Implementors Report](interface-implementors) | `implementors`; `mcp get_implementors`; `lsp textDocument/implementation`; `lsp textDocument/codeLens` |  |
 | [Overview (first-turn summary)](Overview-first-turn) | `overview` |  |
 | [Reverse Call Tree (clickable, Messages window)](Reverse-Call-Tree-clickable-Messages-window) | `reverse-calltree`; drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... |  |
 | [Reverse Call Tree (who calls this, N-deep)](Reverse-Call-Tree-who-calls-this-N-deep) | drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...; `reverse-calltree` |  |
@@ -286,7 +287,7 @@ Ask a question about a symbol and get a clickable chart.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [ask](ask) | `ask`; drag-lint > Reports |  |
-| [Chart questions](Diagrams-and-Charts) | 26 questions; `ask`; drag-lint > Reports |  |
+| [Chart questions](Diagrams-and-Charts) | 27 questions; `ask`; drag-lint > Reports |  |
 | [Charts and the IDE](Charts-and-the-IDE) | procedure: `docs\wiki\Charts-and-the-IDE.md`; drag-lint > Reports |  |
 | [Click-to-source: the draglint:// handler](Draglint-Protocol-Handler) | `protocol`; `drag-lint-open.exe` |  |
 | [Compare a report with current code](compare) | `compare`; drag-lint > Reports > Compare a Saved Report or Chart with Current Code... |  |

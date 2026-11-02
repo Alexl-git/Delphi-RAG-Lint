@@ -863,6 +863,28 @@ drag-lint impact --qname <Foo.Bar> [--db <file.sqlite>] [--depth N] [--format te
 
 Described in [Impact / Blast Radius (symbol)](features/impact-blast-radius-symbol.md).
 
+### implementors
+
+Who implements an interface, which method answers each interface method in each class, and who calls or uses an interface member.
+
+```text
+drag-lint implementors --target <IFoo|IFoo.Bar|TFoo|TFoo.Bar> --db <file.sqlite> [--library-db <lib.sqlite>] [--uses] [--max-sites N] [--include-library] [--format text|json|dot|mermaid] [--json] [--output <file>]
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--target` | `<IFoo\|IFoo.Bar\|TFoo\|TFoo.Bar>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--library-db` | `<lib.sqlite>` |  |  |
+| `--uses` |  |  |  |
+| `--max-sites` | `N` |  |  |
+| `--include-library` |  |  |  |
+| `--format` |  |  |  |
+| `--json` |  |  |  |
+| `--output` | `<file>` |  |  |
+
+Described in [Interface Implementors Report](features/interface-implementors.md).
+
 ### import-log
 
 Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings.

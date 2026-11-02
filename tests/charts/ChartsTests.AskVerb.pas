@@ -67,7 +67,7 @@ uses
 const
   REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
   ASK_REPORT_ENV = 'DRAGLINT_ASK_REPORT';
-  QUESTION_COUNT = 26;  { New-DiagramArtifact.ps1's ValidateSet }
+  QUESTION_COUNT = 27;  { New-DiagramArtifact.ps1's ValidateSet (26) + the Delphi-only implementors }
   INDEX_LINE_NO = 3;    { the plain answer's INDEX line: header, COMMAND, ENGINE, INDEX }
   CHARTS_MARK = 'charts\src\Ask-Report.ps1';
   CLONE_DIR = 'charts\scratch\db';
@@ -242,7 +242,7 @@ begin
   Assert.IsTrue(NormaliseAskQuestion('Who-Reads', Id));
   Assert.AreEqual('who-reads', Id);
   Assert.IsFalse(NormaliseAskQuestion('who-reads-x', Id));
-  Assert.AreEqual(QUESTION_COUNT, Integer(Length(QuestionIds)), 'the 26 ids of New-DiagramArtifact.ps1''s ValidateSet');
+  Assert.AreEqual(QUESTION_COUNT, Integer(Length(QuestionIds)), 'the 27 ids: New-DiagramArtifact.ps1''s ValidateSet + implementors');
 end;
 
 procedure TAskVerbTests.UnknownQuestionIsSetup;

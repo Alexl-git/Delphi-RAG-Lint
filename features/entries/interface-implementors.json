@@ -1,0 +1,92 @@
+{
+  "id": "interface-implementors",
+  "title": "Interface Implementors Report",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.39.2-alpha",
+  "summary": "Who implements an interface, which method answers each interface method in each class, and who calls or uses an interface member",
+  "intro": "Use this when you work with an interface: it lists the classes that implement it (directly, through a derived interface, inherited from an ancestor class or delegated by an implements property), the method that answers each interface method in each class -- method-resolution clauses included -- and the call, read and write sites of an interface member. Give it an interface, an interface member, a class or a class method.",
+  "wikiPage": "interface-implementors",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "implementors",
+      "example": "drag-lint implementors --target IJob.Execute --db app.sqlite",
+      "usage": "drag-lint implementors --target <IFoo|IFoo.Bar|TFoo|TFoo.Bar> --db <file.sqlite> [--library-db <lib.sqlite>] [--uses] [--max-sites N] [--include-library] [--format text|json|dot|mermaid] [--json] [--output <file>]",
+      "flags": [
+        {
+          "name": "--target",
+          "arg": "<IFoo|IFoo.Bar|TFoo|TFoo.Bar>"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<lib.sqlite>"
+        },
+        {
+          "name": "--uses"
+        },
+        {
+          "name": "--max-sites",
+          "arg": "N"
+        },
+        {
+          "name": "--include-library"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--output",
+          "arg": "<file>"
+        }
+      ],
+      "helpOrder": 35,
+      "help": ["  drag-lint implementors       --target <IFoo|IFoo.Bar|TFoo|TFoo.Bar> --db <file.sqlite> [--library-db <lib.sqlite>] [--uses] [--max-sites N] [--include-library] [--format text|json|dot|mermaid] [--json] [--output <file>]", "                               (interface report: who implements an interface -- lists / via a derived interface / inherited / delegated; which method answers an interface method in each class, resolution clauses included;", "                               the call/read/write sites of an interface member, attributed to it (RB-5); a class: its interfaces and what answers each member; a class method: the members it answers + --uses the sites reaching it.", "                               --json = implementors/1 {target,implementors[],unanswered[],sites[],sites_total,library_implementors,notes[]}; exit 0 answered, 1 no such target, 2 usage/ambiguous; chart: ask implementors)"]
+    },
+    {
+      "type": "mcp",
+      "tool": "get_implementors"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/implementation"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/codeLens"
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "Which classes implement this interface?",
+      "command": "drag-lint implementors --target IFoo --db <file.sqlite>"
+    },
+    {
+      "ask": "Which method answers this interface method in each class?",
+      "command": "drag-lint implementors --target IFoo.Bar --db <file.sqlite>"
+    },
+    {
+      "ask": "Who calls this interface method or uses this interface property?",
+      "command": "drag-lint implementors --target IFoo.Bar --db <file.sqlite>"
+    },
+    {
+      "ask": "Which interfaces does this class implement, and what answers each member?",
+      "command": "drag-lint implementors --target TFoo --db <file.sqlite>"
+    }
+  ],
+  "verified": {
+    "date": "2026-11-01",
+    "by": "ENGINE",
+    "build": "1.39.2-alpha",
+    "surfaceHash": "921beeaac8825a8d374494c362deb07b718d23e8fc660c02ae186d549dfc469b"
+  }
+}
