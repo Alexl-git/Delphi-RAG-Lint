@@ -41,11 +41,24 @@ const
 procedure RunRefactorCliAsync(const ACmdLine: string; const ADone: TRefactorRunDone; AStallMs: Integer = REFACTOR_STALL_MS);  // dl:ok unused-public-symbol@f8e3 -- public as the test seam: LspNonBlockingTests R1-R3 drive it (not in the plugin index)
 
 /// <summary>Shows the drag-lint Rename Symbol preview dialog (modal).</summary>
-/// <param name="ASuggestedQName">Initial symbol qname.</param>
+/// <param name="ASuggestedQName">Initial symbol qname (the Symbol field). The
+/// rename verb needs the QUALIFIED name; callers pass the typeat-resolved name
+/// of the symbol under the caret, or '' to let the user type it.</param>
 /// <param name="AProjectDb">Project database ('' = the exe's default resolution).</param>
 /// <param name="AExePath">Path to drag-lint.exe.</param>
+/// <param name="ASuggestedNewName">Initial text of the New name field ('' = empty);
+/// the caller passes the bare identifier under the caret so the user edits it.</param>
 /// <remarks>Main thread only. Preview / Apply run the CLI off the main thread.</remarks>
-procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: string; const AExePath: string);
+procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: string; const AExePath: string; const ASuggestedNewName: string = '');
+
+/// <summary>Reads the symbol the typeat verb resolved from its JSON answer.</summary>
+/// <param name="AOutput">Captured text of `typeat ... --format json` (stderr may
+/// be merged in, so text before the first `{` is ignored).</param>
+/// <param name="AToken">Receives the bare identifier under the caret ('' when absent).</param>
+/// <returns>The `resolved` qualified name, or '' when the output is not JSON, the
+/// token did not resolve, or `resolved` is missing / empty.</returns>
+/// <remarks>Pure; never raises.</remarks>
+function DLParseTypeAtResolved(const AOutput: string; out AToken: string): string;
 
 /// <summary>Shows the drag-lint Extract Method preview dialog for a fixed
 /// source range [AFromLine..AToLine] in AFilePath. Prompts for the new
@@ -71,7 +84,8 @@ uses
   , Winapi.Messages
   , Vcl.Graphics
   , System.Generics.Collections
-  , DragLint.Plugin.ProcRun   { RunCaptureStdout -- stall-bounded spawn } // dl:unit DragLint.Plugin.ProcRun accepted -- PROCRUN_TIMED_OUT_EXIT_CODE is the exit code RunCaptureStdout returns on a stall; it travels with the spawn this unit calls
+  , System.JSON
+  , DragLint.Plugin.ProcRun  { RunCaptureStdout -- stall-bounded spawn } // dl:unit DragLint.Plugin.ProcRun accepted -- PROCRUN_TIMED_OUT_EXIT_CODE is the exit code RunCaptureStdout returns on a stall; it travels with the spawn this unit calls
   , DragLint.Plugin.Telemetry { DLT }
   ;
 
@@ -271,7 +285,27 @@ begin
 end;
 { ---- ShowRefactorDialog ---- }
 
-procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: string; const AExePath: string);
+function DLParseTypeAtResolved(const AOutput: string; out AToken: string): string;
+var
+  Start: Integer;
+  Obj  : TJSONValue;
+begin
+  Result:= '';
+  AToken:= '';
+  Start:= Pos('{', AOutput);
+  if Start = 0 then Exit;
+  Obj:= TJSONObject.ParseJSONValue(Copy(AOutput, Start, MaxInt)); { nil on malformed text -- does not raise }
+  if Obj = nil then Exit;
+  try
+    if Obj is not TJSONObject then Exit;
+    AToken:= TJSONObject(Obj).GetValue<string>('token', '');
+    Result:= TJSONObject(Obj).GetValue<string>('resolved', '');
+  finally
+    Obj.Free;
+  end;
+end;
+
+procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: string; const AExePath: string; const ASuggestedNewName: string);
 var
   Form      : TForm           ;
   Handler   : TRefactorHandler;
@@ -337,6 +371,7 @@ begin
     edNewName.Left  := MARGIN;
     edNewName.Top   := Y;
     edNewName.Width:= FORM_W - MARGIN * 2 - 16;
+    edNewName.Text:= ASuggestedNewName;
     Inc(Y, EDIT_H + 8);
 
     { Write .bak backup checkbox }

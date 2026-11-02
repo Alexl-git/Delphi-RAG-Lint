@@ -829,6 +829,7 @@ end;
 procedure TestIdentSpan;
 var
   S, E: Integer;
+  Tok : string;
 begin
   Check('S1 middle of an identifier', DLIdentSpanAt('  FooBar := 1;', 4, S, E) and (S = 2) and (E = 8), Format('%d..%d', [S, E]));
   Check('S2 first char', DLIdentSpanAt('  FooBar := 1;', 2, S, E) and (S = 2) and (E = 8));
@@ -839,6 +840,17 @@ begin
   Check('S7 past the end of the line', not DLIdentSpanAt('abc', 3, S, E));
   Check('S8 negative column', not DLIdentSpanAt('abc', -1, S, E));
   Check('S9 underscore and digits belong to the identifier', DLIdentSpanAt('x _a1_ y', 3, S, E) and (S = 2) and (E = 6));
+  { T  DLParseTypeAtResolved (pure): the rename dialog's Symbol pre-fill }
+  Check('T1 resolved qname + token',
+    (DLParseTypeAtResolved('{"token":"R","resolved":"Blueprint4.PDFImport.TPdfOverlayPanel.MouseUp.R","kind":"x"}', Tok) = 'Blueprint4.PDFImport.TPdfOverlayPanel.MouseUp.R') and (Tok = 'R'), Tok);
+  Check('T2 leading stderr noise before the JSON is ignored',
+    DLParseTypeAtResolved('(loaded 3 rules)' + #13#10 + '{"token":"R","resolved":"A.B.R"}', Tok) = 'A.B.R');
+  Check('T3 token without resolved gives empty qname but keeps the token',
+    (DLParseTypeAtResolved('{"token":"R"}', Tok) = '') and (Tok = 'R'));
+  Check('T4 empty resolved', DLParseTypeAtResolved('{"token":"R","resolved":""}', Tok) = '');
+  Check('T5 not JSON', (DLParseTypeAtResolved('error: no index', Tok) = '') and (Tok = ''));
+  Check('T6 malformed JSON', DLParseTypeAtResolved('{"token":', Tok) = '');
+  Check('T7 empty output', DLParseTypeAtResolved('', Tok) = '');
 end;
 
 begin

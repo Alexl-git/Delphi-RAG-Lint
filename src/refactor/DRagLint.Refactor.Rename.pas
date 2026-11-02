@@ -222,6 +222,17 @@ type
       /// <remarks>Reads the store only. Guard:
       /// tests\autotest\run_rename_unresolved_by_name.ps1.</remarks>
       class function UnresolvedCandidateNotes(const AStore: ISymbolStore; const AQName: string): TArray<string>;
+      /// <summary>Explains a rename that matched nothing: the name must be
+      /// qualified, and up to 5 indexed symbols whose last segment equals the
+      /// requested name are listed as candidate qualified names.</summary>
+      /// <param name="AStore">The project index (read-only use).</param>
+      /// <param name="AQName">The name the caller asked to rename (bare or qualified).</param>
+      /// <returns>'' when no indexed symbol carries the short name; else
+      /// `Qualify the name (Unit.Type.Member). Candidates: A.B.R; C.D.R` with at
+      /// most 5 candidates, then ` (+N more)` when there are others.</returns>
+      /// <remarks>Reads the store only. Guard:
+      /// tests\autotest\run_rename_qname_local_hints.ps1.</remarks>
+      class function NotFoundHint(const AStore: ISymbolStore; const AQName: string): string;
       /// <summary>Non-empty human reason when any edit's recorded position no
       /// longer holds its old name on disk; '' when every edit is still in place.
       /// A rename must then be refused: the file changed after it was indexed, and
@@ -1296,6 +1307,9 @@ begin
   Result:= nil;
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
   if Length(Syms) = 0 then Exit;
+  { a routine-local symbol (local var / param) cannot be referenced from another
+    unit, so a same-named unresolved ref elsewhere is never a candidate }
+  if Syms[0].Kind in [skLocalVar, skParam] then Exit;
   ShortName:= LastDotSegment(AQName);
   TargetIds:= TDictionary<Int64, Boolean>.Create;
   try
@@ -1305,6 +1319,41 @@ begin
         'it from %s; check it by hand', [AStore.GetFilePath(Ref.FileId), Ref.StartLine, Ref.StartCol, ShortName, Others])];
   finally
     TargetIds.Free;
+  end;
+end;
+
+class function TRenameRefactoring.NotFoundHint(const AStore: ISymbolStore;
+  const AQName: string): string;
+const
+  MaxCandidates = 5;
+var
+  Syms: TArray<TSymbol>;
+  Sym : TSymbol;
+  Seen: TDictionary<string, Boolean>;
+  Qs  : TList<string>;
+  Idx : Integer;
+begin
+  Result:= '';
+  Syms:= AStore.FindSymbolsByExactName(LastDotSegment(AQName));
+  Seen:= TDictionary<string, Boolean>.Create;
+  Qs:= TList<string>.Create;
+  try
+    for Sym in Syms do
+      if (Sym.QualifiedName <> '') and not Seen.ContainsKey(Sym.QualifiedName) then
+      begin
+        Seen.Add(Sym.QualifiedName, True);
+        Qs.Add(Sym.QualifiedName);
+      end;
+    if Qs.Count = 0 then Exit;
+    Qs.Sort;
+    Result:= 'Qualify the name (Unit.Type.Member). Candidates: ';
+    for Idx:= 0 to (if Qs.Count < MaxCandidates then Qs.Count else MaxCandidates) - 1 do
+      Result:= Result + (if Idx > 0 then '; ' else '') + Qs[Idx];
+    if Qs.Count > MaxCandidates then
+      Result:= Result + Format(' (+%d more)', [Qs.Count - MaxCandidates]);
+  finally
+    Qs.Free;
+    Seen.Free;
   end;
 end;
 
