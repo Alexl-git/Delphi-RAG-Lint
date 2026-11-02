@@ -229,6 +229,7 @@ uses
   DRagLint.Lint.EnumOrdinalPersisted, { CollectEnumOrdinalPersisted -- lane X6 }
   DRagLint.Lint.UnusedEnumValue, { CollectUnusedEnumValue -- lane B-ENUM }
   DRagLint.Lint.UnusedGlobal, { CollectUnusedGlobal -- 1.40 lane unusedg } // dl:unit DRagLint.Lint.UnusedGlobal accepted -- UNUSED_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectUnusedGlobal, the collector this unit calls
+  DRagLint.Lint.ReadNeverAssigned, { CollectReadNeverAssigned -- owner request #5b }
   DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
   DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) }
 
@@ -4669,6 +4670,10 @@ begin
     { unused-global (1.40 lane unusedg): unit-level const / var / type nothing names; one refs read per file. }
     if WantRule(UNUSED_GLOBAL_RULE) and OptedIn(UNUSED_GLOBAL_RULE) then
       for var Ug in CollectUnusedGlobal(AStore) do Findings.Add(Ug);
+    { read-never-assigned (owner request #5b, 1.40 lane flow): OptedIn-gated like unused-enum-value --
+      a refs read per file plus source text, whole-project by nature (one unit cannot prove "never"). }
+    if WantRule(READ_NEVER_ASSIGNED_RULE) and OptedIn(READ_NEVER_ASSIGNED_RULE) then
+      for var Rn in CollectReadNeverAssigned(AStore, ALibraryStore) do Findings.Add(Rn);
     { gap-rules wave, lane G8. The two DFM rules and uses-movable-to-implementation are ON by
       default and walk one table each (uses-movable back ON in lane IMOV after REFTYPE: 0 FP on
       engine 114 / ORM3 243, and the engine dogfood --fix --apply builds); virtual-never-overridden

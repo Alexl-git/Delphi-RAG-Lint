@@ -1047,6 +1047,7 @@ Described in:
 
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md)
 * [Fix all in project](features/fix-all-in-project.md)
+* [Read but never assigned (lint rule)](features/read-never-assigned.md)
 * [Run Lint All (Full Report)](features/run-lint-all-full-report.md)
 * [Taint analysis (SQL, command, path)](features/taint-analysis.md)
 * [Target compiler (--target-compiler)](features/target-compiler.md)

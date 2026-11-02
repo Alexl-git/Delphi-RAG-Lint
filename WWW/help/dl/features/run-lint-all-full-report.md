@@ -4,7 +4,7 @@ title: Run Lint All (Full Report)
 summary: Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check
 product: DL
 group: linting
-order: 30023
+order: 30024
 since: 0.61.0-alpha
 status: shipped
 updated: 1.39.2-alpha

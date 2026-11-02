@@ -120,6 +120,7 @@ uses
   DRagLint.Lint.MissingUses in '..\lint\DRagLint.Lint.MissingUses.pas',
   DRagLint.Lint.UnusedEnumValue in '..\lint\DRagLint.Lint.UnusedEnumValue.pas',
   DRagLint.Lint.UnusedGlobal in '..\lint\DRagLint.Lint.UnusedGlobal.pas',
+  DRagLint.Lint.ReadNeverAssigned in '..\lint\DRagLint.Lint.ReadNeverAssigned.pas',
   DRagLint.Lint.EffectRules in '..\lint\DRagLint.Lint.EffectRules.pas',
   DRagLint.Lint.UsesAudit in '..\lint\DRagLint.Lint.UsesAudit.pas',
   DRagLint.Lint.RuleCache in '..\lint\DRagLint.Lint.RuleCache.pas',
