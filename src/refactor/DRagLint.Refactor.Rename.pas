@@ -222,6 +222,18 @@ type
       /// <remarks>Reads the store only. Guard:
       /// tests\autotest\run_rename_unresolved_by_name.ps1.</remarks>
       class function UnresolvedCandidateNotes(const AStore: ISymbolStore; const AQName: string): TArray<string>;
+      /// <summary>Explains a rename that matched nothing: the name must be
+      /// qualified, and up to 5 indexed symbols whose last segment equals the
+      /// requested name are listed as candidate qualified names.</summary>
+      /// <param name="AStore">The project index (read-only use).</param>
+      /// <param name="AQName">The name the caller asked to rename (bare or qualified).</param>
+      /// <param name="AFromFile">File the name was asked from ('' = unknown). Candidates are ranked: declared in that file first, then in its directory, then the rest (library units); each tier alphabetical.</param>
+      /// <returns>'' when no indexed symbol carries the short name; else
+      /// `Qualify the name (Unit.Type.Member). Candidates: A.B.R; C.D.R` with at
+      /// most 5 candidates, then ` (+N more)` when there are others.</returns>
+      /// <remarks>Reads the store only. Guard:
+      /// tests\autotest\run_rename_qname_local_hints.ps1.</remarks>
+      class function NotFoundHint(const AStore: ISymbolStore; const AQName: string; const AFromFile: string = ''): string;
       /// <summary>Non-empty human reason when any edit's recorded position no
       /// longer holds its old name on disk; '' when every edit is still in place.
       /// A rename must then be refused: the file changed after it was indexed, and
@@ -1296,6 +1308,10 @@ begin
   Result:= nil;
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
   if Length(Syms) = 0 then Exit;
+  { a routine-local symbol (local var / param) cannot be referenced from another
+    unit, so a same-named unresolved ref elsewhere is never a candidate }
+  if (Syms[0].Kind in [skLocalVar, skParam])
+     or ((Syms[0].ParentId > 0) and CanBeCallTarget(AStore.GetSymbolById(Syms[0].ParentId).Kind)) then Exit;
   ShortName:= LastDotSegment(AQName);
   TargetIds:= TDictionary<Int64, Boolean>.Create;
   try
@@ -1305,6 +1321,55 @@ begin
         'it from %s; check it by hand', [AStore.GetFilePath(Ref.FileId), Ref.StartLine, Ref.StartCol, ShortName, Others])];
   finally
     TargetIds.Free;
+  end;
+end;
+
+class function TRenameRefactoring.NotFoundHint(const AStore: ISymbolStore;
+  const AQName: string; const AFromFile: string): string;
+const
+  MaxCandidates = 5;
+var
+  Syms   : TArray<TSymbol>;
+  Sym    : TSymbol;
+  Tiers  : TDictionary<string, Integer>;
+  Qs     : TList<string>;
+  Idx    : Integer;
+  Tier   : Integer;
+  Path   : string;
+  FromDir: string;
+begin
+  Result:= '';
+  Syms:= AStore.FindSymbolsByExactName(LastDotSegment(AQName));
+  FromDir:= if AFromFile = '' then '' else ExtractFilePath(AFromFile);
+  Tiers:= TDictionary<string, Integer>.Create;
+  Qs:= TList<string>.Create;
+  try
+    for Sym in Syms do
+    begin
+      if Sym.QualifiedName = '' then Continue;
+      Path:= AStore.GetFilePath(Sym.FileId);
+      Tier:= if (AFromFile <> '') and SameText(Path, AFromFile) then 0
+        else if (FromDir <> '') and SameText(ExtractFilePath(Path), FromDir) then 1
+        else 2;
+      if not Tiers.ContainsKey(Sym.QualifiedName) then Qs.Add(Sym.QualifiedName);
+      if not Tiers.ContainsKey(Sym.QualifiedName) or (Tier < Tiers[Sym.QualifiedName]) then
+        Tiers.AddOrSetValue(Sym.QualifiedName, Tier);
+    end;
+    if Qs.Count = 0 then Exit;
+    Qs.Sort(TComparer<string>.Construct(
+      function(const L, R: string): Integer
+      begin
+        Result:= Tiers[L] - Tiers[R];
+        if Result = 0 then Result:= CompareStr(L, R);
+      end));
+    Result:= 'Qualify the name (Unit.Type.Member). Candidates: ';
+    for Idx:= 0 to (if Qs.Count < MaxCandidates then Qs.Count else MaxCandidates) - 1 do
+      Result:= Result + (if Idx > 0 then '; ' else '') + Qs[Idx];
+    if Qs.Count > MaxCandidates then
+      Result:= Result + Format(' (+%d more)', [Qs.Count - MaxCandidates]);
+  finally
+    Qs.Free;
+    Tiers.Free;
   end;
 end;
 

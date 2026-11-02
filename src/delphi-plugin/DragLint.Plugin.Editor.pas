@@ -2354,13 +2354,28 @@ begin
   end;
 end;
 
+/// <summary>Menu handler for Rename Symbol: opens the preview dialog with the
+/// symbol under the caret already filled in.</summary>
+/// <param name="Sender">Menu item (unused).</param>
+/// <remarks>The rename verb needs a QUALIFIED name, so the Symbol field gets the
+/// `resolved` name from `typeat "file:row:col" --format json` (one bounded
+/// synchronous spawn). typeat reads the file ON DISK, so an unsaved buffer can
+/// resolve stale or not at all; then the Symbol field falls back to the bare
+/// IdentifierAtCursor (or stays empty) and the user qualifies it. The New name
+/// field is pre-filled with the bare identifier. Main thread only.</remarks>
 procedure InvokeRename(Sender: TObject);
+const
+  TYPEAT_TIMEOUT_MS = 10000;
 var
   Uri    : string ;
   Line   : Integer;
   Col    : Integer;
   ProjDb : string ;
   ExePath: string ;
+  Bare   : string ;
+  QName  : string ;
+  Output : string ;
+  ESS    : IOTAEditorServices;
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then
   begin
@@ -2372,10 +2387,23 @@ begin
   ProjDb:= ResolvePrimaryIndexDb;
   ExePath:= DLExe64;
 
-  { Open the refactor preview form.
-    For v0.27 simplicity the qname field starts empty; the user fills it in.
-    Future v0.28+ can extract the identifier at cursor via TTypeAtResolver. }
-  ShowRefactorDialog('', ProjDb, ExePath);
+  { Resolve the symbol under the caret to its qualified name (typeat, 1-based
+    row/col as InvokeTypeAtCursor passes them). Any failure leaves QName = ''
+    and the dialog opens with the bare identifier instead. }
+  Bare:= IdentifierAtCursor;
+  QName:= '';
+  if (ProjDb <> '') and Supports(BorlandIDEServices, IOTAEditorServices, ESS)
+     and (ESS.TopView <> nil) and (ESS.TopView.Buffer <> nil)
+     and (RunAndCaptureStdout(Format('"%s" typeat "%s:%d:%d" --db "%s" --format json',
+            [ExePath, ESS.TopView.Buffer.FileName, Line + 1, Col + 1, ProjDb]), Output, TYPEAT_TIMEOUT_MS) = 0) then
+  begin
+    var Token: string;
+    QName:= DLParseTypeAtResolved(Output, Token);
+    if (Bare = '') and (Token <> '') then Bare:= Token;
+  end;
+  if QName = '' then QName:= Bare;
+
+  ShowRefactorDialog(QName, ProjDb, ExePath, Bare, ESS.TopView.Buffer.FileName);
 end; // procedure
 
 procedure InvokeFormatYadf(Sender: TObject);
