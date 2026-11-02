@@ -175,7 +175,7 @@ function JobQueueBusy: Boolean;
 /// 'reindex: failed (exit N)'.</returns>
 /// <remarks>Pure. The lock refusal is recognised by the phrase 'another index run',
 /// which both AcquireIndexLock refusals (sharing violation, delete pending) carry.</remarks>
-function ReindexResultText(AExitCode: Integer; const AOutput: string): string;
+function ReindexResultText(AExitCode: Integer; const AOutput: string): string;  // dl:ok unused-public-symbol@a063 -- public on purpose: tests\IndexJobTests.dpr (outside the plugin project) pins its wording
 
 { Lazy singleton (create/access on the main thread) + finalization teardown. }
 function JobQueue: TDragLintJobQueue;
@@ -572,7 +572,7 @@ begin
     Exit 2 with the lock refusal is not a failure: another run owns the database. }
   else if (AJob.Kind = jkReindex) and (ExitCode <> 0) then
     Res:= ReindexResultText(ExitCode, Output)
-  else if ExitCode = 2 then
+  else if ExitCode = 2 then  // dl:ok ifthen-to-if-expression@7e59 -- the other branches of this chain call different routines; one expression would hide the chain
     Res:= Res + ': failed'
   else
     Res:= Res + ': done';

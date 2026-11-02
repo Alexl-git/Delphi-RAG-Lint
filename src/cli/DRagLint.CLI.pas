@@ -10007,6 +10007,8 @@ end;
 // non-fatal (Obsidian not installed, registry malformed, etc.); we
 // print a hint and continue.
 procedure OpenInObsidian(const AVaultPath: string);
+const
+  OBS_MS_PER_SEC = 1000; { Obsidian vault timestamps are epoch milliseconds }
 var
   AbsPath          : string       ;
   BaseName         : string       ;
@@ -10067,7 +10069,7 @@ begin
     begin
       NewEntry:= TJSONObject.Create;
       NewEntry.AddPair('path', AbsPath);
-      NewEntry.AddPair('ts', TJSONNumber.Create( NowUnixUtc * Int64(1000)));
+      NewEntry.AddPair('ts', TJSONNumber.Create( NowUnixUtc * Int64(OBS_MS_PER_SEC)));
       Vaults.AddPair(NewVaultId, NewEntry);
       Stream:= TStringStream.Create(Cfg.ToJson, TEncoding.UTF8);
       try
@@ -10613,7 +10615,11 @@ begin
     if Format = 'dot' then Buf.AppendLine('}');
 
     Output:= Buf.ToString;
-    if AArgs.Output <> '' then begin WriteOutputFile(AArgs.Output, Output); Writeln('Wrote ', AArgs.Output); end
+    if AArgs.Output <> '' then
+    begin
+      WriteOutputFile(AArgs.Output, Output);
+      Writeln('Wrote ', AArgs.Output);
+    end
     else Writeln(Output);
   finally
     Buf.Free;
@@ -31534,7 +31540,11 @@ begin
       RenderNodeChart(ForwardTree.Root, Buf, Fmt = 'dot', True);  // callees wing: X -> callee
       if Fmt = 'dot' then Buf.AppendLine('}');
 
-      if AArgs.Output <> '' then begin WriteOutputFile(AArgs.Output, Buf.ToString); Writeln('Wrote ', AArgs.Output); end
+      if AArgs.Output <> '' then
+      begin
+        WriteOutputFile(AArgs.Output, Buf.ToString);
+        Writeln('Wrote ', AArgs.Output);
+      end
       else Writeln(Buf.ToString);
     finally
       Buf.Free;
@@ -31550,7 +31560,11 @@ begin
       JOut.AddPair('callees', BuildTreeJson(ForwardTree));
       AddStalenessPairs(JOut, StoreDb); { ENG-3 }
       var OutStr: string:= JOut.Format(2);
-      if AArgs.Output <> '' then begin WriteOutputFile(AArgs.Output, OutStr); Writeln('Wrote ', AArgs.Output); end
+      if AArgs.Output <> '' then
+      begin
+        WriteOutputFile(AArgs.Output, OutStr);
+        Writeln('Wrote ', AArgs.Output);
+      end
       else Writeln(OutStr);
     finally
       JOut.Free;
@@ -31564,7 +31578,11 @@ begin
       RenderNodeText(ReverseTree.Root, '  ', Lines);
       Lines.Add('CALLEES (downward):');
       RenderNodeText(ForwardTree.Root, '  ', Lines);
-      if AArgs.Output <> '' then begin WriteOutputFile(AArgs.Output, Lines.Text); Writeln('Wrote ', AArgs.Output); end
+      if AArgs.Output <> '' then
+      begin
+        WriteOutputFile(AArgs.Output, Lines.Text);
+        Writeln('Wrote ', AArgs.Output);
+      end
       else Writeln(Lines.Text);
     finally
       Lines.Free;

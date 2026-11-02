@@ -822,10 +822,10 @@ begin
         for Pair in Orig do
         begin
           Path:= Pair.Key;
-          try // dl:ok try-except-swallowed -- 1.40: best-effort restore of the other files; the original exception is re-raised below
+          try
             TFile.WriteAllBytes(Path, Pair.Value);
-          except
-            on Exception do ; // dl:ok empty-on-handler -- 1.40: same restore; one failed file must not stop the others
+          except  // dl:ok try-except-swallowed@767f -- 1.40: best-effort restore of the other files; the original exception is re-raised below
+            on Exception do ; // dl:ok empty-on-handler@17b2 -- 1.40: same restore; one failed file must not stop the others
           end;
         end;
         raise;

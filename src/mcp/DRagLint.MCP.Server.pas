@@ -492,10 +492,10 @@ begin
   // GetStdHandle, not TTextRec(Output).Handle: the RTL opens Output on its first
   // write, so before one that handle is 0.
   Bytes:= TEncoding.UTF8.GetBytes(AText + #10);
-  try // dl:ok try-except-swallowed -- 1.40: a closed pipe makes Flush raise; the write below reports it by returning
+  try
     Flush(Output);
-  except
-    on Exception do ; // dl:ok empty-on-handler -- 1.40: same; nobody is left to answer
+  except  // dl:ok try-except-swallowed@767f -- 1.40: a closed pipe makes Flush raise; the write below reports it by returning
+    on Exception do ; // dl:ok empty-on-handler@17b2 -- 1.40: same; nobody is left to answer
   end;
   Done:= 0;
   while Done < DWORD(Length(Bytes)) do
@@ -1098,10 +1098,10 @@ begin
       var Reply: TJSONObject:= TJSONObject.Create;
       Reply.AddPair('content', TextContent(Format('drag-lint: tool %s failed: %s: %s', [ToolName, E.ClassName, E.Message])));
       Reply.AddPair('isError', TJSONBool.Create(True));
-      try // dl:ok try-except-swallowed -- 1.40: the client closed the pipe; the error handler must not raise out of Run
+      try
         SendResult(AId, Reply);
-      except
-        on Exception do ; // dl:ok empty-on-handler -- 1.40: same; nobody is left to answer
+      except  // dl:ok try-except-swallowed@767f -- 1.40: the client closed the pipe; the error handler must not raise out of Run
+        on Exception do ; // dl:ok empty-on-handler@17b2 -- 1.40: same; nobody is left to answer
       end;
     end;
   end;
