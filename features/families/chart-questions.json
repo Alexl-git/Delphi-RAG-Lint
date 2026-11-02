@@ -32,6 +32,7 @@
     "class-surface":    { "emitter": "charts\\src\\Emit-ClassSurface.ps1" },
     "hierarchy":        { "emitter": "charts\\src\\Emit-Hierarchy.ps1" },
     "wiring":           { "emitter": "charts\\src\\Emit-Wiring.ps1" },
+    "implementors":     { "wikiPage": "interface-implementors", "aliases": ["who implements", "implementations"] },
     "event-wiring":     { "emitter": "charts\\src\\Emit-EventWiring.ps1" },
     "lifecycle":        { "emitter": "charts\\src\\Emit-Lifecycle.ps1" },
     "deps":             { "emitter": "charts\\src\\Emit-Deps.ps1" },

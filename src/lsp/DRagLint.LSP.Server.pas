@@ -1444,6 +1444,7 @@ implementation
 
 uses
   System.StrUtils, { LSP-1 CORE: MatchText }
+  DRagLint.Query.Implementors, { 1.40 ifrpt: the implementors counts of draglint/callerCounts }
   DRagLint.Lint.MissingUses, { MISSING_USES_RULE: publish + codeAction } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
   DRagLint.Project.DefineProfile,
   DRagLint.Symbol.Describe,  // DescribeDeclaredType: the type a hover shows for a value kind
@@ -2457,6 +2458,8 @@ begin
     skParam    : Keyword:= '';
     else Keyword:= ASym.Kind.ToText;
   end; // case
+  { 1.40 (CLASSCTOR-KIND): 'class constructor Create', as declared. }
+  if ASym.IsClassMethod and (Keyword <> '') then Keyword:= 'class ' + Keyword;
 
   case ASym.Kind of
     skFunction, skProcedure, skConstructor, skDestructor, skMethod:
@@ -4043,6 +4046,8 @@ begin
   Res:= TJSONObject.Create;
   try
     Res.AddPair('counts', ComputeCallerCounts(FileFromUri(Uri)));
+    { 1.40 ifrpt: the "N implementors" lens of interfaces and interface methods (0-based lines). }
+    Res.AddPair('implementors', ImplementorCountsForFile(StoresForFile(FileFromUri(Uri)), FileFromUri(Uri)));
   except  // dl:ok bare-except@56ea -- frees the not-yet-handed-over JSON value and re-raises; nothing is swallowed
     Res.Free;
     raise;

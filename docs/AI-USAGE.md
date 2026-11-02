@@ -122,6 +122,12 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
   `via_kind` (`interface`) and, when the `implements` edge is ambiguous, `via_edge`, all placed before `resolution`.
   `impact` lists an interface method's implementors (`--format json`: `implementors`, `via_dispatch` [of via, kind, sites]),
   `context` adds `## Callers via interface dispatch` sections (JSON: a `via_dispatch` array of `{via, kind, sites}`), and `call-path` follows an interface method to its implementors.
+* `implementors --target <IFoo|IFoo.Bar|TFoo|TFoo.Bar>` is the interface report (1.40): which classes implement an
+  interface and how (`lists` / `via` a derived interface / `inherited` / `delegated` by an `implements` property), which
+  method answers an interface method in each class (resolution clauses `IJob.Execute = RunJob` included), the call/read/write
+  sites of an interface member (attributed to the member, RB-5), a class's interfaces and what answers each member, and for a
+  class method the members it answers (`--uses`: the sites reaching it). `--json` = `implementors/1`; `--format dot|mermaid`;
+  `--library-db` adds library implementor counts (`--include-library` lists them). Chart: `ask implementors`. MCP: `get_implementors`.
 * `find-unit` for an **RTL / VCL / third-party** symbol needs the **platform
   library** database (`resolve-dbs --platform win64`), not a project DB - a
   project DB holds only that project's own units.
@@ -171,6 +177,12 @@ declares none; the field being ABSENT means the engine or index predates v22, so
 absent and empty are different answers. `vis_explicit` is `false` only for a
 member in a class's unlabelled leading section, which under `$M+` is actually
 published while `modifiers` says `public` for both.
+`is_class_method` (1.40) is `true` for a routine declared with `class`: a
+class constructor / destructor carries kind `constructor` / `destructor` with
+`is_class_method: true`; class procedures, functions and operators stay kind
+`method`. The text row is tagged `[class]`, `hover` names it `class constructor`.
+A routine with a body also carries `[impl A-B]` in the text row (`impl_start_line` /
+`impl_end_line` in JSON, 0 = no body; `start_line` stays the declaration).
 ---
 
 ## 1. Setup (once)
@@ -244,7 +256,8 @@ published while `modifiers` says `public` for both.
 >   It returns the doc + class surface (signatures) + that symbol's own body +
 >   its callers. Add `--full-surface` ONLY when working on a form's
 >   components/DFM/layout (otherwise the auto-generated component fields are
->   stripped to save tokens).
+>   stripped to save tokens). For a MEMBER target the lean surface also drops
+>   comment-only lines (the other members' `///` docs); a TYPE target keeps them.
 >   Pass a QUALIFIED name when you have one. A bare name resolves only when it is
 >   UNAMBIGUOUS; an ambiguous one deliberately returns nothing rather than
 >   guessing, and the header always names the symbol it chose - check it.
@@ -446,7 +459,7 @@ define further codes.
 | `resolve-uses --name X` | which unit to add to `uses` (won't suggest implementation-only symbols) |
 | `find-unit --name X --in F` | add the declaring unit to F's `uses` clause |
 | `usages --name X` | every read/write/use of X (`--width narrow\|wide\|very-wide`; `--limit N` keeps the first N rows of each JSON group -- declarations included -- and adds `limit` and `totals`, the full counts) |
-| `outline --in F.pas` | all symbols declared in one file (`--kind <k[,k...]>` keeps only those kinds, `--no-locals` drops `local_var` and `param` -- most of a large unit's rows -- and `--limit N` prints the first N and says how many matched; without them every row, as the IDE reads it). Since extractor 1.17.0 that includes nested-routine locals and inline `var` / `for var` declarations, emitted as `local_var` symbols parented to the INNERMOST routine (`U.T.M.Nested.I`). A forward stub row is tagged `[forward -> line N]` (`forward_target_line` in JSON); both rows are listed. |
+| `outline --in F.pas` | all symbols declared in one file (`--kind <k[,k...]>` keeps only those kinds, `--no-locals` drops `local_var` and `param` -- most of a large unit's rows -- and `--limit N` prints the first N and says how many matched; without them every row, as the IDE reads it). Since extractor 1.17.0 that includes nested-routine locals and inline `var` / `for var` declarations, emitted as `local_var` symbols parented to the INNERMOST routine (`U.T.M.Nested.I`). A forward stub row is tagged `[forward -> line N]` (`forward_target_line` in JSON); both rows are listed. A routine with a body is tagged `[impl A-B]` (JSON `impl_start_line` / `impl_end_line`, plus `end_line`; 1.40) and a `class` routine `[class]` (JSON `is_class_method`). |
 | `compare --old R --command "<id> -Target T -Project P"` / `--in U.pas --line L [--update-doc]` | is this report still true? Reruns the report's COMMAND (in-process, no PowerShell) against the current index and diffs the normalised text (forms CSV by row, chart by nodes and edges). Exit 0 same, 1 differs, 2 usage/setup, 3 stale index (the new run never accepts a stale index). `--new F` (two saved outputs, no rerun) / `--question ID --target T` / `--old-db` / `--db F` / `--auto` / `--save` / `--snapshot-dir D` / `--show` / `--format text\|json\|html` / `--open`; `--format json` is schema `compare/1`. Page: [compare](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) |
 | `ask <id> --target T --project P` / `--in U.pas` / `--db D` | one report question (26 ids) as text: the DocInsight remarks block the IDE Reports menu copies, or `--plain` for the plain answer (header, COMMAND, BUNDLE, INDEX, text). Every question is answered in-process on the live index; no PowerShell is needed. Exit 0 answered, 1 refused, 2 usage/setup, 3 stale index (stderr prints the incremental reindex command; `--allow-stale` answers anyway). `--to B` / `--server-db` / `--sql-db` / `--counterpart-db` / `--depth` / `--cap` / `--surface-cap` / `--control` / `--mode` / `--max-rows` / `--out-root` / `--pairs-file` / `--open` / `--resolve-only`. Page: [ask](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ask) |
 | `surface --qname U.T` | class surface / member signatures (`--include-impl`, `--all-visibility`) |
@@ -463,6 +476,7 @@ define further codes.
 |------|--------------|
 | `context --task "verb qname"` | curated context bundle (doc + surface + body + callers); `--full-surface` only for form/DFM work; `--max-callers N` caps the caller list and `--context N` the source lines around each; `--library-db <lib>` adds query-time library-bound calls to the Library calls count (json `library_calls.via` stored|oracle). Adds a `## Wiki` section when the task phrase matches a `dl:wiki` alias (suppressed by `--no-docs`). **A qname that resolves to nothing now exits 1 and says `NOT FOUND`** -- it used to render an empty bundle at exit 0 |
 | `impact --qname U.T.M` | transitive caller blast radius (`--depth N`); an interface method also lists its implementors, an implementor the interface sites reaching it (`--format json`: `implementors`, `via_dispatch`) |
+| `implementors --target IFoo\|IFoo.Bar\|TFoo\|TFoo.Bar` | interface report: implementing classes (lists / via / inherited / delegated), the method answering each interface method per class, member call/use sites (RB-5); `--uses`, `--max-sites N`, `--library-db` + `--include-library`, `--format text\|json\|dot\|mermaid` |
 | `wiring --qname IIntf\|TForm` | Spring4D DI edges + DFM event handlers (`--coverage` for unresolved DI registrations) |
 | `find-callees --qname U.T.M [--db P --db LIB \| --library-db LIB]` | resolved outgoing calls of a routine, one line per call SITE (a target called N times repeats N times; distinct callees: `callgraph --qname U.T.M --direction callees --depth 1`); library-bound callees follow, marked `(library`, in text, and as `{"external": true, "via": "edge"\|"oracle", "receiver_type": ...}` rows in `--json` (`edge` = stored `refs.external_target`, `oracle` = bound at read time against the named library). With no library open the text ends `M external (library not open)` |
 | `call-path --from A --to B` | shortest resolved call path A -> ... -> B (`--max-depth N`; exit 1 = no path) |
@@ -901,6 +915,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `hover` | [Hover at Cursor](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Hover-at-Cursor) | Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers |  |
 | `ide-release` | [ide-release](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ide-release) | Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request |  |
 | `impact` | [Impact / Blast Radius (symbol)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Impact-Blast-Radius-symbol) | Reports what would be affected if a chosen symbol changes -- the set of code to retest |  |
+| `implementors` | [Interface Implementors Report](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/interface-implementors) | Who implements an interface, which method answers each interface method in each class, and who calls or uses an interface member |  |
 | `import-log` | [Import Build Log](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Import-Build-Log) | Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings | index |
 | `index` | [Auto-Document Whole Project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Auto-Document-Whole-Project) | Writes DocInsight documentation into every public declaration a project owns |  |
 | `index` | [Format Whole Project with YADF](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Format-Whole-Project-with-YADF) | Runs YADF formatting across a project's files, with indexing involved as part of the same action |  |
@@ -916,6 +931,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `link-orm` | [link-orm](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/link-orm) | Links a project's code index to a SQL index so ORM-style relationships between Delphi symbols and SQL objects can be resolved across both | index |
 | `lint-all` | [Compliance labels (CWE, CERT, MISRA)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compliance-labels) | Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field |  |
 | `lint-all` | [Fix all in project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Fix-all-in-project) | Applies autofixes for every fixable finding across the whole project, starting from the Structure form |  |
+| `lint-all` | [Read but never assigned (lint rule)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/read-never-assigned) | Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates |  |
 | `lint-all` | [Run Lint All (Full Report)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Run-Lint-All-Full-Report) | Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check |  |
 | `lint-all` | [Taint analysis (SQL, command, path)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/taint-analysis) | taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink |  |
 | `lint-all` | [Target compiler (--target-compiler)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/target-compiler) | Names the Delphi the code is for: lint drops advice needing a newer compiler; index parses `VER<N>0` / `CompilerVersion` branches for it |  |
@@ -1038,6 +1054,7 @@ of the CLI -- exactly **15 tools**:
 | `find_undocumented` | public symbols with no doc comment |
 | `get_symbol_doc` | doc comment for a symbol |
 | `get_impact` | transitive caller impact |
+| `get_implementors` | Interface report (`implementors/1`): implementing classes, answering methods per class, member call/use sites |
 | `get_wiring` | Spring4D DI edges (impl class + lifetime + resolve-sites) and DFM event handlers, by interface or form name |
 | `get_surface` | class surface (signatures) |
 | `get_slice` | a symbol's source body |

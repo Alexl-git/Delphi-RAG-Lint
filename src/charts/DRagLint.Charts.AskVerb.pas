@@ -5,7 +5,7 @@ unit DRagLint.Charts.AskVerb;
   output and the same exit codes.
 
   WHAT IT DOES, IN Ask-Report's ORDER.
-    1. the question: one of the 26 ids (case-insensitive, then lower-cased, Ask-Report R13).
+    1. the question: one of the 27 ids (case-insensitive, then lower-cased, Ask-Report R13).
     2. the PROJECT index: --db as given, else the engine's own `resolve-dbs --project` /
        `--in` (when --in names several indexes, the one report-pairs.json pairs is taken).
        The engine is asked as a child process, exactly as Ask-Report asks it, so the --in

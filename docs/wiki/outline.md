@@ -50,6 +50,20 @@ declaration BOTH stay listed, and the stub row is tagged `[forward -> line N]`
 `hover`, completion, class metrics -- the stub is folded into the real
 declaration. A lone stub with no completion in the unit is still a class.
 
+## Implementation lines and class routines (1.40)
+
+The line printed for a method is its DECLARATION in the class. A routine with a
+body also carries the body span, `[impl A-B]` in the text row and
+`impl_start_line` / `impl_end_line` in JSON (0 when there is no body, e.g. an
+interface or abstract method); JSON also gives the declaration's `end_line`.
+`query` prints the same `[impl A-B]` tag in its text view.
+
+A routine declared with `class` is tagged `[class]` (JSON `is_class_method`).
+A `class constructor` / `class destructor` has kind `constructor` /
+`destructor`, so "class constructor" is that kind plus the tag; class
+procedures, functions and operators keep kind `method`. `hover` names them
+`class constructor`, `class method`, and so on.
+
 ## Reaching it in the IDE
 In the IDE choose drag-lint > Show Structure. The plugin's structure cache
 (TDragLintStructureCache.GetSymbolsForFile, DragLint.Plugin.StructureCache.pas)

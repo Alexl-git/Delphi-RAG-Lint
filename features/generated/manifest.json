@@ -1,6 +1,6 @@
 {
   "product": "1.39.2-alpha",
-  "extractor": "1.28.0-alpha",
+  "extractor": "1.29.0-alpha",
   "resolver": "1.17.0-alpha",
   "schema": 23,
   "groups": [
@@ -1587,7 +1587,7 @@
             }
           ],
           "helpOrder": 6,
-          "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]", "                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:", "                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large", "                               unit's outline); --limit N prints the first N rows and says how many matched."]
+          "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]", "                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:", "                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large", "                               unit's outline); --limit N prints the first N rows and says how many matched.", "                               A routine row ends [impl A-B] (its body) and a class routine [class]; json: impl_start_line,", "                               impl_end_line, end_line, is_class_method."]
         },
         {
           "type": "ide-menu",
@@ -1607,10 +1607,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-30",
+        "date": "2026-11-01",
         "by": "ENGINE",
-        "build": "1.38.0-alpha",
-        "surfaceHash": "52b9c5c2d37e2765ff46220081dc307cacf0209ee68e91c51cca42bd3fd71234"
+        "build": "1.39.2-alpha",
+        "surfaceHash": "e918ed55cdbef432d18cd5bc032f386c610abe266fb469763a97f3ebfaae811c"
       }
     },
     {
@@ -3800,6 +3800,31 @@
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "8669b8cdce32045d3abe557243097a7bc4dd21a96f8c0bd8adc538419d4f755e"
+      }
+    },
+    {
+      "id": "read-never-assigned",
+      "title": "Read but never assigned (lint rule)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.39.2-alpha",
+      "summary": "Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates",
+      "intro": "Read this to see what read-never-assigned reports and what it treats as an assignment. It runs in lint-all and lint-project over a project index; hard-cast writes, var / out arguments, property write accessors, DFM-streamed fields, absolute, initialisers and initialization sections all count.",
+      "wikiPage": "read-never-assigned",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule read-never-assigned"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-01",
+        "by": "ENGINE",
+        "build": "1.39.2-alpha",
+        "surfaceHash": "360982a878a600caf0f2ca7a214d6b7f0220a387e74cda05b94c066a804901d1"
       }
     },
     {
@@ -7876,6 +7901,98 @@
       }
     },
     {
+      "id": "interface-implementors",
+      "title": "Interface Implementors Report",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.39.2-alpha",
+      "summary": "Who implements an interface, which method answers each interface method in each class, and who calls or uses an interface member",
+      "intro": "Use this when you work with an interface: it lists the classes that implement it (directly, through a derived interface, inherited from an ancestor class or delegated by an implements property), the method that answers each interface method in each class -- method-resolution clauses included -- and the call, read and write sites of an interface member. Give it an interface, an interface member, a class or a class method.",
+      "wikiPage": "interface-implementors",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "implementors",
+          "example": "drag-lint implementors --target IJob.Execute --db app.sqlite",
+          "usage": "drag-lint implementors --target <IFoo|IFoo.Bar|TFoo|TFoo.Bar> --db <file.sqlite> [--library-db <lib.sqlite>] [--uses] [--max-sites N] [--include-library] [--format text|json|dot|mermaid] [--json] [--output <file>]",
+          "flags": [
+            {
+              "name": "--target",
+              "arg": "<IFoo|IFoo.Bar|TFoo|TFoo.Bar>"
+            },
+            {
+              "name": "--db",
+              "arg": "<file.sqlite>"
+            },
+            {
+              "name": "--library-db",
+              "arg": "<lib.sqlite>"
+            },
+            {
+              "name": "--uses"
+            },
+            {
+              "name": "--max-sites",
+              "arg": "N"
+            },
+            {
+              "name": "--include-library"
+            },
+            {
+              "name": "--format"
+            },
+            {
+              "name": "--json"
+            },
+            {
+              "name": "--output",
+              "arg": "<file>"
+            }
+          ],
+          "helpOrder": 35,
+          "help": ["  drag-lint implementors       --target <IFoo|IFoo.Bar|TFoo|TFoo.Bar> --db <file.sqlite> [--library-db <lib.sqlite>] [--uses] [--max-sites N] [--include-library] [--format text|json|dot|mermaid] [--json] [--output <file>]", "                               (interface report: who implements an interface -- lists / via a derived interface / inherited / delegated; which method answers an interface method in each class, resolution clauses included;", "                               the call/read/write sites of an interface member, attributed to it (RB-5); a class: its interfaces and what answers each member; a class method: the members it answers + --uses the sites reaching it.", "                               --json = implementors/1 {target,implementors[],unanswered[],sites[],sites_total,library_implementors,notes[]}; exit 0 answered, 1 no such target, 2 usage/ambiguous; chart: ask implementors)"]
+        },
+        {
+          "type": "mcp",
+          "tool": "get_implementors"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/implementation"
+        },
+        {
+          "type": "lsp",
+          "method": "textDocument/codeLens"
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Which classes implement this interface?",
+          "command": "drag-lint implementors --target IFoo --db <file.sqlite>"
+        },
+        {
+          "ask": "Which method answers this interface method in each class?",
+          "command": "drag-lint implementors --target IFoo.Bar --db <file.sqlite>"
+        },
+        {
+          "ask": "Who calls this interface method or uses this interface property?",
+          "command": "drag-lint implementors --target IFoo.Bar --db <file.sqlite>"
+        },
+        {
+          "ask": "Which interfaces does this class implement, and what answers each member?",
+          "command": "drag-lint implementors --target TFoo --db <file.sqlite>"
+        }
+      ],
+      "verified": {
+        "date": "2026-11-01",
+        "by": "ENGINE",
+        "build": "1.39.2-alpha",
+        "surfaceHash": "921beeaac8825a8d374494c362deb07b718d23e8fc660c02ae186d549dfc469b"
+      }
+    },
+    {
       "id": "overview-first-turn",
       "title": "Overview (first-turn summary)",
       "group": "graphs-reports",
@@ -8429,7 +8546,7 @@
             }
           ],
           "helpOrder": 8,
-          "help": ["  drag-lint ask <question>     --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]", "                               [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>]", "                               [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]", "                               [--plain] [--open] [--resolve-only]   one report question (26 ids; `ask --help` lists them) as text:", "                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process", "                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index."]
+          "help": ["  drag-lint ask <question>     --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]", "                               [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>]", "                               [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]", "                               [--plain] [--open] [--resolve-only]   one report question (27 ids; `ask --help` lists them) as text:", "                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process", "                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index."]
         },
         {
           "type": "ide-menu",
@@ -16124,6 +16241,26 @@
         "wikiAnchor": "raise-in-finally"
       },
       {
+        "id": "rule.read-never-assigned",
+        "title": "read-never-assigned",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A field or global variable is read but nothing in the project assigns or creates it -- every read sees 0 / nil / empty. Writes throug... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule read-never-assigned"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "read-never-assigned"
+      },
+      {
         "id": "rule.redundant-as-tobject",
         "title": "redundant-as-tobject",
         "group": "linting",
@@ -18438,6 +18575,38 @@
         "parent": "chart-questions",
         "subgroup": "Type at the cursor",
         "emitter": "charts\\src\\Emit-Wiring.ps1"
+      },
+      {
+        "id": "chart.implementors",
+        "title": "Who implements this interface (implementors)",
+        "group": "diagrams-charts",
+        "owner": "CHARTS",
+        "status": "shipped",
+        "since": "1.20.2-alpha",
+        "summary": "Who implements this interface (implementors) -- chart question (Type at the cursor)",
+        "wikiPage": "interface-implementors",
+        "surfaces": [
+          {
+            "type": "ide-menu",
+            "path": "drag-lint > Reports > Who implements this interface (implementors)..."
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\Ask-Report.ps1",
+            "args": "-Question implementors"
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\New-DiagramArtifact.ps1",
+            "args": "-Question implementors"
+          }
+        ],
+        "audience": "both",
+        "requires": ["index", "graphviz"],
+        "aliases": ["implementations", "who implements"],
+        "tests": ["charts\\src\\Test-Emitters.ps1"],
+        "parent": "chart-questions",
+        "subgroup": "Type at the cursor"
       },
       {
         "id": "chart.event-wiring",

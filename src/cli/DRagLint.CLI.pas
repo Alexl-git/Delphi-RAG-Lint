@@ -95,6 +95,7 @@ uses
   DRagLint.Core.FileTime,
   Winapi.Windows
   , DRagLint.Core.CliError
+  , DRagLint.Query.Implementors { implementors verb (interface report, 1.40) }
   , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
   , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
   , Winapi.ShellAPI
@@ -472,6 +473,10 @@ type
     IncludePrivate: Boolean; // --include-private
     // v0.26: compile-check
     Target: string; // --target <file.dproj|.pas>
+    // 1.40 implementors (interface report): --uses, --max-sites N, --include-library
+    IfrUses       : Boolean;
+    IfrMaxSites   : Integer;
+    IncludeLibrary: Boolean;
     // v0.43: check-unit (in-memory semantic check) + uses-audit
     Shadow         : string ; // --shadow <dir> (unsaved-buffer overlay)
     { ghost-check --in-place: restore the pre-2026-09-08 behaviour of
@@ -1772,6 +1777,13 @@ begin
     else if A = '--project-rules' then Result.ProjectRules:= True
     else if A = '--include-private' then Result.IncludePrivate:= True
     else if (A = '--target') and (i < ParamCount) then begin Inc(i); Result.Target:= ParamStr(i); end
+    else if A = '--uses' then Result.IfrUses:= True  // dl:ok duplicate-code@9c8e -- REVIEWED 2026-11-01: the argument-parse chain repeats the same else-if flag shape by design; the matched 114-token windows are other flags' lines, nothing extractable
+    else if (A = '--max-sites') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.IfrMaxSites:= StrToIntDef(ParamStr(i), -1);
+    end
+    else if A = '--include-library' then Result.IncludeLibrary:= True
     else if (A = '--add-project') and (i < ParamCount) then begin Inc(i); Result.AddProjectName:= ParamStr(i); end
     else if (A = '--shadow') and (i < ParamCount) then begin Inc(i); Result.Shadow:= ParamStr(i); end
     else if (A = '--in-place') and (Result.Command = 'ghost-check') then Result.GhostInPlace:= True
@@ -7413,6 +7425,18 @@ begin
   Result:= True;
 end; // function
 
+{ 1.40: the text-row suffixes the query and outline views share. `[class]` for a
+  routine declared with `class` (CLASSCTOR-KIND) -- the kind column stays the
+  stored kind so a consumer splitting on it is unaffected; `[impl A-B]` for a
+  routine with a body (GAP-OUTLINE-IMPL), the span query --json already gives
+  as impl_start_line / impl_end_line. '' when neither applies. }
+function ImplAndClassTags(const ASym: TSymbol): string;
+begin
+  Result:= '';
+  if ASym.IsClassMethod then Result:= '  [class]';
+  if ASym.ImplStartLine > 0 then
+    Result:= Result + System.SysUtils.Format('  [impl %d-%d]', [ASym.ImplStartLine, ASym.ImplEndLine]);
+end;
 /// <param name="AFuzzy">True when these rows came from the FUZZY FALLBACK (the
 ///  trigram + Levenshtein path taken only after an exact lookup returned zero
 ///  rows), not from an exact match. Emits <c>"match_kind"</c> in the JSON.</param>
@@ -7482,6 +7506,9 @@ begin
           output reads an absent field as False and passes for the wrong reason.
           Measured exactly that way while writing run_directives_in_index.ps1. }
         JObj.AddPair('is_virtual'    , TJSONBool.Create(Sym.IsVirtual));
+        { 1.40 (CLASSCTOR-KIND): declared with `class`. Always present, so a
+          consumer can tell False from an engine that predates the column. }
+        JObj.AddPair('is_class_method', TJSONBool.Create(Sym.IsClassMethod));
         { v11 (M1): class/interface ancestor list; omitted when empty. }
         if Sym.Heritage <> '' then JObj.AddPair('heritage', Sym.Heritage);
         { interface-section symbols (and members of interface-section types) are
@@ -7533,6 +7560,7 @@ begin
         end of the row. }
       if (i <= High(AFilePaths)) and (AFilePaths[i] <> '') then
         Line:= Line + Format('  (%s:%d)', [AFilePaths[i], Sym.StartLine]);
+      Line:= Line + ImplAndClassTags(Sym); { 1.40: before the end-of-row suffixes, see above }
       if Sym.Section = 'implementation' then { gap #3: not usable from other units }
         Line:= Line + '  [impl-only]';
       if Sym.ForwardLine > 0 then { C2.5: the stub was folded into this row }
@@ -11100,6 +11128,78 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>The `implementors` verb: the interface report for --target (spec
+/// 2026-11-01-interface-report-design.md).</summary>
+/// <param name="AArgs">--target (or --qname), --db, optional --library-db / second --db,
+/// --uses, --max-sites N, --include-library, --format text|json|dot|mermaid, --json, --output.</param>
+/// <returns>0 answered (also zero implementors), 1 target not found, 2 usage error,
+/// ambiguous target or missing/stale db.</returns>
+function DoImplementors(const AArgs: TArgs): Integer;
+const
+  USAGE = 'Usage: drag-lint implementors --target <IFoo|IFoo.Bar|TFoo|TFoo.Bar> --db <index.sqlite> [--library-db <lib.sqlite>] '
+    + '[--uses] [--max-sites N] [--include-library] [--format text|json|dot|mermaid] [--json] [--output <file>]';
+begin
+  var Fmt:= if AArgs.AsJson then 'json' else LowerCase(AArgs.Format);
+  if Fmt = '' then Fmt:= 'text';
+  var IsJson:= Fmt = 'json';
+  var Target:= if AArgs.Target <> '' then AArgs.Target else AArgs.QName;
+  if (Target = '') or not MatchText(Fmt, ['text', 'json', 'dot', 'mermaid']) or (AArgs.IfrMaxSites < 0) then
+  begin
+    ReportNotFoundFor(IsJson, USAGE);
+    Exit(2);
+  end;
+  if NoDbResolved(AArgs.DbPath, 'implementors') then Exit(2);
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    ReportNotFoundFor(IsJson, 'ERROR: database not found: ' + AArgs.DbPath);
+    Exit(2);
+  end;
+  var RoOk: Boolean;
+  var Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if (not RoOk) and StaleDbRefusesRun(AArgs, 'implementors', AArgs.DbPath) then Exit(2);
+  var Opts:= TImplementorsOptions.Defaults;
+  Opts.WithUses:= AArgs.IfrUses;
+  if AArgs.IfrMaxSites > 0 then Opts.MaxSites:= AArgs.IfrMaxSites;
+  Opts.IncludeLibrary:= AArgs.IncludeLibrary;
+  var LibPath:= if Length(AArgs.LibraryDbs) > 0 then AArgs.LibraryDbs[0]
+    else if Length(AArgs.DbPaths) > 1 then AArgs.DbPaths[1] else '';
+  if (LibPath <> '') and TFile.Exists(LibPath) then
+  begin
+    var LibOk: Boolean;
+    Opts.LibraryStore:= OpenReadOnlyStore(LibPath, LibOk, True);
+  end;
+  var Report: TImplementorsReport;
+  try
+    Report:= BuildImplementorsReport(Store, Target, Opts);
+  except
+    on E: EImplementorsTarget do
+    begin
+      ReportNotFoundFor(IsJson, E.Message);
+      Exit(if E.Ambiguous then 2 else 1);
+    end;
+  end;
+  var OutText: string;
+  if IsJson then
+  begin
+    var J:= ImplementorsReportToJson(Report);
+    try
+      OutText:= J.ToJSON;
+    finally
+      J.Free;
+    end;
+  end
+  else
+    OutText:= if Fmt = 'text' then ImplementorsReportToText(Report)
+      else ImplementorsReportToChart(Report, Fmt = 'mermaid');
+  if AArgs.Output <> '' then
+  begin
+    TFile.WriteAllText(AArgs.Output, OutText, TEncoding.UTF8);
+    if not IsJson then Writeln('Wrote ', AArgs.Output);
+  end
+  else if IsJson then Writeln(OutText)
+  else Write(OutText);
+  Result:= 0;
+end;
 function DoImpact(const AArgs: TArgs): Integer;
 var
   Store     : ISymbolStore        ;
@@ -11541,6 +11641,12 @@ begin
         JObj.AddPair('name' , S.Name         );
         JObj.AddPair('qname', S.QualifiedName);
         JObj.AddPair('line', TJSONNumber.Create(S.StartLine));
+        { 1.40 (GAP-OUTLINE-IMPL): the declaration's end and the routine BODY
+          span, as query --json gives them; impl 0 = no body. }
+        JObj.AddPair('end_line', TJSONNumber.Create(S.EndLine));
+        JObj.AddPair('impl_start_line', TJSONNumber.Create(S.ImplStartLine));
+        JObj.AddPair('impl_end_line', TJSONNumber.Create(S.ImplEndLine));
+        JObj.AddPair('is_class_method', TJSONBool.Create(S.IsClassMethod)); { 1.40 (CLASSCTOR-KIND) }
         JObj.AddPair('signature', S.Signature);
         JObj.AddPair('modifiers', S.Modifiers);
         JObj.AddPair('directives', S.Directives); { v22: see the query emitter for why this is unconditional }
@@ -11558,7 +11664,8 @@ begin
     for var Idx in Shown do
     begin
       S:= Syms[Idx];
-      var Row: string:= System.SysUtils.Format('%-10s %-40s %d', [S.Kind.ToText, S.QualifiedName, S.StartLine]);
+      { 1.40: ImplAndClassTags -- GAP-OUTLINE-IMPL / CLASSCTOR-KIND }
+      var Row: string:= System.SysUtils.Format('%-10s %-40s %d', [S.Kind.ToText, S.QualifiedName, S.StartLine]) + ImplAndClassTags(S);
       if StubOf[Idx] >= 0 then Row:= Row + System.SysUtils.Format('  [forward -> line %d]', [Syms[StubOf[Idx]].StartLine]);  // dl:ok concat-in-loop@edfd -- Row is a fresh per-iteration inline local, not an accumulator: at most ONE suffix is appended per row, so there is no O(n^2) growth
       Writeln(Row);
     end;
@@ -14417,14 +14524,14 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak');
-  LINT_GATE_PROJECT_RULES: array[0..26] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..27] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
     'assert-with-side-effect', 'enum-helper-separate-units', 'repeated-type-switch',
     'unused-unit-in-uses', 'god-class', 'enum-ordinal-persisted', 'duplicate-unit-on-search-path',
     'dfm-event-handler-missing', 'dfm-password-edit-unmasked', 'uses-movable-to-implementation', 'virtual-never-overridden',
-    'unused-enum-value', 'unused-global',
+    'unused-enum-value', 'unused-global', 'read-never-assigned',
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
@@ -14432,11 +14539,11 @@ const
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..13] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..14] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
-    'unused-enum-value', 'unused-global',
+    'unused-enum-value', 'unused-global', 'read-never-assigned',
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
@@ -22758,6 +22865,8 @@ begin
       OptIn:= OptIn + ['unused-enum-value'];
     if Cfg.ShouldKeep('unused-global', {ADefaultDisabled=}False) then   { 1.40 unusedg }
       OptIn:= OptIn + ['unused-global'];
+    if Cfg.ShouldKeep('read-never-assigned', {ADefaultDisabled=}False) then   { owner request #5b, 1.40 lane flow }
+      OptIn:= OptIn + ['read-never-assigned'];
     { --rule <id> opts <id> in, as it does for lint and lint-project (D4). }
     if AArgs.Rule <> '' then OptIn:= OptIn + [AArgs.Rule];
     { D17: entered only when --rule can be one of its ids, and HANDED the
@@ -23248,6 +23357,8 @@ begin
       OptIn2:= OptIn2 + ['unused-enum-value'];
     if LoadLintConfig(AArgs).ShouldKeep('unused-global', {ADefaultDisabled=}False) then   { 1.40 unusedg }
       OptIn2:= OptIn2 + ['unused-global'];
+    if LoadLintConfig(AArgs).ShouldKeep('read-never-assigned', {ADefaultDisabled=}False) then   { owner request #5b, 1.40 lane flow }
+      OptIn2:= OptIn2 + ['read-never-assigned'];
     { The platform library index, opened the same lazy, NEVER-MIGRATE,
       warn-and-degrade way DoLintAll opens it. It used to be nil here, and that
       was a real divergence rather than a tidiness point: global-only-uses-edge
@@ -36496,6 +36607,7 @@ begin
     else if Args.Command = 'hover'             then Result:= DoHover           (Args)
     else if Args.Command = 'contrast-selftest' then Result:= DoContrastSelfTest
     else if Args.Command = 'impact'            then Result:= DoImpact          (Args)
+    else if Args.Command = 'implementors'      then Result:= DoImplementors    (Args)
     else if Args.Command = 'wiring'            then Result:= DoWiring          (Args)
     else if Args.Command = 'surface'           then Result:= DoSurface         (Args)
     else if Args.Command = 'outline'           then Result:= DoOutline         (Args)

@@ -18,15 +18,19 @@ type
   /// </remarks>
   TDocCommentScanner = class
     public
-      /// <summary>Walk the source, return all comment regions sorted by StartLine.</summary>
+      /// <summary>Walk the source, return all comment regions sorted by StartLine.
+      /// Same-kind line comments on consecutive lines fold into one region, except
+      /// that a doc-kind line comment (///, //1, ///1) following code on its own line
+      /// opens a new region when the run above it did not itself start after code
+      /// (GAP-CONTEXT 1.40).</summary>
       /// <param name="ASource"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->TList&lt;TDocCommentRegion&gt; -- Observed:
       /// TList&lt;TDocCommentRegion&gt;.Create.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol (DRagLint.Doc.Document.pas)</para>
-      /// <para>Calls: DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Emit, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.MergeAdjacentSameKind, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Peek, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.StartLineComment</para>
-      /// <para>Complexity: 34 (cyclomatic, outer body), 198 lines (full implementation)</para>
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.ExistingDocForSymbol (DRagLint.Doc.Document.pas)</para>
+      /// <para>Calls: CharInSet, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Emit, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.MergeAdjacentSameKind, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Peek, DRagLint.Parser.DocComments.TDocCommentScanner.Scan.StartLineComment</para>
+      /// <para>Complexity: 35 (cyclomatic, outer body), 263 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentScanner.Scan.Emit"/>
@@ -307,6 +311,13 @@ var
   StartCol : Integer        ;
   Buf      : TStringBuilder ;
   Kind     : TDocCommentKind;
+  { GAP-CONTEXT (1.40): LineHasCode = code (not a comment, not blank) was seen
+    earlier on the current line; StartTrailing = the open line comment began
+    after such code; Trailing[i] = that flag for Result[i]. Read only by
+    MergeAdjacentSameKind. }
+  LineHasCode  : Boolean       ;
+  StartTrailing: Boolean       ;
+  Trailing     : TList<Boolean>;
 
   procedure StartLineComment(AKind: TDocCommentKind);
   begin
@@ -314,6 +325,7 @@ var
     StartLine:= Line;
     StartCol := Col;
     Kind     := AKind;
+    StartTrailing:= LineHasCode;
     Buf.Clear;
   end;
 
@@ -327,6 +339,8 @@ var
     Region.Kind     := Kind;
     Region.RawText:= Buf.ToString;
     Result.Add(Region);
+    Trailing.Add(StartTrailing);
+    StartTrailing:= False;
     Buf.Clear;
   end;
 
@@ -341,7 +355,15 @@ var
     sLineBreak). X-23: one compacting pass -- a write index plus a builder per
     run. The old fold concatenated the growing RawText and Delete'd one list
     entry per merge, O(n) each, so a run of n trailing `// step` comments cost
-    O(n^2) (0.43 s at 20k lines, 4.79 s at 40k). Output is identical. }
+    O(n^2) (0.43 s at 20k lines, 4.79 s at 40k). Output is identical.
+    GAP-CONTEXT (1.40): a DOC-kind line comment that follows code on its own
+    line (`procedure A;  /// <summary>B ...`) is never folded into the run
+    above it -- it OPENS a new run. Folding it made A's block and B's block one
+    region, attributed whole to B (whose parse took A's <summary>) while A,
+    declared inside the run, got no doc. Only a run that did NOT itself start
+    after code is split: a column of trailing one-line docs (`K1 = 1; /// a`,
+    `K2 = 2; /// b`) still folds as before, since splitting it would hand each
+    line's doc to the declaration BELOW it. Loose `//` runs fold as before. }
   procedure MergeAdjacentSameKind;
   var
     R     : Integer          ;
@@ -350,17 +372,23 @@ var
     Next  : TDocCommentRegion;
     Joined: TStringBuilder   ;
     Grown : Boolean          ;
+    CurTrl: Boolean          ; { Trailing flag of the region that OPENED the current run }
+    Joins : Boolean          ; { Next continues Cur's run }
   begin
     if Result.Count < 2 then Exit;
     Joined:= TStringBuilder.Create;
     try
       W    := 0;
       Cur  := Result[0];
+      CurTrl:= Trailing[0];
       Grown:= False;
       for R:= 1 to Result.Count - 1 do
       begin
         Next:= Result[R];
-        if (Next.Kind = Cur.Kind) and (Next.StartLine = Cur.EndLine + 1) and (Next.Kind in [dckTripleSlash, dckDoubleSlashOne, dckTripleSlashOne, dckLooseLine]) then
+        Joins:= (Next.Kind = Cur.Kind) and (Next.StartLine = Cur.EndLine + 1) and (Next.Kind in [dckTripleSlash, dckDoubleSlashOne, dckTripleSlashOne, dckLooseLine]);
+        { a trailing doc line opens a new run unless the run itself began trailing }
+        if Joins and (Next.Kind <> dckLooseLine) and Trailing[R] and not CurTrl then Joins:= False;
+        if Joins then
         begin
           if not Grown then
           begin
@@ -378,6 +406,7 @@ var
           Result[W]:= Cur;
           Inc(W);
           Cur  := Next;
+          CurTrl:= Trailing[R];
           Grown:= False;
         end;
       end; // for
@@ -392,7 +421,10 @@ var
 begin
   Result:= TList<TDocCommentRegion>.Create;
   Buf:= TStringBuilder.Create;
+  Trailing:= TList<Boolean>.Create;
   try
+    LineHasCode  := False;
+    StartTrailing:= False;
     Len:= Length(ASource);
     I    := 1;
     Line := 1;
@@ -464,6 +496,7 @@ begin
             Inc(I, 2); Inc(Col, 2);
             Continue;
           end;
+          if not CharInSet(ASource[I], [' ', #9, #13, #10]) then LineHasCode:= True;
         end; // case
         ssInString     : if ASource[I] = '''' then State:= ssCode;
         ssInLineComment: if (ASource[I] = #13) or (ASource[I] = #10) then
@@ -510,11 +543,13 @@ begin
       begin
         Inc(Line);
         Col:= 1;
+        LineHasCode:= False;
       end
       else if ASource[I] = #10 then
       begin
         if (I <= 1) or (ASource[I - 1] <> #13) then Inc(Line);
         Col:= 1;
+        LineHasCode:= False;
       end
       else Inc(Col);
       Inc(I);
@@ -525,6 +560,7 @@ begin
 
     MergeAdjacentSameKind;
   finally
+    Trailing.Free;
     Buf.Free;
   end; // try
 end; // begin

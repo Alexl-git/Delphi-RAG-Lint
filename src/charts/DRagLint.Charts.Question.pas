@@ -220,7 +220,7 @@ function QuestionPhrase(const pId: string): string;
 
 /// <summary>Every question id the chart pipeline accepts (New-DiagramArtifact.ps1's
 /// ValidateSet), in the menu-caption order of the header-phrase table.</summary>
-/// <returns>The 26 ids, lower case.</returns>
+/// <returns>The 27 ids, lower case (implementors is Delphi-only: no Emit-*.ps1).</returns>
 function QuestionIds: TArray<string>;
 
 /// <summary>The two count labels of a question (New-DiagramArtifact's $vocab).</summary>
@@ -284,7 +284,7 @@ const
   DEFAULT_DEPTHS: array[0..1] of TDepthDefault = (
     (Id: 'exception-paths'; Depth: 3),
     (Id: 'round-trip'; Depth: 4));
-  QUESTION_CAPTIONS: array[0..25] of array[0..1] of string = (
+  QUESTION_CAPTIONS: array[0..26] of array[0..1] of string = (
     ('butterfly', 'Callers and callees (butterfly chart)...'),
     ('who-calls', 'Who calls this routine...'),
     ('what-it-calls', 'What this routine calls...'),
@@ -304,6 +304,7 @@ const
     ('class-surface', 'What this type exposes (class surface)...'),
     ('hierarchy', 'Ancestors and descendants (hierarchy)...'),
     ('wiring', 'Who registers and resolves this interface...'),
+    ('implementors', 'Who implements this interface (implementors)...'),
     ('event-wiring', 'Which handler runs on which event (form)...'),
     ('lifecycle', 'Form lifecycle (create -> show -> destroy)...'),
     ('deps', 'Dependencies of this unit...'),
@@ -311,7 +312,7 @@ const
     ('cycles', 'Circular unit dependencies...'),
     ('consumers', 'Who uses this table or column...'),
     ('shown-where', 'Where this database column is shown...'));
-  QUESTION_VOCAB: array[0..25] of array[0..2] of string = (
+  QUESTION_VOCAB: array[0..26] of array[0..2] of string = (
     ('butterfly', 'callers', 'callees'),
     ('deps', 'used by', 'uses'),
     ('who-calls', 'call sites', 'cycle rows'),
@@ -325,6 +326,7 @@ const
     ('lifecycle', 'stages wired', 'implemented, not wired'),
     ('cycles', 'groups', 'uses edges'),
     ('wiring', 'registrations', 'resolution sites'),
+    ('implementors', 'implementors', 'use sites'),
     ('effects', 'effects', 'unclassified tokens'),
     ('architecture', 'project units', 'back-edges'),
     ('protocol-trace', 'references', 'zones'),

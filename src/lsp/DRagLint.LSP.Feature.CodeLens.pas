@@ -30,7 +30,9 @@ type
     /// <summary>Replies a CodeLens[]: for each {line, count} of the file's
     /// caller counts, a zero-width range at (line, 0) and the command
     /// `draglint.showCallers` titled '<n> callers' ('1 caller' singular) with
-    /// arguments [uri, line]. A file no store knows answers [].</summary>
+    /// arguments [uri, line]. Above every interface and interface method with at least
+    /// one implementor, a second lens titled '<n> implementors' runs
+    /// draglint.showImplementors with [uri, line] (1.40). A file no store knows answers [].</summary>
     /// <param name="ACtx">The server surface.</param>
     /// <param name="AMethod">Always `textDocument/codeLens`.</param>
     /// <param name="AId">The request id; a notification gets no reply.</param>
@@ -42,11 +44,13 @@ implementation
 
 uses
   System.SysUtils
+  , DRagLint.Query.Implementors
   ;
 
 const
   CODELENS_METHOD  = 'textDocument/codeLens';
   CODELENS_COMMAND = 'draglint.showCallers';
+  IMPL_COMMAND     = 'draglint.showImplementors';
 
 function Position(ALine0: Integer): TJSONObject;
 begin
@@ -60,7 +64,12 @@ begin
   Result:= ACount.ToString + (if ACount = 1 then ' caller' else ' callers');
 end;
 
-function BuildLens(const AUri: string; ALine0, ACount: Integer): TJSONObject;
+function ImplTitle(ACount: Integer): string;
+begin
+  Result:= ACount.ToString + (if ACount = 1 then ' implementor' else ' implementors');
+end;
+
+function BuildLens(const AUri: string; ALine0, ACount: Integer; AImplementors: Boolean = False): TJSONObject;
 begin
   Result:= TJSONObject.Create;
   try
@@ -70,8 +79,8 @@ begin
     Rng.AddPair('end'  , Position(ALine0));
     var Cmd: TJSONObject:= TJSONObject.Create;
     Result.AddPair('command', Cmd);
-    Cmd.AddPair('title'  , Title(ACount));
-    Cmd.AddPair('command', CODELENS_COMMAND);
+    Cmd.AddPair('title'  , if AImplementors then ImplTitle(ACount) else Title(ACount));
+    Cmd.AddPair('command', if AImplementors then IMPL_COMMAND else CODELENS_COMMAND);
     var Args: TJSONArray:= TJSONArray.Create;
     Cmd.AddPair('arguments', Args);
     Args.Add(AUri);
@@ -116,6 +125,13 @@ begin
           Res.AddElement(BuildLens(Uri, (E as TJSONObject).GetValue<Integer>('line'), (E as TJSONObject).GetValue<Integer>('count')));
       finally
         Counts.Free;
+      end;
+      var Impls: TJSONArray:= ImplementorCountsForFile(ACtx.Stores, Path);
+      try
+        for var E: TJSONValue in Impls do
+          Res.AddElement(BuildLens(Uri, (E as TJSONObject).GetValue<Integer>('line'), (E as TJSONObject).GetValue<Integer>('count'), True));
+      finally
+        Impls.Free;
       end;
     end;
   except

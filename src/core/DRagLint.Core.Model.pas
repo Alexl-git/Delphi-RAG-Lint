@@ -190,7 +190,20 @@ const
     ('''...''') are a token of their own and an ordinary '...' string no longer
     runs past end of line. No extractor code change rides on it (a multi-name
     declaration already emitted every name: run_extractor_multi_name_fields.ps1). }
-  DRAGLINT_EXTRACTOR_VERSION = '1.28.0-alpha';
+  { 1.28.0 -> 1.29.0 (2026-11-01, 1.40 Phase B, feat/x129 -- ONE bump for the batch):
+    * call: a method-resolution clause (`procedure IJob.Execute = RunJob;`) is a
+      symbols row 'IJob.Execute' (directives 'resolution', signature '= RunJob'),
+      no phantom method; dispatch_edges gains kind 'delegates' for an
+      `implements` property (directives 'implements IJob'); a 9th calls stream
+      binds `read` refs that name a type (TFoo.Create, C:= TFoo) to the type.
+      Guards: run_method_resolution_dispatch, run_implements_delegation,
+      run_type_read_bind (tests\callresolve).
+    * doc: a trailing doc comment after code opens a new symbol_docs region
+      (Parser.DocComments). Guard run_doc_glued_summary_owner.
+    * kind: class constructor / destructor rows are kind constructor /
+      destructor (were method); new column symbols.is_class_method.
+      Guard run_class_method_flag. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.29.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
@@ -403,6 +416,22 @@ const
   /// the ghost-compile journal that first created the folder.</summary>
   DRAG_HOME_DIR = '_D-RAG';
 
+  /// <summary>symbols.directives token of a METHOD-RESOLUTION CLAUSE row
+  /// (`procedure IJob.Execute = RunJob;`, METHRES-DISPATCH, 1.40).</summary>
+  /// <remarks>Such a row is NOT a class member: its name is the dotted
+  /// interface-method name as written (`IJob.Execute`), its signature is
+  /// `= RunJob` (the target method's name), and DispatchResolver turns it into
+  /// the `implements` edge IJob.Execute -&gt; RunJob instead of joining by name.</remarks>
+  RESOLUTION_DIRECTIVE = 'resolution';
+
+  /// <summary>symbols.directives prefix of a DELEGATING property
+  /// (`property Job: IJob read FJob implements IJob;`, interface report D2, 1.40).</summary>
+  /// <remarks>The full value is `implements IJob` / `implements IA,IB`: the token,
+  /// one space, the interface names as written, comma-joined. DispatchResolver
+  /// writes one `delegates` dispatch_edges row per name the class lists:
+  /// base = the interface, impl = the property.</remarks>
+  IMPLEMENTS_DIRECTIVE = 'implements';
+
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -528,6 +557,15 @@ type
     // name (e.g. 'TColor'), not an ancestor list (helpers have no ancestors).
     // The resolve pass (ResolveHelpers) reads this to populate type_helpers.
     IsHelper     : Boolean     ;
+    /// <summary>True when this routine was declared with the `class` keyword:
+    /// class constructor / destructor / procedure / function / operator.
+    /// False for an instance routine and for every non-routine symbol.</summary>
+    /// <remarks>Stored as symbols.is_class_method (1.40, CLASSCTOR-KIND). A class
+    /// constructor / destructor carries Kind skConstructor / skDestructor; the
+    /// other class routines stay skMethod (run_ctor_dtor_kind_guard case C). So
+    /// "class constructor" is Kind = skConstructor AND IsClassMethod. A row
+    /// written before the column existed reads back False until re-parsed.</remarks>
+    IsClassMethod: Boolean     ;
     // v22 (PLAN-routine-directives-in-index.md): EVERY routine directive --
     // virtual dynamic override abstract overload reintroduce final static
     // assembler export inline deprecated platform experimental message stdcall

@@ -39,8 +39,8 @@ The equivalent standalone command, with the same catalog:
 ```text
 drag-lint rules [--json] [--category <name>] [--rules-dir <dir>]
 ```
-As loaded by this dialog, the catalog has 291 rules, 111 of them fixable,
-247 on by default, across 18 categories.
+As loaded by this dialog, the catalog has 292 rules, 111 of them fixable,
+248 on by default, across 18 categories.
 
 ### What it needs
 Not documented as needing an index -- the feature map marks this row's
@@ -50,7 +50,7 @@ database.
 
 ### Example
 Illustrative only: opening drag-lint > drag-lint Options... shows the
-full 291-rule catalog, grouped by its 18 categories, with a toggle per
+full 292-rule catalog, grouped by its 18 categories, with a toggle per
 rule and a marker for which of the 111 fixable rules have an auto-fix.
 
 ---

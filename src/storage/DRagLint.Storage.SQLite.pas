@@ -720,6 +720,28 @@ type
       procedure ResolveEnumCastRefs(AResolver: TCallResolver;
         const AScopeWhere, AStaleWhere: string;
         out ACandidates, ABound: Int64);
+      /// <summary>GAP-CALLERS (1.40): the calls stage's NINTH stream. Offers every
+      /// still-unbound `read` ref spelled like an indexed type -- the class in
+      /// `TStore.Create(..)`, a class-reference value -- to
+      /// TCallResolver.ResolveTypeRead and sets refs.symbol_id to the type when
+      /// that answer is certain.</summary>
+      /// <param name="AResolver">The pass's resolver, maps already built. Owned
+      /// by the caller.</param>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a
+      /// whole-database run.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when
+      /// none is stale.</param>
+      /// <param name="ACandidates">Out: read rows offered to the resolver.</param>
+      /// <param name="ABound">Out: rows whose symbol_id was set.</param>
+      /// <remarks>
+      /// IDENTITY ONLY: no call_edges row. No other stream binds a `read` ref to a
+      /// type symbol (the value stream keeps value kinds only), so NULLing exactly
+      /// those rows in scope first never erases another stream's answer. Runs
+      /// after every other read stream: it only sees what they declined.
+      /// </remarks>
+      procedure ResolveTypeReadRefs(AResolver: TCallResolver;
+        const AScopeWhere, AStaleWhere: string;
+        out ACandidates, ABound: Int64);
       /// <summary>Record the names a file is about to lose, before OpenFileTx
       /// deletes its symbols.</summary>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
@@ -4069,9 +4091,9 @@ begin
       raise;
     end;
     C:= Res.Counters;
-    ResolveLog(Format('dispatch: overrides=%d implements=%d classref-args=%d declined: no-base=%d external=%d ' +
+    ResolveLog(Format('dispatch: overrides=%d implements=%d classref-args=%d delegates=%d declined: no-base=%d external=%d ' +
       'no-impl=%d generic=%d indirect=%d stale=%d unread=%d  [%.1fs]',
-      [C.Overrides, C.Implements, C.ClassRefArgs, C.NoBase, C.External, C.NoImpl, C.Generic, C.Indirect, C.Stale,
+      [C.Overrides, C.Implements, C.ClassRefArgs, C.Delegates, C.NoBase, C.External, C.NoImpl, C.Generic, C.Indirect, C.Stale,
        C.Unread, ResolveSecs(T0)]));
   finally
     QA.Free;
@@ -4928,6 +4950,10 @@ begin
   TryExec('CREATE INDEX IF NOT EXISTS idx_type_ancestors_name   ON type_ancestors(ancestor_name)');
   { v23 (extractor batch): see Schema.pas 22 -> 23. }
   TryExec('ALTER TABLE symbols ADD COLUMN generic_params TEXT');
+  { 1.40 (CLASSCTOR-KIND): 1 for a routine declared with `class`; see Schema.pas.
+    Additive and read with FindField, so NO SCHEMA_VERSION bump of its own: a
+    pre-1.40 row reads 0 until the extractor bump re-parses it. }
+  TryExec('ALTER TABLE symbols ADD COLUMN is_class_method INTEGER');
   TryExec('ALTER TABLE type_ancestors ADD COLUMN ancestor_type_args TEXT');
   { v15: first-class helper-target edges. Similar to type_ancestors, one row
     per helper declaration (record/class helper for T) linked to its target type.
@@ -5375,7 +5401,7 @@ begin
   FQInsertFile:= NewQuery( 'INSERT OR IGNORE INTO files(path, mtime_unix, sha256, parsed_at, language) ' + 'VALUES (:path, :mtime, :sha, :parsed, :lang)');
   FQInsertSymbol:= NewQuery(
     'INSERT INTO symbols(file_id, parent_id, kind, name, qualified_name, ' + '  signature, modifiers, section, heritage, is_virtual, is_helper, start_line, start_col, end_line, end_col, ' +
-    '  impl_start_line, impl_end_line, prop_access, directives, vis_explicit, generic_params) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, :ish, ' + '  :sl, :sc, :el, :ec, :isl, :iel, :pa, :dirs, :vexp, :gp)');
+    '  impl_start_line, impl_end_line, prop_access, directives, vis_explicit, generic_params, is_class_method) ' + 'VALUES (:fid, :pid, :kind, :name, :qname, :sig, :mods, :sec, :her, :virt, :ish, ' + '  :sl, :sc, :el, :ec, :isl, :iel, :pa, :dirs, :vexp, :gp, :iscm)');
   FQInsertTrigram:= NewQuery( 'INSERT OR IGNORE INTO symbol_trigrams(trigram, symbol_id) ' + 'VALUES (:tg, :sid)');
   FQInsertRef:= NewQuery(
     'INSERT INTO refs(symbol_id, file_id, kind, name_text, ' + '  start_line, start_col, end_line, end_col, enclosing_symbol_id, receiver_text) ' +
@@ -6406,6 +6432,7 @@ begin
   FQInsertSymbol.ParamByName('gp'   ).DataType := ftString;
   if ASymbol.GenericParams <> '' then FQInsertSymbol.ParamByName('gp').AsWideString:= ASymbol.GenericParams
   else FQInsertSymbol.ParamByName('gp').Clear;
+  FQInsertSymbol.ParamByName('iscm' ).AsInteger:= Ord(ASymbol.IsClassMethod); { 1.40: always 0/1, NULL only on an older row }
   FQInsertSymbol.ExecSQL;
   Result:= FConn.GetLastAutoGenValue('');
   // Populate trigram index alongside each symbol insert so fuzzy queries
@@ -9280,6 +9307,8 @@ begin
   Result.GenericParams:= '';
   if AQ.FindField('generic_params') <> nil then { v23: tolerate pre-v23 databases }
     Result.GenericParams:= AQ.FieldByName('generic_params').AsString;
+  if AQ.FindField('is_class_method') <> nil then { 1.40: tolerate older databases; NULL -> False }
+    Result.IsClassMethod:= AQ.FieldByName('is_class_method').AsInteger <> 0;
   Result  .StartLine:= AQ.FieldByName('start_line').AsInteger;
   Result  .StartCol := AQ.FieldByName('start_col' ).AsInteger;
   Result  .EndLine  := AQ.FieldByName('end_line'  ).AsInteger;
@@ -14955,6 +14984,26 @@ begin
   FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + CAST_WRITTEN + Suffix);  // dl:ok sql-injection-concat@1334 -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveTypeUseRefs uses; a temp-table name and an IN-list cannot be parameters.
   BindRefStream(CAST_UNIVERSE, REF_KIND_CALL, Suffix, AResolver.ResolveEnumCast, ACandidates, ABound);
 end;
+
+{ GAP-CALLERS: the type-name read stream. The contract lives on the declaration. }
+procedure TSQLiteSymbolStore.ResolveTypeReadRefs(AResolver: TCallResolver;
+  const AScopeWhere, AStaleWhere: string; out ACandidates, ABound: Int64);
+const
+  TYPE_KINDS_SQL = '(''class'', ''interface'', ''record'', ''type'', ''enum'')';
+  { What this stream wrote: a `read` ref bound to a type. }
+  TREAD_WRITTEN  = 'refs.kind = ''read'' AND refs.symbol_id IN (SELECT id FROM symbols WHERE kind IN ' + TYPE_KINDS_SQL + ')';
+  { The candidates: an unbound `read` spelled like any indexed type. }
+  TREAD_UNIVERSE = 'refs.kind = ''read'' AND refs.symbol_id IS NULL AND refs.name_text COLLATE NOCASE IN ' +
+                   '(SELECT name FROM symbols WHERE kind IN ' + TYPE_KINDS_SQL + ')';
+var
+  Suffix: string;
+begin
+  Suffix:= '';
+  if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
+  FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + TREAD_WRITTEN + Suffix);  // dl:ok sql-injection-concat@6ada -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveTypeUseRefs uses.
+  BindRefStream(TREAD_UNIVERSE, 'read', Suffix, AResolver.ResolveTypeRead, ACandidates, ABound);
+end;
 procedure TSQLiteSymbolStore.WriteExternalStores(const AExtraStores: TArray<ISymbolStore>; AScoped: Boolean);
 const
   KEY = 'external_stores';
@@ -15041,6 +15090,8 @@ var
   TypeBound      : Int64    ; { of those, the rows whose symbol_id was set                  }
   CastCandidates : Int64    ; { X6/G1 enum-cast stream -- unbound enum-named call rows offered }
   CastBound      : Int64    ; { of those, the rows whose symbol_id was set                  }
+  TReadCandidates: Int64    ; { GAP-CALLERS type-read stream -- unbound type-named read rows offered }
+  TReadBound     : Int64    ; { of those, the rows whose symbol_id was set                  }
   TWrites        : Double   ; { seconds the write stream took -- printed on its own line     }
   Streamed  : Int64         ; { call-site refs examined -- see ResolveLog }
   T0        : Int64         ;
@@ -15142,6 +15193,8 @@ begin
   TypeBound      := 0;
   CastCandidates := 0;
   CastBound      := 0;
+  TReadCandidates:= 0;
+  TReadBound     := 0;
   Streamed:= 0;
   Resolver:= TCallResolver.Create(Self, AExtraStores); // prepare name/scope maps ONCE
   except // dl:ok bare-except@4bef -- rollback and RE-RAISE: the lock taken above must not outlive a failed set-up
@@ -15508,6 +15561,9 @@ begin
       ResolveTypeUseRefs(Resolver, ScopeWhere, StaleWhere, TypeCandidates, TypeBound);
       { X6 / G1 (2026-10-25): the EIGHTH stream, enum hard casts, identity only. }
       ResolveEnumCastRefs(Resolver, ScopeWhere, StaleWhere, CastCandidates, CastBound);
+      { GAP-CALLERS (1.40): the NINTH stream, type-name reads, identity only;
+        last of the reads, so it sees only what every read stream declined. }
+      ResolveTypeReadRefs(Resolver, ScopeWhere, StaleWhere, TReadCandidates, TReadBound);
       { 2026-09-23 (D13, resolver 1.8.0-alpha): the FIFTH stream -- bare writes,
         identity only. Same transaction, same all-or-nothing lifetime. }
       TMark:= TStopwatch.GetTimeStamp;
@@ -15698,6 +15754,7 @@ begin
        Resolver.TypeUseStats.Ambiguous, Resolver.TypeUseStats.NotFound, Resolver.TypeUseStats.Unreadable]));
     { X6 / G1 (2026-10-25). The enum hard-cast stream. }
     ResolveLog(Format('calls      enum-casts: %d of %d enum-named call ref(s) bound', [CastBound, CastCandidates]));
+    ResolveLog(Format('calls      type-reads: %d of %d type-named read ref(s) bound', [TReadBound, TReadCandidates]));
     { 2026-09-23 (D13). Every decline by reason, for the same reason as the two
       lines above: a declined write stores nothing anywhere else. }
     ResolveLog(Format('calls      writes: %d of %d write ref(s) bound; declined result %d, own-name %d, ' +

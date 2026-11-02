@@ -92,6 +92,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Lint rules](features/lint-rules.md) | Every lint rule the engine ships, imported from rules --json | 0.2.0-alpha |
 | [lint-tree](features/lint-tree.md) | Answers one question lint-all cannot: does an interface edit to this unit reach any dependent? | 1.11.0-alpha |
 | [Rename across every project that compiles a shared unit](features/multi-project-rename.md) | A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects | 1.29.0-alpha |
+| [Read but never assigned (lint rule)](features/read-never-assigned.md) | Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates | 1.39.2-alpha |
 | [Rescan this unit](features/rescan-this-unit.md) | Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed | 1.28.3-alpha |
 | [Run AST Checks](features/run-ast-checks.md) | Runs drag-lint's AST-level checks against a file | 0.31.0-alpha |
 | [Run Diagnostics (didSave)](features/run-diagnostics-didsave.md) | Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification | 0.22.0-alpha |
@@ -183,6 +184,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [Find Dead Code](features/find-dead-code.md) | Scans the index for code with no references -- candidates to delete | 0.25.0-alpha |
 | [Forms for testers (CSV)](features/generate-test-helper-csv.md) | A CSV of a project's forms, one row per form, telling a tester how to reach each one from the main form | 0.44.0-alpha |
 | [Impact / Blast Radius (symbol)](features/impact-blast-radius-symbol.md) | Reports what would be affected if a chosen symbol changes -- the set of code to retest | 0.17.0-alpha |
+| [Interface Implementors Report](features/interface-implementors.md) | Who implements an interface, which method answers each interface method in each class, and who calls or uses an interface member | 1.39.2-alpha |
 | [Code-built menu tree and registry drift](features/menu-tree.md) | The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it | 1.33.0-alpha |
 | [Reverse Call Tree (clickable, Messages window)](features/reverse-call-tree-clickable-messages-window.md) | The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller | 0.98.0-alpha |
 | [Reverse Call Tree (who calls this, N-deep)](features/reverse-call-tree-who-calls-this-n-deep.md) | Builds the tree of callers of a chosen symbol, transitively, to a chosen depth | 0.96.0-alpha |

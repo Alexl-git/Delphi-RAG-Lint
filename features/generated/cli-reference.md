@@ -856,6 +856,28 @@ drag-lint impact --qname <Foo.Bar> [--db <file.sqlite>] [--depth N] [--format te
 
 Described in [Impact / Blast Radius (symbol)](../../docs/wiki/Impact-Blast-Radius-symbol.md).
 
+### implementors
+
+Who implements an interface, which method answers each interface method in each class, and who calls or uses an interface member.
+
+```text
+drag-lint implementors --target <IFoo|IFoo.Bar|TFoo|TFoo.Bar> --db <file.sqlite> [--library-db <lib.sqlite>] [--uses] [--max-sites N] [--include-library] [--format text|json|dot|mermaid] [--json] [--output <file>]
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--target` | `<IFoo\|IFoo.Bar\|TFoo\|TFoo.Bar>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--library-db` | `<lib.sqlite>` |  |  |
+| `--uses` |  |  |  |
+| `--max-sites` | `N` |  |  |
+| `--include-library` |  |  |  |
+| `--format` |  |  |  |
+| `--json` |  |  |  |
+| `--output` | `<file>` |  |  |
+
+Described in [Interface Implementors Report](../../docs/wiki/interface-implementors.md).
+
 ### import-log
 
 Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings.
@@ -1040,6 +1062,7 @@ Described in:
 
 * [Compliance labels (CWE, CERT, MISRA)](../../docs/wiki/compliance-labels.md)
 * [Fix all in project](../../docs/wiki/Fix-all-in-project.md)
+* [Read but never assigned (lint rule)](../../docs/wiki/read-never-assigned.md)
 * [Run Lint All (Full Report)](../../docs/wiki/Run-Lint-All-Full-Report.md)
 * [Taint analysis (SQL, command, path)](../../docs/wiki/taint-analysis.md)
 * [Target compiler (--target-compiler)](../../docs/wiki/target-compiler.md)

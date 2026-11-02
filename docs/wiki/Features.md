@@ -130,7 +130,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**291 rules. 111 have an auto-fix. 247 are on by default.** 198 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**292 rules. 111 have an auto-fix. 248 are on by default.** 199 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -146,13 +146,13 @@ Rules, autofix, suppression markers and project-wide checks.
 | other | 11 | 3 |
 | platform | 10 | 4 |
 | policy | 3 | - |
-| project-wide | 31 | 6 |
+| project-wide | 32 | 6 |
 | refactoring | 20 | 8 |
 | resource-lifetime | 14 | 7 |
 | review-markers | 5 | 2 |
 | security | 22 | 2 |
 | structure | 13 | 7 |
-| **Total** | **291** | **111** |
+| **Total** | **292** | **111** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -172,9 +172,10 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
 | [Gap-wave lint rules](gap-wave-rules) | `rules` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
-| [Lint rules](rules) | 291 rules, 111 fixable; `rules` |  |
+| [Lint rules](rules) | 292 rules, 111 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
+| [Read but never assigned (lint rule)](read-never-assigned) | `lint-all` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
 | [Rescan this unit](Rescan-this-unit) | Structure form: Rescan this unit; `index` |  |
 | [Run AST Checks](Run-AST-Checks) | About window: Run AST Checks; `check-ast` |  |
@@ -269,6 +270,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [Find Dead Code](Find-Dead-Code) | drag-lint > Code Quality > Find Dead Code...; `find-deadcode` |  |
 | [Forms for testers (CSV)](Generate-Test-Helper-CSV) | drag-lint > Reports > Forms for testers (CSV)...; `forms-csv` |  |
 | [Impact / Blast Radius (symbol)](Impact-Blast-Radius-symbol) | drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...; `impact` |  |
+| [Interface Implementors Report](interface-implementors) | `implementors`; `mcp get_implementors`; `lsp textDocument/implementation`; `lsp textDocument/codeLens` |  |
 | [Overview (first-turn summary)](Overview-first-turn) | `overview` |  |
 | [Reverse Call Tree (clickable, Messages window)](Reverse-Call-Tree-clickable-Messages-window) | `reverse-calltree`; drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... |  |
 | [Reverse Call Tree (who calls this, N-deep)](Reverse-Call-Tree-who-calls-this-N-deep) | drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...; `reverse-calltree` |  |
@@ -285,7 +287,7 @@ Ask a question about a symbol and get a clickable chart.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [ask](ask) | `ask`; drag-lint > Reports |  |
-| [Chart questions](Diagrams-and-Charts) | 26 questions; `ask`; drag-lint > Reports |  |
+| [Chart questions](Diagrams-and-Charts) | 27 questions; `ask`; drag-lint > Reports |  |
 | [Charts and the IDE](Charts-and-the-IDE) | procedure: `docs\wiki\Charts-and-the-IDE.md`; drag-lint > Reports |  |
 | [Click-to-source: the draglint:// handler](Draglint-Protocol-Handler) | `protocol`; `drag-lint-open.exe` |  |
 | [Compare a report with current code](compare) | `compare`; drag-lint > Reports > Compare a Saved Report or Chart with Current Code... |  |

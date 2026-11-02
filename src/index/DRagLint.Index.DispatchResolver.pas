@@ -24,6 +24,10 @@ const
   DISPATCH_KIND_OVERRIDE   = 'override';
   /// <summary>dispatch_edges.kind of an interface method -> its implementing class method.</summary>
   DISPATCH_KIND_IMPLEMENTS = 'implements';
+  /// <summary>dispatch_edges.kind of an interface -> the class PROPERTY that
+  /// delegates it (`property Job: IJob read FJob implements IJob;`). Base is the
+  /// INTERFACE symbol, impl the property; its parent is the delegating class.</summary>
+  DISPATCH_KIND_DELEGATES  = 'delegates';
   /// <summary>Confidence of a row with exactly one candidate.</summary>
   DISPATCH_CONF_CERTAIN    = 'certain';
   /// <summary>Confidence of a row whose name matched more than one candidate (all are written).</summary>
@@ -52,6 +56,7 @@ type
     Overrides   : Integer; // dispatch_edges rows of kind override
     Implements  : Integer; // dispatch_edges rows of kind implements
     ClassRefArgs: Integer; // classref_args rows
+    Delegates   : Integer; // dispatch_edges rows of kind delegates
     NoBase      : Integer; // an override whose chain ends without a virtual of that name
     External    : Integer; // the chain reaches an ancestor with no local id (library) first
     NoImpl      : Integer; // an interface method no method of the implementing chain answers
@@ -74,12 +79,27 @@ type
         IsVirtual: Boolean;
         Override_: Boolean;
       end;
+      { A method-resolution clause `procedure IJob.Execute = RunJob;` of one
+        class (METHRES-DISPATCH). All three names lower-case and bare. }
+      TClause = record
+        IntfName: string;
+        MethName: string;
+        Target  : string;
+      end;
+      { A delegating property's `implements` name (lower-case, bare) and its id. }
+      TDelegate = record
+        IntfName: string;
+        PropId  : Int64;
+      end;
     var
       FConn       : TFDConnection;
       FStore      : ISymbolStore;
       FExtraStores: TArray<ISymbolStore>;
       FKindOf     : TDictionary<Int64, string>;                    // class/interface id -> kind
       FGenericOf  : TDictionary<Int64, Boolean>;                   // interface id -> generic
+      FIntfName   : TDictionary<Int64, string>;                    // interface id -> lower-case bare name
+      FClauses    : TObjectDictionary<Int64, TList<TClause>>;      // class id -> its method-resolution clauses
+      FDelegates  : TObjectDictionary<Int64, TList<TDelegate>>;    // class id -> its delegating properties
       FMethods    : TObjectDictionary<Int64, TList<TMeth>>;        // type id -> its methods
       FParentOf   : TDictionary<Int64, Int64>;                     // class id -> ordinal-0 ancestor id (0 = unresolved row)
       FIntfsOf    : TObjectDictionary<Int64, TList<Int64>>;        // type id -> resolved interface ancestors
@@ -97,6 +117,11 @@ type
     procedure AddEdge(ABase, AImpl: Int64; const AKind, AConf: string);
     procedure ResolveOverrides;
     procedure ResolveImplements;
+    procedure AddClause(AClassId: Int64; const ADottedName, ASig: string);
+    procedure LoadDelegates;
+    function  DelegatedInterfaces(AClassId: Int64; const ADirect: TList<Int64>): TDictionary<Int64, Boolean>;
+    function  ClauseTarget(AClassId, AIntfId: Int64; const AMethName: string; out ATarget: string): Boolean;
+    procedure CollectByName(AFromClass: Int64; const AName, ASig: string; AHits: TList<Int64>; AHitSigs: TList<string>);
     procedure ResolveClassRefArgs;
     function  IsClassRefTypeName(const ATypeText: string; ACache: TDictionary<string, Boolean>): Boolean;
     function  LinesOf(AFileId: Int64): TArray<string>;
@@ -121,7 +146,15 @@ type
     /// interface, and arity does not depend on the type arguments. Several
     /// same-arity candidates are narrowed to the one whose parameter type list
     /// equals the interface method's; when that does not leave exactly one,
-    /// every arity hit is written 'ambiguous'. ClassRefArgs: a bare
+    /// every arity hit is written 'ambiguous'. A METHOD-RESOLUTION CLAUSE in
+    /// the listing class (`procedure IJob.Execute = RunJob;`, a symbols row with
+    /// directive `resolution`) overrides the by-name rule: IJob.Execute -&gt; the
+    /// nearest RunJob on that class's chain, never a same-named Execute, and the
+    /// clause row itself is never an implementor. A DELEGATING property
+    /// (`property Job: IJob read FJob implements IJob;`, directives
+    /// `implements IJob`) writes one `delegates` edge IJob -&gt; that property for
+    /// each named interface the class lists; that interface and its ancestors
+    /// then get no by-name `implements` edges on this class. ClassRefArgs: a bare
     /// class name passed to a parameter whose type is a class reference.</remarks>
     procedure Run;
     /// <summary>dispatch_edges rows, unique on (BaseId, ImplId).</summary>
@@ -142,7 +175,7 @@ uses
   System.StrUtils,
   Data.DB,
   FireDAC.Stan.Param,
-  DRagLint.Core.Model,
+  DRagLint.Core.Model,          // dl:unit DRagLint.Core.Model accepted -- RESOLUTION_DIRECTIVE / IMPLEMENTS_DIRECTIVE: the directive tokens the parser writes travel with the model
   DRagLint.Analysis.Purity,     { LexCallArguments -- the shared argument lexer }
   DRagLint.Index.CallResolver;  { SignatureArityRange, ParamTypeKey -- read-only reuse }
 
@@ -180,6 +213,9 @@ begin
   FExtraStores:= AExtraStores;
   FKindOf     := TDictionary<Int64, string>.Create;
   FGenericOf  := TDictionary<Int64, Boolean>.Create;
+  FIntfName   := TDictionary<Int64, string>.Create;
+  FClauses    := TObjectDictionary<Int64, TList<TClause>>.Create([doOwnsValues]);
+  FDelegates  := TObjectDictionary<Int64, TList<TDelegate>>.Create([doOwnsValues]);
   FMethods    := TObjectDictionary<Int64, TList<TMeth>>.Create([doOwnsValues]);
   FParentOf   := TDictionary<Int64, Int64>.Create;
   FIntfsOf    := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
@@ -202,6 +238,9 @@ begin
   FIntfsOf.Free;
   FParentOf.Free;
   FMethods.Free;
+  FDelegates.Free;
+  FClauses.Free;
+  FIntfName.Free;
   FGenericOf.Free;
   FKindOf.Free;
   inherited Destroy;
@@ -217,15 +256,20 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
-    Q.SQL.Text  := 'SELECT id, kind, generic_params FROM symbols WHERE kind IN (''class'', ''interface'')';
+    Q.SQL.Text  := 'SELECT id, kind, name, generic_params FROM symbols WHERE kind IN (''class'', ''interface'')';
     Q.Open;
     FldId  := Q.FieldByName('id');
     FldKind:= Q.FieldByName('kind');
     FldGen := Q.FieldByName('generic_params');
+    FldName:= Q.FieldByName('name');
     while not Q.Eof do
     begin
       FKindOf.AddOrSetValue(FldId.AsLargeInt, FldKind.AsString);
-      if FldKind.AsString = 'interface' then FGenericOf.AddOrSetValue(FldId.AsLargeInt, Trim(FldGen.AsString) <> '');
+      if FldKind.AsString = 'interface' then
+      begin
+        FGenericOf.AddOrSetValue(FldId.AsLargeInt, Trim(FldGen.AsString) <> '');
+        FIntfName.AddOrSetValue(FldId.AsLargeInt, LowerCase(FldName.AsString));
+      end;
       Q.Next;
     end;
     Q.Close;
@@ -248,6 +292,14 @@ begin
       M.Signature:= FldSig.AsString;
       M.IsVirtual:= FldVirt.AsInteger = 1;
       M.Override_:= ContainsText(' ' + FldDir.AsString + ' ', ' override ');
+      { A method-resolution clause row is not a member: keep it out of the
+        by-name pool and record the mapping it declares instead. }
+      if ContainsText(' ' + FldDir.AsString + ' ', ' ' + RESOLUTION_DIRECTIVE + ' ') and M.Name.Contains('.') then
+      begin
+        AddClause(FldPar.AsLargeInt, M.Name, M.Signature);
+        Q.Next;
+        Continue;
+      end;
       if not FMethods.TryGetValue(FldPar.AsLargeInt, List) then
       begin
         List:= TList<TMeth>.Create;
@@ -383,7 +435,9 @@ begin
   E.Kind      := AKind;
   E.Confidence:= AConf;
   FEdges.Add(E);
-  if AKind = DISPATCH_KIND_OVERRIDE then Inc(FCounters.Overrides) else Inc(FCounters.Implements);
+  if AKind = DISPATCH_KIND_OVERRIDE then Inc(FCounters.Overrides)
+  else if AKind = DISPATCH_KIND_DELEGATES then Inc(FCounters.Delegates)
+  else Inc(FCounters.Implements);
 end;
 
 procedure TDispatchResolver.ResolveOverrides;
@@ -436,6 +490,167 @@ begin
   end;
 end;
 
+{ METHRES-DISPATCH: ADottedName is the clause row's lower-cased name
+  (`ijob.execute`, `ifoo<t>.bar`, `unit.ijob.execute`), ASig its signature
+  (`= RunJob`). Records (ijob, execute, runjob) for AClassId. }
+procedure TDispatchResolver.AddClause(AClassId: Int64; const ADottedName, ASig: string);
+var
+  C   : TClause;
+  L   : TList<TClause>;
+  Cut : Integer;
+  Intf: string;
+begin
+  Cut:= LastDelimiter('.', ADottedName);
+  if Cut <= 1 then Exit;
+  C.MethName:= Copy(ADottedName, Cut + 1, MaxInt);
+  Intf:= Copy(ADottedName, 1, Cut - 1);
+  if Intf.Contains('<') then Intf:= Copy(Intf, 1, Intf.IndexOf('<'));
+  C.IntfName:= LastSegment(Intf);
+  C.Target  := Trim(ASig);
+  if C.Target.StartsWith('=') then C.Target:= Trim(Copy(C.Target, 2, MaxInt));
+  if C.Target.Contains('<') then C.Target:= Copy(C.Target, 1, C.Target.IndexOf('<'));
+  C.Target:= LowerCase(LastSegment(C.Target));
+  if (C.MethName = '') or (C.IntfName = '') or (C.Target = '') then Exit;
+  if not FClauses.TryGetValue(AClassId, L) then
+  begin
+    L:= TList<TClause>.Create;
+    FClauses.Add(AClassId, L);
+  end;
+  L.Add(C);
+end;
+
+{ D2: every property whose directives read `implements IA,IB`, by class. }
+procedure TDispatchResolver.LoadDelegates;
+var
+  Q  : TFDQuery;
+  D  : TDelegate;
+  L  : TList<TDelegate>;
+  Dir: string;
+  FldId, FldPar, FldDir: TField;
+begin
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT id, parent_id, directives FROM symbols WHERE kind = ''property'' AND parent_id IS NOT NULL ' +
+                   'AND directives LIKE ''' + IMPLEMENTS_DIRECTIVE + ' %''';
+    Q.Open;
+    FldId := Q.FieldByName('id');
+    FldPar:= Q.FieldByName('parent_id');
+    FldDir:= Q.FieldByName('directives');
+    while not Q.Eof do
+    begin
+      Dir:= Trim(Copy(FldDir.AsString, Length(IMPLEMENTS_DIRECTIVE) + 1, MaxInt));
+      for var N in Dir.Split([','], TStringSplitOptions.ExcludeEmpty) do
+      begin
+        var Bare:= Trim(N);
+        if Bare.Contains('<') then Bare:= Copy(Bare, 1, Bare.IndexOf('<'));
+        D.IntfName:= LowerCase(LastSegment(Bare));
+        D.PropId  := FldId.AsLargeInt;
+        if D.IntfName = '' then Continue;
+        var Cls:= FldPar.AsLargeInt;
+        if not FDelegates.TryGetValue(Cls, L) then
+        begin
+          L:= TList<TDelegate>.Create;
+          FDelegates.Add(Cls, L);
+        end;
+        L.Add(D);
+      end;
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+{ D2: writes one `delegates` edge per (listed interface, delegating property)
+  of AClassId and returns the interfaces those cover, closed over interface
+  ancestry. A name the class does not LIST is ignored (no edge, nothing
+  covered). The caller owns the result. }
+function TDispatchResolver.DelegatedInterfaces(AClassId: Int64; const ADirect: TList<Int64>): TDictionary<Int64, Boolean>;
+var
+  L    : TList<TDelegate>;
+  D    : TDelegate;
+  Todo : TList<Int64>;
+  IName: string;
+  Up   : TList<Int64>;
+begin
+  Result:= TDictionary<Int64, Boolean>.Create;
+  if not FDelegates.TryGetValue(AClassId, L) then Exit;
+  Todo:= TList<Int64>.Create;
+  try
+    for D in L do
+      for var Intf in ADirect do
+        if FIntfName.TryGetValue(Intf, IName) and (IName = D.IntfName) then
+        begin
+          AddEdge(Intf, D.PropId, DISPATCH_KIND_DELEGATES, DISPATCH_CONF_CERTAIN);
+          Todo.Add(Intf);
+        end;
+    while Todo.Count > 0 do
+    begin
+      var Cur:= Todo[Todo.Count - 1];
+      Todo.Delete(Todo.Count - 1);
+      if Result.ContainsKey(Cur) then Continue;
+      Result.Add(Cur, True);
+      if FIntfsOf.TryGetValue(Cur, Up) then Todo.AddRange(Up);
+    end;
+  finally
+    Todo.Free;
+  end;
+end;
+
+{ Does class AClassId itself (not an ancestor) remap AIntfId's AMethName? }
+function TDispatchResolver.ClauseTarget(AClassId, AIntfId: Int64; const AMethName: string; out ATarget: string): Boolean;
+var
+  L    : TList<TClause>;
+  C    : TClause;
+  IName: string;
+begin
+  Result := False;
+  ATarget:= '';
+  if not FClauses.TryGetValue(AClassId, L) then Exit;
+  if not FIntfName.TryGetValue(AIntfId, IName) then Exit;
+  for C in L do
+    if (C.IntfName = IName) and (C.MethName = AMethName) then
+    begin
+      ATarget:= C.Target;
+      Exit(True);
+    end;
+end;
+
+{ The nearest methods named AName (lower-case) with ASig's arity on the class
+  chain starting at AFromClass; stops at the first class that declares one. }
+procedure TDispatchResolver.CollectByName(AFromClass: Int64; const AName, ASig: string; AHits: TList<Int64>; AHitSigs: TList<string>);
+var
+  Ms : TList<TMeth>;
+  B  : TMeth;
+  Cur: Int64;
+  Anc: Int64;
+begin
+  Cur:= AFromClass;
+  for var Depth:= 1 to CHAIN_MAX_DEPTH do
+  begin
+    if FMethods.TryGetValue(Cur, Ms) then
+      for B in Ms do
+        if (B.Name = AName) and ArityMatches(ASig, B.Signature) then
+        begin
+          AHits.Add(B.Id);
+          AHitSigs.Add(B.Signature);
+        end;
+    if AHits.Count > 0 then Exit;
+    if not FParentOf.TryGetValue(Cur, Anc) then
+    begin
+      Inc(FCounters.NoImpl);
+      Exit;
+    end;
+    if Anc = 0 then
+    begin
+      Inc(FCounters.External);
+      Exit;
+    end;
+    Cur:= Anc;
+  end; // for Depth
+end;
+
 procedure TDispatchResolver.ResolveImplements;
 var
   Pair   : TPair<Int64, string>;
@@ -445,13 +660,12 @@ var
   Up     : TList<Int64>;
   Intf   : Int64;
   IMeths : TList<TMeth>;
-  Ms     : TList<TMeth>;
-  IM, B  : TMeth;
+  IM     : TMeth;
   Hits   : TList<Int64>;
-  Cur    : Int64;
-  Anc    : Int64;
   IsGen  : Boolean;
   HitSigs: TList<string>;
+  Target : string;
+  Deleg  : TDictionary<Int64, Boolean>;
 begin
   Todo   := TList<Int64>.Create;
   Seen   := TDictionary<Int64, Boolean>.Create;
@@ -474,8 +688,14 @@ begin
         Seen.Add(Intf, True);
         if FIntfsOf.TryGetValue(Intf, Up) then Todo.AddRange(Up);
       end;
+      { D2: an interface a property DELEGATES (`implements IJob`), and every
+        interface it inherits, is implemented by the delegate object, not by
+        this class's same-named methods -- the `delegates` edge is the answer. }
+      Deleg:= DelegatedInterfaces(Pair.Key, Direct);
+      try
       for Intf in Seen.Keys do
       begin
+        if Deleg.ContainsKey(Intf) then Continue;
         { Resolver 1.17.0-alpha (RB-5 P2): generic interfaces are no longer
           skipped -- the ancestor row of `IStore<Integer>` already resolves to
           the bare IStore, and name + arity do not depend on the type arguments. }
@@ -485,34 +705,21 @@ begin
         begin
           Hits.Clear;
           HitSigs.Clear;
-          Cur:= Pair.Key;
-          for var Depth:= 1 to CHAIN_MAX_DEPTH do
-          begin
-            if FMethods.TryGetValue(Cur, Ms) then
-              for B in Ms do
-                if (B.Name = IM.Name) and ArityMatches(IM.Signature, B.Signature) then
-                begin
-                  Hits.Add(B.Id);
-                  HitSigs.Add(B.Signature);
-                end;
-            if Hits.Count > 0 then Break;
-            if not FParentOf.TryGetValue(Cur, Anc) then
-            begin
-              Inc(FCounters.NoImpl);
-              Break;
-            end;
-            if Anc = 0 then
-            begin
-              Inc(FCounters.External);
-              Break;
-            end;
-            Cur:= Anc;
-          end; // for Depth
+          { METHRES-DISPATCH: a clause in the class that LISTS the interface
+            (`procedure IJob.Execute = RunJob;`) names the implementor; the
+            target may be inherited. Otherwise the same name implements it. }
+          if ClauseTarget(Pair.Key, Intf, IM.Name, Target) then
+            CollectByName(Pair.Key, Target, IM.Signature, Hits, HitSigs)
+          else
+            CollectByName(Pair.Key, IM.Name, IM.Signature, Hits, HitSigs);
           NarrowByParamTypes(IM.Signature, Hits, HitSigs);
           for var H in Hits do
             AddEdge(IM.Id, H, DISPATCH_KIND_IMPLEMENTS, if Hits.Count = 1 then DISPATCH_CONF_CERTAIN else DISPATCH_CONF_AMBIGUOUS);
         end; // for IM
       end; // for Intf
+      finally
+        Deleg.Free;
+      end;
     end; // for Pair
   finally
     HitSigs.Free;
@@ -767,6 +974,7 @@ begin
   FArgs.Clear;
   FEdgeKeys.Clear;
   LoadTypes;
+  LoadDelegates;
   LoadUses;
   ResolveOverrides;
   ResolveImplements;

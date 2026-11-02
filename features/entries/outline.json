@@ -41,7 +41,7 @@
         }
       ],
       "helpOrder": 6,
-      "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]", "                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:", "                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large", "                               unit's outline); --limit N prints the first N rows and says how many matched."]
+      "help": ["  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]", "                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:", "                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large", "                               unit's outline); --limit N prints the first N rows and says how many matched.", "                               A routine row ends [impl A-B] (its body) and a class routine [class]; json: impl_start_line,", "                               impl_end_line, end_line, is_class_method."]
     },
     {
       "type": "ide-menu",
@@ -61,9 +61,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-30",
+    "date": "2026-11-01",
     "by": "ENGINE",
-    "build": "1.38.0-alpha",
-    "surfaceHash": "52b9c5c2d37e2765ff46220081dc307cacf0209ee68e91c51cca42bd3fd71234"
+    "build": "1.39.2-alpha",
+    "surfaceHash": "e918ed55cdbef432d18cd5bc032f386c610abe266fb469763a97f3ebfaae811c"
   }
 }

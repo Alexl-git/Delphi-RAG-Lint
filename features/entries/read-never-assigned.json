@@ -1,0 +1,25 @@
+{
+  "id": "read-never-assigned",
+  "title": "Read but never assigned (lint rule)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.39.2-alpha",
+  "summary": "Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates",
+  "intro": "Read this to see what read-never-assigned reports and what it treats as an assignment. It runs in lint-all and lint-project over a project index; hard-cast writes, var / out arguments, property write accessors, DFM-streamed fields, absolute, initialisers and initialization sections all count.",
+  "wikiPage": "read-never-assigned",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --rule read-never-assigned"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-01",
+    "by": "ENGINE",
+    "build": "1.39.2-alpha",
+    "surfaceHash": "360982a878a600caf0f2ca7a214d6b7f0220a387e74cda05b94c066a804901d1"
+  }
+}

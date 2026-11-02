@@ -15,6 +15,13 @@ caps how many callers are included. `--context N` is present in the usage
 line; its effect is not documented beyond the flag name. `--no-docs` omits
 doc comments from the bundle.
 
+The class surface is lean by default. For a MEMBER target (a method, field or
+property) it lists the owner's declarations without their comment-only lines
+(`//` and `///`) -- the target's own doc is in `## Doc`, and the other
+members' prose was over 90% of a large class's surface (a 47.5k-token bundle
+fell to a fraction). A TYPE target keeps its members' docs. `--full-surface`
+keeps everything, the DFM component fields of a form class included.
+
 ## Reaching it in the IDE
 No menu item calls this directly. The plugin uses it internally from
 `GetActiveEditorInfo (DragLint.Plugin.Editor.pas)`; there is no menu item for it. The MCP

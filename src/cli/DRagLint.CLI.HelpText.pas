@@ -127,6 +127,8 @@ begin
   Writeln('                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:');
   Writeln('                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large');
   Writeln('                               unit''s outline); --limit N prints the first N rows and says how many matched.');
+  Writeln('                               A routine row ends [impl A-B] (its body) and a class routine [class]; json: impl_start_line,');
+  Writeln('                               impl_end_line, end_line, is_class_method.');
   Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]');
   Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
   Writeln('                               [--format text|json|html] [--output <file>] [--open] [--out-root <dir>]');
@@ -139,7 +141,7 @@ begin
   Writeln('  drag-lint ask <question>     --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]');
   Writeln('                               [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>]');
   Writeln('                               [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]');
-  Writeln('                               [--plain] [--open] [--resolve-only]   one report question (26 ids; `ask --help` lists them) as text:');
+  Writeln('                               [--plain] [--open] [--resolve-only]   one report question (27 ids; `ask --help` lists them) as text:');
   Writeln('                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process');
   Writeln('                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index.');
   Writeln('  drag-lint query type-usage   --in <file.pas> (--names A,B,C | --names-file <f>) [--db ...] [--json]');
@@ -261,6 +263,10 @@ begin
   Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]');
   Writeln('                               an interface method also lists its implementors; an implementor, the interface sites reaching it');
   Writeln('                               --format json: "implementors" [QName,...] and "via_dispatch" [{via,kind,sites}] (keys present only when non-empty; RB-5)');
+  Writeln('  drag-lint implementors       --target <IFoo|IFoo.Bar|TFoo|TFoo.Bar> --db <file.sqlite> [--library-db <lib.sqlite>] [--uses] [--max-sites N] [--include-library] [--format text|json|dot|mermaid] [--json] [--output <file>]');
+  Writeln('                               (interface report: who implements an interface -- lists / via a derived interface / inherited / delegated; which method answers an interface method in each class, resolution clauses included;');
+  Writeln('                               the call/read/write sites of an interface member, attributed to it (RB-5); a class: its interfaces and what answers each member; a class method: the members it answers + --uses the sites reaching it.');
+  Writeln('                               --json = implementors/1 {target,implementors[],unanswered[],sites[],sites_total,library_implementors,notes[]}; exit 0 answered, 1 no such target, 2 usage/ambiguous; chart: ask implementors)');
   Writeln('  drag-lint wiring             --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]   (Spring4D DI + DFM event edges)');
   Writeln('  drag-lint wiring             --coverage           [--db <file.sqlite>] [--format text|json]   (DI registrations not resolved to I->T)');
   Writeln('  drag-lint surface            --qname <Foo.TBar>   [--db <file.sqlite>] [--include-impl] [--all-visibility] [--format text|json]');
@@ -661,6 +667,8 @@ begin
     Writeln('                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:');
     Writeln('                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large');
     Writeln('                               unit''s outline); --limit N prints the first N rows and says how many matched.');
+    Writeln('                               A routine row ends [impl A-B] (its body) and a class routine [class]; json: impl_start_line,');
+    Writeln('                               impl_end_line, end_line, is_class_method.');
     Exit;
   end;
   if pVerb = 'compare' then
@@ -681,7 +689,7 @@ begin
     Writeln('  drag-lint ask <question>     --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]');
     Writeln('                               [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>]');
     Writeln('                               [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]');
-    Writeln('                               [--plain] [--open] [--resolve-only]   one report question (26 ids; `ask --help` lists them) as text:');
+    Writeln('                               [--plain] [--open] [--resolve-only]   one report question (27 ids; `ask --help` lists them) as text:');
     Writeln('                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process');
     Writeln('                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index.');
     Exit;
@@ -871,6 +879,14 @@ begin
     Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]');
     Writeln('                               an interface method also lists its implementors; an implementor, the interface sites reaching it');
     Writeln('                               --format json: "implementors" [QName,...] and "via_dispatch" [{via,kind,sites}] (keys present only when non-empty; RB-5)');
+    Exit;
+  end;
+  if pVerb = 'implementors' then
+  begin
+    Writeln('  drag-lint implementors       --target <IFoo|IFoo.Bar|TFoo|TFoo.Bar> --db <file.sqlite> [--library-db <lib.sqlite>] [--uses] [--max-sites N] [--include-library] [--format text|json|dot|mermaid] [--json] [--output <file>]');
+    Writeln('                               (interface report: who implements an interface -- lists / via a derived interface / inherited / delegated; which method answers an interface method in each class, resolution clauses included;');
+    Writeln('                               the call/read/write sites of an interface member, attributed to it (RB-5); a class: its interfaces and what answers each member; a class method: the members it answers + --uses the sites reaching it.');
+    Writeln('                               --json = implementors/1 {target,implementors[],unanswered[],sites[],sites_total,library_implementors,notes[]}; exit 0 answered, 1 no such target, 2 usage/ambiguous; chart: ask implementors)');
     Exit;
   end;
   if pVerb = 'wiring' then

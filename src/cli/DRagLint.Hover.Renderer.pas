@@ -904,6 +904,9 @@ begin
   Result.ReturnType   := ReturnTypeFromSig(ASym.Signature);
   Result.Doc          := ADoc;
   Result.Kind         := KindQualifier(ASym.Kind); // v(FB #3): friendly qualifier for the header
+  { 1.40 (CLASSCTOR-KIND): 'class constructor', 'class method' -- the keyword the
+    declaration was written with. }
+  if ASym.IsClassMethod and (Result.Kind <> '') then Result.Kind:= 'class ' + Result.Kind;
   { Purity v2: this function never sees a facts row, so the verdict is NOT
     COMPUTED here, not "not proven". Set explicitly rather than left to the
     record's zero-init, which would be 0 and would read as a claim. Callers that

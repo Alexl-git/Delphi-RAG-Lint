@@ -7,6 +7,9 @@ unit DRagLint.LSP.Feature.ImplDecl;
                     (its ForwardLine when a forward declaration was folded in).
   implementation -- the routine's own body (ImplStartLine) plus, for a method,
                     the same-named method of every descendant of the owner type.
+                    An INTERFACE answers its implementing classes, and a method of
+                    one the method that answers it in each implementing class (the
+                    implements rows, DRagLint.Query.Implementors; 1.40 ifrpt).
 
   Both answer [] when nothing resolves; neither raises an error for a position
   on whitespace. Registered through the S0 feature registry exactly as
@@ -56,6 +59,7 @@ uses
   , System.Generics.Defaults
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
+  , DRagLint.Query.Implementors
   ;
 
 const
@@ -155,8 +159,29 @@ begin
     end;
 end;
 
+// An interface, or a method of one: the implements rows (DRagLint.Query.Implementors), not the
+// by-name descendant walk -- that walk stops at a derived interface, misses an implementation
+// inherited from an ancestor class, and lands on the body-less symbol a resolution clause
+// (`procedure IJob.Execute = RunJob`) leaves behind. True when ASym was one of these.
+function AddInterfaceImplementations(const ACtx: ILspServerContext; const AStore: ISymbolStore; const ASym: TSymbol; const ALocs: TList<TLoc>): Boolean;
+begin
+  Result:= False;
+  if ASym.Kind = skInterface then
+  begin
+    for var C: TSymbol in ImplementingClassesOf(AStore, ASym) do
+      AddLoc(ALocs, SymbolUri(ACtx, AStore, C), C.StartLine - 1, C.StartCol - 1);
+    Exit(True);
+  end;
+  if (ASym.Kind not in [skProcedure, skFunction, skMethod]) or (AStore.GetSymbolById(ASym.ParentId).Kind <> skInterface) then Exit;
+  for var M: TSymbol in ImplementingMethodsOf(AStore, ASym) do
+    if M.ImplStartLine > 0 then AddLoc(ALocs, SymbolUri(ACtx, AStore, M), M.ImplStartLine - 1, 0)
+    else AddLoc(ALocs, SymbolUri(ACtx, AStore, M), M.StartLine - 1, M.StartCol - 1);
+  Result:= True;
+end;
+
 procedure CollectImplementations(const ACtx: ILspServerContext; const AStore: ISymbolStore; const ASym: TSymbol; const ALocs: TList<TLoc>);
 begin
+  if AddInterfaceImplementations(ACtx, AStore, ASym, ALocs) then Exit;
   if not (ASym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) then Exit;
   if ASym.ImplStartLine > 0 then AddLoc(ALocs, SymbolUri(ACtx, AStore, ASym), ASym.ImplStartLine - 1, 0);
   if (ASym.Kind in [skMethod, skConstructor, skDestructor]) and (ASym.ParentId > 0) then

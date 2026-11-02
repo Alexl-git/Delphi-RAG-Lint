@@ -132,7 +132,7 @@ end;
 
 procedure TReportCatalogTests.CatalogHasEveryQuestionOnce;
 const
-  { The ValidateSet of charts\src\New-DiagramArtifact.ps1, 2026-10-05. The
+  { The ValidateSet of charts\src\New-DiagramArtifact.ps1, 2026-10-05 (+ implementors, 1.40). The
     runner (tests\plugin\run_reports_text.ps1) re-reads the ValidateSet itself
     and compares it two-way against `ReportTextTests --ids`, so a question added
     to the script without a menu item fails there even if this list is stale. }
@@ -142,7 +142,7 @@ const
     'cycles', 'wiring', 'effects', 'architecture', 'protocol-trace',
     'crosses-boundary', 'shown-where', 'change-impact', 'tested-by',
     'exception-paths', 'consumers', 'feeds-from', 'lands-where', 'round-trip',
-    'path');
+    'path', 'implementors');
 var
   Q: TReportQuestion;
 begin
