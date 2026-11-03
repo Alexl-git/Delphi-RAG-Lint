@@ -196,6 +196,35 @@ procedure ConnectReadOnly(AConn: TFDConnection; const ADbPath: string;
 procedure ConnectWriter(AConn: TFDConnection; const ADbPath: string;
   ABusyTimeoutMs: Integer = -1);
 
+/// <summary>The writer lock wait in milliseconds: ARequested when it is not negative, else
+/// WRITER_BUSY_TIMEOUT_MS or the non-negative integer in DRAGLINT_BUSY_TIMEOUT_MS.</summary>
+/// <param name="ARequested">An explicit wait; negative = the default.</param>
+/// <returns>The wait, in milliseconds.</returns>
+function WriterBusyTimeoutMs(ARequested: Integer = -1): Integer;
+
+/// <summary>Replaces the fixed busy timeout of a CONNECTED writer with the beat-aware wait
+/// (1.41 SQLITE-BUSY-BEAT): while a lock is busy the connection keeps waiting as long as the
+/// heartbeat seq of an engine that writes ADbPath advances, and gives up once no holder's seq has
+/// advanced for WriterBusyTimeoutMs -- so a holder without a heartbeat (an engine older than 1.41,
+/// a verb with no heartbeat pipe, a writer that is not drag-lint) keeps today's fixed timeout.
+/// Also publishes ADbPath on this engine's heartbeat pipe as a database it writes.</summary>
+/// <param name="AConn">A connected FireDAC SQLite writer (ConnectWriter). The caller keeps it.</param>
+/// <param name="ADbPath">The database AConn writes.</param>
+/// <returns>The wait's state, to hand to DisarmBeatAwareWait AFTER AConn is closed; nil when the
+/// SQLite library exposes no busy handler (a static link) -- the fixed timeout then stays.</returns>
+/// <remarks>The waiting connection never advances its own beat. The handler survives as long as
+/// every statement keeps UpdateOptions.LockWait = True (ArmBusyTimeout): FireDAC re-arms
+/// sqlite3_busy_timeout only when the per-statement value changes, which would put the fixed
+/// timeout back. Spec docs\superpowers\specs\2026-11-03-store-busybeat-halfread-design.md;
+/// guard tests\autotest\run_busy_beat_guard.ps1.</remarks>
+function ArmBeatAwareWait(AConn: TFDConnection; const ADbPath: string): Pointer;
+
+/// <summary>Frees the state ArmBeatAwareWait returned and withdraws the database from the
+/// heartbeat's writer field.</summary>
+/// <param name="AWait">The state; nil is ignored. Set to nil.</param>
+/// <remarks>Call only after the connection is closed: SQLite holds the pointer until then.</remarks>
+procedure DisarmBeatAwareWait(var AWait: Pointer);
+
 type
   /// <summary>What an index can say about one source file: it holds it, it
   /// does not, or it could not be asked.</summary>
@@ -330,6 +359,9 @@ uses
   , FireDAC.Phys.SQLite
   , FireDAC.DApt
   , DRagLint.Core.Versions { REBUILD_IN_PROGRESS_META_KEY (B-23) }
+  , System.Math { Min: the busy handler's sleep }
+  , FireDAC.Phys.SQLiteWrapper { TSQLiteDatabase: the native handle for the beat-aware busy handler }
+  , DRagLint.Core.ControlChannel { SnapshotWritingBeats, BeatWriterOpened / BeatWriterClosed }
   ;
 
 { Same two rules as DRagLint.Storage.SQLite.NormalizeStoredPath. Duplicated
@@ -400,6 +432,130 @@ begin
   var Env: Integer;
   if TryStrToInt(GetEnvironmentVariable(BUSY_TIMEOUT_ENV), Env) and (Env >= 0) then Result:= Env;
 end; // function
+
+{ ---- beat-aware writer wait (1.41 SQLITE-BUSY-BEAT) ------------------------ }
+
+const
+  BEAT_PROBE_EVERY_MS  = 1000; { how often a waiter asks the holders for their beat }
+  BEAT_PROBE_PIPE_MS   = 250 ; { per-pipe connect wait of one probe }
+  BEAT_NOTE_AFTER_MS   = 5000; { a wait this long that saw progress says so, once }
+  BUSY_SLEEP_MAX_MS    = 100 ; { the longest sleep between two lock attempts }
+  BUSY_SLEEP_STEP_MS   = 5   ; { sleep grows by this per attempt up to the max }
+
+type
+  TBusyCallback  = function(AUser: Pointer; ACount: Integer): Integer; cdecl;
+  TBusyHandlerFn = function(ADb: Pointer; ACallback: TBusyCallback; AUser: Pointer): Integer; cdecl;
+
+  PBeatWait = ^TBeatWait;
+  { One writer connection's wait state. Touched only by SQLite's busy callback, which
+    runs on the thread executing the connection's statement -- one at a time. }
+  TBeatWait = record
+    DbPath     : string               ;
+    WindowMs   : Int64                ; { no advance for this long = give up }
+    Start      : UInt64               ; { GetTickCount64 at the episode's first BUSY }
+    LastAdvance: UInt64               ;
+    LastProbe  : UInt64               ;
+    Seen       : TArray<TWritingBeat> ; { the holders at the last probe }
+    Noted      : Boolean              ;
+  end;
+
+function SeenSeq(const ASeen: TArray<TWritingBeat>; APid: Cardinal; out ASeq: Int64): Boolean;
+var
+  B: TWritingBeat;
+begin
+  for B in ASeen do
+    if B.Pid = APid then begin ASeq:= B.Beat.Seq; Exit(True); end;
+  ASeq:= 0;
+  Result:= False;
+end;
+
+{ SQLite's busy handler: non-zero = try the lock again, 0 = fail SQLITE_BUSY. ACount is 0
+  on the first call of a new wait. Never lets an exception reach SQLite. }
+function BeatAwareBusy(AUser: Pointer; ACount: Integer): Integer; cdecl;
+var
+  W      : PBeatWait          ;
+  Now_   : UInt64             ;
+  Snap   : TArray<TWritingBeat>;
+  B      : TWritingBeat       ;
+  Old    : Int64              ;
+  Mover  : TWritingBeat       ;
+  Moved  : Boolean            ;
+begin
+  Result:= 0;
+  try
+    W:= PBeatWait(AUser);
+    Now_:= GetTickCount64;
+    if ACount = 0 then
+    begin
+      W.Start:= Now_; W.LastAdvance:= Now_; W.LastProbe:= 0; W.Seen:= nil; W.Noted:= False;  // dl:ok multiple-statements-per-line -- REVIEWED 2026-11-03: one reset of one record
+    end;
+    if Now_ - W.LastProbe >= BEAT_PROBE_EVERY_MS then
+    begin
+      W.LastProbe:= Now_;
+      Snap:= SnapshotWritingBeats(W.DbPath, BEAT_PROBE_PIPE_MS);
+      Moved:= False;
+      Mover:= Default(TWritingBeat);
+      for B in Snap do
+        if SeenSeq(W.Seen, B.Pid, Old) and (Old <> B.Beat.Seq) then
+        begin
+          Moved:= True;
+          Mover:= B;
+        end;
+      W.Seen:= Snap;
+      if Moved then
+      begin
+        W.LastAdvance:= Now_;
+        if (not W.Noted) and (Now_ - W.Start >= BEAT_NOTE_AFTER_MS) then
+        begin
+          W.Noted:= True;
+          Writeln(ErrOutput, Format('NOTE: waiting for the write lock on %s: pid %d is still working (%s); ' +
+            'waiting while its heartbeat advances.', [W.DbPath, Mover.Pid, BeatDisplayText(Mover.Beat)]));
+        end;
+      end;
+    end;
+    if Int64(Now_ - W.LastAdvance) >= W.WindowMs then Exit(0);
+    Sleep(Min(BUSY_SLEEP_MAX_MS, BUSY_SLEEP_STEP_MS * (ACount + 1)));  // dl:ok sleep-in-vcl -- REVIEWED 2026-11-03: SQLite's busy handler sleeps between lock attempts by contract; no VCL loop on this thread
+    Result:= 1;
+  except
+    on E: Exception do Result:= 0; { give up the lock as SQLite's own handler would }  // dl:ok try-except-swallowed -- REVIEWED 2026-11-03: an exception must never unwind into SQLite's C frames; 0 = the statement fails SQLITE_BUSY, which is reported
+  end;
+end;
+
+function ArmBeatAwareWait(AConn: TFDConnection; const ADbPath: string): Pointer;
+var
+  Obj: Pointer       ;
+  Db : TSQLiteDatabase;
+  Fn : TBusyHandlerFn;
+  W  : PBeatWait     ;
+begin
+  Result:= nil;
+  if (AConn = nil) or not AConn.Connected then Exit;
+  Obj:= AConn.CliObj;
+  if (Obj = nil) or not (TObject(Obj) is TSQLiteDatabase) then Exit;
+  Db:= TSQLiteDatabase(Obj);
+  if (Db.Lib = nil) or (Db.Lib.hDLL = 0) then Exit; { static link: no handle to ask }
+  @Fn:= GetProcAddress(Db.Lib.hDLL, 'sqlite3_busy_handler');
+  if not Assigned(Fn) then Exit;
+  New(W);
+  W.DbPath  := ExpandFileName(ADbPath);
+  W.WindowMs:= WriterBusyTimeoutMs(-1);
+  W.Seen    := nil;
+  if Fn(Db.Handle, BeatAwareBusy, W) <> 0 then
+  begin
+    Dispose(W);
+    Exit;
+  end;
+  BeatWriterOpened(W.DbPath);
+  Result:= W;
+end;
+
+procedure DisarmBeatAwareWait(var AWait: Pointer);
+begin
+  if AWait = nil then Exit;
+  BeatWriterClosed(PBeatWait(AWait).DbPath);
+  Dispose(PBeatWait(AWait));
+  AWait:= nil;
+end;
 
 procedure ConnectWriter(AConn: TFDConnection; const ADbPath: string; ABusyTimeoutMs: Integer);
 begin

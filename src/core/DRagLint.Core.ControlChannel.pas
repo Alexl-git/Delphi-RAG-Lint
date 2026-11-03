@@ -316,6 +316,48 @@ function RequestEngineBeat(APid: Cardinal; AConnectTimeoutMs: Integer; out ABeat
 /// <remarks>Main thread only. The pipe closes at unit finalization. Its name: <c>\\.\pipe\drag-lint-beat-&lt;sid&gt;-s&lt;session&gt;-p&lt;pid&gt;</c>.</remarks>
 function BeatChannelOpen(const ACommand, AVersion, AExtractor: string): Boolean;
 
+{ ---- WRITER PUBLICATION (1.41 SQLITE-BUSY-BEAT, owner ruling 2026-11-01) ----
+  A second writer that meets SQLITE_BUSY waits as long as the HOLDER's beat seq
+  advances. To find the holder it asks every other engine's heartbeat pipe
+  `status<TAB>beat<TAB>writing`; an engine answers `writing=<db>|<db>...` with
+  the databases it has a writer store open on. Asked only with `writing`, so
+  every older parser keeps its reply shape. Spec:
+  docs\superpowers\specs\2026-11-03-store-busybeat-halfread-design.md. ------ }
+
+const
+  /// <summary>Argument of a <c>status</c> request that asks for the writer field.</summary>
+  CONTROL_STATUS_ARG_WRITING = 'writing';
+  /// <summary>Prefix of the writer field of a status reply; the paths follow, separated by '|'.</summary>
+  CONTROL_WRITING_FIELD_PREFIX = 'writing=';
+
+type
+  /// <summary>One other engine that has a writer store open on a database, and its heartbeat.</summary>
+  TWritingBeat = record
+    /// <summary>The engine's process id.</summary>
+    Pid : Cardinal   ;
+    /// <summary>Its heartbeat at snapshot time; Beat.Seq is the progress test.</summary>
+    Beat: TEngineBeat;
+  end;
+
+/// <summary>Records that this process opened a writer store on ADbPath (refcounted).</summary>
+/// <param name="ADbPath">The database path; compared as a lower-cased full path.</param>
+/// <remarks>Thread-safe. Pair every call with BeatWriterClosed.</remarks>
+procedure BeatWriterOpened(const ADbPath: string);
+
+/// <summary>Undoes one BeatWriterOpened for ADbPath; the path leaves the writer field at refcount 0.</summary>
+/// <param name="ADbPath">The database path given to BeatWriterOpened.</param>
+/// <remarks>Thread-safe; a path that was never opened is ignored.</remarks>
+procedure BeatWriterClosed(const ADbPath: string);
+
+/// <summary>Asks every OTHER engine of this user and session, on its heartbeat pipe, which databases it
+/// writes, and returns those that write ADbPath with their heartbeat.</summary>
+/// <param name="ADbPath">The database a writer waits on.</param>
+/// <param name="AConnectTimeoutMs">Per-pipe wait for a free instance.</param>
+/// <returns>One entry per engine whose writer field names ADbPath; empty when none answers so -- an engine
+/// older than 1.41, a verb without a heartbeat pipe, or a writer that is not drag-lint.</returns>
+/// <remarks>Any thread. Blocks at most about AConnectTimeoutMs per listed pipe. Never raises.</remarks>
+function SnapshotWritingBeats(const ADbPath: string; AConnectTimeoutMs: Integer): TArray<TWritingBeat>;
+
 type
   /// <summary>The engine side of the channel: one listener thread on the
   /// per-user pipe, and the hooks the host loop uses to cooperate.</summary>
@@ -580,6 +622,7 @@ uses
   System.IOUtils
   , System.DateUtils
   , System.StrUtils { MatchText: BeatChannelEnabledFor }
+  , System.Generics.Collections { TDictionary: GWriterDbs }
   , DRagLint.Core.OutputEncoding { EncodeForOutput: these lines bypass ErrOutput }
   ;
 
@@ -860,6 +903,123 @@ end;
 procedure BeatChannelClose;
 begin
   FreeAndNil(GBeatChannel);
+end;
+
+{ ---- writer publication (1.41) -------------------------------------------- }
+
+const
+  WRITING_SEP = '|'; { a Windows path cannot contain it }
+
+var
+  GWriterDbs: TDictionary<string, Integer>; { lower-cased full path -> open writer stores; under GBeatLock }
+
+function WriterKey(const ADbPath: string): string;
+begin
+  Result:= LowerCase(ExpandFileName(ADbPath));
+end;
+
+procedure BeatWriterOpened(const ADbPath: string);
+var
+  N: Integer;
+begin
+  GBeatLock.Enter;
+  try
+    if not GWriterDbs.TryGetValue(WriterKey(ADbPath), N) then N:= 0;
+    GWriterDbs.AddOrSetValue(WriterKey(ADbPath), N + 1);
+  finally
+    GBeatLock.Leave;
+  end;
+end;
+
+procedure BeatWriterClosed(const ADbPath: string);
+var
+  N: Integer;
+begin
+  GBeatLock.Enter;
+  try
+    if not GWriterDbs.TryGetValue(WriterKey(ADbPath), N) then Exit;
+    if N <= 1 then GWriterDbs.Remove(WriterKey(ADbPath))
+    else GWriterDbs[WriterKey(ADbPath)]:= N - 1;
+  finally
+    GBeatLock.Leave;
+  end;
+end;
+
+function WritingFieldText: string;
+var
+  K: string;
+begin
+  Result:= CONTROL_WRITING_FIELD_PREFIX;
+  GBeatLock.Enter;
+  try
+    for K in GWriterDbs.Keys do
+    begin
+      if Result <> CONTROL_WRITING_FIELD_PREFIX then Result:= Result + WRITING_SEP;
+      Result:= Result + BeatClean(K);
+    end;
+  finally
+    GBeatLock.Leave;
+  end;
+end;
+
+{ True when AReply carries a writer field that names AKey (a WriterKey). }
+function ReplyWrites(const AReply, AKey: string): Boolean;
+var
+  Field, P: string;
+begin
+  for Field in AReply.Split([#9]) do
+  begin
+    if not Field.StartsWith(CONTROL_WRITING_FIELD_PREFIX, True) then Continue;
+    for P in Field.Substring(Length(CONTROL_WRITING_FIELD_PREFIX)).Split([WRITING_SEP]) do
+      if SameText(P, AKey) then Exit(True);
+  end;
+  Result:= False;
+end;
+
+function SnapshotWritingBeats(const ADbPath: string; AConnectTimeoutMs: Integer): TArray<TWritingBeat>;
+var
+  Mine : string         ;
+  Self_: string         ;
+  Key  : string         ;
+  H    : THandle        ;
+  Found: TWin32FindDataW;
+  Leafs: TArray<string> ;
+  Leaf : string         ;
+  Reply: string         ;
+  Err  : string         ;
+  W    : TWritingBeat   ;
+  P    : Integer        ;
+begin
+  SetLength(Result, 0);
+  try
+    Key  := WriterKey(ADbPath);
+    Mine := BEAT_PIPE_PREFIX + CurrentUserSidString + '-s' + IntToStr(CurrentSessionId) + '-p';
+    Self_:= Mine + IntToStr(GetCurrentProcessId);
+    SetLength(Leafs, 0);
+    H:= FindFirstFileW(PIPE_PREFIX_FULL + '*', Found);
+    if H = INVALID_HANDLE_VALUE then Exit;
+    try
+      repeat
+        Leaf:= Found.cFileName;
+        if Leaf.StartsWith(Mine, True) and not SameText(Leaf, Self_) then Leafs:= Leafs + [Leaf];
+      until not FindNextFileW(H, Found);
+    finally
+      Winapi.Windows.FindClose(H);
+    end;
+    for Leaf in Leafs do
+    begin
+      if not ControlRequest(PIPE_PREFIX_FULL + Leaf, CONTROL_MSG_STATUS + #9 + CONTROL_STATUS_ARG_BEAT + #9 +
+        CONTROL_STATUS_ARG_WRITING, AConnectTimeoutMs, Reply, Err) then Continue;
+      if not ReplyWrites(Reply, Key) then Continue;
+      W:= Default(TWritingBeat);
+      if not ParseBeatReply(Reply, W.Beat) then Continue;
+      P:= Leaf.LastIndexOf('-p');
+      W.Pid:= StrToIntDef(Leaf.Substring(P + 2), 0);
+      Result:= Result + [W];
+    end;
+  except
+    on E: Exception do SetLength(Result, 0); { no answer = no holder with a beat }  // dl:ok try-except-swallowed -- REVIEWED 2026-11-03: a failed probe means no holder with a beat, which the waiter treats as the fixed timeout
+  end;
 end;
 { ---- identity ------------------------------------------------------------ }
 
@@ -1317,6 +1477,8 @@ begin
       Line:= Line + #9 + CONTROL_ROLE_FIELD_PREFIX + FOwner.FRole;
     { 1.40: the heartbeat, likewise only when asked. }
     if StatusArgAsked(Fields, CONTROL_STATUS_ARG_BEAT) then Line:= Line + #9 + BeatFieldText(BeatSnapshot);
+    { 1.41: the writer field, likewise only when asked (SQLITE-BUSY-BEAT). }
+    if StatusArgAsked(Fields, CONTROL_STATUS_ARG_WRITING) then Line:= Line + #9 + WritingFieldText;
     for D in FOwner.FDbs do Line:= Line + #9 + D;
     Reply(APipe, Line);
   end
@@ -1444,9 +1606,11 @@ end;
 
 initialization
   GBeatLock:= TCriticalSection.Create;
+  GWriterDbs:= TDictionary<string, Integer>.Create;
 
 finalization
   BeatChannelClose;
+  FreeAndNil(GWriterDbs);
   FreeAndNil(GBeatLock);
 
 end.
