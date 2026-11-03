@@ -14068,6 +14068,9 @@ var
     the lowercased union of its own unit names with the textual
     unit_uses.unit_name entries. }
   FileUnit   : TDictionary<Int64, string>          ;
+  { candidate symbol id -> id of the routine it is declared in, for routine-
+    local class/interface/record types only (see step 1). }
+  LocalOwner : TDictionary<Int64, Int64>           ;
   FileUses   : TObjectDictionary<Int64, TDictionary<string, Boolean>>;
   Lc         : string                             ;
   Sym        : TSymbol                            ;
@@ -14111,6 +14114,7 @@ begin
   FFlowOracles.Clear;
   NameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
   FileUnit   := TDictionary<Int64, string>.Create;
+  LocalOwner := TDictionary<Int64, Int64>.Create;
   FileUses   := TObjectDictionary<Int64, TDictionary<string, Boolean>>.Create([doOwnsValues]);
   Q   := TFDQuery.Create(nil);
   QIns:= TFDQuery.Create(nil);
@@ -14144,8 +14148,18 @@ begin
       declines, and a decline is written as ancestor_kind '?', i.e. exactly the
       behaviour that existed before. It cannot invent a wrong binding, only fail
       to make one. }
-    Q.SQL.Text:= 'SELECT id, file_id, kind, name, qualified_name, heritage, start_line, end_line, generic_params ' +
-                 'FROM symbols WHERE kind IN (''class'',''interface'',''record'')';
+    { ROUTINE-LOCAL candidates (YADF FP 2026-11-03, run_ancestry_routine_local.ps1):
+      a type declared inside a procedure/function/method body is visible only
+      inside that routine, yet it joined the by-name set like any unit-level
+      type -- so `TYadfOptionsFrame = class(TFrame)` bound to the record
+      YADF.Layout.ParseCaseArms.TFrame in ANOTHER unit, and the class looked as
+      if it descended from a record. `local_owner` is the owning routine's id
+      (0 for every non-local type); step 3 keeps such a candidate only for a
+      source declared in that SAME routine. }
+    Q.SQL.Text:= 'SELECT s.id, s.file_id, s.kind, s.name, s.qualified_name, s.heritage, s.start_line, s.end_line, s.generic_params, ' +
+                 '  COALESCE((SELECT p.id FROM symbols p WHERE p.id = s.parent_id AND p.kind IN ' +
+                 '    (''procedure'',''function'',''method'',''constructor'',''destructor'')), 0) AS local_owner ' +
+                 'FROM symbols s WHERE s.kind IN (''class'',''interface'',''record'')';
     Q.Open;
     { The TField references are resolved ONCE: this SELECT walks every class,
       interface and record in the index, and FieldByName is a by-name scan of
@@ -14159,8 +14173,10 @@ begin
     var FldGP   : TField:= Q.FieldByName('generic_params');
     var FldSL   : TField:= Q.FieldByName('start_line'    );
     var FldEL   : TField:= Q.FieldByName('end_line'      );
+    var FldLoc  : TField:= Q.FieldByName('local_owner'   );
     while not Q.Eof do
     begin
+      if FldLoc.AsLargeInt > 0 then LocalOwner.AddOrSetValue(FldId.AsLargeInt, FldLoc.AsLargeInt);
       Sym:= Default(TSymbol);
       Sym.Id           := FldId   .AsLargeInt;
       Sym.FileId       := FldFile .AsLargeInt;
@@ -14250,7 +14266,7 @@ begin
       named target, so generics, qualified names and strong aliases contribute
       no rows at all. Census at the time of writing -- 20 such aliases on ORM3
       CLIENT, 2 on SERVER, 3 in this repo. }
-    Q.SQL.Text:= 'SELECT id, file_id, heritage FROM symbols ' +
+    Q.SQL.Text:= 'SELECT id, file_id, heritage, COALESCE(parent_id, 0) AS parent_id FROM symbols ' +
                  'WHERE kind IN (''class'',''interface'',''type'',''classref'') AND heritage IS NOT NULL AND heritage <> ''''';   { E1 (2026-10-26): a `class of X` row carries X as heritage -> one ordinal-0 row }
       FConn.ExecSQL('DELETE FROM type_ancestors');
       Q.Open;
@@ -14258,6 +14274,7 @@ begin
       begin
         var SymId  := Q.FieldByName('id'      ).AsLargeInt;
         var SymFile:= Q.FieldByName('file_id' ).AsLargeInt;
+        var SymParent: Int64:= Q.FieldByName('parent_id').AsLargeInt;
         var Tokens := SplitHeritageList(Q.FieldByName('heritage').AsString);
         for var Ord:= 0 to High(Tokens) do
         begin
@@ -14282,7 +14299,16 @@ begin
               field to the ONE shared scope rule. It declines (Id = 0) when no
               rule narrows the field to one, and a decline is written out as
               ancestor_kind='?' exactly as before: when unsure, don't claim. }
-            var Narrowed:= FilterCandidatesByArity(Cands.ToArray, AncArity);
+            { A routine-local candidate is visible only to a source declared in
+              that same routine (step 1, local_owner). }
+            var Visible: TArray<TSymbol>:= nil;
+            for var VC in Cands do
+            begin
+              var Owner: Int64;
+              if (not LocalOwner.TryGetValue(VC.Id, Owner)) or (Owner = SymParent) then
+                Visible:= Visible + [VC];
+            end;
+            var Narrowed:= FilterCandidatesByArity(Visible, AncArity);
             if Length(Narrowed) = 1 then Chosen:= Narrowed[0]
             else if Length(Narrowed) = 0 then Chosen:= Default(TSymbol)
             else
@@ -14338,6 +14364,7 @@ begin
     NameToCands.Free;
     FileUses.Free;
     FileUnit.Free;
+    LocalOwner.Free;
   end; // try
 end; // procedure
 
