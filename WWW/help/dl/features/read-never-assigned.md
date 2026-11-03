@@ -5,9 +5,9 @@ summary: "Project-wide lint rule: a field or global that is read but that nothin
 product: DL
 group: linting
 order: 30020
-since: 1.39.2-alpha
+since: 1.40.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.40.0-alpha
 ---
 
 # Read but never assigned (lint rule)

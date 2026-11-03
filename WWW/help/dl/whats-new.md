@@ -12,9 +12,6 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 1.40.0-alpha
 
 * [Engine heartbeat: the IDE tells a busy engine from a stuck one](features/engine-heartbeat.md) -- A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving.
-
-## 1.39.2-alpha
-
 * [Interface Implementors Report](features/interface-implementors.md) -- Who implements an interface, which method answers each interface method in each class, and who calls or uses an interface member.
 * [Read but never assigned (lint rule)](features/read-never-assigned.md) -- Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates.
 

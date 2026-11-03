@@ -4,7 +4,7 @@
   "group": "graphs-reports",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.39.2-alpha",
+  "since": "1.40.0-alpha",
   "summary": "Who implements an interface, which method answers each interface method in each class, and who calls or uses an interface member",
   "intro": "Use this when you work with an interface: it lists the classes that implement it (directly, through a derived interface, inherited from an ancestor class or delegated by an implements property), the method that answers each interface method in each class -- method-resolution clauses included -- and the call, read and write sites of an interface member. Give it an interface, an interface member, a class or a class method.",
   "wikiPage": "interface-implementors",

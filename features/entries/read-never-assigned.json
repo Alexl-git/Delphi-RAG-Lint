@@ -4,7 +4,7 @@
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.39.2-alpha",
+  "since": "1.40.0-alpha",
   "summary": "Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates",
   "intro": "Read this to see what read-never-assigned reports and what it treats as an assignment. It runs in lint-all and lint-project over a project index; hard-cast writes, var / out arguments, property write accessors, DFM-streamed fields, absolute, initialisers and initialization sections all count.",
   "wikiPage": "read-never-assigned",

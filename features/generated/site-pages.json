@@ -436,8 +436,8 @@
     "version": "1.39.2-alpha"
   },
   "features/interface-implementors.md": {
-    "hash": "e0d801ece60248aa24272c231992f96dae13d5e494936b97078ed6ace9cbf143",
-    "version": "1.39.2-alpha"
+    "hash": "7a15548c66d15d6730cf830d3b286c8fbafdd4568d7aebb359de54fb1ee4d238",
+    "version": "1.40.0-alpha"
   },
   "features/library-drift-check.md": {
     "hash": "8ff987bc65e3523a93b325c1f1b0f5f67f6857c447837c3d54fe0d84abcea9c1",
@@ -596,8 +596,8 @@
     "version": "1.35.1-alpha"
   },
   "features/read-never-assigned.md": {
-    "hash": "0eceb426aaebe47668c4b466ede7be48818db433766c063e027ba51d9ddd269c",
-    "version": "1.39.2-alpha"
+    "hash": "2eb452b3e7a178309e3ac9ffc9e4bb23914f964b4ed8ec020ca8863b367d48fb",
+    "version": "1.40.0-alpha"
   },
   "features/rebuild-index-for-this-project.md": {
     "hash": "f4332bfa761c453978eafdcef299d214e2b741c1b76929b91051c6a87cb6ba30",

@@ -3,9 +3,9 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
-## v1.40.0-alpha -- unreleased
+## v1.40.0-alpha -- 2026-11-02
 
-Phase A (no extractor change: an index built by 1.39.2 stays current). Versions are NOT bumped on feat/int140.
+Phase A (no extractor change: an index built by 1.39.2 stays current).
 
 ### Added
 - New project-wide lint rule `unused-global`: an unused global const / var / type (backlog #5a). Rule count 291.

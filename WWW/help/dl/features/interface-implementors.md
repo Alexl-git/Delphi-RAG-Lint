@@ -5,9 +5,9 @@ summary: Who implements an interface, which method answers each interface method
 product: DL
 group: graphs-reports
 order: 70014
-since: 1.39.2-alpha
+since: 1.40.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.40.0-alpha
 ---
 
 # Interface Implementors Report
