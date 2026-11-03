@@ -1,0 +1,2 @@
+object CvNoInst: TCvNoInst
+end

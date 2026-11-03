@@ -3,6 +3,11 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## Unreleased (1.42)
+
+### Fixed
+- `convert-apply`: an identifier `#migrate` (file scope, or naming a uses unit) now renames the code of a unit with NO sibling .dfm or no .dfm instance a `#convert` block matches (MIG-TYPE; it used to fail `sibling .dfm not found` / `no convertible instances found`, or run the unit rules alone). Guards `run_convert_apply_migrate_type.ps1` (N1-N7), new `run_convert_apply_inherited_collection.ps1` (INBOX Q4: inherited `[n]` headers + whole-streamed ParamData + file-scope `#migrate` in a D5-shaped child).
+
 ## v1.40.0-alpha -- 2026-11-02
 
 Phase A (no extractor change: an index built by 1.39.2 stays current).

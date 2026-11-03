@@ -183,10 +183,15 @@ function FindMigrateTarget(ABook: TRuleBook; ARuleLine: Integer; const AOld, ANe
 /// pre-check speaks for: a #link already converting Old, an earlier member-form line of
 /// the block for the same Old, identity, or a line before the first header.</summary>
 /// <param name="ABook">The book; marks are session state, never written to the file.</param>
+/// <param name="AIdentifiers">The engine reports migrate_identifiers (see remarks).</param>
 /// <returns>The number of marks added; a mark already on the node is not added twice.</returns>
 /// <remarks>A legacy line gets none here: engine 1.35.0's convert-validate reports its
-/// refusal itself (measured 2026-10-26), and the Save path marks that.</remarks>
-function StaticMigrateMarks(ABook: TRuleBook): Integer;
+/// refusal itself (measured 2026-10-26), and the Save path marks that.
+/// AIdentifiers (1.42 MIG-TYPE): True when the engine reports migrate_identifiers -- a
+/// member-form line before the first header is then APPLIED (an identifier rename), so it
+/// gets no MIGRATE_GLOBAL_TEXT mark; the other pre-checks (covered, duplicate, identity)
+/// still mark. False keeps the global mark (an engine before 1.38).</remarks>
+function StaticMigrateMarks(ABook: TRuleBook; AIdentifiers: Boolean): Integer;
 
 /// <summary>Puts each rule-level (line 0) migrate-check item's text as a warning mark on the
 /// open book's line it names (owner ruling D8 = B).</summary>
@@ -512,7 +517,7 @@ begin
     end;
 end;
 
-function StaticMigrateMarks(ABook: TRuleBook): Integer;
+function StaticMigrateMarks(ABook: TRuleBook; AIdentifiers: Boolean): Integer;
 var
   LNode: TRuleNode;
   LHdr : Integer;
@@ -541,6 +546,9 @@ begin
       LPick.Old:= LNode.MigOld;
       LPick.New:= LNode.MigNew;
       LText:= MigrateCheck(ABook, LHdr, LPick);
+      // 1.42 (MIG-TYPE): an engine with migrate_identifiers applies a file-scope line.
+      if AIdentifiers and (LText = MIGRATE_GLOBAL_TEXT) then
+        LText:= '';
     end;
     if (LText <> '') and AddStaticWarningMark(LNode, LText) then
       Inc(Result);

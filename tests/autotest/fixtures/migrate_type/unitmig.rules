@@ -1,0 +1,2 @@
+#use System.Types
+#migrate TScreenCursorOld -> TScreenCursorNew, CvNew

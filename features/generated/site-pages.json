@@ -116,8 +116,8 @@
     "version": "1.39.2-alpha"
   },
   "features/convert-apply-migrate.md": {
-    "hash": "8e932a97aa1bba2476f88cc8109eb28524bb99df12b49a909166f82164b696a4",
-    "version": "1.39.2-alpha"
+    "hash": "7450bbf292ec119034bd917e80ee8ce088fe638459cb335ac972a0ff7453a9ce",
+    "version": "1.40.0-alpha"
   },
   "features/convert-apply.md": {
     "hash": "e72331f2124b1a03b61b626fadb8cc056889ae759b8f22bfe36b92cee8360121",

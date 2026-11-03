@@ -1244,6 +1244,34 @@ function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPat
   const ACastLib: TCastLib; AWarnUnlinked: Boolean;
   var AInherited: TArray<TInheritedInstance>): TApplyResult;
 
+/// <summary>True when ARules holds a '#migrate' line that renames an identifier
+/// in code whatever the unit's .dfm holds: a file-scope line (before the first
+/// #convert), or an in-block line that names trailing uses units.</summary>
+/// <param name="ARules">The parsed rule book.</param>
+/// <returns>False for a book whose #migrate lines are all member renames.</returns>
+/// <remarks>Syntax only -- no index is asked, so it can gate the sibling-.dfm
+/// precheck before any --db is opened (1.42 MIG-TYPE). An in-block line whose New
+/// is an enum value is an identifier migrate too (MigrateIsIdentifier) but is not
+/// counted here; UnitHasIdentifierMigrateSites counts it.</remarks>
+function BookHasIdentifierMigrates(const ARules: TConversionRuleSet): Boolean;
+
+/// <summary>True when the book's identifier #migrate rules (file scope, or
+/// in-block with uses units or an enum-value New) touch at least one site in
+/// AUnitPas's code -- a site renamed or a site reported as a migrate-check.</summary>
+/// <param name="ATrees">The run's tree cache; its Stores resolve the targets.
+/// Not owned.</param>
+/// <param name="AUnitPas">The unit; read from disk as it is now.</param>
+/// <param name="ABook">The rule book.</param>
+/// <returns>False when the book has no identifier #migrate, the unit cannot be
+/// read, or no code token of the unit names one (rule-level items alone, line 0,
+/// do not count).</returns>
+/// <remarks>1.42 (MIG-TYPE): the gate that lets a unit with no sibling .dfm, or
+/// with no .dfm instance a #convert block matches, still run BuildApplyPlan for
+/// its identifier #migrate sites. Runs the same planner BuildApplyPlan runs
+/// (PlanIdentifierMigrates); writes nothing.</remarks>
+function UnitHasIdentifierMigrateSites(const ATrees: TConvertTreeCache; const AUnitPas: string;
+  const ABook: TApplyBook): Boolean;
+
 /// <summary>The convert-apply plan for a unit whose COMPONENT part is skipped
 /// -- no sibling .dfm, no #convert block in the book, or no .dfm instance any
 /// block matches -- so only the book's unit rules (#unuse / #use / #useswap)
@@ -5703,6 +5731,49 @@ begin
   end;
 end;
 
+function BookHasIdentifierMigrates(const ARules: TConversionRuleSet): Boolean;
+begin
+  var Block: Integer:= 0;
+  for var R: TConversionRule in ARules.Rules do
+  begin
+    if R.Kind = rkConvert then Inc(Block);
+    if (R.Kind = rkMigrate) and ((Block = 0) or (Length(R.UnitsAdd) > 0)) then Exit(True);
+  end;
+  Result:= False;
+end;
+
+function UnitHasIdentifierMigrateSites(const ATrees: TConvertTreeCache; const AUnitPas: string;
+  const ABook: TApplyBook): Boolean;
+var
+  Lines: TStringList;
+begin
+  Result:= False;
+  if (ATrees = nil) or not TFile.Exists(AUnitPas) then Exit;
+  var PU: TPasUsesInput:= Default(TPasUsesInput);
+  PU.Trees:= ATrees;
+  PU.Book := ABook;
+  { the store indexing the unit: its own declarations are never renamed }
+  for var St: ISymbolStore in ATrees.Stores do
+    if UnitFileIdIn(St, AUnitPas) > 0 then
+    begin
+      PU.Store:= St;
+      Break;
+    end;
+  Lines:= TStringList.Create;
+  try
+    Lines.Text  := ReadUnitText(AUnitPas);
+    PU.PasLines := Lines;
+    var Edits: TArray<TTextEdit>;
+    var Items: TArray<TApplyItem>;
+    var UsesT, IntfT: TArray<string>;
+    PlanIdentifierMigrates(PU, AUnitPas, Edits, Items, UsesT, IntfT);
+    for var It: TApplyItem in Items do
+      if It.Line > 0 then Exit(True);
+  finally
+    Lines.Free;
+  end;
+end;
+
 // 1.27.0: apply/1 pas_uses[] global rows -- the reconciliation's dangling
 // verdicts, sorted by name.
 function DanglingPasUses(const ADangling: TArray<TUsesDangling>): TArray<TApplyPasUse>;
@@ -7229,12 +7300,17 @@ begin
 
   if not TFile.Exists(AUnitPas) then
   begin Result.Error:= Format('unit .pas not found: %s', [AUnitPas]); Exit; end;
-  if not TFile.Exists(ADfmPath) then
+  { 1.42 (MIG-TYPE): no .dfm (ADfmPath '' or missing) is a hard failure only
+    when the unit has no identifier #migrate site either -- such a unit runs
+    the code surfaces alone, nothing is read from or written to a .dfm }
+  var NoDfm: Boolean:= (ADfmPath = '') or not TFile.Exists(ADfmPath);
+  var IdSites: Boolean:= NoDfm and UnitHasIdentifierMigrateSites(ATrees, AUnitPas, ABook);
+  if NoDfm and not IdSites then
   begin Result.Error:= Format('.dfm not found: %s', [ADfmPath]); Exit; end;
   if Length(Stores) = 0 then
   begin Result.Error:= 'no symbol store available (empty AStores)'; Exit; end;
 
-  DfmText:= ReadUnitText(ADfmPath);
+  DfmText:= if NoDfm then '' else ReadUnitText(ADfmPath);
   Instances:= FindConvertInstances(DfmText, ABook.Rules, AOnly);
   { C8 N2 / N2a (1.26.0): a retyped inherited instance goes through the same
     loop as an own one (InhIndex tells them apart); a code-only entry joins
@@ -7242,7 +7318,8 @@ begin
   Instances:= Instances + RetypedInstances(AInherited);
   { 1.25.1: a child of a kept parent converts with it, .pas included }
   for var NO: TNestedOnly in NestedOnlyInstances(DfmText, ABook.Rules, AOnly) do Instances:= Instances + [NO.Instance];
-  if (Length(Instances) = 0) and not HasInheritedAction(AInherited, INH_ACTION_CODE) then
+  if (Length(Instances) = 0) and not HasInheritedAction(AInherited, INH_ACTION_CODE) and
+     not (IdSites or UnitHasIdentifierMigrateSites(ATrees, AUnitPas, ABook)) then
   begin
     Result.Error:= 'no convertible instances found (no #convert rule matched a .dfm instance, or --only filtered everything out)';
     Exit;
@@ -7266,10 +7343,14 @@ begin
     keyed by file id, not path) to find construction sites. }
   PasFileId:= UnitFileIdIn(PasStore, AUnitPas); { 1.26.5: found the way its symbols were }
 
-  var DfmStore: ISymbolStore:= StoreForFile(ADfmPath);
-  DfmFileSyms:= DfmStore.FindSymbolsByFile(ADfmPath);
-  if Length(DfmFileSyms) = 0 then
-    DfmFileSyms:= DfmStore.FindSymbolsByFile(TPath.GetFullPath(ADfmPath));
+  DfmFileSyms:= nil;
+  if not NoDfm then
+  begin
+    var DfmStore: ISymbolStore:= StoreForFile(ADfmPath);
+    DfmFileSyms:= DfmStore.FindSymbolsByFile(ADfmPath);
+    if Length(DfmFileSyms) = 0 then
+      DfmFileSyms:= DfmStore.FindSymbolsByFile(TPath.GetFullPath(ADfmPath));
+  end;
 
   { F/T classes come from ATrees, shared with rule validation: each class's
     members are resolved once per run -- see TConvertTreeCache for the options
