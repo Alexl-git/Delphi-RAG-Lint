@@ -186,7 +186,11 @@ The engine never guesses; every kind it can give:
   method the consumer calls inside `with ... as TX do` is carried as an interface method, its
   signature copied verbatim and dispatch to an override unchanged; a class method or a method
   taken as a pointer is refused), `overloaded-routine`, `signature-in-cycle`, `class-ref`,
-  `type-decl`, `other-ref`, `multiple-classes`, `member-unsupported` (an inherited
+  `type-decl` (a declaration of the class type other than a routine local `V: TX;` alone on
+  its line -- since 1.42 such a local is retyped to the interface when every use of it is
+  `V := X as TX`, `V := nil`, `Assigned(V)`, a compare with nil or `V.M` with M a member the
+  interface carries; a field, a parameter, a global, an inline `var`, `A, B: TX` and any other
+  use of the local, `V.Free` or `FreeAndNil(V)` included, still refuse), `other-ref`, `multiple-classes`, `member-unsupported` (an inherited
   member, a `default` array property or a write to an indexed property; a plain indexed property
   is carried for reading, its index list verbatim), `duplicate-identifier` (the class has a `Get<M>`
   that is not exactly `function Get<M>: <T>;` read by the property -- that one is reused -- or the

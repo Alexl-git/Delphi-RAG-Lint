@@ -2325,6 +2325,9 @@ type
     function HardCastWhat(const pR: TEdgeRef; const pCls: TSymbol): string;
     function GuardedBefore(const pX: string; pEnclosing: Int64; pLine: Integer): Boolean;
     function CheckShape: Boolean;
+    function LocalDeclOf(const pR: TEdgeRef; out pLocal: TSymbol): Boolean;
+    function LocalUseWhy(const pLocal, pRoutine: TSymbol; out pLine: Integer): string;
+    function CheckTypeDecls: Boolean;
     function CheckMembers: Boolean;
     function MemberOf(const pR: TEdgeRef): TSymbol;
     function MemberUseRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
@@ -2454,6 +2457,8 @@ begin
       end;
     erTypeDecl:
       begin
+        var Local: TSymbol;
+        if LocalDeclOf(pR, Local) then Exit(False);  { CYC-C (1): CheckTypeDecls decides }
         pKind:= 'type-decl';
         pWhat:= Format('declares something of type `%s`, which would still need its unit', [pR.Name]);
       end;
@@ -2555,6 +2560,108 @@ begin
   if Q > 0 then
     Exit(Refuse('qualified-ref', Member, FFromFid, Q, Format('line %d names `%s` qualified by its unit (`%s`); ' +
       'that use keeps needing the uses entry the cut removes', [Q, Member, Trim(LineOf(FLines, Q))])));
+  Result:= True;
+end;
+
+{ CYC-C (1): pR is `V: T;` alone on its line (a trailing `//` comment aside) and V is a local
+  variable of a routine of the consumer -- the one type declaration the interface can take over;
+  CheckTypeDecls checks T and every use of V. A field, a parameter, a global, an inline `var`, a
+  list `A, B: T` and any other declaration keep the type-decl refusal. }
+function TMemberPlan.LocalDeclOf(const pR: TEdgeRef; out pLocal: TSymbol): Boolean;
+begin
+  pLocal:= Default(TSymbol);
+  var M:= TRegEx.Match(PlainCode(BareCode(LineOf(FLines, pR.Line))), '^\s*([A-Za-z_]\w*)\s*:\s*' +
+    TRegEx.Escape(pR.Name) + '\s*;\s*$', [roIgnoreCase]);
+  if not M.Success then Exit(False);
+  for var S in FStore.FindSymbolsByExactName(M.Groups[1].Value) do
+    if (S.FileId = FFromFid) and (S.Kind = skLocalVar) and (S.StartLine = pR.Line) and (S.ParentId > 0) then
+    begin
+      pLocal:= S;
+      Exit(True);
+    end;
+  Result:= False;
+end;
+
+{ CYC-C (1): '' when every mention of the local pLocal inside the body of its routine pRoutine
+  (nested routines included) is one an interface-typed local carries unchanged -- `V := X as TX`,
+  `V := nil`, `Assigned(V)`, `V = nil`, `V <> nil`, `V.M` with M a member the interface carries;
+  else what the first other mention does, its line in pLine. The body is the line span of the
+  refs the index encloses in pRoutine (its header line to its last use: the routine symbol is
+  the class declaration, not the body), widened by every ref bound to the local. The scan is
+  lexical: a mention the whitelist does not name (a call argument, `V.Free`, `with V do`,
+  `Y := V`) refuses. }
+function TMemberPlan.LocalUseWhy(const pLocal, pRoutine: TSymbol; out pLine: Integer): string;
+begin
+  pLine:= 0;
+  var V:= TRegEx.Escape(pLocal.Name);
+  var C:= TRegEx.Escape(FCls.Name);
+  var First:= pLocal.StartLine;
+  var Last := pLocal.StartLine;
+  for var R in FStore.GetReferencesFromFile(FFromFid) do
+    if (R.EnclosingSymbolId = pRoutine.Id) or (R.SymbolId = pLocal.Id) then
+    begin
+      First:= Min(First, R.StartLine);
+      Last := Max(Last, R.StartLine);
+    end;
+  for var L:= First to Last do
+  begin
+    if L = pLocal.StartLine then Continue;
+    var Code:= PlainCode(BareCode(LineOf(FLines, L)));
+    for var M in TRegEx.Matches(Code, '(?<![\w.])' + V + '\b', [roIgnoreCase]) do
+    begin
+      var Rest  := Copy(Code, M.Index, MaxInt);
+      var Before:= Copy(Code, 1, M.Index - 1);
+      var Dot   := TRegEx.Match(Rest, '^' + V + '\s*\.\s*([A-Za-z_]\w*)', [roIgnoreCase]);
+      var Carried:= False;
+      if Dot.Success then
+        for var Mb in FMembers do
+          if SameText(Mb.Name, Dot.Groups[1].Value) then Carried:= True;
+      var Ok:= Carried or
+        TRegEx.IsMatch(Rest, '^' + V + '\s*:=\s*(nil|[A-Za-z_]\w*\s+as\s+' + C + ')\s*(;|$|\b(end|else)\b)',
+          [roIgnoreCase]) or
+        TRegEx.IsMatch(Rest, '^' + V + '\s*(=|<>)\s*nil\b', [roIgnoreCase]) or
+        (TRegEx.IsMatch(Before, '\bAssigned\s*\(\s*$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^' + V + '\s*\)'));
+      if Ok then Continue;
+      pLine:= L;
+      Exit(Format('uses the local `%s` other than as `%s := X as %s`, `%s := nil`, `Assigned(%s)`, a compare with ' +
+        'nil or `%s.<member the interface carries>` (`%s`)', [pLocal.Name, pLocal.Name, FCls.Name, pLocal.Name,
+        pLocal.Name, pLocal.Name, Trim(LineOf(FLines, L))]));
+    end;
+  end;
+  Result:= '';
+end;
+
+{ CYC-C (1): each type declaration of the edge -- CheckShape let through only a routine local
+  `V: T;` (LocalDeclOf) -- is retyped `V: <interface>` when T is the class and every use of V is
+  one the interface carries (LocalUseWhy); the `as` casts that assign V are rewritten by
+  RewriteConsumer like any other. Else the type-decl refusal names the first other use. }
+function TMemberPlan.CheckTypeDecls: Boolean;
+var
+  Local: TSymbol;
+  Line : Integer;
+  Done : TList<Integer>;
+begin
+  Done:= TList<Integer>.Create;
+  try
+    for var R in FSurface.Refs do
+    begin
+      if (R.Kind <> erTypeDecl) or Done.Contains(R.Line) then Continue;
+      Done.Add(R.Line);
+      LocalDeclOf(R, Local);  { CheckShape refused every other type declaration }
+      var Routine:= FStore.GetSymbolById(Local.ParentId);
+      if not SameText(R.Name, FCls.Name) or (Routine.Id <= 0) then
+        Exit(Refuse('type-decl', R.Name, FFromFid, R.Line, Format('line %d declares something of type `%s`, which ' +
+          'would still need its unit (`%s`)', [R.Line, R.Name, R.LineText])));
+      var Why:= LocalUseWhy(Local, Routine, Line);
+      if Why <> '' then
+        Exit(Refuse('type-decl', Local.Name, FFromFid, Line, Format('line %d %s; the local `%s` declared at line %d ' +
+          'can become `%s` only when the interface carries every use', [Line, Why, Local.Name, R.Line, FIface])));
+      AddEdit(FFromFid, R.Line, True, [TRegEx.Replace(LineOf(FLines, R.Line), ':\s*' + TRegEx.Escape(FCls.Name) +
+        '\b', ': ' + FIface, [roIgnoreCase])]);
+    end;
+  finally
+    Done.Free;
+  end;
   Result:= True;
 end;
 
@@ -3429,7 +3536,7 @@ begin
     FIface:= if pIfaceName <> '' then pIfaceName
       else 'I' + (if (Length(FCls.Name) > 1) and (UpCase(FCls.Name[1]) = 'T') then Copy(FCls.Name, 2, MaxInt)
       else FCls.Name) + 'Surface';
-    Ok:= CheckMembers and CheckWrites and CheckMethods and CheckClass and RewriteConsumer;
+    Ok:= CheckMembers and CheckWrites and CheckMethods and CheckClass and CheckTypeDecls and RewriteConsumer;
     Ok:= Ok and CheckCastExceptions and CheckWithBodies and CheckMethodMentions and CollectLeafUses;
   end;
   pRefusal:= FRefusal;

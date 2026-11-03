@@ -17,6 +17,7 @@ DRAGLINT_RESOLVER_VERSION 1.17.0 -> 1.18.0-alpha -- every index re-parses once.
 - doc2 (DOCDRIFT-NONCONV): Storage.SQLite doc drift 4 -> 0, glued doc line split; DOCREG-CENSUS / DOCREG-RESPONSE already fixed.
 - sweeper-a (YADF false positives): `unused-parameter` skips non-private methods of a class that implements an interface; `dfm-property-not-declared` stays silent when a class ancestor resolves to a record; `used-before-assignment` honours `X <> nil` / `X = nil` guards; ResolveAncestry never binds a heritage name to a routine-local type of another routine.
 - cyc (CYC-C, partial; D4): `cycles --fix` reports progress while a build waits and has no time limit (cancel via the heartbeat); a non-ANSI char in an inserted literal is written as `#code`. Type-decl / multiple-classes / inherited+with-member residue not started.
+- cyc2 (CYC-C residue, type-decl): `cycles --plan` / `--fix` member hand-over (R2) no longer refuses `type-decl` for a routine local `V: TX;` -- it is retyped to the extracted interface when every use is `V := X as TX`, `V := nil`, `Assigned(V)`, a compare with nil or `V.<carried member>`; a field, parameter, global or any other use still refuses. Guard `run_cyclefix_r2_typedecl_dcc.ps1` (follow + dcc + byte-identical run).
 
 ## v1.40.0-alpha -- 2026-11-02
 
