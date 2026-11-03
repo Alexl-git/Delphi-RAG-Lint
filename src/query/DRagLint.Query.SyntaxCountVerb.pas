@@ -7,6 +7,30 @@ unit DRagLint.Query.SyntaxCountVerb;
 
 interface
 
+/// <summary>Runs `drag-lint syntax-count` from the process command line
+/// (ParamStr(2) onwards).</summary>
+/// <returns>0 = report printed (zero occurrences included); 2 = no --db and no
+/// --in, an unknown --feature name, or a --db that is missing or has an old
+/// schema; 3 = an unknown flag (error[unknown-flag] on stderr).</returns>
+/// <remarks>--db lists every .pas / .dpr / .dpk / .inc row of files.path in that
+/// index; --in adds paths. Each file is parsed at the call; the count is of
+/// the text as written (no $IFDEF evaluation) and is never capped.</remarks>
+function RunSyntaxCountVerb: Integer;
+
+implementation
+
+uses
+  System.SysUtils, System.JSON,
+  DRagLint.Core.CliError, DRagLint.Core.Interfaces, DRagLint.Core.Model,
+  DRagLint.Storage.SQLite, DRagLint.CLI.HelpText, DRagLint.Query.SyntaxCount;
+
+const
+  CVerb = 'syntax-count';
+  CExitOk = 0;
+  CExitUsage = 2;
+  CExitUnknownFlag = 3;
+  CFirstArg = 2; // ParamStr(1) is the verb
+
 type
   /// <summary>The flags syntax-count accepts.</summary>
   TSyntaxCountFlag = (scfDb, scfFile, scfFeature, scfPerFile, scfHits, scfJson, scfHelp, scfOutputEncoding);
@@ -37,33 +61,6 @@ type
 /// <param name="pError">Why parsing failed; '' on success.</param>
 /// <param name="pBadFlag">The unknown flag when that is the failure (exit 3); '' otherwise (exit 2).</param>
 /// <returns>True when every token is a known flag with its value.</returns>
-function ParseSyntaxCountArgs(const pArgs: TArray<string>; out pOpts: TSyntaxCountOptions;
-  out pError, pBadFlag: string): Boolean;
-
-/// <summary>Runs `drag-lint syntax-count` from the process command line
-/// (ParamStr(2) onwards).</summary>
-/// <returns>0 = report printed (zero occurrences included); 2 = no --db and no
-/// --in, an unknown --feature name, or a --db that is missing or has an old
-/// schema; 3 = an unknown flag (error[unknown-flag] on stderr).</returns>
-/// <remarks>--db lists every .pas / .dpr / .dpk / .inc row of files.path in that
-/// index; --in adds paths. Each file is parsed at the call; the count is of
-/// the text as written (no $IFDEF evaluation) and is never capped.</remarks>
-function RunSyntaxCountVerb: Integer;
-
-implementation
-
-uses
-  System.SysUtils, System.JSON,
-  DRagLint.Core.CliError, DRagLint.Core.Interfaces, DRagLint.Core.Model,
-  DRagLint.Storage.SQLite, DRagLint.CLI.HelpText, DRagLint.Query.SyntaxCount;
-
-const
-  CVerb = 'syntax-count';
-  CExitOk = 0;
-  CExitUsage = 2;
-  CExitUnknownFlag = 3;
-  CFirstArg = 2; // ParamStr(1) is the verb
-
 function ParseSyntaxCountArgs(const pArgs: TArray<string>; out pOpts: TSyntaxCountOptions;
   out pError, pBadFlag: string): Boolean;
 var
@@ -162,7 +159,6 @@ var
   F: TSyntaxFeature;
   LRow: TSyntaxFileCount;
   LHit: TSyntaxHit;
-  LLine: string;
 begin
   Writeln(Format('syntax-count: %d file(s) scanned, %d unreadable, %d with parse errors',
     [pReport.FilesScanned, pReport.FilesUnreadable, pReport.FilesWithParseErrors]));
@@ -175,16 +171,33 @@ begin
     Writeln(Format('files with at least one occurrence: %d', [Length(pReport.Files)]));
     for LRow in pReport.Files do
     begin
-      LLine:= '  ' + LRow.FilePath;
+      Write('  ', LRow.FilePath);
       for F:= Low(TSyntaxFeature) to High(TSyntaxFeature) do
         if LRow.Counts[F] > 0 then
-          LLine:= LLine + Format('  %s=%d', [SyntaxFeatureName(F), LRow.Counts[F]]);
-      Writeln(LLine);
+          Write(Format('  %s=%d', [SyntaxFeatureName(F), LRow.Counts[F]]));
+      Writeln;
     end;
   end;
   if pOpts.Hits then
     for LHit in pReport.Hits do
       Writeln(Format('  %s:%d:%d  %s', [LHit.FilePath, LHit.Line, LHit.Col, SyntaxFeatureName(LHit.Feature)]));
+end;
+
+procedure WriteReport(const pReport: TSyntaxCountReport; const pOpts: TSyntaxCountOptions);
+var
+  LJson: TJSONObject;
+begin
+  if not pOpts.AsJson then
+  begin
+    WriteText(pReport, pOpts);
+    Exit;
+  end;
+  LJson:= SyntaxCountToJson(pReport, pOpts.PerFile, pOpts.Hits);
+  try
+    Writeln(LJson.ToJSON);
+  finally
+    LJson.Free;
+  end;
 end;
 
 function Usage(const pWhy: string; pAsJson: Boolean): Integer;
@@ -195,14 +208,32 @@ begin
   Result:= CExitUsage;
 end;
 
+{ The --db file list (when given) followed by the --in paths, or False with
+  pError set. A store that raises on open is reported, never propagated. }
+function CollectFiles(const pOpts: TSyntaxCountOptions; out pFiles: TArray<string>; out pError: string): Boolean;
+begin
+  pFiles:= nil;
+  pError:= '';
+  Result:= True;
+  if pOpts.DbPath <> '' then
+  try
+    Result:= FilesOfIndex(pOpts.DbPath, pFiles, pError);
+  except
+    on E: Exception do
+    begin
+      pError:= 'cannot read index ' + pOpts.DbPath + ': ' + E.Message;
+      Result:= False;
+    end;
+  end;
+  pFiles:= pFiles + pOpts.Files;
+end;
+
 function RunSyntaxCountVerb: Integer;
 var
   LArgs, LFiles: TArray<string>;
   LOpts: TSyntaxCountOptions;
   LError, LBadFlag, LBadName: string;
   LFeatures: TSyntaxFeatures;
-  LReport: TSyntaxCountReport;
-  LJson: TJSONObject;
   I: Integer;
 begin
   LArgs:= nil;
@@ -213,43 +244,28 @@ begin
     if LBadFlag <> '' then
     begin
       WriteCliError(CLI_ERR_UNKNOWN_FLAG, LError, CommandLineWantsJson, 'flag', LBadFlag);
-      Exit(CExitUnknownFlag);
-    end;
-    Exit(Usage(LError, CommandLineWantsJson));
-  end;
-  if LOpts.ShowHelp then
+      Result:= CExitUnknownFlag;
+    end
+    else
+      Result:= Usage(LError, CommandLineWantsJson);
+  end
+  else if LOpts.ShowHelp then
   begin
     WriteVerbHelp(CVerb);
-    Exit(CExitOk);
-  end;
-  if not TryParseSyntaxFeatures(LOpts.FeatureList, LFeatures, LBadName) then
-    Exit(Usage(Format('unknown --feature "%s" (if-expr, is-not, not-in, inline-var, inline-const, anon-method, multiline-string, all)',
-      [LBadName]), LOpts.AsJson));
-  if (LOpts.DbPath = '') and (Length(LOpts.Files) = 0) then
-    Exit(Usage('give --db <file.sqlite> and/or --in <path>', LOpts.AsJson));
-  LFiles:= nil;
-  if LOpts.DbPath <> '' then
-  try
-    if not FilesOfIndex(LOpts.DbPath, LFiles, LError) then
-      Exit(Usage(LError, LOpts.AsJson));
-  except
-    on E: Exception do
-      Exit(Usage('cannot read index ' + LOpts.DbPath + ': ' + E.Message, LOpts.AsJson));
-  end;
-  LFiles:= LFiles + LOpts.Files;
-  LReport:= CountSyntaxFeatures(LFiles, LFeatures, LOpts.Hits);
-  if LOpts.AsJson then
-  begin
-    LJson:= SyntaxCountToJson(LReport, LOpts.PerFile, LOpts.Hits);
-    try
-      Writeln(LJson.ToJSON);
-    finally
-      LJson.Free;
-    end;
+    Result:= CExitOk;
   end
+  else if not TryParseSyntaxFeatures(LOpts.FeatureList, LFeatures, LBadName) then
+    Result:= Usage(Format('unknown --feature "%s" (if-expr, is-not, not-in, inline-var, inline-const, anon-method, multiline-string, all)',
+      [LBadName]), LOpts.AsJson)
+  else if (LOpts.DbPath = '') and (Length(LOpts.Files) = 0) then
+    Result:= Usage('give --db <file.sqlite> and/or --in <path>', LOpts.AsJson)
+  else if not CollectFiles(LOpts, LFiles, LError) then
+    Result:= Usage(LError, LOpts.AsJson)
   else
-    WriteText(LReport, LOpts);
-  Result:= CExitOk;
+  begin
+    WriteReport(CountSyntaxFeatures(LFiles, LFeatures, LOpts.Hits), LOpts);
+    Result:= CExitOk;
+  end;
 end;
 
 end.

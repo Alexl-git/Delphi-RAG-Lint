@@ -15,7 +15,7 @@ unit DRagLint.Query.SyntaxCount;
 interface
 
 uses
-  System.SysUtils, System.JSON, TreeSitter;
+  System.SysUtils, System.JSON;
 
 type
   /// <summary>One syntax feature the count recognises in the parse.</summary>
@@ -80,18 +80,6 @@ function SyntaxFeatureSince(pFeature: TSyntaxFeature): string;
 function TryParseSyntaxFeatures(const pList: string; out pFeatures: TSyntaxFeatures;
   out pBad: string): Boolean;
 
-/// <summary>Counts the selected features in one parsed tree.</summary>
-/// <param name="pRoot">The root (or any) node; walked depth-first, every node visited once.</param>
-/// <param name="pSrc">The UTF-8 bytes the tree was parsed from (read for string literals).</param>
-/// <param name="pFeatures">The features to count; others stay 0.</param>
-/// <param name="pCounts">Incremented, never reset: the caller zeroes it.</param>
-/// <param name="pFilePath">Copied into each hit.</param>
-/// <param name="pHits">Appended to when pWantHits is True.</param>
-/// <param name="pWantHits">Record each occurrence in pHits.</param>
-procedure CountTreeFeatures(const pRoot: TTSNode; const pSrc: TBytes;
-  const pFeatures: TSyntaxFeatures; var pCounts: TSyntaxCounts; const pFilePath: string;
-  var pHits: TArray<TSyntaxHit>; pWantHits: Boolean);
-
 /// <summary>Parses each file and counts the selected features.</summary>
 /// <param name="pFiles">Source paths (.pas / .dpr / .dpk / .inc); a missing or
 /// unreadable one is tallied in FilesUnreadable, never raised.</param>
@@ -116,7 +104,7 @@ function SyntaxCountToJson(const pReport: TSyntaxCountReport; pWithFiles, pWithH
 implementation
 
 uses
-  DRagLint.Diagnostics.ParseCache;
+  TreeSitter, DRagLint.Diagnostics.ParseCache;
 
 const
   CFeatureNames: array[TSyntaxFeature] of string = ('if-expr', 'is-not', 'not-in',
@@ -124,6 +112,9 @@ const
   CFeatureSince: array[TSyntaxFeature] of string = ('Delphi 13', 'Delphi 13', 'Delphi 13',
     'Delphi 10.3', 'Delphi 10.3', 'Delphi 2009', 'Delphi 12');
   CMultilineQuotes = 3; // a multiline string opens with ''' and a line break
+  CByteTab = 9;
+  CByteLf = 10;
+  CByteCr = 13;
 
 function SyntaxFeatureName(pFeature: TSyntaxFeature): string;
 begin
@@ -209,9 +200,9 @@ begin
     if pSrc[I] <> Ord('''') then
       Exit(False);
   I:= LStart + CMultilineQuotes;
-  while (I < LEnd) and (pSrc[I] in [Ord(' '), 9]) do
+  while (I < LEnd) and (pSrc[I] in [Ord(' '), CByteTab]) do
     Inc(I);
-  Result:= (I < LEnd) and (pSrc[I] in [10, 13]);
+  Result:= (I < LEnd) and (pSrc[I] in [CByteLf, CByteCr]);
 end;
 
 { The feature ANode is, or False. One node is at most one feature. }
@@ -220,6 +211,7 @@ var
   LType: string;
 begin
   Result:= True;
+  pFeature:= Low(TSyntaxFeature);
   LType:= pNode.NodeType;
   if LType = 'exprIf' then
     pFeature:= sfIfExpr
@@ -239,6 +231,14 @@ begin
     Result:= False;
 end;
 
+/// <summary>Counts the selected features in one parsed tree.</summary>
+/// <param name="pRoot">The root (or any) node; walked depth-first, every node visited once.</param>
+/// <param name="pSrc">The UTF-8 bytes the tree was parsed from (read for string literals).</param>
+/// <param name="pFeatures">The features to count; others stay 0.</param>
+/// <param name="pCounts">Incremented, never reset: the caller zeroes it.</param>
+/// <param name="pFilePath">Copied into each hit.</param>
+/// <param name="pHits">Appended to when pWantHits is True.</param>
+/// <param name="pWantHits">Record each occurrence in pHits.</param>
 procedure CountTreeFeatures(const pRoot: TTSNode; const pSrc: TBytes;
   const pFeatures: TSyntaxFeatures; var pCounts: TSyntaxCounts; const pFilePath: string;
   var pHits: TArray<TSyntaxHit>; pWantHits: Boolean);
