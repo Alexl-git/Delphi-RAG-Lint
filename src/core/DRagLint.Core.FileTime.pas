@@ -159,8 +159,8 @@ var
   LocalST: TSystemTime;
 begin
   GetSystemTime(UtcST);
-  if SystemTimeToTzSpecificLocalTime(nil, UtcST, LocalST) then Result:= SystemTimeToDateTime(LocalST)
-  else Result:= Now; { no zone data: the RTL clock is all there is }
+  Result:= if SystemTimeToTzSpecificLocalTime(nil, UtcST, LocalST) then SystemTimeToDateTime(LocalST)
+    else Now; { no zone data: the RTL clock is all there is }
 end;
 
 function NowUnixUtc: Int64;
