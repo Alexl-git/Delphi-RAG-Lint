@@ -36677,7 +36677,8 @@ begin
     TSharedFacts.ProjectTag:= if Length(Args.DbPaths) > 1 then '' else ProjectTagOfDb(Args.DbPath);
     { 1.40 heartbeat: the verbs the IDE waits on publish their status record on a status-only pipe; it closes
       at exit (the unit's finalization). Advisory -- a run without one is judged the old way. }
-    BeatChannelOpen(Args.Command, DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+    BeatChannelOpen(if (Args.Command = 'cycles') and Args.Fix then 'cycles --fix' else Args.Command, // 142-cyc D4: only the fix run reports
+      DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
     if Args.Command = 'index' then
     begin
       { The MODE flags name opposite intents, so passing both is a usage error
