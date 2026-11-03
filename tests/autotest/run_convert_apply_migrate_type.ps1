@@ -14,7 +14,8 @@
       overrides the name match (scnBusy). An unmatched member used in the
       .pas is a migrate-check warning and is left as written.
     * TARGET: New must resolve in the library or project index; one that does
-      not is a migrate-check warning per site and no rename.
+      not is a migrate-check warning per site and no rename, plus ONE rule-level
+      (line 0) migrate-check per rule (1.42 MIGTGT) -- only in a unit with a site.
     * TRUST THE SOURCE: an Old that resolves nowhere (TGoneOld) is still
       renamed.
     * QUALIFIED: `Unit.Old` is a migrate-check warning, not rewritten.
@@ -157,6 +158,8 @@ Check 'W2 ... unmatched enum member scoOther: a migrate-check on its line' `
   (@($mc | Where-Object { $_.path -eq 'scoOther' -and $_.line -eq (LineOf '  C:= scoOther;') -and $_.field -eq 'warnings' }).Count -eq 1) (($mc | ForEach-Object { "$($_.path)@$($_.line): $($_.text)" }) -join ' | ')
 Check 'W3 ... unresolvable target TNoSuchType: a migrate-check on the TOldThing2 site' `
   (@($mc | Where-Object { $_.path -eq 'TOldThing2' -and $_.line -eq (LineOf '  T: TOldThing2;') -and $_.text -match 'TNoSuchType' }).Count -eq 1) (($mc | ForEach-Object { "$($_.path)@$($_.line): $($_.text)" }) -join ' | ')
+Check 'W3b ... and ONE rule-level (line 0) migrate-check for that rule (1.42 MIGTGT: the editor marks the book line)' `
+  (@($mc | Where-Object { $_.line -eq 0 -and $_.rule_line -eq 5 -and $_.path -eq 'TOldThing2' -and $_.text -match 'the target TNoSuchType resolves in no supplied index' }).Count -eq 1) (($mc | ForEach-Object { "$($_.path)@$($_.line): $($_.text)" }) -join ' | ')
 Check 'W4 ... qualified CvLib.scoWait: a migrate-check, not rewritten' `
   (@($mc | Where-Object { $_.path -eq 'scoWait' -and $_.line -eq (LineOf '  C:= CvLib.scoWait;') }).Count -eq 1) (($mc | ForEach-Object { "$($_.path)@$($_.line): $($_.text)" }) -join ' | ')
 Check 'W5 POSITIVE CONTROL: the var type in the same unit IS renamed (1 migrate-applied)' `

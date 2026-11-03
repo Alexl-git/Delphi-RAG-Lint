@@ -7,6 +7,7 @@ breaking changes** until v2.0.
 
 ### Fixed
 - `convert-apply`: an identifier `#migrate` (file scope, or naming a uses unit) now renames the code of a unit with NO sibling .dfm or no .dfm instance a `#convert` block matches (MIG-TYPE; it used to fail `sibling .dfm not found` / `no convertible instances found`, or run the unit rules alone). Guards `run_convert_apply_migrate_type.ps1` (N1-N7), new `run_convert_apply_inherited_collection.ps1` (INBOX Q4: inherited `[n]` headers + whole-streamed ParamData + file-scope `#migrate` in a D5-shaped child).
+- `convert-apply`: an identifier `#migrate` whose target resolves in no index now also emits ONE rule-level `migrate-check` (line 0) per rule beside the per-site ones, so the converter's editor puts a warning mark on the `#migrate` line (MIGTGT, owner ruling 2026-10-28; guard W3b). The editor also stops marking a file-scope `#migrate` as "not a member migration" when the engine reports `migrate_identifiers`.
 
 ## v1.40.0-alpha -- 2026-11-02
 

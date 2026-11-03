@@ -5485,6 +5485,7 @@ type
     Qualifier: string;          { the From enum a member may be qualified with }
     Refusal  : string;          { '' renames; else why each site is a warning }
     ByName   : Boolean;         { mapped by EnumMemberStem, not by a book line }
+    NoTarget : Boolean;         { 1.42 MIGTGT: Refusal is 'the target resolves nowhere' }
     Rule     : TConversionRule;
   end;
 
@@ -5500,6 +5501,9 @@ type
 // migrate-check warning -- the target resolves nowhere, the member has no
 // counterpart, Old is declared in this unit or a #convert converts it, or the
 // site is qualified (Unit.Old; only From-enum qualification is renamed).
+// 1.42 (MIGTGT): a target that resolves nowhere is also said ONCE per rule as
+// a rule-level item (line 0) when the unit has a site of it -- the line the
+// converter's editor marks on the #migrate line.
 // The From side is trusted, not resolved: a type no index knows is renamed
 // all the same (its members are then mapped only by explicit lines, said
 // once). AUsesTypes are the declarations whose unit the uses clause needs,
@@ -5514,6 +5518,7 @@ var
   Items: TList<TApplyItem>;
   UsesT: TList<string>;
   IntfT: TList<string>;
+  NoTargetSaid: TDictionary<Integer, Boolean>; { rule lines whose unresolved target was said }
   ImplLine: Integer;
 
   function Item(AKind: TApplyItemKind; AField: TApplyField; const AM: TIdentMigrate; ALine: Integer;
@@ -5555,7 +5560,10 @@ var
     else if not IsValidIdent(R.New, True) then M.Refusal:= 'replacement templates are not applied yet'
     else if Own.ContainsKey(UpperCase(R.Old)) then M.Refusal:= Format('%s is declared in this unit', [R.Old])
     else if not ResolveMigrateTarget(AIn.Trees, R.New, Sym, St) then
-      M.Refusal:= Format('the target %s resolves in no supplied index (library or project)', [R.New]);
+    begin
+      M.Refusal := Format('the target %s resolves in no supplied index (library or project)', [R.New]);
+      M.NoTarget:= True;
+    end;
     for var C: TConversionRule in AIn.Book.Rules.Rules do
       if (M.Refusal = '') and (C.Kind = rkConvert) and SameText(BareTypeTail(C.FromType), R.Old) then
         M.Refusal:= Format('book line %d converts %s', [C.LineNo, R.Old]);
@@ -5662,6 +5670,11 @@ var
     end;
     if M.Refusal <> '' then
     begin
+      { 1.42 (MIGTGT, owner ruling 2026-10-28): an unresolvable target is also ONE
+        rule-level item (line 0), so the editor marks the book line }
+      if M.NoTarget and NoTargetSaid.TryAdd(M.Rule.LineNo, True) then
+        Items.Add(Item(aikMigrateCheck, afWarnings, M, 0, Format('line %d: #migrate %s -> %s NOT applied -- %s; no site is renamed',
+          [M.Rule.LineNo, M.Old, M.New, M.Refusal])));
       Items.Add(Item(aikMigrateCheck, afWarnings, M, ALineNo, Format('#migrate site %s %s NOT renamed -- %s', [Where, ATok, M.Refusal])));
       Exit;
     end;
@@ -5696,6 +5709,7 @@ begin
   Items:= TList<TApplyItem>.Create;
   UsesT:= TList<string>.Create;
   IntfT:= TList<string>.Create;
+  NoTargetSaid:= TDictionary<Integer, Boolean>.Create;
   try
     var Block: Integer:= 0;
     var Any  : Boolean:= False;
@@ -5721,6 +5735,7 @@ begin
     AUsesTypes:= UsesT.ToArray;
     AIntfTypes:= IntfT.ToArray;
   finally
+    NoTargetSaid.Free;
     IntfT.Free;
     UsesT.Free;
     Items.Free;

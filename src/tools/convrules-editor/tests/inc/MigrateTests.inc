@@ -501,6 +501,22 @@ begin
   finally
     B.Free;
   end;
+
+  // 1.42 (MIGTGT, owner ruling 2026-10-28): an identifier #migrate whose target resolves in no
+  // index is a warning MARK on the book line -- the engine's rule-level migrate-check (captured
+  // from the 1.42 engine: tests\autotest\fixtures\migrate_type CvWarn.pas + type.rules).
+  B:= MigBook(['#migrate TScreenCursorOld -> TScreenCursorNew, CvNew', '#migrate scoBusy -> scnHourGlass',
+    '#migrate TOldThing -> TNewThing, CvNew', '#migrate TGoneOld -> TNewThing, CvNew', '#migrate TOldThing2 -> TNoSuchType, NoSuchUnit',
+    '', '#convert CvLib.TOldField -> CvLib.TNewField, CvLib', '#link Size <- Size']);
+  try
+    var LTgt: TArray<TApplyItem>:= MigrateApply('apply-CvWarn-migtgt-142.json', [afMigrateMembers]).MigrateChecks;
+    Check('migrate.migtgt.mark', (AddMigrateCheckMarks(B, LTgt) = 1) and (Length(B.Nodes[4].Marks) = 1) and B.Nodes[4].Marks[0].IsWarning
+      and ContainsText(B.Nodes[4].Marks[0].Text, 'the target TNoSuchType resolves in no supplied index'),
+      'marks on line 5: ' + IntToStr(Length(B.Nodes[4].Marks)));
+    Check('migrate.migtgt.once', AddMigrateCheckMarks(B, LTgt) = 0, 'a second run adds no second mark');
+  finally
+    B.Free;
+  end;
 end;
 
 procedure TestMigrateTabHandoff;

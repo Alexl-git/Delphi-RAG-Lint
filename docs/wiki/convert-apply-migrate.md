@@ -43,7 +43,9 @@ in the code, not a member of a converted instance:
   literals. `items[]` kind `migrate-applied` (no instance).
 * The target `New` must resolve in a supplied `--db` (the platform library or
   the project index); otherwise each site is a `migrate-check` and nothing is
-  renamed. The `Old` side is trusted: a type no index knows any more is still
+  renamed, plus ONE rule-level `migrate-check` (line 0) per rule (1.42 MIGTGT,
+  owner ruling 2026-10-28) -- the converter's editor shows it as a warning mark on
+  the `#migrate` line. The `Old` side is trusted: a type no index knows any more is still
   renamed.
 * Two enums: each member of `Old` is mapped to the member of `New` with the
   same name after the lowercase prefix (`dcrHourGlass` -> `gcrHourGlass`),
