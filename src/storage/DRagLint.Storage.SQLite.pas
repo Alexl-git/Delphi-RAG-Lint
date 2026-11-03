@@ -220,6 +220,7 @@ type
       FBatchOpen             : Boolean     ; // BeginFileBatch's outer transaction is open
       FBatchFiles            : Integer     ; // files opened in the current group
       FBatchStamp            : Int64       ; // TStopwatch time stamp at which the current group began
+      FBusyWait              : Pointer     ; // 1.41 SQLITE-BUSY-BEAT: ArmBeatAwareWait state of the writer connection; nil for a reader
       FQFileStamp            : TFDQuery    ; // FileStampIsCurrent
       FTrigramAvailable      : Boolean     ; // set by Migrate; False when fts5 lacks the trigram tokenizer (SQLite < 3.34): string_fts_tri absent, --substring unsupported
       FReadOnly              : Boolean     ; // v0.86 Task 4: opened read-only (no DDL/writes)
@@ -4368,6 +4369,7 @@ begin
     if FConn.Connected then FConn.Close;
     FConn.Free;
   end;
+  DisarmBeatAwareWait(FBusyWait); { after the close: SQLite held the pointer until then }
   inherited;
 end; // destructor
 
@@ -4502,6 +4504,7 @@ begin
     armed BEFORE the connect so FireDAC's connect-time pragmas wait too (see
     ArmBusyTimeout). }
   ConnectWriter(FConn, ADbPath);
+  FBusyWait:= ArmBeatAwareWait(FConn, ADbPath); { wait while the holder's heartbeat advances }
   FConn.ExecSQL('PRAGMA foreign_keys = ON');
   { v0.42 perf: per-file insert throughput collapses as the DB grows past ~1 GB
     (full C:\Projects scan ran at 0.55 s/file vs ~0.04 s/file historically). The
