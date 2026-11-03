@@ -36,7 +36,6 @@ uses
   , ConvRules.WorkingSet
   , ConvRules.RuleCatalog
   , ConvRules.TextEncoding // CheckApplyIntegrity, the compose gate
-  , ConvRules.InputGate // gateleak: RunNativeDialog, the re-entrancy guard of the curation file dialogs
   ;
 
 type
@@ -452,6 +451,9 @@ type
   end;
 
 implementation
+
+uses
+  ConvRules.InputGate; // gateleak: RunNativeDialog, the re-entrancy guard of the curation file dialogs
 
 { The key FTouched stores a written path under: ONE canonical, case-folded spelling
   per file, so 'C:\b\x.rules' and 'C:\b\sub\..\x.rules' are the same entry and the
