@@ -190,6 +190,18 @@ type
     Depth  : Integer;
   end;
 
+  /// <summary>One ancestor unit of a listed unit's dependency graph (C8CHAIN, owner ruling Q5).</summary>
+  TAncestorUnit = record
+    /// <summary>The ancestor's .pas.</summary>
+    PasPath: string;
+    /// <summary>As TChainUnit.Depth: 1 = the form's parent, larger = further up; frame
+    /// chains continue the count after the form chain.</summary>
+    Depth  : Integer;
+    /// <summary>The checked books' From types still in it (its .dfm objects, any opener,
+    /// and its From-typed fields), bare names, distinct, first seen. [] = treated as converted.</summary>
+    Types  : TArray<string>;
+  end;
+
   /// <summary>The verdict on one inherited instance.</summary>
   TInstanceVerdict = record
     /// <summary>The instance as scanned.</summary>
@@ -229,6 +241,9 @@ type
     Error   : string;
     /// <summary>One verdict per inherited instance of a checked From type.</summary>
     Verdicts: TArray<TInstanceVerdict>;
+    /// <summary>Every indexed ancestor unit up to the root (form chain, then each inline
+    /// frame's chain), root first; [] when not Known or the unit has no indexed class.</summary>
+    Ancestors: TArray<TAncestorUnit>;
   end;
 
 /// <summary>PURE: lists the inherited / inline objects of a text .dfm.</summary>
@@ -284,6 +299,16 @@ function IsFromType(const AType: string; const APairs: TArray<TTypePair>): Boole
 /// <param name="APasPath">A .pas path.</param>
 /// <returns>The file name without its extension.</returns>
 function UnitNameOf(const APasPath: string): string;
+
+/// <summary>PURE: the checked From types a unit still holds (the "already converted?" test of
+/// owner ruling Q5).</summary>
+/// <param name="ADfmText">The unit's .dfm as text; '' for no .dfm.</param>
+/// <param name="AFields">Its class's From-typed fields (TClassInfo.Fields).</param>
+/// <param name="APairs">The checked books' pairs.</param>
+/// <returns>Bare names of every ListDfmInstances type (object, inherited and inline alike)
+/// and every field type that IsFromType; distinct, first seen (.dfm first, then fields).
+/// [] for no pairs.</returns>
+function FromTypesIn(const ADfmText: string; const AFields: TArray<TFieldDecl>; const APairs: TArray<TTypePair>): TArray<string>;
 
 /// <summary>PURE: walks one instance's ancestor chain to its declaring ancestor (spec E2).</summary>
 /// <param name="AInst">The instance.</param>
@@ -883,6 +908,25 @@ end;
 function UnitNameOf(const APasPath: string): string;
 begin
   Result:= ChangeFileExt(ExtractFileName(APasPath), '');
+end;
+
+function FromTypesIn(const ADfmText: string; const AFields: TArray<TFieldDecl>; const APairs: TArray<TTypePair>): TArray<string>;
+
+  procedure AddDistinct(const AType: string);
+  begin
+    if IsFromType(AType, APairs) and not MatchText(BareType(AType), Result) then
+      Result:= Result + [BareType(AType)];
+  end;
+
+begin
+  Result:= nil;
+  if Length(APairs) = 0 then
+    Exit;
+  for var LInst: TDfmInstance in ListDfmInstances(ADfmText) do
+    if LInst.Depth > 0 then
+      AddDistinct(LInst.TypeName);
+  for var LField: TFieldDecl in AFields do
+    AddDistinct(LField.TypeName);
 end;
 
 function ChainUnitOf(const APasPath: string; ADepth: Integer): TChainUnit;

@@ -16303,6 +16303,7 @@ end;
 {$I inc\RunnerDecisionTests.inc}
 {$I inc\MigrateTests.inc}
 {$I inc\RuleChainTests.inc}
+{$I inc\AncestorGraphTests.inc}
 
 begin
   try
@@ -16588,6 +16589,7 @@ begin
     TestRuleChainsMerge;
     TestRuleChainsSplit;
     TestRuleChainsUi;
+    TestAncestorFromTypes;
 
     FreeAndNil(GParseBook);
 
