@@ -937,6 +937,10 @@
               "arg": "N"
             },
             {
+              "name": "--max-body-tokens",
+              "arg": "N"
+            },
+            {
               "name": "--context",
               "arg": "N"
             },
@@ -946,7 +950,7 @@
             }
           ],
           "helpOrder": 39,
-          "help": ["  drag-lint context            --task \"verb qname\" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a \"## Wiki\" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)", "                               [--max-callers N] [--context N] [--no-docs]", "                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).", "                               a method reached only THROUGH an interface also gets \"## Callers via interface dispatch (IFoo.Bar): N site(s)\" sections, after the direct callers; --format json gains \"via_dispatch\" [{via,kind,sites}] (present only when non-empty) (RB-5)"]
+          "help": ["  drag-lint context            --task \"verb qname\" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a \"## Wiki\" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)", "                               [--max-callers N] [--context N] [--no-docs] [--max-body-tokens N]", "                               a whole TYPE target keeps its method bodies up to --max-body-tokens estimated tokens (default 20000; 0 = uncapped): a FOCUS method named after the type (\"modify TFoo Bar\") first, then the most-called-in-type, then the smallest; the rest are listed as header + line range under \"## Omitted bodies\" (json body_cap, bodies_omitted, omitted_bodies). A member target is never cut (CTX-TYPECAP)", "                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).", "                               a method reached only THROUGH an interface also gets \"## Callers via interface dispatch (IFoo.Bar): N site(s)\" sections, after the direct callers; --format json gains \"via_dispatch\" [{via,kind,sites}] (present only when non-empty) (RB-5)"]
         }
       ],
       "audience": "both",
@@ -963,6 +967,10 @@
         {
           "ask": "Can I get the bundle without doc comments?",
           "command": "drag-lint context --task \"modify <QName>\" --db <db> --no-docs"
+        },
+        {
+          "ask": "The bundle for a whole class is huge -- how do I get it smaller, or get every body?",
+          "command": "drag-lint context --task \"modify <TType> <MethodToKeep>\" --db <db> --max-body-tokens 20000   (0 = every body)"
         }
       ],
       "notes": "issued by the plugin from GetActiveEditorInfo (DragLint.Plugin.Editor.pas)",
@@ -972,10 +980,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-29",
+        "date": "2026-11-03",
         "by": "ENGINE",
-        "build": "1.38.0-alpha",
-        "surfaceHash": "586ac7407bd95c8d9823c15e485cb1b87c308d10854689a3f549d7842ea72a6d"
+        "build": "1.39.2-alpha",
+        "surfaceHash": "56a6fb9b865e78ed51ec8c26a7af46caaae59f0c53b0729084c880eee5d431ee"
       }
     },
     {

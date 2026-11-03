@@ -50,6 +50,14 @@ type
       /// (LibraryCallVia = 'oracle' if at least one such hit was added, else 'stored').
       /// nil (the default) keeps the stored-only count and never touches a library. The
       /// caller owns the oracle and the stores behind it.</param>
+      /// <param name="ABodyTokenCap">CTX-TYPECAP: for a TYPE target (class, record,
+      /// interface) the impl-method bodies are kept up to this many estimated tokens;
+      /// the rest land in OmittedBodies as header + line range, and the class-decl
+      /// chunk is dropped when a class surface is present. Engages only when the
+      /// bodies exceed the cap; a member target is never cut; 0 = uncapped. Words
+      /// after the type name in AQName (<c>TFoo Bar</c>) name FOCUS methods whose
+      /// bodies are always kept. Spec:
+      /// docs\superpowers\specs\2026-11-03-ctx-typecap-design.md.</param>
       /// <returns><!-- drag-lint:auto type -->TContextBundle</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -66,7 +74,8 @@ type
       /// </remarks>
       class function Build(
         const AStore: ISymbolStore; const AVerb, AQName: string; ACallerContext, AMaxCallers: Integer; AIncludeDocs, AIncludeSurface,
-        AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''; AOracle: TLibraryOracle = nil): TContextBundle;
+        AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''; AOracle: TLibraryOracle = nil;
+        ABodyTokenCap: Integer = CONTEXT_BODY_TOKEN_CAP): TContextBundle;
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: Round(Length(AText) / 3.7).</returns>
       /// <remarks>
@@ -132,11 +141,15 @@ uses
   DRagLint.Doc.Regions
   , DRagLint.Doc.Wiki   { TWikiParser -- alias matching for the ## Wiki section }
   , System.JSON         { RenderJson's content keys -- escaped by the JSON writer }
+  , System.Generics.Defaults { TComparer -- CapTypeBodies' ranking }
   ;
 
 const
   { How many external targets the "Library calls" line names. }
   LIBRARY_CALLS_TOP = 3;
+  { CTX-TYPECAP: estimated tokens of one omitted-body line beyond its header
+    text (the backticks, the L<a>-<b> range and the token note). }
+  OMITTED_LINE_TOKENS = 6;
 
 class function TContextBundler.EstimateTokens(const AText: string): Integer;
 begin
@@ -444,9 +457,204 @@ begin
   end;
 end; // procedure
 
+{ CTX-TYPECAP: the header line of one impl-method chunk -- the first line that
+  starts with a routine keyword; the first non-blank line when none does. }
+function ChunkHeaderLine(const AText: string): string;
+const
+  HEADS: array[0..5] of string = ('procedure ', 'function ', 'constructor ', 'destructor ', 'class ', 'operator ');
+begin
+  Result:= '';
+  for var S: string in AText.Split([#10]) do
+  begin
+    var T: string:= Trim(S);
+    for var H: string in HEADS do
+      if StartsText(H, T) then Exit(T);
+    if (Result = '') and (T <> '') then Result:= T;
+  end;
+end;
+
+{ CTX-TYPECAP: the bare method name of a header line (`procedure TFoo<T>.Bar(..)`
+  -> `Bar`), '' when none can be read. Generic parameter lists are skipped. }
+function HeaderLeafName(const AHeader: string): string;
+var
+  S    : string ;
+  Depth: Integer;
+  P    : Integer;
+begin
+  S:= Trim(AHeader);
+  if StartsText('class ', S) then S:= Trim(Copy(S, Length('class ') + 1, MaxInt));
+  P:= Pos(' ', S);
+  if P = 0 then Exit('');
+  S:= Trim(Copy(S, P + 1, MaxInt));  { drop the routine keyword }
+  Depth := 0;
+  var SB: TStringBuilder:= TStringBuilder.Create;
+  try
+    for P:= 1 to Length(S) do
+    begin
+      if S[P] = '<' then Inc(Depth)
+      else if S[P] = '>' then Dec(Depth)
+      else if Depth = 0 then
+      begin
+        if not CharInSet(S[P], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) then Break;
+        SB.Append(S[P]);
+      end;
+    end;
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+  if LastDelimiter('.', Result) > 0 then Result:= Copy(Result, LastDelimiter('.', Result) + 1, MaxInt);
+end;
+
+{ CTX-TYPECAP: the distinct lower-cased identifiers of one chunk's text. }
+function ChunkIdentifiers(const AText: string): TDictionary<string, Boolean>;
+var
+  P    : Integer;
+  Start: Integer;
+begin
+  Result:= TDictionary<string, Boolean>.Create;
+  P:= 1;
+  while P <= Length(AText) do
+  begin
+    if CharInSet(AText[P], ['A'..'Z', 'a'..'z', '_']) then
+    begin
+      Start:= P;
+      while (P <= Length(AText)) and CharInSet(AText[P], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(P);
+      Result.AddOrSetValue(LowerCase(Copy(AText, Start, P - Start)), True);
+    end
+    else Inc(P);
+  end;
+end;
+
+{ CTX-TYPECAP (owner ruling 2026-11-01; spec
+  docs\superpowers\specs\2026-11-03-ctx-typecap-design.md). Caps a TYPE
+  target's impl-method bodies at ACap estimated tokens, IN PLACE on ABundle.
+
+  Engages only when the bodies together exceed ACap -- below it the bundle is
+  untouched, so a small type renders exactly as before. Ranking: a FOCUS method
+  (AFocus, named after the type in the task) first and always kept; then more
+  in-type callers (how many OTHER bodies of the type mention the leaf name);
+  then smaller first; then source order. Greedy: a body that does not fit the
+  remaining budget is skipped and the walk goes on. Kept bodies stay in source
+  order; each omitted one becomes a header + line range entry. The class-decl
+  chunk is dropped when AHasSurface (it repeats the surface). }
+procedure CapTypeBodies(var ABundle: TContextBundle; ACap: Integer; const AFocus: TArray<string>; AHasSurface: Boolean);
+var
+  Ix     : TArray<Integer>;  { ImplSlice index of each impl-method chunk }
+  Leaf   : TArray<string> ;
+  Tok    : TArray<Integer>;
+  Calls  : TArray<Integer>;
+  Forced : TArray<Boolean>;
+  Keep   : TArray<Boolean>;
+  Order  : TArray<Integer>;
+  Total  : Integer        ;
+  Used   : Integer        ;
+  K      : Integer        ;
+  Kept   : TArray<TSliceChunk>;
+begin
+  Ix:= nil;
+  Total:= 0;
+  for K:= 0 to High(ABundle.ImplSlice) do
+    if ABundle.ImplSlice[K].Kind = 'impl-method' then
+    begin
+      Ix := Ix  + [K];
+      Tok:= Tok + [TContextBundler.EstimateTokens(ABundle.ImplSlice[K].Text)];
+      Inc(Total, Tok[High(Tok)]);
+    end;
+  if Total <= ACap then Exit;
+
+  SetLength(Leaf  , Length(Ix));
+  SetLength(Calls , Length(Ix));
+  SetLength(Forced, Length(Ix));
+  SetLength(Keep  , Length(Ix));
+  SetLength(Order , Length(Ix));
+  for K:= 0 to High(Ix) do
+  begin
+    Leaf[K]:= LowerCase(HeaderLeafName(ChunkHeaderLine(ABundle.ImplSlice[Ix[K]].Text)));
+    Order[K]:= K;
+    for var F: string in AFocus do
+    begin
+      var FL: string:= F;
+      if LastDelimiter('.', FL) > 0 then FL:= Copy(FL, LastDelimiter('.', FL) + 1, MaxInt);
+      if (Leaf[K] <> '') and SameText(FL, Leaf[K]) then Forced[K]:= True;
+    end;
+  end;
+
+  { In-type callers: one tokenisation per chunk, then one lookup per leaf. A
+    body sharing the leaf (an overload) is not counted as its caller. }
+  for K:= 0 to High(Ix) do
+  begin
+    var Ids: TDictionary<string, Boolean>:= ChunkIdentifiers(ABundle.ImplSlice[Ix[K]].Text);
+    try
+      for var J: Integer:= 0 to High(Ix) do
+        if (Leaf[J] <> '') and (Leaf[J] <> Leaf[K]) and Ids.ContainsKey(Leaf[J]) then Inc(Calls[J]);
+    finally
+      Ids.Free;
+    end;
+  end;
+
+  TArray.Sort<Integer>(Order, TComparer<Integer>.Construct(
+    function(const A, B: Integer): Integer
+    begin
+      Result:= Ord(Forced[B]) - Ord(Forced[A]);
+      if Result = 0 then Result:= Calls[B] - Calls[A];
+      if Result = 0 then Result:= Tok[A] - Tok[B];
+      if Result = 0 then Result:= A - B;
+    end));
+
+  Used:= 0;
+  for K in Order do
+    if Forced[K] or (Used + Tok[K] <= ACap) then
+    begin
+      Keep[K]:= True;
+      Inc(Used, Tok[K]);
+    end;
+
+  ABundle.BodyCap        := ACap;
+  ABundle.BodiesTotal    := Length(Ix);
+  ABundle.BodyTokensTotal:= Total;
+  ABundle.BodyTokensShown:= Used;
+  Kept:= nil;
+  var M: Integer:= 0;  { position in Ix }
+  for K:= 0 to High(ABundle.ImplSlice) do
+  begin
+    var C: TSliceChunk:= ABundle.ImplSlice[K];
+    if C.Kind = 'impl-method' then
+    begin
+      if Keep[M] then Kept:= Kept + [C]
+      else
+      begin
+        var O: TSliceChunk:= C;
+        O.Text:= ChunkHeaderLine(C.Text);
+        ABundle.OmittedBodies:= ABundle.OmittedBodies + [O];
+        ABundle.OmittedTokens:= ABundle.OmittedTokens + [Tok[M]];
+      end;
+      Inc(M);
+    end
+    else if (C.Kind = 'class-decl') and AHasSurface then
+    begin
+      var O: TSliceChunk:= C;
+      O.Text:= 'class declaration (its members are listed in ## Class surface)';
+      ABundle.OmittedBodies:= ABundle.OmittedBodies + [O];
+      ABundle.OmittedTokens:= ABundle.OmittedTokens + [TContextBundler.EstimateTokens(C.Text)];
+    end
+    else Kept:= Kept + [C];
+  end;
+  ABundle.ImplSlice:= Kept;
+end;
+
+{ How many impl-method bodies the cap omitted (the class-decl entry excluded). }
+function OmittedMethodCount(const ABundle: TContextBundle): Integer;
+begin
+  Result:= 0;
+  for var O: TSliceChunk in ABundle.OmittedBodies do
+    if O.Kind = 'impl-method' then Inc(Result);
+end;
+
 class function TContextBundler.Build(
   const AStore: ISymbolStore; const AVerb, AQName: string; ACallerContext, AMaxCallers: Integer; AIncludeDocs, AIncludeSurface,
-  AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''; AOracle: TLibraryOracle = nil): TContextBundle;
+  AIncludeImpl: Boolean; AExcludeDfmFields: Boolean = True; const ATaskText: string = ''; AOracle: TLibraryOracle = nil;
+        ABodyTokenCap: Integer = CONTEXT_BODY_TOKEN_CAP): TContextBundle;
 var
   Syms       : TArray<TSymbol>   ;
   Sym        : TSymbol           ;
@@ -465,6 +673,8 @@ var
   BC         : TBundleCaller     ;
   VTot       : TBundleViaTotal   ;
   R          : TReference        ;
+  LookupName : string            ;  { AQName's first word -- see the focus words }
+  Focus      : TArray<string>    ;  { CTX-TYPECAP focus method names }
 
   { Up to MAX_WIKI_TOPICS topics whose name or alias the task phrase matched.
 
@@ -529,10 +739,21 @@ var
 begin
   FillChar(Result, SizeOf(Result), 0);
   Result.Verb       := AVerb;
-  Result.QName      := AQName;
   Result.GeneratedAt:= Now;
 
-  Syms:= AStore.FindSymbolsByQualifiedName(AQName);
+  { CTX-TYPECAP focus words: a qname never contains a space, so in
+    `TFoo Bar Baz` the first word is the symbol and the rest name methods whose
+    bodies CapTypeBodies always keeps. A phrase without a space is unchanged. }
+  LookupName:= Trim(AQName);
+  Focus     := nil;
+  if LookupName.Contains(' ') then
+  begin
+    Focus     := Copy(LookupName, Pos(' ', LookupName) + 1, MaxInt).Split([' ', ','], TStringSplitOptions.ExcludeEmpty);
+    LookupName:= Copy(LookupName, 1, Pos(' ', LookupName) - 1);
+  end;
+  Result.QName:= LookupName;
+
+  Syms:= AStore.FindSymbolsByQualifiedName(LookupName);
 
   { BARE NAME FALLBACK. FindSymbolsByQualifiedName matches the FULL dotted name,
     so `context --task "modify TypeIsRefCountedOrValue"` found nothing and this
@@ -576,7 +797,7 @@ begin
     rule by run_context_bare_name_body.ps1. Both live in ResolveUniqueName. }
   if Length(Syms) = 0 then
   begin
-    Syms:= ResolveUniqueName(AStore, AQName);
+    Syms:= ResolveUniqueName(AStore, LookupName);
     { Report the resolved QUALIFIED name, not the text the caller typed --
       the bundle header is the reader's evidence of WHICH symbol they got. }
     if Length(Syms) = 1 then Result.QName:= Syms[0].QualifiedName;
@@ -616,7 +837,7 @@ begin
 
     Guarded by tests\autotest\run_context_bare_name_body.ps1. }
   EffQName:= Sym.QualifiedName;
-  if EffQName = '' then EffQName:= AQName;  { defensive: never regress to empty }
+  if EffQName = '' then EffQName:= LookupName;  { defensive: never regress to empty }
 
   if AIncludeDocs then MatchWikiTopics;
 
@@ -681,6 +902,12 @@ begin
   // class SURFACE (signatures, cheap) already supplies the surrounding shape;
   // the body the caller actually needs is the target's own.  (v0.41)
   if AIncludeImpl then Result.ImplSlice:= AStore.GetSymbolSlice(EffQName);
+  { CTX-TYPECAP: a whole TYPE's slice is every method body; cap it. }
+  if AIncludeImpl and (ABodyTokenCap > 0) and (Sym.Kind in [skClass, skInterface, skRecord]) then
+  begin
+    CapTypeBodies(Result, ABodyTokenCap, Focus, Length(Result.ClassSurface) > 0);
+    if Result.BodyCap > 0 then Result.BodyFile:= AStore.GetFilePath(Sym.FileId);
+  end;
 
   // Callers (truncated to AMaxCallers; resolve FilePath from store)
   CallerName:= EffQName;
@@ -751,6 +978,8 @@ begin
       C:= Result.ImplSlice[I];
       Inc(Total, EstimateTokens(C.Text));
     end;
+    { The omitted-bodies list is rendered, so it is counted (header + range). }
+    for I:= 0 to High(Result.OmittedBodies) do Inc(Total, EstimateTokens(Result.OmittedBodies[I].Text) + OMITTED_LINE_TOKENS);
     for I:= 0 to High(Result.Callers) do
     begin
       BC:= Result.Callers[I];
@@ -868,6 +1097,19 @@ begin
       SB.AppendLine;
     end;
 
+    { CTX-TYPECAP: the bodies the type cap left out, as header + line range. }
+    if Length(ABundle.OmittedBodies) > 0 then
+    begin
+      SB.AppendLine(Format('## Omitted bodies (%d of %d method bodies; body cap %d tokens, shown ~%d of ~%d)',
+        [OmittedMethodCount(ABundle), ABundle.BodiesTotal, ABundle.BodyCap, ABundle.BodyTokensShown, ABundle.BodyTokensTotal]));
+      SB.AppendLine('file: ' + ABundle.BodyFile);
+      for I:= 0 to High(ABundle.OmittedBodies) do
+        SB.AppendLine(Format('- `%s` -- L%d-%d (~%d tok)', [ABundle.OmittedBodies[I].Text, ABundle.OmittedBodies[I].StartLine,
+          ABundle.OmittedBodies[I].EndLine, ABundle.OmittedTokens[I]]));
+      SB.AppendLine(CapOmittedNote(OmittedMethodCount(ABundle), ABundle.BodyCap, False, '--max-body-tokens', 0));
+      SB.AppendLine;
+    end;
+
     if ABundle.LibraryCallCount > 0 then
     begin
       SB.AppendLine(Format('Library calls: %d (top: %s)', [ABundle.LibraryCallCount, string.Join(', ', ABundle.LibraryCallTop)]));
@@ -956,6 +1198,8 @@ begin
       C:= ABundle.ImplSlice[I];
       SB.AppendLine(C.Text);
     end;
+    for I:= 0 to High(ABundle.OmittedBodies) do  { CTX-TYPECAP }
+      SB.AppendLine(Format('// omitted: %s  (L%d-%d)', [ABundle.OmittedBodies[I].Text, ABundle.OmittedBodies[I].StartLine, ABundle.OmittedBodies[I].EndLine]));
     Result:= SB.ToString;
   finally
     SB.Free;
@@ -1073,6 +1317,23 @@ begin
       JImpact.AddElement(TJSONObject.Create.AddPair('depth', TJSONNumber.Create(IL.Depth))
         .AddPair('callers', TJSONNumber.Create(IL.CallerCount)).AddPair('units', TJSONNumber.Create(IL.UnitCount)));
     Extra.AddPair('impact', JImpact);
+    { CTX-TYPECAP: present only when the type body cap engaged. }
+    if ABundle.BodyCap > 0 then
+    begin
+      Extra.AddPair('body_cap', TJSONNumber.Create(ABundle.BodyCap));
+      Extra.AddPair('bodies_total', TJSONNumber.Create(ABundle.BodiesTotal));
+      Extra.AddPair('bodies_omitted', TJSONNumber.Create(OmittedMethodCount(ABundle)));
+      Extra.AddPair('body_tokens_total', TJSONNumber.Create(ABundle.BodyTokensTotal));
+      Extra.AddPair('body_tokens_shown', TJSONNumber.Create(ABundle.BodyTokensShown));
+      var JOmit: TJSONArray:= TJSONArray.Create;
+      for I:= 0 to High(ABundle.OmittedBodies) do
+        JOmit.AddElement(TJSONObject.Create.AddPair('kind', ABundle.OmittedBodies[I].Kind)
+          .AddPair('signature', ABundle.OmittedBodies[I].Text)
+          .AddPair('start_line', TJSONNumber.Create(ABundle.OmittedBodies[I].StartLine))
+          .AddPair('end_line', TJSONNumber.Create(ABundle.OmittedBodies[I].EndLine))
+          .AddPair('tokens', TJSONNumber.Create(ABundle.OmittedTokens[I])));
+      Extra.AddPair('omitted_bodies', JOmit);
+    end;
     var Tail: string:= Extra.ToJSON;  // an object: its keys are spliced in after the summary keys
     Result:= Copy(Result, 1, Length(Result) - 1) + ',' + Copy(Tail, 2, MaxInt);
   finally
