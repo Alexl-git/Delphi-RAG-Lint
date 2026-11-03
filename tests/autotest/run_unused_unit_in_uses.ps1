@@ -245,13 +245,34 @@ end;
 
 end.
 '@
+# KIND-FOLLOWUP (1.41): the class ctor/dtor answer comes from the INDEX (kind constructor /
+# destructor + is_class_method, extractor 1.29.0), not from re-reading the source. This unit's
+# .pas is deleted after indexing: a source scan answers False and calls the import dead.
+Write-Ascii (Join-Path $lib 'uClassDtorGone.pas') @'
+unit uClassDtorGone;
+
+interface
+
+type
+  TGone = class
+    class destructor Destroy;
+  end;
+
+implementation
+
+class destructor TGone.Destroy;
+begin
+end;
+
+end.
+'@
 Write-Ascii (Join-Path $prj 'uHost.pas') @'
 unit uHost;
 
 interface
 
 uses
-  uFinalOnly, uClassCtor, uCommentedCtor;
+  uFinalOnly, uClassCtor, uCommentedCtor, uClassDtorGone;
 
 implementation
 
@@ -262,6 +283,7 @@ $libDb = Join-Path $WorkDir 'lib.sqlite'
 $prjDb = Join-Path $WorkDir 'prj.sqlite'
 & $Exe index $lib --db $libDb 2>&1 | Out-Null
 & $Exe index $prj --db $prjDb 2>&1 | Out-Null
+[System.IO.File]::Delete((Join-Path $lib 'uClassDtorGone.pas'))   # KIND-FOLLOWUP: the index alone must answer
 
 $rep = Join-Path $WorkDir 'rep.txt'
 & $Exe lint-all --db $prjDb --db $libDb --output $rep 2>&1 | Out-Null
@@ -284,7 +306,9 @@ Check 'a unit with only a FINALIZATION section is NOT reported' `
 Check 'a unit with a CLASS CONSTRUCTOR is NOT reported' `
   (-not (($uuiu -join "`n") -match 'uClassCtor')) 'class constructor runs at unit start-up'
 Check 'NEGATIVE CONTROL: class ctor/dtor words only in a comment/string IS still reported' `
-  (($uuiu -join "`n") -match 'uCommentedCtor') 'the source scan must skip comments and strings'
+  (($uuiu -join "`n") -match 'uCommentedCtor') 'only a real class ctor/dtor declaration counts, never the words in a comment or string'
+Check 'a unit whose CLASS DESTRUCTOR is known only to the index (source gone) is NOT reported' `
+  (-not (($uuiu -join "`n") -match 'uClassDtorGone')) 'KIND-FOLLOWUP: kind + is_class_method, not a source scan'
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'UNUSED-UNIT-IN-USES GUARD: FAIL' -ForegroundColor Red; exit 1 }

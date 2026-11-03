@@ -1,0 +1,7 @@
+# REDUNDANT-ASTOBJ: a constructor call on a T-class (TStringList.Create, with or without
+# parentheses) is already a class instance, so ' as TObject' is redundant (18, 19).
+# A non-constructor call (20) and an interface cast (21) have a type the source does not show.
+redundant-as-tobject 18
+redundant-as-tobject 19
+!redundant-as-tobject 20
+!redundant-as-tobject 21

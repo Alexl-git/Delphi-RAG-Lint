@@ -163,6 +163,7 @@ uses
   , DRagLint.Lint   .IfdefUndefined // dl:unit DRagLint.Lint.IfdefUndefined accepted -- the rule id travels with the checker that emits it, so --rule gating and the findings cannot drift apart
   , DRagLint.Lint   .PlatformDivergent // dl:unit DRagLint.Lint.PlatformDivergent accepted -- the rule id travels with the checker that emits it, so --rule gating and the findings cannot drift apart
   , DRagLint.Lint   .ProjectRules
+  , DRagLint.Lint.SharedScope { TSiblingStoreResolver / TSiblingProjectLister -- SHARED-UNIT-SCOPE (1.41) }
   , DRagLint.Lint   .ClassMetrics
   , DRagLint.Lint   .TaintRules
   , DRagLint.Lint   .DocRules
@@ -1035,7 +1036,8 @@ function LintLibraryDb     (const AArgs: TArgs): string        ; forward;
 function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string; forward;
 function MakeSiblingStoreResolver(const AArgs: TArgs;
   const AKeepAlive: TList<ISymbolStore>;
-  const AOwned: TObjectList<TObject>): DRagLint.Lint.ProjectRules.TSiblingStoreResolver; forward;
+  const AOwned: TObjectList<TObject>): DRagLint.Lint.SharedScope.TSiblingStoreResolver; forward;
+function MakeSiblingProjectLister(const AArgs: TArgs): DRagLint.Lint.SharedScope.TSiblingProjectLister; forward;
 
 // v0.14: load defaults from `.drag-lint.json` in cwd (or any parent),
 // before CLI flags. Recognized keys:
@@ -16636,7 +16638,7 @@ begin
                                  RuleKeptByRun(AArgs, Cfg, Marked));
             for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
                        FlowStore, NarrowRule, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore,
-                       FileOptIn, {AOnlyFileId=}FlowFid, WholeGraph) do
+                       FileOptIn, {AOnlyFileId=}FlowFid, WholeGraph, MakeSiblingProjectLister(AArgs)) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
             { E18 T15b: circular-uses for EVERY unit of a cycle, on the uses line, with the
@@ -22947,7 +22949,8 @@ begin
       rule so it narrows inside -- the same two halves `lint` uses. }
     if LintRuleWants(Nr, LINT_GATE_PROJECT_RULES) then
       Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
-        Store, Nr, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
+        Store, Nr, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn, 0, nil,
+        MakeSiblingProjectLister(AArgs));
     { E18 T16: a circular-uses message ends in a `cycles --fix` pointer; --project names the real
       project in it instead of the placeholder (the stem stays the finding's anchor unit). }
     if AArgs.ProjectPath <> '' then
@@ -23453,7 +23456,7 @@ begin
                                    [ProjLibWhy]));
     Findings:= DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
       Store, AArgs.Rule, MakeSiblingStoreResolver(AArgs, SibKeep2, SibOwned2),
-      ProjLibStore, OptIn2);
+      ProjLibStore, OptIn2, 0, nil, MakeSiblingProjectLister(AArgs));
   finally
     SibKeep2 .Free;
     SibOwned2.Free;
@@ -33144,6 +33147,53 @@ begin
   Result:= TheOnlyProjectDb('');
 end; // function
 
+{ Fills ANameToDb (lowercased manifest section name -> DB path) from the manifest the run
+  reads (--config wins, exactly as DoResolveDbsList treats it -- without this the resolver
+  would silently read the MACHINE's manifest while the rest of the run used the one the
+  caller named, and a hermetic test could not point it anywhere). A manifest that will not
+  load leaves it empty: every name is then unresolvable, which the rules read as "could not
+  check". Shared by MakeSiblingStoreResolver and MakeSiblingProjectLister (1.41). }
+procedure LoadSiblingNameToDb(const AArgs: TArgs; const ANameToDb: TDictionary<string, string>);
+begin
+  try
+    var Manifest: TIndexManifest:=
+      if AArgs.WorkspaceConfig <> '' then
+        TManifestIO.ParseText(TFile.ReadAllText(AArgs.WorkspaceConfig), ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig)))
+      else TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    var Platform: string:= AArgs.CheckPlatform;
+    if Platform = '' then Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
+    if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
+    var Resolver: DRagLint.Project.Resolver.TProjectResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+    try
+      var Plan: TIndexPlan:= ResolvePlan(Manifest, [Platform], Resolver);
+      for var PS in Plan.Items do
+        if (PS.Name <> '') and (PS.DbPath <> '') then
+          ANameToDb.AddOrSetValue(LowerCase(PS.Name), PS.DbPath);
+    finally
+      Resolver.Free;
+    end;
+  except  // dl:ok try-except-swallowed@e230 -- a manifest that will not load degrades the lint run to "could not check"; it is not an index build
+  end;
+end;
+
+{ Lists the manifest's section names for SHARED-UNIT-SCOPE (1.41): the rules ask each
+  section's index whether it lists a unit. Lazy: the manifest is read on the first call. }
+function MakeSiblingProjectLister(const AArgs: TArgs): DRagLint.Lint.SharedScope.TSiblingProjectLister;
+begin
+  Result:=
+    function: TArray<string>
+    var
+      NameToDb: TDictionary<string, string>;
+    begin
+      NameToDb:= TDictionary<string, string>.Create;
+      try
+        LoadSiblingNameToDb(AArgs, NameToDb);
+        Result:= NameToDb.Keys.ToArray;
+      finally
+        NameToDb.Free;
+      end;
+    end;
+end; // function
 { Maps a project NAME -- as a shared unit's own `dl:shared` header spells it --
   to an open read-only store, for `unused-public-symbol`.
 
@@ -33171,7 +33221,7 @@ end; // function
   Both are the caller's to free, after the rules have run. }
 function MakeSiblingStoreResolver(const AArgs: TArgs;
   const AKeepAlive: TList<ISymbolStore>;
-  const AOwned: TObjectList<TObject>): DRagLint.Lint.ProjectRules.TSiblingStoreResolver;
+  const AOwned: TObjectList<TObject>): DRagLint.Lint.SharedScope.TSiblingStoreResolver;
 var
   NameToDb: TDictionary<string, string>;
   Opened  : TDictionary<string, ISymbolStore>;
@@ -33195,34 +33245,7 @@ begin
       if not Resolved then
       begin
         Resolved:= True; { one attempt, success or not -- a broken manifest must not be re-parsed per symbol }
-        try
-          { --config wins when given, exactly as DoResolveDbsList treats it.
-            Without this the resolver would silently read the MACHINE's manifest
-            while the rest of the run used the one the caller named -- and a
-            hermetic test could not point it anywhere. }
-          var Manifest: TIndexManifest;
-          if AArgs.WorkspaceConfig <> '' then
-            Manifest:= TManifestIO.ParseText(TFile.ReadAllText(AArgs.WorkspaceConfig),
-                                             ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig)))
-          else
-            Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
-          var Platform: string:= AArgs.CheckPlatform;
-          if Platform = '' then Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
-          if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
-          var Resolver: DRagLint.Project.Resolver.TProjectResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
-          try
-            var Plan: TIndexPlan:= ResolvePlan(Manifest, [Platform], Resolver);
-            for var PS in Plan.Items do
-              if (PS.Name <> '') and (PS.DbPath <> '') then
-                NameToDb.AddOrSetValue(LowerCase(PS.Name), PS.DbPath);
-          finally
-            Resolver.Free;
-          end;
-        except
-          { A manifest that will not load leaves every name unresolvable, which
-            the rule reads as "could not check" and reports. Degrading, not
-            failing, is right: this is a lint run, not an index build. }
-        end;
+        LoadSiblingNameToDb(AArgs, NameToDb);
       end;
       if Opened.TryGetValue(LowerCase(AProjectName), St) then Exit(St);
       if not NameToDb.TryGetValue(LowerCase(AProjectName), DbPath) then Exit;

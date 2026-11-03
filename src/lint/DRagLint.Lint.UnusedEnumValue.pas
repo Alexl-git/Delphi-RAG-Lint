@@ -53,6 +53,15 @@ const
 /// and its type may be reported -- the documented false-positive shape.</remarks>
 function CollectUnusedEnumValue(const AStore: ISymbolStore): TArray<TLintFinding>;
 
+/// <summary>The bare type name a symbol's signature declares, as written:
+/// `pK: TKind` -> `TKind`, `X: Unit.TKind` -> `TKind`.</summary>
+/// <param name="ASignature">A symbols.signature value (`name: type ...`, or a bare type).</param>
+/// <returns>The identifier run after the first colon with any unit / outer-type
+/// qualifier dropped; '' when there is none. Case is preserved.</returns>
+/// <remarks>Shared by unused-enum-value and enum-ordinal-persisted (DUPCODE-LEGACY, 1.41):
+/// both match a typed symbol to an enum type by this name. Pure string function.</remarks>
+function DeclaredTypeName(const ASignature: string): string;
+
 implementation
 
 uses
@@ -74,8 +83,7 @@ const
   REF_CALL      = 'call';
   NO_ORDINAL    = -1;
 
-{ The bare type name a symbol's signature declares (`pK: TKind` -> `tkind`). }
-function DeclaredTypeLower(const ASignature: string): string;
+function DeclaredTypeName(const ASignature: string): string;
 var
   S: string;
   I: Integer;
@@ -89,7 +97,6 @@ begin
   Result:= Copy(S, 1, I - 1);
   I:= LastDelimiter('.', Result);
   if I > 0 then Result:= Copy(Result, I + 1, MaxInt);
-  Result:= LowerCase(Result);
 end;
 
 { True for a FILLER value: its name ends in a decimal number equal to its own
@@ -205,7 +212,7 @@ begin
       for var S in AStore.FindSymbolsByKind(K, False, MaxInt) do
       begin
         var E: Int64;
-        if not EnumByName.TryGetValue(DeclaredTypeLower(S.Signature), E) or (E <= 0) then Continue;
+        if not EnumByName.TryGetValue(LowerCase(DeclaredTypeName(S.Signature)), E) or (E <= 0) then Continue;
         BoundToEnum.AddOrSetValue(S.Id, E);
         { a property of the type may be streamed (DFM) by name }
         if K = KIND_PROPERTY then Implicit.AddOrSetValue(E, True);
