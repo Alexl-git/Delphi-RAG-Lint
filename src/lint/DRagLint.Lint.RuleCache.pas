@@ -312,7 +312,7 @@ begin
   if Path = '' then Exit;
   try
     var Prefix: string:= ExtractFileName(Path) + '.tmp-';
-    for var Leftover: string in TDirectory.GetFiles(ExtractFileDir(Path), Prefix + '*') do
+    for var Leftover: string in TDirectory.GetFiles(ExtractFileDir(Path), Prefix + '*') do  // dl:ok taint-path-traversal@83b1 -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input); only rules-<hash>.json.tmp-<pid> files of a dead pid are deleted
     begin
       var Pid: Integer:= StrToIntDef(Copy(ExtractFileName(Leftover), Length(Prefix) + 1, MaxInt), 0);
       if (Pid <= 0) or (Cardinal(Pid) = GetCurrentProcessId) then Continue;
