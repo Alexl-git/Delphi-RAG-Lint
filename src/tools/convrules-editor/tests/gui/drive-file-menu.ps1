@@ -314,7 +314,10 @@ try {
   $st = ''; $t0 = Get-Date
   while (((Get-Date) - $t0).TotalSeconds -lt 10) { $st = (@(Find $main 'TStatusBar' $null) | ForEach-Object { [W]::Txt($_) }) -join ' | '; if ($st -match 'Save was NOT run' -and $st -match 'file or folder dialog') { break }; Start-Sleep -Milliseconds 300 }
   Check 'dlggap.save.reported' (($st -match 'Save was NOT run') -and ($st -match 'file or folder dialog')) ("status: $st")
-  Start-Sleep -Seconds 1  [void][W]::InvokeMenu($main, 'File|Save')
+  Start-Sleep -Seconds 1
+  # Two statements once shared this line with no separator: Start-Sleep threw on the extra argument, the trap
+  # exited mid-run and this Save never ran (so Exit met an unsaved book).
+  [void][W]::InvokeMenu($main, 'File|Save')
   $t0 = Get-Date; while ((Test-Path $out) -and ((Get-Content $out -Raw) -match 'GuardUnitX') -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500 }
   Start-Sleep -Seconds 2
 
@@ -325,8 +328,9 @@ try {
 }
 finally {
   if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
-  Get-ChildItem $tmp -File | ForEach-Object { [IO.File]::Delete($_.FullName) }
-  [IO.Directory]::Delete($tmp)
+  [void]$p.WaitForExit(15000)
+  # Cleanup is not a check: a just-killed editor (or its engine child) can still hold the folder for a moment.
+  try { Get-ChildItem $tmp -File | ForEach-Object { [IO.File]::Delete($_.FullName) }; [IO.Directory]::Delete($tmp) } catch { "INFO  cleanup: $($_.Exception.Message)" }
   "gui-file: $script:pass pass / $script:fail fail"
 }
 if ($script:fail -gt 0) { exit 1 }
