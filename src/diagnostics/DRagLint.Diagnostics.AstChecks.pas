@@ -3022,10 +3022,7 @@ var
   begin
     Name:= LowerCase(NodeStr(AId));
     for K:= Scopes.Count - 1 downto 0 do
-      if Scopes[K].TryGetValue(Name, AType) then
-      begin
-        if (not ScopeEnd[K].TryGetValue(Name, Ends)) or (Ends <= Int64(AId.StartByte)) then Exit(True);
-      end;
+      if Scopes[K].TryGetValue(Name, AType) and ((not ScopeEnd[K].TryGetValue(Name, Ends)) or (Ends <= Int64(AId.StartByte))) then Exit(True);
     Result:= TypeMap.TryGetValue(Name, AType);
   end;
 
@@ -3036,7 +3033,7 @@ var
   var
     Decls: TDictionary<string,string>;
     Ends : TDictionary<string,Int64> ;
-    J, K : Integer;
+    J    : Integer;
     Kid  : TTSNode;
     One  : TDictionary<string,string>;
   begin
@@ -3050,19 +3047,17 @@ var
       Exit(True);
     end;
     if N.NodeType <> 'block' then Exit;
-    Decls:= nil;
-    Ends:= nil;
+    { owned by the scope lists from creation; an empty block's pair is popped below }
+    Decls:= TDictionary<string,string>.Create;
+    Scopes.Add(Decls);
+    Ends:= TDictionary<string,Int64>.Create;
+    ScopeEnd.Add(Ends);
     for J:= 0 to N.NamedChildCount - 1 do
     begin
       Kid:= N.NamedChild(J);
       var EndAt: Int64:= Kid.EndByte;
       if Kid.NodeType = 'assignment' then Kid:= Kid.ChildByField('lhs');
       if Kid.IsNull or ((Kid.NodeType <> 'varDef') and (Kid.NodeType <> 'varAssignDef')) then Continue;
-      if Decls = nil then
-      begin
-        Decls:= TDictionary<string,string>.Create;
-        Ends:= TDictionary<string,Int64>.Create;
-      end;
       One:= TDictionary<string,string>.Create;
       try
         CollectDeclTypes(Kid, Src, One, True);
@@ -3079,10 +3074,13 @@ var
         One.Free;
       end;
     end;
-    if Decls = nil then Exit;
-    K:= Scopes.Add(Decls);
-    ScopeEnd.Add(Ends);
-    Result:= K >= 0;
+    if Decls.Count = 0 then
+    begin
+      Scopes.Delete(Scopes.Count - 1);
+      ScopeEnd.Delete(ScopeEnd.Count - 1);
+      Exit;
+    end;
+    Result:= True;
   end;
 
   function OperandIsFloat(const N: TTSNode): Boolean;

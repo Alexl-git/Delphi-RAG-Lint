@@ -213,11 +213,11 @@ uses
   DRagLint.Report.CycleEdge, { BareUsesBinding / ProjectUnitScopes -- circular-uses binds a bare
                                uses name exactly as the cycles graph does (A3-b) }
   DRagLint.Lint.EnumOrdinalPersisted, { CollectEnumOrdinalPersisted -- lane X6 }
-  DRagLint.Lint.UnusedEnumValue, { CollectUnusedEnumValue -- lane B-ENUM }
+  DRagLint.Lint.UnusedEnumValue, { CollectUnusedEnumValue -- lane B-ENUM } // dl:unit DRagLint.Lint.UnusedEnumValue accepted -- UNUSED_ENUM_VALUE_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectUnusedEnumValue, the collector this unit calls
   DRagLint.Lint.UnusedGlobal, { CollectUnusedGlobal -- 1.40 lane unusedg } // dl:unit DRagLint.Lint.UnusedGlobal accepted -- UNUSED_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectUnusedGlobal, the collector this unit calls
   DRagLint.Lint.ReadNeverAssigned, { CollectReadNeverAssigned -- owner request #5b } // dl:unit DRagLint.Lint.ReadNeverAssigned accepted -- READ_NEVER_ASSIGNED_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectReadNeverAssigned, the collector this unit calls
   DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
-  DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) }
+  DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) } // dl:unit DRagLint.Lint.UsesAudit accepted -- USES_VERDICT_MOVE is how this unit reads the verdict TUsesAuditor returns; it travels with TUsesAuditor, the auditor this unit calls
 
 { Side-effect / operator / helper units that are legitimately used without any
   named symbol reference. Stored lowercase for fast SameText comparison. }
