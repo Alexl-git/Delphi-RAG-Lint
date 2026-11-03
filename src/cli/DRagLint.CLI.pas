@@ -12023,6 +12023,12 @@ begin
   Result:= 0;
 end; // function
 
+{ True when a finding of ARule depends on the project's compile closure (a
+  project-scope, class-metric, taint, doc-drift or cross-file duplicate rule), so a
+  dl:ok for it on a dl:shared unit cannot be judged by one project's index.
+  Defined beside the LINT_GATE_* consts. }
+function IsClosureDependentMarkerRule(const ARule: string): Boolean; forward;
+
 { Drops findings whose source line records them as reviewed, and reports review
   markers that have gone stale or unused.
 
@@ -12095,6 +12101,7 @@ var
   Markers   : TArray<TReviewMarker>              ;
   M         : TReviewMarker                      ;
   Want      : string                             ;
+  SharedProjects: TDictionary<string, Boolean>   ;
 
   { The join key between a finding and the marker that suppressed it.
 
@@ -12189,6 +12196,7 @@ begin
   Extra    := TList<TLintFinding>.Create;
   Accounted:= TDictionary<string, Boolean>.Create;
   Emitted  := TDictionary<string, Boolean>.Create;
+  SharedProjects:= TDictionary<string, Boolean>.Create;
   try
     for F in AFindings do
     begin
@@ -12596,6 +12604,16 @@ begin
               it cannot judge the marker on an enum declaration line; lint-all can. }
             if (AUnjudgedRules <> nil) and MatchText(M.RuleId, TYPE_SCOPE_RULES)
                and TRegEx.IsMatch(Lines[LN - 1], ENUM_DECL_LINE) then Continue;
+            { A dl:shared unit is compiled by several projects, each with its own
+              index: a marker for a closure-dependent rule may be live only under
+              another project's closure (YADF FP #5, 2026-11-03). Not judged here;
+              backlog MARKER-SHARED-UNION merges findings across --db first. }
+            if IsClosureDependentMarkerRule(M.RuleId) then
+            begin
+              if not SharedProjects.ContainsKey(LowerCase(SF)) then
+                SharedProjects.Add(LowerCase(SF), Length(TSharedUnit.ProjectsOf(SF)) > 1);
+              if SharedProjects[LowerCase(SF)] then Continue;
+            end;
             if not Accounted.ContainsKey(MarkerKey(SF, LN, M.RuleId)) then
               EmitHint(SF, LN, 'review-marker-unused',
                 Format('dl:ok marker for "%s" no longer matches any finding on this line -- remove it.', [M.RuleId]));
@@ -12608,6 +12626,7 @@ begin
 
     Result:= Kept.ToArray + Extra.ToArray;
   finally
+    SharedProjects.Free;
     Emitted.Free;
     Accounted.Free;
     Extra.Free;
@@ -14694,6 +14713,14 @@ const
     'taint-sql-injection', 'taint-command-injection', 'taint-path-traversal');
   { lane INC3: the preprocessor's own report (DRagLint.Diagnostics.PpChecks) }
   LINT_GATE_PP: array[0..0] of string = ('pp-unresolved-if');
+{ See the forward declaration before ApplyLineMarkers. }
+function IsClosureDependentMarkerRule(const ARule: string): Boolean;
+begin
+  Result:= MatchText(ARule, LINT_GATE_PROJECT_RULES) or MatchText(ARule, LINT_GATE_CLASS_METRICS)
+    or MatchText(ARule, LINT_GATE_TAINT) or MatchText(ARule, LINT_GATE_DOC_DRIFT)
+    or MatchText(ARule, ['duplicate-code', 'interface-reference-cycle', 'used-unit-not-resolvable',
+                        'unit-not-in-dpr', 'unit-not-in-library']);
+end;
 { True when a lint run with --rule ARule needs a checker that emits AIds: always
   for a run with no --rule, otherwise only when ARule is one of them. }
 function LintRuleWants(const ARule: string; const AIds: array of string): Boolean;
