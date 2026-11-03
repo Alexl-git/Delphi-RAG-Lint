@@ -10740,11 +10740,13 @@ begin
     FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [BARE_LEAF_DFM, MID_DFM, CONV_BASE_DFM]), FakeCodeUses(['IndexName|tblFtrs|41'], False));
   Check('code.use.converted.product.shape', U.Known and (Length(U.Verdicts) = 0), Format('n=%d %s', [Length(U.Verdicts), U.Error]));
 
-  // An unusable (binary) ancestor .dfm: a name no ancestor declares is still decided from
-  // Fields alone (Known); a declared name needs that .dfm for its chain (unknown).
+  // An unusable (binary) ancestor .dfm: code-use matching itself still decides a name no
+  // ancestor declares from Fields alone (no verdict), but since C8CHAIN the unit's ancestor
+  // graph cannot be walked past that .dfm, so the unit is unknown (the gate asks once);
+  // a declared name needs that .dfm for its chain (unknown too).
   Reader:= FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [BARE_LEAF_DFM, BINARY_DFM, BASE_DFM]);
   U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, FakeCodeUses(['Caption|lblNoSuch|60', 'ShowMessage||61'], False));
-  Check('code.use.binary.dfm.nonfield.known', U.Known and (Length(U.Verdicts) = 0), Format('known=%s n=%d %s', [BoolToStr(U.Known, True), Length(U.Verdicts), U.Error]));
+  Check('code.use.binary.dfm.nonfield.known', (not U.Known) and (Length(U.Verdicts) = 0) and ContainsText(U.Error, 'Mid.dfm'), Format('known=%s n=%d %s', [BoolToStr(U.Known, True), Length(U.Verdicts), U.Error]));
   U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, FakeCodeUses(['IndexName|tblFtrs|41'], False));
   Check('code.use.binary.dfm.field.unknown', not U.Known and (Pos('Mid.dfm', U.Error) > 0) and (Length(U.Verdicts) = 0), U.Error);
 
@@ -16591,6 +16593,7 @@ begin
     TestRuleChainsUi;
     TestAncestorFromTypes;
     TestAncestorGraphWalk;
+    TestAnalyzeAncestors;
 
     FreeAndNil(GParseBook);
 

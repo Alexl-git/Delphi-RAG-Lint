@@ -94,3 +94,40 @@ begin
   G:= AncestorGraphOf(Own, [], FakeLookup(Rows, nil), Reader(), [], Err);
   Check('ag.walk.no.pairs', (Err = '') and (Length(G) = 2) and (Length(G[0].Types) = 0));
 end;
+procedure TestAnalyzeAncestors;
+const
+  LEAF_INH_DFM = 'inherited LeafForm: TLeaf' + AG_CRLF + '  inherited tblX: TTable' + AG_CRLF + '  end' + AG_CRLF + 'end';
+  LEAF_OWN_DFM = 'inherited LeafForm: TLeaf' + AG_CRLF + '  object lblMine: TLabel' + AG_CRLF + '  end' + AG_CRLF + 'end';
+var
+  LInh: TUnitInheritance;
+
+  function Rows: TArray<string>;
+  begin
+    Result:= ['TLeaf|' + AG_LEAF_PAS + '|TMid', 'TMid|' + AG_MID_PAS + '|TBase', 'TBase|' + AG_BASE_PAS + '|TForm'];
+  end;
+
+  function Rd(const ALeafDfm, AMidDfm: string): TDfmTextReader;
+  begin
+    Result:= FakeReader([ChangeFileExt(AG_LEAF_PAS, '.dfm'), ChangeFileExt(AG_MID_PAS, '.dfm'), ChangeFileExt(AG_BASE_PAS, '.dfm')],
+      [ALeafDfm, AMidDfm, AG_BASE_DFM]);
+  end;
+
+begin
+  LInh:= AnalyzeUnit(AG_LEAF_PAS, AgPairs, FakeLookup(Rows, nil), Rd(LEAF_INH_DFM, AG_MID_DFM), nil);
+  Check('ag.analyze.ancestors.root.first', LInh.Known and (Length(LInh.Ancestors) = 2) and SameText(LInh.Ancestors[0].PasPath, AG_BASE_PAS)
+    and SameText(LInh.Ancestors[1].PasPath, AG_MID_PAS), LInh.Error);
+  Check('ag.analyze.intermediate.converted', (Length(LInh.Ancestors) = 2) and (Length(LInh.Ancestors[1].Types) = 0));
+  Check('ag.analyze.verdicts.kept', (Length(LInh.Verdicts) = 1) and (LInh.Verdicts[0].State = asUnconverted));
+  LInh:= AnalyzeUnit(AG_LEAF_PAS, AgPairs, FakeLookup(Rows, nil), Rd(LEAF_INH_DFM, AG_MID_OWN_DFM), nil);
+  Check('ag.analyze.intermediate.unconverted', (Length(LInh.Ancestors) = 2) and (string.Join(',', LInh.Ancestors[1].Types) = 'TTable'));
+  LInh:= AnalyzeUnit(AG_LEAF_PAS, AgPairs, FakeLookup(Rows, nil), Rd(LEAF_OWN_DFM, AG_MID_DFM), nil);
+  Check('ag.analyze.no.instance.strict', LInh.Known and (Length(LInh.Verdicts) = 0) and (Length(LInh.Ancestors) = 2)
+    and (string.Join(',', LInh.Ancestors[0].Types) = 'TTable'), LInh.Error);
+  LInh:= AnalyzeUnit(AG_LEAF_PAS, AgPairs, FakeLookup(['TLeaf|' + AG_LEAF_PAS + '|TForm'], nil), Rd(LEAF_OWN_DFM, AG_MID_DFM), nil);
+  Check('ag.analyze.outside.silent', LInh.Known and (Length(LInh.Ancestors) = 0), LInh.Error);
+  LInh:= AnalyzeUnit(AG_LEAF_PAS, AgPairs, FakeLookup(['TLeaf|' + AG_LEAF_PAS + '|TMid', 'TMid|' + AG_MID_PAS + '|TBase', 'TBase|!|boom'], nil),
+    Rd(LEAF_OWN_DFM, AG_MID_DFM), nil);
+  Check('ag.analyze.error.unknown', (not LInh.Known) and (Pos('boom', LInh.Error) > 0) and (Length(LInh.Ancestors) = 0), LInh.Error);
+  LInh:= AnalyzeUnit(AG_LEAF_PAS, AgPairs, FakeLookup([], nil), Rd(LEAF_OWN_DFM, AG_MID_DFM), nil);
+  Check('ag.analyze.own.not.indexed.e3', LInh.Known and (Length(LInh.Ancestors) = 0));
+end;

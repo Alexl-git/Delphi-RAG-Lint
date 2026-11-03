@@ -344,6 +344,7 @@ function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: str
 /// (outside). AOwn.PasPath itself is never listed.</returns>
 function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;
   const AReader: TDfmTextReader; const APairs: TArray<TTypePair>; out AError: string): TArray<TAncestorUnit>;
+
 /// <summary>PURE: the C8 analysis of one listed unit (spec E1-E3, E2b).</summary>
 /// <param name="AUnitPas">The listed .pas; its .dfm is ChangeFileExt(AUnitPas, DFM_EXT).</param>
 /// <param name="APairs">The checked books' pairs; empty = nothing is recorded (E3).</param>
@@ -353,8 +354,8 @@ function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<str
 /// <returns>Known = False when there is nothing to say (see TUnitInheritance.Known);
 /// otherwise one verdict per `inherited` .dfm instance whose class is a From type, then
 /// one per E2b code use (FromCode, asUnconverted) not already reported. `inline`
-/// instances are the unit's OWN frames and are not verdicts; their children are.</returns>
-/// <remarks>A code use is an identifier the unit's own class's methods use that an
+/// instances are the unit's OWN frames and are not verdicts; their children are. Ancestors\n/// is the unit's whole ancestor graph (AncestorGraphOf), filled for every Known unit whose\n/// own class is indexed, with or without verdicts (C8CHAIN, owner ruling Q5).</returns>
+/// <remarks>A failed lookup of the unit's own class is unknown for every unit (not only one\n/// with wanted instances), as is an ancestor graph that cannot be walked (cycle, depth, binary\n/// or unreadable .dfm, failed lookup): Known = False, Verdicts and Ancestors empty.\n/// A code use is an identifier the unit's own class's methods use that an
 /// ANCESTOR declares as a field of a From type (TClassInfo.Fields), found on the same
 /// walk as an instance; its Chain follows E2a (every ancestor whose .dfm opens it with a
 /// From type, plus the declaring unit). Dropped, not reported: a name the .dfm already
@@ -1419,6 +1420,9 @@ var
   LStart  : string;
   LVerdict: TInstanceVerdict;
   LWanted : TArray<TInheritedInstance>;
+  LFrames : TArray<string>;
+  LNoChecks: Boolean;
+  LGraphError: string;
 begin
   Result:= Default(TUnitInheritance);
   Result.UnitPas:= AUnitPas;
@@ -1430,14 +1434,15 @@ begin
   if LScan.IsBinary or (LScan.RootClass = '') then
     Exit;
   LWanted:= nil;
+  LFrames:= nil;
   for var LInst: TInheritedInstance in LScan.Instances do
+  begin
     if (LInst.Opener = doInherited) and IsFromType(LInst.TypeName, APairs) then
       LWanted:= LWanted + [LInst];
-  if (Length(LWanted) = 0) and not Assigned(ACodeUses) then
-  begin
-    Result.Known:= True; // E3: known, and nothing to record
-    Exit;
+    if (LInst.Opener = doInline) and not MatchText(LInst.TypeName, LFrames) then
+      LFrames:= LFrames + [LInst.TypeName];
   end;
+  LNoChecks:= (Length(LWanted) = 0) and not Assigned(ACodeUses);
   LOwn:= ALookup(LScan.RootClass);
   if LOwn.Failed then
   begin
@@ -1445,22 +1450,45 @@ begin
     Exit;
   end;
   if not LOwn.Found then
-    Exit; // the unit itself is not indexed: its row already says so
+  begin
+    Result.Known:= LNoChecks; // E3 when nothing is wanted; else the unit itself is not indexed: its row already says so
+    Exit;
+  end;
+  // C8CHAIN (owner ruling Q5): the ancestor graph, for every unit -- a unit with no inherited
+  // From instance can still sit above an ancestor that still holds a From type.
+  Result.Ancestors:= AncestorGraphOf(LOwn, LFrames, ALookup, AReader, APairs, LGraphError);
+  if LNoChecks then
+  begin
+    Result.Known:= LGraphError = ''; // E3: known, and no verdicts to record
+    Result.Error:= LGraphError;      // unknown: Ancestors is already nil
+    Exit;
+  end;
   for var LInst: TInheritedInstance in LWanted do
   begin
     LStart  := if LInst.FrameClass <> '' then LInst.FrameClass else LOwn.ParentClass;
     LVerdict:= ResolveInstance(LInst, LStart, ALookup, AReader, APairs);
     if LVerdict.State = asUnknown then
     begin
-      Result.Error   := Format(REASON_OF, [LInst.Name, LVerdict.Reason]);
-      Result.Verdicts:= nil;
+      Result.Error    := Format(REASON_OF, [LInst.Name, LVerdict.Reason]);
+      Result.Verdicts := nil;
+      Result.Ancestors:= nil;
       Exit; // unknown is never reported as outside
     end;
     Result.Verdicts:= Result.Verdicts + [LVerdict];
   end;
+  if LGraphError <> '' then
+  begin
+    // The instance walk found nothing unknown, but the graph (up to the root) could not be walked.
+    Result.Error    := LGraphError;
+    Result.Verdicts := nil;
+    Exit;
+  end;
   Result.Known:= not Assigned(ACodeUses) or AddCodeUses(Result, LOwn, LScan.RootClass, APairs, ALookup, AReader, ACodeUses);
   if not Result.Known then
-    Result.Verdicts:= nil; // AddCodeUses set Error: unknown, never a partial answer
+  begin
+    Result.Verdicts := nil; // AddCodeUses set Error: unknown, never a partial answer
+    Result.Ancestors:= nil;
+  end;
 end;
 
 function AnalyzeUnit(const AUnitPas: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader;
