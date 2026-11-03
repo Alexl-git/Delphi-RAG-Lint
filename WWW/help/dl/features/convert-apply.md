@@ -7,7 +7,7 @@ group: component-conversion
 order: 60001
 since: 1.2.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.40.0-alpha
 ---
 
 # convert-apply
@@ -154,6 +154,19 @@ Every `.pas` / `.dfm` convert-apply reads is decoded the way it is written back:
 a UTF-8 or UTF-16 BOM, else valid UTF-8, else ANSI -- so a non-ASCII character
 earlier on a line never shifts an edit's column, and a UTF-8 `.dfm`'s captions
 survive a block re-emit unchanged.
+
+### Ancestors run first in a batch (1.42)
+An `inherited` / `inline` object in a descendant's `.dfm` is retyped only when
+the ancestor that declares it already has the To type. A batch (`--unit`
+repeated) therefore RUNS ancestor-first: a unit runs after every unit of the
+same run that declares one of its inherited or inline objects (form ancestry
+and inline frames alike), whatever the command-line order, so one `--apply`
+converts a base data module and its descendants together. The JSON
+`units[]` stays in `--unit` order; text mode prints
+`convert-apply: units run ancestor-first: <names>` when the order changed. An
+ancestor that is not in the run is still never converted for you: its
+descendant's objects stay `skipped` / `unconverted` until it is.
+
 ### Exit codes
 `0` converted (or nothing to do); `1` the unit was REFUSED (a deliberate
 refusal: nothing written, the reason printed); `2` a write failed or was

@@ -120,8 +120,8 @@
     "version": "1.39.2-alpha"
   },
   "features/convert-apply.md": {
-    "hash": "e72331f2124b1a03b61b626fadb8cc056889ae759b8f22bfe36b92cee8360121",
-    "version": "1.35.1-alpha"
+    "hash": "318b74a75414ce3fceacc4c812d854fe6ad2f7daa6b198ce52c8bf1871569b6d",
+    "version": "1.40.0-alpha"
   },
   "features/convert-scaffold.md": {
     "hash": "40ab9c7e815070bc709235bbf3b92804b86b0fb5eebbad0ce1e049459147cc96",
