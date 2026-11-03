@@ -28,6 +28,7 @@ Phase A (no extractor change: an index built by 1.39.2 stays current). Versions 
 - Plugin RefactorForm rename/extract preview runs the CLI off the main thread.
 - Engine heartbeat: a status record (action, step, n/total) answered on a status-only pipe drag-lint-beat-*; the plugin (ProcRun, LspClient.IsStuck) kills only an engine whose status stopped moving, and the status bar shows it.
 - Test harness: engine companion DLLs and rules are staged by `tests\autotest\lib\EngineCompanions.ps1`; battery and guard fixes.
+- Three YADF lint false positives (fix/yadf-lint-fps): `cognitive-complexity` scores `else if` as +1 with no nesting increment (a flat 69-arm ladder was 2444); `function-result-not-set` no longer fires after `while True` / `repeat..until False` with no Break; `manual-inrange` skips Char operands (char-literal bounds) since Math.InRange has no Char overload. Guards `run_cognitive_else_if_chain.ps1`, `run_function_result_while_true_exit.ps1`, `run_manual_inrange_char.ps1`. No extractor change.
 
 ### Checked, already fixed on main
 - RESOLVEDBS-DPROJ, LSP-SWITCH-MANIFEST, PROPTYPES-FILL, X26-STDOUT, MISSINGCTOR-FP, CONCAT-LOOP, GAP-RENAME-FIELD, TSITTER-DIRWORD remainder.

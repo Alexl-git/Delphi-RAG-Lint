@@ -164,6 +164,10 @@ type
     Src        : TBytes;
     Skipped    : Boolean;
     ForVars    : TList<TCfgForVar>;
+    /// <summary>Opt-in (default False = the historic shape): when True, while-True and until-False loops
+    /// get no test-exit edge, so only a Break reaches the follow block. Set by lint callers via
+    /// TCfgBuilder.Build(..., True); the index-time dataflow facts keep the default (CFG-CONSTLOOP).</summary>
+    PruneConstLoops: Boolean;
     /// <summary><!-- drag-lint:auto sum -->TCfg</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -263,7 +267,7 @@ type
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfg.Create"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function Build(const AProc: TTSNode; const ASrc: TBytes): TCfg;
+    class function Build(const AProc: TTSNode; const ASrc: TBytes; APruneConstLoops: Boolean = False): TCfg;
   end;
 
 /// <summary>Collect every `defProc` node anywhere under ARoot.</summary>
@@ -356,6 +360,14 @@ end;
 function LowerText(const N: TTSNode; const ASrc: TBytes): string;
 begin
   Result := LowerCase(Trim(NodeStr(N, ASrc)));
+end;
+{ True when N's text, ignoring parentheses and case, is exactly the literal ALit
+  ('true' / 'false'). Used to see that `while True` / `until False` cannot exit by
+  their own test. }
+function IsBoolLiteral(const N: TTSNode; const ASrc: TBytes; const ALit: string): Boolean;
+begin
+  Result := (not N.IsNull) and
+    SameText(StringReplace(StringReplace(Trim(LowerText(N, ASrc)), '(', '', [rfReplaceAll]), ')', '', [rfReplaceAll]), ALit);
 end;
 
 { The leading identifier of a `statement` node, lowercased -- '' when it does not
@@ -1143,7 +1155,11 @@ begin
     FollowIdx := Cfg.NewBlock.Index;
     BodyIdx := Cfg.NewBlock.Index;
     Cfg.Blocks[HdrIdx].AddSucc(BodyIdx);
-    Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
+    { `while True do` never tests its way out: the follow block is reachable only via a
+      Break, so a function whose every path leaves by Exit(x) is not a missing-Result
+      path (INBOX-function-result-while-true-exit). }
+    if not (Cfg.PruneConstLoops and IsBoolLiteral(Cond, Cfg.Src, 'true')) then
+      Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
     Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx); { back-edge }
@@ -1238,7 +1254,9 @@ begin
     Cond := ANode.ChildByField('condition');
     if not Cond.IsNull then Cfg.Blocks[TestIdx].AddItem(Cond, WithDepth > 0);
     Cfg.Blocks[TestIdx].AddSucc(BodyIdx);   { loop continues }
-    Cfg.Blocks[TestIdx].AddSucc(FollowIdx); { loop exits }
+    { `until False` never exits by its test; only a Break reaches the follow block. }
+    if not (Cfg.PruneConstLoops and IsBoolLiteral(Cond, Cfg.Src, 'false')) then
+      Cfg.Blocks[TestIdx].AddSucc(FollowIdx); { loop exits }
     Ctx.ContinueIdx := TestIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     BodyAfter := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if BodyAfter >= 0 then Cfg.Blocks[BodyAfter].AddSucc(TestIdx);
@@ -1529,7 +1547,7 @@ end;
 
 { TCfgBuilder }
 
-class function TCfgBuilder.Build(const AProc: TTSNode; const ASrc: TBytes): TCfg;
+class function TCfgBuilder.Build(const AProc: TTSNode; const ASrc: TBytes; APruneConstLoops: Boolean): TCfg;
 var
   St: TBuilderState;
   Body: TTSNode;
@@ -1538,6 +1556,7 @@ begin
   Result := TCfg.Create;
   Result.RoutineNode := AProc;
   Result.Src := ASrc;
+  Result.PruneConstLoops := APruneConstLoops;
   if AProc.IsNull or (AProc.NodeType <> 'defProc') then Exit;
   Body := AProc.ChildByField('body');
   if Body.IsNull then Exit;
