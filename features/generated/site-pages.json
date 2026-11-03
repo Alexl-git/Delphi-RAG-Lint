@@ -596,7 +596,7 @@
     "version": "1.35.1-alpha"
   },
   "features/read-never-assigned.md": {
-    "hash": "2eb452b3e7a178309e3ac9ffc9e4bb23914f964b4ed8ec020ca8863b367d48fb",
+    "hash": "b745cc01898654a90d0a97b05ba1412bef7d40b3d51536fae54d2332d54dee93",
     "version": "1.40.0-alpha"
   },
   "features/rebuild-index-for-this-project.md": {
