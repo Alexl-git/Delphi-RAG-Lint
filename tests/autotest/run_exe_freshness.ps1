@@ -164,6 +164,14 @@ foreach ($d in $srcDirs) {
   }
 }
 Check 'newest source file located' ($null -ne $newest)
+# Named on every stale FAIL (1.42 sweeper-B): an mtime is the only signal this guard has, so a
+# comment-only edit after the build (a dl:ok marker drop) reads stale until the next build even
+# when that build is byte-identical. That is by design -- the guard cannot know an edit is inert
+# without rebuilding -- but the FAIL must say WHICH file is newer so triage takes one line.
+$newestDetail = if ($null -ne $newest) {
+  'newer source: {0} {1} -- rebuild (build\build_draglint_win64.bat); a comment-only edit still needs it' -f `
+    $newest.FullName.Substring($Repo.Length + 1), $newest.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
+} else { '' }
 if ($null -ne $newest) {
   Write-Host ("        newest source : {0}  {1}" -f
     $newest.FullName.Substring($Repo.Length + 1), $newest.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')) -ForegroundColor DarkGray
@@ -400,7 +408,7 @@ foreach ($k in ($targets.Keys | Sort-Object)) {
   Write-Host ("        {0}  {1}" -f $rel, $exe.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')) -ForegroundColor DarkGray
   if ($null -ne $newest) {
     $ok = $exe.LastWriteTime -ge $newest.LastWriteTime
-    Check "$rel is not older than the newest source file" $ok
+    Check "$rel is not older than the newest source file" $ok $(if ($ok) { '' } else { $newestDetail })
     if (-not $ok) {
       Write-Host ("        ^ resolved by: {0}" -f ($t.Sites -join ', ')) -ForegroundColor Yellow
       Write-Host '          Those runners are measuring code that is not in this binary.' -ForegroundColor Yellow
@@ -417,7 +425,8 @@ foreach ($rel in @('src\cli\Win64\Debug\drag-lint.exe', 'third_party\dll-win64\d
   Check "$rel exists (canonical build output)" (Test-Path $p) `
     $(if (Test-Path $p) { '' } else { 'run build\build_draglint_win64.bat' })
   if ((Test-Path $p) -and ($null -ne $newest)) {
-    Check "$rel is not older than the newest source file" ((Get-Item $p).LastWriteTime -ge $newest.LastWriteTime)
+    $ok2 = (Get-Item $p).LastWriteTime -ge $newest.LastWriteTime
+    Check "$rel is not older than the newest source file" $ok2 $(if ($ok2) { '' } else { $newestDetail })
   }
 }
 
