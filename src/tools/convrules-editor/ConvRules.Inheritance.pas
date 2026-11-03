@@ -477,11 +477,12 @@ function DiskTextReader: TDfmTextReader;
 /// itself stays verbatim (owner ruling).</remarks>
 function InheritanceRowNote(const AUnit: TUnitInheritance; ARetypeSupported: Boolean): string;
 
-/// <summary>PURE: the ancestor units to convert before AUnit (spec E2a / E6): the chain
-/// units of its asUnconverted verdicts -- the units whose .dfm declares or re-opens one of
-/// its inherited instances (for an E2b code use, also the unit declaring the field) --
-/// de-duplicated by path, topmost first. An ancestor that never mentions an instance is
-/// not offered.</summary>
+/// <summary>PURE: the ancestor units to convert before AUnit (spec E2a / E6, C8CHAIN): the union
+/// of (a) the chain units of its asUnconverted verdicts -- the units whose .dfm declares or
+/// re-opens one of its inherited instances (for an E2b code use, also the unit declaring the
+/// field) -- and (b) every unit of its Ancestors graph that still holds a From type;
+/// de-duplicated by path, topmost first. An intermediate ancestor is offered when it still
+/// holds a From type, whether or not it re-opens an instance (owner ruling Q5).</summary>
 /// <param name="AUnit">The unit's analysis.</param>
 /// <returns>.pas paths, larger TChainUnit.Depth first (a unit on several chains takes
 /// its largest Depth; equal depths keep first-seen order); [] when nothing is
@@ -611,6 +612,7 @@ const
   SELF_WORD     = 'Self';
   TYPE_SEP      = ', ';
   NOTE_UNCONVERTED  = 'inherits %d %s instance(s) from %s -- convert it first (recommended)';
+  NOTE_ANCESTOR_FMT = 'descends from %s, which still has %s -- convert it first (recommended)';
   NOTE_MISMATCHED   = 'inherits %d %s instance(s) from %s, where they are %s -- not this book''s From or To type';
   OFFER_FMT         = 'Add %s ahead of %s?';
   GATE_ASK_FMT      = 'Could not check inherited instances for %s -- convert anyway?';
@@ -1651,6 +1653,20 @@ begin
     Result:= Format(NOTE_OUTSIDE, [AVerdict.DeclaringUnit]);
 end;
 
+// True when a verdict of AUnit already names APasPath: its declaring unit, or a unit of its Chain.
+function NamedByVerdict(const AUnit: TUnitInheritance; const APasPath: string): Boolean;
+begin
+  for var LVerdict: TInstanceVerdict in AUnit.Verdicts do
+  begin
+    if (LVerdict.DeclaringPas <> '') and SameText(ExpandFileName(LVerdict.DeclaringPas), ExpandFileName(APasPath)) then
+      Exit(True);
+    for var LLink: TChainUnit in LVerdict.Chain do
+      if SameText(ExpandFileName(LLink.PasPath), ExpandFileName(APasPath)) then
+        Exit(True);
+  end;
+  Result:= False;
+end;
+
 function InheritanceRowNote(const AUnit: TUnitInheritance; ARetypeSupported: Boolean): string;
 var
   LParts: TArray<string>;
@@ -1672,6 +1688,9 @@ begin
       Result:= AVerdict.State = asMismatched;
     end) do
     LParts:= LParts + [Format(NOTE_MISMATCHED, [LTally.Count, string.Join(TYPE_SEP, LTally.Types), LTally.UnitName, LTally.Found])];
+  for var LAnc: TAncestorUnit in AUnit.Ancestors do
+    if (Length(LAnc.Types) > 0) and not NamedByVerdict(AUnit, LAnc.PasPath) then
+      LParts:= LParts + [Format(NOTE_ANCESTOR_FMT, [UnitNameOf(LAnc.PasPath), string.Join(TYPE_SEP, LAnc.Types)])];
   for var LVerdict: TInstanceVerdict in AUnit.Verdicts do
   begin
     LNote:= OutsideNote(LVerdict);
@@ -1703,6 +1722,18 @@ begin
           Result:= Result + [LLink.PasPath];
         end;
       end;
+  for var LAnc: TAncestorUnit in AUnit.Ancestors do
+    if Length(LAnc.Types) > 0 then
+    begin
+      LIdx:= PathIndex(LAnc.PasPath, Result);
+      if LIdx >= 0 then
+        LUnits[LIdx].Depth:= Max(LUnits[LIdx].Depth, LAnc.Depth)
+      else
+      begin
+        LUnits:= LUnits + [ChainUnitOf(LAnc.PasPath, LAnc.Depth)];
+        Result:= Result + [LAnc.PasPath];
+      end;
+    end;
   // Topmost first: a STABLE insertion sort on Depth, descending (TArray.Sort is not stable).
   for var I: Integer:= 1 to High(LUnits) do
   begin
@@ -1806,6 +1837,10 @@ begin
   for var LVerdict: TInstanceVerdict in AUnit.Verdicts do
     if (LVerdict.State = asUnconverted) and not MatchText(LVerdict.Instance.TypeName, Result) then
       Result:= Result + [LVerdict.Instance.TypeName];
+  for var LAnc: TAncestorUnit in AUnit.Ancestors do
+    for var LType: string in LAnc.Types do
+      if not MatchText(LType, Result) then
+        Result:= Result + [LType];
 end;
 
 function EngineRefusalNotes(const AUnits: TArray<TUnitInheritance>; AInheritedSupported: Boolean): TArray<string>;

@@ -131,3 +131,43 @@ begin
   LInh:= AnalyzeUnit(AG_LEAF_PAS, AgPairs, FakeLookup([], nil), Rd(LEAF_OWN_DFM, AG_MID_DFM), nil);
   Check('ag.analyze.own.not.indexed.e3', LInh.Known and (Length(LInh.Ancestors) = 0));
 end;
+
+procedure TestAncestorChainUnion;
+var
+  LInh: TUnitInheritance;
+
+  function Anc(const APas: string; ADepth: Integer; const ATypes: TArray<string>): TAncestorUnit;
+  begin
+    Result.PasPath:= APas;
+    Result.Depth  := ADepth;
+    Result.Types  := ATypes;
+  end;
+
+begin
+  LInh:= Default(TUnitInheritance);
+  LInh.UnitPas  := AG_LEAF_PAS;
+  LInh.Known    := True;
+  LInh.Ancestors:= [Anc(AG_BASE_PAS, 2, ['TTable']), Anc(AG_MID_PAS, 1, [])];
+  Check('ag.chain.graph.only', string.Join(',', AncestorChain(LInh)) = AG_BASE_PAS, string.Join(',', AncestorChain(LInh)));
+  LInh.Ancestors[1].Types:= ['TQuery'];
+  Check('ag.chain.intermediate.included', string.Join(',', AncestorChain(LInh)) = AG_BASE_PAS + ',' + AG_MID_PAS);
+  Check('ag.chain.types.union', string.Join(',', UnconvertedTypes(LInh)) = 'TTable,TQuery');
+  Check('ag.chain.note', InheritanceRowNote(LInh, True) = 'descends from Base, which still has TTable -- convert it first (recommended); descends from Mid, which still has TQuery -- convert it first (recommended)',
+    InheritanceRowNote(LInh, True));
+  // a verdict naming Base: Base is listed once, and the E5 part replaces the ancestor part for it
+  SetLength(LInh.Verdicts, 1);
+  LInh.Verdicts[0]:= Default(TInstanceVerdict);
+  LInh.Verdicts[0].Instance.Name    := 'tblX';
+  LInh.Verdicts[0].Instance.TypeName:= 'TTable';
+  LInh.Verdicts[0].State            := asUnconverted;
+  LInh.Verdicts[0].DeclaringUnit    := 'Base';
+  LInh.Verdicts[0].DeclaringPas     := AG_BASE_PAS;
+  SetLength(LInh.Verdicts[0].Chain, 1);
+  LInh.Verdicts[0].Chain[0].PasPath:= AG_BASE_PAS;
+  LInh.Verdicts[0].Chain[0].Depth  := 2;
+  Check('ag.chain.dedupe', string.Join(',', AncestorChain(LInh)) = AG_BASE_PAS + ',' + AG_MID_PAS, string.Join(',', AncestorChain(LInh)));
+  Check('ag.chain.note.verdict.first', InheritanceRowNote(LInh, True) = 'inherits 1 TTable instance(s) from Base -- convert it first (recommended); descends from Mid, which still has TQuery -- convert it first (recommended)',
+    InheritanceRowNote(LInh, True));
+  LInh.Ancestors:= nil;
+  Check('ag.chain.verdicts.only.unchanged', string.Join(',', AncestorChain(LInh)) = AG_BASE_PAS);
+end;

@@ -12035,7 +12035,9 @@ begin
     and (Length(V('tblFtrs').Chain) = 0), Format('state=%d found=%s', [Ord(V('tblFtrs').State), V('tblFtrs').FoundType]));
   Check('inherit.walk.mismatched.to.is.converted', V('tblOps').State = asConverted, IntToStr(Ord(V('tblOps').State)));
   Check('inherit.note.mismatched', InheritanceRowNote(U, True) = NOTE_MISMATCHED + '; ' + NOTE_OUTSIDE_LIB, InheritanceRowNote(U, True));
-  Check('inherit.chain.mismatched.not.offered', Length(AncestorChain(U)) = 0, string.Join(',', AncestorChain(U)));
+  // C8CHAIN: the mismatched declaring unit (Base) is still never offered; Mid, whose .dfm still
+  // opens tblOps as a TTable, now is (the ancestor graph, owner ruling Q5).
+  Check('inherit.chain.mismatched.not.offered', not ContainsText(string.Join(',', AncestorChain(U)), BASE_PAS), string.Join(',', AncestorChain(U)));
   Check('inherit.order.mismatched.silent', Length(OrderWarnings([LEAF_PAS, BASE_PAS], [U], True)) = 0);
   Check('inherit.walk.mismatched.direct', ResolveInstance(V('tblFtrs').Instance, 'TMidDM', FakeLookup(Rows, nil),
     FakeReader(['fx\Mid.dfm', 'fx\Base.dfm'], [MID_DFM, BASE_MIS_DFM]), Pairs).State = asMismatched);
@@ -16594,6 +16596,7 @@ begin
     TestAncestorFromTypes;
     TestAncestorGraphWalk;
     TestAnalyzeAncestors;
+    TestAncestorChainUnion;
 
     FreeAndNil(GParseBook);
 
