@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.40.0-alpha';
+  DRAGLINT_VERSION = '1.42.0-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -203,7 +203,15 @@ const
     * kind: class constructor / destructor rows are kind constructor /
       destructor (were method); new column symbols.is_class_method.
       Guard run_class_method_flag. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.29.0-alpha';
+  { 1.29.0 -> 1.30.0 (2026-11-03, 1.42 wave 1, lane/142-int1 -- ONE bump for the wave):
+    * grammar: tree-sitter-delphi13 v1.4.1 (ad17f6a) -- a last record field of an
+      array / string[N] type without a trailing ';' no longer parses as ERROR
+      (GRAMMAR-LASTFIELD). Guard run_grammar_last_field_array.
+    * dataflow: index-time data_flows opt in to const-loop pruning (CFG-CONSTLOOP,
+      Index.DataFlowFacts). Guard run_dataflow_facts (ConstWhile / ConstRepeat).
+    * Storage.SQLite + CallResolver fingerprint units changed with the resolver
+      fixes below (calls, sweeper-a) and doc2's doc-line split. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.30.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
@@ -409,7 +417,13 @@ const
   /// the same parameter type list (ORM3 CLIENT: 454 ambiguous implements rows).
   /// Remedy: index --all --resolve-only; guard
   /// tests\callresolve\run_interface_dispatch_generic.ps1.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.17.0-alpha';
+  /// <para>1.17.0-alpha -&gt; 1.18.0-alpha (2026-11-03, 1.42 wave 1, rides the 1.30.0
+  /// extractor re-parse): a routine named as a procedure VALUE binds its identity with
+  /// no call edge (GAP-CALLERS, guard tests\callresolve\run_proc_value_bind.ps1);
+  /// ResolveTypeReadRefs is classified resolve surface (RESOLVER-VERGUARD, D7);
+  /// ResolveAncestry never binds a heritage name to a routine-local type of another
+  /// routine (YADF FP #3, guard tests\autotest\run_ancestry_routine_local.ps1).</para>
+  DRAGLINT_RESOLVER_VERSION = '1.18.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

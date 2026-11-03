@@ -1170,7 +1170,7 @@ begin
       if J = Idx + 1 then Exit;                                   { nothing to protect }
       for K:= Idx + 1 to J - 1 do
         if NormStmt(Fx.Txt(Kids[K])).Contains(Rel) then Exit;     { an early release inside }
-      if WrapBetween(Fx, S, Kids[Idx + 1], Kids[J - 1], Kids[J], WithSemi(Fx.Txt(Kids[J])), E) then Result:= [E];  // dl:ok used-before-assignment@f8e3 -- REVIEWED 2026-10-27: FP: E is WrapBetween's out AEdit (a signature split over two lines)
+      if WrapBetween(Fx, S, Kids[Idx + 1], Kids[J - 1], Kids[J], WithSemi(Fx.Txt(Kids[J])), E) then Result:= [E];
       Exit;
     end;
 end;
@@ -1237,7 +1237,7 @@ begin
     if MentionsFreeOf(K, Q) or K.Contains(LowerCase(Q) + '.close') then Exit;
   end;
   if Last <= Idx then Exit;
-  if WrapBetween(Fx, S, Kids[Idx + 1], Kids[Last], CloseN, Q + '.Close;', E) then Result:= [E];  // dl:ok used-before-assignment@94fc -- REVIEWED 2026-10-27: FP: E is WrapBetween's out AEdit (a signature split over two lines)
+  if WrapBetween(Fx, S, Kids[Idx + 1], Kids[Last], CloseN, Q + '.Close;', E) then Result:= [E];
 end;
 
 { unprotected-object-free: `X := T.Create; S; X.Free` in one list ->
@@ -1281,7 +1281,7 @@ begin
   if (Open < 0) or (Open = Idx - 1) then Exit;
   for K:= Open + 1 to Idx - 1 do
     if MentionsFreeOf(NormStmt(Fx.Txt(Kids[K])), X) then Exit;
-  if WrapBetween(Fx, Kids[Open], Kids[Open + 1], Kids[Idx - 1], S, WithSemi(Fx.Txt(S)), E) then Result:= [E];  // dl:ok used-before-assignment@076b -- REVIEWED 2026-10-27: FP: E is WrapBetween's out AEdit (a signature split over two lines)
+  if WrapBetween(Fx, Kids[Open], Kids[Open + 1], Kids[Idx - 1], S, WithSemi(Fx.Txt(S)), E) then Result:= [E];
 end;
 
 { create-inside-try: move `X := T.Create(..)`, the first statement of a try

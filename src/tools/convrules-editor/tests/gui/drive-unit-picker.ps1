@@ -32,6 +32,17 @@ trap { $script:fail++; "FAIL  driver.crash  $($_.Exception.Message) [line $($_.I
 . "$PSScriptRoot\vcl-atoms.ps1"; 'NOTE  ' + (VclAtomsReclaim)   # ATOMLOCK: start from a reclaimed atom table (idempotent)
 function Check($name, $cond, $detail = '') { if ($cond -and $env:DRIVE_FORCE_FAIL -ne $name) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function WaitFor($procId, $caption, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
+# DRVLIB: since STARTUP2 the first Pick... loads the unit lists behind the progress window (TEngineWaitForm, an
+# 11.5 s read idle; minutes at 100% CPU). The picker's deadline counts from the moment that window is gone, so a
+# slow load is waited for, never read as "the picker did not open". Capped at $cap seconds overall.
+function WaitForAfterLoad($procId, $caption, $sec, $cap = 600) {
+  $t0 = Get-Date; $quiet = Get-Date
+  while ((((Get-Date) - $quiet).TotalSeconds -lt $sec) -and (((Get-Date) - $t0).TotalSeconds -lt $cap)) {
+    foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { return $h }; if ([W]::Cls($h) -eq 'TEngineWaitForm') { $quiet = Get-Date } }
+    Start-Sleep -Milliseconds 250
+  }
+  return [IntPtr]::Zero
+}
 function WaitGone($procId, $caption, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { $found = $false; foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { $found = $true } }; if (-not $found) { return $true }; Start-Sleep -Milliseconds 250 }; return $false }
 function Find($parent, $cls, $text) { [W]::Kids($parent) | Where-Object { [W]::Cls($_) -eq $cls -and ($text -eq $null -or [W]::Txt($_) -eq $text) } }
 function Count($lb) { [int][W]::Send($lb, 0x018B, [IntPtr]::Zero, [IntPtr]::Zero) }
@@ -56,7 +67,7 @@ try {
 
   # --- 1. open, lists loaded, filter by name, then by search, invalid mask ignored ---
   Click $btn[0]
-  $pk = WaitFor $p.Id $CAP 90
+  $pk = WaitForAfterLoad $p.Id $CAP 90
   Check 'picker.opens' ($pk -ne [IntPtr]::Zero)
   $edits = @(Find $pk 'TEdit' $null | Sort-Object { [W]::Top($_) })
   $lists = @(Find $pk 'TListBox' $null | Sort-Object { [W]::Left($_) })

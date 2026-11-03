@@ -531,10 +531,14 @@ try {
   Check 'glyph.dialog.count.box.checked' ($boxChecked -and ($boxText -ceq ('Keep ' + $CLINK))) "dialog '$dlgCap'; box '$boxText' checked=$boxChecked; status: $(StatusText $main)"
 
   # --- Auto-Match, then Save As: both G-link lines survive byte-exact, no duplicate ---
+  # DRVLIB: at 100% CPU (A/B 10-28) an engine read was still behind the progress window here, so the gate refused
+  # Auto-Match and then Save As (glyph.automatch read '', no save dialog). Both wait for an idle editor first.
+  [void](WaitIdle $p.Id $main)
   $before = StatusText $main
   Check 'glyph.automatch.invoke' ([W]::InvokeMenu($main, 'Mapping|Auto-Match'))
   $st = WaitStatus $main '^Auto-Match: ' 30
   Check 'glyph.automatch' ($st -match '^Auto-Match: \d+ unambiguous assignment') $st
+  [void](WaitIdle $p.Id $main)
   Check 'glyph.saveas.invoke' ([W]::InvokeMenu($main, 'File|Save As...'))
   $e = SaveDialogTo $p.Id $out
   Start-Sleep -Seconds 1

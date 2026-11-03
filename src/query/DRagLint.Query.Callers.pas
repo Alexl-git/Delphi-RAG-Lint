@@ -249,19 +249,21 @@ function NameCallersForName(const AStore: ISymbolStore; const AName: string; ACo
 /// cannot be attributed to TJob rather than to any other Streaming.</remarks>
 function UsageRefsForName(const AStore: ISymbolStore; const AName: string; const ADecls: TArray<TSymbol>): TArray<TReference>;
 
-/// <summary>The `usages` bucket a reference belongs to.</summary>
+/// <summary>The `usages` bucket a reference belongs to, given what the
+/// resolver BOUND it to (HARDCAST-CALL, 1.42).</summary>
 /// <param name="ARef">A reference from UsageRefsForName.</param>
-/// <returns>'reads' | 'writes' | 'calls' | 'types' | 'attributes' | 'events' |
-/// 'raises' | 'handles'. A 'member-access' ref goes by its AccessMode
-/// (member_accesses.mode): 'read' -> 'reads', 'write' -> 'writes'; one with no
-/// mode, and every unknown kind, stays in 'calls' as before. The exception facts
-/// (1.36.0): raise / raise-expr / reraise -> 'raises', handle / handle-all ->
-/// 'handles', so an exception class's raise and handler sites never inflate its
-/// call count. Pinned by run_raise_handle_refs.ps1 (E).</returns>
-/// <remarks>Before 2026-10-19 the kind alone decided, so every qualified field
-/// access (`AJob.Streaming`) was a CALL and `reads` read 0 for a field read
-/// all over the plugin. Pinned by run_usages_field_access.ps1.</remarks>
-function UsageBucketOf(const ARef: TReference): string;
+/// <param name="ADecls">The declarations of the queried name in the SAME store
+/// as ARef (symbol ids are per store); may be empty.</param>
+/// <returns>'types' for a 'call' ref bound to one of ADecls whose kind is a
+/// TYPE (class, interface, record, enum, type alias, class reference) -- a hard
+/// cast `TEnum(X)`, which the parse cannot tell from a one-argument call and
+/// the resolver binds to the enum (ResolveEnumCast) without a call edge.
+/// Otherwise exactly UsageBucketOf(ARef).</returns>
+/// <remarks>The ref row itself stays kind 'call': enum-ordinal-persisted
+/// selects those rows. Only the usages bucket changes. A call ref bound to a
+/// routine, or unbound, is untouched. Shared by the CLI verb and the LSP
+/// draglint/usages reply. Pinned by run_refs_142_shapes.ps1.</remarks>
+function UsageBucketIn(const ARef: TReference; const ADecls: TArray<TSymbol>): string;
 
 /// <summary>A name match's refs, minus those that cannot be a call of the name:
 /// writes, and reads of a same-named local or parameter of the enclosing routine.</summary>
@@ -571,6 +573,18 @@ begin
   end;
 end; // function
 
+/// <summary>Private (1.42: callers go through UsageBucketIn). The `usages` bucket a reference belongs to.</summary>
+/// <param name="ARef">A reference from UsageRefsForName.</param>
+/// <returns>'reads' | 'writes' | 'calls' | 'types' | 'attributes' | 'events' |
+/// 'raises' | 'handles'. A 'member-access' ref goes by its AccessMode
+/// (member_accesses.mode): 'read' -> 'reads', 'write' -> 'writes'; one with no
+/// mode, and every unknown kind, stays in 'calls' as before. The exception facts
+/// (1.36.0): raise / raise-expr / reraise -> 'raises', handle / handle-all ->
+/// 'handles', so an exception class's raise and handler sites never inflate its
+/// call count. Pinned by run_raise_handle_refs.ps1 (E).</returns>
+/// <remarks>Before 2026-10-19 the kind alone decided, so every qualified field
+/// access (`AJob.Streaming`) was a CALL and `reads` read 0 for a field read
+/// all over the plugin. Pinned by run_usages_field_access.ps1.</remarks>
 function UsageBucketOf(const ARef: TReference): string;
 begin
   if ARef.Kind      = 'read'          then Result:= 'reads'
@@ -583,6 +597,16 @@ begin
   else if (ARef.Kind = 'member-access') and (ARef.AccessMode = 'read' ) then Result:= 'reads'
   else if (ARef.Kind = 'member-access') and (ARef.AccessMode = 'write') then Result:= 'writes'
   else Result:= 'calls'; { call + anything else }
+end; // function
+
+function UsageBucketIn(const ARef: TReference; const ADecls: TArray<TSymbol>): string;
+const
+  TYPE_KINDS = [skClass, skInterface, skRecord, skEnum, skTypeAlias, skClassRef];
+begin
+  Result:= UsageBucketOf(ARef);
+  if (Result <> 'calls') or (ARef.Kind <> REF_KIND_CALL) or (ARef.SymbolId <= 0) then Exit;
+  for var D: TSymbol in ADecls do
+    if (D.Id = ARef.SymbolId) and (D.Kind in TYPE_KINDS) then Exit('types');
 end; // function
 
 { ITEM 1e -- `find-callers` stops calling a WRITE and a same-named LOCAL a caller.

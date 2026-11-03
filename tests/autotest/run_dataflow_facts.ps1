@@ -79,13 +79,14 @@ def rows(routine):
 routines = ['TrimParam','SinkParam','ViaLocal','Killed','Branch','Loop','LiteralOnly','Quoted',
             'NumericOnly','WithBody','ExitValue','SelfIndex','SetField','ReadField','SetGlobal',
             'GetName','UseOut','ListCarrier','ShellRecord','LambdaCapture','BigRoutine','CapRoutine',
-            'ArgValueOnly','ArgRtlValue','ArgUnresolved','ArgTryGet','HardCast']
+            'ArgValueOnly','ArgRtlValue','ArgUnresolved','ArgTryGet','HardCast','ConstWhile','ConstRepeat']
 out['rows'] = {r: rows(r) for r in routines}
 out['markers'] = {m: line_of(m) for m in ['M-TRIM','M-SINKPARAM','M-VIALOCAL-SRC','M-VIALOCAL-DST',
     'M-KILL-SRC','M-KILL-DST','M-BRANCH','M-LOOP','M-QUOTED','M-EXIT','M-SELFINDEX','M-SETFIELD',
     'M-READFIELD','M-SETGLOBAL','M-READGLOBAL','M-OUTPARAM','M-ARGOUT-CALL','M-ARGOUT-SINK',
     'M-LIST','M-SHELLREC','M-LAMBDA','M-ARGVAL-SINK','M-ARGRTL-SINK','M-ARGUNRES-CALL','M-ARGUNRES-SINK',
-    'M-ARGTRY-CALL','M-ARGTRY-K','M-ARGTRY-V','M-G5WRITE','M-G5READ','M-G5SINK']}
+    'M-ARGTRY-CALL','M-ARGTRY-K','M-ARGTRY-V','M-G5WRITE','M-G5READ','M-G5SINK',
+    'M-CWHILE-IN','M-CWHILE-AFTER','M-CREPEAT-IN','M-CREPEAT-AFTER']}
 out['total'] = c.execute('select count(*) from data_flows').fetchone()[0]
 out['orphans'] = c.execute('select count(*) from data_flows d left join symbols s on s.id = d.symbol_id where s.id is null').fetchone()[0]
 miss = c.execute("""select d.dst_kind, d.dst_line, d.dst_col, d.dst_name from data_flows d
@@ -158,6 +159,11 @@ Check 'record member write row Info.lpFile' (Has $Rw.ShellRecord { $_.dst_kind -
 Check 'G5 hard-cast write TEditStub(O).Text := A gives a write row' (Has $Rw.HardCast { $_.dst_kind -eq 'write' -and $_.dst_name -eq 'Text' -and $_.dst_line -eq $M.'M-G5WRITE' -and $_.src_kind -eq 'param' -and $_.src_index -eq 1 })
 Check 'G5 hard-cast read X := TEditStub(O).Text gives a src ref row' (Has $Rw.HardCast { $_.src_kind -eq 'ref' -and $_.src_name -eq 'Text' -and $_.src_line -eq $M.'M-G5READ' })
 Check 'G5 hard-cast read keeps the receiver (cast-call) ref: Sink(X) still gets the TEditStub ref (no recall loss vs. before G5)' (Has $Rw.HardCast { $_.dst_kind -eq 'arg' -and $_.dst_name -eq 'Sink' -and $_.dst_line -eq $M.'M-G5SINK' -and $_.src_kind -eq 'ref' -and $_.src_name -eq 'TEditStub' })
+Write-Host 'Constant loops (CFG-CONSTLOOP: the index CFG opts in to TCfgBuilder.Build(..., True))' -ForegroundColor Cyan
+Check 'ConstWhile: POSITIVE CONTROL -- A reaches the sink inside while True' (Has $Rw.ConstWhile { $_.dst_kind -eq 'arg' -and $_.dst_line -eq $M.'M-CWHILE-IN' -and $_.src_kind -eq 'param' -and $_.src_index -eq 1 })
+Check 'NEGATIVE: while True has no test exit -- A does not reach the sink after the loop (only the Break, after the kill)' (-not (Has $Rw.ConstWhile { $_.dst_line -eq $M.'M-CWHILE-AFTER' -and $_.src_kind -eq 'param' })) "rows=$(@($Rw.ConstWhile | ? { $_.dst_line -eq $M.'M-CWHILE-AFTER' }).Count)"
+Check 'ConstRepeat: POSITIVE CONTROL -- A reaches the sink inside repeat..until False' (Has $Rw.ConstRepeat { $_.dst_kind -eq 'arg' -and $_.dst_line -eq $M.'M-CREPEAT-IN' -and $_.src_kind -eq 'param' -and $_.src_index -eq 1 })
+Check 'NEGATIVE: until False with no Break -- the code after the loop is unreachable, no row' (-not (Has $Rw.ConstRepeat { $_.dst_line -eq $M.'M-CREPEAT-AFTER' })) "rows=$(@($Rw.ConstRepeat | ? { $_.dst_line -eq $M.'M-CREPEAT-AFTER' }).Count)"
 Check 'lambda body sees the captured local (cond 1)' (Has $Rw.LambdaCapture { $_.dst_kind -eq 'arg' -and $_.dst_line -eq $M.'M-LAMBDA' -and $_.src_kind -eq 'param' -and $_.src_index -eq 0 -and $_.cond -eq 1 })
 
 Write-Host 'Fallback and cap' -ForegroundColor Cyan

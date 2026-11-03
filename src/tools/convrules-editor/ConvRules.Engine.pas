@@ -1705,10 +1705,7 @@ begin
       end; // try
       Result:= if (ACancel <> nil) and ACancel.IsCancelled then ENGINE_OUTCOME_CANCELLED else 0;
     end;
-  if Assigned(FLongCallRunner) then
-    LCode:= FLongCallRunner(ATitle, LWork)
-  else
-    LCode:= LWork(nil, nil);
+  LCode:= if Assigned(FLongCallRunner) then FLongCallRunner(ATitle, LWork) else LWork(nil, nil);
   FLastCancelled:= LCode = ENGINE_OUTCOME_CANCELLED;
   Result:= not FLastCancelled;
 end;

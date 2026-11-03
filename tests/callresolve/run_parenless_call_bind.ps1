@@ -138,12 +138,33 @@ try {
     @{ M = 'NEG-PROPGETTER';    N = 'NextId' },
     @{ M = 'NEG-PROPERTY';      N = 'Total' })
   # "Not a call of N": no edge TO a routine named N, and refs.symbol_id not on a
-  # routine. Since 1.8.0 three of these reads DO bind -- to the member they
-  # name (check 4b) -- so "no binding at all" is no longer the negative.
+  # routine -- except the procedure-VALUE sites of check 4c. Since 1.8.0 three of
+  # these reads DO bind -- to the member they name (check 4b) -- so "no binding
+  # at all" is no longer the negative.
+  # 1.42 GAP-CALLERS: a procedure value whose name reaches ONE routine binds that
+  # routine's IDENTITY (refs.symbol_id) with NO call edge, so for the 4c markers
+  # only the edge half of "bound as a call" applies; 4c pins the identity.
+  $procValue = @('NEG-PROCVAR', 'NEG-ADDR', 'NEG-PROCARG', 'NEG-PROCARG-SPLIT', 'NEG-PROCARG-QUAL', 'NEG-PROCARG-FUNC', 'NEG-PARAMS')
   foreach ($n in $neg) {
     $rows = @(RefsAt (LineOf $n.M) $n.N)
-    $bad = @($rows | Where-Object { ($_.tname -eq $n.N) -or (($_.sk -eq 'function' -or $_.sk -eq 'method') -and ([string]$_.sq).EndsWith('.' + $n.N)) })
+    $isPv = $procValue -contains $n.M
+    $bad = @($rows | Where-Object { ($_.tname -eq $n.N) -or ((-not $isPv) -and ($_.sk -eq 'function' -or $_.sk -eq 'method') -and ([string]$_.sq).EndsWith('.' + $n.N)) })
     Check ("check 4  {0}: {1} is not bound as a call of {1}" -f $n.M, $n.N) (($rows.Count -ge 1) -and ($bad.Count -eq 0)) "refs=$($rows.Count) boundAsCall=$($bad.Count)"
+  }
+  # --- check 4c: procedure values bind identity, never an edge (1.42) -------------
+  foreach ($pv in $procValue) {
+    $pvN = if ($pv -eq 'NEG-PARAMS') { 'NextKey' } else { 'NextId' }
+    $rows = @(RefsAt (LineOf $pv) $pvN | Where-Object { $_.kind -eq 'read' })
+    Check ("check 4c {0}: the value read {1} binds uParenlessLib.{1} with no call edge" -f $pv, $pvN) `
+      (($rows.Count -eq 1) -and ($rows[0].sq -eq "uParenlessLib.$pvN") -and ($null -eq $rows[0].tid)) "sq=$($rows[0].sq) tid=$($rows[0].tid)"
+  }
+  # (NEG-PARAMS: `K := NextKey` with K: TKeyFunc is the routine's VALUE, so it binds.)
+  # The overload-set negative stays UNBOUND: which member the source means is not
+  # decidable from one bare name.
+  foreach ($nc in @(@{ M = 'NEG-OVERLOAD'; N = 'Pick' })) {
+    $rows = @(RefsAt (LineOf $nc.M) $nc.N | Where-Object { $_.kind -eq 'read' })
+    Check ("check 4c {0}: {1} stays unbound (not decidable)" -f $nc.M, $nc.N) `
+      (($rows.Count -eq 1) -and ([string]::IsNullOrEmpty([string]$rows[0].sq))) "sq=$($rows[0].sq)"
   }
 
   # --- check 4b: the member these reads DO name (resolver 1.8.0) -------------------
@@ -166,14 +187,16 @@ try {
   # -- since 1.8.0 -- the with target's FIELD NextId, which the with scope now
   # identifies instead of declining on any `with`), proc-value 6 (procedural
   # var, @, procedural parameter, and the D16b/D16c three: a split argument
-  # list, a qualified System.SysUtils.TFunc<T>, a Spring Func<T>), not-callable
-  # 2 (a function needing an argument, an overload set with such a member),
+  # list, a qualified System.SysUtils.TFunc<T>, a Spring Func<T>; and since 1.42
+  # NEG-PARAMS, `K := NextKey` into a TKeyFunc -- the single routine it names
+  # needs an argument, so the read is its VALUE and binds for identity),
+  # not-callable 1 (an overload set with a member needing an argument),
   # with-scope 0. 20 candidates in all.
   $m = [regex]::Match($log1, 'parenless: (\d+) of (\d+) bare read\(s\) bound as call\(s\); declined not-found (\d+), shadowed (\d+), not-callable (\d+), proc-value (\d+), with-scope (\d+), qualified (\d+), unreadable (\d+)')
   if ($m.Success) {
     $v = @(1..9 | ForEach-Object { [int]$m.Groups[$_].Value })
-    Check 'check 5  parenless log line: bound 7 of 20; not-found 0, shadowed 5, not-callable 2, proc-value 6, with-scope 0, qualified 0, unreadable 0' `
-      (($v[0] -eq 7) -and ($v[1] -eq 20) -and ($v[2] -eq 0) -and ($v[3] -eq 5) -and ($v[4] -eq 2) -and ($v[5] -eq 6) -and ($v[6] -eq 0) -and ($v[7] -eq 0) -and ($v[8] -eq 0)) `
+    Check 'check 5  parenless log line: bound 7 of 20; not-found 0, shadowed 5, not-callable 1, proc-value 7, with-scope 0, qualified 0, unreadable 0' `
+      (($v[0] -eq 7) -and ($v[1] -eq 20) -and ($v[2] -eq 0) -and ($v[3] -eq 5) -and ($v[4] -eq 1) -and ($v[5] -eq 7) -and ($v[6] -eq 0) -and ($v[7] -eq 0) -and ($v[8] -eq 0)) `
       ($m.Value)
   } else {
     Check 'check 5  parenless log line present' $false 'no `parenless:` line in the index output'
