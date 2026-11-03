@@ -2,7 +2,11 @@ unit uRnaDecl;
 
 { Fixture for the `read-never-assigned` project rule. Declarations live here,
   most reads and writes in uRnaUse.pas, so the rule must see the whole project.
-  TRIGGER-* lines must fire; CONTROL-* lines must stay silent. }
+  TRIGGER-* lines must fire; CONTROL-* lines must stay silent.
+  The helpers carry a fixture-unique name (RnaShow, not Show): the rule merges
+  the var / out modes of every project AND platform-library routine of the same
+  bare name, and ShlObj's IFileViewer.Show(var pvsi) made every Show(X) read
+  count as a possible write (silencing TRIGGER-FIELD and four run-3 controls). }
 
 interface
 
@@ -59,7 +63,7 @@ const
 
 procedure Fill(var pV: Integer);
 procedure Produce(out pV: Integer);
-procedure Show(const pV: Integer);
+procedure RnaShow(const pV: Integer);
 
 implementation
 
@@ -73,7 +77,7 @@ begin
   pV:= 3;
 end;
 
-procedure Show(const pV: Integer);
+procedure RnaShow(const pV: Integer);
 begin
   if pV > 0 then Exit;
 end;
@@ -92,7 +96,7 @@ var
   P: ^Integer;
 begin
   P:= @FAddr;
-  Show(FNever);
+  RnaShow(FNever);
   Result:= FNever + FSelfSet + FSetElsewhere + FCast + FWith + FVarArg + FOutArg + FSize + P^;
   Result:= Result + Length(FArr) + FList.Count;
 end;
