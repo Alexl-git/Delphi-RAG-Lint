@@ -546,7 +546,9 @@ type
       /// calls stage's THIRD stream. Offers every `read` ref named like a
       /// function or method to TCallResolver.ResolveParenlessRead and writes a
       /// call_edges row (plus refs.symbol_id for a certain edge, through
-      /// UpsertCallEdge) for each one that is a parenless call.</summary>
+      /// UpsertCallEdge) for each one that is a parenless call. 1.42: a read named
+      /// like a PROCEDURE is offered too, and a 'proc-value' answer (`FOnTouch :=
+      /// Touch`) binds refs.symbol_id only -- no call edge.</summary>
       /// <param name="AResolver">The pass's resolver, maps already built. Owned
       /// by the caller.</param>
       /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a
@@ -554,7 +556,8 @@ type
       /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when
       /// none is stale.</param>
       /// <param name="ACandidates">Out: rows offered to the resolver.</param>
-      /// <param name="ABound">Out: rows that earned a call edge.</param>
+      /// <param name="ABound">Out: rows that earned a call edge (an identity-only
+      /// proc-value bind is not counted: it is not a call).</param>
       /// <remarks>
       /// Runs INSIDE ResolveCallTargets' transaction, AFTER the enum-value
       /// stream: that stream NULLs refs.symbol_id over every `read` of an
@@ -14596,14 +14599,16 @@ const
   { The candidates: a `read` spelled like any function or method in the index,
     with no `call` ref at the identical position. The resolver narrows it. }
   PARENLESS_UNIVERSE = 'refs.kind = ''read'' AND refs.name_text COLLATE NOCASE IN ' +
-                       '(SELECT name FROM symbols WHERE kind IN (''function'', ''method'')) ' +
+                       '(SELECT name FROM symbols WHERE kind IN (''function'', ''method'', ''procedure'')) ' +
                        'AND NOT EXISTS (SELECT 1 FROM refs c WHERE c.file_id = refs.file_id ' +
                        'AND c.start_line = refs.start_line AND c.start_col = refs.start_col ' +
                        'AND c.kind = ''call'')';
   { What this stream wrote on an earlier pass: a `read` bound to a routine. No
-    other writer binds a `read` to one -- the enum stream binds enum values. }
+    other writer binds a `read` to one -- the enum stream binds enum values.
+    1.42: `procedure` joined both sets -- a free procedure named as a VALUE
+    (`P := Helper`) is bound for identity ('proc-value', no call edge). }
   PARENLESS_WRITTEN  = 'refs.kind = ''read'' AND refs.symbol_id IN ' +
-                       '(SELECT id FROM symbols WHERE kind IN (''function'', ''method''))';
+                       '(SELECT id FROM symbols WHERE kind IN (''function'', ''method'', ''procedure''))';
 var
   Suffix : string       ;
   Q      : TFDQuery     ;
@@ -14650,11 +14655,18 @@ begin
       { Every decline is counted by reason inside the resolver (ParenlessStats)
         and printed on the stage's log line -- a decline writes nothing. }
       Edge:= AResolver.ResolveParenlessRead(Ref, Reason);
-      if Edge.TargetSymbolId > 0 then
+      if (Edge.TargetSymbolId > 0) and (Reason = '') then
       begin
         Edge.RefId:= Ref.Id;
         UpsertCallEdge(Tok, Edge);
         Inc(ABound);
+      end
+      else if (Edge.TargetSymbolId > 0) and (Reason = 'proc-value') then
+      begin
+        { 1.42 GAP-CALLERS: `FOnTouch := Touch` -- the routine's identity, no call edge. }
+        FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Edge.TargetSymbolId;
+        FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
+        FQSetRefSymbol.ExecSQL;
       end;
       Inc(ACandidates);
       Q.Next;

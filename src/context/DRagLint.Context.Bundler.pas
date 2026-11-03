@@ -340,9 +340,18 @@ end; // function
 //     Self, inherited or the owning type -- the receiver rule of
 //     ISymbolStore.FindUnresolvedNameCallers. Ordinary methods skip rule 2: their
 //     receiver is usually a variable, and dropping `FFoo.Run` would be worse.
-// Guarded by tests\autotest\run_context_callers_scoped_to_target.ps1.
+//  3. (1.42 GAP-CALLERS) an UNBOUND ref on the same token (file, line, column) as a
+//     ref bound OUTSIDE ATargetIds is dropped too: `TBeta.Build(2)` stores a `call`
+//     ref bound to TBeta.Build AND a `member-access` twin left NULL, and rule 1 alone
+//     let the twin through as a [name-only] caller of TAlpha.Build.
+//  4. (1.42 GAP-CALLERS) when the target is a UNIT-LEVEL routine (AUnitOwner is its
+//     unit's qualified name), an UNBOUND ref written with a receiver is kept only
+//     when that receiver names the unit (`Unit.Run`):
+//     `LSP.Run` / `C.Run` call a METHOD of a value and can never reach a free
+//     routine, yet they were listed as [name-only] callers of DRagLint.CLI.Run.
+// Guarded by tests\autotest\run_context_callers_scoped_to_target.ps1 (T1-T4).
 function CallersOfTarget( const ARefs: TArray<TReference>; const ATargetIds: TArray<Int64>; AIsConstructor: Boolean;
-  const AOwnerLeaf: string): TArray<TReference>;
+  const AOwnerLeaf, AUnitOwner: string): TArray<TReference>;
 
   function ReceiverLeaf( const AText: string): string;
   var
@@ -364,26 +373,46 @@ function CallersOfTarget( const ARefs: TArray<TReference>; const ATargetIds: TAr
     Result:= False;
   end; // function
 
+  function TokenKey( const ARef: TReference): string;
+  begin
+    Result:= Format('%d:%d:%d', [ARef.FileId, ARef.StartLine, ARef.StartCol]);
+  end; // function
+
 var
-  R   : TReference;
-  Recv: string    ;
+  R        : TReference;
+  Recv     : string    ;
+  BoundElse: TDictionary<string, Boolean>; { tokens bound to a non-target (rule 3) }
 begin
   Result:= [];
-  for R in ARefs do
-  begin
-    if R.SymbolId <> 0 then
+  BoundElse:= TDictionary<string, Boolean>.Create;
+  try
+    for R in ARefs do
+      if (R.SymbolId <> 0) and not IsTarget(R.SymbolId) then BoundElse.AddOrSetValue(TokenKey(R), True);
+    for R in ARefs do
     begin
-      if IsTarget(R.SymbolId) then Result:= Result + [R];
-      Continue;
-    end;
-    if AIsConstructor and (AOwnerLeaf <> '') then
-    begin
-      Recv:= ReceiverLeaf(R.ReceiverText);
-      if not ((Recv = '') or SameText(Recv, 'Self') or SameText(Recv, 'inherited') or SameText(Recv, AOwnerLeaf)) then
+      if R.SymbolId <> 0 then
+      begin
+        if IsTarget(R.SymbolId) then Result:= Result + [R];
         Continue;
+      end;
+      if BoundElse.ContainsKey(TokenKey(R)) then Continue;
+      if (AUnitOwner <> '') and (Trim(R.ReceiverText) <> '') then
+      begin
+        Recv:= Trim(R.ReceiverText);
+        if not (SameText(Recv, AUnitOwner) or SameText(Recv, AOwnerLeaf)
+                or EndsText('.' + AUnitOwner, Recv)) then Continue;
+      end;
+      if AIsConstructor and (AOwnerLeaf <> '') then
+      begin
+        Recv:= ReceiverLeaf(R.ReceiverText);
+        if not ((Recv = '') or SameText(Recv, 'Self') or SameText(Recv, 'inherited') or SameText(Recv, AOwnerLeaf)) then
+          Continue;
+      end;
+      Result:= Result + [R];
     end;
-    Result:= Result + [R];
-  end;
+  finally
+    BoundElse.Free;
+  end; // try
 end; // function
 
 { The library routine the oracle binds for one unresolved call that has no stored
@@ -665,6 +694,7 @@ var
   RawCallers : TArray<TReference>;
   TargetIds  : TArray<Int64>     ;  { every symbol id under EffQName (overloads) }
   OwnerLeaf  : string            ;  { 'TType' of Unit.TType.Member; '' for a free routine }
+  UnitOwner  : string            ;  { the unit's qualified name when the target is unit-level, else '' }
   Total     : Integer           ;
   SB         : TStringBuilder    ;
   I          : Integer           ;
@@ -916,9 +946,13 @@ begin
   for var TS: TSymbol in AStore.FindSymbolsByQualifiedName(EffQName) do TargetIds:= TargetIds + [TS.Id];
   if Length(TargetIds) = 0 then TargetIds:= [Sym.Id];
   OwnerLeaf:= Copy(EffQName, 1, Length(EffQName) - Length(CallerName) - 1);
+  { rule 4 of CallersOfTarget: the owning UNIT's name when the target is a unit-level routine }
+  UnitOwner:= '';
+  for var OS: TSymbol in AStore.FindSymbolsByQualifiedName(OwnerLeaf) do
+    if OS.Kind = skUnit then UnitOwner:= OwnerLeaf;
   if LastDelimiter('.', OwnerLeaf) > 0 then OwnerLeaf:= Copy(OwnerLeaf, LastDelimiter('.', OwnerLeaf) + 1, MaxInt);
   RawCallers:= DistinctCallSites(CallersOfTarget(AStore.FindCallersByNameWithContext(CallerName, ACallerContext),
-                                                 TargetIds, Sym.Kind = skConstructor, OwnerLeaf));
+                                                 TargetIds, Sym.Kind = skConstructor, OwnerLeaf, UnitOwner));
   Result.TotalCallers:= Length(RawCallers); { XERJ item 2: the count BEFORE the cut }
   Result.CallerCap   := AMaxCallers;
   if Length(RawCallers) > AMaxCallers then SetLength(RawCallers, AMaxCallers);
