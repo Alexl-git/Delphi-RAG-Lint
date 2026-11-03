@@ -317,6 +317,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Setup installer: procedure docs\wiki\Setup-Installer.md
 * Show in Call Graph: host 'Structure form' (the caption is verified, the host is declared)
 * Switch VS Code Delphi MCP entry: menu 'drag-lint-switch --vscode --off' inside drag-lint-switch.exe
+* Target compiler (--target-compiler): lsp workspace/executeCommand
 * Type-level dl:ok review: procedure docs\wiki\Type-Level-Review-Marker.md
 * VS Code extension: Problems stay current: lsp draglint/refreshDiagnostics
 * VS Code extension: Problems stay current: lsp workspace/didChangeWatchedFiles
