@@ -196,12 +196,6 @@ procedure ConnectReadOnly(AConn: TFDConnection; const ADbPath: string;
 procedure ConnectWriter(AConn: TFDConnection; const ADbPath: string;
   ABusyTimeoutMs: Integer = -1);
 
-/// <summary>The writer lock wait in milliseconds: ARequested when it is not negative, else
-/// WRITER_BUSY_TIMEOUT_MS or the non-negative integer in DRAGLINT_BUSY_TIMEOUT_MS.</summary>
-/// <param name="ARequested">An explicit wait; negative = the default.</param>
-/// <returns>The wait, in milliseconds.</returns>
-function WriterBusyTimeoutMs(ARequested: Integer = -1): Integer;
-
 /// <summary>Replaces the fixed busy timeout of a CONNECTED writer with the beat-aware wait
 /// (1.41 SQLITE-BUSY-BEAT): while a lock is busy the connection keeps waiting as long as the
 /// heartbeat seq of an engine that writes ADbPath advances, and gives up once no holder's seq has
@@ -464,7 +458,11 @@ var
   B: TWritingBeat;
 begin
   for B in ASeen do
-    if B.Pid = APid then begin ASeq:= B.Beat.Seq; Exit(True); end;
+    if B.Pid = APid then
+    begin
+      ASeq:= B.Beat.Seq;
+      Exit(True);
+    end;
   ASeq:= 0;
   Result:= False;
 end;
@@ -474,7 +472,7 @@ end;
 function BeatAwareBusy(AUser: Pointer; ACount: Integer): Integer; cdecl;
 var
   W      : PBeatWait          ;
-  Now_   : UInt64             ;
+  NowTick   : UInt64             ;
   Snap   : TArray<TWritingBeat>;
   B      : TWritingBeat       ;
   Old    : Int64              ;
@@ -484,14 +482,18 @@ begin
   Result:= 0;
   try
     W:= PBeatWait(AUser);
-    Now_:= GetTickCount64;
+    NowTick:= GetTickCount64;
     if ACount = 0 then
     begin
-      W.Start:= Now_; W.LastAdvance:= Now_; W.LastProbe:= 0; W.Seen:= nil; W.Noted:= False;  // dl:ok multiple-statements-per-line -- REVIEWED 2026-11-03: one reset of one record
+      W.Start      := NowTick;
+      W.LastAdvance:= NowTick;
+      W.LastProbe  := 0;
+      W.Seen       := nil;
+      W.Noted      := False;
     end;
-    if Now_ - W.LastProbe >= BEAT_PROBE_EVERY_MS then
+    if NowTick - W.LastProbe >= BEAT_PROBE_EVERY_MS then
     begin
-      W.LastProbe:= Now_;
+      W.LastProbe:= NowTick;
       Snap:= SnapshotWritingBeats(W.DbPath, BEAT_PROBE_PIPE_MS);
       Moved:= False;
       Mover:= Default(TWritingBeat);
@@ -504,8 +506,8 @@ begin
       W.Seen:= Snap;
       if Moved then
       begin
-        W.LastAdvance:= Now_;
-        if (not W.Noted) and (Now_ - W.Start >= BEAT_NOTE_AFTER_MS) then
+        W.LastAdvance:= NowTick;
+        if (not W.Noted) and (NowTick - W.Start >= BEAT_NOTE_AFTER_MS) then
         begin
           W.Noted:= True;
           Writeln(ErrOutput, Format('NOTE: waiting for the write lock on %s: pid %d is still working (%s); ' +
@@ -513,11 +515,11 @@ begin
         end;
       end;
     end;
-    if Int64(Now_ - W.LastAdvance) >= W.WindowMs then Exit(0);
-    Sleep(Min(BUSY_SLEEP_MAX_MS, BUSY_SLEEP_STEP_MS * (ACount + 1)));  // dl:ok sleep-in-vcl -- REVIEWED 2026-11-03: SQLite's busy handler sleeps between lock attempts by contract; no VCL loop on this thread
+    if Int64(NowTick - W.LastAdvance) >= W.WindowMs then Exit(0);
+    Sleep(Min(BUSY_SLEEP_MAX_MS, BUSY_SLEEP_STEP_MS * (ACount + 1)));
     Result:= 1;
   except
-    on E: Exception do Result:= 0; { give up the lock as SQLite's own handler would }  // dl:ok try-except-swallowed -- REVIEWED 2026-11-03: an exception must never unwind into SQLite's C frames; 0 = the statement fails SQLITE_BUSY, which is reported
+    on E: Exception do Result:= 0; { never unwind into SQLite's C frames: 0 = the statement fails SQLITE_BUSY, which is reported }
   end;
 end;
 
@@ -531,7 +533,7 @@ begin
   Result:= nil;
   if (AConn = nil) or not AConn.Connected then Exit;
   Obj:= AConn.CliObj;
-  if (Obj = nil) or not (TObject(Obj) is TSQLiteDatabase) then Exit;
+  if (Obj = nil) or (TObject(Obj) is not TSQLiteDatabase) then Exit;
   Db:= TSQLiteDatabase(Obj);
   if (Db.Lib = nil) or (Db.Lib.hDLL = 0) then Exit; { static link: no handle to ask }
   @Fn:= GetProcAddress(Db.Lib.hDLL, 'sqlite3_busy_handler');

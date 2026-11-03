@@ -947,19 +947,17 @@ end;
 
 function WritingFieldText: string;
 var
-  K: string;
+  Keys: TArray<string>;
+  I   : Integer       ;
 begin
-  Result:= CONTROL_WRITING_FIELD_PREFIX;
   GBeatLock.Enter;
   try
-    for K in GWriterDbs.Keys do
-    begin
-      if Result <> CONTROL_WRITING_FIELD_PREFIX then Result:= Result + WRITING_SEP;
-      Result:= Result + BeatClean(K);
-    end;
+    Keys:= GWriterDbs.Keys.ToArray;
   finally
     GBeatLock.Leave;
   end;
+  for I:= 0 to High(Keys) do Keys[I]:= BeatClean(Keys[I]);
+  Result:= CONTROL_WRITING_FIELD_PREFIX + string.Join(WRITING_SEP, Keys);
 end;
 
 { True when AReply carries a writer field that names AKey (a WriterKey). }
@@ -979,7 +977,7 @@ end;
 function SnapshotWritingBeats(const ADbPath: string; AConnectTimeoutMs: Integer): TArray<TWritingBeat>;
 var
   Mine : string         ;
-  Self_: string         ;
+  OwnLeaf: string         ;
   Key  : string         ;
   H    : THandle        ;
   Found: TWin32FindDataW;
@@ -994,14 +992,14 @@ begin
   try
     Key  := WriterKey(ADbPath);
     Mine := BEAT_PIPE_PREFIX + CurrentUserSidString + '-s' + IntToStr(CurrentSessionId) + '-p';
-    Self_:= Mine + IntToStr(GetCurrentProcessId);
+    OwnLeaf:= Mine + IntToStr(GetCurrentProcessId);
     SetLength(Leafs, 0);
     H:= FindFirstFileW(PIPE_PREFIX_FULL + '*', Found);
     if H = INVALID_HANDLE_VALUE then Exit;
     try
       repeat
         Leaf:= Found.cFileName;
-        if Leaf.StartsWith(Mine, True) and not SameText(Leaf, Self_) then Leafs:= Leafs + [Leaf];
+        if Leaf.StartsWith(Mine, True) and not SameText(Leaf, OwnLeaf) then Leafs:= Leafs + [Leaf];
       until not FindNextFileW(H, Found);
     finally
       Winapi.Windows.FindClose(H);
@@ -1017,8 +1015,8 @@ begin
       W.Pid:= StrToIntDef(Leaf.Substring(P + 2), 0);
       Result:= Result + [W];
     end;
-  except
-    on E: Exception do SetLength(Result, 0); { no answer = no holder with a beat }  // dl:ok try-except-swallowed -- REVIEWED 2026-11-03: a failed probe means no holder with a beat, which the waiter treats as the fixed timeout
+  except  // dl:ok try-except-swallowed@a8f7 -- REVIEWED 2026-11-03: a failed probe means no holder with a beat, which the waiter treats as the fixed timeout
+    on E: Exception do SetLength(Result, 0); { no answer = no holder with a beat }
   end;
 end;
 { ---- identity ------------------------------------------------------------ }

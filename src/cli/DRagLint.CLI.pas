@@ -2474,7 +2474,7 @@ var GInProgressNoted: string = ''; { lower-cased db paths already noted, ';'-joi
 procedure NoteIndexRunInProgressOnce(const ADbPath: string);
 begin
   var Key: string:= LowerCase(ExpandFileName(ADbPath));
-  if Pos(';' + Key + ';', ';' + GInProgressNoted) > 0 then Exit;
+  if (';' + GInProgressNoted).Contains(';' + Key + ';') then Exit;
   if (not TFile.Exists(ADbPath + '.indexing.lock')) or HoldsIndexLock(ADbPath) then Exit;
   GInProgressNoted:= GInProgressNoted + Key + ';';
   Writeln(ErrOutput, Format('NOTE: an index run is writing %s right now -- answers may reflect a partly written ' +
@@ -3557,7 +3557,7 @@ begin
       a concurrent reader can be sampled. Unset / 0 = no delay. Kept out of ResolveCallTargets on
       purpose: that is resolver surface (run_resolver_version_guard). }
     var DelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_RESOLVE_DELAY_MS'), 0);
-    if DelayMs > 0 then Sleep(DelayMs);  // dl:ok sleep-in-vcl -- REVIEWED 2026-11-03: console CLI test seam, off unless the env var is set
+    if DelayMs > 0 then Sleep(DelayMs);  // dl:ok sleep-in-vcl@31b4 -- REVIEWED 2026-11-03: console CLI test seam, off unless the env var is set
     AStore.ResolveCallTargets(ALibs);
   finally
     AStore.EndFileBatch;
