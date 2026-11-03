@@ -8,7 +8,10 @@
   intrinsic (SetLength, Inc), a property write accessor, a published or
   default-section (DFM-streamed) field, a `with` write, an `absolute` alias, an
   initialised global, an initialization-section write, an address-of, a typed
-  constant, or a record field.
+  constant, or a record field. A resolved call uses only its own declaration's
+  var / out modes (TRIGGER-BARENAME / -QUALIFIED: a library Show(var) of the same
+  bare name must not silence them); an unresolved call keeps the bare-name merge
+  (CONTROL-UNRESOLVED).
 
     RUN 1  lint-all --rule read-never-assigned  -> exactly the TRIGGER lines, no CONTROL line
     RUN 1b plain lint-all (the rule is ON by default) -> the same TRIGGER lines
@@ -60,17 +63,17 @@ function At($Set, [int]$L) { return @($Set | Where-Object { [int]$_.start_line -
 & $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | Out-Null
 Check 'index exits 0' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 
-$triggers = @('TRIGGER-FIELD', 'TRIGGER-OBJ', 'TRIGGER-GLOBAL')
+$triggers = @('TRIGGER-FIELD', 'TRIGGER-OBJ', 'TRIGGER-GLOBAL', 'TRIGGER-BARENAME', 'TRIGGER-QUALIFIED')
 $controls = @('CONTROL-CROSSUNIT', 'CONTROL-SELFWRITE', 'CONTROL-HARDCAST', 'CONTROL-WITH', 'CONTROL-VARARG',
               'CONTROL-OUTARG', 'CONTROL-RTLVAR', 'CONTROL-PROPSETTER', 'CONTROL-UNREAD', 'CONTROL-ADDR',
               'CONTROL-PUBLISHED', 'CONTROL-DEFAULTSECTION', 'CONTROL-INIT', 'CONTROL-VALUEINIT',
-              'CONTROL-ABSBASE', 'CONTROL-ABSOLUTE', 'CONTROL-INC', 'CONTROL-TYPEDCONST')
+              'CONTROL-ABSBASE', 'CONTROL-ABSOLUTE', 'CONTROL-INC', 'CONTROL-TYPEDCONST', 'CONTROL-UNRESOLVED')
 
 # RUN 1 -- --rule names it (on any default)
 $all = Parse-Findings (& $exePath lint-all --db $db --format json --rule $Rule 2>$null)
 $a = Of $all
 $a | ForEach-Object { Write-Host ("    {0}:{1} {2}" -f (Split-Path $_.file_path -Leaf), $_.start_line, $_.message) }
-Check 'run 1: exactly 3 findings' ($a.Count -eq 3) "count=$($a.Count)"
+Check 'run 1: exactly 5 findings' ($a.Count -eq 5) "count=$($a.Count)"
 # positive-control: read-never-assigned
 foreach ($t in $triggers) { $l = LineOf $t; Check "$t fires" ((At $a $l).Count -eq 1) "line=$l" }
 $msg = @(At $a (LineOf 'TRIGGER-GLOBAL'))
@@ -79,7 +82,7 @@ foreach ($c in $controls) { $l = LineOf $c; Check "$c stays silent" ((At $a $l).
 
 # RUN 1b -- ON by default: plain lint-all reports the same 3
 $def = Of (Parse-Findings (& $exePath lint-all --db $db --format json 2>$null))
-Check 'run 1b ON by default: plain lint-all gives the same 3' ($def.Count -eq 3) "count=$($def.Count)"
+Check 'run 1b ON by default: plain lint-all gives the same 5' ($def.Count -eq 5) "count=$($def.Count)"
 
 # RUN 2 -- --disable turns it off
 $r2 = Parse-Findings (& $exePath lint-all --db $db --format json --disable $Rule 2>$null)
@@ -104,7 +107,7 @@ foreach ($e in $edits) {
 [IO.File]::WriteAllText($su, $tu, [Text.Encoding]::ASCII)
 & $exePath index (Join-Path $scratch 'src') --db $db 2>&1 | Out-Null
 $c3 = Of (Parse-Findings (& $exePath lint-all --db $db --format json --rule $Rule 2>$null))
-Check 'run 3: 3 triggers + 5 positive controls' ($c3.Count -eq 8) "count=$($c3.Count)"
+Check 'run 3: 5 triggers + 5 positive controls' ($c3.Count -eq 10) "count=$($c3.Count)"
 foreach ($e in $edits) { $l = LineOf $e[3]; Check "run 3 $($e[3]) fires once its write is gone" ((At $c3 $l).Count -eq 1) "line=$l" }
 }
 finally {
