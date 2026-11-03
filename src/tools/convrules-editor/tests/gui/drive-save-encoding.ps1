@@ -232,7 +232,21 @@ public static class FG {
   [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
   /* SetForegroundWindow; only when that is refused, an ALT tap (the process that sent the last input may set the
      foreground) and again. The tap can eat the next key, so the caller retries its Ctrl+C. */
-  public static void Front(IntPtr h) { if (SetForegroundWindow(h) && GetForegroundWindow() == h) return; keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero); SetForegroundWindow(h); }
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);
+  [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+  [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a, uint b, bool attach);
+  [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr h);
+  /* DRVLIB: a driver started from a background shell owns no foreground right, so SetForegroundWindow is refused
+     while the owner works in another window (measured: all 6 Ctrl+C tries skipped, save.nonascii.asks read '').
+     Attaching to the CURRENT foreground thread's input lets the call through; the ALT tap stays the last resort. */
+  public static void Front(IntPtr h) {
+    if (SetForegroundWindow(h) && GetForegroundWindow() == h) return;
+    uint me = GetCurrentThreadId(); uint fg = GetWindowThreadProcessId(GetForegroundWindow(), IntPtr.Zero);
+    bool att = (fg != 0) && (fg != me) && AttachThreadInput(me, fg, true);
+    try { BringWindowToTop(h); SetForegroundWindow(h); } finally { if (att) AttachThreadInput(me, fg, false); }
+    if (GetForegroundWindow() == h) return;
+    keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero); SetForegroundWindow(h);
+  }
 }
 "@
 function MsgText($dlg) {
