@@ -119,7 +119,7 @@ type
 
   TWriteVerdict = (wvRead, wvWrite);
 
-  TCollector = class
+  TCollector = class  // dl:ok high-response@dfb5 -- REVIEWED 2026-11-03 one private text-classifier for one rule; RFC 51 counts RTL dictionary/string calls, the 1-over is BoundCallee (RNA-BARENAME)
   private
     FStore, FLib : ISymbolStore;
     FTexts       : TObjectDictionary<Int64, TSrcText>;
