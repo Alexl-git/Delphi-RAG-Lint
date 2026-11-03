@@ -191,7 +191,10 @@ The engine never guesses; every kind it can give:
   `V := X as TX`, `V := nil`, `Assigned(V)`, a compare with nil or `V.M` with M a member the
   interface carries; a field, a parameter, a global, an inline `var`, `A, B: TX` and any other
   use of the local, `V.Free` or `FreeAndNil(V)` included, still refuse), `other-ref`, `multiple-classes`, `member-unsupported` (an inherited
-  member, a `default` array property or a write to an indexed property; a plain indexed property
+  member that no ancestor declared in the class's own unit declares, or one that is `strict private`
+  there -- since 1.42 a member of a same-unit ancestor is carried like an own one, its getter reading
+  it by name, and an ancestor that already declares `Get<M>` / `Set<M>` refuses `duplicate-identifier`;
+  a member of a library ancestor read inside a `with` body still refuses `with-member` --, a `default` array property or a write to an indexed property; a plain indexed property
   is carried for reading, its index list verbatim), `duplicate-identifier` (the class has a `Get<M>`
   that is not exactly `function Get<M>: <T>;` read by the property -- that one is reused -- or the
   leaf declares `I<Class>Surface` differently with every suffix taken; an identical interface is

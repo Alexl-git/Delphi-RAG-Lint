@@ -2328,6 +2328,7 @@ type
     function LocalDeclOf(const pR: TEdgeRef; out pLocal: TSymbol): Boolean;
     function LocalUseWhy(const pLocal, pRoutine: TSymbol; out pLine: Integer): string;
     function CheckTypeDecls: Boolean;
+    function InheritedWhy(const pM: TSymbol; out pKind: string): string;
     function CheckMembers: Boolean;
     function MemberOf(const pR: TEdgeRef): TSymbol;
     function MemberUseRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
@@ -2665,6 +2666,47 @@ begin
   Result:= True;
 end;
 
+{ CYC-C (3): '' when pM, a member the consumer reads that the class does not declare itself, is
+  carried like an own member: an ancestor of the class declared in the class unit declares it (the
+  getter, a method of the class, reads it by name), not under `strict private`, and no class of the
+  chain from the class's parent up to that ancestor declares `Get<M>` / `Set<M>` (the names the
+  interface needs; the class itself is checked by CheckMembers / CheckWrites). Else why not, the
+  refusal kind in pKind: member-unsupported, or duplicate-identifier for a getter / setter name.
+  A member of a library ancestor or of another unit is never on the edge: CheckWithBodies keeps
+  refusing it inside a `with` body. }
+function TMemberPlan.InheritedWhy(const pM: TSymbol; out pKind: string): string;
+var
+  Next: TStoredType;
+begin
+  pKind:= 'member-unsupported';
+  var Cur:= Stored(FCls);
+  for var Hop:= 1 to CMaxAncestorHops do
+  begin
+    if not FIdx.Find(FIdx.ParentOf(Cur), False, Next) or FIdx.IsLib(Next) or (Next.Sym.FileId <> FClsFid) then Break;
+    for var N in TArray<string>.Create('Get' + pM.Name, 'Set' + pM.Name) do
+      if Next.Store.FindChildSymbolByName(Next.Sym.Id, N).Id > 0 then
+      begin
+        pKind:= 'duplicate-identifier';
+        Exit(Format('its ancestor `%s` already declares `%s`, a name the interface needs', [Next.Sym.Name, N]));
+      end;
+    if Next.Sym.Id = pM.ParentId then
+    begin
+      for var L:= pM.StartLine - 1 downto Next.Sym.StartLine do
+      begin
+        var V:= TRegEx.Match(BareCode(LineOf(FClsLines, L)), '^\s*(strict\s+)?(private|protected|public|published)\b',
+          [roIgnoreCase]);
+        if not V.Success then Continue;
+        if (V.Groups[1].Length > 0) and SameText(V.Groups[2].Value, 'private') then
+          Exit(Format('`%s.%s` is strict private: no method of `%s` can read it', [Next.Sym.Name, pM.Name, FCls.Name]));
+        Break;
+      end;
+      Exit('');
+    end;
+    Cur:= Next;
+  end;
+  Result:= Format('no ancestor of `%s` declared in its unit declares it', [FCls.Name]);
+end;
+
 { W6 C7: the argument list that passes an index parameter list on (const pRow, pCol: Integer;
   pName: string -> pRow, pCol, pName). }
 function IndexArgs(const pParams: string): string;
@@ -2697,8 +2739,13 @@ begin
           Exit(Refuse('class-method', M.Name, FFromFid, R.Line, Format('line %d calls the method `%s` of `%s` ' +
             '(`%s`); the interface carries field and property reads only', [R.Line, M.Name, FCls.Name, R.LineText])));
         if M.ParentId <> FCls.Id then
-          Exit(Refuse('member-unsupported', M.Name, FFromFid, R.Line, Format('line %d reads `%s`, which is not ' +
-            'declared in `%s` itself', [R.Line, M.Name, FCls.Name])));
+        begin
+          var Kind:= '';
+          var Why := InheritedWhy(M, Kind);
+          if Why <> '' then
+            Exit(Refuse(Kind, M.Name, FFromFid, R.Line, Format('line %d reads `%s`, which is not declared in `%s` ' +
+              'itself: %s', [R.Line, M.Name, FCls.Name, Why])));
+        end;
         var Sig:= Trim(M.Signature);
         { an indexed property keeps only its element type in symbols.signature: read the declaration }
         var Indexed:= (M.Kind = skProperty) and TRegEx.IsMatch(BareCode(LineOf(FClsLines, M.StartLine)),
@@ -2729,7 +2776,8 @@ begin
   begin
     FGetters.Add('Get' + M.Name);
     var Read:= M.Name;
-    if M.Kind = skProperty then
+    { CYC-C (3): an inherited member is read by name -- its accessor may be private to the ancestor }
+    if (M.Kind = skProperty) and (M.ParentId = FCls.Id) then
     begin
       var Parts: TArray<string>:= nil;
       for var L:= M.StartLine to Max(M.StartLine, M.EndLine) do Parts:= Parts + [BareCode(LineOf(FClsLines, L))];
@@ -3536,7 +3584,8 @@ begin
     FIface:= if pIfaceName <> '' then pIfaceName
       else 'I' + (if (Length(FCls.Name) > 1) and (UpCase(FCls.Name[1]) = 'T') then Copy(FCls.Name, 2, MaxInt)
       else FCls.Name) + 'Surface';
-    Ok:= CheckMembers and CheckWrites and CheckMethods and CheckClass and CheckTypeDecls and RewriteConsumer;
+    Ok:= CheckMembers and CheckWrites and CheckMethods and CheckClass;
+    Ok:= Ok and CheckTypeDecls and RewriteConsumer;
     Ok:= Ok and CheckCastExceptions and CheckWithBodies and CheckMethodMentions and CollectLeafUses;
   end;
   pRefusal:= FRefusal;

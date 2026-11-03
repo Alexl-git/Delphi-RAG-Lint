@@ -18,6 +18,7 @@ DRAGLINT_RESOLVER_VERSION 1.17.0 -> 1.18.0-alpha -- every index re-parses once.
 - sweeper-a (YADF false positives): `unused-parameter` skips non-private methods of a class that implements an interface; `dfm-property-not-declared` stays silent when a class ancestor resolves to a record; `used-before-assignment` honours `X <> nil` / `X = nil` guards; ResolveAncestry never binds a heritage name to a routine-local type of another routine.
 - cyc (CYC-C, partial; D4): `cycles --fix` reports progress while a build waits and has no time limit (cancel via the heartbeat); a non-ANSI char in an inserted literal is written as `#code`. Type-decl / multiple-classes / inherited+with-member residue not started.
 - cyc2 (CYC-C residue, type-decl): `cycles --plan` / `--fix` member hand-over (R2) no longer refuses `type-decl` for a routine local `V: TX;` -- it is retyped to the extracted interface when every use is `V := X as TX`, `V := nil`, `Assigned(V)`, a compare with nil or `V.<carried member>`; a field, parameter, global or any other use still refuses. Guard `run_cyclefix_r2_typedecl_dcc.ps1` (follow + dcc + byte-identical run).
+- cyc2 (CYC-C residue, inherited members): R2 carries a member the class inherits from an ancestor declared in the same unit (was `member-unsupported`); `strict private` there still refuses, an ancestor's own `Get<M>` / `Set<M>` refuses `duplicate-identifier`, a library-ancestor member in a `with` body stays `with-member`. Guard `run_cyclefix_r2_inherited_dcc.ps1`.
 
 ## v1.40.0-alpha -- 2026-11-02
 
