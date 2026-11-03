@@ -12,48 +12,48 @@ index run emits, only WHEN they become visible and how long a second writer wait
 meets a holder dies `database is locked` after 120 s, however busy -- not stuck -- the
 holder is. A whole-DB resolve pass holds the write lock for up to ~37 min.
 
-### Why not a native busy handler
-The engine links FireDAC's STATIC SQLite (`FireDAC.Phys.SQLiteWrapper.Stat`, `{$L
-sqlite3_x64.obj}`). `TSQLiteLib` exposes `sqlite3_busy_timeout` but not
-`sqlite3_busy_handler`, and an `external` in another unit cannot bind to that object file.
-`sqlite3_busy_timeout` from a watcher thread blocks on the waiting connection's mutex. So
-the wait is extended at the application level, at the lock-acquisition point.
+### Mechanism: a native busy handler
+FireDAC loads `sqlite3.dll` dynamically (the build stages it beside the engine). Its
+`TSQLiteLib` exposes `sqlite3_busy_timeout` only, so `ArmBeatAwareWait` takes
+`sqlite3_busy_handler` from the loaded module (`Lib.hDLL` + `GetProcAddress`) and installs
+its own handler on the writer's native handle right after `ConnectWriter`. FireDAC calls
+`sqlite3_busy_timeout` again only when a statement's busy timeout CHANGES; every statement
+keeps `LockWait = True` (ArmBusyTimeout), so the handler stays. A static link (no `hDLL`)
+returns nil and keeps the fixed timeout. Covers EVERY statement of the store's writer
+connection -- transactions, autocommit writes and checkpoints alike.
+(An application-level retry around `StartTransaction` was the fallback design; not needed.)
 
 ### Design
 1. **Holder publication (ControlChannel).** A process-wide, refcounted set of database
    paths this engine has a WRITER store open on (`BeatWriterOpened` / `BeatWriterClosed`,
-   called by `TSQLiteSymbolStore` on a write connect / destroy). The heartbeat pipe's
-   `status` reply gains one field, ONLY when the request carries the new argument
-   `writing`: `writing=<path>|<path>...` (full paths; `|` cannot occur in a Windows path).
-   Older parsers never ask, so their reply shape is unchanged (as `role` / `beat`).
+   called through `ArmBeatAwareWait` / `DisarmBeatAwareWait` by `TSQLiteSymbolStore`). The
+   heartbeat pipe's `status` reply gains one field, ONLY when the request carries the new
+   argument `writing`: `writing=<path>|<path>...` (lower-cased full paths; `|` cannot occur
+   in a Windows path). Older parsers never ask, so their reply shape is unchanged.
 2. **Holder discovery (ControlChannel).** `SnapshotWritingBeats(ADbPath)`: enumerate this
    user's/session's `drag-lint-beat-*` pipes except our own pid, ask each
-   `status<TAB>beat<TAB>writing` (short connect timeout), and keep (pid, seq) of every
-   engine whose `writing=` names ADbPath (case-insensitive full path).
-3. **Waiter rule (Storage.SQLite, `StartWriteTx`).** Every top-level
-   `FConn.StartTransaction` of a writer store goes through one helper:
-   * slice 1: the normal busy timeout W (120 s / env) inside SQLite -- unchanged;
-   * on SQLITE_BUSY: take snapshot S1. No holder with a beat (old engine, a verb without
-     a heartbeat pipe, a non-drag-lint writer) -> re-raise: **today's fixed timeout**.
-   * otherwise retry one more slice W; on BUSY take S2; if ANY holder's seq advanced
-     S1 -> S2, print a one-line NOTE (first time only) and retry with S1 := S2; else
-     re-raise. So a progressing holder is waited out indefinitely; a holder whose beat is
-     frozen for a whole slice is given up on after at most 2W.
-   * the waiter never beats while it waits (two waiters must not keep each other alive).
-4. Out of scope (residual, stays on the fixed W): autocommit writes outside a transaction
-   (`SetMetaValue`, a bare `ExecSQL`) and the connect-time pragmas. The long holds that
-   matter are transactions; the first lock a second writer meets is its BEGIN IMMEDIATE.
+   `status<TAB>beat<TAB>writing` (250 ms connect), keep (pid, beat) of every engine whose
+   `writing=` names ADbPath.
+3. **Waiter rule (FileMembership `BeatAwareBusy`).** One rule for every case: per wait
+   episode, LastAdvance starts at the first BUSY; once a second, probe the holders; any
+   holder whose seq differs from the previous probe moves LastAdvance to now; give up
+   (SQLITE_BUSY, "database is locked") once now - LastAdvance >= W (120 s /
+   `DRAGLINT_BUSY_TIMEOUT_MS`). So: no holder with a beat -> gives up at W, **today's
+   fixed timeout**; a progressing holder -> waited out however long; a frozen beat -> W after
+   its last advance. A NOTE goes to stderr once when a wait passes 5 s and saw progress.
+   The waiter never beats while it waits (two waiters must not keep each other alive).
+4. Residual: the connect-time pragmas run before the handler is installed (fixed W), and
+   writers outside TSQLiteSymbolStore (`import-log`, the migrate probe) keep the fixed W.
 5. The index lock `<db>.indexing.lock` keeps its refuse-at-start design (#17 / IDX-LOCK):
    nothing waits on it today, and turning the refusal into a wait would change the IDE
    job queue's contract. Recorded as a decision, not done.
-
 ### Tests (two-process, `tests\autotest\run_busy_beat_guard.ps1`)
 A python holder (`_fk_perp.py --hold-ms`) holds `BEGIN IMMEDIATE`; a PowerShell runspace
 serves a fake heartbeat pipe; the victim is a real `index --resolve-only` with
-`DRAGLINT_BUSY_TIMEOUT_MS=3000`.
+`DRAGLINT_BUSY_TIMEOUT_MS=3000`; BB6 checks a request without `writing` has no such field.
 * BB1 advancing beat naming the DB: the victim waits the 15 s hold out, exit 0 (RED today:
   `database is locked` at ~3 s).
-* BB2 frozen beat: the victim gives up `database is locked` well before the hold ends.
+* BB2 frozen beat: the victim gives up `database is locked` at about W, well before the hold ends.
 * BB3 no beat pipe: gives up at about W (today's behaviour kept).
 * BB4 an advancing beat that names ANOTHER db is not a holder: gives up (positive control
   for the db match).

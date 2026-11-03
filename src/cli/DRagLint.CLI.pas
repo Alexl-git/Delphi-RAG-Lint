@@ -2461,6 +2461,27 @@ begin
   Flush(ErrOutput);
 end;
 
+{ Defined beside AcquireIndexLock: True when THIS process holds ADbPath's index lock. }
+function HoldsIndexLock(const ADbPath: string): Boolean; forward;
+
+var GInProgressNoted: string = ''; { lower-cased db paths already noted, ';'-joined }
+
+{ 1.41 IDX-HALFREAD: a reader whose database is being written by an index run RIGHT NOW is
+  told so, once per database, on stderr. <db>.indexing.lock is opened DELETE_ON_CLOSE by every
+  index run (AcquireIndexLock), so it exists only while a holder lives -- the file walk commits
+  every 256 files / 5 s, and between those commits and the end of the calls pass a re-emitted
+  file's refs are unresolved. No stdout, no exit code. Guard run_index_halfread_guard.ps1 HR3/HR4. }
+procedure NoteIndexRunInProgressOnce(const ADbPath: string);
+begin
+  var Key: string:= LowerCase(ExpandFileName(ADbPath));
+  if Pos(';' + Key + ';', ';' + GInProgressNoted) > 0 then Exit;
+  if (not TFile.Exists(ADbPath + '.indexing.lock')) or HoldsIndexLock(ADbPath) then Exit;
+  GInProgressNoted:= GInProgressNoted + Key + ';';
+  Writeln(ErrOutput, Format('NOTE: an index run is writing %s right now -- answers may reflect a partly written ' +
+    'index until it finishes.', [ADbPath]));
+  Flush(ErrOutput);
+end;
+
 function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Boolean = False): ISymbolStore;
 var
   Found   : Integer;
@@ -2501,6 +2522,7 @@ begin
     questions -- refuse vs warn vs auto-reindex, and whether the gate lives here
     or per-command -- stay open, and a warning cannot pre-empt them. }
   if AOk then NoteIndexFreshnessOnce(Result, ADbPath);
+  NoteIndexRunInProgressOnce(ADbPath);
 end;
 
 // WRITABLE open (same schema-current guard as OpenReadOnlyStore). Used by
@@ -3509,6 +3531,39 @@ begin
   Flush(Output);
 end;
 
+/// <summary>The calls pass, with the full edge clear a stale resolver or --resolve-only asks for
+/// done INSIDE the pass's transaction (1.41 IDX-HALFREAD).</summary>
+/// <param name="AStore">The writer store of this run; must not be nil.</param>
+/// <param name="AClearFirst">True = drop every call edge and refs.symbol_id first (ClearCallEdges).</param>
+/// <param name="ALibs">Extra (library) stores for ResolveCallTargets.</param>
+/// <remarks>The clear used to run in AUTOCOMMIT before the pass, so for the whole pass (~37 min on a
+/// 2 GB index) every reader saw ZERO resolved refs. Now the store's outer batch transaction wraps
+/// clear + pass (the pass's own transaction nests as a SAVEPOINT): the same statements in the same
+/// order on the same connection, so the scoping decision and the rows are unchanged, and readers keep
+/// the previous complete edges until one COMMIT. A pass that raises still commits the clear -- the
+/// state the old order left. Guard tests\autotest\run_index_halfread_guard.ps1 (HR1/HR2).</remarks>
+procedure ResolveCallsClearingFirst(const AStore: ISymbolStore; AClearFirst: Boolean;
+  const ALibs: TArray<ISymbolStore>);
+begin
+  if not AClearFirst then
+  begin
+    AStore.ResolveCallTargets(ALibs);
+    Exit;
+  end;
+  AStore.BeginFileBatch;
+  try
+    AStore.ClearCallEdges;
+    { TEST SEAM (run_index_halfread_guard.ps1 HR1): hold the transaction open after the clear so
+      a concurrent reader can be sampled. Unset / 0 = no delay. Kept out of ResolveCallTargets on
+      purpose: that is resolver surface (run_resolver_version_guard). }
+    var DelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_RESOLVE_DELAY_MS'), 0);
+    if DelayMs > 0 then Sleep(DelayMs);  // dl:ok sleep-in-vcl -- REVIEWED 2026-11-03: console CLI test seam, off unless the env var is set
+    AStore.ResolveCallTargets(ALibs);
+  finally
+    AStore.EndFileBatch;
+  end; // try
+end;
+
 /// <summary>Runs the post-walk LINK stages, in their one valid order:
 /// uses-targets, ancestry, facts-inherited, helpers, prop-types.</summary>
 /// <param name="AIndent">Leading whitespace for the stage lines (see Stage).</param>
@@ -4197,6 +4252,11 @@ end;
   warm that follows only reads, and holding the lock through it (minutes on a large
   project) made a save-reindex or agent reindex of the same database exit 2
   (whole-branch review of 1.39). }
+function HoldsIndexLock(const ADbPath: string): Boolean;
+begin
+  Result:= (GIndexLocks <> nil) and GIndexLocks.ContainsKey(LowerCase(TPath.GetFullPath(ADbPath)));
+end;
+
 procedure ReleaseIndexLock(const ADbPath: string);
 begin
   if GIndexLocks = nil then Exit;
@@ -4675,7 +4735,10 @@ begin
       the handful of changed files and leave the rest of the database on the old
       resolver -- which is precisely the 2026-08-30 failure, reproduced by the
       fix meant to prevent it. ClearCallEdges also nulls refs.symbol_id. }
-    if ResolverStale or AResolveOnly then Store.ClearCallEdges;
+    { 1.41 IDX-HALFREAD: the clear is DEFERRED into the calls pass's transaction
+      (ResolveCallsClearingFirst), so readers never see the cleared state. RanCalls
+      below is True whenever this is. }
+    var ClearEdgesInPass: Boolean:= ResolverStale or AResolveOnly;
     { Library-first resolve: a DB marked `pending` whose library is ready now re-resolves even when no file changed. }
     { SecPlatform: computed once, before the pre-walk gate (lf-order). }
     var LibRun: TLibraryRun:= PlanLibraryResolve(Store, AItem.LibraryResolve and (AItem.Mode <> smLibrary), SecPlatform, AItem.DbPath);
@@ -4689,7 +4752,7 @@ begin
         and FinishLibraryResolve writes the marker below; SecPlatform (lf-order) names the platform. }
       var SectionGate: TLibraryGate;
       SectionLibs:= ManifestLibraryStores(LibRun.Wanted, SecPlatform, ItemDproj, AItem.DbPath, Store, SectionGate);
-      Stage('  ', 'calls', procedure begin Store.ResolveCallTargets(SectionLibs); end); { v14 (D5): resolve call sites to target symbols }
+      Stage('  ', 'calls', procedure begin ResolveCallsClearingFirst(Store, ClearEdgesInPass, SectionLibs); end); { v14 (D5): resolve call sites to target symbols }
       Stage('  ', 'dispatch', procedure begin Store.ResolveDispatch(SectionLibs); end); { 2026-10-26: overrides / implements / classref args, derived from the edges }
     end
     else
@@ -7226,7 +7289,8 @@ begin
       clear above: with the walk skipped ParsedFiles is 0, so without this the
       flag would announce a re-derive and then skip it -- the one outcome worse
       than not having the flag. }
-    if ResolverStale or AArgs.ResolveOnly then Store.ClearCallEdges;
+    { 1.41 IDX-HALFREAD: deferred into the calls pass's transaction (ResolveCallsClearingFirst). }
+    var ClearEdgesInPass: Boolean:= ResolverStale or AArgs.ResolveOnly;
     var CorpusMoved: Boolean:= (Indexer.ParsedFiles > ParsedBeforeTick) or AArgs.Rebuild or (SweptRows > 0);
     { Library-first resolve: an explicit --library-db names the store itself and clears any marker. }
     var LibRun: TLibraryRun:= PlanLibraryResolve(Store,
@@ -7242,7 +7306,7 @@ begin
       RunLibs:= OpenLibraryStores(AArgs);
       if Length(RunLibs) = 0 then
         RunLibs:= ManifestLibraryStores(LibRun.Wanted, AArgs.CheckPlatform, IdxDproj, ResolvedDb, Store, IdxResolveGate);
-      Stage('', 'calls', procedure begin Store.ResolveCallTargets(RunLibs); end); { v14 (D5) + v21 cross-DB }
+      Stage('', 'calls', procedure begin ResolveCallsClearingFirst(Store, ClearEdgesInPass, RunLibs); end); { v14 (D5) + v21 cross-DB }
       Stage('', 'dispatch', procedure begin Store.ResolveDispatch(RunLibs); end); { 2026-10-26: libraries only recognise a library `class of` param type }
     end
     else
