@@ -171,3 +171,45 @@ begin
   LInh.Ancestors:= nil;
   Check('ag.chain.verdicts.only.unchanged', string.Join(',', AncestorChain(LInh)) = AG_BASE_PAS);
 end;
+
+procedure TestAncestorOrder;
+var
+  Leaf, Mid, Base: TUnitInheritance;
+  Warn           : TArray<string>;
+
+  function Anc(const APas: string; ADepth: Integer): TAncestorUnit;
+  begin
+    Result.PasPath:= APas;
+    Result.Depth  := ADepth;
+    Result.Types  := ['TTable'];
+  end;
+
+  function WithAnc(const APas: string; const AAnc: TArray<TAncestorUnit>): TUnitInheritance;
+  begin
+    Result:= Default(TUnitInheritance);
+    Result.UnitPas  := APas;
+    Result.Known    := True;
+    Result.Ancestors:= AAnc;
+  end;
+
+begin
+  Leaf:= WithAnc(AG_LEAF_PAS, [Anc(AG_BASE_PAS, 2), Anc(AG_MID_PAS, 1)]);
+  Mid := WithAnc(AG_MID_PAS, [Anc(AG_BASE_PAS, 1)]);
+  Base:= WithAnc(AG_BASE_PAS, []);
+  Check('ag.order.root.first', string.Join(',', OrderAncestorFirst([AG_LEAF_PAS, AG_MID_PAS, AG_BASE_PAS], [Leaf, Mid, Base])) = AG_BASE_PAS + ',' + AG_MID_PAS + ',' + AG_LEAF_PAS);
+  Check('ag.order.stable', string.Join(',', OrderAncestorFirst(['fx\X.pas', AG_BASE_PAS, AG_LEAF_PAS], [Leaf, Base])) = 'fx\X.pas,' + AG_BASE_PAS + ',' + AG_LEAF_PAS);
+  Check('ag.order.unlisted.ignored', string.Join(',', OrderAncestorFirst([AG_LEAF_PAS, 'fx\X.pas'], [Leaf])) = AG_LEAF_PAS + ',fx\X.pas');
+  Check('ag.order.unconverted.constrains', string.Join(',', OrderAncestorFirst([AG_MID_PAS, AG_BASE_PAS], [WithAnc(AG_MID_PAS, [Anc(AG_BASE_PAS, 1)])]))
+    = AG_BASE_PAS + ',' + AG_MID_PAS);
+  Mid:= WithAnc(AG_MID_PAS, [Anc(AG_BASE_PAS, 1)]);
+  Mid.Ancestors[0].Types:= nil; // Base treated as converted: no constraint, list unchanged
+  Check('ag.order.converted.no.constraint', string.Join(',', OrderAncestorFirst([AG_MID_PAS, AG_BASE_PAS], [Mid])) = AG_MID_PAS + ',' + AG_BASE_PAS);
+  Check('ag.order.cycle.caller.order', string.Join(',', OrderAncestorFirst([AG_MID_PAS, AG_BASE_PAS],
+    [WithAnc(AG_MID_PAS, [Anc(AG_BASE_PAS, 1)]), WithAnc(AG_BASE_PAS, [Anc(AG_MID_PAS, 1)])])) = AG_MID_PAS + ',' + AG_BASE_PAS);
+  Check('ag.order.case.insensitive', string.Join(',', OrderAncestorFirst([UpperCase(AG_LEAF_PAS), AG_BASE_PAS], [Leaf])) = AG_BASE_PAS + ',' + UpperCase(AG_LEAF_PAS));
+  Warn:= OrderWarnings([AG_LEAF_PAS, AG_BASE_PAS], [Leaf], True);
+  Check('ag.block.text', OrderBlockText(Warn, [AG_BASE_PAS, AG_LEAF_PAS]) = 'Some units are listed above an ancestor that is not converted yet:' + sLineBreak
+    + Warn[0] + sLineBreak + sLineBreak + 'Convert runs ancestors first: Base.pas, Leaf.pas. Reorder the list and run?', OrderBlockText(Warn, [AG_BASE_PAS, AG_LEAF_PAS]));
+  Check('ag.block.no.anyway', not ContainsText(OrderBlockText(Warn, [AG_BASE_PAS, AG_LEAF_PAS]), 'anyway'));
+  Check('ag.block.cancel.text', ORDER_CANCELLED_TEXT = 'Convert cancelled: nothing was run.');
+end;

@@ -11914,8 +11914,9 @@ begin
   Check('inherit.order.ok', Length(OrderWarnings([BASE_PAS, MID_PAS, LEAF_PAS], [Leaf], True)) = 0);
   Check('inherit.order.unlisted.ancestor', Length(OrderWarnings([LEAF_PAS], [Leaf], True)) = 0);
   Check('inherit.order.converted.silent', Length(OrderWarnings([LEAF_PAS, BASE_PAS], [Done], True)) = 0);
-  Check('inherit.order.text', OrderWarningText(Warn, True).StartsWith('Some units are listed above an ancestor that is not converted yet')
-    and OrderWarningText(Warn, True).Contains(Warn[0]) and OrderWarningText(Warn, True).EndsWith('Convert in this order anyway?'), OrderWarningText(Warn, True));
+  Check('inherit.order.text', OrderBlockText(Warn, [BASE_PAS, MID_PAS, LEAF_PAS]).StartsWith('Some units are listed above an ancestor that is not converted yet:')
+    and OrderBlockText(Warn, [BASE_PAS, MID_PAS, LEAF_PAS]).Contains(Warn[0]) and OrderBlockText(Warn, [BASE_PAS, MID_PAS, LEAF_PAS]).EndsWith('Reorder the list and run?'),
+    OrderBlockText(Warn, [BASE_PAS, MID_PAS, LEAF_PAS]));
 
   Notes:= EngineRefusalNotes([Leaf, Done, Unknown], False);
   Check('inherit.refusal.notes', (Length(Notes) = N_NOTES)
@@ -11942,10 +11943,7 @@ begin
     + '-- Leaf.pas may not compile or load.', OfferText(MissingAncestors(AncestorChain(Leaf), [LEAF_PAS]), LEAF_PAS, UnconvertedTypes(Leaf), False));
   Warn:= OrderWarnings([LEAF_PAS, BASE_PAS], [Leaf], False);
   Check('inherit.order.warns.no.retype', (Length(Warn) = 1) and (Warn[0] = 'Leaf.pas is listed above its ancestor Base.pas.'), string.Join(' | ', Warn));
-  Check('inherit.order.text.no.retype', OrderWarningText(Warn, False) = 'Leaf.pas is listed above its ancestor Base.pas.' + sLineBreak + sLineBreak
-    + 'With this engine the order does not change this run''s result: inherited instances are skipped either way. Run anyway?', OrderWarningText(Warn, False));
-  Check('inherit.order.cancel.text', (OrderCancelledText(True) = 'Convert cancelled: reorder the source units (ancestors first) and press Convert again.')
-    and (OrderCancelledText(False) = 'Convert cancelled: nothing was run.'), OrderCancelledText(False));
+  Check('inherit.order.cancel.text', ORDER_CANCELLED_TEXT = 'Convert cancelled: nothing was run.', ORDER_CANCELLED_TEXT);
 end;
 
 { C8 E2 / E3 / E8: the ancestor walk over a fake index. The fixture mirrors the
@@ -16597,6 +16595,7 @@ begin
     TestAncestorGraphWalk;
     TestAnalyzeAncestors;
     TestAncestorChainUnion;
+    TestAncestorOrder;
 
     FreeAndNil(GParseBook);
 

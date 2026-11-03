@@ -537,26 +537,32 @@ function InsertAncestors(const AList: TArray<string>; const AUnitPas: string; co
 /// <returns>Per unit in AUnits order, ancestors topmost first: with retype '&lt;Desc.pas&gt;
 /// is listed above its ancestor &lt;Anc.pas&gt;, which is not converted yet'; without it
 /// '&lt;Desc.pas&gt; is listed above its ancestor &lt;Anc.pas&gt;.' (the order does not
-/// change what this engine does -- OrderWarningText says so).</returns>
-/// <remarks>A warning, never a refusal: the run converts the descendant's own part
-/// either way (E9).</remarks>
+/// change what this engine does).</returns>
+/// <remarks>Only the line wording; the question itself is OrderBlockText (C8CHAIN: the E7
+/// warning is blocking, not an "anyway" confirmation).</remarks>
 function OrderWarnings(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>; ARetypeSupported: Boolean): TArray<string>;
 
-/// <summary>PURE: the single E7 confirmation text.</summary>
+/// <summary>PURE: AList in the order Convert runs it -- every listed unit after the listed
+/// members of its AncestorChain (owner ruling Q5: strict ancestor-first). Stable: units with no
+/// constraint between them keep their order, so an ancestor-first list is returned unchanged
+/// (the 1.42 engine's own in-batch order then has nothing to move).</summary>
+/// <param name="AList">The source list.</param>
+/// <param name="AUnits">The listed units' analyses (any order; a unit without one has no constraint).</param>
+/// <returns>A permutation of AList. Each pass takes the FIRST remaining unit whose listed
+/// ancestors are all placed; a cycle cannot be ordered, so its units follow in list order --
+/// nothing is dropped. Unlisted ancestors impose nothing.</returns>
+function OrderAncestorFirst(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;
+
+/// <summary>PURE: the blocking E7 question (replaces the warning with "anyway").</summary>
 /// <param name="AWarnings">OrderWarnings' lines; not empty.</param>
-/// <param name="ARetypeSupported">The engine reports inherited_retype (C8 N2).</param>
-/// <returns>With retype: a heading line, the warnings one per line, a blank line, then
-/// 'Convert in this order anyway?'. Without it: the warnings one per line, a blank line,
-/// then 'With this engine the order does not change this run''s result: inherited
-/// instances are skipped either way. Run anyway?' -- no claim that reordering helps.</returns>
-function OrderWarningText(const AWarnings: TArray<string>; ARetypeSupported: Boolean): string;
+/// <param name="AOrdered">OrderAncestorFirst's answer.</param>
+/// <returns>ORDER_HEAD, the lines one per line, a blank line, then 'Convert runs ancestors first:
+/// Base.pas, Mid.pas, Leaf.pas. Reorder the list and run?' (file names, ', '-joined).</returns>
+function OrderBlockText(const AWarnings, AOrdered: TArray<string>): string;
 
-/// <summary>PURE: the status after No to the E7 warning.</summary>
-/// <param name="ARetypeSupported">The engine reports inherited_retype (C8 N2).</param>
-/// <returns>With retype 'Convert cancelled: reorder the source units (ancestors first)
-/// and press Convert again.'; without it 'Convert cancelled: nothing was run.'</returns>
-function OrderCancelledText(ARetypeSupported: Boolean): string;
-
+const
+  /// <summary>The status after No to the E7 question (every engine).</summary>
+  ORDER_CANCELLED_TEXT = 'Convert cancelled: nothing was run.';
 /// <summary>PURE: the distinct instance types of AUnit's asUnconverted verdicts,
 /// first-seen order (the E6 offer's types).</summary>
 /// <param name="AUnit">The unit's analysis.</param>
@@ -619,8 +625,8 @@ const
   GATE_ALL_UNITS    = 'the listed units';
   GATE_STOP_FMT     = 'Convert cancelled: inherited instances could not be checked -- %s';
   ORDER_WARNING_FMT = '%s is listed above its ancestor %s, which is not converted yet';
-  ORDER_HEAD        = 'Some units are listed above an ancestor that is not converted yet; their inherited instances will not convert in this run:';
-  ORDER_TAIL        = 'Convert in this order anyway?';
+  ORDER_HEAD        = 'Some units are listed above an ancestor that is not converted yet:';
+  ORDER_BLOCK_FMT   = 'Convert runs ancestors first: %s. Reorder the list and run?';
   // Until the engine retypes inherited instances (C8 N2): converting an ancestor leaves
   // its descendants' inherited objects with the From type under an ancestor that declares
   // the To type -- they fail at load (EClassNotFound / EReadError) and From-only member
@@ -628,9 +634,6 @@ const
   NOTE_BREAKS_UNTIL_N2 = ' -- with this engine, converting it now breaks this unit until N2';
   OFFER_N1_FMT         = ' Converting %s leaves %s''s inherited instance(s) as %s until engine N2 -- %1:s may not compile or load.';
   ORDER_WARNING_N1_FMT = '%s is listed above its ancestor %s.';
-  ORDER_TAIL_N1        = 'With this engine the order does not change this run''s result: inherited instances are skipped either way. Run anyway?';
-  ORDER_CANCELLED      = 'Convert cancelled: reorder the source units (ancestors first) and press Convert again.';
-  ORDER_CANCELLED_N1   = 'Convert cancelled: nothing was run.';
   REFUSAL_FMT       = '%s: %d inherited instance(s) of a From type -- this engine refuses such a unit (no inherited_instances capability), so it will be left unchanged';
 
 type
@@ -1818,19 +1821,57 @@ begin
   end;
 end;
 
-function OrderWarningText(const AWarnings: TArray<string>; ARetypeSupported: Boolean): string;
+// True when every listed ancestor of the unit APas (per its analysis in AUnits) is in APlaced.
+function ListedAncestorsPlaced(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>; const APas: string;
+  const APlaced: TArray<string>): Boolean;
 begin
-  if ARetypeSupported then
-    Result:= ORDER_HEAD + sLineBreak + string.Join(sLineBreak, AWarnings) + sLineBreak + sLineBreak + ORDER_TAIL
-  else
-    Result:= string.Join(sLineBreak, AWarnings) + sLineBreak + sLineBreak + ORDER_TAIL_N1;
+  for var LUnit: TUnitInheritance in AUnits do
+    if SameText(ExpandFileName(LUnit.UnitPas), ExpandFileName(APas)) then
+      for var LAnc: string in AncestorChain(LUnit) do
+        if (PathIndex(LAnc, AList) >= 0) and (PathIndex(LAnc, APlaced) < 0) and not SameText(ExpandFileName(LAnc), ExpandFileName(APas)) then
+          Exit(False);
+  Result:= True;
 end;
 
-function OrderCancelledText(ARetypeSupported: Boolean): string;
+function OrderAncestorFirst(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;
+var
+  LTaken : TArray<Boolean>;
+  LPicked: Integer;
 begin
-  Result:= if ARetypeSupported then ORDER_CANCELLED else ORDER_CANCELLED_N1;
+  Result:= nil;
+  SetLength(LTaken, Length(AList));
+  while Length(Result) < Length(AList) do
+  begin
+    LPicked:= -1;
+    for var LIdx: Integer:= 0 to High(AList) do
+      if not LTaken[LIdx] and ListedAncestorsPlaced(AList, AUnits, AList[LIdx], Result) then
+      begin
+        LPicked:= LIdx;
+        Break;
+      end;
+    if LPicked < 0 then
+    begin
+      // a cycle cannot be ordered: the rest follows in list order, nothing is dropped
+      for var LIdx: Integer:= 0 to High(AList) do
+        if not LTaken[LIdx] then
+          Result:= Result + [AList[LIdx]];
+      Exit;
+    end;
+    LTaken[LPicked]:= True;
+    Result:= Result + [AList[LPicked]];
+  end;
 end;
 
+function OrderBlockText(const AWarnings, AOrdered: TArray<string>): string;
+var
+  LNames: TArray<string>;
+begin
+  LNames:= nil;
+  for var LPas: string in AOrdered do
+    LNames:= LNames + [ExtractFileName(LPas)];
+  Result:= ORDER_HEAD + sLineBreak + string.Join(sLineBreak, AWarnings) + sLineBreak + sLineBreak
+    + Format(ORDER_BLOCK_FMT, [string.Join(TYPE_SEP, LNames)]);
+end;
 function UnconvertedTypes(const AUnit: TUnitInheritance): TArray<string>;
 begin
   Result:= nil;
