@@ -1,7 +1,7 @@
 {
-  "product": "1.40.0-alpha",
-  "extractor": "1.29.0-alpha",
-  "resolver": "1.17.0-alpha",
+  "product": "1.42.0-alpha",
+  "extractor": "1.30.0-alpha",
+  "resolver": "1.18.0-alpha",
   "schema": 23,
   "groups": [
     {
