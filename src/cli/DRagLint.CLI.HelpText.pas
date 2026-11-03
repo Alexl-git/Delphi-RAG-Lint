@@ -508,6 +508,8 @@ begin
   Writeln('       ^ The default RESTRICTS: a hit outside N hops is dropped, not demoted; --near-boost keeps it.');
   Writeln('       ^ A hop is one resolved call edge, callers and callees; --hops 4 is refused (use impact --depth).');
   Writeln('       see wiki page: query-text-near');
+  Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
+  Writeln('       see wiki page: Reverse-Call-Tree-who-calls-this-N-deep');
   Writeln('  drag-lint rules [--json] [--category <name>] [--standard cwe|cert|misra] [--rules-dir <dir>] [--target-compiler <ver|auto> [--project <.dproj>]] - list every lint rule (catalog; each labelled rule shows its CWE/CERT/MISRA ids, --json adds `compliance`; --standard lists only rules labelled under it)');
   Writeln('       see wiki page: rules');
   Writeln('  drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');

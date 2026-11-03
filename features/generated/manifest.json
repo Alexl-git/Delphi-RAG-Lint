@@ -8124,7 +8124,7 @@
         {
           "type": "cli",
           "verb": "reverse-calltree",
-          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
+          "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] [--output F] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
           "flags": [
             {
               "name": "--qname",
@@ -8142,6 +8142,10 @@
             },
             {
               "name": "--json"
+            },
+            {
+              "name": "--output",
+              "arg": "F"
             },
             {
               "name": "--db",

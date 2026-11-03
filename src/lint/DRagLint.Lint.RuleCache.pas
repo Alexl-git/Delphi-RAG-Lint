@@ -106,6 +106,13 @@ type
     /// <param name="AWhy">Why nothing was written, when the result is False.</param>
     /// <returns>True when the entry is on disk. Never raises.</returns>
     class function Save(const AProjectDb: string; const AEntry: TRuleCacheEntry; out AWhy: string): Boolean; static;
+    /// <summary>Deletes the .tmp-&lt;pid&gt; files Save left for AProjectDb when its writer was stopped mid-write.</summary>
+    /// <param name="AProjectDb">The project index path.</param>
+    /// <returns>How many leftover files were deleted.</returns>
+    /// <remarks>A background warm that is stopped (shutdown, a newer index, TerminateProcess) can die between
+    /// WriteAllText and the rename, leaving rules-&lt;hash&gt;.json.tmp-&lt;pid&gt;. A file whose pid is still a live process
+    /// is left alone (a running writer owns it); so is this process's own. Never raises.</remarks>
+    class function SweepStaleTmp(const AProjectDb: string): Integer; static;
   end;
 
 implementation
@@ -295,6 +302,31 @@ begin
     end;
   finally
     Root.Free;
+  end;
+end;
+
+class function TRuleCache.SweepStaleTmp(const AProjectDb: string): Integer;
+begin
+  Result:= 0;
+  var Path: string:= PathFor(AProjectDb);
+  if Path = '' then Exit;
+  try
+    var Prefix: string:= ExtractFileName(Path) + '.tmp-';
+    for var Leftover: string in TDirectory.GetFiles(ExtractFileDir(Path), Prefix + '*') do
+    begin
+      var Pid: Integer:= StrToIntDef(Copy(ExtractFileName(Leftover), Length(Prefix) + 1, MaxInt), 0);
+      if (Pid <= 0) or (Cardinal(Pid) = GetCurrentProcessId) then Continue;
+      var H: THandle:= OpenProcess(SYNCHRONIZE, False, Pid);
+      if H <> 0 then
+      begin
+        CloseHandle(H); { a live process: its writer may still be mid-write }
+        Continue;
+      end;
+      if GetLastError <> ERROR_INVALID_PARAMETER then Continue; { access denied etc: it exists }
+      if DeleteFile(PChar(Leftover)) then Inc(Result);
+    end;
+  except
+    on E: Exception do Result:= 0; { a sweep is housekeeping: a missing folder or a locked file costs nothing }
   end;
 end;
 

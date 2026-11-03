@@ -29,6 +29,7 @@ Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltr
 | `--depth` | `N` |  |  |
 | `--format` |  |  |  |
 | `--json` |  |  |  |
+| `--output` | `F` |  |  |
 | `--db` | `PATH` |  |  |
 
 ## Where to click

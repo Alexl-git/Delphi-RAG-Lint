@@ -1539,6 +1539,7 @@ drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N]
 | `--format` |  |  |  |
 | `--json` |  |  |  |
 | `--db` | `PATH` |  |  |
+| `--output` | `F` |  |  |
 
 Described in:
 
