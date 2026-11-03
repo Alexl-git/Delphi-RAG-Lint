@@ -329,6 +329,21 @@ function FromTypesIn(const ADfmText: string; const AFields: TArray<TFieldDecl>; 
 function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: string; const ALookup: TClassLookup; const AReader: TDfmTextReader;
   const APairs: TArray<TTypePair>): TInstanceVerdict;
 
+/// <summary>PURE: a listed unit's ancestor dependency graph (owner ruling Q5): every indexed
+/// class above AOwn up to the root, then every inline frame class's chain (the frame unit
+/// itself first), each with the From types it still holds.</summary>
+/// <param name="AOwn">The unit's own class (Found); its ParentClass starts the form chain.</param>
+/// <param name="AFrameClasses">The classes of the unit's .dfm `inline` blocks, distinct.</param>
+/// <param name="ALookup">The project index.</param>
+/// <param name="AReader">The file system; drMissing = no .dfm (no From type from a .dfm).</param>
+/// <param name="APairs">The checked books' pairs.</param>
+/// <param name="AError">'' or why the walk could not decide (REASON_FAILED / REASON_CYCLE /
+/// REASON_DEPTH / REASON_DFM text as the instance walk words them); the result is then [].</param>
+/// <returns>Root first (Depth descending, stable; a unit met on several chains keeps its largest
+/// Depth and the union of its Types). A class not in the index ends its chain without error
+/// (outside). AOwn.PasPath itself is never listed.</returns>
+function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;
+  const AReader: TDfmTextReader; const APairs: TArray<TTypePair>; out AError: string): TArray<TAncestorUnit>;
 /// <summary>PURE: the C8 analysis of one listed unit (spec E1-E3, E2b).</summary>
 /// <param name="AUnitPas">The listed .pas; its .dfm is ChangeFileExt(AUnitPas, DFM_EXT).</param>
 /// <param name="APairs">The checked books' pairs; empty = nothing is recorded (E3).</param>
@@ -1174,6 +1189,103 @@ begin
   Result:= ResolveWalk(LCtx, AStartClass);
 end;
 
+// Stable insertion sort, deepest (topmost ancestor) first.
+procedure SortDeepestFirst(var AUnits: TArray<TAncestorUnit>);
+var
+  LItem: TAncestorUnit;
+  LPrev: Integer;
+begin
+  for var LIdx: Integer:= 1 to High(AUnits) do
+  begin
+    LItem:= AUnits[LIdx];
+    LPrev:= LIdx - 1;
+    while (LPrev >= 0) and (AUnits[LPrev].Depth < LItem.Depth) do
+    begin
+      AUnits[LPrev + 1]:= AUnits[LPrev];
+      Dec(LPrev);
+    end;
+    AUnits[LPrev + 1]:= LItem;
+  end;
+end;
+
+// Adds AUnit to AUnits, or merges it into the entry of the same file (largest Depth, union of Types).
+procedure MergeAncestor(var AUnits: TArray<TAncestorUnit>; const AUnit: TAncestorUnit);
+begin
+  for var LIdx: Integer:= 0 to High(AUnits) do
+    if SameText(ExpandFileName(AUnits[LIdx].PasPath), ExpandFileName(AUnit.PasPath)) then
+    begin
+      AUnits[LIdx].Depth:= Max(AUnits[LIdx].Depth, AUnit.Depth);
+      for var LType: string in AUnit.Types do
+        if not MatchText(LType, AUnits[LIdx].Types) then
+          AUnits[LIdx].Types:= AUnits[LIdx].Types + [LType];
+      Exit;
+    end;
+  AUnits:= AUnits + [AUnit];
+end;
+
+function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;
+  const AReader: TDfmTextReader; const APairs: TArray<TTypePair>; out AError: string): TArray<TAncestorUnit>;
+var
+  LUnits: TArray<TAncestorUnit>;
+  LDepth: Integer;
+
+  // One chain from AStart upwards; '' or why it could not be walked.
+  function WalkClasses(const AStart: string): string;
+  var
+    LCls : string;
+    LSeen: TArray<string>;
+    LInfo: TClassInfo;
+    LDfm : string;
+    LText: string;
+    LUnit: TAncestorUnit;
+  begin
+    Result:= '';
+    LSeen := nil;
+    LCls  := AStart;
+    while LCls <> '' do
+    begin
+      if MatchText(LCls, LSeen) then
+        Exit(Format(REASON_CYCLE, [LCls]));
+      if Length(LSeen) >= MAX_CHAIN_DEPTH then
+        Exit(Format(REASON_DEPTH, [MAX_CHAIN_DEPTH, LCls]));
+      LInfo:= ALookup(LCls);
+      if LInfo.Failed then
+        Exit(WithCause(Format(REASON_FAILED, [LCls]), LInfo.Error));
+      if not LInfo.Found then
+        Exit; // left the index: outside, no error
+      LSeen:= LSeen + [LCls];
+      Inc(LDepth);
+      LDfm := ChangeFileExt(LInfo.PasPath, DFM_EXT);
+      LText:= '';
+      case AReader(LDfm, LText) of
+        drUnreadable:
+          Exit(Format(REASON_DFM, [LCls, LDfm]));
+        drMissing:
+          LText:= '';
+        else
+          if LText.StartsWith(BINARY_DFM_SIGNATURE) then
+            Exit(Format(REASON_DFM, [LCls, LDfm]));
+      end; // case
+      LUnit.PasPath:= LInfo.PasPath;
+      LUnit.Depth  := LDepth;
+      LUnit.Types  := FromTypesIn(LText, LInfo.Fields, APairs);
+      MergeAncestor(LUnits, LUnit);
+      LCls:= LInfo.ParentClass;
+    end;
+  end;
+
+begin
+  LUnits:= nil;
+  LDepth:= 0;
+  AError:= WalkClasses(AOwn.ParentClass);
+  for var LFrame: string in AFrameClasses do
+    if AError = '' then
+      AError:= WalkClasses(LFrame);
+  if AError <> '' then
+    Exit(nil);
+  SortDeepestFirst(LUnits);
+  Result:= LUnits;
+end;
 // E2b: the verdict on one code use, walked from AStartClass (the unit's own class's
 // parent) with ResolveWalk. asUnconverted = an inherited use; asUnknown = the walk could
 // not decide; asConverted / asOutside = not an inherited use. Two passes over the same

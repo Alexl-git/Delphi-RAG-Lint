@@ -16590,6 +16590,7 @@ begin
     TestRuleChainsSplit;
     TestRuleChainsUi;
     TestAncestorFromTypes;
+    TestAncestorGraphWalk;
 
     FreeAndNil(GParseBook);
 
