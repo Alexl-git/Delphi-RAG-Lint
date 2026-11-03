@@ -11789,10 +11789,12 @@ var
     AArr.AddElement(O);
   end;
 
-  { The bucket is DRagLint.Query.Callers.UsageBucketOf's, shared with the LSP. }
-  function GroupFor(const ARef: TReference): TJSONArray;
+  { The bucket is DRagLint.Query.Callers.UsageBucketIn's, shared with the LSP.
+    ADecls: the name's declarations in ARef's store (HARDCAST-CALL: a cast
+    bound to a type declaration is a type use, not a call). }
+  function GroupFor(const ARef: TReference; const ADecls: TArray<TSymbol>): TJSONArray;
   begin
-    var Bucket: string:= UsageBucketOf(ARef);
+    var Bucket: string:= UsageBucketIn(ARef, ADecls);
     if Bucket      = 'reads'      then Result:= JReads
     else if Bucket = 'writes'     then Result:= JWrites
     else if Bucket = 'types'      then Result:= JTypes
@@ -11900,7 +11902,7 @@ begin
         JDecls.AddElement(DeclO);
       end;
 
-      for R in UsageRefsForName(Store, AArgs.Name, Decls) do AddRefRow(GroupFor(R), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
+      for R in UsageRefsForName(Store, AArgs.Name, Decls) do AddRefRow(GroupFor(R, Decls), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
 
       if (Width = 'wide') or (Width = 'very-wide') then
         for L in Store.FindTransitiveCallers(AArgs.Name, Depth) do
