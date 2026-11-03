@@ -122,6 +122,7 @@ Find symbols, callers, callees, text and types in the index.
 | [Show Structure](Show-Structure) | drag-lint > Show Structure |  |
 | [Symbol Search](Symbol-Search) | drag-lint > Symbol Search...; `query` |  |
 | [Symbol Slice](Symbol-Slice) | drag-lint > Inspect Symbol > Symbol Slice...; `slice` |  |
+| [syntax-count](syntax-count) | `syntax-count` |  |
 | [Type at Cursor](Type-at-Cursor) | drag-lint > Inspect Symbol > Type at Cursor; `typeat` |  |
 | [usages](usages) | `usages`; drag-lint > Find Usages... |  |
 | [wiki](wiki) | `wiki` |  |

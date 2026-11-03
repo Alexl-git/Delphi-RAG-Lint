@@ -1713,6 +1713,25 @@ drag-lint surface --qname <Foo.TBar> [--db <file.sqlite>] [--include-impl] [--al
 
 Described in [Class Surface](features/class-surface.md).
 
+### syntax-count
+
+Counts modern syntax in the parse of every unit, uncapped: Delphi 13 if-expressions, is not, not in; inline var/const; anonymous methods; multiline strings.
+
+```text
+drag-lint syntax-count (--db <file.sqlite> | --in <path>...) [--feature <a,b>|all] [--per-file] [--hits] [--json]
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--in` | `<path>` |  |  |
+| `--feature` | `<a,b>\|all` |  |  |
+| `--per-file` |  |  |  |
+| `--hits` |  |  |  |
+| `--json` |  |  |  |
+
+Described in [syntax-count](features/syntax-count.md).
+
 ### todos
 
 Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers.

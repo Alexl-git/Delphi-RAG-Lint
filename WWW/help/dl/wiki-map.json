@@ -173,6 +173,7 @@
   "serve": "serve",
   "shared-unit": "shared-unit",
   "sql": "sql",
+  "syntax-count": "syntax-count",
   "taint-analysis": "taint-analysis",
   "target-compiler": "target-compiler",
   "unit-missing-from-uses": "unit-missing-from-uses",

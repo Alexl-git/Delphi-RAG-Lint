@@ -8,8 +8,9 @@ unit DRagLint.Query.SyntaxCount;
 
   Query-time only: every file is parsed again at the call (TAstParseCache, raw
   bytes, no preprocessing -- what is WRITTEN, every $IFDEF branch included). The
-  index is read for nothing but the file list (files.path); no row is written,
-  so the extractor fingerprint is untouched. }
+  index is read for nothing but the file list (files.path, by the verb unit
+  DRagLint.Query.SyntaxCountVerb); no row is written, so the extractor
+  fingerprint is untouched. }
 
 interface
 
@@ -112,21 +113,10 @@ function CountSyntaxFeatures(const pFiles: TArray<string>; const pFeatures: TSyn
 /// <returns>A new object; the caller frees it.</returns>
 function SyntaxCountToJson(const pReport: TSyntaxCountReport; pWithFiles, pWithHits: Boolean): TJSONObject;
 
-/// <summary>The `syntax-count` verb: parses its flags, collects the file list
-/// and prints the report.</summary>
-/// <param name="pArgs">The arguments after the verb: --db &lt;file.sqlite&gt;
-/// and/or --file &lt;path&gt; (repeatable), [--feature a,b|all], [--per-file],
-/// [--hits], [--json].</param>
-/// <returns>0 = report printed (zero occurrences included); 2 = bad flags, no
-/// file source, or a --db that does not open.</returns>
-/// <remarks>--db reads files.path of that index only (every .pas/.dpr/.dpk/.inc
-/// row); the index is opened read-only and never written.</remarks>
-function RunSyntaxCountVerb(const pArgs: TArray<string>): Integer;
-
 implementation
 
 uses
-  System.Generics.Collections, DRagLint.Diagnostics.ParseCache;
+  DRagLint.Diagnostics.ParseCache;
 
 const
   CFeatureNames: array[TSyntaxFeature] of string = ('if-expr', 'is-not', 'not-in',
@@ -386,11 +376,6 @@ begin
     end;
     Result.AddPair('hits', LArr);
   end;
-end;
-
-function RunSyntaxCountVerb(const pArgs: TArray<string>): Integer;
-begin
-  Result:= 2;
 end;
 
 end.

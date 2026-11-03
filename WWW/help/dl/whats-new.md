@@ -9,6 +9,10 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.42.0-alpha
+
+* [syntax-count](features/syntax-count.md) -- Counts modern syntax in the parse of every unit, uncapped: Delphi 13 if-expressions, is not, not in; inline var/const; anonymous methods; multiline strings.
+
 ## 1.40.0-alpha
 
 * [Engine heartbeat: the IDE tells a busy engine from a stuck one](features/engine-heartbeat.md) -- A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving.

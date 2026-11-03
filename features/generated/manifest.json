@@ -2435,6 +2435,71 @@
       }
     },
     {
+      "id": "syntax-count",
+      "title": "syntax-count",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.42.0-alpha",
+      "summary": "Counts modern syntax in the parse of every unit, uncapped: Delphi 13 if-expressions, is not, not in; inline var/const; anonymous methods; multiline strings",
+      "intro": "Read this when you want to know how much of a codebase uses a given syntax feature -- for example how many Delphi 13 if-expressions or is-not tests a downgrade would have to rewrite. It parses each unit at the call and counts shapes in the parse, so strings and comments never count and nothing is capped.",
+      "wikiPage": "syntax-count",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "syntax-count",
+          "usage": "drag-lint syntax-count (--db <file.sqlite> | --in <path>...) [--feature <a,b>|all] [--per-file] [--hits] [--json]",
+          "flags": [
+            {
+              "name": "--db",
+              "arg": "<file.sqlite>"
+            },
+            {
+              "name": "--in",
+              "arg": "<path>"
+            },
+            {
+              "name": "--feature",
+              "arg": "<a,b>|all"
+            },
+            {
+              "name": "--per-file"
+            },
+            {
+              "name": "--hits"
+            },
+            {
+              "name": "--json"
+            }
+          ],
+          "helpOrder": 6,
+          "help": ["  drag-lint syntax-count       (--db <file.sqlite> | --in <path>...) [--feature <a,b>|all] [--per-file] [--hits] [--json]", "                               counts syntax features in the tree-sitter parse of each unit -- shapes, not text, so strings", "                               and comments never count; uncapped. Features: if-expr, is-not, not-in (Delphi 13), inline-var,", "                               inline-const (10.3), anon-method (2009), multiline-string (12); --feature picks some (default all).", "                               --db = every .pas/.dpr/.dpk/.inc row of that index (opened read-only, nothing written);", "                               --in adds a path (repeatable). Text as written: no $IFDEF evaluation, every branch counts.", "                               --per-file lists files with a hit; --hits lists path:line:col per occurrence.", "                               json: features[], files_scanned, files_unreadable, files_with_parse_errors, totals{feature: n},", "                               files[{path, counts}] (--per-file), hits[{feature, path, line, col}] (--hits).", "                               Exit 0 = counted (zero included); 2 = no --db/--in, unknown --feature, unreadable index;", "                               3 = unknown flag."]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "How many Delphi 13 if-expressions and is-not tests does this project use?",
+          "command": "drag-lint syntax-count --db <db> --feature if-expr,is-not"
+        },
+        {
+          "ask": "Where exactly is each is-not test?",
+          "command": "drag-lint syntax-count --db <db> --feature is-not --hits"
+        },
+        {
+          "ask": "Which units use inline variables, and how many each?",
+          "command": "drag-lint syntax-count --db <db> --feature inline-var --per-file --json"
+        }
+      ],
+      "access": "cli-only",
+      "verified": {
+        "date": "2026-11-03",
+        "by": "ENGINE",
+        "build": "1.42.0-alpha",
+        "surfaceHash": "66d84b977cc5c8dedcfb026fccbabcd900af7e32450585a580a2c548a3a4d35c"
+      }
+    },
+    {
       "id": "type-at-cursor",
       "title": "Type at Cursor",
       "group": "search-navigation",

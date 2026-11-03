@@ -1193,6 +1193,15 @@ $mcpCfgFlags = @($(if ($mcpCfgSpan -and $mcpCfgSpan.Success) { [regex]::Matches(
 Check 'check 9: the mcp-config verb''s own flag table was read' ($mcpCfgFlags.Count -ge 12) `
   "only $($mcpCfgFlags.Count) flag(s) read from MCP_CONFIG_FLAG_NAMES in $mcpCfgSrcPath -- was the table renamed or moved?"
 foreach ($mf in $mcpCfgFlags) { [void]$accepted.Add($mf) }
+# `syntax-count` likewise parses its own flags, from SYNTAX_COUNT_FLAG_NAMES of DRagLint.Query.SyntaxCountVerb
+# (GAP-SYNTAXQ, 1.42); same shape, same non-emptiness control.
+$scSrcPath = Join-Path $Repo 'src\query\DRagLint.Query.SyntaxCountVerb.pas'
+$scSpan = $(if (Test-Path -LiteralPath $scSrcPath) {
+  [regex]::Match([IO.File]::ReadAllText($scSrcPath), "(?s)SYNTAX_COUNT_FLAG_NAMES\s*:\s*array\[TSyntaxCountFlag\]\s*of\s*string\s*=\s*\((.*?)\);") })
+$scFlags = @($(if ($scSpan -and $scSpan.Success) { [regex]::Matches($scSpan.Groups[1].Value, "'($FlagRx)'") | ForEach-Object { $_.Groups[1].Value } }))
+Check 'check 9: the syntax-count verb''s own flag table was read' ($scFlags.Count -ge 6) `
+  "only $($scFlags.Count) flag(s) read from SYNTAX_COUNT_FLAG_NAMES in $scSrcPath -- was the table renamed or moved?"
+foreach ($sf in $scFlags) { [void]$accepted.Add($sf) }
 
 $helpSet = Get-FlagSet $helpText $FlagRx
 

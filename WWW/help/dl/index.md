@@ -63,6 +63,7 @@ Find symbols, callers, callees, text and types in the index.
 | [Show Structure](features/show-structure.md) | Shows a structural outline of the current unit | 0.30.0-alpha |
 | [Symbol Search](features/symbol-search.md) | Searches symbols by name across the indexed projects | 0.1.0-alpha |
 | [Symbol Slice](features/symbol-slice.md) | Shows the slice of code relevant to one symbol: its declaration, body, and immediate context | 0.17.0-alpha |
+| [syntax-count](features/syntax-count.md) | Counts modern syntax in the parse of every unit, uncapped: Delphi 13 if-expressions, is not, not in; inline var/const; anonymous methods; multiline strings | 1.42.0-alpha |
 | [Type at Cursor](features/type-at-cursor.md) | Resolves the static type of the expression under the editor caret | 0.19.0-alpha |
 | [usages](features/usages.md) | Finds usage sites of a named symbol, with a choice of report width | 0.33.0-alpha |
 | [wiki](features/wiki.md) | Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it | 1.7.0-alpha |

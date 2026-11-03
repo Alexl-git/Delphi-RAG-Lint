@@ -99,6 +99,8 @@ uses
   DRagLint.Query.IdentWords in '..\query\DRagLint.Query.IdentWords.pas',
   DRagLint.Query.Callers in '..\query\DRagLint.Query.Callers.pas',
   DRagLint.Query.Implementors in '..\query\DRagLint.Query.Implementors.pas',
+  DRagLint.Query.SyntaxCount in '..\query\DRagLint.Query.SyntaxCount.pas',
+  DRagLint.Query.SyntaxCountVerb in '..\query\DRagLint.Query.SyntaxCountVerb.pas',
   DRagLint.Query.HoverModel in '..\query\DRagLint.Query.HoverModel.pas',
   DRagLint.Symbol.Describe in '..\query\DRagLint.Symbol.Describe.pas',
   DRagLint.Lint.Config in '..\lint\DRagLint.Lint.Config.pas',
