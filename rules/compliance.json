@@ -204,6 +204,7 @@
   "raise-bare-exception": {"cwe": ["CWE-397"]},
   "raise-in-destructor": {"cwe": ["CWE-248"], "cert": ["DCL57-CPP"], "misra": ["MISRA-CPP-2008-15-5-1"], "weak": ["CWE-248"]},
   "raise-in-finally": {"cwe": ["CWE-584"], "weak": ["CWE-584"]},
+  "read-never-assigned": {"cwe": ["CWE-457"], "weak": ["CWE-457"]},
   "redundant-as-tobject": {"cwe": ["CWE-1041"]},
   "redundant-assigned-free": {"cwe": ["CWE-1041"]},
   "redundant-cast": {"cwe": ["CWE-1041"]},

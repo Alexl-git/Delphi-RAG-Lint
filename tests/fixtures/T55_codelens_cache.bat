@@ -11,7 +11,7 @@ call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat" >NUL
 REM -NU: DCUs go to a private folder, never beside the sources in src\ -- a stray
 REM src\*.dcu is reused by any later build that searches that directory.
 if not exist "%HERE%_dcu\T55_codelens_cache" mkdir "%HERE%_dcu\T55_codelens_cache"
-dcc64 -NU"%HERE%_dcu\T55_codelens_cache" -E%HERE% -U%HERE%..\..\src\delphi-plugin %HERE%T55_codelens_cache.dpr > "%HERE%t55_build.txt" 2>&1
+dcc64 -NU"%HERE%_dcu\T55_codelens_cache" -E%HERE% -U%HERE%..\..\src\delphi-plugin;%HERE%..\..\src\core %HERE%T55_codelens_cache.dpr > "%HERE%t55_build.txt" 2>&1
 if not exist "%HERE%T55_codelens_cache.exe" (echo FAIL: build failed && type "%HERE%t55_build.txt" && exit /b 1)
 "%HERE%T55_codelens_cache.exe" > "%HERE%t55_out.txt"
 type "%HERE%t55_out.txt"

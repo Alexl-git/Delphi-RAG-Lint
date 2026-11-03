@@ -89,7 +89,8 @@ if ($par -and $r) {
 
 Write-Host 'POSITIVE CONTROL -- the routine hover is unchanged' -ForegroundColor Cyan
 if ($r) {
-  Check 'routine kind is a method'        ($r.kind -in @('method','function','procedure')) $r.kind
+  # TReviewMarkers.Parse is a CLASS function; hover names it 'class method' since 1.40.
+  Check 'routine kind is a method'        ($r.kind -in @('method','class method','function','procedure')) $r.kind
   Check 'routine signature is the full one' ($r.signature -like '*ALineText*') $r.signature
   Check 'routine still lists its params'  ($r.params.Count -ge 1) ("count=" + $r.params.Count)
 }

@@ -229,10 +229,25 @@ Check 'g lint uLoose.pas --project App.dproj (not a DB member): 0 parser-error' 
 # ---------- f: --full-rules ----------
 Write-Host 'lsp --full-rules' -ForegroundColor Cyan
 Start-Lsp @('--db', $Db, '--full-rules')
+# Since 1.40 the full-rules lint child runs OFF the request path (IDE-HANG: the server never
+# blocks on it), so the hover barrier can answer before the child publishes. When nothing
+# arrived before the barrier, read on until that file's publish lands (one 60 s read at most).
+function Push-FullRules([string]$File, [string]$Method) {
+  $r = Push $File $Method
+  if ($r -notcontains 'NO-PUBLISH') { return ,$r }
+  try {
+    while ($true) {
+      $f = ReadFrameT
+      if (($f.method -eq 'textDocument/publishDiagnostics') -and ($f.params.uri -eq (Uri $File))) {
+        return ,@($f.params.diagnostics | Where-Object { $_.code -eq 'parser-error' } | ForEach-Object { [int]$_.range.start.line + 1 })
+      }
+    }
+  } catch { return ,@('NO-PUBLISH') }
+}
 try {
-  $f1 = Push $Unit 'textDocument/didOpen'
+  $f1 = Push-FullRules $Unit 'textDocument/didOpen'
   Check 'f full-rules uUnit.pas: 0 parser-error' (($f1 -join ',') -eq '') "lsp=[$($f1 -join ',')]"
-  $f2 = Push $Loose 'textDocument/didOpen'
+  $f2 = Push-FullRules $Loose 'textDocument/didOpen'
   Check 'f full-rules uLoose.pas: >= 1 parser-error' ($f2.Count -ge 1 -and $f2 -notcontains 'NO-PUBLISH') "lsp=[$($f2 -join ',')]"
 } finally { Stop-Lsp }
 }

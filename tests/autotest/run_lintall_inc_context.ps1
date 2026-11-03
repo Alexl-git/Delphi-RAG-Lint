@@ -59,7 +59,10 @@ Check 'lint-all: Body.inc is scanned (empty-except found in it)' ($hits.Count -g
 Check 'lint-all: exactly ONE empty-except in Body.inc (two includers, no duplicate)' ($hits.Count -eq 1) "n=$($hits.Count)"
 Check 'lint-all: it is on Body.inc line 7 (the HOSTON branch the includers compile)' (($lines.Count -ge 1) -and ($lines[0] -eq 7)) "got=$($lines -join ',')"
 Check 'lint-all: line 15 (the branch no includer compiles) is NOT reported' (-not ($lines -contains 15))
-$err = [IO.File]::ReadAllText((Join-Path $WorkDir 'lintall.err'))
+# The banner is a note of a TEXT run (EmitNoteLine, stdout): under --json it is dropped
+# and stderr stays empty since LINTJSON-STDERR (1.40), so count it on a text run.
+Push-Location $WorkDir
+try { $err = ((& $Exe lint-all --db $db --project $proj 2>&1) -join "`n") } finally { Pop-Location }
 Check 'lint-all: the banner counts the include file' ($err -match 'scanning 4 ') (($err -split "`r?`n" | Where-Object { $_ -match 'scanning' }) -join ' ')
 
 # Positive control: standalone `lint` (no includer context) takes the ELSE branch.

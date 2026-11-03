@@ -92,15 +92,17 @@ $j6 = $null; try { $j6 = $rawJson | ConvertFrom-Json } catch {}
 Ok "lint-all --json stdout parses with no preamble" ($j6 -ne $null)
 Ok "lint-all --json stdout starts at the array"     ($rawJson.TrimStart().StartsWith('['))
 Ok "lint-all --json stdout has no scanning banner"  (-not ($rawJson -match 'lint-all: scanning'))
-# The banner is not deleted, only redirected -- prove it still reaches stderr,
-# or the next reader "fixes" this by silencing progress output altogether.
+# The banner is not deleted -- prove it still reaches stderr in TEXT mode, or the
+# next reader "fixes" this by silencing progress output altogether. Under --json
+# the success path writes nothing to stderr since LINTJSON-STDERR (1.40;
+# run_lintall_json_stdout_clean.ps1), so this check runs without --json.
 # NB: `2>&1 1>$null` does NOT isolate stderr in PowerShell -- 2>&1 merges the
 # streams first, so 1>$null then discards both. Merge, then keep only the
 # records that came from stderr (a native command's stderr surfaces as
 # ErrorRecord once redirected).
-$err6 = ((& $exe lint-all --db $db6 --json 2>&1 |
-          Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }) -join "`n")
-Ok "lint-all --json banner still goes to stderr"    ($err6 -match 'lint-all: scanning')
+# (EmitNoteLine: a text run prints the banner on stdout; a JSON run drops it.)
+$err6 = ((& $exe lint-all --db $db6 2>&1) -join "`n")
+Ok "lint-all banner is still printed (text mode)" ($err6 -match 'lint-all: scanning')
 Remove-Item $scratch6 -Recurse -Force -ErrorAction SilentlyContinue
 
 Remove-Item $cfg,$cfgD,$base -ErrorAction SilentlyContinue

@@ -168,12 +168,15 @@ $bareCount  = @(($bareOut  -join "`n") | ConvertFrom-Json).Count
 $scopeCount = @(($scopeOut -join "`n") | ConvertFrom-Json).Count
 Check 'scoping actually reduces the finding count' ($scopeCount -lt $bareCount) "$scopeCount < $bareCount"
 
-# The scope summary is human text, so on --json it must go to stderr (same
-# contract as the lint-all scanning banner -- see run_pipeline_tests.ps1 #6).
+# The scope summary is human text. Since LINTJSON-STDERR (1.40) a JSON run writes
+# NOTHING to stderr on success (run_lintall_json_stdout_clean.ps1), so under --json
+# the summary is in neither stream; in text mode it is printed (positive control).
 $scopeErr = ((& $Exe lint-all --db $db --project $dprojA --json 2>&1 |
               Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }) -join "`n")
-Check 'scope summary goes to stderr, not into the JSON' (
-  ($scopeErr -match 'belong to the project') -and -not (($scopeOut -join "`n") -match 'belong to the project'))
+Check 'scope summary stays out of the JSON and out of stderr under --json' (
+  -not ($scopeErr -match 'belong to the project') -and -not (($scopeOut -join "`n") -match 'belong to the project'))
+$scopeText = ((& $Exe lint-all --db $db --project $dprojA 2>&1) -join "`n")
+Check 'control: text mode prints the scope summary' ($scopeText -match 'belong to the project')
 
 # ---------------------------------------------------------------------------
 # 3) The other project scopes to ITS OWN member -- proves the filter follows the

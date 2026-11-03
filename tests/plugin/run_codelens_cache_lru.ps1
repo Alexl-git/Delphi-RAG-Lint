@@ -47,7 +47,7 @@ $lines = @(
   '@echo off',
   ('call "{0}"' -f $rs),
   ('cd /d "{0}"' -f $DprDir),
-  ('dcc64 -B -E"{0}" -N0"{1}" {2}' -f $WorkDir, $DcuDir, $DprName),
+  ('dcc64 -B -E"{0}" -N0"{1}" -U"..\src\delphi-plugin;..\src\core" {2}' -f $WorkDir, $DcuDir, $DprName),  # ProcRun (plugin) uses DRagLint.Core.ControlChannel since 1.40
   'echo BUILD_EXITCODE=%ERRORLEVEL%'
 )
 [System.IO.File]::WriteAllText($bat, (($lines -join "`r`n") + "`r`n"), [System.Text.Encoding]::ASCII)
