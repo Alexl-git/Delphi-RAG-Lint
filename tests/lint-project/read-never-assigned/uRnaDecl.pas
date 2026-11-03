@@ -3,10 +3,12 @@ unit uRnaDecl;
 { Fixture for the `read-never-assigned` project rule. Declarations live here,
   most reads and writes in uRnaUse.pas, so the rule must see the whole project.
   TRIGGER-* lines must fire; CONTROL-* lines must stay silent.
-  The helpers carry a fixture-unique name (RnaShow, not Show): the rule merges
-  the var / out modes of every project AND platform-library routine of the same
-  bare name, and ShlObj's IFileViewer.Show(var pvsi) made every Show(X) read
-  count as a possible write (silencing TRIGGER-FIELD and four run-3 controls). }
+  ShlObj's IFileViewer.Show(var pvsi) shares the bare name Show with this
+  unit's Show and TRnaShower.Show (both const). A call the resolver binds uses
+  ONLY the bound declaration's var / out modes (TRIGGER-BARENAME, -QUALIFIED
+  fire); an unbound call (the late-bound Variant V.Show) falls back to the
+  bare-name merge across project + library and stays silent
+  (CONTROL-UNRESOLVED). The other helpers keep the name RnaShow. }
 
 interface
 
@@ -32,9 +34,17 @@ type
     FSize: Integer;             // CONTROL-PROPSETTER
     FUnread: Integer;           // CONTROL-UNREAD
     FAddr: Integer;             // CONTROL-ADDR
+    FBare: Integer;             // TRIGGER-BARENAME
+    FQual: Integer;             // TRIGGER-QUALIFIED
+    FLate: Integer;             // CONTROL-UNRESOLVED
     property Size: Integer read FSize write FSize;
     procedure Init;
     function Total: Integer;
+  end;
+
+  TRnaShower = class
+  public
+    procedure Show(const pV: Integer);
   end;
 
   TRnaForm = class(TComponent)
@@ -64,6 +74,7 @@ const
 procedure Fill(var pV: Integer);
 procedure Produce(out pV: Integer);
 procedure RnaShow(const pV: Integer);
+procedure Show(const pV: Integer);
 
 implementation
 
@@ -82,6 +93,16 @@ begin
   if pV > 0 then Exit;
 end;
 
+procedure Show(const pV: Integer);
+begin
+  if pV > 0 then Exit;
+end;
+
+procedure TRnaShower.Show(const pV: Integer);
+begin
+  if pV > 0 then Exit;
+end;
+
 procedure TRnaHolder.Init;
 begin
   FSelfSet:= 1;
@@ -94,9 +115,15 @@ end;
 function TRnaHolder.Total: Integer;
 var
   P: ^Integer;
+  S: TRnaShower;
+  V: Variant;
 begin
   P:= @FAddr;
   RnaShow(FNever);
+  Show(FBare);
+  S:= TRnaShower.Create;
+  S.Show(FQual);
+  V.Show(FLate);
   Result:= FNever + FSelfSet + FSetElsewhere + FCast + FWith + FVarArg + FOutArg + FSize + P^;
   Result:= Result + Length(FArr) + FList.Count;
 end;

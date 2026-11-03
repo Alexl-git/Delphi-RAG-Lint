@@ -1416,7 +1416,9 @@ procedure TCollector.Run;
 var
   Cfg: TCfg;
 begin
-  Cfg:= TCfgBuilder.Build(FProc, FSrc);
+  { CFG-CONSTLOOP: the same CFG shape the flow lint sees -- while True / until False get no test-exit
+    edge, so only a Break reaches the code after the loop. }
+  Cfg:= TCfgBuilder.Build(FProc, FSrc, True);
   try
     if Cfg.Skipped then RunInsensitive
     else if Cfg.BlockCount > DF_CFG_BLOCK_CAP then

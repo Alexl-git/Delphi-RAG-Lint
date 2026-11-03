@@ -166,7 +166,7 @@ type
     ForVars    : TList<TCfgForVar>;
     /// <summary>Opt-in (default False = the historic shape): when True, while-True and until-False loops
     /// get no test-exit edge, so only a Break reaches the follow block. Set by lint callers via
-    /// TCfgBuilder.Build(..., True); the index-time dataflow facts keep the default (CFG-CONSTLOOP).</summary>
+    /// TCfgBuilder.Build(..., True): the flow lint and, since 1.42, the index-time dataflow facts (CFG-CONSTLOOP).</summary>
     PruneConstLoops: Boolean;  // dl:ok public-field@22e9 -- same record-style public state as Src/Skipped/ForVars; set once by TCfgBuilder.Build
     /// <summary><!-- drag-lint:auto sum -->TCfg</summary>
     /// <remarks>
@@ -253,6 +253,8 @@ type
     /// whose Skipped is True for goto/asm routines.</summary>
     /// <param name="AProc">The `defProc` AST node.</param>
     /// <param name="ASrc">The unit's source bytes (for identifier text).</param>
+    /// <param name="APruneConstLoops">True: while-True / until-False loops get no test-exit edge
+    /// (see TCfg.PruneConstLoops). False (default) keeps the historic shape (refactorings).</param>
     /// <returns><!-- drag-lint:auto -->TCfg -- Observed: TCfg.Create.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
