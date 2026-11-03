@@ -42,26 +42,38 @@
   (#match? @x1 "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$")
   (#declared-type? @x1 "^(System\.)?(Integer|Int64|Cardinal|NativeInt|Byte|Word|ShortInt|SmallInt|Single|Double|Extended|Currency)$"))
 
+; Report-only shapes. A Char/AnsiChar/WideChar operand is NOT a finding: System.Math.InRange
+; has no Char overload, so following the hint would not compile (E2250; INBOX-manual-inrange-char).
+; The Char tell available to a pattern is a char-literal bound ('a' or #32), skipped by the
+; #not-match? predicates on @lo/@hi.
 ((exprBinary
-  lhs: (exprParens (exprBinary lhs: (_) @x1 operator: (kGte) rhs: (_)))
+  lhs: (exprParens (exprBinary lhs: (_) @x1 operator: (kGte) rhs: (_) @lo5))
   operator: (kAnd)
-  rhs: (exprParens (exprBinary lhs: (_) @x2 operator: (kLte) rhs: (_)))) @warn
-  (#eq? @x1 @x2))
+  rhs: (exprParens (exprBinary lhs: (_) @x2 operator: (kLte) rhs: (_) @hi5))) @warn
+  (#eq? @x1 @x2)
+  (#not-match? @lo5 "^['#]")
+  (#not-match? @hi5 "^['#]"))
 
 ((exprBinary
-  lhs: (exprParens (exprBinary lhs: (_) @x1 operator: (kLte) rhs: (_)))
+  lhs: (exprParens (exprBinary lhs: (_) @x1 operator: (kLte) rhs: (_) @hi6))
   operator: (kAnd)
-  rhs: (exprParens (exprBinary lhs: (_) @x2 operator: (kGte) rhs: (_)))) @warn
-  (#eq? @x1 @x2))
+  rhs: (exprParens (exprBinary lhs: (_) @x2 operator: (kGte) rhs: (_) @lo6))) @warn
+  (#eq? @x1 @x2)
+  (#not-match? @lo6 "^['#]")
+  (#not-match? @hi6 "^['#]"))
 
 ((exprBinary
-  lhs: (exprParens (exprBinary lhs: (_) operator: (kLte) rhs: (_) @x1))
+  lhs: (exprParens (exprBinary lhs: (_) @lo7 operator: (kLte) rhs: (_) @x1))
   operator: (kAnd)
-  rhs: (exprParens (exprBinary lhs: (_) @x2 operator: (kLte) rhs: (_)))) @warn
-  (#eq? @x1 @x2))
+  rhs: (exprParens (exprBinary lhs: (_) @x2 operator: (kLte) rhs: (_) @hi7))) @warn
+  (#eq? @x1 @x2)
+  (#not-match? @lo7 "^['#]")
+  (#not-match? @hi7 "^['#]"))
 
 ((exprBinary
-  lhs: (exprParens (exprBinary lhs: (_) @x1 operator: (kLte) rhs: (_)))
+  lhs: (exprParens (exprBinary lhs: (_) @x1 operator: (kLte) rhs: (_) @hi8))
   operator: (kAnd)
-  rhs: (exprParens (exprBinary lhs: (_) operator: (kLte) rhs: (_) @x2))) @warn
-  (#eq? @x1 @x2))
+  rhs: (exprParens (exprBinary lhs: (_) @lo8 operator: (kLte) rhs: (_) @x2))) @warn
+  (#eq? @x1 @x2)
+  (#not-match? @lo8 "^['#]")
+  (#not-match? @hi8 "^['#]"))

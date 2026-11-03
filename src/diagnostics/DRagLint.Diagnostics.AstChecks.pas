@@ -9329,9 +9329,11 @@ var
 
   { SonarSource-style: each control-flow structure adds 1 + its nesting depth;
     each boolean operator (and/or/xor) adds 1 (no nesting). Nested routines are
-    scored separately (recursion stops at a nested defProc). }
-  function Score(const N: TTSNode; ANest: Integer): Integer;
-  var I: Integer; K: string;
+    scored separately (recursion stops at a nested defProc). An `else if` is a
+    hybrid increment: +1 with NO nesting increment (the Sonar spec), so a flat
+    N-arm ladder costs about N, not 1+2+..+N (INBOX-cognitive-else-if-chain). }
+  function Score(const N: TTSNode; ANest: Integer; AElseIf: Boolean = False): Integer;
+  var I: Integer; K: string; AfterElse: Boolean; C: TTSNode;
   begin
     Result:= 0;
     if N.IsNull then Exit;
@@ -9340,8 +9342,17 @@ var
     if (K = 'if') or (K = 'ifElse') or (K = 'while') or (K = 'for') or (K = 'repeat')
        or (K = 'case') or (K = 'exceptionHandler') then
     begin
-      Result:= 1 + ANest;
-      for I:= 0 to N.ChildCount - 1 do Result:= Result + Score(N.Child(I), ANest + 1);
+      Result:= 1 + (if AElseIf then 0 else ANest);
+      AfterElse:= False;
+      for I:= 0 to N.ChildCount - 1 do
+      begin
+        C:= N.Child(I);
+        if AfterElse and ((C.NodeType = 'if') or (C.NodeType = 'ifElse')) then
+          Result:= Result + Score(C, ANest, True)   // else-if: same nesting as its parent if
+        else
+          Result:= Result + Score(C, ANest + 1);
+        AfterElse:= C.NodeType = 'kElse';
+      end;
       Exit;
     end;
     if (K = 'kAnd') or (K = 'kOr') or (K = 'kXor') then Result:= 1;

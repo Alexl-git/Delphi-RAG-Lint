@@ -357,6 +357,14 @@ function LowerText(const N: TTSNode; const ASrc: TBytes): string;
 begin
   Result := LowerCase(Trim(NodeStr(N, ASrc)));
 end;
+{ True when N's text, ignoring parentheses and case, is exactly the literal ALit
+  ('true' / 'false'). Used to see that `while True` / `until False` cannot exit by
+  their own test. }
+function IsBoolLiteral(const N: TTSNode; const ASrc: TBytes; const ALit: string): Boolean;
+begin
+  Result := (not N.IsNull) and
+    SameText(StringReplace(StringReplace(Trim(LowerText(N, ASrc)), '(', '', [rfReplaceAll]), ')', '', [rfReplaceAll]), ALit);
+end;
 
 { The leading identifier of a `statement` node, lowercased -- '' when it does not
   begin with one.
@@ -1143,7 +1151,11 @@ begin
     FollowIdx := Cfg.NewBlock.Index;
     BodyIdx := Cfg.NewBlock.Index;
     Cfg.Blocks[HdrIdx].AddSucc(BodyIdx);
-    Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
+    { `while True do` never tests its way out: the follow block is reachable only via a
+      Break, so a function whose every path leaves by Exit(x) is not a missing-Result
+      path (INBOX-function-result-while-true-exit). }
+    if not IsBoolLiteral(Cond, Cfg.Src, 'true') then
+      Cfg.Blocks[HdrIdx].AddSucc(FollowIdx);
     Ctx.ContinueIdx := HdrIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     TestIdx := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if TestIdx >= 0 then Cfg.Blocks[TestIdx].AddSucc(HdrIdx); { back-edge }
@@ -1238,7 +1250,9 @@ begin
     Cond := ANode.ChildByField('condition');
     if not Cond.IsNull then Cfg.Blocks[TestIdx].AddItem(Cond, WithDepth > 0);
     Cfg.Blocks[TestIdx].AddSucc(BodyIdx);   { loop continues }
-    Cfg.Blocks[TestIdx].AddSucc(FollowIdx); { loop exits }
+    { `until False` never exits by its test; only a Break reaches the follow block. }
+    if not IsBoolLiteral(Cond, Cfg.Src, 'false') then
+      Cfg.Blocks[TestIdx].AddSucc(FollowIdx); { loop exits }
     Ctx.ContinueIdx := TestIdx; Ctx.BreakIdx := FollowIdx; Ctx.FinallyDepth := Finallys.Count; Loops.Push(Ctx);
     BodyAfter := EmitStmt(BodyIdx, ANode.ChildByField('body'));
     if BodyAfter >= 0 then Cfg.Blocks[BodyAfter].AddSucc(TestIdx);
