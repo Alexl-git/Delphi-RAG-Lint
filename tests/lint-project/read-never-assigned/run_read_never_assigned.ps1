@@ -89,11 +89,11 @@ Check 'run 2 --disable: no finding of the rule' ((Of $r2).Count -eq 0)
 $sd = Join-Path $scratch 'src\uRnaDecl.pas'; $su = Join-Path $scratch 'src\uRnaUse.pas'
 $td = [IO.File]::ReadAllText($sd); $tu = [IO.File]::ReadAllText($su)
 $edits = @(
-  @($su, 'TRnaHolder(pObj).FCast:= 3;', 'Show(TRnaHolder(pObj).FCast);', 'CONTROL-HARDCAST'),
-  @($su, 'with H do FWith:= 5;', 'with H do Show(FWith);', 'CONTROL-WITH'),
-  @($sd, 'Fill(FVarArg);', 'Show(FVarArg);', 'CONTROL-VARARG'),
+  @($su, 'TRnaHolder(pObj).FCast:= 3;', 'RnaShow(TRnaHolder(pObj).FCast);', 'CONTROL-HARDCAST'),
+  @($su, 'with H do FWith:= 5;', 'with H do RnaShow(FWith);', 'CONTROL-WITH'),
+  @($sd, 'Fill(FVarArg);', 'RnaShow(FVarArg);', 'CONTROL-VARARG'),
   @($sd, 'read FSize write FSize;', 'read FSize;', 'CONTROL-PROPSETTER'),
-  @($sd, 'GInitSec:= 4;', 'Show(GInitSec);', 'CONTROL-INIT'))
+  @($sd, 'GInitSec:= 4;', 'RnaShow(GInitSec);', 'CONTROL-INIT'))
 foreach ($e in $edits) {
   $txt = if ($e[0] -eq $sd) { $td } else { $tu }
   Check "fixture spells '$($e[1])'" ($txt.Contains($e[1]))
