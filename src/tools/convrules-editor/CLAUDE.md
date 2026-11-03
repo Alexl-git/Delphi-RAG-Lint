@@ -54,7 +54,7 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-unit-rules-toolbar.ps1` 41 -- menu bar, Uses Units commands, Swap
   * `drive-unit-picker.ps1` 20 -- unit picker
   * `drive-unit-harvest.ps1` 21 -- Unit Rules harvest (`-ProofNoDestination`)
-  * `drive-file-menu.ps1` 21 -- New / Save As / Exit, unsaved guard; gateleak: Save As + Open posted under the Save As dialog open nothing (saveas.reentrant.not.nested, RED = 2); env.vcl.atoms
+  * `drive-file-menu.ps1` 25 (DRVLIB 2026-11-03) -- New / Save As / Exit, unsaved guard; gateleak: Save As + Open posted under the Save As dialog open nothing (saveas.reentrant.not.nested, RED = 2); env.vcl.atoms
   * `drive-owning-open.ps1` 6 -- cross-book double-click through `ConfirmDiscard`
   * `drive-engine-wait.ps1` 16 -- progress window, Cancel, retry, cached reload; N7 Save under the progress window (menu path + real Ctrl+S) refused, book untouched (the key check is a guard only: it cannot go RED on a pre-N1 exe)
   * `drive-book-depth.ps1` 21 -- `#depth` combo
