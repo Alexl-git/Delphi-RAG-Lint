@@ -167,7 +167,7 @@ type
     /// <summary>Opt-in (default False = the historic shape): when True, while-True and until-False loops
     /// get no test-exit edge, so only a Break reaches the follow block. Set by lint callers via
     /// TCfgBuilder.Build(..., True); the index-time dataflow facts keep the default (CFG-CONSTLOOP).</summary>
-    PruneConstLoops: Boolean;
+    PruneConstLoops: Boolean;  // dl:ok public-field@22e9 -- same record-style public state as Src/Skipped/ForVars; set once by TCfgBuilder.Build
     /// <summary><!-- drag-lint:auto sum -->TCfg</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->

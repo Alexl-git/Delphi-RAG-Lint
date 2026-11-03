@@ -1168,4 +1168,6 @@
 #   Superseded: 1.29.0-alpha|94f317a8137a363c0c4573d699ba705c9f47424c2f45fda262ed34e1e5a28dd7
 # 2026-11-02 fix/yadf-lint-fps: hash updated WITHOUT a version bump -- DRagLint.Analysis.Cfg.pas gained an OPT-IN TCfg.PruneConstLoops (TCfgBuilder.Build param, default False = the historic CFG). Only the flow-lint caller (FlowChecks) opts in; the index-time caller (Index.DataFlowFacts.TCollector.Run) is untouched, so no emitted row changes. Evidence: a fixture with while True / repeat..until False loops indexed into scratch DBs with the deployed exe and the fix exe gives byte-identical data_flows (8 rows) and symbol_facts (3 rows). Follow-up CFG-CONSTLOOP in docs\BACKLOG-2026-11-01.md (enable in DataFlowFacts with the 1.42 bump).
 #   Superseded: 1.29.0-alpha|09250d1e46167658401982dcff1a5ebc1a17aebffd51b48ef41ea1eda01f2122
-1.29.0-alpha|5e21265dfd93da8dc9e049eac83d282ce2598dd5f7b382f641242ad47354a283
+# 2026-11-02 main (whole-branch lint): hash updated WITHOUT a version bump -- DRagLint.Analysis.Cfg.pas changed only by a dl:ok public-field comment on TCfg.PruneConstLoops; no code, no emitted rows change.
+#   Superseded: 1.29.0-alpha|5e21265dfd93da8dc9e049eac83d282ce2598dd5f7b382f641242ad47354a283
+1.29.0-alpha|d43b27218f21472ac96ee9857e1ab4d424fdf2ad37bc990f577bd5d806317161

@@ -9347,10 +9347,8 @@ var
       for I:= 0 to N.ChildCount - 1 do
       begin
         C:= N.Child(I);
-        if AfterElse and ((C.NodeType = 'if') or (C.NodeType = 'ifElse')) then
-          Result:= Result + Score(C, ANest, True)   // else-if: same nesting as its parent if
-        else
-          Result:= Result + Score(C, ANest + 1);
+        // else-if: same nesting as its parent if
+        Result:= Result + (if AfterElse and ((C.NodeType = 'if') or (C.NodeType = 'ifElse')) then Score(C, ANest, True) else Score(C, ANest + 1));
         AfterElse:= C.NodeType = 'kElse';
       end;
       Exit;
