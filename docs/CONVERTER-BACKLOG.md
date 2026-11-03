@@ -40,6 +40,7 @@ before working on an item.**
     entries `inherited X: TField [n]` (44 of 52 in dmDrawData.dfm), and collection properties
     (ParamData) streamed WHOLE. Engine side (type rename via #migrate, `inherited ... [n]` retype,
     collection rules in the child): INBOX-converter-to-engine-migrate-type-and-inherited-headers.md.
+  * **DONE on conv/c8chain (2026-11-03, unmerged): the editor builds the graph (AncestorGraphOf), offers every ancestor still holding a From type root first, blocks E7 (Yes reorders, No runs nothing) and refuses a chain that leaves both the project and the platform library index (Q-B); the 1.42 engine's in-batch order stays the second net.**
   * **C8CHAIN (new, M) -- OWNER RULING Q5 2026-10-28, replaces "never blocking":** build an
     inheritance DEPENDENCY GRAPH over the run's units and walk each chain to the very original
     (A inherits B inherits C: convert C, B, A). No inherited unit converts before its ancestor is

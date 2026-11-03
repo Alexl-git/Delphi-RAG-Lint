@@ -32,6 +32,10 @@
     {
       "ask": "Can the Convert tab convert many units faster, and how do I turn that off?",
       "command": "Batch mode is automatic for 2+ units on an engine with batch_units (one convert-apply per book per 8 units); set CONVRULES_BATCH=off before starting ConvRulesEditor.exe to convert one unit at a time"
+    },
+    {
+      "ask": "Why does Convert reorder my units, or refuse because of an ancestor?",
+      "command": "Inherited units always convert after their ancestors (C8CHAIN): adding a unit offers every ancestor that still holds a From type, root first, and Convert asks to reorder the list ancestor-first (No runs nothing). An ancestor class found in neither the project index nor the platform library index blocks the run: add its unit to the .dproj/.dpr and reindex"
     }
   ],
   "notes": "own page written 2026-10-21 (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown",
@@ -41,9 +45,9 @@
     "by": "CONVERTER"
   },
   "verified": {
-    "date": "2026-10-28",
+    "date": "2026-11-03",
     "by": "CONVERTER",
-    "build": "1.36.0-alpha",
+    "build": "1.40.0-alpha",
     "surfaceHash": "e2461a908fd5b8bea2d413208afe6e93a9cc52998f70dbde903da031b7055444"
   }
 }
