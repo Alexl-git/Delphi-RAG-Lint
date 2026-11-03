@@ -18,6 +18,7 @@ Any one of these silences the symbol:
 - `X := v`, `Self.X := v`, `O.X := v`, `with O do X := v`, a write in an `initialization` section;
 - a hard cast `TFoo(P).X := v` (ref-gap G5);
 - passing it where the callee takes it by `var` / `out` -- a project routine, a platform-library routine, an RTL intrinsic (`SetLength`, `Inc`, `Val`, `Read`, ...), or a callee neither index knows;
+  when the resolver bound the call (`Show(X)`, `Obj.Show(X)`), only THAT routine's own declaration (its overload set) decides; a same-named routine elsewhere -- e.g. ShlObj's `IFileViewer.Show(var ...)` -- no longer silences it. Only an unbound call (a late-bound `Variant`, an unknown receiver type) falls back to every project and library routine of that bare name, and then any `var` / `out` among them counts (silence, never a false finding);
 - taking its address (`@X`);
 - a property naming it as its `write` accessor;
 - a global declared with an initialiser (`G: Integer = 7`), declared `absolute`, or the target of an `absolute` alias;

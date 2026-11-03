@@ -1963,6 +1963,11 @@ end; // function
       names out of the body; its comment records why the class-level version of
       this gate was refuted by measurement.
 
+  (e) AN ANCESTOR IS MIS-RESOLVED TO A RECORD. The index can bind a class's
+      ancestor name to a same-named record (measured: a routine-local record in
+      another unit, YADF 2026-11-03). A class cannot descend from a record, so
+      the chain is unknown and the rule stays silent, as for gate (b).
+
   A DOTTED PROPERTY IS ITS FIRST SEGMENT. `Font.Style` sets Style on the object
   held by the Font property; the class declares Font, not Font.Style. Checking
   the whole dotted string would report every sub-object property in the corpus.
@@ -2106,6 +2111,20 @@ var
       Silent.AddOrSetValue(LowerCase(AClassName), True);
       Exit(nil);
     end;
+
+    { GATE (e): a CLASS chain with a link resolved to a RECORD is a
+      mis-resolution, not a chain -- a class never descends from a record.
+      Measured 2026-11-03 on YADF: `TYadfOptionsFrame = class(TFrame)` had its
+      ancestor bound to the routine-local record YADF.Layout.ParseCaseArms.TFrame,
+      so the chain looked complete and Left/Top/Width/Height/TabOrder all fired.
+      Treated exactly like gate (b): the real ancestor is unknown, so silence. }
+    if Sym.Kind = skClass then
+      for Anc in Used.GetTransitiveAncestors(Sym.Id) do
+        if Anc.Resolved and SameText(Anc.Kind, 'record') then
+        begin
+          Silent.AddOrSetValue(LowerCase(AClassName), True);
+          Exit(nil);
+        end;
 
     L:= TStringList.Create;
     L.CaseSensitive:= False;

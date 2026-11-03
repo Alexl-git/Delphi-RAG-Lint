@@ -84,7 +84,9 @@ W (Join-Path $work 'uBase.pas') @(
   '    procedure DefineProperties(Filer: TObject);',
   '    procedure Decoyer;','  end;','',
   '  TStreamer = class(TStreamerBase)','  end;','',
+  '  TShadowedFrame = class(TFrameNotInThisIndex)','  end;','',
   'implementation','',
+  'procedure ShadowOwner;','type','  TFrameNotInThisIndex = record','    Depth: Integer;','  end;','begin','end;','',
   'procedure TStreamerBase.DefineProperties(Filer: TObject);','begin',
   "    Filer.DefineProperty('Streamed');",'end;','',
   'procedure TStreamerBase.Decoyer;','begin',
@@ -94,7 +96,7 @@ W (Join-Path $work 'uForm.pas') @(
   'unit uForm;','','interface','','uses','  uBase;','','type',
   '  TMyForm = class','  published','    Widget: TDerivedThing;',
   '    Alien : TForeignThing;','    Grid  : TDerivedThing;',
-  '    Streamy: TStreamer;','  end;','','implementation','','end.')
+  '    Streamy: TStreamer;','    Framey : TShadowedFrame;','  end;','','implementation','','end.')
 
 W (Join-Path $work 'uForm.dfm') @(
   'object MyForm: TMyForm',
@@ -111,6 +113,9 @@ W (Join-Path $work 'uForm.dfm') @(
   '      item',
   "        ItemOnly = 'inside an item block, must be SILENT'",
   '      end>',
+  '  end',
+  '  object Framey: TShadowedFrame',
+  '    Left = 0',
   '  end',
   '  object Streamy: TStreamer',
   "    Streamed = 'streamed by an inherited DefineProperties, must be SILENT'",
@@ -147,6 +152,15 @@ Check 'NEG a property inherited from an ancestor is SILENT' `
 Check 'NEG a DOTTED property is checked by its first segment only' `
       (($rows | Where-Object { $_ -match 'Font\.Height' }).Count -eq 0) `
       'Font is declared; Font.Height is a property of what Font holds'
+
+# YADF FP 2026-11-03: `TYadfOptionsFrame = class(TFrame)` -- the project index
+# resolved the ancestor TFrame to a ROUTINE-LOCAL record `TFrame` in another unit
+# (YADF.Layout.ParseCaseArms.TFrame), so the chain looked complete and every
+# Left/Top/Width/Height/TabOrder fired. A class never descends from a record:
+# such a link is a mis-resolution, and the chain is UNKNOWN, exactly like gate (b).
+Check 'NEG an ancestor mis-resolved to a RECORD is SILENT, not an empty chain' `
+      (($rows | Where-Object { $_ -match 'sets "Left"' }).Count -eq 0) `
+      'a class ancestor that resolves to a record (here a routine-local one) is a wrong resolution'
 
 Check 'NEG an UNRESOLVED ancestor is SILENT, not treated as empty' `
       (($rows | Where-Object { $_ -match 'Whatever' }).Count -eq 0) `

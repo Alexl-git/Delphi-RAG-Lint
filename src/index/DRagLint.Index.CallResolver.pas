@@ -1708,7 +1708,11 @@ type
     /// 'not-found' | 'not-callable' | 'proc-value'.</param>
     /// <returns>An edge whose TargetSymbolId is the called routine and whose
     /// Confidence is 'certain' or 'ambiguous' (an override or duplicate set, the
-    /// same policy as a `call` ref), or TargetSymbolId = 0 for every decline.</returns>
+    /// same policy as a `call` ref), or TargetSymbolId = 0 for every decline --
+    /// EXCEPT 'proc-value' (1.42): when the name is a procedure VALUE and the
+    /// nearest scope answers with one routine (certain), TargetSymbolId names it
+    /// so the caller can bind the read's identity; it is NOT a call and the
+    /// caller must not write a call edge for it.</returns>
     /// <remarks>
     /// The NEAREST declaration of the name decides, exactly as the compiler's
     /// scoping does: lexical scopes, then the enclosing class and its ancestors,
@@ -5365,6 +5369,26 @@ begin
     if AReason = '' then
       for S in Matches do
         if not IsParenlessCallable(S) then AReason:= 'not-callable';
+    { 1.42 GAP-CALLERS: a routine named bare where it CANNOT be a call is a
+      procedure VALUE -- `FOnTouch := Touch`. Bound for identity only
+      (refs.symbol_id, reported 'proc-value', no call edge) when the nearest
+      scope answers with exactly ONE routine and either that routine is a
+      PROCEDURE (it has no value to be read, so a bare read can only be its
+      address) or the site is a procedure-value site (ParenlessIsProcValue).
+      An overload set, or a function needing arguments at a value site, stays
+      'not-callable': which routine the source means is not decidable here. }
+    if (AReason = 'not-callable') and (Matches.Count = 1) then
+    begin
+      Target:= PickFromMatches(Matches, 0, True, Conf);
+      RetType:= SignatureReturnType(Matches[0].Signature);
+      if (Target > 0) and (Conf = 'certain')
+         and ((RetType = '') or ParenlessIsProcValue(ARef, Lines, Rcv, RetType)) then
+      begin
+        AReason              := 'proc-value';
+        Result.TargetSymbolId:= Target;
+        Result.Confidence    := Conf;
+      end;
+    end;
     if AReason = '' then
     begin
       Target := PickFromMatches(Matches, 0, True, Conf);
@@ -5372,7 +5396,15 @@ begin
       for S in Matches do
         if S.Id = Target then RetType:= SignatureReturnType(S.Signature);
       if ByWith and (Conf <> 'certain') then AReason:= 'with-scope'
-      else if ParenlessIsProcValue(ARef, Lines, Rcv, RetType) then AReason:= 'proc-value'
+      else if ParenlessIsProcValue(ARef, Lines, Rcv, RetType) then
+      begin
+        AReason:= 'proc-value';
+        if Conf = 'certain' then
+        begin
+          Result.TargetSymbolId:= Target;
+          Result.Confidence    := Conf;
+        end;
+      end
       else
       begin
         { ReceiverTypeSymbolId stays 0, as on the lexical and unit rungs of

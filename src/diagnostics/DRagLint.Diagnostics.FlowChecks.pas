@@ -1214,8 +1214,10 @@ end;
   This is therefore a syntactic AST check at EMISSION time, not a lattice
   extension; the latter would be path-sensitivity.
 
-  SCOPE, AND WHY IT IS THIS SMALL. Only a BARE LOCAL IDENTIFIER predicate is
-  honoured, and only when the assignment sits under a textually identical one.
+  SCOPE, AND WHY IT IS THIS SMALL. Only a BARE LOCAL IDENTIFIER predicate, or
+  that identifier compared with nil (`X <> nil` / `X = nil`, YADF 2026-11-03,
+  NilComparePredicate), is honoured, and only when the assignment sits under a
+  textually identical one.
   That is the measured shape and nothing more. Deliberately NOT handled:
 
     * witness-flag pairs (`if C then begin X := ..; HaveX := True end;
@@ -1234,6 +1236,49 @@ end;
   Anything with a call, a dot, an index or an operator is refused -- only a
   simple identifier can be compared textually and still mean the same thing at
   two different points in the routine. }
+{ `X <> nil` / `X = nil` (either operand order) with X a bare local identifier,
+  normalised to 'x#<>nil' / 'x#=nil'; '' for anything else. YADF FP 2026-11-03
+  (`if View <> nil then` twice, run_flow_nil_guard_predicate.ps1): a comparison of
+  ONE variable with the constant nil means the same thing at two points exactly
+  when that variable is not rewritten in between -- the same argument, and the
+  same AssignedInRange check, as a bare boolean predicate. The variable is the
+  part before '#' (GuardVarOf). `=` and `<>` stay distinct tokens: the two are
+  opposite predicates and must never pair. }
+function NilComparePredicate(const ACond: TTSNode; const ASrc: TBytes): string;
+var
+  Op, L, R: TTSNode;
+  OpText  : string ;
+begin
+  Result := '';
+  if ACond.IsNull or (ACond.NodeType <> 'exprBinary') then Exit;
+  Op := ACond.ChildByField('operator');
+  if Op.IsNull then Exit;
+  OpText := Trim(NodeStr(Op, ASrc));
+  if (OpText <> '<>') and (OpText <> '=') then Exit;
+  L := ACond.ChildByField('lhs');
+  R := ACond.ChildByField('rhs');
+  if L.IsNull or R.IsNull then Exit;
+  if SameText(Trim(NodeStr(L, ASrc)), 'nil') then
+  begin
+    var T: TTSNode := L;
+    L := R;
+    R := T;
+  end;
+  if (L.NodeType = 'identifier') and SameText(Trim(NodeStr(R, ASrc)), 'nil') then
+    Result := LowerCase(Trim(NodeStr(L, ASrc))) + '#' + OpText + 'nil';
+end;
+
+{ The predicate VARIABLE of a signed guard token: '+view#<>nil' -> 'view',
+  '-p' -> 'p'. AssignedInRange must be handed this, never the token. }
+function GuardVarOf(const AToken: string): string;
+var
+  P: Integer;
+begin
+  Result := Copy(AToken, 2, MaxInt);
+  P := Pos('#', Result);
+  if P > 0 then Result := Copy(Result, 1, P - 1);
+end;
+
 function GuardToken(const AIf, AChild: TTSNode; const ASrc: TBytes): string;
 var
   I, CondIx, ThenIx, ElseIx: Integer;
@@ -1302,9 +1347,12 @@ begin
     sitting at the too-many-exit-points limit, and adding polarity must not
     spend the budget. }
   Cond := AIf.Child(CondIx);
-  if Cond.IsNull or (Cond.NodeType <> 'identifier') then Exit; { compound / call / not }
-  if      InThen then Result := '+' + LowerCase(Trim(NodeStr(Cond, ASrc)))
-  else if InElse then Result := '-' + LowerCase(Trim(NodeStr(Cond, ASrc)));
+  var Pred: string := NilComparePredicate(Cond, ASrc);
+  if (Pred = '') and (not Cond.IsNull) and (Cond.NodeType = 'identifier') then
+    Pred := LowerCase(Trim(NodeStr(Cond, ASrc)));
+  if Pred = '' then Exit; { compound / call / not }
+  if      InThen then Result := '+' + Pred
+  else if InElse then Result := '-' + Pred;
 end;
 
 { Collects the signed guard tokens governing ANode ('+name' then-arm,'-name'
@@ -1381,7 +1429,7 @@ begin
             "was the predicate rewritten in between?" safety check that makes
             this suppression sound. }
           if (AGuards.IndexOf(Own[K]) >= 0)
-             and (not AssignedInRange(ARoutine, ASrc, Copy(Own[K], 2, MaxInt),
+             and (not AssignedInRange(ARoutine, ASrc, GuardVarOf(Own[K]),
                                       Integer(ANode.EndByte), AReadStart)) then
             Exit(True);
       finally

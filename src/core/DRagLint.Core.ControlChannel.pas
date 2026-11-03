@@ -307,7 +307,8 @@ function BeatDisplayText(const ABeat: TEngineBeat): string; // dl:ok unused-publ
 function RequestEngineBeat(APid: Cardinal; AConnectTimeoutMs: Integer; out ABeat: TEngineBeat): Boolean; // dl:ok unused-public-symbol@1794 -- the IDE plugin's API (ProcRun, LspClient): its callers are in the plugin project, not this one
 
 /// <summary>Opens the process-wide heartbeat pipe for verb ACommand and starts the status record's action as
-/// ACommand -- for lsp, index, lint-all, lint and context, the verbs the IDE plugin waits on.</summary>
+/// ACommand -- for lsp, index, lint-all, lint, context and 'cycles --fix' (the CLI's name for `cycles` run
+/// with --fix), the verbs the IDE plugin waits on.</summary>
 /// <param name="ACommand">The CLI verb.</param>
 /// <param name="AVersion">DRAGLINT_VERSION.</param>
 /// <param name="AExtractor">DRAGLINT_EXTRACTOR_VERSION.</param>
@@ -885,7 +886,9 @@ end;
 
 function BeatChannelEnabledFor(const ACommand: string): Boolean;
 begin
-  Result:= MatchText(ACommand, ['lsp', 'index', 'lint-all', 'lint', 'context']);
+  { 'cycles --fix' (lane 142-cyc, owner ruling D4): the CLI passes it for `cycles --fix` only, so a plain
+    `cycles` list query keeps being judged by its CPU (no heartbeat that would stand still while it works) }
+  Result:= MatchText(ACommand, ['lsp', 'index', 'lint-all', 'lint', 'context', 'cycles --fix']);
 end;
 
 function BeatChannelOpen(const ACommand, AVersion, AExtractor: string): Boolean;

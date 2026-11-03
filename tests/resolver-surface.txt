@@ -160,6 +160,16 @@ src/storage/DRagLint.Storage.SQLite.pas::ResolveTypeUseRefs
 # type_use stream share the query-and-bind loop BindRefStream.
 src/storage/DRagLint.Storage.SQLite.pas::ResolveEnumCastRefs
 src/storage/DRagLint.Storage.SQLite.pas::BindRefStream
+# TYPE READS (2026-11-01, x129 GAP-CALLERS ctor part; classified 2026-11-03, 1.42
+# RESOLVER-VERGUARD / ruling D7). A NINTH stream (ResolveTypeReadRefs ->
+# TCallResolver, which is hashed whole) writes refs.symbol_id for an unbound `read`
+# ref that names a TYPE: the receiver of `TFoo.Create(..)`, of `TFoo.ClassMethod`,
+# and a class-reference value `C := TFoo`. It writes rows, so it is surface by the
+# writer rule; the drift check flagged it (it matches `resolve`) and it sat
+# unclassified from x129 until this entry -- the guard was RED on 47e175cc and
+# def36f7c. Lesson: a reader/stream the resolve pass depends on IS resolve
+# surface, whatever its name.
+src/storage/DRagLint.Storage.SQLite.pas::ResolveTypeReadRefs
 # The with scope PARSES THE SOURCE inside the resolver, with the byte transform
 # the indexer applies, so a with body's line/column lands in the coordinates
 # refs are stored in. These two decide those coordinates, and so which ref a

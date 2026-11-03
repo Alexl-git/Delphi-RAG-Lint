@@ -546,7 +546,9 @@ type
       /// calls stage's THIRD stream. Offers every `read` ref named like a
       /// function or method to TCallResolver.ResolveParenlessRead and writes a
       /// call_edges row (plus refs.symbol_id for a certain edge, through
-      /// UpsertCallEdge) for each one that is a parenless call.</summary>
+      /// UpsertCallEdge) for each one that is a parenless call. 1.42: a read named
+      /// like a PROCEDURE is offered too, and a 'proc-value' answer (`FOnTouch :=
+      /// Touch`) binds refs.symbol_id only -- no call edge.</summary>
       /// <param name="AResolver">The pass's resolver, maps already built. Owned
       /// by the caller.</param>
       /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a
@@ -554,7 +556,8 @@ type
       /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when
       /// none is stale.</param>
       /// <param name="ACandidates">Out: rows offered to the resolver.</param>
-      /// <param name="ABound">Out: rows that earned a call edge.</param>
+      /// <param name="ABound">Out: rows that earned a call edge (an identity-only
+      /// proc-value bind is not counted: it is not a call).</param>
       /// <remarks>
       /// Runs INSIDE ResolveCallTargets' transaction, AFTER the enum-value
       /// stream: that stream NULLs refs.symbol_id over every `read` of an
@@ -774,13 +777,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create (DRagLint.Storage.SQLite.pas)</para>
-      /// <para>Calls: DRagLint.Storage.FileMembership.ConnectReadOnly, DRagLint.Storage.FileMembership.ConnectWriter</para>
-      /// <para>Reads: FConn   Writes: FConn</para>
+      /// <para>Calls: DRagLint.Storage.FileMembership.ArmBeatAwareWait, DRagLint.Storage.FileMembership.ConnectReadOnly, DRagLint.Storage.FileMembership.ConnectWriter</para>
+      /// <para>Reads: FConn   Writes: FConn, FBusyWait</para>
+      /// <seealso cref="DRagLint.Storage.FileMembership.ArmBeatAwareWait"/>
       /// <seealso cref="DRagLint.Storage.FileMembership.ConnectReadOnly"/>
       /// <seealso cref="DRagLint.Storage.FileMembership.ConnectWriter"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginFileBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure Connect(const ADbPath: string; AReadOnly: Boolean);
@@ -1004,16 +1007,16 @@ type
       constructor Create(const ADbPath: string; AReadOnly: Boolean = False);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.EndFileBatch, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FinishDeferredTextIndex</para>
-      /// <para>Reads: FScopeFiles, FScopeNames, FScopeTypesBefore, FScopeTypeAncestors, FScopeTypesAfter, FLateAncCache, FQInsertFile, FQUpsertFile (+47 more)</para>
+      /// <para>Calls: DRagLint.Storage.FileMembership.DisarmBeatAwareWait, DRagLint.Storage.SQLite.TSQLiteSymbolStore.EndFileBatch, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FinishDeferredTextIndex</para>
+      /// <para>Reads: FScopeFiles, FScopeNames, FScopeTypesBefore, FScopeTypeAncestors, FScopeTypesAfter, FLateAncCache, FQInsertFile, FQUpsertFile (+48 more)</para>
       /// <para>Pure</para>
       /// <para>Catches: Exception (empty)</para>
       /// <para>Directives: override</para>
+      /// <seealso cref="DRagLint.Storage.FileMembership.DisarmBeatAwareWait"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.EndFileBatch"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.FinishDeferredTextIndex"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginFileBatch"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       destructor Destroy; override;
@@ -1886,7 +1889,7 @@ type
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TSymbol&gt;</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolByExactNameAnywhere (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeCategoryDepth (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeSymbolId (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.TypeCandidateIds (DRagLint.Storage.SQLite.pas) (+5 more)</para>
+      /// <para>Called from: DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolByExactNameAnywhere (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeCategoryDepth (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveTypeSymbolId (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.TypeCandidateIds (DRagLint.Storage.SQLite.pas) (+4 more)</para>
       /// <para>Calls: DRagLint.Core.Model.LastTopLevelSegment, DRagLint.Core.Model.SplitGenericName, DRagLint.Core.Model.StripGenericSegments, DRagLint.Storage.SQLite.PreferArity, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByExactName.CollectByName, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindSymbolsByExactName.KeepQualifiedSuffix, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FoldStubs, EndsStr, EndsText, Pos, ReadSymbolFromQuery, SameText</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName</para>
       /// <para>Pure</para>
@@ -2048,15 +2051,15 @@ type
       /// Q.FieldByName('path').AsString.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas), DRagLint.CLI.DoUsesAudit.UnitsDefining (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindCallersByNameWithContext (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetClassSurface (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetSymbolSlice (DRagLint.Storage.SQLite.pas) (+6 more)</para>
+      /// <para>Called from: DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsesFixSweep.UnitsDefining (DRagLint.CLI.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindCallersByNameWithContext (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetClassSurface (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetSymbolSlice (DRagLint.Storage.SQLite.pas) (+4 more)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath</para>
       /// <para>Reads: FConn</para>
       /// <para>SQL: reads FILES</para>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Checkpoint"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.ClearAllFiles"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginFileBatch"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginTargetedTextIndex"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BindRefStream"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetFilePath(AFileId: Int64): string                                           ;
@@ -2589,7 +2592,8 @@ type
       /// <param name="AExtraStores">The stores the pass consulted; empty removes the key.</param>
       /// <param name="AScoped">True for a scoped pass: with no stores it leaves the key, since
       /// the rows it did not re-resolve keep their external names.</param>
-      procedure WriteExternalStores(const AExtraStores: TArray<ISymbolStore>; AScoped: Boolean);      /// <summary>Implements ISymbolStore.ResolveDispatch: runs TDispatchResolver,
+      procedure WriteExternalStores(const AExtraStores: TArray<ISymbolStore>; AScoped: Boolean);
+      /// <summary>Implements ISymbolStore.ResolveDispatch: runs TDispatchResolver,
       /// then wipes and rewrites dispatch_edges and classref_args in one
       /// transaction.</summary>
       /// <param name="AExtraStores">Library stores for class-reference type lookup; may be nil.</param>
@@ -14068,6 +14072,9 @@ var
     the lowercased union of its own unit names with the textual
     unit_uses.unit_name entries. }
   FileUnit   : TDictionary<Int64, string>          ;
+  { candidate symbol id -> id of the routine it is declared in, for routine-
+    local class/interface/record types only (see step 1). }
+  LocalOwner : TDictionary<Int64, Int64>           ;
   FileUses   : TObjectDictionary<Int64, TDictionary<string, Boolean>>;
   Lc         : string                             ;
   Sym        : TSymbol                            ;
@@ -14111,6 +14118,7 @@ begin
   FFlowOracles.Clear;
   NameToCands:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
   FileUnit   := TDictionary<Int64, string>.Create;
+  LocalOwner := TDictionary<Int64, Int64>.Create;
   FileUses   := TObjectDictionary<Int64, TDictionary<string, Boolean>>.Create([doOwnsValues]);
   Q   := TFDQuery.Create(nil);
   QIns:= TFDQuery.Create(nil);
@@ -14144,8 +14152,18 @@ begin
       declines, and a decline is written as ancestor_kind '?', i.e. exactly the
       behaviour that existed before. It cannot invent a wrong binding, only fail
       to make one. }
-    Q.SQL.Text:= 'SELECT id, file_id, kind, name, qualified_name, heritage, start_line, end_line, generic_params ' +
-                 'FROM symbols WHERE kind IN (''class'',''interface'',''record'')';
+    { ROUTINE-LOCAL candidates (YADF FP 2026-11-03, run_ancestry_routine_local.ps1):
+      a type declared inside a procedure/function/method body is visible only
+      inside that routine, yet it joined the by-name set like any unit-level
+      type -- so `TYadfOptionsFrame = class(TFrame)` bound to the record
+      YADF.Layout.ParseCaseArms.TFrame in ANOTHER unit, and the class looked as
+      if it descended from a record. `local_owner` is the owning routine's id
+      (0 for every non-local type); step 3 keeps such a candidate only for a
+      source declared in that SAME routine. }
+    Q.SQL.Text:= 'SELECT s.id, s.file_id, s.kind, s.name, s.qualified_name, s.heritage, s.start_line, s.end_line, s.generic_params, ' +
+                 '  COALESCE((SELECT p.id FROM symbols p WHERE p.id = s.parent_id AND p.kind IN ' +
+                 '    (''procedure'',''function'',''method'',''constructor'',''destructor'')), 0) AS local_owner ' +
+                 'FROM symbols s WHERE s.kind IN (''class'',''interface'',''record'')';
     Q.Open;
     { The TField references are resolved ONCE: this SELECT walks every class,
       interface and record in the index, and FieldByName is a by-name scan of
@@ -14159,8 +14177,10 @@ begin
     var FldGP   : TField:= Q.FieldByName('generic_params');
     var FldSL   : TField:= Q.FieldByName('start_line'    );
     var FldEL   : TField:= Q.FieldByName('end_line'      );
+    var FldLoc  : TField:= Q.FieldByName('local_owner'   );
     while not Q.Eof do
     begin
+      if FldLoc.AsLargeInt > 0 then LocalOwner.AddOrSetValue(FldId.AsLargeInt, FldLoc.AsLargeInt);
       Sym:= Default(TSymbol);
       Sym.Id           := FldId   .AsLargeInt;
       Sym.FileId       := FldFile .AsLargeInt;
@@ -14250,7 +14270,7 @@ begin
       named target, so generics, qualified names and strong aliases contribute
       no rows at all. Census at the time of writing -- 20 such aliases on ORM3
       CLIENT, 2 on SERVER, 3 in this repo. }
-    Q.SQL.Text:= 'SELECT id, file_id, heritage FROM symbols ' +
+    Q.SQL.Text:= 'SELECT id, file_id, heritage, COALESCE(parent_id, 0) AS parent_id FROM symbols ' +
                  'WHERE kind IN (''class'',''interface'',''type'',''classref'') AND heritage IS NOT NULL AND heritage <> ''''';   { E1 (2026-10-26): a `class of X` row carries X as heritage -> one ordinal-0 row }
       FConn.ExecSQL('DELETE FROM type_ancestors');
       Q.Open;
@@ -14258,6 +14278,7 @@ begin
       begin
         var SymId  := Q.FieldByName('id'      ).AsLargeInt;
         var SymFile:= Q.FieldByName('file_id' ).AsLargeInt;
+        var SymParent: Int64:= Q.FieldByName('parent_id').AsLargeInt;
         var Tokens := SplitHeritageList(Q.FieldByName('heritage').AsString);
         for var Ord:= 0 to High(Tokens) do
         begin
@@ -14282,7 +14303,16 @@ begin
               field to the ONE shared scope rule. It declines (Id = 0) when no
               rule narrows the field to one, and a decline is written out as
               ancestor_kind='?' exactly as before: when unsure, don't claim. }
-            var Narrowed:= FilterCandidatesByArity(Cands.ToArray, AncArity);
+            { A routine-local candidate is visible only to a source declared in
+              that same routine (step 1, local_owner). }
+            var Visible: TArray<TSymbol>:= nil;
+            for var VC in Cands do
+            begin
+              var Owner: Int64;
+              if (not LocalOwner.TryGetValue(VC.Id, Owner)) or (Owner = SymParent) then
+                Visible:= Visible + [VC];
+            end;
+            var Narrowed:= FilterCandidatesByArity(Visible, AncArity);
             if Length(Narrowed) = 1 then Chosen:= Narrowed[0]
             else if Length(Narrowed) = 0 then Chosen:= Default(TSymbol)
             else
@@ -14338,6 +14368,7 @@ begin
     NameToCands.Free;
     FileUses.Free;
     FileUnit.Free;
+    LocalOwner.Free;
   end; // try
 end; // procedure
 
@@ -14596,14 +14627,16 @@ const
   { The candidates: a `read` spelled like any function or method in the index,
     with no `call` ref at the identical position. The resolver narrows it. }
   PARENLESS_UNIVERSE = 'refs.kind = ''read'' AND refs.name_text COLLATE NOCASE IN ' +
-                       '(SELECT name FROM symbols WHERE kind IN (''function'', ''method'')) ' +
+                       '(SELECT name FROM symbols WHERE kind IN (''function'', ''method'', ''procedure'')) ' +
                        'AND NOT EXISTS (SELECT 1 FROM refs c WHERE c.file_id = refs.file_id ' +
                        'AND c.start_line = refs.start_line AND c.start_col = refs.start_col ' +
                        'AND c.kind = ''call'')';
   { What this stream wrote on an earlier pass: a `read` bound to a routine. No
-    other writer binds a `read` to one -- the enum stream binds enum values. }
+    other writer binds a `read` to one -- the enum stream binds enum values.
+    1.42: `procedure` joined both sets -- a free procedure named as a VALUE
+    (`P := Helper`) is bound for identity ('proc-value', no call edge). }
   PARENLESS_WRITTEN  = 'refs.kind = ''read'' AND refs.symbol_id IN ' +
-                       '(SELECT id FROM symbols WHERE kind IN (''function'', ''method''))';
+                       '(SELECT id FROM symbols WHERE kind IN (''function'', ''method'', ''procedure''))';
 var
   Suffix : string       ;
   Q      : TFDQuery     ;
@@ -14650,11 +14683,18 @@ begin
       { Every decline is counted by reason inside the resolver (ParenlessStats)
         and printed on the stage's log line -- a decline writes nothing. }
       Edge:= AResolver.ResolveParenlessRead(Ref, Reason);
-      if Edge.TargetSymbolId > 0 then
+      if (Edge.TargetSymbolId > 0) and (Reason = '') then
       begin
         Edge.RefId:= Ref.Id;
         UpsertCallEdge(Tok, Edge);
         Inc(ABound);
+      end
+      else if (Edge.TargetSymbolId > 0) and (Reason = 'proc-value') then
+      begin
+        { 1.42 GAP-CALLERS: `FOnTouch := Touch` -- the routine's identity, no call edge. }
+        FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Edge.TargetSymbolId;
+        FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
+        FQSetRefSymbol.ExecSQL;
       end;
       Inc(ACandidates);
       Q.Next;
