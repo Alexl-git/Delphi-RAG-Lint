@@ -350,9 +350,16 @@ function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: str
 function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;  // dl:ok unused-public-symbol@32f1 -- REVIEWED 2026-11-03 pinned by the model tests (AncestorGraphTests.inc ag.*), which are outside this project's index; AnalyzeUnit is the editor's caller
   const AReader: TDfmTextReader; const APairs: TArray<TTypePair>; out AError: string): TArray<TAncestorUnit>; overload;
 
-/// <summary>PURE: AncestorGraphOf that also reports where the chains left the index.</summary>
+/// <summary>PURE: AncestorGraphOf that also reports where the chains left the index (C8CHAIN Q-B).</summary>
+/// <param name="AOwn">As the overload above.</param>
+/// <param name="AFrameClasses">As the overload above.</param>
+/// <param name="ALookup">As the overload above.</param>
+/// <param name="AReader">As the overload above.</param>
+/// <param name="APairs">As the overload above.</param>
+/// <param name="AError">As the overload above.</param>
 /// <param name="AOutside">Distinct class names (walk order) that no indexed unit declares: the
 /// first class past the project on each chain (library roots included).</param>
+/// <returns>As the overload above.</returns>
 function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;  // dl:ok unused-public-symbol@32f1 -- REVIEWED 2026-11-03 pinned by the model tests (AncestorGraphTests.inc ag.*), which are outside this project's index; AnalyzeUnit is the editor's caller
   const AReader: TDfmTextReader; const APairs: TArray<TTypePair>; out AError: string; out AOutside: TArray<string>): TArray<TAncestorUnit>; overload;
 

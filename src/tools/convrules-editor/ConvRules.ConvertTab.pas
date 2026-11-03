@@ -30,7 +30,7 @@ uses
   , ConvRules.ConvertRerun  // the raise-and-re-run decisions (Task 6)
   , ConvRules.ConvertRequest  // dl:unit ConvRules.ConvertRequest accepted -- WHOLE_UNIT_SCOPE_TEXT is the E4 Scope line ScopeText returns for no scope; it travels with ScopeText so the reset caption cannot drift from it
   , ConvRules.Inheritance  // dl:unit ConvRules.Inheritance accepted -- ANALYSIS_CANCELLED is the analysis's own cancel text, reused for a reindex skipped by the same cancel
-  , ConvRules.AncestorOrder // C8CHAIN Q-B: TLibraryResult (FLibrary)
+  , ConvRules.AncestorOrder  // dl:unit ConvRules.AncestorOrder accepted -- ORDER_CANCELLED_TEXT is the E7 question's own No text, so it travels with OrderBlockText; the unit is in the interface for TLibraryResult (FLibrary)
   , ConvRules.WorkList  // TWorkRun: TConvertHost.WorkListReady's parameter
   , ConvRules.QualifyFix  // TQualifyPick: TConvertHost.QualifyBook's parameter
   , ConvRules.TextEncoding  // TTextLevel: TConvertHost.LowerBook's parameter
