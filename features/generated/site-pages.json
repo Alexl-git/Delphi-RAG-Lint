@@ -268,8 +268,8 @@
     "version": "1.35.1-alpha"
   },
   "features/engine-heartbeat.md": {
-    "hash": "fd4c976bff23510fc7d02f0b45ac5c3c60233a7ffa0d671d339f82ec37e7828d",
-    "version": "1.39.2-alpha"
+    "hash": "cd88f4b0da8fd5d189caf310c9754bf0b7a0f8075d8c28322c1e8727fad4585a",
+    "version": "1.40.0-alpha"
   },
   "features/exceptions-sync.md": {
     "hash": "98d920375eac672309dc751f117ad663696ac99dfc805e0d0e4ec40c4cbdfe0f",
