@@ -203,7 +203,7 @@
   drag-lint surface            --qname <Foo.TBar>   [--db <file.sqlite>] [--include-impl] [--all-visibility] [--format text|json]
   drag-lint slice              --qname <Foo.TBar>   [--db <file.sqlite>] [--format text|json]
   drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)
-                               [--max-callers N] [--context N] [--no-docs]
+                               [--max-callers N] [--context N] [--no-docs] [--max-body-tokens N]
   drag-lint bench-context      [--db <file.sqlite>] [--n N]
   drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]
   drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>]   (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)
