@@ -7,14 +7,14 @@ group: graphs-reports
 order: 70006
 since: 1.33.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.40.0-alpha
 ---
 
 # Cycles fix (mechanical, compile-gated)
 
 Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output.
 
-cycles --fix makes the edits a --plan playbook describes: a dry run that builds and stages the result, or --apply with .BCK backups, an in-place build, rollback on a compile error or a build timeout (no time limit by default; `--build-timeout <s>`; Cancel stands down, rolls back, exit 1 cancelled -- rolled back; kill after 90 s) and a re-indexed verify. It moves shared types into a leaf unit, inverts a call through a pointer, or extracts an interface. A cycle it cannot cut is refused with one line per reason, never half-written. --rsvars names the Studio build environment.
+cycles --fix makes the edits a --plan playbook describes: a dry run that builds and stages the result, or --apply with .BCK backups, an in-place build, rollback on a compile error or a build timeout (no time limit by default; `--build-timeout <s>`; progress shown; Cancel stands down, rolls back, exit 1 cancelled -- rolled back; kill after 90 s) and a re-indexed verify. It moves shared types into a leaf unit, inverts a call through a pointer, or extracts an interface. A cycle it cannot cut is refused with one line per reason, never half-written. --rsvars names the Studio build environment.
 
 ## How to run it
 

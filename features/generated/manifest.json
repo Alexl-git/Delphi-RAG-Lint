@@ -7364,7 +7364,7 @@
       "status": "shipped",
       "since": "1.33.0-alpha",
       "summary": "Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output",
-      "intro": "cycles --fix makes the edits a --plan playbook describes: a dry run that builds and stages the result, or --apply with .BCK backups, an in-place build, rollback on a compile error or a build timeout (no time limit by default; `--build-timeout <s>`; Cancel stands down, rolls back, exit 1 cancelled -- rolled back; kill after 90 s) and a re-indexed verify. It moves shared types into a leaf unit, inverts a call through a pointer, or extracts an interface. A cycle it cannot cut is refused with one line per reason, never half-written. --rsvars names the Studio build environment.",
+      "intro": "cycles --fix makes the edits a --plan playbook describes: a dry run that builds and stages the result, or --apply with .BCK backups, an in-place build, rollback on a compile error or a build timeout (no time limit by default; `--build-timeout <s>`; progress shown; Cancel stands down, rolls back, exit 1 cancelled -- rolled back; kill after 90 s) and a re-indexed verify. It moves shared types into a leaf unit, inverts a call through a pointer, or extracts an interface. A cycle it cannot cut is refused with one line per reason, never half-written. --rsvars names the Studio build environment.",
       "wikiPage": "Circular-Uses-Report-cycles-fix-plan",
       "surfaces": [
         {
@@ -7492,10 +7492,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-27",
+        "date": "2026-11-03",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "b2a294ce95d0847ab5823e084ccfe6a099bc9fbc9517d66df2064010c52ac724"
+        "build": "1.40.0-alpha",
+        "surfaceHash": "97ae19f7d3ba205fb69167589d634671c01ba0a41eecd9ca6a72745fd94422d1"
       }
     },
     {

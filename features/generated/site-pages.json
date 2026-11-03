@@ -192,8 +192,8 @@
     "version": "1.35.1-alpha"
   },
   "features/cycles-fix.md": {
-    "hash": "bdb10c8beeef95727b0ce9f9039c463a812db55cf1722639dee7da6ba2fca3f7",
-    "version": "1.39.2-alpha"
+    "hash": "a97de6ffe0c3188673c574106b7da94d3a1ad88980cde527b3f7379573115cc5",
+    "version": "1.40.0-alpha"
   },
   "features/deps-report.md": {
     "hash": "34657807a40519c8e6e4079bfe21412d556a359e70cb9cf91642d7a650a52311",

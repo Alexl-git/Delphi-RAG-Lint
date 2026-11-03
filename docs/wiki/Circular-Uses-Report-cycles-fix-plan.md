@@ -267,7 +267,7 @@ project compiles.
   *Fix this cycle (dry run)...* and *Apply cycle fix...* (a dry run, your confirmation, then
   `--apply`).
 
-Every IDE-started run passes the IDE's active platform as `--platform`. There is no time limit: `--build-timeout <s>` sets one per build (default 0 = none). Cancel on the status strip asks the engine to stand down: it kills the build, rolls back, exits 1 *cancelled -- rolled back*; only an engine still running after 90 s is killed. `--part all` forwards the request.
+Every IDE-started run passes the IDE's active platform as `--platform`. There is no time limit: `--build-timeout <s>` sets one per build (default 0 = none). Instead the run shows its progress: while it waits on a build, a re-index or a child run, the status strip reads e.g. *cycles --fix: baseline build 45 s* (the engine heartbeat), and on the command line stderr says `cycles --fix: <step> -- started`, then every 10 s `cycles --fix: <step> -- <n> s (no time limit; Cancel, or drag-lint shutdown --db "<db>", stops it)`; stdout keeps only the result. Cancel on the status strip asks the engine to stand down: it kills the build, rolls back, exits 1 *cancelled -- rolled back*; only an engine still running after 90 s is killed. `--part all` forwards the request.
 
 ## What it needs
 Required. You must have indexed the project before running this -- cycle
