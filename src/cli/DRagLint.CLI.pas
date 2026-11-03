@@ -452,6 +452,7 @@ type
     MaxCallers         : Integer; // --max-callers N (default 5)
     IncludeClassSurface: Boolean; // default true
     FullSurface        : Boolean; // --full-surface: keep DFM component fields (default lean)
+    MaxBodyTokens      : Integer; // context --max-body-tokens N: a TYPE target's body budget (default 20000; 0 = uncapped)
     BenchN             : Integer; // --n N for bench-context (default 20)
     // v0.19: typeat
     Position: string; // raw <file>:<line>:<col>
@@ -1326,6 +1327,7 @@ begin
   Result.Docs               := DefaultDocConfig;
   Result.Depth              := 3;
   Result.MaxCallers         := 5;
+  Result.MaxBodyTokens      := CONTEXT_BODY_TOKEN_CAP;
   Result.IncludeClassSurface:= True;
   { PHASE C B5: honour .gitignore/.hgignore BY DEFAULT. This was opt-in behind
     --use-ignore while a manifest SECTION defaulted UseIgnoreFiles to True
@@ -1730,6 +1732,11 @@ begin
       else begin Result.Verb:= 'modify'; Result.BundleQName:= Result.Task; end;
     end // if
     else if (A = '--max-callers') and (i < ParamCount) then begin Inc(i); Result.MaxCallers:= StrToIntDef(ParamStr(i), 5); end
+    else if (A = '--max-body-tokens') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.MaxBodyTokens:= StrToIntDef(ParamStr(i), CONTEXT_BODY_TOKEN_CAP);
+    end
     else if (A = '--n') and (i < ParamCount) then begin Inc(i); Result.BenchN:= StrToIntDef(ParamStr(i), 20); end
     else if (A = '--to') and (i < ParamCount) then begin Inc(i); Result.RenameTo:= ParamStr(i); end
     else if A = '--no-backup' then Result.NoBackup:= True
@@ -16774,7 +16781,7 @@ begin
 end; // function
 
 // v0.18: drag-lint context --task "verb qname" [--db <path>]
-//   [--format md|json|raw] [--max-callers N] [--context N] [--no-docs]
+//   [--format md|json|raw] [--max-callers N] [--context N] [--no-docs] [--max-body-tokens N]
 //   [--library-db LIBRARY]
 // Builds a TContextBundle and renders it in the requested format.
 // RSV-R2: with --library-db (or a second --db), the "Library calls" count also
@@ -16814,7 +16821,7 @@ begin
   IncImpl:= SameText(AArgs.Verb, 'modify') or SameText(AArgs.Verb, 'refactor') or SameText(AArgs.Verb, 'extend');
   Bundle:= TContextBundler.Build(
     Store, AArgs.Verb, AArgs.BundleQName, AArgs.ContextLines, AArgs.MaxCallers, IncDocs, IncSurface, IncImpl, {AExcludeDfmFields=}
-    not AArgs.FullSurface, {ATaskText=}AArgs.Task, {AOracle=}Oracle);
+    not AArgs.FullSurface, {ATaskText=}AArgs.Task, {AOracle=}Oracle, {ABodyTokenCap=}AArgs.MaxBodyTokens);
 
   { THE OLD TEST HERE WAS `Bundle.QName = ''`, AND IT WAS DEAD. Build stamps
     QName with what the caller asked for BEFORE it looks anything up, so it is
