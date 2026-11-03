@@ -4361,9 +4361,9 @@ var
   { The ref-kind -> bucket mapping is the CLI verb's, including its catch-all:
     'call + anything else' lands in calls. Changing it here would make the two
     shapes disagree on a row's bucket while both still "work". }
-  function GroupFor(const ARef: TReference): TJSONArray;
+  function GroupFor(const ARef: TReference; const ADecls: TArray<TSymbol>): TJSONArray;
   begin
-    var Bucket: string:= UsageBucketOf(ARef); { DRagLint.Query.Callers, shared with the CLI }
+    var Bucket: string:= UsageBucketIn(ARef, ADecls); { DRagLint.Query.Callers, shared with the CLI }
     if Bucket      = 'reads'      then Result:= JReads
     else if Bucket = 'writes'     then Result:= JWrites
     else if Bucket = 'types'      then Result:= JTypes
@@ -4433,7 +4433,7 @@ begin
         JDecls.AddElement(DeclO);
       end;
       for R in UsageRefsForName(St, Nm, Decls) do
-        AddRefRow(GroupFor(R), St.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
+        AddRefRow(GroupFor(R, Decls), St.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
       if Width = 'very-wide' then
         for L in St.FindTransitiveCallers(Nm, Depth) do
         begin

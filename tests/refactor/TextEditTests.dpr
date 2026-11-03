@@ -314,6 +314,31 @@ begin
 
     if TFile.Exists(P) then TFile.Delete(P);
     if TFile.Exists(P + '.bak') then TFile.Delete(P + '.bak');
+
+    { lane 142-cyc (CYC-C residue): EscapeUnfitForPascal -- literals only, comments verbatim }
+    var Cp:= TEncoding.GetEncoding(1252);
+    try
+      Check('pascal-escape: a cp1252-unfit char inside a literal becomes a #code',
+        EscapeUnfitForPascal('const S = ''a'#$4E2D'b'';', Cp) = 'const S = ''a''#20013''b'';');
+      Check('pascal-escape: a cp1252 char (e-acute) stays; only the unfit one is coded',
+        EscapeUnfitForPascal('X := '''#$00E9#$4E2D''';', Cp) = 'X := '''#$00E9'''#20013;');
+      Check('pascal-escape: a brace comment is verbatim and its quote opens no literal',
+        EscapeUnfitForPascal('{ it''s '#$4E2D' } S = '''#$4E2D''';', Cp) = '{ it''s '#$4E2D' } S = #20013;');
+      Check('pascal-escape: a // comment is verbatim to the line end, the next line is code',
+        EscapeUnfitForPascal('// don''t '#$4E2D#13#10'S = '''#$4E2D''';', Cp) = '// don''t '#$4E2D#13#10'S = #20013;');
+      Check('pascal-escape: a (* *) comment is verbatim',
+        EscapeUnfitForPascal('(* ''x'' '#$4E2D' *)', Cp) = '(* ''x'' '#$4E2D' *)');
+      Check('pascal-escape: an identifier char outside a literal is left for the caller to refuse',
+        EscapeUnfitForPascal('G'#$4E2D': Integer;', Cp) = 'G'#$4E2D': Integer;');
+      Check('pascal-escape: an escaped quote inside the literal is kept',
+        EscapeUnfitForPascal('S = ''it''''s '#$4E2D''';', Cp) = 'S = ''it''''s ''#20013;');
+      var ML:= 'S = ' + StringOfChar('''', 3) + #13#10#$4E2D#13#10 + StringOfChar('''', 3) + ';';
+      Check('pascal-escape: a multi-line string is returned unchanged', EscapeUnfitForPascal(ML, Cp) = ML);
+      Check('pascal-escape: pure ASCII text is unchanged',
+        EscapeUnfitForPascal('S = ''abc''; { x }', Cp) = 'S = ''abc''; { x }');
+    finally
+      Cp.Free;
+    end;
   except
     on E: Exception do begin Writeln('EXCEPTION ', E.ClassName, ': ', E.Message); Inc(GFail); end;
   end;

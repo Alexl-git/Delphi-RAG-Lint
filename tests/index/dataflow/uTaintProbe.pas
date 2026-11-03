@@ -55,6 +55,8 @@ type
     procedure ArgUnresolved;
     procedure ArgTryGet(D: TObject);
     procedure HardCast(O: TObject; const A: string);
+    procedure ConstWhile(C: Boolean; const A: string);
+    procedure ConstRepeat(C: Boolean; const A: string);
   end;
 
 procedure Sink(const S: string);
@@ -273,6 +275,32 @@ begin
   TEditStub(O).Text:= A; { M-G5WRITE }
   X:= TEditStub(O).Text; { M-G5READ }
   Sink(X); { M-G5SINK }
+end;
+
+{ CFG-CONSTLOOP: `while True` has no test-exit edge, so only the Break (taken after the kill)
+  reaches the follow block -- A must NOT reach the sink after the loop }
+procedure TProbe.ConstWhile(C: Boolean; const A: string);
+var
+  S: string;
+begin
+  S:= A;
+  while True do
+  begin
+    Sink(S); { M-CWHILE-IN }
+    S:= 'x';
+    if C then Break;
+  end;
+  Sink(S); { M-CWHILE-AFTER }
+end;
+
+{ CFG-CONSTLOOP: `until False` with no Break never reaches the follow block -- no row there }
+procedure TProbe.ConstRepeat(C: Boolean; const A: string);
+begin
+  repeat
+    Sink(A); { M-CREPEAT-IN }
+    if C then Exit;
+  until False;
+  Sink(A); { M-CREPEAT-AFTER }
 end;
 
 end.

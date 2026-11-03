@@ -7,14 +7,14 @@ group: graphs-reports
 order: 70006
 since: 1.33.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.40.0-alpha
 ---
 
 # Cycles fix (mechanical, compile-gated)
 
 Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output.
 
-cycles --fix makes the edits a --plan playbook describes: a dry run that builds and stages the result, or --apply with .BCK backups, an in-place build, rollback on a compile error or a build timeout (no time limit by default; `--build-timeout <s>`; Cancel stands down, rolls back, exit 1 cancelled -- rolled back; kill after 90 s) and a re-indexed verify. It moves shared types into a leaf unit, inverts a call through a pointer, or extracts an interface. A cycle it cannot cut is refused with one line per reason, never half-written. --rsvars names the Studio build environment.
+cycles --fix makes the edits a --plan playbook describes: a dry run that builds and stages the result, or --apply with .BCK backups, an in-place build, rollback on a compile error or a build timeout (no time limit by default; `--build-timeout <s>`; progress shown; Cancel stands down, rolls back, exit 1 cancelled -- rolled back; kill after 90 s) and a re-indexed verify. It moves shared types into a leaf unit, inverts a call through a pointer, or extracts an interface. A cycle it cannot cut is refused with one line per reason, never half-written. --rsvars names the Studio build environment.
 
 ## How to run it
 
@@ -216,8 +216,7 @@ The engine never guesses; every kind it can give:
   after it was indexed: a dry run or `--apply --no-reindex` refuses -- reindex and retry;
   `--apply` re-indexes once, re-plans and reports `reindex_before`, and refuses only a file
   still stale after that), `anchor-mismatch` (a line the plan edits is not
-  what the planner saw), `non-ascii-text` (an inserted line holds a non-ASCII character and
-  the file is ANSI; a NEW unit holding such text is written UTF-8 with a BOM instead), `outside-roots` (the plan would edit a file outside the project's own
+  what the planner saw), `non-ascii-text` (an inserted line holds a character the ANSI code page of the file cannot hold, in a comment or an identifier -- inside a string literal it is written as a numeric code, `'a'#20013'b'`, instead; a NEW unit holding such text is written UTF-8 with a BOM instead), `outside-roots` (the plan would edit a file outside the project's own
   roots).
 * **Plan:** `base-class` (a class whose bodies use the cycle would need a base class
   extracted -- a manual step; the base class stands in for the class at a const / value
@@ -287,7 +286,7 @@ These cases used to refuse and are now applied (lane CYC-C), or are predicted th
   cut by routine-call inversion (not `signature-in-cycle`) when Part B is re-run,.
 
 Still manual: type declarations and type casts of the moved name, several classes in one move, unsupported
-members, unresolved types, non-ASCII text.
+members, unresolved types, non-ASCII text in a comment or an identifier (in a string literal it becomes a `#code`).
 #### What stays manual
 
 A refused group is yours: `--plan` still prints the playbook and the standard remedy for it,

@@ -1172,4 +1172,5 @@
 #   Superseded: 1.29.0-alpha|5e21265dfd93da8dc9e049eac83d282ce2598dd5f7b382f641242ad47354a283
 # 2026-11-02 lane 141-doc: hash updated WITHOUT a version bump -- DRagLint.Parser.DocComments.pas changed only inside three drag-lint:auto doc blocks (TIndexer.IndexFile renamed to IndexFileBody in 'Used by'/'Called from'); comment text only, no extraction change.
 #   Superseded: 1.29.0-alpha|d43b27218f21472ac96ee9857e1ab4d424fdf2ad37bc990f577bd5d806317161
-1.29.0-alpha|b25cbc8c28a0fe33fdd1c17b1a4351ebafb5f4a68aeea11ae2f9d1785ad92ae2
+# 2026-11-03: bumped 1.29.0-alpha -> 1.30.0-alpha (1.42 wave 1, lane/142-int1): grammar v1.4.1, CFG-CONSTLOOP, calls/sweeper-a resolver + doc2 Storage.SQLite edits.
+1.30.0-alpha|1c29b554d1cb81ebd915ed7f6475682f89a92b7c1e53f3237a09159fafdfaf73

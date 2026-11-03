@@ -46,12 +46,17 @@ type
   public
     constructor Create;
     procedure Run;
+    class procedure Build(N: Integer);
   end;
 
   TBeta = class(TObject)
   public
     constructor Create;
+    class procedure Build(N: Integer);
+    procedure Go;
   end;
+
+procedure Go;
 
 implementation
 
@@ -61,6 +66,22 @@ begin
 end;
 
 procedure TAlpha.Run;
+begin
+end;
+
+class procedure TAlpha.Build(N: Integer);
+begin
+end;
+
+class procedure TBeta.Build(N: Integer);
+begin
+end;
+
+procedure TBeta.Go;
+begin
+end;
+
+procedure Go;
 begin
 end;
 
@@ -94,6 +115,11 @@ begin
   B := TBeta.Create; { BETA_SITE }
   S := TStringList.Create; { FOREIGN_SITE }
   A.Run; { RUN_SITE }
+  TAlpha.Build(1); { ALPHA_BUILD_SITE }
+  TBeta.Build(2); { BETA_BUILD_SITE }
+  Go; { GO_SITE }
+  uA.Go; { GO_QUAL_SITE }
+  S.Go; { GO_VALUE_SITE }
 end;
 
 end.
@@ -117,6 +143,8 @@ function CallersOf([string]$b) {
 
 $alpha = CallersOf (Bundle 'modify uA.TAlpha.Create')
 $run   = CallersOf (Bundle 'modify uA.TAlpha.Run')
+$build = CallersOf (Bundle 'modify uA.TAlpha.Build')
+$go    = CallersOf (Bundle 'modify uA.Go')
 
 # ---- POSITIVE CONTROLS -------------------------------------------------------
 # Without P1 an empty Callers section would pass T1/T2 vacuously.
@@ -124,12 +152,29 @@ Check 'P1 POSITIVE CONTROL TAlpha.Create lists its real call site (uC.pas:18)' `
       ($alpha -match 'uC\.pas:18:') "callers section: $alpha"
 Check 'P2 POSITIVE CONTROL a non-constructor member keeps its variable-receiver caller (A.Run, uC.pas:21)' `
       ($run -match 'uC\.pas:21:') "callers section: $run"
+Check 'P3 POSITIVE CONTROL a class method lists its own qualified call site (TAlpha.Build(1), uC.pas:22)' `
+      ($build -match 'uC\.pas:22:') "callers section: $build"
 
 # ---- the defect ---------------------------------------------------------------
 Check 'T1 a Create the resolver bound to ANOTHER type (TBeta.Create, uC.pas:19) is not listed' `
       (-not ($alpha -match 'uC\.pas:19:')) "callers section: $alpha"
 Check 'T2 an unresolved Create on a FOREIGN type (TStringList.Create, uC.pas:20) is not listed' `
       (-not ($alpha -match 'uC\.pas:20:')) "callers section: $alpha"
+
+# 1.42 GAP-CALLERS (gaps.log rows 2026-08-10 TQueryRule.Create, 2026-09-29 TManifestIO.Load,
+# 2026-10-19 TRoutineVarTable.Build, 2026-10-23 TDragLintDockFrame.Create): a call written
+# `TBeta.Build(2)` stores TWO refs on the same token -- the `call` (bound to TBeta.Build) and a
+# `member-access` twin the resolver leaves NULL. Rule 1 dropped the call; the unbound twin
+# survived and was listed as a [name-only] caller of TAlpha.Build.
+Check 'T3 the unbound member-access twin of a call bound to ANOTHER method (TBeta.Build(2), uC.pas:23) is not listed' `
+      (-not ($build -match 'uC\.pas:23:')) "callers section: $build"
+# T4 (1.42 GAP-CALLERS, gaps.log 2026-09-29 `DRagLint.CLI.Run listed as its own caller`):
+# a UNIT-LEVEL routine cannot be reached through a VALUE receiver. `S.Go` (S: TStringList,
+# a type with no Go -- the call stays unbound) was listed as a [name-only] caller of uA.Go.
+Check 'P4 POSITIVE CONTROL the unit-level Go keeps its bare and unit-qualified sites (uC.pas:24, uC.pas:25)' `
+      (($go -match 'uC\.pas:24:') -and ($go -match 'uC\.pas:25:')) "callers section: $go"
+Check 'T4 an unbound value-receiver call (S.Go, uC.pas:26) is not a caller of the unit-level uA.Go' `
+      (-not ($go -match 'uC\.pas:26:')) "callers section: $go"
 
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

@@ -3,6 +3,21 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.42.0-alpha -- unreleased
+
+1.42 wave 1, integrated on lane/142-int1. ONE bump: DRAGLINT_EXTRACTOR_VERSION 1.29.0 -> 1.30.0-alpha and
+DRAGLINT_RESOLVER_VERSION 1.17.0 -> 1.18.0-alpha -- every index re-parses once.
+
+### Fixed
+- grammar (GRAMMAR-LASTFIELD): tree-sitter-delphi13 v1.4.1 -- a last record field of an array / `string[N]` type with no trailing `;` no longer parses as ERROR; a first field named `Platform` stays green. Guard `run_grammar_last_field_array.ps1`.
+- facts-a (CFG-CONSTLOOP): index-time `data_flows` prune constant `while` / `repeat` loops like the lint-time CFG. DATAFLOW-REPARSE-0 proven closed (D16); EXT-INC-FILES already fixed by INC2.
+- calls (GAP-CALLERS, RESOLVER-VERGUARD): `context` Callers drops unbound member-access twins of calls bound elsewhere and value-receiver calls of unit-level routines; a routine named as a procedure VALUE binds its identity with no call edge; `ResolveTypeReadRefs` is classified resolve surface.
+- refs (HARDCAST-CALL): a hard cast `TEnum(X)` is a type use in `usages` / find-callers / LSP, not a call. PARENCAST / PROCFIELD / REFFUNC / CONSTINIT pinned by `run_refs_142_shapes.ps1`.
+- rna (RNA-BARENAME, D6): `read-never-assigned` -- a resolved call uses only its own overload set's var / out modes; an unresolved call keeps the bare-name merge.
+- doc2 (DOCDRIFT-NONCONV): Storage.SQLite doc drift 4 -> 0, glued doc line split; DOCREG-CENSUS / DOCREG-RESPONSE already fixed.
+- sweeper-a (YADF false positives): `unused-parameter` skips non-private methods of a class that implements an interface; `dfm-property-not-declared` stays silent when a class ancestor resolves to a record; `used-before-assignment` honours `X <> nil` / `X = nil` guards; ResolveAncestry never binds a heritage name to a routine-local type of another routine.
+- cyc (CYC-C, partial; D4): `cycles --fix` reports progress while a build waits and has no time limit (cancel via the heartbeat); a non-ANSI char in an inserted literal is written as `#code`. Type-decl / multiple-classes / inherited+with-member residue not started.
+
 ## v1.40.0-alpha -- 2026-11-02
 
 Phase A (no extractor change: an index built by 1.39.2 stays current).

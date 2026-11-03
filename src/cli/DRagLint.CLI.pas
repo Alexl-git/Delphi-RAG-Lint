@@ -11789,10 +11789,12 @@ var
     AArr.AddElement(O);
   end;
 
-  { The bucket is DRagLint.Query.Callers.UsageBucketOf's, shared with the LSP. }
-  function GroupFor(const ARef: TReference): TJSONArray;
+  { The bucket is DRagLint.Query.Callers.UsageBucketIn's, shared with the LSP.
+    ADecls: the name's declarations in ARef's store (HARDCAST-CALL: a cast
+    bound to a type declaration is a type use, not a call). }
+  function GroupFor(const ARef: TReference; const ADecls: TArray<TSymbol>): TJSONArray;
   begin
-    var Bucket: string:= UsageBucketOf(ARef);
+    var Bucket: string:= UsageBucketIn(ARef, ADecls);
     if Bucket      = 'reads'      then Result:= JReads
     else if Bucket = 'writes'     then Result:= JWrites
     else if Bucket = 'types'      then Result:= JTypes
@@ -11900,7 +11902,7 @@ begin
         JDecls.AddElement(DeclO);
       end;
 
-      for R in UsageRefsForName(Store, AArgs.Name, Decls) do AddRefRow(GroupFor(R), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
+      for R in UsageRefsForName(Store, AArgs.Name, Decls) do AddRefRow(GroupFor(R, Decls), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol, R.Resolution);
 
       if (Width = 'wide') or (Width = 'very-wide') then
         for L in Store.FindTransitiveCallers(AArgs.Name, Depth) do
@@ -36675,7 +36677,8 @@ begin
     TSharedFacts.ProjectTag:= if Length(Args.DbPaths) > 1 then '' else ProjectTagOfDb(Args.DbPath);
     { 1.40 heartbeat: the verbs the IDE waits on publish their status record on a status-only pipe; it closes
       at exit (the unit's finalization). Advisory -- a run without one is judged the old way. }
-    BeatChannelOpen(Args.Command, DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+    BeatChannelOpen(if (Args.Command = 'cycles') and Args.Fix then 'cycles --fix' else Args.Command, // 142-cyc D4: only the fix run reports
+      DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
     if Args.Command = 'index' then
     begin
       { The MODE flags name opposite intents, so passing both is a usage error
