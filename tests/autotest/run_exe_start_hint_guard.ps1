@@ -22,7 +22,9 @@ Copy-Item $Exe (Join-Path $bare 'drag-lint.exe') -Force   # deliberately NO dlls
 $bareExe = Join-Path $bare 'drag-lint.exe'
 
 foreach ($g in 'run_find_callers_callback_reach', 'run_generate_test_stub_guard', 'run_hover_bundle_guard',
-               'run_lint_project_scope_active_config_guard', 'run_query_callers_shared_guard', 'run_text_query_adhoc_db') {
+               'run_lint_project_scope_active_config_guard', 'run_query_callers_shared_guard', 'run_text_query_adhoc_db',
+               'run_resolution_kind', 'run_lsp_full_rules_guard', 'run_schema', 'run_lsp_remove_unused_imports_code_action_guard',
+               'run_lintall_json_stdout_clean', 'run_json_stdout_parses_on_stale_index', 'run_lsp_missing_uses_code_action_guard') {
   $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot "$g.ps1") -Exe $bareExe -WorkDir (Join-Path $WorkDir $g) 2>&1 | ForEach-Object { "$_" }) -join "`n"
   Check "$g names 0xC000007B when the exe cannot start" ($out -match '0xC000007B') (($out -split "`n" | Select-Object -First 2) -join ' | ')
 }

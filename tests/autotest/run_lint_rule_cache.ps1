@@ -252,6 +252,16 @@ function LintOne($leaf, [string[]]$extra = @()) {
 }
 function CacheState($prof) { if ($prof -match 'rule-cache: (hit|miss|skipped)') { $Matches[1] } else { '(none)' } }
 function CacheFiles { @(Get-ChildItem $cache -Filter 'rules-*.json' -ErrorAction SilentlyContinue) }
+# GUARD-FLAKY (1.41): under load a just-written cache file can still be held (AV / indexer) when the next step deletes
+# it, so one delete left a stale entry and the MISS-then-HIT control read HIT-then-HIT. Retry until the directory is
+# really empty: returns the moment it is, gives up after 60 s.
+function Clear-Cache {
+  $sw = [Diagnostics.Stopwatch]::StartNew()
+  while ((CacheFiles).Count -gt 0 -and $sw.Elapsed.TotalSeconds -lt 60) {
+    foreach ($f in (CacheFiles)) { try { [IO.File]::Delete($f.FullName) } catch { $null = $_ } }
+    if ((CacheFiles).Count -gt 0) { Start-Sleep -Milliseconds 100 }
+  }
+}
 
 # --- C0 controls ---------------------------------------------------------------
 $allRows = Rows (& $exePath lint-all --db $db --library-db $lib --rules-dir $rules --json 2>$null | Out-String)
@@ -264,7 +274,7 @@ Check 'C0  CONTROL: --rule repeated-type-switch reports it (3 distinct routines)
 # --- C8 + C1(off): cache disabled ------------------------------------------------
 # The index --project above may already have WARMED an entry (Task 2); C8 asks
 # whether a DISABLED run writes, so start it from an empty cache dir.
-CacheFiles | Remove-Item -Force
+Clear-Cache
 $env:DRAGLINT_RULE_CACHE = '0'
 $off = @{}; foreach ($u in $UNITS) { $off[$u] = Tuples (LintOne $u).Rows }
 $env:DRAGLINT_RULE_CACHE = $null
@@ -283,7 +293,7 @@ Check 'C2  the next run is a HIT' ((CacheState $second.Prof) -eq 'hit') "state: 
 # and never writes the --db or --library-db. A cold (filling) plus a warm run
 # must leave both index files byte-identical. C2 above is the positive control
 # that these runs really wrote a cache entry.
-CacheFiles | Remove-Item -Force
+Clear-Cache
 $dbHash0  = (Get-FileHash $db).Hash
 $libHash0 = (Get-FileHash $lib).Hash
 Check 'C13 SANITY: both index files hash' ($dbHash0 -and $libHash0) "db=$dbHash0 lib=$libHash0"
@@ -310,7 +320,7 @@ Check 'C9  the cache never holds a repeated-type-switch row (AC16)' ($cacheTxt -
 # --- C10: --rule never writes a partial entry; reads a full one ---------------------
 $r10 = LintOne 'uCycA.pas' @('--rule','circular-uses')
 Check 'C10 --rule circular-uses on a full entry is a HIT' ((CacheState $r10.Prof) -eq 'hit') "state: $(CacheState $r10.Prof)"
-CacheFiles | Remove-Item -Force
+Clear-Cache
 $r10b = LintOne 'uCycA.pas' @('--rule','circular-uses')
 Check 'C10 --rule on a cold cache answers correctly' (@($r10b.Rows | Where-Object rule -eq 'circular-uses').Count -gt 0) ""
 Check 'C10 ...and does NOT write a partial entry' ((CacheFiles).Count -eq 0) "files: $((CacheFiles).Count)"
@@ -331,7 +341,7 @@ $c6 = LintOne 'uG1.pas'
 Check 'C6  the library index changing makes the next run a MISS' ((CacheState $c6.Prof) -eq 'miss') "state: $(CacheState $c6.Prof)"
 
 # --- C11: a partial entry is TOPPED UP, its other rules carried --------------------
-CacheFiles | Remove-Item -Force
+Clear-Cache
 # Carrying only matters when a run needs rules the entry LACKS while NOT needing
 # one it HAS: entry {circular-uses}, then a run with circular-uses disabled needs
 # {enum, dup}. Without carrying, that run writes {enum, dup} and loses
@@ -348,7 +358,7 @@ Check 'C11 step 3: a default run is now a HIT' ((CacheState $h11.Prof) -eq 'hit'
 Check 'C11 ...with correct findings' (@(Compare-Object $off['uCycA.pas'] (Tuples $h11.Rows)).Count -eq 0) ""
 
 # --- C12: a run that needs none of the cached rules writes nothing ------------------
-CacheFiles | Remove-Item -Force
+Clear-Cache
 $p12 = LintOne 'uCycA.pas' @('--disable','circular-uses,enum-helper-separate-units,duplicate-global-decl,enum-ordinal-persisted,dfm-event-handler-missing')
 Check 'C12 a run needing none of the cached rules writes no (empty) entry' ((CacheFiles).Count -eq 0) "files: $((CacheFiles).Count); $(($p12.Prof -split "`n" | Where-Object { $_ -match 'rule-cache' }) -join ' / ')"
 

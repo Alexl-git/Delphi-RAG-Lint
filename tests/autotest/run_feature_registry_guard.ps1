@@ -72,10 +72,9 @@ if (-not (Test-Path -LiteralPath $engine)) { Write-Host "GUARD BROKEN: engine no
 # check B (menu-tree) reads the PLUGIN index, a gitignored per-checkout DB a fresh worktree lacks; the engine's own
 # message says to build it, so do that (this checkout's _D-RAG only, never another tree's DB).
 $plugDb = Join-Path $Repo 'src\delphi-plugin\_D-RAG\dclDragLintWizard.sqlite'
-if (-not (Test-Path -LiteralPath $plugDb)) {
-  [void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $plugDb))
-  & $engine index --project (Join-Path $Repo 'src\delphi-plugin\dclDragLintWizard.dproj') --db $plugDb 2>&1 | Out-Null
-}
+# Always refresh (incremental, cheap when current): an EXISTING but stale plugin index also made menu-tree exit 3 (PLUGIN-IDX-GUARD).
+[void](New-Item -ItemType Directory -Force -Path (Split-Path -Parent $plugDb))
+& $engine index --project (Join-Path $Repo 'src\delphi-plugin\dclDragLintWizard.dproj') --db $plugDb 2>&1 | Out-Null
 if (Test-Path -LiteralPath $WorkDir) { Remove-Item -LiteralPath $WorkDir -Recurse -Force }
 New-Item -ItemType Directory -Path $WorkDir | Out-Null
 

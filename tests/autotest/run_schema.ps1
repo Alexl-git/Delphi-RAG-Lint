@@ -78,8 +78,10 @@ function Write-Fixture([string]$Path, [string]$Body) {
 Write-Fixture (Join-Path $WorkDir 'uSchemaA.pas') $UnitA
 Write-Fixture (Join-Path $WorkDir 'uSchemaB.pas') $UnitB
 $db = Join-Path $WorkDir 'schema.sqlite'
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 & $Exe index $WorkDir --db $db 2>&1 | Out-Null
-if (-not (Test-Path $db)) { Write-Host "FATAL: index did not produce a db at $db" -ForegroundColor Red; exit 2 }
+$idxCode = $LASTEXITCODE
+if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce a db at $db" -ForegroundColor Red; exit 2 }
 
 Write-Host 'schema --format json' -ForegroundColor Cyan
 # NOTE: stdout only -- the exe may emit diagnostic lines (e.g. manifest-load

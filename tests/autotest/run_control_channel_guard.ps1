@@ -135,12 +135,24 @@ function ErrText($e) { Pump $e; return [System.Text.Encoding]::UTF8.GetString($e
 # longer allowance costs nothing on a quiet box and only stops a loaded one (17 lanes share it) from
 # timing out before the engine got CPU. x3 (1.40 guard lane). No WaitUntil asserts "did NOT happen".
 $script:WaitScale = 3
-function WaitUntil([scriptblock]$Pred, [int]$Ms) {
+# GUARD-FLAKY (1.41): a fixed allowance still lost to a 100%-CPU box. With -Progress (a scriptblock returning any
+# value, e.g. the engine's CPU ticks or its stderr length) the allowance is an IDLE window: the clock restarts every
+# time the value changes, so a slow-but-working engine is never cut off, while a stalled one still fails after
+# $Ms idle. Hard cap 10 min so a runaway cannot hang the battery.
+function WaitUntil([scriptblock]$Pred, [int]$Ms, [scriptblock]$Progress = $null) {
   $Ms = $Ms * $script:WaitScale
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
-  while ($sw.ElapsedMilliseconds -lt $Ms) { if (& $Pred) { return $true }; Start-Sleep -Milliseconds 40 }
+  $total = [System.Diagnostics.Stopwatch]::StartNew()
+  $last = if ($Progress) { "$(& $Progress)" } else { '' }
+  while ($sw.ElapsedMilliseconds -lt $Ms -and $total.ElapsedMilliseconds -lt 600000) {
+    if (& $Pred) { return $true }
+    Start-Sleep -Milliseconds 40
+    if ($Progress) { $now = "$(& $Progress)"; if ($now -ne $last) { $last = $now; $sw.Restart() } }
+  }
   return [bool](& $Pred)
 }
+# Progress probe for an engine started by Start-Engine / Start-Lsp: CPU ticks + bytes written so far.
+function EngineProgress($e) { try { return "$($e.P.TotalProcessorTime.Ticks)/$($e.Out.Length)/$($e.Err.Length)" } catch { return 'gone' } }
 function Send-Lsp($e, $obj) {
   $b = [System.Text.Encoding]::UTF8.GetBytes((Frame $obj))
   $e.P.StandardInput.BaseStream.Write($b, 0, $b.Length); $e.P.StandardInput.BaseStream.Flush()
@@ -408,7 +420,7 @@ if ($leafBz -ne '') { try { $rb = Send-Ctl $leafBz "shutdown`t1" 10000 } catch {
 $busyMs = $sw.ElapsedMilliseconds
 Check 'B1 reply is busy<TAB>pid<TAB>textDocument/didOpen' ($rb -eq "busy`t$($Bz.P.Id)`ttextDocument/didOpen") "got [$rb] after $busyMs ms"
 Check 'B2 engine B still running after the refusal' (-not $Bz.P.HasExited) ''
-$diagDone = WaitUntil { (OutText $Bz) -match 'publishDiagnostics.*BigUnit' } 120000
+$diagDone = WaitUntil { (OutText $Bz) -match 'publishDiagnostics.*BigUnit' } 120000 { EngineProgress $Bz }
 Check 'B3 engine B finished the request it was busy with (diagnostics published)' $diagDone ''
 Check 'B4 db md5 unchanged after the refusal' ((Md5 $c4) -eq $md5c4) ''
 Check 'B5 stderr records the refusal with the reason' ((ErrText $Bz) -match 'control channel:.*REFUSED.*textDocument/didOpen') ''
@@ -417,10 +429,10 @@ Check 'B5 stderr records the refusal with the reason' ((ErrText $Bz) -match 'con
 Write-Host ''
 Write-Host 'F1: --force is NOT taken when the engine complies' -ForegroundColor Cyan
 Check 'F1-0 engine B answers hover after its busy spell (fixture alive)' (HoverAnswers $Bz 30) ''
-$f1 = Invoke-Verb @('shutdown', '--db', $c4, '--wait', '15', '--force') 'F1'
+$f1 = Invoke-Verb @('shutdown', '--db', $c4, '--wait', '60', '--force') 'F1'
 Check 'F1-1 verb exits 0' ($f1.Exit -eq 0) ($f1.Out + $f1.Err)
 Check 'F1-2 no ESCALATING line -- graceful path taken first' ($f1.Out -notmatch 'ESCALAT') $f1.Out
-Check 'F1-3 engine B exited 0' ((WaitUntil { $Bz.P.HasExited } 15000) -and ($Bz.P.ExitCode -eq 0)) ''
+Check 'F1-3 engine B exited 0' ((WaitUntil { $Bz.P.HasExited } 15000 { EngineProgress $Bz }) -and ($Bz.P.ExitCode -eq 0)) ''
 Check 'F1-4 no sidecar' ((Sidecars $c4) -eq '') ("sidecars=" + (Sidecars $c4))
 
 # ---- F2: --force escalates ONLY after a refusal, and loudly ------------------
@@ -567,18 +579,18 @@ function Start-FromTarget([string]$Target, [string[]]$ArgList, [string]$Tag, [ha
 }
 # -StandDownScope names this run's own database, so the test never stands down the owner's real IDE engines.
 function Run-Stager([string]$Target, [string]$Db) {
-  $o = & pwsh -NoProfile -File $stager -FreshExe $Exe -Target $Target -TimeoutSec 40 -HoldSeconds 1 -StandDownWaitSec 30 -StandDownDb $Db 2>&1 | Out-String
+  $o = & pwsh -NoProfile -File $stager -FreshExe $Exe -Target $Target -TimeoutSec 150 -HoldSeconds 1 -StandDownWaitSec 120 -StandDownDb $Db 2>&1 | Out-String
   return @{ Exit = $LASTEXITCODE; Out = $o }
 }
 $stDb = Join-Path $WorkDir 'st1.sqlite'
 $tgt1 = Make-Target 'idx'
 $S1 = Start-FromTarget $tgt1 @('index', $bigDir, '--db', $stDb) 'ST1' $slowIdx
 $null = PipeLeafOf $S1 15000
-$null = WaitUntil { (ErrText $S1) -match '\[\d+/\d+\]' } 20000
+$null = WaitUntil { (ErrText $S1) -match '\[\d+/\d+\]' } 20000 { EngineProgress $S1 }
 Check 'ST1a an index run holds the target image' (-not $S1.P.HasExited) ''
 $r1 = Run-Stager $tgt1 $stDb
 Check 'ST1b stager exits 0 (staged) instead of REFUSING to stage over an index run' ($r1.Exit -eq 0) (($r1.Out -split "`r?`n" | Select-Object -Last 4) -join ' | ')
-Check 'ST1c the index run stood down through the channel (exit 4), it was not killed' ((WaitUntil { $S1.P.HasExited } 30000) -and ($S1.P.ExitCode -eq 4)) ''
+Check 'ST1c the index run stood down through the channel (exit 4), it was not killed' ((WaitUntil { $S1.P.HasExited } 30000 { EngineProgress $S1 }) -and ($S1.P.ExitCode -eq 4)) ''
 Check 'ST1d the stager reports nothing was killed' (($r1.Out -match 'nothing was killed') -and ($r1.Out -notmatch 'stopped PID')) ''
 Check 'ST1e the target is the fresh build' ((Md5 $tgt1) -eq (Md5 $Exe)) ''
 Check 'ST1f the interrupted index left a consistent database, no sidecar' ((IntegrityOk $stDb) -and ((Sidecars $stDb) -eq '')) ''

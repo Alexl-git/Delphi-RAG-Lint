@@ -71,6 +71,7 @@ $all = Parse-Findings (& $exePath lint-all --db $db --format json --rule $Rule 2
 $a = Of $all
 $a | ForEach-Object { Write-Host ("    {0}:{1} {2}" -f (Split-Path $_.file_path -Leaf), $_.start_line, $_.message) }
 Check 'run 1: exactly 3 findings' ($a.Count -eq 3) "count=$($a.Count)"
+# positive-control: read-never-assigned
 foreach ($t in $triggers) { $l = LineOf $t; Check "$t fires" ((At $a $l).Count -eq 1) "line=$l" }
 $msg = @(At $a (LineOf 'TRIGGER-GLOBAL'))
 Check 'message names the global' ($msg.Count -eq 1 -and $msg[0].message -like '*GLimit*')

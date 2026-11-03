@@ -285,6 +285,20 @@ $badHi  = New-Object System.Collections.Generic.List[string]
 $badCtl = New-Object System.Collections.Generic.List[string]
 $scanned = 0
 
+# PLUGIN-IDX-GUARD (1.41): a scratch dir a lane keeps INSIDE its worktree is untracked and is not the
+# repo's content, yet this scan used to fail on it. When Repo is a git work tree, only files git knows
+# (tracked or staged) can fail the guard; an untracked file with a violation is listed as a WARN so a
+# new unadded .pas is still visible, but it does not turn the battery red. No git / not a repo => scan all.
+function Get-GitKnownFiles([string]$Root) {
+  $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+  $raw = & git -C $Root ls-files -z 2>$null
+  if ($LASTEXITCODE -ne 0 -or $null -eq $raw) { return $null }
+  foreach ($e in (($raw -join '') -split "`0")) { if ($e -ne '') { [void]$set.Add($e.Replace('\', '/')) } }
+  return $set
+}
+$gitKnown = Get-GitKnownFiles $Repo
+$badUntracked = New-Object System.Collections.Generic.List[string]
+
 foreach ($ext in $roots.Keys) {
   foreach ($r in $roots[$ext]) {
     $dir = Join-Path $Repo $r
@@ -305,6 +319,10 @@ foreach ($ext in $roots.Keys) {
       }
       $bom = ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) -or
              ($b.Length -ge 2 -and (($b[0] -eq 0xFF -and $b[1] -eq 0xFE) -or ($b[0] -eq 0xFE -and $b[1] -eq 0xFF)))
+      if ($null -ne $gitKnown -and -not $gitKnown.Contains($rel)) {
+        if ($lone -gt 0 -or $hi -gt 0 -or $ctl -gt 0 -or $bom) { $badUntracked.Add($rel) }
+        return
+      }
       if ($lone -gt 0) { $badLf.Add(("{0}  ({1} lone LF)" -f $rel, $lone)) }
       if ($ctl -gt 0) { $badCtl.Add(("{0}  ({1} stray control byte(s))" -f $rel, $ctl)) }
       if ($bom) { $badBom.Add($rel) }
@@ -315,6 +333,7 @@ foreach ($ext in $roots.Keys) {
 }
 
 Check 'files scanned' ($scanned -gt 0) "($scanned)"
+foreach ($x in $badUntracked) { Write-Host "  [WARN] untracked file with an encoding violation (not failing; fix before git add): $x" -ForegroundColor Yellow }
 
 # --- assertions ------------------------------------------------------------
 Check 'no file has a lone LF' ($badLf.Count -eq 0) "($($badLf.Count) offender(s))"
