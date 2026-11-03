@@ -28,6 +28,7 @@ uses
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Lint.SharedUnit { ProjectsOf -- unused-public-symbol must not call a
                                shared unit's API dead on one project's index }
+  , DRagLint.Lint.SharedScope { TSharedScope -- a shared unit is judged by every project that lists it }
   , DRagLint.Analysis.Purity { TEffectSummary.Decode + the effect flags -- the
                                purity v2 rules read the STORED summary and
                                re-derive nothing }
@@ -37,27 +38,7 @@ uses
   ;
 
 type
-  /// <summary>Opens (or returns an already-open) read-only store for a SIBLING
-  /// PROJECT named by a shared unit's own `dl:shared` header.</summary>
-  /// <param name="AProjectName">The project name exactly as the header spells
-  /// it -- 'YADFOT', 'YADFSetup'. Matched case-insensitively against the index
-  /// manifest's section names.</param>
-  /// <returns>An open store, or nil when the name resolves to no configured
-  /// index or the index cannot be opened.</returns>
-  /// <remarks>
-  /// LAZY on purpose. A run over a project with no shared units must
-  /// not open anything, and a box with ~30 configured indexes must not open
-  /// them all to answer a question about one routine. The rule calls this only
-  /// once it already has a finding whose unit declares siblings.
-  /// nil is a legitimate answer and must be read as "could not check", never as
-  /// "not referenced there" -- those lead to opposite conclusions and only one
-  /// of them is safe.
-  /// The caller owns the returned store's lifetime for the whole run.
-  /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectDependentProjectNotRecompiled (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
-  /// <!-- drag-lint:auto END -->
-  /// </remarks>
-  TSiblingStoreResolver = reference to function(const AProjectName: string): ISymbolStore;
+  { TSiblingStoreResolver / TSiblingProjectLister moved to DRagLint.Lint.SharedScope (1.41). }
 
   /// <summary>Index-wide lint rules (oversized classes; unused exported routines).</summary>
   /// <remarks>
@@ -94,6 +75,10 @@ type
     /// enum-helper-separate-units and repeated-type-switch are computed here. Assigned: each
     /// of those four sites asks AWholeGraph(ruleId) instead -- the `lint &lt;file&gt;` rule
     /// cache (DRagLint.Lint.RuleCache). Emit order is unchanged either way.</param>
+    /// <param name="ASiblingNames">Lists the manifest's project sections (SHARED-UNIT-SCOPE, 1.41).
+    /// With ASiblingStore, unused-public-symbol and unused-global judge a unit by EVERY project
+    /// whose index lists it (plus its dl:shared header): reported only when none uses the symbol,
+    /// and not reported when a listing project's index is missing or stale. nil = header only.</param>
     /// <returns>Findings (file paths + lines); empty if none. With AOnlyFileId &gt; 0 the
     /// per-file rules contribute findings for that file only.</returns>
     /// <remarks>
@@ -115,7 +100,8 @@ type
                        const ALibraryStore: ISymbolStore = nil;
                        const AOptInRules: TArray<string> = nil;
                        const AOnlyFileId: Int64 = 0;
-                       const AWholeGraph: TFunc<string, TArray<TLintFinding>> = nil): TArray<TLintFinding>;
+                       const AWholeGraph: TFunc<string, TArray<TLintFinding>> = nil;
+                       const ASiblingNames: TSiblingProjectLister = nil): TArray<TLintFinding>;
     /// <summary>Computes ONE of the six whole-graph rules over AStore, exactly as Run does.</summary>
     /// <param name="ARuleId">circular-uses, duplicate-global-decl, enum-helper-separate-units,
     /// repeated-type-switch, enum-ordinal-persisted or dfm-event-handler-missing; any other id
@@ -4097,8 +4083,9 @@ end; // function
 class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;
   const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore;
   const AOptInRules: TArray<string>; const AOnlyFileId: Int64;
-  const AWholeGraph: TFunc<string, TArray<TLintFinding>>): TArray<TLintFinding>;
+  const AWholeGraph: TFunc<string, TArray<TLintFinding>>; const ASiblingNames: TSiblingProjectLister): TArray<TLintFinding>;
 var
+  Shared        : TSharedScope                ; { SHARED-UNIT-SCOPE: lazy, opens nothing until a shared candidate }
   Findings      : TList<TLintFinding>         ;
   FileIds       : TArray<Int64>               ;
   Fid           : Int64                       ;
@@ -4496,6 +4483,7 @@ begin
   RefdIds    := TDictionary<Int64 , Boolean>      .Create;
   RefdNames  := TDictionary<string, Boolean>      .Create;
   OwnRefFile := nil;
+  Shared     := TSharedScope.Create(AStore, ASiblingStore, ASiblingNames);
   Prof:= GetEnvironmentVariable('DRAGLINT_PROFILE') <> '';
   TCirc:= 0; TEnum:= 0; TRts:= 0; TUuiu:= 0; TGod:= 0; TUpub:= 0; TUpriv:= 0; TAccess:= 0; TOuter:= 0;
   TGlob:= 0; TDupD:= 0; TCens:= 0;
@@ -4608,7 +4596,7 @@ begin
       for var Uv in CollectUnusedEnumValue(AStore) do Findings.Add(Uv);
     { unused-global (1.40 lane unusedg): unit-level const / var / type nothing names; one refs read per file. }
     if WantRule(UNUSED_GLOBAL_RULE) and OptedIn(UNUSED_GLOBAL_RULE) then
-      for var Ug in CollectUnusedGlobal(AStore) do Findings.Add(Ug);
+      for var Ug in CollectUnusedGlobal(AStore, Shared) do Findings.Add(Ug);
     { read-never-assigned (owner request #5b, 1.40 lane flow): OptedIn-gated like unused-enum-value --
       a refs read per file plus source text, whole-project by nature (one unit cannot prove "never"). }
     if WantRule(READ_NEVER_ASSIGNED_RULE) and OptedIn(READ_NEVER_ASSIGNED_RULE) then
@@ -4896,66 +4884,28 @@ begin
                   Severity drops to hint because a question this index cannot
                   answer should not block a true-zero run.
                   See docs\INBOX-unused-public-symbol-lies-on-shared-units.md. }
-                var UPath  : string          := AStore.GetFilePath(Sym.FileId);
-                var UProjs : TArray<string>  := nil;
-                if UPath <> '' then UProjs:= DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf(UPath);
-                if Length(UProjs) > 1 then
-                begin
-                  { NOW WE ACTUALLY GO AND LOOK. The message above has been telling
-                    the reader to check the siblings by hand since the caveat was
-                    added; with a resolver in hand the engine can answer it, and an
-                    answerable question should not be delegated to a human.
-
-                    THE RELATIONSHIP IS DECLARED, so consulting these DBs does not
-                    violate the authoritative-set rule (library + project, nothing
-                    else): the unit's OWN `dl:shared` header names exactly these
-                    projects. This is not a name-match fishing trip across every
-                    index on the box -- it is following a statement the source
-                    makes about itself.
-
-                    Measured on YADF 2026-08-17, and it is what validates the
-                    name-keyed predicate below: of the 9 findings, the 6 false ones
-                    each have >=1 caller ref in a named sibling, while the genuine
-                    one (OptionsHelpText) has 0 in all three. A declaration site
-                    does not count itself as a caller, which is why 0 means 0.
-
-                    THREE OUTCOMES, and the third is the one that is easy to get
-                    wrong: found alive -> suppress; checked everything and found
-                    nothing -> report, and say the siblings WERE checked, because
-                    the old wording ("check there before treating it as dead") is
-                    now stale advice; could not check some sibling -> report with
-                    the old wording, since an unopened index is not evidence of
-                    absence. }
-                  var LiveIn    : string  := '';
-                  var CheckedAll: Boolean := Assigned(ASiblingStore);
-                  if Assigned(ASiblingStore) then
-                    for var PN in UProjs do
-                    begin
-                      var Sib: ISymbolStore := ASiblingStore(PN);
-                      if Sib = nil then begin CheckedAll:= False; Continue; end;
-                      if Length(Sib.FindCallersByName(Sym.Name)) > 0 then
-                      begin
-                        LiveIn:= PN;
-                        Break;
-                      end;
-                    end;
-                  { LiveIn <> '' means a project that compiles this same unit
-                    references the routine: it is alive, and there is no finding
-                    to make. }
-                  if LiveIn = '' then
-                    if CheckedAll then
-                      Add('unused-public-symbol', 'hint',
-                        Format('Exported routine %s is not referenced in this project, nor in the project(s) its unit is shared with (%s).',
-                               [Sym.Name, string.Join(', ', UProjs)]), Sym)
-                    else
-                      Add('unused-public-symbol', 'hint',
-                        Format('Exported routine %s is not referenced within this project. Its unit is shared with %s -- check there before treating it as dead.',
-                               [Sym.Name, string.Join(', ', UProjs)]), Sym);
-                end
-                else
-                  Add('unused-public-symbol', 'info',
-                    Format('Exported routine %s has no references in the index -- possible dead public API', [Sym.Name]), Sym);
-              end
+                { SHARED-UNIT-SCOPE (1.41, owner ruling: UNION). The listing projects are
+                  the header's names PLUS every manifest project whose index holds this
+                  unit (DRagLint.Lint.SharedScope); "used" in a sibling is the caller-ref
+                  predicate validated on YADF above. A listing index that is missing or
+                  stale proves nothing, so that case is silent now (it used to report
+                  with "check there"). }
+                var UPath: string:= AStore.GetFilePath(Sym.FileId);
+                var UName: string:= Sym.Name;
+                var UProjs: string;
+                case Shared.Judge(UPath,
+                       function(const S: ISymbolStore): Boolean
+                       begin
+                         Result:= Length(S.FindCallersByName(UName)) > 0;
+                       end, UProjs) of
+                  svNotShared:
+                    Add('unused-public-symbol', 'info',
+                      Format('Exported routine %s has no references in the index -- possible dead public API', [Sym.Name]), Sym);
+                  svUnusedEverywhere:
+                    Add('unused-public-symbol', 'hint',
+                      Format('Exported routine %s is not referenced in this project, nor in the project(s) its unit is shared with (%s).',
+                             [Sym.Name, UProjs]), Sym);
+                end;              end
               else if IsOwnUnitOnly(Sym) then
               begin
                 { Own-unit tier. A SHARED unit (dl:shared) is skipped: a sibling
@@ -5038,6 +4988,7 @@ begin
     end;
     Result:= Findings.ToArray;
   finally
+    Shared     .Free;
     RefdNames  .Free;
     OwnRefFile .Free;
     RefdIds    .Free;

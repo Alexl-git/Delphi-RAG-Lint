@@ -83,18 +83,14 @@ $solo   = ($out -split "`n" | Where-Object { $_ -match 'SoloOrphan'   }) -join '
 Write-Host ("  shared: {0}" -f $shared.Trim()) -ForegroundColor DarkGray
 Write-Host ("  solo  : {0}" -f $solo.Trim())   -ForegroundColor DarkGray
 
-# PRECONDITION -- both routines must actually be reported, or every arm below is
-# vacuous. The rule fires only on unreferenced exported unit-level routines.
-Check 'the SHARED unit orphan is still reported (not suppressed)' ($shared -ne '')
-Check 'the SOLO unit orphan is reported'                          ($solo   -ne '')
-
-# THE FIX -- shared unit: caveated wording, siblings named, severity hint.
-Check 'shared: does NOT claim "possible dead public API"' (-not ($shared -match 'possible dead public API'))
-Check 'shared: says it is not referenced WITHIN THIS PROJECT' ($shared -match 'not referenced within this project')
-Check 'shared: names the sibling projects from the dl:shared header' `
-    (($shared -match 'AlphaProj') -and ($shared -match 'BetaProj'))
-Check 'shared: severity downgraded to hint' ($shared -match '\[hint\]')
-
+# SHARED-UNIT-SCOPE (1.41, owner ruling 2026-11-02: UNION; spec
+# docs\superpowers\specs\2026-11-03-shared-unit-scope-design.md) REPLACED the caveated
+# report this guard pinned through 1.40. The header names AlphaProj and BetaProj, and no
+# manifest section resolves BetaProj here, so its index cannot be consulted: the verdict
+# is UNDECIDED and the conservative answer is NO finding (an unopened index is not
+# evidence of absence). The union-reported case is run_shared_unit_scope.ps1.
+Check 'the SOLO unit orphan is reported (the rule ran; arms below are not vacuous)' ($solo -ne '')
+Check 'shared, sibling index unknown: the orphan is NOT reported (undecided)' ($shared -eq '') $shared
 # POSITIVE CONTROL -- a NON-shared unit must keep the original wording and
 # severity. Without this arm, a build that rewrote every message unconditionally
 # would pass everything above.
