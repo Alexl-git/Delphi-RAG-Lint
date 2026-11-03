@@ -20,6 +20,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-lintall-rule-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -80,7 +81,7 @@ function LintAll([string[]]$Extra, [string]$Tag) {
 Push-Location C:\TEMP
 try {
   & $Exe index --all --config $manifest --only SecLaRule --jobs 1 2>&1 | Out-Null
-  if (-not (Test-Path $db)) { Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
+  if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
 
   $bare   = LintAll @() 'bare'
   $offOne = LintAll @('--rule', 'magic-literal') 'off'

@@ -48,6 +48,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-walkscope-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -104,7 +105,7 @@ $db = Join-Path $WorkDir 'out\walk.sqlite'
 
 Push-Location C:\TEMP
 try { & $Exe index --all --config $manifest --only SecWalk --jobs 1 2>&1 | Out-Null } finally { Pop-Location }
-if (-not (Test-Path $db)) { Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
+if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
 
 # PRECONDITION. If both files landed in the index the fixture proves nothing --
 # it would be testing a walk with nothing outside it.

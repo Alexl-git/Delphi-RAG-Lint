@@ -34,6 +34,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-dpr-uses-comments-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -98,6 +99,7 @@ $db = Join-Path $WorkDir 'app.sqlite'
 # containing nothing at all.
 $idx = & $Exe index --project (Join-Path $WorkDir 'App.dpr') --db $db --platform Win64 --quiet 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0) {
+  $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
   Write-Host "FATAL: index --project failed (exit $LASTEXITCODE): $(($idx -split "`r?`n" | Where-Object { $_ } | Select-Object -Last 2) -join ' | ')" -ForegroundColor Red
   exit 2
 }

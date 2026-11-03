@@ -29,6 +29,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "C:\TEMP\draglint_convert_apply_backup_set_$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
@@ -54,7 +55,7 @@ function Fixture([string]$Dir) {
   Write-Ascii "$Dir\OnlyDfm.dfm" "object OnlyDfm: TOnlyDfm`n  object tbl: TSrcTable`n    Caption = 't'`n  end`nend`n"
   Write-Ascii "$Dir\r.rules" "#convert LibA.TSrcTable -> LibB.TDstTable, LibB`n#link Title <- Caption`n"
   $o = & $Exe index $Dir --db "$Dir\fx.sqlite" 2>&1
-  if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: fixture index failed: $($o -join ' | ')" -ForegroundColor Red; exit 2 }
+  if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: fixture index failed: $($o -join ' | ')" -ForegroundColor Red; exit 2 }
 }
 function Apply([string]$Dir, [string[]]$Extra) {
   $o = (& $Exe convert-apply --unit "$Dir\OnlyDfm.pas" --rules "$Dir\r.rules" --db "$Dir\fx.sqlite" --apply @Extra 2>&1) -join "`n"

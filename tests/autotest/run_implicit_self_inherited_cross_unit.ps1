@@ -20,6 +20,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-e4inh-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -204,6 +205,7 @@ Push-Location C:\TEMP
 try {
   & $Exe index --all --config $manifest --only SecE4 --jobs 1 2>&1 | Out-Null
   if (-not (Test-Path $db)) {
+    $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
     Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2
   }
   $rows = & $Exe sql --db $db --query ("select substr(f.path, length(rtrim(f.path, replace(f.path, '\', ''))) + 1) " +

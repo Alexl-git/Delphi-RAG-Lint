@@ -19,6 +19,7 @@ param(
     [string] $FixtureDir = "$PSScriptRoot\..\fixtures\menutree",
     [string] $WorkDir    = "$env:TEMP\drag-lint-menu-tree-guard-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -60,7 +61,7 @@ Copy-Item -LiteralPath (Resolve-Path $FixtureDir).Path -Destination $fx -Recurse
 $proj = "$fx\MenuTreeFixture.dproj"
 $db   = "$WorkDir\fixture.sqlite"
 & $Exe index --project $proj --db $db *> "$WorkDir\index.log"
-if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: fixture index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
+if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: fixture index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
 $want = Get-Rows (Get-Content "$fx\expected-paths.txt" -Raw) $false
 Check 'golden has rows' ($want.Count -ge 10) "($($want.Count))"
 

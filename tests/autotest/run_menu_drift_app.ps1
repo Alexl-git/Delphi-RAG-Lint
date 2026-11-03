@@ -16,6 +16,7 @@ param(
     [string] $FixtureDir = "$PSScriptRoot\..\fixtures\formsmap-v9",
     [string] $WorkDir    = "$env:TEMP\drag-lint-menu-drift-app-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -35,7 +36,7 @@ New-Item -ItemType Directory "$fx\_D-RAG" | Out-Null
 $proj = "$fx\Demo9.dproj"
 $db   = "$WorkDir\fixture9.sqlite"
 & $Exe index $fx --db $db *> "$WorkDir\index.log"
-if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: fixture index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
+if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: fixture index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
 
 # one drift run on a registry copy edited by $Edit; returns exit, summary, parsed doc
 function Run-Drift([string]$Tag, [scriptblock]$Edit, [string[]]$Extra = @(), [switch]$DefaultLocation) {

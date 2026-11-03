@@ -162,7 +162,7 @@ function Stop-Engines {
 }
 # The pipe the engine ANNOUNCES on stderr. The full name is asserted separately.
 function PipeLeafOf($e, [int]$Ms) {
-  $null = WaitUntil { (ErrText $e) -match 'control channel listening on \\\\\.\\pipe\\(\S+)' } $Ms
+  $null = WaitUntil { (ErrText $e) -match 'control channel listening on \\\\\.\\pipe\\(\S+)' } $Ms { EngineProgress $e }
   if ((ErrText $e) -match 'control channel listening on \\\\\.\\pipe\\(\S+)') { return $Matches[1] }
   return ''
 }
@@ -269,14 +269,14 @@ Check 'V2 fixture is populated and WAL' ((Test-Path $pristine) -and ((Get-Item $
 
 function HoverAnswers($e, [int]$Id) {
   Send-Lsp $e @{ jsonrpc = '2.0'; id = $Id; method = 'textDocument/hover'; params = @{ textDocument = @{ uri = $uri }; position = @{ line = $declLine; character = $declCol } } }
-  return (WaitUntil { (OutText $e) -match ('"id":' + $Id + '[,}]') -and (OutText $e) -match 'ProjectOwnMethod' } 8000)
+  return (WaitUntil { (OutText $e) -match ('"id":' + $Id + '[,}]') -and (OutText $e) -match 'ProjectOwnMethod' } 8000 { EngineProgress $e })
 }
 function Start-Lsp([string]$Db, [string]$Tag, [hashtable]$EnvVars = @{}) {
   $e = Start-Engine @('lsp', '--db', $Db) $Tag $EnvVars
   Send-Lsp $e @{ jsonrpc = '2.0'; id = 1; method = 'initialize'; params = @{ processId = $null; rootUri = $null; capabilities = @{} } }
   Send-Lsp $e @{ jsonrpc = '2.0'; method = 'initialized'; params = @{} }
   Send-Lsp $e @{ jsonrpc = '2.0'; method = 'textDocument/didOpen'; params = @{ textDocument = @{ uri = $uri; languageId = 'pascal'; version = 1; text = $projText } } }
-  $e.Init = WaitUntil { (OutText $e) -match '"id":1[,}]' } 15000
+  $e.Init = WaitUntil { (OutText $e) -match '"id":1[,}]' } 15000 { EngineProgress $e }
   return $e
 }
 
@@ -379,7 +379,7 @@ $auditBefore = if (Test-Path $auditFile) { @(Get-Content -LiteralPath $auditFile
 $s = Invoke-Verb @('shutdown', '--db', $c1, '--wait', '15') 'S'
 Check 'S1 verb exits 0' ($s.Exit -eq 0) ("exit $($s.Exit): " + $s.Out + $s.Err)
 Check 'S2 verb reports engine A exiting and exited' (($s.Out -match ('pid\s+' + $A.P.Id + '\b.*exiting')) -and ($s.Out -match 'exited')) $s.Out
-$exitedA = WaitUntil { $A.P.HasExited } 15000
+$exitedA = WaitUntil { $A.P.HasExited } 15000 { EngineProgress $A }
 Check 'S3 engine A process exited' $exitedA ''
 Check 'S4 engine A exit code 0' ($exitedA -and ($A.P.ExitCode -eq 0)) ("code " + $(if ($exitedA) { $A.P.ExitCode } else { 'n/a' }))
 Check 'S5 no -wal / -shm sidecar left behind (the difference from a kill)' ((Sidecars $c1) -eq '') ("sidecars=" + (Sidecars $c1))
@@ -428,7 +428,8 @@ Check 'B5 stderr records the refusal with the reason' ((ErrText $Bz) -match 'con
 # ---- F1: --force with a compliant engine takes the graceful path -------------
 Write-Host ''
 Write-Host 'F1: --force is NOT taken when the engine complies' -ForegroundColor Cyan
-Check 'F1-0 engine B answers hover after its busy spell (fixture alive)' (HoverAnswers $Bz 30) ''
+$f10 = HoverAnswers $Bz 30
+Check 'F1-0 engine B answers hover after its busy spell (fixture alive)' $f10 ($($o = OutText $Bz; if ($o.Length -gt 400) { $o.Substring($o.Length - 400) } else { $o }))
 $f1 = Invoke-Verb @('shutdown', '--db', $c4, '--wait', '60', '--force') 'F1'
 Check 'F1-1 verb exits 0' ($f1.Exit -eq 0) ($f1.Out + $f1.Err)
 Check 'F1-2 no ESCALATING line -- graceful path taken first' ($f1.Out -notmatch 'ESCALAT') $f1.Out
@@ -449,7 +450,7 @@ Check 'F2-1 without --force: verb reports BUSY and exits 1' (($f2a.Exit -eq 1) -
 Check 'F2-2 without --force: engine F still running' (-not $Fz.P.HasExited) ''
 $f2b = Invoke-Verb @('shutdown', '--db', $c5, '--wait', '0', '--force') 'F2b'
 Check 'F2-3 with --force: says ESCALATING (loudly, naming the refusal)' ($f2b.Out -match 'ESCALAT') $f2b.Out
-Check 'F2-4 with --force: engine F is gone' (WaitUntil { $Fz.P.HasExited } 10000) ''
+Check 'F2-4 with --force: engine F is gone' (WaitUntil { $Fz.P.HasExited } 10000 { EngineProgress $Fz }) ''
 Check 'F2-5 the escalation was AFTER a graceful attempt (BUSY reported first in the same output)' (($f2b.Out -match 'BUSY') -and ($f2b.Out.IndexOf('BUSY') -lt $f2b.Out.IndexOf('ESCALAT'))) ''
 
 # ---- H: read cancelled, stores never close -> busy after the grace (F5) -------
@@ -460,7 +461,8 @@ $c6 = Join-Path $WorkDir 'c6.sqlite'; Copy-Item $pristine $c6
 $Hz = Start-Lsp $c6 'H' $hangEnv
 Check 'H0 engine H answered initialize' $Hz.Init ''
 $leafHz = PipeLeafOf $Hz 5000
-$null = WaitUntil { (OutText $Hz) -match 'publishDiagnostics' } 15000
+$null = WaitUntil { (OutText $Hz) -match 'publishDiagnostics' } 15000 { EngineProgress $Hz }
+$null = HoverAnswers $Hz 41   # barrier: didOpen fully served before the stand-down is asked (GUARD-FLAKY 1.42)
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 $rh = ''
 if ($leafHz -ne '') { try { $rh = Send-Ctl $leafHz "shutdown`t5000" 10000 } catch { $rh = "ERROR: $($_.Exception.Message)" } }
@@ -468,7 +470,7 @@ $hangMs = $sw.ElapsedMilliseconds
 Check 'H1 reply is busy<TAB>pid<TAB>stand-down started but not finished' ($rh -eq "busy`t$($Hz.P.Id)`tstand-down started but not finished") "got [$rh] after $hangMs ms"
 Check 'H2 the reply came after the grace and before the hang ended (1500 <= ms < 7000)' (($hangMs -ge 1500) -and ($hangMs -lt 7000)) "$hangMs ms"
 Check 'H3 stderr audits the unfinished stand-down' ((ErrText $Hz) -match 'control channel:.*read cancelled but the host has not closed its stores') ''
-Check 'H4 engine H still exits once its store close returns' (WaitUntil { $Hz.P.HasExited } 30000) ''
+Check 'H4 engine H still exits once its store close returns' (WaitUntil { $Hz.P.HasExited } 30000 { EngineProgress $Hz }) ''
 
 Write-Host ''
 Write-Host 'H-S: after a store-close BUSY reply the engine exits promptly (W5-C: FReplied was never set -> teardown waited the 5 s reply join) and the audit grace is not integer-divided to 0 s' -ForegroundColor Cyan
@@ -477,12 +479,13 @@ $c8 = Join-Path $WorkDir 'c8.sqlite'; Copy-Item $pristine $c8
 $Hs = Start-Lsp $c8 'HS' $slowEnv
 Check 'H-S0 engine HS answered initialize' $Hs.Init ''
 $leafHs = PipeLeafOf $Hs 5000
-$null = WaitUntil { (OutText $Hs) -match 'publishDiagnostics' } 15000
+$null = WaitUntil { (OutText $Hs) -match 'publishDiagnostics' } 15000 { EngineProgress $Hs }
+$null = HoverAnswers $Hs 42   # barrier: didOpen fully served before the stand-down is asked (GUARD-FLAKY 1.42)
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 $rs = ''
 if ($leafHs -ne '') { try { $rs = Send-Ctl $leafHs "shutdown`t5000" 10000 } catch { $rs = "ERROR: $($_.Exception.Message)" } }
 Check 'H-S1 reply is the busy "not finished" answer' ($rs -match '^busy\t' -and $rs -match 'not finished') "got [$rs]"
-$null = WaitUntil { $Hs.P.HasExited } 30000
+$null = WaitUntil { $Hs.P.HasExited } 30000 { EngineProgress $Hs }
 $hsMs = $sw.ElapsedMilliseconds
 Check 'H-S2 engine HS exited promptly after its 3 s store close (< 8500 ms from the request; measured 6.1 s fixed, 11.2 s with the 5 s reply join)' ($Hs.P.HasExited -and ($hsMs -lt 8500)) "$hsMs ms"
 Check 'H-S3 the audit names the grace in ms, not 0 s' ((ErrText $Hs) -match 'not closed its stores after 500 ms') ''
@@ -494,14 +497,15 @@ $c7 = Join-Path $WorkDir 'c7.sqlite'; Copy-Item $pristine $c7
 $Hp = Start-Lsp $c7 'HP' $okEnv
 Check 'H-P0 engine HP answered initialize' $Hp.Init ''
 $leafHp = PipeLeafOf $Hp 5000
-$null = WaitUntil { (OutText $Hp) -match 'publishDiagnostics' } 15000
+$null = WaitUntil { (OutText $Hp) -match 'publishDiagnostics' } 15000 { EngineProgress $Hp }
+$null = HoverAnswers $Hp 43   # barrier: didOpen fully served before the stand-down is asked (GUARD-FLAKY 1.42)
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
 $rp = ''
 if ($leafHp -ne '') { try { $rp = Send-Ctl $leafHp "shutdown`t5000" 10000 } catch { $rp = "ERROR: $($_.Exception.Message)" } }
 $hpMs = $sw.ElapsedMilliseconds
 Check 'H-P1 reply is exiting<TAB>pid...' ($rp -match ('^exiting\t' + $Hp.P.Id + '\b')) "got [$rp] after $hpMs ms"
 Check 'H-P2 the hang seam is live: the reply waited for it (>= 1000 ms)' ($hpMs -ge 1000) "$hpMs ms"
-Check 'H-P3 engine HP exited 0' ((WaitUntil { $Hp.P.HasExited } 15000) -and ($Hp.P.ExitCode -eq 0)) ''
+Check 'H-P3 engine HP exited 0' ((WaitUntil { $Hp.P.HasExited } 15000 { EngineProgress $Hp }) -and ($Hp.P.ExitCode -eq 0)) ''
 # ---- W (DEC-13): the long one-shot verbs (index, lint-all) listen and stand down cleanly ----
 Write-Host ''
 Write-Host 'W: index and lint-all open the control channel; shutdown stops them between files, cleanly, resumably' -ForegroundColor Cyan
@@ -527,12 +531,12 @@ $w1db = Join-Path $WorkDir 'w1.sqlite'
 $W1 = Start-Engine @('index', $bigDir, '--db', $w1db) 'W1' $slowIdx
 $leafW1 = PipeLeafOf $W1 15000
 Check 'W1a index engine announces a control pipe (the gate widened beyond lsp/cycles)' ($leafW1 -ne '') $leafW1
-$null = WaitUntil { (ErrText $W1) -match '\[\d+/\d+\]' } 20000
+$null = WaitUntil { (ErrText $W1) -match '\[\d+/\d+\]' } 20000 { EngineProgress $W1 }
 Check 'W1b index is mid-walk when asked (not finished)' (-not $W1.P.HasExited) ''
 $wv = Invoke-Verb @('shutdown', '--db', $w1db, '--wait', '30') 'W1v'
 Check 'W1d 1.39.1: the listing labels the index engine index, not lsp' ($wv.Out -match ('(?m)^\s*pid\s+' + $W1.P.Id + '\s+index\s')) $wv.Out
 Check 'W1c shutdown verb exits 0 and reports the index engine exiting' (($wv.Exit -eq 0) -and ($wv.Out -match ('pid\s+' + $W1.P.Id + '\b.*exiting'))) ($wv.Out + $wv.Err)
-Check 'W1d index process exited by itself with the stand-down code 4 (not killed)' ((WaitUntil { $W1.P.HasExited } 30000) -and ($W1.P.ExitCode -eq 4)) ("code " + $(if ($W1.P.HasExited) { $W1.P.ExitCode } else { 'running' }))
+Check 'W1d index process exited by itself with the stand-down code 4 (not killed)' ((WaitUntil { $W1.P.HasExited } 30000 { EngineProgress $W1 }) -and ($W1.P.ExitCode -eq 4)) ("code " + $(if ($W1.P.HasExited) { $W1.P.ExitCode } else { 'running' }))
 Check 'W1e no -wal / -shm left behind' ((Sidecars $w1db) -eq '') ("sidecars=" + (Sidecars $w1db))
 Check 'W1f database integrity_check ok' (IntegrityOk $w1db) ''
 $partial = FilesIn $w1db
@@ -547,11 +551,11 @@ $slowLint = @{ DRAGLINT_TEST_LINT_FILE_DELAY_MS = '300' }
 $W2 = Start-Engine @('lint-all', '--db', $w1db) 'W2' $slowLint
 $leafW2 = PipeLeafOf $W2 20000
 Check 'W2a lint-all announces a control pipe' ($leafW2 -ne '') $leafW2
-$null = WaitUntil { (ErrText $W2) -match 'lint-all: \[\d+/\d+\]' } 20000
+$null = WaitUntil { (ErrText $W2) -match 'lint-all: \[\d+/\d+\]' } 20000 { EngineProgress $W2 }
 $wv2 = Invoke-Verb @('shutdown', '--db', $w1db, '--wait', '30') 'W2v'
 Check 'W2b shutdown verb reports the lint-all engine exiting' (($wv2.Exit -eq 0) -and ($wv2.Out -match ('pid\s+' + $W2.P.Id + '\b.*exiting'))) ($wv2.Out + $wv2.Err)
-Check 'W2c lint-all exited with the stand-down code 4' ((WaitUntil { $W2.P.HasExited } 30000) -and ($W2.P.ExitCode -eq 4)) ''
-Check 'W2d stderr says PARTIAL' (WaitUntil { (ErrText $W2) -match 'PARTIAL' } 5000) ''
+Check 'W2c lint-all exited with the stand-down code 4' ((WaitUntil { $W2.P.HasExited } 30000 { EngineProgress $W2 }) -and ($W2.P.ExitCode -eq 4)) ''
+Check 'W2d stderr says PARTIAL' (WaitUntil { (ErrText $W2) -match 'PARTIAL' } 5000 { EngineProgress $W2 }) ''
 Check 'W2e database untouched by lint-all (integrity ok, no sidecar)' ((IntegrityOk $w1db) -and ((Sidecars $w1db) -eq '')) ''
 
 # POSITIVE CONTROLS: lsp still stands down (S above), and a verb outside the gate still has no pipe (G above).
@@ -559,7 +563,7 @@ Write-Host 'W-P: POSITIVE CONTROL -- without the stand-down, the same slowed ind
 $w3db = Join-Path $WorkDir 'w3.sqlite'
 $W3 = Start-Engine @('index', $bigDir, '--db', $w3db) 'W3' @{ DRAGLINT_TEST_INDEX_FILE_DELAY_MS = '20' }
 # the engine's stdout/stderr pipes must be drained or a 64 KB pipe stalls it mid-run (that, not a stand-down, made this read 40 of 60)
-Check 'W-P1 an unasked index completes, exit 0, every file present' ((WaitUntil { Pump $W3; $W3.P.HasExited } 120000) -and ($W3.P.ExitCode -eq 0) -and ((FilesIn $w3db) -eq $nBig)) ("files=" + (FilesIn $w3db))
+Check 'W-P1 an unasked index completes, exit 0, every file present' ((WaitUntil { Pump $W3; $W3.P.HasExited } 120000 { EngineProgress $W3 }) -and ($W3.P.ExitCode -eq 0) -and ((FilesIn $w3db) -eq $nBig)) ("files=" + (FilesIn $w3db))
 Check 'W-P2 the pipe is gone with the process' (-not ((PipesInNamespace) -contains $leafW1)) ''
 
 # ---- ST (DEC-13 owner addition): the stager asks through the channel first, kills last ----
@@ -602,7 +606,7 @@ Start-Sleep -Milliseconds 1500
 Check 'ST2a a serve engine (no channel) holds the target image' (-not $S2.P.HasExited) ''
 $r2 = Run-Stager $tgt2 $stDb2
 Check 'ST2b LAST RESORT: with no channel to ask, the holder is stopped and staging succeeds' (($r2.Exit -eq 0) -and ($r2.Out -match 'stopped PID')) (($r2.Out -split "`r?`n" | Select-Object -Last 4) -join ' | ')
-Check 'ST2c the serve engine is gone and the target is the fresh build' ((WaitUntil { $S2.P.HasExited } 15000) -and ((Md5 $tgt2) -eq (Md5 $Exe))) ''
+Check 'ST2c the serve engine is gone and the target is the fresh build' ((WaitUntil { $S2.P.HasExited } 15000 { EngineProgress $S2 }) -and ((Md5 $tgt2) -eq (Md5 $Exe))) ''
 
 $iss = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\..\installer\drag-lint.iss'))
 Check 'ST3 the installer stops the old engine through the channel before installing (StopRunningEngines called from PrepareToInstall)' (($iss -match 'sh' + 'utdown --all --wait') -and ($iss -match '(?s)function PrepareToInstall.*?StopRunningEngines;')) ''

@@ -29,6 +29,7 @@ param(
   [int]$HoldMs     = 15000,
   [int]$TimeoutMs  = 3000
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -130,7 +131,7 @@ try {
   }
   $db = Join-Path $WorkDir 'busy.sqlite'
   $first = Run-Exe @('index', $src, '--db', $db) @{}
-  if ($first.Code -ne 0) { Write-Host "FATAL: setup index failed: $($first.Out)" -ForegroundColor Red; exit 2 }
+  if ($first.Code -ne 0) { $hint = Get-ExeStartFailureHint $first.Code; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: setup index failed: $($first.Out)" -ForegroundColor Red; exit 2 }
   $dbKey = [IO.Path]::GetFullPath($db).ToLowerInvariant()
 
   $r1 = Run-Case 'advancing' $dbKey

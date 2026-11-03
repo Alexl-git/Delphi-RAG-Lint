@@ -33,6 +33,7 @@
   Usage: pwsh -File tests\autotest\run_usages_field_access.ps1 [-Exe <drag-lint.exe>]
 #>
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 $ErrorActionPreference = 'Continue'
 $script:fail = $false
 function Check([string]$n, [bool]$ok, [string]$d = '') {
@@ -122,7 +123,7 @@ end.
 
   Write-Host '== check 1: fixture health ==' -ForegroundColor Cyan
   & $exePath index $scratch --db $db *> (Join-Path $scratch 'index.log')
-  if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
+  if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index exit $LASTEXITCODE" -ForegroundColor Red; exit 2 }
   foreach ($site in @(@('uUse.pas', $R1, 'read'), @('uJob.pas', $W2, 'write'))) {
     $r = Sql $db ("SELECT s.qualified_name AS qn, ma.mode AS mode FROM refs r JOIN files f ON f.id = r.file_id " +
                   "JOIN symbols s ON s.id = r.symbol_id JOIN member_accesses ma ON ma.ref_id = r.id " +

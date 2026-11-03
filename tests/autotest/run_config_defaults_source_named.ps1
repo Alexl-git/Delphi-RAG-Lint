@@ -31,6 +31,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-config-source-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -64,7 +65,7 @@ $neutral = Join-Path $WorkDir 'neutral'
 New-Item -ItemType Directory -Force $neutral | Out-Null
 $goodDb = Join-Path $WorkDir 'good.sqlite'
 $r0 = RunIn $neutral @('index', '--project', (Join-Path $proj 'P.dpr'), '--db', $goodDb)
-if ($r0.Code -ne 0) { Write-Host "FATAL: fixture index failed (exit $($r0.Code))" -ForegroundColor Red; Write-Host $r0.Out; exit 2 }
+if ($r0.Code -ne 0) { $hint = Get-ExeStartFailureHint $r0.Code; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: fixture index failed (exit $($r0.Code))" -ForegroundColor Red; $hint = Get-ExeStartFailureHint $r0.Code; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host $r0.Out; exit 2 }
 
 # A folder whose defaults file names a db that does not exist.
 $cfgDir  = Join-Path $WorkDir 'cfgmissing'

@@ -38,6 +38,7 @@ param(
   [int]$MaxLargeCpuMs = 60000,
   [int]$KillAfterMs   = 180000
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -65,7 +66,7 @@ $other = Join-Path $WorkDir 'other'; New-Item -ItemType Directory $other | Out-N
 [IO.File]::WriteAllText((Join-Path $other 'uOther.pas'), "unit uOther;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`nend.`r`n", [Text.ASCIIEncoding]::new())
 $db = Join-Path $WorkDir 'other.sqlite'
 & $Exe index $other --db $db 2>&1 | Out-Null
-if (-not (Test-Path $db)) { Write-Host 'FATAL: could not build the unrelated index' -ForegroundColor Red; exit 2 }
+if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: could not build the unrelated index' -ForegroundColor Red; exit 2 }
 
 function Measure-LooseOpen([int]$Lines) {
   $dir = Join-Path $WorkDir "s$Lines"; New-Item -ItemType Directory $dir | Out-Null

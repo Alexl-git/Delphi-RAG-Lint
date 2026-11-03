@@ -48,6 +48,7 @@ param(
   [string] $Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string] $WorkDir = (Join-Path ([IO.Path]::GetTempPath()) ("draglint-wiki-" + [Guid]::NewGuid().ToString('N')))
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -93,9 +94,9 @@ function Run([string[]]$A) {
 }
 
 $r = Run @('index', $goodDir, '--db', $goodDb)
-if ($r.Code -ne 0) { Write-Host "FATAL: indexing the good fixture failed`n$($r.Out)`n$($r.Err)" -ForegroundColor Red; exit 1 }
+if ($r.Code -ne 0) { $hint = Get-ExeStartFailureHint $r.Code; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: indexing the good fixture failed`n$($r.Out)`n$($r.Err)" -ForegroundColor Red; exit 1 }
 $r = Run @('index', $badDir, '--db', $badDb)
-if ($r.Code -ne 0) { Write-Host "FATAL: indexing the bad fixture failed`n$($r.Out)`n$($r.Err)" -ForegroundColor Red; exit 1 }
+if ($r.Code -ne 0) { $hint = Get-ExeStartFailureHint $r.Code; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: indexing the bad fixture failed`n$($r.Out)`n$($r.Err)" -ForegroundColor Red; exit 1 }
 
 # ---------------------------------------------------------------------------
 # CHECK 1 -- BOTH PLACEMENTS PARSE. This is the inference the design rests on.

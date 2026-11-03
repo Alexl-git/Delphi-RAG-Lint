@@ -28,6 +28,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-semtok-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -88,7 +89,9 @@ end.
 
 $db = Join-Path $WorkDir 'sem.sqlite'
 & $Exe index $src --db $db 2>&1 | Out-Null
+$idxCode = $LASTEXITCODE
 Check 'fixture indexed' (Test-Path $db)
+if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red; exit 2 } }
 
 $lines = [System.IO.File]::ReadAllLines($file)
 function LineOf([string]$pattern) {
@@ -193,6 +196,7 @@ $bigDb = Join-Path $WorkDir 'big.sqlite'
 $idxOut = & $Exe index $bigSrc --db $bigDb 2>&1
 $idxExit = $LASTEXITCODE
 if ($idxExit -ne 0 -or -not (Test-Path $bigDb) -or (Get-Item $bigDb).Length -le 0) {
+  $hint = Get-ExeStartFailureHint $idxExit; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
   Write-Host ('FAIL: timing-block index did not produce a DB (exit=' + $idxExit + ')') -ForegroundColor Red
   $idxOut | Select-Object -Last 5 | ForEach-Object { Write-Host $_ }
   exit 1
