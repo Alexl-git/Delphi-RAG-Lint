@@ -69,6 +69,14 @@ function TryGetFileMTimeUnix(const APath: string; out AMTimeUnix: Int64): Boolea
 /// </remarks>
 function NowUtc: TDateTime;
 
+/// <summary>The wall clock in the machine's local time zone, for log lines a person reads.</summary>
+/// <returns>Local date and time, derived from the real UTC instant converted with the zone offset in force
+/// AT THAT INSTANT (SystemTimeToTzSpecificLocalTime).</returns>
+/// <remarks>Replaces the RTL's Now for stamps: on a daylight-saving transition day (2026-11-01 here) the
+/// RTL's Now printed started HH:MM one hour ahead of the real clock for the whole day (1.41 DST-LOGSTAMP;
+/// pinned by tests\autotest\run_cli141_followups.ps1). Thread-safe.</remarks>
+function NowLocal: TDateTime;
+
 /// <summary>The real UTC clock as unix epoch seconds (what files.parsed_at stores).</summary>
 /// <returns>Whole seconds since 1970-01-01 UTC. Same source as NowUtc.</returns>
 /// <remarks>Thread-safe.</remarks>
@@ -143,6 +151,16 @@ var
 begin
   GetSystemTime(ST);
   Result:= SystemTimeToDateTime(ST);
+end;
+
+function NowLocal: TDateTime;
+var
+  UtcST  : TSystemTime;
+  LocalST: TSystemTime;
+begin
+  GetSystemTime(UtcST);
+  Result:= if SystemTimeToTzSpecificLocalTime(nil, UtcST, LocalST) then SystemTimeToDateTime(LocalST)
+    else Now; { no zone data: the RTL clock is all there is }
 end;
 
 function NowUnixUtc: Int64;

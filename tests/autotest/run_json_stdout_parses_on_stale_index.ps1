@@ -111,8 +111,10 @@ function TryParse([string]$Text) {
   try { return @{ Ok = $true; Doc = ($Text | ConvertFrom-Json -Depth 100) } } catch { return @{ Ok = $false; Doc = $null; Why = $_.Exception.Message } }
 }
 
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 & $Exe index --project (Join-Path $fx 'App.dpr') --db $db 2>&1 | Out-Null
-if (-not (Test-Path $db)) { Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
+$idxCode = $LASTEXITCODE
+if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
 
 # Every json-emitting verb that reads an index, with arguments that give it a
 # real answer on this fixture. 'env' = the object envelope must carry the

@@ -163,6 +163,7 @@ uses
   , DRagLint.Lint   .IfdefUndefined // dl:unit DRagLint.Lint.IfdefUndefined accepted -- the rule id travels with the checker that emits it, so --rule gating and the findings cannot drift apart
   , DRagLint.Lint   .PlatformDivergent // dl:unit DRagLint.Lint.PlatformDivergent accepted -- the rule id travels with the checker that emits it, so --rule gating and the findings cannot drift apart
   , DRagLint.Lint   .ProjectRules
+  , DRagLint.Lint.SharedScope { TSiblingStoreResolver / TSiblingProjectLister -- SHARED-UNIT-SCOPE (1.41) }
   , DRagLint.Lint   .ClassMetrics
   , DRagLint.Lint   .TaintRules
   , DRagLint.Lint   .DocRules
@@ -452,6 +453,7 @@ type
     MaxCallers         : Integer; // --max-callers N (default 5)
     IncludeClassSurface: Boolean; // default true
     FullSurface        : Boolean; // --full-surface: keep DFM component fields (default lean)
+    MaxBodyTokens      : Integer; // context --max-body-tokens N: a TYPE target's body budget (default 20000; 0 = uncapped)
     BenchN             : Integer; // --n N for bench-context (default 20)
     // v0.19: typeat
     Position: string; // raw <file>:<line>:<col>
@@ -1034,7 +1036,8 @@ function LintLibraryDb     (const AArgs: TArgs): string        ; forward;
 function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string; forward;
 function MakeSiblingStoreResolver(const AArgs: TArgs;
   const AKeepAlive: TList<ISymbolStore>;
-  const AOwned: TObjectList<TObject>): DRagLint.Lint.ProjectRules.TSiblingStoreResolver; forward;
+  const AOwned: TObjectList<TObject>): DRagLint.Lint.SharedScope.TSiblingStoreResolver; forward;
+function MakeSiblingProjectLister(const AArgs: TArgs): DRagLint.Lint.SharedScope.TSiblingProjectLister; forward;
 
 // v0.14: load defaults from `.drag-lint.json` in cwd (or any parent),
 // before CLI flags. Recognized keys:
@@ -1326,6 +1329,7 @@ begin
   Result.Docs               := DefaultDocConfig;
   Result.Depth              := 3;
   Result.MaxCallers         := 5;
+  Result.MaxBodyTokens      := CONTEXT_BODY_TOKEN_CAP;
   Result.IncludeClassSurface:= True;
   { PHASE C B5: honour .gitignore/.hgignore BY DEFAULT. This was opt-in behind
     --use-ignore while a manifest SECTION defaulted UseIgnoreFiles to True
@@ -1730,6 +1734,11 @@ begin
       else begin Result.Verb:= 'modify'; Result.BundleQName:= Result.Task; end;
     end // if
     else if (A = '--max-callers') and (i < ParamCount) then begin Inc(i); Result.MaxCallers:= StrToIntDef(ParamStr(i), 5); end
+    else if (A = '--max-body-tokens') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.MaxBodyTokens:= StrToIntDef(ParamStr(i), CONTEXT_BODY_TOKEN_CAP);
+    end
     else if (A = '--n') and (i < ParamCount) then begin Inc(i); Result.BenchN:= StrToIntDef(ParamStr(i), 20); end
     else if (A = '--to') and (i < ParamCount) then begin Inc(i); Result.RenameTo:= ParamStr(i); end
     else if A = '--no-backup' then Result.NoBackup:= True
@@ -2461,6 +2470,27 @@ begin
   Flush(ErrOutput);
 end;
 
+{ Defined beside AcquireIndexLock: True when THIS process holds ADbPath's index lock. }
+function HoldsIndexLock(const ADbPath: string): Boolean; forward;
+
+var GInProgressNoted: string = ''; { lower-cased db paths already noted, ';'-joined }
+
+{ 1.41 IDX-HALFREAD: a reader whose database is being written by an index run RIGHT NOW is
+  told so, once per database, on stderr. <db>.indexing.lock is opened DELETE_ON_CLOSE by every
+  index run (AcquireIndexLock), so it exists only while a holder lives -- the file walk commits
+  every 256 files / 5 s, and between those commits and the end of the calls pass a re-emitted
+  file's refs are unresolved. No stdout, no exit code. Guard run_index_halfread_guard.ps1 HR3/HR4. }
+procedure NoteIndexRunInProgressOnce(const ADbPath: string);
+begin
+  var Key: string:= LowerCase(ExpandFileName(ADbPath));
+  if (';' + GInProgressNoted).Contains(';' + Key + ';') then Exit;
+  if (not TFile.Exists(ADbPath + '.indexing.lock')) or HoldsIndexLock(ADbPath) then Exit;
+  GInProgressNoted:= GInProgressNoted + Key + ';';
+  Writeln(ErrOutput, Format('NOTE: an index run is writing %s right now -- answers may reflect a partly written ' +
+    'index until it finishes.', [ADbPath]));
+  Flush(ErrOutput);
+end;
+
 function OpenReadOnlyStore(const ADbPath: string; out AOk: Boolean; AQuiet: Boolean = False): ISymbolStore;
 var
   Found   : Integer;
@@ -2501,6 +2531,7 @@ begin
     questions -- refuse vs warn vs auto-reindex, and whether the gate lives here
     or per-command -- stay open, and a warning cannot pre-empt them. }
   if AOk then NoteIndexFreshnessOnce(Result, ADbPath);
+  NoteIndexRunInProgressOnce(ADbPath);
 end;
 
 // WRITABLE open (same schema-current guard as OpenReadOnlyStore). Used by
@@ -3495,7 +3526,7 @@ var
   T0  : TDateTime;
   Beat: TStageHeartbeat;
 begin
-  Writeln(Format('%sstage: %s -- started %s', [AIndent, ALabel, FormatDateTime('hh:nn:ss', Now)]));
+  Writeln(Format('%sstage: %s -- started %s', [AIndent, ALabel, FormatDateTime('hh:nn:ss', NowLocal)]));
   Flush(Output);
   T0  := Now;
   Beat:= TStageHeartbeat.Create(AIndent, ALabel);
@@ -3507,6 +3538,39 @@ begin
   end;
   Writeln(Format('%sstage: %s -- done in %.1fs', [AIndent, ALabel, (Now - T0) * SecsPerDay]));
   Flush(Output);
+end;
+
+/// <summary>The calls pass, with the full edge clear a stale resolver or --resolve-only asks for
+/// done INSIDE the pass's transaction (1.41 IDX-HALFREAD).</summary>
+/// <param name="AStore">The writer store of this run; must not be nil.</param>
+/// <param name="AClearFirst">True = drop every call edge and refs.symbol_id first (ClearCallEdges).</param>
+/// <param name="ALibs">Extra (library) stores for ResolveCallTargets.</param>
+/// <remarks>The clear used to run in AUTOCOMMIT before the pass, so for the whole pass (~37 min on a
+/// 2 GB index) every reader saw ZERO resolved refs. Now the store's outer batch transaction wraps
+/// clear + pass (the pass's own transaction nests as a SAVEPOINT): the same statements in the same
+/// order on the same connection, so the scoping decision and the rows are unchanged, and readers keep
+/// the previous complete edges until one COMMIT. A pass that raises still commits the clear -- the
+/// state the old order left. Guard tests\autotest\run_index_halfread_guard.ps1 (HR1/HR2).</remarks>
+procedure ResolveCallsClearingFirst(const AStore: ISymbolStore; AClearFirst: Boolean;
+  const ALibs: TArray<ISymbolStore>);
+begin
+  if not AClearFirst then
+  begin
+    AStore.ResolveCallTargets(ALibs);
+    Exit;
+  end;
+  AStore.BeginFileBatch;
+  try
+    AStore.ClearCallEdges;
+    { TEST SEAM (run_index_halfread_guard.ps1 HR1): hold the transaction open after the clear so
+      a concurrent reader can be sampled. Unset / 0 = no delay. Kept out of ResolveCallTargets on
+      purpose: that is resolver surface (run_resolver_version_guard). }
+    var DelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_RESOLVE_DELAY_MS'), 0);
+    if DelayMs > 0 then Sleep(DelayMs);  // dl:ok sleep-in-vcl@31b4 -- REVIEWED 2026-11-03: console CLI test seam, off unless the env var is set
+    AStore.ResolveCallTargets(ALibs);
+  finally
+    AStore.EndFileBatch;
+  end; // try
 end;
 
 /// <summary>Runs the post-walk LINK stages, in their one valid order:
@@ -4150,7 +4214,7 @@ const
   behind -- the failure mode a PID file would have. Readers (query, lint ...)
   never take it; only the writers that index do. The same process asking again
   for a database it already holds is told yes. }
-function AcquireIndexLock(const ADbPath: string; AQuiet: Boolean = False): Boolean;
+function AcquireIndexLock(const ADbPath: string; AQuiet: Boolean = False; const AVerb: string = 'index'): Boolean;
 begin
   if GIndexLocks = nil then GIndexLocks:= TDictionary<string, THandle>.Create;
   var Key: string:= LowerCase(TPath.GetFullPath(ADbPath));
@@ -4174,21 +4238,23 @@ begin
   begin
     if AQuiet then Exit(False); { the caller words the refusal (index --watch skips a tick) }
     if Err = ERROR_SHARING_VIOLATION then
-      Writeln(ErrOutput, Format('ERROR: index: another index run is writing %s (its lock %s is held). ' +
+      Writeln(ErrOutput, Format('ERROR: %s: another index run is writing %s (its lock %s is held). ' +
         'Wait for it to finish -- two runs on one database end with "database is locked" after parsing everything.',
-        [ADbPath, LockPath]))
+        [AVerb, ADbPath, LockPath]))
     else if Err = ERROR_ACCESS_DENIED then
-      Writeln(ErrOutput, Format('ERROR: index: the lock file %s is still being deleted -- another index run on %s ' +
+      Writeln(ErrOutput, Format('ERROR: %s: the lock file %s is still being deleted -- another index run on %s ' +
         'is just finishing, or a scanner holds the file open. Retry in a moment. (%s)',
-        [LockPath, ADbPath, SysErrorMessage(Err)]))
+        [AVerb, LockPath, ADbPath, SysErrorMessage(Err)]))
     else
-      Writeln(ErrOutput, Format('ERROR: index: cannot create the lock file %s: %s', [LockPath, SysErrorMessage(Err)]));
+      Writeln(ErrOutput, Format('ERROR: %s: cannot create the lock file %s: %s', [AVerb, LockPath, SysErrorMessage(Err)]));
     Exit(False);
   end;
   GIndexLocks.Add(Key, H); { held until exit or ReleaseIndexLock; the OS closes and deletes it }
   { 1.39.1: a background warm of this database computes on what this run is about
     to rewrite, and would only find its key moved at the end -- stop it now. }
   StopStaleWarm(ADbPath + RULE_CACHE_WARM_MARKER_SUFFIX);
+  { 1.41 WARM-TMP: a warm stopped mid-Save leaves rules-<hash>.json.tmp-<pid>; its writer is gone now. }
+  TRuleCache.SweepStaleTmp(ADbPath);
   Result:= True;
 end;
 
@@ -4197,6 +4263,11 @@ end;
   warm that follows only reads, and holding the lock through it (minutes on a large
   project) made a save-reindex or agent reindex of the same database exit 2
   (whole-branch review of 1.39). }
+function HoldsIndexLock(const ADbPath: string): Boolean;
+begin
+  Result:= (GIndexLocks <> nil) and GIndexLocks.ContainsKey(LowerCase(TPath.GetFullPath(ADbPath)));
+end;
+
 procedure ReleaseIndexLock(const ADbPath: string);
 begin
   if GIndexLocks = nil then Exit;
@@ -4345,7 +4416,7 @@ begin
     var BeginPlat: string:= '';
     if AItem.Platform <> '' then BeginPlat:= ' [' + AItem.Platform + ']';
     Writeln(Format('=== %s%s BEGIN -> %s : started %s ===',
-      [AItem.Name, BeginPlat, AItem.DbPath, FormatDateTime('hh:nn:ss', Now)]));
+      [AItem.Name, BeginPlat, AItem.DbPath, FormatDateTime('hh:nn:ss', NowLocal)]));
     Flush(Output);
 
     { MODE. --rebuild empties the index of source before the walk; --recompile
@@ -4675,7 +4746,10 @@ begin
       the handful of changed files and leave the rest of the database on the old
       resolver -- which is precisely the 2026-08-30 failure, reproduced by the
       fix meant to prevent it. ClearCallEdges also nulls refs.symbol_id. }
-    if ResolverStale or AResolveOnly then Store.ClearCallEdges;
+    { 1.41 IDX-HALFREAD: the clear is DEFERRED into the calls pass's transaction
+      (ResolveCallsClearingFirst), so readers never see the cleared state. RanCalls
+      below is True whenever this is. }
+    var ClearEdgesInPass: Boolean:= ResolverStale or AResolveOnly;
     { Library-first resolve: a DB marked `pending` whose library is ready now re-resolves even when no file changed. }
     { SecPlatform: computed once, before the pre-walk gate (lf-order). }
     var LibRun: TLibraryRun:= PlanLibraryResolve(Store, AItem.LibraryResolve and (AItem.Mode <> smLibrary), SecPlatform, AItem.DbPath);
@@ -4689,7 +4763,7 @@ begin
         and FinishLibraryResolve writes the marker below; SecPlatform (lf-order) names the platform. }
       var SectionGate: TLibraryGate;
       SectionLibs:= ManifestLibraryStores(LibRun.Wanted, SecPlatform, ItemDproj, AItem.DbPath, Store, SectionGate);
-      Stage('  ', 'calls', procedure begin Store.ResolveCallTargets(SectionLibs); end); { v14 (D5): resolve call sites to target symbols }
+      Stage('  ', 'calls', procedure begin ResolveCallsClearingFirst(Store, ClearEdgesInPass, SectionLibs); end); { v14 (D5): resolve call sites to target symbols }
       Stage('  ', 'dispatch', procedure begin Store.ResolveDispatch(SectionLibs); end); { 2026-10-26: overrides / implements / classref args, derived from the edges }
     end
     else
@@ -6944,7 +7018,7 @@ begin
       A tick whose lock another run holds is skipped, not failed: the next one catches up. }
     if AArgs.Watch and (not AArgs.DryRun) and not AcquireIndexLock(ResolvedDb, {AQuiet=}True) then
     begin
-      Writeln(Format('[%s] tick skipped: another index run is writing %s; next try in %ds', [FormatDateTime('hh:nn:ss', Now), ResolvedDb, Interval]));
+      Writeln(Format('[%s] tick skipped: another index run is writing %s; next try in %ds', [FormatDateTime('hh:nn:ss', NowLocal), ResolvedDb, Interval]));
       if WatchIdle(Interval) then Break;
       Continue;
     end;
@@ -6955,7 +7029,7 @@ begin
     var ParsedBeforeTick: Integer:= Indexer.ParsedFiles;
     var SkippedBeforeTick: Integer:= Indexer.SkippedUpToDate;  // cumulative like ParsedFiles; the Done line reports this tick's delta
     var FailedBeforeTick: Integer:= Indexer.FailedFiles;       // F1: same delta rule as SkippedBeforeTick
-    if AArgs.Watch then Writeln(Format('[%s] Indexing tick (interval=%ds)...', [FormatDateTime('hh:nn:ss', Now), Interval]))
+    if AArgs.Watch then Writeln(Format('[%s] Indexing tick (interval=%ds)...', [FormatDateTime('hh:nn:ss', NowLocal), Interval]))
     else if not AArgs.ResolveOnly then Writeln('Indexing...');
     { --resolve-only: re-derive the edges from parses the index ALREADY holds,
       without walking a single file.
@@ -7226,7 +7300,8 @@ begin
       clear above: with the walk skipped ParsedFiles is 0, so without this the
       flag would announce a re-derive and then skip it -- the one outcome worse
       than not having the flag. }
-    if ResolverStale or AArgs.ResolveOnly then Store.ClearCallEdges;
+    { 1.41 IDX-HALFREAD: deferred into the calls pass's transaction (ResolveCallsClearingFirst). }
+    var ClearEdgesInPass: Boolean:= ResolverStale or AArgs.ResolveOnly;
     var CorpusMoved: Boolean:= (Indexer.ParsedFiles > ParsedBeforeTick) or AArgs.Rebuild or (SweptRows > 0);
     { Library-first resolve: an explicit --library-db names the store itself and clears any marker. }
     var LibRun: TLibraryRun:= PlanLibraryResolve(Store,
@@ -7242,7 +7317,7 @@ begin
       RunLibs:= OpenLibraryStores(AArgs);
       if Length(RunLibs) = 0 then
         RunLibs:= ManifestLibraryStores(LibRun.Wanted, AArgs.CheckPlatform, IdxDproj, ResolvedDb, Store, IdxResolveGate);
-      Stage('', 'calls', procedure begin Store.ResolveCallTargets(RunLibs); end); { v14 (D5) + v21 cross-DB }
+      Stage('', 'calls', procedure begin ResolveCallsClearingFirst(Store, ClearEdgesInPass, RunLibs); end); { v14 (D5) + v21 cross-DB }
       Stage('', 'dispatch', procedure begin Store.ResolveDispatch(RunLibs); end); { 2026-10-26: libraries only recognise a library `class of` param type }
     end
     else
@@ -15163,6 +15238,7 @@ begin
     Writeln(ErrOutput, 'ERROR: warm-rule-cache needs --db <project index> that exists.');
     Exit(2);
   end;
+  TRuleCache.SweepStaleTmp(AArgs.DbPath); { 1.41 WARM-TMP: leftovers of a warm that was stopped mid-write }
   var Marker: string:= AArgs.DbPath + RULE_CACHE_WARM_MARKER_SUFFIX;
   var Mine  : string:= IntToStr(GetCurrentProcessId);
   if AArgs.WarmDetached then
@@ -16562,7 +16638,7 @@ begin
                                  RuleKeptByRun(AArgs, Cfg, Marked));
             for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
                        FlowStore, NarrowRule, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore,
-                       FileOptIn, {AOnlyFileId=}FlowFid, WholeGraph) do
+                       FileOptIn, {AOnlyFileId=}FlowFid, WholeGraph, MakeSiblingProjectLister(AArgs)) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
             { E18 T15b: circular-uses for EVERY unit of a cycle, on the uses line, with the
@@ -16774,7 +16850,7 @@ begin
 end; // function
 
 // v0.18: drag-lint context --task "verb qname" [--db <path>]
-//   [--format md|json|raw] [--max-callers N] [--context N] [--no-docs]
+//   [--format md|json|raw] [--max-callers N] [--context N] [--no-docs] [--max-body-tokens N]
 //   [--library-db LIBRARY]
 // Builds a TContextBundle and renders it in the requested format.
 // RSV-R2: with --library-db (or a second --db), the "Library calls" count also
@@ -16814,7 +16890,7 @@ begin
   IncImpl:= SameText(AArgs.Verb, 'modify') or SameText(AArgs.Verb, 'refactor') or SameText(AArgs.Verb, 'extend');
   Bundle:= TContextBundler.Build(
     Store, AArgs.Verb, AArgs.BundleQName, AArgs.ContextLines, AArgs.MaxCallers, IncDocs, IncSurface, IncImpl, {AExcludeDfmFields=}
-    not AArgs.FullSurface, {ATaskText=}AArgs.Task, {AOracle=}Oracle);
+    not AArgs.FullSurface, {ATaskText=}AArgs.Task, {AOracle=}Oracle, {ABodyTokenCap=}AArgs.MaxBodyTokens);
 
   { THE OLD TEST HERE WAS `Bundle.QName = ''`, AND IT WAS DEAD. Build stamps
     QName with what the caller asked for BEFORE it looks anything up, so it is
@@ -16960,7 +17036,7 @@ begin
   if DbPath = '' then begin Writeln(ErrOutput, 'fb-snapshot: --db <sql.sqlite> required'); Exit(2); end;
   { 1.40 IDX-LOCK: this verb writes the index -- take <db>.indexing.lock like `index` does. }
   if ConfigDbRedirectsWrite('fb-snapshot', AArgs, '') then Exit(2);
-  if not AcquireIndexLock(DbPath) then Exit(2);
+  if not AcquireIndexLock(DbPath, {AQuiet=}False, 'fb-snapshot') then Exit(2);
   Store:= TSQLiteSymbolStore.Create(DbPath);
   try
     Store.Migrate;
@@ -22873,7 +22949,8 @@ begin
       rule so it narrows inside -- the same two halves `lint` uses. }
     if LintRuleWants(Nr, LINT_GATE_PROJECT_RULES) then
       Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
-        Store, Nr, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
+        Store, Nr, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn, 0, nil,
+        MakeSiblingProjectLister(AArgs));
     { E18 T16: a circular-uses message ends in a `cycles --fix` pointer; --project names the real
       project in it instead of the placeholder (the stem stays the finding's anchor unit). }
     if AArgs.ProjectPath <> '' then
@@ -23105,7 +23182,7 @@ begin
     var BaseDir: string;
     if AArgs.ProjectPath <> '' then BaseDir:= ExtractFilePath(AArgs.ProjectPath)
     else BaseDir:= ExtractFilePath(ProjectDb);
-    OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', Now) + '.txt');
+    OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', NowLocal) + '.txt');
   end;
 
   { The default-disabled set, in three parts and no hand-written copies:
@@ -23379,7 +23456,7 @@ begin
                                    [ProjLibWhy]));
     Findings:= DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
       Store, AArgs.Rule, MakeSiblingStoreResolver(AArgs, SibKeep2, SibOwned2),
-      ProjLibStore, OptIn2);
+      ProjLibStore, OptIn2, 0, nil, MakeSiblingProjectLister(AArgs));
   finally
     SibKeep2 .Free;
     SibOwned2.Free;
@@ -24068,7 +24145,7 @@ begin
 
   { 1.40 IDX-LOCK: the recompile writes findings into the index -- take <db>.indexing.lock. }
   if (Length(AArgs.DbPaths) > 0) and ConfigDbRedirectsWrite('refresh-findings', AArgs, AArgs.ProjectPath) then Exit(2);
-  if not AcquireIndexLock(DbPath) then Exit(2);
+  if not AcquireIndexLock(DbPath, {AQuiet=}False, 'refresh-findings') then Exit(2);
   Store:= TSQLiteSymbolStore.Create(DbPath);
   Store.Migrate;
 
@@ -30449,7 +30526,7 @@ var
         end;
       end;
 
-      Timestamp:= FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
+      Timestamp:= FormatDateTime('yyyy-mm-dd hh:nn:ss', NowLocal);
 
       { F7 (2026-10-25): step 4 stamps the .pas even when no edit touches it (a
         .dfm-only conversion), so it joins the set HERE -- pre-checked, backed
@@ -31343,6 +31420,19 @@ var
     end;
   end; // procedure
 
+  { --output F writes the rendering to F (and says so on stdout), like butterfly and
+    callgraph; without it the rendering goes to stdout. Until 1.41 the flag was parsed and
+    ignored here. }
+  procedure EmitRendering(const AText: string);
+  begin
+    if AArgs.Output <> '' then
+    begin
+      WriteOutputFile(AArgs.Output, AText);
+      Writeln('Wrote ', AArgs.Output);
+    end
+    else Writeln(AText);
+  end; // procedure
+
 begin
   if not ExplicitDbsExist(AArgs, 'reverse-calltree') then Exit(2);
   if AArgs.QName = '' then
@@ -31430,7 +31520,7 @@ begin
         end;
         for var T in Trees do RenderNodeChart(T.Root, Buf, Fmt = 'dot', Dir = 'callees');
         if Fmt = 'dot' then Buf.AppendLine('}');
-        Writeln(Buf.ToString);
+        EmitRendering(Buf.ToString);
       finally
         Buf.Free;
       end;
@@ -31446,8 +31536,8 @@ begin
           JRoots.AddElement(JTree);
         end;
         // A single root prints the bare object; multiple (overloads) print an array.
-        if JRoots.Count = 1 then Writeln((JRoots.Items[0] as TJSONObject).Format(2))
-        else Writeln(JRoots.Format(2));
+        if JRoots.Count = 1 then EmitRendering((JRoots.Items[0] as TJSONObject).Format(2))
+        else EmitRendering(JRoots.Format(2));
       finally
         JRoots.Free;
       end;
@@ -31457,7 +31547,7 @@ begin
       var Lines: TStringList:= TStringList.Create;
       try
         for var T in Trees do RenderNodeText(T.Root, '', Lines);
-        Writeln(Lines.Text);
+        EmitRendering(Lines.Text);
       finally
         Lines.Free;
       end;
@@ -31759,7 +31849,7 @@ begin
 
   { 1.40 IDX-LOCK: purge MUTATES the index -- take <db>.indexing.lock like `index` does. }
   if ConfigDbRedirectsWrite('purge-locals', AArgs, '') then Exit(2);
-  if not AcquireIndexLock(AArgs.DbPath) then Exit(2);
+  if not AcquireIndexLock(AArgs.DbPath, {AQuiet=}False, 'purge-locals') then Exit(2);
   SizeBefore:= TFile.GetSize(AArgs.DbPath);
   { Read-WRITE open (purge MUTATES) -- same path as index/rename/safe-delete, NOT
     the query_only OpenReadOnlyStore used by read verbs. Migrate ensures the
@@ -33057,6 +33147,53 @@ begin
   Result:= TheOnlyProjectDb('');
 end; // function
 
+{ Fills ANameToDb (lowercased manifest section name -> DB path) from the manifest the run
+  reads (--config wins, exactly as DoResolveDbsList treats it -- without this the resolver
+  would silently read the MACHINE's manifest while the rest of the run used the one the
+  caller named, and a hermetic test could not point it anywhere). A manifest that will not
+  load leaves it empty: every name is then unresolvable, which the rules read as "could not
+  check". Shared by MakeSiblingStoreResolver and MakeSiblingProjectLister (1.41). }
+procedure LoadSiblingNameToDb(const AArgs: TArgs; const ANameToDb: TDictionary<string, string>);
+begin
+  try
+    var Manifest: TIndexManifest:=
+      if AArgs.WorkspaceConfig <> '' then
+        TManifestIO.ParseText(TFile.ReadAllText(AArgs.WorkspaceConfig), ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig)))
+      else TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    var Platform: string:= AArgs.CheckPlatform;
+    if Platform = '' then Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
+    if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
+    var Resolver: DRagLint.Project.Resolver.TProjectResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+    try
+      var Plan: TIndexPlan:= ResolvePlan(Manifest, [Platform], Resolver);
+      for var PS in Plan.Items do
+        if (PS.Name <> '') and (PS.DbPath <> '') then
+          ANameToDb.AddOrSetValue(LowerCase(PS.Name), PS.DbPath);
+    finally
+      Resolver.Free;
+    end;
+  except  // dl:ok try-except-swallowed@e230 -- a manifest that will not load degrades the lint run to "could not check"; it is not an index build
+  end;
+end;
+
+{ Lists the manifest's section names for SHARED-UNIT-SCOPE (1.41): the rules ask each
+  section's index whether it lists a unit. Lazy: the manifest is read on the first call. }
+function MakeSiblingProjectLister(const AArgs: TArgs): DRagLint.Lint.SharedScope.TSiblingProjectLister;
+begin
+  Result:=
+    function: TArray<string>
+    var
+      NameToDb: TDictionary<string, string>;
+    begin
+      NameToDb:= TDictionary<string, string>.Create;
+      try
+        LoadSiblingNameToDb(AArgs, NameToDb);
+        Result:= NameToDb.Keys.ToArray;
+      finally
+        NameToDb.Free;
+      end;
+    end;
+end; // function
 { Maps a project NAME -- as a shared unit's own `dl:shared` header spells it --
   to an open read-only store, for `unused-public-symbol`.
 
@@ -33084,7 +33221,7 @@ end; // function
   Both are the caller's to free, after the rules have run. }
 function MakeSiblingStoreResolver(const AArgs: TArgs;
   const AKeepAlive: TList<ISymbolStore>;
-  const AOwned: TObjectList<TObject>): DRagLint.Lint.ProjectRules.TSiblingStoreResolver;
+  const AOwned: TObjectList<TObject>): DRagLint.Lint.SharedScope.TSiblingStoreResolver;
 var
   NameToDb: TDictionary<string, string>;
   Opened  : TDictionary<string, ISymbolStore>;
@@ -33108,34 +33245,7 @@ begin
       if not Resolved then
       begin
         Resolved:= True; { one attempt, success or not -- a broken manifest must not be re-parsed per symbol }
-        try
-          { --config wins when given, exactly as DoResolveDbsList treats it.
-            Without this the resolver would silently read the MACHINE's manifest
-            while the rest of the run used the one the caller named -- and a
-            hermetic test could not point it anywhere. }
-          var Manifest: TIndexManifest;
-          if AArgs.WorkspaceConfig <> '' then
-            Manifest:= TManifestIO.ParseText(TFile.ReadAllText(AArgs.WorkspaceConfig),
-                                             ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig)))
-          else
-            Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
-          var Platform: string:= AArgs.CheckPlatform;
-          if Platform = '' then Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
-          if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
-          var Resolver: DRagLint.Project.Resolver.TProjectResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
-          try
-            var Plan: TIndexPlan:= ResolvePlan(Manifest, [Platform], Resolver);
-            for var PS in Plan.Items do
-              if (PS.Name <> '') and (PS.DbPath <> '') then
-                NameToDb.AddOrSetValue(LowerCase(PS.Name), PS.DbPath);
-          finally
-            Resolver.Free;
-          end;
-        except
-          { A manifest that will not load leaves every name unresolvable, which
-            the rule reads as "could not check" and reports. Degrading, not
-            failing, is right: this is a lint run, not an index build. }
-        end;
+        LoadSiblingNameToDb(AArgs, NameToDb);
       end;
       if Opened.TryGetValue(LowerCase(AProjectName), St) then Exit(St);
       if not NameToDb.TryGetValue(LowerCase(AProjectName), DbPath) then Exit;
@@ -35097,7 +35207,7 @@ begin
         // and the recompile (RefreshProjectFindingsCore) -- no second store.
         { 1.40 IDX-LOCK: this phase rescans and recompiles INTO the index -- take <db>.indexing.lock. }
         if ConfigDbRedirectsWrite('reconcile-project', AArgs, ProjectFile) then Exit(2);
-        if not AcquireIndexLock(CohDbPath) then Exit(2);
+        if not AcquireIndexLock(CohDbPath, {AQuiet=}False, 'reconcile-project') then Exit(2);
         Store:= TSQLiteSymbolStore.Create(CohDbPath);
         Store.Migrate;
         HaveCoh:= True;
@@ -36821,6 +36931,17 @@ begin
           // ignore -- advisory only
         end;
       end;
+      { 1.41 SERVE-ALLDBS: with no --db, the manifest resolves EVERY database of the exe-dir drag-lint.json
+        (38 here), but TMCPServer opens only the first and used to print one "ignored:" line per other
+        one. Conservative fix, behaviour unchanged: serve the first, hand the server only that one, and say
+        once -- on stderr, never the JSON-RPC stdout -- how to choose. Lazy-opening or refusing without a
+        scope would break MCP configs that rely on the current pick. An explicit --db list is untouched. }
+      if (Length(Args.DbPaths) = 0) and (Length(DbList) > 1) then
+      begin
+        Writeln(ErrOutput, Format('drag-lint serve: NOTE -- no --db given; the manifest resolved %d databases and serve uses only the FIRST (%s). ' +
+          'Pass --db <file.sqlite> (or --project) to choose.', [Length(DbList), DbList[0]]));
+        DbList:= [DbList[0]];
+      end;
       for var ServeDb in DbList do SizeGuardCheck(ServeDb, ServeSGMB, Args.Force32);
       { Before Create, not after: TSQLiteSymbolStore opens the path for write, and
         SQLite CREATES an empty database for one that is not there. So a typo in an
@@ -36889,7 +37010,7 @@ begin
       try
         TFile.AppendAllText(ExtractFilePath(ParamStr(0)) + 'drag-lint-fatal.log',
           Format('%s  cmd=%s  %s: %s'#13#10,
-            [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), Args.Command, E.ClassName, E.Message]));
+            [FormatDateTime('yyyy-mm-dd hh:nn:ss', NowLocal), Args.Command, E.ClassName, E.Message]));
       except
         { deliberately empty }
       end;

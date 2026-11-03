@@ -30,6 +30,7 @@ Full flag list: [context in the CLI reference](../cli.md#context).
 | `--no-docs` |  |  |  |
 | `--full-surface` |  |  |  |
 | `--max-callers` | `N` |  |  |
+| `--max-body-tokens` | `N` |  |  |
 | `--context` | `N` |  |  |
 | `--library-db` | `<library.sqlite>` |  |  |
 
@@ -82,6 +83,9 @@ and a capped list of callers, as markdown.
 
 When the project was indexed with a library (`--library-db`, or `libraryResolve` in the manifest), a routine whose body calls library members gets one extra line above `## Callers`: `Library calls: N (top: a, b, c)`. N counts the calls whose stored `external_target` is set; the top three targets are the most frequent. `--format json` carries the same as `library_calls` (`count`, `top`). A project indexed without a library has no external targets, so the line and the key are both absent. `--library-db <library.sqlite>` (or a second `--db`) opts into a query-time count: calls with no stored link whose receiver is typed by name are bound against the library now (the same binding `find-callees` uses, read-only; a library that cannot be opened is a stderr NOTE and the stored-only count). `library_calls.via` says where the count came from: `stored`, or `oracle` when at least one call was bound at query time. It never attaches a library you did not name.
 
+### A whole type: the body cap
+
+`context --task "modify TFoo"` on a class, record or interface would print every method body (`TSQLiteSymbolStore`: ~262k estimated tokens). The bodies are capped at `--max-body-tokens N` estimated tokens (default **20000**; `0` = every body, the old bundle). Which bodies stay: a FOCUS method named after the type (`modify TFoo Bar` -- always kept), then the methods most called by the type's other methods, then the smallest, then source order. Every omitted body is listed as its header line and `L<start>-<end>` under `## Omitted bodies`, ending with `-- N omitted by cap C; rerun with --max-body-tokens 0`. While capped, the class declaration chunk is dropped too (`## Class surface` already lists it). The cap engages only when the bodies exceed it, so a small type is unchanged, and a member target (one method) is never cut. `--format json` adds `body_cap`, `bodies_total`, `bodies_omitted`, `body_tokens_total`, `body_tokens_shown` and `omitted_bodies` (`kind`, `signature`, `start_line`, `end_line`, `tokens`) when the cap engaged. `--full-surface` does not lift it.
 ### When the phrase is not an identifier
 
 The bundle also carries a `## Wiki` section: if the task phrase matches the

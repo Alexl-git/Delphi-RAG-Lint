@@ -197,6 +197,30 @@ The engine never guesses; every kind it can give:
   `exception-semantics`, `ancestry-unknown`, `with-member`, `unresolved-qualified-type`,
   `type-unresolved`, `leaf-uses-cycle`.
 
+### What the fix handles when names or call shapes already exist
+
+These cases used to refuse and are now applied (lane CYC-C), or are predicted the same way by `--plan` (CYC-B):
+
+* **Names already in the leaf (routine-call inversion).** If the leaf unit already declares the pointer
+  names, identical `T<Routine>Ptr` / `<Routine>Ptr` text is reused and nothing is inserted; different text gets
+  the lowest free `<Routine>Ptr2`, `Ptr3` ... instead of `duplicate-identifier`. For an interface extraction
+  an identical `I<Class>Surface` is reused and a different one takes the lowest free suffix; an existing
+  `Get<M>` is reused only when it is exactly `function Get<M>: <T>;` and the property reads through it
+  (any other still refuses).
+* **Call shapes.** `B.Foo(...)` (the inverted routine qualified by its unit) and `X := Foo` (an assigned value)
+  are redirected to the pointer under the same initialization-order check. `@Foo`, `@B.Foo` and any other
+  `B.X` still refuse.
+* **Overloads.** An overloaded routine is bound when the overload the index bound admits the argument count of
+  every call, no other overload admits any, and none has a default parameter; otherwise `overloaded-routine` stays.
+* **Source layout.** An indented `type` / `var` / `const` header (indented less than its declarations) and the
+  same-line forms `var GX: T = v;` / `type TR = record` are recognised. A final `end.` followed by a block comment is
+  still the final `end.`; a class heritage spread over several lines is read up to its closing `)`. An unbalanced
+  heritage still refuses `manual-edit`.
+* **Plan agrees with fix.** A routine edge whose signature names a type that Part A already moves is predicted as
+  cut by routine-call inversion (not `signature-in-cycle`) when Part B is re-run,.
+
+Still manual: type declarations and type casts of the moved name, several classes in one move, unsupported
+members, unresolved types, non-ASCII text.
 ### What stays manual
 
 A refused group is yours: `--plan` still prints the playbook and the standard remedy for it,

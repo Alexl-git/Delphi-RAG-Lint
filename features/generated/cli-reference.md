@@ -243,6 +243,7 @@ drag-lint context --task "verb qname" [--db <file.sqlite>] [--format md|json|raw
 | `--no-docs` |  |  |  |
 | `--full-surface` |  |  |  |
 | `--max-callers` | `N` |  |  |
+| `--max-body-tokens` | `N` |  |  |
 | `--context` | `N` |  |  |
 | `--library-db` | `<library.sqlite>` |  |  |
 
@@ -1532,6 +1533,7 @@ drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N]
 | `--format` |  |  |  |
 | `--json` |  |  |  |
 | `--db` | `PATH` |  |  |
+| `--output` | `F` |  |  |
 
 Described in:
 

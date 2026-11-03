@@ -2757,6 +2757,8 @@ var
   TypeMap : TDictionary<string,string>;
   Guards  : TDictionary<string,Integer>; { v0.71: 'x|TFoo' set of 'x is TFoo' guards }
   EnumMems: TDictionary<string,TStringList>; { v0.74: same-file enum type (lower) -> member names }
+  Scopes  : TObjectList<TDictionary<string,string>>; { INLINEVAR-SCOPE: routine / block decl maps, innermost last }
+  ScopeEnd: TObjectList<TDictionary<string,Int64>>;  { parallel: an inline var's statement end byte; empty for a routine }
 
   { v11 (M1): the store's resolved category for a declared type text, or
     tcUnknown when there is no store / it can't resolve (caller then falls back
@@ -3005,6 +3007,82 @@ var
         end;
   end;
 
+  { INLINEVAR-SCOPE (1.41): the declared type of identifier AId as seen from
+    where it stands. The innermost enclosing block's inline vars (declared
+    above the use) and routine's params + var-section locals answer first;
+    only a name no enclosing scope declares falls back to the flat file map.
+    Before this, two same-name declarations of different types ANYWHERE in the
+    file made the name AMBIGUOUS_DECL_TYPE for every use, silencing the type
+    rules file-wide. }
+  function LookupType(const AId: TTSNode; out AType: string): Boolean;
+  var
+    K   : Integer;
+    Name: string ;
+    Ends: Int64  ;
+  begin
+    Name:= LowerCase(NodeStr(AId));
+    for K:= Scopes.Count - 1 downto 0 do
+      if Scopes[K].TryGetValue(Name, AType) and ((not ScopeEnd[K].TryGetValue(Name, Ends)) or (Ends <= Int64(AId.StartByte))) then Exit(True);
+    Result:= TypeMap.TryGetValue(Name, AType);
+  end;
+
+  { Pushes the declaration scope N opens, if any: a routine's params + var
+    sections, or a block's inline vars (`var X: T;` and the `var X: T := v`
+    lhs of an assignment). Returns True when it pushed. }
+  function PushScope(const N: TTSNode): Boolean;
+  var
+    Decls: TDictionary<string,string>;
+    Ends : TDictionary<string,Int64> ;
+    J    : Integer;
+    Kid  : TTSNode;
+    One  : TDictionary<string,string>;
+  begin
+    Result:= False;
+    if N.NodeType = 'defProc' then
+    begin
+      Decls:= TDictionary<string,string>.Create;
+      CollectDeclTypes(N, Src, Decls, False);
+      Scopes.Add(Decls);
+      ScopeEnd.Add(TDictionary<string,Int64>.Create);
+      Exit(True);
+    end;
+    if N.NodeType <> 'block' then Exit;
+    { owned by the scope lists from creation; an empty block's pair is popped below }
+    Decls:= TDictionary<string,string>.Create;
+    Scopes.Add(Decls);
+    Ends:= TDictionary<string,Int64>.Create;
+    ScopeEnd.Add(Ends);
+    for J:= 0 to N.NamedChildCount - 1 do
+    begin
+      Kid:= N.NamedChild(J);
+      var EndAt: Int64:= Kid.EndByte;
+      if Kid.NodeType = 'assignment' then Kid:= Kid.ChildByField('lhs');
+      if Kid.IsNull or ((Kid.NodeType <> 'varDef') and (Kid.NodeType <> 'varAssignDef')) then Continue;
+      One:= TDictionary<string,string>.Create;
+      try
+        CollectDeclTypes(Kid, Src, One, True);
+        for var Pair in One do
+        begin
+          { a block that redeclares a name with another type is ambiguous only inside that block }
+          var Prior: string;
+          if Decls.TryGetValue(Pair.Key, Prior) and (not SameText(Prior, Pair.Value)) then
+            Decls.AddOrSetValue(Pair.Key, AMBIGUOUS_DECL_TYPE)
+          else Decls.AddOrSetValue(Pair.Key, Pair.Value);
+          if not Ends.ContainsKey(Pair.Key) then Ends.Add(Pair.Key, EndAt);
+        end;
+      finally
+        One.Free;
+      end;
+    end;
+    if Decls.Count = 0 then
+    begin
+      Scopes.Delete(Scopes.Count - 1);
+      ScopeEnd.Delete(ScopeEnd.Count - 1);
+      Exit;
+    end;
+    Result:= True;
+  end;
+
   function OperandIsFloat(const N: TTSNode): Boolean;
   var
     T  : string;
@@ -3014,7 +3092,7 @@ var
     if N.IsNull then Exit;
     if N.NodeType = 'identifier' then
     begin
-      if TypeMap.TryGetValue(LowerCase(NodeStr(N)), T) then Result:= TypeTextIsFloat(T);
+      if LookupType(N, T) then Result:= TypeTextIsFloat(T);
     end
     else if N.NodeType = 'literalNumber' then
     begin
@@ -3050,7 +3128,7 @@ var
     if N.IsNull then Exit;
     if N.NodeType = 'identifier' then
     begin
-      if TypeMap.TryGetValue(LowerCase(NodeStr(N)), T) then Result:= (CatOf(T) = tcString);
+      if LookupType(N, T) then Result:= (CatOf(T) = tcString);
     end
     else if N.NodeType = 'literalString' then
     begin
@@ -3076,6 +3154,8 @@ var
     HaveCall: Boolean  ;
   begin
     if N.IsNull or (Findings.Count >= 200) then Exit;
+    var Pushed:= PushScope(N);
+    try
     { v0.74: exhaustive-enum-case -- a 'case' on an enum-typed selector that omits
       some members AND has no 'else' silently ignores them (and any future member
       added to the enum). Selector = NamedChild(0) when it is a plain identifier;
@@ -3101,7 +3181,7 @@ var
             begin Selector:= Sc; Break; end;
           end;
         if (not Selector.IsNull) and (Selector.NodeType = 'identifier')
-           and TypeMap.TryGetValue(LowerCase(NodeStr(Selector)), T) then
+           and LookupType(Selector, T) then
         begin
           var Members: TStringList:= ResolveEnumMembers(T);
           if Members <> nil then
@@ -3221,7 +3301,7 @@ var
             begin
               A0:= Args.NamedChild(0);
               if (not A0.IsNull) and (A0.NodeType = 'identifier')
-                 and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T)
+                 and LookupType(A0, T)
                  and TypeTextIsString(T) then
               begin
                 P:= N.StartPoint;
@@ -3250,7 +3330,7 @@ var
         if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
         begin
           A0:= Args.NamedChild(0);
-          if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) and TypeTextIsInterface(T) then
+          if (A0.NodeType = 'identifier') and LookupType(A0, T) and TypeTextIsInterface(T) then
           begin
             P:= Entity.StartPoint;
             F:= Default(TLintFinding);
@@ -3277,7 +3357,7 @@ var
           if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
           begin
             A0:= Args.NamedChild(0);
-            if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) and TypeTextIsPointer(T) then
+            if (A0.NodeType = 'identifier') and LookupType(A0, T) and TypeTextIsPointer(T) then
             begin
               P:= Entity.StartPoint;
               F:= Default(TLintFinding);
@@ -3308,7 +3388,7 @@ var
           if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
           begin
             A0:= Args.NamedChild(0);
-            if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) then
+            if (A0.NodeType = 'identifier') and LookupType(A0, T) then
             begin
               var Tl: string:= LowerCase(Trim(T));
               if (Tl = 'nativeint') or (Tl = 'nativeuint') or (Tl = 'intptr') or (Tl = 'uintptr')
@@ -3345,7 +3425,7 @@ var
           begin
             A0:= Args.NamedChild(0);
             if (A0.NodeType = 'identifier')
-               and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T)
+               and LookupType(A0, T)
                and SameText(Trim(T), En) then
             begin
               P:= Entity.StartPoint;
@@ -3381,7 +3461,7 @@ var
           if (not Args.IsNull) and (Args.NamedChildCount = 1) then
           begin
             A0:= Args.NamedChild(0);
-            if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) then
+            if (A0.NodeType = 'identifier') and LookupType(A0, T) then
             begin
               var Xn: string:= NodeStr(A0);
               if (SameText(Trim(T), 'TObject') or (LooksLikeClassType(T) and not SameText(Trim(T), Un)))
@@ -3416,7 +3496,7 @@ var
           if (not Args.IsNull) and (Args.NamedChildCount = 1) then
           begin
             A0:= Args.NamedChild(0);
-            if (A0.NodeType = 'identifier') and TypeMap.TryGetValue(LowerCase(NodeStr(A0)), T) then
+            if (A0.NodeType = 'identifier') and LookupType(A0, T) then
             begin
               var Tl: string:= LowerCase(Trim(T));
               if (Tl = 'string') or (Tl = 'unicodestring') or (Tl = 'widestring') or (Tl = 'widechar') then
@@ -3507,6 +3587,13 @@ var
       end;
     end;
     for I:= 0 to N.ChildCount - 1 do CheckExpr(N.Child(I));
+    finally
+      if Pushed then
+      begin
+        Scopes.Delete(Scopes.Count - 1);
+        ScopeEnd.Delete(ScopeEnd.Count - 1);
+      end;
+    end;
   end;
 
   { v0.82 (#4 first cut): interface-object-mixing (OFF) -- the ARC/manual
@@ -3659,6 +3746,8 @@ begin
   TypeMap := TDictionary<string,string>.Create;
   Guards  := TDictionary<string,Integer>.Create;
   EnumMems:= TDictionary<string,TStringList>.Create;
+  Scopes  := TObjectList<TDictionary<string,string>>.Create(True);
+  ScopeEnd:= TObjectList<TDictionary<string,Int64>>.Create(True);
   try
 
     if PF.Tree <> nil then
@@ -3673,6 +3762,8 @@ begin
   finally
     for var Ml in EnumMems.Values do Ml.Free;
     EnumMems.Free;
+    ScopeEnd.Free;
+    Scopes.Free;
     Guards.Free;
     TypeMap.Free;
     Findings.Free;

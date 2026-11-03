@@ -7,7 +7,7 @@ group: editor-integration
 order: 110006
 since: 1.40.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.40.0-alpha
 ---
 
 # Engine heartbeat: the IDE tells a busy engine from a stuck one
@@ -60,6 +60,22 @@ engine stager enumerate `drag-lint-ctl-*`, so their behaviour is unchanged.
   mark is ignored. A beat that stops answering is frozen. The stuck limit is
   unchanged (180 s).
 * The status bar shows the last beat, e.g. `index parse 120/400`.
+
+### A second writer waits on it (1.41)
+
+Asked `status<TAB>beat<TAB>writing`, the pipe adds `writing=<db>|<db>...`: the
+databases this engine has a writer store open on (lower-cased full paths). A
+request without `writing` gets the old reply.
+
+A writer that finds the database locked (SQLITE_BUSY) asks the other engines'
+heartbeat pipes once a second which of them write that database. It keeps
+waiting while one of them advances its beat seq, and gives up ("database is
+locked") once no holder's seq has moved for the writer timeout (120 s, or
+`DRAGLINT_BUSY_TIMEOUT_MS`). A holder with no heartbeat (an older engine, a
+verb without a beat pipe, a non-drag-lint writer) therefore keeps the fixed
+120 s. After 5 s of a wait that saw progress, the waiter prints one NOTE to stderr.
+The waiter does not advance its own beat while it waits. Guard:
+`tests\autotest\run_busy_beat_guard.ps1`.
 
 ### Verified by
 

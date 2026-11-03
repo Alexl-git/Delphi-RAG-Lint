@@ -2166,7 +2166,26 @@ type
       TotalCallers - Length(Callers). }
     TotalCallers    : Integer           ;
     CallerCap       : Integer           ;
+    { CTX-TYPECAP (1.41): a TYPE target's method bodies are capped at BodyCap
+      estimated tokens (docs\superpowers\specs\2026-11-03-ctx-typecap-design.md).
+      BodyCap = 0 means the cap did NOT engage (uncapped, or the bodies fit), and
+      then OmittedBodies is empty. OmittedBodies[i].Text is the omitted body's
+      header line (or the class declaration marker), StartLine/EndLine its range;
+      BodyFile is the unit they live in. The totals cover impl-method chunks only. }
+    BodyCap         : Integer             ;
+    BodiesTotal     : Integer             ;
+    BodyTokensTotal : Integer             ;
+    BodyTokensShown : Integer             ;
+    BodyFile        : string              ;
+    OmittedBodies   : TArray<TSliceChunk> ;
+    OmittedTokens   : TArray<Integer>     ;  { parallel to OmittedBodies }
   end;
+
+const
+  /// <summary>CTX-TYPECAP default body budget, in estimated tokens, for a TYPE
+  /// target's method bodies (owner ruling 2026-11-01). `context --max-body-tokens 0`
+  /// lifts it.</summary>
+  CONTEXT_BODY_TOKEN_CAP = 20000;
 
 /// <summary>The one-line "N omitted by cap" note every capped list prints (XERJ item 2).</summary>
 /// <param name="AOmitted">How many rows the cap hid (or, with AAtLeast, the minimum known to be hidden).</param>

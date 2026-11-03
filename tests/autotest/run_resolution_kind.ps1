@@ -120,8 +120,10 @@ end;
 end.
 '@
   $Db = Join-Path $WorkDir 'fix.sqlite'
+  . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
   & $Exe index $SrcDir --db $Db 2>&1 | Out-Null
-  if (-not (Test-Path $Db)) { Write-Host 'FATAL: index produced no DB' -ForegroundColor Red; exit 2 }
+  $idxCode = $LASTEXITCODE
+  if (-not (Test-Path $Db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: index produced no DB' -ForegroundColor Red; exit 2 }
 
   # ---- find-callers --resolved ------------------------------------------------
   $raw = JsonOf @('query','find-callers','--name','Solo','--resolved','--json','--db',$Db)

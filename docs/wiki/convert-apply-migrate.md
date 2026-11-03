@@ -57,6 +57,25 @@ in the code, not a member of a converted instance:
   there).
 Gate: `info --json` -> `capabilities.migrate_identifiers: true`.
 Guard: `tests\autotest\run_convert_apply_migrate_type.ps1`.
+## Output contract for consumers (G1, G2, G5)
+
+The engine stands behind these statements for the `#migrate` items of `convert-apply --json`
+(confirmed by bytes 2026-10-23). A consumer such as the rules editor may rely on them.
+
+* **Item texts are verbatim (G1).** `access_sites[]`, `todos[]` and `warnings[]` hold the item `text`
+  verbatim, one entry per item, so a consumer may match on the exact text. The engine does not reword an
+  item without a version note.
+* **Silences (G2).** (a) A block with no converted instance in the unit yields no item for any of its lines
+  (a scoped line in such a block is silent too). (b) `#migrate X -> X` (identity) yields no item; the editor's
+  pre-check speaks for identity, the engine stays silent. (c) A `#migrate` line before the first header
+  yields no item.
+* **Block extent (G5).** A block is a header line up to the next header line or the end of the file. Blank
+  lines and comments inside a block are not separately specified; a consumer must not depend on them.
+
+Also shipped from the same list (no action): the native deliberate-break status (G4), `rules_file` on
+`pas_uses` rows (G7), `DL_NONE` left out of the uses reconciliation (G8), `from_type` / `to_type` filled (G9),
+a diagnostic for the `with` site (G10) and `old_value` on `migrate-check` items (G11). Open ask for a later
+slice: `convert-validate` echoing the refusal text per `#migrate` line, so it is visible before a run.
 ## Gate
 `drag-lint info --json` -> `capabilities.migrate_members: true`.
 Contract for the converter editor: `docs/NOTICE-2026-10-19-c18-slice1-migrate.md`.

@@ -48,8 +48,10 @@ New-Item -ItemType Directory -Force $WorkDir | Out-Null
 $LibSrc = Join-Path $WorkDir 'libsrc'; New-Item -ItemType Directory -Force $LibSrc | Out-Null
 [IO.File]::WriteAllText((Join-Path $LibSrc 'FxLib.pas'), "unit FxLib;`r`n`r`ninterface`r`n`r`nimplementation`r`n`r`nend.`r`n", [Text.Encoding]::ASCII)
 $LibDb = Join-Path $WorkDir 'library-Win64.sqlite'
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 & $Exe index $LibSrc --db $LibDb 2>&1 | Out-Null
-if (-not (Test-Path $LibDb)) { Write-Host 'FATAL: index produced no library DB' -ForegroundColor Red; exit 2 }
+$idxCode = $LASTEXITCODE
+if (-not (Test-Path $LibDb)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: index produced no library DB' -ForegroundColor Red; exit 2 }
 $env:DRAGLINT_CONTEXT_DEFAULTS = Join-Path $WorkDir 'context-defaults.json'
 [IO.File]::WriteAllText($env:DRAGLINT_CONTEXT_DEFAULTS, (@{ libraries = @{ Win64 = @{ libraryDb = $LibDb } } } | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding($false)))
 

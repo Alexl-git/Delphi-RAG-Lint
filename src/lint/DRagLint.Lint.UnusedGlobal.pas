@@ -39,6 +39,7 @@ interface
 uses
   DRagLint.Core.Model
   , DRagLint.Core.Interfaces
+  , DRagLint.Lint.SharedScope { TSharedScope -- SHARED-UNIT-SCOPE (1.41) }
   ;
 
 const
@@ -51,12 +52,16 @@ const
 /// names: implementation-section declarations (const, var, type alias, class,
 /// record, interface) when nothing in the declaring file names them; interface
 /// section declarations (const, var, type alias) when nothing in any file does,
-/// unless the declaring unit is `dl:shared`. Anchored at the declaration.</returns>
+/// unless another project that lists the unit names them (see AShared). Anchored at the declaration.</returns>
 /// <remarks>Name-keyed and conservative: a homonym used anywhere in scope keeps
 /// a symbol silent, and so does a mention in a comment or string (text
 /// fallback). Not thread-safe. A symbol used only inside an inactive {$IFDEF}
 /// branch is invisible to the refs but visible to the text fallback.</remarks>
-function CollectUnusedGlobal(const AStore: ISymbolStore): TArray<TLintFinding>;
+/// <param name="AShared">SHARED-UNIT-SCOPE (1.41): judges an interface symbol of a unit other
+/// projects list by all of them -- reported only when none names it, silent when one does or when a
+/// listing project's index is missing or stale. nil: a unit with a `dl:shared` header naming
+/// another project is skipped for interface symbols (the 1.40 behaviour).</param>
+function CollectUnusedGlobal(const AStore: ISymbolStore; const AShared: TSharedScope = nil): TArray<TLintFinding>;
 
 implementation
 
@@ -79,7 +84,7 @@ const
   { an unreadable file counts as this many mentions of every suspect: an unopened file is not evidence of absence }
   UNREADABLE_HITS = 1000;
 
-function CollectUnusedGlobal(const AStore: ISymbolStore): TArray<TLintFinding>;
+function CollectUnusedGlobal(const AStore: ISymbolStore; const AShared: TSharedScope): TArray<TLintFinding>;
 var
   UnitIds   : TDictionary<Int64, Boolean>;
   Cands     : TList<TSymbol>;
@@ -230,7 +235,24 @@ begin
         if SameText(C.Section, SECTION_INTF) then
         begin
           var Path: string:= AStore.GetFilePath(C.FileId);
-          if (Path <> '') and (Length(TSharedUnit.ProjectsOf(Path)) > 1) then Continue;
+          if AShared = nil then
+          begin
+            if (Path <> '') and (Length(TSharedUnit.ProjectsOf(Path)) > 1) then Continue;
+          end
+          else
+          begin
+            var Low: string:= LowerCase(C.Name);
+            var DeclLine: Integer:= C.StartLine;
+            var Projs: string;
+            var Verdict: TSharedVerdict:= AShared.Judge(Path,
+              function(const S: ISymbolStore): Boolean
+              begin
+                Result:= False;
+                for var R in S.FindRefsNamingInFiles(S.GetAllFileIds, [Low]) do
+                  if not (SameText(S.GetFilePath(R.FileId), Path) and (R.StartLine = DeclLine)) then Exit(True);
+              end, Projs);
+            if Verdict in [svUsedElsewhere, svUndecided] then Continue;
+          end;
         end;
         Report(C);
       end;

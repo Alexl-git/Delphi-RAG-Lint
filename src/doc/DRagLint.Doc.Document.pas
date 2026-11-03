@@ -794,8 +794,12 @@ end;
 // Deliberately NOT fixed in the scanner. DRagLint.Parser.DocComments is on the
 // extractor hash surface (src\parser), so splitting regions there bumps
 // DRAGLINT_EXTRACTOR_VERSION and re-parses EVERY database -- hours -- to change
-// something only the doc WRITE path gets wrong. Index-time attribution is
-// unaffected by this defect: it reads, it does not rewrite.
+// something only the doc WRITE path gets wrong. Index-time attribution is NOT
+// narrowed either: the index attributes the whole merged region to the declaration
+// below it and ParseXmlDoc takes the FIRST <summary> of that region (RxSummary.Match),
+// i.e. the other block's, not this declaration's own. That read-side
+// mis-attribution is not shared by the write path here; it is left for the next
+// extractor bump.
 //
 // Fires only at count >= 2. A single-block region is untouched, which keeps
 // blocks that legitimately open with something other than <summary> (a bare
@@ -921,6 +925,22 @@ begin
       Exit(True);
 end;
 
+{ DOC-APPLY-GLUED: True when the FIRST source line of a /// region carries code
+  before its `///` (`procedure Alpha;  /// <summary>Beta ...`). The scanner starts
+  such a region ON that code line, so the delete range of a rewrite would begin on
+  code. The apply path's guard refuses the write (nothing is lost) but the unit
+  then cannot be documented at all; the documenter skips the declaration instead
+  and says why. Only line-style /// regions can be glued; other kinds are False. }
+function RegionGluedToCode(const ASrc: string; const ARegion: TDocCommentRegion): Boolean;
+var
+  Lines: TArray<string>;
+begin
+  Result:= False;
+  if ARegion.Kind <> dckTripleSlash then Exit;
+  Lines:= SourceLines(ASrc);
+  if (ARegion.StartLine < 1) or (ARegion.StartLine > Length(Lines)) then Exit;
+  Result:= Pos('///', TrimLeft(Lines[ARegion.StartLine - 1])) <> 1;
+end;
 class function TDocumenter.ExistingDocForSymbol(const AStore: ISymbolStore; const ASym: TSymbol;
   out AFound: Boolean; out AHasDoc: Boolean): TParsedDoc;
 var
@@ -965,7 +985,7 @@ begin
     // would have widened `--strip` alone, silently recreating the very
     // apply/strip asymmetry this task exists to prevent.
     Region:= FindDocRegionAbove(Regions, ASym.StartLine, DOC_ALLOW_GAP, False, SymStartLines);
-    if Region.Kind <> TDocCommentKind(-1) then
+    if (Region.Kind <> TDocCommentKind(-1)) and (not RegionGluedToCode(Src, Region)) then
     begin
       Result := TDocCommentParser.Dispatch(Region);
       AHasDoc:= True;
@@ -1089,7 +1109,17 @@ begin
     // apply/strip asymmetry this task exists to prevent.
     Region:= FindDocRegionAbove(Regions, ASym.StartLine, DOC_ALLOW_GAP, False, SymStartLines);
     if Region.Kind <> TDocCommentKind(-1) then
+    begin
+      if RegionGluedToCode(Src, Region) then
+      begin
+        Writeln(ErrOutput, Format('doc: skipped %s at %s:%d -- its doc block starts on a line that also holds code ' +
+          '(line %d); put the /// block on its own line to document it',
+          [ASym.QualifiedName, ExtractFileName(Path), ASym.StartLine, Region.StartLine]));
+        Result.Action:= daUnchanged;
+        Exit;
+      end;
       Existing:= TDocCommentParser.Dispatch(Region);
+    end;
   finally
     Regions.Free;
   end;
