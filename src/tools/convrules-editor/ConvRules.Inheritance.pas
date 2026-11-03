@@ -246,7 +246,8 @@ type
     Ancestors: TArray<TAncestorUnit>;
     /// <summary>The classes (distinct, walk order) where an ancestor chain of the unit left the
     /// project index (C8CHAIN, owner ruling Q5-B); library roots such as TForm are included --
-    /// UnindexedBlockText filters them. [] when not Known.</summary>
+    /// ConvRules.AncestorOrder.UnindexedBlockText asks the platform library about each. [] when
+    /// not Known.</summary>
     Outside  : TArray<string>;
   end;
 
@@ -312,7 +313,7 @@ function UnitNameOf(const APasPath: string): string;
 /// <returns>Bare names of every ListDfmInstances type (object, inherited and inline alike)
 /// and every field type that IsFromType; distinct, first seen (.dfm first, then fields).
 /// [] for no pairs.</returns>
-function FromTypesIn(const ADfmText: string; const AFields: TArray<TFieldDecl>; const APairs: TArray<TTypePair>): TArray<string>;
+function FromTypesIn(const ADfmText: string; const AFields: TArray<TFieldDecl>; const APairs: TArray<TTypePair>): TArray<string>;  // dl:ok unused-public-symbol@4722 -- REVIEWED 2026-11-03 pinned by the model tests (AncestorGraphTests.inc ag.*), which are outside this project's index; AnalyzeUnit is the editor's caller
 
 /// <summary>PURE: walks one instance's ancestor chain to its declaring ancestor (spec E2).</summary>
 /// <param name="AInst">The instance.</param>
@@ -346,13 +347,13 @@ function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: str
 /// <returns>Root first (Depth descending, stable; a unit met on several chains keeps its largest
 /// Depth and the union of its Types). A class not in the index ends its chain without error
 /// (outside). AOwn.PasPath itself is never listed.</returns>
-function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;
+function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;  // dl:ok unused-public-symbol@32f1 -- REVIEWED 2026-11-03 pinned by the model tests (AncestorGraphTests.inc ag.*), which are outside this project's index; AnalyzeUnit is the editor's caller
   const AReader: TDfmTextReader; const APairs: TArray<TTypePair>; out AError: string): TArray<TAncestorUnit>; overload;
 
 /// <summary>PURE: AncestorGraphOf that also reports where the chains left the index.</summary>
 /// <param name="AOutside">Distinct class names (walk order) that no indexed unit declares: the
 /// first class past the project on each chain (library roots included).</param>
-function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;
+function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;  // dl:ok unused-public-symbol@32f1 -- REVIEWED 2026-11-03 pinned by the model tests (AncestorGraphTests.inc ag.*), which are outside this project's index; AnalyzeUnit is the editor's caller
   const AReader: TDfmTextReader; const APairs: TArray<TTypePair>; out AError: string; out AOutside: TArray<string>): TArray<TAncestorUnit>; overload;
 
 /// <summary>PURE: the C8 analysis of one listed unit (spec E1-E3, E2b).</summary>
@@ -552,41 +553,6 @@ function InsertAncestors(const AList: TArray<string>; const AUnitPas: string; co
 /// warning is blocking, not an "anyway" confirmation).</remarks>
 function OrderWarnings(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>; ARetypeSupported: Boolean): TArray<string>;
 
-/// <summary>PURE: AList in the order Convert runs it -- every listed unit after the listed
-/// members of its AncestorChain (owner ruling Q5: strict ancestor-first). Stable: units with no
-/// constraint between them keep their order, so an ancestor-first list is returned unchanged
-/// (the 1.42 engine's own in-batch order then has nothing to move).</summary>
-/// <param name="AList">The source list.</param>
-/// <param name="AUnits">The listed units' analyses (any order; a unit without one has no constraint).</param>
-/// <returns>A permutation of AList. Each pass takes the FIRST remaining unit whose listed
-/// ancestors are all placed; a cycle cannot be ordered, so its units follow in list order --
-/// nothing is dropped. Unlisted ancestors impose nothing.</returns>
-function OrderAncestorFirst(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;
-
-/// <summary>PURE: the blocking E7 question (replaces the warning with "anyway").</summary>
-/// <param name="AWarnings">OrderWarnings' lines; not empty.</param>
-/// <param name="AOrdered">OrderAncestorFirst's answer.</param>
-/// <returns>ORDER_HEAD, the lines one per line, a blank line, then 'Convert runs ancestors first:
-/// Base.pas, Mid.pas, Leaf.pas. Reorder the list and run?' (file names, ', '-joined).</returns>
-function OrderBlockText(const AWarnings, AOrdered: TArray<string>): string;
-
-/// <summary>PURE: the blocking error for an ancestor chain that leaves the project index (owner
-/// ruling Q5-B, 2026-11-03: the ancestor must be in the project, or the project stops compiling
-/// elsewhere; once it is, it is indexed).</summary>
-/// <param name="AUnits">The listed units' analyses.</param>
-/// <returns>'' when no unit has an unindexed, non-library ancestor class. Else a heading, one
-/// line per (unit, class) -- '&lt;Unit.pas&gt; descends from &lt;TClass&gt;, whose unit is in no indexed
-/// project.' -- a blank line, then the instruction to add that unit to the project
-/// (.dproj/.dpr) and reindex. No "run anyway".</returns>
-/// <remarks>Library roots (TForm, TDataModule, TFrame, ... and the DevExpress / FastReport
-/// prefixes Tcx, Tdx, Tfrx) never block: the editor's lookup is project-only and cannot tell a
-/// library class from an unindexed project class by itself, so this name filter is the
-/// conservative stand-in until a platform-library lookup is wired in.</remarks>
-function UnindexedBlockText(const AUnits: TArray<TUnitInheritance>): string;
-
-const
-  /// <summary>The status after No to the E7 question (every engine).</summary>
-  ORDER_CANCELLED_TEXT = 'Convert cancelled: nothing was run.';
 /// <summary>PURE: the distinct instance types of AUnit's asUnconverted verdicts,
 /// first-seen order (the E6 offer's types).</summary>
 /// <param name="AUnit">The unit's analysis.</param>
@@ -649,11 +615,6 @@ const
   GATE_ALL_UNITS    = 'the listed units';
   GATE_STOP_FMT     = 'Convert cancelled: inherited instances could not be checked -- %s';
   ORDER_WARNING_FMT = '%s is listed above its ancestor %s, which is not converted yet';
-  ORDER_HEAD        = 'Some units are listed above an ancestor that is not converted yet:';
-  UNINDEXED_HEAD    = 'Convert refused: an ancestor of a listed unit is not in the project index.';
-  UNINDEXED_FMT     = '%s descends from %s, whose unit is in no indexed project.';
-  UNINDEXED_TAIL    = 'Add that unit to the project (.dproj/.dpr), reindex, and press Convert again.';
-  ORDER_BLOCK_FMT   = 'Convert runs ancestors first: %s. Reorder the list and run?';
   // Until the engine retypes inherited instances (C8 N2): converting an ancestor leaves
   // its descendants' inherited objects with the From type under an ancestor that declares
   // the To type -- they fail at load (EClassNotFound / EReadError) and From-only member
@@ -1256,6 +1217,23 @@ begin
   AUnits:= AUnits + [AUnit];
 end;
 
+// An ancestor's .dfm text in AText ('' when it has none); returns '' or why it cannot be read
+// (unreadable, or binary).
+function AncestorDfmText(const AReader: TDfmTextReader; const AClass, ADfm: string; out AText: string): string;
+begin
+  Result:= '';
+  AText := '';
+  case AReader(ADfm, AText) of
+    drUnreadable:
+      Result:= Format(REASON_DFM, [AClass, ADfm]);
+    drMissing:
+      AText:= '';
+    else
+      if AText.StartsWith(BINARY_DFM_SIGNATURE) then
+        Result:= Format(REASON_DFM, [AClass, ADfm]);
+  end; // case
+end;
+
 function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;
   const AReader: TDfmTextReader; const APairs: TArray<TTypePair>; out AError: string; out AOutside: TArray<string>): TArray<TAncestorUnit>;
 var
@@ -1288,21 +1266,14 @@ var
       begin
         if not MatchText(LCls, AOutside) then
           AOutside:= AOutside + [LCls];
-        Exit; // left the index: outside, no error here (UnindexedBlockText decides)
+        Break; // left the index: outside, no error here (UnindexedBlockText decides)
       end;
       LSeen:= LSeen + [LCls];
       Inc(LDepth);
-      LDfm := ChangeFileExt(LInfo.PasPath, DFM_EXT);
-      LText:= '';
-      case AReader(LDfm, LText) of
-        drUnreadable:
-          Exit(Format(REASON_DFM, [LCls, LDfm]));
-        drMissing:
-          LText:= '';
-        else
-          if LText.StartsWith(BINARY_DFM_SIGNATURE) then
-            Exit(Format(REASON_DFM, [LCls, LDfm]));
-      end; // case
+      LDfm  := ChangeFileExt(LInfo.PasPath, DFM_EXT);
+      Result:= AncestorDfmText(AReader, LCls, LDfm, LText);
+      if Result <> '' then
+        Exit;
       LUnit.PasPath:= LInfo.PasPath;
       LUnit.Depth  := LDepth;
       LUnit.Types  := FromTypesIn(LText, LInfo.Fields, APairs);
@@ -1525,17 +1496,13 @@ begin
     Result.Verdicts:= Result.Verdicts + [LVerdict];
   end;
   if LGraphError <> '' then
-  begin
     // The instance walk found nothing unknown, but the graph (up to the root) could not be walked.
-    Result.Error    := LGraphError;
-    Result.Verdicts := nil;
-    Result.Outside  := nil;
-    Exit;
-  end;
-  Result.Known:= not Assigned(ACodeUses) or AddCodeUses(Result, LOwn, LScan.RootClass, APairs, ALookup, AReader, ACodeUses);
+    Result.Error:= LGraphError
+  else
+    Result.Known:= not Assigned(ACodeUses) or AddCodeUses(Result, LOwn, LScan.RootClass, APairs, ALookup, AReader, ACodeUses);
   if not Result.Known then
   begin
-    Result.Verdicts := nil; // AddCodeUses set Error: unknown, never a partial answer
+    Result.Verdicts := nil; // the graph or AddCodeUses set Error: unknown, never a partial answer
     Result.Ancestors:= nil;
     Result.Outside  := nil;
   end;
@@ -1866,78 +1833,6 @@ begin
   end;
 end;
 
-// True when every listed ancestor of the unit APas (per its analysis in AUnits) is in APlaced.
-function ListedAncestorsPlaced(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>; const APas: string;
-  const APlaced: TArray<string>): Boolean;
-begin
-  for var LUnit: TUnitInheritance in AUnits do
-    if SameText(ExpandFileName(LUnit.UnitPas), ExpandFileName(APas)) then
-      for var LAnc: string in AncestorChain(LUnit) do
-        if (PathIndex(LAnc, AList) >= 0) and (PathIndex(LAnc, APlaced) < 0) and not SameText(ExpandFileName(LAnc), ExpandFileName(APas)) then
-          Exit(False);
-  Result:= True;
-end;
-
-function OrderAncestorFirst(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;
-var
-  LTaken : TArray<Boolean>;
-  LPicked: Integer;
-begin
-  Result:= nil;
-  SetLength(LTaken, Length(AList));
-  while Length(Result) < Length(AList) do
-  begin
-    LPicked:= -1;
-    for var LIdx: Integer:= 0 to High(AList) do
-      if not LTaken[LIdx] and ListedAncestorsPlaced(AList, AUnits, AList[LIdx], Result) then
-      begin
-        LPicked:= LIdx;
-        Break;
-      end;
-    if LPicked < 0 then
-    begin
-      // a cycle cannot be ordered: the rest follows in list order, nothing is dropped
-      for var LIdx: Integer:= 0 to High(AList) do
-        if not LTaken[LIdx] then
-          Result:= Result + [AList[LIdx]];
-      Exit;
-    end;
-    LTaken[LPicked]:= True;
-    Result:= Result + [AList[LPicked]];
-  end;
-end;
-
-// True for a framework root the project index never holds (see UnindexedBlockText).
-function IsLibraryClass(const AClass: string): Boolean;
-begin
-  Result:= MatchText(BareType(AClass), ['TForm', 'TDataModule', 'TFrame', 'TCustomForm', 'TCustomFrame', 'TCustomDataModule', 'TObject', 'TComponent'])
-    or AClass.StartsWith('Tcx', True) or AClass.StartsWith('Tdx', True) or AClass.StartsWith('Tfrx', True);
-end;
-
-function UnindexedBlockText(const AUnits: TArray<TUnitInheritance>): string;
-var
-  LLines: TArray<string>;
-begin
-  LLines:= nil;
-  for var LUnit: TUnitInheritance in AUnits do
-    for var LClass: string in LUnit.Outside do
-      if not IsLibraryClass(LClass) then
-        LLines:= LLines + [Format(UNINDEXED_FMT, [ExtractFileName(LUnit.UnitPas), LClass])];
-  if Length(LLines) = 0 then
-    Exit('');
-  Result:= UNINDEXED_HEAD + sLineBreak + string.Join(sLineBreak, LLines) + sLineBreak + sLineBreak + UNINDEXED_TAIL;
-end;
-
-function OrderBlockText(const AWarnings, AOrdered: TArray<string>): string;
-var
-  LNames: TArray<string>;
-begin
-  LNames:= nil;
-  for var LPas: string in AOrdered do
-    LNames:= LNames + [ExtractFileName(LPas)];
-  Result:= ORDER_HEAD + sLineBreak + string.Join(sLineBreak, AWarnings) + sLineBreak + sLineBreak
-    + Format(ORDER_BLOCK_FMT, [string.Join(TYPE_SEP, LNames)]);
-end;
 function UnconvertedTypes(const AUnit: TUnitInheritance): TArray<string>;
 begin
   Result:= nil;

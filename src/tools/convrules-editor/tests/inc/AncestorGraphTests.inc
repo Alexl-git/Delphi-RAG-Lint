@@ -214,12 +214,29 @@ begin
   Check('ag.block.cancel.text', ORDER_CANCELLED_TEXT = 'Convert cancelled: nothing was run.');
 end;
 
+{ A fake platform library: ADeclared answer laDeclared, AFailed laFailed ('library locked'),
+  everything else laAbsent. }
+function AgLibrary(const ADeclared, AFailed: TArray<string>): TLibraryClassCheck;
+begin
+  Result:= function(const AClassName: string; out AError: string): TLibraryAnswer
+    begin
+      AError:= '';
+      if MatchText(AClassName, AFailed) then
+      begin
+        AError:= 'library locked';
+        Exit(laFailed);
+      end;
+      Result:= if MatchText(AClassName, ADeclared) then laDeclared else laAbsent;
+    end;
+end;
+
 procedure TestUnindexedAncestors;
 var
   LInh    : TUnitInheritance;
   LOutside: TArray<string>;
   LErr    : string;
   LGraph  : TArray<TAncestorUnit>;
+  LText   : string;
 
   function Own: TClassInfo;
   begin
@@ -243,10 +260,23 @@ begin
   LInh:= AnalyzeUnit(AG_LEAF_PAS, AgPairs, FakeLookup(['TLeaf|' + AG_LEAF_PAS + '|TMid', 'TMid|' + AG_MID_PAS + '|TCustomBase'], nil),
     FakeReader([ChangeFileExt(AG_LEAF_PAS, '.dfm')], ['inherited LeafForm: TLeaf' + AG_CRLF + 'end']), nil);
   Check('ag.outside.analyze.field', LInh.Known and (string.Join(',', LInh.Outside) = 'TCustomBase'), LInh.Error);
-  Check('ag.outside.block.names.class', ContainsText(UnindexedBlockText([WithOutside(['TCustomBase'])]), 'Leaf.pas descends from TCustomBase')
-    and ContainsText(UnindexedBlockText([WithOutside(['TCustomBase'])]), '.dproj/.dpr') and ContainsText(UnindexedBlockText([WithOutside(['TCustomBase'])]), 'reindex'),
-    UnindexedBlockText([WithOutside(['TCustomBase'])]));
-  Check('ag.outside.block.no.anyway', not ContainsText(UnindexedBlockText([WithOutside(['TCustomBase'])]), 'anyway'));
-  Check('ag.outside.library.not.blocked', UnindexedBlockText([WithOutside(['TForm', 'TDataModule', 'TcxCustomForm'])]) = '');
-  Check('ag.outside.none.empty', UnindexedBlockText([WithOutside([])]) = '');
+  LText:= UnindexedBlockText([WithOutside(['TCustomBase'])], AgLibrary(['TForm'], []));
+  Check('ag.outside.block.names.class', ContainsText(LText, 'Leaf.pas descends from TCustomBase') and ContainsText(LText, '.dproj/.dpr')
+    and ContainsText(LText, 'reindex'), LText);
+  Check('ag.outside.block.no.anyway', not ContainsText(LText, 'anyway'));
+  Check('ag.outside.library.not.blocked', UnindexedBlockText([WithOutside(['TForm', 'TDataModule', 'TcxCustomForm'])],
+    AgLibrary(['TForm', 'TDataModule', 'TcxCustomForm'], [])) = '');
+  Check('ag.outside.none.empty', UnindexedBlockText([WithOutside([])], AgLibrary([], [])) = '');
+  // Q-B: the platform library index decides, not a list of names
+  Check('ag.outside.vendor.library.not.blocked', UnindexedBlockText([WithOutside(['TJvCustomForm'])], AgLibrary(['TJvCustomForm'], [])) = '');
+  LText:= UnindexedBlockText([WithOutside(['TJvCustomForm'])], AgLibrary([], []));
+  Check('ag.outside.vendor.unresolved.blocks', ContainsText(LText, 'Leaf.pas descends from TJvCustomForm'), LText);
+  LText:= UnindexedBlockText([WithOutside(['TcxCustomForm', 'TForm'])], AgLibrary(['TForm'], []));
+  Check('ag.outside.prefix.not.trusted', ContainsText(LText, 'descends from TcxCustomForm') and not ContainsText(LText, 'from TForm'), LText);
+  Check('ag.outside.qualified.asks.bare', UnindexedBlockText([WithOutside(['Jv.Forms.TJvForm'])], AgLibrary(['TJvForm'], [])) = '');
+  LText:= UnindexedBlockText([WithOutside(['TJvForm'])], AgLibrary([], ['TJvForm']));
+  Check('ag.outside.library.failed.blocks', ContainsText(LText, 'TJvForm') and ContainsText(LText, 'library locked')
+    and not ContainsText(LText, 'anyway'), LText);
+  Check('ag.outside.classes.distinct', string.Join(',', OutsideClassesOf([WithOutside(['TA', 'X.TB']), WithOutside(['ta', 'TC'])])) = 'TA,TB,TC',
+    string.Join(',', OutsideClassesOf([WithOutside(['TA', 'X.TB']), WithOutside(['ta', 'TC'])])));
 end;

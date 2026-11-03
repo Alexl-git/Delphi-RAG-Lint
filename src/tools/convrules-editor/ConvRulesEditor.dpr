@@ -52,6 +52,7 @@ uses
   , ConvRules.ConvertEncoding in 'ConvRules.ConvertEncoding.pas'
   , ConvRules.Inheritance in 'ConvRules.Inheritance.pas'
   , ConvRules.InheritanceEngine in 'ConvRules.InheritanceEngine.pas'
+  , ConvRules.AncestorOrder in 'ConvRules.AncestorOrder.pas'
   , ConvRules.InputGate in 'ConvRules.InputGate.pas'
   , ConvRules.OutputEncoding in 'ConvRules.OutputEncoding.pas'
   , ConvRules.CapabilityProbe in 'ConvRules.CapabilityProbe.pas'

@@ -30,6 +30,7 @@ uses
   , ConvRules.ConvertRerun  // the raise-and-re-run decisions (Task 6)
   , ConvRules.ConvertRequest  // dl:unit ConvRules.ConvertRequest accepted -- WHOLE_UNIT_SCOPE_TEXT is the E4 Scope line ScopeText returns for no scope; it travels with ScopeText so the reset caption cannot drift from it
   , ConvRules.Inheritance  // dl:unit ConvRules.Inheritance accepted -- ANALYSIS_CANCELLED is the analysis's own cancel text, reused for a reindex skipped by the same cancel
+  , ConvRules.AncestorOrder // C8CHAIN Q-B: TLibraryResult (FLibrary)
   , ConvRules.WorkList  // TWorkRun: TConvertHost.WorkListReady's parameter
   , ConvRules.QualifyFix  // TQualifyPick: TConvertHost.QualifyBook's parameter
   , ConvRules.TextEncoding  // TTextLevel: TConvertHost.LowerBook's parameter
@@ -168,6 +169,7 @@ type
       FScope          : TConvertScope;      // C12: the IDE request's scope; Default = whole unit
       FRunScope       : TConvertScope;      // FScope when Convert was pressed: the report's Scope line (Clear scope may run mid-run)
       FInherit        : TDictionary<string, TUnitInheritance>; // C8 analyses, by upper-cased path
+      FLibrary        : TDictionary<string, TLibraryResult>;   // C8CHAIN Q-B: platform library answers, by upper-cased class
       FPairsKey       : string;             // the checked pairs FInherit was computed with
       FInheritError   : string;             // '' or why some unit could not be checked (status line)
       FAnalyzing      : Boolean;            // an analysis is running behind the progress window
@@ -510,6 +512,7 @@ const
   STEP_TICK_MS    = 1000; // the progress line's clock refresh while one phase runs (C16)
   PAIRS_KEY_NONE        = '|none|'; // FPairsKey after a pass that did not complete: never equals a real key
   INHERIT_FAIL_FMT      = '%s Inherited instances could not be checked for every unit -- %s';
+  LIBRARY_NOT_ASKED     = 'the class was not checked against the library'; // C8CHAIN Q-B: no answer from Analyze's worker
 
 { TConvertTab }
 
@@ -521,6 +524,7 @@ begin
   Caption   := '';
   FEngineProbe:= TEngineAdapter.Create(FHost.ExePath, FHost.GetDbs());
   FInherit    := TDictionary<string, TUnitInheritance>.Create;
+  FLibrary    := TDictionary<string, TLibraryResult>.Create;
   BuildBooks;
   BuildRun;
   BuildSources;
@@ -532,6 +536,7 @@ begin
   if FRunning then
     FCancelRequested:= True; // see the class remarks: the host refuses to close mid-run
   FInherit.Free;
+  FLibrary.Free;
   FEngineProbe.Free;
   inherited Destroy;
 end;
@@ -1066,6 +1071,8 @@ var
   LProject: string;
   LPaths  : TArray<string>;
   LUnits  : TArray<TUnitInheritance>;
+  LLibDbs : TArray<string>;
+  LLibrary: TArray<TLibraryResult>;
   LWork   : TStreamingWork;
   LText   : string;
   LCode   : Integer;
@@ -1076,13 +1083,18 @@ begin
   LReindexed:= False;
   if Length(APaths) = 0 then
     Exit;
-  LPairs:= APairs;
-  LUnits:= nil;
+  LPairs  := APairs;
+  LUnits  := nil;
+  LLibrary:= nil;
   if Length(LPairs) > 0 then
   begin
     LDb     := FHost.GetProjectDb();
     LProject:= FHost.GetProjectFile();
     LPaths  := APaths;
+    LLibDbs := nil; // the --db list without the project DB: the platform libraries
+    for var LLib: string in FHost.GetDbs() do
+      if not SameText(ExpandFileName(LLib), ExpandFileName(LDb)) then
+        LLibDbs:= LLibDbs + [LLib];
     // Runs on the progress window's worker thread; see the class remarks for why
     // FEngineProbe may be used there. Only the PROJECT DB is asked (authority).
     LWork:= function(const AOnProgress: TProgressProc; const ACancel: TCancelToken): Integer
@@ -1126,6 +1138,19 @@ begin
               AError:= if Result then '' else Copy(Trim(LOut), 1, PROBLEM_HEAD);
             end;
           end);
+        // C8CHAIN Q-B: where a chain left the project, the platform library decides whether
+        // it reached a library root or an unindexed project class (UnindexedBlockText).
+        if not ACancel.IsCancelled then
+        begin
+          var LCheck: TLibraryClassCheck:= EngineLibraryClassCheck(FEngineProbe, LLibDbs);
+          for var LClass: string in OutsideClassesOf(LUnits) do
+          begin
+            var LRes: TLibraryResult;
+            LRes.ClassName:= LClass;
+            LRes.Answer   := LCheck(LClass, LRes.Error);
+            LLibrary      := LLibrary + [LRes];
+          end;
+        end;
         Result:= if ACancel.IsCancelled then ENGINE_OUTCOME_CANCELLED else 0;
       end;
     FAnalyzing:= True;
@@ -1164,6 +1189,8 @@ begin
     FInherit.Remove(UpperCase(LPath));
   for var LUnit: TUnitInheritance in LUnits do
     FInherit.AddOrSetValue(UpperCase(LUnit.UnitPas), LUnit);
+  for var LRes: TLibraryResult in LLibrary do
+    FLibrary.AddOrSetValue(UpperCase(LRes.ClassName), LRes);
   LText:= UnknownUnitsText(LUnits);
   if LText <> '' then
     FInheritError:= FInheritError + LText;
@@ -1618,8 +1645,20 @@ begin
   end; // case
   // C8CHAIN (owner ruling Q5-B): an ancestor chain that leaves the project index is an error, not a
   // note -- the ancestor's unit must be added to the project. Blocks; there is no run-anyway.
-  var LUnindexed: string:= UnindexedBlockText(InheritanceOfAll(pUnits));
-  if LUnindexed <> '' then
+  var LUnindexed: string:= UnindexedBlockText(InheritanceOfAll(pUnits),
+    function(const AClassName: string; out AError: string): TLibraryAnswer
+    var
+      LRes: TLibraryResult;
+    begin
+      // filled by Analyze's worker; a class it never asked is unknown, never a library root
+      AError:= LIBRARY_NOT_ASKED;
+      Result:= laFailed;
+      if FLibrary.TryGetValue(UpperCase(AClassName), LRes) then
+      begin
+        AError:= LRes.Error;
+        Result:= LRes.Answer;
+      end;
+    end);  if LUnindexed <> '' then
   begin
     FHost.SetStatus(StringReplace(LUnindexed, sLineBreak, ' ', [rfReplaceAll]), True); // mirrored for the GUI driver
     AskBlockingDropsWith(LUnindexed, mtError, [mbOK]);

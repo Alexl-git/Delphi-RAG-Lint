@@ -52,6 +52,7 @@ uses
   , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
   , ConvRules.Inheritance in '..\ConvRules.Inheritance.pas'  // dl:unit ConvRules.Inheritance accepted -- the tests read MAX_CHAIN_DEPTH / OUTSIDE_NO_ANCESTOR / ANALYSIS_CANCELLED / GATE_CANCELLED_TEXT / BINARY_DFM_SIGNATURE to pin the unit's own texts and limits, so the consts travel with the unit under test
   , ConvRules.InheritanceEngine in '..\ConvRules.InheritanceEngine.pas'
+  , ConvRules.AncestorOrder in '..\ConvRules.AncestorOrder.pas'
   , ConvRules.InputGate in '..\ConvRules.InputGate.pas'  // dl:unit ConvRules.InputGate accepted -- the tests read GATE_* / LOST_COMMAND_UNNAMED to pin the unit's Win32 numbers and texts, so the consts travel with the unit under test
   , ConvRules.MigrateRules in '..\ConvRules.MigrateRules.pas'  // dl:unit ConvRules.MigrateRules accepted -- the tests read MIGRATE_REFUSAL_* to pin the engine's own sentences, so the consts travel with the unit under test
   , ConvRules.Migrate in '..\ConvRules.Migrate.pas'
@@ -10861,6 +10862,11 @@ begin
         P + ' ' + A + ' ' + E);
       Check('lookup.live.library.absent', Eng.LookupClass(Db, 'TForm', P, A, E) = cloAbsent, E);
       Check('lookup.live.injection.absent', Eng.LookupClass(Db, 'x'' OR ''1''=''1', P, A, E) = cloAbsent);
+      // C8CHAIN Q-B: the library binder, with the fixture DB standing in for a platform library
+      Check('libcheck.live.declared.past.failed.db', EngineLibraryClassCheck(Eng, [TPath.Combine(Dir, 'none.sqlite'), Db])('TAncForm', E) = laDeclared, E);
+      Check('libcheck.live.absent', EngineLibraryClassCheck(Eng, [Db])('TJvNoSuchForm', E) = laAbsent, E);
+      Check('libcheck.live.failed', (EngineLibraryClassCheck(Eng, [TPath.Combine(Dir, 'none.sqlite')])('TAncForm', E) = laFailed) and ContainsText(E, 'none.sqlite'), E);
+      Check('libcheck.live.no.library', (EngineLibraryClassCheck(Eng, [])('TAncForm', E) = laFailed) and (E <> ''), E);
       Check('lookup.live.bad.db.failed', (Eng.LookupClass(TPath.Combine(Dir, 'none.sqlite'), 'TDescForm', P, A, E) = cloFailed) and (E <> '')
         and not TFile.Exists(TPath.Combine(Dir, 'none.sqlite')), E);
       Pr.FromType:= 'TLabel';

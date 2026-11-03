@@ -2,7 +2,8 @@ unit ConvRules.InheritanceEngine;
 
 { C8: binds TEngineAdapter's project-index reads (LookupClass, ListClassFields,
   ListCodeRefs) to ConvRules.Inheritance's function types (TClassLookup,
-  TCodeUseLookup). The ONE place that binding is made: the model tests drive it
+  TCodeUseLookup), and the platform library's class lookup to ConvRules.AncestorOrder's
+  TLibraryClassCheck (C8CHAIN Q-B). The ONE place that binding is made: the model tests drive it
   against a fixture index, and the Convert tab passes the same binders to
   AnalyzeUnit, so what the tests prove is what the editor runs. }
 
@@ -11,6 +12,7 @@ interface
 uses
   ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- INDEX_STALE_MARKER is the text the adapter's stale-answer failure carries, so the binder's retry test travels with the adapter that writes it
   , ConvRules.Inheritance
+  , ConvRules.AncestorOrder
   ;
 
 /// <summary>A TClassLookup over the project index: LookupClass for the class's
@@ -36,6 +38,19 @@ function EngineClassLookup(AEngine: TEngineAdapter; const ADb: string; const APa
 /// not answer, the answer was stale, or the unit is not in the index; AError then
 /// holds the engine-side failure text.</returns>
 function EngineCodeUses(AEngine: TEngineAdapter; const ADb: string): TCodeUseLookup;
+
+/// <summary>C8CHAIN (owner ruling Q-B): a TLibraryClassCheck over the platform library
+/// indexes -- TEngineAdapter.LookupClass on each DB in turn.</summary>
+/// <param name="AEngine">The adapter to ask; must outlive the returned check. Not owned.</param>
+/// <param name="ALibraryDbs">The platform library DBs (the host's --db list without the project
+/// DB). Never the project DB: a class found there is not outside in the first place.</param>
+/// <returns>A check answering laDeclared when any DB declares the class (cloFound, or
+/// cloAmbiguous: several library files is still the library), laAbsent when every DB answered
+/// and none declares it, laFailed (AError = the engine's failure texts, '; '-joined) when none
+/// declares it and at least one DB could not be asked -- or when ALibraryDbs is empty.</returns>
+/// <remarks>One `sql` engine process per DB asked (about 0.07 s on library-Win64); run it on the
+/// analysis worker, not the UI thread.</remarks>
+function EngineLibraryClassCheck(AEngine: TEngineAdapter; const ALibraryDbs: TArray<string>): TLibraryClassCheck;
 
 type
   /// <summary>Analyses a set of listed units (AnalyzeUnits with the pass's lookups bound).</summary>
@@ -65,8 +80,12 @@ function AnalyzeRetryingStale(const APaths: TArray<string>; const AAnalyze: TUni
 implementation
 
 uses
-  System.StrUtils
+  System.SysUtils
+  , System.StrUtils
   ;
+
+const
+  NO_LIBRARY_DB = 'no platform library index is configured';
 
 function IsStaleIndexError(const AError: string): Boolean;
 begin
@@ -144,6 +163,30 @@ begin
         cloAbsent, cloAmbiguous:
           Result.Found:= False;
       end; // case
+    end;
+end;
+
+function EngineLibraryClassCheck(AEngine: TEngineAdapter; const ALibraryDbs: TArray<string>): TLibraryClassCheck;
+begin
+  Result:= function(const AClassName: string; out AError: string): TLibraryAnswer
+    var
+      LPath, LParent, LError: string;
+      LErrors               : TArray<string>;
+      LFound                : Boolean;
+    begin
+      LErrors:= nil;
+      LFound := False;
+      for var LDb: string in ALibraryDbs do
+        if not LFound then
+          case AEngine.LookupClass(LDb, AClassName, LPath, LParent, LError) of
+            cloFound, cloAmbiguous: LFound:= True; // several library files is still the library
+            cloFailed: LErrors:= LErrors + [LError];
+            cloAbsent: ; // ask the next library DB
+          end; // case
+      if Length(ALibraryDbs) = 0 then
+        LErrors:= [NO_LIBRARY_DB];
+      AError:= if LFound then '' else string.Join('; ', LErrors);
+      Result:= if LFound then laDeclared else if Length(LErrors) > 0 then laFailed else laAbsent;
     end;
 end;
 
