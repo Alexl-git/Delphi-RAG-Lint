@@ -71,6 +71,9 @@ function CollectEnumOrdinalPersisted(const AStore: ISymbolStore;
 
 implementation
 
+uses
+  DRagLint.Lint.UnusedEnumValue; { DeclaredTypeName -- shared with unused-enum-value (DUPCODE-LEGACY) }
+
 const
   { The built-in ordinal casts whose argument is an enum value on a cast-out line. }
   ORD_CASTS: array[0..19] of string = (
@@ -238,24 +241,6 @@ begin
   { no closing parenthesis inside the window: the list is unreadable }
   pTotal:= 0;
   Result:= 0;
-end;
-
-{ The bare type name a symbol's signature declares (`pK: TKind` -> `TKind`,
-  `Unit.TKind` -> `TKind`), '' when there is none. }
-function DeclaredTypeName(const ASignature: string): string;
-var
-  S: string;
-  I: Integer;
-begin
-  S:= ASignature;
-  I:= Pos(':', S);
-  if I > 0 then S:= Copy(S, I + 1, MaxInt);
-  S:= TrimLeft(S);
-  I:= 1;
-  while (I <= Length(S)) and CharInSet(S[I], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) do Inc(I);
-  Result:= Copy(S, 1, I - 1);
-  I:= LastDelimiter('.', Result);
-  if I > 0 then Result:= Copy(Result, I + 1, MaxInt);
 end;
 
 type
