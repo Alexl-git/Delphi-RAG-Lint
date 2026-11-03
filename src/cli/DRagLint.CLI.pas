@@ -95,6 +95,7 @@ uses
   DRagLint.Core.FileTime,
   Winapi.Windows
   , DRagLint.Core.CliError
+, DRagLint.Core.Encoding { EnsureUtf8Bytes -- ApplyLineMarkers reads a file the way the rules did }
   , DRagLint.Query.Implementors { implementors verb (interface report, 1.40) }
   , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
   , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
@@ -12068,7 +12069,11 @@ function IsClosureDependentMarkerRule(const ARule: string): Boolean; forward;
 
   AUnjudgedRules names rules the CALLER did not evaluate as lint-all would
   (LintUnjudgedMarkerRules); an unaccounted marker for one of them is not
-  reported unused. nil -- lint-all, lint-project -- judges every marker. }
+  reported unused. nil -- lint-all, lint-project -- judges every marker.
+
+  A marker on a line the preprocessor blanked is not reported unused either: no
+  rule saw that line, so the run has no evidence about it (YADF FP #6). Pinned by
+  run_marker_unused_inactive_line.ps1. }
 function ApplyLineMarkers(const AFindings: TArray<TLintFinding>;
   const AScannedFiles: TArray<string> = nil;
   AReviewMaxAgeDays: Integer = REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS;
@@ -12102,6 +12107,7 @@ var
   M         : TReviewMarker                      ;
   Want      : string                             ;
   SharedProjects: TDictionary<string, Boolean>   ;
+  PpLineCache   : TDictionary<string, TArray<string>>;
 
   { The join key between a finding and the marker that suppressed it.
 
@@ -12165,6 +12171,26 @@ var
     end;
   end;
 
+  { True when the preprocessor blanked ALine of AFile for this run. Reads through
+    TAstParseCache.ApplyPreprocess, the ONE transform the rules read, so this
+    answers "did a rule see this line" for the profile and include context the run
+    actually used. Blanking keeps byte length and LF, so line numbers agree, and
+    the marker makes the raw line non-blank, so a blank result means blanked. With
+    preprocessing off, or failing, the bytes come back as they were and every line
+    stays judged. Read only for a marker about to be called unused, which is rare. }
+  function LineIsPreprocessorInactive(const AFile: string; ALine: Integer): Boolean;
+  var
+    PpLines: TArray<string>;
+  begin
+    if not PpLineCache.TryGetValue(AFile, PpLines) then
+    begin
+      PpLines:= TEncoding.UTF8.GetString(
+        TAstParseCache.ApplyPreprocess(EnsureUtf8Bytes(TFile.ReadAllBytes(AFile)), AFile)).Split([#10]);
+      PpLineCache.Add(AFile, PpLines);
+    end;
+    Result:= (ALine >= 1) and (ALine <= Length(PpLines)) and (Trim(PpLines[ALine - 1]) = '');
+  end;
+
   { The first dl:ok marker for ARule on ANOTHER site of a finding -- a pair's
     other end, a type's declaration -- accounted as used whichever finding it
     then suppresses. AWant is that line's window hash. False when the line is
@@ -12197,6 +12223,7 @@ begin
   Accounted:= TDictionary<string, Boolean>.Create;
   Emitted  := TDictionary<string, Boolean>.Create;
   SharedProjects:= TDictionary<string, Boolean>.Create;
+  PpLineCache:= TDictionary<string, TArray<string>>.Create;
   try
     for F in AFindings do
     begin
@@ -12614,7 +12641,11 @@ begin
                 SharedProjects.Add(LowerCase(SF), Length(TSharedUnit.ProjectsOf(SF)) > 1);
               if SharedProjects[LowerCase(SF)] then Continue;
             end;
-            if not Accounted.ContainsKey(MarkerKey(SF, LN, M.RuleId)) then
+            { A line the preprocessor blanked was seen by no rule, so "no longer
+              matches" would be a claim the run has no evidence for (YADF FP #6:
+              a try..except behind a DECLARED gate with no library to answer it). }
+            if not Accounted.ContainsKey(MarkerKey(SF, LN, M.RuleId))
+               and not LineIsPreprocessorInactive(SF, LN) then
               EmitHint(SF, LN, 'review-marker-unused',
                 Format('dl:ok marker for "%s" no longer matches any finding on this line -- remove it.', [M.RuleId]));
           end;
@@ -12626,6 +12657,7 @@ begin
 
     Result:= Kept.ToArray + Extra.ToArray;
   finally
+    PpLineCache.Free;
     SharedProjects.Free;
     Emitted.Free;
     Accounted.Free;
