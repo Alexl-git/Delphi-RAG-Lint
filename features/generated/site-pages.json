@@ -72,8 +72,8 @@
     "version": "1.35.1-alpha"
   },
   "features/circular-uses-report-cycles-fix-plan.md": {
-    "hash": "13441d1dd50f46491d91bffed114cc897c974973dbab21e1f24977f5bf73e11b",
-    "version": "1.38.0-alpha"
+    "hash": "5a35f30a2644ba6170526de405130410088a7eca9ff4f9b2297e9788e9d092fc",
+    "version": "1.39.2-alpha"
   },
   "features/class-surface.md": {
     "hash": "86a96262d1fbf96c4734259b2b732f2d52e1d52420be00d976d9b9cad81c933a",
@@ -116,8 +116,8 @@
     "version": "1.39.2-alpha"
   },
   "features/convert-apply-migrate.md": {
-    "hash": "ba7711758f213e310d5d9d4b73ee7ac7f10513605413c44af5ab97fbbdfc8bb0",
-    "version": "1.38.0-alpha"
+    "hash": "8e932a97aa1bba2476f88cc8109eb28524bb99df12b49a909166f82164b696a4",
+    "version": "1.39.2-alpha"
   },
   "features/convert-apply.md": {
     "hash": "e72331f2124b1a03b61b626fadb8cc056889ae759b8f22bfe36b92cee8360121",
@@ -164,8 +164,8 @@
     "version": "1.36.0-alpha"
   },
   "features/convrules-rule-chains.md": {
-    "hash": "7dc06816e3da74f951da108ee6b0c95e622192749ac0ee2625f6761dae43fbca",
-    "version": "1.36.0-alpha"
+    "hash": "27e5228f15ef45349e50fe0a787b51fad826758e3ce5c18f9da4cca11f391c1b",
+    "version": "1.39.2-alpha"
   },
   "features/convrules-work-list.md": {
     "hash": "53f34ff00497e6fee51992b54bba33375dd00eb16a88df46373c61462320d73f",
@@ -192,8 +192,8 @@
     "version": "1.35.1-alpha"
   },
   "features/cycles-fix.md": {
-    "hash": "8eb3008ab231318beef9b71074962f9b07714b5501ce1a6df871d4cc305b50c5",
-    "version": "1.38.0-alpha"
+    "hash": "bdb10c8beeef95727b0ce9f9039c463a812db55cf1722639dee7da6ba2fca3f7",
+    "version": "1.39.2-alpha"
   },
   "features/deps-report.md": {
     "hash": "34657807a40519c8e6e4079bfe21412d556a359e70cb9cf91642d7a650a52311",

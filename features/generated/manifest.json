@@ -4211,6 +4211,10 @@
           "example": "--project <x.dproj> --db <db> --target-compiler 10.3"
         },
         {
+          "type": "lsp",
+          "method": "workspace/executeCommand"
+        },
+        {
           "type": "ide-menu",
           "path": "drag-lint > Code Quality > Run Lint All (Full Report)..."
         }
