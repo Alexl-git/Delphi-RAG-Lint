@@ -2734,7 +2734,7 @@ var
     TickEx : Int64;  { time already charged exactly, to subtract from the window }
   begin
     TickAt := TStopwatch.GetTimeStamp; TickEx := 0;
-    Cfg := TCfgBuilder.Build(AProc, PF.Src);
+    Cfg := TCfgBuilder.Build(AProc, PF.Src, True);
     FlowTick(0, TickAt, TickEx);
     Vars := TRoutineVarTable.Build(AProc, PF.Src);
     FlowTick(1, TickAt, TickEx);

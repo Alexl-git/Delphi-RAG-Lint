@@ -1166,6 +1166,6 @@
 #   Superseded: 1.27.0-alpha|5ae6c31f4ae6f70b545c92c643e006f946ef6d4f5080958bafc6916bba13beb9
 # 2026-11-01 x129 lint round: hash updated WITHOUT a version bump -- DRagLint.Parser.DocComments.pas got only a regenerated drag-lint:auto doc block (doc-drift fix, comment text), no extraction change.
 #   Superseded: 1.29.0-alpha|94f317a8137a363c0c4573d699ba705c9f47424c2f45fda262ed34e1e5a28dd7
-# 2026-11-02 fix/yadf-lint-fps: hash updated WITHOUT a version bump -- DRagLint.Analysis.Cfg.pas EmitStmt: while-True / until-False loops get no header-to-follow edge (flow-lint only; extraction uses only CfgFindProcs from that unit, so no emitted row changes).
+# 2026-11-02 fix/yadf-lint-fps: hash updated WITHOUT a version bump -- DRagLint.Analysis.Cfg.pas gained an OPT-IN TCfg.PruneConstLoops (TCfgBuilder.Build param, default False = the historic CFG). Only the flow-lint caller (FlowChecks) opts in; the index-time caller (Index.DataFlowFacts.TCollector.Run) is untouched, so no emitted row changes. Evidence: a fixture with while True / repeat..until False loops indexed into scratch DBs with the deployed exe and the fix exe gives byte-identical data_flows (8 rows) and symbol_facts (3 rows). Follow-up CFG-CONSTLOOP in docs\BACKLOG-2026-11-01.md (enable in DataFlowFacts with the 1.42 bump).
 #   Superseded: 1.29.0-alpha|09250d1e46167658401982dcff1a5ebc1a17aebffd51b48ef41ea1eda01f2122
-1.29.0-alpha|da14b76be948347bfccdfdb38b2b9fd6608583d78d8702246560f4eb7e44913a
+1.29.0-alpha|861ebec9e34cabcee8a95c3860996b6f77a9a06759d11f1de5b47368b2c3dcbf
