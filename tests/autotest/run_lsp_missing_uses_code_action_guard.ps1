@@ -157,8 +157,10 @@ function Apply-Edit([string]$Text, $Action) {
 $db = Join-Path $WorkDir 'app.sqlite'
 Push-Location C:\TEMP
 try {
+  . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
   & $Exe index $src --db $db 2>&1 | Out-Null
-  if (-not (Test-Path $db)) { Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
+  $idxCode = $LASTEXITCODE
+  if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
 
   Write-Host 'codeAction quick-fix for unit-missing-from-uses' -ForegroundColor Cyan
   $impl = Get-Actions 'uImplUse.pas'

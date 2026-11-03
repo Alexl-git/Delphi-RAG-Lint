@@ -56,8 +56,10 @@ function New-Case([string]$Name) {
 }
 function Index-Case([string]$Dir) {
   $db = Join-Path $Dir 'app.sqlite'
+  . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
   & $Exe index $Dir --db $db 2>&1 | Out-Null
-  if (-not (Test-Path $db)) { Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
+  $idxCode = $LASTEXITCODE
+  if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $idxCode; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
   return $db
 }
 # The LSP diagnostics the client would hold: lint --json, mapped the way
