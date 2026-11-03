@@ -405,6 +405,19 @@ function FirstLineOfCodePoint(const AText: string; ACode: Integer): Integer;
 /// unit); AText unchanged when nothing needs it. Characters outside literals are never touched.</returns>
 function EscapeUnfitForDfm(const AText: string; AEnc: TEncoding): string;
 
+/// <summary>The Pascal-source form of EscapeUnfitForDfm: rewrites the string literals of AText so
+/// characters AEnc cannot hold become numeric codes ('a'#20013'b'), leaving every comment
+/// (<c>{ }</c>, <c>(* *)</c>, <c>//</c> to the line end) byte for byte.</summary>
+/// <param name="AText">Pascal source text (a fragment; line breaks allowed).</param>
+/// <param name="AEnc">The target file's encoding; a character that round-trips is left alone.</param>
+/// <returns>AText with unfit characters inside literals replaced; AText UNCHANGED when it holds a
+/// multi-line string (<c>'''</c>), which this does not rewrite. A character outside a literal (in a
+/// comment or an identifier) is never touched, so the caller can still find and refuse it.</returns>
+/// <remarks>Lane 142-cyc (CYC-C residue): what lets `cycles --fix` insert a line whose literal holds
+/// such a character into an ANSI file instead of refusing non-ascii-text. A quote inside a comment
+/// never opens a literal. Pure; thread-safe.</remarks>
+function EscapeUnfitForPascal(const AText: string; AEnc: TEncoding): string;
+
 /// <summary>True when bytes are a compiled (binary, TPF0 or resource-header) .dfm.</summary>
 /// <param name="ABytes">The file's raw bytes.</param>
 /// <returns>True for a binary form file; such a file has no text encoding.</returns>
@@ -591,6 +604,74 @@ begin
       Inc(I, Len);
     end;
     if SrcIn then CloseOut; { an unterminated literal: leave the output as balanced as the input was }
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+function EscapeUnfitForPascal(const AText: string; AEnc: TEncoding): string;
+var
+  SB   : TStringBuilder;
+  Code : Integer; { 1-based start of the code run not yet emitted }
+  I, J : Integer;
+
+  { the code run [Code, pUpTo) goes out escaped; its literals are balanced (a comment never starts inside one) }
+  procedure FlushCode(pUpTo: Integer);
+  begin
+    if pUpTo > Code then SB.Append(EscapeUnfitForDfm(Copy(AText, Code, pUpTo - Code), AEnc));
+  end;
+
+begin
+  if AText.Contains('''''''') then Exit(AText); { a multi-line string: not rewritten }
+  SB:= TStringBuilder.Create;
+  try
+    Code:= 1;
+    I:= 1;
+    while I <= Length(AText) do
+    begin
+      J:= 0; { one past the comment that starts at I; 0 = no comment here }
+      case AText[I] of
+        '''':
+          begin
+            { skip the literal: up to its closing quote ('' is an escaped quote) or the line end }
+            Inc(I);
+            while (I <= Length(AText)) and not CharInSet(AText[I], [#13, #10]) do
+              if AText[I] <> '''' then Inc(I)
+              else if (I < Length(AText)) and (AText[I + 1] = '''') then Inc(I, 2)
+              else Break;
+            Inc(I);
+            Continue;
+          end;
+        '{':
+          begin
+            J:= PosEx('}', AText, I + 1);
+            J:= if J = 0 then Length(AText) + 1 else J + 1;
+          end;
+        '(':
+          if (I < Length(AText)) and (AText[I + 1] = '*') then
+          begin
+            J:= PosEx('*)', AText, I + 2);
+            J:= if J = 0 then Length(AText) + 1 else J + 2;
+          end;
+        '/':
+          if (I < Length(AText)) and (AText[I + 1] = '/') then
+          begin
+            J:= I + 2;
+            while (J <= Length(AText)) and not CharInSet(AText[J], [#13, #10]) do Inc(J);
+          end;
+      end;
+      if J = 0 then
+      begin
+        Inc(I);
+        Continue;
+      end;
+      FlushCode(I);
+      SB.Append(Copy(AText, I, J - I)); { the comment, verbatim }
+      Code:= J;
+      I:= J;
+    end;
+    FlushCode(Length(AText) + 1);
     Result:= SB.ToString;
   finally
     SB.Free;

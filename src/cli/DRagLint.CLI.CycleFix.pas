@@ -681,20 +681,36 @@ end;
 // Refusals for text the file's encoding cannot carry faithfully: for an ANSI file a character the
 // edits insert that its code page does not represent (text copied from a file in another code page);
 // C6: a character the code page does represent (cp1252 e-acute into a cp1252 file) is no refusal.
+// Lane 142-cyc: such a character inside a string literal is no refusal either -- staging writes it as a
+// numeric code (EscapeInsertedText); only one in a comment or an identifier still refuses.
 procedure CheckInsertedText(const pPath: string; const pView: TCyclePlanView; pEnc: TEncoding; pOut: TList<TRefusal>);
 begin
   if pEnc = TEncoding.UTF8 then Exit;
   for var E in pView.Edits do
   begin
     if not SameText(E.FilePath, pPath) then Continue;
-    var Ch:= UnrepresentableChar(E.NewLines, pEnc);
+    var Escaped:= EscapeUnfitForPascal(string.Join(#13#10, E.NewLines), pEnc);
+    var Ch:= UnrepresentableChar(Escaped.Split([#13#10]), pEnc);
     if Ch <> '' then
     begin
-      pOut.Add(MakeRefusal('non-ascii-text', '', pPath, Format('an inserted line holds %s, which the ANSI code ' +
-        'page of this file does not represent; edit this file by hand', [Ch]), E.First));
+      pOut.Add(MakeRefusal('non-ascii-text', '', pPath, Format('an inserted line holds %s outside a string literal ' +
+        '(a comment or an identifier), which the ANSI code page of this file does not represent; edit this file ' +
+        'by hand', [Ch]), E.First));
       Exit;
     end;
   end;
+end;
+
+// The edits with the inserted text of pPath (an ANSI file: pEnc is not UTF-8) rewritten so a character
+// its code page cannot hold, inside a string literal, becomes a numeric code ('a'#20013'b'); the edits
+// of every other file and of a UTF-8 file are returned as they are. Line counts do not change.
+function EscapeInsertedText(const pEdits: TArray<TTextEdit>; const pPath: string; pEnc: TEncoding): TArray<TTextEdit>;
+begin
+  Result:= Copy(pEdits);
+  if pEnc = TEncoding.UTF8 then Exit;
+  for var I:= 0 to High(Result) do
+    if SameText(Result[I].FilePath, pPath) and (Result[I].Text <> '') then
+      Result[I].Text:= EscapeUnfitForPascal(Result[I].Text, pEnc);
 end;
 
 function StageShadow(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string;
@@ -738,7 +754,7 @@ begin
       CheckInsertedText(P, pView, Enc, Refs);
       if Refs.Count > Before then Continue;
       var Expected:= Lines.Count + NetLineChange(P, Edits);
-      var Text:= TTextEditApplier.ApplyToText(P, Content, Edits);
+      var Text:= TTextEditApplier.ApplyToText(P, Content, EscapeInsertedText(Edits, P, Enc));
       Lines.Text:= Text;
       if Lines.Count <> Expected then
       begin
