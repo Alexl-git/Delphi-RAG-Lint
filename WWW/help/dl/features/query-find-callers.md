@@ -7,7 +7,7 @@ group: search-navigation
 order: 20020
 since: 0.1.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.42.0-alpha
 ---
 
 # query find-callers
@@ -28,7 +28,7 @@ Full flag list: [query in the CLI reference](../cli.md#query).
 | `--context` | `N` |  |  |
 | `--resolved` |  | precise callers via resolved call_edges (grouped by target, certain\|ambiguous); a PROPERTY/FIELD name lists its bound accesses [certain, read\|write]; an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha) |  |
 | `--db` |  |  |  |
-| `--json` |  | every row ends with a derived "resolution" key: exact \| ambiguous \| external \| name-only (text totals: N callers (a exact, b name-only)); a site that reaches the target only through an interface method also carries "via", "via_kind" and, for an ambiguous implements edge, "via_edge" (RB-5), placed before "resolution" |  |
+| `--json` |  | every row ends with a derived "resolution" key: exact \| ambiguous \| external \| name-only (text totals: N callers (a exact, b name-only)); a site that reaches the target only through an interface method also carries "via", "via_kind" and, for an ambiguous implements edge, "via_edge" (RB-5), placed before "resolution"; with --resolved every row also carries "path" (the full path of the caller file; "file" stays the bare name), before "resolution" (Q-RESOLVED-PATH), and the text rows print (full path:line) |  |
 
 ## Where to click
 

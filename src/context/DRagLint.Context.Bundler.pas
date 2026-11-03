@@ -672,6 +672,56 @@ begin
   ABundle.ImplSlice:= Kept;
 end;
 
+// CTX-SURFACE-DOCS (1.42, owner ruling D8): the member name a class-surface
+// declaration line declares ('' when the line is not a member declaration: a
+// visibility keyword, the `TFoo = class` header, an attribute, a blank line).
+function SurfaceMemberLeaf(const ALine: string): string;
+var
+  T: string ;
+  P: Integer;
+begin
+  T:= Trim(ALine);
+  if (T = '') or not CharInSet(T[1], ['A'..'Z', 'a'..'z', '_']) then Exit('');
+  if StartsText('procedure ', T) or StartsText('function ', T) or StartsText('constructor ', T) or StartsText('destructor ', T) or StartsText('class ', T) or
+    StartsText('operator ', T) or StartsText('property ', T) then Exit(LowerCase(HeaderLeafName(T)));
+  P:= 1;
+  while (P <= Length(T)) and CharInSet(T[P], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(P);
+  if (P <= Length(T)) and (T[P] = ':') then Exit(LowerCase(Copy(T, 1, P - 1)));
+  Result:= '';
+end;
+
+// CTX-SURFACE-DOCS (1.42, owner ruling D8): on a CAPPED type the surface drops
+// the comment-only lines that document a member whose body the cap omitted
+// (TSQLiteSymbolStore: 72k -> ~25k tokens). A member whose body is KEPT (a focus
+// word, in-type callers) keeps its docs, and a line that is not a recognised
+// member declaration keeps the comments above it.
+function DropCappedMemberDocs(const ASurface: TArray<TSurfaceLine>; const AKeptLeaves: TDictionary<string, Boolean>): TArray<TSurfaceLine>;
+var
+  Acc    : TList<TSurfaceLine>;
+  Pending: TList<TSurfaceLine>;
+  L      : TSurfaceLine       ;
+  Leaf   : string             ;
+begin
+  Acc    := TList<TSurfaceLine>.Create;
+  Pending:= TList<TSurfaceLine>.Create;
+  try
+    for L in ASurface do
+      if TrimLeft(L.Text).StartsWith('//') then Pending.Add(L)
+      else
+      begin
+        Leaf:= SurfaceMemberLeaf(L.Text);
+        if (Leaf = '') or AKeptLeaves.ContainsKey(Leaf) then Acc.AddRange(Pending);
+        Pending.Clear;
+        Acc.Add(L);
+      end;
+    Acc.AddRange(Pending);
+    Result:= Acc.ToArray;
+  finally
+    Pending.Free;
+    Acc.Free;
+  end; // try
+end; // function
+
 { How many impl-method bodies the cap omitted (the class-decl entry excluded). }
 function OmittedMethodCount(const ABundle: TContextBundle): Integer;
 begin
@@ -937,6 +987,18 @@ begin
   begin
     CapTypeBodies(Result, ABodyTokenCap, Focus, Length(Result.ClassSurface) > 0);
     if Result.BodyCap > 0 then Result.BodyFile:= AStore.GetFilePath(Sym.FileId);
+    { CTX-SURFACE-DOCS: lean surface only; --full-surface keeps every doc. }
+    if (Result.BodyCap > 0) and AExcludeDfmFields then
+    begin
+      var KeptLeaves: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+      try
+        for var KC: TSliceChunk in Result.ImplSlice do
+          if KC.Kind = 'impl-method' then KeptLeaves.AddOrSetValue(LowerCase(HeaderLeafName(ChunkHeaderLine(KC.Text))), True);
+        Result.ClassSurface:= DropCappedMemberDocs(Result.ClassSurface, KeptLeaves);
+      finally
+        KeptLeaves.Free;
+      end;
+    end;
   end;
 
   // Callers (truncated to AMaxCallers; resolve FilePath from store)

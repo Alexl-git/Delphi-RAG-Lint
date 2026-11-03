@@ -7,7 +7,7 @@ group: search-navigation
 order: 20005
 since: 0.6.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.42.0-alpha
 ---
 
 # context
@@ -85,7 +85,7 @@ When the project was indexed with a library (`--library-db`, or `libraryResolve`
 
 ### A whole type: the body cap
 
-`context --task "modify TFoo"` on a class, record or interface would print every method body (`TSQLiteSymbolStore`: ~262k estimated tokens). The bodies are capped at `--max-body-tokens N` estimated tokens (default **20000**; `0` = every body, the old bundle). Which bodies stay: a FOCUS method named after the type (`modify TFoo Bar` -- always kept), then the methods most called by the type's other methods, then the smallest, then source order. Every omitted body is listed as its header line and `L<start>-<end>` under `## Omitted bodies`, ending with `-- N omitted by cap C; rerun with --max-body-tokens 0`. While capped, the class declaration chunk is dropped too (`## Class surface` already lists it). The cap engages only when the bodies exceed it, so a small type is unchanged, and a member target (one method) is never cut. `--format json` adds `body_cap`, `bodies_total`, `bodies_omitted`, `body_tokens_total`, `body_tokens_shown` and `omitted_bodies` (`kind`, `signature`, `start_line`, `end_line`, `tokens`) when the cap engaged. `--full-surface` does not lift it.
+`context --task "modify TFoo"` on a class, record or interface would print every method body (`TSQLiteSymbolStore`: ~262k estimated tokens). The bodies are capped at `--max-body-tokens N` estimated tokens (default **20000**; `0` = every body, the old bundle). Which bodies stay: a FOCUS method named after the type (`modify TFoo Bar` -- always kept), then the methods most called by the type's other methods, then the smallest, then source order. Every omitted body is listed as its header line and `L<start>-<end>` under `## Omitted bodies`, ending with `-- N omitted by cap C; rerun with --max-body-tokens 0`. While capped, the class declaration chunk is dropped too (`## Class surface` already lists it), and the surface drops the `///` docs of the members whose body was omitted (CTX-SURFACE-DOCS, 1.42; a kept body, e.g. the focus method, keeps its docs; `--full-surface` keeps all). The MCP tool `get_context_bundle` takes the same budget as `max_body_tokens`. The cap engages only when the bodies exceed it, so a small type is unchanged, and a member target (one method) is never cut. `--format json` adds `body_cap`, `bodies_total`, `bodies_omitted`, `body_tokens_total`, `body_tokens_shown` and `omitted_bodies` (`kind`, `signature`, `start_line`, `end_line`, `tokens`) when the cap engaged. `--full-surface` does not lift it.
 ### When the phrase is not an identifier
 
 The bundle also carries a `## Wiki` section: if the task phrase matches the

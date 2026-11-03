@@ -8,6 +8,12 @@ breaking changes** until v2.0.
 1.42 wave 1, integrated on lane/142-int1. ONE bump: DRAGLINT_EXTRACTOR_VERSION 1.29.0 -> 1.30.0-alpha and
 DRAGLINT_RESOLVER_VERSION 1.17.0 -> 1.18.0-alpha -- every index re-parses once.
 
+### Changed (wave 2, lane surface)
+- context (CTX-SURFACE-DOCS, D8): on a capped type the class surface drops the member docs of the omitted bodies; a kept (focus / in-type-called) body keeps its docs; `--full-surface` keeps all.
+- MCP (MCP-CTX-CAP, D9): `get_context_bundle` takes `max_body_tokens` (default 20000, 0 = uncapped), as the CLI's `--max-body-tokens`.
+- query (Q-RESOLVED-PATH, D1): `find-callers --resolved` rows gain `path` (full caller file path, before `resolution`, which stays last); text rows print `(full path:line)`; the IDE plugin prefers `path` (`file` stays the bare name).
+- LSP (LSP-UNOWNED, D2): hover / definition keep answering for a file outside the project; the hover footer adds `(from <db>; file not in this project)`.
+
 ### Fixed
 - grammar (GRAMMAR-LASTFIELD): tree-sitter-delphi13 v1.4.1 -- a last record field of an array / `string[N]` type with no trailing `;` no longer parses as ERROR; a first field named `Platform` stays green. Guard `run_grammar_last_field_array.ps1`.
 - facts-a (CFG-CONSTLOOP): index-time `data_flows` prune constant `while` / `repeat` loops like the lint-time CFG. DATAFLOW-REPARSE-0 proven closed (D16); EXT-INC-FILES already fixed by INC2.

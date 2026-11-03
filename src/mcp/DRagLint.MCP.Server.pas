@@ -676,6 +676,7 @@ begin
         + '"verb":{"type":"string","description":"Action verb: modify|inspect|refactor|delete|extend (default modify)"},'
         + '"caller_context":{"type":"integer","description":"Number of surrounding source lines for each caller (optional, default 3)"},'
         + '"max_callers":{"type":"integer","description":"Maximum number of callers to include (optional, default 5)"},'
+        + '"max_body_tokens":{"type":"integer","description":"Body budget in estimated tokens for a whole TYPE target (optional, default 20000; 0 = uncapped). Over the budget, the lowest-ranked method bodies are listed as header + line range under omitted_bodies and their member docs leave the class surface; a member target is never cut"},'
         + '"full_surface":{"type":"boolean","description":"Keep the auto-generated DFM component fields in the class surface (optional, default false = lean; set true only when working on the form components/DFM)"},'
         + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '},"required":["qname"]}'));
 
@@ -1421,6 +1422,10 @@ begin
       var BundleMaxCallers:= 5;
       if Args.GetValue('max_callers') <> nil then BundleMaxCallers:= StrToIntDef(Args.GetValue('max_callers').Value, 5);
 
+      // CTX-TYPECAP default (same as the CLI --max-body-tokens); 0 = uncapped
+      var BundleMaxBodyTokens:= CONTEXT_BODY_TOKEN_CAP;
+      if Args.GetValue('max_body_tokens') <> nil then BundleMaxBodyTokens:= StrToIntDef(Args.GetValue('max_body_tokens').Value, CONTEXT_BODY_TOKEN_CAP);
+
       // Lean by default: strip auto-generated DFM component fields from the
       // class surface unless full_surface=true.
       var BundleFullSurface:= False;
@@ -1429,7 +1434,7 @@ begin
       // Build the bundle
       { BundleTask, not BundleQName: the wiki lookup matches a HUMAN phrase, and
         the qname has already been reduced to an identifier by the split above. }
-      var Bundle:= TContextBundler.Build(BundleStore, BundleVerb, BundleQName, BundleCallerContext, BundleMaxCallers, True, True, True, {AExcludeDfmFields=} not BundleFullSurface, {ATaskText=} BundleTask);
+      var Bundle:= TContextBundler.Build(BundleStore, BundleVerb, BundleQName, BundleCallerContext, BundleMaxCallers, True, True, True, {AExcludeDfmFields=} not BundleFullSurface, {ATaskText=} BundleTask, {AOracle=} nil, {ABodyTokenCap=} BundleMaxBodyTokens);
 
       // Render as JSON
       ResultText:= TContextBundler.RenderJson(Bundle);

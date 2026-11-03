@@ -1143,7 +1143,8 @@ begin
           begin
             var RO: TJSONObject:= RArr.Items[i] as TJSONObject;
             var RRow: TDLCallerRow;
-            RRow.FilePath   := RO.GetValue<string> ('file'        , '');
+            { Q-RESOLVED-PATH (D1): path is the full path the editor can open; file is the bare name (older engines). }
+            RRow.FilePath   := RO.GetValue<string> ('path'        , RO.GetValue<string>('file', ''));
             RRow.Line       := RO.GetValue<Integer>('line'        , 0 );
             RRow.CodeText   := '';
             RRow.TargetQName:= RO.GetValue<string> ('target_qname', '');
