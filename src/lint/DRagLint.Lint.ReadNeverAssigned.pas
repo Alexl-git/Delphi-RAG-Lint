@@ -17,7 +17,10 @@ unit DRagLint.Lint.ReadNeverAssigned;
     * the symbol passed as an argument where the callee may take it by var /
       out: an RTL intrinsic (SetLength, Inc, Val, ...), a routine of the project
       or the platform library with a var / out parameter at that position, or a
-      callee the indexes do not know at all;
+      callee the indexes do not know at all. A call the resolver bound to a
+      routine answers from THAT routine's overload set only (owner ruling D6);
+      the bare-name merge across project + library is the fallback for an
+      unbound call;
     * its address taken (`@X`);
     * an UNBOUND ref of the same name that writes by any of the shapes above
       (the resolver left it unbound -- a write through it may be this symbol);
@@ -71,6 +74,7 @@ const
   REF_WRITE         = 'write';
   REF_READ          = 'read';
   REF_MEMBER_ACCESS = 'member-access';
+  REF_CALL          = 'call';
   KIND_FIELD        = 'field';
   KIND_VAR          = 'var';
   KIND_PROPERTY     = 'property';
@@ -123,10 +127,14 @@ type
     FCalleeKnown : TDictionary<string, Integer>;          { lower callee -> 0 unknown, 1 routine, 2 non-routine }
     FIntrinsics  : TDictionary<string, Boolean>;          { 'name:index' }
     FNotCallees  : TDictionary<string, Boolean>;
+    FBoundCalls  : TObjectDictionary<Int64, TDictionary<Integer, Int64>>;  { file -> callee-name offset -> bound symbol id }
+    FBoundModes  : TDictionary<Int64, TArray<Boolean>>;   { bound routine id -> var/out per index of its overload set }
+    FBoundIsCall : TDictionary<Int64, Boolean>;           { bound symbol id -> is a routine }
     function TextOf(AFileId: Int64): TSrcText;
     function ArgIsVar(const ACallee: string; AIndex: Integer): Boolean;
     procedure LearnCallee(const ACallee, ALower: string);
-    function ArgVerdict(const S: string; B: Integer): TWriteVerdict;
+    function BoundCallee(AFileId: Int64; ASrc: TSrcText; AOffset: Integer; out AModes: TArray<Boolean>): Boolean;
+    function ArgVerdict(AFileId: Int64; ASrc: TSrcText; B: Integer): TWriteVerdict;
   public
     constructor Create(const AStore, ALibStore: ISymbolStore);
     destructor Destroy; override;
@@ -309,12 +317,18 @@ begin
   FCalleeKnown:= TDictionary<string, Integer>.Create;
   FIntrinsics := TDictionary<string, Boolean>.Create;
   FNotCallees := TDictionary<string, Boolean>.Create;
+  FBoundCalls := TObjectDictionary<Int64, TDictionary<Integer, Int64>>.Create([doOwnsValues]);
+  FBoundModes := TDictionary<Int64, TArray<Boolean>>.Create;
+  FBoundIsCall:= TDictionary<Int64, Boolean>.Create;
   for var N in VAR_INTRINSICS do FIntrinsics.AddOrSetValue(N, True);
   for var N in NOT_CALLEES do FNotCallees.AddOrSetValue(N, True);
 end;
 
 destructor TCollector.Destroy;
 begin
+  FBoundIsCall.Free;
+  FBoundModes.Free;
+  FBoundCalls.Free;
   FNotCallees.Free;
   FIntrinsics.Free;
   FCalleeKnown.Free;
@@ -465,8 +479,9 @@ begin
   end;
 end;
 
-{ The callee name in front of the open parenthesis at AOpen ('' for a grouping). }
-function CalleeBefore(const S: string; AOpen: Integer): string;
+{ The callee name in front of the open parenthesis at AOpen ('' for a grouping),
+  and the offset where that name starts. }
+function CalleeBefore(const S: string; AOpen: Integer; out AStart: Integer): string;
 var
   NEnd: Integer;
 begin
@@ -476,18 +491,71 @@ begin
     while (NEnd >= 1) and (S[NEnd] <> '<') do Dec(NEnd);
     NEnd:= SkipWsBack(S, NEnd - 1);
   end;
-  var NStart: Integer:= SkipIdentBack(S, NEnd) + 1;
-  Result:= if NStart > NEnd then '' else Copy(S, NStart, NEnd - NStart + 1);
+  AStart:= SkipIdentBack(S, NEnd) + 1;
+  Result:= if AStart > NEnd then '' else Copy(S, AStart, NEnd - AStart + 1);
 end;
 
-function TCollector.ArgVerdict(const S: string; B: Integer): TWriteVerdict;
+{ RNA-BARENAME (owner ruling D6, narrow): the routine the resolver bound the
+  call at AOffset (the callee name's start) to. True with AModes = the var/out
+  flags of THAT routine's overload set only (same name, same parent -- the
+  resolver may have picked the wrong overload, so the set errs to silence);
+  False when the call is unbound or bound to a non-routine (a cast), and the
+  caller falls back to the bare-name merge across project + library. }
+function TCollector.BoundCallee(AFileId: Int64; ASrc: TSrcText; AOffset: Integer; out AModes: TArray<Boolean>): Boolean;
 var
-  Index: Integer;
+  Map  : TDictionary<Integer, Int64>;
+  SymId: Int64;
+  IsRtn: Boolean;
 begin
+  AModes:= nil;
+  if not FBoundCalls.TryGetValue(AFileId, Map) then
+  begin
+    Map:= TDictionary<Integer, Int64>.Create;
+    FBoundCalls.Add(AFileId, Map);
+    for var R in FStore.GetReferencesFromFile(AFileId) do
+      if (R.SymbolId > 0) and SameText(R.Kind, REF_CALL) then
+      begin
+        var Off: Integer:= ASrc.OffsetOf(R.StartLine, R.StartCol);
+        if Off > 0 then Map.AddOrSetValue(Off, R.SymbolId);
+      end;
+  end;
+  if not Map.TryGetValue(AOffset, SymId) then Exit(False);
+  if not FBoundIsCall.TryGetValue(SymId, IsRtn) then
+  begin
+    var Sym: TSymbol:= FStore.GetSymbolById(SymId);
+    IsRtn:= (Sym.Id = SymId) and IsRoutineKind(Sym.Kind);
+    if IsRtn then
+    begin
+      var Modes: TArray<Boolean>:= nil;
+      for var Ov in FStore.FindSymbolsByExactName(Sym.Name) do
+        if (Ov.Id = Sym.Id) or (IsRoutineKind(Ov.Kind) and (Ov.ParentId = Sym.ParentId)) then
+        begin
+          var M: TArray<Boolean>:= ParamModes(Ov.Signature);
+          if Length(M) > Length(Modes) then SetLength(Modes, Length(M));
+          for var I:= 0 to High(M) do
+            if M[I] then Modes[I]:= True;
+        end;
+      FBoundModes.AddOrSetValue(SymId, Modes);
+    end;
+    FBoundIsCall.AddOrSetValue(SymId, IsRtn);
+  end;
+  if not IsRtn then Exit(False);
+  AModes:= FBoundModes[SymId];
+  Result:= True;
+end;
+
+function TCollector.ArgVerdict(AFileId: Int64; ASrc: TSrcText; B: Integer): TWriteVerdict;
+var
+  Index, NStart: Integer;
+  Modes: TArray<Boolean>;
+begin
+  var S: string:= ASrc.Text;
   var Open: Integer:= EnclosingOpen(S, B, Index);
   if (Open = 0) or (S[Open] = '[') then Exit(wvRead);   { an index or an open-array constructor }
-  var Callee: string:= CalleeBefore(S, Open);
+  var Callee: string:= CalleeBefore(S, Open, NStart);
   if (Callee = '') or FNotCallees.ContainsKey(LowerCase(Callee)) then Exit(wvRead);
+  if BoundCallee(AFileId, ASrc, NStart, Modes) then
+    Exit(if (Index < Length(Modes)) and Modes[Index] then wvWrite else wvRead);
   Result:= if ArgIsVar(Callee, Index) then wvWrite else wvRead;
 end;
 
@@ -511,7 +579,7 @@ begin
   if B < 1 then Exit(wvRead);
   if S[B] = '@' then Exit(wvWrite);                       { address taken }
   if not (ArgEnd and CharInSet(S[B], ['(', ','])) then Exit(wvRead);
-  Result:= ArgVerdict(S, B);
+  Result:= ArgVerdict(ARef.FileId, Src, B);
 end;
 
 function TCollector.DeclTail(const ASym: TSymbol): string;

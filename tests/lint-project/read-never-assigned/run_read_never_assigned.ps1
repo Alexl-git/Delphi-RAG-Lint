@@ -11,7 +11,9 @@
   constant, or a record field. A resolved call uses only its own declaration's
   var / out modes (TRIGGER-BARENAME / -QUALIFIED: a library Show(var) of the same
   bare name must not silence them); an unresolved call keeps the bare-name merge
-  (CONTROL-UNRESOLVED).
+  (CONTROL-UNRESOLVED). That control needs the platform library (the manifest
+  beside -Exe): without it the bare merge finds no var Show and it fires, so it
+  also proves the two triggers fire WITH the library clash present.
 
     RUN 1  lint-all --rule read-never-assigned  -> exactly the TRIGGER lines, no CONTROL line
     RUN 1b plain lint-all (the rule is ON by default) -> the same TRIGGER lines
