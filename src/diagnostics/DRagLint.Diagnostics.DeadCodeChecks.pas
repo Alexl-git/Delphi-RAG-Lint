@@ -156,10 +156,14 @@ type
     /// syntactically and same-file only (see CollectAddrTaken); matching is by
     /// BARE NAME, so a method sharing a name with an addr-taken free routine is
     /// skipped too, the same trade-off ContractMethods makes.
-    /// Known limitation: interface-method implementations are not detected
-    /// syntactically (requires a symbol store). If an interface method body slips
-    /// through with an unused parameter it will be reported; this is an acceptable
-    /// false-positive gap. Likewise a routine passed as a callback from a
+    /// Interface implementations: a class whose heritage lists an interface
+    /// (a second heritage entry, `class(TInterfacedObject, IFoo)`) has every
+    /// method declared outside a private / strict-private section skipped --
+    /// the interface fixes those signatures, and which methods belong to a
+    /// foreign interface is not visible to a same-file rule (YADF FP 2026-11-03,
+    /// fixture tests\lint\unused-parameter-intf.pas). Known limitation: an
+    /// interface method implemented by a PRIVATE method is still reported, and
+    /// a non-interface public helper of such a class is not. Likewise a routine passed as a callback from a
     /// DIFFERENT unit is not seen -- that needs the store (refs.kind='read' rows
     /// already carry it) and is a documented follow-up, not a regression.
     /// identical-then-else emits one finding at the 'if' node when the then and
@@ -545,6 +549,75 @@ var
     for I:= 0 to N.NamedChildCount - 1 do CountIdents(N.NamedChild(I), AMap);
   end;
 
+  { True when AClassNode (a declClass) lists an interface in its heritage. In
+    Delphi a class heritage list is `(Ancestor, IIntf1, IIntf2, ...)`: the first
+    entry is the ancestor class and EVERY later entry is an interface, so a
+    second typeref is the syntactic proof -- no name heuristic (I-prefix) needed. }
+  function ClassImplementsInterface(const AClassNode: TTSNode): Boolean;
+  var
+    I    : Integer;
+    Count: Integer;
+  begin
+    Count:= 0;
+    for I:= 0 to AClassNode.NamedChildCount - 1 do
+      if AClassNode.NamedChild(I).NodeType = 'typeref' then
+      begin
+        Inc(Count);
+        if Count >= 2 then Exit(True);
+      end;
+    Result:= False;
+  end;
+
+  { A class implementing an interface (ClassImplementsInterface) gets every
+    method declared OUTSIDE a private / strict-private section added to
+    ContractMethods: its parameter list is fixed by the interface. Which methods
+    those are needs the interface's declaration, which for a foreign interface
+    (ToolsAPI IOTACodeFormatter -- the YADF FP filed 2026-11-03) is not in this
+    file, so the rule takes the conservative over-approximation: public,
+    protected, published and default-section methods. A private helper of the
+    same class is still checked (interface methods are conventionally public;
+    one implemented by a private method is a remaining, documented FP). }
+  procedure CollectInterfaceImplNames(const AClassNode: TTSNode);
+  var
+    I, J  : Integer;
+    SecN  : TTSNode;
+    Member: TTSNode;
+    IsPriv: Boolean;
+    MName : string ;
+  begin
+    for I:= 0 to AClassNode.NamedChildCount - 1 do
+    begin
+      SecN:= AClassNode.NamedChild(I);
+      if SecN.NodeType = 'declProc' then
+        Member:= SecN
+      else if SecN.NodeType = 'declSection' then
+        Member:= Default(TTSNode)
+      else
+        Continue;
+      if not Member.IsNull then
+      begin
+        MName:= LowerCase(Trim(NodeStr(Member.ChildByField('name'))));
+        if MName <> '' then ContractMethods.AddOrSetValue(MName, True);
+        Continue;
+      end;
+      IsPriv:= False;
+      for J:= 0 to SecN.NamedChildCount - 1 do
+        if SecN.NamedChild(J).NodeType = 'kPrivate' then
+        begin
+          IsPriv:= True;
+          Break;
+        end;
+      if IsPriv then Continue;
+      for J:= 0 to SecN.NamedChildCount - 1 do
+      begin
+        Member:= SecN.NamedChild(J);
+        if Member.NodeType <> 'declProc' then Continue;
+        MName:= LowerCase(Trim(NodeStr(Member.ChildByField('name'))));
+        if MName <> '' then ContractMethods.AddOrSetValue(MName, True);
+      end;
+    end;
+  end;
+
   { PASS 1: Collect all declProc bare method names that carry contract-binding
     directives. In Delphi, virtual/override/message etc. appear ONLY on the
     interface-section declProc, NOT on the implementation defProc body.
@@ -566,6 +639,8 @@ var
     IsContr: Boolean;
   begin
     if N.IsNull then Exit;
+    if (N.NodeType = 'declClass') and ClassImplementsInterface(N) then
+      CollectInterfaceImplNames(N);
     if N.NodeType = 'declProc' then
     begin
       IsContr:= False;

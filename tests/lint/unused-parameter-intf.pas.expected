@@ -1,0 +1,7 @@
+# a method of a class that implements an interface has a fixed signature (2026-11-03 YADF FP)
+!unused-parameter 23
+!unused-parameter 24
+# positive control: a PRIVATE helper of the same class is not an interface method and still fires
+unused-parameter 22
+# positive control: a class with no interface in its heritage still fires
+unused-parameter 25
