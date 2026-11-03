@@ -3495,7 +3495,7 @@ var
   T0  : TDateTime;
   Beat: TStageHeartbeat;
 begin
-  Writeln(Format('%sstage: %s -- started %s', [AIndent, ALabel, FormatDateTime('hh:nn:ss', Now)]));
+  Writeln(Format('%sstage: %s -- started %s', [AIndent, ALabel, FormatDateTime('hh:nn:ss', NowLocal)]));
   Flush(Output);
   T0  := Now;
   Beat:= TStageHeartbeat.Create(AIndent, ALabel);
@@ -4150,7 +4150,7 @@ const
   behind -- the failure mode a PID file would have. Readers (query, lint ...)
   never take it; only the writers that index do. The same process asking again
   for a database it already holds is told yes. }
-function AcquireIndexLock(const ADbPath: string; AQuiet: Boolean = False): Boolean;
+function AcquireIndexLock(const ADbPath: string; AQuiet: Boolean = False; const AVerb: string = 'index'): Boolean;
 begin
   if GIndexLocks = nil then GIndexLocks:= TDictionary<string, THandle>.Create;
   var Key: string:= LowerCase(TPath.GetFullPath(ADbPath));
@@ -4174,21 +4174,23 @@ begin
   begin
     if AQuiet then Exit(False); { the caller words the refusal (index --watch skips a tick) }
     if Err = ERROR_SHARING_VIOLATION then
-      Writeln(ErrOutput, Format('ERROR: index: another index run is writing %s (its lock %s is held). ' +
+      Writeln(ErrOutput, Format('ERROR: %s: another index run is writing %s (its lock %s is held). ' +
         'Wait for it to finish -- two runs on one database end with "database is locked" after parsing everything.',
-        [ADbPath, LockPath]))
+        [AVerb, ADbPath, LockPath]))
     else if Err = ERROR_ACCESS_DENIED then
-      Writeln(ErrOutput, Format('ERROR: index: the lock file %s is still being deleted -- another index run on %s ' +
+      Writeln(ErrOutput, Format('ERROR: %s: the lock file %s is still being deleted -- another index run on %s ' +
         'is just finishing, or a scanner holds the file open. Retry in a moment. (%s)',
-        [LockPath, ADbPath, SysErrorMessage(Err)]))
+        [AVerb, LockPath, ADbPath, SysErrorMessage(Err)]))
     else
-      Writeln(ErrOutput, Format('ERROR: index: cannot create the lock file %s: %s', [LockPath, SysErrorMessage(Err)]));
+      Writeln(ErrOutput, Format('ERROR: %s: cannot create the lock file %s: %s', [AVerb, LockPath, SysErrorMessage(Err)]));
     Exit(False);
   end;
   GIndexLocks.Add(Key, H); { held until exit or ReleaseIndexLock; the OS closes and deletes it }
   { 1.39.1: a background warm of this database computes on what this run is about
     to rewrite, and would only find its key moved at the end -- stop it now. }
   StopStaleWarm(ADbPath + RULE_CACHE_WARM_MARKER_SUFFIX);
+  { 1.41 WARM-TMP: a warm stopped mid-Save leaves rules-<hash>.json.tmp-<pid>; its writer is gone now. }
+  TRuleCache.SweepStaleTmp(ADbPath);
   Result:= True;
 end;
 
@@ -4345,7 +4347,7 @@ begin
     var BeginPlat: string:= '';
     if AItem.Platform <> '' then BeginPlat:= ' [' + AItem.Platform + ']';
     Writeln(Format('=== %s%s BEGIN -> %s : started %s ===',
-      [AItem.Name, BeginPlat, AItem.DbPath, FormatDateTime('hh:nn:ss', Now)]));
+      [AItem.Name, BeginPlat, AItem.DbPath, FormatDateTime('hh:nn:ss', NowLocal)]));
     Flush(Output);
 
     { MODE. --rebuild empties the index of source before the walk; --recompile
@@ -6944,7 +6946,7 @@ begin
       A tick whose lock another run holds is skipped, not failed: the next one catches up. }
     if AArgs.Watch and (not AArgs.DryRun) and not AcquireIndexLock(ResolvedDb, {AQuiet=}True) then
     begin
-      Writeln(Format('[%s] tick skipped: another index run is writing %s; next try in %ds', [FormatDateTime('hh:nn:ss', Now), ResolvedDb, Interval]));
+      Writeln(Format('[%s] tick skipped: another index run is writing %s; next try in %ds', [FormatDateTime('hh:nn:ss', NowLocal), ResolvedDb, Interval]));
       if WatchIdle(Interval) then Break;
       Continue;
     end;
@@ -6955,7 +6957,7 @@ begin
     var ParsedBeforeTick: Integer:= Indexer.ParsedFiles;
     var SkippedBeforeTick: Integer:= Indexer.SkippedUpToDate;  // cumulative like ParsedFiles; the Done line reports this tick's delta
     var FailedBeforeTick: Integer:= Indexer.FailedFiles;       // F1: same delta rule as SkippedBeforeTick
-    if AArgs.Watch then Writeln(Format('[%s] Indexing tick (interval=%ds)...', [FormatDateTime('hh:nn:ss', Now), Interval]))
+    if AArgs.Watch then Writeln(Format('[%s] Indexing tick (interval=%ds)...', [FormatDateTime('hh:nn:ss', NowLocal), Interval]))
     else if not AArgs.ResolveOnly then Writeln('Indexing...');
     { --resolve-only: re-derive the edges from parses the index ALREADY holds,
       without walking a single file.
@@ -15163,6 +15165,7 @@ begin
     Writeln(ErrOutput, 'ERROR: warm-rule-cache needs --db <project index> that exists.');
     Exit(2);
   end;
+  TRuleCache.SweepStaleTmp(AArgs.DbPath); { 1.41 WARM-TMP: leftovers of a warm that was stopped mid-write }
   var Marker: string:= AArgs.DbPath + RULE_CACHE_WARM_MARKER_SUFFIX;
   var Mine  : string:= IntToStr(GetCurrentProcessId);
   if AArgs.WarmDetached then
@@ -16960,7 +16963,7 @@ begin
   if DbPath = '' then begin Writeln(ErrOutput, 'fb-snapshot: --db <sql.sqlite> required'); Exit(2); end;
   { 1.40 IDX-LOCK: this verb writes the index -- take <db>.indexing.lock like `index` does. }
   if ConfigDbRedirectsWrite('fb-snapshot', AArgs, '') then Exit(2);
-  if not AcquireIndexLock(DbPath) then Exit(2);
+  if not AcquireIndexLock(DbPath, {AQuiet=}False, 'fb-snapshot') then Exit(2);
   Store:= TSQLiteSymbolStore.Create(DbPath);
   try
     Store.Migrate;
@@ -23105,7 +23108,7 @@ begin
     var BaseDir: string;
     if AArgs.ProjectPath <> '' then BaseDir:= ExtractFilePath(AArgs.ProjectPath)
     else BaseDir:= ExtractFilePath(ProjectDb);
-    OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', Now) + '.txt');
+    OutPath:= TPath.Combine(BaseDir, 'lint-report-' + FormatDateTime('YYYYMMDD', NowLocal) + '.txt');
   end;
 
   { The default-disabled set, in three parts and no hand-written copies:
@@ -24068,7 +24071,7 @@ begin
 
   { 1.40 IDX-LOCK: the recompile writes findings into the index -- take <db>.indexing.lock. }
   if (Length(AArgs.DbPaths) > 0) and ConfigDbRedirectsWrite('refresh-findings', AArgs, AArgs.ProjectPath) then Exit(2);
-  if not AcquireIndexLock(DbPath) then Exit(2);
+  if not AcquireIndexLock(DbPath, {AQuiet=}False, 'refresh-findings') then Exit(2);
   Store:= TSQLiteSymbolStore.Create(DbPath);
   Store.Migrate;
 
@@ -30449,7 +30452,7 @@ var
         end;
       end;
 
-      Timestamp:= FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
+      Timestamp:= FormatDateTime('yyyy-mm-dd hh:nn:ss', NowLocal);
 
       { F7 (2026-10-25): step 4 stamps the .pas even when no edit touches it (a
         .dfm-only conversion), so it joins the set HERE -- pre-checked, backed
@@ -31343,6 +31346,19 @@ var
     end;
   end; // procedure
 
+  { --output F writes the rendering to F (and says so on stdout), like butterfly and
+    callgraph; without it the rendering goes to stdout. Until 1.41 the flag was parsed and
+    ignored here. }
+  procedure EmitRendering(const AText: string);
+  begin
+    if AArgs.Output <> '' then
+    begin
+      WriteOutputFile(AArgs.Output, AText);
+      Writeln('Wrote ', AArgs.Output);
+    end
+    else Writeln(AText);
+  end; // procedure
+
 begin
   if not ExplicitDbsExist(AArgs, 'reverse-calltree') then Exit(2);
   if AArgs.QName = '' then
@@ -31430,7 +31446,7 @@ begin
         end;
         for var T in Trees do RenderNodeChart(T.Root, Buf, Fmt = 'dot', Dir = 'callees');
         if Fmt = 'dot' then Buf.AppendLine('}');
-        Writeln(Buf.ToString);
+        EmitRendering(Buf.ToString);
       finally
         Buf.Free;
       end;
@@ -31446,8 +31462,8 @@ begin
           JRoots.AddElement(JTree);
         end;
         // A single root prints the bare object; multiple (overloads) print an array.
-        if JRoots.Count = 1 then Writeln((JRoots.Items[0] as TJSONObject).Format(2))
-        else Writeln(JRoots.Format(2));
+        if JRoots.Count = 1 then EmitRendering((JRoots.Items[0] as TJSONObject).Format(2))
+        else EmitRendering(JRoots.Format(2));
       finally
         JRoots.Free;
       end;
@@ -31457,7 +31473,7 @@ begin
       var Lines: TStringList:= TStringList.Create;
       try
         for var T in Trees do RenderNodeText(T.Root, '', Lines);
-        Writeln(Lines.Text);
+        EmitRendering(Lines.Text);
       finally
         Lines.Free;
       end;
@@ -31759,7 +31775,7 @@ begin
 
   { 1.40 IDX-LOCK: purge MUTATES the index -- take <db>.indexing.lock like `index` does. }
   if ConfigDbRedirectsWrite('purge-locals', AArgs, '') then Exit(2);
-  if not AcquireIndexLock(AArgs.DbPath) then Exit(2);
+  if not AcquireIndexLock(AArgs.DbPath, {AQuiet=}False, 'purge-locals') then Exit(2);
   SizeBefore:= TFile.GetSize(AArgs.DbPath);
   { Read-WRITE open (purge MUTATES) -- same path as index/rename/safe-delete, NOT
     the query_only OpenReadOnlyStore used by read verbs. Migrate ensures the
@@ -35097,7 +35113,7 @@ begin
         // and the recompile (RefreshProjectFindingsCore) -- no second store.
         { 1.40 IDX-LOCK: this phase rescans and recompiles INTO the index -- take <db>.indexing.lock. }
         if ConfigDbRedirectsWrite('reconcile-project', AArgs, ProjectFile) then Exit(2);
-        if not AcquireIndexLock(CohDbPath) then Exit(2);
+        if not AcquireIndexLock(CohDbPath, {AQuiet=}False, 'reconcile-project') then Exit(2);
         Store:= TSQLiteSymbolStore.Create(CohDbPath);
         Store.Migrate;
         HaveCoh:= True;
@@ -36821,6 +36837,17 @@ begin
           // ignore -- advisory only
         end;
       end;
+      { 1.41 SERVE-ALLDBS: with no --db, the manifest resolves EVERY database of the exe-dir drag-lint.json
+        (38 here), but TMCPServer opens only the first and used to print one "ignored:" line per other
+        one. Conservative fix, behaviour unchanged: serve the first, hand the server only that one, and say
+        once -- on stderr, never the JSON-RPC stdout -- how to choose. Lazy-opening or refusing without a
+        scope would break MCP configs that rely on the current pick. An explicit --db list is untouched. }
+      if (Length(Args.DbPaths) = 0) and (Length(DbList) > 1) then
+      begin
+        Writeln(ErrOutput, Format('drag-lint serve: NOTE -- no --db given; the manifest resolved %d databases and serve uses only the FIRST (%s). ' +
+          'Pass --db <file.sqlite> (or --project) to choose.', [Length(DbList), DbList[0]]));
+        DbList:= [DbList[0]];
+      end;
       for var ServeDb in DbList do SizeGuardCheck(ServeDb, ServeSGMB, Args.Force32);
       { Before Create, not after: TSQLiteSymbolStore opens the path for write, and
         SQLite CREATES an empty database for one that is not there. So a typo in an
@@ -36889,7 +36916,7 @@ begin
       try
         TFile.AppendAllText(ExtractFilePath(ParamStr(0)) + 'drag-lint-fatal.log',
           Format('%s  cmd=%s  %s: %s'#13#10,
-            [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), Args.Command, E.ClassName, E.Message]));
+            [FormatDateTime('yyyy-mm-dd hh:nn:ss', NowLocal), Args.Command, E.ClassName, E.Message]));
       except
         { deliberately empty }
       end;
