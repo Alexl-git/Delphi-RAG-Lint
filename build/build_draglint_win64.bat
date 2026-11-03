@@ -93,11 +93,17 @@ if not exist "%SQLITE_SRC%" (
   echo ERROR: x64 sqlite3.dll not found in Studio 37.0 bin64
   exit /b 1
 )
+REM A byte-identical copy is left alone: any running deployed engine has the DLL
+REM loaded, so an unconditional copy /Y failed on the lock BEFORE stage-engine.ps1
+REM (below) got its chance to hold and stop the holders (1.40.0 release, 2026-11-02).
 for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64") do (
-  copy /Y "%SQLITE_SRC%" "%%~D\sqlite3.dll" >NUL
+  fc /b "%SQLITE_SRC%" "%%~D\sqlite3.dll" >NUL 2>&1
   if errorlevel 1 (
-    echo ERROR: failed to stage sqlite3.dll into %%~D
-    exit /b 1
+    copy /Y "%SQLITE_SRC%" "%%~D\sqlite3.dll" >NUL
+    if errorlevel 1 (
+      echo ERROR: failed to stage sqlite3.dll into %%~D
+      exit /b 1
+    )
   )
 )
 REM STAGE THE ENGINE. The plain copy stays FIRST and is the ordinary path: when
