@@ -184,8 +184,11 @@ trap { $script:fail++; "FAIL  driver.crash  $($_.Exception.Message) [line $($_.I
 . "$PSScriptRoot\vcl-atoms.ps1"; 'NOTE  ' + (VclAtomsReclaim)   # ATOMLOCK: start from a reclaimed atom table (idempotent)
 function Check($name, $cond, $detail = '') { if ($cond -and $env:DRIVE_FORCE_FAIL -ne $name) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
-function WaitFor($procId, $caption, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
-function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; do { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; if (((Get-Date) - $t0).TotalSeconds -ge $sec) { break }; Start-Sleep -Milliseconds 250 } while ($true); return [IntPtr]::Zero }
+# DRVLIB: the picker's list load (STARTUP2) and the scoped validation on Save run behind the progress window
+# (TEngineWaitForm); at 100% CPU they outlast a fixed 20/90 s deadline (A/B 10-28: save.nonascii.asks met the
+# progress window, not the question). The deadline counts from the moment that window is gone; 600 s cap overall.
+function WaitFor($procId, $caption, $sec) { $t0 = Get-Date; $quiet = $t0; while ((((Get-Date) - $quiet).TotalSeconds -lt $sec) -and (((Get-Date) - $t0).TotalSeconds -lt 600)) { foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { return $h }; if ([W]::Cls($h) -eq 'TEngineWaitForm') { $quiet = Get-Date } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
+function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; $quiet = $t0; do { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h }; if ([W]::Cls($h) -eq 'TEngineWaitForm') { $quiet = Get-Date } }; if ((((Get-Date) - $quiet).TotalSeconds -ge $sec) -or (((Get-Date) - $t0).TotalSeconds -ge 600)) { break }; Start-Sleep -Milliseconds 250 } while ($true); return [IntPtr]::Zero }
 function TopsNow($procId) { (Forms $procId | ForEach-Object { $h = $_; $s = '{0}/{1}' -f [W]::Cls($h), [W]::Txt($h); if ([W]::Cls($h) -eq '#32770') { $s += ' [' + ((Find $h 'Static' $null | ForEach-Object { [W]::Txt($_) } | Where-Object { $_ }) -join ' ') + ']' }; $s }) -join ' | ' }
 function Find($parent, $cls, $text) { [W]::Kids($parent) | Where-Object { [W]::Cls($_) -eq $cls -and ($text -eq $null -or [W]::Txt($_) -eq $text) } }
 function SetText($h, $s) { [void][W]::SendS($h, 0x000C, [IntPtr]::Zero, $s) }
