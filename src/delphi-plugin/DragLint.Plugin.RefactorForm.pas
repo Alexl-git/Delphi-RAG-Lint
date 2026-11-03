@@ -62,7 +62,7 @@ procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: st
 /// <param name="ABackup">False appends --no-backup.</param>
 /// <returns>The full command line.</returns>
 /// <remarks>Pure.</remarks>
-function DLRenameCmdLine(const AExePath, AQName, ANewName, ADb, AFromFile: string; ADryRun, ABackup: Boolean): string;
+function DLRenameCmdLine(const AExePath, AQName, ANewName, ADb, AFromFile: string; ADryRun, ABackup: Boolean): string;  // dl:ok unused-public-symbol@c8e6 -- public as the test seam: LspNonBlockingTests T8/T9 drive it (not in the plugin index)
 
 /// <summary>Reads the symbol the typeat verb resolved from its JSON answer.</summary>
 /// <param name="AOutput">Captured text of `typeat ... --format json` (stderr may
