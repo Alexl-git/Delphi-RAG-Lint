@@ -1170,4 +1170,6 @@
 #   Superseded: 1.29.0-alpha|09250d1e46167658401982dcff1a5ebc1a17aebffd51b48ef41ea1eda01f2122
 # 2026-11-02 main (whole-branch lint): hash updated WITHOUT a version bump -- DRagLint.Analysis.Cfg.pas changed only by a dl:ok public-field comment on TCfg.PruneConstLoops; no code, no emitted rows change.
 #   Superseded: 1.29.0-alpha|5e21265dfd93da8dc9e049eac83d282ce2598dd5f7b382f641242ad47354a283
-1.29.0-alpha|d43b27218f21472ac96ee9857e1ab4d424fdf2ad37bc990f577bd5d806317161
+# 2026-11-02 lane 141-doc: hash updated WITHOUT a version bump -- DRagLint.Parser.DocComments.pas changed only inside three drag-lint:auto doc blocks (TIndexer.IndexFile renamed to IndexFileBody in 'Used by'/'Called from'); comment text only, no extraction change.
+#   Superseded: 1.29.0-alpha|d43b27218f21472ac96ee9857e1ab4d424fdf2ad37bc990f577bd5d806317161
+1.29.0-alpha|b25cbc8c28a0fe33fdd1c17b1a4351ebafb5f4a68aeea11ae2f9d1785ad92ae2
