@@ -25,9 +25,10 @@ if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -Foreground
 $Exe = (Resolve-Path $Exe).Path
 $WorkDir = Join-Path $WorkDir ([guid]::NewGuid().ToString('N'))
 $srcDir = Join-Path $WorkDir 'src'
-New-Item -ItemType Directory $srcDir -Force | Out-Null
-function Emit([string]$name, [string]$text) {
-  [IO.File]::WriteAllText((Join-Path $srcDir $name), (($text -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
+$libDir = Join-Path $WorkDir 'lib'
+New-Item -ItemType Directory $srcDir, $libDir -Force | Out-Null
+function Emit([string]$name, [string]$text, [string]$dir = $srcDir) {
+  [IO.File]::WriteAllText((Join-Path $dir $name), (($text -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
 }
 Emit 'uCsLog.pas' @'
 unit uCsLog;
@@ -115,6 +116,51 @@ begin
 end;
 end.
 '@
+# INBOX-uses-dotted-name-whitespace: a dotted unit name padded around its dot
+# (`uHelper      .Pad`, legal for dcc) must match unit uHelper.Pad. uHelper.Pad lives in a
+# LIBRARY DB (as System.Generics.Collections does for YADF), so the project index leaves
+# TPadList unbound and the rule reads the uses text; the head (uHelper) is itself an indexed
+# unit, as System is. Reported by lint-all (the INBOX repro), so read from $all.
+Emit 'uHelper.Pad.pas' -dir $libDir @'
+unit uHelper.Pad;
+interface
+type
+  TPadList<T> = class
+  end;
+implementation
+end.
+'@
+Emit 'uWsDot.pas' @'
+unit uWsDot;
+interface
+implementation
+uses
+  uImplUse
+  , uHelper      .Pad
+  ;
+procedure P;
+var
+  L: TPadList<Integer>;
+begin
+  L := TPadList<Integer>.Create;
+end;
+end.
+'@
+Emit 'uWsMiss.pas' @'
+unit uWsMiss;
+interface
+implementation
+uses
+  uHelper  .  Pad;
+procedure P;
+var
+  L: TPadList<Integer>;
+begin
+  L := TPadList<Integer>.Create;
+  CsSite.Send('x');
+end;
+end.
+'@
 # cycle: uCycB uses uCycA in its interface; uCycA needs TCycB (declared in uCycB) in its interface
 Emit 'uCycB.pas' @'
 unit uCycB;
@@ -137,19 +183,23 @@ implementation
 end.
 '@
 $manifest = Join-Path $WorkDir 'manifest.drag-lint.json'
-[IO.File]::WriteAllText($manifest, '{ "settings": { "defaultPlatform": "Win64", "sizeGuardMB": 1500, "enginePath": "auto", "maxJobs": 1 }, "indexes": { "outDir": "out", "sections": [ { "name": "SecMu", "db": "mu.sqlite", "include": ["src"] } ] } }', [Text.Encoding]::ASCII)
+[IO.File]::WriteAllText($manifest, '{ "settings": { "defaultPlatform": "Win64", "sizeGuardMB": 1500, "enginePath": "auto", "maxJobs": 1 }, "indexes": { "outDir": "out", "sections": [ { "name": "SecMu", "db": "mu.sqlite", "include": ["src"] }, { "name": "SecMuLib", "db": "mulib.sqlite", "include": ["lib"] } ] } }', [Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'out\mu.sqlite'
+$libDb = Join-Path $WorkDir 'out\mulib.sqlite'
 function LintOf([string]$unit) {
-  @(& $Exe lint (Join-Path $srcDir $unit) --db $db --rule unit-missing-from-uses --quiet 2>&1 | Out-String) -split "`r?`n" |
+  @(& $Exe lint (Join-Path $srcDir $unit) --db $db --db $libDb --rule unit-missing-from-uses --quiet 2>&1 | Out-String) -split "`r?`n" |
     Where-Object { $_ -match 'unit-missing-from-uses' }
 }
 Push-Location C:\TEMP
 try {
   & $Exe index --all --config $manifest --only SecMu --jobs 1 2>&1 | Out-Null
+  & $Exe index --all --config $manifest --only SecMuLib --jobs 1 2>&1 | Out-Null
   if (-not (Test-Path $db)) { Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
   $impl = @(LintOf 'uImplUse.pas'); $intf = @(LintOf 'uIntfUse.pas'); $already = @(LintOf 'uAlready.pas')
   $local = @(LintOf 'uLocal.pas'); $unknown = @(LintOf 'uUnknown.pas'); $cyc = @(LintOf 'uCycA.pas')
-  $all = & $Exe lint-all --db $db --rule unit-missing-from-uses --quiet 2>&1 | Out-String
+  $all = & $Exe lint-all --db $db --db $libDb --rule unit-missing-from-uses --quiet 2>&1 | Out-String
+  $allLines = $all -split "`r?`n" | Where-Object { $_ -match 'unit-missing-from-uses' }
+  $wsDot = @($allLines | Where-Object { $_ -match 'uWsDot\.pas' }); $wsMiss = @($allLines | Where-Object { $_ -match 'uWsMiss\.pas' })
   $rules = & $Exe rules --json 2>&1 | Out-String
   Write-Host 'FINDINGS' -ForegroundColor Cyan
   # positive-control: unit-missing-from-uses
@@ -159,7 +209,10 @@ try {
   Check 'NEG: a local of that name -> nothing' ($local.Count -eq 0) ($local -join ' | ')
   Check 'NEG: an unindexed used unit could declare it -> nothing' ($unknown.Count -eq 0) ($unknown -join ' | ')
   Check 'cycle: interface would close uCycA -> uCycB -> uCycA, implementation offered' (($cyc.Count -eq 1) -and ($cyc[0] -match 'add it to the implementation uses clause') -and ($cyc[0] -match 'circular unit reference: uCycA -> uCycB -> uCycA')) ($cyc -join ' | ')
-  Check 'lint-all reports the same rule (impl + intf + cycle = 3)' (([regex]::Matches($all, 'unit-missing-from-uses')).Count -eq 3) ''
+  Check 'NEG: dotted uses entry padded before the dot (uHelper      .Pad) -> nothing' ($wsDot.Count -eq 0) ($wsDot -join ' | ')
+  # positive-control: a padded entry (uHelper  .  Pad) covers only its own unit; a truly missing unit still fires
+  Check 'padded entry does not hide a truly missing unit -> one finding for uCsLog' (($wsMiss.Count -eq 1) -and ($wsMiss[0] -match "'CsSite' is declared in unit uCsLog")) ($wsMiss -join ' | ')
+  Check 'lint-all reports the same rule (impl + intf + cycle + wsMiss = 4)' (([regex]::Matches($all, 'unit-missing-from-uses')).Count -eq 4) ''
   Check 'rules --json lists the rule as fixable' ($rules -match '"id"\s*:\s*"unit-missing-from-uses"[^}]*"fixable"\s*:\s*true') ''
   Write-Host 'FIX' -ForegroundColor Cyan
   & $Exe lint (Join-Path $srcDir 'uImplUse.pas') --db $db --rule unit-missing-from-uses --fix --apply --quiet 2>&1 | Out-Null
