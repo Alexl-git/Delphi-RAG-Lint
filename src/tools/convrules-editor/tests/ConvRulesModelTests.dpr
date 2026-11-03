@@ -16596,6 +16596,7 @@ begin
     TestAnalyzeAncestors;
     TestAncestorChainUnion;
     TestAncestorOrder;
+    TestUnindexedAncestors;
 
     FreeAndNil(GParseBook);
 

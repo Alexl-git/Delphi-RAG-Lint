@@ -219,10 +219,13 @@ type
       procedure ClearScopeClick(Sender: TObject);
       /// <summary>Convert's C8 steps after Preflight: the forced re-analysis, the gate
       /// (InheritanceGate: cancelled = stop; unchecked units = ask once), the E10 refusal
-      /// notes and the E7 order warning (asked once, never a refusal).</summary>
-      /// <param name="AUnits">The units the run would convert, run order.</param>
+      /// notes, the unindexed-ancestor error (C8CHAIN Q5-B: blocks, no run-anyway) and the E7 order
+      /// question (C8CHAIN: blocking; Yes reorders ancestor-first).</summary>
+      /// <param name="pUnits">The units the run would convert, run order. Leaves in run
+      /// order: after Yes to the E7 question the list is reordered ancestor-first and
+      /// SetSources shows it.</param>
       /// <returns>False = stop; the status line already says why.</returns>
-      function InheritanceChecksPass(const AUnits: TArray<string>): Boolean;
+      function InheritanceChecksPass(var pUnits: TArray<string>): Boolean;
       /// <summary>R2: asks the engine its version, then its capabilities, behind the asking
       /// wait window, and sets every capability gate from the answer.</summary>
       /// <remarks>A probe that did not answer (failed, or the user chose not to wait) sets
@@ -1588,14 +1591,14 @@ begin
   FBtnCancel.Enabled:= False;
 end;
 
-function TConvertTab.InheritanceChecksPass(const AUnits: TArray<string>): Boolean;
+function TConvertTab.InheritanceChecksPass(var pUnits: TArray<string>): Boolean;
 begin
   Result:= True;
   // C8: the files and the index may have moved since the units were added. Only now,
   // after Preflight: a refused run must not first pay N x ~2 s of analysis.
   ReanalyzeAll(True);
   var LQuestion: string;
-  case InheritanceGate(FAnalysisCancelled, InheritanceOfAll(AUnits), FInheritError, LQuestion) of
+  case InheritanceGate(FAnalysisCancelled, InheritanceOfAll(pUnits), FInheritError, LQuestion) of
     igCancelled:
     begin
       FHost.SetStatus(GATE_CANCELLED_TEXT, False);
@@ -1613,22 +1616,34 @@ begin
     end;
     igProceed: ; // nothing to ask
   end; // case
-  var LRefusals: TArray<string>:= EngineRefusalNotes(InheritanceOfAll(AUnits), FInheritedOk);
+  // C8CHAIN (owner ruling Q5-B): an ancestor chain that leaves the project index is an error, not a
+  // note -- the ancestor's unit must be added to the project. Blocks; there is no run-anyway.
+  var LUnindexed: string:= UnindexedBlockText(InheritanceOfAll(pUnits));
+  if LUnindexed <> '' then
+  begin
+    FHost.SetStatus(StringReplace(LUnindexed, sLineBreak, ' ', [rfReplaceAll]), True); // mirrored for the GUI driver
+    AskBlockingDropsWith(LUnindexed, mtError, [mbOK]);
+    Exit(False);
+  end;
+  var LRefusals: TArray<string>:= EngineRefusalNotes(InheritanceOfAll(pUnits), FInheritedOk);
   FNotes:= FNotes + LRefusals;
   for var LNote: string in LRefusals do
     AddResultRow(['', '', 'note', '', '', '', '', LNote]);
-  // C8 E7: a descendant listed above an unconverted ancestor converts without its
-  // inherited instances. Warn once; never block (E9).
-  var LWarn: TArray<string>:= OrderWarnings(AUnits, InheritanceOfAll(AUnits), FRetypeOk);
+  // C8CHAIN (owner ruling Q5): a descendant above an unconverted ancestor never runs in
+  // that order. Yes reorders the list and runs; No runs nothing.
+  var LWarn: TArray<string>:= OrderWarnings(pUnits, InheritanceOfAll(pUnits), FRetypeOk);
   if Length(LWarn) > 0 then
   begin
-    var LText: string:= OrderWarningText(LWarn, FRetypeOk);
+    var LOrdered: TArray<string>:= OrderAncestorFirst(pUnits, InheritanceOfAll(pUnits));
+    var LText: string:= OrderBlockText(LWarn, LOrdered);
     FHost.SetStatus(StringReplace(LText, sLineBreak, ' ', [rfReplaceAll]), False); // mirrored for the GUI driver: a TMessageForm's text has no window
     if AskBlockingDrops(LText, mtWarning) <> mrYes then
     begin
-      FHost.SetStatus(OrderCancelledText(FRetypeOk), False);
+      FHost.SetStatus(ORDER_CANCELLED_TEXT, False);
       Exit(False);
     end;
+    SetSources(LOrdered);
+    pUnits:= LOrdered;
   end;
 end;
 

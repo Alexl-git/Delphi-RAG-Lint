@@ -213,3 +213,40 @@ begin
   Check('ag.block.no.anyway', not ContainsText(OrderBlockText(Warn, [AG_BASE_PAS, AG_LEAF_PAS]), 'anyway'));
   Check('ag.block.cancel.text', ORDER_CANCELLED_TEXT = 'Convert cancelled: nothing was run.');
 end;
+
+procedure TestUnindexedAncestors;
+var
+  LInh    : TUnitInheritance;
+  LOutside: TArray<string>;
+  LErr    : string;
+  LGraph  : TArray<TAncestorUnit>;
+
+  function Own: TClassInfo;
+  begin
+    Result:= Default(TClassInfo);
+    Result.Found      := True;
+    Result.PasPath    := AG_LEAF_PAS;
+    Result.ParentClass:= 'TMid';
+  end;
+
+  function WithOutside(const AClasses: TArray<string>): TUnitInheritance;
+  begin
+    Result:= Default(TUnitInheritance);
+    Result.UnitPas:= AG_LEAF_PAS;
+    Result.Known  := True;
+    Result.Outside:= AClasses;
+  end;
+
+begin
+  LGraph:= AncestorGraphOf(Own, [], FakeLookup(['TMid|' + AG_MID_PAS + '|TCustomBase'], nil), FakeReader([], []), AgPairs, LErr, LOutside);
+  Check('ag.outside.walk.reported', (LErr = '') and (Length(LGraph) = 1) and (string.Join(',', LOutside) = 'TCustomBase'), LErr + ' ' + string.Join(',', LOutside));
+  LInh:= AnalyzeUnit(AG_LEAF_PAS, AgPairs, FakeLookup(['TLeaf|' + AG_LEAF_PAS + '|TMid', 'TMid|' + AG_MID_PAS + '|TCustomBase'], nil),
+    FakeReader([ChangeFileExt(AG_LEAF_PAS, '.dfm')], ['inherited LeafForm: TLeaf' + AG_CRLF + 'end']), nil);
+  Check('ag.outside.analyze.field', LInh.Known and (string.Join(',', LInh.Outside) = 'TCustomBase'), LInh.Error);
+  Check('ag.outside.block.names.class', ContainsText(UnindexedBlockText([WithOutside(['TCustomBase'])]), 'Leaf.pas descends from TCustomBase')
+    and ContainsText(UnindexedBlockText([WithOutside(['TCustomBase'])]), '.dproj/.dpr') and ContainsText(UnindexedBlockText([WithOutside(['TCustomBase'])]), 'reindex'),
+    UnindexedBlockText([WithOutside(['TCustomBase'])]));
+  Check('ag.outside.block.no.anyway', not ContainsText(UnindexedBlockText([WithOutside(['TCustomBase'])]), 'anyway'));
+  Check('ag.outside.library.not.blocked', UnindexedBlockText([WithOutside(['TForm', 'TDataModule', 'TcxCustomForm'])]) = '');
+  Check('ag.outside.none.empty', UnindexedBlockText([WithOutside([])]) = '');
+end;
