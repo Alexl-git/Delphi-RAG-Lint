@@ -15,6 +15,7 @@ Phase A (no extractor change: an index built by 1.39.2 stays current). Versions 
 - Rule `inline-comment-in-multiline-args` retired (owner decision, 1.40 IDE test): its premise - that YADF reflows the next element into a trailing `//` comment inside a multi-line argument list - is false (YADF 1.0.20 keeps `'', // c` and `Foo(1, // c` unchanged). The check, its fixer and catalogue/profile/README rows are gone; rule count 292 -> 291 (198 built-in + 93 external, 247 default-on, 110 fixable). Lint rule change only, no extractor bump.
 
 ### Fixed
+- `unit-missing-from-uses` no longer reports a name whose unit is listed with blanks around a dot (`System      .Generics.Collections`, legal for dcc; YADF YadfMain.pas x4): the uses-text tokenizer (`DRagLint.Core.UsesInsert`, shared with the IDE quick-fix and the LSP code action) joins `A  .  B` into `A.B`. Lint-time only -- the extractor already stored the clean name, no extractor bump.
 - `large-magic-number` no longer reports float literals (`0.1`, `1.5e3`): the query now exempts anything with a `.` or exponent, matching the rule name and message (ORM3 BASICS.PAS 389-391 false positives).
 - `lint-all --json` keeps stdout a single JSON document (LINTJSON-STDERR); output-file encoding for the remaining verbs under `--output-encoding` (ENC-OUT remainder, `run_output_file_encoding.ps1`).
 - `missing-doc` no longer reports an implementation-section method whose declaration is documented (GAP-MISSINGDOC).

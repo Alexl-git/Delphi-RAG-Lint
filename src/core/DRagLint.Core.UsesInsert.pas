@@ -46,7 +46,9 @@ type
     /// <param name="ALines">The file's lines.</param>
     /// <returns>0 when the text is not a unit or has no implementation keyword.</returns>
     class function ImplementationLine(const ALines: TArray<string>): Integer; static;
-    /// <summary>Every unit name listed in any uses clause of the text, as written.</summary>
+    /// <summary>Every unit name listed in any uses clause of the text, as written
+    /// except that blanks around a dot on one line are dropped
+    /// (`System      .Generics.Collections` is `System.Generics.Collections`).</summary>
     /// <param name="ALines">The file's lines.</param>
     /// <returns>The names in source order; empty when there is no uses clause.</returns>
     class function UsesEntries(const ALines: TArray<string>): TArray<string>; static;
@@ -128,10 +130,28 @@ begin
   Result:= CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '_']);
 end;
 
-{ Tokenizes the whole text: identifiers (dotted names joined) and single
-  punctuation characters. Comments, directives, strings, char codes and
-  numbers produce no token. }
-function Tokenize(const ALines: TArray<string>): TArray<TUTok>;  // dl:ok cognitive-complexity@682a -- REVIEWED 2026-10-29: a flat lexer state machine (code / brace / paren-star, strings, numbers, idents); each branch is one token class
+{ Start (1-based) of the next part of a dotted name when S[AFrom..] is
+  optional blanks, a single `.`, optional blanks and an identifier start on
+  the same line (dcc accepts `System      .Generics`); 0 otherwise, so a
+  range `A..B` or a lone `end.` never joins. }
+function NextDottedPart(const S: string; AFrom: Integer): Integer;
+var
+  P: Integer;
+begin
+  Result:= 0;
+  P     := AFrom;
+  while (P <= Length(S)) and CharInSet(S[P], [' ', #9]) do Inc(P);
+  if (P > Length(S)) or (S[P] <> '.') then Exit;
+  Inc(P);
+  while (P <= Length(S)) and CharInSet(S[P], [' ', #9]) do Inc(P);
+  if (P <= Length(S)) and IsIdentStart(S[P]) then Result:= P;
+end;
+
+{ Tokenizes the whole text: identifiers (dotted names joined, blanks around
+  a dot dropped: `System .Classes` is the one token `System.Classes`) and
+  single punctuation characters. Comments, directives, strings, char codes
+  and numbers produce no token. }
+function Tokenize(const ALines: TArray<string>): TArray<TUTok>;  // dl:ok cognitive-complexity@a0b0 -- REVIEWED 2026-11-02: a flat lexer state machine (code / brace / paren-star, strings, numbers, idents); each branch is one token class; the dotted-name join delegates to NextDottedPart
 var
   State: Integer; { 0 code, 1 inside braces, 2 inside paren-star }
   Count: Integer;
@@ -220,15 +240,23 @@ begin
       end
       else if IsIdentStart(C) then
       begin
+        var TokStart: Integer:= P;
         var B: Integer:= P;
+        var Joined: string:= '';
         Inc(P);
         while P <= N do
         begin
           if IsIdentChar(S[P]) then Inc(P)
-          else if (S[P] = '.') and (P < N) and IsIdentStart(S[P + 1]) then Inc(P)
-          else Break;
+          else
+          begin
+            var Q: Integer:= NextDottedPart(S, P);
+            if Q = 0 then Break;
+            Joined:= Joined + Copy(S, B, P - B) + '.';
+            B     := Q;
+            P     := Q + 1;
+          end;
         end;
-        Add(Copy(S, B, P - B), I + 1, B, P, FirstOnLine);
+        Add(Joined + Copy(S, B, P - B), I + 1, TokStart, P, FirstOnLine);
         FirstOnLine:= False;
       end
       else
