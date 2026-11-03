@@ -1,5 +1,5 @@
 # Driven GUI check for C8 (inherited instances, editor half -- spec 2026-10-05-c8-inherited-instances-design.md E5-E8).
-# Usage: pwsh -NoProfile -File drive-inherited-offer.ps1 -Exe <path\ConvRulesEditor.exe> [-ProofNoInheritance] [-ProofGateYes]
+# Usage: pwsh -NoProfile -File drive-inherited-offer.ps1 -Exe <path\ConvRulesEditor.exe> [-ProofNoInheritance] [-ProofGateYes] [-ProofMidConverted]
 #        A FROZEN drag-lint.exe must sit beside the exe (a staged pin copy, never dll-win64); the fixture is indexed with it.
 # Fixture (temp folder, _D-RAG layout): Fix.dproj / Fix.dpr with Anc (TAncForm, object Label1: TLabel) and Desc
 #   (TDescForm = class(TAncForm), inherited Label1: TLabel), Desc2 (no .dfm block; its CODE writes Label1.Caption --
@@ -26,7 +26,17 @@
 #   warning is answered Yes, and order.yes.runs checks the run finished ('Converted ...' on the status line) and
 #   left a .BCK1 restore point beside Anc or Desc. The default run is unchanged: 16 / 0 (15 + D3's
 #   offer.no.to.all.once); with the switch 17 / 0.
-param([string]$Exe, [switch]$ProofNoInheritance, [switch]$ProofGateYes)
+# C8CHAIN (owner ruling Q5 / Q-A / Q-B, 2026-11-03): Mid (TMidForm = class(TAncForm), its own Label9: TLabel, no
+#   inherited block) and Leaf (class(TMidForm), inherited Label1) -- adding Leaf offers Anc AND Mid, root first; the
+#   E7 question is blocking (Yes reorders, No runs nothing). Orphan descends from a class in neither the project nor
+#   the platform library index: Convert is refused with an OK-only error naming the .dproj/.dpr. LibRoot descends
+#   from TScrollingWinControl (a library class no old name list held) and must NOT be refused.
+#   Measured 2026-11-03 on a 1.40.0-alpha-20261103-145611 pin copy: 24 / 0; -ProofMidConverted (Mid's Label9 is a
+#   TStaticText, so Mid is converted) 21 / 3 (chain.intermediate.offered, chain.yes.inserts.root.first,
+#   order.blocking.text); -ProofGateYes 26 / 0 (adds order.yes.reordered). RED: the pre-C8CHAIN editor (main
+#   2026-10-27) 15 / 9 (order.warning, order.no.runs.nothing, chain.*, order.blocking.*, qb.unindexed.blocks,
+#   qb.ok.only, qb.runs.nothing -- it converts Orphan); the 79dad774 name-filter editor 21 / 3
+#   (qb.library.root.not.blocked, order.blocking.text, order.blocking.no.runs.nothing: it refuses LibRoot).param([string]$Exe, [switch]$ProofNoInheritance, [switch]$ProofGateYes, [switch]$ProofMidConverted)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
@@ -387,6 +397,7 @@ $rulesDir = Join-Path $tmp 'rules'; $dragDir = Join-Path $tmp '_D-RAG'
 [void][IO.Directory]::CreateDirectory($rulesDir); [void][IO.Directory]::CreateDirectory($dragDir)
 $dproj = Join-Path $tmp 'Fix.dproj'; $db = Join-Path $dragDir 'Fix.sqlite'
 $anc = Join-Path $tmp 'Anc.pas'; $desc = Join-Path $tmp 'Desc.pas'; $desc2 = Join-Path $tmp 'Desc2.pas'; $book = Join-Path $rulesDir 'Fix.rules'
+$mid = Join-Path $tmp 'Mid.pas'; $leaf = Join-Path $tmp 'Leaf.pas'; $orphan = Join-Path $tmp 'Orphan.pas'; $libRoot = Join-Path $tmp 'LibRoot.pas'
 WriteAscii $dproj @'
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
@@ -422,7 +433,11 @@ uses
   Vcl.Forms,
   Anc in 'Anc.pas' {AncForm},
   Desc in 'Desc.pas' {DescForm},
-  Desc2 in 'Desc2.pas' {Desc2Form};
+  Desc2 in 'Desc2.pas' {Desc2Form},
+  Mid in 'Mid.pas' {MidForm},
+  Leaf in 'Leaf.pas' {LeafForm},
+  Orphan in 'Orphan.pas' {OrphanForm},
+  LibRoot in 'LibRoot.pas' {LibRootBox};
 
 begin
   Application.Initialize;
@@ -542,6 +557,107 @@ inherited Desc2Form: TDesc2Form
   OnCreate = FormCreate
 end
 '@
+# C8CHAIN: Leaf -> Mid -> Anc. Mid re-opens no Anc instance but holds a TLabel of its own (under
+# -ProofMidConverted a TStaticText: Mid is then converted and drops out of the chain).
+$midType = if ($ProofMidConverted) { 'TStaticText' } else { 'TLabel' }
+WriteAscii $mid ((@'
+unit Mid;
+
+interface
+
+uses
+  Vcl.StdCtrls, Anc;
+
+type
+  TMidForm = class(TAncForm)
+    Label9: MIDTYPE;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@) -replace 'MIDTYPE', $midType)
+WriteAscii (Join-Path $tmp 'Mid.dfm') ((@'
+inherited MidForm: TMidForm
+  object Label9: MIDTYPE
+    Caption = 'Mid'
+  end
+end
+'@) -replace 'MIDTYPE', $midType)
+WriteAscii $leaf @'
+unit Leaf;
+
+interface
+
+uses
+  Mid;
+
+type
+  TLeafForm = class(TMidForm)
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+WriteAscii (Join-Path $tmp 'Leaf.dfm') @'
+inherited LeafForm: TLeafForm
+  inherited Label1: TLabel
+    Caption = 'Leaf'
+  end
+end
+'@
+# C8CHAIN Q-B: Orphan's base class is declared by no project unit and no library unit (blocks);
+# LibRoot's base is a platform-library class that no old name list held (must not block).
+WriteAscii $orphan @'
+unit Orphan;
+
+interface
+
+uses
+  Vcl.Forms;
+
+type
+  TOrphanForm = class(TJvVendorForm)
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+WriteAscii (Join-Path $tmp 'Orphan.dfm') @'
+object OrphanForm: TOrphanForm
+  Caption = 'Orphan'
+end
+'@
+WriteAscii $libRoot @'
+unit LibRoot;
+
+interface
+
+uses
+  Vcl.Forms;
+
+type
+  TLibRootBox = class(TScrollingWinControl)
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+WriteAscii (Join-Path $tmp 'LibRoot.dfm') @'
+object LibRootBox: TLibRootBox
+end
+'@
 WriteAscii $book @'
 #convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls
 #link Caption <- Caption
@@ -557,8 +673,9 @@ try {
   # cancel texts say converting the ancestor breaks the descendant and the order changes nothing.
   $retypeCap = $caps -match '"inherited_retype"\s*:\s*true'
   $offerText = if ($retypeCap) { 'Add Anc.pas ahead of Desc.pas?' } else { 'Add Anc.pas ahead of Desc.pas? Converting Anc.pas leaves Desc.pas''s inherited instance(s) as TLabel until engine N2 -- Desc.pas may not compile or load.' }
-  $orderText = if ($retypeCap) { '*Desc.pas is listed above its ancestor Anc.pas, which is not converted yet*' } else { '*Desc.pas is listed above its ancestor Anc.pas.  With this engine the order does not change this run''s result: inherited instances are skipped either way. Run anyway?*' }
-  $cancelText = if ($retypeCap) { 'Convert cancelled: reorder the source units (ancestors first) and press Convert again.' } else { 'Convert cancelled: nothing was run.' }
+  # C8CHAIN (owner ruling Q5): E7 is a blocking question on every engine; Yes reorders, No runs nothing.
+  $orderText = '*Convert runs ancestors first: Anc.pas, Desc.pas. Reorder the list and run?*'
+  $cancelText = 'Convert cancelled: nothing was run.'
 
   $p = Start-Process $Exe -ArgumentList "`"$book`" --project-db `"$db`"" -PassThru
   $main = [IntPtr]::Zero; $t0 = Get-Date
@@ -647,6 +764,60 @@ try {
   $items = [CT]::Items($src)
   Check 'offer.no.to.all.once' (($noAll.Count -eq 1) -and ($e -eq '') -and ($second -eq [IntPtr]::Zero) -and ($items.Count -eq 2) -and ($items -contains $desc) -and ($items -contains $desc2) -and -not ($items -contains $anc)) "noAllButton=$($noAll.Count) answer=$e secondPrompt=$($second -ne [IntPtr]::Zero) forms: $(TopsNow $p.Id) status: $(Status $main) items: $($items -join ' | ')"
 
+  # --- C8CHAIN: Leaf -> Mid -> Anc; Mid re-opens no instance but still holds a TLabel of its own ---
+  ClearSources $src $del
+  [void](WaitFor { @([CT]::Items($src)).Count -eq 0 } 10)
+  $e = PickFile $p.Id $add $leaf
+  $prompt = WaitCls $p.Id 'TMessageForm' 20
+  $st = Status $main
+  Check 'chain.intermediate.offered' (($e -eq '') -and ($prompt -ne [IntPtr]::Zero) -and ($st -like 'Add Anc.pas, Mid.pas ahead of Leaf.pas?*')) "$e status: $st"
+  if ($prompt -ne [IntPtr]::Zero) { $e = Answer $p.Id 'Yes' } else { $e = 'no prompt' }
+  [void](WaitFor { @([CT]::Items($src)).Count -eq 3 } 10)
+  WaitAddSettled $p.Id $main 3
+  $items = [CT]::Items($src)
+  Check 'chain.yes.inserts.root.first' (($e -eq '') -and ($items.Count -eq 3) -and ($items[0] -eq $anc) -and ($items[1] -eq $mid) -and ($items[2] -eq $leaf)) "$e items: $($items -join ' | ')"
+  # E7 blocking: Leaf, Mid, Anc, LibRoot listed in that order -> the question names the ancestor-first
+  # order; No runs nothing. LibRoot (a platform-library root) must not stop it with the Q-B error.
+  ClearSources $src $del
+  [void](WaitFor { @([CT]::Items($src)).Count -eq 0 } 10)
+  $e = PickFile $p.Id $add $leaf; $prompt = WaitCls $p.Id 'TMessageForm' 20; if ($prompt -ne [IntPtr]::Zero) { [void](Answer $p.Id 'No') }
+  [void](WaitFor { @([CT]::Items($src)).Count -eq 1 } 10)
+  WaitAddSettled $p.Id $main 1
+  $e = PickFile $p.Id $add $mid; $prompt = WaitCls $p.Id 'TMessageForm' 20; if ($prompt -ne [IntPtr]::Zero) { [void](Answer $p.Id 'No') }
+  [void](WaitFor { @([CT]::Items($src)).Count -eq 2 } 10)
+  WaitAddSettled $p.Id $main 2
+  $e = PickFile $p.Id $add $anc
+  WaitAddSettled $p.Id $main 3
+  $e = PickFile $p.Id $add $libRoot
+  WaitAddSettled $p.Id $main 4
+  [void](WaitIdle $p.Id $main 90)
+  Click $conv
+  $warn = WaitCls $p.Id 'TMessageForm' 30
+  $st = Status $main
+  Check 'qb.library.root.not.blocked' (($warn -ne [IntPtr]::Zero) -and -not ($st -like 'Convert refused*') -and -not ($st -like '*LibRoot.pas descends from*')) "status: $st"
+  Check 'order.blocking.text' (($warn -ne [IntPtr]::Zero) -and ($st -like '*Convert runs ancestors first: Anc.pas, Mid.pas, Leaf.pas, LibRoot.pas. Reorder the list and run?*') -and -not ($st -like '*anyway*')) "status: $st"
+  # an exe that refuses here shows an OK-only error box instead: close it so the run goes on
+  if ($warn -ne [IntPtr]::Zero) { if ((Answer $p.Id 'No') -ne '') { [void](Answer $p.Id 'OK') } }
+  [void](WaitFor { (Status $main) -eq $cancelText } 10)
+  Check 'order.blocking.no.runs.nothing' (((Status $main) -eq $cancelText) -and -not (Test-Path -LiteralPath ($leaf + '.BCK1')) -and -not (Test-Path -LiteralPath ($mid + '.BCK1'))) (Status $main)
+
+  # --- C8CHAIN Q-B: a chain that leaves the project AND the platform library is a blocking error, OK only ---
+  # (an error status carries the '[!] ' prefix, hence the leading wildcard)
+  ClearSources $src $del
+  [void](WaitFor { @([CT]::Items($src)).Count -eq 0 } 10)
+  $e = PickFile $p.Id $add $orphan
+  WaitAddSettled $p.Id $main 1
+  [void](WaitIdle $p.Id $main 90)
+  Click $conv
+  $err = WaitCls $p.Id 'TMessageForm' 30
+  $st = Status $main
+  $btns = @(); if ($err -ne [IntPtr]::Zero) { $btns = @(Find $err 'TButton' $null | ForEach-Object { [W]::Txt($_) -replace '&', '' }) }
+  Check 'qb.unindexed.blocks' (($err -ne [IntPtr]::Zero) -and ($st -like '*Convert refused: an ancestor of a listed unit is not in the project index.*Orphan.pas descends from TJvVendorForm, whose unit is in no indexed project.*(.dproj/.dpr), reindex*') -and -not ($st -like '*anyway*')) "status: $st"
+  Check 'qb.ok.only' (($btns.Count -eq 1) -and ($btns[0] -eq 'OK')) ($btns -join ',')
+  if ($err -ne [IntPtr]::Zero) { [void](Answer $p.Id 'OK') }
+  [void](WaitIdle $p.Id $main 90)
+  Check 'qb.runs.nothing' (-not (Test-Path -LiteralPath ($orphan + '.BCK1'))) (Status $main)
+
   # --- D2 (opt-in): the order gate's Yes starts the run. Desc above Anc again, Convert, Yes, wait for the end. ---
   if ($ProofGateYes) {
     ClearSources $src $del
@@ -662,6 +833,8 @@ try {
     Click $conv
     $warn = WaitCls $p.Id 'TMessageForm' 30
     $yes = if ($warn -ne [IntPtr]::Zero) { Answer $p.Id 'Yes' } else { 'no gate warning' }
+    $items = [CT]::Items($src)
+    Check 'order.yes.reordered' (($items.Count -eq 2) -and ($items[0] -eq $anc) -and ($items[1] -eq $desc)) ($items -join ' | ')
     $ended = WaitFor { (Status $main) -ne $pre -and (Status $main) -like 'Converted *' } 90
     $st = Status $main
     $bck = (Test-Path -LiteralPath ($anc + '.BCK1')) -or (Test-Path -LiteralPath ($desc + '.BCK1'))
