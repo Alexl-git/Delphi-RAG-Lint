@@ -279,85 +279,24 @@ begin
   Result:= (if At > 0 then Copy(pMessage, 1, At - 1) else pMessage) + CycleFixPointer(pProject, pStem);
 end;
 
-{ Index of the first character after the `'...'` literal that opens at AFrom
-  (a doubled quote is an escaped quote; an unterminated literal ends at the line). }
-function SkipPascalString(const ASrc: string; AFrom: Integer): Integer;
-var
-  N: Integer;
-begin
-  N:= Length(ASrc);
-  Result:= AFrom + 1;
-  while Result <= N do
-  begin
-    if ASrc[Result] = '''' then
-    begin
-      if (Result < N) and (ASrc[Result + 1] = '''') then Inc(Result, 2) else Break;
-    end
-    else if CharInSet(ASrc[Result], [#10, #13]) then Break
-    else Inc(Result);
-  end;
-  Inc(Result);
-end;
-/// <summary>Does the Pascal source file declare a `class constructor` or `class destructor`?
+/// <summary>Does the indexed unit declare a `class constructor` or `class destructor`?
 /// Such a unit is linked for its side effect exactly like one with an `initialization`
 /// section, so unused-unit-in-uses must not call its import dead.</summary>
-/// <param name="ASourcePath">Path of the unit's .pas file.</param>
-/// <returns>True when `class` is immediately followed by `constructor` or `destructor` as
-/// identifier tokens outside `//`, `{ }`, `(* *)` comments and `'...'` strings; False
-/// when it does not, or when the file is missing or unreadable.</returns>
-/// <remarks>Pure text scan, no index. The index has no class-method flag on its
-/// constructor / destructor symbols, so this cannot be answered from the DB today.</remarks>
-function UnitDeclaresClassCtorDtor(const ASourcePath: string): Boolean;
+/// <param name="AStore">The store that indexed the unit; nil answers False.</param>
+/// <param name="AUnit">The unit's skUnit symbol in AStore.</param>
+/// <returns>True when a symbol of the unit's file has Kind skConstructor or skDestructor
+/// AND IsClassMethod; False otherwise.</returns>
+/// <remarks>KIND-FOLLOWUP (1.41): an index read, no source scan. It needs a DB written by
+/// extractor 1.29.0 or later (kind constructor / destructor + symbols.is_class_method);
+/// an older row reads IsClassMethod False until the DB is re-parsed.</remarks>
+function UnitDeclaresClassCtorDtor(const AStore: ISymbolStore; const AUnit: TSymbol): Boolean;
 var
-  Src, Word, Prev: string;
-  I, N: Integer;
+  S: TSymbol;
 begin
   Result:= False;
-  if not TFile.Exists(ASourcePath) then Exit;
-  try
-    Src:= TFile.ReadAllText(ASourcePath, TEncoding.ANSI);
-  except  // dl:ok try-except-swallowed@66ef -- by contract (see <returns>): a missing or unreadable file answers False, so the import is judged on the index alone
-    on EStreamError do Exit;
-    on EInOutError do Exit;
-  end;
-  N:= Length(Src);
-  I:= 1;
-  Prev:= '';
-  while I <= N do
-  begin
-    var C:= Src[I];
-    var C2:= if I < N then Src[I + 1] else #0;
-    if CharInSet(C, ['A'..'Z', 'a'..'z', '_']) then
-    begin
-      var Start:= I;
-      while (I <= N) and CharInSet(Src[I], ['A'..'Z', 'a'..'z', '_', '0'..'9']) do Inc(I);
-      Word:= LowerCase(Copy(Src, Start, I - Start));
-      if (Prev = 'class') and ((Word = 'constructor') or (Word = 'destructor')) then Exit(True);
-      Prev:= Word;
-    end
-    else if (C = '/') and (C2 = '/') then
-      while (I <= N) and not CharInSet(Src[I], [#10, #13]) do Inc(I)
-    else if C = '{' then
-    begin
-      while (I <= N) and (Src[I] <> '}') do Inc(I);
-      Inc(I);
-    end
-    else if (C = '(') and (C2 = '*') then
-    begin
-      var Close:= PosEx('*)', Src, I + 2);
-      I:= if Close = 0 then N + 1 else Close + 2;
-    end
-    else if C = '''' then
-    begin
-      I:= SkipPascalString(Src, I);
-      Prev:= '';
-    end
-    else
-    begin
-      if not CharInSet(C, [' ', #9, #10, #13]) then Prev:= '';
-      Inc(I);
-    end;
-  end;
+  if AStore = nil then Exit;
+  for S in AStore.FindSymbolsByFile(AStore.GetFilePath(AUnit.FileId)) do
+    if S.IsClassMethod and (S.Kind in [skConstructor, skDestructor]) then Exit(True);
 end;
 
 function IsSideEffectUnit(const AUnitName: string): Boolean;
@@ -4453,8 +4392,8 @@ var
 
     The indexer emits one skInitialization child marker per unit that has one
     (v0.41), and a skFinalization child per unit with a finalization section, so
-    those are a child scan, not a re-parse; the class ctor/dtor case is a source
-    scan (UnitDeclaresClassCtorDtor) because the index keeps no class-method flag.
+    those are a child scan, not a re-parse; the class ctor/dtor case reads the file's
+    symbols for kind constructor / destructor + is_class_method (UnitDeclaresClassCtorDtor).
     Cached because
     unused-unit-in-uses is already the most expensive rule in the pass. }
   function UnitHasSideEffectSection(const AUnitName: string; out AInitSection: Boolean): Boolean;
@@ -4477,7 +4416,7 @@ var
           if Ch.Kind = skInitialization then AFlags:= AFlags or CFlagInit;
           if Ch.Kind = skFinalization then AFlags:= AFlags or CFlagOther;
         end;
-        if (AFlags = 0) and UnitDeclaresClassCtorDtor(AFrom.GetFilePath(U.FileId)) then AFlags:= CFlagOther;
+        if (AFlags = 0) and UnitDeclaresClassCtorDtor(AFrom, U) then AFlags:= CFlagOther;
         Break;
       end;
     end;
