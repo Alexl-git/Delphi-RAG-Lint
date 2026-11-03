@@ -170,6 +170,18 @@ $s = Lint-P1
 Check 'stale listing DB: DeadBeat is NOT reported (cannot prove it dead)' ($s -notmatch 'DeadBeat') $s
 Check 'stale listing DB: GDead is NOT reported' ($s -notmatch 'GDead') $s
 
+Write-Host 'DLOK-UNDECIDED: a dl:ok on an undecided site is not review-marker-unused' -ForegroundColor Cyan
+$ctl = Join-Path $sh 'Shared.Ctl.pas'
+$src = [System.IO.File]::ReadAllText($ctl)
+$src = $src.Replace('  GDead: Integer;', '  GDead: Integer; // dl:ok unused-global -- test: sibling index stale')
+$src = [regex]::new('procedure DeadBeat;').Replace($src, 'procedure DeadBeat; // dl:ok unused-public-symbol -- test: sibling index stale', 1)
+$src = [regex]::new('procedure Beat;').Replace($src, 'procedure Beat; // dl:ok bare-except -- CONTROL: no such finding, must stay unused', 1)
+Write-Ascii $ctl $src
+& $Exe index --project "$p1\P1.dproj" --db $db1 --quiet 2>&1 | Out-Null
+$o = (@(& $Exe lint-all --db $db1 --config $manifest --rules-dir $Rules --enable unused-global,review-marker-unused --quiet 2>&1) | ForEach-Object { "$_" }) -join "`n"
+Check 'POSITIVE CONTROL: a marker on a decided/no-finding line IS review-marker-unused' ($o -match 'review-marker-unused[^\n]*bare-except|bare-except[^\n]*review-marker-unused') $o
+Check 'undecided unused-public-symbol marker NOT reported unused' ($o -notmatch 'unused-public-symbol" no longer') $o
+Check 'undecided unused-global marker NOT reported unused' ($o -notmatch 'unused-global" no longer') $o
 Write-Host ''
 if ($script:Failed) { Write-Host 'SHARED-UNIT-SCOPE GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'SHARED-UNIT-SCOPE GUARD: PASS' -ForegroundColor Green

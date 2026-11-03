@@ -4924,6 +4924,8 @@ begin
                     Add('unused-public-symbol', 'hint',
                       Format('Exported routine %s is not referenced in this project, nor in the project(s) its unit is shared with (%s).',
                              [Sym.Name, UProjs]), Sym);
+                  svUndecided:
+                    NoteUndecidedSite(UPath, Sym.StartLine, 'unused-public-symbol');
                 end;              end
               else if IsOwnUnitOnly(Sym) then
               begin

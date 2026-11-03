@@ -12596,6 +12596,9 @@ begin
               it cannot judge the marker on an enum declaration line; lint-all can. }
             if (AUnjudgedRules <> nil) and MatchText(M.RuleId, TYPE_SCOPE_RULES)
                and TRegEx.IsMatch(Lines[LN - 1], ENUM_DECL_LINE) then Continue;
+            { DLOK-UNDECIDED: the shared-unit verdict was svUndecided (a listing project's index
+              is missing or stale), so the finding was withheld -- the marker cannot be judged. }
+            if IsUndecidedSite(SF, LN, M.RuleId) then Continue;
             if not Accounted.ContainsKey(MarkerKey(SF, LN, M.RuleId)) then
               EmitHint(SF, LN, 'review-marker-unused',
                 Format('dl:ok marker for "%s" no longer matches any finding on this line -- remove it.', [M.RuleId]));

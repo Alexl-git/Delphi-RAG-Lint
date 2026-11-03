@@ -80,11 +80,60 @@ type
     function Judge(const AUnitPath: string; const AUsed: TSiblingUse; out AProjects: string): TSharedVerdict;
   end;
 
+/// <summary>Records that the SHARED-UNIT-SCOPE verdict for a finding site was svUndecided, so
+/// the finding was withheld and a dl:ok on that line cannot be judged.</summary>
+/// <param name="AFile">The unit path as the own store records it.</param>
+/// <param name="ALine">The line the finding would have been anchored on.</param>
+/// <param name="ARule">The rule id that would have fired.</param>
+/// <remarks>Thread-safe. Process-wide; consulted by the review-marker-unused pass so a marker
+/// whose finding was withheld for want of a fresh sibling index reads as "cannot judge", not
+/// "suppresses nothing" (DLOK-UNDECIDED).</remarks>
+procedure NoteUndecidedSite(const AFile: string; ALine: Integer; const ARule: string);
+
+/// <summary>Was NoteUndecidedSite called for this site in this process?</summary>
+/// <param name="AFile">A file path; compared after slash and case normalisation.</param>
+/// <param name="ALine">The line.</param>
+/// <param name="ARule">The rule id; case-insensitive.</param>
+/// <returns>True when the site's shared-scope verdict was undecided.</returns>
+function IsUndecidedSite(const AFile: string; ALine: Integer; const ARule: string): Boolean;
+
 implementation
 
 uses
   DRagLint.Lint.SharedUnit,  { TSharedUnit.ProjectsOf -- the header-declared projects }
   DRagLint.Index.Freshness;  { ProbeIndexFreshness -- a stale sibling proves nothing }
+
+var
+  GUndecided: TDictionary<string, Boolean>;
+
+function SiteKey(const AFile: string; ALine: Integer; const ARule: string): string;
+var
+  P: string;
+begin
+  P:= StringReplace(AFile, '/', '\', [rfReplaceAll]);
+  if P <> '' then P:= ExpandFileName(P);
+  Result:= LowerCase(P) + '|' + IntToStr(ALine) + '|' + LowerCase(ARule);
+end;
+
+procedure NoteUndecidedSite(const AFile: string; ALine: Integer; const ARule: string);
+begin
+  TMonitor.Enter(GUndecided);
+  try
+    GUndecided.AddOrSetValue(SiteKey(AFile, ALine, ARule), True);
+  finally
+    TMonitor.Exit(GUndecided);
+  end;
+end;
+
+function IsUndecidedSite(const AFile: string; ALine: Integer; const ARule: string): Boolean;
+begin
+  TMonitor.Enter(GUndecided);
+  try
+    Result:= GUndecided.ContainsKey(SiteKey(AFile, ALine, ARule));
+  finally
+    TMonitor.Exit(GUndecided);
+  end;
+end;
 
 const
   META_INDEXED_AT = 'indexed_at_unix';
@@ -226,5 +275,11 @@ begin
   end;
   Result:= svUnusedEverywhere;
 end;
+
+initialization
+  GUndecided:= TDictionary<string, Boolean>.Create;
+
+finalization
+  GUndecided.Free;
 
 end.
