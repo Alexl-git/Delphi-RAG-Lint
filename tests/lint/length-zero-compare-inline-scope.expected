@@ -1,0 +1,4 @@
+# INLINEVAR-SCOPE: the string S in P (16) fires although Q declares an inline S of another type;
+# the inline TArray S in Q (25) must not (a dynamic array has no '' form).
+length-zero-compare 16
+!length-zero-compare 25
