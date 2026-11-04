@@ -15220,10 +15220,7 @@ begin
   if AClearFirst then
   begin
     ClearCallEdges;
-    { TEST SEAM (run_index_halfread_guard.ps1 HR1): hold the transaction open after the clear so a
-      concurrent reader can be sampled. Unset / 0 = no delay. }
-    var DelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_RESOLVE_DELAY_MS'), 0);
-    if DelayMs > 0 then Sleep(DelayMs);  // dl:ok sleep-in-vcl@31b4 -- REVIEWED 2026-11-04: console CLI test seam, off unless the env var is set
+    BeatTestHold; { TEST SEAM (run_index_halfread_guard HR1): hold this transaction open after the clear }
   end;
   try
   { Only the temp tables are built here. The DELETE they feed happens INSIDE the
