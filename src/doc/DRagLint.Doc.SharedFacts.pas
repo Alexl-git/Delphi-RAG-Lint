@@ -1423,6 +1423,26 @@ begin
   Result:= SplitEntries(Trim(Copy(Flat, P, Stop - P)));
 end;
 
+{ The entries with this run's own project tag removed from every tag set.
+  ReconcileContent appends TSharedFacts.ProjectTag to each fresh entry; a block
+  written from the other project's DB stores [A]X where this run reconciles
+  [A,Own]X. Own-tag bookkeeping alone is not drift (YADF FP #1, 2026-11-03).
+  An entry with no tag other than Own becomes untagged, so a fresh-only entry
+  or an unrendered [Own]Y still differs. ProjectTag = '' drops nothing. }
+function StripOwnTag(const AEntries: TArray<string>): TArray<string>;
+var
+  I   : Integer;
+  Tags: TArray<string>;
+  Bare: string;
+begin
+  SetLength(Result, Length(AEntries));
+  for I:= 0 to High(AEntries) do
+  begin
+    SplitTagged(AEntries[I], Tags, Bare);
+    Result[I]:= FormatTagged(WithoutTag(Tags, TSharedFacts.ProjectTag), Bare);
+  end;
+end;
+
 { Would the writer change this participating label? A stored window always
   changes (it is replaced by the reconciled whole list); otherwise compare the
   stored entries with ReconcileContent's, as a multiset -- order is not drift
@@ -1430,8 +1450,8 @@ end;
 function ReconciledDrift(const AStore: ISymbolStore; const AStored, AFresh: string): Boolean;
 begin
   Result:= IsTruncated(AStored) or
-           not SameEntryMultiset(SplitEntries(ReconcileContent(AStore, AStored, AFresh)),
-                                 SplitEntries(AStored));
+           not SameEntryMultiset(StripOwnTag(SplitEntries(ReconcileContent(AStore, AStored, AFresh))),
+                                 StripOwnTag(SplitEntries(AStored)));
 end;
 
 { Does this unit take part in fact reconciliation at all?
