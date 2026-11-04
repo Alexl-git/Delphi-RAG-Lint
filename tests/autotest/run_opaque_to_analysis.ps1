@@ -68,6 +68,10 @@ try {
   $nolib = Lint @('--db', $db, '--library-db', 'none', '--rule', $Rule)
   Check 'negative: no library index -> silent' ($nolib.Count -eq 0)
 
+  $one = & $Exe lint (Join-Path $WorkDir 'proj\uOpaque.pas') --db $db --library-db $lib --rule $Rule --json 2>$null
+  $oneF = @(($one -join "`n") | ConvertFrom-Json) | Where-Object { $_.rule -eq $Rule }
+  Check 'lint <file> --library-db: the same two findings' (@($oneF).Count -eq 2)
+
   $dbx = Join-Path $WorkDir 'fxlib.sqlite'
   & $Exe index (Join-Path $WorkDir 'proj') --db $dbx --library-db $lib 2>&1 | Out-Null
   $ext = & $Exe sql --query "select count(*) from refs where external_target is not null" --db $dbx 2>$null | Select-Object -Skip 2 -First 1

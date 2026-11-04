@@ -8,6 +8,7 @@ This is a rule about the limits of drag-lint's own analysis, not a complaint abo
 ```
 drag-lint lint-all --db <project.sqlite> --db <library.sqlite> --rule opaque-to-analysis
 drag-lint lint-all --db <project.sqlite> --db <library.sqlite> --enable opaque-to-analysis
+drag-lint lint <unit.pas> --db <project.sqlite> --library-db <library.sqlite> --rule opaque-to-analysis
 ```
 
 ## What it reports
