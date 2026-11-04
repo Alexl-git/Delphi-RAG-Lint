@@ -28,6 +28,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-ownroots-note-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -95,7 +96,7 @@ end.
 $db   = Join-Path $app '_D-RAG\App.sqlite'
 $decl = Join-Path $app '_D-RAG\drag-lint-project.json'
 & $Exe index --project (Join-Path $app 'App.dpr') --db $db 2>&1 | Out-Null
-if (-not (Test-Path $db)) { Write-Host "FATAL: no index" -ForegroundColor Red; exit 2 }
+if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: no index" -ForegroundColor Red; exit 2 }
 
 function LintAll {
   Push-Location $WorkDir

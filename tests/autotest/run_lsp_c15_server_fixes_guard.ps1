@@ -26,6 +26,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-c15-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -112,7 +113,7 @@ $file = Join-Path $src 'uC15.pas'
 [IO.File]::WriteAllText($file, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
 $db = Join-Path $WorkDir 'c15.sqlite'
 $null = & $Exe index $src --db $db 2>&1
-if (-not (Test-Path $db)) { Write-Host 'FATAL: fixture not indexed' -ForegroundColor Red; exit 2 }
+if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host 'FATAL: fixture not indexed' -ForegroundColor Red; exit 2 }
 $uri = 'file:///' + ($file -replace '\\', '/')
 $td = @{ uri = $uri }
 

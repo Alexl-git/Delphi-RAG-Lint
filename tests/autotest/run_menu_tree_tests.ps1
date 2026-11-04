@@ -19,6 +19,7 @@ param(
     [string] $WorkDir    = "$env:TEMP\drag-lint-menu-tree-tests-$PID",
     [int]    $MinTests   = 182
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
@@ -30,7 +31,7 @@ $fixture  = (Resolve-Path $FixtureDir).Path
 # --- scratch fixture DB, and the renamed-helper copy (control 4) ---
 $db = "$WorkDir\fixture.sqlite"
 & $Exe index --project "$fixture\MenuTreeFixture.dproj" --db $db *> "$WorkDir\index.log"
-if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: fixture index failed (exit $LASTEXITCODE), see $WorkDir\index.log" -ForegroundColor Red; exit 2 }
+if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: fixture index failed (exit $LASTEXITCODE), see $WorkDir\index.log" -ForegroundColor Red; exit 2 }
 $renamed = "$WorkDir\renamed"
 Copy-Item -LiteralPath $fixture -Destination $renamed -Recurse
 $b = "$renamed\MT.Builder.pas"
@@ -40,14 +41,14 @@ if ($txt2 -eq $txt) { Write-Host 'FATAL: rename control changed nothing' -Foregr
 [IO.File]::WriteAllText($b, $txt2, [Text.ASCIIEncoding]::new())
 $dbRenamed = "$WorkDir\renamed.sqlite"
 & $Exe index --project "$renamed\MenuTreeFixture.dproj" --db $dbRenamed *> "$WorkDir\index-renamed.log"
-if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: renamed-copy index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
+if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: renamed-copy index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
 
 # --- dxBar (formsmap-v9): a scratch copy, and one with the bar helper renamed ---
 $v9 = "$WorkDir\v9"
 Copy-Item -LiteralPath (Resolve-Path "$PSScriptRoot\..\fixtures\formsmap-v9").Path -Destination $v9 -Recurse
 $dbV9 = "$WorkDir\v9.sqlite"
 & $Exe index --project "$v9\Demo9.dproj" --db $dbV9 *> "$WorkDir\index-v9.log"
-if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: v9 fixture index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
+if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: v9 fixture index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
 $v9r = "$WorkDir\v9renamed"
 Copy-Item -LiteralPath $v9 -Destination $v9r -Recurse
 $renamedAny = $false
@@ -61,7 +62,7 @@ foreach ($u in 'uBarUtils9.pas', 'uMain9.pas') {
 if (-not $renamedAny) { Write-Host 'FATAL: v9 rename control changed nothing' -ForegroundColor Red; exit 2 }
 $dbV9r = "$WorkDir\v9renamed.sqlite"
 & $Exe index --project "$v9r\Demo9.dproj" --db $dbV9r *> "$WorkDir\index-v9r.log"
-if ($LASTEXITCODE -ne 0) { Write-Host "FATAL: v9 renamed index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
+if ($LASTEXITCODE -ne 0) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: v9 renamed index failed (exit $LASTEXITCODE)" -ForegroundColor Red; exit 2 }
 
 # --- build the test exe ---
 $rsvars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'

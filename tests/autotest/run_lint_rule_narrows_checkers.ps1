@@ -32,6 +32,7 @@ param(
   [string]$Repo    = "$PSScriptRoot\..\..",
   [string]$WorkDir = "$env:TEMP\drag-lint-rule-narrows-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -137,7 +138,7 @@ function Ran([string]$Out, [string]$Name) { $Out -match ('\[lint-checker\] ' + [
 Push-Location C:\TEMP
 try {
   & $Exe index --all --config $manifest --only SecNarrow --jobs 1 2>&1 | Out-Null
-  if (-not (Test-Path $db)) { Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
+  if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
 
   Write-Host ''
   Write-Host 'P: the pre-existing observable -- the project pass profiles itself' -ForegroundColor Cyan

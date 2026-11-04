@@ -27,6 +27,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) ("draglint-uuenum-" + [Guid]::NewGuid().ToString('N')))
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -122,6 +123,7 @@ $db      = Join-Path $WorkDir 'uuenum.sqlite'
 $errFile = Join-Path $WorkDir 'stderr.txt'
 & $Exe index $fixDir --db $db 2>$errFile | Out-Null
 if ($LASTEXITCODE -ne 0) {
+  $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }
   Write-Host "FATAL: indexing the fixture failed ($LASTEXITCODE)" -ForegroundColor Red
   Write-Host (Get-Content -LiteralPath $errFile -Raw)
   exit 1

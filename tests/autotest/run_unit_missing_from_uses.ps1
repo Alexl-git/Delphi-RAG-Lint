@@ -14,6 +14,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-missinguses-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -194,7 +195,7 @@ Push-Location C:\TEMP
 try {
   & $Exe index --all --config $manifest --only SecMu --jobs 1 2>&1 | Out-Null
   & $Exe index --all --config $manifest --only SecMuLib --jobs 1 2>&1 | Out-Null
-  if (-not (Test-Path $db)) { Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
+  if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $db" -ForegroundColor Red; exit 2 }
   $impl = @(LintOf 'uImplUse.pas'); $intf = @(LintOf 'uIntfUse.pas'); $already = @(LintOf 'uAlready.pas')
   $local = @(LintOf 'uLocal.pas'); $unknown = @(LintOf 'uUnknown.pas'); $cyc = @(LintOf 'uCycA.pas')
   $all = & $Exe lint-all --db $db --db $libDb --rule unit-missing-from-uses --quiet 2>&1 | Out-String

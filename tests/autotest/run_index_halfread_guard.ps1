@@ -23,6 +23,7 @@ param(
   [string]$WorkDir = "$env:TEMP\drag-lint-halfread-guard-$PID",
   [int]$DelayMs    = 6000
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
@@ -60,7 +61,7 @@ try {
   }
   $db = Join-Path $WorkDir 'half.sqlite'
   $first = Run-Exe @('index', $src, '--db', $db) @{}
-  if ($first.Code -ne 0) { Write-Host "FATAL: setup index failed: $($first.Out)$($first.Err)" -ForegroundColor Red; exit 2 }
+  if ($first.Code -ne 0) { $hint = Get-ExeStartFailureHint $first.Code; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: setup index failed: $($first.Out)$($first.Err)" -ForegroundColor Red; exit 2 }
   $r0 = Resolved $db
   if ($r0 -le 0) { Write-Host "FATAL: setup resolved no refs ($r0)" -ForegroundColor Red; exit 2 }
 

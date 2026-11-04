@@ -42,6 +42,7 @@ param(
     [string] $Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
     [string] $WorkDir = "$env:TEMP\drag-lint-lintall-infers-project-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -128,7 +129,7 @@ Write-Ascii (Join-Path $WorkDir '.drag-lint.json') @"
 
 $db = Join-Path $WorkDir '_D-RAG\P.sqlite'
 & $Exe index --project $dproj --db $db 2>&1 | Out-Null
-if (-not (Test-Path $db)) { Write-Host "FATAL: index not created at $db" -ForegroundColor Red; exit 2 }
+if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index not created at $db" -ForegroundColor Red; exit 2 }
 
 Push-Location $WorkDir
 try {

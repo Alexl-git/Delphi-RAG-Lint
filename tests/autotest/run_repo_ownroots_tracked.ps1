@@ -32,6 +32,7 @@ param(
   [string]$Repo    = "$PSScriptRoot\..\..",
   [string]$WorkDir = "$env:TEMP\drag-lint-repo-ownroots-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -138,7 +139,7 @@ end.
 '@
 $db = Join-Path $cli '_D-RAG\App.sqlite'
 & $Exe index --project (Join-Path $cli 'App.dpr') --db $db 2>&1 | Out-Null
-if (-not (Test-Path $db)) { Write-Host "FATAL: no index" -ForegroundColor Red; exit 2 }
+if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: no index" -ForegroundColor Red; exit 2 }
 function LintAll {
   Push-Location $WorkDir
   try { return (& $Exe lint-all --db $db --output (Join-Path $WorkDir 'rep.txt') 2>&1 | Out-String) }

@@ -20,6 +20,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-lsp-c16-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -96,7 +97,7 @@ foreach ($v in 'cr', 'crlf') {
   $dir = Join-Path $WorkDir $v
   $db = Join-Path $WorkDir "$v.sqlite"
   & $Exe index $dir --db $db 2>&1 | Out-Null
-  if (-not (Test-Path $db)) { Write-Host "FATAL: $v fixture not indexed" -ForegroundColor Red; exit 2 }
+  if (-not (Test-Path $db)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: $v fixture not indexed" -ForegroundColor Red; exit 2 }
   $tokens[$v] = Decode (LspTokens (Join-Path $dir 'uCr.pas') $db)
 }
 $a = $tokens['cr']; $b = $tokens['crlf']

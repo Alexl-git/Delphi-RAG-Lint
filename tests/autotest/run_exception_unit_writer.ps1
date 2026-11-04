@@ -96,6 +96,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-excwriter-$PID"
 )
+. (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -278,7 +279,7 @@ function Sync([string]$Db, [string]$Cfg, [switch]$Apply) {
 }
 
 Reindex $manA 'SecA'
-if (-not (Test-Path $dbA)) { Write-Host "FATAL: index did not produce $dbA" -ForegroundColor Red; exit 2 }
+if (-not (Test-Path $dbA)) { $hint = Get-ExeStartFailureHint $LASTEXITCODE; if ($hint) { Write-Host "FATAL: $hint" -ForegroundColor Red }; Write-Host "FATAL: index did not produce $dbA" -ForegroundColor Red; exit 2 }
 
 $defsPathA = Join-Path $projA 'src\uExceptionDefinitions.pas'
 
