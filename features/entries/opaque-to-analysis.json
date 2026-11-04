@@ -1,0 +1,25 @@
+{
+  "id": "opaque-to-analysis",
+  "title": "Opaque to analysis (lint rule)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.42.0-alpha",
+  "summary": "Project-wide lint rule (info, off by default): a routine whose non-library calls are mostly unresolvable, so impact and call trees are blind inside it",
+  "intro": "Read this to find the routines the index cannot see through. It runs in lint-all over a project index plus the library index; library calls are left out, and what remains is reported with its numbers.",
+  "wikiPage": "opaque-to-analysis",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --db <library.sqlite> --rule opaque-to-analysis"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-04",
+    "by": "ENGINE",
+    "build": "1.42.0-alpha",
+    "surfaceHash": "360982a878a600caf0f2ca7a214d6b7f0220a387e74cda05b94c066a804901d1"
+  }
+}

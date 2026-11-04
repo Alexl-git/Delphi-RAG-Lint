@@ -218,6 +218,7 @@ uses
   DRagLint.Lint.ReadNeverAssigned, { CollectReadNeverAssigned -- owner request #5b } // dl:unit DRagLint.Lint.ReadNeverAssigned accepted -- READ_NEVER_ASSIGNED_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectReadNeverAssigned, the collector this unit calls
   DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
   DRagLint.Lint.AncestorNotInProject, { ancestor-not-in-project (1.42 enum) }
+  DRagLint.Lint.OpaqueToAnalysis, { opaque-to-analysis (1.42 opaque) } // dl:unit DRagLint.Lint.OpaqueToAnalysis accepted -- OPAQUE_TO_ANALYSIS_RULE is the rule id the dispatch names; it travels with CollectOpaqueToAnalysis, the collector this unit calls
   DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) } // dl:unit DRagLint.Lint.UsesAudit accepted -- USES_VERDICT_MOVE is how this unit reads the verdict TUsesAuditor returns; it travels with TUsesAuditor, the auditor this unit calls
 
 { Side-effect / operator / helper units that are legitimately used without any
@@ -4632,6 +4633,10 @@ begin
       (silent without it -- see the unit). }
     if WantRule('ancestor-not-in-project') then
       for var An in CollectAncestorNotInProject(AStore, ALibraryStore) do Findings.Add(An);
+    { opaque-to-analysis (1.42 lane opaque): OFF, OptedIn-gated -- two refs reads per routine plus
+      the library oracle; needs the library index (silent without it -- see the unit). }
+    if WantRule(OPAQUE_TO_ANALYSIS_RULE) and OptedIn(OPAQUE_TO_ANALYSIS_RULE) then
+      for var Oa in CollectOpaqueToAnalysis(AStore, ALibraryStore, AOnlyFileId) do Findings.Add(Oa);
     if WantRule('dfm-password-edit-unmasked') then
       for var Pw in CollectDfmPasswordEditUnmasked(AStore) do Findings.Add(Pw);
     if WantRule('uses-movable-to-implementation') then

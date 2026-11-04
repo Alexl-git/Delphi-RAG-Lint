@@ -14862,7 +14862,7 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak');
-  LINT_GATE_PROJECT_RULES: array[0..28] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..29] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
@@ -14871,19 +14871,20 @@ const
     'dfm-event-handler-missing', 'dfm-password-edit-unmasked', 'uses-movable-to-implementation', 'virtual-never-overridden',
     'unused-enum-value', 'unused-global', 'read-never-assigned',
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
-    'ancestor-not-in-project');
+    'ancestor-not-in-project', 'opaque-to-analysis');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
     index it never evaluates them unless --rule names one: a dl:ok for one of them
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..14] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..15] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
     'unused-enum-value', 'unused-global', 'read-never-assigned',
-    'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive');
+    'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
+    'opaque-to-analysis');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
     is answered exactly for one file -- its own call sites, narrowed by AOnlyFileId
@@ -23218,6 +23219,8 @@ begin
       OptIn:= OptIn + ['assert-with-side-effect'];
     for var Bx in LANE_BEFFECT_RULES do   { lane B-EFFECT }
       if Cfg.ShouldKeep(Bx, {ADefaultDisabled=}True) then OptIn:= OptIn + [Bx];
+    if Cfg.ShouldKeep('opaque-to-analysis', {ADefaultDisabled=}True) then   { 1.42 opaque }
+      OptIn:= OptIn + ['opaque-to-analysis'];
     if Cfg.ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
       OptIn:= OptIn + ['virtual-never-overridden'];
     if Cfg.ShouldKeep('unused-enum-value', {ADefaultDisabled=}False) then   { B-ENUM; ON since ENUMRULES 2026-10-28 }
@@ -23713,6 +23716,8 @@ begin
       if LoadLintConfig(AArgs).ShouldKeep(Bx, {ADefaultDisabled=}True) then OptIn2:= OptIn2 + [Bx];
     if LoadLintConfig(AArgs).ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
       OptIn2:= OptIn2 + ['virtual-never-overridden'];
+    if LoadLintConfig(AArgs).ShouldKeep('opaque-to-analysis', {ADefaultDisabled=}True) then   { 1.42 opaque }
+      OptIn2:= OptIn2 + ['opaque-to-analysis'];
     if LoadLintConfig(AArgs).ShouldKeep('unused-enum-value', {ADefaultDisabled=}False) then   { B-ENUM; ON since ENUMRULES 2026-10-28 }
       OptIn2:= OptIn2 + ['unused-enum-value'];
     if LoadLintConfig(AArgs).ShouldKeep('unused-global', {ADefaultDisabled=}False) then   { 1.40 unusedg }

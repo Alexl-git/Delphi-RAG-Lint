@@ -106,7 +106,9 @@ const
     'else-after-exit', 'missing-const-param', 'local-shadows-field', 'method-could-be-static',
     'too-many-bool-fields', 'index-loop-to-for-in',
     { gap-rules wave (G0): OFF-by-default new built-ins }
-    'copy-paste-assignment', 'unused-loop-variable', 'virtual-never-overridden'];
+    'copy-paste-assignment', 'unused-loop-variable', 'virtual-never-overridden',
+    { 1.42 lane opaque }
+    'opaque-to-analysis'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -865,6 +867,7 @@ begin
     B('dfm-event-handler-missing', 'project-wide', 'warning', 'A .dfm names an event handler that the form class and its ancestors do not declare -- the form fails to load');
     B('dfm-password-edit-unmasked', 'security', 'info', 'Edit control named like a password field has no PasswordChar -- the secret is shown on screen');
     B('uses-movable-to-implementation', 'project-wide', 'hint', 'Interface uses entry is needed only by the implementation section -- move it to cut coupling and compile time');
+    B('opaque-to-analysis', 'project-wide', 'info', 'A routine whose calls that do not provably leave the project are predominantly unresolvable -- impact analysis, call trees and dead-code detection are blind inside it. A fact about the limits of the index, not a defect; needs the library index', False);
     B('virtual-never-overridden', 'project-wide', 'hint', 'Virtual method with no override anywhere in the project -- the virtual dispatch buys nothing', False);
     { taint wave T2: store-backed interprocedural taint (DRagLint.Lint.TaintRules; catalogues rules\taint-*.json) }
     B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');

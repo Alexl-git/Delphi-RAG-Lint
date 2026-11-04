@@ -125,6 +125,7 @@ uses
   DRagLint.Lint.UnusedGlobal in '..\lint\DRagLint.Lint.UnusedGlobal.pas',
   DRagLint.Lint.SharedScope in '..\lint\DRagLint.Lint.SharedScope.pas',
   DRagLint.Lint.ReadNeverAssigned in '..\lint\DRagLint.Lint.ReadNeverAssigned.pas',
+  DRagLint.Lint.OpaqueToAnalysis in '..\lint\DRagLint.Lint.OpaqueToAnalysis.pas',
   DRagLint.Lint.EffectRules in '..\lint\DRagLint.Lint.EffectRules.pas',
   DRagLint.Lint.AncestorNotInProject in '..\lint\DRagLint.Lint.AncestorNotInProject.pas',
   DRagLint.Lint.UsesAudit in '..\lint\DRagLint.Lint.UsesAudit.pas',
