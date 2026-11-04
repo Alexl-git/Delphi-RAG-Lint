@@ -12188,7 +12188,7 @@ var
         TAstParseCache.ApplyPreprocess(EnsureUtf8Bytes(TFile.ReadAllBytes(AFile)), AFile)).Split([#10]);
       PpLineCache.Add(AFile, PpLines);
     end;
-    Result:= (ALine >= 1) and (ALine <= Length(PpLines)) and (Trim(PpLines[ALine - 1]) = '');
+    Result:= InRange(ALine, 1, Length(PpLines)) and (Trim(PpLines[ALine - 1]) = '');
   end;
 
   { The first dl:ok marker for ARule on ANOTHER site of a finding -- a pair's
