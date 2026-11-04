@@ -828,7 +828,7 @@ begin
   T0:= GetTickCount64;
   while GetTickCount64 - T0 < UInt64(Hold) do
   begin
-    Sleep(HOLD_SLICE_MS);  // dl:ok sleep-in-vcl@31b4 -- REVIEWED 2026-11-04: console test seam, off unless the env var is set
+    Sleep(HOLD_SLICE_MS);
     if Moves then BeatProgress;
   end;
 end;

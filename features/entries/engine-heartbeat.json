@@ -25,6 +25,10 @@
     {
       "ask": "What is the engine doing right now?",
       "command": "see the drag-lint status bar panel in the IDE"
+    },
+    {
+      "ask": "Is my long index slow or stuck, and how far has it got?",
+      "command": "drag-lint shutdown --all --dry-run"
     }
   ],
   "access": "cli-only",
