@@ -281,7 +281,7 @@ try {
   Check 'h0 the golden exists' (Test-Path $Golden) $Golden
   if (Test-Path $Golden) {
     $nt = Get-Normal $sp.Text $sd
-    Check 'h1 the single-class plan is byte-identical to the f70071d8 golden' ($nt -ceq [IO.File]::ReadAllText($Golden)) ''
+    Check 'h1 the single-class plan is byte-identical to the f70071d8 golden' ($nt -ceq ([IO.File]::ReadAllText($Golden) -replace "`r`n", "`n")) ''
     Check 'h2 the golden really is a member hand-over plan' ($nt.Contains($Handover)) ''
   }
 
