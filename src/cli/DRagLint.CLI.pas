@@ -3541,36 +3541,20 @@ begin
 end;
 
 /// <summary>The calls pass, with the full edge clear a stale resolver or --resolve-only asks for
-/// done INSIDE the pass's transaction (1.41 IDX-HALFREAD).</summary>
+/// done INSIDE the pass's own transaction (1.41 IDX-HALFREAD; 1.42 CALLSLOW: no outer batch).</summary>
 /// <param name="AStore">The writer store of this run; must not be nil.</param>
 /// <param name="AClearFirst">True = drop every call edge and refs.symbol_id first (ClearCallEdges).</param>
 /// <param name="ALibs">Extra (library) stores for ResolveCallTargets.</param>
 /// <remarks>The clear used to run in AUTOCOMMIT before the pass, so for the whole pass (~37 min on a
-/// 2 GB index) every reader saw ZERO resolved refs. Now the store's outer batch transaction wraps
-/// clear + pass (the pass's own transaction nests as a SAVEPOINT): the same statements in the same
-/// order on the same connection, so the scoping decision and the rows are unchanged, and readers keep
-/// the previous complete edges until one COMMIT. A pass that raises still commits the clear -- the
-/// state the old order left. Guard tests\autotest\run_index_halfread_guard.ps1 (HR1/HR2).</remarks>
+/// 2 GB index) every reader saw ZERO resolved refs. The pass now clears inside its own transaction, so
+/// readers keep the previous complete edges until one COMMIT, and a pass that raises rolls the clear
+/// back too. NOT by wrapping the pass in the store's batch: that made its transaction a SAVEPOINT and
+/// every row write quadratic (see ISymbolStore.ResolveCallTargets). Guards
+/// tests\autotest\run_index_halfread_guard.ps1 (HR1/HR2), run_calls_pass_no_savepoint_guard.ps1.</remarks>
 procedure ResolveCallsClearingFirst(const AStore: ISymbolStore; AClearFirst: Boolean;
   const ALibs: TArray<ISymbolStore>);
 begin
-  if not AClearFirst then
-  begin
-    AStore.ResolveCallTargets(ALibs);
-    Exit;
-  end;
-  AStore.BeginFileBatch;
-  try
-    AStore.ClearCallEdges;
-    { TEST SEAM (run_index_halfread_guard.ps1 HR1): hold the transaction open after the clear so
-      a concurrent reader can be sampled. Unset / 0 = no delay. Kept out of ResolveCallTargets on
-      purpose: that is resolver surface (run_resolver_version_guard). }
-    var DelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_RESOLVE_DELAY_MS'), 0);
-    if DelayMs > 0 then Sleep(DelayMs);  // dl:ok sleep-in-vcl@31b4 -- REVIEWED 2026-11-03: console CLI test seam, off unless the env var is set
-    AStore.ResolveCallTargets(ALibs);
-  finally
-    AStore.EndFileBatch;
-  end; // try
+  AStore.ResolveCallTargets(ALibs, AClearFirst);
 end;
 
 /// <summary>Runs the post-walk LINK stages, in their one valid order:

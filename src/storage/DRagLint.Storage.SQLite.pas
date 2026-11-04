@@ -2583,7 +2583,7 @@ type
       /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FileIsStaleProbe"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
+      procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);
       /// <summary>Item 4 (spec s.4.3): records which extra stores the resolve pass
       /// consulted as schema_meta.external_stores -- a JSON array of {path,
       /// indexer_fingerprint, resolver_fingerprint, indexed_at_unix} read from each
@@ -15083,7 +15083,7 @@ begin
   SetMetaValue(KEY, '[' + string.Join(',', Parts) + ']');
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);{ v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);{ v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
   every 'call' ref through ResolveOne. Non-resolving sites (Edge.TargetSymbolId=0)
@@ -15176,7 +15176,9 @@ begin
     first and short-circuited, so the scoping predicate's own queries (CountFiles,
     CallEdgesNeedRebuild) are still not run when extra stores decide it. }
   var DeclineWhy: string;
-  if Length(AExtraStores) > 0 then
+  if AClearFirst then
+    DeclineWhy:= 'a full edge clear was asked for (a stale resolver or --resolve-only)'
+  else if Length(AExtraStores) > 0 then
     DeclineWhy:= 'extra stores are attached, and a library index consulted by ResolveExternally is outside everything this instance recorded'
   else
     DeclineWhy:= ScopedResolveDeclineReason;
@@ -15210,6 +15212,19 @@ begin
   Ref := Default(TReference);
   Edge:= Default(TCallEdge );
   DataVersion0:= ReadDataVersion(FConn);
+  { Printed for run_calls_pass_no_savepoint_guard: 1 = this pass is the outermost transaction. >1 means
+    it runs as a SAVEPOINT, and then every row write of the pass walks the in-memory sub-journal
+    (see the remarks on ISymbolStore.ResolveCallTargets). }
+  if Profiled then
+    ResolveLog(Format('calls      transaction nesting %d', [FConn.ConnectionIntf.Transaction.NestingLevel]));
+  if AClearFirst then
+  begin
+    ClearCallEdges;
+    { TEST SEAM (run_index_halfread_guard.ps1 HR1): hold the transaction open after the clear so a
+      concurrent reader can be sampled. Unset / 0 = no delay. }
+    var DelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_RESOLVE_DELAY_MS'), 0);
+    if DelayMs > 0 then Sleep(DelayMs);  // dl:ok sleep-in-vcl@31b4 -- REVIEWED 2026-11-04: console CLI test seam, off unless the env var is set
+  end;
   try
   { Only the temp tables are built here. The DELETE they feed happens INSIDE the
     rebuild transaction below -- see the note there. MaterializeResolveScope
