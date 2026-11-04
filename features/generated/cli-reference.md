@@ -931,6 +931,7 @@ Described in:
 * [Index a project against its active build config](../../docs/wiki/index-build-config.md)
 * [Rebuild Index for This Project](../../docs/wiki/Rebuild-Index-for-This-Project.md)
 * [Rescan this unit](../../docs/wiki/Rescan-this-unit.md)
+* [Library path of the project's Delphi](../../docs/wiki/target-bds-library-path.md)
 * [Target compiler (--target-compiler)](../../docs/wiki/target-compiler.md)
 
 ### info
@@ -1446,7 +1447,10 @@ drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--to project|library] [-
 | `--json` |  |  |  |
 | `--config` | `<path>` |  |  |
 
-Described in [Reconcile Project Members (.dpr/.dproj)](../../docs/wiki/Reconcile-Project-Members-dpr-dproj.md).
+Described in:
+
+* [Reconcile Project Members (.dpr/.dproj)](../../docs/wiki/Reconcile-Project-Members-dpr-dproj.md)
+* [Library path of the project's Delphi](../../docs/wiki/target-bds-library-path.md)
 
 ### refresh-findings
 

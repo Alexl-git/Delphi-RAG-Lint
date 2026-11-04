@@ -711,6 +711,10 @@
     "hash": "8e1f884060a789351d69f16674291625a90544e6298cbfaa8b3634804d0eac0f",
     "version": "1.39.2-alpha"
   },
+  "features/target-bds-library-path.md": {
+    "hash": "deb09bdedd6d633500dee8935bda6e189eeabe90638b8bae686e7607e7f10b8c",
+    "version": "1.42.0-alpha"
+  },
   "features/target-compiler.md": {
     "hash": "4f93d763bb2598bd58b6d8e5bbaadc42f429a71194061f5fcaa80c27784ced2f",
     "version": "1.39.2-alpha"

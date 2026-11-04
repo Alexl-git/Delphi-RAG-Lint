@@ -25,6 +25,7 @@ Build and maintain the per-project and library indexes.
 | [register-project](features/register-project.md) | Add a new project to the manifest so index --all and the IDE can see it | 1.20.4-alpha |
 | [schema](features/schema.md) | Prints the live schema of an index database: schemaversion, every table and column, and row counts | 0.95.0-alpha |
 | [Show Resolved DBs (debug)](features/show-resolved-dbs-debug.md) | Prints which database(s) drag-lint would actually use for a given project, file, or platform, without running a real query | 0.60.0-alpha |
+| [Library path of the project's Delphi](features/target-bds-library-path.md) | index reads the library path, IDE variables and $(BDS) from the BDS key of the project's target; a missing key falls back to 37.0 with a one-line note | 1.42.0-alpha |
 
 ## Search and navigation
 

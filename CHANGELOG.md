@@ -8,6 +8,9 @@ breaking changes** until v2.0.
 1.42 wave 1, integrated on lane/142-int1. ONE bump: DRAGLINT_EXTRACTOR_VERSION 1.29.0 -> 1.30.0-alpha and
 DRAGLINT_RESOLVER_VERSION 1.17.0 -> 1.18.0-alpha -- every index re-parses once.
 
+### Added
+- GH #13 (reported by Jonathas Paiva): `index --project` / `index --all` read a project against the Delphi it targets: Search Path, Browsing Path, platform list, IDE Environment Variables and `$(BDS)` come from the BDS key its target maps to (`--target-compiler`, then ProjectVersion). Units only that Search Path names join the closure, so their callers bind. Key not installed: 37.0 and one line naming both, also in `--json`. `reconcile-project`, `unit-not-in-dpr`, `unit-not-in-library`, autodoc and rename read the same key and treat those units as library. A Delphi 13 project's closure is byte-identical. Tested on a simulated registry; not yet on a second real Studio.
+
 ### Fixed
 - grammar (GRAMMAR-LASTFIELD): tree-sitter-delphi13 v1.4.1 -- a last record field of an array / `string[N]` type with no trailing `;` no longer parses as ERROR; a first field named `Platform` stays green. Guard `run_grammar_last_field_array.ps1`.
 - facts-a (CFG-CONSTLOOP): index-time `data_flows` prune constant `while` / `repeat` loops like the lint-time CFG. DATAFLOW-REPARSE-0 proven closed (D16); EXT-INC-FILES already fixed by INC2.

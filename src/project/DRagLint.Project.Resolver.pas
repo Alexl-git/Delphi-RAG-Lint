@@ -14,6 +14,17 @@ uses
   , DRagLint.Core.StudioEnv { TStudioEnv: the ONLY source of a RAD Studio path }
   ;
 
+const
+  /// <summary>The BDS key of the one Studio this product runs on (Delphi 13): what
+  /// every reader uses when nothing names another target.</summary>
+  DEFAULT_BDS_KEY = '37.0';
+
+/// <summary>True when a Studio's key names a root folder that exists.</summary>
+/// <param name="AStudio">A BDS key, e.g. '20.0'.</param>
+/// <returns>False for a missing key, and for a key an uninstalled Studio left
+/// behind pointing at a folder that is gone.</returns>
+function IsBdsStudioInstalled(const AStudio: string): Boolean;
+
 type
   // Resolves the set of folders that should be scanned for a Delphi project.
   // Inputs: a .dproj path. Outputs: deduplicated folder list combining:
@@ -39,6 +50,7 @@ type
   TProjectResolver = class
     strict private
       FBDS            : string                          ;
+      FStudio         : string                          ; // the BDS key this instance reads
       FCurrentPlatform: string                          ; // what $(Platform) expands to right now
       FEnvVars        : TDictionary<string, string>     ; // RAD Studio "Environment Variables" (e.g. DXVCL), loaded lazily
       FEnvVarsLoaded  : Boolean                          ;
@@ -122,7 +134,7 @@ type
       /// </remarks>
       procedure AddSemicolonList(AList: TList<string>; const ASemicolonList: string; const ABaseDir: string);
       /// <summary><!-- drag-lint:auto sum -->Enumerates every platform subkey under
-      /// ...\BDS\37.0\Library across both hives and registry views, deduplicated
+      /// this Studio's Library across both hives and registry views, deduplicated
       /// case-insensitively. These are the names Delphi itself registers (Win32, Win64,
       /// Android64, iOSDevice64, ...).</summary>
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
@@ -243,6 +255,13 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create;
+      /// <summary>A resolver over ANOTHER Studio's key: its Search and Browsing
+      /// paths, platform list and Environment Variables, with $(BDS) and
+      /// $(BDSCOMMONDIR) expanding from that key's RootDir.</summary>
+      /// <param name="AStudio">A BDS key; DEFAULT_BDS_KEY behaves exactly as Create.</param>
+      /// <remarks>Does not check the key is installed: IsBdsStudioInstalled is the
+      /// caller's decision. TStudioEnv and the compiler stay on 37.0.</remarks>
+      constructor CreateForStudio(const AStudio: string);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Reads: FEnvVars</para>
@@ -356,7 +375,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveLibraryPaths(AAllPlatforms: Boolean = False): TArray<string>;
-      /// <summary>Returns every platform name registered under BDS\37.0\Library,
+      /// <summary>Returns every platform name registered under this Studio's Library,
       /// deduplicated case-insensitively. Wraps the private EnumLibraryPlatforms.
       /// Returns at least ['Win32','Win64'] as a fallback when the registry is empty.</summary>
       /// <returns>Array of platform names (e.g. Win32, Win64, Android64).</returns>
@@ -393,12 +412,358 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ReadPlatformLibraryPaths(const APlatform: string): TArray<string>;
+      /// <summary>The roots `index` keeps OUT of a project closure.</summary>
+      /// <returns>On the default Studio exactly ResolveLibraryPaths. On another: what
+      /// the platform library DBs (built from 37.0) cover, plus that Studio's own
+      /// folders -- everything else on its path has no other index to live in.</returns>
+      function ClosureLibraryRoots: TArray<string>;
+      /// <summary>The roots that are not project MEMBERS: a unit under one needs no
+      /// listing in the .dpr, because the compiler finds it through the library path.</summary>
+      /// <returns>On the default Studio exactly ResolveLibraryPaths; on another, its
+      /// whole library path plus the default Studio's.</returns>
+      /// <remarks>For reconcile-project, unit-not-in-dpr, unit-not-in-library, autodoc
+      /// and rename: a unit `index` added from the library path is not a project gap.</remarks>
+      function MembershipLibraryRoots: TArray<string>;
+      /// <summary>The folders a closure searches after the project's own, as dcc does.</summary>
+      /// <param name="APlatform">The target platform.</param>
+      /// <returns>Nil on the default Studio, where library units stay in the library
+      /// DB. On another, its Search Path minus ClosureLibraryRoots, in path order.</returns>
+      function ClosureSearchTail(const APlatform: string): TArray<string>;
   end;
 
 implementation
 
+uses
+  System.JSON;
+
 const
-  BDS_REG_PATH = '\Software\Embarcadero\BDS\37.0';
+  BDS_REG_ROOT = '\Software\Embarcadero\BDS\';
+  ENV_VARS_SUBKEY = '\Environment Variables';
+  LIBRARY_SUBKEY = '\Library';
+  ROOT_DIR_VALUE = 'RootDir';
+  FIXTURE_ENV_VAR = 'DRAGLINT_TEST_BDS_REGISTRY';
+  STUDIO_OWNED_FOLDER = '\embarcadero\';
+
+type
+  /// <summary>Everything this unit reads from a BDS registry key, as an input seam:
+  /// a test replaces the whole tree without touching the real registry.</summary>
+  /// <remarks>Stateless; each call reads its source afresh. A key or value that is
+  /// not there answers empty, never raises.</remarks>
+  IBdsRegistry = interface
+    ['{6E0C4B1D-2A7F-4C53-9D3E-7A1B5F60C2E4}']
+    /// <summary>The RootDir value of a Studio's key.</summary>
+    /// <param name="AStudio">A BDS key, e.g. '20.0'.</param>
+    /// <returns>The value as stored, or ''.</returns>
+    function RootDir(const AStudio: string): string;
+    /// <summary>The platform subkeys under the key's Library, in probe order.</summary>
+    /// <param name="AStudio">A BDS key.</param>
+    /// <returns>Names, duplicates possible (one source per hive and view).</returns>
+    function LibraryPlatforms(const AStudio: string): TArray<string>;
+    /// <summary>One path value of one platform, in probe order.</summary>
+    /// <param name="AStudio">A BDS key.</param>
+    /// <param name="APlatform">A platform subkey; case-insensitive.</param>
+    /// <param name="AValueName">'Search Path' or 'Browsing Path'.</param>
+    /// <returns>The raw semicolon lists, one per source that has the value.</returns>
+    function LibraryPathValues(const AStudio, APlatform, AValueName: string): TArray<string>;
+    /// <summary>The IDE's user-defined Environment Variables of a Studio.</summary>
+    /// <param name="AStudio">A BDS key.</param>
+    /// <returns>Name/value pairs as stored.</returns>
+    function EnvironmentVariables(const AStudio: string): TArray<TPair<string, string>>;
+  end;
+
+  { A DRAGLINT_TEST_BDS_REGISTRY file that is not a JSON object: a broken test
+    set-up, which must not read as an empty registry. }
+  EBdsRegistryFixture = class(Exception);
+
+  { The machine's registry: both hives and both views, HKCU first, 32-bit first --
+    the order the resolver always read in, which ReadLibraryPaths's dedup and so the
+    closure's root order depend on. }
+  TRealBdsRegistry = class(TInterfacedObject, IBdsRegistry)
+  public
+    function RootDir(const AStudio: string): string;
+    function LibraryPlatforms(const AStudio: string): TArray<string>;
+    function LibraryPathValues(const AStudio, APlatform, AValueName: string): TArray<string>;
+    function EnvironmentVariables(const AStudio: string): TArray<TPair<string, string>>;
+  end;
+
+  { The test seam: see ActiveBdsRegistry for the shape. Owns the parsed JSON. }
+  TFixtureBdsRegistry = class(TInterfacedObject, IBdsRegistry)
+  strict private
+    FRoot: TJSONObject;
+    function Child(AParent: TJSONObject; const AName: string): TJSONObject;
+  public
+    constructor Create(const AFixtureFile: string);
+    destructor Destroy; override;
+    function RootDir(const AStudio: string): string;
+    function LibraryPlatforms(const AStudio: string): TArray<string>;
+    function LibraryPathValues(const AStudio, APlatform, AValueName: string): TArray<string>;
+    function EnvironmentVariables(const AStudio: string): TArray<TPair<string, string>>;
+  end;
+
+function TRealBdsRegistry.RootDir(const AStudio: string): string;
+var
+  Reg     : TRegistry;
+  HiveRoot: HKEY     ;
+  Sam     : Cardinal ;
+begin
+  Result:= '';
+  for HiveRoot in [HKEY(HKEY_CURRENT_USER), HKEY(HKEY_LOCAL_MACHINE)] do
+    for Sam in [KEY_WOW64_32KEY, KEY_WOW64_64KEY] do
+    begin
+      Reg:= TRegistry.Create(KEY_READ or Sam);
+      try
+        Reg.RootKey:= HiveRoot;
+        if Reg.OpenKeyReadOnly(BDS_REG_ROOT + AStudio) then
+        try
+          if Reg.ValueExists(ROOT_DIR_VALUE) then Result:= Trim(Reg.ReadString(ROOT_DIR_VALUE));
+        finally
+          Reg.CloseKey;
+        end;
+      finally
+        Reg.Free;
+      end;
+      if Result <> '' then Exit;
+    end;
+end;
+
+function TRealBdsRegistry.LibraryPlatforms(const AStudio: string): TArray<string>;
+var
+  Names   : TStringList;
+  Reg     : TRegistry  ;
+  HiveRoot: HKEY       ;
+  Sam     : Cardinal   ;
+begin
+  Result:= nil;
+  Names:= TStringList.Create;
+  try
+    for HiveRoot in [HKEY(HKEY_CURRENT_USER), HKEY(HKEY_LOCAL_MACHINE)] do
+      for Sam in [KEY_WOW64_32KEY, KEY_WOW64_64KEY] do
+      begin
+        Reg:= TRegistry.Create(KEY_READ or Sam);
+        try
+          Reg.RootKey:= HiveRoot;
+          if Reg.OpenKeyReadOnly(BDS_REG_ROOT + AStudio + LIBRARY_SUBKEY) then
+          try
+            Names.Clear;
+            Reg.GetKeyNames(Names);
+            Result:= Result + Names.ToStringArray;
+          finally
+            Reg.CloseKey;
+          end;
+        finally
+          Reg.Free;
+        end;
+      end;
+  finally
+    Names.Free;
+  end;
+end;
+
+function TRealBdsRegistry.LibraryPathValues(const AStudio, APlatform, AValueName: string): TArray<string>;
+var
+  Reg     : TRegistry;
+  HiveRoot: HKEY     ;
+  Sam     : Cardinal ;
+begin
+  Result:= nil;
+  for HiveRoot in [HKEY(HKEY_CURRENT_USER), HKEY(HKEY_LOCAL_MACHINE)] do
+    for Sam in [KEY_WOW64_32KEY, KEY_WOW64_64KEY] do
+    begin
+      Reg:= TRegistry.Create(KEY_READ or Sam);
+      try
+        Reg.RootKey:= HiveRoot;
+        if Reg.OpenKeyReadOnly(BDS_REG_ROOT + AStudio + LIBRARY_SUBKEY + '\' + APlatform) then
+        try
+          if Reg.ValueExists(AValueName) then Result:= Result + [Reg.ReadString(AValueName)];
+        finally
+          Reg.CloseKey;
+        end;
+      finally
+        Reg.Free;
+      end;
+    end;
+end;
+
+function TRealBdsRegistry.EnvironmentVariables(const AStudio: string): TArray<TPair<string, string>>;
+var
+  Reg  : TRegistry  ;
+  Names: TStringList;
+  Name : string     ;
+begin
+  Result:= nil;
+  Names:= TStringList.Create;
+  Reg:= TRegistry.Create(KEY_READ);
+  try
+    Reg.RootKey:= HKEY_CURRENT_USER;
+    if Reg.OpenKeyReadOnly(BDS_REG_ROOT + AStudio + ENV_VARS_SUBKEY) then
+    try
+      Reg.GetValueNames(Names);
+      for Name in Names do
+        if (Name.Trim <> '') and Reg.ValueExists(Name) then
+          Result:= Result + [TPair<string, string>.Create(Name, Reg.ReadString(Name))];
+    finally
+      Reg.CloseKey;
+    end;
+  finally
+    Reg.Free;
+    Names.Free;
+  end;
+end;
+
+constructor TFixtureBdsRegistry.Create(const AFixtureFile: string);
+begin
+  inherited Create;
+  FRoot:= TJSONObject.ParseJSONValue(TFile.ReadAllText(AFixtureFile)) as TJSONObject; // dl:ok taint-path-traversal -- REVIEWED 2026-11-03 a test seam: the variable is set by the guard that owns the file, and the file is only parsed, never executed or written
+  if FRoot = nil then raise EBdsRegistryFixture.CreateFmt('%s: not a JSON object: %s', [FIXTURE_ENV_VAR, AFixtureFile]);
+end;
+
+destructor TFixtureBdsRegistry.Destroy;
+begin
+  FRoot.Free;
+  inherited Destroy;
+end;
+
+function TFixtureBdsRegistry.Child(AParent: TJSONObject; const AName: string): TJSONObject;
+begin
+  Result:= nil;
+  if AParent = nil then Exit;
+  for var Pair: TJSONPair in AParent do
+    if SameText(Pair.JsonString.Value, AName) and (Pair.JsonValue is TJSONObject) then Exit(TJSONObject(Pair.JsonValue));
+end;
+
+function TFixtureBdsRegistry.RootDir(const AStudio: string): string;
+var
+  Studio: TJSONObject;
+begin
+  Result:= '';
+  Studio:= Child(FRoot, AStudio);
+  if Studio <> nil then Studio.TryGetValue<string>(ROOT_DIR_VALUE, Result);
+end;
+
+function TFixtureBdsRegistry.LibraryPlatforms(const AStudio: string): TArray<string>;
+var
+  Lib: TJSONObject;
+begin
+  Result:= nil;
+  Lib:= Child(Child(FRoot, AStudio), 'Library');
+  if Lib <> nil then
+    for var Pair: TJSONPair in Lib do Result:= Result + [Pair.JsonString.Value];
+end;
+
+function TFixtureBdsRegistry.LibraryPathValues(const AStudio, APlatform, AValueName: string): TArray<string>;
+var
+  Plat : TJSONObject;
+  Value: string     ;
+begin
+  Result:= nil;
+  Plat:= Child(Child(Child(FRoot, AStudio), 'Library'), APlatform);
+  if (Plat <> nil) and Plat.TryGetValue<string>(AValueName, Value) then Result:= [Value];
+end;
+
+function TFixtureBdsRegistry.EnvironmentVariables(const AStudio: string): TArray<TPair<string, string>>;
+var
+  Vars: TJSONObject;
+begin
+  Result:= nil;
+  Vars:= Child(Child(FRoot, AStudio), 'Environment Variables');
+  if Vars <> nil then
+    for var Pair: TJSONPair in Vars do
+      Result:= Result + [TPair<string, string>.Create(Pair.JsonString.Value, Pair.JsonValue.Value)];
+end;
+
+function BdsRegistryFixturePath: string;
+begin
+  Result:= Trim(GetEnvironmentVariable(FIXTURE_ENV_VAR));
+end;
+
+/// <summary>The registry every TProjectResolver reads: the real one, unless the
+/// DRAGLINT_TEST_BDS_REGISTRY environment variable names a JSON fixture.</summary>
+/// <returns>A stateless reader.</returns>
+/// <remarks>The fixture replaces the WHOLE tree, 37.0 included, so a guard cannot
+/// pass through the machine's own Studio by accident. Shape:
+/// {"20.0": {"RootDir": "...", "Library": {"Win32": {"Search Path": "..."}},
+/// "Environment Variables": {"NAME": "..."}}}.</remarks>
+function ActiveBdsRegistry: IBdsRegistry;
+begin
+  if BdsRegistryFixturePath = '' then Exit(TRealBdsRegistry.Create);
+  Result:= TFixtureBdsRegistry.Create(BdsRegistryFixturePath);
+end;
+
+function IsBdsStudioInstalled(const AStudio: string): Boolean;
+var
+  Root: string;
+begin
+  Root:= Trim(ActiveBdsRegistry.RootDir(AStudio));
+  Result:= (Root <> '') and TDirectory.Exists(Root);
+end;
+
+{ True when AFile is AFolder or lies under it; case-insensitive. }
+function IsUnderAnyRoot(const AFile: string; const ARoots: TArray<string>): Boolean;
+var
+  NormFile: string;
+begin
+  NormFile:= IncludeTrailingPathDelimiter(LowerCase(AFile));
+  for var Root: string in ARoots do
+    if NormFile.StartsWith(IncludeTrailingPathDelimiter(LowerCase(Root))) then Exit(True);
+  Result:= False;
+end;
+
+constructor TProjectResolver.CreateForStudio(const AStudio: string);
+begin
+  Create;
+  if SameText(AStudio, DEFAULT_BDS_KEY) then Exit;
+  FStudio:= AStudio;
+  FBDS:= ExcludeTrailingPathDelimiter(Trim(ActiveBdsRegistry.RootDir(AStudio)));
+end;
+
+function TProjectResolver.ClosureLibraryRoots: TArray<string>;
+var
+  Installed: TProjectResolver;
+begin
+  Result:= ResolveLibraryPaths;
+  if SameText(FStudio, DEFAULT_BDS_KEY) then Exit;
+  var Own: TArray<string>:= Result;
+  Installed:= TProjectResolver.Create;
+  try
+    Result:= Installed.ResolveLibraryPaths;
+  finally
+    Installed.Free;
+  end;
+  for var Root: string in Own do
+    if IsUnderAnyRoot(Root, [FBDS]) or ContainsText(Root, STUDIO_OWNED_FOLDER) then Result:= Result + [Root];
+end;
+
+function TProjectResolver.MembershipLibraryRoots: TArray<string>;
+var
+  Installed: TProjectResolver;
+begin
+  Result:= ResolveLibraryPaths;
+  if SameText(FStudio, DEFAULT_BDS_KEY) then Exit;
+  Installed:= TProjectResolver.Create;
+  try
+    Result:= Result + Installed.ResolveLibraryPaths;
+  finally
+    Installed.Free;
+  end;
+end;
+
+function TProjectResolver.ClosureSearchTail(const APlatform: string): TArray<string>;
+var
+  List    : TList<string> ;
+  Excluded: TArray<string>;
+begin
+  Result:= nil;
+  if SameText(FStudio, DEFAULT_BDS_KEY) then Exit;
+  Excluded:= ClosureLibraryRoots;
+  List:= TList<string>.Create;
+  try
+    ReadLibraryPaths(List, [APlatform], True);
+    for var Root: string in List do
+      if not IsUnderAnyRoot(Root, Excluded) then Result:= Result + [Root];
+  finally
+    List.Free;
+  end;
+end;
 
 constructor TProjectResolver.Create;
 begin
@@ -409,7 +774,10 @@ begin
     does not resolve, FBDS stays EMPTY so $(BDS) expands to nothing and the
     resulting path fails the existence checks downstream, rather than pointing
     at a Studio that is not there. }
-  FBDS:= TStudioEnv.RootOrEmpty;
+  FStudio:= DEFAULT_BDS_KEY;
+  { A fixture replaces the whole tree, this key's RootDir included. }
+  FBDS:= if BdsRegistryFixturePath <> '' then ExcludeTrailingPathDelimiter(Trim(ActiveBdsRegistry.RootDir(DEFAULT_BDS_KEY)))
+         else TStudioEnv.RootOrEmpty;
   FCurrentPlatform:= 'Win64';
   FEnvVars:= TDictionary<string, string>.Create;
   FEnvVarsLoaded:= False;
@@ -430,30 +798,11 @@ end;
 /// nested $(NAME)), which ResolveNamedMacro leaves to a subsequent ExpandMacros
 /// pass on the returned path.</remarks>
 procedure TProjectResolver.EnsureEnvVarsLoaded;
-var
-  Reg  : TRegistry  ;
-  Names: TStringList;
-  Name : string     ;
 begin
   if FEnvVarsLoaded then Exit;
   FEnvVarsLoaded:= True; // set first: a failed read must not retry every path
-  Names:= TStringList.Create;
-  Reg:= TRegistry.Create(KEY_READ);
-  try
-    Reg.RootKey:= HKEY_CURRENT_USER;
-    if Reg.OpenKeyReadOnly(BDS_REG_PATH + '\Environment Variables') then
-    try
-      Reg.GetValueNames(Names);
-      for Name in Names do
-        if (Name.Trim <> '') and Reg.ValueExists(Name) then
-          FEnvVars.AddOrSetValue(UpperCase(Name.Trim), Reg.ReadString(Name));
-    finally
-      Reg.CloseKey;
-    end;
-  finally
-    Reg.Free;
-    Names.Free;
-  end;
+  for var Pair: TPair<string, string> in ActiveBdsRegistry.EnvironmentVariables(FStudio) do
+    FEnvVars.AddOrSetValue(UpperCase(Pair.Key.Trim), Pair.Value);
 end;
 
 /// <summary>Resolves a single macro NAME (the text inside a $(...)), trying the
@@ -555,40 +904,12 @@ begin
   end;
 end;
 
-procedure ReadRegPathInto(const ARoot: HKEY; const AKey, AValue: string; ASamDesired: Cardinal; const AAdd: TProc<string>);
-var
-  Reg     : TRegistry;
-  RegValue: string   ;
-begin
-  Reg:= TRegistry.Create(KEY_READ or ASamDesired);
-  try
-    Reg.RootKey:= ARoot;
-    if Reg.OpenKeyReadOnly(AKey) then
-    try
-      if Reg.ValueExists(AValue) then
-      begin
-        RegValue:= Reg.ReadString(AValue);
-        AAdd(RegValue);
-      end;
-    finally
-      Reg.CloseKey;
-    end;
-  finally
-    Reg.Free;
-  end;
-end; // procedure
-
-// Enumerates every platform subkey under ...\BDS\37.0\Library across both
+// Enumerates every platform subkey under this Studio's Library across both
 // hives and registry views, deduplicated case-insensitively. These are the
 // names Delphi itself registers (Win32, Win64, Android64, iOSDevice64, ...).
 function TProjectResolver.EnumLibraryPlatforms: TArray<string>;
 var
-  List    : TList<string>;
-  Names   : TStringList  ;
-  Reg     : TRegistry    ;
-  HiveRoot: HKEY         ;
-  Sam     : Cardinal     ;
-  Name    : string       ;
+  List: TList<string>;
 
   procedure AddUnique(const AName: string);
   begin
@@ -600,29 +921,10 @@ var
 
 begin
   List:= TList<string>.Create;
-  Names:= TStringList.Create;
   try
-    for HiveRoot in [HKEY(HKEY_CURRENT_USER), HKEY(HKEY_LOCAL_MACHINE)] do
-      for Sam in [KEY_WOW64_32KEY, KEY_WOW64_64KEY] do
-      begin
-        Reg:= TRegistry.Create(KEY_READ or Sam);
-        try
-          Reg.RootKey:= HiveRoot;
-          if Reg.OpenKeyReadOnly(BDS_REG_PATH + '\Library') then
-          try
-            Names.Clear;
-            Reg.GetKeyNames(Names);
-            for Name in Names do AddUnique(Name);
-          finally
-            Reg.CloseKey;
-          end;
-        finally
-          Reg.Free;
-        end;
-      end; // for
+    for var Name: string in ActiveBdsRegistry.LibraryPlatforms(FStudio) do AddUnique(Name);
     Result:= List.ToArray;
   finally
-    Names.Free;
     List.Free;
   end; // try
 end; // begin
@@ -656,25 +958,19 @@ procedure TProjectResolver.ReadLibraryPaths(AList: TList<string>;
 const
   VALUE_NAMES: array[0..1] of string = ('Search Path', 'Browsing Path');
 var
-  Plat    : string  ;
-  Val     : string  ;
-  HiveRoot: HKEY    ;
-  Sam     : Cardinal;
-  RegBase : string  ;
-  Last    : Integer ;
+  Plat    : string      ;
+  Last    : Integer     ;
+  Registry: IBdsRegistry;
 begin
-  if ASearchPathOnly then Last:= 0 else Last:= High(VALUE_NAMES);
-  // Probe HKCU + HKLM, both 32-bit + 64-bit registry views.
+  Last:= if ASearchPathOnly then 0 else High(VALUE_NAMES);
+  Registry:= ActiveBdsRegistry;
+  // The real registry probes HKCU + HKLM, both 32-bit + 64-bit views.
   for Plat in APlatforms do
   begin
     FCurrentPlatform:= Plat; // so $(Platform) expands to this target
     for var VIdx: Integer:= 0 to Last do
-    begin
-      Val:= VALUE_NAMES[VIdx];
-      RegBase:= BDS_REG_PATH + '\Library\' + Plat;
-      for HiveRoot in [HKEY(HKEY_CURRENT_USER), HKEY(HKEY_LOCAL_MACHINE)] do
-        for Sam in [KEY_WOW64_32KEY, KEY_WOW64_64KEY] do ReadRegPathInto(HiveRoot, RegBase, Val, Sam, procedure (S: string) begin AddSemicolonList(AList, S, ''); end);
-    end;
+      for var RawList: string in Registry.LibraryPathValues(FStudio, Plat, VALUE_NAMES[VIdx]) do
+        AddSemicolonList(AList, RawList, '');
   end;
   FCurrentPlatform:= 'Win64'; // back to default for any later expansion
 end;

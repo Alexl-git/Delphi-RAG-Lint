@@ -387,6 +387,7 @@ uses
   , DRagLint.Index.Freshness // dl:unit DRagLint.Index.Freshness accepted -- StaleEvidence calls ChangedFilePaths and reads the INDEXED_AT_KEY stamp the freshness module defines; the const travels with that call
   , DRagLint.Index.Plan
   , DRagLint.Project.Resolver
+  , DRagLint.Project.TargetStudio { GH #13: LibraryRootsOf }
   , DRagLint.Project.Members
   , DRagLint.Project.DefineProfile
   , DRagLint.Project.Coherence // dl:unit DRagLint.Project.Coherence accepted -- TagMismatch reads the PROJECT_TAG_KEY stamp this module defines beside ProjectTagConflicts, which compares it; the const travels with that call
@@ -553,6 +554,21 @@ end; // function
 const
   INDEX_DEFAULT_PLATFORM = 'Win64';
 
+{ GH #13: a project that targets another Studio reads that Studio's library path;
+  every other project shares the cached default set. }
+function LibraryRootsOf(const AProjectFile: string): TArray<string>;
+var
+  Studio: TProjectResolver;
+begin
+  if not ResolveTargetStudio(AProjectFile).IsForeign then Exit(LibraryRoots);
+  Studio:= ResolveTargetStudio(AProjectFile).OpenResolver;
+  try
+    Result:= Studio.MembershipLibraryRoots;
+  finally
+    Studio.Free;
+  end;
+end;
+
 { The .pas files of AProjectFile's compile CLOSURE, absolute, existing on
   disk: the declared members and every project-local unit they use
   transitively, as `index --project` resolves them -- the same resolver, the
@@ -567,7 +583,7 @@ var
   List    : TStringList     ;
   F       : string          ;
 begin
-  Resolver:= TClosureResolver.Create(LibraryRoots);
+  Resolver:= TClosureResolver.Create(LibraryRootsOf(AProjectFile));
   List    := TStringList.Create;
   try
     Resolver.SetPreprocess(True, ResolveActiveBuild(AProjectFile, INDEX_DEFAULT_PLATFORM, '', True).Profile);
@@ -592,7 +608,7 @@ var
 begin
   Count:= 0;
   Names:= nil;
-  for C in ComputeCoherence(AStore, PairDfmSiblings(ProjectOwnedMembers(ClosureUnits(AProjectFile), LibraryRoots))) do
+  for C in ComputeCoherence(AStore, PairDfmSiblings(ProjectOwnedMembers(ClosureUnits(AProjectFile), LibraryRootsOf(AProjectFile)))) do
     if not C.Indexed then
     begin
       Inc(Count);
