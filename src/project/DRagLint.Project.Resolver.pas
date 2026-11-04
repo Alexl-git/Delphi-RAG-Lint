@@ -116,15 +116,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ExpandMacros (DRagLint.Project.Resolver.pas)</para>
-      /// <para>Calls: ExcludeTrailingPathDelimiter, GetEnvironmentVariable</para>
+      /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.CommonDirOf</para>
       /// <para>Returns: FCommonDir</para>
       /// <para>Reads: FCommonDir, FBDS, FStudio   Writes: FCommonDir</para>
-      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.CommonDirOf"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function StudioCommonDir: string;

@@ -15111,7 +15111,7 @@ begin
   SetMetaValue(KEY, '[' + string.Join(',', Parts) + ']');
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@84e6, deep-nesting@6ffc, cyclomatic-complexity@6a89, cognitive-complexity@95b3 -- REVIEWED 2026-11-04: one transaction over one resolver with shared maps; splitting it here would touch resolve-surface code in a no-bump release, callslow added only progress + savepoint handling
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@ab13, deep-nesting@6ffc, cyclomatic-complexity@e905, cognitive-complexity@fb12 -- REVIEWED 2026-11-04: one transaction over one resolver with shared maps; splitting it here would touch resolve-surface code in a no-bump release, callslow added only progress + savepoint handling
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams

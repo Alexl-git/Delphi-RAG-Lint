@@ -325,7 +325,7 @@ begin
   Rsvars:= TPath.Combine(ARoot, 'bin\rsvars.bat');
   if (ARoot <> '') and TFile.Exists(Rsvars) then
   begin
-    Found:= TRegEx.Match(TFile.ReadAllText(Rsvars), COMMONDIR_SET);  // dl:ok taint-path-traversal -- REVIEWED 2026-11-04: the path is the local Studio's own RootDir from this user's registry, the same trust as the library path itself
+    Found:= TRegEx.Match(TFile.ReadAllText(Rsvars), COMMONDIR_SET);  // dl:ok taint-path-traversal@aa19 -- REVIEWED 2026-11-04: the path is the local Studio's own RootDir from this user's registry, the same trust as the library path itself
     if Found.Success then Result:= ExcludeTrailingPathDelimiter(Found.Groups[1].Value);
   end;
   if Result = '' then Result:= TPath.Combine(TPath.Combine(GetEnvironmentVariable('PUBLIC'), PUBLIC_REL), AStudioKey);
