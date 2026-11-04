@@ -1,0 +1,29 @@
+{
+  "id": "convrules-scoped-validate",
+  "title": "Scoped validation on Save",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.31.0-alpha",
+  "summary": "ConvRulesEditor File menu: Save and Validate check the syntax and only the changed #convert blocks, one engine pass per distinct From/To pair",
+  "intro": "Save a big rule book without re-validating every block.",
+  "wikiPage": "convrules-editor-scoped-validate",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "File > Validate"
+    },
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "File > Save"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-04",
+    "by": "alexanderl",
+    "build": "1.42.0-alpha"
+  }
+}

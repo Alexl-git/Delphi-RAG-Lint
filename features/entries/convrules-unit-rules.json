@@ -1,0 +1,54 @@
+{
+  "id": "convrules-unit-rules",
+  "title": "Unit rules (#use, #unuse, #useswap)",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.31.0-alpha",
+  "summary": "ConvRulesEditor Uses Units menu and Unit Rules tab: add, remove and swap units in the converted unit's uses clause",
+  "intro": "Manage the uses-clause changes a conversion makes.",
+  "wikiPage": "convrules-editor-unit-rules",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Uses Units > Swap..."
+    },
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Uses Units > Add unit..."
+    },
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Uses Units > Remove unit"
+    },
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Uses Units > Delete unit rule"
+    },
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Uses Units > Derive units"
+    },
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Uses Units > Check units"
+    },
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Uses Units > Accept scope renames"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-04",
+    "by": "alexanderl",
+    "build": "1.42.0-alpha"
+  }
+}

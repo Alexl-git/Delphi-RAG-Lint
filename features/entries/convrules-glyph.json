@@ -1,0 +1,24 @@
+{
+  "id": "convrules-glyph",
+  "title": "Glyph expressions (G[I/N])",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.31.0-alpha",
+  "summary": "ConvRulesEditor Mapping menu: set, change or clear the G[I/N] glyph expression on the selected link",
+  "intro": "Edit a link's glyph expression without touching the #link text.",
+  "wikiPage": "convrules-editor-glyph",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Mapping > Glyph expression..."
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-04",
+    "by": "alexanderl",
+    "build": "1.42.0-alpha"
+  }
+}
