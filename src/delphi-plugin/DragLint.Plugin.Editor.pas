@@ -2294,6 +2294,11 @@ end;
 
 const
   CHECK_UNIT_STALL_MS = 90000;
+  FORMAT_STALL_MS = 60000;
+  IMPORT_LOG_STALL_MS = 60000;
+  AST_CHECK_STALL_MS = 30000;
+  COPY_DIAG_STALL_MS = 20000;
+  EXPORT_STALL_MS = 180000;
 
 var
   { The editor command whose dialog waits on the engine (rename, quick fix, go to
@@ -2479,7 +2484,7 @@ begin
 
       { The IDE will auto-detect the file change on next focus switch. }
       ShowMessage( Format('drag-lint Format with YADF:'#13#10 + '%s', [Trim(Output)]));
-    end, 60000);
+    end, FORMAT_STALL_MS);
 end; // procedure
 
 /// <summary>The active project's `.pas` members that exist on disk.</summary>
@@ -3561,7 +3566,7 @@ begin
       ShowMessage(Format(
           'drag-lint Import Build Log complete.'#13#10 + 'Imported: %d error(s), %d warning(s), %d hint(s).'#13#10 + 'Check the Messages pane for details.',
           [ErrCount, WarnCount, HintCount]));
-    end, 60000);
+    end, IMPORT_LOG_STALL_MS);
 end; // procedure
 
 /// <summary>Opens the IDE Tools->Options dialog (drag-lint pages live under
@@ -3653,7 +3658,7 @@ begin
       end;
 
       ShowMessage(Format('drag-lint AST Checks:'#13#10'%s', [Trim(Output)]));
-    end, 30000);
+    end, AST_CHECK_STALL_MS);
 end; // procedure
 
 procedure AnnounceHoverStart;
@@ -4345,7 +4350,7 @@ begin
         Params.AddPair('diagnostics', Arr   ); { Arr ownership -> Params }
         Cache .Update (FilePath     , Params);
         if (ES <> nil) and (ES.TopView <> nil) then
-        try ES.TopView.Paint; except end;
+        try ES.TopView.Paint; except on E: Exception do DLT('diag', 'repaint failed: ' + E.Message); end;
 
         if Count = 0 then ShowMessage(Format('drag-lint: no diagnostics for %s.', [ExtractFileName(FilePath)]))
         else
@@ -4360,7 +4365,7 @@ begin
         Lines.Free;
         Params.Free; { frees Arr + child objects }
       end; // try
-    end, 20000);
+    end, COPY_DIAG_STALL_MS);
 end; // procedure
 
 procedure InvokeOpenLog(Sender: TObject);
@@ -4565,7 +4570,7 @@ begin
   P:= Pos('[', AOutput); { skip any "(loaded defaults...)" banner prefix }
   if P <= 0 then Exit;
   V:= nil;
-  try V:= TJSONObject.ParseJSONValue(Copy(AOutput, P, MaxInt)); except V:= nil; end;
+  try V:= TJSONObject.ParseJSONValue(Copy(AOutput, P, MaxInt)); except on E: Exception do DLT('hover', 'qname answer unreadable: ' + E.Message); end;
   try
     if (V is TJSONArray) then
     begin
@@ -5162,7 +5167,7 @@ begin
         Units.Sorted    := True;
         Units.Duplicates:= dupIgnore;
         V:= nil;
-        try V:= TJSONObject.ParseJSONValue(Output); except V:= nil; end;
+        try V:= TJSONObject.ParseJSONValue(Output); except on E: Exception do DLT('uses', 'check-unit answer unreadable: ' + E.Message); end;
         try
           if V is TJSONArray then
           begin
@@ -5224,9 +5229,17 @@ var
   MS       : IOTAModuleServices         ;
   Next     : TProc<string>              ;
 begin
-  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then begin ANext(''); Exit; end;
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then
+  begin
+    ANext('');
+    Exit;
+  end;
   EV:= ESS.TopView;
-  if (EV = nil) or (EV.Buffer = nil) then begin ANext(''); Exit; end;
+  if (EV = nil) or (EV.Buffer = nil) then
+  begin
+    ANext('');
+    Exit;
+  end;
   FileName:= EV.Buffer.FileName;
   CaretRow0:= EV.Position.Row - 1; { cache is 0-based }
   if CaretRow0 < 0 then CaretRow0:= 0;
@@ -5237,14 +5250,28 @@ begin
   for D in Diags do
   begin
     U:= DLExtractAddUnit(D.Message);
-    if U <> '' then begin DLT('uses', 'quickfix: cache -> ' + U); ANext(U); Exit; end;
+    if U <> '' then
+    begin
+      DLT('uses', 'quickfix: cache -> ' + U);
+      ANext(U);
+      Exit;
+    end;
   end;
 
   { 2) fallback: run check-unit --resolve-uses and match the caret line. }
-  if not SameText(ExtractFileExt(FileName), '.pas') then begin ANext(''); Exit; end;
+  if not SameText(ExtractFileExt(FileName), '.pas') then
+  begin
+    ANext('');
+    Exit;
+  end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
-  Proj:= GetActiveProjectFile; LibDb:= DLLibraryDb;
-  if not FileExists(LibDb) then begin ANext(''); Exit; end;
+  Proj:= GetActiveProjectFile;
+  LibDb:= DLLibraryDb;
+  if not FileExists(LibDb) then
+  begin
+    ANext('');
+    Exit;
+  end;
   Cmd:= Format('"%s" check-unit "%s" --resolve-uses --db "%s" --format json', [DLExe64, FileName, LibDb]);
   if Proj <> '' then Cmd:= Cmd + Format(' --project "%s"', [Proj]);
   Next:= ANext;
@@ -5255,13 +5282,13 @@ begin
       Arr    : TJSONArray ;
       Obj    : TJSONObject;
       i      : Integer    ;
-      FLine  : Integer    ;
+      AnsLine: Integer    ;
       Found  : string     ;
       AddUnit: string     ;
     begin
       Found:= '';
       V:= nil;
-      try V:= TJSONObject.ParseJSONValue(AOutput); except V:= nil; end;
+      try V:= TJSONObject.ParseJSONValue(AOutput); except on E: Exception do DLT('uses', 'check-unit answer unreadable: ' + E.Message); end;
       try
         if V is TJSONArray then
         begin
@@ -5270,10 +5297,12 @@ begin
           for i:= 0 to Arr.Count - 1 do
             if Arr.Items[i] is TJSONObject then
             begin
-              Obj:= Arr.Items[i] as TJSONObject; AddUnit:= ''; FLine:= -1;
+              Obj:= Arr.Items[i] as TJSONObject;
+              AddUnit:= '';
+              AnsLine:= -1;
               Obj.TryGetValue<string>('addUnit', AddUnit);
-              Obj.TryGetValue<Integer>('line', FLine);
-              if (Trim(AddUnit) <> '') and (FLine = CaretRow0 + 1) then
+              Obj.TryGetValue<Integer>('line', AnsLine);
+              if (Trim(AddUnit) <> '') and (AnsLine = CaretRow0 + 1) then
               begin
                 Found:= Trim(AddUnit);
                 DLT('uses', 'quickfix: engine(line) -> ' + Found);
@@ -5852,7 +5881,7 @@ begin
     begin
       ShellExecute(0, 'open', PChar(Dir), nil, nil, SW_SHOWNORMAL);
       ShowMessage('drag-lint: exported Obsidian notes to'#13#10 + Dir);
-    end, 180000);
+    end, EXPORT_STALL_MS);
 end;
 
 

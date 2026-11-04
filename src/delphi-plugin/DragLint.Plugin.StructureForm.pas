@@ -1530,6 +1530,28 @@ begin
   PostIdeMessage('drag-lint: ' + ATitle + ': not run -- another fix is still running; wait for it to finish.');
 end;
 
+{ A Busy job for a run that rewrites AFilePath, or nil, with the refusal reported, when
+  the unit has unsaved edits (the reload would lose them) or a fix is running. }
+function NewFileRewriteJob(const AFilePath, ATitle, ACoalesceKey, ACmd: string; ATimeoutMs: Integer): TDragLintJob;
+begin
+  Result:= nil;
+  if BufferIsModified(AFilePath) then
+  begin
+    SetDragLintNote(ATitle + ': not run -- save the unit first (a fix rewrites the file on disk and reloads it)');
+    PostIdeMessage('drag-lint: ' + ATitle + ': not run -- the unit has unsaved changes; save it first.');
+    Exit;
+  end;
+  if RefusedWhileFixRuns(ATitle) then Exit;
+  Result:= TDragLintJob.Create;
+  Result.Kind       := jkGeneric;
+  Result.Busy       := True; { wait cursor until OnDone; no second fix meanwhile }
+  Result.Title      := ATitle;
+  Result.CoalesceKey:= ACoalesceKey;
+  Result.CmdLine    := ACmd;
+  Result.TimeoutMs  := ATimeoutMs;
+  Result.Streaming  := False;
+end;
+
 { The body of RunFixJob, standalone so a rename preview's OnDone -- which must
   not capture a form -- can queue the --apply run for AFilePath. }
 procedure EnqueueFixJob(const AFilePath, ATitle, ACmd: string; ATimeoutMs: Integer; const AUsesUnit: string);
@@ -1542,21 +1564,8 @@ begin
   FilePath:= AFilePath;
   UsesUnit:= AUsesUnit;
   Title   := ATitle + ' -- ' + ExtractFileName(FilePath);
-  if BufferIsModified(FilePath) then
-  begin
-    SetDragLintNote(Title + ': not run -- save the unit first (a fix rewrites the file on disk and reloads it)');
-    PostIdeMessage('drag-lint: ' + Title + ': not run -- the unit has unsaved changes; save it first.');
-    Exit;
-  end;
-  if RefusedWhileFixRuns(Title) then Exit;
-  Job:= TDragLintJob.Create;
-  Job.Kind       := jkGeneric;
-  Job.Busy       := True; { wait cursor until OnDone; no second fix meanwhile }
-  Job.Title      := Title;
-  Job.CoalesceKey:= 'autofix:' + LowerCase(FilePath) + ':' + ATitle;
-  Job.CmdLine    := ACmd;
-  Job.TimeoutMs  := ATimeoutMs;
-  Job.Streaming  := False;
+  Job:= NewFileRewriteJob(FilePath, Title, 'autofix:' + LowerCase(FilePath) + ':' + ATitle, ACmd, ATimeoutMs);
+  if Job = nil then Exit;
   Job.OnDone:=
     procedure(AExit: Integer; AOutput: string)
     var
@@ -1605,21 +1614,8 @@ var
 begin
   FilePath:= AFilePath;
   Title   := ATitle + ' -- ' + ExtractFileName(FilePath);
-  if BufferIsModified(FilePath) then
-  begin
-    SetDragLintNote(Title + ': not run -- save the unit first (this rewrites the file on disk and reloads it)');
-    PostIdeMessage('drag-lint: ' + Title + ': not run -- the unit has unsaved changes; save it first.');
-    Exit;
-  end;
-  if RefusedWhileFixRuns(Title) then Exit;
-  Job:= TDragLintJob.Create;
-  Job.Kind       := jkGeneric;
-  Job.Busy       := True;
-  Job.Title      := Title;
-  Job.CoalesceKey:= 'verb:' + LowerCase(FilePath) + ':' + ATitle;
-  Job.CmdLine    := ACmd;
-  Job.TimeoutMs  := ATimeoutMs;
-  Job.Streaming  := False;
+  Job:= NewFileRewriteJob(FilePath, Title, 'verb:' + LowerCase(FilePath) + ':' + ATitle, ACmd, ATimeoutMs);
+  if Job = nil then Exit;
   Job.OnDone:=
     procedure(AExit: Integer; AOutput: string)
     var
@@ -2338,6 +2334,8 @@ GJobQueueBusyHook:=
   end;
 
 finalization
+  FreeAndNil(GDbProbeRun);
+  FreeAndNil(GDbForFileMemo);
 GJobQueueBusyHook:= nil;
 if JobQueueBusy then Screen.Cursor:= crDefault;
 if GStructureForm <> nil then FreeAndNil(GStructureForm);

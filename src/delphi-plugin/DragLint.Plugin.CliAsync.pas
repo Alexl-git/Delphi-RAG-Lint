@@ -90,7 +90,7 @@ procedure RunCliAsync(const ACmdLine: string; const ADone: TCliRunDone; AStallMs
 /// <remarks>Main thread only. This unit's finalization calls it; call it directly
 /// only from a test. A worker that misses the budget leaks its run rather than risk
 /// freeing what it still uses.</remarks>
-function StopAllCliRuns(AWaitMs: Cardinal = CLI_ASYNC_STOP_MS): Boolean;
+function StopAllCliRuns(AWaitMs: Cardinal = CLI_ASYNC_STOP_MS): Boolean;  // dl:ok unused-public-symbol@066c -- public as the test seam: CliAsyncTests E drives it (not in the plugin index)
 
 implementation
 
@@ -166,7 +166,7 @@ begin
   try
     try
       FExitCode:= RunCaptureStdout(FCmdLine, FOutput, FStallMs, FCancel);
-    except
+    except  // dl:ok try-except-swallowed@e89e -- not swallowed: the handler logs and hands the failure to ADone as -1 with its text
       on E: Exception do
       begin
         FExitCode:= -1;

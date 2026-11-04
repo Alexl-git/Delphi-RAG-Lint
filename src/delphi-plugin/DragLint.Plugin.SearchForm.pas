@@ -28,6 +28,8 @@ const
 
 type
   TSearchHandler = class(TComponent)
+  private
+    FRun       : TCliRunSlot; { the search in flight; a newer one supersedes it }
   public
     FKind      : TComboBox ;
     FQuery     : TEdit     ;
@@ -42,7 +44,6 @@ type
     FStatus    : TLabel    ;
     FDebounce  : TTimer    ;
     FRows      : TSearchRows;
-    FRun       : TCliRunSlot; { the search in flight; a newer one supersedes it }
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function ResolveExe: string;
@@ -155,7 +156,13 @@ var
   Exe, Cmd, K, Q, Args: string;
 begin
   Q:= Trim(FQuery.Text);
-  if Q = '' then begin FRun.Cancel; FList.Items.Clear; SetEmpty('Type to search.'); Exit; end;
+  if Q = '' then
+  begin
+    FRun.Cancel;
+    FList.Items.Clear;
+    SetEmpty('Type to search.');
+    Exit;
+  end;
   Exe:= ResolveExe;
   K:= CurrentKind;
   RebuildColumns;
@@ -194,7 +201,12 @@ begin
   Q:= AQuery;
   Outp:= Trim(AOutput);
 
-  if AExitCode < 0 then begin FList.Items.Clear; SetEmpty('drag-lint not found or failed to start'); Exit; end;
+  if AExitCode < 0 then
+  begin
+    FList.Items.Clear;
+    SetEmpty('drag-lint not found or failed to start');
+    Exit;
+  end;
   if (Outp = '') or (not (CharInSet(Outp[1], ['[', '{']))) then
   begin
     FList.Items.Clear;
@@ -237,7 +249,8 @@ begin
   FRun.Cancel;
   FRows:= nil;
   FList.Items.Clear;
-  Reconfigure; RebuildColumns;
+  Reconfigure;
+  RebuildColumns;
   if Trim(FQuery.Text) <> '' then RunSearch else SetEmpty('Type to search.');
 end;
 

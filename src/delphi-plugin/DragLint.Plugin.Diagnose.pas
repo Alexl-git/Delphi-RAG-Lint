@@ -424,7 +424,8 @@ begin
   end;
   Bare:= EngineInfoCmd(nil);
   Full:= EngineInfoCmd(IndexRowDbs(Dbs, LibPath));
-  if Bare = Full then Cmds:= [Bare] else Cmds:= [Bare, Full];
+  Cmds:= [Bare];
+  if Bare <> Full then Cmds:= Cmds + [Full];
   FetchEngineInfoStep(ASlot, Cmds, 0, ADone);
 end;
 

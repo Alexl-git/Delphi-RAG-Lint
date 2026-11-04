@@ -571,7 +571,7 @@ begin
   if Length(FDbPaths) > 0 then
   begin
     for var P in FDbPaths do
-      if P <> '' then CmdLine:= CmdLine + Format(' --db "%s"', [P]);
+      if P <> '' then CmdLine:= CmdLine + Format(' --db "%s"', [P]);  // dl:ok concat-in-loop@48d4 -- one --db per index in use, a handful, once per query
   end
   else if FDbPath <> '' then CmdLine:= CmdLine + Format(' --db "%s"', [FDbPath]);
   CmdLine:= CmdLine + ' --format json';
