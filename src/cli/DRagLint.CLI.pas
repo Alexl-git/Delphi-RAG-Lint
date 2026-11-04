@@ -94,6 +94,7 @@ implementation
 uses
   DRagLint.Core.FileTime,
   Winapi.Windows
+  , DRagLint.Lint.MarkerUnion { lint-all --shared-db: the marker evidence of several project indexes }  // dl:ok uses-global-census@bdba -- MARKER_ACCOUNT_ENV is the one name parent and child share; the const is the contract
   , DRagLint.Core.CliError
 , DRagLint.Core.Encoding { EnsureUtf8Bytes -- ApplyLineMarkers reads a file the way the rules did }
   , DRagLint.Query.Implementors { implementors verb (interface report, 1.40) }
@@ -691,6 +692,9 @@ type
     // Task 5: lint-all ownership scope. --lint-third-party restores the pre-
     // Task-5 behaviour (every indexed .pas file, vendored code included).
     LintThirdParty: Boolean;
+    // lint-all --shared-db <db> (repeatable): other project indexes whose findings
+    // count as evidence for a closure-dependent review marker on a shared unit.
+    SharedDbs: TArray<string>;
     // The same scope question for `document --project`, which WRITES rather
     // than reports and so needs it more: without it a YADF run put its only two
     // edits into the vendored DelphiAST checkout. Separate flag from
@@ -873,6 +877,8 @@ begin
   Writeln('  ONE --db list works across verbs: a block written by "document --db P --db L" is');
   Writeln('  accepted by "lint-all --db P --db L". Passing them the other way round made');
   Writeln('  doc-drift report a block no command could clear (fixed 2026-08-25).');
+  Writeln('  A second --db of lint-all is that library slot, not another project: to judge a dl:ok');
+  Writeln('  on a dl:shared unit across projects, name them with --shared-db <db> (repeatable).');
   Writeln('  Omit --db entirely and the manifest resolver supplies the full set in order.');
   Writeln('  [--size-guard-mb N] [--force32] apply wherever a db is OPENED (index, query, lsp, serve):');
   Writeln('  the 32-bit build refuses a database larger than the guard because it would run out of');
@@ -1567,6 +1573,13 @@ begin
     end
     else if A = '--no-locals' then Result.NoLocals:= True
     else if A = '--lint-third-party' then Result.LintThirdParty:= True
+    else if (A = '--shared-db') and (i < ParamCount) then
+    begin
+      { lint-all only: a verb that accepted and ignored it would read as "judged". }
+      if Result.Command <> 'lint-all' then raise Exception.Create(UNKNOWN_ARG_PREFIX + A + ' (lint-all only)');  // dl:ok raise-bare-exception@2522 -- the handler in Run matches this prefix for the unknown-flag reason, like the raise at the end of this chain
+      Inc(i);
+      Result.SharedDbs:= Result.SharedDbs + [ParamStr(i)];
+    end
     else if A = '--document-third-party' then Result.DocumentThirdParty:= True
     else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then Result.ScanLibraries:= True // Win32 + Win64 (--scan-libraries is the back-compat alias)
     else if A = '--scan-libraries-all' then
@@ -12308,13 +12321,21 @@ function IsClosureDependentMarkerRule(const ARule: string): Boolean; forward;
   (LintUnjudgedMarkerRules); an unaccounted marker for one of them is not
   reported unused. nil -- lint-all, lint-project -- judges every marker.
 
+  AUnion is the evidence of `lint-all --shared-db`; nil keeps the skip for a
+  closure-dependent marker on a multi-project dl:shared unit. With it, such a marker
+  is judged only when at least as many DBs (this run + peers) scanned the unit as its
+  dl:shared lists and none lacked the evidence; it is then unused only if NO DB
+  produced its finding, and a peer's review-marker-stale for it is reported here.
+  A run started as a peer (MARKER_ACCOUNT_ENV set) writes that evidence on its way out.
+  Pinned by run_marker_shared_union.ps1.
+
   A marker on a line the preprocessor blanked is not reported unused either: no
   rule saw that line, so the run has no evidence about it (YADF FP #6). Pinned by
   run_marker_unused_inactive_line.ps1. }
 function ApplyLineMarkers(const AFindings: TArray<TLintFinding>;
   const AScannedFiles: TArray<string> = nil;
   AReviewMaxAgeDays: Integer = REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS;
-  const AUnjudgedRules: TArray<string> = nil): TArray<TLintFinding>;
+  const AUnjudgedRules: TArray<string> = nil; AUnion: TMarkerUnion = nil): TArray<TLintFinding>;
 const
   { Rules that count a comment as content, so the marker itself stops them
     firing. Measured, not assumed -- see the note at the unused-marker scan. }
@@ -12343,7 +12364,10 @@ var
   Markers   : TArray<TReviewMarker>              ;
   M         : TReviewMarker                      ;
   Want      : string                             ;
-  SharedProjects: TDictionary<string, Boolean>   ;
+  SharedProjects: TDictionary<string, Integer>   ;
+  AccountOut: string                             ;
+  PeerStale : TList<TPeerStaleHint>              ;
+  PeerUnjudged: TDictionary<string, Boolean>     ;
   PpLineCache   : TDictionary<string, TArray<string>>;
 
   { The join key between a finding and the marker that suppressed it.
@@ -12369,12 +12393,8 @@ var
     is returned unchanged. '' is guarded because it would otherwise expand to
     the cwd and turn "no path" into a real one. }
   function MarkerKey(const AFile: string; ALine: Integer; const ARule: string): string;
-  var
-    P: string;
   begin
-    P:= StringReplace(AFile, '/', '\', [rfReplaceAll]);
-    if P <> '' then P:= ExpandFileName(P);
-    Result:= LowerCase(P) + '|' + IntToStr(ALine) + '|' + LowerCase(ARule);
+    Result:= TMarkerUnion.MarkerKey(AFile, ALine, ARule);
   end;
 
   { One hint per marker, never one per finding that happened to share the line.
@@ -12397,6 +12417,15 @@ var
     H.EndLine  := ALine; H.EndCol  := 1;
     H.Message  := AMsg;
     Extra.Add(H);
+    if (AccountOut <> '') and (ARule = 'review-marker-stale') then
+    begin
+      var PS: TPeerStaleHint:= Default(TPeerStaleHint);
+      PS.FilePath  := AFile;
+      PS.Line      := ALine;
+      PS.MarkerRule:= AMarkerRule;
+      PS.Message   := AMsg;
+      PeerStale.Add(PS);
+    end;
   end;
 
   function LinesOf(const AFile: string): TArray<string>;
@@ -12459,7 +12488,10 @@ begin
   Extra    := TList<TLintFinding>.Create;
   Accounted:= TDictionary<string, Boolean>.Create;
   Emitted  := TDictionary<string, Boolean>.Create;
-  SharedProjects:= TDictionary<string, Boolean>.Create;
+  SharedProjects:= TDictionary<string, Integer>.Create;
+  AccountOut:= GetEnvironmentVariable(MARKER_ACCOUNT_ENV);
+  PeerStale := TList<TPeerStaleHint>.Create;
+  PeerUnjudged:= TDictionary<string, Boolean>.Create;
   PpLineCache:= TDictionary<string, TArray<string>>.Create;
   try
     for F in AFindings do
@@ -12870,13 +12902,32 @@ begin
                and TRegEx.IsMatch(Lines[LN - 1], ENUM_DECL_LINE) then Continue;
             { A dl:shared unit is compiled by several projects, each with its own
               index: a marker for a closure-dependent rule may be live only under
-              another project's closure (YADF FP #5, 2026-11-03). Not judged here;
-              backlog MARKER-SHARED-UNION merges findings across --db first. }
+              another project's closure (YADF FP #5, 2026-11-03). Not judged by one
+              index; `lint-all --shared-db` judges it across every project's (see
+              the header comment). }
             if IsClosureDependentMarkerRule(M.RuleId) then
             begin
-              if not SharedProjects.ContainsKey(LowerCase(SF)) then
-                SharedProjects.Add(LowerCase(SF), Length(TSharedUnit.ProjectsOf(SF)) > 1);
-              if SharedProjects[LowerCase(SF)] then Continue;
+              var Listed: Integer;
+              if not SharedProjects.TryGetValue(LowerCase(SF), Listed) then
+              begin
+                Listed:= Length(TSharedUnit.ProjectsOf(SF));
+                SharedProjects.Add(LowerCase(SF), Listed);
+              end;
+              if Listed > 1 then
+              begin
+                var UKey: string:= MarkerKey(SF, LN, M.RuleId);
+                if (AccountOut <> '') and not Accounted.ContainsKey(UKey)
+                   and (IsUndecidedSite(SF, LN, M.RuleId) or LineIsPreprocessorInactive(SF, LN)) then
+                  PeerUnjudged.AddOrSetValue(UKey, True);
+                if AUnion = nil then Continue;
+                if (1 + AUnion.PeersScanning(SF) < Listed) or AUnion.IsUnjudged(UKey) then
+                begin
+                  AUnion.NoteLeftUnjudged;
+                  Continue;
+                end;
+                AUnion.NoteJudged;
+                if AUnion.IsLive(UKey) then Continue;
+              end;
             end;
             { DLOK-UNDECIDED: the shared-unit verdict was svUndecided (a listing project's index
               is missing or stale), so the finding was withheld -- the marker cannot be judged. }
@@ -12895,8 +12946,27 @@ begin
       Known.Free;
     end;
 
+    { A marker whose only finding lives under a peer can go stale only there: the
+      peer's hint is the one report of it, so it travels to this run's report. A unit
+      this run did not scan is not this run's to report. }
+    if AUnion <> nil then
+      for var PH: TPeerStaleHint in AUnion.StaleHints do
+        if IsClosureDependentMarkerRule(PH.MarkerRule) and (Length(TSharedUnit.ProjectsOf(PH.FilePath)) > 1) then
+          for var ScanF: string in AScannedFiles do
+            if SameText(TMarkerUnion.NormalPath(ScanF), TMarkerUnion.NormalPath(PH.FilePath)) then
+            begin
+              EmitHint(PH.FilePath, PH.Line, 'review-marker-stale',
+                PH.Message + Format(' (the finding exists under --shared-db %s)', [PH.PeerDb]), PH.MarkerRule);
+              Break;
+            end;
+    if AccountOut <> '' then
+      TMarkerUnion.WriteAccount(AccountOut, AScannedFiles, Accounted.Keys.ToArray, PeerUnjudged.Keys.ToArray,
+        PeerStale.ToArray);
+
     Result:= Kept.ToArray + Extra.ToArray;
   finally
+    PeerUnjudged.Free;
+    PeerStale.Free;
     PpLineCache.Free;
     SharedProjects.Free;
     Emitted.Free;
@@ -13274,6 +13344,116 @@ procedure EmitNoteLine(const AArgs: TArgs; const AText: string);
 begin
   if not IsMachineReadableOutput(AArgs) then Writeln(AText);
 end; // procedure
+
+/// <summary>Runs this engine with the given arguments, nothing on the console, and
+/// waits for it.</summary>
+/// <param name="ACmdArgs">The command line after the exe name.</param>
+/// <param name="AExitCode">The child's exit code; 0 when it could not start.</param>
+/// <returns>False when the process could not be started.</returns>
+function RunSelfSilently(const ACmdArgs: string; out AExitCode: Cardinal): Boolean;
+var
+  SA : TSecurityAttributes;
+  SI : TStartupInfoW      ;
+  PI : TProcessInformation;
+  Nul: THandle            ;
+  Cmd: string             ;
+begin
+  AExitCode:= 0;
+  ZeroMemory(@SA, SizeOf(SA));
+  SA.nLength:= SizeOf(SA);
+  SA.bInheritHandle:= True;
+  Nul:= CreateFileW('NUL', GENERIC_READ or GENERIC_WRITE, FILE_SHARE_READ or FILE_SHARE_WRITE, @SA, OPEN_EXISTING, 0, 0);
+  if Nul = INVALID_HANDLE_VALUE then Exit(False);
+  try
+    ZeroMemory(@SI, SizeOf(SI));
+    SI.cb:= SizeOf(SI);
+    SI.dwFlags:= STARTF_USESTDHANDLES;
+    SI.hStdInput := Nul;
+    SI.hStdOutput:= Nul;
+    SI.hStdError := Nul;
+    ZeroMemory(@PI, SizeOf(PI));
+    Cmd:= '"' + ParamStr(0) + '" ' + ACmdArgs;
+    UniqueString(Cmd);
+    Result:= CreateProcessW(nil, PChar(Cmd), nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, PI);
+    if not Result then Exit;
+    try
+      WaitForSingleObject(PI.hProcess, INFINITE);
+      GetExitCodeProcess(PI.hProcess, AExitCode);
+    finally
+      CloseHandle(PI.hThread);
+      CloseHandle(PI.hProcess);
+    end;
+  finally
+    CloseHandle(Nul);
+  end;
+end; // function
+
+/// <summary>Runs `lint-all --db peer` once per --shared-db and merges what each run
+/// learned about review markers.</summary>
+/// <param name="AArgs">Parsed args; the rule, config and preprocess selections carry
+/// over so a peer answers the same question the primary was asked.</param>
+/// <param name="APrimaryDb">The store this run reports from; naming it as a peer adds
+/// no witness, so it is skipped with a note.</param>
+/// <returns>The merged evidence, owned by the caller; nil when no --shared-db was given.</returns>
+/// <remarks>A peer that fails, or leaves no complete account, took no part: it is named
+/// on stderr and the markers it could have witnessed stay unjudged -- never "no finding
+/// there". Peers run one after another, each costing a full lint-all of its DB.</remarks>
+function RunMarkerPeers(const AArgs: TArgs; const APrimaryDb: string): TMarkerUnion;
+const
+  EXIT_FINDINGS_SURVIVED = 1;
+var
+  CommonArgs: string;
+  Seen: TArray<string>;
+
+  function Quoted(const AValue: string): string;
+  begin
+    Result:= '"' + AValue + '"';
+  end;
+
+  procedure AddFlag(const AFlag, AValue: string);
+  begin
+    if AValue <> '' then CommonArgs:= CommonArgs + ' ' + AFlag + ' ' + Quoted(AValue);
+  end;
+
+begin
+  Result:= nil;
+  if Length(AArgs.SharedDbs) = 0 then Exit;
+  Result:= TMarkerUnion.Create;
+  CommonArgs:= '--json --quiet';
+  AddFlag('--rule', AArgs.Rule);
+  AddFlag('--enable', AArgs.Enable);
+  AddFlag('--disable', AArgs.Disable);
+  AddFlag('--config', AArgs.ConfigPath);
+  AddFlag('--platform', AArgs.CheckPlatform);
+  AddFlag('--target-compiler', AArgs.TargetCompiler);
+  if AArgs.NoPreprocess then CommonArgs:= CommonArgs + ' --no-preprocess';
+  if AArgs.LintThirdParty then CommonArgs:= CommonArgs + ' --lint-third-party';
+  Seen:= [ExpandFileName(APrimaryDb)];
+  for var Peer: string in AArgs.SharedDbs do
+  begin
+    var FullPeer: string:= ExpandFileName(Peer);
+    if MatchText(FullPeer, Seen) then
+    begin
+      EmitNoteLine(AArgs, Format('lint-all: --shared-db %s is already part of this run; it adds no witness.', [Peer]));
+      Continue;
+    end;
+    Seen:= Seen + [FullPeer];
+    EmitNoteLine(AArgs, Format('lint-all: --shared-db: running %s ...', [Peer]));
+    var AccountFile: string:= TPath.Combine(TPath.GetTempPath,
+      'draglint-marker-account-' + TGUID.NewGuid.ToString + '.tsv');
+    var ChildExit: Cardinal;
+    SetEnvironmentVariable(MARKER_ACCOUNT_ENV, PChar(AccountFile));
+    try
+      var Started: Boolean:= RunSelfSilently('lint-all --db ' + Quoted(Peer) + ' ' + CommonArgs, ChildExit);
+      if not (Started and (ChildExit <= EXIT_FINDINGS_SURVIVED) and Result.AddPeerAccount(AccountFile, Peer)) then
+        EmitStatusLine(AArgs, Format('lint-all: --shared-db %s took no part (exit %d): the markers it could ' +
+          'have witnessed stay unjudged.', [Peer, ChildExit]));
+    finally
+      SetEnvironmentVariable(MARKER_ACCOUNT_ENV, nil);
+      System.SysUtils.DeleteFile(AccountFile); { none is written when a peer dies early; False is fine }
+    end;
+  end;
+end; // function
 
 /// <summary>Shared output tail for the finding-producing commands. Applies line
 /// suppressions, config (severity remap + enable/disable), and the baseline, then
@@ -14075,7 +14255,7 @@ end;
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
   const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil;
   const APrimaryDb: string = ''; const AWalkSkipped: TArray<string> = nil;
-  const AUnjudgedRules: TArray<string> = nil): Integer;
+  const AUnjudgedRules: TArray<string> = nil; AMarkerUnion: TMarkerUnion = nil): Integer;
 var
   Cfg      : TLintConfig         ;
   Survivors: TArray<TLintFinding>;
@@ -14181,7 +14361,7 @@ begin
     unreviewed's age limit; the filter that USES the config stays at step 1. }
   Cfg:= LoadLintConfig(AArgs);
   AFindings:= ApplyLineMarkers(AFindings, ScopedScan,
-    Cfg.ThresholdFor('review-marker-reason-unreviewed', REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS), AUnjudgedRules);
+    Cfg.ThresholdFor('review-marker-reason-unreviewed', REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS), AUnjudgedRules, AMarkerUnion);
 
   { 1: config -- severity remap + enable/disable filter.
 
@@ -22642,6 +22822,12 @@ var
 begin
   if not ApplyRunTargetCompiler(AArgs, LoadLintConfig(AArgs).TargetCompiler) then Exit(2);
   if LintAllRefusesFile(AArgs) or not ExplicitDbsExist(AArgs, 'lint-all') then Exit(2);
+  for var SharedDb: string in AArgs.SharedDbs do
+    if not TFile.Exists(SharedDb) then
+    begin
+      Writeln(ErrOutput, Format('ERROR: lint-all: --shared-db does not exist: %s. Nothing was answered.', [SharedDb]));
+      Exit(2);
+    end;
   TailPhase:= 0;
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
@@ -23540,6 +23726,8 @@ begin
     Config "enabled":["<id>"] still overrides any of them (opt-in). doc-drift
     stays ON -- do NOT add it. }
   LintPhase('finalize+output');
+  var MarkerUnion: TMarkerUnion:= RunMarkerPeers(AArgs, ProjectDb);
+  try
   Result:= FinalizeAndOutput(
     { ...less the --rule id: naming a rule opts it back in for this run, the
       contract `lint` states at its own DefDisabled build-up (D4). }
@@ -23662,10 +23850,18 @@ begin
     Store, { ADF Task 8: enables the store-backed doc-drift --fix path }
     FilePaths, { the scanned set -- what makes review-marker-unused able to see a
                  marker in a file that now reports nothing }
-    ProjectDb  { the store actually opened above -- the doc --fix path renders
+    ProjectDb, { the store actually opened above -- the doc --fix path renders
                  under options defined relative to it, and lint-all's primary is
                  NOT AArgs.DbPath. See OpenExtraStoresExcept. }
+    nil, nil, MarkerUnion
   );
+  if MarkerUnion <> nil then
+    EmitNoteLine(AArgs, Format('lint-all: --shared-db: %d marker(s) judged across %d DB(s), %d left unjudged ' +
+      '(fewer DBs scan the unit than its dl:shared lists, or one has no evidence).',
+      [MarkerUnion.Judged, 1 + MarkerUnion.Peers, MarkerUnion.LeftUnjudged]));
+  finally
+    MarkerUnion.Free;
+  end;
   { 100% means FINISHED -- the report is written and every phase is done. It is
     emitted exactly once, here, so a reader (and the IDE bar) can treat it as a
     completion signal rather than as "the scan loop ended", which is what it

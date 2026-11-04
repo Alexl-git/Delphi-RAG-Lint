@@ -6,7 +6,7 @@ finding. Reach for it as the overall project health check.
 
 ## Running it from the CLI
 ```
-drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party]
+drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--shared-db <db> ...]
 ```
 `--project <.dproj|.dpr>` reports only on the units that project compiles (its
 compile closure + their `.dfm` siblings) -- use it when one folder holds
@@ -23,6 +23,30 @@ named in the skip block like any third-party root. `--disable id,...` turns off 
 The shared Output/CI flags also apply: `--format sarif`, `--fail-on <level>`,
 `--config <file>`, `--enable id1,id2`, `--profile <name>`, `--baseline <file>`,
 `--write-baseline <file>`.
+
+## Judging a marker on a unit several projects share
+
+A `dl:ok` for a closure-dependent rule (project-scope, class-metric, taint,
+doc-drift, cross-file `duplicate-code`) on a unit whose `dl:shared` marker lists
+several projects may be live only under another project's compile closure. One
+index cannot tell, so a plain `lint-all` skips the verdict on such a marker.
+`--shared-db <db>`, repeatable, names the other projects' indexes:
+```
+drag-lint lint-all --db <A.sqlite> --shared-db <B.sqlite>
+```
+Each `--shared-db` runs as its own `lint-all --db <it>` (a full run per peer, with
+the same `--rule`, `--enable`, `--disable`, `--config`, `--platform`,
+`--target-compiler`, `--no-preprocess` and `--lint-third-party`), and the report stays the primary's:
+
+* `review-marker-unused` only if NO DB produces the finding.
+* `review-marker-stale` when a peer's finding no longer matches the marker's hash,
+  naming that peer.
+* No verdict -- today's skip -- when fewer DBs scanned the unit than its `dl:shared`
+  lists, when a DB has no evidence for the line (preprocessor-blanked, undecided),
+  or when a peer could not run (named on stderr). A closing note counts the markers
+  judged and left.
+
+`--db A --db B` is NOT this: the second `--db` is the library slot.
 
 ## Reaching it in the IDE
 drag-lint > Code Quality > Run Lint All (Full Report)...

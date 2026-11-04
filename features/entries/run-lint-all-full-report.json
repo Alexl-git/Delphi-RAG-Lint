@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "lint-all",
-      "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]",
+      "usage": "drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...]",
       "flags": [
         {
           "name": "--db",
@@ -55,6 +55,11 @@
           "name": "--no-preprocess"
         },
         {
+          "name": "--shared-db",
+          "arg": "<db>",
+          "summary": "another project index, repeatable: evidence for a closure-dependent dl:ok on a dl:shared unit"
+        },
+        {
           "name": "--fix"
         },
         {
@@ -67,7 +72,7 @@
     }
   ],
   "audience": "both",
-  "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.", "A vendored folder INSIDE the project folder is linted as your own code until `excludeRoots` names it in `<project>\\_D-RAG\\drag-lint-project.json`."],
+  "pitfalls": ["A second --db is the library slot, not another project: to judge a dl:ok on a dl:shared unit use --shared-db.", "lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.", "A vendored folder INSIDE the project folder is linted as your own code until `excludeRoots` names it in `<project>\\_D-RAG\\drag-lint-project.json`."],
   "questions": [
     {
       "ask": "How healthy is my whole project against every lint rule?",
@@ -80,12 +85,16 @@
     {
       "ask": "How do I write the full lint report to a file?",
       "command": "drag-lint lint-all --db <file.sqlite> --output <report.txt>"
+    },
+    {
+      "ask": "Is a dl:ok on a unit shared by two projects still needed?",
+      "command": "drag-lint lint-all --db <A.sqlite> --shared-db <B.sqlite>"
     }
   ],
   "verified": {
-    "date": "2026-10-28",
+    "date": "2026-11-04",
     "by": "ENGINE",
-    "build": "1.36.0-alpha",
-    "surfaceHash": "557189816aa3fa2848eb840f8019f130d131a4c43c1b3437eadc1a0d5c9d8fa2"
+    "build": "1.42.0-alpha",
+    "surfaceHash": "d1d282ef70da519514c2596faf63b3dac0d88bec4d2c4e8dd66c6b5e96629842"
   }
 }
