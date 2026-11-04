@@ -67,6 +67,7 @@ uses
   System.IOUtils,
   System.Math,
   System.StrUtils,
+  DRagLint.Core.ControlChannel, { BeatStep / BeatProgress: the stage's progress }
   DRagLint.Core.FileTime;
 
 const
@@ -740,6 +741,7 @@ begin
   I:= 0;
   while I <= High(FRoutines) do
   begin
+    BeatProgress(I); { one report per file; N counts routines }
     FileId:= FRoutines[I].FileId;
     J:= I;
     while (J <= High(FRoutines)) and (FRoutines[J].FileId = FileId) do Inc(J);
@@ -1438,16 +1440,20 @@ var
 begin
   FStats:= Default(TPurityStats);
   Sw:= TStopwatch.StartNew;
+  BeatStep('purity load');
   Load;
   BuildContexts;
   TLoad:= SecondsOf(Sw);
   Sw:= TStopwatch.StartNew;
+  BeatStep('purity scan', Length(FRoutines));
   ScanFiles;
   TScan:= SecondsOf(Sw);
   Sw:= TStopwatch.StartNew;
+  BeatStep('purity fixpoint');
   FixPoint;
   TFix:= SecondsOf(Sw);
   Sw:= TStopwatch.StartNew;
+  BeatStep('purity write', Length(FRoutines));
   WriteVerdicts;
   TWrite:= SecondsOf(Sw);
   Report(TLoad, TScan, TFix, TWrite);

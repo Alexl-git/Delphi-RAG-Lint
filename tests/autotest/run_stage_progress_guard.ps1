@@ -82,11 +82,16 @@ try {
   New-Item -ItemType Directory $big -Force | Out-Null
   $Calls = 1500
   $body = (1..$Calls | ForEach-Object { '  Work;' }) -join "`r`n"
-  [IO.File]::WriteAllText((Join-Path $big 'ProgBig.pas'), "unit ProgBig;`r`n`r`ninterface`r`n`r`nprocedure Work;`r`nprocedure Many;`r`n`r`nimplementation`r`n`r`nprocedure Work;`r`nbegin`r`nend;`r`n`r`nprocedure Many;`r`nbegin`r`n$body`r`nend;`r`n`r`nend.`r`n", [Text.Encoding]::ASCII)
+  $extraDecl = (1..300 | ForEach-Object { "procedure Extra$_;" }) -join "`r`n"
+  $extraImpl = (1..300 | ForEach-Object { "procedure Extra$_;`r`nbegin`r`n  Work;`r`nend;" }) -join "`r`n`r`n"
+  [IO.File]::WriteAllText((Join-Path $big 'ProgBig.pas'), "unit ProgBig;`r`n`r`ninterface`r`n`r`nprocedure Work;`r`nprocedure Many;`r`n$extraDecl`r`n`r`nimplementation`r`n`r`nprocedure Work;`r`nbegin`r`nend;`r`n`r`n$extraImpl`r`n`r`nprocedure Many;`r`nbegin`r`n$body`r`nend;`r`n`r`nend.`r`n", [Text.Encoding]::ASCII)
   $bdb = Join-Path $WorkDir 'big.sqlite'
   $b = Run-Exe @('index', $big, '--db', $bdb) @{ DRAGLINT_STAGE_HEARTBEAT_MS = 1 }
   $counted = @($b.Text -split "`r?`n" | Where-Object { $_ -match 'resolve calls (\d+) of (\d+)' -and [int]$Matches[2] -ge $Calls })
   Check 'P4 the calls stream reports N of an exact M' (($b.Code -eq 0) -and ($counted.Count -gt 0)) "exit=$($b.Code) lines=$($counted.Count) first='$(if ($counted.Count) { $counted[0].Trim() })'"
+  $pur = @($b.Text -split "`r?`n" | Where-Object { $_ -match 'stage: purity -- still running.*purity \w+' })
+  $sea = @($b.Text -split "`r?`n" | Where-Object { $_ -match 'stage: search -- still running.*search \w+' })
+  Check 'P5 purity and search name their step on the beat line' (($pur.Count -gt 0) -and ($sea.Count -gt 0)) "purity=$($pur.Count) search=$($sea.Count)"
 }
 catch {
   Write-Host "FATAL: $($_.Exception.Message)" -ForegroundColor Red

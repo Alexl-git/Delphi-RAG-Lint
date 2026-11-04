@@ -10558,6 +10558,7 @@ begin
                    'LEFT JOIN symbol_docs d ON d.symbol_id = s.id ' +
                    'WHERE s.kind IN (' + CONCEPT_SEARCH_KINDS + ') ' +
                    'AND NOT EXISTS (SELECT 1 FROM symbol_search x WHERE x.symbol_id = s.id)';
+      BeatStep('search symbols');
       Q.Open;
       FldId   := Q.FieldByName('id');
       FldName := Q.FieldByName('name');
@@ -10580,6 +10581,7 @@ begin
         if R.Tokens = '' then R.Tokens:= Name.ToLower;
         Rows.Add(R);
         FileSet.AddOrSetValue(R.FileId, True);
+        BeatProgress;
         Q.Next;
       end; // while
       Q.Close;
@@ -10604,6 +10606,7 @@ begin
           Q.Next;
         end; // while
         Q.Close;
+        BeatStep('search literals');
         Q.SQL.Text:= 'SELECT file_id, start_line, end_line, text FROM string_literals ' +
                      'WHERE kind = ''doc''' + FileFilter + ' ORDER BY file_id, start_line';
         Q.Open;
@@ -10626,6 +10629,7 @@ begin
           if Block.Length > 0 then Block.Append(' ');
           Block.Append(FldText.AsString);
           BlockEnd := LitEnd;
+          BeatProgress;
           Q.Next;
         end; // while
         FlushBlock;
@@ -10650,6 +10654,7 @@ begin
         Ins.Prepare;
         Q.SQL.Text:= 'DELETE FROM symbol_search WHERE symbol_id NOT IN (SELECT id FROM symbols)';
         Q.ExecSQL;
+        BeatStep('search write', Rows.Count);
         for R in Rows do  // dl:ok duplicate-code@b0f0 -- the prepared-insert-in-one-transaction shape PutEffectFacts also uses; PutEffectFacts is a hashed emit routine, so sharing a helper with it would bill an extractor re-parse
         begin
           Ins.ParamByName('sid').AsLargeInt:= R.Id;
@@ -10657,6 +10662,7 @@ begin
           if R.Summary = '' then Ins.ParamByName('sum').Clear else Ins.ParamByName('sum').Value:= R.Summary;
           if R.Remarks = '' then Ins.ParamByName('rem').Clear else Ins.ParamByName('rem').Value:= R.Remarks;
           Ins.ExecSQL;
+          BeatProgress;
         end; // for
         FConn.Commit;
       finally
