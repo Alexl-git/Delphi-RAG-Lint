@@ -8,6 +8,7 @@
     P2 control: the same hold with a counter that stands still shows no rate above 0
     P3 `shutdown --all --dry-run` shows the running engine's step from outside; it asks nothing
        (the engine still ends 0 with its rows)
+    P4 the resolve streams report N of an exact M: esolve calls on the beat line, over a fixture of known size
 
   Scratch only (-WorkDir); --dry-run only, so it cannot stop an engine it did not start. pwsh 7.
 #>
@@ -76,6 +77,16 @@ try {
   }
   $e = Finish $h
   Check 'P3 shutdown --dry-run shows the step from outside, and the engine carries on to exit 0' (($seen -ne '') -and ($e.Code -eq 0)) "exit=$($e.Code) '$seen'"
+
+  $big = Join-Path $WorkDir 'big'
+  New-Item -ItemType Directory $big -Force | Out-Null
+  $Calls = 1500
+  $body = (1..$Calls | ForEach-Object { '  Work;' }) -join "`r`n"
+  [IO.File]::WriteAllText((Join-Path $big 'ProgBig.pas'), "unit ProgBig;`r`n`r`ninterface`r`n`r`nprocedure Work;`r`nprocedure Many;`r`n`r`nimplementation`r`n`r`nprocedure Work;`r`nbegin`r`nend;`r`n`r`nprocedure Many;`r`nbegin`r`n$body`r`nend;`r`n`r`nend.`r`n", [Text.Encoding]::ASCII)
+  $bdb = Join-Path $WorkDir 'big.sqlite'
+  $b = Run-Exe @('index', $big, '--db', $bdb) @{ DRAGLINT_STAGE_HEARTBEAT_MS = 1 }
+  $counted = @($b.Text -split "`r?`n" | Where-Object { $_ -match 'resolve calls (\d+) of (\d+)' -and [int]$Matches[2] -ge $Calls })
+  Check 'P4 the calls stream reports N of an exact M' (($b.Code -eq 0) -and ($counted.Count -gt 0)) "exit=$($b.Code) lines=$($counted.Count) first='$(if ($counted.Count) { $counted[0].Trim() })'"
 }
 catch {
   Write-Host "FATAL: $($_.Exception.Message)" -ForegroundColor Red
