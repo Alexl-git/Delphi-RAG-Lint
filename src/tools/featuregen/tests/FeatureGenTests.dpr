@@ -32,6 +32,7 @@ uses
 
 var
   GPass: Integer = 0;
+  GSkip: Integer = 0;
   GFail: Integer = 0;
 
 procedure Check(const pName: string; pCond: Boolean; const pDetail: string = '');
@@ -1925,6 +1926,64 @@ begin
     Result := 'empty live kinds: ' + Result;
 end;
 
+{ Why the real repo's live surface cannot be harvested HERE, or '' when it can. Only the ABSENT
+  plugin index qualifies: a fresh worktree has none (it is gitignored, prepare_battery.ps1 builds
+  it). A stale index, a dead engine or an empty kind are not skips: they still fail. }
+function PluginIndexSkipReason(const pRepo: string): string;
+begin
+  Result := '';
+  if not TFile.Exists(TPath.Combine(pRepo, PLUGIN_DB)) then
+    Result := 'no plugin index at ' + TPath.Combine(pRepo, PLUGIN_DB) +
+      ' (gitignored; absent in a fresh worktree), so the real repo''s live surface cannot be harvested';
+end;
+
+{ One SKIP line with its reason. This runner stays usable in a worktree, but the SKIP is not a
+  pass: tests\autotest\run_featuregen_tests.ps1 fails on any SKIP line, so the battery cannot lose
+  these pins silently. }
+procedure SkipTest(const pName, pReason: string);
+begin
+  Inc(GSkip);
+  Writeln('SKIP ', pName, ' ', pReason);
+end;
+
+type
+  TRepoTest = procedure(const pRepo: string);
+
+{ Runs a test that needs the real repo's live surface, or skips it with the reason. Without this
+  the harvest's exception reached the top-level handler and every later test silently never ran. }
+procedure RunLiveTest(const pName, pRepo: string; pTest: TRepoTest);
+var
+  lReason: string;
+begin
+  lReason := PluginIndexSkipReason(pRepo);
+  if lReason <> '' then
+    SkipTest(pName, lReason)
+  else
+    pTest(pRepo);
+end;
+
+{ Positive controls of the skip: it fires only on the absent index, and with the index present a
+  real empty kind still reaches the FAIL detail Live.HarvestEveryKindNonEmpty reports. }
+procedure TestLiveSkipPositiveControl;
+var
+  lDir, lDb, lDetail: string;
+begin
+  FreeAndNil(GLive);
+  lDir := FreshDir('plugin-index-skip');
+  Check('Live.SkipFiresOnAbsentPluginIndex', PluginIndexSkipReason(lDir) <> '', 'no reason for a repo with no plugin index');
+  lDb := TPath.Combine(lDir, PLUGIN_DB);
+  TDirectory.CreateDirectory(ExtractFilePath(lDb));
+  TFile.WriteAllText(lDb, '');
+  Check('Live.SkipSilentWhenPluginIndexExists', PluginIndexSkipReason(lDir) = '', PluginIndexSkipReason(lDir));
+  GLive := TLiveSurface.Create; { every kind empty, the health check must name them }
+  try
+    lDetail := LiveHealthDetail(lDir, MainEngine);
+  finally
+    FreeAndNil(GLive);
+  end;
+  Check('Live.EmptyKindStillFailsWithIndexPresent', lDetail.StartsWith('empty live kinds: '), lDetail);
+end;
+
 procedure TestHarvestFailureIsCleanFail;
 var
   lDetail: string;
@@ -1938,7 +1997,7 @@ procedure TestLiveHarvestParity(const pRepo: string);
 var
   lFile: string;
   lPsLines, lMine, lMissing, lExtra: TArray<string>;
-  lMsg: string;
+  lMsg, lSkip: string;
 begin
   lFile := GoldenFile(pRepo, 'live\live.txt');
   lMsg := '';
@@ -1954,7 +2013,11 @@ begin
   CompareFindingSets(lPsLines, lMine, lMissing, lExtra);
   Check('Live.HarvestEqualsGolden', (lMsg = '') and (Length(lPsLines) > 100) and (Length(lMissing) = 0) and (Length(lExtra) = 0),  // dl:ok magic-literal@c059 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     lMsg + ' missing: ' + string.Join(' | ', Copy(lMissing, 0, 8)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 8)));  // dl:ok magic-literal@8005 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
-  Check('Live.HarvestEveryKindNonEmpty', LiveHealthDetail(pRepo, MainEngine) = '', LiveHealthDetail(pRepo, MainEngine));
+  lSkip := PluginIndexSkipReason(pRepo);
+  if lSkip <> '' then
+    SkipTest('Live.HarvestEveryKindNonEmpty', lSkip)
+  else
+    Check('Live.HarvestEveryKindNonEmpty', LiveHealthDetail(pRepo, MainEngine) = '', LiveHealthDetail(pRepo, MainEngine));
 end;
 { The "add this entry" template inside a B finding carries the date of the day it was
   rendered ("date": "2026-10-19"); the frozen golden was rendered on its capture day. The
@@ -3742,6 +3805,7 @@ begin
     begin
       TestSharedLiveNotCachedOnFailure(lRepo);
       TestHarvestFailureIsCleanFail;
+      TestLiveSkipPositiveControl;
       TestHarvestRaisesOnEmptySubMap(lRepo);
       TestLiveHarvestParity(lRepo);
       lGold := GoldenRepo(lRepo);
@@ -3756,15 +3820,15 @@ begin
       TestMarkedBlockNoMarkers;
       TestSeededImporterAndFileChecks(lRepo);
       TestSinceOverride(lRepo);
-      TestPositiveControls(lRepo);
-      TestMenuPathChecks(lRepo);
+      RunLiveTest('TestPositiveControls', lRepo, TestPositiveControls);
+      RunLiveTest('TestMenuPathChecks', lRepo, TestMenuPathChecks);
       TestHelpText(lRepo);
       TestFlagAliasPolicy(lRepo);
       TestHelpOrderTiebreak;
-      TestPlannedSkipsLive(lRepo);
+      RunLiveTest('TestPlannedSkipsLive', lRepo, TestPlannedSkipsLive);
       TestWellFormedCatchesBadEntry(lRepo);
-      TestBacklogReadsVerified(lRepo);
-      TestDocsChecksEndToEnd(lRepo);
+      RunLiveTest('TestBacklogReadsVerified', lRepo, TestBacklogReadsVerified);
+      RunLiveTest('TestDocsChecksEndToEnd', lRepo, TestDocsChecksEndToEnd);
       TestCommands(lRepo);
     end;
   except
@@ -3782,7 +3846,10 @@ begin
     on E: Exception do
       Writeln('INFO scratch folder not removed: ', SCRATCH, ' (', E.Message, ')');
   end;
-  Writeln(Format('SUMMARY pass=%d fail=%d', [GPass, GFail]));
+  if GSkip > 0 then
+    Writeln(Format('SUMMARY pass=%d fail=%d skip=%d', [GPass, GFail, GSkip]))
+  else
+    Writeln(Format('SUMMARY pass=%d fail=%d', [GPass, GFail]));
   if GFail > 0 then
     Halt(1);
 end.
