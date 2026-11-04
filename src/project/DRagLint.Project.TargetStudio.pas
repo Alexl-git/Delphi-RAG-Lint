@@ -21,7 +21,7 @@ interface
 
 uses
   DRagLint.Index.Closure
-  , DRagLint.Project.Resolver  // dl:ok uses-global-census -- REVIEWED 2026-11-04: DEFAULT_BDS_KEY belongs with the resolver this unit opens per key
+  , DRagLint.Project.Resolver  // dl:ok uses-global-census@d4b1 -- REVIEWED 2026-11-04: DEFAULT_BDS_KEY belongs with the resolver this unit opens per key
   ;
 
 type
@@ -90,7 +90,7 @@ uses
   , System.Classes
   , System.RegularExpressions
   , System.Generics.Collections
-  , DRagLint.Lint.TargetCompiler  // dl:ok uses-global-census -- REVIEWED 2026-11-04: TARGET_COMPILER_AUTO is the token of the resolver call this unit makes
+  , DRagLint.Lint.TargetCompiler  // dl:ok uses-global-census@d7c5 -- REVIEWED 2026-11-04: TARGET_COMPILER_AUTO is the token of the resolver call this unit makes
   , DRagLint.Preprocess.Profile
   ;
 

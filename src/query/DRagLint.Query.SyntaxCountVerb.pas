@@ -21,7 +21,7 @@ implementation
 
 uses
   System.SysUtils, System.JSON,
-  DRagLint.Core.CliError, DRagLint.Core.Interfaces, DRagLint.Core.Model,  // dl:ok uses-global-census -- REVIEWED 2026-11-04: CLI_ERR_UNKNOWN_FLAG is the shared exit vocabulary of every verb
+  DRagLint.Core.CliError, DRagLint.Core.Interfaces, DRagLint.Core.Model,  // dl:ok uses-global-census@6918 -- REVIEWED 2026-11-04: CLI_ERR_UNKNOWN_FLAG is the shared exit vocabulary of every verb
   DRagLint.Storage.SQLite, DRagLint.CLI.HelpText, DRagLint.Query.SyntaxCount;
 
 const
