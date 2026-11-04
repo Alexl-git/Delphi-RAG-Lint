@@ -12,6 +12,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 1.42.0-alpha
 
 * [syntax-count](features/syntax-count.md) -- Counts modern syntax in the parse of every unit, uncapped: Delphi 13 if-expressions, is not, not in; inline var/const; anonymous methods; multiline strings.
+* [Library path of the project's Delphi](features/target-bds-library-path.md) -- index reads the library path, IDE variables and $(BDS) from the BDS key of the project's target; a missing key falls back to 37.0 with a one-line note.
 
 ## 1.40.0-alpha
 

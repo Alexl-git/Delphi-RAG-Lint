@@ -86,13 +86,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CheckUsedUnitResolvable(const AStore: ISymbolStore;
-        const ALibDbPath: string): TArray<TLintFinding>;
+        const ALibDbPath: string; const AProjectFile: string = ''): TArray<TLintFinding>;
   end;
 
 implementation
 
 uses
   FireDAC.Comp.Client
+  , DRagLint.Project.TargetStudio { ResolveTargetStudio: the project's Delphi, for the .dcu search (GH #13) }
   , DRagLint.Storage.FileMembership { ConnectReadOnly: the shared reader open }
   ;
 
@@ -315,7 +316,7 @@ begin
 end; // function
 
 class function TProjectChecks.CheckUsedUnitResolvable(const AStore: ISymbolStore;
-  const ALibDbPath: string): TArray<TLintFinding>;
+  const ALibDbPath: string; const AProjectFile: string): TArray<TLintFinding>;
 var
   Findings   : TList<TLintFinding>;
   Members    : TDictionary<string, Boolean>; { normalized stems of indexed units }
@@ -353,7 +354,7 @@ var
     Plat := ChangeFileExt(ExtractFileName(ALibDbPath), '');
     if StartsText('library-', Plat) then Plat := Copy(Plat, Length('library-') + 1, MaxInt) else Plat := '';
     if Plat = '' then Exit;
-    Resolver := DRagLint.Project.Resolver.TProjectResolver.Create;
+    Resolver := ResolveTargetStudio(AProjectFile).OpenResolver;
     try
       for Dir in Resolver.ReadPlatformLibraryPaths(Plat) do
       begin

@@ -120,6 +120,18 @@
     "verb": "resolve-dbs"
   },
   {
+    "id": "target-bds-library-path",
+    "title": "Library path of the project's Delphi",
+    "summary": "index reads the library path, IDE variables and $(BDS) from the BDS key of the project's target; a missing key falls back to 37.0 with a one-line note",
+    "group": "indexing",
+    "order": 10011,
+    "since": "1.42.0-alpha",
+    "file": "features/target-bds-library-path.md",
+    "menus": [],
+    "context": [],
+    "verb": "index"
+  },
+  {
     "id": "call-path",
     "title": "call-path",
     "summary": "Finds the shortest resolved call path from one symbol to another",

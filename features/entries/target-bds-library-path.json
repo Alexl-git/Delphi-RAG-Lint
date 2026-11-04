@@ -1,0 +1,28 @@
+{
+  "id": "target-bds-library-path",
+  "title": "Library path of the project's Delphi",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.42.0-alpha",
+  "summary": "index reads the library path, IDE variables and $(BDS) from the BDS key of the project's target; a missing key falls back to 37.0 with a one-line note",
+  "intro": "Read this when a project targets an older Delphi: index follows it for the library path too, so units only that Delphi's Search Path names join the closure and their callers bind.",
+  "wikiPage": "target-bds-library-path",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "index"
+    },
+    {
+      "type": "cli",
+      "verb": "reconcile-project"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-03",
+    "by": "ENGINE",
+    "build": "1.42.0-alpha",
+    "surfaceHash": "ead44514ae4938cc9b042eeb688059fa2d1f21dcd0e0709503fe6dad9ebf767e"
+  }
+}

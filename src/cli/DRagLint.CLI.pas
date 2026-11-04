@@ -138,6 +138,7 @@ uses
   , DRagLint.Index.LibraryOracle { TLibraryOracle -- find-callees binds a value receiver typed by name to a library routine (item 4) }
   , DRagLint.Lint.Autofix   { IsFixableRule & co. + BuildAutofixEdits -- the autofix registry (lane A0) }
   , DRagLint.Lint.TargetCompiler { --target-compiler: ResolveTargetCompiler, TTargetRuleGate (1.38) }
+  , DRagLint.Project.TargetStudio { GH #13: the library path of the project's Delphi }
   { DRagLint.Core.Model moved to the INTERFACE uses (for DRAGLINT_VERSION); it
     must not be listed twice. }
   , DRagLint.Core   .Interfaces
@@ -2837,6 +2838,20 @@ end;
 // Caller owns + must free the returned object.
 function SectionIndexBuild(const AItem: TPlanSection; const ABuildConfig: string): TActiveBuild; forward;
 
+/// <summary>The Studio key a closure section reads: as ApplySectionCompilerVersion
+/// chooses the section's defines, from the .dproj of its first root.</summary>
+/// <param name="AItem">The plan section.</param>
+/// <returns>The default key for anything but a closure section.</returns>
+function SectionTargetStudio(const AItem: TPlanSection): TTargetStudio;
+var
+  Dproj: string;
+begin
+  Dproj:= '';
+  if (AItem.Mode = smClosure) and (Length(AItem.Roots) > 0) then Dproj:= AItem.Roots[0];
+  if SameText(ExtractFileExt(Dproj), '.dpr') then Dproj:= ChangeFileExt(Dproj, '.dproj');
+  Result:= ResolveTargetStudio(Dproj);
+end;
+
 function PlanToJson(const AManifest: TIndexManifest; const APlan: TIndexPlan; const ABuildConfig: string = ''): TJSONObject;
 var
   SecBuild : TActiveBuild ;
@@ -2891,6 +2906,13 @@ begin
     else if SecBuild.Source = dsDelphiLsp then JSecObj.AddPair('cfg', '<json>')
     else JSecObj.AddPair('cfg', SecBuild.Config);
     JSecObj.AddPair('defs', SecBuild.Digest);
+    var SecStudio: TTargetStudio:= SectionTargetStudio(PS);
+    if PS.Mode = smClosure then
+    begin
+      JSecObj.AddPair('requested_bds', SecStudio.RequestedBds);
+      JSecObj.AddPair('used_bds', SecStudio.UsedBds);
+      JSecObj.AddPair('library_note', SecStudio.Note);
+    end;
 
     if PS.Mode = smLibrary then
       // Library sections: emit count only (hundreds of folders)
@@ -4708,9 +4730,13 @@ begin
       begin
         // AItem.Roots for closure = the .dpr/.dproj paths.
         // Build library roots for exclusion from the closure walk.
-        Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+        var SecStudio: TTargetStudio:= SectionTargetStudio(AItem);
+        if SecStudio.SummaryLine <> '' then Writeln('  ', SecStudio.SummaryLine);
+        if SecStudio.Note <> '' then Writeln('  ', SecStudio.Note);
+        Resolver:= SecStudio.OpenResolver;
         try
-          Cl:= TClosureResolver.Create(Resolver.ResolveLibraryPaths);
+          var SecTail: TArray<string>:= Resolver.ClosureSearchTail(EffectiveIndexPlatform(AItem.Platform));
+          Cl:= TClosureResolver.Create(Resolver.ClosureLibraryRoots);
           try
             // PP-Task-10: per-config uses-discovery -- honour the SAME profile
             // the indexer uses for this section (default ON; --no-preprocess -> False).
@@ -4739,12 +4765,12 @@ begin
               end;
               // Combine global + section exclude patterns for the closure.
               ExcludePatterns:= Concat( AItem.Filter.GlobalExclude, AItem.Filter.SectionExclude);
-              CR:= Cl.Resolve(F, ExcludePatterns);
+              CR:= ResolveTargetClosure(Cl, F, ExcludePatterns, SecTail);
               if PPSrc <> nil then // lane INC3: second pass as in DoIndex
               begin
                 var PPMissed: Boolean:= PPSrc.UnknownAnswers > 0;
                 PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
-                if PPMissed then CR:= Cl.Resolve(F, ExcludePatterns);
+                if PPMissed then CR:= ResolveTargetClosure(Cl, F, ExcludePatterns, SecTail);
               end;
               for W in CR.Warnings do Writeln('  ', W);
               Indexer.SetIncludeContext(APreprocess, CR.SearchPaths); // lane INC: as in DoIndex
@@ -5470,6 +5496,9 @@ begin
           var DryBuild: TActiveBuild:= SectionIndexBuild(PS, AArgs.BuildConfig);
           if DryBuild.Dproj <> '' then
             Writeln('        ', IndexDefinesText(DryBuild));
+          var DryStudio: TTargetStudio:= SectionTargetStudio(PS);
+          if DryStudio.SummaryLine <> '' then Writeln('        ', DryStudio.SummaryLine);
+          if DryStudio.Note <> '' then Writeln('        ', DryStudio.Note);
           if PS.Mode = smLibrary then
           begin
             var DrySib: TArray<string>:= SiblingPlatformExcludes(PS.Platform, DryResolver.EnumRegistryPlatforms);
@@ -6572,8 +6601,43 @@ begin
   end;
 end;
 
+/// <summary>The run's library-path facts, for `index --project`: the line naming a
+/// foreign Studio, the fallback note, and with --json one object an agent can read.</summary>
+/// <param name="AStudio">The project's choice.</param>
+/// <param name="AAsJson">--json.</param>
+/// <param name="AStore">The store for the counts; nil on a dry run, which has none.</param>
+/// <remarks>Prints nothing at all for a project on the default Studio without --json,
+/// so a Delphi 13 run's output is what it always was.</remarks>
+procedure WriteIndexStudioSummary(const AStudio: TTargetStudio; AAsJson: Boolean; const AStore: ISymbolStore);
+var
+  JRoot: TJSONObject;
+  JLib : TJSONObject;
+begin
+  if AStudio.SummaryLine <> '' then Writeln(AStudio.SummaryLine);
+  if AStudio.Note <> '' then Writeln(AStudio.Note);
+  if not AAsJson then Exit;
+  JRoot:= TJSONObject.Create;
+  try
+    if AStore <> nil then
+    begin
+      JRoot.AddPair('files', TJSONNumber.Create(AStore.CountFiles));
+      JRoot.AddPair('symbols', TJSONNumber.Create(AStore.CountSymbols));
+      JRoot.AddPair('refs', TJSONNumber.Create(AStore.CountReferences));
+    end;
+    JLib:= TJSONObject.Create;
+    JRoot.AddPair('library_path', JLib);
+    JLib.AddPair('requested_bds', AStudio.RequestedBds);
+    JLib.AddPair('used_bds', AStudio.UsedBds);
+    JLib.AddPair('note', AStudio.Note);
+    Writeln(JRoot.ToJSON);
+  finally
+    JRoot.Free;
+  end;
+end;
+
 function DoIndex(const AArgs: TArgs): Integer;
 var
+  IdxStudio: TTargetStudio                             ;
   Store    : ISymbolStore                              ;
   Indexer  : IIndexer                                  ;
   Parser   : IParser                                   ;
@@ -6858,6 +6922,7 @@ begin
     Indexer.SetWalkFilter(WF);
   end;
 
+  IdxStudio:= Default(TTargetStudio); { read by the summary only when --project resolved it below }
   // Resolve target folders once (--scan-libraries / --project) or fall back
   // to the explicit path. The watch loop re-walks these on every tick;
   // unchanged files are skipped via mtime+sha256.
@@ -6900,9 +6965,11 @@ begin
       finally agree about what X is. Library units stay out: they live in
       library-Win32.sqlite / library-Win64.sqlite, which a consumer reaches by
       passing a second --db. }
-    Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+    IdxStudio:= ResolveTargetStudio(AArgs.ProjectPath);
+    Resolver:= IdxStudio.OpenResolver;
     try
-      var Cl: TClosureResolver:= TClosureResolver.Create(Resolver.ResolveLibraryPaths);
+      var IdxTail: TArray<string>:= Resolver.ClosureSearchTail(IdxBuild.Platform);
+      var Cl: TClosureResolver:= TClosureResolver.Create(Resolver.ClosureLibraryRoots);
       try
         { PP-Task-10: uses-discovery must honour the SAME define profile the
           indexer was handed above, or the closure and the symbol extraction
@@ -6916,7 +6983,7 @@ begin
         var PPSrc: TPPUnitSourceResolver:= nil;
         if not AArgs.NoPreprocess then
           PPSrc:= InstallPPUnitSource(IdxBuild.Profile, nil, [LintLibraryDb(AArgs)]);
-        var CR: TClosureResult:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
+        var CR: TClosureResult:= ResolveTargetClosure(Cl, AArgs.ProjectPath, AArgs.ExcludeGlobs, IdxTail);
         { The first pass could not see the project's own units yet; when an IF
           asked for a name it could not answer, resolve once more with them. }
         if PPSrc <> nil then
@@ -6925,7 +6992,7 @@ begin
           PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
           if PPMissed then
           begin
-            CR:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
+            CR:= ResolveTargetClosure(Cl, AArgs.ProjectPath, AArgs.ExcludeGlobs, IdxTail);
             PPSrc.AddUnitFiles(CR.Files, CR.SearchPaths);
           end;
         end;
@@ -6975,6 +7042,7 @@ begin
       is -- and it takes Folders as its in-scope set. }
     Writeln(Format('Compile closure: %d file(s):', [Length(Folders)]));
     PrintScopeListing(Folders, AArgs.DryRun);
+    if AArgs.DryRun then WriteIndexStudioSummary(IdxStudio, AArgs.AsJson, nil);
   end
   else Folders:= [AArgs.Path];
 
@@ -7517,6 +7585,7 @@ begin
     if Indexer.SkippedUpToDate - SkippedBeforeTick > 0 then Writeln(Format(
         'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date%s, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate - SkippedBeforeTick, FailedNote, Elapsed]))
     else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d%s, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, FailedNote, Elapsed]));
+    if AArgs.ProjectPath <> '' then WriteIndexStudioSummary(IdxStudio, AArgs.AsJson, Store);
     AnyFileFailed:= AnyFileFailed or (TickFailed > 0);
     if not AArgs.Watch then Break;
     ReleaseIndexLock(ResolvedDb); { 1.39.1: between ticks another index may write }
@@ -16833,7 +16902,7 @@ begin
           if LintRuleWants(NarrowRule, ['used-unit-not-resolvable']) then
           begin
             TraceLintChecker('used-unit-resolvable');
-            for F in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(FlowStore, LintLibraryDb(AArgs)) do
+            for F in DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(FlowStore, LintLibraryDb(AArgs), AArgs.ProjectPath) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
           end;
@@ -21616,9 +21685,12 @@ var
   Dfm         : string                                    ;
 begin
   Result:= nil;
-  ProjResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+  { MEMBERSHIP roots, no tail: this scope answers "what is this project's own code"
+    for lint-all and for unit-not-in-dpr's third direction. A unit `index` added
+    from the library path (GH #13) is neither to lint nor to list in the .dpr. }
+  ProjResolver:= ResolveTargetStudio(AArgs.ProjectPath).OpenResolver;
   try
-    LibRoots:= ProjResolver.ResolveLibraryPaths;
+    LibRoots:= ProjResolver.MembershipLibraryRoots;
   finally
     ProjResolver.Free;
   end;
@@ -23261,7 +23333,7 @@ begin
   { Used-unit resolvability (used-unit-not-resolvable) }
   LintPhase('used-unit-resolvable');
   if LintRuleWants(Nr, ['used-unit-not-resolvable']) then
-    Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDb);
+    Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDb, (if AArgs.ProjectPath <> '' then AArgs.ProjectPath else ManifestProjectFileForDb(ProjectDb)));
 
   { The per-file filter above only narrowed the SCAN. Every rule between the
     scan and here reads the whole store -- god-class, clone detection, layering,
@@ -23671,7 +23743,7 @@ begin
       if ContainsText(ExtractFileName(AArgs.DbPaths[DbI]), 'library-') then
       begin LibDbPath2 := AArgs.DbPaths[DbI]; Break; end;
     if (LibDbPath2 = '') and (Length(AArgs.DbPaths) > 1) then LibDbPath2 := AArgs.DbPaths[High(AArgs.DbPaths)];
-    Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDbPath2);
+    Findings := Findings + DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable(Store, LibDbPath2, AArgs.ProjectPath);
   end;
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join); ON by default. }
   if (AArgs.Rule = '') or (AArgs.Rule = 'missing-doc') then
@@ -34088,9 +34160,11 @@ var
   W           : string                                    ;
 begin
   if AArgs.ProjectPath = '' then begin Writeln('ERROR: selftest closure requires --project <dpr/.dproj>'); Exit (2 ); end;
-  ProjResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+  var Tail: TArray<string>;
+  ProjResolver:= ResolveTargetStudio(AArgs.ProjectPath).OpenResolver;
   try
-    LibRoots:= ProjResolver.ResolveLibraryPaths;
+    LibRoots:= ProjResolver.ClosureLibraryRoots;
+    Tail:= ProjResolver.ClosureSearchTail(EffectiveIndexPlatform(AArgs.CheckPlatform));
   finally
     ProjResolver.Free;
   end;
@@ -34105,7 +34179,7 @@ begin
     if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then Dproj:= AArgs.ProjectPath;
     Resolver.SetPreprocess(not AArgs.NoPreprocess,
       ResolveIndexBuild(Dproj, AArgs.CheckPlatform, AArgs.BuildConfig).Profile);
-    CR:= Resolver.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
+    CR:= ResolveTargetClosure(Resolver, AArgs.ProjectPath, AArgs.ExcludeGlobs, Tail);
   finally
     Resolver.Free;
   end;
@@ -35120,9 +35194,9 @@ begin
   if Own.Error <> '' then Exit;
   { Load warns about and records a bad file (LoadError) instead of raising. }
   Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
-  Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+  Resolver:= ResolveTargetStudio(ProjAbs).OpenResolver;
   try
-    LibRoots:= Resolver.ResolveLibraryPaths + ManifestLibraryIncludeRoots(Manifest);
+    LibRoots:= Resolver.MembershipLibraryRoots + ManifestLibraryIncludeRoots(Manifest);
   finally
     Resolver.Free;
   end;
@@ -35281,9 +35355,11 @@ begin
   { Library roots exclude library files from the closure: the registry library
     paths, plus (T-22) every folder the manifest's library section includes --
     so a folder `--apply --to library` wrote stops being reported at once. }
-  ProjResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+  var RecStudio: TTargetStudio:= ResolveTargetStudio(ProjectFile);
+  if RecStudio.Note <> '' then Writeln(ErrOutput, 'reconcile-project: ', RecStudio.Note);
+  ProjResolver:= RecStudio.OpenResolver;
   try
-    LibRoots:= ProjResolver.ResolveLibraryPaths + ManifestLibraryIncludeRoots(Manifest);
+    LibRoots:= ProjResolver.MembershipLibraryRoots + ManifestLibraryIncludeRoots(Manifest);
   finally
     ProjResolver.Free;
   end;
@@ -35524,6 +35600,9 @@ begin
       // stdout stays valid JSON; --apply messages go to ErrOutput.
       JRoot:= TJSONObject.Create;
       try
+        JRoot.AddPair('requested_bds', RecStudio.RequestedBds);
+        JRoot.AddPair('used_bds', RecStudio.UsedBds);
+        JRoot.AddPair('library_note', RecStudio.Note);
         JMissing:= TJSONArray.Create;
         for Item in RR.Missing do
         begin
@@ -36767,6 +36846,7 @@ begin
   try
     Args:= ParseArgs;
     if not ApplyPreprocessCompilerVersion(Args) then Exit(2);
+    SetRunTargetCompilerArg(Args.TargetCompiler);
     if Args.ShowHelp then
     begin
       if Args.HelpVerb <> '' then PrintMenuVerbHelp(Args.HelpVerb)

@@ -77,6 +77,7 @@ Build and maintain the per-project and library indexes.
 | [Auto-Document Whole Project](Auto-Document-Whole-Project) | drag-lint > Generate & Export > Auto-Document Whole Project...; `index`; `document` |  |
 | [Include-file indexing and IF evaluation](inc-indexing) | `index` |  |
 | [Index a project against its active build config](index-build-config) | `index` |  |
+| [Library path of the project's Delphi](target-bds-library-path) | `index`; `reconcile-project` |  |
 | [migrate-dbs](migrate-dbs) | `migrate-dbs`; drag-lint > Index & Maintenance > Migrate Index DBs to _D-RAG... |  |
 | [pp-profile](pp-profile) | `pp-profile` |  |
 | [purge-locals](purge-locals) | `purge-locals`; drag-lint > Index & Maintenance > Shrink Index (purge locals)... |  |

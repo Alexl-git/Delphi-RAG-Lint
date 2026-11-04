@@ -280,7 +280,7 @@ uses
     needs TFunc there -- so repeating it here is E2004. }
   System.StrUtils, System.Generics.Collections, System.Generics.Defaults,
   DRagLint.Doc.Document, DRagLint.Doc.Regions, DRagLint.Doc.Strip, // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
-  DRagLint.Index.Closure, DRagLint.Project.Resolver,
+  DRagLint.Index.Closure, DRagLint.Project.Resolver, DRagLint.Project.TargetStudio,
   { Ownership for DocumentProject -- the same declaration lint-all reads, so the
     two commands cannot disagree about which files belong to the project. }
   DRagLint.Project.OwnRoots;
@@ -592,9 +592,9 @@ begin
   // project-local compile closure. The default TClosureResolver keeps the
   // all-branch uses-scan (no per-config preprocessing needed to find the files
   // to document).
-  ProjResolver := TProjectResolver.Create;
+  ProjResolver := ResolveTargetStudio(AProjectFile).OpenResolver;
   try
-    LibRoots := ProjResolver.ResolveLibraryPaths;
+    LibRoots := ProjResolver.MembershipLibraryRoots;
   finally
     ProjResolver.Free;
   end;
