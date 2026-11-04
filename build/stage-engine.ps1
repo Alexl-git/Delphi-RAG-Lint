@@ -56,7 +56,9 @@ param(
   # a test names ITS OWN database so it never stands down the owner's real IDE engines.
   [string] $StandDownDb = ''
 )
-$StandDownScope = if ($StandDownDb) { @('--db', $StandDownDb) } else { @('--all') }
+# @(...) around the whole if: a one-element result unrolls to a scalar string, and splatting a
+# string passes it character by character (the engine saw "-": Unknown argument: -).
+$StandDownScope = @(if ($StandDownDb) { '--db'; $StandDownDb } else { '--all' })
 
 $ErrorActionPreference = 'Stop'
 

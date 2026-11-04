@@ -1,6 +1,6 @@
 #Requires -Version 7.3
 <#
-  publish-release.ps1 -Version <X.Y.Z-alpha> [-DryRun] [-SkipBuild] [-SkipBattery] [-BuildPlugin] [-Repo <root>]
+  publish-release.ps1 -Version <X.Y.Z-alpha> [-DryRun] [-SkipBuild] [-SkipBattery] [-BuildPlugin] [-SkipWiki] [-Repo <root>]
 
   The publish pipeline of spec section 12, in one place, stopping at the first
   failure (owner decision 15.6). Steps:
@@ -16,6 +16,8 @@
                                                run_manual_freshness_guard.ps1 sees it)
     4  tests\run_battery.ps1                  [-SkipBattery]
     5  tools\publish-wiki.ps1                 (itself re-runs the featuregen gate)
+       [-SkipWiki] skips this step (default off; owner ruling D13: a release whose wiki
+       is published separately, e.g. after the owner's hands-on period)
     6  installer\Build-Installer.ps1        the Inno Setup installer is the release package
        (1.31.4+); no zip archives are built any more (B-01 / T-19). The installer build
        does not touch the deployed engine, so no engine backup/restore is needed.
@@ -33,7 +35,7 @@
   both orders rebuild it exactly once, after the last doc change (15.6).
 #>
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$Version, [switch]$DryRun, [switch]$SkipBuild, [switch]$SkipBattery, [switch]$BuildPlugin,
+param([Parameter(Mandatory)][string]$Version, [switch]$DryRun, [switch]$SkipBuild, [switch]$SkipBattery, [switch]$BuildPlugin, [switch]$SkipWiki,
       [string]$Repo = (Split-Path -Parent $PSScriptRoot))
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -72,7 +74,7 @@ Invoke-Step 3 'build-manual.ps1' @('pwsh', '-NoProfile', '-File', (Join-Path $Re
 # ---- 4 the battery ----------------------------------------------------------------
 Invoke-Step 4 'run_battery.ps1' @('pwsh', '-NoProfile', '-File', (Join-Path $Repo 'tests\run_battery.ps1')) -Skip $SkipBattery.IsPresent
 # ---- 5 the wiki -------------------------------------------------------------------
-Invoke-Step 5 'publish-wiki.ps1' @('pwsh', '-NoProfile', '-File', (Join-Path $Repo 'tools\publish-wiki.ps1'))
+Invoke-Step 5 'publish-wiki.ps1' @('pwsh', '-NoProfile', '-File', (Join-Path $Repo 'tools\publish-wiki.ps1')) -Skip $SkipWiki.IsPresent
 # ---- 6 the installer (the release package; no zip archives) ---------------------------
 Invoke-Step 6 'Build-Installer.ps1 (the installer is the release package)' @('pwsh', '-NoProfile', '-File', (Join-Path $Repo 'installer\Build-Installer.ps1'), '-EngineDir', (Join-Path $Repo 'third_party\dll-win64'), '-Plugin32Dir', (Join-Path $Repo 'third_party\dll-win32'))
 # ---- 7 tag + release: still by hand -------------------------------------------------
