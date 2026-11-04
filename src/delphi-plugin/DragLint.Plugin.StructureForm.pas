@@ -72,6 +72,7 @@ uses
   , { per-severity row icons; one asset shared with the editor gutter }
     DragLint.Plugin.SeverityGlyph
   , DragLint.Plugin.Editor { v0.88 AutoFix: RunAndCaptureStdout for the fix verbs }
+  , DragLint.Plugin.CliAsync
   , { 2026-10-13: row order, nearest row, clipboard text, autofix summary }
     DragLint.Plugin.DiagList
   , { Fix all runs as a queued job -> status-bar progress }
@@ -126,6 +127,7 @@ type
       FItemCycleDry   : TMenuItem   ; { 'Fix this cycle (dry run)...' }
       FItemCycleApply : TMenuItem   ; { 'Apply cycle fix...' -- dry run, confirm, then --apply }
       FRootDiag       : TTreeNode   ; { the current 'Diagnostics (N)' root, for node discrimination }
+      FRulesRun       : TCliRunSlot ; { the rules --json in flight }
       FFixableRules   : TStringList ; { lower-case rule-ids with a registered fix; nil until first fetched }
       { fix_opt_in naming rules: 'Fix it' on ONE finding is the opt-in (the engine
         treats --fix-line + --fix-rule so); 'Fix all in unit' counts them when an
@@ -168,6 +170,7 @@ type
       function  UnusedUnitOfNode(ANode: TTreeNode): string;
       { v0.88 AutoFix handlers + helpers. }
       procedure EnsureFixableRules;
+      procedure ShowFixableRules(AExitCode: Integer; const AOutput: string);
       function  NodeIsDiagnosticsRoot(ANode: TTreeNode): Boolean;
       function  NodeIsFixableFinding (ANode: TTreeNode): Boolean;
       { 'Allow this message': record a dl:ok review of ONE finding on ONE line. }
@@ -379,10 +382,16 @@ var
   { Memo for ResolveDbForFile: one engine round-trip per file, not per menu
     click. Nine call sites share this function and most fire from popup handlers,
     so an unmemoised spawn would be paid again for every Find Usages, Fix-all and
-    Document-it on the same file. Invalidated by path, so switching files (or
-    switching active project, which changes the answer) re-probes. }
-  GDbForFileKey  : string = '';
-  GDbForFileValue: string = '';
+    Document-it on the same file. Switching files (or switching active project,
+    which changes the answer) re-probes, in the background; what is known meanwhile
+    still answers. Main thread only. }
+  GDbForFileMemo: TDictionary<string, string> = nil;
+  GDbProbeKey   : string = '';
+  GDbProbeRun   : TCliRunSlot = nil;
+
+const
+  DB_PROBE_STALL_MS = 15000;
+  RULES_LIST_STALL_MS = 15000;
 
 function ResolveDbForOpenFile(const AFilePath: string): string;
 { v0.42: the Structure outline must query a database that ACTUALLY CONTAINS the
@@ -401,15 +410,20 @@ function ResolveDbForOpenFile(const AFilePath: string): string;
 
   Falls back to the old take-the-first-resolved-db behaviour when the engine
   cannot answer, so nothing regresses to empty. Empty => let the exe
-  self-resolve. }
+  self-resolve.
+
+  IDE-MAINTHREAD-CLI: RefreshForFile calls this on EVERY tab switch and a memo of one
+  entry missed on every switch between two files, so this spawn, on the main thread
+  and with a 15 s budget, was the plugin's most frequent freeze. It now answers from
+  the memo, or the fallback on a first visit, and asks the engine in the background;
+  a different answer refreshes the panel if it still shows that file. }
 var
   Dbs       : TArray<string>;
   Key       : string        ;
   Cmd       : string        ;
-  Output    : string        ;
-  Lines     : TArray<string>;
-  L         : string        ;
   ActiveProj: string        ;
+  Shown     : string        ;
+  FilePath  : string        ;
 begin
   Result:= '';
   try
@@ -417,37 +431,39 @@ begin
       a unit-level function that must not accidentally shadow-resolve to it. }
     ActiveProj:= DragLint.Plugin.DbResolver.GetActiveProjectFilePath;
     Key:= LowerCase(AFilePath) + '|' + LowerCase(ActiveProj);
-    if (Key = GDbForFileKey) and (GDbForFileValue <> '') then Exit(GDbForFileValue);
-
-    if AFilePath <> '' then
+    if GDbForFileMemo = nil then GDbForFileMemo:= TDictionary<string, string>.Create;
+    if not GDbForFileMemo.TryGetValue(Key, Result) then
     begin
-      Cmd:= Format('"%s" resolve-dbs --in "%s"', [ResolveExePath, AFilePath]);
-      if ActiveProj <> '' then Cmd:= Cmd + Format(' --project "%s"', [ActiveProj]);
-      Output:= '';
-      if RunAndCaptureStdout(Cmd, Output, 15000) = 0 then
-      begin
-        Lines:= Output.Split([#13#10, #10], TStringSplitOptions.ExcludeEmpty);
-        for L in Lines do
-          if (Trim(L) <> '') and TFile.Exists(Trim(L)) then
-          begin
-            Result:= Trim(L);
-            Break;
-          end;
-      end;
-    end;
-
-    { Fallback: the resolver's own order, exactly as before. }
-    if Result = '' then
-    begin
+      { The resolver's own order, exactly as before. }
       Dbs:= ResolveActiveIndexDbs(LoadSettings);
       if Length(Dbs) > 0 then Result:= Dbs[0];
     end;
 
-    if Result <> '' then
-    begin
-      GDbForFileKey  := Key;
-      GDbForFileValue:= Result;
-    end;
+    if (AFilePath = '') or (Key = GDbProbeKey) then Exit;
+    GDbProbeKey:= Key;
+    Cmd:= Format('"%s" resolve-dbs --in "%s"', [ResolveExePath, AFilePath]);
+    if ActiveProj <> '' then Cmd:= Cmd + Format(' --project "%s"', [ActiveProj]);
+    Shown   := Result;
+    FilePath:= AFilePath;
+    if GDbProbeRun = nil then GDbProbeRun:= TCliRunSlot.Create;
+    GDbProbeRun.Start(Cmd, DB_PROBE_STALL_MS,
+      procedure(AExitCode: Integer; const AOutput: string)
+      var
+        L       : string;
+        Resolved: string;
+      begin
+        Resolved:= Shown;
+        if AExitCode = 0 then
+          for L in AOutput.Split([#13#10, #10], TStringSplitOptions.ExcludeEmpty) do
+            if (Trim(L) <> '') and TFile.Exists(Trim(L)) then
+            begin
+              Resolved:= Trim(L);
+              Break;
+            end;
+        if (Resolved <> '') and (GDbForFileMemo <> nil) then GDbForFileMemo.AddOrSetValue(Key, Resolved);
+        if (Resolved <> Shown) and (GStructureForm <> nil) and SameText(GStructureForm.FCurrentFile, FilePath) then
+          GStructureForm.RefreshForFile(FilePath);
+      end);
   except
     Result:= '';
   end;
@@ -628,6 +644,7 @@ procedure TDragLintStructureForm.FormDestroy(Sender: TObject);
 begin
   if GLiveStructureForms <> nil then GLiveStructureForms.Remove(Self);
   ClearNodeData;
+  FreeAndNil(FRulesRun);     { abandons the run in flight: its answer never reaches a dead form }
   FreeAndNil(FFixableRules); { v0.88 AutoFix: release the cached fixable-rule set }
   FreeAndNil(FOptInFixRules);
 end;
@@ -683,6 +700,7 @@ begin
     Exit;
   end;
   FLblFile.Caption:= ExtractFileName(AFilePath);
+  EnsureFixableRules;
 
   { Re-shell once; cache the results so the filter re-renders without re-running
     drag-lint on every keystroke. }
@@ -1152,18 +1170,9 @@ end;
   so membership tests are case-insensitive. Any spawn/parse failure leaves
   FFixableRules an EMPTY (non-nil) list -- the popup then simply never offers
   'Fix it', which is the safe degradation. }
+{ IDE-MAINTHREAD-CLI: asks once, off the main thread; RefreshForFile starts it, so the
+  answer is in by the time the first menu opens. Until then no rule counts as fixable. }
 procedure TDragLintStructureForm.EnsureFixableRules;
-var
-  Cmd    : string      ;
-  Output : string      ;
-  ExitVal: Integer     ;
-  Root   : TJSONObject ;
-  Arr    : TJSONArray  ;
-  V      : TJSONValue  ;
-  Obj    : TJSONObject ;
-  IdV    : TJSONValue  ;
-  FixV   : TJSONValue  ;
-  OptV   : TJSONValue  ;
 begin
   if FFixableRules <> nil then Exit;
   FFixableRules:= TStringList.Create;
@@ -1174,15 +1183,27 @@ begin
   FOptInFixRules.CaseSensitive:= False;
   FOptInFixRules.Duplicates   := dupIgnore;
   FOptInFixRules.Sorted       := True;
+  FRulesRun:= TCliRunSlot.Create;
+  FRulesRun.Start(Format('"%s" rules --json', [ResolveExePath]), RULES_LIST_STALL_MS, ShowFixableRules);
+end;
+
+procedure TDragLintStructureForm.ShowFixableRules(AExitCode: Integer; const AOutput: string);
+var
+  Root   : TJSONObject ;
+  Arr    : TJSONArray  ;
+  V      : TJSONValue  ;
+  Obj    : TJSONObject ;
+  IdV    : TJSONValue  ;
+  FixV   : TJSONValue  ;
+  OptV   : TJSONValue  ;
+begin
   try
-    Cmd    := Format('"%s" rules --json', [ResolveExePath]);
-    ExitVal:= RunAndCaptureStdout(Cmd, Output, 15000);
-    if (ExitVal <> 0) or (Output = '') then
+    if (AExitCode <> 0) or (AOutput = '') then
     begin
-      DLT('autofix', Format('rules --json failed (exit=%d, len=%d)', [ExitVal, Length(Output)]));
+      DLT('autofix', Format('rules --json failed (exit=%d, len=%d)', [AExitCode, Length(AOutput)]));
       Exit;
     end;
-    Root:= TJSONObject.ParseJSONValue(Output) as TJSONObject;
+    Root:= TJSONObject.ParseJSONValue(AOutput) as TJSONObject;
     if Root = nil then
     begin
       DLT('autofix', 'rules --json: not a JSON object');
@@ -1215,7 +1236,7 @@ begin
     end;
   except
     on E: Exception do
-      DLT('autofix', 'EnsureFixableRules failed: ' + E.ClassName + ': ' + E.Message);
+      DLT('autofix', 'ShowFixableRules failed: ' + E.ClassName + ': ' + E.Message);
   end;
 end; // procedure
 
@@ -2018,37 +2039,12 @@ end;
   popups as the user runs 'Create helper class' on other enums, so a stale
   cached "no helper" would wrongly re-enable the item. }
 function TDragLintStructureForm.NodeIsEnumHelperTarget(ANode: TTreeNode): Boolean;
-var
-  QName  : string     ;
-  Db     : string     ;
-  Cmd    : string     ;
-  Output : string     ;
-  ExitVal: Integer    ;
-  Arr    : TJSONValue ;
 begin
-  Result:= False;
-  QName:= EnumQNameForNode(ANode);
-  if QName = '' then Exit;
-  Db:= ResolveDbForFile; { same DB resolver Find Usages / Fix-all / Document it use }
-  if Db = '' then Exit;
-  try
-    Cmd:= Format('"%s" helpers-of "%s" --json --db "%s"', [ResolveExePath, QName, Db]);
-    ExitVal:= RunAndCaptureStdout(Cmd, Output, 15000);
-    if ExitVal <> 0 then Exit;
-    Arr:= TJSONObject.ParseJSONValue(Output);
-    if Arr = nil then Exit;
-    try
-      Result:= (Arr is TJSONArray) and (TJSONArray(Arr).Count = 0);
-    finally
-      Arr.Free;
-    end;
-  except
-    on E: Exception do
-    begin
-      DLT('enumhelper', 'NodeIsEnumHelperTarget failed: ' + E.ClassName + ': ' + E.Message);
-      Result:= False;
-    end;
-  end;
+  { IDE-MAINTHREAD-CLI: this runs each time the menu opens, so it no longer asks
+    `helpers-of`, which held the menu up for as long as the engine took. An enum that
+    already has a helper keeps the item: the engine refuses that case and makes no
+    edit (helper-already-exists), and the job names the refusal. }
+  Result:= (EnumQNameForNode(ANode) <> '') and (ResolveDbForFile <> '');
 end; // function
 
 { 'Create helper class' -- generate a Byte-family record helper for the
