@@ -18,9 +18,13 @@ implementation
 uses
   System.SysUtils, System.Generics.Collections,
   Vcl.StdCtrls, Vcl.ComCtrls, Vcl.ExtCtrls, Winapi.Windows,
-  DragLint.Plugin.ProcRun, DragLint.Plugin.SearchParse,
+  DragLint.Plugin.CliAsync, DragLint.Plugin.SearchParse,
   DragLint.Plugin.HoverForm, DragLint.Plugin.DbResolver, DragLint.Plugin.Settings,
   DragLint.Plugin.ExeResolver;
+
+const
+  USAGES_STALL_MS = 30000;
+  SEARCH_STALL_MS = 15000;
 
 type
   TSearchHandler = class(TComponent)
@@ -38,12 +42,16 @@ type
     FStatus    : TLabel    ;
     FDebounce  : TTimer    ;
     FRows      : TSearchRows;
+    FRun       : TCliRunSlot; { the search in flight; a newer one supersedes it }
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
     function ResolveExe: string;
     function DbArgs: string;
     function CurrentKind: string;
     procedure Reconfigure;
     procedure RebuildColumns;
     procedure RunSearch;
+    procedure ShowResult(AExitCode: Integer; const AOutput, AKind, AQuery, ADbArgs: string);
     procedure Fill(const ARows: TSearchRows);
     procedure SetEmpty(const AMsg: string);
     procedure KindChange(Sender: TObject);
@@ -55,6 +63,18 @@ type
     procedure BtnClick(Sender: TObject);
     procedure ListActivate(Sender: TObject);
   end;
+
+constructor TSearchHandler.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FRun:= TCliRunSlot.Create;
+end;
+
+destructor TSearchHandler.Destroy;
+begin
+  FRun.Free;  { abandons the run in flight: its answer never reaches a dead handler }
+  inherited Destroy;
+end;
 
 function TSearchHandler.ResolveExe: string;
 begin
@@ -132,40 +152,54 @@ end;
 
 procedure TSearchHandler.RunSearch;
 var
-  Exe, Cmd, Outp, K, Q: string; ExitCode: Integer; Rows: TSearchRows;
+  Exe, Cmd, K, Q, Args: string;
 begin
   Q:= Trim(FQuery.Text);
-  if Q = '' then begin FList.Items.Clear; SetEmpty('Type to search.'); Exit; end;
+  if Q = '' then begin FRun.Cancel; FList.Items.Clear; SetEmpty('Type to search.'); Exit; end;
   Exe:= ResolveExe;
   K:= CurrentKind;
   RebuildColumns;
   SetEmpty('Searching.');
+  Args:= DbArgs;
 
   if K = 'Symbol' then
-    Cmd:= Format('"%s" query --name "%s"%s --json', [Exe, Q, DbArgs])
+    Cmd:= Format('"%s" query --name "%s"%s --json', [Exe, Q, Args])
   else if K = 'Text' then
   begin
     Cmd:= Format('"%s" query --text "%s"', [Exe, Q]);
     case FTextMode.ItemIndex of 1: Cmd:= Cmd + ' --substring'; 2: Cmd:= Cmd + ' --any-order'; end;
     if FTextSource.ItemIndex > 0 then Cmd:= Cmd + ' --source ' + LowerCase(FTextSource.Text);
-    Cmd:= Cmd + DbArgs + ' --json';
+    Cmd:= Cmd + Args + ' --json';
   end
   else
   begin
     Cmd:= Format('"%s" usages --name "%s" --width %s%s --format json',
-      [Exe, Q, LowerCase(StringReplace(FWidth.Text, ' ', '-', [rfReplaceAll])), DbArgs]);
+      [Exe, Q, LowerCase(StringReplace(FWidth.Text, ' ', '-', [rfReplaceAll])), Args]);
   end;
 
-  if K = 'Usages' then ExitCode:= RunCaptureStdout(Cmd, Outp, 30000)
-  else ExitCode:= RunCaptureStdout(Cmd, Outp, 15000);
-  Outp:= Trim(Outp);
+  { IDE-MAINTHREAD-CLI: this ran on the main thread off a 300 ms debounce, so every
+    pause in typing froze the IDE for the length of a query. }
+  FRun.Start(Cmd, if K = 'Usages' then USAGES_STALL_MS else SEARCH_STALL_MS,
+    procedure(AExitCode: Integer; const AOutput: string)
+    begin
+      ShowResult(AExitCode, AOutput, K, Q, Args);
+    end);
+end;
 
-  if ExitCode < 0 then begin FList.Items.Clear; SetEmpty('drag-lint not found or failed to start'); Exit; end;
+procedure TSearchHandler.ShowResult(AExitCode: Integer; const AOutput, AKind, AQuery, ADbArgs: string);
+var
+  Outp, K, Q: string; Rows: TSearchRows;
+begin
+  K:= AKind;
+  Q:= AQuery;
+  Outp:= Trim(AOutput);
+
+  if AExitCode < 0 then begin FList.Items.Clear; SetEmpty('drag-lint not found or failed to start'); Exit; end;
   if (Outp = '') or (not (CharInSet(Outp[1], ['[', '{']))) then
   begin
     FList.Items.Clear;
     if Copy(Outp, 1, 5) = 'ERROR' then SetEmpty('drag-lint error: ' + Copy(Outp, 1, 200))
-    else SetEmpty(Format('drag-lint error (exit %d)', [ExitCode]));
+    else SetEmpty(Format('drag-lint error (exit %d)', [AExitCode]));
     Exit;
   end;
 
@@ -187,7 +221,7 @@ begin
   Fill(Rows);
   if Length(Rows) = 0 then
   begin
-    if Trim(DbArgs) = '' then SetEmpty('No project index found - run Tools > drag-lint > Lint Buffer, or set the exe/DB in settings.')
+    if Trim(ADbArgs) = '' then SetEmpty('No project index found - run Tools > drag-lint > Lint Buffer, or set the exe/DB in settings.')
     else if (K = 'Symbol') and (FKindFilter.ItemIndex > 0) then SetEmpty(Format('No %s matches for "%s"', [FKindFilter.Text, Q]))
     else if (K = 'Symbol') then SetEmpty(Format('No matches for "%s"  -  drag-lint indexes types/methods/fields/consts, not locals or parameters.', [Q]))
     else if (K = 'Text') and (FTextMode.ItemIndex = 1) and (Length(Q) < 3) then SetEmpty('--substring needs >= 3 characters; try Any-word.')
@@ -197,7 +231,15 @@ begin
 end;
 
 procedure TSearchHandler.KindChange(Sender: TObject);
-begin Reconfigure; RebuildColumns; if Trim(FQuery.Text) <> '' then RunSearch; end;
+begin
+  { A run of the old kind must not land under the new kind's columns, and neither
+    must the old kind's rows stay on show. }
+  FRun.Cancel;
+  FRows:= nil;
+  FList.Items.Clear;
+  Reconfigure; RebuildColumns;
+  if Trim(FQuery.Text) <> '' then RunSearch else SetEmpty('Type to search.');
+end;
 
 procedure TSearchHandler.AdvChange(Sender: TObject);
 begin FAdvPanel.Visible:= FAdvChk.Checked; end;
