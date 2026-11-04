@@ -251,6 +251,7 @@ begin
                 for var R in S.FindRefsNamingInFiles(S.GetAllFileIds, [Low]) do
                   if not (SameText(S.GetFilePath(R.FileId), Path) and (R.StartLine = DeclLine)) then Exit(True);
               end, Projs);
+            if Verdict = svUndecided then NoteUndecidedSite(Path, DeclLine, UNUSED_GLOBAL_RULE);
             if Verdict in [svUsedElsewhere, svUndecided] then Continue;
           end;
         end;

@@ -273,7 +273,7 @@ begin
   var Root: TJSONValue:= nil;
   try
     try
-      Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Path, TEncoding.UTF8), False, True);
+      Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Path, TEncoding.UTF8), False, True);  // dl:ok taint-path-traversal@eb6f -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
       var O: TJSONObject:= Root as TJSONObject;
       if O.GetValue<Integer>('format') <> CACHE_FORMAT then
       begin
@@ -359,12 +359,12 @@ begin
       verified its key before writing, and the last rename wins. }
     var Tmp: string:= Path + '.tmp-' + IntToStr(GetCurrentProcessId);
     try
-      TDirectory.CreateDirectory(ExtractFileDir(Path));
-      TFile.WriteAllText(Tmp, O.ToJSON, TEncoding.UTF8);
+      TDirectory.CreateDirectory(ExtractFileDir(Path));  // dl:ok taint-path-traversal@636b -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
+      TFile.WriteAllText(Tmp, O.ToJSON, TEncoding.UTF8);  // dl:ok taint-path-traversal@3899 -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
       if not MoveFileEx(PChar(Tmp), PChar(Path), MOVEFILE_REPLACE_EXISTING) then
       begin
         AWhy:= 'rename failed: ' + SysErrorMessage(GetLastError);
-        DeleteFile(PChar(Tmp));
+        DeleteFile(PChar(Tmp));  // dl:ok taint-path-traversal@114f -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
         Exit;
       end;
       Result:= True;
@@ -374,7 +374,7 @@ begin
       on E: Exception do
       begin
         AWhy:= 'write failed: ' + E.Message;
-        DeleteFile(PChar(Tmp));
+        DeleteFile(PChar(Tmp));  // dl:ok taint-path-traversal@114f -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
         Result:= False;
       end;
     end;

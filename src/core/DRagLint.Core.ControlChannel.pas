@@ -305,7 +305,7 @@ procedure BeatTestHold;
 /// <summary>One-line human text for a snapshot, e.g. <c>index: resolve 120/400</c>.</summary>
 /// <param name="ABeat">The snapshot.</param>
 /// <returns>The text; 'idle' for an empty action.</returns>
-function BeatDisplayText(const ABeat: TEngineBeat): string; // dl:ok unused-public-symbol@3a03 -- the IDE plugin's API (ProcRun, LspClient): its callers are in the plugin project, not this one
+function BeatDisplayText(const ABeat: TEngineBeat): string;
 
 /// <summary>Asks the engine with process id APid for its heartbeat.</summary>
 /// <param name="APid">Engine process id.</param>
@@ -315,7 +315,7 @@ function BeatDisplayText(const ABeat: TEngineBeat): string; // dl:ok unused-publ
 /// a wrapper process, a verb that does not report -- or no answer).</returns>
 /// <remarks>Blocks at most about AConnectTimeoutMs plus the listener's reply (immediate: a status-only
 /// listener does no work). Any thread.</remarks>
-function RequestEngineBeat(APid: Cardinal; AConnectTimeoutMs: Integer; out ABeat: TEngineBeat): Boolean; // dl:ok unused-public-symbol@1794 -- the IDE plugin's API (ProcRun, LspClient): its callers are in the plugin project, not this one
+function RequestEngineBeat(APid: Cardinal; AConnectTimeoutMs: Integer; out ABeat: TEngineBeat): Boolean;
 
 /// <summary>Opens the process-wide heartbeat pipe for verb ACommand and starts the status record's action as
 /// ACommand -- for lsp, index, lint-all, lint, context and 'cycles --fix' (the CLI's name for `cycles` run

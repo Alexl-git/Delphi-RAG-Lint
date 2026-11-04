@@ -12729,6 +12729,9 @@ begin
                 SharedProjects.Add(LowerCase(SF), Length(TSharedUnit.ProjectsOf(SF)) > 1);
               if SharedProjects[LowerCase(SF)] then Continue;
             end;
+            { DLOK-UNDECIDED: the shared-unit verdict was svUndecided (a listing project's index
+              is missing or stale), so the finding was withheld -- the marker cannot be judged. }
+            if IsUndecidedSite(SF, LN, M.RuleId) then Continue;
             if not Accounted.ContainsKey(MarkerKey(SF, LN, M.RuleId)) then
               EmitHint(SF, LN, 'review-marker-unused',
                 Format('dl:ok marker for "%s" no longer matches any finding on this line -- remove it.', [M.RuleId]));
