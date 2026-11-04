@@ -32,7 +32,7 @@ const
   REFACTOR_STALL_MS = 60000;
 
 /// <summary>Runs one drag-lint refactor command line on a worker thread and hands
-/// the result to ADone on the main thread (IDE-HANG, 1.40).</summary>
+/// the result to ADone on the main thread (IDE-HANG, 1.40; CliAsync since 1.42).</summary>
 /// <param name="ACmdLine">Full command line, as CreateProcessW takes it.</param>
 /// <param name="ADone">Called exactly once, on the main thread, however late.</param>
 /// <param name="AStallMs">Stall budget; defaults to REFACTOR_STALL_MS.</param>
@@ -100,6 +100,7 @@ uses
   , System.JSON
   , DragLint.Plugin.ProcRun  { RunCaptureStdout -- stall-bounded spawn } // dl:unit DragLint.Plugin.ProcRun accepted -- PROCRUN_TIMED_OUT_EXIT_CODE is the exit code RunCaptureStdout returns on a stall; it travels with the spawn this unit calls
   , DragLint.Plugin.Telemetry { DLT }
+  , DragLint.Plugin.CliAsync { RunCliAsync }
   ;
 
 const
@@ -107,27 +108,12 @@ const
 
 procedure RunRefactorCliAsync(const ACmdLine: string; const ADone: TRefactorRunDone; AStallMs: Integer);
 begin
-  TThread.CreateAnonymousThread(
-    procedure
-    var
-      Output: string;
-      Code  : Integer;
+  RunCliAsync(ACmdLine,
+    procedure(AExitCode: Integer; const AOutput: string)
     begin
-      Code  := -1;   { what ADone sees if the run raises }
-      Output:= '';
-      try
-        Code:= RunCaptureStdout(ACmdLine, Output, AStallMs);
-      except
-        on E: Exception do
-        begin
-          DLT('refactor', 'refactor run raised ' + E.ClassName + ': ' + E.Message);
-          Output:= 'drag-lint: the run raised ' + E.ClassName + ': ' + E.Message;
-        end;
-      end;
-      { Reached whatever the run did (every Exception is caught above): ADone
-        must run, or the dialog would stay busy for good. }
-      TThread.Queue(nil, procedure begin ADone(Code, Output); end);
-    end).Start;
+      if AExitCode = -1 then DLT('refactor', 'refactor run failed: ' + AOutput);
+      ADone(AExitCode, AOutput);
+    end, AStallMs);
 end;
 
 { ---- TCliDialogHandler: the shared busy state of both dialogs ---- }

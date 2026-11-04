@@ -101,6 +101,7 @@
         <DCCReference Include="DragLint.Plugin.StructureForm.pas"/>
         <DCCReference Include="DragLint.Plugin.Options.pas"/>
         <DCCReference Include="DragLint.Plugin.ProcRun.pas"/>
+        <DCCReference Include="DragLint.Plugin.CliAsync.pas"/>
         <DCCReference Include="DragLint.Plugin.SurfaceSplit.pas"/>
         <DCCReference Include="DragLint.Plugin.LiveDbChoice.pas"/>
         <DCCReference Include="DragLint.Plugin.IndexJob.pas"/>

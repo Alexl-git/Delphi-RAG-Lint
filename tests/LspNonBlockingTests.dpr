@@ -46,6 +46,7 @@ uses
   DragLint.Plugin.CodeLensCache in '..\src\delphi-plugin\DragLint.Plugin.CodeLensCache.pas',
   DragLint.Plugin.StructureCache in '..\src\delphi-plugin\DragLint.Plugin.StructureCache.pas',
   DragLint.Plugin.ProcRun in '..\src\delphi-plugin\DragLint.Plugin.ProcRun.pas',
+  DragLint.Plugin.CliAsync in '..\src\delphi-plugin\DragLint.Plugin.CliAsync.pas',
   DragLint.Plugin.RefactorForm in '..\src\delphi-plugin\DragLint.Plugin.RefactorForm.pas';
 
 const
