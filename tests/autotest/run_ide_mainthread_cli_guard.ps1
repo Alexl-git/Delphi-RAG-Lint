@@ -44,6 +44,7 @@ $Rows = @(
   @{ Unit = 'DragLint.Plugin.UsagesForm';       Budget = 0; Note = 'usages query' }
   @{ Unit = 'DragLint.Plugin.LintOptionsFrame'; Budget = 0; Note = 'rules catalog on options open' }
   @{ Unit = 'DragLint.Plugin.UsesDepsFrame';    Budget = 0; Note = 'dry run, cycle list, apply' }
+  @{ Unit = 'DragLint.Plugin.Reports';          Budget = 0; Note = 'typeat at the caret' }
 )
 
 $failed = 0
