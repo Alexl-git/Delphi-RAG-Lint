@@ -3430,6 +3430,12 @@ type
     FIndent: string;
     FT0    : TDateTime;
     FStop  : TEvent;
+    FLastN : Int64;
+    FLastAt: UInt64;
+    FLastStep: string;
+    /// <summary>The ", step N of M, R/s" tail of a beat line, from the status record.</summary>
+    /// <returns>'' when the current step has reported no counter.</returns>
+    function ProgressSuffix: string;
   protected
     procedure Execute; override;
   public
@@ -3483,6 +3489,26 @@ begin
   inherited;  // dl:ok inherited-bare@246d
 end;
 
+function TStageHeartbeat.ProgressSuffix: string;
+var
+  B   : TEngineBeat;
+  Tick: UInt64;
+begin
+  B   := BeatSnapshot;
+  Tick:= GetTickCount64;
+  Result:= '';
+  if (B.Step <> '') and ((B.N > 0) or (B.Total > 0)) then
+  begin
+    Result:= ', ' + B.Step + ' ' + IntToStr(B.N);
+    if B.Total > 0 then Result:= Result + ' of ' + IntToStr(B.Total);
+    if SameStr(B.Step, FLastStep) and (Tick > FLastAt) then
+      Result:= Result + Format(', %.0f/s', [(B.N - FLastN) * 1000.0 / (Tick - FLastAt)]);
+  end;
+  FLastStep:= B.Step;
+  FLastN   := B.N;
+  FLastAt  := Tick;
+end;
+
 procedure TStageHeartbeat.Execute;
 var
   Elapsed: Double;
@@ -3496,8 +3522,8 @@ begin
       with spaces, so %02d yields '0m 0s'; zero-padding is the PRECISION form.
       Caught by the runner asserting the rendered shape rather than merely that
       a beat occurred. }
-    Writeln(Format('%sstage: %s -- still running, %dm%.2ds elapsed',
-      [FIndent, FLabel, Trunc(Elapsed) div SecsPerMin, Trunc(Elapsed) mod SecsPerMin]));
+    Writeln(Format('%sstage: %s -- still running, %dm%.2ds elapsed%s',
+      [FIndent, FLabel, Trunc(Elapsed) div SecsPerMin, Trunc(Elapsed) mod SecsPerMin, ProgressSuffix]));
     Flush(Output);
   end;
 end;
@@ -3529,6 +3555,7 @@ begin
   Writeln(Format('%sstage: %s -- started %s', [AIndent, ALabel, FormatDateTime('hh:nn:ss', NowLocal)]));
   Flush(Output);
   T0  := Now;
+  BeatStep(ALabel); { a stage without counters must not show the previous stage's step and N }
   Beat:= TStageHeartbeat.Create(AIndent, ALabel);
   try
     AProc();
@@ -18387,6 +18414,14 @@ begin
   for Row in Rows do Writeln(Format('  pid %d  %s  %s  %s', [Row.Pid, Row.Role, Row.Version, DbList(Row.Dbs)]));
   if AArgs.DryRun then
   begin
+    { The outside view of a long run: the same record the IDE plugin polls. }
+    for Row in Rows do
+    begin
+      var RowBeat: TEngineBeat;
+      if RequestEngineBeat(Row.Pid, CONNECT_TIMEOUT_MS, RowBeat) then
+        Writeln(Format('    pid %d beat: %s (seq %d, last report %d s ago)',
+          [Row.Pid, BeatDisplayText(RowBeat), RowBeat.Seq, RowBeat.AgeMs div MS_PER_SECOND]));
+    end;
     Writeln('dry run: nothing asked, nothing changed.');
     Exit(0);
   end;

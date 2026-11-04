@@ -43,6 +43,16 @@ engine stager enumerate `drag-lint-ctl-*`, so their behaviour is unchanged.
   unchanged (180 s).
 * The status bar shows the last beat, e.g. `index parse 120/400`.
 
+## Reading it from outside (1.42)
+
+`drag-lint shutdown --all --dry-run` lists every engine of this user and session and adds, per engine, the
+beat line: `pid 1234 beat: index: resolve calls 512000/1100203 (seq 8048, last report 3 s ago)`. It asks
+nothing and changes nothing. Compare two readings: the seq and N are the progress test.
+
+The stage's own `still running` line carries the same counter and a rate:
+`stage: calls -- still running, 12m00s elapsed, resolve calls 512000 of 1100203, 710/s`. A stage with no
+counter prints the time only.
+
 ## A second writer waits on it (1.41)
 
 Asked `status<TAB>beat<TAB>writing`, the pipe adds `writing=<db>|<db>...`: the
