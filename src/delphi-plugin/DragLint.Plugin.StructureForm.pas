@@ -176,7 +176,6 @@ type
       { 'Allow this message': record a dl:ok review of ONE finding on ONE line. }
       function  NodeIsAllowableFinding(ANode: TTreeNode): Boolean;
       procedure AllowClick             (Sender: TObject);
-      procedure ReloadCurrentFileBuffer;
       procedure PopupPopup             (Sender: TObject);
       procedure FixItClick             (Sender: TObject);
       procedure FixAllInUnitClick      (Sender: TObject);
@@ -392,6 +391,10 @@ var
 const
   DB_PROBE_STALL_MS = 15000;
   RULES_LIST_STALL_MS = 15000;
+  ALLOW_STALL_MS = 30000;
+  DOCUMENT_ONE_STALL_MS = 60000;
+  DOCUMENT_UNIT_STALL_MS = 120000;
+  DOCUMENT_PROJECT_STALL_MS = 600000;
 
 function ResolveDbForOpenFile(const AFilePath: string): string;
 { v0.42: the Structure outline must query a database that ACTUALLY CONTAINS the
@@ -1296,46 +1299,6 @@ begin
   Result:= UnusedUnitFromMessage(FDiags[ND.DiagIndex].Message);
 end;
 
-{ Reload the on-disk file into the IDE editor buffer AFTER the current callback
-  unwinds. Copied from Keyboard.pas:284-297 (Extract Method): the closure must
-  capture ONLY the FilePath string -- no OTAPI interface may outlive this
-  callback or the module's edit-buffer refcount dangles and the tab closes. The
-  module is re-resolved inside the queued proc; exceptions are swallowed into the
-  plugin log (a queued proc must never throw into the IDE message loop). Refresh
-  the diagnostics tree afterwards so it reflects the just-applied fix. }
-procedure TDragLintStructureForm.ReloadCurrentFileBuffer;
-var
-  FilePath: string;
-begin
-  FilePath:= FCurrentFile; { capture as a plain string only }
-  if FilePath = '' then Exit;
-  TThread.ForceQueue(nil,
-    procedure
-    var
-      QMS : IOTAModuleServices;
-      QMod: IOTAModule        ;
-    begin
-      try
-        if not Supports(BorlandIDEServices, IOTAModuleServices, QMS) then Exit;
-        QMod:= QMS.FindModule(FilePath);
-        if QMod <> nil then QMod.Refresh(True);
-      except
-        on E: Exception do DLT('autofix', 'deferred Refresh failed: ' + E.ClassName + ': ' + E.Message);
-      end; // try
-    end);
-  { Re-read diagnostics + rebuild the tree so fixed findings drop off. Also
-    deferred, and after the buffer reload is queued, so it runs on a settled UI. }
-  TThread.ForceQueue(nil,
-    procedure
-    begin
-      try
-        RefreshDiagnosticsOnly;
-      except
-        on E: Exception do DLT('autofix', 'deferred diag refresh failed: ' + E.ClassName + ': ' + E.Message);
-      end; // try
-    end);
-end; // procedure
-
 { Enable exactly the item(s) that apply to the clicked/selected node:
   - Diagnostics root or row -> 'Copy'; 'Fix all in unit (N)' when N > 0
                                findings have a registered fix.
@@ -1473,7 +1436,7 @@ end;
 
 { Reload AFilePath from disk into its editor buffer, deferred until the
   current callback unwinds. Only the path string is captured -- no OTAPI
-  interface may outlive the callback (see ReloadCurrentFileBuffer). }
+  interface may outlive the callback (see Keyboard.pas, Extract Method). }
 procedure ReloadModuleFromDisk(const AFilePath: string);
 begin
   if AFilePath = '' then Exit;
@@ -1623,6 +1586,62 @@ begin
         end;
       except
         on E: Exception do DLT('autofix', 'fix job OnDone failed: ' + E.ClassName + ': ' + E.Message);
+      end;
+    end;
+  SetDragLintNote(Title + '...');
+  JobQueue.Enqueue(Job);
+end;
+
+{ IDE-MAINTHREAD-CLI: a menu verb that rewrites AFilePath (allow, document,
+  create-enum-helper) as a Busy job, off the main thread, in line with every other
+  writer and refused like them while the unit has unsaved edits, which the reload
+  would otherwise lose. Reports the engine's answer, a refusal included, where the
+  fix jobs report theirs. Captures no form. }
+procedure EnqueueVerbJob(const AFilePath, ATitle, ACmd: string; ATimeoutMs: Integer);
+var
+  Job     : TDragLintJob;
+  FilePath: string;
+  Title   : string;
+begin
+  FilePath:= AFilePath;
+  Title   := ATitle + ' -- ' + ExtractFileName(FilePath);
+  if BufferIsModified(FilePath) then
+  begin
+    SetDragLintNote(Title + ': not run -- save the unit first (this rewrites the file on disk and reloads it)');
+    PostIdeMessage('drag-lint: ' + Title + ': not run -- the unit has unsaved changes; save it first.');
+    Exit;
+  end;
+  if RefusedWhileFixRuns(Title) then Exit;
+  Job:= TDragLintJob.Create;
+  Job.Kind       := jkGeneric;
+  Job.Busy       := True;
+  Job.Title      := Title;
+  Job.CoalesceKey:= 'verb:' + LowerCase(FilePath) + ':' + ATitle;
+  Job.CmdLine    := ACmd;
+  Job.TimeoutMs  := ATimeoutMs;
+  Job.Streaming  := False;
+  Job.OnDone:=
+    procedure(AExit: Integer; AOutput: string)
+    var
+      Summary: string;
+    begin
+      try
+        DLT('verbjob', Format('%s -> exit=%d', [Title, AExit]));
+        if AExit = 0 then Summary:= 'done'
+        else
+        begin
+          DLT('verbjob', Title + ' non-zero exit; output: ' + Copy(AOutput, 1, CLogExcerptChars));
+          Summary:= Format('FAILED (exit %d): %s', [AExit, FirstOutputLine(AOutput)]);
+        end;
+        SetDragLintNote(Title + ': ' + Summary);
+        PostIdeMessage('drag-lint: ' + Title + ': ' + Summary);
+        if AExit = 0 then
+        begin
+          ReloadModuleFromDisk(FilePath);
+          EnqueueReindexThenRelint('');
+        end;
+      except
+        on E: Exception do DLT('verbjob', 'verb job OnDone failed: ' + E.ClassName + ': ' + E.Message);
       end;
     end;
   SetDragLintNote(Title + '...');
@@ -1927,20 +1946,14 @@ end;
 procedure TDragLintStructureForm.AllowClick(Sender: TObject);
 var
   ND     : TStructureNodeData;
-  Cmd    : string           ;
-  Output : string           ;
-  ExitVal: Integer          ;
 begin
   try
     if not NodeIsAllowableFinding(FTree.Selected) then Exit;
     ND:= TStructureNodeData(FTree.Selected.Data);
     if FCurrentFile = '' then Exit;
-    Cmd:= Format('"%s" allow "%s" --fix-line %d --fix-rule "%s" --apply',
-      [ResolveExePath, FCurrentFile, ND.Line, ND.Code]);
-    ExitVal:= RunAndCaptureStdout(Cmd, Output, 30000);
-    DLT('allow', Format('Allow %s line %d rule %s -> exit=%d', [ExtractFileName(FCurrentFile), ND.Line, ND.Code, ExitVal]));
-    if ExitVal = 0 then ReloadCurrentFileBuffer
-    else DLT('allow', 'Allow non-zero exit; output: ' + Copy(Output, 1, 400));
+    EnqueueVerbJob(FCurrentFile, Format('Allow %s line %d', [ND.Code, ND.Line]),
+      Format('"%s" allow "%s" --fix-line %d --fix-rule "%s" --apply', [ResolveExePath, FCurrentFile, ND.Line, ND.Code]),
+      ALLOW_STALL_MS);
   except
     on E: Exception do DLT('allow', 'AllowClick failed: ' + E.ClassName + ': ' + E.Message);
   end;
@@ -1971,10 +1984,7 @@ end;
 procedure TDragLintStructureForm.DocumentItClick(Sender: TObject);
 var
   ND     : TStructureNodeData;
-  Cmd    : string           ;
-  Output : string           ;
   Db     : string           ;
-  ExitVal: Integer          ;
 begin
   try
     if not NodeIsDocumentable(FTree.Selected) then Exit;
@@ -1986,11 +1996,8 @@ begin
       DLT('autodoc', 'Document it: no index DB for ' + FCurrentFile);
       Exit;
     end;
-    Cmd:= Format('"%s" document --qname "%s" --db "%s" --apply', [ResolveExePath, ND.QName, Db]);
-    ExitVal:= RunAndCaptureStdout(Cmd, Output, 60000);
-    DLT('autodoc', Format('Document it %s -> exit=%d', [ND.QName, ExitVal]));
-    if ExitVal = 0 then ReloadCurrentFileBuffer
-    else DLT('autodoc', 'Document it non-zero exit; output: ' + Copy(Output, 1, 400));
+    EnqueueVerbJob(FCurrentFile, 'Document ' + ND.QName,
+      Format('"%s" document --qname "%s" --db "%s" --apply', [ResolveExePath, ND.QName, Db]), DOCUMENT_ONE_STALL_MS);
   except
     on E: Exception do DLT('autodoc', 'DocumentItClick failed: ' + E.ClassName + ': ' + E.Message);
   end;
@@ -2060,10 +2067,7 @@ end; // function
 procedure TDragLintStructureForm.CreateEnumHelperClick(Sender: TObject);
 var
   QName  : string ;
-  Cmd    : string ;
-  Output : string ;
   Db     : string ;
-  ExitVal: Integer;
 begin
   try
     QName:= EnumQNameForNode(FTree.Selected);
@@ -2075,11 +2079,8 @@ begin
       DLT('enumhelper', 'Create helper class: no index DB for ' + FCurrentFile);
       Exit;
     end;
-    Cmd:= Format('"%s" create-enum-helper --qname "%s" --db "%s" --apply', [ResolveExePath, QName, Db]);
-    ExitVal:= RunAndCaptureStdout(Cmd, Output, 60000);
-    DLT('enumhelper', Format('Create helper class %s -> exit=%d', [QName, ExitVal]));
-    if ExitVal = 0 then ReloadCurrentFileBuffer
-    else DLT('enumhelper', 'Create helper class non-zero exit; output: ' + Copy(Output, 1, 400));
+    EnqueueVerbJob(FCurrentFile, 'Create helper class for ' + QName,
+      Format('"%s" create-enum-helper --qname "%s" --db "%s" --apply', [ResolveExePath, QName, Db]), DOCUMENT_ONE_STALL_MS);
   except
     on E: Exception do DLT('enumhelper', 'CreateEnumHelperClick failed: ' + E.ClassName + ': ' + E.Message);
   end;
@@ -2121,10 +2122,7 @@ end;
   comments appear and the Diagnostics/Code Elements tree refreshes. }
 procedure TDragLintStructureForm.DocumentUnitClick(Sender: TObject);
 var
-  Cmd    : string ;
-  Output : string ;
   Db     : string ;
-  ExitVal: Integer;
 begin
   try
     if FCurrentFile = '' then Exit;
@@ -2134,11 +2132,8 @@ begin
       DLT('autodoc', 'Document unit: no index DB for ' + FCurrentFile);
       Exit;
     end;
-    Cmd:= Format('"%s" document --unit "%s" --db "%s" --apply', [ResolveExePath, FCurrentFile, Db]);
-    ExitVal:= RunAndCaptureStdout(Cmd, Output, 120000);
-    DLT('autodoc', Format('Document unit %s -> exit=%d', [ExtractFileName(FCurrentFile), ExitVal]));
-    if ExitVal = 0 then ReloadCurrentFileBuffer
-    else DLT('autodoc', 'Document unit non-zero exit; output: ' + Copy(Output, 1, 400));
+    EnqueueVerbJob(FCurrentFile, 'Document unit',
+      Format('"%s" document --unit "%s" --db "%s" --apply', [ResolveExePath, FCurrentFile, Db]), DOCUMENT_UNIT_STALL_MS);
   except
     on E: Exception do DLT('autodoc', 'DocumentUnitClick failed: ' + E.ClassName + ': ' + E.Message);
   end;
@@ -2156,9 +2151,6 @@ procedure TDragLintStructureForm.DocumentProjectClick(Sender: TObject);
 var
   ProjFile: string ;
   Db      : string ;
-  Cmd     : string ;
-  Output  : string ;
-  ExitVal : Integer;
 begin
   try
     ProjFile:= GetActiveProjectFilePath;
@@ -2173,11 +2165,8 @@ begin
       DLT('autodoc', 'Document project: no index DB for ' + ProjFile);
       Exit;
     end;
-    Cmd:= Format('"%s" document --project "%s" --db "%s" --apply', [ResolveExePath, ProjFile, Db]);
-    ExitVal:= RunAndCaptureStdout(Cmd, Output, 600000);
-    DLT('autodoc', Format('Document project %s -> exit=%d', [ExtractFileName(ProjFile), ExitVal]));
-    if ExitVal = 0 then ReloadCurrentFileBuffer
-    else DLT('autodoc', 'Document project non-zero exit; output: ' + Copy(Output, 1, 400));
+    EnqueueVerbJob(FCurrentFile, 'Document project ' + ExtractFileName(ProjFile),
+      Format('"%s" document --project "%s" --db "%s" --apply', [ResolveExePath, ProjFile, Db]), DOCUMENT_PROJECT_STALL_MS);
   except
     on E: Exception do DLT('autodoc', 'DocumentProjectClick failed: ' + E.ClassName + ': ' + E.Message);
   end;

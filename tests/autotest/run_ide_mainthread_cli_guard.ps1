@@ -46,6 +46,7 @@ $Rows = @(
   @{ Unit = 'DragLint.Plugin.UsesDepsFrame';    Budget = 0; Note = 'dry run, cycle list, apply' }
   @{ Unit = 'DragLint.Plugin.Reports';          Budget = 0; Note = 'typeat at the caret' }
   @{ Unit = 'DragLint.Plugin.Diagnose';         Budget = 0; Note = 'info --json for the About and Diagnose screens' }
+  @{ Unit = 'DragLint.Plugin.StructureForm';    Budget = 0; Note = 'tab switch, menu open, menu verbs' }
 )
 
 $failed = 0
