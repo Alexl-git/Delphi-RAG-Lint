@@ -60,6 +60,7 @@ uses
   , Vcl.ExtCtrls
   , Vcl.StdCtrls
   , DRagLint.Lint.Config
+  , DragLint.Plugin.CliAsync
   ;
 
 type
@@ -88,6 +89,7 @@ type
     FScroll    : TScrollBox;
     { internal catalog + config state }
     FCatalogJSON: string;       { last successful raw JSON from "rules --json" }
+    FRun        : TCliRunSlot;  { the "rules --json" in flight }
     FHasData   : Boolean;       { True after at least one successful load }
     FProfile   : string;        { active profile name; '' = base config }
     FCfg       : TLintConfig;   { active config (base or profile-merged) }
@@ -130,6 +132,7 @@ type
     procedure SearchChanged   (Sender: TObject);
     procedure ClearBody;
     procedure RenderCatalog(const AJSON: string);
+    procedure ShowCatalog(AExitCode: Integer; const AOutput: string);
     procedure UpdateCountsLabel;
     { naming preset helpers }
     procedure PresetSelected    (Sender: TObject);
@@ -152,9 +155,13 @@ type
     /// <summary>Frees the auto-fix checkbox reference map (not the boxes,
     /// which are owned by the form / their parent group boxes).</summary>
     destructor Destroy; override;
-    /// <summary>Runs "drag-lint rules --json", parses the catalog, loads the
-    /// active project's drag-lint-lint.json, and re-renders all rule controls
-    /// with the resulting enabled/disabled/param state.</summary>
+    /// <summary>Loads the active project's drag-lint-lint.json, then runs
+    /// "drag-lint rules --json" off the main thread; when the answer arrives,
+    /// parses the catalog and re-renders all rule controls with the resulting
+    /// enabled/disabled/param state.</summary>
+    /// <remarks>Returns at once (IDE-MAINTHREAD-CLI). A newer call supersedes the
+    /// run; freeing the frame abandons it. Save before the answer arrives keeps the
+    /// loaded config: no rule is rendered, so none overrides it.</remarks>
     procedure ReloadCatalogAndConfig;
     /// <summary>Walks all rendered rule controls, mutates an in-memory
     /// TLintConfig via TLintConfigWriter setters, and saves the result to
@@ -202,7 +209,7 @@ uses
   , Vcl.Samples.Spin
   , Vcl.Dialogs
   , ToolsAPI
-  , DragLint.Plugin.ProcRun
+
   , DragLint.Plugin.Settings
   , DRagLint.Lint.ConfigWriter
   , DragLint.Plugin.ExeResolver
@@ -316,6 +323,9 @@ type
     constructor CreateForRule(AOwner: TComponent; const ARule: TCatalogRule);
     destructor  Destroy; override;
   end;
+
+const
+  RULES_CATALOG_STALL_MS = 15000;
 
 constructor TRuleTag.CreateForRule(AOwner: TComponent; const ARule: TCatalogRule);
 begin
@@ -690,6 +700,7 @@ begin
     raise EResNotFound. Mirrors TDragLintStructureForm (the working dock tab). }
   inherited CreateNew(AOwner);
   FCatalogJSON:= '';
+  FRun        := TCliRunSlot.Create;
   FHasData    := False;
   FProfile    := '';
   FCfg        := TLintConfig.Load('', '');  { default no-op config }
@@ -703,6 +714,7 @@ destructor TLintOptionsFrame.Destroy;
 begin
   { Only holds references to VCL-owned checkboxes/edits; free the maps, not
     the controls themselves (owned by Self / their parent GroupBox). }
+  FRun.Free;  { abandons the run in flight: its answer never reaches a dead frame }
   FAutoFixCBs.Free;
   FNamingEditors.Free;
   inherited;
@@ -1320,15 +1332,19 @@ end;
   ============================================================ }
 
 procedure TLintOptionsFrame.ReloadCatalogAndConfig;
-var
-  ExePath, Cmd, JSON: string;
-  ExitCode: Integer;
-  CP: string;
 begin
-  ExePath := ResolveExe;
-  Cmd     := '"' + ExePath + '" rules --json';
-  ExitCode:= RunCaptureStdout(Cmd, JSON, 15000);
-  if ExitCode <> 0 then
+  { IDE-MAINTHREAD-CLI: this ran on the main thread each time the options opened.
+    The config is a file read and loads NOW: Save can run before the catalog arrives
+    (OK pressed at once), and its baseline is FCfg, so a default FCfg there would
+    overwrite the user's config with defaults. }
+  FCfg:= TLintConfig.Load(CfgPath, FProfile);
+  FLblCounts.Caption:= 'Loading the rule catalog...';
+  FRun.Start('"' + ResolveExe + '" rules --json', RULES_CATALOG_STALL_MS, ShowCatalog);
+end;
+
+procedure TLintOptionsFrame.ShowCatalog(AExitCode: Integer; const AOutput: string);
+begin
+  if AExitCode <> 0 then
   begin
     { Show error label; don't crash }
     ClearBody;
@@ -1341,16 +1357,16 @@ begin
     if ErrLbl.Width < 100 then ErrLbl.Width:= 300;
     ErrLbl.Caption := Format(
       'drag-lint rules --json failed (exit %d). Ensure the exe path is set in Settings.',
-      [ExitCode]);
+      [AExitCode]);
     ErrLbl.AutoSize:= False;
     FLblCounts.Caption:= 'Load failed.';
     Exit;
   end;
   { Load the active config (base or profile-merged) into the field so
-    RenderCatalog can reference it directly. }
-  CP    := CfgPath;
-  FCfg  := TLintConfig.Load(CP, FProfile);
-  RenderCatalog(JSON);
+    RenderCatalog can reference it directly: again, as the profile can have changed
+    while the catalog was on its way. }
+  FCfg:= TLintConfig.Load(CfgPath, FProfile);
+  RenderCatalog(AOutput);
   ReloadProfileList;  { refresh combo after successful load }
 end;
 

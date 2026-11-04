@@ -42,6 +42,7 @@ $Rows = @(
   @{ Unit = 'DragLint.Plugin.SymbolSearchForm'; Budget = 0; Note = 'timer-driven search' }
   @{ Unit = 'DragLint.Plugin.SearchForm';       Budget = 0; Note = 'debounced search' }
   @{ Unit = 'DragLint.Plugin.UsagesForm';       Budget = 0; Note = 'usages query' }
+  @{ Unit = 'DragLint.Plugin.LintOptionsFrame'; Budget = 0; Note = 'rules catalog on options open' }
 )
 
 $failed = 0
