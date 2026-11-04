@@ -5935,7 +5935,7 @@ var
   GCallerCountsId    : Integer            = 0;
   GCallerCountsClient: TDragLintLspClient = nil;
 
-function LspCallerCounts(const AFilePath: string; const ADone: TCallerCountsDone): Boolean; // dl:ok deep-nesting@199d -- the depth is the anonymous reply handler nested in the request; splitting it out would separate the parse from the one request it serves
+function LspCallerCounts(const AFilePath: string; const ADone: TCallerCountsDone): Boolean; // dl:ok deep-nesting@d520 -- the depth is the anonymous reply handler nested in the request; splitting it out would separate the parse from the one request it serves
 { 2026-10-29: ASYNC, one at a time, and never while the engine is busy. The
   synchronous version waited 8 s on the main thread at every view activation;
   on a big library unit the engine then spent 13 minutes on it while every

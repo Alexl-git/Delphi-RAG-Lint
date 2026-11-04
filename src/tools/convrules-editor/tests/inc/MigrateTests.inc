@@ -458,7 +458,7 @@ begin
     var LRow: TArray<string>:= MembersRowText(B.Nodes[2]);
     Check('migrate.members.row', (string.Join('|', LRow) = 'Click|Press|rename|') and (MembersRowText(B.Nodes[3])[2] = 'DL_NONE')
       and (string.Join('|', MembersRowText(B.Nodes[4])) = 'TUpdateKind|TFDUpdateRequest|legacy|' + MIGRATE_REFUSAL_UNITS), string.Join('|', MembersRowText(B.Nodes[4])));
-    Check('migrate.static.marks', StaticMigrateMarks(B, False) = 3, 'covered Click, duplicate Count, identity Hint');
+    Check('migrate.static.marks', StaticMigrateMarks(B, False) = 3, 'covered Click, duplicate Count, identity Hint');  // dl:ok magic-literal@06cf -- REVIEWED 2026-11-04 int3: test expectation: the literal is the asserted value
     Check('migrate.static.marks.text', (Length(B.Nodes[2].Marks) = 1) and (B.Nodes[2].Marks[0].Text = 'book line 2 already converts Click') and B.Nodes[2].Marks[0].IsWarning
       and (Length(B.Nodes[3].Marks) = 0) and (Length(B.Nodes[5].Marks) = 1) and (B.Nodes[5].Marks[0].Text = 'book line 4 already converts Count'));
     Check('migrate.static.marks.once', (StaticMigrateMarks(B, False) = 0) and (Length(B.Nodes[2].Marks) = 1));
@@ -497,7 +497,7 @@ begin
   B:= MigBook(['#migrate dcrOther -> gcrNone', '#convert TSrcBtn -> TDstBtn', '#link Press <- Click', '#migrate Click -> Press']);
   try
     Check('migrate.static.global.identifiers', (StaticMigrateMarks(B, True) = 1) and (Length(B.Nodes[0].Marks) = 0)
-      and (Length(B.Nodes[3].Marks) = 1), 'with migrate_identifiers only the covered Click line is marked');
+      and (Length(B.Nodes[3].Marks) = 1), 'with migrate_identifiers only the covered Click line is marked');  // dl:ok magic-literal@1553 -- REVIEWED 2026-11-04 int3: test expectation: the literal is the asserted value
   finally
     B.Free;
   end;
@@ -510,9 +510,9 @@ begin
     '', '#convert CvLib.TOldField -> CvLib.TNewField, CvLib', '#link Size <- Size']);
   try
     var LTgt: TArray<TApplyItem>:= MigrateApply('apply-CvWarn-migtgt-142.json', [afMigrateMembers]).MigrateChecks;
-    Check('migrate.migtgt.mark', (AddMigrateCheckMarks(B, LTgt) = 1) and (Length(B.Nodes[4].Marks) = 1) and B.Nodes[4].Marks[0].IsWarning
-      and ContainsText(B.Nodes[4].Marks[0].Text, 'the target TNoSuchType resolves in no supplied index'),
-      'marks on line 5: ' + IntToStr(Length(B.Nodes[4].Marks)));
+    Check('migrate.migtgt.mark', (AddMigrateCheckMarks(B, LTgt) = 1) and (Length(B.Nodes[4].Marks) = 1) and B.Nodes[4].Marks[0].IsWarning  // dl:ok magic-literal@5ab2 -- REVIEWED 2026-11-04 int3: test expectation: the literal is the asserted value
+      and ContainsText(B.Nodes[4].Marks[0].Text, 'the target TNoSuchType resolves in no supplied index'),  // dl:ok magic-literal@4565 -- REVIEWED 2026-11-04 int3: test expectation: the literal is the asserted value
+      'marks on line 5: ' + IntToStr(Length(B.Nodes[4].Marks)));  // dl:ok magic-literal@f799 -- REVIEWED 2026-11-04 int3: test expectation: the literal is the asserted value
     Check('migrate.migtgt.once', AddMigrateCheckMarks(B, LTgt) = 0, 'a second run adds no second mark');
   finally
     B.Free;

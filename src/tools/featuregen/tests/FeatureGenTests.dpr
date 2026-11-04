@@ -2401,7 +2401,7 @@ var
   lI: Integer;
 begin
   lLine := '';
-  for lI := 1 to 120 do
+  for lI := 1 to 120 do  // dl:ok large-magic-number@e025, magic-literal@e025 -- REVIEWED 2026-11-04 int3: test expectation: the chunking loop bound and literal limits are the asserted values
     lLine := lLine + '--flag-number-' + IntToStr(lI) + ' <v''x> ';
   lLine := lLine.TrimRight;
   lStmt := WriteLnStatement(lLine);
@@ -2411,7 +2411,7 @@ begin
   lJoined := Copy(lJoined, Length('  Writeln(''') + 1, Length(lJoined) - Length('  Writeln(''') - Length(''');'#10)).Replace('''''', '''');
   Check('HelpChunk.RoundTrip', lJoined = lLine, 'concatenated chunks must equal the input');
   for lI := 0 to High(lParts) - 1 do
-    Check('HelpChunk.BreakAfterSpace' + IntToStr(lI), lParts[lI].EndsWith(' '), 'chunk ' + IntToStr(lI) + ' ends mid-token: ...' + Copy(lParts[lI], Length(lParts[lI]) - 12, 13));
+    Check('HelpChunk.BreakAfterSpace' + IntToStr(lI), lParts[lI].EndsWith(' '), 'chunk ' + IntToStr(lI) + ' ends mid-token: ...' + Copy(lParts[lI], Length(lParts[lI]) - 12, 13));  // dl:ok magic-literal@9b04 -- REVIEWED 2026-11-04 int3: test expectation: the chunking loop bound and literal limits are the asserted values
   Check('HelpChunk.ShortLineSingleLiteral', not WriteLnStatement('--short --line').Contains(#10'    '), 'a short line stays one literal');
 end;
 procedure TestHelpText(const pRepo: string);

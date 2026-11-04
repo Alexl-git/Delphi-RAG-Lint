@@ -70,7 +70,7 @@ var
 begin
   T0:= GetTickCount64;
   repeat
-    CheckSynchronize(10);
+    CheckSynchronize(10);  // dl:ok magic-literal@0b14 -- REVIEWED 2026-11-04 int3: test data (pump slice, -99 unset sentinel, child argv position, slow-child factor)
     Result:= ACond();
   until Result or (GetTickCount64 - T0 >= AMs);
 end;
@@ -108,7 +108,7 @@ var
   Calls, Code: Integer; Text: string; Thread: Cardinal; T0: UInt64;
 begin
   Calls:= 0;
-  Code:= -99;
+  Code:= -99;  // dl:ok large-magic-number@d9e4, magic-literal@d9e4 -- REVIEWED 2026-11-04 int3: test data (pump slice, -99 unset sentinel, child argv position, slow-child factor)
   Thread:= 0;
   T0:= GetTickCount64;
   RunCliAsync(ChildCmd(CHILD_SLOW_MS, 'hello', Marker('a1')),
@@ -207,7 +207,7 @@ begin
   Slot.Start(ChildCmd(CHILD_SLOW_MS, 'x', Marker('c6')), CLI_ASYNC_STALL_MS,
     procedure(AExit: Integer; const AOut: string) begin Inc(Calls); end);
   Pump(PUMP_QUIET_MS);
-  Slot.Free;
+  Slot.Free;  // dl:ok unprotected-object-free@2824 -- REVIEWED 2026-11-04 int3: the test IS the mid-run Free of the slot; a try-finally would hide the Free it exercises
   Pump(CHILD_SLOW_MS + PUMP_QUIET_MS);
   Check('C6 no answer after the slot is freed', Calls = 0, IntToStr(Calls));
   Check('C7 the child was killed', not FileExists(Marker('c6')));
@@ -218,7 +218,7 @@ begin
   Slot.Start(ChildCmd(CHILD_FAST_MS, 'x', Marker('c8')), CLI_ASYNC_STALL_MS,
     procedure(AExit: Integer; const AOut: string) begin Inc(Calls); end);
   Check('C8a the child finished, so the answer is queued', WaitChildDone(Marker('c8')));
-  Slot.Free;
+  Slot.Free;  // dl:ok unprotected-object-free@2824 -- REVIEWED 2026-11-04 int3: the test IS the mid-run Free of the slot; a try-finally would hide the Free it exercises
   Pump(PUMP_QUIET_MS);
   Check('C8 queued answer dropped after the slot is freed', Calls = 0, IntToStr(Calls));
 end;
@@ -233,7 +233,7 @@ begin
     procedure(AExit: Integer; const AOut: string)
     begin
       Inc(Calls);
-      raise Exception.Create('from ADone');
+      raise Exception.Create('from ADone');  // dl:ok raise-bare-exception@1f50 -- REVIEWED 2026-11-04 int3: a test: any exception from ADone must be swallowed by the runner, the class is irrelevant
     end);
   TEscapeCounter.Count:= 0;
   System.Classes.ApplicationHandleException:= TEscapeCounter.Hit;
@@ -267,7 +267,7 @@ begin
   Calls:= 0;
   Slot:= TCliRunSlot.Create;
   try
-    Slot.Start(ChildCmd(CHILD_SLOW_MS * 4, 'x', Marker('e1')), CLI_ASYNC_STALL_MS,
+    Slot.Start(ChildCmd(CHILD_SLOW_MS * 4, 'x', Marker('e1')), CLI_ASYNC_STALL_MS,  // dl:ok magic-literal@23fb -- REVIEWED 2026-11-04 int3: test data (pump slice, -99 unset sentinel, child argv position, slow-child factor)
       procedure(AExit: Integer; const AOut: string) begin Inc(Calls); end);
     RunCliAsync(ChildCmd(CHILD_FAST_MS, 'x', Marker('e2')),
       procedure(AExit: Integer; const AOut: string) begin Inc(Calls); end);
@@ -296,10 +296,10 @@ end;
 procedure RunChild;
 begin
   { child <ms> <text> <marker> }
-  Writeln(ParamStr(3));
+  Writeln(ParamStr(3));  // dl:ok magic-literal@50ed -- REVIEWED 2026-11-04 int3: test data (pump slice, -99 unset sentinel, child argv position, slow-child factor)
   Flush(Output);
   Sleep(StrToIntDef(ParamStr(2), 0));
-  TFile.WriteAllText(ParamStr(4), 'done');
+  TFile.WriteAllText(ParamStr(4), 'done');  // dl:ok magic-literal@06e7 -- REVIEWED 2026-11-04 int3: test data (pump slice, -99 unset sentinel, child argv position, slow-child factor)
   Halt(CHILD_EXIT);
 end;
 
