@@ -7831,6 +7831,27 @@ end; // procedure
   filters name matches exactly as `query find-callers` does. }
 
 function DoQueryHints(const AArgs: TArgs): Integer; forward;
+/// <summary>The stderr hint `query find-callers` prints beside "0 caller(s)".</summary>
+/// <param name="pName">The --name the user passed.</param>
+/// <param name="pResolved">True for the --resolved form, False for the plain name-based form.</param>
+/// <returns>One "hint: ..." line. A DOTTED name in the plain form is told to use the bare member name
+/// (refs.name_text holds no qualifier, so TFoo.Bar can never match) -- the old text sent it to
+/// `usages --name TFoo.Bar`, which was no better. Any other plain zero also names --resolved, which
+/// reaches a property's getter/setter that the name-based form cannot (FC-GETTER-DEFAULT: the default
+/// stays name-based, only the hint changed).</returns>
+/// <remarks>Pure; stderr only, so JSON documents on stdout are untouched. Pinned by run_qcli_142_guard.ps1.</remarks>
+function ZeroCallersHint(const pName: string; pResolved: Boolean): string;
+const
+  BASE_HINT = 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --name ';
+begin
+  if pResolved then Exit(BASE_HINT + pName);
+  var DotAt: Integer:= LastDelimiter('.', pName);
+  Result:= if DotAt > 0 then
+    Format('hint: the plain form matches the BARE member name (references carry no qualifier), so "%s" cannot match. '
+      + 'Try: drag-lint query find-callers --name %s   or   --resolved --name %s', [pName, Copy(pName, DotAt + 1, MaxInt), pName])
+  else
+    BASE_HINT + pName + '. A property getter/setter is reached through its property: try find-callers --resolved --name ' + pName;
+end; // function
 
 { v(A2): the --decl-contains arm of `query find`.
 
@@ -9681,7 +9702,7 @@ begin
         else if TotalCallers = 0 then
         begin
           Writeln('0 caller(s)');
-          Writeln(ErrOutput, 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --name ', AArgs.Name);
+          Writeln(ErrOutput, ZeroCallersHint(AArgs.Name, True));
         end
         else Writeln(Format('%d callers (%s)', [TotalCallers, ResTally.ToText]));
       finally
@@ -9726,7 +9747,7 @@ begin
       begin
         Writeln(Format('%d caller(s)%s', [TotalRefs, (if RefTally.ToText <> '' then ' (' + RefTally.ToText + ')' else '')]));
         if TotalRefs = 0 then
-          Writeln(ErrOutput, 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --name ', AArgs.Name);
+          Writeln(ErrOutput, ZeroCallersHint(AArgs.Name, False));
       end;
     finally
       JRefs.Free;
@@ -12027,6 +12048,8 @@ begin
   begin
     Writeln('ERROR: database not found: ', AArgs.DbPath);
     Writeln('Run "drag-lint index <path>" first, or pass --db <file.sqlite>.');
+    Writeln('usages does not read the manifest: without --db it has no database (find-callers does resolve one).');
+    Writeln('Pass --db <file.sqlite>; resolve-dbs --project <x.dproj> prints the right one.');
     Exit(2);
   end;
 

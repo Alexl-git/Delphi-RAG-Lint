@@ -253,6 +253,9 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 
 * `find-callers` matches the **bare member name**. `--name TFoo.Bar` returns 0;
   `--name Bar` returns the call sites.
+  The 0-caller hint says so and names the bare name. A property getter/setter (`GetFoo`) is also 0 in the plain form -- the default
+  stays name-based -- and its hint points at `--resolved`, which reaches it through the property.
+  `usages` counts a qualified call `FHost.Feed(x)` once (it used to count the stored call + member-access pair twice).
 * `find-callers` also reports interface dispatch (RB-5): a method reached only THROUGH an interface method it implements
   lists those sites as a separate `via <IFoo.Bar> dispatch` group; `--json` rows gain `via` (the interface method),
   `via_kind` (`interface`) and, when the `implements` edge is ambiguous, `via_edge`, all placed before `resolution`.

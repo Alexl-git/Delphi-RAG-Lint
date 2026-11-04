@@ -123,6 +123,7 @@ begin
   Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
   Writeln('                               --limit N keeps the first N rows of each JSON group (declarations included) and adds');
   Writeln('                               "limit" and "totals" (the full counts); without it nothing is capped.');
+  Writeln('                               --db is REQUIRED: usages never reads the manifest, so without it the verb exits 2.');
   Writeln('  drag-lint outline            --in <path.pas> [--db <path>] [--format text|json] [--json] [--kind <k[,k...]>] [--no-locals] [--limit N]');
   Writeln('                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:');
   Writeln('                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large');
@@ -673,6 +674,7 @@ begin
     Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
     Writeln('                               --limit N keeps the first N rows of each JSON group (declarations included) and adds');
     Writeln('                               "limit" and "totals" (the full counts); without it nothing is capped.');
+    Writeln('                               --db is REQUIRED: usages never reads the manifest, so without it the verb exits 2.');
     Exit;
   end;
   if pVerb = 'outline' then

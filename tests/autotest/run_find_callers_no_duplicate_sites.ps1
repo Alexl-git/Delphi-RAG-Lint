@@ -165,16 +165,14 @@ Check "POSITIVE CONTROL: the line with TWO real calls (line $lnTwoCalls) reports
 #    in its own output -- that is a separate rendering question, deliberately out
 #    of scope. If `usages` is ever given the same post-filter, this case must be
 #    re-pointed at another kind-bearing reader, NOT deleted.
-$usg = (& $Exe usages --name Run --db $db --format json 2>&1) -join "`n"
-$usgSites = @()
-foreach ($m in [regex]::Matches($usg, '"line":\s*(\d+),\s*"col":\s*(\d+)')) {
-  $usgSites += ('{0}:{1}' -f $m.Groups[1].Value, $m.Groups[2].Value)
-}
-$usgAtQualified = @($usgSites | Where-Object { $_ -eq "$lnQualified`:5" }).Count
-Check 'CONTROL: the store still returns BOTH refs at the qualified site (post-filter, not a store change)' `
+# 1.42 (USAGES-DOUBLE-COUNT): `usages` now collapses the member-access under a call at READ time, so it
+# can no longer witness the two stored refs. Re-pointed (not deleted) at the refs table through `sql`.
+$sqlq = "SELECT kind FROM refs WHERE name_text='Run' AND start_line=$lnQualified AND start_col=5"
+$sqlOut = (& $Exe sql --query $sqlq --db $db --json 2>&1) -join "`n"
+$usgAtQualified = [regex]::Matches($sqlOut, '"call"|"member-access"').Count
+Check 'CONTROL: the store still holds BOTH refs at the qualified site (post-filter, not a store change)' `
   ($usgAtQualified -eq 2) `
-  ("usages reported {0} ref(s) at ${lnQualified}:5, expected 2 -- the collapse was pushed into the shared store query" -f $usgAtQualified)
-
+  ("the refs table holds {0} ref(s) at ${lnQualified}:5, expected 2 -- the collapse was pushed into the store" -f $usgAtQualified)
 Write-Host ''
 if ($script:fail) { Write-Host 'FIND-CALLERS-DUPSITES GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'FIND-CALLERS-DUPSITES GUARD: PASS' -ForegroundColor Green

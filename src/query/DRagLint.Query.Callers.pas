@@ -551,13 +551,37 @@ begin
   end;
 end; // function
 
+{ USAGES-DOUBLE-COUNT (1.42). A QUALIFIED call `FHost.FeedHarvest(x)` stores two refs at ONE position:
+  the 'call' and a 'member-access' (see CollapseRefsAtSameSite). `usages` buckets by kind, so the one
+  call site was counted twice (calls + reads, or calls twice). Both rows stay in the store -- rename and
+  --resolved read them -- so this is a READ-TIME screen: a member-access sharing file+line+col with a
+  'call' is dropped from the usages list. Keyed on the column, so two calls on one line both survive.
+  A member-access with no call beside it (a field/property read or write) is untouched. Order kept. }
+function DropMemberAccessUnderCall(const ARefs: TArray<TReference>): TArray<TReference>;
+var
+  CallSites: TDictionary<string, Boolean>;
+  R        : TReference;
+begin
+  Result:= nil;
+  CallSites:= TDictionary<string, Boolean>.Create;
+  try
+    for R in ARefs do
+      if SameText(R.Kind, 'call') then CallSites.AddOrSetValue(Format('%d:%d:%d', [R.FileId, R.StartLine, R.StartCol]), True);
+    for R in ARefs do
+      if not (SameText(R.Kind, 'member-access') and CallSites.ContainsKey(Format('%d:%d:%d', [R.FileId, R.StartLine, R.StartCol]))) then
+        Result:= Result + [R];
+  finally
+    CallSites.Free;
+  end;
+end; // function
+
 function UsageRefsForName(const AStore: ISymbolStore; const AName: string; const ADecls: TArray<TSymbol>): TArray<TReference>;
 var
   DotAt: Integer;
   Kept : TList<TReference>;
 begin
   DotAt:= LastDelimiter('.', AName);
-  if DotAt = 0 then Exit(AStore.FindCallersByName(AName));
+  if DotAt = 0 then Exit(DropMemberAccessUnderCall(AStore.FindCallersByName(AName)));
   Kept:= TList<TReference>.Create;
   try
     for var R in AStore.FindCallersByName(Copy(AName, DotAt + 1, MaxInt)) do
@@ -567,7 +591,7 @@ begin
           Kept.Add(R);
           Break;
         end;
-    Result:= Kept.ToArray;
+    Result:= DropMemberAccessUnderCall(Kept.ToArray);
   finally
     Kept.Free;
   end;

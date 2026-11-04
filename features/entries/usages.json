@@ -41,7 +41,7 @@
         }
       ],
       "helpOrder": 5,
-      "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view.", "                               --limit N keeps the first N rows of each JSON group (declarations included) and adds", "                               \"limit\" and \"totals\" (the full counts); without it nothing is capped."]
+      "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view.", "                               --limit N keeps the first N rows of each JSON group (declarations included) and adds", "                               \"limit\" and \"totals\" (the full counts); without it nothing is capped.", "                               --db is REQUIRED: usages never reads the manifest, so without it the verb exits 2."]
     },
     {
       "type": "ide-menu",
@@ -61,9 +61,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-30",
+    "date": "2026-11-04",
     "by": "ENGINE",
-    "build": "1.38.0-alpha",
-    "surfaceHash": "836b63f5bd194044f8024d7160d368bde3bbce8686e1fa09452da477b3083288"
+    "build": "1.42.0-alpha",
+    "surfaceHash": "246b68950e63708d892d1a7633fe1ccfefa6bfa8d9279b09ac7ba46acb086adc"
   }
 }

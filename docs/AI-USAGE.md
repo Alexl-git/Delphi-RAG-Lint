@@ -57,7 +57,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > **Pass only databases `resolve-dbs` printed.** An explicit `--db` that does not
 > exist is exit 2, never a narrower answer: the verb names the path and its
 > position on stderr and returns nothing. Match on the EXIT CODE, not the prose.
-> Omitting `--db` is always safe -- the manifest resolver drops absent files.
+> Omitting `--db` is safe for the verbs that resolve a manifest set (`query`, `find-callers`, `lint-all` ...) -- the manifest resolver drops absent files. **`usages` is the exception**: it never reads the manifest, so `usages --name X` with no `--db` is exit 2 ("usages does not read the manifest"); pass the `--db` that `resolve-dbs` printed.
 > With `--project` and no `--db` (a `"db"` in `.drag-lint.json` counts as an
 > explicit `--db`), readers resolved through the consumer DB list open ONLY that
 > project's own index (its exact manifest section, else
@@ -117,6 +117,9 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 
 * `find-callers` matches the **bare member name**. `--name TFoo.Bar` returns 0;
   `--name Bar` returns the call sites.
+  The 0-caller hint says so and names the bare name. A property getter/setter (`GetFoo`) is also 0 in the plain form -- the default
+  stays name-based -- and its hint points at `--resolved`, which reaches it through the property.
+  `usages` counts a qualified call `FHost.Feed(x)` once (it used to count the stored call + member-access pair twice).
 * `find-callers` also reports interface dispatch (RB-5): a method reached only THROUGH an interface method it implements
   lists those sites as a separate `via <IFoo.Bar> dispatch` group; `--json` rows gain `via` (the interface method),
   `via_kind` (`interface`) and, when the `implements` edge is ambiguous, `via_edge`, all placed before `resolution`.
