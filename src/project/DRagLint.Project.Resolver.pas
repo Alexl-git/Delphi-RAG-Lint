@@ -23,6 +23,16 @@ const
 /// <param name="AStudio">A BDS key, e.g. '20.0'.</param>
 /// <returns>False for a missing key, and for a key an uninstalled Studio left
 /// behind pointing at a folder that is gone.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Project.TargetStudio.ResolveTargetStudio (DRagLint.Project.TargetStudio.pas)</para>
+/// <para>Calls: DRagLint.Project.Resolver.ActiveBdsRegistry, DRagLint.Project.Resolver.IBdsRegistry.RootDir, Trim</para>
+/// <para>Returns: (Root &lt;&gt; '') and TDirectory.Exists(Root)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Project.Resolver.ActiveBdsRegistry"/>
+/// <seealso cref="DRagLint.Project.Resolver.IBdsRegistry.RootDir"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsBdsStudioInstalled(const AStudio: string): Boolean;
 
 type
@@ -42,12 +52,13 @@ type
   /// level deep) All $(BDS) and similar macros are expanded.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]declaration (DRagLint.Index.Coverage.pas), [drag-lint]declaration (DRagLint.Index.DbSelect.pas), [drag-lint]declaration (DRagLint.Index.Plan.pas), [drag-lint]DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoIndex (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestDbSelect (DRagLint.CLI.pas),
-  /// [drag-lint]DRagLint.CLI.LibrarySectionDbs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveLibraryDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas), [drag-lint]DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), [drag-lint]DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas), [drag-lint]DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems (DRagLint.Lint.ProjectChecks.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.LibraryRoots (DRagLint.Refactor.MultiProjectRename.pas)</para>
-  /// <para>Used in units: Config.IndexesFrame, Config.SettingsFrame, [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Doc.Batch, [drag-lint]DRagLint.Index.Coverage, [drag-lint]DRagLint.Index.DbSelect, [drag-lint]DRagLint.Index.Plan, [drag-lint]DRagLint.Lint.ProjectChecks, DragLint.Plugin.OptionsFrames, [drag-lint]DRagLint.Refactor.MultiProjectRename</para>
+  /// <para>Used by: [drag-lint]declaration (DRagLint.Index.Coverage.pas), [drag-lint]declaration (DRagLint.Index.DbSelect.pas), [drag-lint]declaration (DRagLint.Index.Plan.pas), [drag-lint]declaration (DRagLint.Project.TargetStudio.pas) ?, [drag-lint]DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoCheckUnit (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoIndex (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLibraryDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoResolveDbsList (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestCoverage (DRagLint.CLI.pas),
+  /// [drag-lint]DRagLint.CLI.DoSelfTestDbSelect (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LibrarySectionDbs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.LoadSiblingNameToDb (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveLibraryDb (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.UnitNotInLibraryFindings (DRagLint.CLI.pas) ?, [drag-lint]DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), [drag-lint]DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas) ?, [drag-lint]DRagLint.Index.DbSelect.TDbSelect.Resolve (DRagLint.Index.DbSelect.pas), [drag-lint]DRagLint.Index.Plan.ResolvePlan (DRagLint.Index.Plan.pas) ?, [drag-lint]DRagLint.Lint.ProjectChecks.TProjectChecks.CheckUsedUnitResolvable.EnsureDcuStems (DRagLint.Lint.ProjectChecks.pas),
+  /// [drag-lint]DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots (DRagLint.Project.Resolver.pas), [drag-lint]DRagLint.Project.Resolver.TProjectResolver.MembershipLibraryRoots (DRagLint.Project.Resolver.pas), [drag-lint]DRagLint.Project.TargetStudio.TTargetStudio.OpenResolver (DRagLint.Project.TargetStudio.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.LibraryRoots (DRagLint.Refactor.MultiProjectRename.pas), [drag-lint]DRagLint.Refactor.MultiProjectRename.LibraryRootsOf (DRagLint.Refactor.MultiProjectRename.pas) ?</para>
+  /// <para>Used in units: Config.IndexesFrame, Config.SettingsFrame, [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Doc.Batch, [drag-lint]DRagLint.Index.Coverage, [drag-lint]DRagLint.Index.DbSelect, [drag-lint]DRagLint.Index.Plan, [drag-lint]DRagLint.Lint.ProjectChecks, DragLint.Plugin.OptionsFrames, [drag-lint]DRagLint.Project.TargetStudio, [drag-lint]DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
-  TProjectResolver = class
+  TProjectResolver = class  // dl:ok high-response@b6dc -- REVIEWED 2026-11-04: one class answers all of .dproj folders, library paths and macros per Studio key; RFC 72 from CreateForStudio and the closure roots, split owed with NEXT-BUMP GH13-CLOSURE-TAIL
     strict private
       FBDS            : string                          ;
       FCommonDir      : string                          ;
@@ -58,14 +69,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ResolveNamedMacro (DRagLint.Project.Resolver.pas)</para>
-      /// <para>Calls: UpperCase</para>
-      /// <para>Reads: FEnvVarsLoaded, FEnvVars   Writes: FEnvVarsLoaded</para>
-      /// <para>Touches: registry</para>
+      /// <para>Calls: DRagLint.Project.Resolver.ActiveBdsRegistry, DRagLint.Project.Resolver.IBdsRegistry.EnvironmentVariables, UpperCase</para>
+      /// <para>Reads: FEnvVarsLoaded, FStudio, FEnvVars   Writes: FEnvVarsLoaded</para>
+      /// <seealso cref="DRagLint.Project.Resolver.ActiveBdsRegistry"/>
+      /// <seealso cref="DRagLint.Project.Resolver.IBdsRegistry.EnvironmentVariables"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure EnsureEnvVarsLoaded                     ;
@@ -81,8 +91,8 @@ type
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnsureEnvVarsLoaded"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveNamedMacro(const AName: string; out AValue: string): Boolean;
@@ -91,19 +101,32 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList (DRagLint.Project.Resolver.pas)</para>
-      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ResolveNamedMacro, Pos, StringReplace</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.ResolveNamedMacro, DRagLint.Project.Resolver.TProjectResolver.StudioCommonDir, Pos, StringReplace</para>
       /// <para>Reads: FBDS, FCurrentPlatform</para>
-      /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ResolveNamedMacro"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.StudioCommonDir"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ExpandMacros(const APath: string): string;
       /// <summary>$(BDSCOMMONDIR) for this resolver's Studio; cached after the first ask.</summary>
       /// <returns>The folder; it need not exist.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ExpandMacros (DRagLint.Project.Resolver.pas)</para>
+      /// <para>Calls: ExcludeTrailingPathDelimiter, GetEnvironmentVariable</para>
+      /// <para>Returns: FCommonDir</para>
+      /// <para>Reads: FCommonDir, FBDS, FStudio   Writes: FCommonDir</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function StudioCommonDir: string;
       /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
@@ -115,9 +138,9 @@ type
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ExpandMacros"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure AddFolderIfReal(AList: TList<string>; const APath: string);
@@ -131,27 +154,27 @@ type
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ExpandMacros"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure AddSemicolonList(AList: TList<string>; const ASemicolonList: string; const ABaseDir: string);
-      /// <summary><!-- drag-lint:auto sum -->Enumerates every platform subkey under
-      /// this Studio's Library across both hives and registry views, deduplicated
+      /// <summary><!-- drag-lint:auto sum -->Enumerates every platform subkey under this
+      /// Studio's Library across both hives and registry views, deduplicated
       /// case-insensitively. These are the names Delphi itself registers (Win32, Win64,
       /// Android64, iOSDevice64, ...).</summary>
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.EnumRegistryPlatforms (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths (DRagLint.Project.Resolver.pas)</para>
-      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms.AddUnique, HKEY, SameText</para>
-      /// <para>Touches: registry</para>
+      /// <para>Calls: DRagLint.Project.Resolver.ActiveBdsRegistry, DRagLint.Project.Resolver.IBdsRegistry.LibraryPlatforms, DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms.AddUnique, SameText</para>
+      /// <para>Reads: FStudio</para>
+      /// <seealso cref="DRagLint.Project.Resolver.ActiveBdsRegistry"/>
+      /// <seealso cref="DRagLint.Project.Resolver.IBdsRegistry.LibraryPlatforms"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms.AddUnique"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function EnumLibraryPlatforms: TArray<string>;
@@ -167,8 +190,8 @@ type
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>); overload;
@@ -180,16 +203,16 @@ type
     /// <param name="ASearchPathOnly"><!-- drag-lint:auto type -->Boolean</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/2 (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveCompilePaths (DRagLint.Project.Resolver.pas)</para>
-    /// <para>Calls: DRagLint.Project.Resolver.ReadRegPathInto, DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList, HKEY</para>
+    /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/2 (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ResolveCompilePaths (DRagLint.Project.Resolver.pas)</para>
+    /// <para>Calls: DRagLint.Project.Resolver.ActiveBdsRegistry, DRagLint.Project.Resolver.IBdsRegistry.LibraryPathValues, DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList</para>
     /// <para>Overload 2 of 2</para>
-    /// <para>Writes: FCurrentPlatform</para>
+    /// <para>Reads: FStudio   Writes: FCurrentPlatform</para>
     /// <para>Directives: overload</para>
-    /// <seealso cref="DRagLint.Project.Resolver.ReadRegPathInto"/>
+    /// <seealso cref="DRagLint.Project.Resolver.ActiveBdsRegistry"/>
+    /// <seealso cref="DRagLint.Project.Resolver.IBdsRegistry.LibraryPathValues"/>
     /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
     /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
-    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ReadLibraryPaths(AList: TList<string>; const APlatforms: TArray<string>; ASearchPathOnly: Boolean); overload;
@@ -202,9 +225,9 @@ type
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ReadDProj       (const ADprojPath: string; AList: TList<string>);
@@ -217,9 +240,9 @@ type
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ReadDprUsesPaths(const ADprPath  : string; AList: TList<string>);
@@ -240,22 +263,22 @@ type
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadDprUsesPaths"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure CollectProjectFolders(const ADprojPath: string; AList: TList<string>);
     public
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+16 more)</para>
-      /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty</para>
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas) (+14 more)</para>
+      /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty, DRagLint.Project.Resolver.ActiveBdsRegistry, DRagLint.Project.Resolver.BdsRegistryFixturePath, DRagLint.Project.Resolver.IBdsRegistry.RootDir, ExcludeTrailingPathDelimiter, Trim</para>
       /// <para>constructor</para>
-      /// <para>Writes: FBDS, FCurrentPlatform, FEnvVars, FEnvVarsLoaded</para>
+      /// <para>Writes: FStudio, FBDS, FCurrentPlatform, FEnvVars, FEnvVarsLoaded</para>
       /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
+      /// <seealso cref="DRagLint.Project.Resolver.ActiveBdsRegistry"/>
+      /// <seealso cref="DRagLint.Project.Resolver.BdsRegistryFixturePath"/>
+      /// <seealso cref="DRagLint.Project.Resolver.IBdsRegistry.RootDir"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create;
@@ -264,8 +287,21 @@ type
       /// key's RootDir and $(BDSCOMMONDIR) to that Studio's common folder: the value its
       /// own bin\rsvars.bat sets, else %PUBLIC%\Documents\Embarcadero\Studio\&lt;key&gt;.</summary>
       /// <param name="AStudio">A BDS key; DEFAULT_BDS_KEY behaves exactly as Create.</param>
-      /// <remarks>Does not check the key is installed: IsBdsStudioInstalled is the
-      /// caller's decision. TStudioEnv and the compiler stay on 37.0.</remarks>
+      /// <remarks>
+      /// Does not check the key is installed: IsBdsStudioInstalled is the
+      /// caller's decision. TStudioEnv and the compiler stay on 37.0.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Project.TargetStudio.TTargetStudio.OpenResolver (DRagLint.Project.TargetStudio.pas)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.ActiveBdsRegistry, DRagLint.Project.Resolver.IBdsRegistry.RootDir, DRagLint.Project.Resolver.TProjectResolver.Create, ExcludeTrailingPathDelimiter, SameText, Trim</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FStudio, FBDS</para>
+      /// <seealso cref="DRagLint.Project.Resolver.ActiveBdsRegistry"/>
+      /// <seealso cref="DRagLint.Project.Resolver.IBdsRegistry.RootDir"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor CreateForStudio(const AStudio: string);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -274,9 +310,9 @@ type
       /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnsureEnvVarsLoaded"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       destructor Destroy; override;
@@ -300,7 +336,7 @@ type
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Resolve(const ADprojPath: string): TArray<string>;
@@ -323,7 +359,7 @@ type
     /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
     /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
     /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
-    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveCompilePaths(const ADprojPath, APlatform: string): TArray<string>;
@@ -347,8 +383,8 @@ type
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Destroy"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveProjectOnly(const ADprojPath: string): TArray<string>;
@@ -369,14 +405,14 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas) (+4 more)</para>
+      /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.Index.Coverage.ComputeCoverage (DRagLint.Index.Coverage.pas), DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.MembershipLibraryRoots (DRagLint.Project.Resolver.pas) (+1 more)</para>
       /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms, DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/2</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveLibraryPaths(AAllPlatforms: Boolean = False): TArray<string>;
@@ -393,8 +429,8 @@ type
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.EnumLibraryPlatforms"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function EnumRegistryPlatforms: TArray<string>;
@@ -412,8 +448,8 @@ type
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ReadPlatformLibraryPaths(const APlatform: string): TArray<string>;
@@ -421,18 +457,54 @@ type
       /// <returns>On the default Studio exactly ResolveLibraryPaths. On another: what
       /// the platform library DBs (built from 37.0) cover, plus that Studio's own
       /// folders -- everything else on its path has no other index to live in.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail (DRagLint.Project.Resolver.pas)</para>
+      /// <para>Calls: ContainsText, DRagLint.Project.Resolver.IsUnderAnyRoot, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths, SameText</para>
+      /// <para>Reads: FStudio, FBDS</para>
+      /// <seealso cref="DRagLint.Project.Resolver.IsUnderAnyRoot"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ClosureLibraryRoots: TArray<string>;
       /// <summary>The roots that are not project MEMBERS: a unit under one needs no
       /// listing in the .dpr, because the compiler finds it through the library path.</summary>
       /// <returns>On the default Studio exactly ResolveLibraryPaths; on another, its
       /// whole library path plus the default Studio's.</returns>
-      /// <remarks>For reconcile-project, unit-not-in-dpr, unit-not-in-library, autodoc
-      /// and rename: a unit `index` added from the library path is not a project gap.</remarks>
+      /// <remarks>
+      /// For reconcile-project, unit-not-in-dpr, unit-not-in-library, autodoc
+      /// and rename: a unit `index` added from the library path is not a project gap.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.UnitNotInLibraryFindings (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), DRagLint.Refactor.MultiProjectRename.LibraryRootsOf (DRagLint.Refactor.MultiProjectRename.pas)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths, SameText</para>
+      /// <para>Reads: FStudio</para>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function MembershipLibraryRoots: TArray<string>;
       /// <summary>The folders a closure searches after the project's own, as dcc does.</summary>
       /// <param name="APlatform">The target platform.</param>
       /// <returns>Nil on the default Studio, where library units stay in the library
       /// DB. On another, its Search Path minus ClosureLibraryRoots, in path order.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Project.Resolver.IsUnderAnyRoot, DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots, DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/3, SameText</para>
+      /// <para>Reads: FStudio</para>
+      /// <seealso cref="DRagLint.Project.Resolver.IsUnderAnyRoot"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
+      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ClosureSearchTail(const APlatform: string): TArray<string>;
   end;
 
@@ -846,7 +918,7 @@ begin
   Rsvars:= TPath.Combine(FBDS, RSVARS_REL);
   if (FBDS <> '') and TFile.Exists(Rsvars) then
   begin
-    Found:= TRegEx.Match(TFile.ReadAllText(Rsvars), COMMONDIR_SET);
+    Found:= TRegEx.Match(TFile.ReadAllText(Rsvars), COMMONDIR_SET);  // dl:ok taint-path-traversal@aa19 -- REVIEWED 2026-11-04: the path is the local Studio's own RootDir from this user's registry, the same trust as the library path itself
     if Found.Success then FCommonDir:= ExcludeTrailingPathDelimiter(Found.Groups[1].Value);
   end;
   if FCommonDir = '' then

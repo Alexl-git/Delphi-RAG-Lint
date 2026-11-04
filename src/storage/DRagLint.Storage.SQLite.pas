@@ -14554,9 +14554,9 @@ procedure BeatStreamOpen(AConn: TFDConnection; AQ: TFDQuery; const AStep: string
 var
   Total: Int64;
 begin
-  Total:= AConn.ExecSQLScalar('SELECT count(*) FROM (' + AQ.SQL.Text + ')');
+  Total:= AConn.ExecSQLScalar('SELECT count(*) FROM (' + AQ.SQL.Text + ')');  // dl:ok taint-sql-injection@c459 -- REVIEWED 2026-11-04: AQ.SQL.Text is this store's own literal stream query; the reported source is the DB path, which never reaches SQL text
   BeatStep(AStep, Total);
-  AQ.Open;  // dl:ok dataset-open-without-close -- REVIEWED 2026-11-04: an opener by design; each stream closes and frees its own query
+  AQ.Open;  // dl:ok dataset-open-without-close@07d8 -- REVIEWED 2026-11-04: an opener by design; each stream closes and frees its own query
 end;
 
 procedure TSQLiteSymbolStore.ResolveEnumValueRefs(AResolver: TCallResolver;
@@ -15111,7 +15111,8 @@ begin
   SetMetaValue(KEY, '[' + string.Join(',', Parts) + ']');
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);{ v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@84e6, deep-nesting@6ffc, cyclomatic-complexity@6a89, cognitive-complexity@95b3 -- REVIEWED 2026-11-04: one transaction over one resolver with shared maps; splitting it here would touch resolve-surface code in a no-bump release, callslow added only progress + savepoint handling
+{ v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
   every 'call' ref through ResolveOne. Non-resolving sites (Edge.TargetSymbolId=0)

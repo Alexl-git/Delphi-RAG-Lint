@@ -3625,7 +3625,7 @@ begin
   Flush(ErrOutput);
   { ExitProcess, not Halt: this is not the main thread, and finalization would race the pass that is
     still running on it. SQLite recovers the open transaction exactly as after a kill. }
-  ExitProcess(if Low then EXIT_STAGE_STALLED_LOWMEM else EXIT_STAGE_STALLED);  // dl:ok halt-in-library -- REVIEWED 2026-11-04: the opt-in --stall-exit-min contract is exactly this exit; the CLI is the process's owner
+  ExitProcess(if Low then EXIT_STAGE_STALLED_LOWMEM else EXIT_STAGE_STALLED);  // dl:ok halt-in-library@1989 -- REVIEWED 2026-11-04: the opt-in --stall-exit-min contract is exactly this exit; the CLI is the process's owner
 end;
 
 procedure TStageHeartbeat.Execute;
@@ -15358,7 +15358,7 @@ begin
     { Test hook (run_index_lock_released_before_warm): stretch the window between
       the end of the writes and the warm so a second run can be started inside it. }
     var WarmDelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_WARM_DELAY_MS'), 0);
-    if WarmDelayMs > 0 then Sleep(WarmDelayMs);  // dl:ok sleep-in-vcl@acdc -- REVIEWED 2026-10-30: console CLI test hook, off unless the env var is set
+    if WarmDelayMs > 0 then Sleep(WarmDelayMs);  // dl:ok sleep-in-vcl@8477 -- REVIEWED 2026-11-04: console CLI test hook, off unless the env var is set
     WarmRuleCache(AProjectDb, ALibraryDb);
     Exit;
   end;
@@ -15480,7 +15480,7 @@ end;
 /// and the next lint fills lazily); 2 without a --db that exists.</returns>
 /// <remarks>What an index run starts in the background (with --detached, which
 /// also sends the output to NUL); by hand it is the synchronous warm.</remarks>
-function DoWarmRuleCache(const AArgs: TArgs): Integer;
+function DoWarmRuleCache(const AArgs: TArgs): Integer;  // dl:ok deep-nesting@d5cd -- REVIEWED 2026-11-04: the depth is the inline watcher thread with its wait loop; it captures five locals of this one lifetime and is read top to bottom
 begin
   if (AArgs.DbPath = '') or not TFile.Exists(AArgs.DbPath) then
   begin
@@ -30994,7 +30994,7 @@ var
   // (and its freshness checked) the FIRST time a unit reaches that step, then
   // reused: a single --unit run keeps its old order, a batch pays for both and
   // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
-  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@0b2d, cyclomatic-complexity@d6f3, method-too-long@0ad6 -- REVIEWED 2026-10-24 (lint sweep b0bad3cf..HEAD): the branch count and length are that same early-outcome chain; splitting it is a convert-apply refactor, not a sweep fix. Each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@3537, cyclomatic-complexity@02e3, method-too-long@dcc8 -- REVIEWED 2026-11-04 (lint sweep b0bad3cf..HEAD): the branch count and length are that same early-outcome chain; splitting it is a convert-apply refactor, not a sweep fix. Each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
   var
     UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
     ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }

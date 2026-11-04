@@ -364,7 +364,7 @@ begin
       if not MoveFileEx(PChar(Tmp), PChar(Path), MOVEFILE_REPLACE_EXISTING) then
       begin
         AWhy:= 'rename failed: ' + SysErrorMessage(GetLastError);
-        DeleteFile(PChar(Tmp));  // dl:ok taint-path-traversal@114f -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
+        if not DeleteFile(PChar(Tmp)) then AWhy:= AWhy + ' (temp file left: ' + Tmp + ')';  // dl:ok taint-path-traversal@13ee -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
         Exit;
       end;
       Result:= True;
@@ -374,7 +374,7 @@ begin
       on E: Exception do
       begin
         AWhy:= 'write failed: ' + E.Message;
-        DeleteFile(PChar(Tmp));  // dl:ok taint-path-traversal@114f -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
+        if not DeleteFile(PChar(Tmp)) then AWhy:= AWhy + ' (temp file left: ' + Tmp + ')';  // dl:ok taint-path-traversal@13ee -- the folder is the user's own DRAGLINT_RULE_CACHE_DIR or %LOCALAPPDATA%\drag-lint\cache (the caller's environment, not remote input), same as SweepStaleTmp
         Result:= False;
       end;
     end;

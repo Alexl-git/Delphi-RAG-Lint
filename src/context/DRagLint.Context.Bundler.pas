@@ -682,7 +682,7 @@ var
 begin
   T:= Trim(ALine);
   if (T = '') or not CharInSet(T[1], ['A'..'Z', 'a'..'z', '_']) then Exit('');
-  if StartsText('procedure ', T) or StartsText('function ', T) or StartsText('constructor ', T) or StartsText('destructor ', T) or StartsText('class ', T) or
+  if StartsText('procedure ', T) or StartsText('function ', T) or StartsText('constructor ', T) or StartsText('destructor ', T) or StartsText('class ', T) or  // dl:ok boolean-expression-complexity@f722 -- REVIEWED 2026-11-04: a flat keyword list, one alternative per header kind
     StartsText('operator ', T) or StartsText('property ', T) then Exit(LowerCase(HeaderLeafName(T)));
   P:= 1;
   while (P <= Length(T)) and CharInSet(T[P], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(P);
