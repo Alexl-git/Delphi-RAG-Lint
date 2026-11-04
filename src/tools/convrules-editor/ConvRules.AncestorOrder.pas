@@ -17,7 +17,8 @@ type
   /// <summary>How the platform library index answered "do you declare this class?".</summary>
   /// <remarks>laDeclared: one or more library files declare it (a library root: the walk
   /// stops there, nothing blocks). laAbsent: no library DB declares it. laFailed: a library
-  /// DB could not be asked and none declared it; unknown, never read as declared.</remarks>
+  /// DB could not be asked and none declared it; unknown, never read as declared (UnindexedBlockText
+  /// still lets the VCL roots TForm, TFrame, TDataModule and their TCustom* forms through).</remarks>
   TLibraryAnswer = (laDeclared, laAbsent, laFailed);
 
   /// <summary>Asks the platform library index whether it declares a class.</summary>
@@ -109,7 +110,11 @@ function OutsideClassesOf(const AUnits: TArray<TUnitInheritance>): TArray<string
 /// which is declared in more than one project unit -- remove the duplicate or qualify the class.' (the
 /// engine does not name the candidate units), and no reindex instruction.</returns>
 /// <remarks>A library that could not be asked blocks (unknown is never read as a library
-/// root). No class-name list: a vendor class counts as a root only when the library declares it.</remarks>
+/// root), EXCEPT the VCL roots TForm, TFrame, TDataModule, TCustomForm, TCustomFrame and
+/// TCustomDataModule (owner ruling 2026-11-04: a locked or missing library DB must not make every
+/// ordinary form look unindexed). Only the laFailed path consults that short list; when the library
+/// answers, its answer wins for every class, so a vendor class counts as a root only when the
+/// library declares it.</remarks>
 function UnindexedBlockText(const AUnits: TArray<TUnitInheritance>; const AIsLibrary: TLibraryClassCheck): string;
 
 implementation
@@ -130,6 +135,9 @@ const
   UNINDEXED_HEAD  = 'Convert refused: an ancestor of a listed unit is not in the project index.';
   UNINDEXED_FMT   = '%s descends from %s, whose unit is in no indexed project.';
   UNASKED_FMT     = '%s descends from %s, which is in no project index; the platform library index could not be asked -- %s.';
+  /// <summary>The VCL roots a library that cannot be asked still counts as declaring (owner ruling
+  /// 2026-11-04); only ever consulted for laFailed -- a library answer always wins.</summary>
+  VCL_ROOTS       : array[0..5] of string = ('TForm', 'TFrame', 'TDataModule', 'TCustomForm', 'TCustomFrame', 'TCustomDataModule');
   UNINDEXED_TAIL  = 'Add that unit to the project (.dproj/.dpr), reindex, and press Convert again.';
   AMBIGUOUS_HEAD  = 'Convert refused: an ancestor of a listed unit is ambiguous.';
   AMBIGUOUS_FMT   = '%s descends from %s, which is declared in more than one project unit -- remove the duplicate or qualify the class.';
@@ -277,7 +285,8 @@ begin
         laAbsent:
           LLines:= LLines + [Format(UNINDEXED_FMT, [ExtractFileName(LUnit.UnitPas), LClass])];
         laFailed:
-          LLines:= LLines + [Format(UNASKED_FMT, [ExtractFileName(LUnit.UnitPas), LClass, LError])];
+          if not MatchText(BareType(LClass), VCL_ROOTS) then // the library cannot be asked: the VCL roots stay roots
+            LLines:= LLines + [Format(UNASKED_FMT, [ExtractFileName(LUnit.UnitPas), LClass, LError])];
       end; // case
   end;
   Result:= '';

@@ -16607,6 +16607,7 @@ begin
     TestUnindexedAncestors;
     TestMissingAncestorsBlock;
     TestAmbiguousAncestors;
+    TestLibraryFailedVclRoots;
 
     FreeAndNil(GParseBook);
 

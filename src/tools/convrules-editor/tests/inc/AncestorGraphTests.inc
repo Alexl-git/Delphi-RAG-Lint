@@ -349,3 +349,25 @@ begin
   LText:= UnindexedBlockText([LInh], AgLibrary([], []));
   Check('ag.ambiguous.and.outside.both', ContainsText(LText, 'TA') and ContainsText(LText, 'TB') and ContainsText(LText, 'TJvForm') and ContainsText(LText, 'no indexed project'), LText);
 end;
+
+{ C8CHAIN review #3 (owner ruling): library cannot be asked -> the VCL roots still count as roots. }
+procedure TestLibraryFailedVclRoots;
+var
+  LInh : TUnitInheritance;
+  LText: string;
+  LRoots: TArray<string>;
+begin
+  LRoots:= ['TForm', 'TFrame', 'TDataModule', 'TCustomForm', 'TCustomFrame', 'TCustomDataModule'];
+  LInh:= Default(TUnitInheritance);
+  LInh.UnitPas:= AG_LEAF_PAS;
+  LInh.Known  := True;
+  LInh.Outside:= LRoots + ['Vcl.Forms.TForm'];
+  Check('ag.libfailed.vcl.roots.not.blocked', UnindexedBlockText([LInh], AgLibrary([], LRoots)) = '', UnindexedBlockText([LInh], AgLibrary([], LRoots)));
+  LInh.Outside:= ['tform', 'TJvForm'];
+  LText:= UnindexedBlockText([LInh], AgLibrary([], ['tform', 'TJvForm']));
+  Check('ag.libfailed.other.class.still.blocks', ContainsText(LText, 'TJvForm') and ContainsText(LText, 'library locked') and not ContainsText(LText, 'descends from tform'), LText);
+  LInh.Outside:= ['TForm'];
+  LText:= UnindexedBlockText([LInh], AgLibrary([], []));
+  Check('ag.libanswers.absent.wins.over.root.name', ContainsText(LText, 'Leaf.pas descends from TForm'), LText);
+  Check('ag.libanswers.declared.not.blocked', UnindexedBlockText([LInh], AgLibrary(['TForm'], [])) = '');
+end;
