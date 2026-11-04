@@ -3704,7 +3704,7 @@ procedure ResolveCallsClearingFirst(const AStore: ISymbolStore; AClearFirst: Boo
 begin
   { Test seam (run_index_kill_resolve_guard.ps1): holds every run here, so a real kill lands before the pass commits. }
   var StartDelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_CALLS_START_DELAY_MS'), 0);
-  if StartDelayMs > 0 then Sleep(StartDelayMs);
+  if StartDelayMs > 0 then TThread.Sleep(StartDelayMs);
   AStore.ResolveCallTargets(ALibs, AClearFirst);
 end;
 
