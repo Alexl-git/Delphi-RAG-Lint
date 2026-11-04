@@ -36,7 +36,8 @@
 #   order.blocking.text); -ProofGateYes 26 / 0 (adds order.yes.reordered). RED: the pre-C8CHAIN editor (main
 #   2026-10-27) 15 / 9 (order.warning, order.no.runs.nothing, chain.*, order.blocking.*, qb.unindexed.blocks,
 #   qb.ok.only, qb.runs.nothing -- it converts Orphan); the 79dad774 name-filter editor 21 / 3
-#   (qb.library.root.not.blocked, order.blocking.text, order.blocking.no.runs.nothing: it refuses LibRoot).param([string]$Exe, [switch]$ProofNoInheritance, [switch]$ProofGateYes, [switch]$ProofMidConverted)
+#   (qb.library.root.not.blocked, order.blocking.text, order.blocking.no.runs.nothing: it refuses LibRoot).
+param([string]$Exe, [switch]$ProofNoInheritance, [switch]$ProofGateYes, [switch]$ProofMidConverted)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
@@ -840,6 +841,35 @@ try {
     $bck = (Test-Path -LiteralPath ($anc + '.BCK1')) -or (Test-Path -LiteralPath ($desc + '.BCK1'))
     Check 'order.yes.runs' (($yes -eq '') -and $ended -and $bck) "answer: $yes; ended=$ended; BCK1=$bck; status: $st"
   }
+
+  # --- C8CHAIN review #1 (owner ruling, 891efca1): No to the add-time offer does not exempt the unit at Convert ---
+  # Leaf alone is listed (Anc and Mid are not converted and not listed). Convert asks the missing-ancestor question
+  # again; No cancels the whole run (Leaf untouched, no .BCK1); a second Convert + Yes inserts root-first and runs.
+  ClearSources $src $del
+  [void](WaitFor { @([CT]::Items($src)).Count -eq 0 } 10)
+  $e = PickFile $p.Id $add $leaf; $prompt = WaitCls $p.Id 'TMessageForm' 20; if ($prompt -ne [IntPtr]::Zero) { [void](Answer $p.Id 'No') }
+  [void](WaitFor { @([CT]::Items($src)).Count -eq 1 } 10)
+  WaitAddSettled $p.Id $main 1
+  [void](WaitIdle $p.Id $main 90)
+  $leafDfm = Join-Path $tmp 'Leaf.dfm'
+  $h0 = @((Get-FileHash -LiteralPath $leaf).Hash, (Get-FileHash -LiteralPath $leafDfm).Hash) -join ' '
+  Click $conv
+  $ask = WaitCls $p.Id 'TMessageForm' 30
+  $st = Status $main
+  Check 'c8.convert.block.asks' (($ask -ne [IntPtr]::Zero) -and ($st -like '*Some units descend from an ancestor that is not converted yet and is not in the run:*Leaf.pas descends from*which is not in the run*Add Anc.pas, Mid.pas ahead of the units that need them and run? No cancels the whole run.*')) "status: $st"
+  $e = if ($ask -ne [IntPtr]::Zero) { Answer $p.Id 'No' } else { 'no question' }
+  [void](WaitFor { (Status $main) -eq $cancelText } 10)
+  $h1 = @((Get-FileHash -LiteralPath $leaf).Hash, (Get-FileHash -LiteralPath $leafDfm).Hash) -join ' '
+  $items = [CT]::Items($src)
+  Check 'c8.convert.block.no.cancels' (($e -eq '') -and ((Status $main) -eq $cancelText) -and ($h0 -eq $h1) -and -not (Test-Path -LiteralPath ($leaf + '.BCK1')) -and -not (Test-Path -LiteralPath ($leafDfm + '.BCK1')) -and ($items.Count -eq 1)) "answer: $e; status: $(Status $main); items: $($items -join ' | ')"
+  [void](WaitIdle $p.Id $main 90)
+  Click $conv
+  $ask = WaitCls $p.Id 'TMessageForm' 30
+  $e = if ($ask -ne [IntPtr]::Zero) { Answer $p.Id 'Yes' } else { 'no question' }
+  [void](WaitFor { @([CT]::Items($src)).Count -ge 3 } 10)
+  $items = [CT]::Items($src)
+  Check 'c8.convert.block.yes.inserts' (($e -eq '') -and ($items.Count -ge 3) -and ($items[0] -eq $anc) -and ($items[1] -eq $mid) -and ($items[-1] -eq $leaf)) "answer: $e; items: $($items -join ' | ')"
+  [void](WaitFor { (Test-Path -LiteralPath ($leaf + '.BCK1')) -or ((Status $main) -like 'Converted *') } 120)
 }
 finally {
   if ($null -ne $p -and -not $p.HasExited) { $p.Kill($true); [void]$p.WaitForExit(15000) }
