@@ -3617,7 +3617,7 @@ begin
   if Low then ExitMs:= ExitMs div STAGE_LOWMEM_LIMIT_DIVISOR;
   if Stalled < UInt64(ExitMs) then Exit;
   Text:= Format('%sstage: %s -- STALLED: no progress for %d s at %s (seq %d), %d MB free of %d MB; exiting with code %d. ' +
-    'The open transaction rolls back. A kill after the walk keeps the parse only with --resolve-only.',
+    'The open transaction rolls back. The parse survives: the next plain index skips the files already parsed and re-derives the edges.',
     [FIndent, FLabel, Stalled div STAGE_MS_PER_SECOND, Where, B.Seq, AvailMb, TotalMb,
      if Low then EXIT_STAGE_STALLED_LOWMEM else EXIT_STAGE_STALLED]);
   Writeln(Text);
@@ -3703,6 +3703,9 @@ end;
 procedure ResolveCallsClearingFirst(const AStore: ISymbolStore; AClearFirst: Boolean;
   const ALibs: TArray<ISymbolStore>);
 begin
+  { Test seam (run_index_kill_resolve_guard.ps1): holds every run here, so a real kill lands before the pass commits. }
+  var StartDelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_CALLS_START_DELAY_MS'), 0);
+  if StartDelayMs > 0 then TThread.Sleep(StartDelayMs);
   AStore.ResolveCallTargets(ALibs, AClearFirst);
 end;
 
@@ -4887,6 +4890,8 @@ begin
       (ResolveCallsClearingFirst), so readers never see the cleared state. RanCalls
       below is True whenever this is. }
     var ClearEdgesInPass: Boolean:= ResolverStale or AResolveOnly;
+    { A sweep writes no file, so the gate's mark did not fire; same reason (InstallIndexStandDownGate). }
+    if Length(Evicted) > 0 then Store.SetMetaValue(RESOLVER_FP_KEY, '');
     { Library-first resolve: a DB marked `pending` whose library is ready now re-resolves even when no file changed. }
     { SecPlatform: computed once, before the pre-walk gate (lf-order). }
     var LibRun: TLibraryRun:= PlanLibraryResolve(Store, AItem.LibraryResolve and (AItem.Mode <> smLibrary), SecPlatform, AItem.DbPath);
@@ -5249,7 +5254,15 @@ end;
 /// because the files written so far were never resolved), the WAL is checkpointed, the
 /// connection is closed, `exiting` is answered and the process ends with
 /// CONTROL_EXIT_STOOD_DOWN. No file transaction is open at that point, so no file row is
-/// half written; every committed file is up to date and the same command resumes.</remarks>
+/// half written; every committed file is up to date and the same command resumes.
+/// <para>THE GATE ALSO MARKS THE RESOLVE INCOMPLETE. Before the first file a run writes, it clears
+/// the resolver stamp; CommitIndexerFingerprint writes it back once the resolve pass completed. A
+/// file's re-parse cascades its call edges away and its up-to-date row commits before the pass does,
+/// so a run killed in between used to leave a next plain run with nothing to re-parse, a matching
+/// stamp and "calls -- skipped": those edges stayed lost until the file next changed. An absent
+/// stamp is stale, so that run now re-derives every edge. A run that writes no file never fires
+/// this. Installed with or without a batch channel. Guard:
+/// tests\autotest\run_index_kill_resolve_guard.ps1.</para></remarks>
 procedure InstallIndexStandDownGate;
 begin
   { Test seam (run_control_channel_guard.ps1): slows each file so a stand-down can land mid-walk. }
@@ -5257,6 +5270,8 @@ begin
   GFileTxGate:= procedure(AStore: TObject)
     begin
       if FileDelayMs > 0 then Sleep(FileDelayMs);
+      if (AStore is TSQLiteSymbolStore) and (TSQLiteSymbolStore(AStore).GetMetaValue(RESOLVER_FP_KEY) <> '') then
+        TSQLiteSymbolStore(AStore).SetMetaValue(RESOLVER_FP_KEY, '');
       if not BatchStandDownTaken then Exit;
       Writeln(ErrOutput, 'index: stopped by a maintenance stand-down between files; the database is consistent. Re-run the same command to resume.');
       if AStore is TSQLiteSymbolStore then
@@ -5542,7 +5557,8 @@ begin
   begin
     var AllDbs: TArray<string>:= nil;
     for var PlanSec in Plan.Items do AllDbs:= AllDbs + [ExpandFileName(PlanSec.DbPath)];
-    if BatchChannelOpen('index', AllDbs, DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION) then InstallIndexStandDownGate;
+    BatchChannelOpen('index', AllDbs, DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+    InstallIndexStandDownGate;
   end;
   // Compute effective job count.
   // Priority: --jobs CLI > manifest.settings.maxJobs > auto (min(CpuCount, sections)).
@@ -6550,7 +6566,14 @@ end;
 
   This does NOT give per-file resumability -- an interrupted run still restarts
   from the beginning. That needs the per-file indexed_at_version column tracked
-  in INBOX-index-runs-are-not-resumable; this is the correctness half only. }
+  in INBOX-index-runs-are-not-resumable; this is the correctness half only.
+
+  1.42, FINGERPRINT-STAMP-AFTER-WALK: IT STAYS AT END OF RUN, MEASURED. The proposal
+  was to stamp right after the walk so a kill during resolve never forces a
+  re-parse. It never did: the per-file stamps (ApplyIndexerFingerprint) are
+  committed before the resolve, so the next run parses 0 files and resolves
+  (run_index_kill_resolve_guard K4). Moving this stamp would buy nothing and would
+  make ProbeLibraryReadiness read a library killed mid-resolve as finished. }
 procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
   APreprocess: Boolean; const APlatform, ACfgLimb: string);
 begin
@@ -6809,7 +6832,11 @@ begin
   end;
   Store.Migrate;
   { DEC-13: a long one-shot run listens for a maintenance stand-down (a dry run touches no disk, so it does not). }
-  if (not AArgs.DryRun) and BatchChannelOpen('index', TArray<string>.Create(ExpandFileName(ResolvedDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION) then InstallIndexStandDownGate;
+  if not AArgs.DryRun then
+  begin
+    BatchChannelOpen('index', TArray<string>.Create(ExpandFileName(ResolvedDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+    InstallIndexStandDownGate;
+  end;
   { V-C (1.31.5): a DB with no files before this run (created by it, or never
     filled) has nothing stale -- the stamp / scan_type notes below are real
     warnings only on a DB that already holds an index. Read before any rebuild
@@ -7482,6 +7509,8 @@ begin
       than not having the flag. }
     { 1.41 IDX-HALFREAD: deferred into the calls pass's transaction (ResolveCallsClearingFirst). }
     var ClearEdgesInPass: Boolean:= ResolverStale or AArgs.ResolveOnly;
+    { A sweep writes no file, so the gate's mark did not fire; same reason (InstallIndexStandDownGate). }
+    if SweptRows > 0 then Store.SetMetaValue(RESOLVER_FP_KEY, '');
     var CorpusMoved: Boolean:= (Indexer.ParsedFiles > ParsedBeforeTick) or AArgs.Rebuild or (SweptRows > 0);
     { Library-first resolve: an explicit --library-db names the store itself and clears any marker. }
     var LibRun: TLibraryRun:= PlanLibraryResolve(Store,
