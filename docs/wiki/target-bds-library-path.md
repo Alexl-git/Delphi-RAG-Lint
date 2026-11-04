@@ -62,7 +62,7 @@ The closure is recomputed on every `index --project`, so a library path change a
 
 ## Tested and not tested
 
-Guards replace the registry with a JSON fixture (`DRAGLINT_TEST_BDS_REGISTRY`, `tests\autotest\run_target_bds_libpath_guard.ps1`). Beyond the fixture, on 2026-11-04 a scratch project with ProjectVersion 20.1 ran against the build box's real Studio 23.0 key: `Library path: BDS 23.0 (target Delphi 12)`, and a unit found only on 23.0's library path joined the closure with its own uses and an include. A Delphi 13 closure is byte-identical before and after the `` change on 3 real projects.
+Guards replace the registry with a JSON fixture (`DRAGLINT_TEST_BDS_REGISTRY`, `tests\autotest\run_target_bds_libpath_guard.ps1`). Beyond the fixture, on 2026-11-04 a scratch project with ProjectVersion 20.1 ran against the build box's real Studio 23.0 key: `Library path: BDS 23.0 (target Delphi 12)`, and a unit found only on 23.0's library path joined the closure with its own uses and an include. A Delphi 13 closure is byte-identical before and after the `$(BDSCOMMONDIR)` change on 3 real projects.
 
 Not tested here:
 
