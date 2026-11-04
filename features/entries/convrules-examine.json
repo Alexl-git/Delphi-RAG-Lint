@@ -1,0 +1,29 @@
+{
+  "id": "convrules-examine",
+  "title": "Examine: mark the properties a form uses",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.31.0-alpha",
+  "summary": "ConvRulesEditor Conversion menu: pick .dfm/.pas files and mark in green the From properties they actually use",
+  "intro": "See which properties of a class your forms really use before mapping.",
+  "wikiPage": "convrules-editor-examine",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Conversion > Examine..."
+    },
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Conversion > Clear marks"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-04",
+    "by": "alexanderl",
+    "build": "1.42.0-alpha"
+  }
+}

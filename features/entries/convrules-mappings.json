@@ -1,0 +1,24 @@
+{
+  "id": "convrules-mappings",
+  "title": "Conditional #mapping authoring",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.31.0-alpha",
+  "summary": "ConvRulesEditor Mapping menu: author a conditional #mapping (one enum value sets several target properties) and #apply it to a conversion",
+  "intro": "Write a conditional #mapping without hand-editing #when lines.",
+  "wikiPage": "convrules-editor-mappings",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Mapping > Mappings..."
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-04",
+    "by": "alexanderl",
+    "build": "1.42.0-alpha"
+  }
+}
