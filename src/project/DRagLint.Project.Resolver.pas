@@ -613,7 +613,7 @@ end;
 constructor TFixtureBdsRegistry.Create(const AFixtureFile: string);
 begin
   inherited Create;
-  FRoot:= TJSONObject.ParseJSONValue(TFile.ReadAllText(AFixtureFile)) as TJSONObject; // dl:ok taint-path-traversal -- REVIEWED 2026-11-03 a test seam: the variable is set by the guard that owns the file, and the file is only parsed, never executed or written
+  FRoot:= TJSONObject.ParseJSONValue(TFile.ReadAllText(AFixtureFile)) as TJSONObject; // dl:ok taint-path-traversal@8295 -- REVIEWED 2026-11-03 a test seam: the variable is set by the guard that owns the file, and the file is only parsed, never executed or written
   if FRoot = nil then raise EBdsRegistryFixture.CreateFmt('%s: not a JSON object: %s', [FIXTURE_ENV_VAR, AFixtureFile]);
 end;
 
