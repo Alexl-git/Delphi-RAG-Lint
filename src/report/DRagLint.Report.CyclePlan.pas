@@ -66,7 +66,8 @@ type
   /// signature-in-cycle, signature-unknown, routine-not-called, init-order,
   /// duplicate-identifier, edge-still-used, overloaded-routine, unsupported-directive; R2 (E18 T6) adds
   /// member-write, construction, class-method, class-ref, type-decl, type-cast, other-ref,
-  /// multiple-classes, member-unsupported, no-iinterface, ref-counted, receiver-unknown,
+  /// multiple-classes (overlapping `with` bodies of two classes, or an edge naming no class; PlanMemberInterface),
+  /// member-unsupported, no-iinterface, ref-counted, receiver-unknown,
   /// cast-unseen, with-member, ancestry-unknown, type-unresolved, unresolved-qualified-type, exception-semantics (and reuses leaf-uses-cycle,
   /// qualified-ref, duplicate-identifier, edge-still-used, manual-edit). Line is 0 when the
   /// refusal has no single line (an edge, a unit).</remarks>
@@ -170,11 +171,16 @@ type
     /// <summary>member-interface / routine-inversion: the unit that receives the interface or the
     /// pointer declarations (a new `*.Untangle` leaf or an existing unit); else ''.</summary>
     InversionUnit: string;
-    /// <summary>member-interface: the extracted interface's name; else ''.</summary>
+    /// <summary>member-interface: the extracted interface's name (the first, on an edge through
+    /// several classes); else ''.</summary>
     IfaceName: string;
     /// <summary>member-interface: the ancestor a receiver that does not implement IInterface is
-    /// cast through ('' when no line needs a cast); else ''.</summary>
+    /// cast through, for IfaceName ('' when no line needs a cast); else ''.</summary>
     CastAncestor: string;
+    /// <summary>member-interface: every extracted interface's name; else empty.</summary>
+    IfaceNames: TArray<string>;
+    /// <summary>member-interface: the cast ancestor of each of IfaceNames, parallel to it; else empty.</summary>
+    CastAncestors: TArray<string>;
     /// <summary>routine-inversion: the procedural type `T&lt;Routine&gt;Ptr`; else ''.</summary>
     PtrType: string;
     /// <summary>routine-inversion: the variable `&lt;Routine&gt;Ptr`; else ''.</summary>
@@ -756,7 +762,10 @@ type
     procedure SettleIfaceName(const pSurface: TEdgeSurface; const pLeaf: TUntangleLeaf; const pUnitScopes: TArray<string>;
       var pSteps: TRecipeSteps; var pRefusal: TRecipeRefusal);
     procedure RenderMemberHandOver(pStep: Integer);
-    procedure EmitMemberWrites;
+    procedure EmitMemberWrites(const pSetters: TArray<string>);
+    function SurfaceClassList(const pSep: string): string;
+    function SurfaceIfaceList(const pSep: string): string;
+    procedure RenderMemberSurface(const pSurf: TMemberSurface);
     function InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
     function LeavesProgramReason(const pSteps: TRecipeSteps): string;
     procedure RegisterDeclUnit;
@@ -2876,8 +2885,9 @@ begin
     for var R in FInversion.Routines do
       if pOwner.Id = R.Id then Exit(True);
   { R2: the consumer names the interface instead of the class }
-  if (FInversion.Recipe = crMemberInterface) and (pOwner.Id = FInversion.ClassId) and
-    (pFid = FInversion.ConsumerFid) then Exit(True);
+  if (FInversion.Recipe = crMemberInterface) and (pFid = FInversion.ConsumerFid) then
+    for var S in FInversion.Surfaces do
+      if pOwner.Id = S.ClassId then Exit(True);
   if not FItems.TryGetValue(pOwner.Id, Item) then Exit(False);
   if Item.Kind in [mvDecl, mvWithBodies] then Exit(True);
   for var Fid in Item.CutFids do
@@ -4350,8 +4360,9 @@ begin
     L.Add('unit ' + FLeafName[pStem] + ';');
     L.Add('');
     if IsInversionStem(pStem) and (FInversion.Recipe = crMemberInterface) then
-      L.Add(Format('// Created by `drag-lint cycles --plan`: the interface %s (%s) implements, extracted',
-        [FInversion.ClassTypeName, P.UnitName]))
+      L.Add(Format('// Created by `drag-lint cycles --plan`: the interface%s %s (%s) implement%s, extracted',
+        [(if Length(FInversion.Surfaces) > 1 then 's' else ''), SurfaceClassList(', '), P.UnitName,
+         (if Length(FInversion.Surfaces) > 1 then '' else 's')]))
     else
       L.Add('// Created by `drag-lint cycles --plan`: declarations moved here from ' + P.UnitName);
     L.Add('// to break a circular unit dependency. This unit may use only units OUTSIDE');
@@ -4400,9 +4411,9 @@ begin
       if FLeafInfo[Stem].Reason <> '' then EmitFmt('- Note: %s.', [FLeafInfo[Stem].Reason]);
   for var Stem in LeafStems(udExtend) do
     if IsInversionStem(Stem) and (FInversion.Recipe = crMemberInterface) then
-      EmitFmt('- `%s` already exists (`%s`) and uses no unit of this cycle: it receives the interface `%s`. ' +
+      EmitFmt('- `%s` already exists (`%s`) and uses no unit of this cycle: it receives the interface%s `%s`. ' +
         'Do not create it again; the edit step lists the insert.', [FLeafName[Stem], FLeafPath[Stem],
-        FInversion.IfaceName])
+        (if Length(FInversion.Surfaces) > 1 then 's' else ''), SurfaceIfaceList('`, `')])
     else if IsInversionStem(Stem) then
       EmitFmt('- `%s` already exists (`%s`) and uses no unit of this cycle: it receives the procedural ' +
         'type and variable of `%s`. Do not create it again; the edit step lists the insert.',
@@ -4951,37 +4962,68 @@ end;
 { W6 C2: R2 into an existing leaf that already declares I<Class>Surface. The same code text (comments
   aside; the GUID is derived from leaf + name, so a repeated plan matches) is reused: nothing is
   inserted. A different declaration: the lowest free suffix (`I<Class>Surface2` ...) names the
-  interface and the steps are planned again with it. No free suffix below 100: `duplicate-identifier`. }
+  interface and the steps are planned again with it. No free suffix below 100: `duplicate-identifier`.
+  1.42 cyc2: per interface of the edge; a suffix another interface of the edge holds is not free. }
 procedure TCyclePlanner.SettleIfaceName(const pSurface: TEdgeSurface; const pLeaf: TUntangleLeaf;
   const pUnitScopes: TArray<string>; var pSteps: TRecipeSteps; var pRefusal: TRecipeRefusal);
 var
-  Clash: TSymbol;
+  Names: TArray<string>;
 begin
   var F:= GetFile(pLeaf.Fid);
-  Clash:= Default(TSymbol);
-  for var S in F.Syms do
-    if SameText(S.Name, pSteps.IfaceName) then Clash:= S;
-  if Clash.Id = 0 then Exit;
-  var Mine:= '';
-  for var T in pSteps.IfaceDecl do Mine:= Mine + ' ' + CodePart(T);
-  if SameText(DeclarationText(F.Lines, Clash), Trim(TRegEx.Replace(Mine, '\s+', ' '))) then
+  var ClashOf:= function(const pName: string): TSymbol
+    begin
+      Result:= Default(TSymbol);
+      for var S in F.Syms do
+        if SameText(S.Name, pName) then Result:= S;
+    end;
+  var SameDecl:= function(const pSurf: TMemberSurface; const pClash: TSymbol): Boolean
+    begin
+      var Mine:= '';
+      for var T in pSurf.IfaceDecl do Mine:= Mine + ' ' + CodePart(T);
+      Result:= SameText(DeclarationText(F.Lines, pClash), Trim(TRegEx.Replace(Mine, '\s+', ' ')));
+    end;
+  Names:= nil;
+  for var S in pSteps.Surfaces do Names:= Names + [S.IfaceName];
+  var Renamed:= False;
+  for var I:= 0 to High(Names) do
   begin
-    pSteps.ReuseDecl:= True;
-    Exit;
+    var Clash:= ClashOf(Names[I]);
+    if (Clash.Id = 0) or SameDecl(pSteps.Surfaces[I], Clash) then Continue;
+    var Free:= '';
+    for var N:= 2 to CMaxPtrSuffix do
+    begin
+      var Name:= Clash.Name + IntToStr(N);
+      if (ClashOf(Name).Id = 0) and not MatchText(Name, Names) then
+      begin
+        Free:= Name;
+        Break;
+      end;
+    end;
+    if Free = '' then
+    begin
+      pRefusal.Kind  := 'duplicate-identifier';
+      pRefusal.Reason:= Format('`%s` already declares `%s` (line %d) differently, and every suffix up to %d is taken',
+        [pLeaf.UnitName, Clash.Name, Clash.StartLine, CMaxPtrSuffix]);
+      Exit;
+    end;
+    Names[I]:= Free;
+    Renamed := True;
   end;
-  for var N:= 2 to CMaxPtrSuffix do
+  if Renamed then
   begin
-    var Name := Clash.Name + IntToStr(N);
-    var Taken:= False;
-    for var S in F.Syms do
-      if SameText(S.Name, Name) then Taken:= True;
-    if Taken then Continue;
-    pSteps:= PlanMemberInterface(Self, FLibStore, pSurface, pLeaf.UnitName, pUnitScopes, pRefusal, Name);
-    Exit;
+    pSteps:= PlanMemberInterface(Self, FLibStore, pSurface, pLeaf.UnitName, pUnitScopes, pRefusal, Names);
+    if pRefusal.Kind <> '' then Exit;
   end;
-  pRefusal.Kind  := 'duplicate-identifier';
-  pRefusal.Reason:= Format('`%s` already declares `%s` (line %d) differently, and every suffix up to %d is taken',
-    [pLeaf.UnitName, Clash.Name, Clash.StartLine, CMaxPtrSuffix]);
+  var Reused:= 0;
+  for var I:= 0 to High(pSteps.Surfaces) do
+  begin
+    var Clash:= ClashOf(pSteps.Surfaces[I].IfaceName);
+    if (Clash.Id = 0) or not SameDecl(pSteps.Surfaces[I], Clash) then Continue;
+    pSteps.Surfaces[I].Reused:= True;
+    Inc(Reused);
+  end;
+  pSteps.ReuseDecl:= Reused = Length(pSteps.Surfaces);
+  if (Reused > 0) and not pSteps.ReuseDecl then pSteps.IfaceDecl:= MemberSurfaceDecls(pSteps.Surfaces);
 end;
 { W6 C2: R1 into an existing leaf that already declares the pointer's names. The same type and variable
   declarations (text equal) are reused: nothing is inserted, and the assignment is added only when the
@@ -5450,73 +5492,101 @@ end;
 
 { B1: the members the consumer of an R2 cut WRITES -- read/write properties with a one-line
   setter each; nothing when it only reads. }
-procedure TCyclePlanner.EmitMemberWrites;
+procedure TCyclePlanner.EmitMemberWrites(const pSetters: TArray<string>);
 begin
-  if Length(FInversion.Setters) = 0 then Exit;
+  if Length(pSetters) = 0 then Exit;
   EmitFmt('- The members `%s` writes are read/write properties instead, each with a one-line setter that ' +
     'assigns the member itself (%s); a property with its own setter still runs it.',
-    [ExtractFileName(PathOf(FInversion.ConsumerFid)), string.Join(', ', FInversion.Setters)]);
+    [ExtractFileName(PathOf(FInversion.ConsumerFid)), string.Join(', ', pSetters)]);
 end;
 
-procedure TCyclePlanner.RenderMemberHandOver(pStep: Integer);
+{ The class names of an R2 cut, joined by pSep (one name for an edge through one class). }
+function TCyclePlanner.SurfaceClassList(const pSep: string): string;
+begin
+  Result:= '';
+  for var S in FInversion.Surfaces do Result:= Result + (if Result <> '' then pSep else '') + S.ClassTypeName;
+end;
+
+{ The interface names of an R2 cut, joined by pSep. }
+function TCyclePlanner.SurfaceIfaceList(const pSep: string): string;
+begin
+  Result:= '';
+  for var S in FInversion.Surfaces do Result:= Result + (if Result <> '' then pSep else '') + S.IfaceName;
+end;
+
+{ One class of an R2 cut: its interface, its class edits and its consumer lines. On an edge through
+  one class every `is` / `as` / cast ref is that class's. }
+procedure TCyclePlanner.RenderMemberSurface(const pSurf: TMemberSurface);
 var
   IsLines, AsLines, CastLines: TList<string>;
 begin
-  EmitFmt('### Step %d: what moves where', [pStep]);
   IsLines  := TList<string>.Create;
   AsLines  := TList<string>.Create;
   CastLines:= TList<string>.Create;
   try
     for var R in FCutEdge.Surface.Refs do
-      if (R.Kind = erTypeIs) and not IsLines.Contains(IntToStr(R.Line)) then IsLines.Add(IntToStr(R.Line))
+      if (Length(FInversion.Surfaces) > 1) and not SameText(R.Name, pSurf.ClassTypeName) then Continue
+      else if (R.Kind = erTypeIs) and not IsLines.Contains(IntToStr(R.Line)) then IsLines.Add(IntToStr(R.Line))
       else if (R.Kind = erTypeAs) and not AsLines.Contains(IntToStr(R.Line)) then AsLines.Add(IntToStr(R.Line))
       else if (R.Kind = erTypeCast) and not CastLines.Contains(IntToStr(R.Line)) then CastLines.Add(IntToStr(R.Line));
-    var Decl    := UnitNameOfStem(FInversion.DeclStem);
     var Consumer:= ExtractFileName(PathOf(FInversion.ConsumerFid));
-    EmitFmt('Nothing moves. Recipe: **member hand-over through an extracted interface** -- `%s` stays in `%s`; ' +
-      'units outside this cycle keep using it as before.', [FInversion.ClassTypeName, Decl]);
-    if FInversion.ReuseDecl then
+    if pSurf.Reused then
       EmitFmt('- `%s` already declares the interface `%s` (GUID `%s`) with exactly this text: it is reused, nothing ' +
         'is inserted there. Its properties are the members `%s` reads: %s.', [FLeafName[FInversion.DeclStem],
-        FInversion.IfaceName, FInversion.IfaceGuid, Consumer, string.Join(', ', FInversion.MemberSigs)])
+        pSurf.IfaceName, pSurf.IfaceGuid, Consumer, string.Join(', ', pSurf.MemberSigs)])
     else
       EmitFmt('- `%s` gets the interface `%s` (GUID `%s`), with a read-only property for each member `%s` reads: %s.',
-        [FLeafName[FInversion.DeclStem], FInversion.IfaceName, FInversion.IfaceGuid, Consumer,
-         string.Join(', ', FInversion.MemberSigs)]);
-    EmitMemberWrites;
-    if Length(FInversion.MethodSigs) > 0 then
+        [FLeafName[FInversion.DeclStem], pSurf.IfaceName, pSurf.IfaceGuid, Consumer,
+         string.Join(', ', pSurf.MemberSigs)]);
+    EmitMemberWrites(pSurf.Setters);
+    if Length(pSurf.MethodSigs) > 0 then
       EmitFmt('- The interface also declares each method `%s` calls on it, the signature copied verbatim: %s. `%s` ' +
         'needs no edit for them: its own methods implement them, and a virtual one still dispatches to the override.',
-        [Consumer, string.Join(', ', FInversion.MethodSigs), FInversion.ClassTypeName]);
+        [Consumer, string.Join(', ', pSurf.MethodSigs), pSurf.ClassTypeName]);
     EmitFmt('- `%s` implements it: `%s` is appended to its heritage, and a getter per member is declared before ' +
-      'the class''s `end;` and implemented in its implementation section%s.', [FInversion.ClassTypeName,
-      FInversion.IfaceName,
-      (if Length(FInversion.KeptGetters) > 0 then Format(' -- except %s, which the class already declares and the ' +
-        'interface reuses as is', [QuoteList(FInversion.KeptGetters)]) else '')]);
+      'the class''s `end;` and implemented in its implementation section%s.', [pSurf.ClassTypeName,
+      pSurf.IfaceName,
+      (if Length(pSurf.KeptGetters) > 0 then Format(' -- except %s, which the class already declares and the ' +
+        'interface reuses as is', [QuoteList(pSurf.KeptGetters)]) else '')]);
     if IsLines.Count > 0 then
-      EmitFmt('- `%s`: `X is %s` becomes `Supports(X, %s)` (line %s).', [Consumer, FInversion.ClassTypeName,
-        FInversion.IfaceName, string.Join(', ', IsLines.ToArray)]);
+      EmitFmt('- `%s`: `X is %s` becomes `Supports(X, %s)` (line %s).', [Consumer, pSurf.ClassTypeName,
+        pSurf.IfaceName, string.Join(', ', IsLines.ToArray)]);
     if AsLines.Count > 0 then
-      EmitFmt('- `%s`: `X as %s` becomes `X as %s` (line %s)%s.', [Consumer, FInversion.ClassTypeName,
-        FInversion.IfaceName, string.Join(', ', AsLines.ToArray),
-        (if FInversion.CastAncestor <> '' then Format('; a receiver whose type does not implement IInterface ' +
-          'is cast through `%s` first', [FInversion.CastAncestor]) else '')]);
+      EmitFmt('- `%s`: `X as %s` becomes `X as %s` (line %s)%s.', [Consumer, pSurf.ClassTypeName,
+        pSurf.IfaceName, string.Join(', ', AsLines.ToArray),
+        (if pSurf.CastAncestor <> '' then Format('; a receiver whose type does not implement IInterface ' +
+          'is cast through `%s` first', [pSurf.CastAncestor]) else '')]);
     if CastLines.Count > 0 then
       EmitFmt('- `%s`: the hard cast `%s(X).M` becomes `(X as %s).M` (line %s)%s. Behaviour change, stated: a ' +
         'cast of an object that is no `%s` used to read through the wrong object; it now raises EIntfCastError.',
-        [Consumer, FInversion.ClassTypeName, FInversion.IfaceName, string.Join(', ', CastLines.ToArray),
-         (if FInversion.CastAncestor <> '' then Format(' -- through `%s` when X''s type does not implement IInterface',
-           [FInversion.CastAncestor]) else ''), FInversion.ClassTypeName]);
-    Emit('- Checked: no name inside a `with` body changes what it binds to; the members carried are fields and ' +
-      'properties of the class itself, read only.');
-    EmitFmt('- Exceptions: a failed `as %s` raises EIntfCastError, not EInvalidCast as `as %s` did -- a handler ' +
-      'for EInvalidCast no longer catches it. Checked: `%s` handles no EInvalidCast, or each `as` follows its ' +
-      '`is` guard.', [FInversion.IfaceName, FInversion.ClassTypeName, Consumer]);
+        [Consumer, pSurf.ClassTypeName, pSurf.IfaceName, string.Join(', ', CastLines.ToArray),
+         (if pSurf.CastAncestor <> '' then Format(' -- through `%s` when X''s type does not implement IInterface',
+           [pSurf.CastAncestor]) else ''), pSurf.ClassTypeName]);
   finally
     CastLines.Free;
     AsLines.Free;
     IsLines.Free;
   end;
+end;
+
+procedure TCyclePlanner.RenderMemberHandOver(pStep: Integer);
+begin
+  EmitFmt('### Step %d: what moves where', [pStep]);
+  var Decl    := UnitNameOfStem(FInversion.DeclStem);
+  var Consumer:= ExtractFileName(PathOf(FInversion.ConsumerFid));
+  if Length(FInversion.Surfaces) > 1 then
+    EmitFmt('Nothing moves. Recipe: **member hand-over through an extracted interface**, one interface per class -- ' +
+      '`%s` stay in `%s`; units outside this cycle keep using them as before.', [SurfaceClassList('`, `'), Decl])
+  else
+    EmitFmt('Nothing moves. Recipe: **member hand-over through an extracted interface** -- `%s` stays in `%s`; ' +
+      'units outside this cycle keep using it as before.', [FInversion.ClassTypeName, Decl]);
+  for var S in FInversion.Surfaces do RenderMemberSurface(S);
+  Emit('- Checked: no name inside a `with` body changes what it binds to; the members carried are fields and ' +
+    'properties of the class itself, read only.');
+  for var S in FInversion.Surfaces do
+    EmitFmt('- Exceptions: a failed `as %s` raises EIntfCastError, not EInvalidCast as `as %s` did -- a handler ' +
+      'for EInvalidCast no longer catches it. Checked: `%s` handles no EInvalidCast, or each `as` follows its ' +
+      '`is` guard.', [S.IfaceName, S.ClassTypeName, Consumer]);
   Emit('');
 end;
 
@@ -5565,6 +5635,14 @@ begin
   end;
   if pPlan.CutEdge.Recipe = crMemberInterface then
   begin
+    if Length(FInversion.Surfaces) > 1 then
+      EmitFmt('Cut the edge `%s -> %s` by **member hand-over through an extracted interface**, one per class: `%s` ' +
+        'takes from `%s` only `is` / `as` tests against `%s` and reads of their members. Each class implements its ' +
+        'own new interface (`%s`, in that order), declared in `%s`, and `%s` tests and casts against those instead. ' +
+        'No edge of this cycle can be cut by moving declarations or by routine-call inversion.',
+        [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem, pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem,
+        SurfaceClassList('`, `'), SurfaceIfaceList('`, `'), FLeafName[FInversion.DeclStem], pPlan.CutEdge.FromStem])
+    else
     EmitFmt('Cut the edge `%s -> %s` by **member hand-over through an extracted interface**: `%s` takes from ' +
       '`%s` only `is` / `as` tests against `%s` and reads of its members. `%s` implements a new interface `%s`, ' +
       'declared in `%s`, and `%s` tests and casts against that instead. No edge of this cycle can be cut by ' +
@@ -5655,7 +5733,7 @@ begin
       { R1 / R2 cut the edge only when the consumer drops the uses entry }
       var Still:= InversionStillUsed;
       if Still <> '' then
-        Add('edge-still-used', (if FInversion.Recipe = crMemberInterface then FInversion.ClassTypeName
+        Add('edge-still-used', (if FInversion.Recipe = crMemberInterface then SurfaceClassList(', ')
           else FInversion.RoutineName), PathOf(FInversion.ConsumerFid), Still, 0);
     end;
     for var Fid in pPlan.Touched do
@@ -5849,6 +5927,11 @@ begin
       Result.InversionUnit:= InversionLeaf(Steps).UnitName;
       Result.IfaceName    := Steps.IfaceName;
       Result.CastAncestor := Steps.CastAncestor;
+      for var S in Steps.Surfaces do
+      begin
+        Result.IfaceNames   := Result.IfaceNames + [S.IfaceName];
+        Result.CastAncestors:= Result.CastAncestors + [S.CastAncestor];
+      end;
       Result.PtrType      := Steps.PtrType;
       Result.PtrVar       := Steps.PtrVar;
       Result.PtrTypeDecl  := Steps.TypeDecl;

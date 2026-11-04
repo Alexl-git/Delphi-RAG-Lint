@@ -1175,7 +1175,8 @@ function LeafOf(const pView: TCyclePlanView; const pName: string): string;
 begin
   for var M in pView.Moves do
     if SameText(M.Symbol, pName) and (M.ToUnit <> '') then Exit(M.ToUnit);
-  if (pView.InversionUnit <> '') and (pName <> '') and MatchText(pName, [pView.IfaceName, pView.PtrType, pView.PtrVar]) then
+  if (pView.InversionUnit <> '') and (pName <> '') and
+    (MatchText(pName, [pView.PtrType, pView.PtrVar]) or MatchText(pName, pView.IfaceNames)) then
     Exit(pView.InversionUnit);
   Result:= '';
 end;
@@ -1308,19 +1309,23 @@ var
     Repairs.Add(R);
   end;
 
-  // E2015 on `<expr> as <IfaceName>`: cast <expr> through the plan's ancestor.
+  // E2015 on `<expr> as <IfaceName>`: cast <expr> through the plan's ancestor of that interface.
   procedure RepairCast(const pErr: TDccLine; const pPath: string; pFile: TRepairFile);
   begin
-    if (pView.IfaceName = '') or (pView.CastAncestor = '') then Exit;
     var Text:= pFile.Lines[pErr.Line - 1];
-    var M:= TRegEx.Match(Text, '(?<![\w.)\]^])([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s+as\s+' +
-      TRegEx.Escape(pView.IfaceName) + '\b', [roIgnoreCase]);
-    if not M.Success then Exit;
-    var G:= M.Groups[1];
-    var Fixed:= Copy(Text, 1, G.Index - 1) + pView.CastAncestor + '(' + G.Value + ')' + Copy(Text, G.Index + G.Length, MaxInt);
-    pFile.Lines[pErr.Line - 1]:= Fixed;
-    pFile.Dirty:= True;
-    AddRepair(pErr, pPath, Format('cast `%s` through %s: %s', [G.Value, pView.CastAncestor, Trim(Fixed)]));
+    for var I:= 0 to High(pView.IfaceNames) do
+    begin
+      if pView.CastAncestors[I] = '' then Continue;
+      var M:= TRegEx.Match(Text, '(?<![\w.)\]^])([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s+as\s+' +
+        TRegEx.Escape(pView.IfaceNames[I]) + '\b', [roIgnoreCase]);
+      if not M.Success then Continue;
+      var G:= M.Groups[1];
+      var Fixed:= Copy(Text, 1, G.Index - 1) + pView.CastAncestors[I] + '(' + G.Value + ')' + Copy(Text, G.Index + G.Length, MaxInt);
+      pFile.Lines[pErr.Line - 1]:= Fixed;
+      pFile.Dirty:= True;
+      AddRepair(pErr, pPath, Format('cast `%s` through %s: %s', [G.Value, pView.CastAncestors[I], Trim(Fixed)]));
+      Exit;
+    end;
   end;
 
   // E2010 '...' and 'Procedure' on the `PtrVar :=` line: re-emit the pointer type from the plan.
@@ -1787,12 +1792,16 @@ end;
 function BreakLine(const pView: TCyclePlanView; const pLine: string; pMode: Integer): string;
 begin
   Result:= pLine;
-  if (pMode = CBreakCast) and (pView.IfaceName <> '') and (pView.CastAncestor <> '') then
+  if pMode = CBreakCast then
   begin
-    var M:= TRegEx.Match(pLine, '\b' + TRegEx.Escape(pView.CastAncestor) + '\(([^()]*)\)(\s+as\s+' +
-      TRegEx.Escape(pView.IfaceName) + '\b)', [roIgnoreCase]);
-    if M.Success then
-      Result:= Copy(pLine, 1, M.Index - 1) + M.Groups[1].Value + M.Groups[2].Value + Copy(pLine, M.Index + M.Length, MaxInt);
+    for var I:= 0 to High(pView.IfaceNames) do
+    begin
+      if pView.CastAncestors[I] = '' then Continue;
+      var M:= TRegEx.Match(Result, '\b' + TRegEx.Escape(pView.CastAncestors[I]) + '\(([^()]*)\)(\s+as\s+' +
+        TRegEx.Escape(pView.IfaceNames[I]) + '\b)', [roIgnoreCase]);
+      if M.Success then
+        Result:= Copy(Result, 1, M.Index - 1) + M.Groups[1].Value + M.Groups[2].Value + Copy(Result, M.Index + M.Length, MaxInt);
+    end;
   end
   else if (pMode = CBreakPointer) and (pView.PtrTypeDecl <> '') and (Trim(pLine) = Trim(pView.PtrTypeDecl)) then
   begin

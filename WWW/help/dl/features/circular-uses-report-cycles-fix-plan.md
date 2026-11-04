@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70005
 since: 0.43.0-alpha
 status: shipped
-updated: 1.40.0-alpha
+updated: 1.42.0-alpha
 ---
 
 # Circular Uses Report (cycles + fix plan)
@@ -243,8 +243,17 @@ The engine never guesses; every kind it can give:
   method the consumer calls inside `with ... as TX do` is carried as an interface method, its
   signature copied verbatim and dispatch to an override unchanged; a class method or a method
   taken as a pointer is refused), `overloaded-routine`, `signature-in-cycle`, `class-ref`,
-  `type-decl`, `other-ref`, `multiple-classes`, `member-unsupported` (an inherited
-  member, a `default` array property or a write to an indexed property; a plain indexed property
+  `type-decl` (a declaration of the class type other than a routine local `V: TX;` alone on
+  its line -- since 1.42 such a local is retyped to the interface when every use of it is
+  `V := X as TX`, `V := nil`, `Assigned(V)`, a compare with nil or `V.M` with M a member the
+  interface carries; a field, a parameter, a global, an inline `var`, `A, B: TX` and any other
+  use of the local, `V.Free` or `FreeAndNil(V)` included, still refuse), `other-ref`, `multiple-classes` (since 1.42 an edge through several
+  classes is cut with one interface per class, see below; only `with` bodies of two different classes that overlap, nested or as one
+  `with X as TA, Y as TB do`, and an edge that names no class at all still refuse), `member-unsupported` (an inherited
+  member that no ancestor declared in the class's own unit declares, or one that is `strict private`
+  there -- since 1.42 a member of a same-unit ancestor is carried like an own one, its getter reading
+  it by name, and an ancestor that already declares `Get<M>` / `Set<M>` refuses `duplicate-identifier`;
+  a member of a library ancestor read inside a `with` body still refuses `with-member` --, a `default` array property or a write to an indexed property; a plain indexed property
   is carried for reading, its index list verbatim), `duplicate-identifier` (the class has a `Get<M>`
   that is not exactly `function Get<M>: <T>;` read by the property -- that one is reused -- or the
   leaf declares `I<Class>Surface` differently with every suffix taken; an identical interface is
@@ -252,6 +261,30 @@ The engine never guesses; every kind it can give:
   (no IInterface ancestor outside the cycle; the walk continues past one declared inside it),
   `exception-semantics`, `ancestry-unknown`, `with-member`, `unresolved-qualified-type`,
   `type-unresolved`, `leaf-uses-cycle`.
+
+#### An edge through several classes (R2, since 1.42)
+
+When the consumer tests or casts against more than one class of the used unit, each class that is an
+`is` / `as` operand gets its own interface `I<Class>Surface` in the same leaf, with its own GUID, its own
+getters and setters, and every use site is retyped to its own interface; a consumer line naming two classes
+is rewritten for both. The output is deterministic: classes are taken in name order and the GUID derives from
+leaf + interface name.
+
+* **All or nothing.** Every R2 check runs per class. The first class refused refuses the whole edge, under
+  that class's own refusal kind, and the reason names the class (`class `TZed`: no ancestor ...`). No
+  interface of the other classes is planned, so nothing is half-applied.
+* **A member two classes can reach** is carried by each: `TA` and `TB` sharing a same-unit ancestor's member
+  each get a getter, and a member of `TA` is also on the interface of a descendant `TB` of `TA` when both are on
+  the edge, even if only `TA`'s uses read it. `X is TA` stays true for a `TB`, because `TB` inherits `TA`'s
+  interface. A `Get<M>` that already exists on the ancestor therefore refuses `duplicate-identifier` on the
+  descendant; split the edge by hand if that hits you.
+* **An existing leaf** is settled per interface: an identical declaration is reused, a different one takes the
+  lowest suffix free in the leaf and on the edge, and the others are not affected.
+* **Still refused:** `multiple-classes` for `with` bodies of two different classes that overlap (a bare name
+  there has two candidates, which the check of one interface cannot judge; split the `with` first) and for an
+  edge that names no class at all; `with-member` for a member of a library ancestor used inside a `with` body.
+* `--plan`, `tools\follow-cycle-plan.ps1` and `--fix --apply` apply the same bytes; guard
+  `tests\autotest\run_cyclefix_r2_multiclass_dcc.ps1`.
 
 #### What the fix handles when names or call shapes already exist
 

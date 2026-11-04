@@ -191,12 +191,45 @@ type
     VarDecl: string;
   end;
 
+  /// <summary>R2: one class of the edge and the interface extracted for it.</summary>
+  /// <remarks>An edge through one class has one entry, which repeats the singular R2 fields of
+  /// TRecipeSteps; an edge through several has one per class that is an `is` / `as` operand, sorted
+  /// by class name.</remarks>
+  TMemberSurface = record
+    /// <summary>The class whose members the interface hands over.</summary>
+    ClassTypeName: string;
+    /// <summary>symbols.id of that class.</summary>
+    ClassId: Int64;
+    /// <summary>`I&lt;Class without its T&gt;Surface`, or that name with the lowest free suffix.</summary>
+    IfaceName: string;
+    /// <summary>Its GUID text `{8-4-4-4-12}` (SurfaceGuid of `&lt;Leaf&gt;.&lt;IfaceName&gt;`).</summary>
+    IfaceGuid: string;
+    /// <summary>The interface declaration, indented for a `type` block, without the keyword.</summary>
+    IfaceDecl: TArray<string>;
+    /// <summary>`Name: Type` of every member carried, in declaration order.</summary>
+    MemberSigs: TArray<string>;
+    /// <summary>`Set&lt;Member&gt;` of every member the consumer writes, in declaration order.</summary>
+    Setters: TArray<string>;
+    /// <summary>`Name&lt;signature verbatim&gt;` of every instance method carried, in call order.</summary>
+    MethodSigs: TArray<string>;
+    /// <summary>The ancestor a receiver that does not implement IInterface is cast through; '' when
+    /// no line needs a cast.</summary>
+    CastAncestor: string;
+    /// <summary>The getters the class already declared and the interface reuses as they are.</summary>
+    KeptGetters: TArray<string>;
+    /// <summary>True when the leaf already declares IfaceDecl with exactly this code text (comments
+    /// aside); it is reused, nothing is inserted for it.</summary>
+    Reused: Boolean;
+  end;
+
   /// <summary>What recipe R1 (routine-call inversion) or R2 (member hand-over) does to
   /// one edge, as data the planner maps onto its leaf machinery and file edits.</summary>
   /// <remarks>The leaf's new unit, its .dpr / .dproj registration and every uses-clause
   /// edit are NOT here: the planner derives them (UntangleCatalog leaf, Task 3a lexer
   /// edits) from LeafStem / DeclStem / ConsumerFid (R2: also LeafUses / ConsumerUses).
-  /// The R1 fields are empty for R2 and the R2 fields empty for R1.</remarks>
+  /// The R1 fields are empty for R2 and the R2 fields empty for R1. On an R2 edge through several
+  /// classes the singular class fields (ClassTypeName .. IfaceGuid, CastAncestor) name the first of
+  /// Surfaces; Edits, IfaceDecl, LeafUses, ConsumerUses and the signature lists hold all of them.</remarks>
   TRecipeSteps = record
     /// <summary>crRoutineInversion or crMemberInterface when filled; crNone otherwise.</summary>
     Recipe: TCutRecipe;
@@ -273,6 +306,8 @@ type
     /// <summary>R2 (W6 C2): the getters the class already declared (`Get&lt;Member&gt;`) and the interface
     /// reuses as they are; empty when every getter is new.</summary>
     KeptGetters: TArray<string>;
+    /// <summary>R2: one entry per class the edge hands over (see TMemberSurface); empty for R1.</summary>
+    Surfaces: TArray<TMemberSurface>;
   end;
 
 const
@@ -447,15 +482,26 @@ function IsClassChainMember(const pProject, pLibrary: ISymbolStore; pEnclosingId
 /// is derived from it).</param>
 /// <param name="pUnitScopes">EffectiveUnitScopes of the project; nil = the Delphi defaults.</param>
 /// <param name="pRefusal">Receives why the recipe does not apply; Kind '' when it does.</param>
-/// <param name="pIfaceName">The interface's name; '' = `I&lt;Class&gt;Surface` (the leaf already declaring that name
-/// differently, W6 C2 plans again with the lowest free suffix).</param>
+/// <param name="pIfaceNames">The interface names, parallel to the result's Surfaces (classes sorted by
+/// name); nil = `I&lt;Class&gt;Surface` each, a name two classes would share taking the lowest free suffix (the
+/// leaf already declaring a name differently, W6 C2 plans again with that name's lowest free suffix).</param>
 /// <returns>The steps; Recipe = crNone when refused.</returns>
 /// <remarks>
 /// <para>Shape (first offending ref, in line order): every ref must be erTypeIs, erTypeAs or
 /// erMemberRead -- else `member-write`, `construction`, `class-method` (a method called
 /// through the class or an instance, e.g. in a `with` body), `class-ref`, `type-decl`,
-/// `type-cast`, `other-ref` (a routine or variable of B); then `multiple-classes`,
-/// `qualified-ref` (`B.X` anywhere in A).</para>
+/// `type-cast`, `other-ref` (a routine or variable of B); then `qualified-ref` (`B.X` anywhere in A).</para>
+/// <para>Several classes (1.42 cyc2): each class that is an `is` / `as` operand of the edge gets its own
+/// interface, and every check below runs per class, in class-name order. The refs are shared out: a test,
+/// cast or type declaration goes to its class; a member goes to EVERY such class that declares or inherits
+/// it (a class that only inherits it gets its own getter too, so a member shared by two classes is on both
+/// interfaces, and a member of TA is also carried by a descendant TB of TA on the edge, even when only TA's
+/// uses read it). A ref that fits no such class goes to the first, whose checks refuse it. A consumer line
+/// naming two classes is rewritten once for each. All-or-nothing: the first class refused refuses the edge,
+/// under that class's kind, the reason naming the class; no steps come back. `multiple-classes` remains for
+/// two shapes only: `with` bodies of two different classes that overlap (nested, or one `with X as TA, Y as
+/// TB do`) -- a bare name there has two candidates and the check of one interface cannot judge it -- and an
+/// edge that names no class at all (its `is` / `as` operand is an interface or another type).</para>
 /// <para>Members: each must be a field or a property declared in the class itself (an indexed property is carried for reading, its index list verbatim -- W6 C7; a `default` one or a write refuses)
 /// (`member-unsupported`; a method is `class-method`); `duplicate-identifier` when the class
 /// already has `Get&lt;M&gt;` -- unless it is exactly `function Get&lt;M&gt;: &lt;T&gt;;` and the property M
@@ -484,7 +530,12 @@ function IsClassChainMember(const pProject, pLibrary: ISymbolStore; pEnclosingId
 /// </remarks>
 function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
   const pSurface: TEdgeSurface; const pLeafUnit: string; const pUnitScopes: TArray<string>;
-  out pRefusal: TRecipeRefusal; const pIfaceName: string = ''): TRecipeSteps;
+  out pRefusal: TRecipeRefusal; const pIfaceNames: TArray<string> = nil): TRecipeSteps;
+
+/// <summary>The interface declarations the leaf must receive for an R2 edge.</summary>
+/// <param name="pSurfaces">The edge's surfaces.</param>
+/// <returns>The IfaceDecl lines of every surface not Reused, in order, a blank line between two.</returns>
+function MemberSurfaceDecls(const pSurfaces: TArray<TMemberSurface>): TArray<string>;
 
 /// <summary>The effective unit-scope names of a project: every `&lt;DCC_Namespace&gt;` value of
 /// the .dproj (any configuration group), split at `;`.</summary>
@@ -2325,6 +2376,10 @@ type
     function HardCastWhat(const pR: TEdgeRef; const pCls: TSymbol): string;
     function GuardedBefore(const pX: string; pEnclosing: Int64; pLine: Integer): Boolean;
     function CheckShape: Boolean;
+    function LocalDeclOf(const pR: TEdgeRef; out pLocal: TSymbol): Boolean;
+    function LocalUseWhy(const pLocal, pRoutine: TSymbol; out pLine: Integer): string;
+    function CheckTypeDecls: Boolean;
+    function InheritedWhy(const pM: TSymbol; out pKind: string): string;
     function CheckMembers: Boolean;
     function MemberOf(const pR: TEdgeRef): TSymbol;
     function MemberUseRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
@@ -2454,6 +2509,8 @@ begin
       end;
     erTypeDecl:
       begin
+        var Local: TSymbol;
+        if LocalDeclOf(pR, Local) then Exit(False);  { CYC-C (1): CheckTypeDecls decides }
         pKind:= 'type-decl';
         pWhat:= Format('declares something of type `%s`, which would still need its unit', [pR.Name]);
       end;
@@ -2544,6 +2601,7 @@ begin
   if Best.Line > 0 then
     Exit(Refuse(BestKind, Best.Name, FFromFid, Best.Line, Format('line %d %s (`%s`)', [Best.Line, BestWhat,
       Best.LineText])));
+  { 1.42 cyc2: an edge through several classes never reaches here with more than one (TEdgeComposer) }
   if Length(FSurface.ClassNames) <> 1 then
     Exit(Refuse('multiple-classes', string.Join(', ', FSurface.ClassNames), FFromFid, 0,
       Format('the edge names %d classes (%s); one interface hands over the members of one class',
@@ -2556,6 +2614,149 @@ begin
     Exit(Refuse('qualified-ref', Member, FFromFid, Q, Format('line %d names `%s` qualified by its unit (`%s`); ' +
       'that use keeps needing the uses entry the cut removes', [Q, Member, Trim(LineOf(FLines, Q))])));
   Result:= True;
+end;
+
+{ CYC-C (1): pR is `V: T;` alone on its line (a trailing `//` comment aside) and V is a local
+  variable of a routine of the consumer -- the one type declaration the interface can take over;
+  CheckTypeDecls checks T and every use of V. A field, a parameter, a global, an inline `var`, a
+  list `A, B: T` and any other declaration keep the type-decl refusal. }
+function TMemberPlan.LocalDeclOf(const pR: TEdgeRef; out pLocal: TSymbol): Boolean;
+begin
+  pLocal:= Default(TSymbol);
+  var M:= TRegEx.Match(PlainCode(BareCode(LineOf(FLines, pR.Line))), '^\s*([A-Za-z_]\w*)\s*:\s*' +
+    TRegEx.Escape(pR.Name) + '\s*;\s*$', [roIgnoreCase]);
+  if not M.Success then Exit(False);
+  for var S in FStore.FindSymbolsByExactName(M.Groups[1].Value) do
+    if (S.FileId = FFromFid) and (S.Kind = skLocalVar) and (S.StartLine = pR.Line) and (S.ParentId > 0) then
+    begin
+      pLocal:= S;
+      Exit(True);
+    end;
+  Result:= False;
+end;
+
+{ CYC-C (1): '' when every mention of the local pLocal inside the body of its routine pRoutine
+  (nested routines included) is one an interface-typed local carries unchanged -- `V := X as TX`,
+  `V := nil`, `Assigned(V)`, `V = nil`, `V <> nil`, `V.M` with M a member the interface carries;
+  else what the first other mention does, its line in pLine. The body is the line span of the
+  refs the index encloses in pRoutine (its header line to its last use: the routine symbol is
+  the class declaration, not the body), widened by every ref bound to the local. The scan is
+  lexical: a mention the whitelist does not name (a call argument, `V.Free`, `with V do`,
+  `Y := V`) refuses. }
+function TMemberPlan.LocalUseWhy(const pLocal, pRoutine: TSymbol; out pLine: Integer): string;
+begin
+  pLine:= 0;
+  var V:= TRegEx.Escape(pLocal.Name);
+  var C:= TRegEx.Escape(FCls.Name);
+  var First:= pLocal.StartLine;
+  var Last := pLocal.StartLine;
+  for var R in FStore.GetReferencesFromFile(FFromFid) do
+    if (R.EnclosingSymbolId = pRoutine.Id) or (R.SymbolId = pLocal.Id) then
+    begin
+      First:= Min(First, R.StartLine);
+      Last := Max(Last, R.StartLine);
+    end;
+  for var L:= First to Last do
+  begin
+    if L = pLocal.StartLine then Continue;
+    var Code:= PlainCode(BareCode(LineOf(FLines, L)));
+    for var M in TRegEx.Matches(Code, '(?<![\w.])' + V + '\b', [roIgnoreCase]) do
+    begin
+      var Rest  := Copy(Code, M.Index, MaxInt);
+      var Before:= Copy(Code, 1, M.Index - 1);
+      var Dot   := TRegEx.Match(Rest, '^' + V + '\s*\.\s*([A-Za-z_]\w*)', [roIgnoreCase]);
+      var Carried:= False;
+      if Dot.Success then
+        for var Mb in FMembers do
+          if SameText(Mb.Name, Dot.Groups[1].Value) then Carried:= True;
+      var Ok:= Carried or
+        TRegEx.IsMatch(Rest, '^' + V + '\s*:=\s*(nil|[A-Za-z_]\w*\s+as\s+' + C + ')\s*(;|$|\b(end|else)\b)',
+          [roIgnoreCase]) or
+        TRegEx.IsMatch(Rest, '^' + V + '\s*(=|<>)\s*nil\b', [roIgnoreCase]) or
+        (TRegEx.IsMatch(Before, '\bAssigned\s*\(\s*$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^' + V + '\s*\)'));
+      if Ok then Continue;
+      pLine:= L;
+      Exit(Format('uses the local `%s` other than as `%s := X as %s`, `%s := nil`, `Assigned(%s)`, a compare with ' +
+        'nil or `%s.<member the interface carries>` (`%s`)', [pLocal.Name, pLocal.Name, FCls.Name, pLocal.Name,
+        pLocal.Name, pLocal.Name, Trim(LineOf(FLines, L))]));
+    end;
+  end;
+  Result:= '';
+end;
+
+{ CYC-C (1): each type declaration of the edge -- CheckShape let through only a routine local
+  `V: T;` (LocalDeclOf) -- is retyped `V: <interface>` when T is the class and every use of V is
+  one the interface carries (LocalUseWhy); the `as` casts that assign V are rewritten by
+  RewriteConsumer like any other. Else the type-decl refusal names the first other use. }
+function TMemberPlan.CheckTypeDecls: Boolean;
+var
+  Local: TSymbol;
+  Line : Integer;
+  Done : TList<Integer>;
+begin
+  Done:= TList<Integer>.Create;
+  try
+    for var R in FSurface.Refs do
+    begin
+      if (R.Kind <> erTypeDecl) or Done.Contains(R.Line) then Continue;
+      Done.Add(R.Line);
+      LocalDeclOf(R, Local);  { CheckShape refused every other type declaration }
+      var Routine:= FStore.GetSymbolById(Local.ParentId);
+      if not SameText(R.Name, FCls.Name) or (Routine.Id <= 0) then
+        Exit(Refuse('type-decl', R.Name, FFromFid, R.Line, Format('line %d declares something of type `%s`, which ' +
+          'would still need its unit (`%s`)', [R.Line, R.Name, R.LineText])));
+      var Why:= LocalUseWhy(Local, Routine, Line);
+      if Why <> '' then
+        Exit(Refuse('type-decl', Local.Name, FFromFid, Line, Format('line %d %s; the local `%s` declared at line %d ' +
+          'can become `%s` only when the interface carries every use', [Line, Why, Local.Name, R.Line, FIface])));
+      AddEdit(FFromFid, R.Line, True, [TRegEx.Replace(LineOf(FLines, R.Line), ':\s*' + TRegEx.Escape(FCls.Name) +
+        '\b', ': ' + FIface, [roIgnoreCase])]);
+    end;
+  finally
+    Done.Free;
+  end;
+  Result:= True;
+end;
+
+{ CYC-C (3): '' when pM, a member the consumer reads that the class does not declare itself, is
+  carried like an own member: an ancestor of the class declared in the class unit declares it (the
+  getter, a method of the class, reads it by name), not under `strict private`, and no class of the
+  chain from the class's parent up to that ancestor declares `Get<M>` / `Set<M>` (the names the
+  interface needs; the class itself is checked by CheckMembers / CheckWrites). Else why not, the
+  refusal kind in pKind: member-unsupported, or duplicate-identifier for a getter / setter name.
+  A member of a library ancestor or of another unit is never on the edge: CheckWithBodies keeps
+  refusing it inside a `with` body. }
+function TMemberPlan.InheritedWhy(const pM: TSymbol; out pKind: string): string;
+var
+  Next: TStoredType;
+begin
+  pKind:= 'member-unsupported';
+  var Cur:= Stored(FCls);
+  for var Hop:= 1 to CMaxAncestorHops do
+  begin
+    if not FIdx.Find(FIdx.ParentOf(Cur), False, Next) or FIdx.IsLib(Next) or (Next.Sym.FileId <> FClsFid) then Break;
+    for var N in TArray<string>.Create('Get' + pM.Name, 'Set' + pM.Name) do
+      if Next.Store.FindChildSymbolByName(Next.Sym.Id, N).Id > 0 then
+      begin
+        pKind:= 'duplicate-identifier';
+        Exit(Format('its ancestor `%s` already declares `%s`, a name the interface needs', [Next.Sym.Name, N]));
+      end;
+    if Next.Sym.Id = pM.ParentId then
+    begin
+      for var L:= pM.StartLine - 1 downto Next.Sym.StartLine do
+      begin
+        var V:= TRegEx.Match(BareCode(LineOf(FClsLines, L)), '^\s*(strict\s+)?(private|protected|public|published)\b',
+          [roIgnoreCase]);
+        if not V.Success then Continue;
+        if (V.Groups[1].Length > 0) and SameText(V.Groups[2].Value, 'private') then
+          Exit(Format('`%s.%s` is strict private: no method of `%s` can read it', [Next.Sym.Name, pM.Name, FCls.Name]));
+        Break;
+      end;
+      Exit('');
+    end;
+    Cur:= Next;
+  end;
+  Result:= Format('no ancestor of `%s` declared in its unit declares it', [FCls.Name]);
 end;
 
 { W6 C7: the argument list that passes an index parameter list on (const pRow, pCol: Integer;
@@ -2590,8 +2791,13 @@ begin
           Exit(Refuse('class-method', M.Name, FFromFid, R.Line, Format('line %d calls the method `%s` of `%s` ' +
             '(`%s`); the interface carries field and property reads only', [R.Line, M.Name, FCls.Name, R.LineText])));
         if M.ParentId <> FCls.Id then
-          Exit(Refuse('member-unsupported', M.Name, FFromFid, R.Line, Format('line %d reads `%s`, which is not ' +
-            'declared in `%s` itself', [R.Line, M.Name, FCls.Name])));
+        begin
+          var Kind:= '';
+          var Why := InheritedWhy(M, Kind);
+          if Why <> '' then
+            Exit(Refuse(Kind, M.Name, FFromFid, R.Line, Format('line %d reads `%s`, which is not declared in `%s` ' +
+              'itself: %s', [R.Line, M.Name, FCls.Name, Why])));
+        end;
         var Sig:= Trim(M.Signature);
         { an indexed property keeps only its element type in symbols.signature: read the declaration }
         var Indexed:= (M.Kind = skProperty) and TRegEx.IsMatch(BareCode(LineOf(FClsLines, M.StartLine)),
@@ -2622,7 +2828,8 @@ begin
   begin
     FGetters.Add('Get' + M.Name);
     var Read:= M.Name;
-    if M.Kind = skProperty then
+    { CYC-C (3): an inherited member is read by name -- its accessor may be private to the ancestor }
+    if (M.Kind = skProperty) and (M.ParentId = FCls.Id) then
     begin
       var Parts: TArray<string>:= nil;
       for var L:= M.StartLine to Max(M.StartLine, M.EndLine) do Parts:= Parts + [BareCode(LineOf(FClsLines, L))];
@@ -3419,6 +3626,12 @@ begin
   end;
 end;
 
+{ `I<Class without its T>Surface`. }
+function DefaultIfaceName(const pClass: string): string;
+begin
+  Result:= 'I' + (if (Length(pClass) > 1) and (UpCase(pClass[1]) = 'T') then Copy(pClass, 2, MaxInt) else pClass) + 'Surface';
+end;
+
 function TMemberPlan.Run(const pLeafUnit, pIfaceName: string; out pRefusal: TRecipeRefusal): TRecipeSteps;
 begin
   Result  := Default(TRecipeSteps);
@@ -3426,10 +3639,9 @@ begin
   var Ok:= (FFromFid > 0) and (FClsFid > 0) and CheckShape;
   if Ok then
   begin
-    FIface:= if pIfaceName <> '' then pIfaceName
-      else 'I' + (if (Length(FCls.Name) > 1) and (UpCase(FCls.Name[1]) = 'T') then Copy(FCls.Name, 2, MaxInt)
-      else FCls.Name) + 'Surface';
-    Ok:= CheckMembers and CheckWrites and CheckMethods and CheckClass and RewriteConsumer;
+    FIface:= if pIfaceName <> '' then pIfaceName else DefaultIfaceName(FCls.Name);
+    Ok:= CheckMembers and CheckWrites and CheckMethods and CheckClass;
+    Ok:= Ok and CheckTypeDecls and RewriteConsumer;
     Ok:= Ok and CheckCastExceptions and CheckWithBodies and CheckMethodMentions and CollectLeafUses;
   end;
   pRefusal:= FRefusal;
@@ -3455,17 +3667,364 @@ begin
   for var St in FSetters do if St <> '' then Result.Setters:= Result.Setters + [St];
   for var M in FMethods do Result.MethodSigs:= Result.MethodSigs + [M.Name + Trim(M.Signature)];
   Result.KeptGetters  := FKeptGetters.ToArray;
+  SetLength(Result.Surfaces, 1);
+  Result.Surfaces[0].ClassTypeName:= Result.ClassTypeName;
+  Result.Surfaces[0].ClassId      := Result.ClassId;
+  Result.Surfaces[0].IfaceName    := Result.IfaceName;
+  Result.Surfaces[0].IfaceGuid    := Result.IfaceGuid;
+  Result.Surfaces[0].IfaceDecl    := Result.IfaceDecl;
+  Result.Surfaces[0].MemberSigs   := Result.MemberSigs;
+  Result.Surfaces[0].Setters      := Result.Setters;
+  Result.Surfaces[0].MethodSigs   := Result.MethodSigs;
+  Result.Surfaces[0].CastAncestor := Result.CastAncestor;
+  Result.Surfaces[0].KeptGetters  := Result.KeptGetters;
+end;
+
+type
+  { 1.42 cyc2: the `with` statement of one class on a consumer line, and the last line of its body. }
+  TClassWith = record
+    ClassName: string;
+    First    : Integer;
+    Last     : Integer;
+  end;
+
+  { One PlanMemberInterface run on an edge through several classes: one TMemberPlan per class, over the
+    refs of that class and the consumer lines as the classes before it rewrote them. Decisions: the
+    plans stay one-class planners (every existing refusal keeps its meaning, per class), and only this
+    composer knows there are several; see PlanMemberInterface's remarks for the contract. }
+  TEdgeComposer = class
+  private
+    FSource : IEdgeSurfaceSource;
+    FLibrary: ISymbolStore;
+    FStore  : ISymbolStore;
+    FIdx    : TTypeIndex;
+    FSurface: TEdgeSurface;
+    FScopes : TArray<string>;
+    FFromFid: Int64;
+    FToFid  : Int64;
+    FClasses: TArray<TSymbol>;
+    FLines  : TArray<string>;
+    FWiths  : TList<TClassWith>;
+    FRefusal: TRecipeRefusal;
+    function Refuse(const pKind, pSymbol: string; pLine: Integer; const pReason: string): Boolean;
+    function CollectClasses: Boolean;
+    function HoldsMember(const pCls: TSymbol; pParentId: Int64): Boolean;
+    function ClassesOfRef(const pR: TEdgeRef): TArray<Integer>;
+    function SubSurface(pClass: Integer): TEdgeSurface;
+    function PickNames(const pGiven: TArray<string>): TArray<string>;
+    procedure Overlay(const pSteps: TRecipeSteps);
+    function WithsOverlap: Boolean;
+    function Merge(const pParts: TArray<TRecipeSteps>): TRecipeSteps;
+  public
+    constructor Create(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore; const pSurface: TEdgeSurface;
+      const pUnitScopes: TArray<string>);
+    destructor Destroy; override;
+    function Run(const pLeafUnit: string; const pIfaceNames: TArray<string>; out pRefusal: TRecipeRefusal): TRecipeSteps;
+  end;
+
+constructor TEdgeComposer.Create(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
+  const pSurface: TEdgeSurface; const pUnitScopes: TArray<string>);
+begin
+  inherited Create;
+  FSource     := pSource;
+  FLibrary    := pLibrary;
+  FStore      := pSource.Store;
+  FIdx.Project:= FStore;
+  FIdx.Lib    := pLibrary;
+  FSurface    := pSurface;
+  FScopes     := pUnitScopes;
+  FFromFid    := pSource.FidOfStem(pSurface.FromStem);
+  FToFid      := pSource.FidOfStem(pSurface.ToStem);
+  FLines      := pSource.FileLines(FFromFid);
+  FWiths      := TList<TClassWith>.Create;
+end;
+
+destructor TEdgeComposer.Destroy;
+begin
+  FWiths.Free;
+  inherited Destroy;
+end;
+
+function TEdgeComposer.Refuse(const pKind, pSymbol: string; pLine: Integer; const pReason: string): Boolean;
+begin
+  FRefusal:= MakeRefusal(pKind, pSymbol, FFromFid, pLine, pReason);
+  Result  := False;
+end;
+
+{ The classes of the edge that are an `is` / `as` operand, sorted by name; any other operand of the
+  edge (an interface, a type alias) refuses: no class plan would rewrite it. }
+function TEdgeComposer.CollectClasses: Boolean;
+var
+  Found: TList<TSymbol>;
+begin
+  Found:= TList<TSymbol>.Create;
+  try
+    for var R in FSurface.Refs do
+    begin
+      if R.Kind not in [erTypeIs, erTypeAs] then Continue;
+      var S:= if R.SymbolId > 0 then FStore.GetSymbolById(R.SymbolId) else Default(TSymbol);
+      if (S.Kind <> skClass) or (S.FileId <> FToFid) then
+        Exit(Refuse('other-ref', R.Name, R.Line, Format('line %d tests or casts against `%s`, which is no class of ' +
+          '`%s` (`%s`)', [R.Line, R.Name, FSurface.ToStem, R.LineText])));
+      var Known:= False;
+      for var C in Found do
+        if C.Id = S.Id then Known:= True;
+      if not Known then Found.Add(S);
+    end;
+    if Found.Count = 0 then
+      Exit(Refuse('multiple-classes', string.Join(', ', FSurface.ClassNames), 0, Format('the edge names %d classes ' +
+        '(%s) and tests none of them with `is` / `as`', [Length(FSurface.ClassNames),
+        string.Join(', ', FSurface.ClassNames)])));
+    Found.Sort(TComparer<TSymbol>.Construct(
+      function(const pLeft, pRight: TSymbol): Integer
+      begin
+        Result:= CompareText(pLeft.Name, pRight.Name);
+      end));
+    FClasses:= Found.ToArray;
+  finally
+    Found.Free;
+  end;
+  Result:= True;
+end;
+
+{ Whether pCls declares a member of the class pParentId, or inherits it through ancestors declared in
+  its own unit (the only ones the edge can name). }
+function TEdgeComposer.HoldsMember(const pCls: TSymbol; pParentId: Int64): Boolean;
+var
+  Cur, Next: TStoredType;
+begin
+  Cur.Sym  := pCls;
+  Cur.Store:= FStore;
+  for var Hop:= 1 to CMaxAncestorHops do
+  begin
+    if Cur.Sym.Id = pParentId then Exit(True);
+    if not FIdx.Find(FIdx.ParentOf(Cur), False, Next) or FIdx.IsLib(Next) or (Next.Sym.FileId <> pCls.FileId) then Exit(False);
+    Cur:= Next;
+  end;
+  Result:= False;
+end;
+
+{ Which classes' plans must see the ref (see PlanMemberInterface's remarks). A bare write in a `with`
+  body is recorded against the class declaring the member (MemberOf). }
+function TEdgeComposer.ClassesOfRef(const pR: TEdgeRef): TArray<Integer>;
+begin
+  Result:= nil;
+  var S:= if pR.SymbolId > 0 then FStore.GetSymbolById(pR.SymbolId) else Default(TSymbol);
+  var ParentId: Int64:= S.ParentId;
+  if S.Kind = skClass then
+  begin
+    if pR.Kind <> erMemberWrite then
+    begin
+      for var I:= 0 to High(FClasses) do
+        if FClasses[I].Id = S.Id then Exit(TArray<Integer>.Create(I));
+      Exit(TArray<Integer>.Create(0));
+    end;
+    ParentId:= S.Id;
+  end;
+  for var I:= 0 to High(FClasses) do
+    if HoldsMember(FClasses[I], ParentId) then Result:= Result + [I];
+  if Result = nil then Result:= TArray<Integer>.Create(0);
+end;
+
+{ The surface one class's plan sees: the refs of that class, and that class alone. }
+function TEdgeComposer.SubSurface(pClass: Integer): TEdgeSurface;
+var
+  Refs: TList<TEdgeRef>;
+begin
+  Result:= FSurface;
+  Refs  := TList<TEdgeRef>.Create;
+  try
+    for var R in FSurface.Refs do
+      if TArray.Contains<Integer>(ClassesOfRef(R), pClass) then Refs.Add(R);
+    Result.Refs:= Refs.ToArray;
+  finally
+    Refs.Free;
+  end;
+  Result.ClassNames:= TArray<string>.Create(FClasses[pClass].Name);
+end;
+
+{ The name of each class's interface: pGiven when it names them all, else the default; a default
+  another class of the edge took first (TFoo and Foo) gets the lowest free suffix. }
+function TEdgeComposer.PickNames(const pGiven: TArray<string>): TArray<string>;
+begin
+  if Length(pGiven) = Length(FClasses) then Exit(pGiven);
+  Result:= nil;
+  for var C in FClasses do
+  begin
+    var Name:= DefaultIfaceName(C.Name);
+    var N:= 1;
+    while MatchText(Name, Result) do
+    begin
+      Inc(N);
+      Name:= DefaultIfaceName(C.Name) + IntToStr(N);
+    end;
+    Result:= Result + [Name];
+  end;
+end;
+
+{ The consumer lines the next class's plan reads: this class's rewrites applied (every rewrite
+  replaces a whole line, keeping the line numbers). }
+procedure TEdgeComposer.Overlay(const pSteps: TRecipeSteps);
+begin
+  for var E in pSteps.Edits do
+    if (E.Fid = FFromFid) and E.Replace and (Length(E.NewLines) = 1) and (E.Line >= 1) and (E.Line <= Length(FLines)) then
+      FLines[E.Line - 1]:= E.NewLines[0];
+end;
+
+{ Refuses `with` bodies of two classes that overlap: PlanMemberInterface's remarks say why. }
+function TEdgeComposer.WithsOverlap: Boolean;
+begin
+  Result:= False;
+  for var A in FWiths do
+    for var B in FWiths do
+      if not SameText(A.ClassName, B.ClassName) and (A.First <= B.First) and (B.First <= A.Last) then
+      begin
+        Refuse('multiple-classes', A.ClassName + ', ' + B.ClassName, B.First, Format('the `with` body of `%s` at ' +
+          'line %d overlaps the `with` of `%s` at line %d; a bare name there has two candidates, which the check ' +
+          'of one interface cannot judge. Split the `with` statements by hand first', [A.ClassName, A.First,
+          B.ClassName, B.First]));
+        Exit(True);
+      end;
+end;
+
+{ Appends pItems not yet in pTo (case-insensitive), in order. }
+procedure AddUniqueText(pTo: TList<string>; const pItems: TArray<string>);
+begin
+  for var S in pItems do
+    if not MatchText(S, pTo.ToArray) then pTo.Add(S);
+end;
+
+{ The merged steps: the first class's scalars, everybody's lists. An edit of a line an earlier class
+  edited: a replace wins (it was made from the earlier text); an insert at the same anchor (the getter
+  bodies) follows the earlier lines. }
+function TEdgeComposer.Merge(const pParts: TArray<TRecipeSteps>): TRecipeSteps;
+var
+  Edits: TList<TRecipeEdit>;
+  Leaf, Cons: TList<string>;
+begin
+  Result:= pParts[0];
+  Result.MemberSigs:= nil;
+  Result.Setters   := nil;
+  Result.MethodSigs:= nil;
+  Result.KeptGetters:= nil;
+  Result.Surfaces  := nil;
+  Edits:= TList<TRecipeEdit>.Create;
+  Leaf := TList<string>.Create;
+  Cons := TList<string>.Create;
+  try
+    for var P in pParts do
+    begin
+      for var E in P.Edits do
+      begin
+        var At:= -1;
+        for var I:= 0 to Edits.Count - 1 do
+          if (Edits[I].Fid = E.Fid) and (Edits[I].Line = E.Line) and (Edits[I].Replace = E.Replace) then At:= I;
+        if At < 0 then Edits.Add(E)
+        else
+        begin
+          var Into:= Edits[At];
+          Into.NewLines:= if E.Replace then E.NewLines else Into.NewLines + E.NewLines;
+          Edits[At]:= Into;
+        end;
+      end;
+      AddUniqueText(Leaf, P.LeafUses);
+      AddUniqueText(Cons, P.ConsumerUses);
+      Result.MemberSigs := Result.MemberSigs + P.MemberSigs;
+      Result.Setters    := Result.Setters + P.Setters;
+      Result.MethodSigs := Result.MethodSigs + P.MethodSigs;
+      Result.KeptGetters:= Result.KeptGetters + P.KeptGetters;
+      Result.Surfaces   := Result.Surfaces + P.Surfaces;
+    end;
+    Result.Edits       := Edits.ToArray;
+    Result.LeafUses    := Leaf.ToArray;
+    Result.ConsumerUses:= Cons.ToArray;
+    Result.IfaceDecl   := MemberSurfaceDecls(Result.Surfaces);
+  finally
+    Cons.Free;
+    Leaf.Free;
+    Edits.Free;
+  end;
+end;
+
+function TEdgeComposer.Run(const pLeafUnit: string; const pIfaceNames: TArray<string>;
+  out pRefusal: TRecipeRefusal): TRecipeSteps;
+var
+  Parts  : TArray<TRecipeSteps>;
+  Refusal: TRecipeRefusal;
+begin
+  Result:= Default(TRecipeSteps);
+  pRefusal:= Default(TRecipeRefusal);
+  if not CollectClasses then
+  begin
+    pRefusal:= FRefusal;
+    Exit;
+  end;
+  var Names:= PickNames(pIfaceNames);
+  FLines:= Copy(FLines);
+  SetLength(Parts, Length(FClasses));
+  for var I:= 0 to High(FClasses) do
+  begin
+    var P:= TMemberPlan.Create(FSource, FLibrary, SubSurface(I), FScopes);
+    try
+      P.FLines:= Copy(FLines);
+      Parts[I]:= P.Run(pLeafUnit, Names[I], Refusal);
+      if Refusal.Kind <> '' then
+      begin
+        pRefusal:= Refusal;
+        pRefusal.Reason:= Format('class `%s`: %s', [FClasses[I].Name, Refusal.Reason]);
+        Exit;
+      end;
+      for var W in P.FWithLines do
+      begin
+        var CW: TClassWith;
+        CW.ClassName:= FClasses[I].Name;
+        CW.First    := W;
+        CW.Last     := WithBodyEnd(FLines, W);
+        FWiths.Add(CW);
+      end;
+    finally
+      P.Free;
+    end;
+    Overlay(Parts[I]);
+  end;
+  if WithsOverlap then
+  begin
+    pRefusal:= FRefusal;
+    Exit;
+  end;
+  Result:= Merge(Parts);
+end;
+
+function MemberSurfaceDecls(const pSurfaces: TArray<TMemberSurface>): TArray<string>;
+begin
+  Result:= nil;
+  for var S in pSurfaces do
+    if not S.Reused then
+    begin
+      if Result <> nil then Result:= Result + [''];
+      Result:= Result + S.IfaceDecl;
+    end;
 end;
 
 function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
   const pSurface: TEdgeSurface; const pLeafUnit: string; const pUnitScopes: TArray<string>;
-  out pRefusal: TRecipeRefusal; const pIfaceName: string): TRecipeSteps;
+  out pRefusal: TRecipeRefusal; const pIfaceNames: TArray<string>): TRecipeSteps;
 var
   P: TMemberPlan;
+  C: TEdgeComposer;
 begin
+  if Length(pSurface.ClassNames) > 1 then
+  begin
+    C:= TEdgeComposer.Create(pSource, pLibrary, pSurface, pUnitScopes);
+    try
+      Exit(C.Run(pLeafUnit, pIfaceNames, pRefusal));
+    finally
+      C.Free;
+    end;
+  end;
   P:= TMemberPlan.Create(pSource, pLibrary, pSurface, pUnitScopes);
   try
-    Result:= P.Run(pLeafUnit, pIfaceName, pRefusal);
+    Result:= P.Run(pLeafUnit, (if Length(pIfaceNames) > 0 then pIfaceNames[0] else ''), pRefusal);
   finally
     P.Free;
   end;
