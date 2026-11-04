@@ -20,6 +20,12 @@ $bare = Join-Path $WorkDir 'bare'
 New-Item -ItemType Directory -Path $bare | Out-Null
 Copy-Item $Exe (Join-Path $bare 'drag-lint.exe') -Force   # deliberately NO dlls beside it
 $bareExe = Join-Path $bare 'drag-lint.exe'
+# The bare exe MUST fail at load, and with the default error mode Windows parks it behind a csrss
+# "Application Error" box until someone clicks OK: the guard hung 900 s when the battery's parent was
+# started through ShellExecute (Start-Process -WindowStyle Hidden). SEM_FAILCRITICALERRORS is inherited
+# by every child, so the loader reports 0xC000007B instead.
+Add-Type -Namespace DragLintGuard -Name ErrMode -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetErrorMode(uint uMode);'
+[void][DragLintGuard.ErrMode]::SetErrorMode(1)
 
 foreach ($g in 'run_find_callers_callback_reach', 'run_generate_test_stub_guard', 'run_hover_bundle_guard',
                'run_lint_project_scope_active_config_guard', 'run_query_callers_shared_guard', 'run_text_query_adhoc_db',

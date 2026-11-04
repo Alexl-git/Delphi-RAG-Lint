@@ -1,6 +1,7 @@
 {
   "abstract-method-instantiation": {},
   "address-of-local-returned": {"cwe": ["CWE-562"], "cert": ["DCL30-C"], "misra": ["MISRA-C-2012-R18.6"]},
+  "ancestor-not-in-project": {},
   "application-terminate-in-library": {"misra": ["MISRA-C-2012-R21.8"], "weak": ["MISRA-C-2012-R21.8"]},
   "approx-constant": {},
   "assert-call": {},

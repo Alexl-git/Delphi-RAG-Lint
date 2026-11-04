@@ -199,6 +199,14 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RsvarsBat: string; static;
+    /// <summary>The value $(BDSCOMMONDIR) has for one Studio: what that Studio's own
+    /// bin\rsvars.bat sets, else %PUBLIC%\Documents\Embarcadero\Studio\&lt;key&gt;.</summary>
+    /// <param name="ARoot">The Studio's root; '' goes straight to the fallback.</param>
+    /// <param name="AStudioKey">Its BDS key, e.g. 23.0.</param>
+    /// <returns>The folder without a trailing delimiter; it need not exist.</returns>
+    /// <remarks>Reads one file on each call; the caller caches. Not under the root:
+    /// the folder is the version's Public Documents.</remarks>
+    class function CommonDirOf(const ARoot, AStudioKey: string): string; static;
     /// <summary>Checks the parts of the contract a test can control: that $BDS
     /// wins, that a trailing delimiter and surrounding whitespace are
     /// normalised away, and that RsvarsBat is COMPOSED from Root rather than
@@ -236,6 +244,7 @@ implementation
 
 uses
   System.IOUtils,
+  System.RegularExpressions,
   System.Win.Registry,
   Winapi.Windows;
 
@@ -302,6 +311,24 @@ end; // function
 class function TStudioEnv.RsvarsBat: string;
 begin
   Result:= TPath.Combine(Root, 'bin\rsvars.bat');
+end; // function
+
+class function TStudioEnv.CommonDirOf(const ARoot, AStudioKey: string): string;
+const
+  COMMONDIR_SET = '(?im)^\s*@?\s*set\s+BDSCOMMONDIR\s*=\s*(.+?)\s*$';
+  PUBLIC_REL = 'Documents\Embarcadero\Studio';
+var
+  Rsvars: string;
+  Found : TMatch;
+begin
+  Result:= '';
+  Rsvars:= TPath.Combine(ARoot, 'bin\rsvars.bat');
+  if (ARoot <> '') and TFile.Exists(Rsvars) then
+  begin
+    Found:= TRegEx.Match(TFile.ReadAllText(Rsvars), COMMONDIR_SET);  // dl:ok taint-path-traversal -- REVIEWED 2026-11-04: the path is the local Studio's own RootDir from this user's registry, the same trust as the library path itself
+    if Found.Success then Result:= ExcludeTrailingPathDelimiter(Found.Groups[1].Value);
+  end;
+  if Result = '' then Result:= TPath.Combine(TPath.Combine(GetEnvironmentVariable('PUBLIC'), PUBLIC_REL), AStudioKey);
 end; // function
 
 class function TStudioEnv.SelfTest(out AFailure: string): Boolean;

@@ -15205,9 +15205,11 @@ begin
     first and short-circuited, so the scoping predicate's own queries (CountFiles,
     CallEdgesNeedRebuild) are still not run when extra stores decide it. }
   var DeclineWhy: string:=
-    if AClearFirst then 'a full edge clear was asked for (a stale resolver or --resolve-only)'
-    else if Length(AExtraStores) > 0 then 'extra stores are attached, and a library index consulted by ResolveExternally is outside everything this instance recorded'
+    if Length(AExtraStores) > 0 then 'extra stores are attached, and a library index consulted by ResolveExternally is outside everything this instance recorded'
     else ScopedResolveDeclineReason;
+  { A clear forces the whole database, but only names itself when nothing more
+    specific applies: a new database also clears, and says so in its own reason. }
+  if AClearFirst and (DeclineWhy = '') then DeclineWhy:= 'a full edge clear was asked for (a stale resolver or --resolve-only)';
   Scoped:= DeclineWhy = '';
   { ANNOUNCED BEFORE THE PASS, NOT AFTER IT. The completion lines at the bottom
     of this routine already say which shape ran -- but they print when it is

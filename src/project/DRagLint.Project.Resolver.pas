@@ -284,8 +284,8 @@ type
       constructor Create;
       /// <summary>A resolver over ANOTHER Studio's key: its Search and Browsing
       /// paths, platform list and Environment Variables, with $(BDS) expanding to that
-      /// key's RootDir and $(BDSCOMMONDIR) to that Studio's common folder: the value its
-      /// own bin\rsvars.bat sets, else %PUBLIC%\Documents\Embarcadero\Studio\&lt;key&gt;.</summary>
+      /// key's RootDir and $(BDSCOMMONDIR) to that Studio's common folder: which
+      /// TStudioEnv.CommonDirOf gives for that root and key.</summary>
       /// <param name="AStudio">A BDS key; DEFAULT_BDS_KEY behaves exactly as Create.</param>
       /// <remarks>
       /// Does not check the key is installed: IsBdsStudioInstalled is the
@@ -902,27 +902,9 @@ end;
 /// pointing at the wrong folder.</summary>
 /// <remarks>The named-macro sweep is bounded (max 8 iterations) so a macro whose
 /// value references itself cannot loop forever.</remarks>
-{ $(BDSCOMMONDIR) as dcc sees it. It is not under the Studio's root: rsvars.bat sets it
-  to the Public Documents folder of that version, so that file is asked first and the
-  documented layout is only the fallback (a Studio with no rsvars, a registry fixture). }
 function TProjectResolver.StudioCommonDir: string;
-const
-  RSVARS_REL = 'bin\rsvars.bat';
-  COMMONDIR_SET = '(?im)^\s*@?\s*set\s+BDSCOMMONDIR\s*=\s*(.+?)\s*$';
-  PUBLIC_REL = 'Documents\Embarcadero\Studio';
-var
-  Rsvars: string;
-  Found : TMatch;
 begin
-  if FCommonDir <> '' then Exit(FCommonDir);
-  Rsvars:= TPath.Combine(FBDS, RSVARS_REL);
-  if (FBDS <> '') and TFile.Exists(Rsvars) then
-  begin
-    Found:= TRegEx.Match(TFile.ReadAllText(Rsvars), COMMONDIR_SET);  // dl:ok taint-path-traversal@aa19 -- REVIEWED 2026-11-04: the path is the local Studio's own RootDir from this user's registry, the same trust as the library path itself
-    if Found.Success then FCommonDir:= ExcludeTrailingPathDelimiter(Found.Groups[1].Value);
-  end;
-  if FCommonDir = '' then
-    FCommonDir:= TPath.Combine(TPath.Combine(GetEnvironmentVariable('PUBLIC'), PUBLIC_REL), FStudio);
+  if FCommonDir = '' then FCommonDir:= TStudioEnv.CommonDirOf(FBDS, FStudio);
   Result:= FCommonDir;
 end;
 

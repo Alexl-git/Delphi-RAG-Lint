@@ -1427,8 +1427,11 @@ end;
   ReconcileContent appends TSharedFacts.ProjectTag to each fresh entry; a block
   written from the other project's DB stores [A]X where this run reconciles
   [A,Own]X. Own-tag bookkeeping alone is not drift (YADF FP #1, 2026-11-03).
-  An entry with no tag other than Own becomes untagged, so a fresh-only entry
-  or an unrendered [Own]Y still differs. ProjectTag = '' drops nothing. }
+  Own is dropped only where another tag remains: [Own]X against a stored
+  untagged X is this project's one-time ADOPTION of a legacy entry, and it is
+  drift, because without that tag this project could never reap the entry later.
+  A fresh-only entry or an unrendered [Own]Y still differs. ProjectTag = ''
+  drops nothing. }
 function StripOwnTag(const AEntries: TArray<string>): TArray<string>;
 var
   I   : Integer;
@@ -1439,7 +1442,8 @@ begin
   for I:= 0 to High(AEntries) do
   begin
     SplitTagged(AEntries[I], Tags, Bare);
-    Result[I]:= FormatTagged(WithoutTag(Tags, TSharedFacts.ProjectTag), Bare);
+    var Others: TArray<string>:= WithoutTag(Tags, TSharedFacts.ProjectTag);
+    Result[I]:= if Length(Others) > 0 then FormatTagged(Others, Bare) else AEntries[I];
   end;
 end;
 

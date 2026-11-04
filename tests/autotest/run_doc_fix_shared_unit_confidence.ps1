@@ -136,7 +136,8 @@ Check 'CONTROL-A exactly one entry for the caller (one identity)' (([regex]::Mat
 # `[A,B]uCaller.CallIt (uCaller.pas) ?`, and A then wrote it back, for ever.
 Fix $dbB
 $cf = CalledFrom (BlockAbove $uShared 'procedure Foo;')
-Check 'CASE-B B adopted the entry under its own tag' ($cf -match '\[A,B\]uCaller\.CallIt') $cf
+# YADF FP #1: an entry another project already tagged is not rewritten just to add B's tag.
+Check 'CASE-B B leaves A''s tagged entry alone (own-tag bookkeeping is not drift)' ($cf -match '\[A\]uCaller\.CallIt') $cf
 Check 'CASE-B ...and KEPT it certain (no downgrade to ?)' ($cf -notmatch '\?') $cf
 Check 'CASE-B B reports no drift after its adoption' ((Drift $dbB) -eq 0)
 
