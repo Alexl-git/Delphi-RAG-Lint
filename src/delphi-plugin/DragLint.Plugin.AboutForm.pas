@@ -29,6 +29,7 @@ uses
   , Vcl.Forms
   , Vcl.StdCtrls
   , Vcl.ExtCtrls
+  , DragLint.Plugin.CliAsync
   ;
 
 type
@@ -51,7 +52,9 @@ type
         in FWrappers would accumulate one dead object per row per refresh, and
         the window refreshes after every applied fix. }
       FRowObjs  : TList     ;
+      FInfoRun  : TCliRunSlot; { the engine info request in flight }
       procedure BuildContent;
+      procedure RenderContent;
       procedure ClearContent;
       procedure DoRefresh   (Sender: TObject);
       procedure DoDiagnose  (Sender: TObject);
@@ -319,6 +322,7 @@ begin
   Color        := ThemedColor(clBtnFace);
 
   BuildButtons;
+  FInfoRun:= TCliRunSlot.Create;
   BuildContent;
 end;
 
@@ -326,6 +330,7 @@ destructor TDragLintAboutForm.Destroy;
 var
   I: Integer;
 begin
+  FreeAndNil(FInfoRun);  { abandons the run in flight: its answer never reaches a dead form }
   ClearContent;   { frees FRowObjs' contents }
   if FRowObjs <> nil then FRowObjs.Free;
   if FWrappers <> nil then
@@ -355,6 +360,16 @@ begin
 end;
 
 procedure TDragLintAboutForm.BuildContent;
+begin
+  { IDE-MAINTHREAD-CLI: the engine is asked off the main thread; what is on screen
+    stays there until the answer can replace it. }
+  FStatusBar.Caption   := '  Asking the engine...';
+  FStatusBar.Font.Color:= ThemedColor(clWindowText);
+  FStatusBar.Font.Style:= [];
+  RefreshEngineInfo(FInfoRun, RenderContent);
+end;
+
+procedure TDragLintAboutForm.RenderContent;
 
   procedure RenderGroup(const ATitle: string; const ALines: TDiagLines);
   var
@@ -645,30 +660,31 @@ begin
   BuildContent;
 end;
 
+const
+  DIAG_LOG_TAIL_LINES = 60;
+
 procedure TDragLintAboutForm.DoDiagnose(Sender: TObject);
-var
-  Report: string;
 begin
-  Screen.Cursor:= crHourGlass;
-  try
-    Report:= BuildDiagnoseReport(60);
-  finally
-    Screen.Cursor:= crDefault;
-  end;
-  ShowTextReport('drag-lint -- diagnose current state', Report);
+  FStatusBar.Caption:= '  Asking the engine...';
+  RefreshEngineInfo(FInfoRun,
+    procedure
+    begin
+      FStatusBar.Caption:= '';
+      ShowTextReport('drag-lint -- diagnose current state', BuildDiagnoseReport(DIAG_LOG_TAIL_LINES));
+    end);
 end;
 
 procedure TDragLintAboutForm.DoCopyReport(Sender: TObject);
 begin
-  Screen.Cursor:= crHourGlass;
-  try
-    Clipboard.AsText:= BuildDiagnoseReport(60);
-  finally
-    Screen.Cursor:= crDefault;
-  end;
-  FStatusBar.Caption   := '  Diagnose report copied to the clipboard.';
-  FStatusBar.Font.Color:= ThemedColor(clWindowText);
-  FStatusBar.Font.Style:= [];
+  FStatusBar.Caption:= '  Asking the engine...';
+  RefreshEngineInfo(FInfoRun,
+    procedure
+    begin
+      Clipboard.AsText:= BuildDiagnoseReport(DIAG_LOG_TAIL_LINES);
+      FStatusBar.Caption   := '  Diagnose report copied to the clipboard.';
+      FStatusBar.Font.Color:= ThemedColor(clWindowText);
+      FStatusBar.Font.Style:= [];
+    end);
 end;
 
 procedure TDragLintAboutForm.DoCloseClick(Sender: TObject);

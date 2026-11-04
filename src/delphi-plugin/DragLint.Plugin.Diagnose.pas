@@ -40,6 +40,7 @@ interface
 
 uses
   System.SysUtils
+  , DragLint.Plugin.CliAsync
   ;
 
 type
@@ -88,10 +89,21 @@ function DescribeDiagFix(AFix: TDiagFix; out ACurrent, AProposed: string): Boole
 /// DescribeDiagFix. Main thread only.</remarks>
 function ApplyDiagFix(AFix: TDiagFix; out AError: string): Boolean;
 
+/// <summary>Asks the engine `info --json`, off the main thread, for what DiagVersions,
+/// DiagIndexes and BuildDiagnoseReport report from it (IDE-MAINTHREAD-CLI). ADone then
+/// builds the screen from the answers.</summary>
+/// <param name="ASlot">The screen's slot; a newer call supersedes the run, and
+/// freeing the slot means ADone never runs. The caller owns it.</param>
+/// <param name="ADone">Runs once on the main thread when both answers are in, however
+/// they ended; at once when there is no engine to ask.</param>
+/// <remarks>Main thread only. The answers replace the previous ones at the start, so
+/// a screen never shows an answer older than its own request.</remarks>
+procedure RefreshEngineInfo(ASlot: TCliRunSlot; const ADone: TProc);
+
 /// <summary>Plugin, engine, tree-sitter and graph-viewer versions.</summary>
 /// <returns>Rows for the Versions group.</returns>
-/// <remarks>Shells `drag-lint info --json` synchronously with a short budget --
-/// acceptable because the user asked for this screen. Main thread only.</remarks>
+/// <remarks>Reads the answer RefreshEngineInfo fetched; spawns nothing. Without one
+/// the engine row says so. Main thread only.</remarks>
 function DiagVersions: TDiagLines;
 
 /// <summary>Versions of the sibling tools in the same family -- YADF, YADFOT,
@@ -135,7 +147,8 @@ function DiagConfiguration: TDiagLines;
 /// <summary>The full copyable "Diagnose current state" report.</summary>
 /// <param name="ALogTailLines">How many trailing plugin-log lines to append.</param>
 /// <returns>A plain-text report intended to be pasted into an issue.</returns>
-/// <remarks>Composes every DiagX group plus the log tail. Main thread only.</remarks>
+/// <remarks>Composes every DiagX group plus the log tail. Call from
+/// RefreshEngineInfo's ADone. Main thread only.</remarks>
 function BuildDiagnoseReport(ALogTailLines: Integer = 40): string;
 
 /// <summary>True when any row in ALines is dsBad.</summary>
@@ -147,6 +160,7 @@ uses
   System.Classes
   , System.IOUtils
   , System.JSON
+  , System.Generics.Collections
   , Winapi.Windows
   , ToolsAPI
   , DragLint.Plugin.Updates
@@ -318,14 +332,108 @@ end;
 
 { ---- Versions ---- }
 
+type
+  TEngineInfoAnswer = record
+    ExitCode: Integer;
+    Output  : string ;
+  end;
+
+const
+  ENGINE_INFO_STALL_MS = 8000;
+
+var
+  { RefreshEngineInfo's answers by command line; main thread only. }
+  GEngineInfo: TDictionary<string, TEngineInfoAnswer> = nil;
+
+{ ONE spawn for every database. Per-db spawning would multiply the process
+  cost by the number of indexes to learn facts the engine already reports
+  together. }
+function EngineInfoCmd(const ADbs: TArray<string>): string;
+var
+  Db: string;
+begin
+  Result:= '"' + DragLintExe + '" info --json';
+  for Db in ADbs do
+    if Db <> '' then Result:= Result + ' --db "' + Db + '"';
+end;
+
+function PathAlreadyListed(const AList: TArray<string>; const APath: string): Boolean; forward;
+
+{ The databases the index rows ask about, each once. DE-DUPLICATED because
+  ResolveActiveIndexDbs usually ALREADY returns the library path, and a repeated --db
+  makes the engine open that file twice -- 2.37 GB on this machine -- to answer a
+  question it has already answered. }
+function IndexRowDbs(const ADbs: TArray<string>; const ALibPath: string): TArray<string>;
+var
+  P: string;
+begin
+  Result:= nil;
+  for P in ADbs do
+    if (P <> '') and not PathAlreadyListed(Result, P) then Result:= Result + [P];
+  if TFile.Exists(ALibPath) and not PathAlreadyListed(Result, ALibPath) then
+    Result:= Result + [ALibPath];
+end;
+
+procedure FetchEngineInfoStep(ASlot: TCliRunSlot; const ACmds: TArray<string>; AIndex: Integer; const ADone: TProc);
+begin
+  if AIndex > High(ACmds) then
+  begin
+    ADone();
+    Exit;
+  end;
+  var Cmds: TArray<string>:= ACmds;
+  var Done: TProc:= ADone;
+  ASlot.Start(ACmds[AIndex], ENGINE_INFO_STALL_MS,
+    procedure(AExitCode: Integer; const AOutput: string)
+    var
+      Answer: TEngineInfoAnswer;
+    begin
+      Answer.ExitCode:= AExitCode;
+      Answer.Output  := AOutput;
+      GEngineInfo.AddOrSetValue(Cmds[AIndex], Answer);
+      FetchEngineInfoStep(ASlot, Cmds, AIndex + 1, Done);
+    end);
+end;
+
+procedure RefreshEngineInfo(ASlot: TCliRunSlot; const ADone: TProc);
+var
+  Settings: TDragLintSettings;
+  LibWhy  : string;
+  LibPath : string;
+  Dbs     : TArray<string>;
+  Bare    : string;
+  Full    : string;
+  Cmds    : TArray<string>;
+begin
+  if GEngineInfo = nil then GEngineInfo:= TDictionary<string, TEngineInfoAnswer>.Create;
+  GEngineInfo.Clear;
+  ASlot.Cancel;
+  if not FileExists(DragLintExe) then
+  begin
+    ADone();  { EngineInfoJson names the missing exe }
+    Exit;
+  end;
+  Dbs:= nil;
+  LibPath:= '';
+  Settings:= LoadSettings;
+  try
+    LibPath:= GetPlatformAwareLibraryDbPathEx(Settings, LibWhy);
+    Dbs    := ResolveActiveIndexDbs(Settings);
+  except
+    on E: Exception do DebugLog('diagnose: database resolution raised -- ' + E.Message); { DiagIndexes reports it on its row }
+  end;
+  Bare:= EngineInfoCmd(nil);
+  Full:= EngineInfoCmd(IndexRowDbs(Dbs, LibPath));
+  if Bare = Full then Cmds:= [Bare] else Cmds:= [Bare, Full];
+  FetchEngineInfoStep(ASlot, Cmds, 0, ADone);
+end;
+
 function EngineInfoJson(out AJson: TJSONObject; out AError: string;
                         const ADbs: TArray<string> = nil): Boolean;
 var
   Exe   : string ;
   Output: string ;
-  Cmd   : string ;
-  Db    : string ;
-  Code  : Integer;
+  Answer: TEngineInfoAnswer;
   OpenP : Integer;
   CloseP: Integer;
   Slice : string ;
@@ -340,27 +448,17 @@ begin
     AError:= 'engine exe not found at ' + Exe;
     Exit;
   end;
-  Output:= '';
-  { ONE spawn for every database. Per-db spawning would multiply the process
-    cost by the number of indexes to learn facts the engine already reports
-    together. }
-  Cmd:= '"' + Exe + '" info --json';
-  for Db in ADbs do
-    if Db <> '' then Cmd:= Cmd + ' --db "' + Db + '"';
-  try
-    Code:= RunAndCaptureStdout(Cmd, Output, 8000);
-  except
-    on E: Exception do
-    begin
-      AError:= E.ClassName + ': ' + E.Message;
-      Exit;
-    end;
-  end;
-  if Code <> 0 then
+  if (GEngineInfo = nil) or not GEngineInfo.TryGetValue(EngineInfoCmd(ADbs), Answer) then
   begin
-    AError:= Format('info exited %d', [Code]);
+    AError:= 'the engine was not asked yet -- press Refresh';
     Exit;
   end;
+  if Answer.ExitCode <> 0 then
+  begin
+    AError:= Format('info exited %d', [Answer.ExitCode]);
+    Exit;
+  end;
+  Output:= Answer.Output;
   OpenP := Pos('{', Output);
   CloseP:= LastDelimiter('}', Output);
   if (OpenP = 0) or (CloseP <= OpenP) then
@@ -758,15 +856,8 @@ Dbs:= nil;
   end;
 
   { Asked ONCE, for the library index and every project index together, before
-    any row is emitted -- see the freshness amendment in the unit header.
-    DE-DUPLICATED because ResolveActiveIndexDbs usually ALREADY returns the
-    library path, and a repeated --db makes the engine open that file twice --
-    2.37 GB on this machine -- to answer a question it has already answered. }
-  AllDbs:= nil;
-  for P in Dbs do
-    if (P <> '') and not PathAlreadyListed(AllDbs, P) then AllDbs:= AllDbs + [P];
-  if TFile.Exists(LibPath) and not PathAlreadyListed(AllDbs, LibPath) then
-    AllDbs:= AllDbs + [LibPath];
+    any row is emitted -- see the freshness amendment in the unit header. }
+  AllDbs:= IndexRowDbs(Dbs, LibPath);
   Verdicts:= IndexVerdicts(AllDbs);
   try
     Add(Result, Line('Library index', LibPath, Sev));
@@ -974,5 +1065,10 @@ begin
     Sb.Free;
   end;
 end;
+
+initialization
+
+finalization
+  FreeAndNil(GEngineInfo);
 
 end.

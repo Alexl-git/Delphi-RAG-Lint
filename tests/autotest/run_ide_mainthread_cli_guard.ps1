@@ -45,6 +45,7 @@ $Rows = @(
   @{ Unit = 'DragLint.Plugin.LintOptionsFrame'; Budget = 0; Note = 'rules catalog on options open' }
   @{ Unit = 'DragLint.Plugin.UsesDepsFrame';    Budget = 0; Note = 'dry run, cycle list, apply' }
   @{ Unit = 'DragLint.Plugin.Reports';          Budget = 0; Note = 'typeat at the caret' }
+  @{ Unit = 'DragLint.Plugin.Diagnose';         Budget = 0; Note = 'info --json for the About and Diagnose screens' }
 )
 
 $failed = 0
