@@ -1,0 +1,10 @@
+# OFF by default (config enables it). AST half: locals and parameters only; one finding per spelling per routine. The store half (bound refs) is in tests\lint-project\identifier-case-mismatch.
+identifier-case-mismatch 19
+identifier-case-mismatch 20
+identifier-case-mismatch 21
+identifier-case-mismatch 24
+!identifier-case-mismatch 33
+!identifier-case-mismatch 34
+!identifier-case-mismatch 36
+!identifier-case-mismatch 37
+!identifier-case-mismatch 49

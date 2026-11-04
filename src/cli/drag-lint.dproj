@@ -163,6 +163,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.MissingUses.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.UnusedEnumValue.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.UnusedGlobal.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.DataModuleFormGlobal.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.SharedScope.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ReadNeverAssigned.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.EffectRules.pas"/>
@@ -250,6 +251,7 @@
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ExceptionThreadChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.DeclParityChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ParityExtChecks.pas"/>
+        <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.LifetimeShapeChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.CloneChecks.pas"/>
         <DCCReference Include="..\diagnostics\DRagLint.Diagnostics.ParseCache.pas"/>
         <DCCReference Include="..\analysis\DRagLint.Analysis.Cfg.pas"/>

@@ -89,6 +89,7 @@ $OwnRunner = @{
     'assert-with-side-effect'   = 'tests\lint-project\assert-side-effect\run_assert_side_effect.ps1'
     'unit-missing-from-uses'    = 'tests\autotest\run_unit_missing_from_uses.ps1'
     'read-never-assigned'       = 'tests\lint-project\read-never-assigned\run_read_never_assigned.ps1'
+    'datamodule-form-global'    = 'tests\lint-project\datamodule-form-global\run_datamodule_form_global.ps1'
 }
 function HasOwnRunner([string]$Id, [hashtable]$Map = $OwnRunner) {
   if (-not $Map.ContainsKey($Id)) { return $false }

@@ -1,0 +1,25 @@
+{
+  "id": "interfaced-object-nil-leak",
+  "title": "Interfaced object set to nil (lint rule)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.42.0-alpha",
+  "summary": "Lint rule, OFF by default: an object reference to a TInterfacedObject descendant is set to nil while it holds a fresh instance, which leaks it",
+  "intro": "Read this to see when X := nil leaks a TInterfacedObject descendant and when it only clears an alias. Works per file; an index widens the class-descent check beyond the file.",
+  "wikiPage": "interfaced-object-nil-leak",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --rule interfaced-object-nil-leak"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-04",
+    "by": "ENGINE",
+    "build": "1.42.0-alpha",
+    "surfaceHash": "360982a878a600caf0f2ca7a214d6b7f0220a387e74cda05b94c066a804901d1"
+  }
+}

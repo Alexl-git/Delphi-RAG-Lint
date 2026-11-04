@@ -1,0 +1,11 @@
+# OFF by default (config enables it). Pointer into a memory stream's buffer used after the stream was freed; a TBytes copy is reference-counted and stays silent.
+stream-buffer-after-free 30
+stream-buffer-after-free 44
+stream-buffer-after-free 55
+stream-buffer-after-free 65
+!stream-buffer-after-free 85
+!stream-buffer-after-free 95
+!stream-buffer-after-free 108
+!stream-buffer-after-free 121
+!stream-buffer-after-free 136
+!stream-buffer-after-free 149

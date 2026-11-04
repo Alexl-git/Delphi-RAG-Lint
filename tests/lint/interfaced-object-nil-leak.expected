@@ -1,0 +1,12 @@
+# OFF by default (config enables it). A TInterfacedObject-descendant OBJECT reference set to nil while it holds a fresh instance: an object reference holds no count, so nil releases nothing.
+interfaced-object-nil-leak 46
+interfaced-object-nil-leak 57
+interfaced-object-nil-leak 67
+!interfaced-object-nil-leak 79
+!interfaced-object-nil-leak 89
+!interfaced-object-nil-leak 99
+!interfaced-object-nil-leak 108
+!interfaced-object-nil-leak 113
+!interfaced-object-nil-leak 123
+!interfaced-object-nil-leak 131
+!interfaced-object-nil-leak 141

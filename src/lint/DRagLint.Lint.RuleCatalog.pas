@@ -106,7 +106,9 @@ const
     'else-after-exit', 'missing-const-param', 'local-shadows-field', 'method-could-be-static',
     'too-many-bool-fields', 'index-loop-to-for-in',
     { gap-rules wave (G0): OFF-by-default new built-ins }
-    'copy-paste-assignment', 'unused-loop-variable', 'virtual-never-overridden'];
+    'copy-paste-assignment', 'unused-loop-variable', 'virtual-never-overridden',
+    { 1.42 lane ruleset: the old ROADMAP candidates }
+    'stream-buffer-after-free', 'interfaced-object-nil-leak', 'identifier-case-mismatch', 'datamodule-form-global'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -866,6 +868,11 @@ begin
     B('dfm-password-edit-unmasked', 'security', 'info', 'Edit control named like a password field has no PasswordChar -- the secret is shown on screen');
     B('uses-movable-to-implementation', 'project-wide', 'hint', 'Interface uses entry is needed only by the implementation section -- move it to cut coupling and compile time');
     B('virtual-never-overridden', 'project-wide', 'hint', 'Virtual method with no override anywhere in the project -- the virtual dispatch buys nothing', False);
+    { 1.42 lane ruleset: the old ROADMAP candidates. All OFF. }
+    B('stream-buffer-after-free', 'resource-lifetime', 'warning', 'Pointer into a memory stream buffer (S.Memory, @S.Bytes[n], Pointer(S.Bytes)) is used after the stream was freed -- it dangles. A TBytes copy of S.Bytes is reference-counted and stays silent', False);
+    B('interfaced-object-nil-leak', 'resource-lifetime', 'warning', 'Object reference of a TInterfacedObject descendant is set to nil while it holds a fresh instance -- an object reference holds no count, so nil releases nothing and the instance leaks', False);
+    B('identifier-case-mismatch', 'naming', 'info', 'A name is spelled in a different case from its declaration -- locals and parameters from the AST, bound refs from the index', False);
+    B('datamodule-form-global', 'project-wide', 'warning', 'A unit declaring a TDataModule descendant reaches another unit''s global form variable -- the data layer now needs that form to exist', False);
     { taint wave T2: store-backed interprocedural taint (DRagLint.Lint.TaintRules; catalogues rules\taint-*.json) }
     B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');
     B('taint-command-injection', 'security', 'error', 'Tainted data reaches a process launch sink -- a catalogued source flows across routines into ShellExecute / CreateProcess / WinExec (CWE-78)');

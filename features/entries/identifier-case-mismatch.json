@@ -1,0 +1,25 @@
+{
+  "id": "identifier-case-mismatch",
+  "title": "Identifier case mismatch (lint rule)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.42.0-alpha",
+  "summary": "Lint rule, OFF by default: a name spelled in a different case from its declaration",
+  "intro": "Read this to see what identifier-case-mismatch covers: locals and parameters from the syntax tree, bound refs from an index, reported once per spelling.",
+  "wikiPage": "identifier-case-mismatch",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --rule identifier-case-mismatch"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-04",
+    "by": "ENGINE",
+    "build": "1.42.0-alpha",
+    "surfaceHash": "360982a878a600caf0f2ca7a214d6b7f0220a387e74cda05b94c066a804901d1"
+  }
+}
