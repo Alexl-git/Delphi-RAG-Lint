@@ -45,6 +45,7 @@ type
   TRnaShower = class
   public
     procedure Show(const pV: Integer);
+    procedure SetTextBuf(const pBuffer: PChar);
   end;
 
   TRnaForm = class(TComponent)
@@ -67,6 +68,7 @@ var
   GBase: Integer;               // CONTROL-ABSBASE
   GAbs: Integer absolute GBase; // CONTROL-ABSOLUTE
   GCounter: Integer;            // CONTROL-INC
+  GStdBuf: array[0..1, 0..7] of Byte; // CONTROL-SETTEXTBUF
 
 const
   CTyped: Integer = 5;          // CONTROL-TYPEDCONST
@@ -103,6 +105,11 @@ begin
   if pV > 0 then Exit;
 end;
 
+procedure TRnaShower.SetTextBuf(const pBuffer: PChar);
+begin
+  if pBuffer = nil then Exit;
+end;
+
 procedure TRnaHolder.Init;
 begin
   FSelfSet:= 1;
@@ -110,6 +117,7 @@ begin
   Produce(FOutArg);
   SetLength(FArr, 2);
   Inc(GCounter);
+  SetTextBuf(Output, GStdBuf[0]);
 end;
 
 function TRnaHolder.Total: Integer;

@@ -92,11 +92,11 @@ const
   { The compiler intrinsics / RTL routines that take an argument by var / out,
     as 'name:index' (index ANY_ARG: every argument). They have no declaration
     an index could answer from. }
-  VAR_INTRINSICS: array[0..27] of string = (
+  VAR_INTRINSICS: array[0..29] of string = (
     'setlength:0', 'inc:0', 'dec:0', 'include:0', 'exclude:0', 'initialize:0', 'finalize:0',
     'fillchar:0', 'move:1', 'str:1', 'val:1', 'val:2', 'insert:1', 'delete:0', 'new:0', 'getmem:0',
     'reallocmem:0', 'setstring:0', 'read:-1', 'readln:-1', 'blockread:-1', 'assignfile:0', 'reset:0',
-    'rewrite:0', 'atomicincrement:0', 'atomicdecrement:0', 'atomicexchange:0', 'atomiccmpexchange:0');
+    'rewrite:0', 'atomicincrement:0', 'atomicdecrement:0', 'atomicexchange:0', 'atomiccmpexchange:0', 'settextbuf:0', 'settextbuf:1');
 
   { A word before `(` that makes it a grouping, not a call. }
   NOT_CALLEES: array[0..18] of string = (

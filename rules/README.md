@@ -293,10 +293,15 @@ If you want to discover what AST nodes look like for a fragment of Delphi
 code, run the tree-sitter CLI on a sample file:
 
 ```cmd
-C:\Projects\tree-sitter-delphi13\node_modules\tree-sitter-cli\tree-sitter.exe parse path\to\sample.pas
+pwsh -File tools\ts-parse.ps1 path\to\sample.pas
 ```
 
-Use that output to write your query.
+Use that output to write your query. Do not call `tree-sitter.exe parse` bare: it picks the
+grammar from `C:\Projects` by extension (`.pas`/`.dpr` match both the delphi13 and the pascal
+grammar) and compiles it into `%LOCALAPPDATA%\tree-sitter\lib` from whatever the working
+copy holds that day, so the tree can differ from what drag-lint's rules see. `tools\ts-parse.ps1`
+forces `--scope source.delphi`, names the grammar directory and its git state, and warns when it
+is newer than the engine's `tree-sitter-delphi13.dll`.
 
 ## CI / output ergonomics (v0.66)
 

@@ -59,6 +59,12 @@ function FlagAliasLines(const pAliases: TArray<TFlagAlias>): TArray<string>;
 /// <returns>A sentence of policy and a canonical / aliases / why table, LF line ends; '' when pAliases is empty.</returns>
 function FlagAliasesMarkdown(const pAliases: TArray<TFlagAlias>; pHeading: Boolean): string;
 
+/// <summary>The Writeln statement(s) that print pLine.</summary>
+/// <param name="pLine">One help line, raw (quotes not yet doubled).</param>
+/// <returns>One Writeln with one quoted literal; a line over MAX_LITERAL_CHUNK becomes a concatenation of literals, one per source line, each break placed just AFTER a space so no flag name or word is split between two literals (a hard break only when a 800-character window holds no space).</returns>
+/// <remarks>Concatenating the literals (with doubled quotes undone) gives pLine exactly.</remarks>
+function WriteLnStatement(const pLine: string): string;
+
 /// <summary>The complete text of src\cli\DRagLint.CLI.HelpText.pas for pReg (LF line ends; the output writer converts to CRLF).</summary>
 /// <param name="pReg">Loaded registry.</param>
 /// <remarks>Emits WriteVerbReference, WriteFlagAliases (the "Flag aliases:" section, FlagAliasLines) and WriteVerbHelp.</remarks>
@@ -201,7 +207,7 @@ const
 { One Writeln statement for pLine; a long line becomes a concatenation of quoted chunks, one per source line. }
 function WriteLnStatement(const pLine: string): string;
 var
-  lPos: Integer;
+  lPos, lLen, lCut: Integer;
 begin
   if Length(pLine) <= MAX_LITERAL_CHUNK then
     Exit('  Writeln(''' + pLine.Replace('''', '''''') + ''');'#10);
@@ -211,8 +217,18 @@ begin
   begin
     if lPos > 1 then
       Result := Result + ' +'#10'    ';
-    Result := Result + '''' + Copy(pLine, lPos, MAX_LITERAL_CHUNK).Replace('''', '''''') + '''';
-    Inc(lPos, MAX_LITERAL_CHUNK);
+    lLen := MAX_LITERAL_CHUNK;
+    if lPos + lLen - 1 < Length(pLine) then
+    begin
+      { break just after the last space of the window so no flag name or word is split; hard break only when the window holds no space }
+      lCut := lLen;
+      while (lCut > 1) and (pLine[lPos + lCut - 1] <> ' ') do
+        Dec(lCut);
+      if lCut > 1 then
+        lLen := lCut;
+    end;
+    Result := Result + '''' + Copy(pLine, lPos, lLen).Replace('''', '''''') + '''';
+    Inc(lPos, lLen);
   end;
   Result := Result + ');'#10;
 end;
