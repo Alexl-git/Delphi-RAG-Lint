@@ -43,6 +43,7 @@ $Rows = @(
   @{ Unit = 'DragLint.Plugin.SearchForm';       Budget = 0; Note = 'debounced search' }
   @{ Unit = 'DragLint.Plugin.UsagesForm';       Budget = 0; Note = 'usages query' }
   @{ Unit = 'DragLint.Plugin.LintOptionsFrame'; Budget = 0; Note = 'rules catalog on options open' }
+  @{ Unit = 'DragLint.Plugin.UsesDepsFrame';    Budget = 0; Note = 'dry run, cycle list, apply' }
 )
 
 $failed = 0
