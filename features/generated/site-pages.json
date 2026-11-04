@@ -707,6 +707,10 @@
     "hash": "33327e056480cd4273a8a7ceec5bde0da41d33f5c8e4539672c21771b2bdce5c",
     "version": "1.38.0-alpha"
   },
+  "features/syntax-count.md": {
+    "hash": "7508454242e4efd41f3ca11e4a2485f8fe4aac55e48128f31ecfd441e1d3850b",
+    "version": "1.42.0-alpha"
+  },
   "features/taint-analysis.md": {
     "hash": "8e1f884060a789351d69f16674291625a90544e6298cbfaa8b3634804d0eac0f",
     "version": "1.39.2-alpha"
@@ -720,8 +724,8 @@
     "version": "1.39.2-alpha"
   },
   "features/type-at-cursor.md": {
-    "hash": "782cc919f2818815fb082b84d9e7f4ed29363a8eaec0fbab64e6e68f0ed4f2a9",
-    "version": "1.38.0-alpha"
+    "hash": "371152e70dbbc717788b31537fe79bb50c43279e607d8bed44a7bf054e777aff",
+    "version": "1.42.0-alpha"
   },
   "features/type-level-review-marker.md": {
     "hash": "70b14abb3476ec432ba6f59f3ec67424fed191bbbc7ba94fca3dcb74cb4590da",
@@ -740,8 +744,8 @@
     "version": "1.35.1-alpha"
   },
   "features/usages.md": {
-    "hash": "85cd31de92f54ab083ccffd7f1287c65f55dbf86e2ecd80d25a40752406c5348",
-    "version": "1.38.0-alpha"
+    "hash": "afbda19bd27cf3e5d97a5a3a6e9588acf3acbfabeec41af6e668123302bd1e9d",
+    "version": "1.42.0-alpha"
   },
   "features/uses-audit-interface-impl-moves-unused-this-unit.md": {
     "hash": "c934d9522c4162749aadf1f2c33b7b6be4b1736faeec049d13da0cb3f5330088",
@@ -772,8 +776,8 @@
     "version": "1.35.1-alpha"
   },
   "features/wiki.md": {
-    "hash": "29996a5a7df2aac3cea08638e036fb6abd7142570f18691cb9ff820342367c41",
-    "version": "1.38.0-alpha"
+    "hash": "0d1abdb6a1d49e23aa7a117e4e0911f0cb98a5f500fad3fd6642d0cf17702e0d",
+    "version": "1.42.0-alpha"
   },
   "features/workspace-add.md": {
     "hash": "7dd33b23f48c83010c300f5c8b01fb6b310b00a33dd63af43beb601d5ff0d61d",

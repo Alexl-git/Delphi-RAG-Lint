@@ -129,6 +129,17 @@ begin
   Writeln('                               unit''s outline); --limit N prints the first N rows and says how many matched.');
   Writeln('                               A routine row ends [impl A-B] (its body) and a class routine [class]; json: impl_start_line,');
   Writeln('                               impl_end_line, end_line, is_class_method.');
+  Writeln('  drag-lint syntax-count       (--db <file.sqlite> | --in <path>...) [--feature <a,b>|all] [--per-file] [--hits] [--json]');
+  Writeln('                               counts syntax features in the tree-sitter parse of each unit -- shapes, not text, so strings');
+  Writeln('                               and comments never count; uncapped. Features: if-expr, is-not, not-in (Delphi 13), inline-var,');
+  Writeln('                               inline-const (10.3), anon-method (2009), multiline-string (12); --feature picks some (default all).');
+  Writeln('                               --db = every .pas/.dpr/.dpk/.inc row of that index (opened read-only, nothing written);');
+  Writeln('                               --in adds a path (repeatable). Text as written: no $IFDEF evaluation, every branch counts.');
+  Writeln('                               --per-file lists files with a hit; --hits lists path:line:col per occurrence.');
+  Writeln('                               json: features[], files_scanned, files_unreadable, files_with_parse_errors, totals{feature: n},');
+  Writeln('                               files[{path, counts}] (--per-file), hits[{feature, path, line, col}] (--hits).');
+  Writeln('                               Exit 0 = counted (zero included); 2 = no --db/--in, unknown --feature, unreadable index;');
+  Writeln('                               3 = unknown flag.');
   Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]');
   Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
   Writeln('                               [--format text|json|html] [--output <file>] [--open] [--out-root <dir>]');
@@ -672,6 +683,21 @@ begin
     Writeln('                               unit''s outline); --limit N prints the first N rows and says how many matched.');
     Writeln('                               A routine row ends [impl A-B] (its body) and a class routine [class]; json: impl_start_line,');
     Writeln('                               impl_end_line, end_line, is_class_method.');
+    Exit;
+  end;
+  if pVerb = 'syntax-count' then
+  begin
+    Writeln('  drag-lint syntax-count       (--db <file.sqlite> | --in <path>...) [--feature <a,b>|all] [--per-file] [--hits] [--json]');
+    Writeln('                               counts syntax features in the tree-sitter parse of each unit -- shapes, not text, so strings');
+    Writeln('                               and comments never count; uncapped. Features: if-expr, is-not, not-in (Delphi 13), inline-var,');
+    Writeln('                               inline-const (10.3), anon-method (2009), multiline-string (12); --feature picks some (default all).');
+    Writeln('                               --db = every .pas/.dpr/.dpk/.inc row of that index (opened read-only, nothing written);');
+    Writeln('                               --in adds a path (repeatable). Text as written: no $IFDEF evaluation, every branch counts.');
+    Writeln('                               --per-file lists files with a hit; --hits lists path:line:col per occurrence.');
+    Writeln('                               json: features[], files_scanned, files_unreadable, files_with_parse_errors, totals{feature: n},');
+    Writeln('                               files[{path, counts}] (--per-file), hits[{feature, path, line, col}] (--hits).');
+    Writeln('                               Exit 0 = counted (zero included); 2 = no --db/--in, unknown --feature, unreadable index;');
+    Writeln('                               3 = unknown flag.');
     Exit;
   end;
   if pVerb = 'compare' then
