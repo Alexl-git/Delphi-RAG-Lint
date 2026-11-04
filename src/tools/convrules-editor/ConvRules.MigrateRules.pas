@@ -22,6 +22,10 @@ const
   /// <summary>The info --json capability that says convert-apply applies member-form
   /// #migrate lines inside a #convert block (engine 1.32.0-alpha and later).</summary>
   CAPABILITY_MIGRATE_MEMBERS = 'migrate_members';
+  /// <summary>The info --json capability that says convert-apply also applies IDENTIFIER
+  /// #migrate lines -- file scope, or in a block naming uses units or an enum-value target
+  /// (engine 1.38 and later): a file-scope line is applied, not "not a member migration".</summary>
+  CAPABILITY_MIGRATE_IDENTIFIERS = 'migrate_identifiers';
   /// <summary>The replacement that marks a deliberate break: the engine wraps each site
   /// as DL_NONE(&lt;old&gt;) so the unit stops compiling there until converted by hand.</summary>
   MIGRATE_DL_NONE = 'DL_NONE';

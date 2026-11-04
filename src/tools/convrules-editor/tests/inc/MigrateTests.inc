@@ -458,10 +458,10 @@ begin
     var LRow: TArray<string>:= MembersRowText(B.Nodes[2]);
     Check('migrate.members.row', (string.Join('|', LRow) = 'Click|Press|rename|') and (MembersRowText(B.Nodes[3])[2] = 'DL_NONE')
       and (string.Join('|', MembersRowText(B.Nodes[4])) = 'TUpdateKind|TFDUpdateRequest|legacy|' + MIGRATE_REFUSAL_UNITS), string.Join('|', MembersRowText(B.Nodes[4])));
-    Check('migrate.static.marks', StaticMigrateMarks(B) = 3, 'covered Click, duplicate Count, identity Hint');
+    Check('migrate.static.marks', StaticMigrateMarks(B, False) = 3, 'covered Click, duplicate Count, identity Hint');
     Check('migrate.static.marks.text', (Length(B.Nodes[2].Marks) = 1) and (B.Nodes[2].Marks[0].Text = 'book line 2 already converts Click') and B.Nodes[2].Marks[0].IsWarning
       and (Length(B.Nodes[3].Marks) = 0) and (Length(B.Nodes[5].Marks) = 1) and (B.Nodes[5].Marks[0].Text = 'book line 4 already converts Count'));
-    Check('migrate.static.marks.once', (StaticMigrateMarks(B) = 0) and (Length(B.Nodes[2].Marks) = 1));
+    Check('migrate.static.marks.once', (StaticMigrateMarks(B, False) = 0) and (Length(B.Nodes[2].Marks) = 1));
     Check('migrate.members.mark', EndsText('book line 2 already converts Click', MembersRowText(B.Nodes[2])[3]), MembersRowText(B.Nodes[2])[3]);
     Check('migrate.target.by.line', FindMigrateTarget(B, 4, 'Count', 'DL_NONE') = 3);
     B.Nodes.Insert(0, B.ParseLine('#depth 3'));
@@ -481,6 +481,39 @@ begin
       and ContainsText(B.Nodes[5].Marks[0].Text, 'book line 5 already converts Click') and (AddMigrateCheckMarks(B, LChecks) = 0));
     var LWith: TArray<TApplyItem>:= MigrateApply('apply-WithForm-rename-1350.json', [afMigrateMembers]).MigrateChecks;
     Check('migrate.postrun.site.skipped', AddMigrateCheckMarks(B, LWith) = 0, 'a per-site check is no rule-level mark');
+  finally
+    B.Free;
+  end;
+
+  // 1.42 (MIG-TYPE): an engine with migrate_identifiers APPLIES a file-scope line -- no
+  // "not a member migration" mark; the covered-by-#link pre-check still marks.
+  B:= MigBook(['#migrate dcrOther -> gcrNone', '#convert TSrcBtn -> TDstBtn', '#link Press <- Click', '#migrate Click -> Press']);
+  try
+    Check('migrate.static.global.old', (StaticMigrateMarks(B, False) = 2) and (Length(B.Nodes[0].Marks) = 1)
+      and (B.Nodes[0].Marks[0].Text = MIGRATE_GLOBAL_TEXT), 'without migrate_identifiers the file-scope line is marked');
+  finally
+    B.Free;
+  end;
+  B:= MigBook(['#migrate dcrOther -> gcrNone', '#convert TSrcBtn -> TDstBtn', '#link Press <- Click', '#migrate Click -> Press']);
+  try
+    Check('migrate.static.global.identifiers', (StaticMigrateMarks(B, True) = 1) and (Length(B.Nodes[0].Marks) = 0)
+      and (Length(B.Nodes[3].Marks) = 1), 'with migrate_identifiers only the covered Click line is marked');
+  finally
+    B.Free;
+  end;
+
+  // 1.42 (MIGTGT, owner ruling 2026-10-28): an identifier #migrate whose target resolves in no
+  // index is a warning MARK on the book line -- the engine's rule-level migrate-check (captured
+  // from the 1.42 engine: tests\autotest\fixtures\migrate_type CvWarn.pas + type.rules).
+  B:= MigBook(['#migrate TScreenCursorOld -> TScreenCursorNew, CvNew', '#migrate scoBusy -> scnHourGlass',
+    '#migrate TOldThing -> TNewThing, CvNew', '#migrate TGoneOld -> TNewThing, CvNew', '#migrate TOldThing2 -> TNoSuchType, NoSuchUnit',
+    '', '#convert CvLib.TOldField -> CvLib.TNewField, CvLib', '#link Size <- Size']);
+  try
+    var LTgt: TArray<TApplyItem>:= MigrateApply('apply-CvWarn-migtgt-142.json', [afMigrateMembers]).MigrateChecks;
+    Check('migrate.migtgt.mark', (AddMigrateCheckMarks(B, LTgt) = 1) and (Length(B.Nodes[4].Marks) = 1) and B.Nodes[4].Marks[0].IsWarning
+      and ContainsText(B.Nodes[4].Marks[0].Text, 'the target TNoSuchType resolves in no supplied index'),
+      'marks on line 5: ' + IntToStr(Length(B.Nodes[4].Marks)));
+    Check('migrate.migtgt.once', AddMigrateCheckMarks(B, LTgt) = 0, 'a second run adds no second mark');
   finally
     B.Free;
   end;

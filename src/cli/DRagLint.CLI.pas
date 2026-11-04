@@ -31402,7 +31402,7 @@ var
       #convert blocks have nothing to locate. A book with #unuse / #use /
       #useswap still has the unit's uses clauses to change, so it runs them and
       reports the component part as skipped (component_part skipped-no-dfm). }
-    if not TFile.Exists(DfmPath) and not BookHasUnitRules(Rules) then
+    if not TFile.Exists(DfmPath) and not BookHasUnitRules(Rules) and not BookHasIdentifierMigrates(Rules) then
       Exit(FailUnit(Format('sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath]), 1));
 
     { 1.22.0 (C8 N1, N3; replaces 1.20.6's ruling-R6 refusal). Inherited /
@@ -31549,15 +31549,28 @@ var
       1.28.0 (owner 2026-10-11): its own exit code 6, a CONFIGURATION error; 2 means a
       write failure / rollback on this verb and must not be read as one. }
     { the castlib was parsed and validated once, before the unit loop (see CastLibFailure) }
-    if JCtx.ComponentPart = 'applied' then
+    { 1.42 (MIG-TYPE): identifier #migrate rules act on the unit's CODE, so a
+      unit with no .dfm, or none a #convert block matches, still runs
+      BuildApplyPlan when it has a #migrate site; component_part keeps saying
+      the component part was skipped. A missing .dfm gets here with no unit
+      rules only because the book has identifier #migrate lines: with no site
+      it keeps the old refusal. }
+    var Book: TApplyBook:= TApplyBook.Create(Rules, JCtx.Unreachable);
+    Book.Reconcile:= not AArgs.NoReconcileUses; { C9, default on }
+    var IdSites: Boolean:= (JCtx.ComponentPart <> 'applied') or not TFile.Exists(DfmPath);
+    IdSites:= IdSites and UnitHasIdentifierMigrateSites(Trees, UnitPas, Book);
+    if (JCtx.ComponentPart = 'applied') and not TFile.Exists(DfmPath) then
     begin
-      var Book: TApplyBook:= TApplyBook.Create(Rules, JCtx.Unreachable);
-      Book.Reconcile:= not AArgs.NoReconcileUses; { C9, default on }
-      PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, Book,
-        AArgs.OnlySections, CastLib, not AArgs.NoWarnUnlinked, JCtx.InheritedInsts);
-    end
-    else
-      PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, AArgs.OnlySections, not AArgs.NoReconcileUses);
+      if not IdSites then
+        Exit(FailUnit(Format('sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath]), 1));
+      JCtx.ComponentPart:= 'skipped-no-dfm';
+      JCtx.DfmPath      := '';
+    end;
+    PlanRes:= if (JCtx.ComponentPart = 'applied') or IdSites then
+                BuildApplyPlan(Trees, UnitPas, JCtx.DfmPath, Book,
+                  AArgs.OnlySections, CastLib, not AArgs.NoWarnUnlinked, JCtx.InheritedInsts)
+              else
+                BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, AArgs.OnlySections, not AArgs.NoReconcileUses);
     JCtx.UsesReconcile:= if AArgs.NoReconcileUses then 'off'
                          else if PlanRes.Report.UsesReconcile <> '' then PlanRes.Report.UsesReconcile
                          else 'on';
@@ -31735,7 +31748,8 @@ begin
 
   { one unit keeps its old order: a missing .dfm (book without unit rules)
     fails before any --db is opened }
-  if (Length(Units) = 1) and not TFile.Exists(TPath.ChangeExtension(Units[0], '.dfm')) and not BookHasUnitRules(Rules) then
+  if (Length(Units) = 1) and not TFile.Exists(TPath.ChangeExtension(Units[0], '.dfm')) and not BookHasUnitRules(Rules) and
+     not BookHasIdentifierMigrates(Rules) then
   begin
     Writeln(Format('ERROR: sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)',
       [TPath.ChangeExtension(Units[0], '.dfm')]));

@@ -1,0 +1,2 @@
+object CvPlainInst: TCvPlainInst
+end

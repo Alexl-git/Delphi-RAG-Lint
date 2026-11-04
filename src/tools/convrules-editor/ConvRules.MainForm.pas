@@ -150,6 +150,7 @@ type
       FWorkListTab   : TWorkListTab          ; // what the last run's converted code still uses
       FMembersPanel  : TMembersPanel         ; // A4: the active block's #migrate lines
       FMigrateOk     : Boolean               ; // A4: engine reports migrate_members
+      FMigrateIdOk   : Boolean               ; // 1.42 MIG-TYPE: engine reports migrate_identifiers
       FHarvestStrip  : TPanel                ; // the control strip above FUnitList
       FHarvestBtnRow : TFlowPanel            ; // Add source / Paste / Clear row (Task 7 adds none; Task 6 adds rows below)
       FDropTarget    : IDropTarget           ; // OLE target on the form's window; re-registered by CreateWnd
@@ -6669,6 +6670,7 @@ begin
   FBookDepthOk         := MatchText(CAPABILITY_BOOK_DEPTH, LCaps);
   FEngine.ProgressLines:= MatchText(CAPABILITY_PROGRESS_LINES, LCaps);
   FMigrateOk           := MatchText(CAPABILITY_MIGRATE_MEMBERS, LCaps);
+  FMigrateIdOk         := MatchText(CAPABILITY_MIGRATE_IDENTIFIERS, LCaps);
   ApplyMigrateCapability;
   FStartupProbed:= LCached;
   if LCached then
@@ -7875,7 +7877,7 @@ begin
   FValidatePending:= NextPending(FValidatePending, AJobs, R);
   ApplyValidateMarks(FBook.Nodes.ToArray, ALineNodes, AJobs, R);
   // A4 (D8 = B): AFTER ApplyValidateMarks, which drops the non-syntax marks of every validated block.
-  StaticMigrateMarks(FBook);
+  StaticMigrateMarks(FBook, FMigrateIdOk);
   StaticChainMarks(FBook); // CHAIN-1 M1: after the migrate marks, never twice
   RefreshRuleMarks;
   FGrid.Invalidate;

@@ -1,0 +1,10 @@
+#migrate TScreenCursorOld -> TScreenCursorNew
+
+#convert CvLib.TOldField -> CvLib.TNewField, CvLib
+#link Size <- Size
+
+#convert CvLib.TOldQuery -> CvLib.TNewQuery, CvLib
+#link Sql <- Sql
+#link Params <- Params
+#link Params.Items.Name <- Params.Items.Name
+#link Params.Items.ParamType <- Params.Items.DataType

@@ -14,7 +14,8 @@
       overrides the name match (scnBusy). An unmatched member used in the
       .pas is a migrate-check warning and is left as written.
     * TARGET: New must resolve in the library or project index; one that does
-      not is a migrate-check warning per site and no rename.
+      not is a migrate-check warning per site and no rename, plus ONE rule-level
+      (line 0) migrate-check per rule (1.42 MIGTGT) -- only in a unit with a site.
     * TRUST THE SOURCE: an Old that resolves nowhere (TGoneOld) is still
       renamed.
     * QUALIFIED: `Unit.Old` is a migrate-check warning, not rewritten.
@@ -24,7 +25,14 @@
       a warning.
     * The same rules inside the #convert block give the same plan.
     * POSITIVE CONTROL: the book without #migrate changes no Old token.
-    * The applied unit compiles with dcc64 (CvLib, CvNew, CvUse).
+    * NO INSTANCE NEEDED (1.42 MIG-TYPE): a unit with NO sibling .dfm
+      (CvCode) or a .dfm no #convert block matches (CvNoInst) still gets its
+      identifier #migrate sites renamed and the target's unit added; a book of
+      unit rules + #migrate and no #convert block does too (unitmig.rules).
+      CONTROLS: such a unit with no #migrate site keeps the old errors
+      ("sibling .dfm not found", exit 1; "no convertible instances found").
+    * The applied units compile with dcc64 (CvLib, CvNew, CvUse, CvCode,
+      CvNoInst).
 
   Fixtures: tests\autotest\fixtures\migrate_type, COPIED to a $PID scratch
   folder and indexed there. Nothing shared is touched.
@@ -52,7 +60,7 @@ Copy-Item (Join-Path $PSScriptRoot 'fixtures\migrate_type\*') $WorkDir
 function P([string]$n) { return (Join-Path $WorkDir $n) }
 function Text([string]$n) { return [IO.File]::ReadAllText((P $n), [Text.Encoding]::ASCII) }
 $orig = @{}
-foreach ($f in 'CvUse.pas', 'CvUse.dfm', 'CvWarn.pas', 'CvWarn.dfm', 'CvImpl.pas', 'CvImpl.dfm') { $orig[$f] = [IO.File]::ReadAllBytes((P $f)) }
+foreach ($f in 'CvUse.pas', 'CvUse.dfm', 'CvWarn.pas', 'CvWarn.dfm', 'CvImpl.pas', 'CvImpl.dfm', 'CvCode.pas', 'CvNoInst.pas', 'CvNoInst.dfm') { $orig[$f] = [IO.File]::ReadAllBytes((P $f)) }
 function Restore { foreach ($k in $orig.Keys) { [IO.File]::WriteAllBytes((P $k), $orig[$k]) } }
 
 $db = P 'fx.sqlite'
@@ -150,6 +158,8 @@ Check 'W2 ... unmatched enum member scoOther: a migrate-check on its line' `
   (@($mc | Where-Object { $_.path -eq 'scoOther' -and $_.line -eq (LineOf '  C:= scoOther;') -and $_.field -eq 'warnings' }).Count -eq 1) (($mc | ForEach-Object { "$($_.path)@$($_.line): $($_.text)" }) -join ' | ')
 Check 'W3 ... unresolvable target TNoSuchType: a migrate-check on the TOldThing2 site' `
   (@($mc | Where-Object { $_.path -eq 'TOldThing2' -and $_.line -eq (LineOf '  T: TOldThing2;') -and $_.text -match 'TNoSuchType' }).Count -eq 1) (($mc | ForEach-Object { "$($_.path)@$($_.line): $($_.text)" }) -join ' | ')
+Check 'W3b ... and ONE rule-level (line 0) migrate-check for that rule (1.42 MIGTGT: the editor marks the book line)' `
+  (@($mc | Where-Object { $_.line -eq 0 -and $_.rule_line -eq 5 -and $_.path -eq 'TOldThing2' -and $_.text -match 'the target TNoSuchType resolves in no supplied index' }).Count -eq 1) (($mc | ForEach-Object { "$($_.path)@$($_.line): $($_.text)" }) -join ' | ')
 Check 'W4 ... qualified CvLib.scoWait: a migrate-check, not rewritten' `
   (@($mc | Where-Object { $_.path -eq 'scoWait' -and $_.line -eq (LineOf '  C:= CvLib.scoWait;') }).Count -eq 1) (($mc | ForEach-Object { "$($_.path)@$($_.line): $($_.text)" }) -join ' | ')
 Check 'W5 POSITIVE CONTROL: the var type in the same unit IS renamed (1 migrate-applied)' `
@@ -158,6 +168,39 @@ $r = Apply 'CvWarn.pas' 'type.rules' @('--apply', '--no-backup')
 $t = Text 'CvWarn.pas'
 Check 'W6 ... --apply leaves scoOther, TOldThing2 and CvLib.scoWait as written' `
   (($r.Code -eq 0) -and $t.Contains('  C:= scoOther;') -and $t.Contains('  T: TOldThing2;') -and $t.Contains('  C:= CvLib.scoWait;') -and $t.Contains('  C: TScreenCursorNew;')) $t
+
+# ---- no instance needed: no .dfm / no matching instance (1.42 MIG-TYPE) -----------
+$WantCode = 'scoDefault=1,scoWait=1,TScreenCursorOld=1'
+$r = Apply 'CvCode.pas' 'type.rules' @('--format', 'json')
+Check 'N1 CvCode (no .dfm) dry run: exit 0, ok, component_part skipped-no-dfm, the three sites applied' `
+  (($r.Code -eq 0) -and ($null -ne $r.J) -and $r.J.ok -and ($r.J.component_part -eq 'skipped-no-dfm') -and ((Tally (Kinds $r.J 'migrate-applied')) -eq $WantCode)) $r.Out
+$r = Apply 'CvCode.pas' 'type.rules' @('--apply', '--no-backup')
+$t = Text 'CvCode.pas'
+Check 'N2 ... --apply renames them, adds CvNew once to the implementation uses, writes no .dfm' `
+  (($r.Code -eq 0) -and $t.Contains('  C: TScreenCursorNew;') -and $t.Contains('  C:= scnWait;') -and $t.Contains('  if C = scnDefault then Exit;') -and
+   ([regex]::Matches($t, '\bCvNew\b').Count -eq 1) -and ($t -match '(?s)implementation\s+uses[^;]*\bCvNew\b[^;]*;') -and -not (Test-Path (P 'CvCode.dfm'))) "$($r.Out)`n$t"
+$nb = [IO.File]::ReadAllBytes((P 'CvNoInst.dfm'))
+$r = Apply 'CvNoInst.pas' 'type.rules' @('--format', 'json')
+Check 'N3 CvNoInst (.dfm, no #convert instance) dry run: exit 0, ok, component_part applied, the three sites applied' `
+  (($r.Code -eq 0) -and ($null -ne $r.J) -and $r.J.ok -and ($r.J.component_part -eq 'applied') -and ((Tally (Kinds $r.J 'migrate-applied')) -eq $WantCode)) $r.Out
+$r = Apply 'CvNoInst.pas' 'type.rules' @('--apply', '--no-backup')
+$t = Text 'CvNoInst.pas'
+Check 'N4 ... --apply renames them, CvNew added once, the .dfm byte-unchanged' `
+  (($r.Code -eq 0) -and $t.Contains('  C: TScreenCursorNew;') -and $t.Contains('  C:= scnWait;') -and ([regex]::Matches($t, '\bCvNew\b').Count -eq 1) -and
+   ([Convert]::ToBase64String([IO.File]::ReadAllBytes((P 'CvNoInst.dfm'))) -eq [Convert]::ToBase64String($nb))) "$($r.Out)`n$t"
+[IO.File]::WriteAllBytes((P 'CvCode.pas'), $orig['CvCode.pas'])
+Reindex
+$r = Apply 'CvCode.pas' 'unitmig.rules' @('--apply', '--no-backup')
+$t = Text 'CvCode.pas'
+Check 'N5 unit rules + #migrate, no #convert, no .dfm: --apply renames AND adds System.Types and CvNew once each' `
+  (($r.Code -eq 0) -and $t.Contains('  C: TScreenCursorNew;') -and $t.Contains('  C:= scnWait;') -and
+   ([regex]::Matches($t, '\bCvNew\b').Count -eq 1) -and ([regex]::Matches($t, '\bSystem\.Types\b').Count -eq 1)) "$($r.Out)`n$t"
+$r = Apply 'CvPlain.pas' 'type.rules' @()
+Check 'N6 CONTROL: no .dfm and no #migrate site -- the old refusal, exit 1, "sibling .dfm not found"' `
+  (($r.Code -eq 1) -and ($r.Out -match 'sibling \.dfm not found')) $r.Out
+$r = Apply 'CvPlainInst.pas' 'type.rules' @('--format', 'json')
+Check 'N7 CONTROL: a .dfm with no instance and no #migrate site -- ok false, "no convertible instances found"' `
+  (($null -ne $r.J) -and -not $r.J.ok -and ($r.J.error -match 'no convertible instances found')) $r.Out
 
 # ---- compile the applied clean unit -------------------------------------------
 function Compile([string]$Prog, [string[]]$Units) {
@@ -169,7 +212,7 @@ function Compile([string]$Prog, [string[]]$Units) {
   Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait | Out-Null
   return (Get-Content $log -Raw -ErrorAction SilentlyContinue)
 }
-$cl = Compile 'PT' @('CvLib', 'CvNew', 'CvUse')
+$cl = Compile 'PT' @('CvLib', 'CvNew', 'CvUse', 'CvCode', 'CvNoInst')
 $err = @(($cl -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' })
 Check 'J1 the applied unit compiles with dcc64' (($cl -match 'BUILD_EXITCODE=0') -and ($err.Count -eq 0)) ($err -join ' | ')
 

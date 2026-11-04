@@ -7,7 +7,7 @@ group: component-conversion
 order: 60002
 since: 1.22.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.40.0-alpha
 ---
 
 # convert-apply #migrate (member, type and enum rename / DL_NONE)
@@ -88,7 +88,9 @@ in the code, not a member of a converted instance:
   literals. `items[]` kind `migrate-applied` (no instance).
 * The target `New` must resolve in a supplied `--db` (the platform library or
   the project index); otherwise each site is a `migrate-check` and nothing is
-  renamed. The `Old` side is trusted: a type no index knows any more is still
+  renamed, plus ONE rule-level `migrate-check` (line 0) per rule (1.42 MIGTGT,
+  owner ruling 2026-10-28) -- the converter's editor shows it as a warning mark on
+  the `#migrate` line. The `Old` side is trusted: a type no index knows any more is still
   renamed.
 * Two enums: each member of `Old` is mapped to the member of `New` with the
   same name after the lowercase prefix (`dcrHourGlass` -> `gcrHourGlass`),
@@ -100,8 +102,15 @@ in the code, not a member of a converted instance:
   `migrate-check` per site.
 * The unit declaring `New` is added to uses (the interface uses when a site is
   there).
+* No component instance needed (1.42): a unit with NO sibling `.dfm`, or a
+  `.dfm` no `#convert` block matches, still gets its identifier `#migrate`
+  sites renamed (`component_part` reads as before: `skipped-no-dfm`, `skipped-no-instances` or `applied`). A unit
+  with no `#migrate` site keeps the old answer (`sibling .dfm not found`,
+  exit 1; `no convertible instances found`).
 Gate: `info --json` -> `capabilities.migrate_identifiers: true`.
-Guard: `tests\autotest\run_convert_apply_migrate_type.ps1`.
+Guards: `tests\autotest\run_convert_apply_migrate_type.ps1`; inherited `[n]` headers, a
+whole-streamed collection and a file-scope `#migrate` in one D5-shaped child:
+`tests\autotest\run_convert_apply_inherited_collection.ps1`.
 ### Output contract for consumers (G1, G2, G5)
 
 The engine stands behind these statements for the `#migrate` items of `convert-apply --json`
