@@ -16603,6 +16603,7 @@ begin
     TestAncestorChainUnion;
     TestAncestorOrder;
     TestUnindexedAncestors;
+    TestMissingAncestorsBlock;
 
     FreeAndNil(GParseBook);
 

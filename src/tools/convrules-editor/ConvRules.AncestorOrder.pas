@@ -58,6 +58,33 @@ function OrderAncestorFirst(const AList: TArray<string>; const AUnits: TArray<TU
 /// Reorder the list and run?' (file names, ', '-joined).</returns>
 function OrderBlockText(const AWarnings, AOrdered: TArray<string>): string;
 
+/// <summary>PURE: the unconverted ancestor units of the listed units that are NOT in the run
+/// (C8CHAIN, owner ruling 2026-11-04: a descendant whose unconverted ancestor is not in the run
+/// blocks at Convert, as it does when the ancestor is listed below it).</summary>
+/// <param name="AList">The run, as Convert would run it.</param>
+/// <param name="AUnits">The listed units' analyses (any order; a unit without one has no ancestors).</param>
+/// <returns>Distinct .pas paths, per unit in AList order its AncestorChain units that are not in
+/// AList, topmost first. [] when every unconverted ancestor is listed. An ancestor listed
+/// anywhere (above or below) is not missing; OrderWarnings handles the order.</returns>
+function MissingAncestorsOfAll(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;
+
+/// <summary>PURE: the blocking question for MissingAncestorsOfAll (the same blocking E7 style).</summary>
+/// <param name="AList">The run.</param>
+/// <param name="AUnits">The listed units' analyses.</param>
+/// <returns>'' when nothing is missing. Else 'Some units descend from an ancestor that is not
+/// converted yet and is not in the run:', one line per (unit, ancestor) '&lt;Desc.pas&gt; descends
+/// from &lt;Anc.pas&gt;, which is not in the run', a blank line, then 'Add Base.pas, Mid.pas
+/// ahead of the units that need them and run? No cancels the whole run.' (file names).</returns>
+/// <remarks>Yes inserts via InsertMissingAncestors; No cancels the WHOLE run (ORDER_CANCELLED_TEXT).
+/// A No when the unit was added does not exempt it here.</remarks>
+function MissingBlockText(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): string;
+
+/// <summary>PURE: AList with every missing ancestor inserted root-first ahead of the units that
+/// need it (InsertAncestors per listed unit).</summary>
+/// <param name="AList">The run.</param>
+/// <param name="AUnits">The listed units' analyses.</param>
+/// <returns>A new list; AList itself when nothing is missing. Listed units are never moved.</returns>
+function InsertMissingAncestors(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;
 /// <summary>PURE: the distinct bare class names (BareType, first-seen order, case-insensitive)
 /// where the listed units' ancestor chains left the project index -- the classes the platform
 /// library must be asked about.</summary>
@@ -93,6 +120,9 @@ const
   NAME_SEP        = ', ';
   ORDER_HEAD      = 'Some units are listed above an ancestor that is not converted yet:';
   ORDER_BLOCK_FMT = 'Convert runs ancestors first: %s. Reorder the list and run?';
+  MISSING_HEAD    = 'Some units descend from an ancestor that is not converted yet and is not in the run:';
+  MISSING_LINE_FMT = '%s descends from %s, which is not in the run';
+  MISSING_QUESTION_FMT = 'Add %s ahead of the units that need them and run? No cancels the whole run.';
   UNINDEXED_HEAD  = 'Convert refused: an ancestor of a listed unit is not in the project index.';
   UNINDEXED_FMT   = '%s descends from %s, whose unit is in no indexed project.';
   UNASKED_FMT     = '%s descends from %s, which is in no project index; the platform library index could not be asked -- %s.';
@@ -150,6 +180,68 @@ begin
     + Format(ORDER_BLOCK_FMT, [string.Join(NAME_SEP, LNames)]);
 end;
 
+function FindUnit(const AUnits: TArray<TUnitInheritance>; const APas: string): Integer;
+begin
+  for var I: Integer:= 0 to High(AUnits) do
+    if SameText(ExpandFileName(AUnits[I].UnitPas), ExpandFileName(APas)) then
+      Exit(I);
+  Result:= -1;
+end;
+
+function MissingAncestorsOfAll(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;
+var
+  LAt: Integer;
+begin
+  Result:= nil;
+  for var LPas: string in AList do
+  begin
+    LAt:= FindUnit(AUnits, LPas);
+    if LAt < 0 then
+      Continue;
+    for var LAnc: string in MissingAncestors(AncestorChain(AUnits[LAt]), AList) do
+      if PathIndex(LAnc, Result) < 0 then
+        Result:= Result + [LAnc];
+  end;
+end;
+
+function MissingBlockText(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): string;
+var
+  LLines  : TArray<string>;
+  LNames  : TArray<string>;
+  LAt     : Integer;
+  LMissing: TArray<string>;
+begin
+  LMissing:= MissingAncestorsOfAll(AList, AUnits);
+  if Length(LMissing) = 0 then
+    Exit('');
+  LLines:= nil;
+  for var LPas: string in AList do
+  begin
+    LAt:= FindUnit(AUnits, LPas);
+    if LAt >= 0 then
+      for var LAnc: string in MissingAncestors(AncestorChain(AUnits[LAt]), AList) do
+        LLines:= LLines + [Format(MISSING_LINE_FMT, [ExtractFileName(LPas), ExtractFileName(LAnc)])];
+  end;
+  LNames:= nil;
+  for var LPas: string in InsertMissingAncestors(AList, AUnits) do
+    if PathIndex(LPas, LMissing) >= 0 then
+      LNames:= LNames + [ExtractFileName(LPas)];
+  Result:= MISSING_HEAD + sLineBreak + string.Join(sLineBreak, LLines) + sLineBreak + sLineBreak
+    + Format(MISSING_QUESTION_FMT, [string.Join(NAME_SEP, LNames)]);
+end;
+
+function InsertMissingAncestors(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;
+var
+  LAt: Integer;
+begin
+  Result:= AList;
+  for var LPas: string in AList do
+  begin
+    LAt:= FindUnit(AUnits, LPas);
+    if LAt >= 0 then
+      Result:= InsertAncestors(Result, LPas, AncestorChain(AUnits[LAt]));
+  end;
+end;
 function OutsideClassesOf(const AUnits: TArray<TUnitInheritance>): TArray<string>;
 begin
   Result:= nil;

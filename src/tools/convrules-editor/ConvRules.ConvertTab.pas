@@ -1624,6 +1624,26 @@ begin
   // C8: the files and the index may have moved since the units were added. Only now,
   // after Preflight: a refused run must not first pay N x ~2 s of analysis.
   ReanalyzeAll(True);
+  // C8CHAIN (owner ruling 2026-11-04): an unconverted ancestor that is NOT in the run blocks just
+  // as one listed below its descendant does. Yes inserts the missing ancestors root-first and
+  // runs (they are analysed so every later check sees them); No cancels the WHOLE run -- a No
+  // when the unit was added does not exempt it here.
+  var LMissingText: string:= MissingBlockText(pUnits, InheritanceOfAll(pUnits));
+  if LMissingText <> '' then
+  begin
+    FHost.SetStatus(StringReplace(LMissingText, sLineBreak, ' ', [rfReplaceAll]), False); // mirrored for the GUI driver
+    if AskBlockingDrops(LMissingText, mtWarning) <> mrYes then
+    begin
+      FHost.SetStatus(ORDER_CANCELLED_TEXT, False);
+      Exit(False);
+    end;
+    var LAdded: TArray<string>:= MissingAncestorsOfAll(pUnits, InheritanceOfAll(pUnits));
+    pUnits:= InsertMissingAncestors(pUnits, InheritanceOfAll(pUnits));
+    SetSources(pUnits);
+    FHost.FeedHarvest(LAdded);
+    var LPairsErr: string;
+    Analyze(LAdded, CheckedPairs(LPairsErr));
+  end;
   var LQuestion: string;
   case InheritanceGate(FAnalysisCancelled, InheritanceOfAll(pUnits), FInheritError, LQuestion) of
     igCancelled:

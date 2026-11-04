@@ -280,3 +280,42 @@ begin
   Check('ag.outside.classes.distinct', string.Join(',', OutsideClassesOf([WithOutside(['TA', 'X.TB']), WithOutside(['ta', 'TC'])])) = 'TA,TB,TC',
     string.Join(',', OutsideClassesOf([WithOutside(['TA', 'X.TB']), WithOutside(['ta', 'TC'])])));
 end;
+{ C8CHAIN review #1 (owner ruling): an unconverted ancestor that is not in the run blocks at Convert. }
+function AgLeafWithAncestors(const ALeafPas: string): TUnitInheritance;
+var
+  LAnc: TAncestorUnit;
+begin
+  Result:= Default(TUnitInheritance);
+  Result.UnitPas:= ALeafPas;
+  Result.Known  := True;
+  LAnc.PasPath:= AG_BASE_PAS;
+  LAnc.Depth  := 2;
+  LAnc.Types  := ['TTable'];
+  Result.Ancestors:= [LAnc];
+  LAnc.PasPath:= AG_MID_PAS;
+  LAnc.Depth  := 1;
+  LAnc.Types  := ['TTable'];
+  Result.Ancestors:= Result.Ancestors + [LAnc];
+end;
+
+procedure TestMissingAncestorsBlock;
+var
+  LUnits: TArray<TUnitInheritance>;
+  LText : string;
+begin
+  LUnits:= [AgLeafWithAncestors(AG_LEAF_PAS)];
+  Check('ag.missing.root.first', string.Join(',', MissingAncestorsOfAll([AG_LEAF_PAS], LUnits)) = AG_BASE_PAS + ',' + AG_MID_PAS,
+    string.Join(',', MissingAncestorsOfAll([AG_LEAF_PAS], LUnits)));
+  Check('ag.missing.listed.ancestor.not.missing', string.Join(',', MissingAncestorsOfAll([AG_LEAF_PAS, AG_BASE_PAS], LUnits)) = AG_MID_PAS);
+  Check('ag.missing.all.listed.none', Length(MissingAncestorsOfAll([AG_BASE_PAS, AG_MID_PAS, AG_LEAF_PAS], LUnits)) = 0);
+  Check('ag.missing.two.units.distinct', string.Join(',', MissingAncestorsOfAll([AG_LEAF_PAS, AG_FRM_PAS], LUnits + [AgLeafWithAncestors(AG_FRM_PAS)]))
+    = AG_BASE_PAS + ',' + AG_MID_PAS);
+  Check('ag.missing.unknown.unit.none', Length(MissingAncestorsOfAll([AG_LEAF_PAS], [Default(TUnitInheritance)])) = 0);
+  LText:= MissingBlockText([AG_LEAF_PAS], LUnits);
+  Check('ag.missing.text.names', ContainsText(LText, 'Leaf.pas') and ContainsText(LText, 'Base.pas, Mid.pas') and ContainsText(LText, 'not in the run')
+    and ContainsText(LText, 'cancel') and not ContainsText(LText, 'anyway'), LText);
+  Check('ag.missing.text.none.empty', MissingBlockText([AG_BASE_PAS, AG_MID_PAS, AG_LEAF_PAS], LUnits) = '');
+  Check('ag.missing.insert.root.first', string.Join(',', InsertMissingAncestors([AG_LEAF_PAS], LUnits)) = AG_BASE_PAS + ',' + AG_MID_PAS + ',' + AG_LEAF_PAS,
+    string.Join(',', InsertMissingAncestors([AG_LEAF_PAS], LUnits)));
+  Check('ag.missing.insert.keeps.listed', string.Join(',', InsertMissingAncestors([AG_MID_PAS, AG_LEAF_PAS], LUnits)) = AG_BASE_PAS + ',' + AG_MID_PAS + ',' + AG_LEAF_PAS);
+end;
