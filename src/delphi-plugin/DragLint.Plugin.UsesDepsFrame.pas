@@ -61,6 +61,7 @@ uses
   , Vcl.ExtCtrls
   , Vcl.CheckLst
   , System.Generics.Collections
+  , DragLint.Plugin.CliAsync
   , DragLint.Plugin.CycleFix // dl:unit DragLint.Plugin.CycleFix accepted -- CYCLE_FIX_TIMEOUT_MS is the one plugin cycle-fix time limit; a second copy here is what let it drift (see StructureForm)
   ;
 
@@ -109,13 +110,21 @@ type
       FBtnRefresh: TButton      ;
       FRows      : TUsesDepsRows;
       FReport    : TUsesReportProc;
+      FApplying  : Boolean      ;
+      FAfterRefresh: TProc      ;
       procedure BuildControls;
       function  TickedNames: string;
       function  DryRunArgs (const APas, AProj, ADb: string): string;
       function  ApplyArgs  (const APas, AProj, ADb, AOnly: string): string;
       procedure HandleRefresh(Sender: TObject);
       procedure HandleTickAll(Sender: TObject);
+      procedure ShowDryRun(AExitCode: Integer; const AOutput: string);
+      procedure FillFromDryRun(const AOutput: string);
+      procedure SetApplying(AValue: Boolean);
+      procedure FinishApply(AExitCode: Integer; const AOutput: string);
     protected
+      { The list query in flight; an apply or a newer refresh supersedes it. }
+      FRun       : TCliRunSlot  ;
       FList      : TCheckListBox;
       FBar       : TPanel       ;
       { The middle button: "Tick all" here, "Dry run" in TCircularUsesSection. }
@@ -130,6 +139,13 @@ type
       /// <summary>The Apply button: runs the verb's --apply for the ticked rows.</summary>
       /// <param name="Sender">The button; unused.</param>
       procedure HandleApply(Sender: TObject); virtual;
+      /// <summary>Starts this section's query off the main thread.</summary>
+      /// <returns>True when a run started and its answer will call
+      /// FinishRefresh; False when there is nothing to wait for.</returns>
+      function StartRefresh: Boolean; virtual;
+      /// <summary>Hands over to the next section of a "Refresh all", if any.</summary>
+      /// <remarks>Every run StartRefresh started must end here.</remarks>
+      procedure FinishRefresh;
     public
       /// <summary>Builds the section into AParent for AVerb.</summary>
       /// <param name="AOwner">Component owner; frees the section and its controls.</param>
@@ -141,9 +157,16 @@ type
       constructor Create(AOwner: TComponent; AParent: TWinControl; AVerb: TUsesVerb;
                          const ACaption: string; AOnReport: TUsesReportProc); reintroduce;
       destructor Destroy; override;
-      /// <summary>Re-queries this section and repaints it. Never called on tab
-      /// activation -- only from a button or the frame's "Refresh both".</summary>
-      procedure Refresh; virtual;
+      /// <summary>Re-queries this section and repaints it when the answer arrives.
+      /// Never called on tab activation -- only from a button or the frame's
+      /// "Refresh both".</summary>
+      /// <remarks>Returns at once (IDE-MAINTHREAD-CLI): the engine runs off the main
+      /// thread and a newer Refresh supersedes it. Refused while an apply runs.</remarks>
+      procedure Refresh;
+      /// <summary>Refresh, then ANext once this section is done, however it ended, so
+      /// a "Refresh all" runs the engines one after the other as it always has.</summary>
+      /// <param name="ANext">Runs on the main thread; never once the section is freed.</param>
+      procedure RefreshThen(const ANext: TProc);
   end;
 
   /// <summary>The "Circular uses" section: one row per strongly connected
@@ -165,6 +188,7 @@ type
       function  TickedCycle: Integer;
       procedure SetRunning(AValue: Boolean);
       procedure RunFix(AApply: Boolean);
+      procedure ShowCycles(AExitCode: Integer; const AOutput: string);
       procedure FinishFix(AApply: Boolean; AExit: Integer; const AOutput: string);
       procedure HandleDryRun    (Sender: TObject);
       procedure HandleClickCheck(Sender: TObject);
@@ -175,6 +199,11 @@ type
       /// Yes/No confirmation (CycleFixApplyConfirmText; default No).</summary>
       /// <param name="Sender">The button; unused.</param>
       procedure HandleApply(Sender: TObject); override;
+      /// <summary>Starts the SCC list query off the main thread. Writes nothing;
+      /// never called on tab activation.</summary>
+      /// <returns>True when a run started; False when a fix is running or the scope
+      /// has no project.</returns>
+      function StartRefresh: Boolean; override;
     public
       /// <summary>Builds the section and re-captions its strip to
       /// Refresh / Dry run / Apply, with radio-like ticks.</summary>
@@ -187,9 +216,6 @@ type
       /// <summary>Unregisters the section, so a cycles --fix job that finishes
       /// after the dock is gone does not call into a freed object.</summary>
       destructor Destroy; override;
-      /// <summary>Re-runs the SCC list query and repaints. Writes nothing;
-      /// never called on tab activation.</summary>
-      procedure Refresh; override;
   end;
 
   /// <summary>The Uses &amp; Deps dock tab: a scope strip, three sections and one
@@ -365,22 +391,16 @@ begin
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
 end;
 
-{ One place that spawns the engine, so the wait cursor, the quoting and the
-  timeout cannot differ between the four call sites. Returns a negative value
-  when the engine could not be started at all. }
-function RunEngine(const AArgs: string; out AOutput: string): Integer;
+{ One place that builds the engine's command line, so the quoting cannot differ
+  between the call sites. False when there is no engine to run. }
+function EngineCmdLine(const AArgs: string; out ACmdLine: string): Boolean;
 var
   Exe: string;
 begin
-  AOutput:= '';
+  ACmdLine:= '';
   Exe:= DragLintExe;
-  if (Exe = '') or not FileExists(Exe) then Exit(-1);
-  Screen.Cursor:= crHourGlass;
-  try
-    Result:= RunCaptureStdout(Format('"%s" %s', [Exe, AArgs]), AOutput, ENGINE_TIMEOUT_MS);
-  finally
-    Screen.Cursor:= crDefault;
-  end;
+  Result:= (Exe <> '') and FileExists(Exe);
+  if Result then ACmdLine:= Format('"%s" %s', [Exe, AArgs]);
 end;
 
 { Read the outcome fields out of either verb's document, and NORMALISE the one
@@ -478,10 +498,19 @@ end;
 
 { ---- TUsesDepsSection ----------------------------------------------------- }
 
+var
+  { Every live TUsesDepsSection, main thread only. An apply is not killed when the
+    dock closes (it is writing files), so its answer checks membership here before
+    it touches the section. }
+  GLiveUsesSections: TList<TUsesDepsSection> = nil;
+
 constructor TUsesDepsSection.Create(AOwner: TComponent; AParent: TWinControl;
   AVerb: TUsesVerb; const ACaption: string; AOnReport: TUsesReportProc);
 begin
   inherited Create(AOwner);
+  if GLiveUsesSections = nil then GLiveUsesSections:= TList<TUsesDepsSection>.Create;
+  GLiveUsesSections.Add(Self);
+  FRun    := TCliRunSlot.Create;
   FVerb   := AVerb;
   FReport := AOnReport;
   FRows   := TUsesDepsRows.Create;
@@ -492,6 +521,8 @@ end;
 
 destructor TUsesDepsSection.Destroy;
 begin
+  if GLiveUsesSections <> nil then GLiveUsesSections.Remove(Self);
+  FRun.Free;  { abandons the query in flight: its answer never reaches a dead section }
   { Only the row list is owned here; the controls belong to Self. }
   FRows.Free;
   inherited Destroy;
@@ -604,16 +635,37 @@ begin
 end;
 
 procedure TUsesDepsSection.Refresh;
-var
-  Scope   : TUsesScope ;
-  Output  : string     ;
-  Doc     : TJSONObject;
-  Arr     : TJSONArray ;
-  I       : Integer    ;
-  It      : TJSONObject;
-  Row     : TUsesDepsRow;
-  Actions : Integer    ;
 begin
+  if not StartRefresh then FinishRefresh;
+end;
+
+procedure TUsesDepsSection.RefreshThen(const ANext: TProc);
+begin
+  FAfterRefresh:= ANext;
+  Refresh;
+end;
+
+procedure TUsesDepsSection.FinishRefresh;
+var
+  Next: TProc;
+begin
+  Next:= FAfterRefresh;
+  FAfterRefresh:= nil;
+  if Assigned(Next) then Next();
+end;
+
+function TUsesDepsSection.StartRefresh: Boolean;
+var
+  Scope  : TUsesScope;
+  CmdLine: string    ;
+begin
+  Result:= False;
+  if FApplying then
+  begin
+    Report('An apply is in progress -- the list refreshes when it finishes.');
+    Exit;
+  end;
+  FRun.Cancel;
   FRows.Clear;
   Render;
   Scope:= ResolveScope;
@@ -625,13 +677,39 @@ begin
   end;
   SaveAllModules;
 
-  if RunEngine(DryRunArgs(Scope.Pas, Scope.Proj, Scope.Db), Output) < 0 then
+  if not EngineCmdLine(DryRunArgs(Scope.Pas, Scope.Proj, Scope.Db), CmdLine) then
   begin
     Report('drag-lint.exe not found -- check drag-lint Options.');
     Exit;
   end;
 
-  Doc:= ParseDoc(Output);
+  { IDE-MAINTHREAD-CLI: uses-fix verifies by compiling, up to ENGINE_TIMEOUT_MS. }
+  Report('Asking the engine...');
+  FRun.Start(CmdLine, ENGINE_TIMEOUT_MS, ShowDryRun);
+  Result:= True;
+end; // function
+
+procedure TUsesDepsSection.ShowDryRun(AExitCode: Integer; const AOutput: string);
+begin
+  { Whatever this run shows, the next section of a "Refresh all" still has its turn. }
+  try
+    if AExitCode < 0 then Report('drag-lint.exe not found -- check drag-lint Options.')
+    else FillFromDryRun(AOutput);
+  finally
+    FinishRefresh;
+  end;
+end;
+
+procedure TUsesDepsSection.FillFromDryRun(const AOutput: string);
+var
+  Doc     : TJSONObject;
+  Arr     : TJSONArray ;
+  I       : Integer    ;
+  It      : TJSONObject;
+  Row     : TUsesDepsRow;
+  Actions : Integer    ;
+begin
+  Doc:= ParseDoc(AOutput);
   if Doc = nil then
   begin
     Report('The engine returned no readable document. Run the same action from the menu to see its raw output.');
@@ -701,30 +779,75 @@ begin
     if (I < FRows.Count) and FRows[I].Actionable then FList.Checked[I]:= True;
 end;
 
+procedure TUsesDepsSection.SetApplying(AValue: Boolean);
+begin
+  FApplying:= AValue;
+  FBtnApply  .Enabled:= not AValue;
+  FBtnRefresh.Enabled:= not AValue;
+  FBtnTickAll.Enabled:= not AValue;
+end;
+
 procedure TUsesDepsSection.HandleApply(Sender: TObject);
 var
-  Only   : string       ;
-  Scope  : TUsesScope   ;
-  Output : string       ;
-  Outcome: TApplyOutcome;
+  Only   : string    ;
+  Scope  : TUsesScope;
+  CmdLine: string    ;
+  Me     : TUsesDepsSection;
+  Verb   : TUsesVerb ;
+  Pas    : string    ;
 begin
+  if FApplying then Exit;
   Only:= TickedNames;
   if Only = '' then begin Report('Nothing ticked in this section.'); Exit; end;
   Scope:= ResolveScope;
   if not Scope.Ok then begin Report(Scope.Problem); Exit; end;
   SaveAllModules;
 
-  if RunEngine(ApplyArgs(Scope.Pas, Scope.Proj, Scope.Db, Only), Output) < 0 then
+  if not EngineCmdLine(ApplyArgs(Scope.Pas, Scope.Proj, Scope.Db, Only), CmdLine) then
   begin
     Report('drag-lint.exe not found -- check drag-lint Options.');
     Exit;
   end;
 
-  Outcome:= ReadOutcome(Output);
+  { No slot: a slot's owner going away kills the child, and this one is writing files.
+    Closing the dock mid-apply leaves it to finish, and its files still get reloaded. }
+  FRun.Cancel;
+  SetApplying(True);
+  Report('Applying...');
+  Me  := Self;
+  Verb:= FVerb;
+  Pas := Scope.Pas;
+  RunCliAsync(CmdLine,
+    procedure(AExitCode: Integer; const AOutput: string)
+    begin
+      { WHICH FILES TO RELOAD. uses-fix rewrites the ONE unit it was given and its
+        document names no others; reconcile-project reports `edited`, which is
+        exactly the project files that changed, so nothing else is disturbed. }
+      var Outcome: TApplyOutcome:= ReadOutcome(AOutput);
+      if Outcome.Readable and Outcome.Applied then
+        if Verb = uvUnitCleanup then ReloadModules([Pas])
+        else                         ReloadModules(Outcome.Edited);
+      if (GLiveUsesSections <> nil) and GLiveUsesSections.Contains(Me) then Me.FinishApply(AExitCode, AOutput);
+    end, ENGINE_TIMEOUT_MS);
+end; // procedure
+
+procedure TUsesDepsSection.FinishApply(AExitCode: Integer; const AOutput: string);
+var
+  Outcome: TApplyOutcome;
+begin
+  SetApplying(False);
+  if AExitCode = -1 then
+  begin
+    Report('drag-lint.exe could not be started -- check drag-lint Options.');
+    Exit;
+  end;
+
+  Outcome:= ReadOutcome(AOutput);
   if not Outcome.Readable then
   begin
     { NOT reported as "nothing was written": the engine may well have written
-      before whatever spoiled the document. The user is told to look. }
+      before whatever spoiled the document, or before it was stopped for making
+      no progress. The user is told to look. }
     Report('The apply returned no readable document -- files may or may not have been written. Check them before re-running.');
     Exit;
   end;
@@ -733,13 +856,6 @@ begin
     with no subject cannot say which of the two just wrote. }
   if FVerb = uvUnitCleanup then Report(DescribeOutcome('uses-fix', Outcome))
   else                          Report(DescribeOutcome('reconcile-project', Outcome));
-
-  { WHICH FILES TO RELOAD. uses-fix rewrites the ONE unit it was given and its
-    document names no others; reconcile-project reports `edited`, which is
-    exactly the project files that changed, so nothing else is disturbed. }
-  if Outcome.Applied then
-    if FVerb = uvUnitCleanup then ReloadModules([Scope.Pas])
-    else                          ReloadModules(Outcome.Edited);
 
   { Repaint from what is now true, not from what was true before the write. }
   Refresh;
@@ -829,13 +945,13 @@ begin
   Result:= 0;
 end;
 
-procedure TCircularUsesSection.Refresh;
+function TCircularUsesSection.StartRefresh: Boolean;
 var
-  Scope : TUsesScope;
-  Output: string    ;
-  Fixable: Integer  ;
-  Row   : TCycleRow ;
+  Scope  : TUsesScope;
+  CmdLine: string    ;
 begin
+  Result:= False;
+  FRun.Cancel;
   { A job the queue dropped (ClearPending, shutdown) never runs its OnDone; it
     is no longer counted by JobQueueBusy, so that is the signal to re-enable. }
   if FRunning and not JobQueueBusy then SetRunning(False);
@@ -853,18 +969,38 @@ begin
     Exit;
   end;
   SaveAllModules;
-  if RunEngine(CycleListArgs(Scope.Proj, Scope.Db, GetActivePlatformForLibrary), Output) < 0 then
+  if not EngineCmdLine(CycleListArgs(Scope.Proj, Scope.Db, GetActivePlatformForLibrary), CmdLine) then
   begin
     Report('drag-lint.exe not found -- check drag-lint Options.');
     Exit;
   end;
-  FCycles:= ParseCycleRows(Output);
-  Render;
-  Fixable:= 0;
-  for Row in FCycles do
-    if Row.Fixable then Inc(Fixable);
-  Report(Format('cycles: %d circular unit group(s), %d with a mechanical fix. Tick one, then Dry run.',
-                [Length(FCycles), Fixable]));
+  { IDE-MAINTHREAD-CLI: cycles over a large project takes seconds to minutes. }
+  Report('Asking the engine...');
+  FRun.Start(CmdLine, ENGINE_TIMEOUT_MS, ShowCycles);
+  Result:= True;
+end; // function
+
+procedure TCircularUsesSection.ShowCycles(AExitCode: Integer; const AOutput: string);
+var
+  Fixable: Integer  ;
+  Row    : TCycleRow;
+begin
+  try
+    if AExitCode < 0 then
+    begin
+      Report('drag-lint.exe not found -- check drag-lint Options.');
+      Exit;
+    end;
+    FCycles:= ParseCycleRows(AOutput);
+    Render;
+    Fixable:= 0;
+    for Row in FCycles do
+      if Row.Fixable then Inc(Fixable);
+    Report(Format('cycles: %d circular unit group(s), %d with a mechanical fix. Tick one, then Dry run.',
+                  [Length(FCycles), Fixable]));
+  finally
+    FinishRefresh;
+  end;
 end; // procedure
 
 { One path for both buttons, so the dry run the user reviewed and the apply
@@ -939,6 +1075,7 @@ begin
     begin
       if IsLiveCycleSection(Sec) then Sec.FinishFix(IsApply, AExit, AOutput);
     end;
+  FRun.Cancel;  { the list query would read the graph this job is about to change }
   SetRunning(True);
   Report(Job.Title + ' -- running in the background; the IDE stays usable.');
   JobQueue.Enqueue(Job);
@@ -1067,9 +1204,15 @@ begin
   Scope:= ResolveScope;
   FLblScope.Caption:= Format('scope: %s | %s',
     [ExtractFileName(Scope.Pas), ExtractFileName(Scope.Proj)]);
-  FUnitSec.Refresh;
-  FProjSec.Refresh;
-  FCycleSec.Refresh;
+  FUnitSec.RefreshThen(
+    procedure
+    begin
+      FProjSec.RefreshThen(
+        procedure
+        begin
+          FCycleSec.Refresh;
+        end);
+    end);
 end;
 
 procedure TUsesDepsFrame.HandleRefreshAll(Sender: TObject);
@@ -1097,5 +1240,6 @@ initialization
 
 finalization
   FreeAndNil(GLiveCycleSections);
+  FreeAndNil(GLiveUsesSections);
 
 end.

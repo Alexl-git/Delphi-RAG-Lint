@@ -107,8 +107,8 @@ try {
   Check 'T2 ... and the engine runs IDE jobs without --build-timeout (unbounded builds, Cancel stops them)' (-not ($kv.Values -match '--build-timeout')) ''
   $frameSrc  = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.UsesDepsFrame.pas'))
   $editorSrc = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.Editor.pas'))
-  Check 'T3 the other Uses & Deps sections keep 180 s (ENGINE_TIMEOUT_MS, used by RunEngine)' `
-    (($frameSrc -match '(?m)^\s*ENGINE_TIMEOUT_MS\s*=\s*180000;') -and ($frameSrc.Contains('AOutput, ENGINE_TIMEOUT_MS)'))) ''
+  Check 'T3 the other Uses & Deps sections keep 180 s (ENGINE_TIMEOUT_MS, on all three off-main-thread runs)' `
+    (($frameSrc -match '(?m)^\s*ENGINE_TIMEOUT_MS\s*=\s*180000;') -and $frameSrc.Contains('ENGINE_TIMEOUT_MS, ShowDryRun)') -and $frameSrc.Contains('ENGINE_TIMEOUT_MS, ShowCycles)') -and $frameSrc.Contains('end, ENGINE_TIMEOUT_MS)')) ''
   Check 'T4 the tab''s Dry run / Apply job runs under CYCLE_FIX_TIMEOUT_MS' ($frameSrc -match 'Job\.TimeoutMs\s*:=\s*CYCLE_FIX_TIMEOUT_MS;') ''
   Check 'T5 the menu dry run passes CYCLE_FIX_TIMEOUT_MS; other menu reports keep 180 s' `
     ($editorSrc.Contains("DLRunReport(CycleFixMenuArgs(Proj, Db, GetActivePlatformForLibrary), 'drag-lint-circular-uses-fix.txt', CYCLE_FIX_TIMEOUT_MS);") -and ($editorSrc -match 'REPORT_TIMEOUT_MS\s*=\s*180000;') -and ($editorSrc.Contains('RunAndCaptureStdout(Cmd, Output, ATimeoutMs);'))) ''

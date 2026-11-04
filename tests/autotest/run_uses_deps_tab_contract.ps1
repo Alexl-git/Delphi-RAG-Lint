@@ -178,7 +178,7 @@ Check '4c an unreadable document is NOT reported as "nothing was written"' `
 # 5 -- the stale-buffer requirement.
 # ---------------------------------------------------------------------------
 Check '5a a successful apply reloads the affected modules' `
-  ($src -match 'if Outcome\.Applied then[\s\S]{0,200}ReloadModules') `
+  ($src -match 'if Outcome\.Readable and Outcome\.Applied then[\s\S]{0,200}ReloadModules') `
   'a stale IDE buffer silently overwrites the fix on the next save -- the fix appears to work, then vanishes'
 
 Check '5b the reload is deferred with ForceQueue, not called inline' `

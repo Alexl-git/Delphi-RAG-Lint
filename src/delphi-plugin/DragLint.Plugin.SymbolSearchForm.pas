@@ -32,10 +32,13 @@ uses
   , Winapi.Windows
   , ToolsAPI
   , DragLint.Plugin.HoverForm
-  , DragLint.Plugin.ProcRun
+  , DragLint.Plugin.CliAsync
   ; { OpenSourceAt }
 
 { ---- TSymbolSearchForm ---- }
+
+const
+  SYMBOL_SEARCH_STALL_MS = 15000;
 
 type
   TSymbolItem = record
@@ -58,14 +61,17 @@ type
       FEmbedded : Boolean             ; { v0.42: tab mode -> open source instead of modal }
       FResult   : string              ;
       FItems    : array of TSymbolItem;
+      FRun      : TCliRunSlot         ; { the search in flight; a newer one supersedes it }
       procedure TimerFired  (Sender: TObject);
       procedure EditChange  (Sender: TObject);
       procedure ListDblClick(Sender: TObject);
       procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
       procedure Accept;
       procedure RunSearch(const AText: string);
+      procedure ShowResult(AExitCode: Integer; const AOutput: string);
     public
       constructor Create(AOwner: TComponent; AForm: TForm; AEdit: TEdit; AList: TListView; ALblStatus: TLabel; const AExePath, ADbPath: string); reintroduce;
+      destructor Destroy; override;
       function GetResult: string;
   end;
 
@@ -84,6 +90,7 @@ begin
   else FDbArgs:= '';
   FEmbedded:= False;
   FResult  := '';
+  FRun     := TCliRunSlot.Create;
 
   FTimer:= TTimer.Create(Self);
   FTimer.Interval:= 300;
@@ -106,6 +113,12 @@ begin
   end;
 end; // constructor
 
+destructor TSymbolSearchHandler.Destroy;
+begin
+  FRun.Free;  { abandons the run in flight: its answer never reaches a dead handler }
+  inherited Destroy;
+end;
+
 function TSymbolSearchHandler.GetResult: string;
 begin
   Result:= FResult;
@@ -124,10 +137,31 @@ begin
 end;
 
 procedure TSymbolSearchHandler.RunSearch(const AText: string);
+begin
+  { v0.49: defensive -- the timer can fire after the form/controls are gone, and
+    the IDE's VCL Styles (TStyleManager.GetStyle) can AV during a styled repaint
+    of these controls under some themes / RDP. Guard nils and NEVER force a
+    synchronous repaint here (FForm.Update was the AV trigger), and wrap every
+    caption set so a theming fault can't crash the IDE. }
+  if (FList = nil) or (FLblStatus = nil) then Exit;
+  if (FExePath = '') or (Trim(AText) = '') then
+  begin
+    FRun.Cancel;
+    FList.Items.Clear;
+    SetLength(FItems, 0);
+    try FLblStatus.Caption:= 'Type to search...'; except end;
+    Exit;
+  end;
+
+  try FLblStatus.Caption:= 'Searching...'; except end;
+
+  { IDE-MAINTHREAD-CLI: this ran on the main thread off a 300 ms timer, so every
+    pause in typing froze the IDE for the length of a query. }
+  FRun.Start(Format('"%s" query --name "%s"', [FExePath, Trim(AText)]) + FDbArgs, SYMBOL_SEARCH_STALL_MS, ShowResult);
+end; // procedure
+
+procedure TSymbolSearchHandler.ShowResult(AExitCode: Integer; const AOutput: string);
 var
-  CmdLine : string        ;
-  Output  : string        ;
-  ExitCode: Integer       ;
   Lines   : TStringList   ;
   i       : Integer       ;
   j       : Integer       ;
@@ -138,32 +172,12 @@ var
   ColonPos: Integer       ;
   Item    : TListItem     ;
 begin
-  { v0.49: defensive -- the timer can fire after the form/controls are gone, and
-    the IDE's VCL Styles (TStyleManager.GetStyle) can AV during a styled repaint
-    of these controls under some themes / RDP. Guard nils and NEVER force a
-    synchronous repaint here (FForm.Update was the AV trigger), and wrap every
-    caption set so a theming fault can't crash the IDE. }
-  if (FList = nil) or (FLblStatus = nil) then Exit;
-  if (FExePath = '') or (Trim(AText) = '') then
-  begin
-    FList.Items.Clear;
-    SetLength(FItems, 0);
-    try FLblStatus.Caption:= 'Type to search...'; except end;
-    Exit;
-  end;
-
-  try FLblStatus.Caption:= 'Searching...'; except end;
-
-  CmdLine:= Format('"%s" query --name "%s"', [FExePath, Trim(AText)]) + FDbArgs;
-
-  ExitCode:= RunCaptureStdout(CmdLine, Output, 15000);
-
   FList.Items.BeginUpdate;
   try
     FList.Items.Clear;
     SetLength(FItems, 0);
 
-    if ExitCode < 0 then
+    if AExitCode < 0 then
     begin
       try FLblStatus.Caption:= 'Failed to spawn drag-lint.exe'; except end;
       Exit;
@@ -171,7 +185,7 @@ begin
 
     Lines:= TStringList.Create;
     try
-      Lines.Text:= Output;
+      Lines.Text:= AOutput;
       Count:= 0;
       for i:= 0 to Lines.Count - 1 do
       begin

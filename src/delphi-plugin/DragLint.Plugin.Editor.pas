@@ -284,6 +284,7 @@ uses
     DragLint.Plugin.DbResolver
   , DRagLint.Index.Manifest   { TProjectDbMatch: pdmUnique / pdmAmbiguous / pdmNone }
   , DragLint.Plugin.ProcRun
+  , DragLint.Plugin.CliAsync
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.Reports
@@ -2291,6 +2292,18 @@ begin
   end;
 end;
 
+const
+  CHECK_UNIT_STALL_MS = 90000;
+  FORMAT_STALL_MS = 60000;
+  IMPORT_LOG_STALL_MS = 60000;
+  AST_CHECK_STALL_MS = 30000;
+  COPY_DIAG_STALL_MS = 20000;
+  EXPORT_STALL_MS = 180000;
+
+var
+  { The editor command whose dialog waits on the engine (rename, quick fix, go to
+    definition): a newer one supersedes it. Main thread only; lives for the unit. }
+  GEditorCommandRun: TCliRunSlot = nil;
 { ---- v0.26: synchronous process helper ---- }
 
 // Spawns ACmdLine with merged stdout+stderr capture. Returns the process exit
@@ -2368,15 +2381,14 @@ procedure InvokeRename(Sender: TObject);
 const
   TYPEAT_TIMEOUT_MS = 10000;
 var
-  Uri    : string ;
-  Line   : Integer;
-  Col    : Integer;
-  ProjDb : string ;
-  ExePath: string ;
-  Bare   : string ;
-  QName  : string ;
-  Output : string ;
-  ESS    : IOTAEditorServices;
+  Uri     : string ;
+  Line    : Integer;
+  Col     : Integer;
+  ProjDb  : string ;
+  ExePath : string ;
+  Bare    : string ;
+  FileName: string ;
+  ESS     : IOTAEditorServices;
 begin
   if not GetActiveEditorInfo(Uri, Line, Col) then
   begin
@@ -2388,23 +2400,38 @@ begin
   ProjDb:= ResolvePrimaryIndexDb;
   ExePath:= DLExe64;
 
+  Bare:= IdentifierAtCursor;
+  FileName:= '';
+  if Supports(BorlandIDEServices, IOTAEditorServices, ESS) and (ESS.TopView <> nil) and (ESS.TopView.Buffer <> nil) then
+    FileName:= ESS.TopView.Buffer.FileName;
+  if (ProjDb = '') or (FileName = '') then
+  begin
+    ShowRefactorDialog(Bare, ProjDb, ExePath, Bare, FileName);
+    Exit;
+  end;
+
   { Resolve the symbol under the caret to its qualified name (typeat, 1-based
     row/col as InvokeTypeAtCursor passes them). Any failure leaves QName = ''
-    and the dialog opens with the bare identifier instead. }
-  Bare:= IdentifierAtCursor;
-  QName:= '';
-  if (ProjDb <> '') and Supports(BorlandIDEServices, IOTAEditorServices, ESS)
-     and (ESS.TopView <> nil) and (ESS.TopView.Buffer <> nil)
-     and (RunAndCaptureStdout(Format('"%s" typeat "%s:%d:%d" --db "%s" --format json',
-            [ExePath, ESS.TopView.Buffer.FileName, Line + 1, Col + 1, ProjDb]), Output, TYPEAT_TIMEOUT_MS) = 0) then
-  begin
-    var Token: string;
-    QName:= DLParseTypeAtResolved(Output, Token);
-    if (Bare = '') and (Token <> '') then Bare:= Token;
-  end;
-  if QName = '' then QName:= Bare;
-
-  ShowRefactorDialog(QName, ProjDb, ExePath, Bare, ESS.TopView.Buffer.FileName);
+    and the dialog opens with the bare identifier instead.
+    IDE-MAINTHREAD-CLI: off the main thread; the dialog opens when typeat answers. }
+  GEditorCommandRun.Start(Format('"%s" typeat "%s:%d:%d" --db "%s" --format json',
+      [ExePath, FileName, Line + 1, Col + 1, ProjDb]), TYPEAT_TIMEOUT_MS,
+    procedure(AExitCode: Integer; const AOutput: string)
+    var
+      QName: string;
+      Token: string;
+      Shown: string;
+    begin
+      QName:= '';
+      Shown:= Bare;
+      if AExitCode = 0 then
+      begin
+        QName:= DLParseTypeAtResolved(AOutput, Token);
+        if (Shown = '') and (Token <> '') then Shown:= Token;
+      end;
+      if QName = '' then QName:= Shown;
+      ShowRefactorDialog(QName, ProjDb, ExePath, Shown, FileName);
+    end);
 end; // procedure
 
 procedure InvokeFormatYadf(Sender: TObject);
@@ -2414,8 +2441,6 @@ var
   FilePath: string            ;
   ExePath : string            ;
   CmdLine : string            ;
-  Output  : string            ;
-  ExitCode: Integer           ;
 begin
   if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then
   begin
@@ -2441,21 +2466,25 @@ begin
   { For v0.27: do not auto-save; spawn YADF against the current on-disk file.
     The user should save the file before invoking this command. }
   CmdLine:= Format('"%s" format "%s"', [ExePath, FilePath]);
-  ExitCode:= RunAndCaptureStdout(CmdLine, Output, 60000);
+  { IDE-MAINTHREAD-CLI: formatting a large unit took seconds with the IDE frozen. }
+  RunCliAsync(CmdLine,
+    procedure(ExitCode: Integer; const Output: string)
+    begin
 
-  if ExitCode = -1 then
-  begin
-    ShowMessage( 'drag-lint: failed to spawn format command.'#13#10 + 'Ensure drag-lint.exe is on PATH or next to the BPL.');
-    Exit;
-  end;
-  if ExitCode = 2 then
-  begin
-    ShowMessage( 'drag-lint: the format command rejected its arguments (usage error, exit 2).'#13#10 + Trim(Output));
-    Exit;
-  end;
+      if ExitCode = -1 then
+      begin
+        ShowMessage( 'drag-lint: failed to spawn format command.'#13#10 + 'Ensure drag-lint.exe is on PATH or next to the BPL.');
+        Exit;
+      end;
+      if ExitCode = 2 then
+      begin
+        ShowMessage( 'drag-lint: the format command rejected its arguments (usage error, exit 2).'#13#10 + Trim(Output));
+        Exit;
+      end;
 
-  { The IDE will auto-detect the file change on next focus switch. }
-  ShowMessage( Format('drag-lint Format with YADF:'#13#10 + '%s', [Trim(Output)]));
+      { The IDE will auto-detect the file change on next focus switch. }
+      ShowMessage( Format('drag-lint Format with YADF:'#13#10 + '%s', [Trim(Output)]));
+    end, FORMAT_STALL_MS);
 end; // procedure
 
 /// <summary>The active project's `.pas` members that exist on disk.</summary>
@@ -3476,14 +3505,6 @@ var
   DbPath   : string     ;
   ExePath  : string     ;
   CmdLine  : string     ;
-  Output   : string     ;
-  ExitCode : Integer    ;
-  ErrCount : Integer    ;
-  WarnCount: Integer    ;
-  HintCount: Integer    ;
-  Lines    : TStringList;
-  Line     : string     ;
-  LLine    : string     ;
 begin
   DbPath:= ResolvePrimaryIndexDb;
 
@@ -3503,38 +3524,49 @@ begin
   if DbPath <> '' then CmdLine:= Format('"%s" import-log "%s" --db "%s"', [ExePath, LogFile, DbPath])
   else CmdLine:= Format('"%s" import-log "%s"', [ExePath, LogFile]);
 
-  ExitCode:= RunAndCaptureStdout(CmdLine, Output, 60000);
-
-  if ExitCode = 2 then
-  begin
-    ShowMessage('drag-lint: failed to spawn import-log.'#13#10 + 'Ensure drag-lint.exe is on PATH or next to the BPL.');
-    Exit;
-  end;
-
-  // Count imported findings from output.
-  ErrCount := 0;
-  WarnCount:= 0;
-  HintCount:= 0;
-  Lines:= TStringList.Create;
-  try
-    Lines.Text:= Output;
-    for Line in Lines do
+  { IDE-MAINTHREAD-CLI: importing a build log took seconds with the IDE frozen. }
+  RunCliAsync(CmdLine,
+    procedure(ExitCode: Integer; const Output: string)
+    var
+      ErrCount : Integer    ;
+      WarnCount: Integer    ;
+      HintCount: Integer    ;
+      Lines    : TStringList;
+      Line     : string     ;
+      LLine    : string     ;
     begin
-      LLine:= LowerCase(Line);
-      if (Pos(') error:', LLine) > 0) or (Pos(') fatal:', LLine) > 0) then Inc(ErrCount)
-      else if Pos(') warning:', LLine) > 0 then Inc(WarnCount)
-      else if (Pos(') hint:', LLine) > 0) or (Pos(') information:', LLine) > 0) then Inc(HintCount);
-    end;
-  finally
-    Lines.Free;
-  end; // try
 
-  // Trigger LSP refresh for affected files.
-  if DbPath <> '' then BroadcastDidSaveForAffectedFiles(Output);
+      if ExitCode = 2 then
+      begin
+        ShowMessage('drag-lint: failed to spawn import-log.'#13#10 + 'Ensure drag-lint.exe is on PATH or next to the BPL.');
+        Exit;
+      end;
 
-  ShowMessage(Format(
-      'drag-lint Import Build Log complete.'#13#10 + 'Imported: %d error(s), %d warning(s), %d hint(s).'#13#10 + 'Check the Messages pane for details.',
-      [ErrCount, WarnCount, HintCount]));
+      // Count imported findings from output.
+      ErrCount := 0;
+      WarnCount:= 0;
+      HintCount:= 0;
+      Lines:= TStringList.Create;
+      try
+        Lines.Text:= Output;
+        for Line in Lines do
+        begin
+          LLine:= LowerCase(Line);
+          if (Pos(') error:', LLine) > 0) or (Pos(') fatal:', LLine) > 0) then Inc(ErrCount)
+          else if Pos(') warning:', LLine) > 0 then Inc(WarnCount)
+          else if (Pos(') hint:', LLine) > 0) or (Pos(') information:', LLine) > 0) then Inc(HintCount);
+        end;
+      finally
+        Lines.Free;
+      end; // try
+
+      // Trigger LSP refresh for affected files.
+      if DbPath <> '' then BroadcastDidSaveForAffectedFiles(Output);
+
+      ShowMessage(Format(
+          'drag-lint Import Build Log complete.'#13#10 + 'Imported: %d error(s), %d warning(s), %d hint(s).'#13#10 + 'Check the Messages pane for details.',
+          [ErrCount, WarnCount, HintCount]));
+    end, IMPORT_LOG_STALL_MS);
 end; // procedure
 
 /// <summary>Opens the IDE Tools->Options dialog (drag-lint pages live under
@@ -3569,8 +3601,6 @@ var
   ExePath : string            ;
   DbPath  : string            ;
   CmdLine : string            ;
-  Output  : string            ;
-  ExitCode: Integer           ;
   Client  : TDragLintLspClient;
   Params  : TJSONObject       ;
   TextDoc : TJSONObject       ;
@@ -3601,30 +3631,34 @@ begin
   if DbPath <> '' then CmdLine:= Format('"%s" check-ast "%s" --db "%s"', [ExePath, FilePath, DbPath])
   else CmdLine:= Format('"%s" check-ast "%s"', [ExePath, FilePath]);
 
-  ExitCode:= RunAndCaptureStdout(CmdLine, Output, 30000);
+  { IDE-MAINTHREAD-CLI: check-ast parses the whole unit, with the IDE frozen until it answered. }
+  RunCliAsync(CmdLine,
+    procedure(ExitCode: Integer; const Output: string)
+    begin
 
-  if ExitCode = 2 then
-  begin
-    ShowMessage('drag-lint: failed to spawn check-ast.'#13#10 + 'Ensure drag-lint.exe is on PATH or next to the BPL.');
-    Exit;
-  end;
+      if ExitCode = 2 then
+      begin
+        ShowMessage('drag-lint: failed to spawn check-ast.'#13#10 + 'Ensure drag-lint.exe is on PATH or next to the BPL.');
+        Exit;
+      end;
 
-  Uri:= 'file:///' + StringReplace(FilePath, '\', '/', [rfReplaceAll]);
-  Client:= EnsureLspClient;
-  if Client <> nil then
-  begin
-    Params := TJSONObject.Create;
-    TextDoc:= TJSONObject.Create;
-    TextDoc.AddPair('uri'         , Uri    );
-    Params .AddPair('textDocument', TextDoc);
-    try
-      Client.Notify('textDocument/didSave', Params);
-    finally
-      Params.Free;
-    end;
-  end;
+      Uri:= 'file:///' + StringReplace(FilePath, '\', '/', [rfReplaceAll]);
+      Client:= EnsureLspClient;
+      if Client <> nil then
+      begin
+        Params := TJSONObject.Create;
+        TextDoc:= TJSONObject.Create;
+        TextDoc.AddPair('uri'         , Uri    );
+        Params .AddPair('textDocument', TextDoc);
+        try
+          Client.Notify('textDocument/didSave', Params);
+        finally
+          Params.Free;
+        end;
+      end;
 
-  ShowMessage(Format('drag-lint AST Checks:'#13#10'%s', [Trim(Output)]));
+      ShowMessage(Format('drag-lint AST Checks:'#13#10'%s', [Trim(Output)]));
+    end, AST_CHECK_STALL_MS);
 end; // procedure
 
 procedure AnnounceHoverStart;
@@ -4176,7 +4210,7 @@ type
   end;
 
 procedure InvokeCopyDiagnostics(Sender: TObject);
-{ v0.46: lint the active SAVED file ON DEMAND (synchronous), copy the findings to
+{ v0.46: lint the active SAVED file ON DEMAND (off the main thread), copy the findings to
   the clipboard (for pasting to an AI) AND publish them to the cache + repaint so
   the gutter/inline markers light up. This is independent of the background
   live-diagnostics runner -- it always reflects the file on disk right now.
@@ -4189,37 +4223,6 @@ var
   FilePath: string             ;
   Exe     : string             ;
   CmdLine : string             ;
-  Output  : string             ;
-  Line    : string             ;
-  Loc     : string             ;
-  Loc2    : string             ;
-  ColStr  : string             ;
-  LineStr : string             ;
-  Tag     : string             ;
-  Rest    : string             ;
-  Rule    : string             ;
-  Msg     : string             ;
-  ClipText: string             ;
-  Lines   : TStringList        ;
-  SB      : TStringBuilder     ;
-  Rows    : TList<TCopyDiagRow>;
-  Row     : TCopyDiagRow       ;
-  i       : Integer            ;
-  lb      : Integer            ;
-  rb      : Integer            ;
-  c1      : Integer            ;
-  c2      : Integer            ;
-  P       : Integer            ;
-  LineNo  : Integer            ;
-  ColNo   : Integer            ;
-  Count   : Integer            ;
-  SevInt  : Integer            ;
-  Params  : TJSONObject        ;
-  DObj    : TJSONObject        ;
-  RangeObj: TJSONObject        ;
-  StartObj: TJSONObject        ;
-  EndObj  : TJSONObject        ;
-  Arr     : TJSONArray         ;
 begin
   FilePath:= '';
   if Supports(BorlandIDEServices, IOTAEditorServices, ES) and (ES <> nil) then
@@ -4237,98 +4240,132 @@ begin
   Exe:= DLExe64;
 
   CmdLine:= Format('"%s" lint "%s"', [Exe, FilePath]);
-  Output:= '';
-  RunAndCaptureStdout(CmdLine, Output, 20000);
-
-  Lines := TStringList        .Create;
-  SB    := TStringBuilder     .Create;
-  Rows  := TList<TCopyDiagRow>.Create;
-  Params:= TJSONObject        .Create;
-  Arr   := TJSONArray         .Create;
-  try
-    Lines.Text:= Output;
-    Count:= 0;
-    for i:= 0 to Lines.Count - 1 do
+  { IDE-MAINTHREAD-CLI: a lint of a large unit froze the IDE until it answered. }
+  RunCliAsync(CmdLine,
+    procedure(ExitCode: Integer; const Output: string)
+    var
+      Line    : string             ;
+      Loc     : string             ;
+      Loc2    : string             ;
+      ColStr  : string             ;
+      LineStr : string             ;
+      Tag     : string             ;
+      Rest    : string             ;
+      Rule    : string             ;
+      Msg     : string             ;
+      ClipText: string             ;
+      Lines   : TStringList        ;
+      SB      : TStringBuilder     ;
+      Rows    : TList<TCopyDiagRow>;
+      Row     : TCopyDiagRow       ;
+      i       : Integer            ;
+      lb      : Integer            ;
+      rb      : Integer            ;
+      c1      : Integer            ;
+      c2      : Integer            ;
+      P       : Integer            ;
+      LineNo  : Integer            ;
+      ColNo   : Integer            ;
+      Count   : Integer            ;
+      SevInt  : Integer            ;
+      Params  : TJSONObject        ;
+      DObj    : TJSONObject        ;
+      RangeObj: TJSONObject        ;
+      StartObj: TJSONObject        ;
+      EndObj  : TJSONObject        ;
+      Arr     : TJSONArray         ;
     begin
-      Line:= Lines[i];
-      lb:= Pos('[', Line); rb:= Pos(']', Line);
-      if (lb = 0) or (rb = 0) or (rb < lb) then Continue; { not a finding line }
-      Loc:= Trim(Copy(Line, 1, lb - 1));
-      c2:= LastDelimiter(':', Loc); if c2 <= 1 then Continue;
-      ColStr:= Copy(Loc, c2 + 1, MaxInt);
-      Loc2:= Copy(Loc, 1, c2 - 1);
-      c1:= LastDelimiter(':', Loc2); if c1 <= 1 then Continue;
-      LineStr:= Copy(Loc2, c1 + 1, MaxInt);
-      Tag:= LowerCase(Copy(Line, lb + 1, rb - lb - 1));
-      Rest:= Trim(Copy(Line, rb + 1, MaxInt));
-      P:= Pos(':', Rest);
-      if P > 0 then
-      begin Rule:= Trim(Copy(Rest, 1, P - 1)); Msg:= Trim(Copy(Rest, P + 1, MaxInt)); end
-      else
-      begin Rule:= ''; Msg:= Rest; end;
-      LineNo:= StrToIntDef(Trim(LineStr), 1);
-      ColNo := StrToIntDef(Trim(ColStr ), 1);
 
-      { Collect the clipboard row; sorted by (line, col) after the loop so the
-        pasted list is in file order, not the engine's rule-grouped order. }
-      Row.LineNo:= LineNo;
-      Row.ColNo := ColNo ;
-      Row.Text  := Format('%s(%d,%d): %s %s: %s', [FilePath, LineNo, ColNo, Tag, Rule, Msg]);
-      Rows.Add(Row);
-      Inc(Count);
+      Lines := TStringList        .Create;
+      SB    := TStringBuilder     .Create;
+      Rows  := TList<TCopyDiagRow>.Create;
+      Params:= TJSONObject        .Create;
+      Arr   := TJSONArray         .Create;
+      try
+        Lines.Text:= Output;
+        Count:= 0;
+        for i:= 0 to Lines.Count - 1 do
+        begin
+          Line:= Lines[i];
+          lb:= Pos('[', Line); rb:= Pos(']', Line);
+          if (lb = 0) or (rb = 0) or (rb < lb) then Continue; { not a finding line }
+          Loc:= Trim(Copy(Line, 1, lb - 1));
+          c2:= LastDelimiter(':', Loc); if c2 <= 1 then Continue;
+          ColStr:= Copy(Loc, c2 + 1, MaxInt);
+          Loc2:= Copy(Loc, 1, c2 - 1);
+          c1:= LastDelimiter(':', Loc2); if c1 <= 1 then Continue;
+          LineStr:= Copy(Loc2, c1 + 1, MaxInt);
+          Tag:= LowerCase(Copy(Line, lb + 1, rb - lb - 1));
+          Rest:= Trim(Copy(Line, rb + 1, MaxInt));
+          P:= Pos(':', Rest);
+          if P > 0 then
+          begin Rule:= Trim(Copy(Rest, 1, P - 1)); Msg:= Trim(Copy(Rest, P + 1, MaxInt)); end
+          else
+          begin Rule:= ''; Msg:= Rest; end;
+          LineNo:= StrToIntDef(Trim(LineStr), 1);
+          ColNo := StrToIntDef(Trim(ColStr ), 1);
 
-      { cache entry (LSP-style, 0-based) so EditViewNotifier paints it }
-      if Pos('error', Tag) > 0 then SevInt:= 1
-      else if Pos('warn', Tag) > 0 then SevInt:= 2
-      else if Pos('hint', Tag) > 0 then SevInt:= 4
-      else SevInt:= 3;
-      StartObj:= TJSONObject.Create;
-      StartObj.AddPair('line'     , TJSONNumber.Create(LineNo - 1));
-      StartObj.AddPair('character', TJSONNumber.Create(ColNo  - 1));
-      EndObj:= TJSONObject.Create;
-      EndObj.AddPair('line', TJSONNumber.Create(LineNo - 1));
-      EndObj.AddPair('character', TJSONNumber.Create(ColNo + 1));
-      RangeObj:= TJSONObject.Create;
-      RangeObj.AddPair('start', StartObj);
-      RangeObj.AddPair('end'  , EndObj  );
-      DObj:= TJSONObject.Create;
-      DObj.AddPair('range', RangeObj);
-      DObj.AddPair('severity', TJSONNumber.Create(SevInt));
-      DObj.AddPair('source' , 'lint');
-      DObj.AddPair('code'   , Rule  );
-      DObj.AddPair('message', Msg   );
-      Arr.AddElement(DObj);
-    end; // for
+          { Collect the clipboard row; sorted by (line, col) after the loop so the
+            pasted list is in file order, not the engine's rule-grouped order. }
+          Row.LineNo:= LineNo;
+          Row.ColNo := ColNo ;
+          Row.Text  := Format('%s(%d,%d): %s %s: %s', [FilePath, LineNo, ColNo, Tag, Rule, Msg]);
+          Rows.Add(Row);
+          Inc(Count);
 
-    { Sort the clipboard rows by (line, column) -- stable enough for the pane to
-      match -- then emit them in file order. }
-    Rows.Sort(TComparer<TCopyDiagRow>.Construct(
-      function(const L, R: TCopyDiagRow): Integer
-      begin
-        Result:= L.LineNo - R.LineNo;
-        if Result = 0 then Result:= L.ColNo - R.ColNo;
-      end));
-    for i:= 0 to Rows.Count - 1 do
-      SB.AppendLine(Rows[i].Text);
+          { cache entry (LSP-style, 0-based) so EditViewNotifier paints it }
+          if Pos('error', Tag) > 0 then SevInt:= 1
+          else if Pos('warn', Tag) > 0 then SevInt:= 2
+          else if Pos('hint', Tag) > 0 then SevInt:= 4
+          else SevInt:= 3;
+          StartObj:= TJSONObject.Create;
+          StartObj.AddPair('line'     , TJSONNumber.Create(LineNo - 1));
+          StartObj.AddPair('character', TJSONNumber.Create(ColNo  - 1));
+          EndObj:= TJSONObject.Create;
+          EndObj.AddPair('line', TJSONNumber.Create(LineNo - 1));
+          EndObj.AddPair('character', TJSONNumber.Create(ColNo + 1));
+          RangeObj:= TJSONObject.Create;
+          RangeObj.AddPair('start', StartObj);
+          RangeObj.AddPair('end'  , EndObj  );
+          DObj:= TJSONObject.Create;
+          DObj.AddPair('range', RangeObj);
+          DObj.AddPair('severity', TJSONNumber.Create(SevInt));
+          DObj.AddPair('source' , 'lint');
+          DObj.AddPair('code'   , Rule  );
+          DObj.AddPair('message', Msg   );
+          Arr.AddElement(DObj);
+        end; // for
 
-    Params.AddPair('diagnostics', Arr   ); { Arr ownership -> Params }
-    Cache .Update (FilePath     , Params);
-    if (ES <> nil) and (ES.TopView <> nil) then
-    try ES.TopView.Paint; except end;
+        { Sort the clipboard rows by (line, column) -- stable enough for the pane to
+          match -- then emit them in file order. }
+        Rows.Sort(TComparer<TCopyDiagRow>.Construct(
+          function(const L, R: TCopyDiagRow): Integer
+          begin
+            Result:= L.LineNo - R.LineNo;
+            if Result = 0 then Result:= L.ColNo - R.ColNo;
+          end));
+        for i:= 0 to Rows.Count - 1 do
+          SB.AppendLine(Rows[i].Text);
 
-    if Count = 0 then ShowMessage(Format('drag-lint: no diagnostics for %s.', [ExtractFileName(FilePath)]))
-    else
-    begin
-      ClipText:= Format('drag-lint diagnostics for %s (%d):'#13#10'%s', [ExtractFileName(FilePath), Count, SB.ToString]);
-      Vcl.Clipbrd.Clipboard.AsText:= ClipText;
-      ShowMessage(Format( 'drag-lint: %d diagnostic(s) copied to the clipboard and shown in the gutter.', [Count]));
-    end;
-  finally
-    SB.Free;
-    Rows.Free;
-    Lines.Free;
-    Params.Free; { frees Arr + child objects }
-  end; // try
+        Params.AddPair('diagnostics', Arr   ); { Arr ownership -> Params }
+        Cache .Update (FilePath     , Params);
+        if (ES <> nil) and (ES.TopView <> nil) then
+        try ES.TopView.Paint; except on E: Exception do DLT('diag', 'repaint failed: ' + E.Message); end;
+
+        if Count = 0 then ShowMessage(Format('drag-lint: no diagnostics for %s.', [ExtractFileName(FilePath)]))
+        else
+        begin
+          ClipText:= Format('drag-lint diagnostics for %s (%d):'#13#10'%s', [ExtractFileName(FilePath), Count, SB.ToString]);
+          Vcl.Clipbrd.Clipboard.AsText:= ClipText;
+          ShowMessage(Format( 'drag-lint: %d diagnostic(s) copied to the clipboard and shown in the gutter.', [Count]));
+        end;
+      finally
+        SB.Free;
+        Rows.Free;
+        Lines.Free;
+        Params.Free; { frees Arr + child objects }
+      end; // try
+    end, COPY_DIAG_STALL_MS);
 end; // procedure
 
 procedure InvokeOpenLog(Sender: TObject);
@@ -4521,25 +4558,19 @@ end; // procedure
   query JSON now carries "file". '' if not found in ADb. Used by the hover
   def-row click so it navigates for project AND library defs while the popup
   display stays clean (the path is resolved on click, never shown). }
-function DLResolveQnameFile(const AQName, ADb: string): string;
+{ The `file` of the first row of a `query --qname --json` answer; '' when none. }
+function DLParseQnameFile(const AOutput: string): string;
 var
-  Cmd   : string     ;
-  Output: string     ;
-  V     : TJSONValue ;
-  Arr   : TJSONArray ;
-  Obj   : TJSONObject;
-  P     : Integer    ;
+  V  : TJSONValue ;
+  Arr: TJSONArray ;
+  Obj: TJSONObject;
+  P  : Integer    ;
 begin
   Result:= '';
-  if (AQName = '') or (ADb = '') or not FileExists(ADb) then Exit;
-  Cmd:= Format('"%s" query --qname "%s" --db "%s" --json', [DLExe64, AQName, ADb]);
-  Output:= '';
-  RunAndCaptureStdout(Cmd, Output, 15000);
-  P:= Pos('[', Output); { skip any "(loaded defaults...)" banner prefix }
+  P:= Pos('[', AOutput); { skip any "(loaded defaults...)" banner prefix }
   if P <= 0 then Exit;
-  Output:= Copy(Output, P, MaxInt);
   V:= nil;
-  try V:= TJSONObject.ParseJSONValue(Output); except V:= nil; end;
+  try V:= TJSONObject.ParseJSONValue(Copy(AOutput, P, MaxInt)); except on E: Exception do DLT('hover', 'qname answer unreadable: ' + E.Message); end;
   try
     if (V is TJSONArray) then
     begin
@@ -4554,6 +4585,36 @@ begin
     V.Free;
   end;
 end; // function
+
+{ Looks AQName up in ADbs[AIndex..], in order, off the main thread (IDE-MAINTHREAD-CLI),
+  and hands ANext the first file that exists; '' when no index has it. }
+procedure DLResolveQnameFileThen(const AQName: string; const ADbs: TArray<string>; AIndex: Integer; const ANext: TProc<string>);
+const
+  QNAME_QUERY_STALL_MS = 15000;
+begin
+  if AIndex > High(ADbs) then
+  begin
+    ANext('');
+    Exit;
+  end;
+  if (AQName = '') or (ADbs[AIndex] = '') or not FileExists(ADbs[AIndex]) then
+  begin
+    DLResolveQnameFileThen(AQName, ADbs, AIndex + 1, ANext);
+    Exit;
+  end;
+  var QName: string:= AQName;
+  var Dbs: TArray<string>:= ADbs;
+  var Next: TProc<string>:= ANext;
+  GEditorCommandRun.Start(Format('"%s" query --qname "%s" --db "%s" --json', [DLExe64, AQName, ADbs[AIndex]]), QNAME_QUERY_STALL_MS,
+    procedure(AExitCode: Integer; const AOutput: string)
+    var
+      Found: string;
+    begin
+      Found:= DLParseQnameFile(AOutput);
+      if (Found <> '') and FileExists(Found) then Next(Found)
+      else DLResolveQnameFileThen(QName, Dbs, AIndex + 1, Next);
+    end);
+end; // procedure
 
 { ---- Uses & Dependencies ---- }
 
@@ -5072,16 +5133,7 @@ var
   Proj    : string            ;
   LibDb   : string            ;
   Cmd     : string            ;
-  Output  : string            ;
   MS      : IOTAModuleServices;
-  V       : TJSONValue        ;
-  Arr     : TJSONArray        ;
-  Obj     : TJSONObject       ;
-  i       : Integer           ;
-  U       : string            ;
-  Combined: string            ;
-  MsgList : string            ;
-  Units   : TStringList       ;
 begin
   if not DLActivePas(Pas) then begin ShowMessage('drag-lint: open a .pas unit first.'); Exit; end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
@@ -5096,83 +5148,98 @@ begin
   Cmd:= Format('"%s" check-unit "%s" --resolve-uses --db "%s" --format json', [DLExe64, Pas, LibDb]);
   if Proj <> '' then Cmd:= Cmd + Format(' --project "%s"', [Proj]);
   DLT('uses', 'suggest-missing: ' + Cmd);
-  Output:= '';
-  RunAndCaptureStdout(Cmd, Output, 90000);
+  { IDE-MAINTHREAD-CLI: check-unit compiles the unit, up to 90 s with the IDE frozen. }
+  GEditorCommandRun.Start(Cmd, CHECK_UNIT_STALL_MS,
+    procedure(ExitCode: Integer; const Output: string)
+    var
+      V       : TJSONValue ;
+      Arr     : TJSONArray ;
+      Obj     : TJSONObject;
+      i       : Integer    ;
+      U       : string     ;
+      Combined: string     ;
+      MsgList : string     ;
+      Units   : TStringList;
+    begin
 
-  Units:= TStringList.Create;
-  try
-    Units.Sorted    := True;
-    Units.Duplicates:= dupIgnore;
-    V:= nil;
-    try V:= TJSONObject.ParseJSONValue(Output); except V:= nil; end;
-    try
-      if V is TJSONArray then
-      begin
-        Arr:= V as TJSONArray;
-        for i:= 0 to Arr.Count - 1 do
-          if Arr.Items[i] is TJSONObject then
+      Units:= TStringList.Create;
+      try
+        Units.Sorted    := True;
+        Units.Duplicates:= dupIgnore;
+        V:= nil;
+        try V:= TJSONObject.ParseJSONValue(Output); except on E: Exception do DLT('uses', 'check-unit answer unreadable: ' + E.Message); end;
+        try
+          if V is TJSONArray then
           begin
-            Obj:= Arr.Items[i] as TJSONObject;
-            U:= '';
-            if Obj.TryGetValue<string>('addUnit', U) and (Trim(U) <> '') then Units.Add(Trim(U));
+            Arr:= V as TJSONArray;
+            for i:= 0 to Arr.Count - 1 do
+              if Arr.Items[i] is TJSONObject then
+              begin
+                Obj:= Arr.Items[i] as TJSONObject;
+                U:= '';
+                if Obj.TryGetValue<string>('addUnit', U) and (Trim(U) <> '') then Units.Add(Trim(U));
+              end;
           end;
-      end;
-    finally
-      V.Free;
-    end; // try
+        finally
+          V.Free;
+        end; // try
 
-    DLT('uses', Format('suggest-missing: %d unit(s) [%s]', [Units.Count, Units.CommaText]));
-    if Units.Count = 0 then
-    begin
-      ShowMessage('drag-lint: no missing units to add.'#13#10 + '(No undeclared-identifier errors, or the symbols could not be resolved '#13#10 +
-        'from the library index. Tip: build the project first so dependencies '#13#10 + 'resolve from DCUs.)');
-      Exit;
-    end;
+        DLT('uses', Format('suggest-missing: %d unit(s) [%s]', [Units.Count, Units.CommaText]));
+        if Units.Count = 0 then
+        begin
+          ShowMessage('drag-lint: no missing units to add.'#13#10 + '(No undeclared-identifier errors, or the symbols could not be resolved '#13#10 +
+            'from the library index. Tip: build the project first so dependencies '#13#10 + 'resolve from DCUs.)');
+          Exit;
+        end;
 
-    MsgList:= Units.CommaText;
-    if MessageDlg(
-      Format('drag-lint resolved %d missing unit(s):'#13#10#13#10'%s'#13#10#13#10 + 'Add them to the IMPLEMENTATION uses clause?', [Units.Count, MsgList]), mtConfirmation,
-      [mbYes, mbNo], 0) <> mrYes then Exit;
+        MsgList:= Units.CommaText;
+        if MessageDlg(
+          Format('drag-lint resolved %d missing unit(s):'#13#10#13#10'%s'#13#10#13#10 + 'Add them to the IMPLEMENTATION uses clause?', [Units.Count, MsgList]), mtConfirmation,
+          [mbYes, mbNo], 0) <> mrYes then Exit;
 
-    if DLAddUnitsToImplUses(Units.ToStringArray, Combined) then
-    begin
-      DLT('uses', 'inserted: ' + Combined);
-      ShowMessage('drag-lint: added to the implementation uses clause:'#13#10 + Combined);
-    end
-    else ShowMessage('drag-lint: could not locate the implementation uses clause.'#13#10 + 'Add manually: ' + MsgList);
-  finally
-    Units.Free;
-  end; // try
+        if DLAddUnitsToImplUses(Units.ToStringArray, Combined) then
+        begin
+          DLT('uses', 'inserted: ' + Combined);
+          ShowMessage('drag-lint: added to the implementation uses clause:'#13#10 + Combined);
+        end
+        else ShowMessage('drag-lint: could not locate the implementation uses clause.'#13#10 + 'Add manually: ' + MsgList);
+      finally
+        Units.Free;
+      end; // try
+    end);
 end; // procedure
 
 { Find the unit that fixes the undeclared identifier on the caret line: first
   from a cached diagnostic message ("add unit X"), else by running check-unit
-  --resolve-uses now and matching the caret line. }
-function DLCursorUndeclaredUnit(out AUnit: string): Boolean;
+  --resolve-uses and matching the caret line, off the main thread (IDE-MAINTHREAD-CLI):
+  it compiles the unit, up to CHECK_UNIT_STALL_MS. ANext gets the unit, or '' for no
+  suggestion; it runs at once on the fast path, when the engine answers otherwise. }
+procedure DLCursorUndeclaredUnitThen(const ANext: TProc<string>);
 var
   ESS      : IOTAEditorServices         ;
   EV       : IOTAEditView               ;
   FileName : string                     ;
-  Pas      : string                     ;
   Proj     : string                     ;
   LibDb    : string                     ;
   Cmd      : string                     ;
-  Output   : string                     ;
   U        : string                     ;
   CaretRow0: Integer                    ;
-  i        : Integer                    ;
-  FLine    : Integer                    ;
   Diags    : TArray<TDragLintDiagnostic>;
   D        : TDragLintDiagnostic        ;
   MS       : IOTAModuleServices         ;
-  V        : TJSONValue                 ;
-  Arr      : TJSONArray                 ;
-  Obj      : TJSONObject                ;
+  Next     : TProc<string>              ;
 begin
-  Result:= False; AUnit:= '';
-  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then Exit;
+  if not Supports(BorlandIDEServices, IOTAEditorServices, ESS) then
+  begin
+    ANext('');
+    Exit;
+  end;
   EV:= ESS.TopView;
-  if (EV = nil) or (EV.Buffer = nil) then Exit;
+  if (EV = nil) or (EV.Buffer = nil) then
+  begin
+    ANext('');
+    Exit;
+  end;
   FileName:= EV.Buffer.FileName;
   CaretRow0:= EV.Position.Row - 1; { cache is 0-based }
   if CaretRow0 < 0 then CaretRow0:= 0;
@@ -5183,45 +5250,78 @@ begin
   for D in Diags do
   begin
     U:= DLExtractAddUnit(D.Message);
-    if U <> '' then begin AUnit:= U; DLT('uses', 'quickfix: cache -> ' + U); Exit(True); end;
+    if U <> '' then
+    begin
+      DLT('uses', 'quickfix: cache -> ' + U);
+      ANext(U);
+      Exit;
+    end;
   end;
 
-  { 2) fallback: run check-unit --resolve-uses now and match the caret line. }
-  if not SameText(ExtractFileExt(FileName), '.pas') then Exit;
+  { 2) fallback: run check-unit --resolve-uses and match the caret line. }
+  if not SameText(ExtractFileExt(FileName), '.pas') then
+  begin
+    ANext('');
+    Exit;
+  end;
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
-  Pas:= FileName; Proj:= GetActiveProjectFile; LibDb:= DLLibraryDb;
-  if not FileExists(LibDb) then Exit;
-  Cmd:= Format('"%s" check-unit "%s" --resolve-uses --db "%s" --format json', [DLExe64, Pas, LibDb]);
+  Proj:= GetActiveProjectFile;
+  LibDb:= DLLibraryDb;
+  if not FileExists(LibDb) then
+  begin
+    ANext('');
+    Exit;
+  end;
+  Cmd:= Format('"%s" check-unit "%s" --resolve-uses --db "%s" --format json', [DLExe64, FileName, LibDb]);
   if Proj <> '' then Cmd:= Cmd + Format(' --project "%s"', [Proj]);
-  Output:= '';
-  RunAndCaptureStdout(Cmd, Output, 90000);
-  V:= nil;
-  try V:= TJSONObject.ParseJSONValue(Output); except V:= nil; end;
-  try
-    if V is TJSONArray then
+  Next:= ANext;
+  GEditorCommandRun.Start(Cmd, CHECK_UNIT_STALL_MS,
+    procedure(AExitCode: Integer; const AOutput: string)
+    var
+      V      : TJSONValue ;
+      Arr    : TJSONArray ;
+      Obj    : TJSONObject;
+      i      : Integer    ;
+      AnsLine: Integer    ;
+      Found  : string     ;
+      AddUnit: string     ;
     begin
-      Arr:= V as TJSONArray;
-      { prefer the finding on the caret line }
-      for i:= 0 to Arr.Count - 1 do
-        if Arr.Items[i] is TJSONObject then
+      Found:= '';
+      V:= nil;
+      try V:= TJSONObject.ParseJSONValue(AOutput); except on E: Exception do DLT('uses', 'check-unit answer unreadable: ' + E.Message); end;
+      try
+        if V is TJSONArray then
         begin
-          Obj:= Arr.Items[i] as TJSONObject; U:= ''; FLine:= -1;
-          Obj.TryGetValue<string>('addUnit', U);
-          Obj.TryGetValue<Integer>('line', FLine);
-          if (Trim(U) <> '') and (FLine = CaretRow0 + 1) then
-          begin AUnit:= Trim(U); DLT('uses', 'quickfix: engine(line) -> ' + AUnit); Exit(True); end;
+          Arr:= V as TJSONArray;
+          { prefer the finding on the caret line }
+          for i:= 0 to Arr.Count - 1 do
+            if Arr.Items[i] is TJSONObject then
+            begin
+              Obj:= Arr.Items[i] as TJSONObject;
+              AddUnit:= '';
+              AnsLine:= -1;
+              Obj.TryGetValue<string>('addUnit', AddUnit);
+              Obj.TryGetValue<Integer>('line', AnsLine);
+              if (Trim(AddUnit) <> '') and (AnsLine = CaretRow0 + 1) then
+              begin
+                Found:= Trim(AddUnit);
+                DLT('uses', 'quickfix: engine(line) -> ' + Found);
+                Break;
+              end;
+            end;
+          { v0.46 review (M): NO "first resolvable in the unit" fallback for the
+            CURSOR quick-fix -- it could insert a unit unrelated to the symbol under
+            the caret (especially when an uncompiled project yields many spurious
+            undeclared ids). If nothing matches the caret line, report no suggestion
+            and let InvokeQuickFixUses tell the user to put the caret on the offending
+            line. The whole-unit InvokeSuggestUses keeps its own broader behaviour. }
         end;
-      { v0.46 review (M): NO "first resolvable in the unit" fallback for the
-        CURSOR quick-fix -- it could insert a unit unrelated to the symbol under
-        the caret (especially when an uncompiled project yields many spurious
-        undeclared ids). If nothing matches the caret line, return False and let
-        InvokeQuickFixUses tell the user to put the caret on the offending line.
-        The whole-unit InvokeSuggestUses keeps its own broader behaviour. }
-    end;
-  finally
-    V.Free;
-  end; // try
-end; // function
+      finally
+        V.Free;
+      end; // try
+      Next(Found);
+    end);
+end; // procedure
 
 { Quick-fix: add the unit for the undeclared identifier on the caret line. }
 procedure InvokeQuickFixUses(Sender: TObject);
@@ -5237,14 +5337,20 @@ begin
     else ShowMessage('drag-lint: ' + U + ' is already listed, or no ' + TUsesText.SectionWord(Sec) + ' section was found. Add manually: ' + U);
     Exit;
   end;
-  if not DLCursorUndeclaredUnit(U) then
-  begin
-    ShowMessage('drag-lint: no missing-unit suggestion for the line at the cursor.'#13#10 +
-      '(Put the caret on the line with the undeclared identifier; build the project first so deps resolve.)');
-    Exit;
-  end;
-  if DLAddUnitsToImplUses([U], Ins) then ShowMessage('drag-lint: added unit to the implementation uses clause: ' + Ins)
-  else ShowMessage('drag-lint: could not locate the implementation uses clause. Add manually: ' + U);
+  DLCursorUndeclaredUnitThen(
+    procedure(AUnit: string)
+    var
+      Added: string;
+    begin
+      if AUnit = '' then
+      begin
+        ShowMessage('drag-lint: no missing-unit suggestion for the line at the cursor.'#13#10 +
+          '(Put the caret on the line with the undeclared identifier; build the project first so deps resolve.)');
+        Exit;
+      end;
+      if DLAddUnitsToImplUses([AUnit], Added) then ShowMessage('drag-lint: added unit to the implementation uses clause: ' + Added)
+      else ShowMessage('drag-lint: could not locate the implementation uses clause. Add manually: ' + AUnit);
+    end);
 end;
 
 { Pull the unit name out of a compiler H2443 message like
@@ -5762,7 +5868,6 @@ var
   Db    : string;
   Dir   : string;
   Cmd   : string;
-  Output: string;
 begin
   Db:= ResolvePrimaryIndexDb;
   if Db = '' then begin ShowMessage('drag-lint: no project index.'); Exit; end;
@@ -5770,10 +5875,13 @@ begin
   try TDirectory.CreateDirectory(Dir); except end;
   Cmd:= Format('"%s" export obsidian --db "%s" --output-dir "%s"', [DLExe64, Db, Dir]);
   DLT('menu', 'run: ' + Cmd);
-  Output:= '';
-  RunAndCaptureStdout(Cmd, Output, 180000);
-  ShellExecute(0, 'open', PChar(Dir), nil, nil, SW_SHOWNORMAL);
-  ShowMessage('drag-lint: exported Obsidian notes to'#13#10 + Dir);
+  { IDE-MAINTHREAD-CLI: an export walks the whole index, up to three minutes with the IDE frozen. }
+  RunCliAsync(Cmd,
+    procedure(ExitCode: Integer; const Output: string)
+    begin
+      ShellExecute(0, 'open', PChar(Dir), nil, nil, SW_SHOWNORMAL);
+      ShowMessage('drag-lint: exported Obsidian notes to'#13#10 + Dir);
+    end, EXPORT_STALL_MS);
 end;
 
 
@@ -7138,12 +7246,13 @@ begin
     popup display stays clean; the path is resolved here, on click. }
       DragLint.Plugin.HoverForm.GOnNavigateToQname:=
       procedure(AQName: string; ALine: Integer)
-        var F: string;
         begin
-          F:= DLResolveQnameFile(AQName, ResolvePrimaryIndexDb);
-          if F = '' then F:= DLResolveQnameFile(AQName, DLLibraryDb);
-          if (F <> '') and FileExists(F) then DLNavigateToSource(F, ALine)
-          else ShowMessage('drag-lint: could not locate ' + AQName + ' in the project or library index; open it manually.');
+          DLResolveQnameFileThen(AQName, [ResolvePrimaryIndexDb, DLLibraryDb], 0,
+            procedure(AFile: string)
+            begin
+              if AFile <> '' then DLNavigateToSource(AFile, ALine)
+              else ShowMessage('drag-lint: could not locate ' + AQName + ' in the project or library index; open it manually.');
+            end);
         end;
 
         { TEMP debug telemetry: fresh log per session + record the resolved engine. }
@@ -7250,6 +7359,7 @@ begin
   is only ever consulted; if the server is down it answers False and the cache
   falls back to spawning, so installing it early costs nothing. }
 SetCallerCountsHook(LspCallerCounts);
+GEditorCommandRun:= TCliRunSlot.Create;
 
 finalization
 { TEARDOWN BRACKETING. An access violation while the IDE closes leaves NOTHING
@@ -7261,6 +7371,7 @@ finalization
   TDStep('Editor: finalization BEGIN');
 UnregisterDragLintMenu;
 
+  FreeAndNil(GEditorCommandRun);
   TDStep('Editor: finalization END');
 
 end.

@@ -87,7 +87,7 @@ uses
   , DragLint.Plugin.ReportText  // dl:unit DragLint.Plugin.ReportText accepted -- REPORT_QUESTIONS is the catalog this unit builds the menu from; it travels with the unit by design
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.IndexJob  // dl:unit DragLint.Plugin.IndexJob accepted -- a section reindex shares the save-time reindex ceiling INDEX_JOB_TIMEOUT_MS on purpose
-  , DragLint.Plugin.ProcRun
+  , DragLint.Plugin.CliAsync
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.Theme
   , DragLint.Plugin.Fonts
@@ -273,22 +273,39 @@ begin
     end;
 end;
 
-{ typeat's resolved name at the caret, or the bare identifier. }
-function CaretTarget(const pView: IOTAEditView; const pInFile: string): string;
 var
-  Db    : string;
-  Answer: string;
+  { The caret's typeat in flight; a newer report question supersedes it. Main thread
+    only; freed at unit finalization, which abandons the run. }
+  GCaretRun: TCliRunSlot = nil;
+
+{ Hands ANext typeat's resolved name at the caret, or the bare identifier.
+  IDE-MAINTHREAD-CLI: typeat can take TYPEAT_TIMEOUT_MS, so it runs off the main thread;
+  the prompt comes up when it answers. The caret position and the fallback are read
+  now, so moving the caret meanwhile changes neither. }
+procedure CaretTargetThen(const pView: IOTAEditView; const pInFile: string; const pNext: TProc<string>);
+var
+  Db      : string;
+  Fallback: string;
 begin
-  Result:= '';
+  Fallback:= IdentifierAtCursor;
   Db:= ResolvePrimaryIndexDb;
-  if Db <> '' then
+  if Db = '' then
   begin
-    var Cmd: string:= Format('"%s" typeat "%s:%d:%d" --db "%s" --format json',
-      [DragLintExe, pInFile, pView.Position.Row, pView.Position.Column, Db]);
-    DebugLog('Reports: ' + Cmd);
-    if RunCaptureStdout(Cmd, Answer, TYPEAT_TIMEOUT_MS) = 0 then Result:= ParseTypeAtResolved(Answer);
+    pNext(Fallback);
+    Exit;
   end;
-  if Result = '' then Result:= IdentifierAtCursor;
+  var Cmd: string:= Format('"%s" typeat "%s:%d:%d" --db "%s" --format json',
+    [DragLintExe, pInFile, pView.Position.Row, pView.Position.Column, Db]);
+  DebugLog('Reports: ' + Cmd);
+  if GCaretRun = nil then GCaretRun:= TCliRunSlot.Create;
+  GCaretRun.Start(Cmd, TYPEAT_TIMEOUT_MS,
+    procedure(AExitCode: Integer; const AOutput: string)
+    var
+      Resolved: string;
+    begin
+      Resolved:= if AExitCode = 0 then ParseTypeAtResolved(AOutput) else '';
+      pNext(if Resolved = '' then Fallback else Resolved);
+    end);
 end;
 
 function PromptTarget(const pQuestion: TReportQuestion; var pTarget: string): Boolean;
@@ -320,31 +337,46 @@ begin
   Result:= IsValidReportTarget(pTo);
 end;
 
-function ChooseTarget(const pQuestion: TReportQuestion; const pInFile: string; out pTarget: string): Boolean;
+{ Works out the question's target and hands it to pNext: at once, or from the caret's
+  typeat when that answers. pNext does not run when the user cancels a prompt. }
+procedure ChooseTargetThen(const pQuestion: TReportQuestion; const pInFile: string; const pNext: TProc<string>);
 var
-  View: IOTAEditView;
+  View  : IOTAEditView;
+  Target: string;
+  Q     : TReportQuestion;
 begin
-  pTarget:= '';
-  case pQuestion.Kind of
-    rtkProject:
+  Q:= pQuestion;
+  case Q.Kind of
+    rtkProject: pNext(PROJECT_TARGET);
+    rtkUnit   :
       begin
-        pTarget:= PROJECT_TARGET;
-        Exit(True);
+        Target:= ChangeFileExt(ExtractFileName(pInFile), '');
+        if PromptTarget(Q, Target) then pNext(Target);
       end;
-    rtkUnit   : pTarget:= ChangeFileExt(ExtractFileName(pInFile), '');
-    rtkName   : pTarget:= '';
+    rtkName   :
+      begin
+        Target:= '';
+        if PromptTarget(Q, Target) then pNext(Target);
+      end;
   else
-    if not SaveAllIfModified then Exit(False);
+    if not SaveAllIfModified then Exit;
     View:= ActiveEditView;
     if View = nil then
     begin
       ShowMessage(MSG_PREFIX + 'no active editor.');
-      Exit(False);
+      Exit;
     end;
-    pTarget:= CaretTarget(View, pInFile);
-    if QuestionTakesFormControl(pQuestion.Id) then pTarget:= ControlTargetFromDfm(pTarget, pInFile);
+    var InFile: string:= pInFile;
+    var Next: TProc<string>:= pNext;
+    CaretTargetThen(View, InFile,
+      procedure(ACaret: string)
+      var
+        Chosen: string;
+      begin
+        Chosen:= if QuestionTakesFormControl(Q.Id) then ControlTargetFromDfm(ACaret, InFile) else ACaret;
+        if PromptTarget(Q, Chosen) then Next(Chosen);
+      end);
   end;
-  Result:= PromptTarget(pQuestion, pTarget);
 end;
 
 { ---- the answer ---- }
@@ -485,18 +517,29 @@ procedure InvokeReportQuestion(Sender: TObject);
 var
   Exe   : string;
   InFile: string;
-  Target: string;
-  ToName: string;
 begin
   if not (Sender is TMenuItem) then Exit;
   var Idx: Integer:= TMenuItem(Sender).Tag;
   if (Idx < Low(REPORT_QUESTIONS)) or (Idx > High(REPORT_QUESTIONS)) then Exit;
   var Q: TReportQuestion:= REPORT_QUESTIONS[Idx];
-  if not (ResolveRunTools(Exe, InFile) and ChooseTarget(Q, InFile, Target)) then Exit;
-  ToName:= '';
-  if QuestionTakesSecondRoutine(Q.Id) and not PromptSecondRoutine(Q, Target, ToName) then Exit;
-  var Shown: string:= if ToName = '' then Target else Target + ' -> ' + ToName;
-  EnqueueReport(Q.Id, Shown, BuildAskCmdLine(Exe, Q.Id, Target, InFile, ToName));
+  if not ResolveRunTools(Exe, InFile) then Exit;
+  var ExeName: string:= Exe;
+  var FromFile: string:= InFile;
+  ChooseTargetThen(Q, InFile,
+    procedure(ATarget: string)
+    var
+      ToName: string;
+    begin
+      ToName:= '';
+      if QuestionTakesSecondRoutine(Q.Id) and not PromptSecondRoutine(Q, ATarget, ToName) then Exit;
+      var Shown: string:= if ToName = '' then ATarget else ATarget + ' -> ' + ToName;
+      EnqueueReport(Q.Id, Shown, BuildAskCmdLine(ExeName, Q.Id, ATarget, FromFile, ToName));
+    end);
 end;
+
+initialization
+
+finalization
+  FreeAndNil(GCaretRun);
 
 end.
