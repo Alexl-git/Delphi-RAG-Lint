@@ -164,6 +164,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.SharedScope.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ReadNeverAssigned.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.EffectRules.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.AncestorNotInProject.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.UsesAudit.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.RuleCache.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.Autofix.pas"/>

@@ -89,6 +89,7 @@
   "Wiki-Blocks-Authoring": "wiki-blocks-authoring",
   "allow": "allow",
   "ambiguous-calls": "ambiguous-calls",
+  "ancestor-not-in-project": "ancestor-not-in-project",
   "ask": "ask",
   "autofix-wave": "autofix-wave",
   "bench-context": "bench-context",

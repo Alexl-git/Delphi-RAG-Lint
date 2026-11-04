@@ -124,6 +124,7 @@ uses
   DRagLint.Lint.SharedScope in '..\lint\DRagLint.Lint.SharedScope.pas',
   DRagLint.Lint.ReadNeverAssigned in '..\lint\DRagLint.Lint.ReadNeverAssigned.pas',
   DRagLint.Lint.EffectRules in '..\lint\DRagLint.Lint.EffectRules.pas',
+  DRagLint.Lint.AncestorNotInProject in '..\lint\DRagLint.Lint.AncestorNotInProject.pas',
   DRagLint.Lint.UsesAudit in '..\lint\DRagLint.Lint.UsesAudit.pas',
   DRagLint.Lint.RuleCache in '..\lint\DRagLint.Lint.RuleCache.pas',
   DRagLint.Lint.Autofix in '..\lint\DRagLint.Lint.Autofix.pas',

@@ -9,6 +9,10 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.42.0-alpha
+
+* [Ancestor not in project (lint rule)](features/ancestor-not-in-project.md) -- Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library.
+
 ## 1.40.0-alpha
 
 * [Engine heartbeat: the IDE tells a busy engine from a stuck one](features/engine-heartbeat.md) -- A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving.

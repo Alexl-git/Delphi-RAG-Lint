@@ -2612,6 +2612,30 @@
       }
     },
     {
+      "id": "ancestor-not-in-project",
+      "title": "Ancestor not in project (lint rule)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.42.0-alpha",
+      "summary": "Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library",
+      "intro": "Read this to see when ancestor-not-in-project fires and how to fix it. It runs in lint-all over a project index plus the library index, and names the unit to add to the .dproj / .dpr.",
+      "wikiPage": "ancestor-not-in-project",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule ancestor-not-in-project"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-03",
+        "by": "alexanderl",
+        "build": "1.42.0-alpha"
+      }
+    },
+    {
       "id": "autofix-wave",
       "title": "Autofix for fixable rules",
       "group": "linting",
@@ -12175,6 +12199,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "address-of-local-returned"
+      },
+      {
+        "id": "rule.ancestor-not-in-project",
+        "title": "ancestor-not-in-project",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A form / frame / data module inherits from a class declared in no unit of the project and not in the platform library -- the project co... (project-wide, error)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule ancestor-not-in-project"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "ancestor-not-in-project"
       },
       {
         "id": "rule.application-terminate-in-library",

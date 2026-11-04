@@ -217,6 +217,7 @@ uses
   DRagLint.Lint.UnusedGlobal, { CollectUnusedGlobal -- 1.40 lane unusedg } // dl:unit DRagLint.Lint.UnusedGlobal accepted -- UNUSED_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectUnusedGlobal, the collector this unit calls
   DRagLint.Lint.ReadNeverAssigned, { CollectReadNeverAssigned -- owner request #5b } // dl:unit DRagLint.Lint.ReadNeverAssigned accepted -- READ_NEVER_ASSIGNED_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectReadNeverAssigned, the collector this unit calls
   DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
+  DRagLint.Lint.AncestorNotInProject, { ancestor-not-in-project (1.42 enum) }
   DRagLint.Lint.UsesAudit; { TUsesAuditor -- uses-movable-to-implementation (lane G8) } // dl:unit DRagLint.Lint.UsesAudit accepted -- USES_VERDICT_MOVE is how this unit reads the verdict TUsesAuditor returns; it travels with TUsesAuditor, the auditor this unit calls
 
 { Side-effect / operator / helper units that are legitimately used without any
@@ -4626,6 +4627,11 @@ begin
       scans every file's symbols, so it is OFF by default and OptedIn-gated. }
     if WantRule('dfm-event-handler-missing') then
       for var Hf in WholeGraph('dfm-event-handler-missing') do Findings.Add(Hf);
+    { ancestor-not-in-project (1.42 lane enum, owner ruling 2026-11-03): ERROR, ON by
+      default. One class scan plus a file-head read per form unit; needs the library index
+      (silent without it -- see the unit). }
+    if WantRule('ancestor-not-in-project') then
+      for var An in CollectAncestorNotInProject(AStore, ALibraryStore) do Findings.Add(An);
     if WantRule('dfm-password-edit-unmasked') then
       for var Pw in CollectDfmPasswordEditUnmasked(AStore) do Findings.Add(Pw);
     if WantRule('uses-movable-to-implementation') then

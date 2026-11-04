@@ -1,0 +1,2 @@
+object MyFrame: TMyFrame
+end

@@ -4,10 +4,10 @@ title: Autofix for fixable rules
 summary: lint --fix repairs findings of the 110 fixable rules; --json reports per finding whether it was applied; lint accepts a folder
 product: DL
 group: linting
-order: 30001
+order: 30002
 since: 1.37.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.42.0-alpha
 ---
 
 # Autofix for fixable rules

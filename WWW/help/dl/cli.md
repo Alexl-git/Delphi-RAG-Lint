@@ -1043,7 +1043,7 @@ Described in:
 
 ### lint-all
 
-Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field.
+Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library.
 
 ```text
 drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess]
@@ -1068,6 +1068,7 @@ drag-lint lint-all [--profile <name>] [--db <file.sqlite>] [--project <.dproj>] 
 
 Described in:
 
+* [Ancestor not in project (lint rule)](features/ancestor-not-in-project.md)
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md)
 * [Fix all in project](features/fix-all-in-project.md)
 * [Read but never assigned (lint rule)](features/read-never-assigned.md)
