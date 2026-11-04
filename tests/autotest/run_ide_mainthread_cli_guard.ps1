@@ -41,6 +41,7 @@ function Count-Spawns([string]$t) {
 $Rows = @(
   @{ Unit = 'DragLint.Plugin.SymbolSearchForm'; Budget = 0; Note = 'timer-driven search' }
   @{ Unit = 'DragLint.Plugin.SearchForm';       Budget = 0; Note = 'debounced search' }
+  @{ Unit = 'DragLint.Plugin.UsagesForm';       Budget = 0; Note = 'usages query' }
 )
 
 $failed = 0

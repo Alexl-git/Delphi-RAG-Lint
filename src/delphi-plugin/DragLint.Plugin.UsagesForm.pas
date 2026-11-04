@@ -41,7 +41,7 @@ uses
   , ToolsAPI
   , DragLint.Plugin.DbResolver
   , DragLint.Plugin.Settings
-  , DragLint.Plugin.ProcRun
+  , DragLint.Plugin.CliAsync
   , DragLint.Plugin.ExeResolver
   ;
 
@@ -59,6 +59,9 @@ begin
 end;
 
 { ---- TUsageNodeData: stores file + line in tree node.Data ---- }
+
+const
+  USAGES_QUERY_STALL_MS = 30000;
 
 type
   TUsageNodeData = class
@@ -82,6 +85,7 @@ type
       FDbPaths       : TArray<string>; { v0.40.3: multi-DB list }
       FWidth         : string        ; { v0.42: narrow|wide|very-wide }
       FLastCallerNode: TTreeNode     ;
+      FRun           : TCliRunSlot   ; { the query in flight; a newer one supersedes it }
       procedure BtnRefreshClick(Sender: TObject);
       procedure BtnCloseClick  (Sender: TObject);
       procedure TreeDblClick   (Sender: TObject);
@@ -90,6 +94,7 @@ type
       procedure FormDestroy(Sender: TObject);
       procedure ClearNodeData;
       procedure RunQuery;
+      procedure ShowResult(AExitCode: Integer; const AOutput: string);
       procedure ParseUsagesGrouped(const AOutput: string; out AParsed: Boolean);
       procedure NavigateToNode(ANode: TTreeNode);
       procedure ParseTextOutput(const AOutput: string);
@@ -166,16 +171,19 @@ begin
 
   FLastCallerNode:= nil;
   FWidth:= 'narrow';
+  FRun:= TCliRunSlot.Create;
 end; // constructor
 
 procedure TDragLintUsagesForm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
   Action:= caFree;
   GUsagesForm:= nil;
+  FRun.Cancel;  { nobody is left to read the answer }
 end;
 
 procedure TDragLintUsagesForm.FormDestroy(Sender: TObject);
 begin
+  FreeAndNil(FRun);  { abandons the run in flight: its answer never reaches a dead form }
   ClearNodeData;
 end;
 
@@ -541,8 +549,40 @@ end; // procedure
 procedure TDragLintUsagesForm.RunQuery;
 var
   CmdLine : string ;
+begin
+  FRun.Cancel;
+  FTree.Items.BeginUpdate;
+  try
+    ClearNodeData;
+    FTree.Items.Clear;
+    if FExePath = '' then AddNodeData(nil, '(drag-lint.exe path not configured)', '', 0)
+    else AddNodeData(nil, '(searching...)', '', 0);
+  finally
+    FTree.Items.EndUpdate;
+  end;
+  if FExePath = '' then Exit;
+
+  { v0.42: the new 'usages' command finds reads/writes/etc. (not just calls)
+    and supports the width selector. }
+  if FWidth = '' then FWidth:= 'narrow';
+  CmdLine:= Format('"%s" usages --name "%s" --width %s', [FExePath, FSymbolName, FWidth]);
+  { v0.40.3: emit one --db per resolved path. Falls back to legacy
+    single-DB if FDbPaths is empty but FDbPath is set. }
+  if Length(FDbPaths) > 0 then
+  begin
+    for var P in FDbPaths do
+      if P <> '' then CmdLine:= CmdLine + Format(' --db "%s"', [P]);
+  end
+  else if FDbPath <> '' then CmdLine:= CmdLine + Format(' --db "%s"', [FDbPath]);
+  CmdLine:= CmdLine + ' --format json';
+
+  { IDE-MAINTHREAD-CLI: a wide usages query can take many seconds on a large index. }
+  FRun.Start(CmdLine, USAGES_QUERY_STALL_MS, ShowResult);
+end; // procedure
+
+procedure TDragLintUsagesForm.ShowResult(AExitCode: Integer; const AOutput: string);
+var
   Output  : string ;
-  ExitCode: Integer;
   Parsed  : Boolean;
   i       : Integer;
 begin
@@ -551,35 +591,13 @@ begin
     ClearNodeData;
     FTree.Items.Clear;
 
-    if FExePath = '' then
-    begin
-      AddNodeData(nil, '(drag-lint.exe path not configured)', '', 0);
-      Exit;
-    end;
-
-    { v0.42: the new 'usages' command finds reads/writes/etc. (not just calls)
-      and supports the width selector. }
-    if FWidth = '' then FWidth:= 'narrow';
-    CmdLine:= Format('"%s" usages --name "%s" --width %s', [FExePath, FSymbolName, FWidth]);
-    { v0.40.3: emit one --db per resolved path. Falls back to legacy
-      single-DB if FDbPaths is empty but FDbPath is set. }
-    if Length(FDbPaths) > 0 then
-    begin
-      for var P in FDbPaths do
-        if P <> '' then CmdLine:= CmdLine + Format(' --db "%s"', [P]);
-    end
-    else if FDbPath <> '' then CmdLine:= CmdLine + Format(' --db "%s"', [FDbPath]);
-    CmdLine:= CmdLine + ' --format json';
-
-    ExitCode:= RunCaptureStdout(CmdLine, Output, 30000);
-
-    if ExitCode < 0 then
+    if AExitCode < 0 then
     begin
       AddNodeData(nil, '(failed to spawn drag-lint.exe)', '', 0);
       Exit;
     end;
 
-    Output:= Trim(Output);
+    Output:= Trim(AOutput);
 
     if (Length(Output) > 0) and (Output[1] = '{') then
     begin
