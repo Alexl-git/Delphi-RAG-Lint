@@ -3552,9 +3552,9 @@ begin
         for Line in Lines do
         begin
           LLine:= LowerCase(Line);
-          if (Pos(') error:', LLine) > 0) or (Pos(') fatal:', LLine) > 0) then Inc(ErrCount)
-          else if Pos(') warning:', LLine) > 0 then Inc(WarnCount)
-          else if (Pos(') hint:', LLine) > 0) or (Pos(') information:', LLine) > 0) then Inc(HintCount);
+          if LLine.Contains(') error:') or LLine.Contains(') fatal:') then Inc(ErrCount)
+          else if LLine.Contains(') warning:') then Inc(WarnCount)
+          else if LLine.Contains(') hint:') or LLine.Contains(') information:') then Inc(HintCount);
         end;
       finally
         Lines.Free;
@@ -4243,6 +4243,12 @@ begin
   { IDE-MAINTHREAD-CLI: a lint of a large unit froze the IDE until it answered. }
   RunCliAsync(CmdLine,
     procedure(ExitCode: Integer; const Output: string)
+    const
+      { DiagnosticSeverity, LSP numbering: what the paint cache stores }
+      LSP_SEV_ERROR = 1;
+      LSP_SEV_WARNING = 2;
+      LSP_SEV_INFO = 3;
+      LSP_SEV_HINT = 4;
     var
       Line    : string             ;
       Loc     : string             ;
@@ -4259,10 +4265,10 @@ begin
       Rows    : TList<TCopyDiagRow>;
       Row     : TCopyDiagRow       ;
       i       : Integer            ;
-      lb      : Integer            ;
-      rb      : Integer            ;
-      c1      : Integer            ;
-      c2      : Integer            ;
+      LBracket: Integer            ;
+      RBracket: Integer            ;
+      ColonLine: Integer            ;
+      ColonCol: Integer            ;
       P       : Integer            ;
       LineNo  : Integer            ;
       ColNo   : Integer            ;
@@ -4287,21 +4293,30 @@ begin
         for i:= 0 to Lines.Count - 1 do
         begin
           Line:= Lines[i];
-          lb:= Pos('[', Line); rb:= Pos(']', Line);
-          if (lb = 0) or (rb = 0) or (rb < lb) then Continue; { not a finding line }
-          Loc:= Trim(Copy(Line, 1, lb - 1));
-          c2:= LastDelimiter(':', Loc); if c2 <= 1 then Continue;
-          ColStr:= Copy(Loc, c2 + 1, MaxInt);
-          Loc2:= Copy(Loc, 1, c2 - 1);
-          c1:= LastDelimiter(':', Loc2); if c1 <= 1 then Continue;
-          LineStr:= Copy(Loc2, c1 + 1, MaxInt);
-          Tag:= LowerCase(Copy(Line, lb + 1, rb - lb - 1));
-          Rest:= Trim(Copy(Line, rb + 1, MaxInt));
+          LBracket:= Pos('[', Line);
+          RBracket:= Pos(']', Line);
+          if (LBracket = 0) or (RBracket = 0) or (RBracket < LBracket) then Continue; { not a finding line }
+          Loc:= Trim(Copy(Line, 1, LBracket - 1));
+          ColonCol:= LastDelimiter(':', Loc);
+          if ColonCol <= 1 then Continue;
+          ColStr:= Copy(Loc, ColonCol + 1, MaxInt);
+          Loc2:= Copy(Loc, 1, ColonCol - 1);
+          ColonLine:= LastDelimiter(':', Loc2);
+          if ColonLine <= 1 then Continue;
+          LineStr:= Copy(Loc2, ColonLine + 1, MaxInt);
+          Tag:= LowerCase(Copy(Line, LBracket + 1, RBracket - LBracket - 1));
+          Rest:= Trim(Copy(Line, RBracket + 1, MaxInt));
           P:= Pos(':', Rest);
           if P > 0 then
-          begin Rule:= Trim(Copy(Rest, 1, P - 1)); Msg:= Trim(Copy(Rest, P + 1, MaxInt)); end
+          begin
+            Rule:= Trim(Copy(Rest, 1, P - 1));
+            Msg:= Trim(Copy(Rest, P + 1, MaxInt));
+          end
           else
-          begin Rule:= ''; Msg:= Rest; end;
+          begin
+            Rule:= '';
+            Msg:= Rest;
+          end;
           LineNo:= StrToIntDef(Trim(LineStr), 1);
           ColNo := StrToIntDef(Trim(ColStr ), 1);
 
@@ -4314,10 +4329,10 @@ begin
           Inc(Count);
 
           { cache entry (LSP-style, 0-based) so EditViewNotifier paints it }
-          if Pos('error', Tag) > 0 then SevInt:= 1
-          else if Pos('warn', Tag) > 0 then SevInt:= 2
-          else if Pos('hint', Tag) > 0 then SevInt:= 4
-          else SevInt:= 3;
+          SevInt:= if Tag.Contains('error') then LSP_SEV_ERROR
+            else if Tag.Contains('warn') then LSP_SEV_WARNING
+            else if Tag.Contains('hint') then LSP_SEV_HINT
+            else LSP_SEV_INFO;
           StartObj:= TJSONObject.Create;
           StartObj.AddPair('line'     , TJSONNumber.Create(LineNo - 1));
           StartObj.AddPair('character', TJSONNumber.Create(ColNo  - 1));

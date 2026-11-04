@@ -2351,7 +2351,7 @@ begin
     TFile.WriteAllText(PasL, ORIG, TEncoding.ASCII);
     Calls := 0;
     Raised:= '';
-    Rows  := nil;  // dl:ok overwrite-before-read@05a7 -- REVIEWED 2026-09-29 read when the call below raises: the check must not report the previous case's rows
+    Rows  := nil;
     Lock:= TFileStream.Create(PasL, fmOpenRead or fmShareExclusive);
     try
       try
@@ -2377,7 +2377,7 @@ begin
     PasF:= TPath.Combine(Dir, 'F.pas');
     TFile.WriteAllText(PasF, ORIG, TEncoding.ASCII);
     Raised:= '';
-    Rows  := nil;  // dl:ok overwrite-before-read@05a7 -- REVIEWED 2026-09-29 read when the call below raises: the check must not report the previous case's rows
+    Rows  := nil;
     try
       try
         Rows:= RunConversionUnits([PasF], ['A.rules', 'B.rules'],
@@ -9932,7 +9932,7 @@ begin
         Result:= 'OK';
     end;
   R:= RunScopedValidation(Txt, Jobs, Fake);
-  Check('validate.paircache.calls', Length(Calls) = 3, string.Join(';', Calls));  // dl:ok magic-literal@5b7f -- REVIEWED 2026-11-04 expected call count is the assertion data of the fixture
+  Check('validate.paircache.calls', Length(Calls) = 3, string.Join(';', Calls));  // dl:ok magic-literal@2907 -- REVIEWED 2026-11-04 expected call count is the assertion data of the fixture
   Check('validate.paircache.diags.per.block', (Length(R.JobDiags[0]) = 1) and (Length(R.JobDiags[1]) = 1) and (Length(R.JobDiags[2]) = 0)
     and R.JobDone[0] and R.JobDone[1] and R.JobDone[2], Format('%d/%d/%d', [Length(R.JobDiags[0]), Length(R.JobDiags[1]), Length(R.JobDiags[2])]));
 end;
@@ -10698,7 +10698,7 @@ end;
   whose .dfm never overrides tblFtrs). Same chain rule as E2a; no double count with a
   .dfm block; own fields, unknown names and converted fields are not uses; a walk
   that cannot decide makes the unit unknown, never outside. }
-procedure TestInheritanceCodeUses;  // dl:ok cyclomatic-complexity@520f -- REVIEWED 2026-10-06 an assertion list plus a one-loop lookup helper (nested function V); the count is mostly the and-chains in Check conditions, and splitting the list would only scatter one fixture
+procedure TestInheritanceCodeUses;  // dl:ok cyclomatic-complexity@7d28 -- REVIEWED 2026-10-06 an assertion list plus a one-loop lookup helper (nested function V); the count is mostly the and-chains in Check conditions, and splitting the list would only scatter one fixture
 const
   BASE_PAS = 'fx\Base.pas';
   MID_PAS  = 'fx\Mid.pas';

@@ -107,19 +107,24 @@ procedure TestAsyncContract;
 var
   Calls, Code: Integer; Text: string; Thread: Cardinal; T0: UInt64;
 begin
-  Calls:= 0; Code:= -99; Thread:= 0;
+  Calls:= 0;
+  Code:= -99;
+  Thread:= 0;
   T0:= GetTickCount64;
   RunCliAsync(ChildCmd(CHILD_SLOW_MS, 'hello', Marker('a1')),
     procedure(AExit: Integer; const AOut: string)
     begin
-      Inc(Calls); Code:= AExit; Text:= AOut; Thread:= GetCurrentThreadId;
+      Inc(Calls);
+      Code:= AExit;
+      Text:= AOut;
+      Thread:= GetCurrentThreadId;
     end);
   Check('A1 RunCliAsync returns before the child ends', GetTickCount64 - T0 < BLOCK_LIMIT_MS, UIntToStr(GetTickCount64 - T0));
   Check('A2 ADone not called synchronously', Calls = 0);
   Check('A3 delivered', PumpUntil(function: Boolean begin Result:= Calls > 0; end, PUMP_DONE_MS));
   Check('A4 on the main thread', Thread = MainThreadID, Format('%d vs %d', [Thread, MainThreadID]));
   Check('A5 exit code', Code = CHILD_EXIT, IntToStr(Code));
-  Check('A6 output', Pos('hello', Text) > 0, Text);
+  Check('A6 output', Text.Contains('hello'), Text);
   Pump(PUMP_QUIET_MS);
   Check('A7 exactly once', Calls = 1, IntToStr(Calls));
 
@@ -127,7 +132,8 @@ begin
   RunCliAsync('"C:\no\such\exe-cliasync.exe" x',
     procedure(AExit: Integer; const AOut: string)
     begin
-      Inc(Calls); Code:= AExit;
+      Inc(Calls);
+      Code:= AExit;
     end);
   Check('A8 a spawn failure is delivered', PumpUntil(function: Boolean begin Result:= Calls > 0; end, PUMP_DONE_MS));
   Check('A9 with -1', Code = -1, IntToStr(Code));
@@ -137,7 +143,8 @@ procedure TestSupersede;
 var
   Slot: TCliRunSlot; OldCalls, NewCalls: Integer; Text: string;
 begin
-  OldCalls:= 0; NewCalls:= 0;
+  OldCalls:= 0;
+  NewCalls:= 0;
   Slot:= TCliRunSlot.Create;
   try
     Slot.Start(ChildCmd(CHILD_SLOW_MS, 'old', Marker('b1')), CLI_ASYNC_STALL_MS,
@@ -145,9 +152,13 @@ begin
     Check('B1 Running after Start', Slot.Running);
     Pump(PUMP_QUIET_MS);  { the old child must really exist before it is superseded }
     Slot.Start(ChildCmd(CHILD_FAST_MS, 'new', Marker('b2')), CLI_ASYNC_STALL_MS,
-      procedure(AExit: Integer; const AOut: string) begin Inc(NewCalls); Text:= AOut; end);
+      procedure(AExit: Integer; const AOut: string)
+      begin
+        Inc(NewCalls);
+        Text:= AOut;
+      end);
     Check('B2 the new run delivered', PumpUntil(function: Boolean begin Result:= NewCalls > 0; end, PUMP_DONE_MS));
-    Check('B3 with its own output', Pos('new', Text) > 0, Text);
+    Check('B3 with its own output', Text.Contains('new'), Text);
     Check('B4 not Running once delivered', not Slot.Running);
     Pump(CHILD_SLOW_MS + PUMP_QUIET_MS);  { past the old child's natural end }
     Check('B5 the old answer never arrived', OldCalls = 0, IntToStr(OldCalls));
@@ -216,7 +227,8 @@ procedure TestDoneIsSafe;
 var
   Slot: TCliRunSlot; Calls, Second: Integer;
 begin
-  Calls:= 0; Second:= 0;
+  Calls:= 0;
+  Second:= 0;
   RunCliAsync(ChildCmd(CHILD_FAST_MS, 'x', Marker('d1')),
     procedure(AExit: Integer; const AOut: string)
     begin

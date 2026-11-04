@@ -291,7 +291,7 @@ begin
   LLines:= ApplyItemReportLines(LConv);
   var LApplied, LBreak, LCheck: Integer;
   var LAppliedNote, LBreakNote: string;
-  LApplied:= 0; LBreak:= 0; LCheck:= 0;  // dl:ok multiple-statements-per-line -- three counters reset together
+  LApplied:= 0; LBreak:= 0; LCheck:= 0;  // dl:ok multiple-statements-per-line@6e7e -- three counters reset together
   for var LL: string in LLines do
   begin
     var LCols: TArray<string>:= LL.Split([#9]);
@@ -388,9 +388,9 @@ begin
   P:= Default(TMigratePick);
   B:= MigBook(['#link Hint <- Tip', '#convert TSrcBtn -> TDstBtn', '#link Press <- Click', '#link Cnt <- Cnt : SomeCast', '#link Same <- Same']);
   try
-    P.Old:= 'Width'; P.New:= 'W';  // dl:ok multiple-statements-per-line -- one pick
+    P.Old:= 'Width'; P.New:= 'W';  // dl:ok multiple-statements-per-line@3485 -- one pick
     Check('migrate.check.clean', MigrateCheck(B, 1, P) = '', MigrateCheck(B, 1, P));
-    P.Old:= 'Click'; P.New:= 'Tap';  // dl:ok multiple-statements-per-line -- one pick
+    P.Old:= 'Click'; P.New:= 'Tap';  // dl:ok multiple-statements-per-line@7e8b -- one pick
     Check('migrate.check.link.rename', MigrateCheck(B, 1, P) = 'book line 3 already converts Click', MigrateCheck(B, 1, P));
     P.Old:= 'Cnt';
     var LCast: string:= MigrateCheck(B, 1, P);
@@ -398,7 +398,7 @@ begin
     Check('migrate.check.link.cast', (LCast = 'book line 4 already converts Cnt') and (MigrateCheck(B, 1, P) = ''), LCast + '|' + MigrateCheck(B, 1, P));
     P.Old:= 'Tip';
     Check('migrate.check.link.file', MigrateCheck(B, 1, P) = 'book line 1 already converts Tip', MigrateCheck(B, 1, P));
-    P.Old:= 'Width'; P.New:= 'width';  // dl:ok multiple-statements-per-line -- one pick
+    P.Old:= 'Width'; P.New:= 'width';  // dl:ok multiple-statements-per-line@eda8 -- one pick
     Check('migrate.check.identity', MigrateCheck(B, 1, P) = '#migrate Width -> width renames nothing', MigrateCheck(B, 1, P));
     P.New:= 'Items.Count';
     Check('migrate.check.template', MigrateCheck(B, 1, P) = MIGRATE_REFUSAL_TEMPLATE, MigrateCheck(B, 1, P));
@@ -412,7 +412,7 @@ begin
   try
     var LSnap: string:= B.Snapshot;
     Blk:= FindMigrateBlock(B, 'TSrcBtn', 'TDstBtn', 'Fix.rules');
-    P.Old:= 'Click'; P.New:= 'Press'; P.Break:= False;  // dl:ok multiple-statements-per-line -- one pick
+    P.Old:= 'Click'; P.New:= 'Press'; P.Break:= False;  // dl:ok multiple-statements-per-line@7d94 -- one pick
     O:= ApplyMigratePick(B, Blk, P);
     Check('migrate.apply.append', O.Applied and not O.Replaced and (O.Before = '') and (O.After = '#migrate Click -> Press') and (O.Line = 4)
       and (B.SaveToString = '#convert TSrcBtn -> TDstBtn' + sLineBreak + '#link Caption <- Caption' + sLineBreak + '#migrate Count -> X, U' + sLineBreak
@@ -432,15 +432,15 @@ begin
     Check('migrate.apply.dirty', (B.Snapshot <> LSnap) and (Length(O.Node.Marks) = 0) and (Length(B.Nodes[1].Marks) = 1));
     Check('migrate.status.changed', MigrateStatusText('Fix.rules', Blk, O)
       = 'Changed #migrate Click -> Tap (line 4 of Fix.rules) -- not saved: File > Save, then Convert again', MigrateStatusText('Fix.rules', Blk, O));
-    P.Old:= 'Count'; P.New:= ''; P.Break:= True;  // dl:ok multiple-statements-per-line -- one pick
+    P.Old:= 'Count'; P.New:= ''; P.Break:= True;  // dl:ok multiple-statements-per-line@8751 -- one pick
     O:= ApplyMigratePick(B, Blk, P);
     Check('migrate.apply.break', O.Applied and (O.After = '#migrate Count -> DL_NONE'), O.After);
     Check('migrate.apply.legacy.kept', (B.Nodes[2].Emit = '#migrate Count -> X, U') and (O.Node <> B.Nodes[2]) and (O.Warning = ''), O.Warning);
-    P.Old:= 'Width'; P.New:= 'width'; P.Break:= False;  // dl:ok multiple-statements-per-line -- one pick
+    P.Old:= 'Width'; P.New:= 'width'; P.Break:= False;  // dl:ok multiple-statements-per-line@e8f5 -- one pick
     O:= ApplyMigratePick(B, Blk, P);
     Check('migrate.status.warning', O.Applied and EndsText('; check: #migrate Width -> width renames nothing', MigrateStatusText('Fix.rules', Blk, O)),
       MigrateStatusText('Fix.rules', Blk, O));
-    P.Old:= 'Foo'; P.New:= '';  // dl:ok multiple-statements-per-line -- one pick
+    P.Old:= 'Foo'; P.New:= '';  // dl:ok multiple-statements-per-line@d570 -- one pick
     O:= ApplyMigratePick(B, Blk, P);
     Check('migrate.apply.refused', (not O.Applied) and (O.Reason = MIGRATE_REFUSAL_NO_NEW), O.Reason);
     Blk:= FindMigrateBlock(B, 'TSrcBtn', 'TNone', 'Fix.rules');

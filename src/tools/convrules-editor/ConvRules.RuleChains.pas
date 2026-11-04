@@ -743,7 +743,7 @@ begin
 end;
 
 // Detection steps 1-4: duplicates, chains, cycles.
-procedure FindConvertFindings(ABook: TRuleBook; AList: TList<TRuleChain>);  // dl:ok cyclomatic-complexity@f08a, cognitive-complexity@6cf1 -- REVIEWED 2026-10-27 spec 5.1 steps 1-4 are one deterministic pass over shared arrays; splitting it only passes six arrays around
+procedure FindConvertFindings(ABook: TRuleBook; AList: TList<TRuleChain>);  // dl:ok cyclomatic-complexity@f08a, cognitive-complexity@6de4 -- REVIEWED 2026-10-27 spec 5.1 steps 1-4 are one deterministic pass over shared arrays; splitting it only passes six arrays around
 var
   LRules  : TList<TRuleInfo>;
   LInfo   : TRuleInfo;

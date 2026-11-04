@@ -211,7 +211,7 @@ begin
 end;
 
 // ---- Task 2 (merge) block: TestRuleChainsMerge, filled by CHAIN-1 Task 2 ----
-procedure TestRuleChainsMerge;  // dl:ok cyclomatic-complexity@da85 -- REVIEWED 2026-10-27 test procedure is a flat list of independent Check calls; splitting would hide the scenario
+procedure TestRuleChainsMerge;  // dl:ok cyclomatic-complexity@4e6e -- REVIEWED 2026-10-27 test procedure is a flat list of independent Check calls; splitting would hide the scenario
 var
   Books: TObjectList<TRuleBook>;
 
@@ -297,7 +297,7 @@ begin
     LI:= StartsAt(M, '#note chain merge: the lines below came from TB -> TC (line 12)');
     Check('chains.merge.q.rest', (LI >= 0) and (PosOf(M, '#warn Title "check"') > LI) and (not Has(M, '#tag t2')) and Has(M, '#tag t1'),
       IntToStr(LI));
-    Check('chains.merge.counts', (M.Composed = 5) and (M.Carried = 1) and (M.Noted = 4) and (Length(M.Dropped) = 1),  // dl:ok magic-literal@4210 -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
+    Check('chains.merge.counts', (M.Composed = 5) and (M.Carried = 1) and (M.Noted = 4) and (Length(M.Dropped) = 1),  // dl:ok magic-literal@5446 -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
       Format('%d/%d/%d/%d', [M.Composed, M.Carried, M.Noted, Length(M.Dropped)]));
     Check('chains.merge.range.non.last', (M.NodeIdx = 0) and (M.LastIdx = 10) and (M.NewLines[High(M.NewLines)] = ''),  // dl:ok magic-literal@33fa -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture
       Format('%d..%d', [M.NodeIdx, M.LastIdx]));
@@ -425,7 +425,7 @@ begin
     P:= Plan(MAPPED + CHAIN_CRLF + '#apply m');
     Check('chains.split.mappings.case', (Length(P.Mappings[1]) = 1) and (P.Mappings[1][0] = 'M'), IntToStr(Length(P.Mappings[1])));
     P:= Plan('#convert TA -> TB' + CHAIN_CRLF + '#convert tb -> TC');
-    Check('chains.split.stages.case', StagesText(P) = '[0];[1]', StagesText(P));  // dl:ok magic-literal@2d0e -- REVIEWED 2026-11-04 expected stage text is the assertion data of the fixture
+    Check('chains.split.stages.case', StagesText(P) = '[0];[1]', StagesText(P));
 
     Book:= ChainMakeBook(Books, '#depth 3' + CHAIN_CRLF + CHAIN_BOOK_CHAIN);
     Check('chains.split.text.depth', StartsText('#depth 3' + CHAIN_CRLF, StageBookText(Book, [3], nil)), StageBookText(Book, [3], nil));  // dl:ok magic-literal@4522 -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture

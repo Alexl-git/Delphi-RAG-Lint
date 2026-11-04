@@ -2171,7 +2171,7 @@ end;
   many failures (a seeded repo). pMcpExpected / pNestedExpected: the exact size of each
   Delphi-only class; pNewDExpected: the exact number of check D findings on the outputs the
   PowerShell generator did not own (-1: any number above zero, a seeded tree). }
-procedure TestCheckParity(const pRepo, pCheckRepo, pLevelName: string; pLevel: TCheckLevel; const pName: string;  // dl:ok too-many-parameters@8a65 -- REVIEWED 2026-10-26 (re-stamped: pProseExpected added): test helper: each parameter is one expected count of the parity comparison
+procedure TestCheckParity(const pRepo, pCheckRepo, pLevelName: string; pLevel: TCheckLevel; const pName: string;  // dl:ok too-many-parameters@cc7e -- REVIEWED 2026-10-26 (re-stamped: pProseExpected added): test helper: each parameter is one expected count of the parity comparison
   pMinFindings, pMcpExpected, pNestedExpected, pNewDExpected, pProseExpected, pDocsExpected: Integer);
 var
   lFile, lMsg, lLine, lName: string;
@@ -2412,7 +2412,7 @@ begin
   Check('HelpChunk.RoundTrip', lJoined = lLine, 'concatenated chunks must equal the input');
   for lI := 0 to High(lParts) - 1 do
     Check('HelpChunk.BreakAfterSpace' + IntToStr(lI), lParts[lI].EndsWith(' '), 'chunk ' + IntToStr(lI) + ' ends mid-token: ...' + Copy(lParts[lI], Length(lParts[lI]) - 12, 13));
-  Check('HelpChunk.ShortLineSingleLiteral', Pos(#10'    ', WriteLnStatement('--short --line')) = 0, 'a short line stays one literal');
+  Check('HelpChunk.ShortLineSingleLiteral', not WriteLnStatement('--short --line').Contains(#10'    '), 'a short line stays one literal');
 end;
 procedure TestHelpText(const pRepo: string);
 var
@@ -3813,8 +3813,8 @@ begin
       TestCheckParity(lRepo, lGold, 'Full', clFull, 'Full', 0, ExpectedMcpExclusions(lGold, GoldenLive(lRepo).McpTools), 0, 0, GOLDEN_PROSE_FULL, -1);
       lSeeded := SeededRepo(lGold);
       // the seeded copy carries the same MCP server source, so the live tool list is the same
-      TestCheckParity(lRepo, lSeeded, 'WellFormed', clWellFormed, 'SeededWellFormed', 5, 0, 1, 0, GOLDEN_PROSE_A, 0);  // dl:ok magic-literal@8c3e -- REVIEWED 2026-10-26 (re-stamped: GOLDEN_PROSE_A argument added): test expectation: the literal is the asserted value
-      TestCheckParity(lRepo, lSeeded, 'Full', clFull, 'SeededFull', 8, ExpectedMcpExclusions(lSeeded, GoldenLive(lRepo).McpTools), 1, -1, GOLDEN_PROSE_FULL, -1);  // dl:ok magic-literal@edb5 -- REVIEWED 2026-10-26 (re-stamped: GOLDEN_PROSE_FULL argument added): test expectation: the literal is the asserted value
+      TestCheckParity(lRepo, lSeeded, 'WellFormed', clWellFormed, 'SeededWellFormed', 5, 0, 1, 0, GOLDEN_PROSE_A, 0);  // dl:ok magic-literal@d0f0 -- REVIEWED 2026-10-26 (re-stamped: GOLDEN_PROSE_A argument added): test expectation: the literal is the asserted value
+      TestCheckParity(lRepo, lSeeded, 'Full', clFull, 'SeededFull', 8, ExpectedMcpExclusions(lSeeded, GoldenLive(lRepo).McpTools), 1, -1, GOLDEN_PROSE_FULL, -1);  // dl:ok magic-literal@468e -- REVIEWED 2026-10-26 (re-stamped: GOLDEN_PROSE_FULL argument added): test expectation: the literal is the asserted value
       TestCheckDCoversAllOutputs(lRepo);
       TestWikiCwdIndependent(lRepo);
       TestMarkedBlockNoMarkers;
