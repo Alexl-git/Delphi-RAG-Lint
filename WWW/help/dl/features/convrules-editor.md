@@ -7,7 +7,7 @@ group: component-conversion
 order: 60008
 since: 0.0.0
 status: shipped
-updated: 1.40.0-alpha
+updated: 1.42.0-alpha
 ---
 
 # ConvRulesEditor
@@ -36,9 +36,14 @@ launch it with a conversion request (`--convert-request <file>`).
 * **Inherited units, ancestors first** -- adding a unit walks its class chain to the root and offers
   every ancestor that still holds a From type of the checked books (intermediate classes included),
   root first. Convert never runs a descendant above its ancestor: it asks to reorder the list
-  ancestor-first (No runs nothing). An ancestor class that is in neither the project index nor the
-  platform library index blocks the run until its unit is added to the `.dproj`/`.dpr` and
-  reindexed; a library class (`TForm`, a vendor base the library declares) ends the chain. The
+  ancestor-first (No runs nothing). An unconverted ancestor that is not in the run at all blocks the same
+  way: Convert asks to add the missing ancestors root-first (Yes) or cancels the whole run (No) -- a No
+  when the unit was added does not exempt it later. An ancestor class that is in neither the project
+  index nor the platform library index blocks the run until its unit is added to the `.dproj`/`.dpr`
+  and reindexed; a library class (`TForm`, a vendor base the library declares) ends the chain. A class
+  that two project units declare is ambiguous: it blocks with its own message (remove the duplicate or
+  qualify the class), never as "not in a project". If the platform library cannot be asked, only
+  `TForm`, `TFrame`, `TDataModule` and their `TCustom*` forms still count as roots; any other class blocks. The
   1.42 engine orders a batch ancestor-first too, as a second net.
 * **Work list** -- the manual to-do list after a run: [Work list](convrules-work-list.md).
 * **Reindex project** -- refresh the index between stages: [Reindex project](convrules-reindex-project.md).

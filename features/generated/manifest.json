@@ -6408,7 +6408,7 @@
         },
         {
           "ask": "Why does Convert reorder my units, or refuse because of an ancestor?",
-          "command": "Inherited units always convert after their ancestors (C8CHAIN): adding a unit offers every ancestor that still holds a From type, root first, and Convert asks to reorder the list ancestor-first (No runs nothing). An ancestor class found in neither the project index nor the platform library index blocks the run: add its unit to the .dproj/.dpr and reindex"
+          "command": "Inherited units always convert after their ancestors (C8CHAIN): adding a unit offers every ancestor that still holds a From type, root first, and Convert asks to reorder the list ancestor-first (No runs nothing). An unconverted ancestor that is not in the run blocks too: Yes adds the missing ancestors root-first and runs, No cancels the whole run. An ancestor class found in neither the project index nor the platform library index blocks the run: add its unit to the .dproj/.dpr and reindex. A class declared in more than one project unit is ambiguous and blocks with its own message: remove the duplicate or qualify the class. When the platform library cannot be asked, only TForm, TFrame, TDataModule and their TCustom* forms still count as library roots"
         }
       ],
       "notes": "own page written 2026-10-21 (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown",
