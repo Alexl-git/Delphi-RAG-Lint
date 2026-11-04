@@ -67,6 +67,7 @@
   "duplicate-exception-handler": {"cwe": ["CWE-561"], "weak": ["CWE-561"]},
   "duplicate-global-decl": {},
   "duplicate-unit-on-search-path": {},
+  "effect-free-in-loop-invariant": {"cwe": ["CWE-1050"]},
   "else-after-exit": {},
   "empty-case-branch": {"cwe": ["CWE-1071"]},
   "empty-conditional": {"cwe": ["CWE-1071"]},

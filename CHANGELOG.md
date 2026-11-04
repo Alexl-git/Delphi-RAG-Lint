@@ -10,6 +10,9 @@ DRAGLINT_RESOLVER_VERSION 1.17.0 -> 1.18.0-alpha -- every index re-parses once.
 
 ### Added (wave 3, lane opaque)
 - New project rule `opaque-to-analysis` (info, OFF): a routine whose calls that do not provably leave the project are predominantly unresolvable (3+ opaque calls, 60%+ of opaque + resolved). Library calls are judged live through the library oracle, so it needs the library index and is silent without one. No extractor or resolver bump.
+### Added / changed (wave 3, lane effect)
+- lint (TRIAGE #35): new rule `effect-free-in-loop-invariant` (info, OFF): a proven effect-free call in a loop whose arguments and read state cannot change in it.
+- lint (TRIAGE #46): `side-effect-in-short-circuit` no longer reports a deliberate short-circuit: a Boolean `TryX`, a Boolean callee that only writes its own parameters, a parameterless memo, a stored SQL read, `Assigned(R) and R.F`. An accumulator (`X:= X or F(..)`) still fires. Still OFF.
 
 ### Changed (wave 2, lane surface)
 - context (CTX-SURFACE-DOCS, D8): on a capped type the class surface drops the member docs of the omitted bodies; a kept (focus / in-type-called) body keeps its docs; `--full-surface` keeps all.
