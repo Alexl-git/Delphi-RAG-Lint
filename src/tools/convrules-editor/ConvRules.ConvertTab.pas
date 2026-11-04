@@ -1658,7 +1658,8 @@ begin
         AError:= LRes.Error;
         Result:= LRes.Answer;
       end;
-    end);  if LUnindexed <> '' then
+    end);
+  if LUnindexed <> '' then
   begin
     FHost.SetStatus(StringReplace(LUnindexed, sLineBreak, ' ', [rfReplaceAll]), True); // mirrored for the GUI driver
     AskBlockingDropsWith(LUnindexed, mtError, [mbOK]);
