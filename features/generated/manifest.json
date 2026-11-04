@@ -229,10 +229,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-30",
+        "date": "2026-11-04",
         "by": "ENGINE",
-        "build": "1.38.0-alpha",
-        "surfaceHash": "8d8c209fde0d7936447a7686e162e95db1c0a3e4ed6b1b19a627f055e8b34491"
+        "build": "1.42.0-alpha",
+        "surfaceHash": "98111b04831ff6b22d650eaef54bf1c49887c37aadd52de8aee74e248c559cb0"
       }
     },
     {
@@ -337,10 +337,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-03",
+        "date": "2026-11-04",
         "by": "ENGINE",
         "build": "1.42.0-alpha",
-        "surfaceHash": "ead44514ae4938cc9b042eeb688059fa2d1f21dcd0e0709503fe6dad9ebf767e"
+        "surfaceHash": "f63a873186707a0e0a3d9a41e802e5d20ba7d4ff3fff053f6b1fb257c3ae5348"
       }
     },
     {
@@ -582,10 +582,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-30",
+        "date": "2026-11-04",
         "by": "ENGINE",
-        "build": "1.38.0-alpha",
-        "surfaceHash": "9883677e685a4253f20c617addc3985571fd1e495c06effda5bc7d989b51c9cb"
+        "build": "1.42.0-alpha",
+        "surfaceHash": "79de4a889871bdf79d85cf50190c3c8326d0e4b7d78b5843bf65d046e68dcd73"
       }
     },
     {
@@ -1018,10 +1018,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-11-03",
+        "date": "2026-11-04",
         "by": "ENGINE",
-        "build": "1.39.2-alpha",
-        "surfaceHash": "56a6fb9b865e78ed51ec8c26a7af46caaae59f0c53b0729084c880eee5d431ee"
+        "build": "1.42.0-alpha",
+        "surfaceHash": "57103fb1a1a0c210d8412084e7c3f8338c13bb87f58b19dbb88024f11aadf55d"
       }
     },
     {
@@ -2081,10 +2081,10 @@
       ],
       "notes": "issued by the plugin from TDragLintCodeLensCache.PopulateOnce (DragLint.Plugin.CodeLensCache.pas)",
       "verified": {
-        "date": "2026-10-30",
+        "date": "2026-11-04",
         "by": "ENGINE",
-        "build": "1.38.0-alpha",
-        "surfaceHash": "c05627943670fa6bcda3cc869512f7beb28ef4b882ac627ab6dc4e7b32865ef4"
+        "build": "1.42.0-alpha",
+        "surfaceHash": "0816dd15a72012227407c91fd635d46d9c40f1881a93a845f078ba21e66b864b"
       }
     },
     {
@@ -2531,7 +2531,7 @@
       ],
       "access": "cli-only",
       "verified": {
-        "date": "2026-11-03",
+        "date": "2026-11-04",
         "by": "ENGINE",
         "build": "1.42.0-alpha",
         "surfaceHash": "66d84b977cc5c8dedcfb026fccbabcd900af7e32450585a580a2c548a3a4d35c"
@@ -2733,9 +2733,10 @@
       ],
       "audience": "both",
       "verified": {
-        "date": "2026-11-03",
-        "by": "alexanderl",
-        "build": "1.42.0-alpha"
+        "date": "2026-11-04",
+        "by": "ENGINE",
+        "build": "1.42.0-alpha",
+        "surfaceHash": "360982a878a600caf0f2ca7a214d6b7f0220a387e74cda05b94c066a804901d1"
       }
     },
     {
@@ -7627,7 +7628,7 @@
         }
       ],
       "verified": {
-        "date": "2026-11-03",
+        "date": "2026-11-04",
         "by": "ENGINE",
         "build": "1.42.0-alpha",
         "surfaceHash": "97ae19f7d3ba205fb69167589d634671c01ba0a41eecd9ca6a72745fd94422d1"
@@ -8246,10 +8247,10 @@
       ],
       "notes": "No menu item of its own since 2026-09-07: drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... asks where to render, and Yes picks the Messages window",
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-04",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "e742a582c5f98baf14bc01a5c2c31c583027592895226a429d5f0771e5fd2e30"
+        "build": "1.42.0-alpha",
+        "surfaceHash": "f0c43146110c09671391a2398597fe0399a47e6dcd0091621b523b3712d1c588"
       }
     },
     {
@@ -8314,10 +8315,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-04",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "cbb4a90a85c37c48c7640d1ab7d42a13c228897047bf17fdee3c485e42041dad"
+        "build": "1.42.0-alpha",
+        "surfaceHash": "e60cfc49531e1e410c6d70d085a50a63a0d1bf7da7f52284e63fa98c6343486e"
       }
     },
     {
@@ -9984,6 +9985,12 @@
       "accessReviewed": {
         "date": "2026-11-01",
         "by": "ENGINE"
+      },
+      "verified": {
+        "date": "2026-11-04",
+        "by": "ENGINE",
+        "build": "1.42.0-alpha",
+        "surfaceHash": "81165732911eb5f9313d41558529ff7eeba476a0802f3583b01b87bb49e44540"
       }
     },
     {

@@ -19,7 +19,7 @@ Read this when a project targets an older Delphi: index follows it for the libra
 ## How to run it
 
 ```text
-drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library] [--target-compiler <ver|auto>]
+drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...] [--wait-library <min>] [--require-library] [--stall-exit-min <min>] [--target-compiler <ver|auto>]
 ```
 
 Full flag list: [index in the CLI reference](../cli.md#index).
@@ -36,7 +36,7 @@ No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 
-`index --project` and `index --all` read a project against the Delphi it targets: not only the defines (`VER<N>0`, `CompilerVersion`), but also the Search Path, Browsing Path, platform list and IDE Environment Variables from that Delphi's BDS registry key, with `$(BDS)` expanding to that Studio's root. Reported by Jonathas Paiva (GitHub #13).
+`index --project` and `index --all` read a project against the Delphi it targets: not only the defines (`VER<N>0`, `CompilerVersion`), but also the Search Path, Browsing Path, platform list and IDE Environment Variables from that Delphi's BDS registry key, with `$(BDS)` expanding to that Studio's root and `$(BDSCOMMONDIR)` to that Studio's common folder (what its `bin\rsvars.bat` sets; else `%PUBLIC%\Documents\Embarcadero\Studio\<key>`). Reported by Jonathas Paiva (GitHub #13).
 
 ### Which key
 
@@ -96,13 +96,14 @@ The LSP and MCP servers read no library path; they read the DB.
 
 The closure is recomputed on every `index --project`, so a library path change alone reaches the next run: added units are indexed and stored callers bind, with no source touched and no `--rebuild`. A folder that LEAVES the path keeps its rows until `--rebuild`, the existing `files > walked` state.
 
-### Not tested here
+### Tested and not tested
 
-The build box has one Studio; guards replace the registry with a JSON fixture (`DRAGLINT_TEST_BDS_REGISTRY`, `tests\autotest\run_target_bds_libpath_guard.ps1`). A second real Studio is needed to confirm:
+Guards replace the registry with a JSON fixture (`DRAGLINT_TEST_BDS_REGISTRY`, `tests\autotest\run_target_bds_libpath_guard.ps1`). Beyond the fixture, on 2026-11-04 a scratch project with ProjectVersion 20.1 ran against the build box's real Studio 23.0 key: `Library path: BDS 23.0 (target Delphi 12)`, and a unit found only on 23.0's library path joined the closure with its own uses and an include. A Delphi 13 closure is byte-identical before and after the `$(BDSCOMMONDIR)` change on 3 real projects.
 
-- the real `HKCU` / `HKLM` key layout of an older Studio, including `RootDir` under `WOW6432Node`;
-- `$(BDSCOMMONDIR)`, which keeps today's formula over the target's root and does not name `Public\Documents`;
-- component installers' path layout, and how much of it the `\Embarcadero\` rule keeps out;
+Not tested here:
+
+- a Studio key under `HKLM` / `WOW6432Node` only;
+- component installers' path layout on other machines, and how much of it the `\Embarcadero\` rule keeps out;
 - the 7 units of the report that came from a different checkout.
 
 ---
