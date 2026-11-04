@@ -1,19 +1,19 @@
 <#
-  run_effect_rules.ps1 -- the three store-backed effect rules of backlog lane
-  B-EFFECT (1.37.0): side-effect-in-short-circuit, property-getter-with-effect,
-  ui-access-in-thread-transitive.
+  run_effect_rules.ps1 -- the store-backed effect rules: lane B-EFFECT (1.37.0)
+  side-effect-in-short-circuit, property-getter-with-effect,
+  ui-access-in-thread-transitive; 1.42 effect-free-in-loop-invariant.
 
   Indexes tests\lint-project\effect-rules\*.pas into a scratch DB beside this
   script (the `index` verb runs the purity resolve stage and the facts pass, so
   effect_summary / effect_witness / ui_affinity are populated) and runs
   lint-all TWICE:
 
-    RUN 1  bare `lint-all`             -> ZERO findings for the three ids (all
+    RUN 1  bare `lint-all`             -> ZERO findings for the four ids (all
                                           OFF by default), SOME findings overall.
-    RUN 2  `--enable <the three ids>`  -> per id, exactly its TRIGGER lines and
+    RUN 2  `--enable <the four ids>`  -> per id, exactly its TRIGGER lines and
                                           none of its CONTROL lines.
 
-  Every line number is READ FROM THE FIXTURE MARKERS (SC-, PG-, UT- prefixes),
+  Every line number is READ FROM THE FIXTURE MARKERS (SC-, PG-, UT-, LI- prefixes),
   never hard-coded. `lint --json` is a BARE ARRAY keyed `start_line`.
 
   Usage: pwsh -File tests\lint-project\effect-rules\run_effect_rules.ps1 [-Exe <drag-lint.exe>]
@@ -27,7 +27,7 @@ $dir     = $PSScriptRoot
 $db      = Join-Path $dir '_effect_rules_test.sqlite'
 foreach ($x in @($db, "$db-shm", "$db-wal")) { if (Test-Path $x) { Remove-Item $x -Force } }
 
-$Rules = @{ 'SC' = 'side-effect-in-short-circuit'; 'PG' = 'property-getter-with-effect'; 'UT' = 'ui-access-in-thread-transitive' }
+$Rules = @{ 'SC' = 'side-effect-in-short-circuit'; 'PG' = 'property-getter-with-effect'; 'UT' = 'ui-access-in-thread-transitive'; 'LI' = 'effect-free-in-loop-invariant' }
 
 function Parse-Findings([string[]]$Raw) {
   $txt = ($Raw -join "`n"); $b = $txt.IndexOf('[')
@@ -69,6 +69,7 @@ foreach ($p in $Rules.Keys) {
     'SC' { @($a | Where-Object { $_.message -like '*effect_summary*' }).Count -eq $a.Count }
     'PG' { @($a | Where-Object { $_.message -like '*Get*' }).Count -eq $a.Count }
     'UT' { @($a | Where-Object { $_.message -like '*->*' -and $_.message -like '*ShowText*' }).Count -eq $a.Count }
+    'LI' { @($a | Where-Object { $_.message -like '*effect-free*' -and $_.message -like '*before the loop*' }).Count -eq $a.Count }
   }
   $r = ($trig.Count -gt 0) -and ($ctl.Count -gt 0) -and ($miss.Count -eq 0) -and ($hit.Count -eq 0) -and ($xtra.Count -eq 0) -and $msgOk
   $ok = $ok -and $r
@@ -76,5 +77,5 @@ foreach ($p in $Rules.Keys) {
     $id, $trig.Count, $ctl.Count, ($miss -join ','), ($hit -join ','), ($xtra -join ','), $msgOk)
 }
 $detail | ForEach-Object { Write-Host "  $_" }
-if ($ok) { Write-Host "PASS  three effect rules: OFF by default; every trigger fires, every control silent"; exit 0 }
+if ($ok) { Write-Host "PASS  four effect rules: OFF by default; every trigger fires, every control silent"; exit 0 }
 Write-Host "FAIL"; exit 1

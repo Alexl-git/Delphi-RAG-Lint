@@ -34,6 +34,8 @@ const
   PROPERTY_GETTER_WITH_EFFECT_RULE = 'property-getter-with-effect';
   /// <summary>Rule id: a thread body that reaches UI-touching code.</summary>
   UI_ACCESS_IN_THREAD_TRANSITIVE_RULE = 'ui-access-in-thread-transitive';
+  /// <summary>Rule id: an effect-free call a loop could make once, before it starts.</summary>
+  EFFECT_FREE_IN_LOOP_INVARIANT_RULE = 'effect-free-in-loop-invariant';
 
 /// <summary>Finds resolved calls to a routine with a PROVEN effect that sit in
 /// the RIGHT operand of a Boolean <c>and</c> / <c>or</c>, so they run only when
@@ -53,7 +55,16 @@ const
 /// Boolean, True/False, <c>Assigned(..)</c>, another proven Boolean and/or, or
 /// the call itself to a callee whose signature returns a Boolean type. A file
 /// that contains <c>{$B+}</c> or <c>{$BOOLEVAL ON}</c> anywhere is skipped
-/// whole. <c>xor</c> evaluates both sides and never counts. Never raises.</remarks>
+/// whole. <c>xor</c> evaluates both sides and never counts.
+/// DELIBERATE SHORT-CIRCUITS are exempt (1.42 tuning, 0 of 16 sampled findings
+/// were actionable): a Boolean callee named <c>Try&lt;Word&gt;</c>; a Boolean
+/// callee whose only proven effect is writing its own parameters (the fetch
+/// shape); a parameterless memoizing callee (every write sits under an if that
+/// tests nil, Assigned or what the body assigns); a callee whose proven effect is only a stored
+/// SQL read; and a <c>Rcv.F</c> whose left operands include
+/// <c>Assigned(Rcv)</c> or <c>Rcv &lt;&gt; nil</c>. NONE of these exempts an
+/// ACCUMULATOR, <c>X:= X or F(..)</c>: there the call is lost once X is decided,
+/// which is the bug this rule exists for. Never raises.</remarks>
 function CollectSideEffectInShortCircuit(const AStore: ISymbolStore;
   AOnlyFileId: Int64): TArray<TLintFinding>;
 
@@ -92,6 +103,34 @@ function CollectPropertyGetterWithEffect(const AStore: ISymbolStore;
 function CollectUiAccessInThreadTransitive(const AStore: ISymbolStore;
   AOnlyFileId: Int64): TArray<TLintFinding>;
 
+/// <summary>Finds resolved calls to a value-returning, PROVEN effect-free routine
+/// inside a loop that would answer the same on every iteration, so the call can
+/// move before the loop.</summary>
+/// <param name="AStore">The project index; must carry the purity columns.</param>
+/// <param name="AOnlyFileId">0 for every file; otherwise only findings in that
+/// file are returned.</param>
+/// <returns>One info finding per (call line, callee), anchored at the call line;
+/// the message names the callee, the loop's line and which proof holds.</returns>
+/// <remarks>ABSENCE OVER A WRONG FINDING. Inside a loop means its body or a
+/// while / until condition; a for bound and a for-in enumerable run once and do
+/// not count. Every overload and override of the name must be proven effect-free.
+/// ARGUMENTS and RECEIVER are invariant when each name is a by-value local or
+/// parameter the loop neither assigns, steps nor hands to a call not proven
+/// effect-free, or a constant or type; anything reaching through a dot, subscript
+/// or call needs the first proof below.
+/// STATE is invariant by one of two proofs: (1) the loop writes only local
+/// variables and every call in it is proven effect-free, or one of a short list of
+/// RTL routines of their arguments alone, so nothing the callee reads can change
+/// (a <c>.Count</c> read is taken as a read); or (2) the callee itself
+/// reads no state, its body naming only its own by-value locals, constants and those
+/// routines. A name a nested routine or closure mentions, or whose address is taken,
+/// is no local; a with or asm around or inside the loop silences it. A one-line accessor is
+/// not worth hoisting and never fires. Assumes no other thread writes what the
+/// callee reads, and that a property getter has no effect (see
+/// property-getter-with-effect). Never raises.</remarks>
+function CollectEffectFreeInLoopInvariant(const AStore: ISymbolStore;
+  AOnlyFileId: Int64): TArray<TLintFinding>;
+
 implementation
 
 uses
@@ -106,6 +145,7 @@ uses
 
 const
   CEffectFreeNotProven = 0;
+  CEffectFreeProven    = 1;
   CConfidenceCertain   = 'certain';
   CSeverityInfo        = 'info';
   CSeverityWarning     = 'warning';
@@ -194,6 +234,32 @@ begin
   Result:= StartsStr('expr', N.NodeType) or (N.NodeType = 'identifier');
 end;
 
+{ A method's stored signature declares a return type after its parameter list,
+  also when it has none (`: Integer`). }
+function SignatureReturnsValue(const ASignature: string): Boolean;
+begin
+  var S: string:= Trim(ASignature);
+  var P: Integer:= LastDelimiter(':)', S);
+  Result:= (P > 0) and (S[P] = ':');
+end;
+
+{ One certain routine call worth judging, seen for the first time and in the
+  file asked for. Both call-site rules start here. }
+function AcceptCallSite(const AC: TResolvedCaller; ASymId, AOnlyFileId: Int64;
+  AFileIdOf: TDictionary<string, Int64>; ASeen: TDictionary<string, Boolean>; out AFileId: Int64): Boolean;
+begin
+  Result:= False;
+  AFileId:= 0;
+  if (AC.Mode <> '') or (AC.Confidence <> CConfidenceCertain) then Exit;
+  if (AC.FullPath = '') or (AC.CallSiteLine <= 0) then Exit;
+  if not AFileIdOf.TryGetValue(AC.FullPath, AFileId) then AFileId:= 0;
+  if (AOnlyFileId <> 0) and (AFileId <> AOnlyFileId) then Exit;
+  var Key: string:= Format('%s|%d|%d', [AC.FullPath, AC.CallSiteLine, ASymId]);
+  if ASeen.ContainsKey(Key) then Exit;
+  ASeen.Add(Key, True);
+  Result:= True;
+end;
+
 function IsBooleanReturn(const ASignature: string): Boolean;
 const
   CBoolTypes: array[0..3] of string = ('Boolean', 'ByteBool', 'WordBool', 'LongBool');
@@ -213,10 +279,13 @@ type
     Src       : TBytes;
     Callee    : TTSNode;
     BoolCallee: Boolean;
+    Binary    : TTSNode;
     function BoolOperand(const N: TTSNode): Boolean;
     function IsCondition(const N: TTSNode): Boolean;
     function BoolProven(const B: TTSNode): Boolean;
     function Guarded: Boolean;
+    function IsAccumulator: Boolean;
+    function NilGuardsReceiver: Boolean;
   end;
 
 function TShortCircuitJudge.BoolOperand(const N: TTSNode): Boolean;
@@ -272,11 +341,96 @@ begin
   begin
     if (P.NodeType = 'exprBinary') and MatchStr(OperatorOf(P), ['kAnd', 'kOr']) and
        SameNode(P.ChildByField('rhs'), N) and BoolProven(P) then
+    begin
+      Binary:= P;
       Exit(True);
+    end;
     if not IsExprNode(P) then Exit;
     N:= P;
     P:= N.Parent;
   end;
+end;
+
+{ True for `X:= X or F(..)`, also over a chain or in parentheses: the leftmost
+  operand of the assigned and/or tree IS the assignment target. Binary is the
+  operator Guarded proved. }
+function TShortCircuitJudge.IsAccumulator: Boolean;
+begin
+  var Top: TTSNode:= Binary;
+  var P  : TTSNode:= Top.Parent;
+  while (not P.IsNull) and ((P.NodeType = 'exprParens') or
+        ((P.NodeType = 'exprBinary') and MatchStr(OperatorOf(P), ['kAnd', 'kOr']))) do
+  begin
+    Top:= P;
+    P:= Top.Parent;
+  end;
+  if P.IsNull or (P.NodeType <> 'assignment') then Exit(False);
+  var Left: TTSNode:= Unparen(Top);
+  while (not Left.IsNull) and (Left.NodeType = 'exprBinary') and
+        MatchStr(OperatorOf(Left), ['kAnd', 'kOr']) do
+    Left:= Unparen(Left.ChildByField('lhs'));
+  Result:= (not Left.IsNull) and
+    SameText(Trim(NodeText(P.ChildByField('lhs'), Src)), Trim(NodeText(Left, Src)));
+end;
+
+{ True for `Assigned(R) and .. R.F`, `(R <> nil) and .. R.F`: one of the `and`
+  operands left of the call tests the very receiver it is called on. }
+function TShortCircuitJudge.NilGuardsReceiver: Boolean;
+begin
+  Result:= False;
+  var Dot: TTSNode:= Callee.Parent;
+  if Dot.IsNull or (Dot.NodeType <> 'exprDot') or not SameNode(Dot.ChildByField('rhs'), Callee) then Exit;
+  var Rcv: string:= Trim(NodeText(Dot.ChildByField('lhs'), Src));
+  if Rcv = '' then Exit;
+  var B: TTSNode:= Binary;
+  while (not B.IsNull) and (B.NodeType = 'exprBinary') and (OperatorOf(B) = 'kAnd') do
+  begin
+    var L: TTSNode:= Unparen(B.ChildByField('lhs'));
+    var Conj: TTSNode:= L;
+    if (not L.IsNull) and (L.NodeType = 'exprBinary') and (OperatorOf(L) = 'kAnd') then
+      Conj:= Unparen(L.ChildByField('rhs'));
+    if not Conj.IsNull then
+    begin
+      if (Conj.NodeType = 'exprCall') and SameText(NodeText(Conj.ChildByField('entity'), Src), 'Assigned') then
+      begin
+        var A: string:= Trim(NodeText(Conj.ChildByField('args'), Src));
+        if A.StartsWith('(') and A.EndsWith(')') then A:= Trim(Copy(A, 2, Length(A) - 2));
+        if SameText(A, Rcv) then Exit(True);
+      end
+      else if (Conj.NodeType = 'exprBinary') and (OperatorOf(Conj) = 'kNeq') and
+              (Conj.ChildByField('rhs').NodeType = 'kNil') and
+              SameText(Trim(NodeText(Conj.ChildByField('lhs'), Src)), Rcv) then
+        Exit(True);
+    end;
+    B:= L;
+  end;
+end;
+
+{ True for `TryFoo`, not for `Tryst`: the word after Try starts a new word. }
+function IsTryName(const AName: string): Boolean;
+const
+  CTryLen = Length('Try');
+begin
+  Result:= StartsText('Try', AName) and (Length(AName) > CTryLen) and
+    CharInSet(AName[CTryLen + 1], ['A'..'Z', '_']);
+end;
+
+function IsMemoRoutine(const ARoot: TTSNode; const ASrc: TBytes; const ARoutine: TSymbol): Boolean; forward;
+
+{ The callee-level half of the deliberate-short-circuit exemption; see the
+  remarks on CollectSideEffectInShortCircuit. The parse happens last and only
+  for a callee that could be a memo. }
+function CalleeIsDeliberate(const AStore: ISymbolStore; const ASym: TSymbol; const ASum: TEffectSummary;
+  const AWitness: string; ABoolRet: Boolean): Boolean;
+const
+  CSqlReadWitness = 'reads SQL ';
+begin
+  if ABoolRet and (IsTryName(ASym.Name) or (ASum.Flags * [efGlobal, efHeap, efSelfFields] = [])) then Exit(True);
+  var StateOnly: Boolean:= (Length(ASum.Params) = 0) and (efHeap not in ASum.Flags);
+  if StateOnly and (efSelfFields not in ASum.Flags) and StartsStr(CSqlReadWitness, AWitness) then Exit(True);
+  if (not StateOnly) or (ASym.ImplStartLine <= 0) or ASym.Signature.Contains('(') then Exit(False);
+  var PF: TParsedFile:= TAstParseCache.Get(AStore.GetFilePath(ASym.FileId));
+  Result:= (PF.Tree <> nil) and IsMemoRoutine(PF.Tree.RootNode, PF.Src, ASym);
 end;
 
 { Cheap pre-filter before any parse: the word `and` or `or` on the call line
@@ -336,20 +490,15 @@ begin
     for var Sym in AStore.FindSymbolsWithFacts do
     begin
       var SF: TSymbolFacts;
-      if not Facts.TryGetValue(Sym.Id, SF) or (SF.EffectFree <> CEffectFreeNotProven) then Continue;
+      if (not Facts.TryGetValue(Sym.Id, SF)) or (SF.EffectFree <> CEffectFreeNotProven) then Continue;
       var Sum: TEffectSummary:= TEffectSummary.Decode(SF.EffectSummary);
       if (Sum.Flags * [efGlobal, efHeap, efSelfFields] = []) and (Length(Sum.Params) = 0) then Continue;
       var BoolRet: Boolean:= IsBooleanReturn(Sym.Signature);
+      var Deliberate: Boolean:= CalleeIsDeliberate(AStore, Sym, Sum, SF.EffectWitness, BoolRet);
       for var C in AStore.FindResolvedCallers(Sym.Id) do
       begin
-        if (C.Mode <> '') or (C.Confidence <> CConfidenceCertain) then Continue;
-        if (C.FullPath = '') or (C.CallSiteLine <= 0) then Continue;
         var FileId: Int64;
-        if not FileIdOf.TryGetValue(C.FullPath, FileId) then FileId:= 0;
-        if (AOnlyFileId <> 0) and (FileId <> AOnlyFileId) then Continue;
-        var Key: string:= Format('%s|%d|%d', [C.FullPath, C.CallSiteLine, Sym.Id]);
-        if Seen.ContainsKey(Key) then Continue;
-        Seen.Add(Key, True);
+        if not AcceptCallSite(C, Sym.Id, AOnlyFileId, FileIdOf, Seen, FileId) then Continue;
         if not AndOrNear(LinesOf(C.FullPath, LineCache), C.CallSiteLine) then Continue;
         { Get answers Tree = nil for a missing or unreadable file. }
         var PF: TParsedFile:= TAstParseCache.Get(C.FullPath);
@@ -358,6 +507,7 @@ begin
         CollectIdentsOnRow(PF.Tree.RootNode, C.CallSiteLine - 1, Sym.Name, PF.Src, Idents);
         if Idents.Count = 0 then Continue;
         var AllGuarded: Boolean:= True;
+        var AnyAccidental: Boolean:= False;
         for var Id in Idents do
         begin
           var J: TShortCircuitJudge;
@@ -369,8 +519,10 @@ begin
             AllGuarded:= False;
             Break;
           end;
+          if J.IsAccumulator or ((not Deliberate) and (not J.NilGuardsReceiver)) then
+            AnyAccidental:= True;
         end;
-        if not AllGuarded then Continue;
+        if (not AllGuarded) or (not AnyAccidental) then Continue;
         var Fd: TLintFinding:= Default(TLintFinding);
         Fd.RuleId    := SIDE_EFFECT_IN_SHORT_CIRCUIT_RULE;
         Fd.FilePath  := C.FullPath;
@@ -493,6 +645,51 @@ begin
   end;
 end;
 
+{ Stricter than IsLazyInitGetter, for a routine that is NOT a getter: besides the
+  guarding condition, EVERY assignment other than to Result sits under an `if`
+  that tests nil, Assigned or what the body assigns. A stream's Write tests the
+  size it grows but moves its position unconditionally, so it is no memo. }
+function IsMemoRoutine(const ARoot: TTSNode; const ASrc: TBytes; const ARoutine: TSymbol): Boolean;
+var
+  AssignedNames: TDictionary<string, Boolean>;
+  Nodes        : TList<TTSNode>;
+begin
+  Result:= False;
+  if not IsLazyInitGetter(ARoot, ASrc, ARoutine) then Exit;
+  var Proc: TTSNode:= FindDefProcAt(ARoot, ARoutine.ImplStartLine - 1);
+  var Body: TTSNode:= Proc.ChildByField('body');
+  AssignedNames:= TDictionary<string, Boolean>.Create;
+  Nodes        := TList<TTSNode>.Create;
+  try
+    CollectNodesOfType(Body, 'assignment', Nodes);
+    var Writes: TArray<TTSNode>:= nil;
+    for var A in Nodes do
+    begin
+      var L: string:= LowerCase(Trim(NodeText(A.ChildByField('lhs'), ASrc)));
+      if StartsStr('self.', L) then L:= Copy(L, Length('self.') + 1, MaxInt);
+      if (L = '') or (L = 'result') or SameText(L, ARoutine.Name) then Continue;
+      AssignedNames.AddOrSetValue(L, True);
+      Writes:= Writes + [A];
+    end;
+    for var W in Writes do
+    begin
+      var Guarded: Boolean:= False;
+      var P: TTSNode:= W.Parent;
+      while (not P.IsNull) and (not SameNode(P, Body)) and not Guarded do
+      begin
+        Guarded:= MatchStr(P.NodeType, ['if', 'ifElse']) and
+          ConditionGuards(P.ChildByField('condition'), ASrc, AssignedNames);
+        P:= P.Parent;
+      end;
+      if not Guarded then Exit;
+    end;
+    Result:= True;
+  finally
+    Nodes.Free;
+    AssignedNames.Free;
+  end;
+end;
+
 function CollectPropertyGetterWithEffect(const AStore: ISymbolStore;
   AOnlyFileId: Int64): TArray<TLintFinding>;
 var
@@ -568,6 +765,535 @@ begin
     ByFile.Free;
     Facts.Free;
     Findings.Free;
+  end;
+end; // function
+
+{ ---- effect-free-in-loop-invariant ------------------------------------------ }
+
+type
+  { What a bare name can be, from every symbol the project declares under it. }
+  TLoopNameClass = (
+    lncUnknown,   { no symbol: RTL, library, inherited -- could be anything }
+    lncConstant,  { const, enum value, type or unit: cannot change }
+    lncData,      { field, var, property: state a write can change }
+    lncProven,    { every routine of the name is proven effect-free }
+    lncOther);    { a routine not proven, or a mix }
+
+  { What one loop can change. }
+  TLoopChanges = record
+    Written : TDictionary<string, Boolean>; { lowercase; caller owns }
+    Frozen  : Boolean;                      { writes only locals, calls only proven routines }
+    Rejected: Boolean;                      { with / asm: nothing is known }
+  end;
+
+  TLoopInvariantRun = class
+  strict private
+    FStore    : ISymbolStore;
+    FFacts    : TDictionary<Int64, TSymbolFacts>;
+    FNames    : TDictionary<string, TLoopNameClass>;
+    FStateless: TDictionary<Int64, Boolean>;
+    function ReadsNoState(const N: TTSNode; const ASrc: TBytes; ALocals: TDictionary<string, Boolean>): Boolean;
+    procedure WalkLoop(const N: TTSNode; const ASrc: TBytes; ALocals: TDictionary<string, Boolean>; var AChanges: TLoopChanges);
+    procedure WalkCall(const AIdent, ANode: TTSNode; const ASrc: TBytes; ALocals: TDictionary<string, Boolean>; var AChanges: TLoopChanges);
+  public
+    constructor Create(const AStore: ISymbolStore);
+    destructor Destroy; override;
+    procedure LoadFacts;
+    function SymbolFacts(AId: Int64; out AFacts: TSymbolFacts): Boolean;
+    function ClassifyName(const ALowerName: string): TLoopNameClass;
+    procedure CollectLocals(const AProc: TTSNode; const ASrc: TBytes; ALocals: TDictionary<string, Boolean>);
+    function AnalyzeLoop(const ALoop: TTSNode; const ASrc: TBytes; ALocals: TDictionary<string, Boolean>; AWritten: TDictionary<string, Boolean>): TLoopChanges;
+    function CalleeReadsNoState(const ASym: TSymbol): Boolean;
+    function NameInvariant(const ALc: string; ALocals: TDictionary<string, Boolean>; const AChanges: TLoopChanges): Boolean;
+    function Invariant(const N, ACallee, ACall, AOwnDot: TTSNode; const ASrc: TBytes; ALocals: TDictionary<string, Boolean>; const AChanges: TLoopChanges): Boolean;
+  end;
+
+{ Intrinsics and RTL routines that depend on their arguments alone and write no
+  parameter. ClassifyName lets a project routine of the same name win. }
+function IsStatelessRtl(const AName: string): Boolean;
+const
+  CStateless: array[0..31] of string = ('abs', 'assigned', 'ceil', 'charinset', 'chr', 'comparestr',
+    'comparetext', 'copy', 'floor', 'high', 'inttostr', 'length', 'low', 'lowercase', 'max', 'min',
+    'odd', 'ord', 'pos', 'pred', 'round', 'samestr', 'sametext', 'sizeof', 'sqr', 'succ', 'trim',
+    'trimleft', 'trimright', 'trunc', 'uppercase', 'startstext');
+begin
+  Result:= MatchStr(AName, CStateless);
+end;
+
+function HasAddressOf(const N: TTSNode): Boolean;
+begin
+  Result:= False;
+  if N.NodeType <> 'exprUnary' then Exit;
+  for var I:= 0 to N.ChildCount - 1 do
+    if N.Child(I).NodeType = 'kAt' then Exit(True);
+end;
+
+procedure MarkAll(const N: TTSNode; const ASrc: TBytes; AOut: TDictionary<string, Boolean>);
+begin
+  if N.IsNull then Exit;
+  if N.NodeType = 'identifier' then AOut.AddOrSetValue(LowerCase(NodeText(N, ASrc)), True);
+  for var I:= 0 to N.NamedChildCount - 1 do MarkAll(N.NamedChild(I), ASrc, AOut);
+end;
+
+procedure RemoveAddressTaken(const N: TTSNode; const ASrc: TBytes; ALocals: TDictionary<string, Boolean>);
+begin
+  if N.IsNull then Exit;
+  if HasAddressOf(N) then
+  begin
+    var Taken: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+    try
+      MarkAll(N, ASrc, Taken);
+      for var K in Taken.Keys do ALocals.Remove(K);
+    finally
+      Taken.Free;
+    end;
+  end;
+  for var I:= 0 to N.NamedChildCount - 1 do RemoveAddressTaken(N.NamedChild(I), ASrc, ALocals);
+end;
+
+{ A bare local, or a subscript of one: no dot, deref or call in the store. }
+function LocalStore(const N: TTSNode; const ASrc: TBytes; ALocals: TDictionary<string, Boolean>): Boolean;
+begin
+  var X: TTSNode:= Unparen(N);
+  if X.IsNull then Exit(False);
+  if X.NodeType = 'identifier' then Exit(ALocals.ContainsKey(LowerCase(NodeText(X, ASrc))));
+  Result:= (X.NodeType = 'exprSubscript') and LocalStore(X.ChildByField('entity'), ASrc, ALocals);
+end;
+
+constructor TLoopInvariantRun.Create(const AStore: ISymbolStore);
+begin
+  inherited Create;
+  FStore    := AStore;
+  FFacts    := TDictionary<Int64, TSymbolFacts>.Create;
+  FNames    := TDictionary<string, TLoopNameClass>.Create;
+  FStateless:= TDictionary<Int64, Boolean>.Create;
+end;
+
+destructor TLoopInvariantRun.Destroy;
+begin
+  FStateless.Free;
+  FNames.Free;
+  FFacts.Free;
+  inherited Destroy;
+end;
+
+procedure TLoopInvariantRun.LoadFacts;
+begin
+  for var F in FStore.GetAllSymbolFacts do FFacts.AddOrSetValue(F.SymbolId, F);
+end;
+
+function TLoopInvariantRun.SymbolFacts(AId: Int64; out AFacts: TSymbolFacts): Boolean;
+begin
+  Result:= FFacts.TryGetValue(AId, AFacts);
+end;
+
+function TLoopInvariantRun.ClassifyName(const ALowerName: string): TLoopNameClass;
+begin
+  if FNames.TryGetValue(ALowerName, Result) then Exit;
+  Result:= lncUnknown;
+  for var S in FStore.FindSymbolsByExactName(ALowerName) do
+    begin
+      var One: TLoopNameClass;
+      case S.Kind of
+        skUnit, skClass, skInterface, skRecord, skEnum, skEnumValue, skConstDecl, skTypeAlias: One:= lncConstant;
+        skField, skVarDecl, skProperty, skComponent: One:= lncData;
+        skFunction, skMethod:
+          begin
+            var F: TSymbolFacts;
+            One:= if FFacts.TryGetValue(S.Id, F) and (F.EffectFree = CEffectFreeProven) then lncProven else lncOther;
+          end;
+        skProcedure, skConstructor, skDestructor: One:= lncOther;
+      else
+        Continue; { a local or parameter of some other routine says nothing here }
+      end;
+      if Result = lncUnknown then Result:= One
+      else if Result <> One then
+        { Constant beside data is data; a routine beside anything else is not proven. }
+        Result:= if (Result in [lncConstant, lncData]) and (One in [lncConstant, lncData]) then lncData else lncOther;
+    end;
+  { A field called Pos does not stop Pos(..) being the RTL's; a routine called Pos does. }
+  if (Result in [lncUnknown, lncData, lncConstant]) and IsStatelessRtl(ALowerName) then Result:= lncProven;
+  FNames.Add(ALowerName, Result);
+end;
+
+{ Fills ALocals with the routine's by-value parameters, its variables, Result and
+  Self. A name a nested routine or closure mentions is left out, because a call
+  in the loop can write it there, and so is a var / out parameter: it may alias
+  state. }
+procedure TLoopInvariantRun.CollectLocals(const AProc: TTSNode; const ASrc: TBytes; ALocals: TDictionary<string, Boolean>);
+var
+  Nested: TDictionary<string, Boolean>;
+
+  procedure Walk(const N: TTSNode);
+  begin
+    if N.IsNull then Exit;
+    var T: string:= N.NodeType;
+    if (T = 'lambda') or ((T = 'defProc') and not SameNode(N, AProc)) then
+    begin
+      MarkAll(N, ASrc, Nested);
+      Exit;
+    end;
+    if (T = 'declArg') or (T = 'declVar') then
+    begin
+      var ByRef: Boolean:= False;
+      for var I:= 0 to N.ChildCount - 1 do
+        if (N.Child(I).NodeType = 'kVar') or (N.Child(I).NodeType = 'kOut') then ByRef:= True;
+      var Ty: TTSNode:= N.ChildByField('type');
+      if (not ByRef) and (not Ty.IsNull) then
+        for var I:= 0 to N.NamedChildCount - 1 do
+        begin
+          var Ch: TTSNode:= N.NamedChild(I);
+          if (Ch.NodeType = 'identifier') and (Ch.StartByte < Ty.StartByte) then
+            ALocals.AddOrSetValue(LowerCase(NodeText(Ch, ASrc)), True);
+        end;
+      Exit;
+    end;
+    if (T = 'varDef') or (T = 'varAssignDef') then
+      for var I:= 0 to N.NamedChildCount - 1 do
+        if N.NamedChild(I).NodeType = 'identifier' then
+        begin
+          ALocals.AddOrSetValue(LowerCase(NodeText(N.NamedChild(I), ASrc)), True);
+          Break;
+        end;
+    for var I:= 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I));
+  end;
+
+begin
+  Nested:= TDictionary<string, Boolean>.Create;
+  try
+    Walk(AProc);
+    for var K in Nested.Keys do ALocals.Remove(K);
+  finally
+    Nested.Free;
+  end;
+  ALocals.AddOrSetValue('result', True);
+  ALocals.AddOrSetValue('self', True);
+  RemoveAddressTaken(AProc, ASrc, ALocals);
+end;
+
+{ One call in the loop, with or without an argument list. }
+procedure TLoopInvariantRun.WalkCall(const AIdent, ANode: TTSNode; const ASrc: TBytes;
+  ALocals: TDictionary<string, Boolean>; var AChanges: TLoopChanges);
+const
+  CStepRoutines: array[0..3] of string = ('dec', 'exclude', 'inc', 'include');
+  CFlow        : array[0..2] of string = ('break', 'continue', 'exit');
+begin
+  var Name: string:= if AIdent.IsNull then '' else LowerCase(NodeText(AIdent, ASrc));
+  var Args: TTSNode:= if ANode.NodeType = 'exprCall' then ANode.ChildByField('args') else Default(TTSNode);
+  if MatchStr(Name, CFlow) and (ANode.NodeType <> 'exprDot') then
+  begin
+    WalkLoop(Args, ASrc, ALocals, AChanges);
+    Exit;
+  end;
+  if MatchStr(Name, CStepRoutines) and (not Args.IsNull) and (Args.NamedChildCount > 0) then
+  begin
+    MarkAll(Args, ASrc, AChanges.Written);
+    if not LocalStore(Args.NamedChild(0), ASrc, ALocals) then AChanges.Frozen:= False;
+    WalkLoop(Args, ASrc, ALocals, AChanges);
+    Exit;
+  end;
+  var Proven: Boolean:= (Name <> '') and (not ALocals.ContainsKey(Name)) and
+    (ClassifyName(Name) in [lncProven, lncConstant]);
+  if not Proven then
+  begin
+    AChanges.Frozen:= False;
+    { Maybe a var parameter, maybe a record method: its receiver and arguments may change. }
+    MarkAll(ANode, ASrc, AChanges.Written);
+  end;
+  { The name itself was judged here; only what surrounds it is left to walk. }
+  var Ent: TTSNode:= if ANode.NodeType = 'exprCall' then ANode.ChildByField('entity') else ANode;
+  if Ent.NodeType = 'exprDot' then WalkLoop(Ent.ChildByField('lhs'), ASrc, ALocals, AChanges);
+  WalkLoop(Args, ASrc, ALocals, AChanges);
+end;
+
+procedure TLoopInvariantRun.WalkLoop(const N: TTSNode; const ASrc: TBytes;
+  ALocals: TDictionary<string, Boolean>; var AChanges: TLoopChanges);
+begin
+  if N.IsNull or AChanges.Rejected then Exit;
+  var T: string:= N.NodeType;
+  if (T = 'with') or (T = 'asm') then AChanges.Rejected:= True
+  else if T = 'assignment' then
+  begin
+    var Lhs: TTSNode:= N.ChildByField('lhs');
+    MarkAll(Lhs, ASrc, AChanges.Written);
+    if not LocalStore(Lhs, ASrc, ALocals) then AChanges.Frozen:= False;
+    if Unparen(Lhs).NodeType = 'exprSubscript' then
+      WalkLoop(Unparen(Lhs).ChildByField('args'), ASrc, ALocals, AChanges);
+    WalkLoop(N.ChildByField('rhs'), ASrc, ALocals, AChanges);
+  end
+  else if T = 'exprCall' then WalkCall(CalleeIdentOf(N), N, ASrc, ALocals, AChanges)
+  else if (T = 'statement') and (N.NamedChildCount = 1) and
+          MatchStr(N.NamedChild(0).NodeType, ['identifier', 'exprDot']) then
+    { A statement that is only a name is a parenless call. }
+    WalkCall(CalleeIdentOf(N.NamedChild(0)), N.NamedChild(0), ASrc, ALocals, AChanges)
+  else if (T = 'exprDot') and SameText(NodeText(N.ChildByField('rhs'), ASrc), 'Count') then
+    { List.Count is a read in every library this code sees; only what it is read from is left. }
+    WalkLoop(N.ChildByField('lhs'), ASrc, ALocals, AChanges)
+  else if T = 'identifier' then
+  begin
+    var Lc: string:= LowerCase(NodeText(N, ASrc));
+    { A name that may be a parenless call the index did not bind stops the proof. }
+    if (not ALocals.ContainsKey(Lc)) and (ClassifyName(Lc) not in [lncConstant, lncData, lncProven]) then
+      AChanges.Frozen:= False;
+  end
+  else
+  begin
+    if HasAddressOf(N) then
+    begin
+      AChanges.Frozen:= False;
+      MarkAll(N, ASrc, AChanges.Written);
+    end;
+    if (T = 'foreach') or (T = 'varDef') or (T = 'varAssignDef') then
+      for var I:= 0 to N.NamedChildCount - 1 do
+        if N.NamedChild(I).NodeType = 'identifier' then
+        begin
+          var Lc: string:= LowerCase(NodeText(N.NamedChild(I), ASrc));
+          AChanges.Written.AddOrSetValue(Lc, True);
+          if not ALocals.ContainsKey(Lc) then AChanges.Frozen:= False;
+        end;
+    if T = 'for' then
+    begin
+      var LoopVar: TTSNode:= N.ChildByField('start').ChildByField('lhs');
+      MarkAll(LoopVar, ASrc, AChanges.Written);
+      if not LocalStore(LoopVar, ASrc, ALocals) then AChanges.Frozen:= False;
+    end;
+    for var I:= 0 to N.NamedChildCount - 1 do
+      WalkLoop(N.NamedChild(I), ASrc, ALocals, AChanges);
+  end;
+end;
+function TLoopInvariantRun.AnalyzeLoop(const ALoop: TTSNode; const ASrc: TBytes;
+  ALocals: TDictionary<string, Boolean>; AWritten: TDictionary<string, Boolean>): TLoopChanges;
+begin
+  Result:= Default(TLoopChanges);
+  Result.Written:= AWritten;
+  Result.Frozen := True;
+  WalkLoop(ALoop, ASrc, ALocals, Result);
+end;
+
+{ True when no name under N is anything but a by-value local, a constant or a
+  stateless intrinsic, and nothing reaches through a dot, subscript or deref. }
+function TLoopInvariantRun.ReadsNoState(const N: TTSNode; const ASrc: TBytes; ALocals: TDictionary<string, Boolean>): Boolean;
+begin
+  Result:= True;
+  if N.IsNull then Exit;
+  var T: string:= N.NodeType;
+  if (T = 'exprDot') or (T = 'exprSubscript') or (T = 'with') or (T = 'asm') or HasAddressOf(N) then Exit(False);
+  if (T = 'exprUnary') and not MatchStr(OperatorOf(N), ['kNot', 'kSub', 'kAdd']) then Exit(False);
+  if T = 'identifier' then
+  begin
+    var Lc: string:= LowerCase(NodeText(N, ASrc));
+    Exit(ALocals.ContainsKey(Lc) or IsStatelessRtl(Lc) or (ClassifyName(Lc) = lncConstant));
+  end;
+  for var I:= 0 to N.NamedChildCount - 1 do
+    if not ReadsNoState(N.NamedChild(I), ASrc, ALocals) then Exit(False);
+end;
+
+function TLoopInvariantRun.CalleeReadsNoState(const ASym: TSymbol): Boolean;
+var
+  Locals: TDictionary<string, Boolean>;
+begin
+  if FStateless.TryGetValue(ASym.Id, Result) then Exit;
+  Result:= False;
+  var PF: TParsedFile:= TAstParseCache.Get(FStore.GetFilePath(ASym.FileId));
+  if (PF.Tree <> nil) and (ASym.ImplStartLine > 0) then
+  begin
+    var Proc: TTSNode:= FindDefProcAt(PF.Tree.RootNode, ASym.ImplStartLine - 1);
+    Locals:= TDictionary<string, Boolean>.Create;
+    try
+      if not Proc.IsNull then
+      begin
+        CollectLocals(Proc, PF.Src, Locals);
+        Locals.AddOrSetValue(LowerCase(ASym.Name), True);
+        Locals.Remove('self');
+        Result:= ReadsNoState(Proc.ChildByField('body'), PF.Src, Locals);
+      end;
+    finally
+      Locals.Free;
+    end;
+  end;
+  FStateless.Add(ASym.Id, Result);
+end;
+
+{ A name under the call: not changed by the loop, and a local or a constant --
+  or, in a frozen loop, anything the proof already vouched for. }
+function TLoopInvariantRun.NameInvariant(const ALc: string; ALocals: TDictionary<string, Boolean>;
+  const AChanges: TLoopChanges): Boolean;
+begin
+  if AChanges.Written.ContainsKey(ALc) then Exit(False);
+  if ALocals.ContainsKey(ALc) then Exit(True);
+  var Cl: TLoopNameClass:= ClassifyName(ALc);
+  Result:= (Cl = lncConstant) or (AChanges.Frozen and (Cl in [lncData, lncProven]));
+end;
+
+{ True for the expression shapes that read nothing but their own operands. }
+function ReadsOperandsOnly(const N: TTSNode): Boolean;
+begin
+  var T: string:= N.NodeType;
+  if T = 'exprUnary' then Exit(MatchStr(OperatorOf(N), ['kNot', 'kSub', 'kAdd']));
+  Result:= (N.NamedChildCount = 0) or MatchStr(T, ['exprBinary', 'exprParens', 'exprArgs']);
+end;
+
+{ True when the subtree of the call (arguments and receiver) cannot answer
+  differently on a later iteration. ACallee is the callee's own identifier;
+  ACall / AOwnDot are the call's own nodes, which any proof may pass through. }
+function TLoopInvariantRun.Invariant(const N, ACallee, ACall, AOwnDot: TTSNode; const ASrc: TBytes;
+  ALocals: TDictionary<string, Boolean>; const AChanges: TLoopChanges): Boolean;
+begin
+  if N.IsNull or SameNode(N, ACallee) then Exit(True);
+  if HasAddressOf(N) then Exit(False);
+  if N.NodeType = 'identifier' then Exit(NameInvariant(LowerCase(NodeText(N, ASrc)), ALocals, AChanges));
+  if not (AChanges.Frozen or SameNode(N, ACall) or SameNode(N, AOwnDot) or ReadsOperandsOnly(N)) then Exit(False);
+  Result:= True;
+  for var I:= 0 to N.NamedChildCount - 1 do
+    if not Invariant(N.NamedChild(I), ACallee, ACall, AOwnDot, ASrc, ALocals, AChanges) then Exit(False);
+end;
+{ The nearest loop whose every iteration runs N; null when there is none or a
+  `with` sits anywhere around it (it may rebind any name). }
+function EnclosingIteratedLoop(const N: TTSNode; out AProc: TTSNode): TTSNode;
+begin
+  Result:= Default(TTSNode);
+  AProc := Default(TTSNode);
+  var C: TTSNode:= N;
+  var P: TTSNode:= N.Parent;
+  while not P.IsNull do
+  begin
+    var T: string:= P.NodeType;
+    if T = 'with' then Exit(Default(TTSNode));
+    if T = 'lambda' then Exit(Default(TTSNode));
+    if T = 'defProc' then
+    begin
+      AProc:= P;
+      Exit;
+    end;
+    if Result.IsNull then
+    begin
+      if (T = 'while') or (T = 'repeat') then Result:= P
+      else if ((T = 'for') or (T = 'foreach')) and SameNode(P.ChildByField('body'), C) then Result:= P;
+    end;
+    C:= P;
+    P:= C.Parent;
+  end;
+  Result:= Default(TTSNode);
+end;
+
+{ The whole call an identifier names: `F`, `X.F`, `F(..)`, `X.F(..)`. AOwnDot is
+  the dot of `X.F`, null without a receiver. }
+function CallNodeOf(const AIdent: TTSNode; out AOwnDot: TTSNode): TTSNode;
+begin
+  AOwnDot:= AIdent.Parent;
+  if AOwnDot.IsNull or (AOwnDot.NodeType <> 'exprDot') or not SameNode(AOwnDot.ChildByField('rhs'), AIdent) then
+    AOwnDot:= Default(TTSNode);
+  var Inner: TTSNode:= if AOwnDot.IsNull then AIdent else AOwnDot;
+  Result:= Inner.Parent;
+  if Result.IsNull or (Result.NodeType <> 'exprCall') or not SameNode(Result.ChildByField('entity'), Inner) then
+    Result:= Inner;
+end;
+
+{ `Result:= FField` and the like: the hoist would save nothing. }
+function IsOneLineAccessor(const ARoot: TTSNode; const ASym: TSymbol): Boolean;
+var
+  Nodes: TList<TTSNode>;
+begin
+  Result:= False;
+  if ASym.ImplStartLine <= 0 then Exit;
+  var Proc: TTSNode:= FindDefProcAt(ARoot, ASym.ImplStartLine - 1);
+  if Proc.IsNull then Exit;
+  Nodes:= TList<TTSNode>.Create;
+  try
+    CollectNodesOfType(Proc.ChildByField('body'), 'assignment', Nodes);
+    if Nodes.Count <> 1 then Exit;
+    Result:= MatchStr(Unparen(Nodes[0].ChildByField('rhs')).NodeType, ['identifier', 'exprDot']);
+  finally
+    Nodes.Free;
+  end;
+end;
+
+function CollectEffectFreeInLoopInvariant(const AStore: ISymbolStore;
+  AOnlyFileId: Int64): TArray<TLintFinding>;
+var
+  Run     : TLoopInvariantRun;
+  Findings: TList<TLintFinding>;
+  FileIdOf: TDictionary<string, Int64>;
+  Seen    : TDictionary<string, Boolean>;
+  Idents  : TList<TTSNode>;
+  Locals  : TDictionary<string, Boolean>;
+  Written : TDictionary<string, Boolean>;
+begin
+  Run     := TLoopInvariantRun.Create(AStore);
+  Findings:= TList<TLintFinding>.Create;
+  FileIdOf:= TDictionary<string, Int64>.Create(TIStringComparer.Ordinal);
+  Seen    := TDictionary<string, Boolean>.Create;
+  Idents  := TList<TTSNode>.Create;
+  Locals  := TDictionary<string, Boolean>.Create;
+  Written := TDictionary<string, Boolean>.Create;
+  try
+    for var Fi in AStore.GetAllFileIds do
+      FileIdOf.AddOrSetValue(AStore.GetFilePath(Fi), Fi);
+    Run.LoadFacts;
+    for var Sym in AStore.FindSymbolsWithFacts do
+    begin
+      var SF: TSymbolFacts;
+      if (not Run.SymbolFacts(Sym.Id, SF)) or (SF.EffectFree <> CEffectFreeProven) then Continue;
+      if not ((Sym.Kind = skFunction) or ((Sym.Kind = skMethod) and SignatureReturnsValue(Sym.Signature))) then Continue;
+      if Run.ClassifyName(LowerCase(Sym.Name)) <> lncProven then Continue;
+      var Accessor: Integer:= -1; { unknown until a call site makes it worth a parse }
+      for var C in AStore.FindResolvedCallers(Sym.Id) do
+      begin
+        var FileId: Int64;
+        if not AcceptCallSite(C, Sym.Id, AOnlyFileId, FileIdOf, Seen, FileId) then Continue;
+        var PF: TParsedFile:= TAstParseCache.Get(C.FullPath);
+        if PF.Tree = nil then Continue;
+        Idents.Clear;
+        CollectIdentsOnRow(PF.Tree.RootNode, C.CallSiteLine - 1, Sym.Name, PF.Src, Idents);
+        for var Id in Idents do
+        begin
+          var Proc: TTSNode;
+          var Loop: TTSNode:= EnclosingIteratedLoop(Id, Proc);
+          if Loop.IsNull or Proc.IsNull then Continue;
+          if Accessor < 0 then
+          begin
+            var Own: TParsedFile:= TAstParseCache.Get(AStore.GetFilePath(Sym.FileId));
+            Accessor:= Ord((Own.Tree <> nil) and IsOneLineAccessor(Own.Tree.RootNode, Sym));
+          end;
+          if Accessor = 1 then Break;
+          Locals.Clear;
+          Run.CollectLocals(Proc, PF.Src, Locals);
+          Written.Clear;
+          var Changes: TLoopChanges:= Run.AnalyzeLoop(Loop, PF.Src, Locals, Written);
+          if Changes.Rejected then Continue;
+          if not (Changes.Frozen or Run.CalleeReadsNoState(Sym)) then Continue;
+          var OwnDot: TTSNode;
+          var Call: TTSNode:= CallNodeOf(Id, OwnDot);
+          if not Run.Invariant(Call, Id, Call, OwnDot, PF.Src, Locals, Changes) then Continue;
+          var Fd: TLintFinding:= Default(TLintFinding);
+          Fd.RuleId    := EFFECT_FREE_IN_LOOP_INVARIANT_RULE;
+          Fd.FilePath  := C.FullPath;
+          Fd.FileId    := FileId;
+          Fd.StartLine := C.CallSiteLine;
+          Fd.EndLine   := C.CallSiteLine;
+          Fd.StartCol  := Integer(Id.StartPoint.Column) + 1;
+          Fd.EndCol    := Fd.StartCol + Length(Sym.Name);
+          Fd.Severity  := CSeverityInfo;
+          Fd.SymbolName:= Sym.Name;
+          Fd.Message   := Format(
+            '%s is effect-free and answers the same on every iteration of the loop at line %d ' +
+            '(%s) -- call it once before the loop',
+            [Sym.QualifiedName, Integer(Loop.StartPoint.Row) + 1,
+             if Changes.Frozen then 'the loop writes only local variables' else 'it reads no state']);
+          Findings.Add(Fd);
+          Break;
+        end;
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Written.Free;
+    Locals.Free;
+    Idents.Free;
+    Seen.Free;
+    FileIdOf.Free;
+    Findings.Free;
+    Run.Free;
   end;
 end; // function
 

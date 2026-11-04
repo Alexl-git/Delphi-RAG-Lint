@@ -4588,6 +4588,9 @@ begin
       for var Pf5 in CollectPropertyGetterWithEffect(AStore, AOnlyFileId) do Findings.Add(Pf5);
     if WantRule('ui-access-in-thread-transitive') and OptedIn('ui-access-in-thread-transitive') then
       for var Pf6 in CollectUiAccessInThreadTransitive(AStore, AOnlyFileId) do Findings.Add(Pf6);
+    { 1.42: same gate, same reason. }
+    if WantRule('effect-free-in-loop-invariant') and OptedIn('effect-free-in-loop-invariant') then
+      Findings.AddRange(CollectEffectFreeInLoopInvariant(AStore, AOnlyFileId));
     Inc(TPurity, Tick - T0);
     T0:= Tick;
 

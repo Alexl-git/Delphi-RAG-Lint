@@ -8,6 +8,10 @@ breaking changes** until v2.0.
 1.42 wave 1, integrated on lane/142-int1. ONE bump: DRAGLINT_EXTRACTOR_VERSION 1.29.0 -> 1.30.0-alpha and
 DRAGLINT_RESOLVER_VERSION 1.17.0 -> 1.18.0-alpha -- every index re-parses once.
 
+### Added / changed (wave 3, lane effect)
+- lint (TRIAGE #35): new rule `effect-free-in-loop-invariant` (info, OFF): a proven effect-free call in a loop whose arguments and read state cannot change in it.
+- lint (TRIAGE #46): `side-effect-in-short-circuit` no longer reports a deliberate short-circuit: a Boolean `TryX`, a Boolean callee that only writes its own parameters, a parameterless memo, a stored SQL read, `Assigned(R) and R.F`. An accumulator (`X:= X or F(..)`) still fires. Still OFF.
+
 ### Changed (wave 2, lane surface)
 - context (CTX-SURFACE-DOCS, D8): on a capped type the class surface drops the member docs of the omitted bodies; a kept (focus / in-type-called) body keeps its docs; `--full-surface` keeps all.
 - MCP (MCP-CTX-CAP, D9): `get_context_bundle` takes `max_body_tokens` (default 20000, 0 = uncapped), as the CLI's `--max-body-tokens`.

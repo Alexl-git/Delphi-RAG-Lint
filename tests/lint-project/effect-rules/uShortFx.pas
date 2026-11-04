@@ -26,10 +26,19 @@ type
 function Pop(var AList: Integer): Boolean;
 function NextId: Boolean;
 function Mask: Integer;
+function Take(var AList: Integer): Integer;
+function TryNext: Boolean;
+function Cached: Boolean;
+function StoredCount: Boolean;
+function Grow(ACount: Integer): Integer;
+function GrowIf(ACount: Integer): Integer;
 procedure Driver;
 
 var
   GNext: Integer;
+  GLoaded: Boolean;
+  GMemo: Boolean;
+  GMax: Integer;
 
 implementation
 
@@ -70,16 +79,72 @@ begin
   Result:= GNext;
 end;
 
+{ Writes through its var parameter and returns an INTEGER -- not the fetch shape. }
+function Take(var AList: Integer): Integer;
+begin
+  AList:= AList - 1;
+  Result:= AList;
+end;
+
+{ The TryX idiom by NAME: its effect is a global write, and it is still a try. }
+function TryNext: Boolean;
+begin
+  GNext:= GNext + 1;
+  Result:= GNext > 1;
+end;
+
+{ A memo: the only write fills a cache the condition itself tests. }
+function Cached: Boolean;
+begin
+  if not GLoaded then
+  begin
+    GLoaded:= True;
+    GMemo:= GNext > 0;
+  end;
+  Result:= GMemo;
+end;
+
+{ A read-only query: the stored 'g' stands for READS SQL, nothing changes. }
+function StoredCount: Boolean;
+var
+  Q: TFDQuery;
+begin
+  Q:= TFDQuery.Create(nil);
+  Q.SQL.Text:= 'SELECT COUNT(*) FROM T';
+  Q.Open;
+  Result:= Q.Fields[0].AsInteger > 0;
+end;
+
+{ Tests what it assigns, like a memo, but moves GNext unconditionally: no memo. }
+function Grow(ACount: Integer): Integer;
+begin
+  if GNext + ACount > GMax then GMax:= GNext + ACount;
+  GNext:= GNext + ACount;
+  Result:= GNext;
+end;
+
+{ Every write under a test of what it assigns, like a stream's Write: it takes a
+  parameter, so it does a job per call and is no memo. }
+function GrowIf(ACount: Integer): Integer;
+begin
+  if GMax >= 0 then
+  begin
+    GMax:= GMax + ACount;
+  end;
+  Result:= GMax;
+end;
+
 procedure Driver;
 var
   N : Integer;
   B : TBox;
+  B2: TBox;
   Ok: Boolean;
 begin
   N := 3;
   Ok:= N > 0;
   B := TBox.Create;
-  if (N > 0) and Pop(N) then N:= 1;           { SC-TRIGGER-1: p0 after and }
+  if (N > 0) and (Take(N) > 0) then N:= 1;     { SC-TRIGGER-1: p0, integer callee }
   if Ok or B.Bump then N:= 2;                  { SC-TRIGGER-2: s after or }
   Ok:= Ok and NextId();                        { SC-TRIGGER-3: g, assignment }
   while (N > 0) and
@@ -94,6 +159,18 @@ begin
   N:= Mask; if Ok then N:= 10;                 { SC-CONTROL-6: effect outside any and/or }
   if Ok xor NextId then N:= 11;                { SC-CONTROL-7: xor evaluates both }
   if Ok and Ok then Pop(N);                    { SC-CONTROL-8: effect in the then-branch }
+  if (N > 0) and Pop(N) then N:= 12;           { SC-CONTROL-9: Boolean fetch through a param only }
+  if Ok and TryNext then N:= 13;               { SC-CONTROL-10: TryX idiom, by name }
+  if Ok and Cached then N:= 14;                { SC-CONTROL-11: memoizing callee }
+  if Ok and StoredCount then N:= 15;           { SC-CONTROL-12: read-only SQL }
+  if Assigned(B) and B.Bump then N:= 16;       { SC-CONTROL-13: nil guard of the receiver }
+  if (B <> nil) and B.Bump then N:= 17;        { SC-CONTROL-14: nil guard of the receiver }
+  Ok:= Ok and Pop(N);                          { SC-TRIGGER-7: accumulator, the fetch shape still loses the call }
+  Ok:= Ok or TryNext;                          { SC-TRIGGER-8: accumulator, the TryX idiom still loses the call }
+  Ok:= (Ok or NextId) or Cached;               { SC-TRIGGER-9: accumulator over a chain, memo or not }
+  if Assigned(B2) and B.Bump then N:= 18;      { SC-TRIGGER-10: the guard tests another object }
+  if (N > 0) and (Grow(N) > 0) then N:= 19;    { SC-TRIGGER-11: tests what it assigns, yet no memo }
+  if (N > 0) and (GrowIf(N) > 0) then N:= 20;  { SC-TRIGGER-12: guarded writes, but it takes a parameter }
   B.Free;
 end;
 
