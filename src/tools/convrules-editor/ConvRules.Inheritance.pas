@@ -372,8 +372,13 @@ function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<str
 /// <returns>Known = False when there is nothing to say (see TUnitInheritance.Known);
 /// otherwise one verdict per `inherited` .dfm instance whose class is a From type, then
 /// one per E2b code use (FromCode, asUnconverted) not already reported. `inline`
-/// instances are the unit's OWN frames and are not verdicts; their children are. Ancestors\n/// is the unit's whole ancestor graph (AncestorGraphOf), filled for every Known unit whose\n/// own class is indexed, with or without verdicts (C8CHAIN, owner ruling Q5).</returns>
-/// <remarks>A failed lookup of the unit's own class is unknown for every unit (not only one\n/// with wanted instances), as is an ancestor graph that cannot be walked (cycle, depth, binary\n/// or unreadable .dfm, failed lookup): Known = False, Verdicts and Ancestors empty.\n/// A code use is an identifier the unit's own class's methods use that an
+/// instances are the unit's OWN frames and are not verdicts; their children are. Ancestors
+/// is the unit's whole ancestor graph (AncestorGraphOf), filled for every Known unit whose
+/// own class is indexed, with or without verdicts (C8CHAIN, owner ruling Q5).</returns>
+/// <remarks>A failed lookup of the unit's own class is unknown for every unit (not only one
+/// with wanted instances), as is an ancestor graph that cannot be walked (cycle, depth, binary
+/// or unreadable .dfm, failed lookup): Known = False, Verdicts and Ancestors empty.
+/// A code use is an identifier the unit's own class's methods use that an
 /// ANCESTOR declares as a field of a From type (TClassInfo.Fields), found on the same
 /// walk as an instance; its Chain follows E2a (every ancestor whose .dfm opens it with a
 /// From type, plus the declaring unit). Dropped, not reported: a name the .dfm already
