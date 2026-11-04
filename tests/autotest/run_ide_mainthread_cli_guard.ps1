@@ -47,6 +47,8 @@ $Rows = @(
   @{ Unit = 'DragLint.Plugin.Reports';          Budget = 0; Note = 'typeat at the caret' }
   @{ Unit = 'DragLint.Plugin.Diagnose';         Budget = 0; Note = 'info --json for the About and Diagnose screens' }
   @{ Unit = 'DragLint.Plugin.StructureForm';    Budget = 0; Note = 'tab switch, menu open, menu verbs' }
+  # 14 = the declaration and body of RunAndCaptureStdout (3), seven on worker threads (compile, ghost check, reports, call tree, butterfly), and the main-thread sites left on purpose: the hover fallback for an engine without the bundle (3) and register-project inside its modal confirm (1).
+  @{ Unit = 'DragLint.Plugin.Editor';           Budget = 14; Note = 'menu commands' }
 )
 
 $failed = 0
