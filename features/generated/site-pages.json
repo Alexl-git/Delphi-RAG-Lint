@@ -24,8 +24,8 @@
     "version": "1.33.0-alpha"
   },
   "features/auto-document-whole-project.md": {
-    "hash": "0e3e275630e57c84d6747bc4a71318c67413dd18c70e6d89f377b1d0ca3ada06",
-    "version": "1.38.0-alpha"
+    "hash": "02365ba15ecc39834dc621dfe632bba3540b72c3b3b3dd03c26c9088e9923daa",
+    "version": "1.42.0-alpha"
   },
   "features/auto-uses-on-save.md": {
     "hash": "c1bc3f11a746870a0942c8b51611150584d549210ffa332a59bf6dd0cd38f87d",
@@ -268,8 +268,8 @@
     "version": "1.35.1-alpha"
   },
   "features/engine-heartbeat.md": {
-    "hash": "cd88f4b0da8fd5d189caf310c9754bf0b7a0f8075d8c28322c1e8727fad4585a",
-    "version": "1.40.0-alpha"
+    "hash": "d98cbe9185f07209bdfc42af0194655c499a0ca273fdd5dc9d34a81a7d67aac3",
+    "version": "1.42.0-alpha"
   },
   "features/exceptions-sync.md": {
     "hash": "98d920375eac672309dc751f117ad663696ac99dfc805e0d0e4ec40c4cbdfe0f",
@@ -600,8 +600,8 @@
     "version": "1.40.0-alpha"
   },
   "features/rebuild-index-for-this-project.md": {
-    "hash": "f4332bfa761c453978eafdcef299d214e2b741c1b76929b91051c6a87cb6ba30",
-    "version": "1.38.0-alpha"
+    "hash": "bfc996f0656e128fab910b9570790481bebc28eeaba414004d6469a5e05ccb5f",
+    "version": "1.42.0-alpha"
   },
   "features/reconcile-project-members-dpr-dproj.md": {
     "hash": "9a05a375896fcc2b6664ce7b467f1535193f9c90b96abf98db0f1e57733ab458",

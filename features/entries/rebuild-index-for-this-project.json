@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "index",
-      "usage": "drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--rule-cache-warm background|wait|off] [--watch [--interval N]] [--target-compiler <ver|auto>]",
+      "usage": "drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--wait-library <min>] [--require-library] [--stall-exit-min <min>] [--rule-cache-warm background|wait|off] [--watch [--interval N]] [--target-compiler <ver|auto>]",
       "flags": [
         {
           "name": "--project",
@@ -46,6 +46,11 @@
         },
         {
           "name": "--require-library"
+        },
+        {
+          "name": "--stall-exit-min",
+          "arg": "min",
+          "summary": "a counter standing still this long ends the run: exit 8, or exit 9 at a quarter of the limit when RAM is critical. A moving counter is never stopped. Off by default."
         },
         {
           "name": "--watch"

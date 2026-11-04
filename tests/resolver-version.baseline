@@ -706,7 +706,14 @@
 #   7338 purity verdicts, 29192 call edges and symbol/ref counts (0 diffs), and
 #   run_purity_symbol_lookup_cost.ps1 E1 checks the same on a fixture.
 #   Superseded: 1.17.0-alpha|7c0bbfbe1228c9f24a98c08df2697e4d3d612949f98fcf66b7a8a05c25a79239
-1.18.0-alpha|bb82640d1e69b64cbcd9b20a0e57dbf27fcf3a8de0dbd39479f6756aa07eb1c5
+# 2026-11-04: hash refreshed WITHOUT a bump (1.18.0-alpha stays; controller ruling, lane 142-callslow). The calls pass
+#   clears inside its own transaction instead of nesting as a SAVEPOINT (the fix for the 1.42 re-parse slowdown), and
+#   the streams, purity and search report progress. Nothing derived changes: on a copy of MicroniteMW1Service.sqlite
+#   (no library attached) the old engine and this one, --resolve-only from the same file, gave identical full ordered
+#   dumps of all 41 tables (call_edges, member_accesses, refs, dispatch_edges ...) except schema_meta.indexed_at_unix;
+#   a mutated copy made the comparison fail on the two mutated tables.
+#   Superseded: 1.18.0-alpha|bb82640d1e69b64cbcd9b20a0e57dbf27fcf3a8de0dbd39479f6756aa07eb1c5
+1.18.0-alpha|175508be7054dbfd95a6ab46c5b00dfcd4a3cbd3bfdb55c8554041117baa5189
 # superseded (same 1.12.0-alpha, re-pinned WITHOUT a bump 2026-10-18, wave 1.31.5 lane 2 / V-C): Storage.SQLite changed only the scoped-pass BOOKKEEPING -- the one-in-three share latch now divides by the file count from BEFORE the run (FScopeCorpusBefore) instead of CountFiles at the first removal (which already counted this run's new files), new/changed write counters feed the decline REASON text, the FTS5 'AVAILABLE' line is gone, and the '~37 min' warning prints only from 1M refs. No binding rule changed: the latch only chooses scoped vs whole-DB, and the two passes are designed to write the same call edges, so no stored edge is stale. 1.12.0-alpha|e2db1d4d6dd17d7b1687e0cb9f7b27822e71e3299e5d2afed86dd0f329658c7d
 # superseded (same 1.12.0-alpha, never released; E5 review round 1 on the branch -- NearestClassMember: the nearest member of any kind hides a farther field, an unresolved parent ends the walk, interfaces are not walked; new decline reason 'hidden'): 1.12.0-alpha|3cebd6247a15eb7fa8708c80fd73242b4c60d53c9d44a390564efaa12a6b1806
 # superseded: 1.11.0-alpha|7d04a1be5c4bfd0968b01c171996afe597c3b1ad94ae9910e013e044974854bd

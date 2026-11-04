@@ -7,7 +7,7 @@ group: editor-integration
 order: 110006
 since: 1.40.0-alpha
 status: shipped
-updated: 1.40.0-alpha
+updated: 1.42.0-alpha
 ---
 
 # Engine heartbeat: the IDE tells a busy engine from a stuck one
@@ -60,6 +60,31 @@ engine stager enumerate `drag-lint-ctl-*`, so their behaviour is unchanged.
   mark is ignored. A beat that stops answering is frozen. The stuck limit is
   unchanged (180 s).
 * The status bar shows the last beat, e.g. `index parse 120/400`.
+
+### Reading it from outside (1.42)
+
+`drag-lint shutdown --all --dry-run` lists every engine of this user and session and adds, per engine, the
+beat line: `pid 1234 beat: index: resolve calls 512000/1100203 (seq 8048, last report 3 s ago)`. It asks
+nothing and changes nothing. Compare two readings: the seq and N are the progress test.
+
+The stage's own `still running` line carries the same counter and a rate:
+`stage: calls -- still running, 12m00s elapsed, resolve calls 512000 of 1100203, 710/s`. A stage with no
+counter prints the time only.
+
+### Slow or stuck? (1.42)
+
+A heartbeat proves only that its own timer thread is alive, so a long stage compares the status record's seq.
+A counter standing still for 15 minutes prints `stage: calls -- NO PROGRESS for 900 s at <step> N of M`, and free
+RAM under 512 MB prints `LOW MEMORY`. Neither stops anything.
+
+`index --stall-exit-min <min>` arms an exit: a counter standing still that long ends the run with exit 8 and a
+`STALLED` line (exit 9, at a quarter of the limit, when RAM is critical). A moving counter is never stopped,
+however slow and however short memory is. Some steps have no counter (purity fixpoint, facts-inherited, COMMIT),
+so set the limit above the longest of them: 60 on a library index.
+
+The open transaction rolls back, as after a kill. **Re-run a library killed after its walk with `--resolve-only`:**
+a plain re-run re-parses every file, because the indexer fingerprint is stamped only at the end of a run.
+To stop a run from outside, use the existing `shutdown --force`; there is no separate nudge.
 
 ### A second writer waits on it (1.41)
 

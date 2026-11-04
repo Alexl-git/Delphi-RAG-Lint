@@ -291,6 +291,17 @@ procedure BeatStep(const AStep: string; ATotal: Int64 = 0);
 /// <remarks>Thread-safe; safe to call from hot loops (one critical section, no allocation).</remarks>
 procedure BeatProgress(AN: Int64 = -1; ATotal: Int64 = -1);
 
+/// <summary>A copy of the status record, with AgeMs computed now.</summary>
+/// <returns>The snapshot; Seq = 0 when nothing was reported yet.</returns>
+/// <remarks>Thread-safe; one critical section.</remarks>
+function BeatSnapshot: TEngineBeat;
+
+/// <summary>TEST SEAM: holds the caller for DRAGLINT_TEST_RESOLVE_DELAY_MS, as a stalled stage would.</summary>
+/// <remarks>Unset / 0 = returns at once. With DRAGLINT_TEST_BEAT_MOVES set the hold reports progress as it
+/// waits, which is a genuinely slow stage with a moving counter. Lives here, not in the resolve pass, so the
+/// guards that use it can change without touching resolver surface.</remarks>
+procedure BeatTestHold;
+
 /// <summary>One-line human text for a snapshot, e.g. <c>index: resolve 120/400</c>.</summary>
 /// <param name="ABeat">The snapshot.</param>
 /// <returns>The text; 'idle' for an empty action.</returns>
@@ -800,6 +811,25 @@ begin
     BeatMarkLocked;
   finally
     GBeatLock.Leave;
+  end;
+end;
+
+procedure BeatTestHold;
+const
+  HOLD_SLICE_MS = 20;
+var
+  T0   : UInt64;
+  Hold : Integer;
+  Moves: Boolean;
+begin
+  Hold:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_RESOLVE_DELAY_MS'), 0);
+  if Hold <= 0 then Exit;
+  Moves:= GetEnvironmentVariable('DRAGLINT_TEST_BEAT_MOVES') <> '';
+  T0:= GetTickCount64;
+  while GetTickCount64 - T0 < UInt64(Hold) do
+  begin
+    Sleep(HOLD_SLICE_MS);
+    if Moves then BeatProgress;
   end;
 end;
 

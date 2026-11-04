@@ -597,6 +597,7 @@ type
     LspMergeBudgetMs   : Integer; // --merge-budget-ms <n>
     LspMergeBudgetSet  : Boolean; // False = LSP_MERGE_BUDGET_DEFAULT_MS
     ResolveOnly : Boolean; // index --resolve-only: re-derive edges, skip the walk
+    StallExitMin: Integer; // index --stall-exit-min: minutes without progress before the run gives up; 0 = warn only
     WaitLibraryMin : Integer; // index --wait-library <minutes>: poll a not-ready platform library, then continue
     RequireLibrary : Boolean; // index --require-library: a not-ready platform library is ERROR, exit 2
     RuleCacheWarm: string; // index --rule-cache-warm background|wait|off ('' = DRAGLINT_RULE_CACHE_WARM, else wait)
@@ -1645,6 +1646,11 @@ begin
     else if A = '--resume' then Result.Resume:= True
     else if A = '--status' then Result.StatusOnly:= True
     else if (A = '--wait') and (i < ParamCount) then begin Inc(i); Result.WaitSeconds:= StrToIntDef(ParamStr(i), 0); end
+    else if (A = '--stall-exit-min') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.StallExitMin:= StrToIntDef(ParamStr(i), 0);
+    end
     else if A = '--force' then Result.ForceKill:= True
     else if (A = '--query') and (i < ParamCount) then begin Inc(i); Result.SqlQuery:= ParamStr(i); end
     else if (A = '--timeout-ms') and (i < ParamCount) then begin Inc(i); Result.TimeoutMs:= StrToIntDef(ParamStr(i), 0); end
@@ -3430,6 +3436,21 @@ type
     FIndent: string;
     FT0    : TDateTime;
     FStop  : TEvent;
+    FLastN : Int64;
+    FLastAt: UInt64;
+    FLastStep: string;
+    FSeq    : Int64;
+    FMovedAt: UInt64;
+    FWarnAt : UInt64;
+    /// <summary>The ", step N of M, R/s" tail of a beat line, from the status record.</summary>
+    /// <returns>'' when the current step has reported no counter.</returns>
+    function ProgressSuffix: string;
+    /// <summary>The progress test, run once a beat: prints a LOW MEMORY or NO PROGRESS reason line, and
+    /// ends the process when --stall-exit-min is armed and the counter has stood still that long.</summary>
+    /// <remarks>Progress means the status record's Seq moved, never that this timer ran: a heartbeat
+    /// proves only that its own thread is alive. A stage whose counter moves is never stopped, however
+    /// slow and however short memory is. Off by default: without the flag it only prints.</remarks>
+    procedure CheckStall;
   protected
     procedure Execute; override;
   public
@@ -3451,6 +3472,25 @@ const
     can prove the beat actually beats. Undocumented in --help on purpose: it is a
     test hook, not a feature. }
   STAGE_HEARTBEAT_ENV = 'DRAGLINT_STAGE_HEARTBEAT_MS';
+  { Minutes a counter may stand still before a warning. Longer than any counter-less step measured on a
+    library index (purity fixpoint, facts-inherited: under 13 minutes). }
+  STAGE_MS_PER_SECOND         = 1000;
+  STAGE_MS_PER_MINUTE         = 60000;
+  STAGE_BYTES_PER_MB          = 1024 * 1024;
+  STAGE_STALL_WARN_MINUTES    = 15;
+  STAGE_STALL_WARN_DEFAULT_MS = STAGE_STALL_WARN_MINUTES * STAGE_MS_PER_MINUTE;
+  STAGE_STALL_WARN_ENV        = 'DRAGLINT_STAGE_STALL_WARN_MS';   { test seam, as above }
+  STAGE_STALL_EXIT_ENV        = 'DRAGLINT_STAGE_STALL_EXIT_MS';   { test seam: --stall-exit-min in ms }
+  STAGE_AVAIL_PHYS_ENV        = 'DRAGLINT_TEST_AVAIL_PHYS_MB';    { test seam: pretend free RAM }
+  STAGE_CRITICAL_FREE_MB      = 512;
+  { Short of memory, a standing counter is given a quarter of the armed limit. }
+  STAGE_LOWMEM_LIMIT_DIVISOR  = 4;
+  EXIT_STAGE_STALLED          = 8; { --stall-exit-min: no progress for the limit }
+  EXIT_STAGE_STALLED_LOWMEM   = 9; { the same, with free RAM under STAGE_CRITICAL_FREE_MB }
+
+var
+  { index --stall-exit-min; 0 = warn only. Set once in Run before any stage. }
+  GStageStallExitMin: Integer = 0;
 
 /// <summary>The heartbeat interval in ms -- the env override when set to a
 /// positive integer, otherwise one minute.</summary>
@@ -3483,10 +3523,92 @@ begin
   inherited;  // dl:ok inherited-bare@246d
 end;
 
+function TStageHeartbeat.ProgressSuffix: string;
+var
+  B   : TEngineBeat;
+  Tick: UInt64;
+begin
+  B   := BeatSnapshot;
+  Tick:= GetTickCount64;
+  Result:= '';
+  if (B.Step <> '') and ((B.N > 0) or (B.Total > 0)) then
+  begin
+    Result:= ', ' + B.Step + ' ' + IntToStr(B.N);
+    if B.Total > 0 then Result:= Result + ' of ' + IntToStr(B.Total);
+    if SameStr(B.Step, FLastStep) and (Tick > FLastAt) then
+      Result:= Result + Format(', %.0f/s', [(B.N - FLastN) * STAGE_MS_PER_SECOND / (Tick - FLastAt)]);
+  end;
+  FLastStep:= B.Step;
+  FLastN   := B.N;
+  FLastAt  := Tick;
+end;
+
+procedure TStageHeartbeat.CheckStall;
+var
+  B        : TEngineBeat;
+  Mem      : TMemoryStatusEx;
+  Tick     : UInt64;
+  Stalled  : UInt64;
+  AvailMb  : Int64;
+  TotalMb  : Int64;
+  Low      : Boolean;
+  WarnMs   : Int64;
+  ExitMs   : Int64;
+  Where    : string;
+  Text     : string;
+begin
+  B   := BeatSnapshot;
+  Tick:= GetTickCount64;
+  if B.Seq <> FSeq then
+  begin
+    FSeq    := B.Seq;
+    FMovedAt:= Tick;
+    FWarnAt := 0;
+  end;
+  Stalled:= Tick - FMovedAt;
+  Mem:= Default(TMemoryStatusEx);
+  Mem.dwLength:= SizeOf(Mem);
+  GlobalMemoryStatusEx(Mem);
+  AvailMb:= StrToInt64Def(GetEnvironmentVariable(STAGE_AVAIL_PHYS_ENV), Int64(Mem.ullAvailPhys div STAGE_BYTES_PER_MB));
+  TotalMb:= Int64(Mem.ullTotalPhys div STAGE_BYTES_PER_MB);
+  Low    := AvailMb < STAGE_CRITICAL_FREE_MB;
+  Where  := if B.Step = '' then FLabel else B.Step;
+  Where  := Where + ' ' + IntToStr(B.N) + if B.Total > 0 then ' of ' + IntToStr(B.Total) else '';
+  if Low then
+  begin
+    Writeln(Format('%sstage: %s -- LOW MEMORY: %d MB free of %d MB, at %s', [FIndent, FLabel, AvailMb, TotalMb, Where]));
+    Flush(Output);
+  end;
+  WarnMs:= StrToInt64Def(GetEnvironmentVariable(STAGE_STALL_WARN_ENV), STAGE_STALL_WARN_DEFAULT_MS);
+  if (Stalled >= UInt64(WarnMs)) and ((FWarnAt = 0) or (Tick - FWarnAt >= UInt64(WarnMs))) then
+  begin
+    FWarnAt:= Tick;
+    Writeln(Format('%sstage: %s -- NO PROGRESS for %d s at %s (seq %d); %d MB free of %d MB',
+      [FIndent, FLabel, Stalled div STAGE_MS_PER_SECOND, Where, B.Seq, AvailMb, TotalMb]));
+    Flush(Output);
+  end;
+  ExitMs:= StrToInt64Def(GetEnvironmentVariable(STAGE_STALL_EXIT_ENV), Int64(GStageStallExitMin) * STAGE_MS_PER_MINUTE);
+  if ExitMs <= 0 then Exit;
+  if Low then ExitMs:= ExitMs div STAGE_LOWMEM_LIMIT_DIVISOR;
+  if Stalled < UInt64(ExitMs) then Exit;
+  Text:= Format('%sstage: %s -- STALLED: no progress for %d s at %s (seq %d), %d MB free of %d MB; exiting with code %d. ' +
+    'The open transaction rolls back. A kill after the walk keeps the parse only with --resolve-only.',
+    [FIndent, FLabel, Stalled div STAGE_MS_PER_SECOND, Where, B.Seq, AvailMb, TotalMb,
+     if Low then EXIT_STAGE_STALLED_LOWMEM else EXIT_STAGE_STALLED]);
+  Writeln(Text);
+  Flush(Output);
+  Writeln(ErrOutput, Text);
+  Flush(ErrOutput);
+  { ExitProcess, not Halt: this is not the main thread, and finalization would race the pass that is
+    still running on it. SQLite recovers the open transaction exactly as after a kill. }
+  ExitProcess(if Low then EXIT_STAGE_STALLED_LOWMEM else EXIT_STAGE_STALLED);  // dl:ok halt-in-library -- REVIEWED 2026-11-04: the opt-in --stall-exit-min contract is exactly this exit; the CLI is the process's owner
+end;
+
 procedure TStageHeartbeat.Execute;
 var
   Elapsed: Double;
 begin
+  FMovedAt:= GetTickCount64;
   { WaitFor, not Sleep: a stage that finishes in 3 s must not keep the process
     alive for the rest of the minute waiting to say so. }
   while FStop.WaitFor(StageHeartbeatMs) = wrTimeout do
@@ -3496,9 +3618,10 @@ begin
       with spaces, so %02d yields '0m 0s'; zero-padding is the PRECISION form.
       Caught by the runner asserting the rendered shape rather than merely that
       a beat occurred. }
-    Writeln(Format('%sstage: %s -- still running, %dm%.2ds elapsed',
-      [FIndent, FLabel, Trunc(Elapsed) div SecsPerMin, Trunc(Elapsed) mod SecsPerMin]));
+    Writeln(Format('%sstage: %s -- still running, %dm%.2ds elapsed%s',
+      [FIndent, FLabel, Trunc(Elapsed) div SecsPerMin, Trunc(Elapsed) mod SecsPerMin, ProgressSuffix]));
     Flush(Output);
+    CheckStall;
   end;
 end;
 
@@ -3529,6 +3652,7 @@ begin
   Writeln(Format('%sstage: %s -- started %s', [AIndent, ALabel, FormatDateTime('hh:nn:ss', NowLocal)]));
   Flush(Output);
   T0  := Now;
+  BeatStep(ALabel); { a stage without counters must not show the previous stage's step and N }
   Beat:= TStageHeartbeat.Create(AIndent, ALabel);
   try
     AProc();
@@ -3541,36 +3665,20 @@ begin
 end;
 
 /// <summary>The calls pass, with the full edge clear a stale resolver or --resolve-only asks for
-/// done INSIDE the pass's transaction (1.41 IDX-HALFREAD).</summary>
+/// done INSIDE the pass's own transaction (1.41 IDX-HALFREAD; 1.42 CALLSLOW: no outer batch).</summary>
 /// <param name="AStore">The writer store of this run; must not be nil.</param>
 /// <param name="AClearFirst">True = drop every call edge and refs.symbol_id first (ClearCallEdges).</param>
 /// <param name="ALibs">Extra (library) stores for ResolveCallTargets.</param>
 /// <remarks>The clear used to run in AUTOCOMMIT before the pass, so for the whole pass (~37 min on a
-/// 2 GB index) every reader saw ZERO resolved refs. Now the store's outer batch transaction wraps
-/// clear + pass (the pass's own transaction nests as a SAVEPOINT): the same statements in the same
-/// order on the same connection, so the scoping decision and the rows are unchanged, and readers keep
-/// the previous complete edges until one COMMIT. A pass that raises still commits the clear -- the
-/// state the old order left. Guard tests\autotest\run_index_halfread_guard.ps1 (HR1/HR2).</remarks>
+/// 2 GB index) every reader saw ZERO resolved refs. The pass now clears inside its own transaction, so
+/// readers keep the previous complete edges until one COMMIT, and a pass that raises rolls the clear
+/// back too. NOT by wrapping the pass in the store's batch: that made its transaction a SAVEPOINT and
+/// every row write quadratic (see ISymbolStore.ResolveCallTargets). Guards
+/// tests\autotest\run_index_halfread_guard.ps1 (HR1/HR2), run_calls_pass_no_savepoint_guard.ps1.</remarks>
 procedure ResolveCallsClearingFirst(const AStore: ISymbolStore; AClearFirst: Boolean;
   const ALibs: TArray<ISymbolStore>);
 begin
-  if not AClearFirst then
-  begin
-    AStore.ResolveCallTargets(ALibs);
-    Exit;
-  end;
-  AStore.BeginFileBatch;
-  try
-    AStore.ClearCallEdges;
-    { TEST SEAM (run_index_halfread_guard.ps1 HR1): hold the transaction open after the clear so
-      a concurrent reader can be sampled. Unset / 0 = no delay. Kept out of ResolveCallTargets on
-      purpose: that is resolver surface (run_resolver_version_guard). }
-    var DelayMs: Integer:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_RESOLVE_DELAY_MS'), 0);
-    if DelayMs > 0 then Sleep(DelayMs);  // dl:ok sleep-in-vcl@31b4 -- REVIEWED 2026-11-03: console CLI test seam, off unless the env var is set
-    AStore.ResolveCallTargets(ALibs);
-  finally
-    AStore.EndFileBatch;
-  end; // try
+  AStore.ResolveCallTargets(ALibs, AClearFirst);
 end;
 
 /// <summary>Runs the post-walk LINK stages, in their one valid order:
@@ -5585,6 +5693,7 @@ begin
         reads out of AArgs must be put on this line or it does not exist over
         there. }
       if AArgs.ResolveOnly  then ChildCmdLine:= ChildCmdLine + ' --resolve-only';
+      if AArgs.StallExitMin > 0 then ChildCmdLine:= ChildCmdLine + ' --stall-exit-min ' + IntToStr(AArgs.StallExitMin);
       if AArgs.ForceReparse then ChildCmdLine:= ChildCmdLine + ' --force-reparse';
       if AArgs.MaxFileKBSet then ChildCmdLine:= ChildCmdLine + ' --max-file-kb ' + IntToStr(AArgs.MaxFileKB);
       { x11: and --target-compiler -- without it a child preprocessed its section for
@@ -18403,6 +18512,14 @@ begin
   for Row in Rows do Writeln(Format('  pid %d  %s  %s  %s', [Row.Pid, Row.Role, Row.Version, DbList(Row.Dbs)]));
   if AArgs.DryRun then
   begin
+    { The outside view of a long run: the same record the IDE plugin polls. }
+    for Row in Rows do
+    begin
+      var RowBeat: TEngineBeat;
+      if RequestEngineBeat(Row.Pid, CONNECT_TIMEOUT_MS, RowBeat) then
+        Writeln(Format('    pid %d beat: %s (seq %d, last report %d s ago)',
+          [Row.Pid, BeatDisplayText(RowBeat), RowBeat.Seq, RowBeat.AgeMs div MS_PER_SECOND]));
+    end;
     Writeln('dry run: nothing asked, nothing changed.');
     Exit(0);
   end;
@@ -36679,6 +36796,7 @@ begin
       at exit (the unit's finalization). Advisory -- a run without one is judged the old way. }
     BeatChannelOpen(if (Args.Command = 'cycles') and Args.Fix then 'cycles --fix' else Args.Command, // 142-cyc D4: only the fix run reports
       DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION);
+    GStageStallExitMin:= Args.StallExitMin;
     if Args.Command = 'index' then
     begin
       { The MODE flags name opposite intents, so passing both is a usage error

@@ -7,7 +7,7 @@ group: indexing
 order: 10007
 since: 0.2.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.42.0-alpha
 ---
 
 # Rebuild Index for This Project
@@ -32,6 +32,7 @@ Full flag list: [index in the CLI reference](../cli.md#index).
 | `--wait-library` | `<min>` |  |  |
 | `--rule-cache-warm` | `background\|wait\|off` |  |  |
 | `--require-library` |  |  |  |
+| `--stall-exit-min` | `min` | a counter standing still this long ends the run: exit 8, or exit 9 at a quarter of the limit when RAM is critical. A moving counter is never stopped. Off by default. |  |
 | `--watch` |  |  |  |
 | `--interval` | `N` |  |  |
 

@@ -2583,7 +2583,7 @@ type
       /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.FileIsStaleProbe"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);
+      procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);
       /// <summary>Item 4 (spec s.4.3): records which extra stores the resolve pass
       /// consulted as schema_meta.external_stores -- a JSON array of {path,
       /// indexer_fingerprint, resolver_fingerprint, indexed_at_unix} read from each
@@ -10558,6 +10558,7 @@ begin
                    'LEFT JOIN symbol_docs d ON d.symbol_id = s.id ' +
                    'WHERE s.kind IN (' + CONCEPT_SEARCH_KINDS + ') ' +
                    'AND NOT EXISTS (SELECT 1 FROM symbol_search x WHERE x.symbol_id = s.id)';
+      BeatStep('search symbols');
       Q.Open;
       FldId   := Q.FieldByName('id');
       FldName := Q.FieldByName('name');
@@ -10580,6 +10581,7 @@ begin
         if R.Tokens = '' then R.Tokens:= Name.ToLower;
         Rows.Add(R);
         FileSet.AddOrSetValue(R.FileId, True);
+        BeatProgress;
         Q.Next;
       end; // while
       Q.Close;
@@ -10604,6 +10606,7 @@ begin
           Q.Next;
         end; // while
         Q.Close;
+        BeatStep('search literals');
         Q.SQL.Text:= 'SELECT file_id, start_line, end_line, text FROM string_literals ' +
                      'WHERE kind = ''doc''' + FileFilter + ' ORDER BY file_id, start_line';
         Q.Open;
@@ -10626,6 +10629,7 @@ begin
           if Block.Length > 0 then Block.Append(' ');
           Block.Append(FldText.AsString);
           BlockEnd := LitEnd;
+          BeatProgress;
           Q.Next;
         end; // while
         FlushBlock;
@@ -10650,6 +10654,7 @@ begin
         Ins.Prepare;
         Q.SQL.Text:= 'DELETE FROM symbol_search WHERE symbol_id NOT IN (SELECT id FROM symbols)';
         Q.ExecSQL;
+        BeatStep('search write', Rows.Count);
         for R in Rows do  // dl:ok duplicate-code@b0f0 -- the prepared-insert-in-one-transaction shape PutEffectFacts also uses; PutEffectFacts is a hashed emit routine, so sharing a helper with it would bill an extractor re-parse
         begin
           Ins.ParamByName('sid').AsLargeInt:= R.Id;
@@ -10657,6 +10662,7 @@ begin
           if R.Summary = '' then Ins.ParamByName('sum').Clear else Ins.ParamByName('sum').Value:= R.Summary;
           if R.Remarks = '' then Ins.ParamByName('rem').Clear else Ins.ParamByName('rem').Value:= R.Remarks;
           Ins.ExecSQL;
+          BeatProgress;
         end; // for
         FConn.Commit;
       finally
@@ -14537,6 +14543,22 @@ end; // procedure
 { The enum-value stream of the calls stage. The contract, the NULL-own-universe
   argument and the fail-open note live on the DECLARATION -- see the DocInsight
   block on TSQLiteSymbolStore.ResolveEnumValueRefs. }
+const
+  { rows per progress report inside a resolve stream: cheap, and well under one a second at any speed }
+  STREAM_BEAT_EVERY = 1024;
+
+{ Opens a resolve stream's query with its step and exact row count in the status record, so the stage
+  heartbeat and `shutdown --dry-run` can say N of M. The count is one more run of the stream's own scan:
+  seconds against the minutes its rows take. }
+procedure BeatStreamOpen(AConn: TFDConnection; AQ: TFDQuery; const AStep: string);
+var
+  Total: Int64;
+begin
+  Total:= AConn.ExecSQLScalar('SELECT count(*) FROM (' + AQ.SQL.Text + ')');
+  BeatStep(AStep, Total);
+  AQ.Open;  // dl:ok dataset-open-without-close -- REVIEWED 2026-11-04: an opener by design; each stream closes and frees its own query
+end;
+
 procedure TSQLiteSymbolStore.ResolveEnumValueRefs(AResolver: TCallResolver;
   const AScopeWhere, AStaleWhere: string;
   out ACandidates, ABound, AShadowDecls: Int64);
@@ -14579,7 +14601,7 @@ begin
     Q.Connection:= FConn;
     Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
                    'refs.start_line, refs.start_col FROM refs WHERE ' + Where;
-    Q.Open;
+    BeatStreamOpen(FConn, Q, 'resolve enum-values');
     FldId  := Q.FieldByName('id'                 );
     FldFile:= Q.FieldByName('file_id'            );
     FldName:= Q.FieldByName('name_text'          );
@@ -14610,6 +14632,7 @@ begin
         Inc(ABound);
       end;
       Inc(ACandidates);
+      if ACandidates mod STREAM_BEAT_EVERY = 0 then BeatProgress(ACandidates);
       Q.Next;
     end;
     Q.Close;
@@ -14663,7 +14686,7 @@ begin
     Q.Connection:= FConn;
     Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
                    'refs.start_line, refs.start_col FROM refs WHERE ' + PARENLESS_UNIVERSE + Suffix;
-    Q.Open;
+    BeatStreamOpen(FConn, Q, 'resolve parenless');
     FldId  := Q.FieldByName('id'                 );
     FldFile:= Q.FieldByName('file_id'            );
     FldName:= Q.FieldByName('name_text'          );
@@ -14697,6 +14720,7 @@ begin
         FQSetRefSymbol.ExecSQL;
       end;
       Inc(ACandidates);
+      if ACandidates mod STREAM_BEAT_EVERY = 0 then BeatProgress(ACandidates);
       Q.Next;
     end;
     Q.Close;
@@ -14772,7 +14796,7 @@ begin
     Q.Connection:= FConn;
     Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
                    'refs.start_line, refs.start_col FROM refs WHERE ' + MEMBER_UNIVERSE + Suffix;
-    Q.Open;
+    BeatStreamOpen(FConn, Q, 'resolve member-reads');
     FldId  := Q.FieldByName('id'                 );
     FldFile:= Q.FieldByName('file_id'            );
     FldName:= Q.FieldByName('name_text'          );
@@ -14797,6 +14821,7 @@ begin
         Inc(ABound);
       end;
       Inc(ACandidates);
+      if ACandidates mod STREAM_BEAT_EVERY = 0 then BeatProgress(ACandidates);
       Q.Next;
     end;
     Q.Close;
@@ -14835,7 +14860,7 @@ begin
     Q.Connection:= FConn;
     Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
                    'refs.start_line, refs.start_col FROM refs WHERE ' + Where;
-    Q.Open;
+    BeatStreamOpen(FConn, Q, 'resolve writes');
     FldId  := Q.FieldByName('id'                 );
     FldFile:= Q.FieldByName('file_id'            );
     FldName:= Q.FieldByName('name_text'          );
@@ -14863,6 +14888,7 @@ begin
         Inc(ABound);
       end;
       Inc(ACandidates);
+      if ACandidates mod STREAM_BEAT_EVERY = 0 then BeatProgress(ACandidates);
       Q.Next;
     end;
     Q.Close;
@@ -14906,7 +14932,7 @@ begin
     Q.Connection:= FConn;
     Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
                    'refs.start_line, refs.start_col FROM refs WHERE ' + VALUE_UNIVERSE + Suffix;
-    Q.Open;
+    BeatStreamOpen(FConn, Q, 'resolve value-reads');
     FldId  := Q.FieldByName('id'                 );
     FldFile:= Q.FieldByName('file_id'            );
     FldName:= Q.FieldByName('name_text'          );
@@ -14932,6 +14958,7 @@ begin
         Inc(ABound);
       end;
       Inc(ACandidates);
+      if ACandidates mod STREAM_BEAT_EVERY = 0 then BeatProgress(ACandidates);
       Q.Next;
     end;
     Q.Close;
@@ -14962,7 +14989,7 @@ begin
     Q.Connection:= FConn;
     Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.enclosing_symbol_id, ' +
                    'refs.start_line, refs.start_col FROM refs WHERE ' + AUniverse + ASuffix;
-    Q.Open;
+    BeatStreamOpen(FConn, Q, 'resolve type-binds');
     FldId  := Q.FieldByName('id'                 );
     FldFile:= Q.FieldByName('file_id'            );
     FldName:= Q.FieldByName('name_text'          );
@@ -14988,6 +15015,7 @@ begin
         Inc(ABound);
       end;
       Inc(ACandidates);
+      if ACandidates mod STREAM_BEAT_EVERY = 0 then BeatProgress(ACandidates);
       Q.Next;
     end;
     Q.Close;
@@ -15083,7 +15111,7 @@ begin
   SetMetaValue(KEY, '[' + string.Join(',', Parts) + ']');
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>);{ v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);{ v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
   every 'call' ref through ResolveOne. Non-resolving sites (Edge.TargetSymbolId=0)
@@ -15175,11 +15203,10 @@ begin
   { Order preserved from the boolean this replaced: the extra-store test came
     first and short-circuited, so the scoping predicate's own queries (CountFiles,
     CallEdgesNeedRebuild) are still not run when extra stores decide it. }
-  var DeclineWhy: string;
-  if Length(AExtraStores) > 0 then
-    DeclineWhy:= 'extra stores are attached, and a library index consulted by ResolveExternally is outside everything this instance recorded'
-  else
-    DeclineWhy:= ScopedResolveDeclineReason;
+  var DeclineWhy: string:=
+    if AClearFirst then 'a full edge clear was asked for (a stale resolver or --resolve-only)'
+    else if Length(AExtraStores) > 0 then 'extra stores are attached, and a library index consulted by ResolveExternally is outside everything this instance recorded'
+    else ScopedResolveDeclineReason;
   Scoped:= DeclineWhy = '';
   { ANNOUNCED BEFORE THE PASS, NOT AFTER IT. The completion lines at the bottom
     of this routine already say which shape ran -- but they print when it is
@@ -15210,6 +15237,16 @@ begin
   Ref := Default(TReference);
   Edge:= Default(TCallEdge );
   DataVersion0:= ReadDataVersion(FConn);
+  { Printed for run_calls_pass_no_savepoint_guard: 1 = this pass is the outermost transaction. >1 means
+    it runs as a SAVEPOINT, and then every row write of the pass walks the in-memory sub-journal
+    (see the remarks on ISymbolStore.ResolveCallTargets). }
+  if Profiled then
+    ResolveLog(Format('calls      transaction nesting %d', [FConn.ConnectionIntf.Transaction.NestingLevel]));
+  if AClearFirst then
+  begin
+    ClearCallEdges;
+    BeatTestHold; { TEST SEAM (run_index_halfread_guard HR1): hold this transaction open after the clear }
+  end;
   try
   { Only the temp tables are built here. The DELETE they feed happens INSIDE the
     rebuild transaction below -- see the note there. MaterializeResolveScope
@@ -15446,9 +15483,8 @@ begin
       else
         ClearCallEdges; // rebuild every edge each run (like ResolveAncestry's DELETE)
       SkippedStaleRcv:= 0;
-      BeatStep('resolve calls');
       BeatRefs:= 0;
-      Q.Open;
+      BeatStreamOpen(FConn, Q, 'resolve calls');
       while not Q.Eof do
       begin
         Ref:= Default(TReference);
@@ -15469,7 +15505,7 @@ begin
           Ref.ReceiverText:= Q.FieldByName('receiver_text').AsString;
 
         Inc(BeatRefs);
-        if BeatRefs mod RESOLVE_BEAT_EVERY = 0 then BeatProgress; { 1.40 heartbeat: the 37-minute pass is not silent }
+        if BeatRefs mod RESOLVE_BEAT_EVERY = 0 then BeatProgress(BeatRefs); { 1.40 heartbeat: the 37-minute pass is not silent }
         if Profiled then TMark:= TStopwatch.GetTimeStamp;
         UnitValuesBefore:= Resolver.UnitValueBound;
         Edge:= Resolver.ResolveOne(Ref);

@@ -1286,7 +1286,15 @@ type
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ClearCompilerFindings"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore> = nil);
+    /// <param name="AExtraStores">Library stores consulted for sites this index cannot bind.</param>
+    /// <param name="AClearFirst">True = drop every call edge and refs.symbol_id first (a stale resolver
+    /// or --resolve-only). The clear runs INSIDE the pass's own transaction, so readers keep the previous
+    /// complete edges until the one COMMIT, a pass that raises rolls the clear back too, and the pass is
+    /// always whole-database. It must stay inside: this pass must be the OUTERMOST transaction. Nested
+    /// (as a SAVEPOINT) every row write releases a statement savepoint at a non-zero sub-journal offset,
+    /// and SQLite walks the in-memory sub-journal from its head each time, which is quadratic in the
+    /// pass (1.42 re-parse: 343 s -> 2348 s on a 450k-ref index; run_calls_pass_no_savepoint_guard).</param>
+    procedure ResolveCallTargets(const AExtraStores: TArray<ISymbolStore> = nil; AClearFirst: Boolean = False);
     /// <summary>Rebuilds dispatch_edges (base method -> override / implementing
     /// method) and classref_args (call site -> class passed to a `class of`
     /// parameter) from the stored parse and call_edges. Run right after
