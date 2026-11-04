@@ -420,6 +420,12 @@ begin
     P:= Plan(MAPPED);
     Check('chains.split.mappings', (StagesText(P) = '[1];[2]') and (Length(P.Mappings[0]) = 0) and (Length(P.Mappings[1]) = 1)
       and (P.Mappings[1][0] = 'M'), StagesText(P));
+    // CONV-CASE: the engine resolves a #mapping name and a type's bare name without regard to case, so the
+    // editor must agree -- 'M' and 'm' are ONE mapping, 'TB' and 'tb' are ONE class.
+    P:= Plan(MAPPED + CHAIN_CRLF + '#apply m');
+    Check('chains.split.mappings.case', (Length(P.Mappings[1]) = 1) and (P.Mappings[1][0] = 'M'), IntToStr(Length(P.Mappings[1])));
+    P:= Plan('#convert TA -> TB' + CHAIN_CRLF + '#convert tb -> TC');
+    Check('chains.split.stages.case', StagesText(P) = '[0];[1]', StagesText(P));  // dl:ok magic-literal@2d0e -- REVIEWED 2026-11-04 expected stage text is the assertion data of the fixture
 
     Book:= ChainMakeBook(Books, '#depth 3' + CHAIN_CRLF + CHAIN_BOOK_CHAIN);
     Check('chains.split.text.depth', StartsText('#depth 3' + CHAIN_CRLF, StageBookText(Book, [3], nil)), StageBookText(Book, [3], nil));  // dl:ok magic-literal@4522 -- REVIEWED 2026-10-27 expected counts/indices/depths are the assertion data of the fixture

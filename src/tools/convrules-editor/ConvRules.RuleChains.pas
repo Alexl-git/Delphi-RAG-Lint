@@ -1230,17 +1230,28 @@ begin
   end;
 end;
 
-// Adds the distinct '#apply X' names of ABlock to ANames, in order.
+// Adds the distinct '#apply X' names of ABlock to ANames, in order. Distinct WITHOUT regard to case
+// (CONV-CASE): the engine and TRuleBook.MappingNodesNamed resolve a mapping name case-insensitively,
+// so '#apply M' and '#apply m' are one mapping and the first spelling seen is kept.
 procedure AddApplyNames(const ABlock: TRuleBlock; ANames: TList<string>);
 var
-  LLine: string;
-  LName: string;
+  LLine : string;
+  LName : string;
+  LKnown: Boolean;
+  LOld  : string;
 begin
   for LLine in ABlock.RawText.Split([#10]) do
     if StartsText('#apply ', Trim(LLine)) then
     begin
       LName:= Trim(Copy(Trim(LLine), Length('#apply ') + 1, MaxInt));
-      if (LName <> '') and not ANames.Contains(LName) then
+      LKnown:= False;
+      for LOld in ANames do
+        if SameText(LOld, LName) then
+        begin
+          LKnown:= True;
+          Break;
+        end;
+      if (LName <> '') and not LKnown then
         ANames.Add(LName);
     end;
 end;
