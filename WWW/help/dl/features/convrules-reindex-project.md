@@ -4,10 +4,10 @@ title: Reindex project
 summary: "ConvRulesEditor command: incremental index --project of the editor's project index, cancellable"
 product: DL
 group: component-conversion
-order: 60012
+order: 60015
 since: 1.26.7-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.42.0-alpha
 ---
 
 # Reindex project

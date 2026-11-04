@@ -4,7 +4,7 @@ title: Taint analysis (SQL, command, path)
 summary: taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink
 product: DL
 group: linting
-order: 30026
+order: 30032
 since: 1.37.0-alpha
 status: shipped
 updated: 1.42.0-alpha

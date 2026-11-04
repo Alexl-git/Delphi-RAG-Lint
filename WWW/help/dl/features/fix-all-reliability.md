@@ -4,7 +4,7 @@ title: Fix all reliability (1.31.3)
 summary: Fix all no longer drops every rename for library-root members, shows a wait cursor and refuses a second fix, and keeps E-prefixed exception classes
 product: DL
 group: linting
-order: 30011
+order: 30013
 since: 1.31.3-alpha
 status: shipped
 updated: 1.42.0-alpha

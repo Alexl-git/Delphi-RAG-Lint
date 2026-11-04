@@ -8,6 +8,15 @@ breaking changes** until v2.0.
 1.42 wave 1, integrated on lane/142-int1. ONE bump: DRAGLINT_EXTRACTOR_VERSION 1.29.0 -> 1.30.0-alpha and
 DRAGLINT_RESOLVER_VERSION 1.17.0 -> 1.18.0-alpha -- every index re-parses once.
 
+### Added / changed (wave 3, other lanes)
+- lint (lane ruleset): four old ROADMAP candidates as rules, all OFF: `stream-buffer-after-free`, `interfaced-object-nil-leak`, `identifier-case-mismatch`, `datamodule-form-global`.
+- lint-all (lane marku, MARKER-SHARED-UNION): `--shared-db <db>` (repeatable) judges a closure-dependent `dl:ok` on a `dl:shared` unit across project indexes; each peer is a full lint-all child.
+- find-callers / usages (lane qcli): the zero-result hint names the bare name and `--resolved`; a getter default stays a hint only; `usages` says it never reads the manifest; `usages` no longer double-counts a member access under a call (read-time collapse, stored refs unchanged).
+- read-never-assigned (lane ops3, RNA-GSTDBUF-FP): `SetTextBuf(F, Buf)` is an RTL var-intrinsic. featuregen: the help generator breaks long `Writeln` literals after a space, never inside a flag name. New `tools\ts-parse.ps1` forces the grammar scope.
+- index (lane idx3): a run killed before its calls pass commits no longer loses edges on the next run. No fingerprint change.
+- IDE plugin (lane idemain, IDE-MAINTHREAD-CLI): new CliAsync runner; Search, Find Usages, Reports, Uses and Deps, About / Diagnose, lint options, Structure panel and Editor menu commands no longer spawn the engine on the main thread. Structure verbs that write refuse an unsaved unit.
+- convert-apply (lanes conv-apply, conv-mig): a `--unit` batch runs ancestor-first so inherited / inline .dfm objects convert in one run. ConvRulesEditor (lane conv-editor): `#apply` names are case-insensitive (CONV-CASE), one engine pass per distinct From/To pair (CONV-BOOKVALID).
+
 ### Added (wave 3, lane opaque)
 - New project rule `opaque-to-analysis` (info, OFF): a routine whose calls that do not provably leave the project are predominantly unresolvable (3+ opaque calls, 60%+ of opaque + resolved). Library calls are judged live through the library oracle, so it needs the library index and is silent without one. No extractor or resolver bump.
 ### Added / changed (wave 3, lane effect)
@@ -35,9 +44,8 @@ DRAGLINT_RESOLVER_VERSION 1.17.0 -> 1.18.0-alpha -- every index re-parses once.
 - cyc2 (CYC-C residue, type-decl): `cycles --plan` / `--fix` member hand-over (R2) no longer refuses `type-decl` for a routine local `V: TX;` -- it is retyped to the extracted interface when every use is `V := X as TX`, `V := nil`, `Assigned(V)`, a compare with nil or `V.<carried member>`; a field, parameter, global or any other use still refuses. Guard `run_cyclefix_r2_typedecl_dcc.ps1` (follow + dcc + byte-identical run).
 - cyc2 (CYC-C residue, inherited members): R2 carries a member the class inherits from an ancestor declared in the same unit (was `member-unsupported`); `strict private` there still refuses, an ancestor's own `Get<M>` / `Set<M>` refuses `duplicate-identifier`, a library-ancestor member in a `with` body stays `with-member`. Guard `run_cyclefix_r2_inherited_dcc.ps1`.
 - cyc2 (CYC-C residue, several classes): `cycles --plan` / `--fix` member hand-over (R2) cuts an edge through more than one class with one interface per class (was `multiple-classes`): all-or-nothing, the refusal names the class; a member two classes reach is on both interfaces; `--fix` repairs a cast per interface. `multiple-classes` remains for overlapping `with` bodies of two classes and for an edge naming no class; a library-ancestor member in a `with` body stays `with-member`. Guard run_cyclefix_r2_multiclass_dcc.ps1.
-## Unreleased (1.42)
 
-### Fixed
+### Fixed (wave 3, converter lanes)
 - `convert-apply`: an identifier `#migrate` (file scope, or naming a uses unit) now renames the code of a unit with NO sibling .dfm or no .dfm instance a `#convert` block matches (MIG-TYPE; it used to fail `sibling .dfm not found` / `no convertible instances found`, or run the unit rules alone). Guards `run_convert_apply_migrate_type.ps1` (N1-N7), new `run_convert_apply_inherited_collection.ps1` (INBOX Q4: inherited `[n]` headers + whole-streamed ParamData + file-scope `#migrate` in a D5-shaped child).
 - `convert-apply`: an identifier `#migrate` whose target resolves in no index now also emits ONE rule-level `migrate-check` (line 0) per rule beside the per-site ones, so the converter's editor puts a warning mark on the `#migrate` line (MIGTGT, owner ruling 2026-10-28; guard W3b). The editor also stops marking a file-scope `#migrate` as "not a member migration" when the engine reports `migrate_identifiers`.
 

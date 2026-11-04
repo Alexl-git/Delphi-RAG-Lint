@@ -4,10 +4,10 @@ title: "Member migration (#migrate)"
 summary: "ConvRulesEditor: write #migrate Old -> New or -> DL_NONE (one row, or DL_NONE for all selected rows) into the row's book, or via the block's Members list"
 product: DL
 group: component-conversion
-order: 60010
+order: 60013
 since: 1.35.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.42.0-alpha
 ---
 
 # Member migration (#migrate)

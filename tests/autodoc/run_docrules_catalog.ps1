@@ -233,8 +233,11 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # side-effect-in-short-circuit + property-getter-with-effect + ui-access-in-thread-transitive (B-EFFECT).
 # 196 -> 197 (2026-10-30, 1.38 plan A): unit-missing-from-uses (project rule, lint-all).
 # 197 -> 198 (2026-11-01, 1.40 unusedg): unused-global (project rule, lint-all).
-$ExpectedBuiltins = 199
-Assert ("built-in rule count = {0} (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit + confusable-identifier + line-too-long + enum-bare-read-scoped + platform-divergent-define + enum-ordinal-persisted + 49 gaps-wave built-ins + ancestor-not-in-project); got {1}" -f $ExpectedBuiltins, $builtins.Count) ($builtins.Count -eq $ExpectedBuiltins)
+# 198 -> 199 (2026-11-03, 1.42 enum): ancestor-not-in-project.
+# 199 -> 205 (2026-11-04, 1.42 wave 3, all OFF): opaque-to-analysis, effect-free-in-loop-invariant, stream-buffer-after-free,
+#   interfaced-object-nil-leak, identifier-case-mismatch, datamodule-form-global.
+$ExpectedBuiltins = 205
+Assert ("built-in rule count = {0} (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit + confusable-identifier + line-too-long + enum-bare-read-scoped + platform-divergent-define + enum-ordinal-persisted + 49 gaps-wave built-ins + ancestor-not-in-project + 6 wave-3 rules); got {1}" -f $ExpectedBuiltins, $builtins.Count) ($builtins.Count -eq $ExpectedBuiltins)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })
 Assert ("exactly 5 documentation-category built-ins; got {0}" -f $docBuiltins.Count) ($docBuiltins.Count -eq 5)

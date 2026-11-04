@@ -81,7 +81,9 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Copy All Diagnostics](features/copy-all-diagnostics.md) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form | 0.1.0-alpha |
 | [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md) | Puts the current file's lint findings onto the clipboard | 0.1.0-alpha |
 | [Copy Selected Diagnostics](features/copy-selected-diagnostics.md) | Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard | 1.28.3-alpha |
+| [Data module reaching a global form (lint rule)](features/datamodule-form-global.md) | Project lint rule, OFF by default: a data module unit reads or writes another unit's global form variable | 1.42.0-alpha |
 | [drag-lint: Project Rules](features/drag-lint-project-rules.md) | Right-click a project in the Project Manager to make it the active project and open its Lint Options tab in the drag-lint dock | 0.95.0-alpha |
+| [Effect-free call in a loop that could move out (lint rule)](features/effect-free-in-loop-invariant.md) | Project-wide lint rule, OFF by default: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop | 1.42.0-alpha |
 | [exceptions-sync](features/exceptions-sync.md) | Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites | 1.8.0-alpha |
 | [Fix all in project](features/fix-all-in-project.md) | Applies autofixes for every fixable finding across the whole project, starting from the Structure form | 0.61.0-alpha |
 | [Fix all in unit](features/fix-all-in-unit.md) | Applies autofixes for every fixable finding in the current unit, starting from the Structure form | 0.1.0-alpha |
@@ -90,16 +92,20 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Format Whole Project with YADF](features/format-whole-project-with-yadf.md) | Runs YADF formatting across a project's files, with indexing involved as part of the same action | 0.1.0-alpha |
 | [Format with YADF](features/format-with-yadf.md) | Reformats one Pascal unit by driving the external YADF formatter | 0.16.0-alpha |
 | [Gap-wave lint rules](features/gap-wave-rules.md) | About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave | 1.37.0-alpha |
+| [Identifier case mismatch (lint rule)](features/identifier-case-mismatch.md) | Lint rule, OFF by default: a name spelled in a different case from its declaration | 1.42.0-alpha |
+| [Interfaced object set to nil (lint rule)](features/interfaced-object-nil-leak.md) | Lint rule, OFF by default: an object reference to a TInterfacedObject descendant is set to nil while it holds a fresh instance, which leaks it | 1.42.0-alpha |
 | [Lint Buffer (Unsaved)](features/lint-buffer-unsaved.md) | Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first | 0.1.0-alpha |
 | [lint-project](features/lint-project.md) | Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol | 0.48.0-alpha |
 | [Lint rules](features/lint-rules.md) | Every lint rule the engine ships, imported from rules --json | 0.2.0-alpha |
 | [lint-tree](features/lint-tree.md) | Answers one question lint-all cannot: does an interface edit to this unit reach any dependent? | 1.11.0-alpha |
 | [Rename across every project that compiles a shared unit](features/multi-project-rename.md) | A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects | 1.29.0-alpha |
+| [Opaque to analysis (lint rule)](features/opaque-to-analysis.md) | Project-wide lint rule (info, off by default): a routine whose non-library calls are mostly unresolvable, so impact and call trees are blind inside it | 1.42.0-alpha |
 | [Read but never assigned (lint rule)](features/read-never-assigned.md) | Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates | 1.40.0-alpha |
 | [Rescan this unit](features/rescan-this-unit.md) | Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed | 1.28.3-alpha |
 | [Run AST Checks](features/run-ast-checks.md) | Runs drag-lint's AST-level checks against a file | 0.31.0-alpha |
 | [Run Diagnostics (didSave)](features/run-diagnostics-didsave.md) | Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification | 0.22.0-alpha |
 | [Run Lint All (Full Report)](features/run-lint-all-full-report.md) | Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check | 0.61.0-alpha |
+| [Stream buffer used after free (lint rule)](features/stream-buffer-after-free.md) | Lint rule, OFF by default: a pointer into a memory stream buffer is used after the stream was freed | 1.42.0-alpha |
 | [Taint analysis (SQL, command, path)](features/taint-analysis.md) | taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink | 1.37.0-alpha |
 | [Target compiler (--target-compiler)](features/target-compiler.md) | Names the Delphi the code is for: lint drops advice needing a newer compiler; index parses `VER<N>0` / `CompilerVersion` branches for it | 1.38.0-alpha |
 | [Type-level dl:ok review](features/type-level-review-marker.md) | One dl:ok on an enum type declaration reviews every unused-enum-value or enum-ordinal-cast finding of that type, in any unit | 1.38.0-alpha |
@@ -160,10 +166,15 @@ Rule-driven migration of legacy component types.
 | [Curate rule books](features/convrules-curate.md) | ConvRulesEditor: split, delete, merge and compose #convert blocks across rule books on disk | 1.20.0-alpha |
 | [ConvRulesEditor](features/convrules-editor.md) | Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27) | 0.0.0 |
 | [Rule book and source encoding](features/convrules-encoding.md) | ConvRulesEditor keeps each book's encoding, asks before a lossy save, and before a Convert whose rules a source cannot hold (raise it, fix the rules, or cancel) | 1.35.0-alpha |
+| [Examine: mark the properties a form uses](features/convrules-examine.md) | ConvRulesEditor Conversion menu: pick .dfm/.pas files and mark in green the From properties they actually use | 1.31.0-alpha |
+| [Glyph expressions (G[I/N])](features/convrules-glyph.md) | ConvRulesEditor Mapping menu: set, change or clear the G[I/N] glyph expression on the selected link | 1.31.0-alpha |
+| [Conditional #mapping authoring](features/convrules-mappings.md) | ConvRulesEditor Mapping menu: author a conditional #mapping (one enum value sets several target properties) and #apply it to a conversion | 1.31.0-alpha |
 | [Member migration (#migrate)](features/convrules-migrate-members.md) | ConvRulesEditor: write #migrate Old -> New or -> DL_NONE (one row, or DL_NONE for all selected rows) into the row's book, or via the block's Members list | 1.35.0-alpha |
 | [Qualify #convert quick fix](features/convrules-qualify-fix.md) | ConvRulesEditor Convert tab: one click writes the engine's qualified #convert line (apply/1 qualify_fixes) into the open book | 1.31.5-alpha |
 | [Reindex project](features/convrules-reindex-project.md) | ConvRulesEditor command: incremental index --project of the editor's project index, cancellable | 1.26.7-alpha |
 | [Rule chains (single-pass warning, merge / split)](features/convrules-rule-chains.md) | ConvRulesEditor marks #convert chains, cycles, duplicate From types and unit swap chains on Save; offers merge into TA -> TC or split into stage books | 1.35.1-alpha |
+| [Scoped validation on Save](features/convrules-scoped-validate.md) | ConvRulesEditor File menu: Save and Validate check the syntax and only the changed #convert blocks, one engine pass per distinct From/To pair | 1.31.0-alpha |
+| [Unit rules (#use, #unuse, #useswap)](features/convrules-unit-rules.md) | ConvRulesEditor Uses Units menu and Unit Rules tab: add, remove and swap units in the converted unit's uses clause | 1.31.0-alpha |
 | [Work list](features/convrules-work-list.md) | ConvRulesEditor tab: what the last Convert run's converted code still uses from the old components (engine pas_uses) | 1.28.2-alpha |
 | [glyph-vacuum](features/glyph-vacuum.md) | Measure every streamed glyph or picture under a tree before writing a glyph rule | 1.15.0-alpha |
 | [proptree](features/proptree.md) | Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties | 1.1.0-alpha |

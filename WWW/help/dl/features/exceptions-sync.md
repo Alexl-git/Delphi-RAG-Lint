@@ -4,7 +4,7 @@ title: exceptions-sync
 summary: Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites
 product: DL
 group: linting
-order: 30008
+order: 30010
 since: 1.8.0-alpha
 status: shipped
 updated: 1.42.0-alpha

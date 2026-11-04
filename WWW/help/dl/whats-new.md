@@ -12,6 +12,12 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 ## 1.42.0-alpha
 
 * [Ancestor not in project (lint rule)](features/ancestor-not-in-project.md) -- Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library.
+* [Data module reaching a global form (lint rule)](features/datamodule-form-global.md) -- Project lint rule, OFF by default: a data module unit reads or writes another unit's global form variable.
+* [Effect-free call in a loop that could move out (lint rule)](features/effect-free-in-loop-invariant.md) -- Project-wide lint rule, OFF by default: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop.
+* [Identifier case mismatch (lint rule)](features/identifier-case-mismatch.md) -- Lint rule, OFF by default: a name spelled in a different case from its declaration.
+* [Interfaced object set to nil (lint rule)](features/interfaced-object-nil-leak.md) -- Lint rule, OFF by default: an object reference to a TInterfacedObject descendant is set to nil while it holds a fresh instance, which leaks it.
+* [Opaque to analysis (lint rule)](features/opaque-to-analysis.md) -- Project-wide lint rule (info, off by default): a routine whose non-library calls are mostly unresolvable, so impact and call trees are blind inside it.
+* [Stream buffer used after free (lint rule)](features/stream-buffer-after-free.md) -- Lint rule, OFF by default: a pointer into a memory stream buffer is used after the stream was freed.
 * [syntax-count](features/syntax-count.md) -- Counts modern syntax in the parse of every unit, uncapped: Delphi 13 if-expressions, is not, not in; inline var/const; anonymous methods; multiline strings.
 * [Library path of the project's Delphi](features/target-bds-library-path.md) -- index reads the library path, IDE variables and $(BDS) from the BDS key of the project's target; a missing key falls back to 37.0 with a one-line note.
 
@@ -82,6 +88,11 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.31.0-alpha
 
+* [Examine: mark the properties a form uses](features/convrules-examine.md) -- ConvRulesEditor Conversion menu: pick .dfm/.pas files and mark in green the From properties they actually use.
+* [Glyph expressions (G[I/N])](features/convrules-glyph.md) -- ConvRulesEditor Mapping menu: set, change or clear the G[I/N] glyph expression on the selected link.
+* [Conditional #mapping authoring](features/convrules-mappings.md) -- ConvRulesEditor Mapping menu: author a conditional #mapping (one enum value sets several target properties) and #apply it to a conversion.
+* [Scoped validation on Save](features/convrules-scoped-validate.md) -- ConvRulesEditor File menu: Save and Validate check the syntax and only the changed #convert blocks, one engine pass per distinct From/To pair.
+* [Unit rules (#use, #unuse, #useswap)](features/convrules-unit-rules.md) -- ConvRulesEditor Uses Units menu and Unit Rules tab: add, remove and swap units in the converted unit's uses clause.
 * [Click-to-source: the draglint:// handler](features/protocol-handler.md) -- Registers draglint:// so a chart row opens its line in RAD Studio; a GUI helper exe, no PowerShell.
 
 ## 1.30.0-alpha

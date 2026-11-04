@@ -132,7 +132,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**292 rules. 110 have an auto-fix. 248 are on by default.** 199 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**298 rules. 110 have an auto-fix. 248 are on by default.** 205 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -144,17 +144,17 @@ Rules, autofix, suppression markers and project-wide checks.
 | firedac | 3 | 3 |
 | metrics | 8 | - |
 | modernize | 4 | 4 |
-| naming | 13 | 9 |
+| naming | 14 | 9 |
 | other | 11 | 3 |
 | platform | 10 | 4 |
 | policy | 3 | - |
-| project-wide | 33 | 6 |
+| project-wide | 36 | 6 |
 | refactoring | 20 | 8 |
-| resource-lifetime | 14 | 7 |
+| resource-lifetime | 16 | 7 |
 | review-markers | 5 | 2 |
 | security | 22 | 2 |
 | structure | 12 | 6 |
-| **Total** | **292** | **110** |
+| **Total** | **298** | **110** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -164,8 +164,10 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Copy All Diagnostics](Copy-All-Diagnostics) | Structure form: Copy All Diagnostics; `lint` |  |
 | [Copy Diagnostics (Current File)](Copy-Diagnostics-Current-File) | About window: Copy Diagnostics (Current File); `lint` |  |
 | [Copy Selected Diagnostics](Copy-Selected-Diagnostics) | Structure form: Copy |  |
+| [Data module reaching a global form (lint rule)](datamodule-form-global) | `lint-all` |  |
 | [Downgrade fixes (compat rules)](compat-downgrade-fixes) | `lint` | planned |
 | [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
+| [Effect-free call in a loop that could move out (lint rule)](effect-free-in-loop-invariant) | `lint-all` |  |
 | [exceptions-sync](Features) | `exceptions-sync` |  |
 | [Fix all in project](Fix-all-in-project) | Structure form: Fix all in project; `lint-all` |  |
 | [Fix all in unit](Fix-all-in-unit) | Structure form: Fix all in unit; `lint` |  |
@@ -174,16 +176,20 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Format Whole Project with YADF](Format-Whole-Project-with-YADF) | drag-lint > Format Whole Project with YADF...; `format`; `index` |  |
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
 | [Gap-wave lint rules](gap-wave-rules) | `rules` |  |
+| [Identifier case mismatch (lint rule)](identifier-case-mismatch) | `lint-all` |  |
+| [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
-| [Lint rules](rules) | 292 rules, 110 fixable; `rules` |  |
+| [Lint rules](rules) | 298 rules, 110 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
+| [Opaque to analysis (lint rule)](opaque-to-analysis) | `lint-all` |  |
 | [Read but never assigned (lint rule)](read-never-assigned) | `lint-all` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
 | [Rescan this unit](Rescan-this-unit) | Structure form: Rescan this unit; `index` |  |
 | [Run AST Checks](Run-AST-Checks) | About window: Run AST Checks; `check-ast` |  |
 | [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | About window: Run Diagnostics (didSave) |  |
 | [Run Lint All (Full Report)](Run-Lint-All-Full-Report) | drag-lint > Code Quality > Run Lint All (Full Report)...; `lint-all` |  |
+| [Stream buffer used after free (lint rule)](stream-buffer-after-free) | `lint-all` |  |
 | [Taint analysis (SQL, command, path)](taint-analysis) | `lint-all` |  |
 | [Target compiler (--target-compiler)](target-compiler) | `lint`; `lint-all`; `rules`; `index`; `lsp workspace/executeCommand`; drag-lint > Code Quality > Run Lint All (Full Report)... |  |
 | [Type-level dl:ok review](Type-Level-Review-Marker) | procedure: `docs\wiki\Type-Level-Review-Marker.md` |  |
@@ -235,6 +241,7 @@ Rule-driven migration of legacy component types.
 
 | Feature | Surfaces | Status |
 |---|---|---|
+| [Conditional #mapping authoring](convrules-editor-mappings) | `ConvRulesEditor.exe` (Mapping > Mappings...) |  |
 | [Convert progress](convrules-editor-convert-progress) | `ConvRulesEditor.exe` (Convert tab progress line) |  |
 | [convert-apply #migrate (member, type and enum rename / DL_NONE)](convert-apply-migrate) | `convert-apply` |  |
 | [convert-apply](convert-apply) | `convert-apply` |  |
@@ -243,6 +250,8 @@ Rule-driven migration of legacy component types.
 | [convert-validate](convert-validate) | `convert-validate` |  |
 | [ConvRulesEditor](convrules-editor) | `ConvRulesEditor.exe`; `ConvRulesEditor.exe` (Conversion > Convert... (the IDE plugin starts it with --convert-request FILE and probes --write-capabilities FILE)) |  |
 | [Curate rule books](convrules-editor-curate) | `ConvRulesEditor.exe` (File > Curate...) |  |
+| [Examine: mark the properties a form uses](convrules-editor-examine) | `ConvRulesEditor.exe` (Conversion > Examine...); `ConvRulesEditor.exe` (Conversion > Clear marks) |  |
+| [Glyph expressions (G[I/N])](convrules-editor-glyph) | `ConvRulesEditor.exe` (Mapping > Glyph expression...) |  |
 | [glyph-vacuum](glyph-vacuum) | `glyph-vacuum` |  |
 | [Member migration (#migrate)](convrules-editor-migrate) | `ConvRulesEditor.exe` (Work list tab > Migrate...); `ConvRulesEditor.exe` (Classes tab > Members list > Add...) |  |
 | [Progress window and busy guard](convrules-editor-busy-guard) | `ConvRulesEditor.exe` (Progress window (appears by itself)) |  |
@@ -251,6 +260,8 @@ Rule-driven migration of legacy component types.
 | [Reindex project](convrules-editor-reindex-project) | `ConvRulesEditor.exe` (Conversion > Reindex project) |  |
 | [Rule book and source encoding](convrules-editor-encoding) | `ConvRulesEditor.exe` (File > Encoding); `ConvRulesEditor.exe` (File > Save); `ConvRulesEditor.exe` (Convert tab > Convert) |  |
 | [Rule chains (single-pass warning, merge / split)](convrules-editor-rule-chains) | `ConvRulesEditor.exe` (Conversion > Rule chains...); `ConvRulesEditor.exe` (File > Save (offer)) |  |
+| [Scoped validation on Save](convrules-editor-scoped-validate) | `ConvRulesEditor.exe` (File > Validate); `ConvRulesEditor.exe` (File > Save) |  |
+| [Unit rules (#use, #unuse, #useswap)](convrules-editor-unit-rules) | `ConvRulesEditor.exe` (Uses Units > Swap...); `ConvRulesEditor.exe` (Uses Units > Add unit...); `ConvRulesEditor.exe` (Uses Units > Remove unit); `ConvRulesEditor.exe` (Uses Units > Delete unit rule); `ConvRulesEditor.exe` (Uses Units > Derive units); `ConvRulesEditor.exe` (Uses Units > Check units); `ConvRulesEditor.exe` (Uses Units > Accept scope renames) |  |
 | [Work list](convrules-editor-work-list) | `ConvRulesEditor.exe` (View > Work list) |  |
 
 ## Graphs and reports

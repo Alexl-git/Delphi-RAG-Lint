@@ -51,6 +51,8 @@ drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--dep
 ```
 `--limit N` keeps the first N rows of each JSON group and adds `"limit"` and
 `"totals"` (every group's full count); `declarations` is a group too, so it is capped like the others. Without it the document is unchanged.
+
+**`--db` is required.** Unlike `query` / `find-callers`, `usages` never reads the manifest: without `--db` it exits 2 (`usages does not read the manifest`). A qualified call such as `FHost.Feed(x)` is counted once (the stored call + member-access pair is collapsed at read time).
 `--name <X>` is the symbol to search for. `--width` controls report width
 (`narrow`, `wide`, or `very-wide`). `--depth N` is in the usage line with no
 further description -- not documented. `--format json` is the only format the

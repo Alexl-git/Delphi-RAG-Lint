@@ -1,6 +1,7 @@
 {
   "captions": {
     "-": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Asking the engine...": "structural: transient status line while an About / Diagnose / Uses and Deps request runs off the main thread (1.42 IDE-MAINTHREAD-CLI); no feature of its own",
     "All resolved components look healthy.": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
     "Diagnose report copied to the clipboard.": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
     "Problems detected -- the red lines above are the ones that matter.": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",

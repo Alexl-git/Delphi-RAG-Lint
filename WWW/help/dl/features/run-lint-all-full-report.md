@@ -4,7 +4,7 @@ title: Run Lint All (Full Report)
 summary: Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check
 product: DL
 group: linting
-order: 30025
+order: 30030
 since: 0.61.0-alpha
 status: shipped
 updated: 1.42.0-alpha
@@ -34,6 +34,7 @@ Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 | `--quiet` |  | suppress per-file progress lines written to stderr |  |
 | `--lint-third-party` |  |  |  |
 | `--no-preprocess` |  |  |  |
+| `--shared-db` | `<db>` | another project index, repeatable: evidence for a closure-dependent dl:ok on a dl:shared unit |  |
 | `--fix` |  |  |  |
 | `--fix-naming` |  |  |  |
 | `--apply` |  |  |  |
@@ -48,18 +49,19 @@ Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 
 ## Pitfalls
 
+* A second --db is the library slot, not another project: to judge a dl:ok on a dl:shared unit use --shared-db.
 * lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.
 * A vendored folder INSIDE the project folder is linted as your own code until `excludeRoots` names it in `<project>\_D-RAG\drag-lint-project.json`.
 
 ## Details
 
-Runs the full rule catalog (292 rules, 248 on by default across 18 categories,
+Runs the full rule catalog (298 rules, 248 on by default across 18 categories,
 110 auto-fixable) against a project's indexed code and reports every surviving
 finding. Reach for it as the overall project health check.
 
 ### Running it from the CLI
 ```text
-drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party]
+drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--shared-db <db> ...]
 ```
 `--project <.dproj|.dpr>` reports only on the units that project compiles (its
 compile closure + their `.dfm` siblings) -- use it when one folder holds
@@ -76,6 +78,30 @@ named in the skip block like any third-party root. `--disable id,...` turns off 
 The shared Output/CI flags also apply: `--format sarif`, `--fail-on <level>`,
 `--config <file>`, `--enable id1,id2`, `--profile <name>`, `--baseline <file>`,
 `--write-baseline <file>`.
+
+### Judging a marker on a unit several projects share
+
+A `dl:ok` for a closure-dependent rule (project-scope, class-metric, taint,
+doc-drift, cross-file `duplicate-code`) on a unit whose `dl:shared` marker lists
+several projects may be live only under another project's compile closure. One
+index cannot tell, so a plain `lint-all` skips the verdict on such a marker.
+`--shared-db <db>`, repeatable, names the other projects' indexes:
+```text
+drag-lint lint-all --db <A.sqlite> --shared-db <B.sqlite>
+```
+Each `--shared-db` runs as its own `lint-all --db <it>` (a full run per peer, with
+the same `--rule`, `--enable`, `--disable`, `--config`, `--platform`,
+`--target-compiler`, `--no-preprocess` and `--lint-third-party`), and the report stays the primary's:
+
+* `review-marker-unused` only if NO DB produces the finding.
+* `review-marker-stale` when a peer's finding no longer matches the marker's hash,
+  naming that peer.
+* No verdict -- today's skip -- when fewer DBs scanned the unit than its `dl:shared`
+  lists, when a DB has no evidence for the line (preprocessor-blanked, undecided),
+  or when a peer could not run (named on stderr). A closing note counts the markers
+  judged and left.
+
+`--db A --db B` is NOT this: the second `--db` is the library slot.
 
 ### What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the project's index

@@ -4,7 +4,7 @@ title: lint-project
 summary: Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol
 product: DL
 group: linting
-order: 30017
+order: 30021
 since: 0.48.0-alpha
 status: shipped
 updated: 1.42.0-alpha
