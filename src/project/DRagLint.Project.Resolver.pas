@@ -50,6 +50,7 @@ type
   TProjectResolver = class
     strict private
       FBDS            : string                          ;
+      FCommonDir      : string                          ;
       FStudio         : string                          ; // the BDS key this instance reads
       FCurrentPlatform: string                          ; // what $(Platform) expands to right now
       FEnvVars        : TDictionary<string, string>     ; // RAD Studio "Environment Variables" (e.g. DXVCL), loaded lazily
@@ -101,6 +102,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ExpandMacros(const APath: string): string;
+      /// <summary>$(BDSCOMMONDIR) for this resolver's Studio; cached after the first ask.</summary>
+      /// <returns>The folder; it need not exist.</returns>
+      function StudioCommonDir: string;
       /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;string&gt;</param>
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
@@ -256,8 +260,9 @@ type
       /// </remarks>
       constructor Create;
       /// <summary>A resolver over ANOTHER Studio's key: its Search and Browsing
-      /// paths, platform list and Environment Variables, with $(BDS) and
-      /// $(BDSCOMMONDIR) expanding from that key's RootDir.</summary>
+      /// paths, platform list and Environment Variables, with $(BDS) expanding to that
+      /// key's RootDir and $(BDSCOMMONDIR) to that Studio's common folder: the value its
+      /// own bin\rsvars.bat sets, else %PUBLIC%\Documents\Embarcadero\Studio\&lt;key&gt;.</summary>
       /// <param name="AStudio">A BDS key; DEFAULT_BDS_KEY behaves exactly as Create.</param>
       /// <remarks>Does not check the key is installed: IsBdsStudioInstalled is the
       /// caller's decision. TStudioEnv and the compiler stay on 37.0.</remarks>
@@ -825,6 +830,30 @@ end;
 /// pointing at the wrong folder.</summary>
 /// <remarks>The named-macro sweep is bounded (max 8 iterations) so a macro whose
 /// value references itself cannot loop forever.</remarks>
+{ $(BDSCOMMONDIR) as dcc sees it. It is not under the Studio's root: rsvars.bat sets it
+  to the Public Documents folder of that version, so that file is asked first and the
+  documented layout is only the fallback (a Studio with no rsvars, a registry fixture). }
+function TProjectResolver.StudioCommonDir: string;
+const
+  RSVARS_REL = 'bin\rsvars.bat';
+  COMMONDIR_SET = '(?im)^\s*@?\s*set\s+BDSCOMMONDIR\s*=\s*(.+?)\s*$';
+  PUBLIC_REL = 'Documents\Embarcadero\Studio';
+var
+  Rsvars: string;
+  Found : TMatch;
+begin
+  if FCommonDir <> '' then Exit(FCommonDir);
+  Rsvars:= TPath.Combine(FBDS, RSVARS_REL);
+  if (FBDS <> '') and TFile.Exists(Rsvars) then
+  begin
+    Found:= TRegEx.Match(TFile.ReadAllText(Rsvars), COMMONDIR_SET);
+    if Found.Success then FCommonDir:= ExcludeTrailingPathDelimiter(Found.Groups[1].Value);
+  end;
+  if FCommonDir = '' then
+    FCommonDir:= TPath.Combine(TPath.Combine(GetEnvironmentVariable('PUBLIC'), PUBLIC_REL), FStudio);
+  Result:= FCommonDir;
+end;
+
 function TProjectResolver.ExpandMacros(const APath: string): string;
 const
   MAX_PASSES = 8;
@@ -839,7 +868,7 @@ var
 begin
   Result:= APath;
   Result:= StringReplace(Result, '$(BDS)', FBDS, [rfReplaceAll, rfIgnoreCase]);
-  Result:= StringReplace(Result, '$(BDSCOMMONDIR)', TPath.Combine(FBDS, '..\Studio\Public\Documents'), [rfReplaceAll, rfIgnoreCase]);
+  Result:= StringReplace(Result, '$(BDSCOMMONDIR)', StudioCommonDir, [rfReplaceAll, rfIgnoreCase]);
   Result:= StringReplace(Result, '$(Platform)', FCurrentPlatform, [rfReplaceAll, rfIgnoreCase]);
   Result:= StringReplace(Result, '$(Config)'  , 'Debug'         , [rfReplaceAll, rfIgnoreCase]);
 

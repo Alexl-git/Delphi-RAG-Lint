@@ -183,6 +183,45 @@ $f13 = Dl @('selftest', 'files', '--db', $sec13.db) $reg
 Check '--jobs: the 10.3 section indexed the library-only unit' ($f103 -match 'uLibOnly\.pas') $f103
 Check '--jobs: the Delphi 13 section did not' (-not ($f13 -match 'uLibOnly\.pas')) $f13
 
+Write-Host '[9] $(BDSCOMMONDIR) follows the target: that Studio''s rsvars.bat, else Public Documents by key'
+$p103c = Join-Path $Scratch 'P103c'; WriteProject $p103c '18.8'
+WriteUnit "$p103c\uCaller.pas" 'uCaller' 'uCommonDirLib' 'procedure CallIt;' "procedure CallIt;`nbegin`nend;"
+$commonA = Join-Path $Scratch 'CommonA\Lib'
+$publicB = Join-Path $Scratch 'PublicB'
+$commonB = Join-Path $publicB 'Documents\Embarcadero\Studio\20.0\Lib'
+WriteUnit "$commonA\uCommonDirLib.pas" 'uCommonDirLib' '' '' ''
+WriteUnit "$commonB\uCommonDirLib.pas" 'uCommonDirLib' '' '' ''
+# 20.0 keeps its library under a root with no \embarcadero\ in it, so the tail admits it.
+$s20c = Join-Path $Scratch 'Studio\20.0c'
+[void][IO.Directory]::CreateDirectory($s20c)
+$regCommon = Join-Path $Scratch 'registry-common.json'
+WriteRegistry $regCommon @{ '20.0' = (Studio $s20c "`$(BDSCOMMONDIR)\Lib"); '37.0' = (Studio $s37 $common) }
+WriteText "$s20c\bin\rsvars.bat" "@SET BDS=$s20c`n@SET BDSCOMMONDIR=$(Join-Path $Scratch 'CommonA')`n"
+$cRs = ClosureOf "$p103c\P.dproj" $regCommon
+Check 'rsvars.bat names it: the unit under its Lib folder is reached' (@($cRs | Where-Object { $_ -like "$commonA*uCommonDirLib.pas" }).Count -eq 1) ($cRs -join ';')
+[IO.File]::Delete("$s20c\bin\rsvars.bat")
+# The fallback lands under \Embarcadero\, which is Studio-owned, so it is a library root
+# and stays OUT of the closure even with the project's own search path naming that folder.
+$p103d = Join-Path $Scratch 'P103d'; WriteProject $p103d '18.8'
+WriteUnit "$p103d\uCaller.pas" 'uCaller' 'uCommonDirLib' 'procedure CallIt;' "procedure CallIt;`nbegin`nend;"
+WriteText "$p103d\P.dproj" "<Project><PropertyGroup><ProjectVersion>18.8</ProjectVersion><DCC_UnitSearchPath>$commonB</DCC_UnitSearchPath><MainSource>P.dpr</MainSource></PropertyGroup><ItemGroup><DCCReference Include=`"uCaller.pas`"/></ItemGroup></Project>`n"
+$savedPublic = $env:PUBLIC
+$env:PUBLIC = $publicB
+$cPub = ClosureOf "$p103d\P.dproj" $regCommon
+$env:PUBLIC = (Join-Path $Scratch 'NoSuchPublic')
+$cPubOther = ClosureOf "$p103d\P.dproj" $regCommon
+$env:PUBLIC = $savedPublic
+Check 'no rsvars.bat: PUBLIC\Documents\Embarcadero\Studio\<key> is the library root' (-not (Named $cPub 'uCommonDirLib.pas')) ($cPub -join ';')
+Check 'control: with PUBLIC elsewhere the same project keeps the unit' (Named $cPubOther 'uCommonDirLib.pas') ($cPubOther -join ';')
+
+Write-Host '[10] a project folder with non-ASCII characters still reaches the library tail'
+$accented = Join-Path $Scratch ('Automa' + [char]0x00E7 + [char]0x00E3 + 'o')
+WriteProject $accented '18.8'
+$cAcc = ClosureOf "$accented\P.dproj" $reg
+Check 'uLibOnly.pas is in the closure' (Named ($cAcc | Where-Object { $_ -like "$team20*" }) 'uLibOnly.pas') ($cAcc -join ';')
+Check 'and its own use uLibDeep.pas' (Named $cAcc 'uLibDeep.pas') ($cAcc -join ';')
+Check 'and no shadow-project path leaked into the closure' (-not (($cAcc -join ';') -match 'dl-closure-tail')) ($cAcc -join ';')
+
 Write-Host ''
 Write-Host "target-bds-libpath: pass=$script:pass fail=$script:fail"
 if ($script:fail -gt 0) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
