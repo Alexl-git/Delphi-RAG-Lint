@@ -593,8 +593,9 @@ $effectiveTimeout = $(if ($Jobs -gt 1) { $TimeoutSec * 2 } else { $TimeoutSec })
 # default. Keyed by runner file name; the value is a FLOOR in seconds (the budget
 # is max(default, value)), so -TimeoutSec can still only raise it. The runner's
 # checks are untouched. doctests_v021: passes alone, ~1060 s under load (the default
-# 600 s killed it as a TIMEOUT on a busy box).
-$RunnerBudgetSec = @{ 'run_doctests_v021.ps1' = 1800; 'run_lint_tests.ps1' = 1200 }
+# 600 s killed it as a TIMEOUT on a busy box). 1.42 int1 battery (2026-11-03): doctests_v021
+# took 2016 s and fix_fixtures 577 s of 600 under load -- floors raised to ~1.5x / 2x those.
+$RunnerBudgetSec = @{ 'run_doctests_v021.ps1' = 3000; 'run_lint_tests.ps1' = 1200; 'run_fix_fixtures.ps1' = 1200 }
 
 # --- Run ------------------------------------------------------------------
 $results = New-Object System.Collections.Generic.List[object]
