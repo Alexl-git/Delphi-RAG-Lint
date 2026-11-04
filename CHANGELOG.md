@@ -8,6 +8,9 @@ breaking changes** until v2.0.
 1.42 wave 1, integrated on lane/142-int1. ONE bump: DRAGLINT_EXTRACTOR_VERSION 1.29.0 -> 1.30.0-alpha and
 DRAGLINT_RESOLVER_VERSION 1.17.0 -> 1.18.0-alpha -- every index re-parses once.
 
+### Added (wave 3, lane opaque)
+- New project rule `opaque-to-analysis` (info, OFF): a routine whose calls that do not provably leave the project are predominantly unresolvable (3+ opaque calls, 60%+ of opaque + resolved). Library calls are judged live through the library oracle, so it needs the library index and is silent without one. No extractor or resolver bump.
+
 ### Changed (wave 2, lane surface)
 - context (CTX-SURFACE-DOCS, D8): on a capped type the class surface drops the member docs of the omitted bodies; a kept (focus / in-type-called) body keeps its docs; `--full-surface` keeps all.
 - MCP (MCP-CTX-CAP, D9): `get_context_bundle` takes `max_body_tokens` (default 20000, 0 = uncapped), as the CLI's `--max-body-tokens`.

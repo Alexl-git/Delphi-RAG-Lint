@@ -185,6 +185,7 @@
   "not-in-precedence": {"cwe": ["CWE-783"], "misra": ["MISRA-C-2012-R12.1"]},
   "object-leak": {"cwe": ["CWE-401"], "cert": ["MEM31-C"], "misra": ["MISRA-C-2012-R22.1"]},
   "off-by-one-count": {"cwe": ["CWE-193"]},
+  "opaque-to-analysis": {},
   "out-param-not-set": {"cwe": ["CWE-457"], "weak": ["CWE-457"]},
   "outputdebugstring": {"cwe": ["CWE-489"]},
   "overflow-before-widening": {"cwe": ["CWE-190"], "cert": ["INT30-C", "INT32-C"]},
