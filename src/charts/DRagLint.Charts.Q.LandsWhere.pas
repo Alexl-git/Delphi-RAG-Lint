@@ -227,8 +227,8 @@ type
     procedure SelectField(const pTarget: string);
     procedure MeasureConvention;
     procedure MeasureParamByName;
-    procedure ResolveOrm;  // dl:ok unused-private-member@bbd3 -- REVIEWED 2026-10-14: linter FP -- Emit calls it as the bare then / else statement of `if FKind = KIND_ORM then ResolveOrm else ResolveDfm;`, which the extractor emits no call ref for (logged to draglint-gaps.log)
-    procedure ResolveDfm;  // dl:ok unused-private-member@717d -- REVIEWED 2026-10-14: linter FP -- Emit calls it as the bare then / else statement of `if FKind = KIND_ORM then ResolveOrm else ResolveDfm;`, which the extractor emits no call ref for (logged to draglint-gaps.log)
+    procedure ResolveOrm;
+    procedure ResolveDfm;
     procedure ReadColumn;
     procedure ReadServer;
     procedure RecheckColumn;

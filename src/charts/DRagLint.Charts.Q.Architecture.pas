@@ -166,7 +166,7 @@ end;
 /// <remarks>Opens a read-only TSQLiteSymbolStore beside the TChartsIndex (two read-only handles on one file) and calls BuildDepsReport on it.</remarks>
 function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;  // dl:ok method-too-long@5acb, deep-nesting@5be6 -- REVIEWED 2026-10-17: ports the one-script PS body line for line (H2-H8); the sections share a dozen locals (zones, matrix, degrees, report), so splitting would only thread them as parameters
 begin
-  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pArgs.GuardedDb, True);  // dl:ok object-leak@8a34 -- REVIEWED 2026-10-17: ISymbolStore is reference-counted and released at scope exit, as in Q.Wiring
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pArgs.GuardedDb, True);
   var Index:= TChartsIndex.Create(pArgs.GuardedDb);
   try
     { ---- 1. every unit, with its file (PS 101-106) ---- }

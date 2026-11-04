@@ -5449,7 +5449,7 @@ begin
   end;
 end;
 
-function TLSPServer.DispatchMessage(const AMsg: TJSONObject): Boolean;  // dl:ok cognitive-complexity@f917 -- the former Run body moved verbatim: one flat method-name dispatch chain, each branch a one-line delegate
+function TLSPServer.DispatchMessage(const AMsg: TJSONObject): Boolean;
 var
   Method   : string     ;
   Id       : TJSONValue ;

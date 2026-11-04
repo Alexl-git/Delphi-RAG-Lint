@@ -282,7 +282,7 @@ begin
     finally
       Json.Free;
     end;
-  except // dl:ok bare-except@e286 -- REVIEWED 2026-10-26 fail-open by contract: a resolver fault falls back to the pre-C10 profile, never raises
+  except // dl:ok bare-except@164c -- REVIEWED 2026-10-26 fail-open by contract: a resolver fault falls back to the pre-C10 profile, never raises
     Result := False;
     APlatform := '';
     ADefines := nil;

@@ -4367,9 +4367,9 @@ begin
       without one) still owes its FTS5 rebuild. A failure here is left to the
       schema_meta debt, which the next writer's Migrate settles. }
     if FBatchOpen and FConn.Connected then
-      try EndFileBatch; except end;  // dl:ok empty-except, try-except-swallowed -- REVIEWED 2026-10-30 (PR #10): a destructor must not raise; EndFileBatch has already rolled the batch back when it fails
+      try EndFileBatch; except end;  // dl:ok empty-except@8ae8, try-except-swallowed@8ae8 -- REVIEWED 2026-10-30 (PR #10): a destructor must not raise; EndFileBatch has already rolled the batch back when it fails
     if FFtsDeferred and FConn.Connected then
-      try FinishDeferredTextIndex; except end;  // dl:ok empty-except, try-except-swallowed -- REVIEWED 2026-10-30 (PR #10): a destructor must not raise; a rebuild left pending is redone by the next writer (FTS_REBUILD_PENDING_KEY)
+      try FinishDeferredTextIndex; except end;  // dl:ok empty-except@d18e, try-except-swallowed@d18e -- REVIEWED 2026-10-30 (PR #10): a destructor must not raise; a rebuild left pending is redone by the next writer (FTS_REBUILD_PENDING_KEY)
     if FConn.Connected then FConn.Close;
     FConn.Free;
   end;
@@ -6016,7 +6016,7 @@ begin
     FConn.ExecSQL('DROP TRIGGER IF EXISTS string_literals_ad');
     FConn.ExecSQL('DROP TRIGGER IF EXISTS string_literals_au');
     FConn.Commit;
-  except  // dl:ok bare-except, try-except-swallowed -- REVIEWED 2026-10-30 (PR #10): a failed trigger DROP keeps the triggers: the load stays correct, only not deferred
+  except  // dl:ok bare-except@db75, try-except-swallowed@db75 -- REVIEWED 2026-10-30 (PR #10): a failed trigger DROP keeps the triggers: the load stays correct, only not deferred
     FConn.Rollback;
     Exit;
   end;

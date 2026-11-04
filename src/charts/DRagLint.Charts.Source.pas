@@ -178,7 +178,7 @@ uses
   , System.IOUtils
   , System.Hash
   , System.Math
-  , System.Character  // dl:ok unused-unit-in-uses@b683 -- REVIEWED 2026-10-13: linter FP -- PsTrim calls TCharHelper.IsWhiteSpace on pS[First]; removing the unit fails E2671 (C:\Projects\Delphi-RAG-lint\docs\INBOX-lint-fp-unused-unit-helper-on-indexed-char.md)
+  , System.Character
   , System.Generics.Defaults
   ;
 

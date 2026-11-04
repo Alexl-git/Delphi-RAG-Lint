@@ -64,7 +64,7 @@ implementation
 uses
   System.SysUtils,
   System.StrUtils,
-  System.Character,  // dl:ok unused-unit-in-uses@6171 -- REVIEWED 2026-10-14: TCharHelper.IsWhiteSpace in TrimWhiteSpace; removing it fails E2671
+  System.Character,
   System.Generics.Collections,
   DragLint.Plugin.OpenSourcePath;
 

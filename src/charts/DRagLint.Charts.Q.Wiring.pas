@@ -147,7 +147,7 @@ function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;
 var
   Found: Boolean;
 begin
-  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pArgs.GuardedDb, True);  // dl:ok object-leak@8a34 -- REVIEWED 2026-10-17: ISymbolStore is reference-counted and released at scope exit, as in Q.Butterfly
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pArgs.GuardedDb, True);
   var Index:= TChartsIndex.Create(pArgs.GuardedDb);
   try
     { ---- 1. the index-wide pre-check, before anything else ---- }

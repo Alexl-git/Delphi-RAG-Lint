@@ -782,7 +782,7 @@ type
     CompareOutRoot: string ; // --out-root <dir>  (compare: where the rerun's per-run bundle folder is made; '' = %TEMP%\drag-lint-reports)
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@21f1 -- (483 lines: 1.27.x banner lines merged from main + compare lines + the 1.30.0 ask lines + the protocol / mcp-config lines): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -1781,17 +1781,17 @@ begin
     else if (A = '--shadow-out') and (i < ParamCount) then
     begin
       Inc(i);
-      Result.ShadowOut:= ParamStr(i);  // dl:ok duplicate-code@6921 -- the flag parser is a table of one-value flags (Inc(i); Result.X:= ParamStr(i)); the shape repeats by construction
+      Result.ShadowOut:= ParamStr(i);
     end
     else if (A = '--rsvars') and (i < ParamCount) then
     begin
       Inc(i);
-      Result.CycleRsVars:= ParamStr(i);  // dl:ok duplicate-code@bcfb -- the flag parser is a table of one-value flags (Inc(i); Result.X:= ParamStr(i)); the shape repeats by construction
+      Result.CycleRsVars:= ParamStr(i);
     end
     else if (A = '--build-timeout') and (i < ParamCount) then
     begin
       Inc(i);
-      Result.CycleBuildTimeout:= ParamStr(i);  // dl:ok duplicate-code@2b8c -- the flag parser is a table of one-value flags (Inc(i); Result.X:= ParamStr(i)); the shape repeats by construction
+      Result.CycleBuildTimeout:= ParamStr(i);
     end
     // v0.69 D2a: rename --kind param positional args
     // Note: --kind  already parsed into Result.Kind   (line ~638)
@@ -1856,7 +1856,7 @@ begin
     else if (Result.Command = 'format'   ) and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (Result.Command = 'allow'    ) and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
     else if (Result.Command = 'workspace') and (Result.SubCommand = 'add') and (Result.Target = '') and (not A.StartsWith('--')) then Result.Target:= A
-    else if (A = '--dir') and (i < ParamCount) then begin Inc(i); Result.Path:= ParamStr(i); Result.PathFromConfig:= False; end  // dl:ok multiple-statements-per-line -- REVIEWED 2026-10-25: the ParseArgs one-line value-flag arm shape shared by every sibling arm; W5-C adds the config-flag reset to it
+    else if (A = '--dir') and (i < ParamCount) then begin Inc(i); Result.Path:= ParamStr(i); Result.PathFromConfig:= False; end  // dl:ok multiple-statements-per-line@a652 -- REVIEWED 2026-10-25: the ParseArgs one-line value-flag arm shape shared by every sibling arm; W5-C adds the config-flag reset to it
     else if (A = '--parent-pid') and (i < ParamCount) then begin Inc(i); Result.ParentPid:= Cardinal(StrToInt64Def(ParamStr(i), 0)); end
     { v1.7 Task 1: LSP merge proxy. --delphi-lsp names the child to spawn and
       exists chiefly so the guard can substitute a stub server; without it the
@@ -1950,7 +1950,7 @@ begin
     else if A = '--reindex' then Result.DocReindex:= True
     // AutoDocument (ADF T4): --seealso opts in the <seealso> doc-source.
     else if A = '--seealso' then Result.DocSeeAlso:= True // now the default; kept so existing scripts do not break
-    else if A = '--no-seealso' then Result.DocSeeAlso:= False  // dl:ok duplicate-code@b5e0 -- REVIEWED 2026-09-23: the ParseArgs shape every flag branch shares (a flag parser is a chain of these by design); the duplicate window moved here when the doc-forget flags were added below
+    else if A = '--no-seealso' then Result.DocSeeAlso:= False
     // AutoDocument (ADF T5): --since opts in the git <since> doc-source; --base-dir
     // sets the repo root for the git lookup (defaults to the file's own dir).
     else if (A = '--since') and (Result.Command = 'gain') and (i < ParamCount) then
@@ -2054,7 +2054,7 @@ begin
       Inc(i);
       Result.Question:= ParamStr(i);
     end
-    else if (A = '--show') and (i < ParamCount) then  // dl:ok duplicate-code@b8ae -- REVIEWED 2026-10-11: the ParseArgs value-flag arm shape (Inc(i); Result.X:= ParamStr(i)) shared with --castlib; one arm per compare flag extends the chain
+    else if (A = '--show') and (i < ParamCount) then
     begin
       Inc(i);
       Result.CompareShow:= ParamStr(i);
@@ -2064,7 +2064,7 @@ begin
       Inc(i);
       Result.SnapshotDir:= ParamStr(i);
     end
-    else if (A = '--out-root') and (i < ParamCount) then begin Inc(i); Result.CompareOutRoot:= ParamStr(i); end // dl:ok multiple-statements-per-line -- REVIEWED 2026-10-26: the ParseArgs one-line value-flag arm shape shared by every sibling arm
+    else if (A = '--out-root') and (i < ParamCount) then begin Inc(i); Result.CompareOutRoot:= ParamStr(i); end // dl:ok multiple-statements-per-line@6fd9 -- REVIEWED 2026-10-26: the ParseArgs one-line value-flag arm shape shared by every sibling arm
     else if A = '--auto' then Result.CompareAuto:= True
     else if A = '--save' then Result.CompareSave:= True
     else if A = '--update-doc' then Result.UpdateDoc:= True
@@ -31314,7 +31314,7 @@ var
   // (and its freshness checked) the FIRST time a unit reaches that step, then
   // reused: a single --unit run keeps its old order, a batch pays for both and
   // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
-  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@3537, cyclomatic-complexity@02e3, method-too-long@dcc8 -- REVIEWED 2026-11-04 (lint sweep b0bad3cf..HEAD): the branch count and length are that same early-outcome chain; splitting it is a convert-apply refactor, not a sweep fix. Each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@c229, cyclomatic-complexity@b09f, method-too-long@e410 -- REVIEWED 2026-11-04 (lint sweep b0bad3cf..HEAD): the branch count and length are that same early-outcome chain; splitting it is a convert-apply refactor, not a sweep fix. Each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
   var
     UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
     ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }
@@ -31719,7 +31719,7 @@ begin
   { one unit keeps its old first check; a batch checks each unit in RunUnit }
   if (Length(Units) = 1) and not TFile.Exists(Units[0]) then
   begin
-    Writeln(Format('ERROR: unit not found: %s', [Units[0]]));  // dl:ok duplicate-code@f028
+    Writeln(Format('ERROR: unit not found: %s', [Units[0]]));
     Exit(2);
   end;
   if not TFile.Exists(AArgs.RulesFile) then
