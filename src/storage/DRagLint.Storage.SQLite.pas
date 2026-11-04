@@ -14556,7 +14556,7 @@ var
 begin
   Total:= AConn.ExecSQLScalar('SELECT count(*) FROM (' + AQ.SQL.Text + ')');
   BeatStep(AStep, Total);
-  AQ.Open;
+  AQ.Open;  // dl:ok dataset-open-without-close -- REVIEWED 2026-11-04: an opener by design; each stream closes and frees its own query
 end;
 
 procedure TSQLiteSymbolStore.ResolveEnumValueRefs(AResolver: TCallResolver;
@@ -15203,13 +15203,10 @@ begin
   { Order preserved from the boolean this replaced: the extra-store test came
     first and short-circuited, so the scoping predicate's own queries (CountFiles,
     CallEdgesNeedRebuild) are still not run when extra stores decide it. }
-  var DeclineWhy: string;
-  if AClearFirst then
-    DeclineWhy:= 'a full edge clear was asked for (a stale resolver or --resolve-only)'
-  else if Length(AExtraStores) > 0 then
-    DeclineWhy:= 'extra stores are attached, and a library index consulted by ResolveExternally is outside everything this instance recorded'
-  else
-    DeclineWhy:= ScopedResolveDeclineReason;
+  var DeclineWhy: string:=
+    if AClearFirst then 'a full edge clear was asked for (a stale resolver or --resolve-only)'
+    else if Length(AExtraStores) > 0 then 'extra stores are attached, and a library index consulted by ResolveExternally is outside everything this instance recorded'
+    else ScopedResolveDeclineReason;
   Scoped:= DeclineWhy = '';
   { ANNOUNCED BEFORE THE PASS, NOT AFTER IT. The completion lines at the bottom
     of this routine already say which shape ran -- but they print when it is
