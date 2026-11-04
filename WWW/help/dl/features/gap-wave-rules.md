@@ -4,10 +4,10 @@ title: Gap-wave lint rules
 summary: About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave
 product: DL
 group: linting
-order: 30014
+order: 30015
 since: 1.37.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.42.0-alpha
 ---
 
 # Gap-wave lint rules

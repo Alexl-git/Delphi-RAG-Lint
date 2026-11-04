@@ -4,10 +4,10 @@ title: Compliance labels (CWE, CERT, MISRA)
 summary: Rules carry CWE / CERT / MISRA ids; --labels prints them, rules --standard filters by standard, JSON gains a compliance field
 product: DL
 group: linting
-order: 30002
+order: 30003
 since: 1.37.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.42.0-alpha
 ---
 
 # Compliance labels (CWE, CERT, MISRA)

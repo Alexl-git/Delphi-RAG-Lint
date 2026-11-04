@@ -4,10 +4,10 @@ title: Format Whole Project with YADF
 summary: Runs YADF formatting across a project's files, with indexing involved as part of the same action
 product: DL
 group: linting
-order: 30012
+order: 30013
 since: 0.1.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.42.0-alpha
 ---
 
 # Format Whole Project with YADF

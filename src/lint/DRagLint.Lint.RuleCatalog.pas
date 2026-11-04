@@ -861,6 +861,7 @@ begin
     B('free-of-parameter', 'resource-lifetime', 'warning', 'Free of a by-value or const parameter -- the caller''s reference now dangles');
     B('property-accessor-name', 'naming', 'info', 'Property accessor is not named F<Prop> / Get<Prop> / Set<Prop> -- the convention makes accessors findable');
     B('unused-loop-variable', 'dead-code', 'hint', 'for-loop counter is never used in the body -- the loop only repeats; check the intent', False);
+    B('ancestor-not-in-project', 'project-wide', 'error', 'A form / frame / data module inherits from a class declared in no unit of the project and not in the platform library -- the project compiles only where that unit happens to be on the search path; add the unit to the .dproj / .dpr');
     B('dfm-event-handler-missing', 'project-wide', 'warning', 'A .dfm names an event handler that the form class and its ancestors do not declare -- the form fails to load');
     B('dfm-password-edit-unmasked', 'security', 'info', 'Edit control named like a password field has no PasswordChar -- the secret is shown on screen');
     B('uses-movable-to-implementation', 'project-wide', 'hint', 'Interface uses entry is needed only by the implementation section -- move it to cut coupling and compile time');
