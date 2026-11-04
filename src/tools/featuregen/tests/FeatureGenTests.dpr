@@ -2330,6 +2330,27 @@ begin
   Check('Help.EqualOrderSameInEitherInsertionOrder', SortedIds([lA, lB, lC]) = SortedIds([lC, lB, lA]), SortedIds([lA, lB, lC]) + ' vs ' + SortedIds([lC, lB, lA]));
   Check('Help.EqualOrderIdIsOrdinal', SortedIds([lA, lB, lC]) = 'Zeta;menu-tree;register-project;', SortedIds([lA, lB, lC]));
 end;
+{ Help generator: a long line is chunked at a space, never inside a flag name or word. }
+procedure TestHelpChunking;
+var
+  lLine, lStmt, lJoined: string;
+  lParts: TArray<string>;
+  lI: Integer;
+begin
+  lLine := '';
+  for lI := 1 to 120 do
+    lLine := lLine + '--flag-number-' + IntToStr(lI) + ' <v''x> ';
+  lLine := lLine.TrimRight;
+  lStmt := WriteLnStatement(lLine);
+  lParts := lStmt.Split([''' +'#10'    ''']);
+  Check('HelpChunk.IsChunked', Length(lParts) > 1, 'positive control: the line must exceed one chunk, parts=' + IntToStr(Length(lParts)));
+  lJoined := lStmt.Replace(''' +'#10'    ''', '');
+  lJoined := Copy(lJoined, Length('  Writeln(''') + 1, Length(lJoined) - Length('  Writeln(''') - Length(''');'#10)).Replace('''''', '''');
+  Check('HelpChunk.RoundTrip', lJoined = lLine, 'concatenated chunks must equal the input');
+  for lI := 0 to High(lParts) - 1 do
+    Check('HelpChunk.BreakAfterSpace' + IntToStr(lI), lParts[lI].EndsWith(' '), 'chunk ' + IntToStr(lI) + ' ends mid-token: ...' + Copy(lParts[lI], Length(lParts[lI]) - 12, 13));
+  Check('HelpChunk.ShortLineSingleLiteral', Pos(#10'    ', WriteLnStatement('--short --line')) = 0, 'a short line stays one literal');
+end;
 procedure TestHelpText(const pRepo: string);
 var
   lReg: TRegistry;
@@ -3703,6 +3724,7 @@ begin
     if lRepo <> '' then
       TestWikiParity(lRepo);
     TestCaptionKeyVector;
+    TestHelpChunking;
     TestParseMenuTreeJson;
     TestCompareFindingSetsPositiveControl;
     TestEmptyKindsPositiveControl;
