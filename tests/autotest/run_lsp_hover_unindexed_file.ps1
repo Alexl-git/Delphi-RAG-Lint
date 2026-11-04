@@ -296,6 +296,7 @@ Write-Host 'PC1: POSITIVE CONTROL -- hover in an INDEXED file' -ForegroundColor 
 $pc1 = Invoke-Hover $projFile $projLine $projCol
 Check 'indexed-file hover resolves the project symbol' `
   ($pc1 -match 'ProjUnit\.TProjectThing\.ProjectOwnMethod') "got: [$pc1]"
+Check 'LSP-UNOWNED CONTROL: an owned file carries no not-in-this-project label' ($pc1 -notmatch 'file not in this project') "got: [$pc1]"
 
 # ---- CASE 1: the reported shape -- a call site in the loose file ----
 Write-Host ''
@@ -306,6 +307,7 @@ Check 'does NOT name the far-away library class' `
 Check 'names the loose unit own Apply' `
   ($c1 -match 'LooseUnit\.TLooseThing\.Apply') "got: [$c1]"
 Check 'shows the loose parameter ALooseArg' ($c1 -match 'ALooseArg') "got: [$c1]"
+Check 'LSP-UNOWNED (D2): the unowned answer is labelled (from <db>; file not in this project)' ($c1 -match '\(from [^;)]+; file not in this project\)') "got: [$c1]"
 
 # ---- NC2: stdout hygiene, checked on the very reply that builds the index ----
 Write-Host ''

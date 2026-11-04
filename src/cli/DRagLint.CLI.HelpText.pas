@@ -111,7 +111,7 @@ begin
   Writeln('                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)');
   Writeln('                               EXIT 0 = callers listed, 1 = ZERO callers (a valid answer, not an error;');
   Writeln('                               --json prints []), 2 = usage error or a missing/stale --db. See "Exit codes" below.');
-  Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3)');
+  Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3); --resolved rows also carry "path" = the full path of the caller file ("file" stays the bare name), before "resolution"');
   Writeln('                               a method reached only THROUGH an interface lists those sites as a separate "via IFoo.Bar dispatch" group;');
   Writeln('                                 --json rows gain "via" (interface method QName), "via_kind" ("interface") and, when the implements edge is ambiguous, "via_edge" (RB-5)');
   Writeln('  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)');
@@ -273,7 +273,7 @@ begin
   Writeln('  drag-lint slice              --qname <Foo.TBar>   [--db <file.sqlite>] [--format text|json]');
   Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)');
   Writeln('                               [--max-callers N] [--context N] [--no-docs] [--max-body-tokens N]');
-  Writeln('                               a whole TYPE target keeps its method bodies up to --max-body-tokens estimated tokens (default 20000; 0 = uncapped): a FOCUS method named after the type ("modify TFoo Bar") first, then the most-called-in-type, then the smallest; the rest are listed as header + line range under "## Omitted bodies" (json body_cap, bodies_omitted, omitted_bodies). A member target is never cut (CTX-TYPECAP)');
+  Writeln('                               a whole TYPE target keeps its method bodies up to --max-body-tokens estimated tokens (default 20000; 0 = uncapped): a FOCUS method named after the type ("modify TFoo Bar") first, then the most-called-in-type, then the smallest; the rest are listed as header + line range under "## Omitted bodies" (json body_cap, bodies_omitted, omitted_bodies). A member target is never cut (CTX-TYPECAP). When the cap engages, the class surface also drops the member docs of the omitted bodies; a kept body keeps its docs (CTX-SURFACE-DOCS)');
   Writeln('                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).');
   Writeln('                               a method reached only THROUGH an interface also gets "## Callers via interface dispatch (IFoo.Bar): N site(s)" sections, after the direct callers; --format json gains "via_dispatch" [{via,kind,sites}] (present only when non-empty) (RB-5)');
   Writeln('  drag-lint bench-context      [--db <file.sqlite>] [--n N]');
@@ -630,7 +630,7 @@ begin
     Writeln('                                 an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)');
     Writeln('                               EXIT 0 = callers listed, 1 = ZERO callers (a valid answer, not an error;');
     Writeln('                               --json prints []), 2 = usage error or a missing/stale --db. See "Exit codes" below.');
-    Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3)');
+    Writeln('                               --json: every row ends with "resolution": exact|ambiguous|external|name-only (derived; XERJ item 3); --resolved rows also carry "path" = the full path of the caller file ("file" stays the bare name), before "resolution"');
     Writeln('                               a method reached only THROUGH an interface lists those sites as a separate "via IFoo.Bar dispatch" group;');
     Writeln('                                 --json rows gain "via" (interface method QName), "via_kind" ("interface") and, when the implements edge is ambiguous, "via_edge" (RB-5)');
     Writeln('  drag-lint query --kind <k> --all [--public] [--db ...] [--json]   (list EVERY symbol of one kind -- no name, no doc clause, no row cap; e.g. every unit in a DB)');
@@ -912,7 +912,7 @@ begin
   begin
     Writeln('  drag-lint context            --task "verb qname" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a "## Wiki" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)');
     Writeln('                               [--max-callers N] [--context N] [--no-docs] [--max-body-tokens N]');
-    Writeln('                               a whole TYPE target keeps its method bodies up to --max-body-tokens estimated tokens (default 20000; 0 = uncapped): a FOCUS method named after the type ("modify TFoo Bar") first, then the most-called-in-type, then the smallest; the rest are listed as header + line range under "## Omitted bodies" (json body_cap, bodies_omitted, omitted_bodies). A member target is never cut (CTX-TYPECAP)');
+    Writeln('                               a whole TYPE target keeps its method bodies up to --max-body-tokens estimated tokens (default 20000; 0 = uncapped): a FOCUS method named after the type ("modify TFoo Bar") first, then the most-called-in-type, then the smallest; the rest are listed as header + line range under "## Omitted bodies" (json body_cap, bodies_omitted, omitted_bodies). A member target is never cut (CTX-TYPECAP). When the cap engages, the class surface also drops the member docs of the omitted bodies; a kept body keeps its docs (CTX-SURFACE-DOCS)');
     Writeln('                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).');
     Writeln('                               a method reached only THROUGH an interface also gets "## Callers via interface dispatch (IFoo.Bar): N site(s)" sections, after the direct callers; --format json gains "via_dispatch" [{via,kind,sites}] (present only when non-empty) (RB-5)');
     Exit;

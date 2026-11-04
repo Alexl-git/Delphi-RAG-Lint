@@ -9519,7 +9519,7 @@ begin
         having to spawn this exe. Only the RENDERING lives here now, and it is
         unchanged: per-target headers in the text form, callbacks without one,
         and a JSON key order of
-        caller_qname,file,confidence,target_qname[,line][,caller_line][,mode][,path]
+        caller_qname,file,confidence,target_qname[,line][,caller_line][,mode][,path],resolution
         with caller_line OMITTED when the enclosing symbol is unknown.
         Pinned by run_query_callers_shared_guard.ps1. }
       var TotalCallers:= 0;
@@ -9568,14 +9568,19 @@ begin
               end;
               { XERJ item 3 (owner ruling 2026-10-28): `resolution` is the LAST key; the
                 pinned key order of run_query_callers_shared_guard.ps1 gained it on purpose. }
+              { Q-RESOLVED-PATH (owner ruling D1, 2026-11-03): path is the FULL path of the caller's file, so a
+                consumer can open it (file stays the bare name the diffs key on). It sits BEFORE
+                resolution, which stays the LAST key. Omitted when the row has no full path. }
+              if Row.FullPath <> '' then JObj.AddPair('path', Row.FullPath);
               JObj.AddPair('resolution', Row.Resolution);
               JOut.AddElement(JObj);
             end
             else
             begin
               { The text form names the same line the JSON `line` does (C1). }
-              var Where: string:= Row.FilePath;
-              if Row.CallSiteLine > 0 then Where:= Format('%s:%d', [Row.FilePath, Row.CallSiteLine]);
+              { Q-RESOLVED-PATH (D1): the text row names the FULL path (it opens), as the JSON path. }
+              var Where: string:= if Row.FullPath <> '' then Row.FullPath else Row.FilePath;
+              if Row.CallSiteLine > 0 then Where:= Format('%s:%d', [Where, Row.CallSiteLine]);
               if Row.Confidence = 'callback' then
                 { A callback reach is reported WITHOUT a target header -- it is a
                   reach, not a call, and the shape is what keeps the two from

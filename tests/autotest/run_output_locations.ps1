@@ -90,21 +90,23 @@ Check 'CONTROL: the location sits BEFORE the [impl-only] suffix, which stays at 
   (($qi -match ('\(' + $esc + ':' + $hiddenDecl + '\)')) -and ($qi -match '\[impl-only\]\s*$')) "got: $qi"
 
 Write-Host ''
-Write-Host 'find-callers --resolved (UNCHANGED on purpose)' -ForegroundColor Cyan
-# PR #4 also proposed a `path` key and full-path text rows here. Left out at
-# maintainer review (2026-10-30): `resolution` is the LAST key by owner ruling
-# (XERJ item 3, pinned by run_query_callers_shared_guard.ps1) and the plugin /
-# compare scripts parse the file-NAME text rows. These checks pin that contract.
+Write-Host 'find-callers --resolved (Q-RESOLVED-PATH, owner ruling D1 2026-11-03: ACCEPTED)' -ForegroundColor Cyan
+# PR #4 proposed a `path` key and full-path text rows here. Declined at maintainer review
+# (2026-10-30), ACCEPTED by owner ruling D1 (2026-11-03): `path` is the full path and sits BEFORE
+# `resolution`, which stays the LAST key (XERJ item 3, run_query_callers_shared_guard.ps1);
+# `file` stays the bare name the diffs key on; the text row names the full path.
 $j = (& $Exe query find-callers --name Target --resolved --json --db $db 2>$null) -join "`n"
 $rows = @(ConvertFrom-Json -InputObject $j)
 Check 'one resolved caller' ($rows.Count -eq 1) "json: $j"
 if ($rows.Count -eq 1) {
-  Check 'CONTROL: `file` is the file NAME (the contract consumers diff on)' ($rows[0].file -eq 'uWhere.pas') "file=$($rows[0].file)"
-  Check 'CONTROL: `resolution` is the LAST key and there is no `path` key' `
-    (((@($rows[0].PSObject.Properties.Name) | Select-Object -Last 1) -eq 'resolution') -and -not ($rows[0].PSObject.Properties.Name -contains 'path')) "keys=$(@($rows[0].PSObject.Properties.Name) -join ',')"
+  Check 'CONTROL: `file` is still the file NAME (the contract consumers diff on)' ($rows[0].file -eq 'uWhere.pas') "file=$($rows[0].file)"
+  Check 'ASSERT: `path` is the full path of the caller file' (($rows[0].path -ieq $unit)) "path=$($rows[0].path) want=$unit"
+  $names = @($rows[0].PSObject.Properties.Name)
+  Check 'CONTROL: `resolution` is still the LAST key and `path` sits before it' `
+    (($names[-1] -eq 'resolution') -and ($names.IndexOf('path') -ge 0) -and ($names.IndexOf('path') -lt $names.IndexOf('resolution'))) "keys=$($names -join ',')"
 }
 $t = (& $Exe query find-callers --name Target --resolved --db $db 2>$null) -join "`n"
-Check 'CONTROL: the text row prints (file name:site line)' ($t -match ('\(uWhere\.pas:' + $callSite + '\)')) "got: $t"
+Check 'ASSERT: the text row prints (full path:site line)' ($t -match ('\(' + $esc + ':' + $callSite + '\)')) "got: $t"
 Write-Host ''
 Write-Host 'MCP find_symbol' -ForegroundColor Cyan
 $req = Join-Path $WorkDir 'mcp.json'

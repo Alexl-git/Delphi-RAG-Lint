@@ -3483,8 +3483,16 @@ begin
   Ctx   := FileContext(APath);
   Result:= 'context: ' + (if Ctx.Project = '' then 'none' else ExtractFileName(Ctx.Project)) + ' -- ' + Ctx.Platform
     + (if Ctx.PlatformDefaulted then ' [default]' else '');
-  var Notice: string:= ContextNotice(APath, Ctx, DbSetFor(APath, Ctx), False);
+  var Dbs   : TLspDbSet:= DbSetFor(APath, Ctx);
+  var Notice: string   := ContextNotice(APath, Ctx, Dbs, False);
   if Notice <> '' then Result:= Result + #10#10 + Notice;
+  { LSP-UNOWNED (owner ruling D2, 2026-11-03): a file no index of its context owns still
+    answers from the stores (hover, definition); the footer says whose answer it is. }
+  var Owned: Boolean:= False;
+  for var St: ISymbolStore in StoreSet(Dbs) + FStores do
+    if St.FindFileIdByPath(APath) > 0 then Owned:= True;
+  if (not Owned) and (APath <> '') then
+    Result:= Result + #10#10 + Format('(from %s; file not in this project)', [(if Dbs.ProjectDb <> '' then ExtractFileName(Dbs.ProjectDb) else if Dbs.LibraryDb <> '' then ExtractFileName(Dbs.LibraryDb) else 'the open index')]);
 end;
 
 function TLSPServer.StoresForFile(const APath: string): TArray<ISymbolStore>;

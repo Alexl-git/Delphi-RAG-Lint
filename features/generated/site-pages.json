@@ -112,8 +112,8 @@
     "version": "1.38.0-alpha"
   },
   "features/context.md": {
-    "hash": "7c535f58f2d8ef98aea3b4190be40da9688d56bba0477b8ebeaa1957e9a9af23",
-    "version": "1.39.2-alpha"
+    "hash": "1ac0bcf657752694d8cbf3f90190d00e566c81fe4b6f445afce77a19f0df6087",
+    "version": "1.42.0-alpha"
   },
   "features/convert-apply-migrate.md": {
     "hash": "8e932a97aa1bba2476f88cc8109eb28524bb99df12b49a909166f82164b696a4",
@@ -480,8 +480,8 @@
     "version": "1.39.2-alpha"
   },
   "features/lsp.md": {
-    "hash": "70982e59ddfbcdd1d293131c8d8ed07f961208832f0e250a5196df07b19cc4dd",
-    "version": "1.39.2-alpha"
+    "hash": "8cdfdcdb71e16af34885920d950ef20eb0e25d6d41324775937b36a85f829248",
+    "version": "1.42.0-alpha"
   },
   "features/maintenance.md": {
     "hash": "b880c95ae36ec3086769089c61fa0662ad531a2c62d3edaba207c4d91e74741d",
@@ -556,8 +556,8 @@
     "version": "1.38.0-alpha"
   },
   "features/query-find-callers.md": {
-    "hash": "89d9b5fe81e14204b317076b24bca118a44d64fefd356277dd150fe787852d96",
-    "version": "1.38.0-alpha"
+    "hash": "35d675bca885f53470da7c02dda61b18de3846c637311dd5ba36445387b42fa5",
+    "version": "1.42.0-alpha"
   },
   "features/query-kind-all.md": {
     "hash": "a0d0e4f2836cc1fe9ee0efc88320bbc60f64e72071d2c73005dc1d29362884fa",

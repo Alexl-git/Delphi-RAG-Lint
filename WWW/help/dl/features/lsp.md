@@ -7,7 +7,7 @@ group: editor-integration
 order: 110012
 since: 0.6.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.42.0-alpha
 ---
 
 # lsp
@@ -266,7 +266,7 @@ Guards: `tests\autotest\run_lsp_context_isolation_guard.ps1`, `tests\autotest\ru
 
 ### Diagnostics for a file no index owns
 
-Plain `drag-lint lsp` publishes lint findings for every opened file. When no loaded index owns the file (for example another worktree's copy of a unit), the findings are computed from the buffer alone and are tagged `source: "drag-lint (unowned)"` instead of `"drag-lint"`, so you can tell they are not backed by a project index. Owned files keep `"drag-lint"`. Guard: `tests\autotest\run_lsp_unowned_label_guard.ps1`.
+Plain `drag-lint lsp` publishes lint findings for every opened file. When no loaded index owns the file (for example another worktree's copy of a unit), the findings are computed from the buffer alone and are tagged `source: "drag-lint (unowned)"` instead of `"drag-lint"`, so you can tell they are not backed by a project index. Owned files keep `"drag-lint"`. Guard: `tests\autotest\run_lsp_unowned_label_guard.ps1`. Hover and definition for such a file still answer (from its own parse plus the context stores); the hover footer says `(from <db>; file not in this project)` (LSP-UNOWNED, 1.42; guard `run_lsp_hover_unindexed_file.ps1`).
 
 ### Clearing diagnostics
  server clears what it published: on `textDocument/didClose` and on `workspace/didChangeWatchedFiles` entries of type 3 (Deleted) it publishes an empty `diagnostics` array for the same uri string the client used, so a closed file, or one deleted without ever being closed (a removed git worktree), disappears from the Problems panel instead of keeping its last warnings. The VS Code extension registers a `**/*.{pas,dpr,dpk,inc,dfm}` watcher so deletions reach the server; Created/Changed events on a `.pas`/`.dpr`/`.dpk` the client has not open re-lint it from disk (see [vscode-extension](auto-uses-on-save.md); guard `tests\autotest\run_lsp_watch_pascal_guard.ps1`). Guard: `tests\autotest\run_lsp_clear_diags_guard.ps1`.
