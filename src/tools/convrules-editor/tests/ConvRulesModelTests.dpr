@@ -9897,6 +9897,45 @@ begin
   end; // try
 end;
 
+// CONV-BOOKVALID: each pair pass costs one engine process (the dominant cost of
+// a Save), so a pair shared by several blocks is asked ONCE and its answer is
+// read for every block that owns the pair.
+procedure TestValidatePairCache;
+var
+  Jobs : TArray<TValidateJob>;
+  Calls: TArray<string>;
+  Fake : TValidateFn;
+  R    : TScopedValidation;
+  Txt  : string;
+
+  function Job(const AFrom, ATo, AKey: string; AFirst, ALast: Integer): TValidateJob;
+  begin
+    Result:= Default(TValidateJob);
+    Result.FromType := AFrom;
+    Result.ToType   := ATo;
+    Result.Key      := AKey;
+    Result.FirstLine:= AFirst;
+    Result.LastLine := ALast;
+  end;
+
+begin
+  Txt:= '#convert TA -> TB' + #13#10 + '#link x <- y' + #13#10 + '#convert TA -> TB' + #13#10 + '#link z <- w' + #13#10 + '#convert TC -> TD' + #13#10;
+  Jobs:= [Job('TA', 'TB', 'a1', 1, 2), Job('TA', 'TB', 'a2', 3, 4), Job('TC', 'TD', 'c1', 5, 5)];
+  Calls:= nil;
+  Fake:= function(const AText, AFrom, ATo: string): string
+    begin
+      Calls:= Calls + [AFrom + '|' + ATo];
+      if AFrom = 'TA' then
+        Result:= 'line 2: bad link' + #13#10 + 'line 4: bad link too'
+      else
+        Result:= 'OK';
+    end;
+  R:= RunScopedValidation(Txt, Jobs, Fake);
+  Check('validate.paircache.calls', Length(Calls) = 3, string.Join(';', Calls));  // dl:ok magic-literal@5b7f -- REVIEWED 2026-11-04 expected call count is the assertion data of the fixture
+  Check('validate.paircache.diags.per.block', (Length(R.JobDiags[0]) = 1) and (Length(R.JobDiags[1]) = 1) and (Length(R.JobDiags[2]) = 0)
+    and R.JobDone[0] and R.JobDone[1] and R.JobDone[2], Format('%d/%d/%d', [Length(R.JobDiags[0]), Length(R.JobDiags[1]), Length(R.JobDiags[2])]));
+end;
+
 procedure TestValidateTextStreams;
 const
   STANDIN_CMD = '@echo off'#13#10'echo line 1: warning: first'#13#10'echo   resolver: edges were derived by r=1 (minutes, not a re-parse). 1>&2'#13#10 +
@@ -16505,6 +16544,7 @@ begin
     TestValidate1262Note;
     TestValidateScopeBlocks;
     TestValidateScopeRun;
+    TestValidatePairCache;
     TestValidateTextStreams;
     TestValidateScopeCancel;
     TestGlyphLinkParse;

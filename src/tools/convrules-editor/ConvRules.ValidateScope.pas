@@ -149,8 +149,10 @@ function DiagsForJob(const ADiags: TArray<TValidateDiag>; const AJob: TValidateJ
 /// <summary>Run the syntax pass and one pass per job, keeping what each owns.</summary>
 /// <param name="AText">The text to validate.</param>
 /// <param name="AJobs">The blocks to check with their own pair.</param>
-/// <param name="AValidate">The engine call; called 1 + Length(AJobs) times unless
-/// cancelled.</param>
+/// <param name="AValidate">The engine call; called once for the syntax pass and once per
+/// DISTINCT (FromType, ToType) pair among AJobs, at most 1 + Length(AJobs) times, fewer when
+/// cancelled. Blocks that share a pair read one answer (CONV-BOOKVALID: each call is an engine
+/// process, the dominant cost of a Save).</param>
 /// <param name="ACancelled">Polled before and after each call; nil = never. A
 /// pass during or after which it answers True is NOT done, and no further pass
 /// starts.</param>
@@ -539,31 +541,54 @@ function RunScopedValidation(const AText: string; const AJobs: TArray<TValidateJ
 var
   i: Integer      ;
   D: TValidateDiag;
+
+  // The syntax pass, then one pair pass per DISTINCT pair (CONV-BOOKVALID): blocks that
+  // share a pair read the same parsed answer. A pass is done only when no cancel came
+  // before OR during it: a cancel kills the engine mid-run, so its output is partial
+  // and must not replace any mark, nor be remembered for a later block.
+  procedure RunPasses;
+  var
+    LOut  : string;
+    LPairs: TDictionary<string, TArray<TValidateDiag>>;
+    LKey  : string;
+    LPair : TArray<TValidateDiag>;
+    j     : Integer;
+  begin
+    if IsCancelled(ACancelled) then
+      Exit;
+    LOut:= AValidate(AText, '', '');
+    if IsCancelled(ACancelled) then
+      Exit;
+    Result.Syntax:= ParseValidateOutput(LOut);
+    Result.SyntaxDone:= True;
+    LPairs:= TDictionary<string, TArray<TValidateDiag>>.Create;
+    try
+      for j:= 0 to High(AJobs) do
+      begin
+        if IsCancelled(ACancelled) then
+          Exit;
+        LKey:= AJobs[j].FromType + #1 + AJobs[j].ToType;
+        if not LPairs.TryGetValue(LKey, LPair) then
+        begin
+          LOut:= AValidate(AText, AJobs[j].FromType, AJobs[j].ToType);
+          if IsCancelled(ACancelled) then
+            Exit;
+          LPair:= ParseValidateOutput(LOut);
+          LPairs.Add(LKey, LPair);
+        end;
+        Result.JobDiags[j]:= DiagsForJob(LPair, AJobs[j]);
+        Result.JobDone[j]:= True;
+      end;
+    finally
+      LPairs.Free;
+    end; // try
+  end; // procedure
+
 begin
   Result:= Default(TScopedValidation);
   SetLength(Result.JobDiags, Length(AJobs));
   SetLength(Result.JobDone, Length(AJobs));
-  // A pass is done only when no cancel came before OR during it: a cancel kills
-  // the engine mid-run, so its output is partial and must not replace any mark.
-  if not IsCancelled(ACancelled) then
-  begin
-    var LOut: string:= AValidate(AText, '', '');
-    if not IsCancelled(ACancelled) then
-    begin
-      Result.Syntax:= ParseValidateOutput(LOut);
-      Result.SyntaxDone:= True;
-      for i:= 0 to High(AJobs) do
-      begin
-        if IsCancelled(ACancelled) then
-          Break;
-        LOut:= AValidate(AText, AJobs[i].FromType, AJobs[i].ToType);
-        if IsCancelled(ACancelled) then
-          Break;
-        Result.JobDiags[i]:= DiagsForJob(ParseValidateOutput(LOut), AJobs[i]);
-        Result.JobDone[i]:= True;
-      end;
-    end;
-  end;
+  RunPasses;
   Result.Cancelled:= not Result.SyntaxDone;
   for i:= 0 to High(AJobs) do
     if not Result.JobDone[i] then
