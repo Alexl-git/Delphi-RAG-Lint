@@ -115,6 +115,9 @@ type
   TClassInfo = record
     /// <summary>Exactly one unit of the project index declares the class.</summary>
     Found      : Boolean;
+    /// <summary>Two or more project units declare the class (cloAmbiguous): never guessed, and not
+    /// absent -- Found is False but the class is NOT outside the project (C8CHAIN review #2).</summary>
+    Ambiguous  : Boolean;
     /// <summary>The index could not be asked (engine failure); unknown, not absent.</summary>
     Failed     : Boolean;
     /// <summary>Failed only: why -- the engine's own text naming the DB (missing,
@@ -249,6 +252,10 @@ type
     /// ConvRules.AncestorOrder.UnindexedBlockText asks the platform library about each. [] when
     /// not Known.</summary>
     Outside  : TArray<string>;
+    /// <summary>The classes (distinct, walk order) that two or more project units declare (C8CHAIN
+    /// review #2): NOT outside the index and never asked of the platform library --
+    /// ConvRules.AncestorOrder.UnindexedBlockText blocks on them with their own message. [] when not Known.</summary>
+    Ambiguous: TArray<string>;
   end;
 
 /// <summary>PURE: lists the inherited / inline objects of a text .dfm.</summary>
@@ -363,6 +370,19 @@ function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<str
 function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;  // dl:ok unused-public-symbol@32f1 -- REVIEWED 2026-11-03 pinned by the model tests (AncestorGraphTests.inc ag.*), which are outside this project's index; AnalyzeUnit is the editor's caller
   const AReader: TDfmTextReader; const APairs: TArray<TTypePair>; out AError: string; out AOutside: TArray<string>): TArray<TAncestorUnit>; overload;
 
+/// <summary>PURE: AncestorGraphOf that also reports the ambiguous classes (C8CHAIN review #2).</summary>
+/// <param name="AOwn">As the overload above.</param>
+/// <param name="AFrameClasses">As the overload above.</param>
+/// <param name="ALookup">As the overload above.</param>
+/// <param name="AReader">As the overload above.</param>
+/// <param name="APairs">As the overload above.</param>
+/// <param name="AError">As the overload above.</param>
+/// <param name="AOutside">As the overload above; an ambiguous class is NOT listed here.</param>
+/// <param name="AAmbiguous">Distinct class names (walk order) that two or more project units declare
+/// (TClassInfo.Ambiguous); the chain ends there without error.</param>
+/// <returns>As the overload above.</returns>
+function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;  // dl:ok unused-public-symbol@32f1 -- REVIEWED 2026-11-04 pinned by the model tests (AncestorGraphTests.inc ag.ambiguous.*), which are outside this project's index; AnalyzeUnit is the editor's caller
+  const AReader: TDfmTextReader; const APairs: TArray<TTypePair>; out AError: string; out AOutside, AAmbiguous: TArray<string>): TArray<TAncestorUnit>; overload;
 /// <summary>PURE: the C8 analysis of one listed unit (spec E1-E3, E2b).</summary>
 /// <param name="AUnitPas">The listed .pas; its .dfm is ChangeFileExt(AUnitPas, DFM_EXT).</param>
 /// <param name="APairs">The checked books' pairs; empty = nothing is recorded (E3).</param>
@@ -1247,7 +1267,7 @@ begin
 end;
 
 function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;
-  const AReader: TDfmTextReader; const APairs: TArray<TTypePair>; out AError: string; out AOutside: TArray<string>): TArray<TAncestorUnit>;
+  const AReader: TDfmTextReader; const APairs: TArray<TTypePair>; out AError: string; out AOutside, AAmbiguous: TArray<string>): TArray<TAncestorUnit>;
 var
   LUnits: TArray<TAncestorUnit>;
   LDepth: Integer;
@@ -1274,6 +1294,12 @@ var
       LInfo:= ALookup(LCls);
       if LInfo.Failed then
         Exit(WithCause(Format(REASON_FAILED, [LCls]), LInfo.Error));
+      if LInfo.Ambiguous then
+      begin
+        if not MatchText(LCls, AAmbiguous) then
+          AAmbiguous:= AAmbiguous + [LCls];
+        Break; // declared in more than one project unit: not outside, UnindexedBlockText words it
+      end;
       if not LInfo.Found then
       begin
         if not MatchText(LCls, AOutside) then
@@ -1296,8 +1322,9 @@ var
 
 begin
   LUnits  := nil;
-  AOutside:= nil;
-  LDepth  := 0;
+  AOutside  := nil;
+  AAmbiguous:= nil;
+  LDepth    := 0;
   AError  := WalkClasses(AOwn.ParentClass);
   for var LFrame: string in AFrameClasses do
     if AError = '' then
@@ -1306,6 +1333,14 @@ begin
     Exit(nil);
   SortDeepestFirst(LUnits);
   Result:= LUnits;
+end;
+
+function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;
+  const AReader: TDfmTextReader; const APairs: TArray<TTypePair>; out AError: string; out AOutside: TArray<string>): TArray<TAncestorUnit>;
+var
+  LIgnored: TArray<string>;
+begin
+  Result:= AncestorGraphOf(AOwn, AFrameClasses, ALookup, AReader, APairs, AError, AOutside, LIgnored);
 end;
 
 function AncestorGraphOf(const AOwn: TClassInfo; const AFrameClasses: TArray<string>; const ALookup: TClassLookup;
@@ -1484,13 +1519,16 @@ begin
   end;
   // C8CHAIN (owner ruling Q5): the ancestor graph, for every unit -- a unit with no inherited
   // From instance can still sit above an ancestor that still holds a From type.
-  Result.Ancestors:= AncestorGraphOf(LOwn, LFrames, ALookup, AReader, APairs, LGraphError, Result.Outside);
+  Result.Ancestors:= AncestorGraphOf(LOwn, LFrames, ALookup, AReader, APairs, LGraphError, Result.Outside, Result.Ambiguous);
   if LNoChecks then
   begin
     Result.Known:= LGraphError = ''; // E3: known, and no verdicts to record
     Result.Error:= LGraphError;      // unknown: Ancestors is already nil
     if LGraphError <> '' then
-      Result.Outside:= nil;
+    begin
+      Result.Outside  := nil;
+      Result.Ambiguous:= nil;
+    end;
     Exit;
   end;
   for var LInst: TInheritedInstance in LWanted do
@@ -1503,6 +1541,7 @@ begin
       Result.Verdicts := nil;
       Result.Ancestors:= nil;
       Result.Outside  := nil;
+      Result.Ambiguous:= nil;
       Exit; // unknown is never reported as outside
     end;
     Result.Verdicts:= Result.Verdicts + [LVerdict];
@@ -1517,6 +1556,7 @@ begin
     Result.Verdicts := nil; // the graph or AddCodeUses set Error: unknown, never a partial answer
     Result.Ancestors:= nil;
     Result.Outside  := nil;
+    Result.Ambiguous:= nil;
   end;
 end;
 

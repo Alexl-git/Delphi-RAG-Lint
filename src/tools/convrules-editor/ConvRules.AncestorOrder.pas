@@ -103,7 +103,11 @@ function OutsideClassesOf(const AUnits: TArray<TUnitInheritance>): TArray<string
 /// '&lt;Unit.pas&gt; descends from &lt;TClass&gt;, whose unit is in no indexed project.';
 /// laFailed: '&lt;Unit.pas&gt; descends from &lt;TClass&gt;, which is in no project index; the platform
 /// library index could not be asked -- &lt;why&gt;.' -- a blank line, then the instruction to add
-/// that unit to the project (.dproj/.dpr) and reindex. No "run anyway".</returns>
+/// that unit to the project (.dproj/.dpr) and reindex. No "run anyway". A class in a unit's Ambiguous
+/// (declared in two or more project units) is not asked of the library: a separate 'Convert refused:
+/// an ancestor of a listed unit is ambiguous.' section, one line '&lt;Unit.pas&gt; descends from &lt;TClass&gt;,
+/// which is declared in more than one project unit -- remove the duplicate or qualify the class.' (the
+/// engine does not name the candidate units), and no reindex instruction.</returns>
 /// <remarks>A library that could not be asked blocks (unknown is never read as a library
 /// root). No class-name list: a vendor class counts as a root only when the library declares it.</remarks>
 function UnindexedBlockText(const AUnits: TArray<TUnitInheritance>; const AIsLibrary: TLibraryClassCheck): string;
@@ -127,6 +131,9 @@ const
   UNINDEXED_FMT   = '%s descends from %s, whose unit is in no indexed project.';
   UNASKED_FMT     = '%s descends from %s, which is in no project index; the platform library index could not be asked -- %s.';
   UNINDEXED_TAIL  = 'Add that unit to the project (.dproj/.dpr), reindex, and press Convert again.';
+  AMBIGUOUS_HEAD  = 'Convert refused: an ancestor of a listed unit is ambiguous.';
+  AMBIGUOUS_FMT   = '%s descends from %s, which is declared in more than one project unit -- remove the duplicate or qualify the class.';
+  AMBIGUOUS_TAIL  = 'Remove the duplicate declaration (or qualify the class name), then press Convert again.';
 
 // True when every listed ancestor of the unit APas (per its analysis in AUnits) is in APlaced.
 function ListedAncestorsPlaced(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>; const APas: string;
@@ -242,6 +249,7 @@ begin
       Result:= InsertAncestors(Result, LPas, AncestorChain(AUnits[LAt]));
   end;
 end;
+
 function OutsideClassesOf(const AUnits: TArray<TUnitInheritance>): TArray<string>;
 begin
   Result:= nil;
@@ -253,11 +261,16 @@ end;
 
 function UnindexedBlockText(const AUnits: TArray<TUnitInheritance>; const AIsLibrary: TLibraryClassCheck): string;
 var
-  LLines: TArray<string>;
-  LError: string;
+  LLines    : TArray<string>;
+  LAmbiguous: TArray<string>;
+  LError    : string;
 begin
-  LLines:= nil;
+  LLines    := nil;
+  LAmbiguous:= nil;
   for var LUnit: TUnitInheritance in AUnits do
+  begin
+    for var LClass: string in LUnit.Ambiguous do
+      LAmbiguous:= LAmbiguous + [Format(AMBIGUOUS_FMT, [ExtractFileName(LUnit.UnitPas), LClass])];
     for var LClass: string in LUnit.Outside do
       case AIsLibrary(BareType(LClass), LError) of
         laDeclared: ; // a library root: the chain ends there, nothing blocks
@@ -266,9 +279,13 @@ begin
         laFailed:
           LLines:= LLines + [Format(UNASKED_FMT, [ExtractFileName(LUnit.UnitPas), LClass, LError])];
       end; // case
-  if Length(LLines) = 0 then
-    Exit('');
-  Result:= UNINDEXED_HEAD + sLineBreak + string.Join(sLineBreak, LLines) + sLineBreak + sLineBreak + UNINDEXED_TAIL;
+  end;
+  Result:= '';
+  if Length(LLines) > 0 then
+    Result:= UNINDEXED_HEAD + sLineBreak + string.Join(sLineBreak, LLines) + sLineBreak + sLineBreak + UNINDEXED_TAIL;
+  if Length(LAmbiguous) > 0 then
+    Result:= Result + (if Result = '' then '' else sLineBreak + sLineBreak) + AMBIGUOUS_HEAD + sLineBreak + string.Join(sLineBreak, LAmbiguous)
+      + sLineBreak + sLineBreak + AMBIGUOUS_TAIL;
 end;
 
 end.

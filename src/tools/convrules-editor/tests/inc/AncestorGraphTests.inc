@@ -319,3 +319,33 @@ begin
     string.Join(',', InsertMissingAncestors([AG_LEAF_PAS], LUnits)));
   Check('ag.missing.insert.keeps.listed', string.Join(',', InsertMissingAncestors([AG_MID_PAS, AG_LEAF_PAS], LUnits)) = AG_BASE_PAS + ',' + AG_MID_PAS + ',' + AG_LEAF_PAS);
 end;
+
+{ C8CHAIN review #2: an ambiguous project class is not "outside the index". }
+procedure TestAmbiguousAncestors;
+var
+  LAmb  : TArray<string>;
+  LOut  : TArray<string>;
+  LErr  : string;
+  LInh  : TUnitInheritance;
+  LText : string;
+  LOwn  : TClassInfo;
+begin
+  LOwn:= Default(TClassInfo);
+  LOwn.Found      := True;
+  LOwn.PasPath    := AG_LEAF_PAS;
+  LOwn.ParentClass:= 'TMid';
+  AncestorGraphOf(LOwn, [], FakeLookup(['TMid|' + AG_MID_PAS + '|TBaseForm', 'TBaseForm|?'], nil), FakeReader([], []), AgPairs, LErr, LOut, LAmb);
+  Check('ag.ambiguous.walk.field', (LErr = '') and (Length(LOut) = 0) and (string.Join(',', LAmb) = 'TBaseForm'), LErr + ' ' + string.Join(',', LOut) + ' ' + string.Join(',', LAmb));
+  LInh:= AnalyzeUnit(AG_LEAF_PAS, AgPairs, FakeLookup(['TLeaf|' + AG_LEAF_PAS + '|TMid', 'TMid|' + AG_MID_PAS + '|TBaseForm', 'TBaseForm|?'], nil),
+    FakeReader([ChangeFileExt(AG_LEAF_PAS, '.dfm')], ['inherited LeafForm: TLeaf' + AG_CRLF + 'end']), nil);
+  Check('ag.ambiguous.analyze.not.outside', LInh.Known and (Length(LInh.Outside) = 0) and (string.Join(',', LInh.Ambiguous) = 'TBaseForm'), LInh.Error);
+  LText:= UnindexedBlockText([LInh], AgLibrary(['TBaseForm'], []));
+  Check('ag.ambiguous.block.names.class', ContainsText(LText, 'Leaf.pas descends from TBaseForm') and ContainsText(LText, 'more than one project unit')
+    and ContainsText(LText, 'ambiguous') and ContainsText(LText, 'qualify'), LText);
+  Check('ag.ambiguous.block.not.unindexed', not ContainsText(LText, 'no indexed project') and not ContainsText(LText, 'reindex') and not ContainsText(LText, 'anyway'), LText);
+  Check('ag.ambiguous.not.asked.of.library', OutsideClassesOf([LInh]) = nil);
+  LInh.Ambiguous:= ['TA', 'TB'];
+  LInh.Outside  := ['TJvForm'];
+  LText:= UnindexedBlockText([LInh], AgLibrary([], []));
+  Check('ag.ambiguous.and.outside.both', ContainsText(LText, 'TA') and ContainsText(LText, 'TB') and ContainsText(LText, 'TJvForm') and ContainsText(LText, 'no indexed project'), LText);
+end;

@@ -10565,7 +10565,9 @@ begin
         LParts:= LRow.Split(['|']);
         if not SameText(LParts[0], AClassName) then
           Continue;
-        if LParts[1] = '!' then
+        if LParts[1] = '?' then
+          Result.Ambiguous:= True // two project units declare the class
+        else if LParts[1] = '!' then
         begin
           Result.Failed:= True;
           Result.Error := if Length(LParts) > PARENT_FIELD then LParts[PARENT_FIELD] else '';
@@ -16604,6 +16606,7 @@ begin
     TestAncestorOrder;
     TestUnindexedAncestors;
     TestMissingAncestorsBlock;
+    TestAmbiguousAncestors;
 
     FreeAndNil(GParseBook);
 

@@ -160,8 +160,9 @@ begin
           Result.Failed:= True;
           Result.Error := LError;
         end;
-        cloAbsent, cloAmbiguous:
-          Result.Found:= False;
+        cloAbsent: ; // Found stays False: outside the project
+        cloAmbiguous:
+          Result.Ambiguous:= True; // two project units declare it: not outside, never guessed
       end; // case
     end;
 end;
