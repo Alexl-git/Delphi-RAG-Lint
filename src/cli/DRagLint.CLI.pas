@@ -30911,6 +30911,56 @@ type
     failure, exit 2 }
   EConvertApplyWrite = class(Exception);
 
+{ 1.42 (CONVAPPLY-INHERITED): True when two unit lists are the same paths in
+  the same order (case-insensitive) }
+function SameUnitOrder(const AA, AB: TArray<string>): Boolean;
+begin
+  Result:= Length(AA) = Length(AB);
+  if not Result then Exit;
+  for var I: Integer:= 0 to High(AA) do
+    if not SameText(AA[I], AB[I]) then Exit(False);
+end;
+
+{ 1.42: the units' file names, comma-separated, for the text-mode order note }
+function UnitNamesJoined(const AUnits: TArray<string>): string;
+begin
+  Result:= '';
+  for var U: string in AUnits do
+    Result:= Result + (if Result = '' then '' else ', ') + ExtractFileName(U);
+end;
+
+{ 1.42 (CONVAPPLY-INHERITED): the batch's apply/1 objects put back into --unit
+  order. ABatch holds them in RUN order, unit I's objects at
+  ASliceStart[I] .. ASliceStart[I + 1] - 1; ARunOrder is a permutation of
+  ACmdOrder (a repeated path is matched to its occurrences in turn). Returns
+  nil when the orders agree, else a NEW array of clones the caller owns;
+  ABatch is never freed here. }
+function ReorderBatchJson(const ABatch: TJSONArray; const ASliceStart: TArray<Integer>;
+  const ARunOrder, ACmdOrder: TArray<string>): TJSONArray;
+var
+  Used: TArray<Boolean>;
+  Done: Boolean;
+begin
+  if SameUnitOrder(ARunOrder, ACmdOrder) then Exit(nil);
+  SetLength(Used, Length(ARunOrder));
+  Done  := False;
+  Result:= TJSONArray.Create;
+  try
+    for var C: string in ACmdOrder do
+      for var R: Integer:= 0 to High(ARunOrder) do
+        if not Used[R] and SameText(ARunOrder[R], C) then
+        begin
+          Used[R]:= True;
+          for var J: Integer:= ASliceStart[R] to ASliceStart[R + 1] - 1 do
+            Result.AddElement(ABatch.Items[J].Clone as TJSONValue);
+          Break;
+        end;
+    Done:= True;
+  finally
+    if not Done then FreeAndNil(Result);
+  end;
+end;
+
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
 /// [--only Name1,Name2,...] [--apply] [--no-backup] [--no-warn-unlinked] [--format json] -- Track 3 sub-project B: locates the
 /// component instances to convert in the sibling .dfm and rewrites all five surfaces
@@ -31759,11 +31809,21 @@ begin
     Result:= 0;
     var NOk     : Integer:= 0;
     var NRefused: Integer:= 0;
+    { 1.42 (CONVAPPLY-INHERITED, owner ruling Q5): run ancestor-first, so a
+      descendant's inherited objects see their ancestor already converted;
+      the report keeps --unit order (ReorderBatchJson) }
+    var CmdOrder: TArray<string>:= Units;
+    Units:= OrderUnitsAncestorFirst(Trees, Units, Rules);
+    var SliceStart: TArray<Integer>;
+    SetLength(SliceStart, Length(Units) + 1);
+    if not UseJson and not SameUnitOrder(CmdOrder, Units) then
+      Writeln('convert-apply: units run ancestor-first: ' + UnitNamesJoined(Units));
     for var I: Integer:= 0 to High(Units) do
     begin
       if not UseJson then Writeln(Format('=== unit %d of %d: %s ===', [I + 1, Length(Units), Units[I]]));
       var Code: Integer;
       var Before: Integer:= if UseJson then BatchJson.Count else 0;
+      SliceStart[I]:= Before;
       try
         Code:= RunUnit(Units[I]);
       except
@@ -31778,7 +31838,17 @@ begin
       else if JCtx.Refused then Inc(NRefused);
       if not UseJson then Writeln('');
     end;
-    if UseJson then EmitBatchJson(Result, NOk, NRefused)
+    if UseJson then
+    begin
+      SliceStart[Length(Units)]:= BatchJson.Count;
+      var Reordered: TJSONArray:= ReorderBatchJson(BatchJson, SliceStart, Units, CmdOrder);
+      if Reordered <> nil then
+      begin
+        BatchJson.Free;  // dl:ok unprotected-object-free@c94d -- REVIEWED 2026-11-03: BatchJson is owned by DoConvertApply's outer try-finally (BatchJson.Free); this swaps in the reordered copy, which that finally then frees
+        BatchJson:= Reordered;
+      end;
+      EmitBatchJson(Result, NOk, NRefused);
+    end
     else
       Writeln(Format('batch: %d unit(s) -- %d ok, %d refused, %d failed; classes_built %d; exit %d',
         [Length(Units), NOk, NRefused, Length(Units) - NOk - NRefused, Trees.ClassesBuilt, Result]));

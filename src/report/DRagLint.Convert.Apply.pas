@@ -1025,6 +1025,27 @@ function CheckUnitFreshness(const AStores: TArray<ISymbolStore>; const AUnitPas,
 function FindInheritedInstances(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>): TArray<TInheritedInstance>;
 
+/// <summary>The batch order convert-apply runs: AUnits with every unit placed
+/// after the units of the same run that declare its inherited / inline .dfm
+/// objects (1.42 CONVAPPLY-INHERITED).</summary>
+/// <param name="ATrees">Cross-db tree cache; its stores resolve the owner
+/// classes' ancestor chains.</param>
+/// <param name="AUnits">The --unit list, in command-line order.</param>
+/// <param name="ARules">The parsed rule book: only inherited / inline objects
+/// of a #convert From type create a dependency.</param>
+/// <returns>A permutation of AUnits (see OrderUnitsByDependencies).</returns>
+/// <remarks>A descendant's inherited object is retyped only when its
+/// declaring ancestor's .dfm ALREADY has the To type (FindInheritedInstances
+/// reads it from disk). Before 1.42 the batch ran in command-line order, so a
+/// descendant listed before its ancestor was skipped 'unconverted' although
+/// the same run converted the ancestor a moment later. The dependencies of a
+/// unit are the files of each owner class's chain (the same walk
+/// FindInheritedInstances makes); a unit without a readable text .dfm, or
+/// whose owners do not resolve, has none. Reads the units' .dfm files;
+/// writes nothing.</remarks>
+function OrderUnitsAncestorFirst(const ATrees: TConvertTreeCache; const AUnits: TArray<string>;
+  const ARules: TConversionRuleSet): TArray<string>;
+
 /// <summary>The id AStore gives the file APath -- found the way the unit's
 /// symbols are found, so a source tree moved or copied after indexing still
 /// resolves (1.26.5).</summary>
@@ -2658,6 +2679,95 @@ begin
   finally
     DfmTexts.Free;
   end;
+end;
+
+{ AUnits reordered so that every unit comes after each other unit
+  of the list it depends on (1.42 CONVAPPLY-INHERITED, owner ruling Q5:
+  strict ancestor-first). Pure.
+  AUnits: the units, in the caller's order.
+  ADeps: index-aligned with AUnits: the files (any case, any
+  spelling GetFullPath normalises) unit I must follow. A file that is not in
+  AUnits, or is AUnits[I] itself, is ignored.
+  Returns a permutation of AUnits. Stable: units with no ordering
+  constraint between them keep the caller's relative order, so a list that
+  is already ancestor-first is returned unchanged.
+  Each pass takes the FIRST remaining unit whose in-list
+  dependencies are all placed. A dependency cycle (impossible for class
+  ancestry, conceivable across inline frames) cannot be ordered: its units
+  follow in the caller's order, nothing is dropped. }
+function OrderUnitsByDependencies(const AUnits: TArray<string>;
+  const ADeps: TArray<TArray<string>>): TArray<string>;
+var
+  Placed: TArray<Boolean>;
+  Keys  : TArray<string>;
+
+  function KeyOf(const APath: string): string;
+  begin
+    Result:= UpperCase(TPath.GetFullPath(APath));
+  end;
+
+  { True when every dependency of unit AIdx that is another unit of the list is placed }
+  function Ready(AIdx: Integer): Boolean;
+  begin
+    if AIdx > High(ADeps) then Exit(True);
+    for var D: string in ADeps[AIdx] do
+    begin
+      if D = '' then Continue;
+      var K: string:= KeyOf(D);
+      for var J: Integer:= 0 to High(Keys) do
+        if (J <> AIdx) and not Placed[J] and (Keys[J] = K) then Exit(False);
+    end;
+    Result:= True;
+  end;
+
+begin
+  Result:= nil;
+  SetLength(Placed, Length(AUnits));
+  SetLength(Keys, Length(AUnits));
+  for var I: Integer:= 0 to High(AUnits) do Keys[I]:= KeyOf(AUnits[I]);
+  while Length(Result) < Length(AUnits) do
+  begin
+    var Pick: Integer:= -1;
+    for var I: Integer:= 0 to High(AUnits) do
+      if not Placed[I] and Ready(I) then
+      begin
+        Pick:= I;
+        Break;
+      end;
+    { a cycle: the first unplaced unit goes next, in the caller's order }
+    if Pick < 0 then
+      for var I: Integer:= 0 to High(AUnits) do
+        if not Placed[I] then
+        begin
+          Pick:= I;
+          Break;
+        end;
+    Placed[Pick]:= True;
+    Result:= Result + [AUnits[Pick]];
+  end;
+end;
+
+function OrderUnitsAncestorFirst(const ATrees: TConvertTreeCache; const AUnits: TArray<string>;
+  const ARules: TConversionRuleSet): TArray<string>;
+var
+  Deps: TArray<TArray<string>>;
+begin
+  SetLength(Deps, Length(AUnits));
+  for var I: Integer:= 0 to High(AUnits) do
+  begin
+    Deps[I]:= nil;
+    var Dfm: string:= TPath.ChangeExtension(AUnits[I], '.dfm');
+    if not TFile.Exists(Dfm) then Continue;
+    var Owners: TArray<string>:= nil;
+    for var Inst: TInheritedInstance in ScanInheritedConvertInstances(ReadUnitText(Dfm), ARules) do
+      if (Inst.OwnerClass <> '') and not MatchText(Inst.OwnerClass, Owners) then Owners:= Owners + [Inst.OwnerClass];
+    for var Owner: string in Owners do
+    begin
+      var Detail: string;
+      Deps[I]:= Deps[I] + OwnerChainFiles(ATrees, Owner, AUnits[I], Detail);
+    end;
+  end;
+  Result:= OrderUnitsByDependencies(AUnits, Deps);
 end;
 
 function UnitFileIdIn(const AStore: ISymbolStore; const APath: string): Int64;
