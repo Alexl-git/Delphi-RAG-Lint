@@ -113,6 +113,9 @@ Ranked by leverage, what I'd reach for next:
    case-sensitive identifier mismatch, dangling `TBytes` after a stream
    close, `Result := nil` on a TInterfacedObject, FormGlobal coupling in
    data modules. Each is 10–50 lines of walker code.
+   **Done in 1.42 (lane ruleset), all OFF:** `identifier-case-mismatch`, `stream-buffer-after-free`
+   (a TBytes copy is reference-counted, so the rule follows POINTERS into the buffer),
+   `interfaced-object-nil-leak`, `datamodule-form-global`; the first candidate shipped as `unit-not-in-dpr`.
 
 4. **LSP server** — many editors support LSP but not MCP. A thin LSP
    adapter that exposes "go to definition" and "find references" would

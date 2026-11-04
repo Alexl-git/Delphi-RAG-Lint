@@ -90,6 +90,7 @@ $OwnRunner = @{
     'unit-missing-from-uses'    = 'tests\autotest\run_unit_missing_from_uses.ps1'
     'read-never-assigned'       = 'tests\lint-project\read-never-assigned\run_read_never_assigned.ps1'
     'opaque-to-analysis'        = 'tests\autotest\run_opaque_to_analysis.ps1'
+    'datamodule-form-global'    = 'tests\lint-project\datamodule-form-global\run_datamodule_form_global.ps1'
 }
 function HasOwnRunner([string]$Id, [hashtable]$Map = $OwnRunner) {
   if (-not $Map.ContainsKey($Id)) { return $false }

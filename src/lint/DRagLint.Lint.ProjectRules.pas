@@ -215,6 +215,7 @@ uses
   DRagLint.Lint.EnumOrdinalPersisted, { CollectEnumOrdinalPersisted -- lane X6 }
   DRagLint.Lint.UnusedEnumValue, { CollectUnusedEnumValue -- lane B-ENUM } // dl:unit DRagLint.Lint.UnusedEnumValue accepted -- UNUSED_ENUM_VALUE_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectUnusedEnumValue, the collector this unit calls
   DRagLint.Lint.UnusedGlobal, { CollectUnusedGlobal -- 1.40 lane unusedg } // dl:unit DRagLint.Lint.UnusedGlobal accepted -- UNUSED_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectUnusedGlobal, the collector this unit calls
+  DRagLint.Lint.DataModuleFormGlobal, { CollectDataModuleFormGlobal -- 1.42 lane ruleset } // dl:unit DRagLint.Lint.DataModuleFormGlobal accepted -- DATAMODULE_FORM_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectDataModuleFormGlobal, the collector this unit calls
   DRagLint.Lint.ReadNeverAssigned, { CollectReadNeverAssigned -- owner request #5b } // dl:unit DRagLint.Lint.ReadNeverAssigned accepted -- READ_NEVER_ASSIGNED_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectReadNeverAssigned, the collector this unit calls
   DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
   DRagLint.Lint.AncestorNotInProject, { ancestor-not-in-project (1.42 enum) }
@@ -4625,6 +4626,9 @@ begin
       a refs read per file plus source text, whole-project by nature (one unit cannot prove "never"). }
     if WantRule(READ_NEVER_ASSIGNED_RULE) and OptedIn(READ_NEVER_ASSIGNED_RULE) then
       for var Rn in CollectReadNeverAssigned(AStore, ALibraryStore) do Findings.Add(Rn);
+    { datamodule-form-global (1.42 lane ruleset): OFF; whole-project by nature (both ends live in the index). }
+    if WantRule(DATAMODULE_FORM_GLOBAL_RULE) and OptedIn(DATAMODULE_FORM_GLOBAL_RULE) then
+      for var Dm in CollectDataModuleFormGlobal(AStore, ALibraryStore) do Findings.Add(Dm);
     { gap-rules wave, lane G8. The two DFM rules and uses-movable-to-implementation are ON by
       default and walk one table each (uses-movable back ON in lane IMOV after REFTYPE: 0 FP on
       engine 114 / ORM3 243, and the engine dogfood --fix --apply builds); virtual-never-overridden
