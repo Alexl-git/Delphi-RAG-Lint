@@ -7249,7 +7249,7 @@ begin
     if HasMemberAccesses then
       MemberArm:=
         'UNION ALL ' +
-        'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ''certain'' AS confidence, ma.mode ' +
+        'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ''certain'' AS confidence, ma.mode ' +
         'FROM member_accesses ma ' +
         'JOIN refs r ON r.id = ma.ref_id ' +
         'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
@@ -7299,7 +7299,7 @@ begin
       NoMemberAccess:= '';
     ValueArm:=
       'UNION ALL ' +
-      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ''certain'' AS confidence, ' +
+      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ''certain'' AS confidence, ' +
       'CASE r.kind WHEN ''write'' THEN ''write'' ELSE ''read'' END AS mode ' +
       'FROM refs r ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
@@ -7312,7 +7312,7 @@ begin
       { Wrapped in a subquery: a compound SELECT may only ORDER BY a result
         column, and the confidence CASE below is an expression. }
       'SELECT * FROM (' +
-      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, ce.confidence, '''' AS mode ' +
+      'SELECT r.enclosing_symbol_id, s.qualified_name AS encl_qname, f.path AS file_path, r.start_line, r.start_col, ce.confidence, '''' AS mode ' +
       'FROM call_edges ce ' +
       'JOIN refs r ON r.id = ce.ref_id ' +
       'LEFT JOIN symbols s ON s.id = r.enclosing_symbol_id ' +
@@ -7351,6 +7351,7 @@ begin
       R.Location  := ExtractFileName(R.FullPath);
       if Q.FieldByName('start_line').IsNull then R.CallSiteLine := 0
       else R.CallSiteLine := Q.FieldByName('start_line').AsInteger;
+      R.CallSiteCol:= if Q.FieldByName('start_col').IsNull then 0 else Q.FieldByName('start_col').AsInteger;
       R.Confidence:= Q.FieldByName('confidence').AsString;
       var ModeF: TField:= Q.FindField('mode');
       if (ModeF <> nil) and not ModeF.IsNull then R.Mode:= ModeF.AsString else R.Mode:= '';

@@ -1040,6 +1040,10 @@ type
     /// <summary>1-based line of the call site in the caller's file; 0 when unknown.
     /// Added for reverse-calltree; other consumers may ignore it.</summary>
     CallSiteLine     : Integer;
+    /// <summary>1-based column of the site's first character (refs.start_col); 0
+    /// when unknown. Filled by FindResolvedCallers only; `usages --rw` reads it to
+    /// tell an argument from the rest of a line.</summary>
+    CallSiteCol      : Integer;
     Confidence       : string;
     /// <summary>The call site's receiver text as extracted -- `LModule` in
     /// `LModule.TransferFile(...)`, '' for an unqualified call.</summary>

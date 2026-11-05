@@ -124,9 +124,48 @@ begin
 end;
 end.
 '@
-$dpr = "program App;`r`nuses uProps in 'uProps.pas', uUser in 'uUser.pas';`r`nbegin`r`nend.`r`n"
+$argsUnit = @'
+unit uArgs;
+interface
+type
+  TArgs = class
+  private
+    FCnt: Integer;
+    FVar: Integer;
+    FOut: Integer;
+    FVal: Integer;
+    FMix: Integer;
+    FUnr: Integer;
+    FLong: Integer;
+  public
+    procedure Run;
+  end;
+procedure TakeVar(var A: Integer; const B: Integer; out C: Integer);
+procedure TakeTwo(A, B: Integer; var D, E: Integer);
+implementation
+procedure TakeVar(var A: Integer; const B: Integer; out C: Integer);
+begin
+end;
+procedure TakeTwo(A, B: Integer; var D, E: Integer);
+begin
+end;
+procedure TArgs.Run;
+begin
+  Inc(FCnt); { A1 }
+  Dec(FCnt, 2); { A2 }
+  TakeVar(FVar, FVal, FOut); { A3 }
+  TakeTwo(FVal, FVal,
+    FMix, FMix); { A4 }
+  Nobody(FUnr); { A5 }
+  FVal:= FCnt + 1; { A6 }
+  TakeVar(FLong + 1, FVal, FVal); { A7 }
+end;
+end.
+'@
+$dpr = "program App;`r`nuses uProps in 'uProps.pas', uUser in 'uUser.pas', uArgs in 'uArgs.pas';`r`nbegin`r`nend.`r`n"
 [IO.File]::WriteAllText("$scratch\uProps.pas", ($props -replace "`r?`n", "`r`n"), [Text.Encoding]::ASCII)
 [IO.File]::WriteAllText("$scratch\uUser.pas",  ($user  -replace "`r?`n", "`r`n"), [Text.Encoding]::ASCII)
+[IO.File]::WriteAllText("$scratch\uArgs.pas",  ($argsUnit -replace "`r?`n", "`r`n"), [Text.Encoding]::ASCII)
 [IO.File]::WriteAllText("$scratch\App.dpr", $dpr, [Text.Encoding]::ASCII)
 function LineOf([string]$file, [string]$tag) {
   $i = 0
@@ -248,6 +287,30 @@ Check '13b text names the site and the route' ($txt -match ('uUser\.pas:{0}.*pro
 # ---- 14: miss
 $doc = Rw 'NoSuchThing'
 Check '14 no such symbol: exit 1' ($script:rwExit -eq 1) "exit=$($script:rwExit)"
+
+# ---- 15-22: Inc/Dec and var/out arguments (reclassified at query time, no extractor change)
+$A1 = LineOf 'uArgs.pas' 'A1'; $A2 = LineOf 'uArgs.pas' 'A2'; $A3 = LineOf 'uArgs.pas' 'A3'; $A4 = LineOf 'uArgs.pas' 'A4'
+$A5 = LineOf 'uArgs.pas' 'A5'; $A6 = LineOf 'uArgs.pas' 'A6'; $A7 = LineOf 'uArgs.pas' 'A7'
+function RowLines($rows) { @($rows | ForEach-Object { [int]$_.line }) | Sort-Object }
+function SameL($actual, [int[]]$expected) { ((@($actual) -join ' ') -eq ((@($expected) | Sort-Object) -join ' ')) }
+$t = T (Rw 'TArgs.FCnt') 'uArgs.TArgs.FCnt'
+Check '15a POSITIVE CONTROL: Inc/Dec arguments are writers' (SameL (RowLines $t.writers) @($A1, $A2)) "writers: $(RowLines $t.writers)"
+Check '15b ...and their arg label is inc-dec' ((@($t.writers | Where-Object { $_.arg -eq 'inc-dec' }).Count) -eq 2) 'no inc-dec label'
+Check '15c the read in a longer expression stays a reader (A6); Inc sites are not readers' (SameL (RowLines $t.readers) @($A6)) "readers: $(RowLines $t.readers)"
+$t = T (Rw 'TArgs.FVar') 'uArgs.TArgs.FVar'
+Check '16 var argument of a resolved call: reader AND writer' ((SameL (RowLines $t.readers) @($A3)) -and (SameL (RowLines $t.writers) @($A3)) -and ($t.writers[0].arg -eq 'var-arg')) "r=$(RowLines $t.readers) w=$(RowLines $t.writers)"
+$t = T (Rw 'TArgs.FOut') 'uArgs.TArgs.FOut'
+Check '17 out argument: writer only' ((SameL (RowLines $t.writers) @($A3)) -and (@($t.readers).Count -eq 0) -and ($t.writers[0].arg -eq 'out-arg')) "r=$(RowLines $t.readers) w=$(RowLines $t.writers)"
+$t = T (Rw 'TArgs.FVal') 'uArgs.TArgs.FVal'
+Check '18 const / by-value arguments stay readers; writers are the := (A6) and the out argument (A7, third position)' ((SameL (RowLines $t.readers) @($A3, ($A4 - 1), $A7)) -and (SameL (RowLines $t.writers) @($A6, $A7))) "r=$(RowLines $t.readers) w=$(RowLines $t.writers)"
+$t = T (Rw 'TArgs.FMix') 'uArgs.TArgs.FMix'
+Check '19 second-line argument of a var parameter: reader and writer' ((SameL (RowLines $t.readers) @($A4)) -and (SameL (RowLines $t.writers) @($A4))) "r=$(RowLines $t.readers) w=$(RowLines $t.writers)"
+$t = T (Rw 'TArgs.FUnr') 'uArgs.TArgs.FUnr'
+Check '20 argument of an UNRESOLVED call stays a reader (not guessed)' ((SameL (RowLines $t.readers) @($A5)) -and (@($t.writers).Count -eq 0)) "r=$(RowLines $t.readers) w=$(RowLines $t.writers)"
+$t = T (Rw 'TArgs.FLong') 'uArgs.TArgs.FLong'
+Check '21 var argument inside a longer expression (FLong + 1) stays a reader' ((SameL (RowLines $t.readers) @($A7)) -and (@($t.writers).Count -eq 0)) "r=$(RowLines $t.readers) w=$(RowLines $t.writers)"
+$txt = (& $exePath usages --name TArgs.FVar --rw --db $db 2>$null) -join "`n"
+Check '22 text names the argument kind and the note states the coverage' (($txt -match '\[arg var-arg\]') -and ($txt -match 'RESOLVED call')) "text: $txt"
 
 [IO.Directory]::Delete($scratch, $true)
 if ($script:fail) { Write-Host 'run_usages_rw: FAIL' -ForegroundColor Red; exit 1 }

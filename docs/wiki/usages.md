@@ -42,6 +42,8 @@ the property has no getter or setter method:
 - for a **getter**: reads only; for a **setter**: writes only;
 - for a routine that is no accessor: its callers, under `calls`.
 
+A site the index stores as a read is reclassified from the source when you ask: the whole argument of `Inc`/`Dec` is a writer (`arg: inc-dec`), the whole argument of a `var` parameter of a resolved call is a reader and a writer (`var-arg`), and of an `out` parameter a writer (`out-arg`). An argument of an unresolved or ambiguous call, or one inside a longer expression (`F + 1`, `F.X`, `@F`, `F[I]`), stays a reader.
+
 Each row names the route it came by (`property`, `field`, `getter`, `setter`, `direct`). A bare name gives
 one block per declaration and counts the unbound name matches separately; a qualified name leaves them out.
 `--json` gives `targets[]` with `readers`, `writers`, `calls`, `totals`, `read_accessor` / `write_accessor` and

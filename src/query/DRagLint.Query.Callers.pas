@@ -286,7 +286,11 @@ type
   /// (through a property), 'field' (a mention of the property's backing field),
   /// 'getter' / 'setter' (a direct call of the accessor method), 'direct' (the
   /// member has no property in front of it). ViaName is the qualified name of the
-  /// symbol the site is bound to.</remarks>
+  /// symbol the site is bound to. Arg says why a site that the index stores as a
+  /// read is listed as a write: 'inc-dec' (the argument of Inc or Dec), 'var-arg'
+  /// (the argument bound to a var parameter of a resolved call; the site is
+  /// listed as a reader AND a writer) or 'out-arg' (an out parameter; a writer
+  /// only); '' for every other site.</remarks>
   TMemberUserRow = record
     CallerQName: string ;
     FullPath   : string ;
@@ -295,6 +299,7 @@ type
     ViaName    : string ;
     Confidence : string ;
     Resolution : string ;
+    Arg        : string ;
   end;
 
   /// <summary>The users of one declaration, split into readers and writers.</summary>
@@ -340,7 +345,14 @@ type
 /// member_accesses names an accessor only for a property somebody accesses: a property
 /// with no users must still lead to its field. A source that cannot be read leaves
 /// the accessors empty and the bound sites intact. Directions are the index's:
-/// a var/out argument and Inc/Dec of a field are indexed as reads.</remarks>
+/// the index stores a var/out argument and Inc/Dec of a field as reads, so this
+/// function RECLASSIFIES them when it reports (no extractor change). Covered: a
+/// site that is a whole argument of Inc/Dec (a write), of a var parameter (read and
+/// write) or of an out parameter (write) of a RESOLVED call (a certain call_edge
+/// or a bound call ref). Not covered, and left a reader: an argument of an
+/// unresolved or ambiguous call, a part of a longer expression (`Foo(F + 1)`,
+/// `Foo(F.X)`, `Foo(@F)`, `Foo(F[I])`), a call whose argument list is more than
+/// 12 lines long, and a site the source no longer matches (stale file).</remarks>
 function MemberUsersForName(const AStore: ISymbolStore; const AName: string): TArray<TMemberUsers>;
 
 /// <summary>The refs named by a BARE name that the resolver left unbound.</summary>
@@ -354,7 +366,9 @@ implementation
 
 uses
   System.IOUtils,
-  System.RegularExpressions;
+  System.Math,
+  System.RegularExpressions,
+  System.StrUtils;
 
 { Pull the call site's OWN line out of the indexed context blob.
   FindCallersByNameWithContext formats each line as '%5d: %s', so after Trim the
@@ -882,12 +896,349 @@ begin
   end;
 end;
 
+type
+  { How a site that the index stores as a read really uses its target, as far as the
+    source text and the resolved call say. }
+  TArgUse = (auNone, auIncDec, auVarArg, auOutArg);
+
+const
+  ARG_SCAN_LINES = 12;
+  ARG_LABELS: array[TArgUse] of string = ('', 'inc-dec', 'var-arg', 'out-arg');
+
+function IsIdentChar(AChar: Char): Boolean;
+begin
+  Result:= CharInSet(AChar, ['A'..'Z', 'a'..'z', '0'..'9', '_']);
+end;
+
+{ The character at a 1-based position; a blank outside the text, so column 0 acts
+  as the line break. }
+function CharAtPos(const ALines: TArray<string>; ALine, ACol: Integer): Char;
+begin
+  Result:= ' ';
+  if InRange(ALine, 1, Length(ALines)) and InRange(ACol, 1, Length(ALines[ALine - 1])) then
+    Result:= ALines[ALine - 1][ACol];
+end;
+
+{ One character back; column 0 stands for the line break. False at AFloorLine. }
+function StepBack(const ALines: TArray<string>; var ALine, ACol: Integer; AFloorLine: Integer): Boolean;
+begin
+  Dec(ACol);
+  if ACol < 0 then
+  begin
+    Dec(ALine);
+    if (ALine < AFloorLine) or (ALine < 1) then Exit(False);
+    ACol:= Length(ALines[ALine - 1]);
+  end;
+  Result:= True;
+end;
+
+{ Past blanks, backward. False at the floor. }
+function SkipBlanksBack(const ALines: TArray<string>; var ALine, ACol: Integer; AFloorLine: Integer): Boolean;
+begin
+  Result:= True;
+  while Result and CharInSet(CharAtPos(ALines, ALine, ACol), [' ', #9]) do
+    Result:= StepBack(ALines, ALine, ACol, AFloorLine);
+end;
+
+{ Past an identifier, backward. False at the floor. }
+function SkipIdentBack(const ALines: TArray<string>; var ALine, ACol: Integer; AFloorLine: Integer): Boolean;
+begin
+  Result:= True;
+  while Result and IsIdentChar(CharAtPos(ALines, ALine, ACol)) do
+    Result:= StepBack(ALines, ALine, ACol, AFloorLine);
+end;
+
+{ Does the next significant character after (ALine, AFromCol) end an argument? }
+function ArgumentEndsAt(const ALines: TArray<string>; ALine, AFromCol: Integer): Boolean;
+begin
+  var NextLine: Integer:= ALine;
+  var NextCol : Integer:= AFromCol;
+  while (NextLine <= Length(ALines)) and (NextLine - ALine <= ARG_SCAN_LINES) do
+  begin
+    var Line: string:= ALines[NextLine - 1];
+    while (NextCol <= Length(Line)) and CharInSet(Line[NextCol], [' ', #9]) do Inc(NextCol);
+    if NextCol <= Length(Line) then Exit(CharInSet(Line[NextCol], [',', ')']));
+    Inc(NextLine);
+    NextCol:= 1;
+  end;
+  Result:= False;
+end;
+
+{ Backward past blanks and a `Receiver.` chain, stopping on the delimiter. }
+function SkipReceiverBack(const ALines: TArray<string>; var ALine, ACol: Integer; AFloorLine: Integer): Boolean;
+begin
+  Result:= SkipBlanksBack(ALines, ALine, ACol, AFloorLine);
+  while Result and (CharAtPos(ALines, ALine, ACol) = '.') do
+    Result:= StepBack(ALines, ALine, ACol, AFloorLine) and SkipBlanksBack(ALines, ALine, ACol, AFloorLine)
+      and IsIdentChar(CharAtPos(ALines, ALine, ACol)) and SkipIdentBack(ALines, ALine, ACol, AFloorLine)
+      and SkipBlanksBack(ALines, ALine, ACol, AFloorLine);
+end;
+
+{ From a closing quote at ACol to its opening quote, on the same line. }
+function SkipStringBack(const ALines: TArray<string>; ALine: Integer; var ACol: Integer): Boolean;
+begin
+  var QuoteAt: Integer:= ACol - 1;
+  while (QuoteAt >= 1) and (ALines[ALine - 1][QuoteAt] <> '''') do Dec(QuoteAt);
+  Result:= QuoteAt >= 1;
+  if Result then ACol:= QuoteAt;
+end;
+
+{ Backward to the parenthesis that opens the argument list, counting the commas at
+  depth 0. False on a `[` or `;` at depth 0, an open string, or at the floor. }
+function WalkToOpenParen(const ALines: TArray<string>; var ALine, ACol: Integer; AFloorLine: Integer;
+  var AArgIndex: Integer): Boolean;
+begin
+  var Depth: Integer:= 0;
+  while True do
+  begin
+    var Ch: Char:= CharAtPos(ALines, ALine, ACol);
+    case Ch of
+      ')', ']': Inc(Depth);
+      '(', '[':
+        begin
+          if Depth = 0 then Exit(Ch = '(');
+          Dec(Depth);
+        end;
+      ',': if Depth = 0 then Inc(AArgIndex);
+      ';': if Depth = 0 then Exit(False);
+      '''': if not SkipStringBack(ALines, ALine, ACol) then Exit(False);
+    end;
+    if not StepBack(ALines, ALine, ACol, AFloorLine) then Exit(False);
+  end;
+end;
+
+{ The identifier before the parenthesis at (ALine, ACol), unless it is a keyword (a
+  grouping, not a call). }
+function CalleeBefore(const ALines: TArray<string>; ALine, ACol, AFloorLine: Integer;
+  out ACallee: string; out ACalleeLine, ACalleeCol: Integer): Boolean;
+const
+  NOT_CALLS: array[0..21] of string = ('if', 'while', 'until', 'and', 'or', 'not', 'in', 'of', 'then',
+    'do', 'else', 'to', 'downto', 'case', 'with', 'xor', 'div', 'mod', 'shl', 'shr', 'is', 'as');
+begin
+  ACallee:= '';
+  ACalleeLine:= 0;
+  ACalleeCol:= 0;
+  if not (StepBack(ALines, ALine, ACol, AFloorLine) and SkipBlanksBack(ALines, ALine, ACol, AFloorLine)) then Exit(False);
+  if not IsIdentChar(CharAtPos(ALines, ALine, ACol)) then Exit(False);
+  var LastCol: Integer:= ACol;
+  if not SkipIdentBack(ALines, ALine, ACol, AFloorLine) then Exit(False);
+  ACalleeLine:= ALine;
+  ACalleeCol := ACol + 1;
+  ACallee:= Copy(ALines[ALine - 1], ACalleeCol, LastCol - ACol);
+  Result:= not MatchText(ACallee, NOT_CALLS);
+end;
+
+{ Is the identifier that starts at (ALine, ACol) a WHOLE argument of a call? That is:
+  the next significant character is a comma or a closing parenthesis (so it is not
+  followed by `.`, `[`, `^` or an operator), the characters before it, past any
+  `Receiver.` prefix, are an opening parenthesis or a comma (so no `@`, no operator),
+  and the parenthesis found by walking back is preceded by an identifier (so it is
+  a call, not a grouping). Returns that identifier, where it starts, and the index of
+  the argument. Strings are skipped; comments are not parsed. }
+function LocateArgument(const ALines: TArray<string>; ALine, ACol: Integer;
+  out ACallee: string; out ACalleeLine, ACalleeCol, AArgIndex: Integer): Boolean;
+begin
+  Result:= False;
+  ACallee:= '';
+  ACalleeLine:= 0;
+  ACalleeCol:= 0;
+  AArgIndex:= 0;
+  if not InRange(ALine, 1, Length(ALines)) then Exit;
+  var Text: string:= ALines[ALine - 1];
+  if (not InRange(ACol, 1, Length(Text))) or (not IsIdentChar(Text[ACol])) then Exit;
+  var EndCol: Integer:= ACol;
+  while (EndCol <= Length(Text)) and IsIdentChar(Text[EndCol]) do Inc(EndCol);
+  if not ArgumentEndsAt(ALines, ALine, EndCol) then Exit;
+  var LowLine: Integer:= Max(ALine - ARG_SCAN_LINES, 1);
+  var L: Integer:= ALine;
+  var C: Integer:= ACol;
+  if not (StepBack(ALines, L, C, LowLine) and SkipReceiverBack(ALines, L, C, LowLine)) then Exit;
+  Result:= CharInSet(CharAtPos(ALines, L, C), ['(', ','])
+    and WalkToOpenParen(ALines, L, C, LowLine, AArgIndex)
+    and CalleeBefore(ALines, L, C, LowLine, ACallee, ACalleeLine, ACalleeCol);
+end;
+
+{ The mode word ('var' | 'out' | 'const' | '') of the AIndex-th parameter (0-based) in a
+  routine signature `(A, B: T; var C: U)`. '' when the index is past the list. }
+function ParamModeAt(const ASig: string; AIndex: Integer): string;
+var
+  Depth, GStart, Idx, Count, ColonAt: Integer;
+  Group, Names, Mode: string;
+begin
+  Result:= '';
+  var Open: Integer:= Pos('(', ASig);
+  if Open = 0 then Exit;
+  Depth:= 0;
+  GStart:= Open + 1;
+  Idx:= 0;
+  for var I: Integer:= Open to Length(ASig) do
+  begin
+    var Ch: Char:= ASig[I];
+    if CharInSet(Ch, ['(', '[', '<']) then Inc(Depth)
+    else if CharInSet(Ch, [')', ']', '>']) then Dec(Depth);
+    if not (((Ch = ';') and (Depth = 1)) or ((Ch = ')') and (Depth = 0))) then Continue;
+    Group:= Trim(Copy(ASig, GStart, I - GStart));
+    GStart:= I + 1;
+    if Group <> '' then
+    begin
+      while Group.StartsWith('[') and Group.Contains(']') do Group:= Trim(Copy(Group, Pos(']', Group) + 1, MaxInt));
+      Mode:= '';
+      for var Word: string in ['var', 'out', 'const', 'in'] do
+        if Group.StartsWith(Word + ' ', True) then
+        begin
+          Mode:= LowerCase(Word);
+          Group:= Trim(Copy(Group, Length(Word) + 1, MaxInt));
+          Break;
+        end;
+      ColonAt:= Pos(':', Group);
+      Names:= if ColonAt > 0 then Copy(Group, 1, ColonAt - 1) else Group;
+      Count:= 1;
+      for var K: Integer:= 1 to Length(Names) do
+        if Names[K] = ',' then Inc(Count);
+      if AIndex < Idx + Count then Exit(Mode);
+      Idx:= Idx + Count;
+    end;
+    if Depth = 0 then Break;
+  end;
+end;
+
+type
+  /// <summary>Decides, for a site the index stores as a read, whether the source makes
+  /// it an Inc/Dec argument or an argument of a var / out parameter of a resolved call.</summary>
+  /// <remarks>Caches source lines, name lookups and verdicts for one query. Not
+  /// thread-safe; owned and freed by the caller.</remarks>
+  TArgClassifier = class
+  strict private
+    FStore: ISymbolStore;
+    FLines: TDictionary<string, TArray<string>>;
+    FNamed: TDictionary<string, TArray<TReference>>;
+    FPaths: TDictionary<Int64, string>;
+    FEdges: TDictionary<Int64, TArray<TCallEdge>>;
+    FUse  : TDictionary<string, TArgUse>;
+    function LinesOf(const APath: string): TArray<string>;
+    function RefsNamed(const AName: string): TArray<TReference>;
+    function PathOf(AFileId: Int64): string;
+    function EdgesOf(AEnclosingId: Int64): TArray<TCallEdge>;
+    function TargetOf(const ARC: TResolvedCaller; const ACallee: string; ALine, ACol: Integer): TSymbol;
+  public
+    constructor Create(const AStore: ISymbolStore);
+    destructor Destroy; override;
+    /// <summary>The argument use of one resolved site.</summary>
+    /// <param name="ARC">A site with FullPath, CallSiteLine and CallSiteCol.</param>
+    /// <returns>auNone when the site is no whole argument, the call is unresolved or
+    /// ambiguous, the parameter is by value or const, or the source does not match.</returns>
+    function Classify(const ARC: TResolvedCaller): TArgUse;
+  end;
+
+constructor TArgClassifier.Create(const AStore: ISymbolStore);
+begin
+  inherited Create;
+  FStore:= AStore;
+  FLines:= TDictionary<string, TArray<string>>.Create;
+  FNamed:= TDictionary<string, TArray<TReference>>.Create;
+  FPaths:= TDictionary<Int64, string>.Create;
+  FEdges:= TDictionary<Int64, TArray<TCallEdge>>.Create;
+  FUse  := TDictionary<string, TArgUse>.Create;
+end;
+
+destructor TArgClassifier.Destroy;
+begin
+  FUse.Free;
+  FEdges.Free;
+  FPaths.Free;
+  FNamed.Free;
+  FLines.Free;
+  inherited Destroy;
+end;
+
+function TArgClassifier.LinesOf(const APath: string): TArray<string>;
+begin
+  var Key: string:= LowerCase(APath);
+  if not FLines.TryGetValue(Key, Result) then
+  begin
+    Result:= ReadLinesOrNothing(APath);
+    FLines.Add(Key, Result);
+  end;
+end;
+
+function TArgClassifier.RefsNamed(const AName: string): TArray<TReference>;
+begin
+  var Key: string:= LowerCase(AName);
+  if not FNamed.TryGetValue(Key, Result) then
+  begin
+    Result:= FStore.FindCallersByName(AName);
+    FNamed.Add(Key, Result);
+  end;
+end;
+
+function TArgClassifier.PathOf(AFileId: Int64): string;
+begin
+  if not FPaths.TryGetValue(AFileId, Result) then
+  begin
+    Result:= FStore.GetFilePath(AFileId);
+    FPaths.Add(AFileId, Result);
+  end;
+end;
+
+function TArgClassifier.EdgesOf(AEnclosingId: Int64): TArray<TCallEdge>;
+begin
+  if not FEdges.TryGetValue(AEnclosingId, Result) then
+  begin
+    Result:= FStore.GetCallEdgesFromSymbol(AEnclosingId);
+    FEdges.Add(AEnclosingId, Result);
+  end;
+end;
+
+function TArgClassifier.TargetOf(const ARC: TResolvedCaller; const ACallee: string; ALine, ACol: Integer): TSymbol;
+begin
+  Result:= Default(TSymbol);
+  for var R: TReference in RefsNamed(ACallee) do
+  begin
+    if (R.StartLine <> ALine) or (R.StartCol <> ACol) then Continue;
+    if not SameText(PathOf(R.FileId), ARC.FullPath) then Continue;
+    if R.SymbolId > 0 then Exit(FStore.GetSymbolById(R.SymbolId));
+    if ARC.EnclosingSymbolId > 0 then
+      for var E: TCallEdge in EdgesOf(ARC.EnclosingSymbolId) do
+        if (E.RefId = R.Id) and (E.TargetSymbolId > 0) and SameText(E.Confidence, 'certain') then
+          Exit(FStore.GetSymbolById(E.TargetSymbolId));
+  end;
+end;
+
+function TArgClassifier.Classify(const ARC: TResolvedCaller): TArgUse;
+var
+  Callee: string;
+  CL, CC, Idx: Integer;
+begin
+  Result:= auNone;
+  if (ARC.CallSiteLine < 1) or (ARC.CallSiteCol < 1) then Exit;
+  var Key: string:= Format('%s:%d:%d', [LowerCase(ARC.FullPath), ARC.CallSiteLine, ARC.CallSiteCol]);
+  if FUse.TryGetValue(Key, Result) then Exit;
+  Result:= auNone;
+  var Lines: TArray<string>:= LinesOf(ARC.FullPath);
+  if (Length(Lines) > 0) and LocateArgument(Lines, ARC.CallSiteLine, ARC.CallSiteCol, Callee, CL, CC, Idx) then
+  begin
+    if (Idx = 0) and (SameText(Callee, 'Inc') or SameText(Callee, 'Dec')) then Result:= auIncDec
+    else
+    begin
+      var Target: TSymbol:= TargetOf(ARC, Callee, CL, CC);
+      if Target.Id > 0 then
+      begin
+        var Mode: string:= ParamModeAt(Target.Signature, Idx);
+        if Mode = 'var' then Result:= auVarArg
+        else if Mode = 'out' then Result:= auOutArg;
+      end;
+    end;
+  end;
+  FUse.Add(Key, Result);
+end;
+
 function MemberUsersForName(const AStore: ISymbolStore; const AName: string): TArray<TMemberUsers>;
 const
   MODE_READ  = 'read' ;
   MODE_WRITE = 'write';
 var
   Seen: TDictionary<string, Boolean>;
+  Args: TArgClassifier;
   Cur : TMemberUsers;
 
   { The resolved callers of ASymbolId into Cur. AForce is the direction of a row
@@ -898,20 +1249,33 @@ var
     begin
       var Mode: string:= if RC.Mode <> '' then RC.Mode else AForce;
       if (AOnly <> '') and (Mode <> AOnly) then Continue;
-      var Key: string:= Format('%s:%d:%s', [LowerCase(RC.FullPath), RC.CallSiteLine, Mode]);
-      if Seen.ContainsKey(Key) then Continue;
-      Seen.Add(Key, True);
-      var Row: TMemberUserRow:= Default(TMemberUserRow);
-      Row.CallerQName:= RC.EnclosingQName;
-      Row.FullPath   := RC.FullPath;
-      Row.Line       := RC.CallSiteLine;
-      Row.Via        := AVia;
-      Row.ViaName    := AViaName;
-      Row.Confidence := RC.Confidence;
-      Row.Resolution := ResolutionOfConfidence(RC.Confidence);
-      if Mode = MODE_READ then Cur.Readers:= Cur.Readers + [Row]
-      else if Mode = MODE_WRITE then Cur.Writers:= Cur.Writers + [Row]
-      else Cur.Calls:= Cur.Calls + [Row];
+      { A stored read that is really an Inc/Dec or var/out argument: see MemberUsersForName. }
+      var Use: TArgUse:= auNone;
+      if (AOnly = '') and (RC.Mode = MODE_READ) then Use:= Args.Classify(RC);
+      var Modes: TArray<string>;
+      case Use of
+        auIncDec, auOutArg: Modes:= [MODE_WRITE];
+        auVarArg          : Modes:= [MODE_READ, MODE_WRITE];
+      else Modes:= [Mode];
+      end;
+      for var M: string in Modes do
+      begin
+        var Key: string:= Format('%s:%d:%s', [LowerCase(RC.FullPath), RC.CallSiteLine, M]);
+        if Seen.ContainsKey(Key) then Continue;
+        Seen.Add(Key, True);
+        var Row: TMemberUserRow:= Default(TMemberUserRow);
+        Row.CallerQName:= RC.EnclosingQName;
+        Row.FullPath   := RC.FullPath;
+        Row.Line       := RC.CallSiteLine;
+        Row.Via        := AVia;
+        Row.ViaName    := AViaName;
+        Row.Confidence := RC.Confidence;
+        Row.Resolution := ResolutionOfConfidence(RC.Confidence);
+        Row.Arg        := ARG_LABELS[Use];
+        if M = MODE_READ then Cur.Readers:= Cur.Readers + [Row]
+        else if M = MODE_WRITE then Cur.Writers:= Cur.Writers + [Row]
+        else Cur.Calls:= Cur.Calls + [Row];
+      end;
     end;
   end;
 
@@ -975,6 +1339,7 @@ begin
   Result:= nil;
   if (AStore = nil) or (Trim(AName) = '') then Exit;
   Seen:= TDictionary<string, Boolean>.Create;
+  Args:= TArgClassifier.Create(AStore);
   try
     for var T: TSymbol in AStore.FindSymbolsByExactName(AName) do
     begin
@@ -988,6 +1353,7 @@ begin
       Result:= Result + [Cur];
     end;
   finally
+    Args.Free;
     Seen.Free;
   end; // try
 end; // function
