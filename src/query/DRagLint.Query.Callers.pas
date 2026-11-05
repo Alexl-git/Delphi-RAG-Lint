@@ -144,7 +144,7 @@ type
     /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.MemberAccess.GroupRoutines (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Charts.MemberAccess.LoadSites (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderJson (DRagLint.Context.Bundler.pas) (+71 more)</para>
+    /// <para>Called from: DRagLint.Charts.MemberAccess.GroupRoutines (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Charts.MemberAccess.LoadSites (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderJson (DRagLint.Context.Bundler.pas) (+76 more)</para>
     /// <para>Writes: Exact, Ambiguous, External, NameOnly</para>
     /// <seealso cref="DRagLint.Query.Callers.TResolutionTally.ToText"/>
     /// <!-- drag-lint:auto END -->
@@ -365,7 +365,12 @@ type
   /// read is listed as a write: 'inc-dec' (the argument of Inc or Dec), 'var-arg'
   /// (the argument bound to a var parameter of a resolved call; the site is
   /// listed as a reader AND a writer) or 'out-arg' (an out parameter; a writer
-  /// only); '' for every other site.</remarks>
+  /// only); '' for every other site.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.Callers.pas) ?, DRagLint.CLI.DoUsagesReadersWriters.RowsJson (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsagesReadersWriters.WriteRows (DRagLint.CLI.pas) ?, DRagLint.Query.Callers.MemberUsersForName.AddRows (DRagLint.Query.Callers.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Query.Callers</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMemberUserRow = record
     CallerQName: string ;
     FullPath   : string ;
@@ -440,7 +445,17 @@ type
 /// or a bound call ref). Not covered, and left a reader: an argument of an
 /// unresolved or ambiguous call, a part of a longer expression (`Foo(F + 1)`,
 /// `Foo(F.X)`, `Foo(@F)`, `Foo(F[I])`), a call whose argument list is more than
-/// 12 lines long, and a site the source no longer matches (stale file).</remarks>
+/// 12 lines long, and a site the source no longer matches (stale file).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUsagesReadersWriters (DRagLint.CLI.pas)</para>
+/// <para>Calls: AccessorSymbol, AddAccessorRows, AddRows, DeclaredAccessors, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Query.Callers.MemberUsersForName.GatherMember, DRagLint.Query.Callers.MemberUsersForName.GatherProperty, DRagLint.Query.Callers.ReadLinesOrNothing (+6 more)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Query.Callers.MemberUsersForName.GatherMember"/>
+/// <seealso cref="DRagLint.Query.Callers.MemberUsersForName.GatherProperty"/>
+/// <seealso cref="DRagLint.Query.Callers.ReadLinesOrNothing"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MemberUsersForName(const AStore: ISymbolStore; const AName: string): TArray<TMemberUsers>;
 
 /// <summary>The refs named by a BARE name that the resolver left unbound.</summary>

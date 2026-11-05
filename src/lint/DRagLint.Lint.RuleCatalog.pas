@@ -765,7 +765,7 @@ begin
       effects can still be reported. Guard:
       tests\lint-project\purity-rules\run_purity_rules.ps1 run 1. }
     B('discarded-effect-free-result', 'project-wide', 'info', 'A proven effect-free value-returning routine is called in statement position and its result discarded -- the call does nothing', True);
-    B('query-name-with-effect',       'project-wide', 'info', 'A Get*/Is*/Has*/Find*/Can*/Should* routine has a PROVEN escaping effect (writes a field, global state or frees storage) -- a question that also changes something', False);
+    B('query-name-with-effect',       'project-wide', 'info', 'A Get*/Is*/Has*/Find*/Can*/Should* function has a PROVEN escaping effect (writes a field, global state or frees storage) -- a question that also changes something', False);
     { assert-with-side-effect (INBOX 2026-09-23 rule 4) ships OFF for the same
       reason as the two above: it reads the STORED purity verdict and the resolved
       call edges, so on an index without the purity stage it is silent rather

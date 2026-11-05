@@ -76,7 +76,7 @@
     "version": "1.35.1-alpha"
   },
   "features/circular-uses-report-cycles-fix-plan.md": {
-    "hash": "3bfa89b2e5e86066315d8d921d47603f7e29637f8f17e179be5658eade65ee8f",
+    "hash": "09f0b4bd80d7a27a37e8975487c1e14ff030644c9c11a9cbb258e327886f4d61",
     "version": "1.43.0-alpha"
   },
   "features/class-surface.md": {
@@ -216,7 +216,7 @@
     "version": "1.35.1-alpha"
   },
   "features/cycles-fix.md": {
-    "hash": "312eda66495d3718356db48b95271ff1251adcc1fa61ab80ca4ac145a29c4f35",
+    "hash": "ffcd9aa493dfa812a0a78a0c20c413ed01957fe9262fe1882589e83be8e5513b",
     "version": "1.43.0-alpha"
   },
   "features/datamodule-form-global.md": {
@@ -268,7 +268,7 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "642bc8ef27fdeeabd81d0080b1fc1b90186397cf444748226a037b7ce1d5f930",
+    "hash": "25a772bceb8cbc7891019a29656e7b928c39147e5f6535864ac03617f41f4320",
     "version": "1.43.0-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
@@ -796,7 +796,7 @@
     "version": "1.35.1-alpha"
   },
   "features/usages.md": {
-    "hash": "10fe4503f01fd2f3bc4e0597f294c2a03cb3d2cf0de182d4514acbf1c91f18c6",
+    "hash": "882843f0fb383544eb04f88886c92b2cae7d6d2034c061a59741b6870c8bf3cf",
     "version": "1.43.0-alpha"
   },
   "features/uses-audit-interface-impl-moves-unused-this-unit.md": {

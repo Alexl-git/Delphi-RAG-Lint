@@ -1175,4 +1175,4 @@
 # 2026-11-03: bumped 1.29.0-alpha -> 1.30.0-alpha (1.42 wave 1, lane/142-int1): grammar v1.4.1, CFG-CONSTLOOP, calls/sweeper-a resolver + doc2 Storage.SQLite edits.
 #   Superseded: 1.30.0-alpha|1c29b554d1cb81ebd915ed7f6475682f89a92b7c1e53f3237a09159fafdfaf73
 # 2026-11-05: bumped 1.30.0-alpha -> 1.31.0-alpha (1.43, lane/143-int): D5-COMPILERVER, YADF6, RESOLVE-ONLY-STAMPS, GH13-CLOSURE-TAIL, PARSE-THROUGHPUT, INLINE-VAR-CTOR-UNTYPED, RECV-UNDECIDABLE slice, WITH-SELF-PROP.
-1.31.0-alpha|6af5ed00c3b2cbc5afdbe3b867eb9e7b22cfff59b548283d1fffe2e7a69cf11b
+1.31.0-alpha|eef47a5a6d0c80e672805faff4e5429ebbcf691e5f807373b8310ba90ad65613

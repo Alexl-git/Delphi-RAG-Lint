@@ -34,11 +34,17 @@ DRAGLINT_RESOLVER_VERSION 1.18.0 -> 1.19.0-alpha -- every index re-parses once.
 - cycles --fix (lane cyc3, CYC-C): R2 carries chain members that a `with` body or a cast names; overlapping `with` bodies of two classes are cut; an operand with no class refuses with `other-ref`, naming its line. A run refused after the writes prints `Verdict: refused`, as its JSON says.
 - ConvRulesEditor (lane gui, GUILOCK): the dpr MessageBox in RunNativeDialog is gated; `gui-run.ps1` treats a lock timeout as final and kills by tree after 15 minutes; book-depth waits on the saved file. DRV2B and DRVLIB proof still needs an unlocked desktop.
 
+- usages (lane qfix): `--rw` lists `Inc(X)` and `Dec(X)` as writers, an argument bound to a var parameter of a resolved call as reader and writer, and one bound to an out parameter as writer, each row saying why. This is decided at query level: the index still stores them as reads, and no bump is involved.
+- query-name-with-effect (lane qfix; the rule stays OFF): a routine with no return type, a summary whose witness is only a read and a witness naming a binding gap no longer fire (measured on DB copies: CLIENT 4 -> 1, SERVER 7 -> 1, YADF 2 -> 2).
+- resolve (lane recv2, RECV-UNDECIDABLE): `A[i]`, for-in over arrays, `TList` / `TObjectList` / `IList` / `IReadOnlyList`, `as`, and collection results of `F(x)`, `A.B(x)` and `A.Field` type a for-var or inline var (this engine's own DB: edges 31287 -> 31872, untyped no-edge receivers 24194 -> 19675, 0 lost or changed).
+
 ### Tests and docs
+- IDE plugin (lane ide4): the ShowInfoInline default, ON since 2026-08-26, is pinned by a guard, and the manual and DEC-17 now say so. Wiki and README: Circular Uses states it works locally with no AI and no internet, and gains a step-by-step; the Options wiki page has the current menu wording.
 - lsp (lane lsp, G0): headless parity guard: the plugin's lint command and `lsp --full-rules` publish the same set. docs\EDITORS.md: the Zed extension exists.
 
 ### Known limitation
-- `usages --rw`: `Inc(X)`, `Dec(X)` and a var / out argument are indexed as reads, so those writers are listed as readers only.
+- `usages --rw`: an argument of an unresolved or ambiguous call, a part of a longer expression (`Foo(F + 1)`, `Foo(F.X)`, `Foo(@F)`, `Foo(F[I])`), a call whose argument list runs past 12 lines and a site in a stale file stay readers only.
+- `query-name-with-effect`: `GetCpuPercent`, a real effect behind a binding-gap witness, no longer fires.
 
 ## v1.42.0-alpha -- 2026-11-05
 

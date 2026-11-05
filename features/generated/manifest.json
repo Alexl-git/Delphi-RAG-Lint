@@ -16778,7 +16778,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "A Get*/Is*/Has*/Find*/Can*/Should* routine has a PROVEN escaping effect (writes a field, global state or frees storage) -- a question th... (project-wide, info)",
+        "summary": "A Get*/Is*/Has*/Find*/Can*/Should* function has a PROVEN escaping effect (writes a field, global state or frees storage) -- a question t... (project-wide, info)",
         "wikiPage": "rules",
         "surfaces": [
           {
