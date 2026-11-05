@@ -280,7 +280,81 @@ function DropRefsThatCannotBeCallers(const AStore: ISymbolStore;
 /// <returns>The refs with same-site duplicates collapsed, order preserved.</returns>
 function CollapseRefsAtSameSite(const ARefs: TArray<TReference>): TArray<TReference>;
 
+type
+  /// <summary>One user of a member, as `usages --rw` lists it.</summary>
+  /// <remarks>Via says by which route the site reaches the member: 'property'
+  /// (through a property), 'field' (a mention of the property's backing field),
+  /// 'getter' / 'setter' (a direct call of the accessor method), 'direct' (the
+  /// member has no property in front of it). ViaName is the qualified name of the
+  /// symbol the site is bound to.</remarks>
+  TMemberUserRow = record
+    CallerQName: string ;
+    FullPath   : string ;
+    Line       : Integer;
+    Via        : string ;
+    ViaName    : string ;
+    Confidence : string ;
+    Resolution : string ;
+  end;
+
+  /// <summary>The users of one declaration, split into readers and writers.</summary>
+  /// <remarks>Calls holds the sites that neither read nor write: the callers of a
+  /// routine that is no property's accessor. ReadAccessor / WriteAccessor are set
+  /// for a property only, as written in its declaration; their Kind is 'field',
+  /// 'method' or 'unresolved' (declared by an ancestor, or a source the index no
+  /// longer matches), '' when the property has no such accessor.
+  /// BacksProperties names the properties a field or accessor method stands behind.</remarks>
+  TMemberUsers = record
+    Target           : TSymbol;
+    FilePath         : string ;
+    ReadAccessor     : string ;
+    ReadAccessorKind : string ;
+    WriteAccessor    : string ;
+    WriteAccessorKind: string ;
+    BacksProperties  : TArray<string>;
+    Readers          : TArray<TMemberUserRow>;
+    Writers          : TArray<TMemberUserRow>;
+    Calls            : TArray<TMemberUserRow>;
+  end;
+
+  /// <summary>The refs carrying a name that the resolver bound to nothing, by
+  /// usage direction. They may belong to any symbol of that name.</summary>
+  TUnboundUsers = record
+    Reads : TArray<TReference>;
+    Writes: TArray<TReference>;
+    Other : TArray<TReference>;
+  end;
+
+/// <summary>Finds the users of a property, field or routine, split into readers and
+/// writers (`usages --rw`, owner Q1 2026-11-04).</summary>
+/// <param name="AStore">An open store; nil answers nothing.</param>
+/// <param name="AName">A bare or qualified name; one result per declaration.</param>
+/// <returns>One TMemberUsers per declaration of AName. A property gathers its own
+/// bound accesses, the mentions of a backing field and the direct calls of its
+/// accessor methods. A field gathers the same for each property it backs, plus its own
+/// mentions. A getter gathers only reads, a setter only writes. One site appears
+/// once per direction, under its first route in that order; sites are per line,
+/// because a resolved row carries no column.</returns>
+/// <remarks>The accessor NAMES come from the property's declaration text, read from
+/// the file on disk, because symbols.prop_access keeps only 'ro'/'rw'/'wo' and
+/// member_accesses names an accessor only for a property somebody accesses: a property
+/// with no users must still lead to its field. A source that cannot be read leaves
+/// the accessors empty and the bound sites intact. Directions are the index's:
+/// a var/out argument and Inc/Dec of a field are indexed as reads.</remarks>
+function MemberUsersForName(const AStore: ISymbolStore; const AName: string): TArray<TMemberUsers>;
+
+/// <summary>The refs named by a BARE name that the resolver left unbound.</summary>
+/// <param name="AStore">An open store; nil answers nothing.</param>
+/// <param name="AName">The name; a qualified name answers nothing, because an
+/// unbound site cannot be attributed to one owner.</param>
+/// <returns>The unbound refs, split with the `usages` buckets.</returns>
+function UnboundUsersForName(const AStore: ISymbolStore; const AName: string): TUnboundUsers;
+
 implementation
+
+uses
+  System.IOUtils,
+  System.RegularExpressions;
 
 { Pull the call site's OWN line out of the indexed context blob.
   FindCallersByNameWithContext formats each line as '%5d: %s', so after Trim the
@@ -757,5 +831,179 @@ begin
     Seen.Free;
   end; // try
 end;
+
+{ The read and write specifiers of a property declaration: the text after the
+  type colon, up to the first semicolon, comments and array parameters removed.
+  Only the first segment of `read FRec.Value` names a member of the class. }
+procedure DeclaredAccessors(const ALines: TArray<string>; const AProp: TSymbol; out ARead, AWrite: string);
+const
+  COMMENTS = '\{[^}]*\}|\(\*.*?\*\)|//[^\r\n]*';
+  ARRAY_PARAMS = '\[[^\]]*\]';
+  ACCESSOR = '\b%s\s+([A-Za-z_]\w*)';
+var
+  Text: string;
+begin
+  ARead := '';
+  AWrite:= '';
+  if (AProp.StartLine < 1) or (AProp.EndLine > Length(ALines)) then Exit;
+  for var I: Integer:= AProp.StartLine to AProp.EndLine do Text:= Text + ALines[I - 1] + sLineBreak;
+  Text:= TRegEx.Replace(Text, COMMENTS, ' ', [roSingleLine]);
+  Text:= TRegEx.Replace(Text, ARRAY_PARAMS, ' ');
+  var ColonAt: Integer:= Pos(':', Text);
+  if ColonAt = 0 then Exit;
+  Text:= Copy(Text, ColonAt + 1, MaxInt);
+  var SemiAt: Integer:= Pos(';', Text);
+  if SemiAt > 0 then SetLength(Text, SemiAt - 1);
+  var M: TMatch:= TRegEx.Match(Text, Format(ACCESSOR, ['read']), [roIgnoreCase]);
+  if M.Success then ARead:= M.Groups[1].Value;
+  M:= TRegEx.Match(Text, Format(ACCESSOR, ['write']), [roIgnoreCase]);
+  if M.Success then AWrite:= M.Groups[1].Value;
+end;
+
+{ AName as a member of AProp's class; Id 0 and kind 'unresolved' when the class
+  does not declare it, '' for no accessor at all. }
+function AccessorSymbol(const AStore: ISymbolStore; const AProp: TSymbol; const AName: string; out AKind: string): TSymbol;
+begin
+  Result:= Default(TSymbol);
+  AKind := '';
+  if AName = '' then Exit;
+  Result:= AStore.FindChildSymbolByName(AProp.ParentId, AName);
+  AKind:= if Result.Id <= 0 then 'unresolved' else if Result.Kind in [skFunction, skProcedure, skMethod] then 'method' else 'field';
+end;
+
+function ReadLinesOrNothing(const APath: string): TArray<string>;
+begin
+  Result:= nil;
+  try
+    if TFile.Exists(APath) then Result:= TFile.ReadAllLines(APath);
+  except
+    on E: EInOutError do Result:= nil; { the bound sites stand without the accessor names }
+    on E: EEncodingError do Result:= nil;
+  end;
+end;
+
+function MemberUsersForName(const AStore: ISymbolStore; const AName: string): TArray<TMemberUsers>;
+const
+  MODE_READ  = 'read' ;
+  MODE_WRITE = 'write';
+var
+  Seen: TDictionary<string, Boolean>;
+  Cur : TMemberUsers;
+
+  { The resolved callers of ASymbolId into Cur. AForce is the direction of a row
+    that has none (a call of an accessor method); AOnly keeps one direction. }
+  procedure AddRows(ASymbolId: Int64; const AVia, AViaName, AForce, AOnly: string);
+  begin
+    for var RC: TResolvedCaller in AStore.FindResolvedCallers(ASymbolId) do
+    begin
+      var Mode: string:= if RC.Mode <> '' then RC.Mode else AForce;
+      if (AOnly <> '') and (Mode <> AOnly) then Continue;
+      var Key: string:= Format('%s:%d:%s', [LowerCase(RC.FullPath), RC.CallSiteLine, Mode]);
+      if Seen.ContainsKey(Key) then Continue;
+      Seen.Add(Key, True);
+      var Row: TMemberUserRow:= Default(TMemberUserRow);
+      Row.CallerQName:= RC.EnclosingQName;
+      Row.FullPath   := RC.FullPath;
+      Row.Line       := RC.CallSiteLine;
+      Row.Via        := AVia;
+      Row.ViaName    := AViaName;
+      Row.Confidence := RC.Confidence;
+      Row.Resolution := ResolutionOfConfidence(RC.Confidence);
+      if Mode = MODE_READ then Cur.Readers:= Cur.Readers + [Row]
+      else if Mode = MODE_WRITE then Cur.Writers:= Cur.Writers + [Row]
+      else Cur.Calls:= Cur.Calls + [Row];
+    end;
+  end;
+
+  procedure AddAccessorRows(const AAccessor: TSymbol; const AKind, AMethodVia, AForce: string);
+  begin
+    if AKind = 'field' then AddRows(AAccessor.Id, 'field', AAccessor.QualifiedName, '', '')
+    else if AKind = 'method' then AddRows(AAccessor.Id, AMethodVia, AAccessor.QualifiedName, AForce, '');
+  end;
+
+  procedure GatherProperty(const AProp: TSymbol; const ALines: TArray<string>);
+  var
+    RName, WName, RKind, WKind: string;
+  begin
+    DeclaredAccessors(ALines, AProp, RName, WName);
+    var RSym: TSymbol:= AccessorSymbol(AStore, AProp, RName, RKind);
+    var WSym: TSymbol:= AccessorSymbol(AStore, AProp, WName, WKind);
+    Cur.ReadAccessor     := RName;
+    Cur.ReadAccessorKind := RKind;
+    Cur.WriteAccessor    := WName;
+    Cur.WriteAccessorKind:= WKind;
+    AddRows(AProp.Id, 'property', AProp.QualifiedName, '', '');
+    AddAccessorRows(RSym, RKind, 'getter', MODE_READ);
+    AddAccessorRows(WSym, WKind, 'setter', MODE_WRITE);
+  end;
+
+  { A field or method: the properties of its class it stands behind, then its own sites. }
+  procedure GatherMember(const AMember: TSymbol; const ALines: TArray<string>);
+  var
+    RName, WName: string;
+    Role: string;
+  begin
+    Role:= '';
+    if AMember.ParentId > 0 then
+      for var P: TSymbol in AStore.FindSymbolsByFile(Cur.FilePath) do
+      begin
+        if (P.Kind <> skProperty) or (P.ParentId <> AMember.ParentId) then Continue;
+        DeclaredAccessors(ALines, P, RName, WName);
+        var IsReader: Boolean:= SameText(RName, AMember.Name);
+        var IsWriter: Boolean:= SameText(WName, AMember.Name);
+        if not (IsReader or IsWriter) then Continue;
+        Cur.BacksProperties:= Cur.BacksProperties + [P.QualifiedName];
+        if AMember.Kind = skField then AddRows(P.Id, 'property', P.QualifiedName, '', '')
+        else if IsReader then
+        begin
+          Role:= MODE_READ;
+          AddRows(P.Id, 'property', P.QualifiedName, '', MODE_READ);
+        end
+        else
+        begin
+          Role:= MODE_WRITE;
+          AddRows(P.Id, 'property', P.QualifiedName, '', MODE_WRITE);
+        end;
+      end;
+    if Length(Cur.BacksProperties) = 0 then AddRows(AMember.Id, 'direct', AMember.QualifiedName, '', '')
+    else if AMember.Kind = skField then AddRows(AMember.Id, 'field', AMember.QualifiedName, '', '')
+    else if Role = MODE_READ then AddRows(AMember.Id, 'getter', AMember.QualifiedName, MODE_READ, '')
+    else AddRows(AMember.Id, 'setter', AMember.QualifiedName, MODE_WRITE, '');
+  end;
+
+begin
+  Result:= nil;
+  if (AStore = nil) or (Trim(AName) = '') then Exit;
+  Seen:= TDictionary<string, Boolean>.Create;
+  try
+    for var T: TSymbol in AStore.FindSymbolsByExactName(AName) do
+    begin
+      Seen.Clear;
+      Cur:= Default(TMemberUsers);
+      Cur.Target  := T;
+      Cur.FilePath:= AStore.GetFilePath(T.FileId);
+      var Lines: TArray<string>:= ReadLinesOrNothing(Cur.FilePath);
+      if T.Kind = skProperty then GatherProperty(T, Lines)
+      else GatherMember(T, Lines);
+      Result:= Result + [Cur];
+    end;
+  finally
+    Seen.Free;
+  end; // try
+end; // function
+
+function UnboundUsersForName(const AStore: ISymbolStore; const AName: string): TUnboundUsers;
+begin
+  Result:= Default(TUnboundUsers);
+  if (AStore = nil) or (Trim(AName) = '') or (LastDelimiter('.', AName) > 0) then Exit;
+  for var R: TReference in DropMemberAccessUnderCall(AStore.FindCallersByName(AName)) do
+  begin
+    if R.SymbolId > 0 then Continue;
+    var Bucket: string:= UsageBucketOf(R);
+    if Bucket = 'reads' then Result.Reads:= Result.Reads + [R]
+    else if Bucket = 'writes' then Result.Writes:= Result.Writes + [R]
+    else if Bucket = 'calls' then Result.Other:= Result.Other + [R];
+  end;
+end; // function
 
 end.

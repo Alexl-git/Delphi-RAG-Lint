@@ -48,3 +48,8 @@ drag-lint lint-project --db C:\Projects\MyApp\_D-RAG\MyApp.sqlite --rule circula
 ```
 
 This would report circular-uses findings for `MyApp` as JSON.
+
+## Which rules can `--rule` take
+`--rule help`, on `lint <file>`, `lint --project` and `lint-project`, lists every id in the catalog and exits 0
+(`--json`: `rules[]`). On `lint --project` with no unit, the rules that run there (`unit-not-in-dpr`,
+`unit-not-in-library`) are listed apart from those that need a unit. An id the catalog does not have exits 2.

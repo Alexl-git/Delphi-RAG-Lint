@@ -107,6 +107,7 @@ uses
   , System.Classes
   , System.Hash
   , System.IOUtils
+  , DRagLint.CLI.UnitContext { usages --in with no --db: which project does this file belong to }
   , DRagLint.CLI.LibraryReady { library-first resolve: readiness probe + platform choice (plan 2026-10-28) }
   , DRagLint.CLI.LibraryMarker { the project DB's library_resolve_state marker: JSON, decision table, notice }
   , DRagLint.CLI.HelpText   { WriteVerbReference -- the generated verb reference of --help (featuregen, P7) }
@@ -444,6 +445,7 @@ type
     WiringCoverage: Boolean; // v8: --coverage for the wiring command
     ContextLines  : Integer; // v0.17: find-callers --context N
     Resolved      : Boolean; // v14 (D5 T8): find-callers --resolved (precise callers via call_edges)
+    UsagesRw      : Boolean; // usages --rw: the users of a member split into readers and writers
     // v14 (D5 T11): call-graph traversal verbs (call-path / callgraph)
     CallFrom : string ; // --from <A>  (call-path source routine name/qname)
     // CallTo reuses RenameTo: --to is parsed into RenameTo (rename verb); call-path
@@ -1717,6 +1719,7 @@ begin
     else if A = '--coverage'       then Result.WiringCoverage:= True
     else if (A = '--context') and (i < ParamCount) then begin Inc(i); Result.ContextLines:= StrToIntDef(ParamStr(i), 0); end
     else if A = '--resolved' then Result.Resolved:= True // v14 (D5 T8): find-callers --resolved
+    else if A = '--rw' then Result.UsagesRw:= True  // dl:ok duplicate-code@115a -- ParseArgs is a flat else-if flag chain; the repeated tokens are its shape, not copied logic
     // v14 (D5 T11): call-path / callgraph traversal flags.
     else if (A = '--from') and (i < ParamCount) then begin Inc(i); Result.CallFrom:= ParamStr(i); end
     else if (A = '--max-depth') and (i < ParamCount) then begin Inc(i); Result.MaxDepth:= StrToIntDef(ParamStr(i), 20); end
@@ -7900,7 +7903,7 @@ function DoQueryHints(const AArgs: TArgs): Integer; forward;
 /// <remarks>Pure; stderr only, so JSON documents on stdout are untouched. Pinned by run_qcli_142_guard.ps1.</remarks>
 function ZeroCallersHint(const pName: string; pResolved: Boolean): string;
 const
-  BASE_HINT = 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --name ';
+  BASE_HINT = 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --rw --name ';
 begin
   if pResolved then Exit(BASE_HINT + pName);
   var DotAt: Integer:= LastDelimiter('.', pName);
@@ -12013,6 +12016,400 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>Answers a --rule value that needs no lint run: `help` lists the catalog,
+/// and an id the catalog does not have is refused.</summary>
+/// <param name="AArgs">Parsed args; Rule, RulesDir and AsJson are read.</param>
+/// <param name="AProjectOnly">True for `lint --project` with no unit: the rules that
+/// run there are listed apart from those that need a unit.</param>
+/// <param name="AExit">Receives the verb's exit code when the result is True.</param>
+/// <returns>True when the verb is done: `help` (exit 0), unknown id (exit 2).
+/// False for a catalog id, which the run goes on to use.</returns>
+function LintRuleArgAnswered(const AArgs: TArgs; AProjectOnly: Boolean; out AExit: Integer): Boolean;
+const
+  PROJECT_LEVEL_RULES: array[0..1] of string = ('unit-not-in-dpr', UNIT_NOT_IN_LIBRARY_RULE_ID);
+
+  function IsProjectLevel(const AId: string): Boolean;
+  begin
+    Result:= False;
+    for var P: string in PROJECT_LEVEL_RULES do
+      if SameText(P, AId) then Exit(True);
+  end;
+
+var
+  Ids: TArray<string>;
+begin
+  AExit:= 0;
+  Ids:= nil;
+  var Known: Boolean:= False;
+  for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(AArgs.RulesDir, '') do
+  begin
+    Ids:= Ids + [RI.Id];
+    if SameText(RI.Id, AArgs.Rule) then Known:= True;
+  end;
+  TArray.Sort<string>(Ids);
+  if Known then Exit(False);
+  Result:= True;
+  if not SameText(AArgs.Rule, 'help') then
+  begin
+    Writeln(Format('ERROR: unknown rule "%s"', [AArgs.Rule]));
+    Writeln(Format('known rules (%d): %s', [Length(Ids), string.Join(', ', Ids)]));
+    AExit:= 2;
+    Exit;
+  end;
+  if AArgs.AsJson then
+  begin
+    var JRoot: TJSONObject:= TJSONObject.Create;
+    try
+      var JRules: TJSONArray:= TJSONArray.Create;
+      for var Id: string in Ids do JRules.Add(Id);
+      JRoot.AddPair('rules', JRules);
+      if AProjectOnly then
+      begin
+        var JProject: TJSONArray:= TJSONArray.Create;
+        for var P: string in PROJECT_LEVEL_RULES do JProject.Add(P);
+        JRoot.AddPair('project_level', JProject);
+      end;
+      Writeln(JRoot.Format(2));
+    finally
+      JRoot.Free;
+    end; // try
+    Exit;
+  end;
+  Writeln(Format('--rule takes one of these %d ids (details: drag-lint rules):', [Length(Ids)]));
+  if AProjectOnly then
+  begin
+    Writeln('run by lint --project with no unit:');
+    for var P: string in PROJECT_LEVEL_RULES do Writeln('  ' + P);
+    Writeln('need a unit (lint <file> --rule <id>) or lint-all:');
+  end;
+  for var Id: string in Ids do
+    if not (AProjectOnly and IsProjectLevel(Id)) then Writeln('  ' + Id);
+end; // function
+
+/// <summary>True when a library index declares the unit AName, as written or under
+/// one of the default unit scopes (`SysUtils` is System.SysUtils).</summary>
+/// <param name="AStore">The open library store.</param>
+/// <param name="AName">The unit name from a uses clause.</param>
+/// <returns>True when a unit symbol of that name exists.</returns>
+function LibraryHasUnit(const AStore: ISymbolStore; const AName: string): Boolean;
+const
+  DEFAULT_SCOPES: array[0..10] of string = ('', 'System.', 'Vcl.', 'Winapi.', 'Data.', 'Datasnap.', 'Soap.', 'Xml.', 'Web.', 'FMX.', 'Bde.');
+begin
+  Result:= False;
+  for var Scope: string in DEFAULT_SCOPES do
+    for var S: TSymbol in AStore.FindSymbolsByExactName(Scope + AName) do
+      if S.Kind = skUnit then Exit(True);
+end;
+
+/// <summary>The library half of UsagesDbForFile: no project owns AAbs, so it is a
+/// library unit on the assumed platform, if what it uses says so.</summary>
+/// <param name="AArgs">Parsed args; InFile and LibraryDbs are read.</param>
+/// <param name="AAbs">The file, expanded.</param>
+/// <param name="ALib">The library database; may be '' or missing.</param>
+/// <param name="ALibHoldsFile">True when ALib holds AAbs: what it uses is not questioned.</param>
+/// <param name="APlatform">The platform so far; '' assumes Win64.</param>
+/// <param name="ADb">Receives ALib on 0.</param>
+/// <returns>0, or 2 with the reason and what to do on stderr.</returns>
+function UsagesLibraryDb(const AArgs: TArgs; const AAbs, ALib: string; ALibHoldsFile: Boolean; const APlatform: string; out ADb: string): Integer;
+begin
+  Result:= 2;
+  ADb:= '';
+  var Platform: string:= APlatform;
+  if Length(AArgs.LibraryDbs) > 0 then
+  begin
+    if ContainsText(ALib, 'win64') then Platform:= 'Win64'
+    else if ContainsText(ALib, 'win32') then Platform:= 'Win32';
+  end;
+  if Platform = '' then Platform:= 'Win64';
+  if (ALib = '') or not TFile.Exists(ALib) then
+  begin
+    Writeln(ErrOutput, Format('ERROR: usages: no project lists %s and no %s library index exists to treat it as a library unit.', [AArgs.InFile, Platform]));
+    Writeln(ErrOutput, '  Pass --db <project db>; resolve-dbs --project <x.dproj> prints it. Or pass --library-db <lib.sqlite>.');
+    Exit;
+  end;
+  var RoOk: Boolean;
+  var Store: ISymbolStore:= OpenReadOnlyStore(ALib, RoOk);
+  if (not RoOk) or (Store = nil) then
+  begin
+    Writeln(ErrOutput, 'ERROR: usages: the library index cannot be read: ', ALib);
+    Exit;
+  end;
+  var Foreign: TArray<string>:= nil;
+  if not ALibHoldsFile then
+    for var U: string in UnitsUsedBy(AAbs) do
+      if not LibraryHasUnit(Store, U) then Foreign:= Foreign + [U];
+  if Length(Foreign) > 0 then
+  begin
+    Writeln(ErrOutput, Format('ERROR: usages: no project lists %s, and it uses units the %s library does not have: %s.', [AArgs.InFile, Platform, string.Join(', ', Foreign)]));
+    Writeln(ErrOutput, '  Which project is it part of? Pass that project''s database with --db; resolve-dbs --project <x.dproj> prints it,');
+    Writeln(ErrOutput, '  and drag-lint index --project <x.dproj> creates it.');
+    Exit;
+  end;
+  Writeln(ErrOutput, Format('usages: no project lists %s; treating it as a library unit, assumed platform %s, database %s', [AArgs.InFile, Platform, ALib]));
+  ADb:= ALib;
+  Result:= 0;
+end; // function
+
+/// <summary>Finds the database `usages --in F` with no --db answers from: a unit does
+/// not exist by itself (owner Q2, 2026-11-04).</summary>
+/// <param name="AArgs">Parsed args; InFile, CheckPlatform, LibraryDbs are read.</param>
+/// <param name="ADb">Receives the database on 0.</param>
+/// <returns>0 with ADb set, the choice said on stderr; 2 with what to do said on
+/// stderr. The CLI cannot prompt, so every "ask" is that message and that exit.</returns>
+/// <remarks>
+/// <para>A project owns F when its project file names it (the folder of F and its
+/// ancestors are searched), when that project's DB holds it, or when a project DB of
+/// the manifest holds it. One owner with a DB answers; one owner without a DB gets
+/// the index command; two owners are named and nothing is guessed.</para>
+/// <para>With no owner F is a library unit on the assumed platform, which only
+/// holds while everything it uses is in the library: a unit the library lacks
+/// needs a project, and the message names it.</para>
+/// </remarks>
+function UsagesDbForFile(const AArgs: TArgs; out ADb: string): Integer;
+var
+  Manifest: TIndexManifest;
+  HaveManifest: Boolean;
+  Abs: string;
+  Owners: TArray<string>;
+  OwnerDbs: TArray<string>;
+
+  procedure AddOwner(const AOwner, ADbPath: string);
+  begin
+    for var Have: string in OwnerDbs do
+      if SameText(Have, ADbPath) then Exit;
+    Owners  := Owners   + [AOwner];
+    OwnerDbs:= OwnerDbs + [ADbPath];
+  end;
+
+begin
+  Result:= 2;
+  ADb:= '';
+  Abs:= ExpandFileName(AArgs.InFile);
+  if not TFile.Exists(Abs) then
+  begin
+    Writeln(ErrOutput, 'ERROR: usages: file not found: ', AArgs.InFile);
+    Exit;
+  end;
+  HaveManifest:= False;
+  Manifest:= Default(TIndexManifest);
+  try
+    Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    HaveManifest:= True;
+  except
+    on E: Exception do Writeln(ErrOutput, 'NOTE: usages: manifest not read (', E.Message, '); searching from the file''s folder only.');
+  end;
+
+  for var Proj: string in ProjectFilesNear(Abs) do
+  begin
+    var Db: string;
+    var Claimants: TArray<string>;
+    var Match: TProjectDbMatch:= ResolveOwnProjectDb(Manifest, Proj, Db, Claimants);
+    var Named: Boolean:= ProjectListsFile(Proj, Abs);
+    if Match = pdmAmbiguous then
+    begin
+      if not Named then Continue;
+      ReportAmbiguousProject('usages', Proj, Claimants);
+      Exit;
+    end;
+    if Named or (TFile.Exists(Db) and DbContainsFile(Db, Abs)) then AddOwner(Proj, Db);
+  end;
+
+  var Platform: string:= AArgs.CheckPlatform;
+  if HaveManifest then
+  begin
+    if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
+    var LibDbs: TArray<string>:= LibrarySectionDbs(Manifest);
+    var Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+    try
+      for var Cand: string in TDbSelect.Resolve(Manifest, Platform, Resolver, True) do
+        if (not IsLibrarySectionDb(LibDbs, Cand)) and DbContainsFile(Cand, Abs) then AddOwner('(manifest project)', Cand);
+    finally
+      Resolver.Free;
+    end;
+  end;
+
+  { The library's own source sits under the vendor's build projects, which nobody
+    indexes: a library that holds the file outranks an owner with no index. }
+  var Lib: string:= LintLibraryDb(AArgs);
+  var LibHoldsFile: Boolean:= (Lib <> '') and TFile.Exists(Lib) and DbContainsFile(Lib, Abs);
+  if LibHoldsFile then
+  begin
+    var KeptOwners: TArray<string>:= nil;
+    var KeptDbs   : TArray<string>:= nil;
+    for var I: Integer:= 0 to High(OwnerDbs) do
+      if TFile.Exists(OwnerDbs[I]) then
+      begin
+        KeptOwners:= KeptOwners + [Owners[I]];
+        KeptDbs   := KeptDbs    + [OwnerDbs[I]];
+      end;
+    Owners  := KeptOwners;
+    OwnerDbs:= KeptDbs;
+  end;
+
+  if Length(OwnerDbs) > 1 then
+  begin
+    Writeln(ErrOutput, Format('ERROR: usages: %s belongs to %d projects; which one? Pass its database with --db:', [AArgs.InFile, Length(OwnerDbs)]));
+    for var I: Integer:= 0 to High(OwnerDbs) do Writeln(ErrOutput, Format('  %s  --db "%s"', [Owners[I], OwnerDbs[I]]));
+    Exit;
+  end;
+
+  if Length(OwnerDbs) = 1 then
+  begin
+    if not TFile.Exists(OwnerDbs[0]) then
+    begin
+      Writeln(ErrOutput, Format('ERROR: usages: %s belongs to project %s, which has no index yet. Create it:', [AArgs.InFile, Owners[0]]));
+      Writeln(ErrOutput, Format('  drag-lint index --project "%s" --db "%s"', [Owners[0], OwnerDbs[0]]));
+      Exit;
+    end;
+    Writeln(ErrOutput, Format('usages: project %s, database %s', [Owners[0], OwnerDbs[0]]));
+    ADb:= OwnerDbs[0];
+    Exit(0);
+  end;
+
+  Result:= UsagesLibraryDb(AArgs, Abs, Lib, LibHoldsFile, Platform, ADb);
+end; // function
+
+/// <summary>`usages --rw`: the users of a property or member, split into readers and
+/// writers, one block per declaration. See MemberUsersForName for what is gathered.</summary>
+/// <param name="AArgs">Parsed args; Name, Limit, AsJson / Format are read.</param>
+/// <param name="ADbs">The databases to scan; a missing file is skipped.</param>
+/// <returns>0 with any declaration or unbound site, 1 with neither (a usage answer
+/// of nothing is said on stderr), 2 on an explicit stale database.</returns>
+function DoUsagesReadersWriters(const AArgs: TArgs; const ADbs: TArray<string>): Integer;
+const
+  NOTE_DIRECTIONS = 'a var/out argument and Inc/Dec of a field are indexed as reads, so check those sites for writes';
+
+  function RowsJson(const ARows: TArray<TMemberUserRow>): TJSONArray;
+  begin
+    Result:= TJSONArray.Create;
+    for var I: Integer:= 0 to High(ARows) do
+    begin
+      if (AArgs.Limit > 0) and (I >= AArgs.Limit) then Break;
+      var O: TJSONObject:= TJSONObject.Create;
+      O.AddPair('caller'    , ARows[I].CallerQName);
+      O.AddPair('path'      , ARows[I].FullPath);
+      O.AddPair('line'      , TJSONNumber.Create(ARows[I].Line));
+      O.AddPair('via'       , ARows[I].Via);
+      O.AddPair('via_name'  , ARows[I].ViaName);
+      O.AddPair('confidence', ARows[I].Confidence);
+      O.AddPair('resolution', ARows[I].Resolution);
+      Result.AddElement(O);
+    end;
+  end;
+
+  procedure WriteRows(const ATitle: string; const ARows: TArray<TMemberUserRow>);
+  begin
+    Writeln(Format('  %s (%d):', [ATitle, Length(ARows)]));
+    for var I: Integer:= 0 to High(ARows) do
+    begin
+      if (AArgs.Limit > 0) and (I >= AArgs.Limit) then Break;
+      Writeln(Format('    %s  (%s:%d)  [via %s %s]', [ARows[I].CallerQName, ARows[I].FullPath, ARows[I].Line, ARows[I].Via, ARows[I].ViaName]));
+    end;
+  end;
+
+var
+  AsJson : Boolean;
+  JRoot  : TJSONObject;
+  JTargets: TJSONArray;
+  Found  : Integer;
+  Unbound: TUnboundUsers;
+begin
+  Result:= 0;
+  AsJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+  Found:= 0;
+  Unbound:= Default(TUnboundUsers);
+  JRoot:= TJSONObject.Create;
+  try
+    JTargets:= TJSONArray.Create;
+    JRoot.AddPair('name', AArgs.Name);
+    JRoot.AddPair('targets', JTargets);
+    for var DbPath: string in ADbs do
+    begin
+      if not TFile.Exists(DbPath) then Continue;
+      var RoOk: Boolean;
+      var Store: ISymbolStore:= OpenReadOnlyStore(DbPath, RoOk);
+      if (not RoOk) or (Store = nil) then
+      begin
+        if (not RoOk) and StaleDbRefusesRun(AArgs, 'usages', DbPath) then Exit(2);
+        Continue;
+      end;
+      for var U: TMemberUsers in MemberUsersForName(Store, AArgs.Name) do
+      begin
+        Inc(Found);
+        if AsJson then
+        begin
+          var T: TJSONObject:= TJSONObject.Create;
+          T.AddPair('qname', U.Target.QualifiedName);
+          T.AddPair('kind' , U.Target.Kind.ToText);
+          T.AddPair('file' , U.FilePath);
+          T.AddPair('line' , TJSONNumber.Create(U.Target.StartLine));
+          if U.ReadAccessor <> '' then
+          begin
+            T.AddPair('read_accessor'     , U.ReadAccessor);
+            T.AddPair('read_accessor_kind', U.ReadAccessorKind);
+          end;
+          if U.WriteAccessor <> '' then
+          begin
+            T.AddPair('write_accessor'     , U.WriteAccessor);
+            T.AddPair('write_accessor_kind', U.WriteAccessorKind);
+          end;
+          var JBacks: TJSONArray:= TJSONArray.Create;
+          for var B: string in U.BacksProperties do JBacks.Add(B);
+          T.AddPair('backs_properties', JBacks);
+          T.AddPair('readers', RowsJson(U.Readers));
+          T.AddPair('writers', RowsJson(U.Writers));
+          T.AddPair('calls'  , RowsJson(U.Calls));
+          var JTotals: TJSONObject:= TJSONObject.Create;
+          JTotals.AddPair('readers', TJSONNumber.Create(Length(U.Readers)));
+          JTotals.AddPair('writers', TJSONNumber.Create(Length(U.Writers)));
+          JTotals.AddPair('calls'  , TJSONNumber.Create(Length(U.Calls)));
+          T.AddPair('totals', JTotals);
+          JTargets.AddElement(T);
+        end
+        else
+        begin
+          Writeln(Format('%s (%s)  %s:%d', [U.Target.QualifiedName, U.Target.Kind.ToText, U.FilePath, U.Target.StartLine]));
+          if U.ReadAccessor <> '' then Writeln(Format('  read accessor: %s (%s)', [U.ReadAccessor, U.ReadAccessorKind]));
+          if U.WriteAccessor <> '' then Writeln(Format('  write accessor: %s (%s)', [U.WriteAccessor, U.WriteAccessorKind]));
+          for var B: string in U.BacksProperties do Writeln('  backs property: ' + B);
+          WriteRows('readers', U.Readers);
+          WriteRows('writers', U.Writers);
+          if Length(U.Calls) > 0 then WriteRows('calls', U.Calls);
+        end;
+      end;
+      var One: TUnboundUsers:= UnboundUsersForName(Store, AArgs.Name);
+      Unbound.Reads := Unbound.Reads  + One.Reads;
+      Unbound.Writes:= Unbound.Writes + One.Writes;
+      Unbound.Other := Unbound.Other  + One.Other;
+    end;
+    var UnboundCount: Integer:= Length(Unbound.Reads) + Length(Unbound.Writes) + Length(Unbound.Other);
+    if AsJson then
+    begin
+      var JU: TJSONObject:= TJSONObject.Create;
+      JU.AddPair('reads' , TJSONNumber.Create(Length(Unbound.Reads)));
+      JU.AddPair('writes', TJSONNumber.Create(Length(Unbound.Writes)));
+      JU.AddPair('other' , TJSONNumber.Create(Length(Unbound.Other)));
+      JRoot.AddPair('unbound', JU);
+      JRoot.AddPair('note', NOTE_DIRECTIONS);
+      Writeln(JRoot.Format(2));
+    end
+    else
+    begin
+      if UnboundCount > 0 then
+        Writeln(Format('unbound name matches (not attributed to any declaration): reads %d, writes %d, other %d; a qualified name leaves them out',
+          [Length(Unbound.Reads), Length(Unbound.Writes), Length(Unbound.Other)]));
+      if Found > 0 then Writeln('note: ' + NOTE_DIRECTIONS);
+    end;
+    if (Found = 0) and (UnboundCount = 0) then
+    begin
+      Writeln(ErrOutput, Format('usages --rw: no declaration or reference named "%s"; check the name, or that this is the project''s database.', [AArgs.Name]));
+      Result:= 1;
+    end;
+  finally
+    JRoot.Free;
+  end; // try
+end; // function
+
 // v0.42: drag-lint usages --name <X> [--width narrow|wide|very-wide]
 //        [--db ...] [--depth N] [--format text|json]
 // Find every place a symbol is used -- not just calls. After a DEEP index,
@@ -12096,6 +12493,15 @@ begin
   PathsToScan:= AArgs.DbPaths;
   if Length(PathsToScan) = 0 then PathsToScan:= [AArgs.DbPath];
 
+  { USAGES-PROJECT-CONTEXT: a file and no --db: the file's own project decides. }
+  if (Length(AArgs.DbPaths) = 0) and (AArgs.DbPath = '') and (AArgs.InFile <> '') then
+  begin
+    var ContextDb: string;
+    var ContextExit: Integer:= UsagesDbForFile(AArgs, ContextDb);
+    if ContextExit <> 0 then Exit(ContextExit);
+    PathsToScan:= [ContextDb];
+  end;
+
   { NO DATABASE AT ALL is an error, not an empty answer (USAGES-NAME, 1.40): the loop below skips
     a missing file, so with nothing resolved it printed "calls: 0" and exited 0 -- while the same
     question to `query find-callers` said "database not found". Mirror that: exit 2. }
@@ -12108,8 +12514,11 @@ begin
     Writeln('Run "drag-lint index <path>" first, or pass --db <file.sqlite>.');
     Writeln('usages does not read the manifest: without --db it has no database (find-callers does resolve one).');
     Writeln('Pass --db <file.sqlite>; resolve-dbs --project <x.dproj> prints the right one.');
+    Writeln('Or name a unit with --in <file.pas>: its project and database are found from it.');
     Exit(2);
   end;
+
+  if AArgs.UsagesRw then Exit(DoUsagesReadersWriters(AArgs, PathsToScan));
 
   JRoot:= TJSONObject.Create;
   JDecls := TJSONArray.Create; JReads := TJSONArray.Create;
@@ -16396,20 +16805,8 @@ begin
     See docs\INBOX-lint-rule-filter-leaks-other-rules.md. }
   if AArgs.Rule <> '' then
   begin
-    var KnownRule: Boolean:= False;
-    var KnownIds : TArray<string>:= nil;
-    for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(AArgs.RulesDir, '') do
-    begin
-      KnownIds:= KnownIds + [RI.Id];
-      if SameText(RI.Id, AArgs.Rule) then KnownRule:= True;
-    end;
-    if not KnownRule then
-    begin
-      TArray.Sort<string>(KnownIds);
-      Writeln(Format('ERROR: unknown rule "%s"', [AArgs.Rule]));
-      Writeln(Format('known rules (%d): %s', [Length(KnownIds), string.Join(', ', KnownIds)]));
-      Exit(2);
-    end;
+    var RuleExit: Integer;
+    if LintRuleArgAnswered(AArgs, (AArgs.ProjectPath <> '') and (AArgs.Path = ''), RuleExit) then Exit(RuleExit);
   end;
   { D17: the rule this run NARROWS its checkers to -- AArgs.Rule, except '' for
     a review-marker-* rule (see LintNarrowRule). The report is still filtered to
@@ -23904,6 +24301,11 @@ var
   Findings   : TArray<TLintFinding> ;
   DefDisabled: TArray<string>       ;
 begin
+  if AArgs.Rule <> '' then
+  begin
+    var RuleExit: Integer;
+    if LintRuleArgAnswered(AArgs, False, RuleExit) then Exit(RuleExit);
+  end;
   if not FileExists(AArgs.DbPath) then
   begin
     Writeln(Format('Database not found: %s (pass --db <index.sqlite>)', [AArgs.DbPath]));
