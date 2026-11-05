@@ -9,6 +9,17 @@ Open it when picking the next converter job, not at session start.
 Sizes S/M/L; model = haiku / sonnet / session (owner rule 2a). **Measure against the tree
 before working on an item.**
 
+## State 2026-11-05 -- adds to the states below
+
+* **UNAPPLIED-RULE PRE-CHECK (new, M; replaces CONV-6 / TRIAGE #36):** owner ruling 2026-11-04
+  (via ENGINE-09): a component whose class has a conversion rule that the run did not apply
+  (e.g. TTable) is NOT a lint rule but a converter PRE-CHECK before a conversion. Read the .dfm
+  files themselves -- ORM3\CLIENT .dfm with TTable are not in the index. Sizing:
+  C:\TEMP\claude\lanes\143\newrules\SIZING.md (88 findings / 76 .dfm, all TTable, Loader2025).
+* **MIGTYPO closed (ruling D3):** the vendor plural TDBScreenCursors line stays; it is inert for
+  D5 and Studio 37, and DataDB-to-FireDAC.rules:54 already has the singular.
+* **REPIN held** for the 1.43 re-parse (extractor 1.31.0); then re-verify convert-apply
+  `--old-platform-db` (lane/143-convd5). DRVLIB rerun, DRV2B, GUILOCK, ENUMMAP: ENGINE lanes.
 ## State 2026-10-28 (convrules-editor-31) -- adds to the 10-26 state below
 
 * **SHIPPED 10-27/28 (ENGINE-merged to local main):** conv/regreview -> 4582c280 (15 registry entries
