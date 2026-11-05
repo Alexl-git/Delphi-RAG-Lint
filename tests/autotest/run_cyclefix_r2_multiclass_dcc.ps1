@@ -9,6 +9,16 @@
           Aux read through a typed local of Child; `is TDemoGageAux` must stay true for a Child.
     leaf  the two-class pair with an existing leaf declaring IDemoGagePortSurface differently: only that
           interface takes a suffix.
+    nested two classes, `with Part as TDemoGageAux do with Owner as TDemoGagePort do` (1.43 CYC-C): Owner is read
+          through the Aux interface (a library member, its getter GetOwnerSurface because TPersistent declares
+          GetOwner); Name, on both classes, must stay the INNER one's: the stdout shows which.
+    comma  the same as one head, `with Part as TDemoGageAux, Owner as TDemoGagePort do`.
+    lines  the same head on two lines.
+    libwrite one class; a library member read and written bare in a `with` body (Name, Tag): the consumer has
+          its own Name and Tag, so a wrong binding shows in the stdout (with a second positive control).
+    redecl a class(TLabel): Caption, redeclared without a type in `published`, typed in TControl.
+    castlib library members through a cast, no `with` needed: `(Owner as TDemoGagePort).Name`, `.Tag :=` (the
+          1.42 plan was mechanical with an interface lacking them and died in the compile gate).
   FIX PATH: `cycles --fix --apply` on the two-class pair writes the same consumer bytes as the follower
   and is verified; the cast seam (DRAGLINT_CYCLEFIX_BREAK=1) on it is repaired by E2015 through the
   ancestor of the interface concerned, which is NOT the first interface of the edge.
@@ -20,8 +30,14 @@
   REFUSED (planned only; no partial plan: no interface, no follower write):
     z1 the SECOND class is ref-counted, z2 the second class has no IInterface ancestor,
     z3 the second class's `as` has a receiver that is no plain name (receiver-unknown),
-    z4 `with` bodies of two classes overlap (multiple-classes, a shape deliberately not supported),
-    z5 a library-ancestor member in a `with` body of a class of the edge (with-member, out of scope).
+    z4 a library method in overlapping `with` bodies of two classes (with-member),
+    z5 a library method in a `with` body of a class of the edge (with-member: `Free` through an interface would
+       release a temporary on a freed object), z6 the same with the head on two lines,
+    z7 a protected library member (with-member: whether the consumer sees it depends on its own ancestry),
+    z8 an indexed library property (with-member),
+    z9 a library method through a cast (class-method).
+  NO-CLASS: an `is` operand that is an interface its unit keeps refuses other-ref naming the line; a private library
+  name is ignored (the consumer's own FOwner stays its own, planned, not on the interface).
 
   POSITIVE CONTROL: the followed two-class copy with GetNote returning '' still compiles, but its stdout
   DIFFERS. The RED run is the f70071d8 engine: it refuses the accepted shapes with multiple-classes.
@@ -173,6 +189,46 @@ function Set-SecondClass([string]$Dir, [string]$Heritage, [string]$Test) {
     "  Part := Owner;`n$Test`nend;")
 }
 
+# 1.43 CYC-C: Aux and Port, named; pHead is the `with` head over both classes.
+function Set-OverlapPair([string]$Dir, [string]$Head) {
+  Add-AuxClass (Join-Path $Dir 'DemoGagePort.pas') '' "  Name := 'portname';`n  with TDemoGageAux.Create(Self) do`n  begin`n    Name := 'auxname';`n    Note := 'first note';`n  end;`n"
+  Edit-File (Join-Path $Dir 'DemoUIConnect.pas') $AttachOld ("procedure TDemoUIConnect.Attach;`nvar`n  I: Integer;`n  Part: TComponent;`nbegin`n" +
+    "  if not (Owner is TDemoGagePort) then`n    Exit;`n  with Owner as TDemoGagePort do`n    Log.Add(Format('ui connected (last gage %d)', [LastGage]));`n" +
+    "  for I := 0 to Owner.ComponentCount - 1 do`n  begin`n    Part := Owner.Components[I];`n    if Part is TDemoGageAux then`n$Head`n" +
+    "        Log.Add('note ' + Note + ' name ' + Name);`n  end;`nend;")
+}
+$nested = { param($Dir) Set-OverlapPair $Dir "      with Part as TDemoGageAux do`n        with Owner as TDemoGagePort do" }
+$comma  = { param($Dir) Set-OverlapPair $Dir "      with Part as TDemoGageAux, Owner as TDemoGagePort do" }
+$lines  = { param($Dir) Set-OverlapPair $Dir "      with Part as TDemoGageAux,`n        Owner as TDemoGagePort do" }
+$libWrite = {
+  param($Dir)
+  Edit-File (Join-Path $Dir 'DemoGagePort.pas') $PortCtor ("$PortCtor  Name := 'portname';`n")
+  Edit-File (Join-Path $Dir 'DemoUIConnect.pas') $AttachOld ("procedure TDemoUIConnect.Attach;`nbegin`n  Name := 'uiname';`n  Tag := 3;`n" +
+    "  if not (Owner is TDemoGagePort) then`n    Exit;`n  with Owner as TDemoGagePort do`n  begin`n    Tag := 7;`n" +
+    "    Log.Add(Format('tag %d name %s', [Tag, Name]));`n  end;`n  (Owner as TDemoGagePort).Log.Add(Format('own tag %d name %s', [Self.Tag, Self.Name]));`nend;")
+}
+$redecl = {
+  param($Dir)
+  $gp = Join-Path $Dir 'DemoGagePort.pas'
+  Edit-File $gp "  System.Classes;" "  System.Classes,`n  Vcl.Controls,`n  Vcl.StdCtrls;"
+  Edit-File $gp $PortDecl "  /// <summary>A label of a port.</summary>`n  TDemoGageLab = class(TLabel)`n  end;`n`n$PortDecl"
+  Edit-File $gp $PortCtor "$PortCtor  TDemoGageLab.Create(Self).Caption := 'first caption';`n"
+  Edit-File (Join-Path $Dir 'DemoUIConnect.pas') $AttachOld ("procedure TDemoUIConnect.Attach;`nvar`n  I: Integer;`n  Part: TComponent;`nbegin`n" +
+    "  if not (Owner is TDemoGagePort) then`n    Exit;`n  with Owner as TDemoGagePort do`n    Log.Add(Format('ui connected (last gage %d)', [LastGage]));`n" +
+    "  for I := 0 to Owner.ComponentCount - 1 do`n  begin`n    Part := Owner.Components[I];`n    if Part is TDemoGageLab then`n      with Part as TDemoGageLab do`n" +
+    "      begin`n        (Owner as TDemoGagePort).Log.Add('caption ' + Caption);`n        Caption := 'second caption';`n" +
+    "        (Owner as TDemoGagePort).Log.Add('caption ' + Caption);`n      end;`n  end;`nend;")
+}
+
+$castLib = {
+  param($Dir)
+  Edit-File (Join-Path $Dir 'DemoGagePort.pas') $PortCtor ("$PortCtor  Name := 'portname';`n")
+  Edit-File (Join-Path $Dir 'DemoUIConnect.pas') $AttachOld ("procedure TDemoUIConnect.Attach;`nbegin`n  Name := 'uiname';`n" +
+    "  if not (Owner is TDemoGagePort) then`n    Exit;`n  (Owner as TDemoGagePort).Tag := 9;`n" +
+    "  (Owner as TDemoGagePort).Log.Add('name ' + (Owner as TDemoGagePort).Name);`n" +
+    "  (Owner as TDemoGagePort).Log.Add(IntToStr((Owner as TDemoGagePort).Tag));`nend;")
+}
+
 function Test-Accepted([string]$Tag, $Prep, [string[]]$Ifaces, [string]$NoClassRegex) {
   Write-Host "== accepted: $Tag" -ForegroundColor Cyan
   $base = Join-Path $WorkDir "$Tag-base"; $edit = Join-Path $WorkDir "$Tag-edit"
@@ -225,6 +281,22 @@ try {
 
   $two = Test-Accepted 'two' $twoClass @('IDemoGageAuxSurface', 'IDemoGagePortSurface') '\bTDemoGage(Aux|Port)\b'
   $null = Test-Accepted 'three' $threeClass @('IDemoGageAuxSurface', 'IDemoGageChildSurface', 'IDemoGagePortSurface') '\bTDemoGage(Aux|Child|Port)\b'
+  $nest = Test-Accepted 'nested' $nested @('IDemoGageAuxSurface', 'IDemoGagePortSurface') '\bTDemoGage(Aux|Port)\b'
+  $null = Test-Accepted 'comma' $comma @('IDemoGageAuxSurface', 'IDemoGagePortSurface') '\bTDemoGage(Aux|Port)\b'
+  $null = Test-Accepted 'lines' $lines @('IDemoGageAuxSurface', 'IDemoGagePortSurface') '\bTDemoGage(Aux|Port)\b'
+  $lw = Test-Accepted 'libwrite' $libWrite @('IDemoGagePortSurface') '\bTDemoGagePort\b'
+  $null = Test-Accepted 'redecl' $redecl @('IDemoGageLabSurface', 'IDemoGagePortSurface') '\bTDemoGage(Lab|Port)\b'
+  $null = Test-Accepted 'castlib' $castLib @('IDemoGagePortSurface') '\bTDemoGagePort\b'
+  $np = [IO.File]::ReadAllText((Join-Path $nest.Edit 'DemoGagePort.pas'))
+  Check 'n1 Owner is carried under the free getter name: TPersistent declares GetOwner' ($np -match 'function TDemoGageAux\.GetOwnerSurface: TComponent;') ''
+  Check 'n2 the nested stdout really holds the inner class''s name (the outer one''s is auxname)' ([Text.Encoding]::ASCII.GetString([Convert]::FromBase64String($nest.Out0)) -match 'note first note name portname') ''
+
+  Write-Host '== positive control: the followed libwrite copy with the library-name getter returning a constant' -ForegroundColor Cyan
+  Edit-File (Join-Path $lw.Edit 'DemoGagePort.pas') "function TDemoGagePort.GetName: TComponentName;`nbegin`n  Result := Name;" "function TDemoGagePort.GetName: TComponentName;`nbegin`n  Result := 'constant';"
+  $bl2 = Invoke-Build $lw.Dproj
+  Check 'pc3 it still compiles' $bl2.Ok $bl2.Errors
+  $outL = Invoke-Program $lw.Dproj
+  Check 'pc4 its stdout DIFFERS from the untouched build (the libwrite compare has teeth)' (($outL -ne '<no exe>') -and ($outL -cne $lw.Out0)) ''
 
   Write-Host '== positive control: the followed two-class copy with the Aux getter returning an empty string' -ForegroundColor Cyan
   Edit-File (Join-Path $two.Edit 'DemoGagePort.pas') "function TDemoGageAux.GetNote: string;`nbegin`n  Result := FNote;" "function TDemoGageAux.GetNote: string;`nbegin`n  Result := '';"
@@ -290,8 +362,12 @@ try {
     @{ Tag = 'z1'; Kind = 'ref-counted'; Names = 'TDemoGageZed'; Prep = { param($Dir) Set-SecondClass $Dir 'TInterfacedObject' "  if Part is TDemoGageZed then`n    Exit;" } },
     @{ Tag = 'z2'; Kind = 'no-iinterface'; Names = 'TDemoGageZed'; Prep = { param($Dir) Set-SecondClass $Dir 'TObject' "  if Part is TDemoGageZed then`n    Exit;" } },
     @{ Tag = 'z3'; Kind = 'receiver-unknown'; Names = 'TDemoGageZed'; Prep = { param($Dir) Set-SecondClass $Dir 'TComponent' "  if (Owner.Components[0] as TDemoGageZed).Tag2 = 0 then`n    Exit;" } },
-    @{ Tag = 'z4'; Kind = 'multiple-classes'; Names = 'overlaps'; Prep = { param($Dir) Set-SecondClass $Dir 'TComponent' "  if Part is TDemoGageZed then`n    with Part as TDemoGageZed do`n      with Part as TDemoGagePort do`n        Log.Add('nested');" } },
-    @{ Tag = 'z5'; Kind = 'with-member'; Names = 'TDemoGageZed'; Prep = { param($Dir) Set-SecondClass $Dir 'TComponent' "  if Part is TDemoGageZed then`n    with Part as TDemoGageZed do`n      if (Name = '') and (Tag2 = 0) then`n        Exit;" } }
+    @{ Tag = 'z4'; Kind = 'with-member'; Names = 'Free'; Prep = { param($Dir) Set-SecondClass $Dir 'TComponent' "  if Part is TDemoGageZed then`n    with Part as TDemoGageZed do`n      with Part as TDemoGagePort do`n        Free;" } },
+    @{ Tag = 'z5'; Kind = 'with-member'; Names = 'TDemoGageZed.*Free'; Prep = { param($Dir) Set-SecondClass $Dir 'TComponent' "  if Part is TDemoGageZed then`n    with Part as TDemoGageZed do`n      if Tag2 = 0 then`n        Free;" } },
+    @{ Tag = 'z6'; Kind = 'with-member'; Names = 'TDemoGageZed.*Free'; Prep = { param($Dir) Set-SecondClass $Dir 'TComponent' "  if Part is TDemoGageZed then`n    with`n      Part as TDemoGageZed do`n      if Tag2 = 0 then`n        Free;" } },
+    @{ Tag = 'z7'; Kind = 'with-member'; Names = 'protected'; Prep = { param($Dir) Edit-File (Join-Path $Dir 'DemoGagePort.pas') "  System.Classes;" "  System.Classes,`n  Vcl.StdCtrls;"; Set-SecondClass $Dir 'TCustomLabel' "  if Part is TDemoGageZed then`n    with Part as TDemoGageZed do`n      if Text = '' then`n        Exit;" } },
+    @{ Tag = 'z8'; Kind = 'with-member'; Names = 'indexed'; Prep = { param($Dir) Set-SecondClass $Dir 'TComponent' "  if Part is TDemoGageZed then`n    with Part as TDemoGageZed do`n      if Components[0] = nil then`n        Exit;" } },
+    @{ Tag = 'z9'; Kind = 'class-method'; Names = 'Free'; Prep = { param($Dir) Set-SecondClass $Dir 'TComponent' "  if Part is TDemoGageZed then`n    (Part as TDemoGageZed).Free;" } }
   )
   foreach ($z in $refusals) {
     Write-Host "== refused: $($z.Kind)" -ForegroundColor Cyan
@@ -309,6 +385,22 @@ try {
     $fx0 = $LASTEXITCODE
     Check "$($z.Tag)5 the follower writes nothing (exit $fx0)" ((Get-TreeHash $d) -ceq $h0) ''
   }
+
+  Write-Host '== no class: the operand is an interface its unit keeps (it names a class of the unit)' -ForegroundColor Cyan
+  $nc = Join-Path $WorkDir 'noclass-edit'; Copy-Tree $Fx $nc
+  Edit-File (Join-Path $nc 'DemoGagePort.pas') $PortDecl ("  TDemoGagePort = class;`n`n  /// <summary>Something with a port.</summary>`n  IDemoHasPort = interface`n    ['{11111111-2222-3333-4444-555555555555}']`n    /// <summary>The port.</summary>`n    function Port: TDemoGagePort;`n  end;`n`n$PortDecl")
+  Edit-File (Join-Path $nc 'DemoUIConnect.pas') $AttachOld "procedure TDemoUIConnect.Attach;`nbegin`n  if Owner is IDemoHasPort then`n    Exit;`nend;"
+  Edit-File (Join-Path $nc 'DemoUIConnect.pas') "  if not (Sender is TDemoGagePort) then`n    Exit;`n  with Sender as TDemoGagePort do`n  begin`n    // Log and LastGage bind to the port; InBuf binds to Self.`n    Log.Add('data ' + InBuf);`n    Log.Add(Format('gage now %d', [LastGage]));`n    LastGage := 0; // <-- a WRITE through the with: an interface of reads cannot carry it`n  end;`n" ''
+  $ncp = (Get-PlanFile (Join-Path $nc 'MemberWrite.dproj') 'noclass').Text
+  Check 'c1 the edge refuses other-ref, naming the interface and its line' ($ncp -match 'IDemoHasPort` \(no class\): refused: other-ref -- line \d+ tests or casts against `IDemoHasPort`') ''
+  Check 'c2 the old wording is gone' (-not $ncp.Contains('names 0 classes')) ''
+
+  Write-Host '== a name private to its library unit is not the consumer''s business' -ForegroundColor Cyan
+  $pv = Join-Path $WorkDir 'private-edit'; Copy-Tree $Fx $pv
+  Edit-File (Join-Path $pv 'DemoUIConnect.pas') $AttachOld "procedure TDemoUIConnect.Attach;`nvar`n  FOwner: Integer;`nbegin`n  if not (Owner is TDemoGagePort) then`n    Exit;`n  with Owner as TDemoGagePort do`n  begin`n    FOwner := LastGage;`n    Log.Add(IntToStr(FOwner));`n  end;`nend;"
+  $pvp = (Get-PlanFile (Join-Path $pv 'MemberWrite.dproj') 'private').Text
+  Check 'v1 planned by member hand-over (TComponent.FOwner does not refuse it)' ($pvp.Contains($Handover)) ''
+  Check 'v2 FOwner is not on the interface' (-not ($pvp -match 'property FOwner')) ''
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }

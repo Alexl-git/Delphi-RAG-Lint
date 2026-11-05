@@ -12,12 +12,12 @@
 
   THE LIBRARY: R2 reads the ancestry of TComponent from a platform library. This runner never
   opens a real library: it indexes a STUB library (System: TObject, IInterface; System.Classes:
-  TPersistent, TComponent with Name, TStrings) in its scratch dir and passes that with --library-db.
+  TPersistent, TComponent with Name and Ping, TStrings) in its scratch dir and passes that with --library-db.
   -LibraryDb is accepted for the battery's uniform call and ignored.
 
   (a) the plan cuts demouiconnect -> demogageport by member hand-over; no with-member refusal.
   (a4) `Self.Name` (a member of the ancestor TComponent the interface does not carry) proceeds too.
-  (b) POSITIVE CONTROL: the unqualified `Name` there is refused `with-member` (it binds to the port
+  (b) POSITIVE CONTROL: the unqualified method `Ping` there is refused `with-member` (it binds to the port
       today and to the consumer after the rewrite). NOT the unqualified `InBuf`: that one binds to the
       port, so R2 carries it in the interface and correctly proceeds.
   (c) with RAD Studio: `cycles --fix --cycle 1 --apply` on a copy (compile gate on) exits 0, the
@@ -82,7 +82,7 @@ try {
   New-Item -ItemType Directory -Force $stubDir | Out-Null
   Set-Text (Join-Path $stubDir 'System.pas') "unit System;`n`ninterface`n`ntype`n  TObject = class`n  end;`n`n  IInterface = interface`n  end;`n`nimplementation`n`nend.`n"
   Set-Text (Join-Path $stubDir 'System.Classes.pas') ("unit System.Classes;`n`ninterface`n`ntype`n  TPersistent = class(TObject)`n  end;`n`n" +
-    "  TComponent = class(TPersistent, IInterface)`n  private`n    FName: string;`n  public`n    property Name: string read FName;`n  end;`n`n  TStrings = class(TPersistent)`n  end;`n`nimplementation`n`nend.`n")
+    "  TComponent = class(TPersistent, IInterface)`n  private`n    FName: string;`n  public`n    procedure Ping;`n    property Name: string read FName;`n  end;`n`n  TStrings = class(TPersistent)`n  end;`n`nimplementation`n`nend.`n")
   $Stub = Join-Path $WorkDir 'stub-library.sqlite'
   & $Exe index $stubDir --db $Stub *> (Join-Path $WorkDir 'index-stub.log')
   Check 's0 the stub library was indexed' (($LASTEXITCODE -eq 0) -and (Test-Path $Stub)) "exit=$LASTEXITCODE"
@@ -99,11 +99,11 @@ try {
   $p4 = Get-Plan $a4 'a4'
   Check 'a4 Self.Name (an uncarried ancestor member, qualified) proceeds too' (($p4.Exit -eq 0) -and $p4.Text.Contains('by **member hand-over through an extracted interface**') -and -not $p4.Text.Contains('refused: with-member')) "exit=$($p4.Exit)"
 
-  Write-Host '== (b) positive control: the unqualified Name still refuses' -ForegroundColor Cyan
-  $b = New-Copy 'b' "  with pPort as TDemoGagePort do`r`n    Log.Add('data ' + Self.InBuf + Name);"
+  Write-Host '== (b) positive control: the unqualified Ping still refuses' -ForegroundColor Cyan
+  $b = New-Copy 'b' "  with pPort as TDemoGagePort do`r`n  begin`r`n    Log.Add('data ' + Self.InBuf);`r`n    Ping;`r`n  end;"
   Check 'b0 indexed' ($b.IndexExit -eq 0) "exit=$($b.IndexExit)"
   $pb = Get-Plan $b 'b'
-  Check 'b1 refused: with-member naming Name' ($pb.Text -match 'refused: with-member -- inside `with \.\.\. as TDemoGagePort do` \(line \d+\), `Name`') ''
+  Check 'b1 refused: with-member naming Ping' ($pb.Text -match 'refused: with-member -- inside `with \.\.\. as TDemoGagePort do`, `Ping` is a method') ''
   Check 'b2 not cut by member hand-over' (-not $pb.Text.Contains('by **member hand-over through an extracted interface**')) ''
 
   if (-not (Test-Path $RsVars)) {

@@ -2417,7 +2417,8 @@ begin
     AddRefusedLines(pStaged, pVerdict, pExplicit, pOut)
   else if pOpts.Apply then
   begin
-    pOut.Add('Verdict: mechanical');
+    { as the JSON's verdict: a run refused after the writes (cancelled, a compile error) is not mechanical }
+    pOut.Add(if Length(pApplied.Refusals) > 0 then CVerdictRefused else 'Verdict: mechanical');
     AddApplyLines(pApplied, pStaged, pOut);
   end
   else

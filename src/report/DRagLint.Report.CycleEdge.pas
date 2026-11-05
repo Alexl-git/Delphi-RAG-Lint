@@ -498,10 +498,13 @@ function IsClassChainMember(const pProject, pLibrary: ISymbolStore; pEnclosingId
 /// interfaces, and a member of TA is also carried by a descendant TB of TA on the edge, even when only TA's
 /// uses read it). A ref that fits no such class goes to the first, whose checks refuse it. A consumer line
 /// naming two classes is rewritten once for each. All-or-nothing: the first class refused refuses the edge,
-/// under that class's kind, the reason naming the class; no steps come back. `multiple-classes` remains for
-/// two shapes only: `with` bodies of two different classes that overlap (nested, or one `with X as TA, Y as
-/// TB do`) -- a bare name there has two candidates and the check of one interface cannot judge it -- and an
-/// edge that names no class at all (its `is` / `as` operand is an interface or another type).</para>
+/// under that class's kind, the reason naming the class; no steps come back. `with` bodies of two different
+/// classes may overlap (nested, or one `with X as TA, Y as TB do`, where Y is read in TA's scope; 1.43 CYC-C): each
+/// class checks every bare name of its whole body, so a name either class declares is carried by that class, or
+/// the edge is refused, and the nesting order, unchanged by the rewrite, decides between two carriers as it did
+/// between the classes.</para>
+/// <para>An edge whose `is` / `as` operand is no class (an interface or an alias its declaring unit keeps)
+/// refuses `other-ref`, naming the line (1.43 CYC-C).</para>
 /// <para>Members: each must be a field or a property declared in the class itself (an indexed property is carried for reading, its index list verbatim -- W6 C7; a `default` one or a write refuses)
 /// (`member-unsupported`; a method is `class-method`); `duplicate-identifier` when the class
 /// already has `Get&lt;M&gt;` -- unless it is exactly `function Get&lt;M&gt;: &lt;T&gt;;` and the property M
@@ -514,11 +517,17 @@ function IsClassChainMember(const pProject, pLibrary: ISymbolStore; pEnclosingId
 /// ISurface` when X's static type implements IInterface, else `TAnc(X) as ISurface` (TAnc =
 /// AncestorImplementingIInterface). X must be `Self`, a parameter or local of the enclosing
 /// routine, or a field / property of the enclosing class or its ancestors (`receiver-unknown`);
-/// a project TAnc must not be declared in B (`cast-unseen`). Every name used inside a
-/// `with X as TClass do` body that is a member of the class or of an ancestor but not
-/// carried, a getter name or an IInterface method refuses `with-member` (it would bind to
+/// a project TAnc must not be declared in B (`cast-unseen`). A `with` head may span lines. A
+/// public or published non-indexed field or property of the class chain, a library ancestor included, named bare in a
+/// `with X as TClass do` body goes on the interface too (read, or a plain write through a setter; 1.43 CYC-C;
+/// an accessor name the chain already declares takes the suffix Surface); one private to its library
+/// unit is invisible to the consumer and ignored. Every other name used there that is a
+/// member of the class or of an ancestor but not carried (a library method such as `Free`: the temporary
+/// interface would be released on a freed object; a protected library member: whether the consumer sees it
+/// is not decidable here), a getter name or an IInterface method refuses `with-member` (it would bind to
 /// something else after the rewrite); an ancestry no index completes refuses
-/// `ancestry-unknown`. A failed `as ISurface` raises EIntfCastError, not EInvalidCast: when
+/// `ancestry-unknown`. The same member read or written as `(X as TClass).M` or `TClass(X).M` is carried the same
+/// way; there a library method refuses `class-method` and any other uncarriable one `member-unsupported`. A failed `as ISurface` raises EIntfCastError, not EInvalidCast: when
 /// A names EInvalidCast, an `as` without an earlier `is` guard on the same receiver in its
 /// routine refuses `exception-semantics`.</para>
 /// <para>Leaf: the units declaring the member types -- a project unit as bound from B, else
@@ -1846,12 +1855,22 @@ type
     Store: ISymbolStore;
   end;
 
+  { A class chain's member a consumer names: the nearest declaration (its visibility decides) and the
+    nearest holding a type; a redeclaration without one has Sym <> TypedSym. }
+  TChainMember = record
+    Owner   : TStoredType;
+    Typed   : TStoredType;
+    Sym     : TSymbol;
+    TypedSym: TSymbol;
+  end;
+
   { The indexes R2 reads types from: the project first, then the platform library.
     A library type's ancestors are looked up in the library only. }
   TTypeIndex = record
     Project: ISymbolStore;
     Lib    : ISymbolStore;
     function Find(const pName: string; pLibOnly: Boolean; out pType: TStoredType): Boolean;
+    function FindFrom(const pName: string; const pFrom: TStoredType; out pType: TStoredType): Boolean;
     function IsLib(const pType: TStoredType): Boolean;
     function IsInterfaceName(const pName: string; pLibOnly: Boolean): Boolean;
     function ParentOf(const pType: TStoredType): string;
@@ -1922,6 +1941,38 @@ begin
   pType:= Default(TStoredType);
   var N:= BareTypeName(pName);
   Result:= ((not pLibOnly) and PickType(Project, N, pType)) or PickType(Lib, N, pType);
+end;
+
+{ 1.43: the ancestor pName of pFrom as pFrom's own unit sees it. The library holds both Vcl.StdCtrls.TLabel and
+  FMX.StdCtrls.TLabel (TForm, TEdit, TButton the same) and Find takes the widest: the wrong chain hides members
+  from a `with` check. A library name declared by several units is taken from pFrom's unit, else from the last uses
+  entry of pFrom's file that names one of them; with none, what Find answers. }
+function TTypeIndex.FindFrom(const pName: string; const pFrom: TStoredType; out pType: TStoredType): Boolean;
+begin
+  Result:= Find(pName, IsLib(pFrom), pType);
+  if not Result or not IsLib(pType) then Exit;
+  var Candidates: TArray<TSymbol>:= nil;
+  for var S in Lib.FindSymbolsByExactName(BareTypeName(pName)) do
+    if (S.Kind in [skClass, skInterface]) and (S.FileId <> pType.Sym.FileId) then Candidates:= Candidates + [S];
+  if Candidates = nil then Exit;
+  Candidates:= Candidates + [pType.Sym];
+  for var S in Candidates do
+    if IsLib(pFrom) and (S.FileId = pFrom.Sym.FileId) and (S.EndLine > S.StartLine) then
+    begin
+      pType.Sym:= S;
+      Exit;
+    end;
+  var Entries:= pFrom.Store.GetUnitUsesForFile(pFrom.Sym.FileId);
+  for var I:= High(Entries) downto 0 do
+    for var S in Candidates do
+    begin
+      var U:= UnitOfFile(Lib.GetFilePath(S.FileId));
+      if (S.EndLine > S.StartLine) and (SameText(U, Entries[I].UnitName) or EndsText('.' + Entries[I].UnitName, U)) then
+      begin
+        pType.Sym:= S;
+        Exit;
+      end;
+    end;
 end;
 
 function TTypeIndex.IsLib(const pType: TStoredType): Boolean;
@@ -2046,7 +2097,7 @@ begin
     var P:= pIdx.ParentOf(Cur);
     if P = '' then Exit(True);
     pStop:= BareTypeName(P);
-    if not pIdx.Find(P, pIdx.IsLib(Cur), Next) then Break;
+    if not pIdx.FindFrom(P, Cur, Next) then Break;
     Cur:= Next;
   end;
 end;
@@ -2232,6 +2283,32 @@ begin
   Result:= Length(pLines);
 end;
 
+{ Whether the `as pClass` on line pLine is an item of a `with` head: `with` precedes it on that line, or
+  on an earlier line with nothing but the rest of the head between (`with A as TA,` / `  B as TB do`). }
+function IsWithHeadLine(const pLines: TArray<string>; pLine: Integer; const pClass: string): Boolean;
+const
+  CHeadEnd      = '\b(do|then|else|begin|end|of|try|repeat|except|finally)\b|;';
+  CWithWord     = '\bwith\b';
+  CMaxHeadLines = 8;  { a `with` head longer than this is not written by hand }
+begin
+  var Code:= PlainCode(LineOf(pLines, pLine));
+  var AsAt:= TRegEx.Match(Code, '\bas\s+' + TRegEx.Escape(pClass) + '\b', [roIgnoreCase]);
+  if not AsAt.Success then Exit(False);
+  var Before:= Copy(Code, 1, AsAt.Index - 1);
+  if TRegEx.IsMatch(Before, CWithWord, [roIgnoreCase]) then Exit(True);
+  if TRegEx.IsMatch(Before, CHeadEnd, [roIgnoreCase]) then Exit(False);
+  for var L:= pLine - 1 downto Max(1, pLine - CMaxHeadLines) do
+  begin
+    var Prev:= PlainCode(LineOf(pLines, L));
+    var Withs:= TRegEx.Matches(Prev, CWithWord, [roIgnoreCase]);
+    if Withs.Count > 0 then
+      Exit(not TRegEx.IsMatch(Copy(Prev, Withs[Withs.Count - 1].Index + Withs[Withs.Count - 1].Length, MaxInt), CHeadEnd,
+        [roIgnoreCase]));
+    if TRegEx.IsMatch(Prev, CHeadEnd, [roIgnoreCase]) then Exit(False);
+  end;
+  Result:= False;
+end;
+
 // Where the getter bodies go in the class unit: after the `$R *.dfm` resource line when the
 // unit has one, else after its implementation uses clause, else after `implementation`.
 function BodyAnchor(const pLines: TArray<string>): Integer;
@@ -2383,6 +2460,7 @@ type
     function CheckMembers: Boolean;
     function MemberOf(const pR: TEdgeRef): TSymbol;
     function MemberUseRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
+    function MemberShapeWhy(const pR: TEdgeRef; const pS: TSymbol): string;
     function CallMayWrite(const pCallee: string; pLine: Integer): Boolean;
     function CheckWrites: Boolean;
     procedure AddSetterLines(pI: Integer; const pIndent: string; pDecls, pBodies: TList<string>);
@@ -2395,6 +2473,15 @@ type
     function RewriteConsumer: Boolean;
     function CheckCastUnit: Boolean;
     procedure SkipCycleAncestors;
+    function BareBodyRefs(pWith: Integer; const pRefs: TArray<TReference>): TArray<TReference>;
+    function ChainMemberOf(const pName: string; out pMember: TChainMember): Boolean;
+    function FirstCarry(const pR: TReference; pInWith: Boolean; pNames, pChain: TStringList;
+      pCarried: TDictionary<string, Integer>; out pIdx: Integer): Boolean;
+    function CarryUse(const pR: TReference; pIdx: Integer; pChain: TStringList): Boolean;
+    function CarryChainMember(const pR: TReference; pInWith: Boolean; pNames, pChain: TStringList;
+      pCarried: TDictionary<string, Integer>): Boolean;
+    procedure RemoveCarriedNames(pNames: TStringList);
+    function CheckCastChainMembers: Boolean;
     function CheckWithBodies: Boolean;
     function LibUnitOf(const pIdent: string): string;
     function IsScopeRoot(const pSegment: string): Boolean;
@@ -2601,6 +2688,15 @@ begin
   if Best.Line > 0 then
     Exit(Refuse(BestKind, Best.Name, FFromFid, Best.Line, Format('line %d %s (`%s`)', [Best.Line, BestWhat,
       Best.LineText])));
+  { 1.43 CYC-C: an `is` / `as` operand of the edge that is no class: nothing to hand over. The moves were
+    tried first (the planner reaches here only when the declaration stayed), so the refusal names the line }
+  if Length(FSurface.ClassNames) = 0 then
+    for var R in FSurface.Refs do
+      if R.Kind in [erTypeIs, erTypeAs] then
+        Exit(Refuse('other-ref', R.Name, FFromFid, R.Line, Format('line %d tests or casts against `%s`, which is no ' +
+          'class of `%s` (`%s`): the hand-over extracts an interface from a class, and this declaration could not be ' +
+          'moved out of the unit either; move what it names, or the declaration, by hand', [R.Line, R.Name,
+          FSurface.ToStem, Trim(R.LineText)])));
   { 1.42 cyc2: an edge through several classes never reaches here with more than one (TEdgeComposer) }
   if Length(FSurface.ClassNames) <> 1 then
     Exit(Refuse('multiple-classes', string.Join(', ', FSurface.ClassNames), FFromFid, 0,
@@ -2724,8 +2820,8 @@ end;
   chain from the class's parent up to that ancestor declares `Get<M>` / `Set<M>` (the names the
   interface needs; the class itself is checked by CheckMembers / CheckWrites). Else why not, the
   refusal kind in pKind: member-unsupported, or duplicate-identifier for a getter / setter name.
-  A member of a library ancestor or of another unit is never on the edge: CheckWithBodies keeps
-  refusing it inside a `with` body. }
+  A member of a library ancestor or of another unit is never on the edge; inside a `with` body
+  CheckWithBodies carries a library one and refuses the other. }
 function TMemberPlan.InheritedWhy(const pM: TSymbol; out pKind: string): string;
 var
   Next: TStoredType;
@@ -2879,32 +2975,37 @@ end;
   member of a class. Every such shape is `member-write`; a plain write is carried by a
   read/write property (CheckWrites). }
 function TMemberPlan.MemberUseRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
+begin
+  pKind := 'member-write';
+  pWhat := MemberShapeWhy(pR, MemberOf(pR));
+  Result:= pWhat <> '';
+  if not Result then pKind:= '';
+end;
+
+{ What makes the use pR of the member pS uncarriable by an interface property; '' when nothing does. }
+function TMemberPlan.MemberShapeWhy(const pR: TEdgeRef; const pS: TSymbol): string;
 var
   T: TStoredType;
 begin
-  pKind:= 'member-write';
-  pWhat:= '';
-  var S     := MemberOf(pR);
+  Result:= '';
   var Code  := PlainCode(pR.LineText);
   var Name  := TRegEx.Escape(pR.Name);
   var Callee:= CallArgumentCallee(Code, pR.Name);
-  if (pR.Kind = erMemberWrite) and not ((S.Kind in [skField, skProperty]) and (S.ParentId > 0)) then
-    pWhat:= Format('writes `%s`, which is no field or property of a class; an interface carries members only',
+  if (pR.Kind = erMemberWrite) and not ((pS.Kind in [skField, skProperty]) and (pS.ParentId > 0)) then
+    Result:= Format('writes `%s`, which is no field or property of a class; an interface carries members only',
       [pR.Name])
   else if TRegEx.IsMatch(Code, '\b(Inc|Dec)\s*\([^,;]*?(?<!\w)' + Name + '\s*[,)]', [roIgnoreCase]) then
-    pWhat:= Format('changes `%s` with Inc / Dec, which takes a variable; a property cannot be passed to it',
+    Result:= Format('changes `%s` with Inc / Dec, which takes a variable; a property cannot be passed to it',
       [pR.Name])
   else if (Callee <> '') and CallMayWrite(Callee, pR.Line) then
-    pWhat:= Format('passes `%s` as an argument of `%s`, which may take it as a var / out parameter; a property ' +
+    Result:= Format('passes `%s` as an argument of `%s`, which may take it as a var / out parameter; a property ' +
       'cannot be passed to one', [pR.Name, Callee])
   else if TRegEx.IsMatch(Code, '(?<!\w)' + Name + '(\s*(\.\s*\w+|\[[^\]]*\]|\^))+\s*:=', [roIgnoreCase]) and
-    not FIdx.Find(Trim(S.Signature), False, T) then
-    pWhat:= Format('writes into `%s` (of type `%s`), which is no class or interface; through a property the ' +
-      'write would change a copy', [pR.Name, Trim(S.Signature)])
+    not FIdx.Find(Trim(pS.Signature), False, T) then
+    Result:= Format('writes into `%s` (of type `%s`), which is no class or interface; through a property the ' +
+      'write would change a copy', [pR.Name, Trim(pS.Signature)])
   else if (pR.Kind = erMemberWrite) and not TRegEx.IsMatch(Code, '(?<!\w)' + Name + '\s*:=', [roIgnoreCase]) then
-    pWhat:= Format('writes `%s` other than by a plain `%s :=` assignment', [pR.Name, pR.Name]);
-  Result:= pWhat <> '';
-  if not Result then pKind:= '';
+    Result:= Format('writes `%s` other than by a plain `%s :=` assignment', [pR.Name, pR.Name]);
 end;
 
 { B1: whether the routine pCallee called on line pLine may take an argument by var / out.
@@ -3228,8 +3329,7 @@ begin
       Done.Add(R.Line);
       if not RewriteLine(R.Line, R.EnclosingId, Text) then Exit(False);
       AddEdit(FFromFid, R.Line, True, [Text]);
-      if TRegEx.IsMatch(PlainCode(LineOf(FLines, R.Line)), '\bwith\b.*\bas\s+' + TRegEx.Escape(FCls.Name) + '\b',
-        [roIgnoreCase]) then FWithLines.Add(R.Line);
+      if IsWithHeadLine(FLines, R.Line, FCls.Name) then FWithLines.Add(R.Line);
     end;
   finally
     Done.Free;
@@ -3327,48 +3427,335 @@ begin
   Result:= EndsStr('.', Before) and not EndsStr('..', Before);
 end;
 
+{ The refs of the consumer that could rebind inside the `with` at line pWith: bare names (a type, a
+  member access or a qualified name cannot rebind) after the `as <class>` of the head -- in `with A as TA,
+  B as TB do` B is read in TA's scope, exactly as in the nested form -- up to WithBodyEnd. Columns are read
+  from the file as indexed: another class's rewrite of the line in FLines moved them. }
+function TMemberPlan.BareBodyRefs(pWith: Integer; const pRefs: TArray<TReference>): TArray<TReference>;
+const
+  CNoRebind: array[0..1] of string = ('type_use', 'member-access');
+begin
+  Result:= nil;
+  var Indexed:= FSource.FileLines(FFromFid);
+  var Head   := TRegEx.Match(LineOf(Indexed, pWith), '\bas\s+' + TRegEx.Escape(FCls.Name) + '\b', [roIgnoreCase]);
+  var HeadEnd:= if Head.Success then Head.Index + Head.Length else 0;
+  var Last   := WithBodyEnd(FLines, pWith);
+  for var R in pRefs do
+  begin
+    var InHead:= (R.StartLine = pWith) and (R.StartCol < HeadEnd);
+    if not InRange(R.StartLine, pWith, Last) or (R.ReceiverText <> '') or InHead then Continue;
+    if not MatchText(R.Kind, CNoRebind) and not QualifiedAt(Indexed, R.StartLine, R.StartCol) then Result:= Result + [R];
+  end;
+end;
+
+{ The nearest declaration of pName walking up from the class: Sym (its visibility decides) and TypedSym,
+  the nearest one holding a type (`published property Caption;` redeclares without one). False when
+  the chain does not declare it. }
+function TMemberPlan.ChainMemberOf(const pName: string; out pMember: TChainMember): Boolean;
+var
+  Next: TStoredType;
+begin
+  Result := False;
+  pMember:= Default(TChainMember);
+  var Cur:= Stored(FCls);
+  for var Hop:= 1 to CMaxAncestorHops do
+  begin
+    var S:= Cur.Store.FindChildSymbolByName(Cur.Sym.Id, pName);
+    if (S.Id > 0) and not Result then
+    begin
+      pMember.Owner:= Cur;
+      pMember.Sym  := S;
+      Result       := True;
+    end;
+    if (S.Id > 0) and (Trim(S.Signature) <> '') then
+    begin
+      pMember.Typed   := Cur;
+      pMember.TypedSym:= S;
+      Exit;
+    end;
+    if not FIdx.FindFrom(FIdx.ParentOf(Cur), Cur, Next) then Exit;
+    Cur:= Next;
+  end;
+end;
+
+{ A member's type as symbols.signature holds it: a property redeclared without one (`property Caption;`)
+  is stored with the inherited type behind a colon. }
+function MemberTypeText(const pSignature: string): string;
+begin
+  Result:= Trim(pSignature);
+  if Result.StartsWith(':') then Result:= Trim(Result.Substring(1));
+end;
+
+{ The visibility section a member is declared in, lower case ('strict private'); 'public' when its
+  class opens without a section; '' when the source cannot be read. }
+function DeclaredVisibility(const pOwner: TStoredType; const pSym: TSymbol): string;
+begin
+  var Path:= pOwner.Store.GetFilePath(pOwner.Sym.FileId);
+  if not TFile.Exists(Path) then Exit('');
+  var Lines:= TFile.ReadAllLines(Path);
+  Result:= 'public';
+  for var L:= Min(pSym.StartLine, Length(Lines)) - 1 downto pOwner.Sym.StartLine do
+  begin
+    var V:= TRegEx.Match(BareCode(Lines[L - 1]), '^\s*((strict\s+)?(private|protected)|public|published)\b', [roIgnoreCase]);
+    if V.Success then Exit(LowerCase(TRegEx.Replace(V.Groups[1].Value, '\s+', ' ')));
+  end;
+end;
+
+{ Whether pName is an indexed property where pMember's type is declared; '' when not. A source
+  that cannot be read answers why. }
+function IndexedWhy(const pMember: TChainMember; const pName: string): string;
+begin
+  Result:= '';
+  var Path:= pMember.Typed.Store.GetFilePath(pMember.Typed.Sym.FileId);
+  if not TFile.Exists(Path) then Exit('its library source cannot be read, so its declaration cannot be checked');
+  var Lines:= TFile.ReadAllLines(Path);
+  var Line := pMember.TypedSym.StartLine;
+  if InRange(Line, 1, Length(Lines)) and TRegEx.IsMatch(BareCode(Lines[Line - 1]), '\bproperty\s+' + TRegEx.Escape(pName) +
+    '\s*\[', [roIgnoreCase]) then Result:= 'it is an indexed property';
+end;
+
+{ Why the interface cannot carry the library member, seen from the consumer; '' when it can. pVis: its
+  section (DeclaredVisibility). A method: `Free` through an interface would leave a temporary to release on a freed
+  object, and no method is carried. A protected member: the consumer sees it only if it descends from its class,
+  which this check cannot tell, so carrying could itself rebind. }
+function UncarriableWhy(const pMember: TChainMember; const pName, pVis: string): string;
+begin
+  Result:=
+    if pMember.Sym.Kind not in [skField, skProperty] then
+      'the interface does not carry a library method (after the rewrite the name would bind to something ' +
+      'else); qualify or split the `with` by hand'
+    else if pVis = '' then 'its library source cannot be read, so its visibility is unknown'
+    else if EndsText('protected', pVis) then
+      'it is protected: whether the consumer sees it depends on the consumer''s own ancestry, so carrying ' +
+      'it could itself change what the name binds to'
+    else if pMember.TypedSym.Id = 0 then 'the index holds no type for it'
+    else if MemberTypeText(pMember.TypedSym.Signature).IndexOfAny(['[', ']', ':', '(', ')', ';']) >= 0 then
+      'its type is not a plain name'
+    else IndexedWhy(pMember, pName);
+end;
+
+{ The accessor name for a carried library member: pPrefix + pName, or with the suffix Surface when the chain
+  already declares that (TPersistent.GetOwner: a method of that name in the class would hide it). '' when both are taken. }
+function FreeAccessorName(pChain: TStringList; const pPrefix, pName: string): string;
+begin
+  Result:= pPrefix + pName;
+  if pChain.IndexOf(Result) < 0 then Exit;
+  Result:= Result + 'Surface';
+  if pChain.IndexOf(Result) >= 0 then Result:= '';
+end;
+
+{ pR names a chain member not carried yet: goes on the interface when it can, pIdx its index in FMembers; -1 when there
+  is nothing to carry: a name that is not a member (pNames), a member private to its library unit (the consumer never
+  saw it: the name binds past it before and after), and any but a public or published field or property of a project
+  class, which stays in pNames for the caller's check. False with the refusal set when it cannot be carried: a
+  library member, UncarriableWhy; `with-member` in a `with` body, else `class-method` / `member-unsupported`. }
+function TMemberPlan.FirstCarry(const pR: TReference; pInWith: Boolean; pNames, pChain: TStringList;
+  pCarried: TDictionary<string, Integer>; out pIdx: Integer): Boolean;
+var
+  Found: TChainMember;
+begin
+  Result:= True;
+  pIdx  := -1;
+  var Name:= pR.NameText;
+  var At  := pNames.IndexOf(Name);
+  if (At < 0) or not ChainMemberOf(Name, Found) then Exit;
+  var Vis:= DeclaredVisibility(Found.Owner, Found.Sym);
+  if FIdx.IsLib(Found.Owner) then
+  begin
+    if EndsText('private', Vis) then
+    begin
+      pNames.Delete(At);
+      Exit;
+    end;
+    var Why:= UncarriableWhy(Found, Name, Vis);
+    if Why <> '' then
+    begin
+      var IsMember:= Found.Sym.Kind in [skField, skProperty];
+      var Kind    := if pInWith then 'with-member' else if IsMember then 'member-unsupported' else 'class-method';
+      var Where   := Format((if pInWith then 'inside `with ... as %s do`' else 'through a cast to `%s`'), [FCls.Name]);
+      Exit(Refuse(Kind, Name, FFromFid, pR.StartLine, Format('%s, `%s` is %s of the library ancestor `%s`: %s', [Where, Name,
+        (if IsMember then 'a member' else 'a method'), Found.Owner.Sym.Name, Why])));
+    end;
+  end
+  else if not MatchText(Vis, ['public', 'published']) or (UncarriableWhy(Found, Name, Vis) <> '') then Exit;
+  var Getter:= FreeAccessorName(pChain, 'Get', Found.Sym.Name);
+  if Getter = '' then
+    Exit(Refuse('duplicate-identifier', 'Get' + Name, FFromFid, pR.StartLine, Format('`%s` or an ancestor already ' +
+      'declares `Get%s` and `Get%sSurface`, the getter names the interface could use for the member `%s`',
+      [FCls.Name, Name, Name, Name])));
+  pNames.Delete(At);
+  var M:= Found.Sym;
+  M.Id       := 0;  { an id of another store; FIndexed and the edge's refs key on the project's }
+  M.Signature:= MemberTypeText(Found.TypedSym.Signature);
+  M.FileId   := FClsFid;
+  M.StartLine:= FCls.StartLine;  { AddLeafUse binds the type from here }
+  M.EndLine  := FCls.StartLine;
+  pIdx:= FMembers.Add(M);
+  FGetters.Add(Getter);
+  FReads.Add(M.Name);
+  SetLength(FSetters, FMembers.Count);
+  pCarried.Add(LowerCase(Name), pIdx);
+end;
+
+{ One use of the carried member pIdx: no shape a property cannot take; a plain write adds its setter. }
+function TMemberPlan.CarryUse(const pR: TReference; pIdx: Integer; pChain: TStringList): Boolean;
+begin
+  Result:= True;
+  var U:= Default(TEdgeRef);
+  U.Name    := pR.NameText;
+  U.Line    := pR.StartLine;
+  U.LineText:= LineOf(FLines, pR.StartLine);
+  var Written:= SameText(pR.Kind, 'write') or TRegEx.IsMatch(PlainCode(U.LineText), '(?<![\w.])' + TRegEx.Escape(pR.NameText) +
+    '\s*:=', [roIgnoreCase]);
+  U.Kind:= if Written then erMemberWrite else erMemberRead;
+  var Why:= MemberShapeWhy(U, FMembers[pIdx]);
+  if Why <> '' then
+    Exit(Refuse('member-write', pR.NameText, FFromFid, pR.StartLine, Format('line %d %s (`%s`)', [pR.StartLine, Why,
+      Trim(U.LineText)])));
+  if not Written or (FSetters[pIdx] <> '') then Exit;
+  var Name  := FMembers[pIdx].Name;
+  var Setter:= FreeAccessorName(pChain, 'Set', Name);
+  if Setter = '' then
+    Exit(Refuse('duplicate-identifier', 'Set' + Name, FFromFid, pR.StartLine, Format('line %d writes the member ' +
+      '`%s`; `%s` or an ancestor already declares `Set%s` and `Set%sSurface`, the setter names the interface could use',
+      [pR.StartLine, Name, FCls.Name, Name, Name])));
+  FSetters[pIdx]:= Setter;
+end;
+
+{ One bare name of a `with` body, or a member through a cast, against the class chain: a public or published field
+  or property goes on the interface (first use), its getter reading it by name and a plain write adding a setter (the
+  consumer compiled, so it is writable). The edge does not always hold one a project class declares: the index binds
+  a bare name to the innermost `with` only, so the outer class's member in a nested body comes here.
+  pCarried: member name (lower case) -> index in FMembers. }
+function TMemberPlan.CarryChainMember(const pR: TReference; pInWith: Boolean; pNames, pChain: TStringList;
+  pCarried: TDictionary<string, Integer>): Boolean;
+var
+  Idx: Integer;
+begin
+  Result:= True;
+  if not pCarried.TryGetValue(LowerCase(pR.NameText), Idx) then
+  begin
+    if not FirstCarry(pR, pInWith, pNames, pChain, pCarried, Idx) then Exit(False);
+    if Idx < 0 then Exit;
+  end;
+  Result:= CarryUse(pR, Idx, pChain);
+end;
+
+{ Takes the members and methods the interface carries out of pNames. }
+procedure TMemberPlan.RemoveCarriedNames(pNames: TStringList);
+  procedure Take(const pName: string);
+  begin
+    var At:= pNames.IndexOf(pName);
+    if At >= 0 then pNames.Delete(At);
+  end;
+begin
+  for var M in FMembers do Take(M.Name);
+  for var M in FMethods do Take(M.Name);
+end;
+
+{ 1.43: `(X as TClass).M` and `TClass(X).M` on a line the rewrite retypes, with M a member the edge does not list
+  (the index binds it to its declaring class, a library ancestor's or another unit's): without M on the interface
+  the plan is mechanical and the compile gate rolls it back. So M is carried like a `with` body's name. }
+function TMemberPlan.CheckCastChainMembers: Boolean;
+var
+  Names  : TStringList;
+  Chain  : TStringList;
+  Carried: TDictionary<string, Integer>;
+  Lines  : TList<Integer>;
+  Stop   : string;
+begin
+  Result := True;
+  Names  := TStringList.Create(dupIgnore, True, False);
+  Chain  := TStringList.Create(dupIgnore, True, False);
+  Carried:= TDictionary<string, Integer>.Create;
+  Lines  := TList<Integer>.Create;
+  try
+    var C:= TRegEx.Escape(FCls.Name);
+    var Pat:= '(?:\(\s*[A-Za-z_][\w.]*\s+as\s+' + C + '\s*\)|(?<![\w.])' + C + '\s*\(\s*[A-Za-z_]\w*\s*\))\s*\.\s*([A-Za-z_]\w*)(\s*:=)?';
+    var Known:= False;
+    var Complete:= False;
+    for var R in FSurface.Refs do
+    begin
+      if (R.Kind not in [erTypeAs, erTypeCast]) or Lines.Contains(R.Line) then Continue;
+      Lines.Add(R.Line);
+      for var M in TRegEx.Matches(PlainCode(LineOf(FLines, R.Line)), Pat, [roIgnoreCase]) do
+      begin
+        if not Known then
+        begin
+          Known   := True;
+          Complete:= ChainMembers(FIdx, Stored(FCls), Names, Stop);
+          Chain.AddStrings(Names);
+          RemoveCarriedNames(Names);
+        end;
+        var Name:= M.Groups[1].Value;
+        var U:= Default(TReference);
+        U.NameText := Name;
+        U.StartLine:= R.Line;
+        U.Kind     := if (M.Groups.Count > 2) and (M.Groups[2].Value <> '') then 'write' else 'read';
+        if not Complete and not MatchText(Name, Chain.ToStringArray) then
+          Exit(Refuse('ancestry-unknown', Stop, FClsFid, FCls.StartLine, Format('the ancestry of `%s` stops at `%s`, ' +
+            'which no index given declares, and line %d reads `%s` through a cast (pass --library-db)', [FCls.Name, Stop,
+            R.Line, Name])));
+        if not CarryChainMember(U, False, Names, Chain, Carried) then Exit(False);
+      end;
+    end;
+  finally
+    Lines.Free;
+    Carried.Free;
+    Chain.Free;
+    Names.Free;
+  end;
+end;
+
 { No name inside a `with X as TClass do` body may change its binding when the interface
   replaces the class: a member of the class chain the interface does not carry, a getter
-  name, an IInterface method. A qualified name (`Self.InBuf`) cannot rebind (T17b D1). }
+  name, an IInterface method. A public or published field or property of the chain is put on the
+  interface first (CarryChainMember). A qualified name (`Self.InBuf`) cannot rebind (T17b D1). }
 function TMemberPlan.CheckWithBodies: Boolean;
 var
-  Names: TStringList;
-  Stop : string;
+  Names  : TStringList;
+  Chain  : TStringList;
+  Carried: TDictionary<string, Integer>;
+  Stop   : string;
 begin
   Result:= True;
   if FWithLines.Count = 0 then Exit;
-  Names:= TStringList.Create(dupIgnore, True, False);
+  Names  := TStringList.Create(dupIgnore, True, False);
+  Chain  := TStringList.Create(dupIgnore, True, False);
+  Carried:= TDictionary<string, Integer>.Create;
   try
     if not ChainMembers(FIdx, Stored(FCls), Names, Stop) then
       Exit(Refuse('ancestry-unknown', Stop, FClsFid, FCls.StartLine, Format('the ancestry of `%s` stops at ' +
         '`%s`, which no index given declares: what a `with` body binds to it cannot be checked (pass --library-db)',
         [FCls.Name, Stop])));
+    Chain.AddStrings(Names);
     Names.AddStrings(FGetters.ToArray);
     for var St in FSetters do if St <> '' then Names.Add(St);
     Names.AddStrings(CIInterfaceMethods);
-    for var M in FMembers do
-      if Names.IndexOf(M.Name) >= 0 then Names.Delete(Names.IndexOf(M.Name));
-    for var M in FMethods do
-      if Names.IndexOf(M.Name) >= 0 then Names.Delete(Names.IndexOf(M.Name));
+    RemoveCarriedNames(Names);
+    { carried for a cast already (CheckCastChainMembers): a write here still needs its setter }
+    for var I:= 0 to FMembers.Count - 1 do
+      if FMembers[I].Id = 0 then Carried.Add(LowerCase(FMembers[I].Name), I);
     var Refs:=FStore.GetReferencesFromFile(FFromFid);
     for var W in FWithLines do
+      for var R in BareBodyRefs(W, Refs) do
+        if not CarryChainMember(R, True, Names, Chain, Carried) then Exit(False);
+    { what was just carried adds names of its own, which the body must not use either }
+    for var I:= 0 to FMembers.Count - 1 do
     begin
-      var DoAt:= TRegEx.Match(LineOf(FLines, W), '\bdo\b', [roIgnoreCase]);
-      var Last:= WithBodyEnd(FLines, W);
-      for var R in Refs do
-      begin
-        { a bare name of the body; the `with` expression itself (before `do`) is outside it }
-        var InBody:= (R.StartLine >= W) and (R.StartLine <= Last) and (R.ReceiverText = '');
-        var InHead:= (R.StartLine = W) and DoAt.Success and (R.StartCol < DoAt.Index);
-        if InBody and not InHead and not MatchText(R.Kind, ['type_use', 'member-access']) and
-          (Names.IndexOf(R.NameText) >= 0) and not QualifiedAt(FLines, R.StartLine, R.StartCol) then
+      Names.Add(FGetters[I]);
+      if FSetters[I] <> '' then Names.Add(FSetters[I]);
+    end;
+    for var W in FWithLines do
+      for var R in BareBodyRefs(W, Refs) do
+        if Names.IndexOf(R.NameText) >= 0 then
           Exit(Refuse('with-member', R.NameText, FFromFid, R.StartLine, Format('inside `with ... as %s do` ' +
             '(line %d), `%s` at line %d names a member of `%s` or its ancestors that the interface does not ' +
             'carry: after the rewrite it would bind to something else', [FCls.Name, W, R.NameText, R.StartLine,
             FCls.Name])));
-      end;
-    end;
   finally
+    Carried.Free;
+    Chain.Free;
     Names.Free;
   end;
 end;
@@ -3642,7 +4029,8 @@ begin
     FIface:= if pIfaceName <> '' then pIfaceName else DefaultIfaceName(FCls.Name);
     Ok:= CheckMembers and CheckWrites and CheckMethods and CheckClass;
     Ok:= Ok and CheckTypeDecls and RewriteConsumer;
-    Ok:= Ok and CheckCastExceptions and CheckWithBodies and CheckMethodMentions and CollectLeafUses;
+    Ok:= Ok and CheckCastExceptions and CheckCastChainMembers;
+    Ok:= Ok and CheckWithBodies and CheckMethodMentions and CollectLeafUses;
   end;
   pRefusal:= FRefusal;
   if not Ok then
@@ -3681,13 +4069,6 @@ begin
 end;
 
 type
-  { 1.42 cyc2: the `with` statement of one class on a consumer line, and the last line of its body. }
-  TClassWith = record
-    ClassName: string;
-    First    : Integer;
-    Last     : Integer;
-  end;
-
   { One PlanMemberInterface run on an edge through several classes: one TMemberPlan per class, over the
     refs of that class and the consumer lines as the classes before it rewrote them. Decisions: the
     plans stay one-class planners (every existing refusal keeps its meaning, per class), and only this
@@ -3704,7 +4085,6 @@ type
     FToFid  : Int64;
     FClasses: TArray<TSymbol>;
     FLines  : TArray<string>;
-    FWiths  : TList<TClassWith>;
     FRefusal: TRecipeRefusal;
     function Refuse(const pKind, pSymbol: string; pLine: Integer; const pReason: string): Boolean;
     function CollectClasses: Boolean;
@@ -3713,12 +4093,10 @@ type
     function SubSurface(pClass: Integer): TEdgeSurface;
     function PickNames(const pGiven: TArray<string>): TArray<string>;
     procedure Overlay(const pSteps: TRecipeSteps);
-    function WithsOverlap: Boolean;
     function Merge(const pParts: TArray<TRecipeSteps>): TRecipeSteps;
   public
     constructor Create(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore; const pSurface: TEdgeSurface;
       const pUnitScopes: TArray<string>);
-    destructor Destroy; override;
     function Run(const pLeafUnit: string; const pIfaceNames: TArray<string>; out pRefusal: TRecipeRefusal): TRecipeSteps;
   end;
 
@@ -3736,13 +4114,6 @@ begin
   FFromFid    := pSource.FidOfStem(pSurface.FromStem);
   FToFid      := pSource.FidOfStem(pSurface.ToStem);
   FLines      := pSource.FileLines(FFromFid);
-  FWiths      := TList<TClassWith>.Create;
-end;
-
-destructor TEdgeComposer.Destroy;
-begin
-  FWiths.Free;
-  inherited Destroy;
 end;
 
 function TEdgeComposer.Refuse(const pKind, pSymbol: string; pLine: Integer; const pReason: string): Boolean;
@@ -3871,21 +4242,6 @@ begin
       FLines[E.Line - 1]:= E.NewLines[0];
 end;
 
-{ Refuses `with` bodies of two classes that overlap: PlanMemberInterface's remarks say why. }
-function TEdgeComposer.WithsOverlap: Boolean;
-begin
-  Result:= False;
-  for var A in FWiths do
-    for var B in FWiths do
-      if not SameText(A.ClassName, B.ClassName) and (A.First <= B.First) and (B.First <= A.Last) then
-      begin
-        Refuse('multiple-classes', A.ClassName + ', ' + B.ClassName, B.First, Format('the `with` body of `%s` at ' +
-          'line %d overlaps the `with` of `%s` at line %d; a bare name there has two candidates, which the check ' +
-          'of one interface cannot judge. Split the `with` statements by hand first', [A.ClassName, A.First,
-          B.ClassName, B.First]));
-        Exit(True);
-      end;
-end;
 
 { Appends pItems not yet in pTo (case-insensitive), in order. }
 procedure AddUniqueText(pTo: TList<string>; const pItems: TArray<string>);
@@ -3974,23 +4330,10 @@ begin
         pRefusal.Reason:= Format('class `%s`: %s', [FClasses[I].Name, Refusal.Reason]);
         Exit;
       end;
-      for var W in P.FWithLines do
-      begin
-        var CW: TClassWith;
-        CW.ClassName:= FClasses[I].Name;
-        CW.First    := W;
-        CW.Last     := WithBodyEnd(FLines, W);
-        FWiths.Add(CW);
-      end;
     finally
       P.Free;
     end;
     Overlay(Parts[I]);
-  end;
-  if WithsOverlap then
-  begin
-    pRefusal:= FRefusal;
-    Exit;
   end;
   Result:= Merge(Parts);
 end;
