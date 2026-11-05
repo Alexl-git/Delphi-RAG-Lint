@@ -1,7 +1,7 @@
 # ask
 
 Asks one report question -- who writes this field, which tables this routine
-touches, what this unit depends on, and the other 23 -- and prints the answer as
+touches, what this unit depends on, and the other 24 -- and prints the answer as
 text. Reach for it when you want the answer on stdout (an agent, a script, a
 terminal) rather than in the IDE: it is the same answer the **drag-lint > Reports**
 menu puts on the clipboard, because that menu now runs this verb.
@@ -13,11 +13,12 @@ Every question of the chart pipeline, by id:
 `butterfly`, `who-calls`, `what-it-calls`, `path`, `effects`, `touches-tables`,
 `exception-paths`, `crosses-boundary`, `protocol-trace`, `change-impact`,
 `tested-by`, `who-writes`, `who-reads`, `feeds-from`, `lands-where`,
-`round-trip`, `class-surface`, `hierarchy`, `wiring`, `event-wiring`,
+`round-trip`, `class-surface`, `hierarchy`, `wiring`, `implementors`, `event-wiring`,
 `lifecycle`, `deps`, `architecture`, `cycles`, `consumers`, `shown-where`.
 
-Each id has its own page (`ask-<id>`) saying what to select and how to read
-the chart.
+Each id has a page saying what to select and how to read the chart: `ask-<id>`,
+except `round-trip` ([Field-Round-Trip-Report](Field-Round-Trip-Report)) and
+`implementors` ([interface-implementors](interface-implementors)).
 
 ## Running it from the CLI
 
@@ -68,16 +69,17 @@ starts with `ask-report:`.
 
 ## How it answers
 
-All twenty-six questions (`touches-tables`, `shown-where`, `deps`,
+All twenty-seven questions (`touches-tables`, `shown-where`, `deps`,
 `class-surface`, `event-wiring`, `tested-by`, `change-impact`, `crosses-boundary`,
 `protocol-trace`, `lifecycle`, `effects`, `feeds-from`, `lands-where`,
-`consumers`, `exception-paths`, `who-calls`, `what-it-calls`, `butterfly`, `hierarchy`, `wiring`, `path`, `architecture`, `cycles`, `who-writes`, `who-reads`, `round-trip`) are answered inside the engine, from the live
+`consumers`, `exception-paths`, `who-calls`, `what-it-calls`, `butterfly`, `hierarchy`, `wiring`, `implementors`, `path`, `architecture`, `cycles`, `who-writes`, `who-reads`, `round-trip`) are answered inside the engine, from the live
 index. `crosses-boundary` takes its counterpart from `--counterpart-db`, else from
 the pair in `report-pairs.json`; with neither it draws the one side and says so, as
 the script does. No question is handed to PowerShell: the engine answers
 all of them itself, and `charts\src\Ask-Report.ps1 -Plain` stays in the repository
-only as an internal parity oracle (not shipped, not a user tool). The text is the same either way: the questions are held to the PowerShell output byte for byte by
-the parity harness (`charts\src\Test-Parity.ps1 -Mode Question`).
+only as an internal parity oracle (not shipped, not a user tool). Twenty-six questions are held to that script's output byte for byte by the parity
+harness (`charts\src\Test-Parity.ps1 -Mode Question`); `implementors` is newer than the
+script, has no PowerShell counterpart, and is held by `tests\autotest\run_implementors_guard.ps1`.
 
 ## Examples
 

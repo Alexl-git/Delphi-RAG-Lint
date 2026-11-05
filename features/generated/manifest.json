@@ -9042,10 +9042,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-05",
         "by": "CHARTS",
-        "build": "1.33.0-alpha",
-        "surfaceHash": "ac8bef600f9010352311eed8a310e026b586f703edc61e47dc6817808c9fa238"
+        "build": "1.42.0-alpha",
+        "surfaceHash": "f88e3250ddbb3b5d882ec002509952dda68815701f6e282d4ab35dcad99589db"
       }
     },
     {
