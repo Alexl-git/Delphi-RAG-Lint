@@ -98,6 +98,7 @@ uses
   , DRagLint.Core.CliError
 , DRagLint.Core.Encoding { EnsureUtf8Bytes -- ApplyLineMarkers reads a file the way the rules did }
   , DRagLint.Query.Implementors { implementors verb (interface report, 1.40) }
+  , DRagLint.Query.CrossImpact { impact --all-projects (1.43) }
   , DRagLint.Query.SyntaxCountVerb { syntax-count verb (GAP-SYNTAXQ, 1.42) }
   , DRagLint.Query.IdentWords { SelfTestIdentWords -- selftest ident-words (concept search, XERJ item 5) }
   , DRagLint.Core.OutputEncoding { --output-encoding / "outputEncoding": stdout + stderr bytes (2026-10-26) }  // dl:unit DRagLint.Core.OutputEncoding accepted -- the flag name, config key and value list are the CLI surface of that unit; ParseArgs and the config reader use all three
@@ -486,6 +487,7 @@ type
     IfrUses       : Boolean;
     IfrMaxSites   : Integer;
     IncludeLibrary: Boolean;
+    AllProjects   : Boolean; // impact --all-projects: every manifest DB, not one
     // v0.43: check-unit (in-memory semantic check) + uses-audit
     Shadow         : string ; // --shadow <dir> (unsaved-buffer overlay)
     { ghost-check --in-place: restore the pre-2026-09-08 behaviour of
@@ -1826,6 +1828,7 @@ begin
       Result.IfrMaxSites:= StrToIntDef(ParamStr(i), -1);
     end
     else if A = '--include-library' then Result.IncludeLibrary:= True
+    else if A = '--all-projects' then Result.AllProjects:= True
     else if (A = '--add-project') and (i < ParamCount) then begin Inc(i); Result.AddProjectName:= ParamStr(i); end
     else if (A = '--shadow') and (i < ParamCount) then begin Inc(i); Result.Shadow:= ParamStr(i); end
     else if (A = '--in-place') and (Result.Command = 'ghost-check') then Result.GhostInPlace:= True
@@ -11542,6 +11545,90 @@ begin
   else Write(OutText);
   Result:= 0;
 end;
+/// <summary>`impact --all-projects`: asks every database the manifest names, one row
+/// per section, including the sections that could not answer.</summary>
+/// <param name="AArgs">QName, Depth, Format; WorkspaceConfig (--config) names the
+/// manifest; CheckPlatform (--platform) narrows the library sections.</param>
+/// <returns>0 the target was found somewhere, also with sections unanswered (the
+/// report says so); 1 found nowhere, or depth 0; 2 usage error, --db given, or a
+/// manifest that did not load.</returns>
+/// <remarks>Read-only. --db is refused rather than ignored: it would name one
+/// database while the answer came from all of them.</remarks>
+function DoImpactAllProjects(const AArgs: TArgs): Integer;
+var
+  Manifest: TIndexManifest;
+  Filter  : TArray<string>;
+  Plan    : TIndexPlan    ;
+begin
+  var IsJson:= SameText(AArgs.Format, 'json');
+  if AArgs.QName = '' then
+  begin
+    ReportNotFoundFor(IsJson, 'Usage: drag-lint impact --qname <Qualified.Name> --all-projects [--platform win32|win64] [--config <manifest>] [--depth N] [--format text|json]');
+    Exit(2);
+  end;
+  if Length(AArgs.DbPaths) > 0 then
+  begin
+    ReportNotFoundFor(IsJson, 'ERROR: impact: --all-projects asks every manifest database; it does not take --db.');
+    Exit(2);
+  end;
+  if AArgs.Depth <= 0 then
+  begin
+    Writeln(AArgs.QName);
+    Writeln('  (depth 0 returns nothing)');
+    Exit(1);
+  end;
+  Manifest:= Default(TIndexManifest);
+  var LoadErr:= '';
+  try
+    if AArgs.WorkspaceConfig <> '' then
+      Manifest:= TManifestIO.ParseText(TFile.ReadAllText(AArgs.WorkspaceConfig),
+        ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig)))
+    else
+    begin
+      Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+      LoadErr := Manifest.LoadError;
+    end;
+    if LoadErr = '' then LoadErr:= TManifestIO.Validate(Manifest);
+  except
+    on E: Exception do LoadErr:= E.Message;
+  end; // try
+  if LoadErr <> '' then
+  begin
+    ReportNotFoundFor(IsJson, 'ERROR: impact: the manifest did not load, so the project list is unknown: ' + LoadErr);
+    Exit(2);
+  end;
+  Filter:= nil;
+  if AArgs.CheckPlatform <> '' then Filter:= [AArgs.CheckPlatform];
+  var Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+  try
+    Plan:= ResolvePlan(Manifest, Filter, Resolver);
+  finally
+    Resolver.Free;
+  end; // try
+  if Length(Plan.Items) = 0 then
+  begin
+    ReportNotFoundFor(IsJson, 'ERROR: impact: the manifest names no index section; nothing can answer.');
+    Exit(2);
+  end;
+  var ConfigPath:= AArgs.WorkspaceConfig;
+  var Report:= BuildCrossImpact(Plan, AArgs.QName, AArgs.Depth, AArgs.CheckPlatform,
+    function(const pItem: TPlanSection): string
+    begin
+      Result:= IndexSectionCommand(pItem, ConfigPath);
+    end);
+  if IsJson then
+  begin
+    var J:= CrossImpactToJson(Report);
+    try
+      Writeln(J.Format(2));
+    finally
+      J.Free;
+    end; // try
+  end
+  else Write(CrossImpactToText(Report));
+  Result:= if Report.Found then 0 else 1;
+end; // function
+
 function DoImpact(const AArgs: TArgs): Integer;
 var
   Store     : ISymbolStore        ;
@@ -37770,7 +37857,7 @@ begin
     else if Args.Command = 'todos'             then Result:= DoTodos           (Args)
     else if Args.Command = 'hover'             then Result:= DoHover           (Args)
     else if Args.Command = 'contrast-selftest' then Result:= DoContrastSelfTest
-    else if Args.Command = 'impact'            then Result:= DoImpact          (Args)
+    else if Args.Command = 'impact'            then Result:= if Args.AllProjects then DoImpactAllProjects(Args) else DoImpact(Args)
     else if Args.Command = 'implementors'      then Result:= DoImplementors    (Args)
     else if Args.Command = 'wiring'            then Result:= DoWiring          (Args)
     else if Args.Command = 'surface'           then Result:= DoSurface         (Args)
