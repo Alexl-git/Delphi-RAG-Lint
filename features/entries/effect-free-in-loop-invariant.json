@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.42.0-alpha",
-  "summary": "Project-wide lint rule, OFF by default: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop",
+  "summary": "Project-wide lint rule, ON by default since 1.43: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop",
   "intro": "Read this to see when effect-free-in-loop-invariant fires and why it stays silent. It reads the stored purity facts in lint-all and names the loop the call can move out of.",
   "wikiPage": "effect-free-in-loop-invariant",
   "surfaces": [

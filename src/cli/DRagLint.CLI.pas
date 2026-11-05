@@ -15526,7 +15526,7 @@ const
     id ships OFF and stays --rule-only on this verb.
     tests\autotest\run_lint_file_discarded_effect_free.ps1. }
   LINT_FILE_OPTIN_ON: array[0..0] of string = ('discarded-effect-free-result');
-  { The OFF-by-default store rules of lane B-EFFECT and 1.42 (DRagLint.Lint.EffectRules). }
+  { The store rules of lane B-EFFECT and 1.42 (DRagLint.Lint.EffectRules). Only side-effect-in-short-circuit ships OFF (1.43, owner Q3); the loops below pass that per id. }
   LANE_BEFFECT_RULES: array[0..3] of string = (
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
     'effect-free-in-loop-invariant');
@@ -23862,7 +23862,7 @@ begin
     if Cfg.ShouldKeep('assert-with-side-effect', {ADefaultDisabled=}True) then
       OptIn:= OptIn + ['assert-with-side-effect'];
     for var Bx in LANE_BEFFECT_RULES do   { lane B-EFFECT }
-      if Cfg.ShouldKeep(Bx, {ADefaultDisabled=}True) then OptIn:= OptIn + [Bx];
+      if Cfg.ShouldKeep(Bx, {ADefaultDisabled=}SameText(Bx, 'side-effect-in-short-circuit')) then OptIn:= OptIn + [Bx];
     if Cfg.ShouldKeep('opaque-to-analysis', {ADefaultDisabled=}True) then   { 1.42 opaque }
       OptIn:= OptIn + ['opaque-to-analysis'];
     if Cfg.ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
@@ -24374,7 +24374,7 @@ begin
     if LoadLintConfig(AArgs).ShouldKeep('assert-with-side-effect', {ADefaultDisabled=}True) then
       OptIn2:= OptIn2 + ['assert-with-side-effect'];
     for var Bx in LANE_BEFFECT_RULES do   { lane B-EFFECT }
-      if LoadLintConfig(AArgs).ShouldKeep(Bx, {ADefaultDisabled=}True) then OptIn2:= OptIn2 + [Bx];
+      if LoadLintConfig(AArgs).ShouldKeep(Bx, {ADefaultDisabled=}SameText(Bx, 'side-effect-in-short-circuit')) then OptIn2:= OptIn2 + [Bx];
     if LoadLintConfig(AArgs).ShouldKeep('virtual-never-overridden', {ADefaultDisabled=}True) then   { G8 }
       OptIn2:= OptIn2 + ['virtual-never-overridden'];
     if LoadLintConfig(AArgs).ShouldKeep('opaque-to-analysis', {ADefaultDisabled=}True) then   { 1.42 opaque }

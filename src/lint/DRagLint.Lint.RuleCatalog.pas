@@ -774,11 +774,12 @@ begin
       two builds, not a style point. }
     B('assert-with-side-effect',      'project-wide', 'warning', 'A routine with a PROVEN effect (writes a field, a global, a parameter or frees storage) is called inside Assert -- release builds compile Assert out, so the effect happens in Debug only', False);
     { --- lane B-EFFECT (1.37.0): three more readers of the stored purity / ui_affinity facts,
-      all OFF and OptedIn-gated like assert-with-side-effect (10-sample gates in the lane REPORT). }
+      OptedIn-gated like assert-with-side-effect (10-sample gates in the lane REPORT). 1.43 (owner Q3: ON unless many false
+      positives or costly): side-effect-in-short-circuit stays OFF (0 actionable of ~85); the other three ship ON. }
     B('side-effect-in-short-circuit',  'project-wide', 'info', 'A routine with a PROVEN effect is called in the right operand of a Boolean and/or -- short-circuit evaluation skips it whenever the left operand decides the result', False);
-    B('property-getter-with-effect',   'project-wide', 'info', 'A property''s read accessor is a method with a PROVEN self-field or global write (lazy initialisers and memos exempt) -- reading a property should not change state', False);
-    B('ui-access-in-thread-transitive', 'project-wide', 'warning', 'A TThread.Execute reaches, through resolved calls not marshalled by Synchronize/Queue, a routine that touches the UI -- the call path is printed', False);
-    B('effect-free-in-loop-invariant', 'project-wide', 'info', 'A PROVEN effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop -- it can move before the loop', False);
+    B('property-getter-with-effect',   'project-wide', 'info', 'A property''s read accessor is a method with a PROVEN self-field or global write (lazy initialisers and memos exempt) -- reading a property should not change state', True);
+    B('ui-access-in-thread-transitive', 'project-wide', 'warning', 'A TThread.Execute reaches, through resolved calls not marshalled by Synchronize/Queue, a routine that touches the UI -- the call path is printed', True);
+    B('effect-free-in-loop-invariant', 'project-wide', 'info', 'A PROVEN effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop -- it can move before the loop', True);
 
     { --- documentation (ADF milestone) --- }
     B('missing-doc', 'documentation', 'warning', 'Public declaration has no DocInsight doc-comment', False); // OFF by default -- fires 1302x on drag-lint's own first-run wave; opt in via "enabled"

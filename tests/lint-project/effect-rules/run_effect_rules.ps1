@@ -8,8 +8,8 @@
   effect_summary / effect_witness / ui_affinity are populated) and runs
   lint-all TWICE:
 
-    RUN 1  bare `lint-all`             -> ZERO findings for the four ids (all
-                                          OFF by default), SOME findings overall.
+    RUN 1  bare `lint-all`             -> side-effect-in-short-circuit: ZERO (OFF by default);
+                                          the other three (ON since 1.43, owner Q3): exactly their TRIGGER lines.
     RUN 2  `--enable <the four ids>`  -> per id, exactly its TRIGGER lines and
                                           none of its CONTROL lines.
 
@@ -44,16 +44,16 @@ function Marks([string]$Pattern) {
 Write-Host "Indexing fixtures..."
 & $exePath index $dir --db $db | Out-Null
 
-Write-Host "RUN 1: bare lint-all (the rules must be OFF by default)..."
+Write-Host "RUN 1: bare lint-all (SC OFF by default; PG, UT, LI ON by default)..."
 $f0 = Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)
 $ids = @($Rules.Values)
-$off = @($f0 | Where-Object { $ids -contains $_.rule }).Count
+$off = @($f0 | Where-Object { $_.rule -eq $Rules["SC"] }).Count
 Write-Host ("  run 1: {0} finding(s) total; ours={1}" -f $f0.Count, $off)
 
 Write-Host "RUN 2: lint-all --enable $($ids -join ',') ..."
 $f = Parse-Findings (& $exePath lint-all --db $db --format json --enable ($ids -join ',') 2>$null)
 $ok = ($off -eq 0) -and ($f0.Count -gt 0)
-$detail = @("off=$($off -eq 0) run1Real=$($f0.Count -gt 0)")
+$detail = @("scOff=$($off -eq 0) run1Real=$($f0.Count -gt 0)")
 foreach ($p in $Rules.Keys) {
   $id   = $Rules[$p]
   $a    = @($f | Where-Object { $_.rule -eq $id })
@@ -71,11 +71,14 @@ foreach ($p in $Rules.Keys) {
     'UT' { @($a | Where-Object { $_.message -like '*->*' -and $_.message -like '*ShowText*' }).Count -eq $a.Count }
     'LI' { @($a | Where-Object { $_.message -like '*effect-free*' -and $_.message -like '*before the loop*' }).Count -eq $a.Count }
   }
-  $r = ($trig.Count -gt 0) -and ($ctl.Count -gt 0) -and ($miss.Count -eq 0) -and ($hit.Count -eq 0) -and ($xtra.Count -eq 0) -and $msgOk
+  # RUN 1: the ON-by-default rules must give exactly the same lines WITHOUT --enable; SC must give none.
+  $b    = @($f0 | Where-Object { $_.rule -eq $id } | ForEach-Object { '{0}|{1}' -f (Split-Path $_.file_path -Leaf).ToLower(), $_.start_line })
+  $bareOk = if ($p -eq 'SC') { $b.Count -eq 0 } else { (@($trig | Where-Object { $b -notcontains $_ }).Count -eq 0) -and (@($b | Where-Object { $trig -notcontains $_ }).Count -eq 0) }
+  $r = $bareOk -and ($trig.Count -gt 0) -and ($ctl.Count -gt 0) -and ($miss.Count -eq 0) -and ($hit.Count -eq 0) -and ($xtra.Count -eq 0) -and $msgOk
   $ok = $ok -and $r
   $detail += ("{0}: triggers={1} controls={2} missing=[{3}] controlsHit=[{4}] extra=[{5}] msg={6}" -f `
     $id, $trig.Count, $ctl.Count, ($miss -join ','), ($hit -join ','), ($xtra -join ','), $msgOk)
 }
 $detail | ForEach-Object { Write-Host "  $_" }
-if ($ok) { Write-Host "PASS  four effect rules: OFF by default; every trigger fires, every control silent"; exit 0 }
+if ($ok) { Write-Host "PASS  four effect rules: SC OFF, PG/UT/LI ON by default; every trigger fires, every control silent"; exit 0 }
 Write-Host "FAIL"; exit 1

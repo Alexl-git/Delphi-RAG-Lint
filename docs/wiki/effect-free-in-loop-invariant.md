@@ -1,6 +1,6 @@
 # Effect-free call in a loop (`effect-free-in-loop-invariant`)
 
-A project-wide lint rule, severity **info**, OFF by default: a call to a PROVEN effect-free, value-returning routine inside a loop, where every iteration would get the same answer. The call can move in front of the loop.
+A project-wide lint rule, severity **info**, ON by default since 1.43 (owner ruling: rules are ON unless they cost time or give many false positives; turn it off with `--disable effect-free-in-loop-invariant`): a call to a PROVEN effect-free, value-returning routine inside a loop, where every iteration would get the same answer. The call can move in front of the loop.
 
 ```pascal
 for var O in Row do
