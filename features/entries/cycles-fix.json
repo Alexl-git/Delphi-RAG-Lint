@@ -137,6 +137,10 @@
       "command": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> --unit <stem> --apply"
     },
     {
+      "ask": "Can it cut a cycle where one unit constructs a class of the other?",
+      "command": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> --unit <stem>"
+    },
+    {
       "ask": "Why was this cycle refused?",
       "command": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> --cycle <n>"
     }

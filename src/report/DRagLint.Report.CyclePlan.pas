@@ -70,7 +70,8 @@ type
   /// member-unsupported, no-iinterface, ref-counted, receiver-unknown,
   /// cast-unseen, with-member, ancestry-unknown, type-unresolved, unresolved-qualified-type, exception-semantics (and reuses leaf-uses-cycle,
   /// qualified-ref, duplicate-identifier, edge-still-used, manual-edit); coupling-remains (lane cyc4: mutual leaves that
-  /// cannot merge, or a prediction that keeps the interface coupling). Line is 0 when the
+  /// cannot merge, or a prediction that keeps the interface coupling); ctor-inversion-surface (B8: a class a consumer
+  /// constructs, whose constructor inversion is outside its closed whitelist; the reason names the line). Line is 0 when the
   /// refusal has no single line (an edge, a unit).</remarks>
   TRefusal = record
     Kind    : string;
@@ -393,6 +394,9 @@ uses
 const
   CLeafSuffix    = CUntangleSuffix;
   CBaseSuffix    = 'Base';
+  CRefCtorSurface = 'ctor-inversion-surface';
+  CCtorFuncPrefix = 'New';   // B8: New<TX> in TX's unit
+  CCtorPtrSuffix  = 'Ptr';   // B8: New<TX>Ptr in the leaf, of type TNew<TX>Ptr
   CCodeFence     = '```';
   CPascalFence   = '```pascal';
   CTextFence     = '```text';
@@ -490,6 +494,8 @@ type
     Refusal    : string;  // mvBlocked by a recipe gate: its refusal kind (F5: 'base-class'); '' otherwise
     SameLine   : Boolean; // W6 C6: the keyword opens the declaration's own line (`var X: T;`); Header = Sym.StartLine
     BaseAncestor: string; // B4-d: the ancestor the base class inherits, as the header writes it; '' = TObject
+    CtorName    : string; // B8: the constructor the consumers call through the pointer; '' = no inversion
+    CtorSig     : string; // B8: its parameter list verbatim, parentheses included; '' = none
   end;
 
   TConsumer = record
@@ -661,6 +667,13 @@ type
     function PullMembers(const pF: TPlanFile; var pItem: TMoveItem; const pChildren: TArray<TSymbol>;
       pUsed: TDictionary<string, Boolean>): Boolean;
     function BuildSwitches(var pItem: TMoveItem): Boolean;
+    function FindCtor(const pItem: TMoveItem; const pName: string; out pSig, pWhy: string): Boolean;
+    function CtorTypeWhy(const pItem: TMoveItem; const pSig: string): string;
+    function TakeCtor(var pItem: TMoveItem; const pF: TPlanFile; pLine: Integer; const pName: string): Boolean;
+    function CtorSiteLine(const pItem: TMoveItem; out pFid: Int64): Integer;
+    function CtorSiteOk(const pItem: TMoveItem; const pCode: string; pIndex, pLen: Integer; const pSlots: TArray<string>): Boolean;
+    procedure RefuseCtor(var pItem: TMoveItem; pFid: Int64; pLine: Integer; const pWhy: string);
+    procedure AddCtorEdits;
     function BaseSiteRefusal(const pItem: TMoveItem): string;
     function AncestorRefusal(const pF: TPlanFile; const pItem: TMoveItem; const pAnc: string): string;
     function StreamedMemberRefusal(const pF: TPlanFile; const pItem: TMoveItem): string;
@@ -2069,7 +2082,17 @@ begin
     Drags.Free;
   end;
   if Length(pItem.Drags) = 0 then pItem.Kind:= mvWithBodies
-  else if (pItem.Sym.Kind = skClass) and (Length(pItem.CutFids) > 0) then BuildBase(pF, pItem)
+  else if (pItem.Sym.Kind = skClass) and (Length(pItem.CutFids) > 0) then
+  begin
+    BuildBase(pF, pItem);
+    { B8: whatever kept the base class from a class a consumer constructs, the kind is the inversion's }
+    var Fid: Int64;
+    if (pItem.Kind = mvBlocked) and (pItem.Refusal <> CRefCtorSurface) then
+    begin
+      var Line:= CtorSiteLine(pItem, Fid);
+      if Line > 0 then RefuseCtor(pItem, Fid, Line, pItem.Reason.Replace('refused: base-class -- ', ''));
+    end;
+  end
   else
   begin
     pItem.Kind  := mvBlocked;
@@ -2373,15 +2396,20 @@ begin
         var Line:= F.Lines[I - 1];
         var Code:= CodeOf(Line, Starts[I - 1]);
         if not TRegEx.IsMatch(Code, '\b' + pItem.Sym.Name + '\b', [roIgnoreCase]) then Continue;
-        if TRegEx.IsMatch(Code, '\b' + pItem.Sym.Name + '\s*\.', [roIgnoreCase]) then
+        { B8: `TX.<constructor>` goes through the pointer; any other `TX.` stays refused }
+        for var CM in TRegEx.Matches(Code, '\b' + pItem.Sym.Name + '\s*\.\s*([A-Za-z_]\w*)', [roIgnoreCase]) do
+          if not TakeCtor(pItem, F, I, CM.Groups[1].Value) then Exit;
+        var Text:= Line;
+        if pItem.CtorName <> '' then
         begin
-          pItem.Reason:= Format('`%s` line %d uses `%s.` (the class itself, not an instance)',
-            [ExtractFileName(F.Path), I, pItem.Sym.Name]);
-          Exit;
+          var Call:= '\b' + pItem.Sym.Name + '\s*\.\s*' + pItem.CtorName + '\b';
+          var Ptr := CCtorFuncPrefix + pItem.Sym.Name + CCtorPtrSuffix;
+          Text:= ReplaceInCode(Text, Starts[I - 1], Call + '\s*\(', Ptr + '(');
+          Text:= ReplaceInCode(Text, Starts[I - 1], Call, Ptr + '()');
         end;
         SL.Fid    := Fid;
         SL.Line   := I;
-        SL.NewText:= ReplaceInCode(Line, Starts[I - 1], '\b' + pItem.Sym.Name + '\b', pItem.BaseName);
+        SL.NewText:= ReplaceInCode(Text, Starts[I - 1], '\b' + pItem.Sym.Name + '\b', pItem.BaseName);
         L.Add(SL);
       end;
     end;
@@ -2390,6 +2418,254 @@ begin
   finally
     L.Free;
   end;
+end;
+
+function RoutineAt(const pF: TPlanFile; pLine: Integer): TSymbol; forward;
+
+{ B8: the argument list that forwards the parameters of pSig: `(a, b)`, or '' for none. }
+function CtorArgs(const pSig: string): string;
+begin
+  Result:= '';
+  var Inner:= Trim(pSig);
+  if StartsStr('(', Inner) and EndsStr(')', Inner) then Inner:= Copy(Inner, 2, Length(Inner) - 2);
+  for var Group in Inner.Split([';']) do
+  begin
+    var Colon:= Pos(':', Group);
+    if Colon = 0 then Continue;
+    var Names:= Trim(TRegEx.Replace(Copy(Group, 1, Colon - 1), '^\s*(\[\s*ref\s*\]\s*)?((const|var|out|constref)\s+)?', '', [roIgnoreCase]));
+    Result:= Result + (if Result <> '' then ', ' else '') + Names;
+  end;
+  if Result <> '' then Result:= '(' + Result + ')';
+end;
+
+{ B8: the constructor pName of the class of pItem, its own or the nearest ancestor's: pSig is its parameter
+  list verbatim. False with pWhy '' when no class of the chain declares a constructor of that name (then
+  `TX.pName` is no construction); False with pWhy set when it cannot be told apart or the chain cannot be read. }
+function TCyclePlanner.FindCtor(const pItem: TMoveItem; const pName: string; out pSig, pWhy: string): Boolean;
+const
+  CMaxDepth = 64;
+begin
+  pSig:= '';
+  pWhy:= '';
+  var Cur  := pItem.Sym;
+  var Store:= FStore;
+  for var Depth:= 1 to CMaxDepth do
+  begin
+    var Hits:= 0;
+    for var C in Store.FindAllChildSymbols(Cur.Id) do
+      { an ancestor's private one (a `class constructor Create` is stored so) is no candidate of a call from outside }
+      if (C.Kind = skConstructor) and SameText(C.Name, pName) and ((Depth = 1) or not ContainsText(C.Modifiers, 'private')) then
+      begin
+        Inc(Hits);
+        pSig:= Trim(C.Signature);
+        if ContainsText(C.Directives, 'overload') then Inc(Hits);
+      end;
+    if Hits > 1 then
+    begin
+      pWhy:= Format('`%s.%s` is overloaded: the pointer could carry one signature only', [Cur.Name, pName]);
+      Exit(False);
+    end;
+    if Hits = 1 then Exit(True);
+    if SameText(Cur.Name, 'TObject') then Exit(False);
+    var Parts:= SplitHeritage(Cur.Heritage);
+    var Parent:= if Length(Parts) > 0 then Parts[0] else 'TObject';
+    Parent:= Parent.Substring(Parent.LastIndexOf('.') + 1);
+    var Found:= False;
+    var Next := Default(TSymbol);
+    for var Source:= 0 to 1 do
+    begin
+      var S:= if Source = 0 then Store else FLibStore;
+      if (S = nil) or Found then Continue;
+      for var Cand in S.FindSymbolsByExactName(Parent) do
+        if (Cand.Kind = skClass) and ((not Found) or (Cand.EndLine - Cand.StartLine > Next.EndLine - Next.StartLine)) then
+        begin
+          Next := Cand;
+          Store:= S;
+          Found:= True;
+        end;
+    end;
+    if not Found then
+    begin
+      pWhy:= Format('the ancestor `%s` of `%s` is declared in no index given%s, so the constructor `%s` cannot be read',
+        [Parent, Cur.Name, (if FLibStore = nil then ' (no platform library was read: pass --library-db)' else ''), pName]);
+      Exit(False);
+    end;
+    Cur:= Next;
+  end;
+  Result:= False;
+end;
+
+{ B8: '' when every parameter type of pSig can be named in the leaf: a plain name that is a System built-in or is
+  declared in a unit outside the cycle that the interface of the class's unit already uses (LeafEntries hands those
+  to the leaf). Anything else (an untyped parameter, `array of`, a generic, a type of the cycle) is why not. }
+function TCyclePlanner.CtorTypeWhy(const pItem: TMoveItem; const pSig: string): string;
+var
+  Owner: TSymbol;
+  Stem : string;
+begin
+  Result:= '';
+  var Inner:= Trim(pSig);
+  if StartsStr('(', Inner) and EndsStr(')', Inner) then Inner:= Copy(Inner, 2, Length(Inner) - 2);
+  if Inner = '' then Exit;
+  var F:= GetFile(pItem.Sym.FileId);
+  for var Group in Inner.Split([';']) do
+  begin
+    var Colon:= Pos(':', Group);
+    if Colon = 0 then Exit(Format('the parameter `%s` has no type', [Trim(Group)]));
+    var TypeText:= Trim(Copy(Group, Colon + 1, MaxInt));
+    var Eq:= Pos('=', TypeText);
+    if Eq > 0 then TypeText:= Trim(Copy(TypeText, 1, Eq - 1));
+    if not TRegEx.IsMatch(TypeText, '^[A-Za-z_]\w*$') then
+      Exit(Format('the parameter type `%s` is not a plain name', [TypeText]));
+    if IsBuiltinTypeName(TypeText) then Continue;
+    var Seen:= False;
+    if BindName(F.Fid, pItem.Sym.StartLine, TypeText, Owner, Stem) then
+    begin
+      if FMembers.ContainsKey(Stem) then
+        Exit(Format('the parameter type `%s` is declared in a unit of this cycle', [TypeText]));
+      for var U in SectionEntries(F, scIntf) do
+        if SameText(U.UnitName, Stem) then Seen:= True;
+    end
+    else if FLibStore <> nil then
+      for var S in FLibStore.FindSymbolsByExactName(TypeText) do
+        for var U in SectionEntries(F, scIntf) do
+        begin
+          var Lib:= ChangeFileExt(ExtractFileName(FLibStore.GetFilePath(S.FileId)), '');
+          if SameText(U.UnitName, Lib) or EndsText('.' + U.UnitName, Lib) then Seen:= True;
+        end;
+    if not Seen then
+      Exit(Format('the parameter type `%s` is not declared in a unit the interface of `%s` uses, so the leaf could not ' +
+        'name it', [TypeText, ExtractFileName(F.Path)]));
+  end;
+end;
+
+{ B8: a refusal of the constructor inversion: its kind, the line, why. }
+procedure TCyclePlanner.RefuseCtor(var pItem: TMoveItem; pFid: Int64; pLine: Integer; const pWhy: string);
+begin
+  pItem.Kind   := mvBlocked;
+  pItem.Refusal:= CRefCtorSurface;
+  pItem.Reason := Format('refused: %s -- `%s:%d`: `%s` is constructed here, and the constructor inversion does not ' +
+    'cover it: %s', [CRefCtorSurface, ExtractFileName(PathOf(pFid)), pLine, pItem.Sym.Name, pWhy]);
+end;
+
+{ B8: the first line of a cut unit that calls a constructor of the class; 0 when there is none. }
+function TCyclePlanner.CtorSiteLine(const pItem: TMoveItem; out pFid: Int64): Integer;
+var
+  Sig, Why: string;
+begin
+  pFid:= 0;
+  for var Fid in pItem.CutFids do
+  begin
+    var F:= GetFile(Fid);
+    var Starts:= CodeStarts(F.Lines);
+    for var I:= 1 to Length(F.Lines) do
+      for var M in TRegEx.Matches(CodeOf(F.Lines[I - 1], Starts[I - 1]), '\b' + pItem.Sym.Name + '\s*\.\s*([A-Za-z_]\w*)', [roIgnoreCase]) do
+        if FindCtor(pItem, M.Groups[1].Value, Sig, Why) or (Why <> '') then
+        begin
+          pFid:= Fid;
+          Exit(I);
+        end;
+  end;
+  Result:= 0;
+end;
+
+{ B8: `TX.pName` at line pLine of pF. True when pName is no constructor (the old refusal text is set, Result False
+  below) is not a case: True only when the site can go through the pointer, with the item's constructor set. }
+function TCyclePlanner.TakeCtor(var pItem: TMoveItem; const pF: TPlanFile; pLine: Integer; const pName: string): Boolean;
+var
+  Sig, Why: string;
+  Owner   : TSymbol;
+  Stem    : string;
+begin
+  Result:= False;
+  if not FindCtor(pItem, pName, Sig, Why) then
+  begin
+    if Why <> '' then RefuseCtor(pItem, pF.Fid, pLine, Why)
+    else pItem.Reason:= Format('`%s` line %d uses `%s.` (the class itself, not an instance)',
+      [ExtractFileName(pF.Path), pLine, pItem.Sym.Name]);
+    Exit;
+  end;
+  if (pItem.CtorName <> '') and not SameText(pItem.CtorName, pName) then
+  begin
+    RefuseCtor(pItem, pF.Fid, pLine, Format('it calls both `%s` and `%s`; the inversion carries one constructor',
+      [pItem.CtorName, pName]));
+    Exit;
+  end;
+  Why:= CtorTypeWhy(pItem, Sig);
+  var FuncName:= CCtorFuncPrefix + pItem.Sym.Name;
+  if (Why = '') and BindName(pItem.Sym.FileId, pItem.Sym.StartLine, FuncName, Owner, Stem) then
+    Why:= Format('the name `%s` is taken', [FuncName]);
+  if (Why = '') and BindName(pItem.Sym.FileId, pItem.Sym.StartLine, FuncName + CCtorPtrSuffix, Owner, Stem) then
+    Why:= Format('the name `%s` is taken', [FuncName + CCtorPtrSuffix]);
+  if Why = '' then
+  begin
+    { nothing uses the class's unit after the cut unless the program lists it: its initialization would never run }
+    var Listed:= False;
+    if FProjectFid > 0 then
+      for var U in SectionEntries(GetFile(FProjectFid), scProg) do
+        if SameText(U.UnitName, UnitNameOfStem(pItem.Stem)) then Listed:= True;
+    if not Listed then
+      Why:= Format('the program does not list `%s`, so its initialization (which assigns the pointer) may never run',
+        [UnitNameOfStem(pItem.Stem)]);
+  end;
+  if Why = '' then
+  begin
+    var Ref:= Default(TEdgeRef);
+    Ref.Line:= pLine;
+    Ref.Enclosing:= RoutineAt(pF, pLine).Name;
+    Why:= InitOrderWhy(pF.Lines, Ref, pF.UnitName);
+    var Fin:= 0;
+    for var I:= High(pF.Lines) downto 0 do
+      if SameText(Trim(CodePart(pF.Lines[I])), 'finalization') then
+      begin
+        Fin:= I + 1;
+        Break;
+      end;
+    if (Why = '') and (Fin > 0) and (pLine > Fin) then
+      Why:= Format('the call at line %d runs in the finalization section of `%s`', [pLine, pF.UnitName]);
+  end;
+  if Why <> '' then
+  begin
+    RefuseCtor(pItem, pF.Fid, pLine, Why);
+    Exit;
+  end;
+  pItem.CtorName:= pName;
+  pItem.CtorSig := Sig;
+  Result:= True;
+end;
+
+{ B8: the occurrence (pIndex, pLen) of the class name in pCode is `S := TX.<constructor>[(args)]` as a whole
+  statement, S a slot that switches: the result lands where the base class type stands. }
+function TCyclePlanner.CtorSiteOk(const pItem: TMoveItem; const pCode: string; pIndex, pLen: Integer;
+  const pSlots: TArray<string>): Boolean;
+begin
+  Result:= False;
+  if (pItem.CtorName = '') or (Length(pSlots) = 0) then Exit;
+  if not TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1), '(^|[;\s])(Self\s*\.\s*)?(' + string.Join('|', pSlots) + ')\s*:=\s*$',
+    [roIgnoreCase]) then Exit;
+  var Rest:= Copy(pCode, pIndex + pLen, MaxInt);
+  var Head:= TRegEx.Match(Rest, '^\s*\.\s*' + pItem.CtorName + '\b', [roIgnoreCase]);
+  if not Head.Success then Exit;
+  Rest:= Copy(Rest, Head.Length + 1, MaxInt);
+  var Open:= TRegEx.Match(Rest, '^\s*\(');
+  if Open.Success then
+  begin
+    var Depth:= 0;
+    var Close:= 0;
+    for var I:= Open.Length to Length(Rest) do
+    begin
+      if Rest[I] = '(' then Inc(Depth)
+      else if Rest[I] = ')' then Dec(Depth);
+      if Depth = 0 then
+      begin
+        Close:= I;
+        Break;
+      end;
+    end;
+    if Close = 0 then Exit;
+    Rest:= Copy(Rest, Close + 1, MaxInt);
+  end;
+  Result:= TRegEx.IsMatch(Rest, '^\s*(;|$|end\b|else\b)', [roIgnoreCase]);
 end;
 
 { B4: the routine whose implementation (header to `end`) holds line pLine of pF, else the routine whose
@@ -2530,6 +2806,8 @@ begin
             if (Field = '') and ObjSlotAt(pItem, S.Fid, S.Line, M.Index, Slot) then Why:= ObjSlotRefusal(pItem, Slot, Fields, Slots)
             else if (Field = '') and IsListCreation(CodeOf(LineAt(F.Lines, S.Line), csCode), pItem.Sym.Name, Fields) then Continue
             else if (Field = '') and ClassTestSiteOk(CodeOf(LineAt(F.Lines, S.Line), csCode), M.Index, M.Length, pItem) then Continue
+            else if (Field = '') and CtorSiteOk(pItem, CodeOf(LineAt(F.Lines, S.Line), csCode), M.Index, M.Length,
+              SlotNames(Slots, RoutineAt(F, S.Line).Id)) then Continue
             else if Field = '' then
               Exit(Format('%s: `%s` is used here as something other than a parameter type (a field, ' +
                 'variable, cast or type argument)', [Site, pItem.Sym.Name]));
@@ -2629,13 +2907,21 @@ begin
     var Code:= CodePart(LineAt(F.Lines, L));
     var Names:= SlotNames(pSlots, if pSlot.IsField then RoutineAt(F, L).Id else pSlot.RoutineId);
     for var U in TRegEx.Matches(Code, '\b' + pSlot.Name + '\b', [roIgnoreCase]) do
-      if not IsSlotUse(Code, U.Index, U.Length, Names, pFields) then
+      if not IsSlotUse(Code, U.Index, U.Length, Names, pFields) and not ((pItem.CtorName <> '') and
+        TRegEx.IsMatch(Copy(Code, U.Index + U.Length, MaxInt), '^\s*:=\s*' + pItem.Sym.Name + '\s*\.\s*' + pItem.CtorName + '\b',
+          [roIgnoreCase])) then
         Exit(Format('`%s:%d`: %s', [ExtractFileName(F.Path), L, What]));
   end;
+  { B8: a method the base class declares `virtual; abstract;` dispatches to the class's own body }
+  var Pulled: TArray<string>:= nil;
+  if pItem.CtorName <> '' then
+    for var B in pItem.BaseMembers do
+      if B.Sym.Kind in [skMethod, skFunction, skProcedure] then Pulled:= Pulled + [B.Sym.Name];
   for var R in F.Refs do
   begin
     if (R.StartLine < First) or (R.StartLine > Last) or not SameText(R.ReceiverText, pSlot.Name) then Continue;
-    var IsRead:= SameText(R.Kind, 'member-access') and MemberAccessOf(R.Id, MA) and SameText(MA.MemberMode, 'read');
+    var IsRead:= (SameText(R.Kind, 'member-access') and MemberAccessOf(R.Id, MA) and SameText(MA.MemberMode, 'read')) or
+      MatchText(R.NameText, Pulled);
     if not IsRead and not SameText(R.NameText, 'Free') then
       Exit(Format('`%s:%d`: %s; `%s.%s` is not a read of a member', [ExtractFileName(F.Path), R.StartLine, What,
         pSlot.Name, R.NameText]));
@@ -3330,6 +3616,68 @@ begin
       end
       else MarkDeleted(Fid, M.Range);
     for var S in Item.Switches do MarkReplaced(S.Fid, S.Line, S.NewText);
+  end;
+  AddCtorEdits;
+end;
+
+{ B8: per unit that declares an inverted class: the New<TX> bodies in front of the section that closes the
+  implementation, and the pointer assignments at the head of its initialization. }
+procedure TCyclePlanner.AddCtorEdits;
+var
+  Fids  : TList<Int64>;
+  Bodies: TList<string>;
+  Assign: TList<string>;
+  R     : TRecipeEdit;
+  E     : TFileEdit;
+begin
+  Fids  := TList<Int64>.Create;
+  Bodies:= TList<string>.Create;
+  Assign:= TList<string>.Create;
+  try
+    for var Id in FOrder do
+      if (FItems[Id].CtorName <> '') and not Fids.Contains(FItems[Id].Sym.FileId) then Fids.Add(FItems[Id].Sym.FileId);
+    for var Fid in Fids do
+    begin
+      Bodies.Clear;
+      Assign.Clear;
+      for var Id in FOrder do
+      begin
+        var Item:= FItems[Id];
+        if (Item.CtorName = '') or (Item.Sym.FileId <> Fid) then Continue;
+        var Fn:= CCtorFuncPrefix + Item.Sym.Name;
+        Bodies.Add(Format('function %s%s: %s;', [Fn, Item.CtorSig, Item.BaseName]));
+        Bodies.Add('begin');
+        Bodies.Add(Format('  Result := %s.%s%s;', [Item.Sym.Name, Item.CtorName, CtorArgs(Item.CtorSig)]));
+        Bodies.Add('end;');
+        Bodies.Add('');
+        Assign.Add(Format('  %s%s := %s;', [Fn, CCtorPtrSuffix, Fn]));
+      end;
+      var F:= GetFile(Fid);
+      if not AssignmentEdit(F.Lines, Fid, Assign.ToArray, R) then Continue;  { CtorSiteLine's file parsed: it has an `end.` }
+      E:= Default(TFileEdit);
+      E.First:= R.Line;
+      E.Last := R.Line;
+      if SameText(Trim(CodePart(LineAt(F.Lines, R.Line))), 'initialization') then
+      begin
+        E.Kind    := ekInsertAfter;
+        E.NewLines:= R.NewLines;
+        EditList(Fid).Add(E);
+        E.First   := R.Line - 1;
+        E.Last    := R.Line - 1;
+        E.NewLines:= Bodies.ToArray;
+        EditList(Fid).Add(E);
+      end
+      else
+      begin
+        E.Kind    := if R.Replace then ekReplace else ekInsertAfter;
+        E.NewLines:= Bodies.ToArray + R.NewLines;
+        EditList(Fid).Add(E);
+      end;
+    end;
+  finally
+    Assign.Free;
+    Bodies.Free;
+    Fids.Free;
   end;
 end;
 
@@ -4226,7 +4574,7 @@ begin
       Base.Recipe:= crMoveGlobals;
       pEvals[I]  := Base;
     end
-    else if ContainsStr(Base.Why, 'base-class') then
+    else if ContainsStr(Base.Why, 'base-class') or ContainsStr(Base.Why, CRefCtorSurface) then
     begin
       Ev.Why:= Ev.Why + '; through a base class: ' + Base.Why;
       pEvals[I]:= Ev;
@@ -4428,6 +4776,10 @@ begin
        (if Names.Count > 0 then QuoteList(Names.ToArray) else 'nothing (an empty base)')]);
     EmitFmt('   - `%s` stays in `%s` and becomes `%s`; the members above are deleted from it.',
       [pItem.Sym.Name, ExtractFileName(PathOf(pItem.Sym.FileId)), Trim(CodePart(pItem.HeaderNew))]);
+    if pItem.CtorName <> '' then
+      EmitFmt('   - **Constructor inversion:** `%s.%s` is called through the pointer `%2:s%0:s%3:s` of the leaf; `%2:s%0:s` in `%4:s` ' +
+        'runs the same constructor with the same arguments and its initialization assigns the pointer.',
+        [pItem.Sym.Name, pItem.CtorName, CCtorFuncPrefix, CCtorPtrSuffix, ExtractFileName(PathOf(pItem.Sym.FileId))]);
     for var Fid in pItem.CutFids do
     begin
       Lines.Clear;
@@ -4558,6 +4910,12 @@ begin
       end;
     end;
     L.Add(Ind + 'end;');
+    if pItem.CtorName <> '' then
+    begin
+      L.Add('');
+      L.Add(Ind + '/// <summary>Creates a <c>' + pItem.Sym.Name + '</c>; assigned by <c>' + F.UnitName + '</c>''s initialization.</summary>');
+      L.Add(Ind + Format('T%s%s%s = function%s: %s;', [CCtorFuncPrefix, pItem.Sym.Name, CCtorPtrSuffix, pItem.CtorSig, pItem.BaseName]));
+    end;
     Result:= L.ToArray;
   finally
     L.Free;
@@ -4652,7 +5010,18 @@ begin
       L.Add('');
       if not SameText(KW, Keyword) then L.Add(KW);
       Keyword:= KW;
-      if Item.Kind = mvBase then L.AddRange(BaseClassText(Item))
+      if Item.Kind = mvBase then
+      begin
+        L.AddRange(BaseClassText(Item));
+        if Item.CtorName <> '' then
+        begin
+          var Ptr:= CCtorFuncPrefix + Item.Sym.Name + CCtorPtrSuffix;
+          L.Add('');
+          L.Add('var');
+          L.Add(Format('  %s: T%s;', [Ptr, Ptr]));
+          Keyword:= 'var';
+        end;
+      end
       else if Item.SameLine then
       begin
         { W6 C6: the leaf's own keyword line opens the block; the declaration loses the keyword }
@@ -5166,6 +5535,13 @@ begin
       Rollback(Snap);
       var M:= Classify(N.Owner, Cut[N.Owner.Id].ToArray);
       M.Reason:= Why;
+      { B8: what it needs cannot move: the constructor inversion does not cover it }
+      if (M.Refusal = '') and (M.CtorName <> '') then
+      begin
+        var Fid: Int64;
+        var Line:= CtorSiteLine(M, Fid);
+        if Line > 0 then RefuseCtor(M, Fid, Line, Why);
+      end;
       FManual.Add(M);
     end;
   finally

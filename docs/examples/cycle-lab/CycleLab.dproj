@@ -90,6 +90,8 @@
         <DCCReference Include="LabGuardA.pas"/>
         <DCCReference Include="LabCtorOwner.pas"/>
         <DCCReference Include="LabCtorChild.pas"/>
+        <DCCReference Include="LabCtorStrOwner.pas"/>
+        <DCCReference Include="LabCtorStrChild.pas"/>
         <DCCReference Include="LabClsRegistry.pas"/>
         <DCCReference Include="LabClsWidget.pas"/>
         <DCCReference Include="LabExcHost.pas"/>

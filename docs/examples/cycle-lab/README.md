@@ -17,7 +17,8 @@ into `out\`. Baseline program output: `baseline-run.txt` (identical after the DL
 | LabInit (Consumer/Sink) | routine called from an `initialization` section | auto Part A (impl-only cycle left); Part B refuses `init-order` | optional: leave it (legal) |
 | LabExc (Host/Widget) | `as` cast + `except on EInvalidCast` | auto Part A (impl-only left) | optional; Part B would change the exception class (`exception-semantics`) |
 | LabVar (Host/Widget) | `var` parameter of the other unit's class | refused `blocked-symbol` (class used as `TX.Create`) | move the class pair into one unit, or stop naming the class in an interface |
-| LabCtor (Owner/Child) | owner creates child, child casts owner | refused `blocked-symbol` (`TLabCtorChild.` construction) | child holds `TObject`/interface; or merge units |
+| LabCtor (Owner/Child) | owner creates child, child casts owner | on 1.36 refused `blocked-symbol` (`TLabCtorChild.` construction); since 1.44 auto: constructor inversion, the cycle is gone | none |
+| LabCtorStr (Owner/Child, since 1.44) | three classes constructed: an inherited library constructor, a default parameter, no parentheses; literals spell the class names | auto: constructor inversion, the literals byte-identical | none |
 | LabRc (Host/Widget) | `TInterfacedObject` descendant | refused `blocked-symbol` (+`signature-in-cycle`) | merge, or hand over an interface (`ref-counted`) |
 | LabCls (Registry/Widget) | `class of` type in a signature | refused `blocked-symbol` (classref cannot move) | declare the metaclass in a leaf unit that both use |
 | LabDir (A/B) | interface `uses` entry inside `{$IFDEF}`, entry unused | refused `directive` | delete the guarded entry (unused) |

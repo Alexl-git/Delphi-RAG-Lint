@@ -39,6 +39,8 @@ uses
   DemoUIConnect in 'DemoUIConnect.pas',
   LabCtorOwner in 'LabCtorOwner.pas',
   LabCtorChild in 'LabCtorChild.pas',
+  LabCtorStrOwner in 'LabCtorStrOwner.pas',
+  LabCtorStrChild in 'LabCtorStrChild.pas',
   LabClsRegistry in 'LabClsRegistry.pas',
   LabClsWidget in 'LabClsWidget.pas',
   LabExcHost in 'LabExcHost.pas',

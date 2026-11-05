@@ -623,6 +623,28 @@ function CodeOf(const pLine: string; pStart: TCodeStart): string;
 /// <returns>The rewritten line.</returns>
 function ReplaceInCode(const pLine: string; pStart: TCodeStart; const pPattern, pWith: string): string;
 
+/// <summary>Why a pointer call at pRef may run before the declaring unit assigned the pointer: the
+/// line is in the initialization section of its unit, or that section names the routine holding it.</summary>
+/// <param name="pLines">The consumer's lines.</param>
+/// <param name="pRef">The call: its Line and Enclosing are read.</param>
+/// <param name="pUnit">The consumer's name, for the text.</param>
+/// <returns>'' when no such order problem is seen.</returns>
+function InitOrderWhy(const pLines: TArray<string>; const pRef: TEdgeRef; const pUnit: string): string;
+
+/// <summary>The declaring unit's edit: pAssigns as the first statements of its initialization
+/// section, creating the section when there is none.</summary>
+/// <param name="pLines">The declaring unit's lines.</param>
+/// <param name="pFid">Its file id.</param>
+/// <param name="pAssigns">The statements, indented.</param>
+/// <param name="pEdit">The edit. Replace is True only when the final `end.` line is rewritten.</param>
+/// <returns>False when the unit has no final `end.`, `initialization` or `finalization` line.</returns>
+function AssignmentEdit(const pLines: TArray<string>; pFid: Int64; const pAssigns: TArray<string>; out pEdit: TRecipeEdit): Boolean;
+
+/// <summary>Whether pName is a System type every unit sees without a uses entry.</summary>
+/// <param name="pName">A bare type name.</param>
+/// <returns>True for a built-in (Integer, string, TObject, TClass ...).</returns>
+function IsBuiltinTypeName(const pName: string): Boolean;
+
 implementation
 
 uses
@@ -647,6 +669,11 @@ const
   CDeclStartWords        = ' function procedure constructor destructor class operator type var const threadvar ' +
     'resourcestring label begin asm implementation interface initialization finalization exports uses ' +
     'property end strict private protected public published ';  { a routine declaration and its directives span at most this many lines }
+
+function IsBuiltinTypeName(const pName: string): Boolean;
+begin
+  Result:= ContainsText(CBuiltinTypes, ' ' + pName + ' ');
+end;
 
 function StemOfPath(const pPath: string): string;
 begin
