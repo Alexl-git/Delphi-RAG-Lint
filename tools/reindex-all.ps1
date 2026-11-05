@@ -2,6 +2,9 @@
   reindex-all.ps1 -- rebuild every index, with the two library platforms in
   parallel.
 
+  FOR A BUMP RE-PARSE USE tools\reparse-libraries.ps1 (owner ruling Q5, 1.43): the
+  libraries alone first, projects after, one summary with an ETA.
+
   WHY THIS EXISTS: every database re-parses in full on its first run under a
   build whose EXTRACTION identity changed.
 
