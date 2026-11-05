@@ -314,6 +314,7 @@
         <DCCReference Include="..\report\DRagLint.Convert.UnitRules.pas"/>
         <DCCReference Include="..\report\DRagLint.Convert.UsesReconcile.pas"/>
         <DCCReference Include="DRagLint.CLI.CycleFix.pas"/>
+        <DCCReference Include="DRagLint.CLI.UnitContext.pas"/>
         <DCCReference Include="DRagLint.CLI.LibraryReady.pas"/>
         <DCCReference Include="DRagLint.CLI.HelpText.pas"/>
         <DCCReference Include="DRagLint.CLI.LibraryMarker.pas"/>

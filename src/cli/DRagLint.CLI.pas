@@ -107,6 +107,7 @@ uses
   , System.Classes
   , System.Hash
   , System.IOUtils
+  , DRagLint.CLI.UnitContext { usages --in with no --db: which project does this file belong to }
   , DRagLint.CLI.LibraryReady { library-first resolve: readiness probe + platform choice (plan 2026-10-28) }
   , DRagLint.CLI.LibraryMarker { the project DB's library_resolve_state marker: JSON, decision table, notice }
   , DRagLint.CLI.HelpText   { WriteVerbReference -- the generated verb reference of --help (featuregen, P7) }
@@ -12000,6 +12001,174 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>True when a library index declares the unit AName, as written or under
+/// one of the default unit scopes (`SysUtils` is System.SysUtils).</summary>
+/// <param name="AStore">The open library store.</param>
+/// <param name="AName">The unit name from a uses clause.</param>
+/// <returns>True when a unit symbol of that name exists.</returns>
+function LibraryHasUnit(const AStore: ISymbolStore; const AName: string): Boolean;
+const
+  DEFAULT_SCOPES: array[0..10] of string = ('', 'System.', 'Vcl.', 'Winapi.', 'Data.', 'Datasnap.', 'Soap.', 'Xml.', 'Web.', 'FMX.', 'Bde.');
+begin
+  Result:= False;
+  for var Scope: string in DEFAULT_SCOPES do
+    for var S: TSymbol in AStore.FindSymbolsByExactName(Scope + AName) do
+      if S.Kind = skUnit then Exit(True);
+end;
+
+/// <summary>Finds the database `usages --in F` with no --db answers from: a unit does
+/// not exist by itself (owner Q2, 2026-11-04).</summary>
+/// <param name="AArgs">Parsed args; InFile, CheckPlatform, LibraryDbs are read.</param>
+/// <param name="ADb">Receives the database on 0.</param>
+/// <returns>0 with ADb set, the choice said on stderr; 2 with what to do said on
+/// stderr. The CLI cannot prompt, so every "ask" is that message and that exit.</returns>
+/// <remarks>
+/// <para>A project owns F when its project file names it (the folder of F and its
+/// ancestors are searched), when that project's DB holds it, or when a project DB of
+/// the manifest holds it. One owner with a DB answers; one owner without a DB gets
+/// the index command; two owners are named and nothing is guessed.</para>
+/// <para>With no owner F is a library unit on the assumed platform, which only
+/// holds while everything it uses is in the library: a unit the library lacks
+/// needs a project, and the message names it.</para>
+/// </remarks>
+function UsagesDbForFile(const AArgs: TArgs; out ADb: string): Integer;
+var
+  Manifest: TIndexManifest;
+  HaveManifest: Boolean;
+  Abs: string;
+  Owners: TArray<string>;
+  OwnerDbs: TArray<string>;
+
+  procedure AddOwner(const AOwner, ADbPath: string);
+  begin
+    for var Have: string in OwnerDbs do
+      if SameText(Have, ADbPath) then Exit;
+    Owners  := Owners   + [AOwner];
+    OwnerDbs:= OwnerDbs + [ADbPath];
+  end;
+
+begin
+  Result:= 2;
+  ADb:= '';
+  Abs:= ExpandFileName(AArgs.InFile);
+  if not TFile.Exists(Abs) then
+  begin
+    Writeln(ErrOutput, 'ERROR: usages: file not found: ', AArgs.InFile);
+    Exit;
+  end;
+  HaveManifest:= False;
+  Manifest:= Default(TIndexManifest);
+  try
+    Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    HaveManifest:= True;
+  except
+    on E: Exception do Writeln(ErrOutput, 'NOTE: usages: manifest not read (', E.Message, '); searching from the file''s folder only.');
+  end;
+
+  for var Proj: string in ProjectFilesNear(Abs) do
+  begin
+    var Db: string;
+    var Claimants: TArray<string>;
+    var Match: TProjectDbMatch:= ResolveOwnProjectDb(Manifest, Proj, Db, Claimants);
+    var Named: Boolean:= ProjectListsFile(Proj, Abs);
+    if Match = pdmAmbiguous then
+    begin
+      if not Named then Continue;
+      ReportAmbiguousProject('usages', Proj, Claimants);
+      Exit;
+    end;
+    if Named or (TFile.Exists(Db) and DbContainsFile(Db, Abs)) then AddOwner(Proj, Db);
+  end;
+
+  var LibDbs: TArray<string>:= nil;
+  var Platform: string:= AArgs.CheckPlatform;
+  if HaveManifest then
+  begin
+    if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
+    LibDbs:= LibrarySectionDbs(Manifest);
+    var Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+    try
+      for var Cand: string in TDbSelect.Resolve(Manifest, Platform, Resolver, True) do
+        if (not IsLibrarySectionDb(LibDbs, Cand)) and DbContainsFile(Cand, Abs) then AddOwner('(manifest project)', Cand);
+    finally
+      Resolver.Free;
+    end;
+  end;
+
+  { The library's own source sits under the vendor's build projects, which nobody
+    indexes: a library that holds the file outranks an owner with no index. }
+  var Lib: string:= LintLibraryDb(AArgs);
+  var LibHoldsFile: Boolean:= (Lib <> '') and TFile.Exists(Lib) and DbContainsFile(Lib, Abs);
+  if LibHoldsFile then
+  begin
+    var KeptOwners: TArray<string>:= nil;
+    var KeptDbs   : TArray<string>:= nil;
+    for var I: Integer:= 0 to High(OwnerDbs) do
+      if TFile.Exists(OwnerDbs[I]) then
+      begin
+        KeptOwners:= KeptOwners + [Owners[I]];
+        KeptDbs   := KeptDbs    + [OwnerDbs[I]];
+      end;
+    Owners  := KeptOwners;
+    OwnerDbs:= KeptDbs;
+  end;
+
+  if Length(OwnerDbs) > 1 then
+  begin
+    Writeln(ErrOutput, Format('ERROR: usages: %s belongs to %d projects; which one? Pass its database with --db:', [AArgs.InFile, Length(OwnerDbs)]));
+    for var I: Integer:= 0 to High(OwnerDbs) do Writeln(ErrOutput, Format('  %s  --db "%s"', [Owners[I], OwnerDbs[I]]));
+    Exit;
+  end;
+
+  if Length(OwnerDbs) = 1 then
+  begin
+    if not TFile.Exists(OwnerDbs[0]) then
+    begin
+      Writeln(ErrOutput, Format('ERROR: usages: %s belongs to project %s, which has no index yet. Create it:', [AArgs.InFile, Owners[0]]));
+      Writeln(ErrOutput, Format('  drag-lint index --project "%s" --db "%s"', [Owners[0], OwnerDbs[0]]));
+      Exit;
+    end;
+    Writeln(ErrOutput, Format('usages: project %s, database %s', [Owners[0], OwnerDbs[0]]));
+    ADb:= OwnerDbs[0];
+    Exit(0);
+  end;
+
+  { No project owns it: a library unit, if what it uses says so. }
+  if Length(AArgs.LibraryDbs) > 0 then
+  begin
+    if ContainsText(Lib, 'win64') then Platform:= 'Win64'
+    else if ContainsText(Lib, 'win32') then Platform:= 'Win32';
+  end;
+  if Platform = '' then Platform:= 'Win64';
+  if (Lib = '') or not TFile.Exists(Lib) then
+  begin
+    Writeln(ErrOutput, Format('ERROR: usages: no project lists %s and no %s library index exists to treat it as a library unit.', [AArgs.InFile, Platform]));
+    Writeln(ErrOutput, '  Pass --db <project db>; resolve-dbs --project <x.dproj> prints it. Or pass --library-db <lib.sqlite>.');
+    Exit;
+  end;
+  var RoOk: Boolean;
+  var Store: ISymbolStore:= OpenReadOnlyStore(Lib, RoOk);
+  if (not RoOk) or (Store = nil) then
+  begin
+    Writeln(ErrOutput, 'ERROR: usages: the library index cannot be read: ', Lib);
+    Exit;
+  end;
+  var Foreign: TArray<string>:= nil;
+  if not LibHoldsFile then
+    for var U: string in UnitsUsedBy(Abs) do
+      if not LibraryHasUnit(Store, U) then Foreign:= Foreign + [U];
+  if Length(Foreign) > 0 then
+  begin
+    Writeln(ErrOutput, Format('ERROR: usages: no project lists %s, and it uses units the %s library does not have: %s.', [AArgs.InFile, Platform, string.Join(', ', Foreign)]));
+    Writeln(ErrOutput, '  Which project is it part of? Pass that project''s database with --db; resolve-dbs --project <x.dproj> prints it,');
+    Writeln(ErrOutput, '  and drag-lint index --project <x.dproj> creates it.');
+    Exit;
+  end;
+  Writeln(ErrOutput, Format('usages: no project lists %s; treating it as a library unit, assumed platform %s, database %s', [AArgs.InFile, Platform, Lib]));
+  ADb:= Lib;
+  Result:= 0;
+end; // function
+
 /// <summary>`usages --rw`: the users of a property or member, split into readers and
 /// writers, one block per declaration. See MemberUsersForName for what is gathered.</summary>
 /// <param name="AArgs">Parsed args; Name, Limit, AsJson / Format are read.</param>
@@ -12224,6 +12393,15 @@ begin
   PathsToScan:= AArgs.DbPaths;
   if Length(PathsToScan) = 0 then PathsToScan:= [AArgs.DbPath];
 
+  { USAGES-PROJECT-CONTEXT: a file and no --db: the file's own project decides. }
+  if (Length(AArgs.DbPaths) = 0) and (AArgs.DbPath = '') and (AArgs.InFile <> '') then
+  begin
+    var ContextDb: string;
+    var ContextExit: Integer:= UsagesDbForFile(AArgs, ContextDb);
+    if ContextExit <> 0 then Exit(ContextExit);
+    PathsToScan:= [ContextDb];
+  end;
+
   { NO DATABASE AT ALL is an error, not an empty answer (USAGES-NAME, 1.40): the loop below skips
     a missing file, so with nothing resolved it printed "calls: 0" and exited 0 -- while the same
     question to `query find-callers` said "database not found". Mirror that: exit 2. }
@@ -12236,6 +12414,7 @@ begin
     Writeln('Run "drag-lint index <path>" first, or pass --db <file.sqlite>.');
     Writeln('usages does not read the manifest: without --db it has no database (find-callers does resolve one).');
     Writeln('Pass --db <file.sqlite>; resolve-dbs --project <x.dproj> prints the right one.');
+    Writeln('Or name a unit with --in <file.pas>: its project and database are found from it.');
     Exit(2);
   end;
 

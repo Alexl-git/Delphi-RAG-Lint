@@ -48,3 +48,12 @@ one block per declaration and counts the unbound name matches separately; a qual
 `backs_properties`. Sites are per line. A symbol nobody declares or mentions exits 1.
 
 Limit: directions are the index's, so a `var`/`out` argument and `Inc`/`Dec` of a field count as reads.
+
+## No `--db`: name the unit (`--in`)
+A unit does not exist by itself, so `usages --name X --in <file.pas>` with no `--db` finds its context:
+1. The project: a `.dproj`, `.dpr` or `.dpk` in the file's folder or an ancestor that names it, or whose index holds it, or a manifest project whose index holds it. Its database answers; stderr says which.
+2. That project has no index: exit 2 and the `drag-lint index --project ... --db ...` command to create it.
+3. Two projects own it: exit 2, both named with their `--db`. Nothing is guessed.
+4. No project: a library unit on an assumed platform (stderr says which), answered from the library index, or `--library-db`. If it uses units that library lacks, exit 2 and the message names them and asks for the project. A file the library itself holds is not asked about.
+
+The CLI cannot prompt: every "ask" is a message on stderr and a non-zero exit, with stdout left empty.

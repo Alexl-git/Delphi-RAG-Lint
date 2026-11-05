@@ -346,6 +346,7 @@ uses
   DRagLint.Charts.Trace.Chart in '..\charts\DRagLint.Charts.Trace.Chart.pas',
   DRagLint.Charts.Q.RoundTrip in '..\charts\DRagLint.Charts.Q.RoundTrip.pas',
   DRagLint.CLI.CycleFix in 'DRagLint.CLI.CycleFix.pas',
+  DRagLint.CLI.UnitContext in 'DRagLint.CLI.UnitContext.pas',
   DRagLint.CLI.LibraryReady in 'DRagLint.CLI.LibraryReady.pas',
   DRagLint.CLI.HelpText in 'DRagLint.CLI.HelpText.pas',
   DRagLint.CLI.LibraryMarker in 'DRagLint.CLI.LibraryMarker.pas',
