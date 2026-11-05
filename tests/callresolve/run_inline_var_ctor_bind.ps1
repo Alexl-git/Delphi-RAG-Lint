@@ -36,6 +36,20 @@
     N8 X.Add            FList.Create, not a type name -> no edge, no type text
     C1 D.Bar            `var D: TFoo` control         -> TFoo.Bar
 
+  FUNCTION RESULTS (RECV-UNDECIDABLE slice): an initializer ending in a call is typed
+  by the receiver ladder, when that names a type of this index the local's own file
+  resolves to the same symbol.
+    S1 X.Bar            GetFoo(1)                     -> TFoo.Bar
+    S2 X.Ping           D.Mk('a') (a method)          -> TInner.Ping
+    S3 X.Bar            TFoo(D) (a cast)              -> TFoo.Bar
+    S4 Y.Ping           X := GetFoo(1); Y := X.Mk('a') -> TInner.Ping
+    N9  X.Bar           Over(1), overloads disagree   -> unbound
+    N10 X.Mk            X := X.Mk('a') self reference -> unbound, and it ends
+    N11 X.Bar           Box.Get(0), returns the generic T -> unbound
+    N12 X.Bar           NoRet(1), a procedure         -> unbound
+    N13 X.Bar           MkAmb(1), TAmb is ambiguous at the local -> unbound
+    N14 X.Bar           GetFoo(1) where a LOCAL GetFoo shadows the routine -> unbound
+
   `sql --json` rows are POSITIONAL arrays; Sql() maps them onto column names.
   Usage: pwsh -File tests\callresolve\run_inline_var_ctor_bind.ps1 [-Exe <drag-lint.exe>]
 #>
@@ -77,6 +91,7 @@ type
     constructor Create; overload;
     constructor Create(N: Integer; const S: string); overload;
     constructor Make(const S: string);
+    function Mk(const S: string): TInner;
     procedure Bar;
   end;
 
@@ -93,6 +108,7 @@ type
   TBox<T> = class
   public
     procedure Put;
+    function Get(I: Integer): T;
   end;
 
   TFac = class
@@ -102,6 +118,10 @@ type
   end;
 
 function F(O: TObject): TObject;
+function GetFoo(N: Integer): TFoo;
+function Over(N: Integer): TFoo; overload;
+function Over(const S: string): TInner; overload;
+procedure NoRet(N: Integer);
 
 implementation
 
@@ -116,6 +136,12 @@ procedure TBox<T>.Put; begin end;
 class function TFac.Create: TInner; begin Result := nil; end;
 procedure TFac.Bar; begin end;
 function F(O: TObject): TObject; begin Result := O; end;
+function GetFoo(N: Integer): TFoo; begin Result := nil; end;
+function Over(N: Integer): TFoo; begin Result := nil; end;
+function Over(const S: string): TInner; begin Result := nil; end;
+procedure NoRet(N: Integer); begin end;
+function TFoo.Mk(const S: string): TInner; begin Result := nil; end;
+function TBox<T>.Get(I: Integer): T; begin end;
 
 end.
 '@
@@ -130,9 +156,12 @@ type
     procedure Bar;
   end;
 
+function MkAmb(N: Integer): TAmb;
+
 implementation
 
 procedure TAmb.Bar; begin end;
+function MkAmb(N: Integer): TAmb; begin Result := nil; end;
 
 end.
 '@
@@ -169,6 +198,8 @@ type
 
 procedure Run;
 procedure Traps;
+procedure Results;
+procedure Shadow;
 
 implementation
 
@@ -264,6 +295,60 @@ begin
   end;
 end;
 
+procedure Results;
+var
+  D: TFoo;
+  Box: TBox<TFoo>;
+begin
+  D := nil;
+  Box := nil;
+  begin
+    var X := GetFoo(1);
+    X.Bar; // S1
+  end;
+  begin
+    var X := D.Mk('a');
+    X.Ping; // S2
+  end;
+  begin
+    var X := TFoo(D);
+    X.Bar; // S3
+  end;
+  begin
+    var X := GetFoo(1);
+    var Y := X.Mk('a');
+    Y.Ping; // S4
+  end;
+  begin
+    var X := Over(1);
+    X.Bar; // N9
+  end;
+  begin
+    var X := X.Mk('a');
+    X.Mk('b'); // N10
+  end;
+  begin
+    var X := Box.Get(0);
+    X.Bar; // N11
+  end;
+  begin
+    var X := NoRet(1);
+    X.Bar; // N12
+  end;
+  begin
+    var X := MkAmb(1);
+    X.Bar; // N13
+  end;
+end;
+
+procedure Shadow;
+var
+  GetFoo: TFn;
+begin
+  var X := GetFoo(1);
+  X.Bar; // N14
+end;
+
 end.
 '@
 W (Join-Path $WorkDir 'App.dpr') @'
@@ -320,7 +405,11 @@ $cases = @(
   @{ M = 'R7';  N = 'Put';  Q = 'uDefs.TBox.Put' },
   @{ M = 'R8';  N = 'Ping'; Q = 'uDefs.TInner.Ping' },
   @{ M = 'R9';  N = 'Bar';  Q = 'uDefs.TFoo.Bar' },
-  @{ M = 'R10'; N = 'Base'; Q = 'uDefs.TBase.Base' })
+  @{ M = 'R10'; N = 'Base'; Q = 'uDefs.TBase.Base' },
+  @{ M = 'S1';  N = 'Bar';  Q = 'uDefs.TFoo.Bar' },
+  @{ M = 'S2';  N = 'Ping'; Q = 'uDefs.TInner.Ping' },
+  @{ M = 'S3';  N = 'Bar';  Q = 'uDefs.TFoo.Bar' },
+  @{ M = 'S4';  N = 'Ping'; Q = 'uDefs.TInner.Ping' })
 foreach ($c in $cases) {
   $r = CallAt $c.M $c.N
   Check ("{0}  {1} binds {2}" -f $c.M, $c.N, $c.Q) `
@@ -342,7 +431,13 @@ $negs = @(
   @{ M = 'N5';  N = 'Bar'; Why = 'a self reference is not a type' },
   @{ M = 'N6';  N = 'Bar'; Why = 'a local value shadows the type of the name' },
   @{ M = 'N7';  N = 'Bar'; Why = 'a member the chain does not declare' },
-  @{ M = 'N8';  N = 'Add'; Why = 'an unknown head that does not read as a type name' })
+  @{ M = 'N8';  N = 'Add'; Why = 'an unknown head that does not read as a type name' },
+  @{ M = 'N9';  N = 'Bar'; Why = 'overloads that disagree on the return type' },
+  @{ M = 'N10'; N = 'Mk';  Why = 'a self reference, which must also terminate' },
+  @{ M = 'N11'; N = 'Bar'; Why = 'a generic parameter is not a type name' },
+  @{ M = 'N12'; N = 'Bar'; Why = 'a procedure yields nothing' },
+  @{ M = 'N13'; N = 'Bar'; Why = 'the return type is ambiguous where the local reads it' },
+  @{ M = 'N14'; N = 'Bar'; Why = 'a local value shadows the routine of the name' })
 foreach ($c in $negs) {
   $r = CallAt $c.M $c.N
   Check ("{0}  {1} stays unbound: {2}" -f $c.M, $c.N, $c.Why) `
