@@ -344,6 +344,8 @@ is refused (exit 2, naming both and suggesting `resolve-dbs --project <x>`), lea
 the DB byte-identical; `--rebuild` proceeds with a NOTE, replacing the other closure
 wholesale. An untagged DB (fresh, folder-built, or pre-1.18) is accepted. (1.31.2)
 
+**First use builds the project index (1.44).** A query verb given `--project <x.dproj>` and no `--db` builds a missing project index at its proper path (the manifest owner, else `<project dir>\_D-RAG\<base>.sqlite`) and says so on one stderr line; `--no-create` skips that. It never builds with an explicit `--db`, with no project known, or from a private engine copy, and `resolve-dbs` stays read-only: it marks each missing path on stderr and prints the index command.
+
 **MODE is chosen per run, independently of type:**
 
 | Mode | Meaning |

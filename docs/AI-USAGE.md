@@ -58,6 +58,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > exist is exit 2, never a narrower answer: the verb names the path and its
 > position on stderr and returns nothing. Match on the EXIT CODE, not the prose.
 > Omitting `--db` is safe for the verbs that resolve a manifest set (`query`, `find-callers`, `lint-all` ...) -- the manifest resolver drops absent files. **`usages` is the exception**: `usages --name X` with no `--db` is exit 2 ("usages does not read the manifest"); pass the `--db` that `resolve-dbs` printed, or `--in <file.pas>`, which finds the unit's project and database (no index: prints the command, exit 2; two projects: names both, exit 2; no project: library unit on an assumed platform, unless it uses units the library lacks).
+> **First use of a project (1.44).** A verb that needs the project's own index and finds none at its proper path (the manifest owner, else `<project dir>\_D-RAG\<base>.sqlite`) builds it fresh when `--project <x.dproj>` names the project and no `--db` was given, and says so on ONE stderr line; `--no-create` skips that. It never builds with an explicit `--db`, with no project known, or from a private engine copy (anything not under `third_party\dll-win64`, Program Files or LocalAppData\Programs, or with `DRAGLINT_NO_AUTOCREATE=1`); two creators cannot race (an exclusive `<db>.creating` lock: the loser builds nothing). `resolve-dbs` stays read-only: it marks EVERY missing path on stderr (`NOTE: <path> (missing) -- not built yet; build it with: <command>`) and leaves stdout the bare path list.
 > With `--project` and no `--db` (a `"db"` in `.drag-lint.json` counts as an
 > explicit `--db`), readers resolved through the consumer DB list open ONLY that
 > project's own index (its exact manifest section, else
@@ -90,7 +91,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 > ASCII output is byte-for-byte what it always was. `--output-encoding utf8` or
 > `utf16` writes UTF-8 / UTF-16LE instead (no BOM); `"outputEncoding": "utf8"` in
 > `.drag-lint.json` sets it when the command line does not; any other value is an
-> argument error (exit 3). Files a verb writes (`--output`, reports) obey it too. When an ascii run turns non-ASCII characters into `\uXXXX` escapes it prints ONE stderr warning naming the count and how to switch (`--output-encoding utf8`, or `"outputEncoding"` in `.drag-lint.json`); a JSON file written with `--output` then also carries a leading `"lossy_output": N`.
+> argument error (exit 3). Files a verb writes (`--output`, reports) obey it too. When an ascii run turns non-ASCII characters into `\uXXXX` escapes it prints ONE stderr warning naming the count and how to switch (`--output-encoding utf8`, or `"outputEncoding"` in `.drag-lint.json`); a JSON file written with `--output` then also carries a leading `"lossy_output": N`. Text reports (`implementors --output` included, since 1.44) follow `--output-encoding` and never carry a BOM; files whose FORMAT fixes the encoding (the manifest and other JSON written by `WriteJsonFileAtomic`, `compare` HTML) are UTF-8 without BOM whatever the option says.
 > Non-ANSI characters in paths are stored in the index intact (they were `?`
 > before 2026-10-26).
 >

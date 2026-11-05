@@ -468,6 +468,7 @@ type
     // v0.24: rename
     RenameTo: string ; // --to <NewName>
     NoBackup: Boolean; // --no-backup
+    NoCreate: Boolean; // --no-create (C8: do not build a missing project index on first use)
     // v0.69 D2a: rename --kind symbol|param
     // RenameKind reuses Kind (--kind already parsed into Kind)
     // RefFile    reuses InFile (--file already parsed into InFile)
@@ -820,6 +821,8 @@ begin
   Writeln('  Where is X, what is its signature?    drag-lint query --name X --db <db>');
   Writeln('  Who calls X?                          drag-lint query find-callers --name X --db <db>');
   Writeln('       ^ the BARE member name. --name TFoo.Bar silently returns 0; --name Bar returns the sites.');
+  Writeln('  The project has no index yet?         a query verb with --project <x.dproj> and no --db builds it on first use (stderr says so); --no-create skips that');
+  Writeln('       ^ never with --db or from a private engine copy; resolve-dbs only marks each missing path and prints the index command.');
   Writeln('  Change X without reading the file     drag-lint context --task "modify <Unit.TType.X>" --db <db> --format markdown');
   Writeln('       ^ ~60x leaner than the source. Add --full-surface ONLY for DFM/component/event work.');
   Writeln('  Is unit U part of project P?          drag-lint query --name U --db <P.sqlite> --exact');
@@ -1783,6 +1786,7 @@ begin
     else if (A = '--n') and (i < ParamCount) then begin Inc(i); Result.BenchN:= StrToIntDef(ParamStr(i), 20); end
     else if (A = '--to') and (i < ParamCount) then begin Inc(i); Result.RenameTo:= ParamStr(i); end
     else if A = '--no-backup' then Result.NoBackup:= True
+    else if A = '--no-create' then Result.NoCreate:= True
     // cycles --fix
     else if (A = '--cycle') and (i < ParamCount) then
     begin
@@ -11402,7 +11406,11 @@ begin
     if Fmt = 'json' then Write(DRagLint.Hover.Renderer.RenderHoverJson(Model, Asm_.FactLines))
     else Write(DRagLint.Hover.Renderer.RenderHoverMarkdown(Syms[0], Doc, Rhs, Asm_.FactLines, Asm_.DeclaredType));
   end
-  else Write(DRagLint.Hover.Renderer.RenderHoverPlain(Syms[0], Doc, Asm_.DeclaredType));
+  else
+  begin
+    Write(DRagLint.Hover.Renderer.RenderHoverPlain(Syms[0], Doc, Asm_.DeclaredType));
+    for var ImplLine in Asm_.ImplLines do Writeln(ImplLine); { C22: plain skips FactLines, so the answering-methods line is printed here }
+  end;
   Result:= 0;
 end; // function
 
@@ -11597,7 +11605,7 @@ begin
       else ImplementorsReportToChart(Report, Fmt = 'mermaid');
   if AArgs.Output <> '' then
   begin
-    TFile.WriteAllText(AArgs.Output, OutText, TEncoding.UTF8);
+    WriteOutputFile(AArgs.Output, OutText); { C16: follows --output-encoding, never a BOM (was TFile.WriteAllText UTF8 + BOM) }
     if not IsJson then Writeln('Wrote ', AArgs.Output);
   end
   else if IsJson then Writeln(OutText)
@@ -17853,6 +17861,10 @@ begin
         'cross-file ' +
         'duplicate-code, interface-reference-cycle, exception-class enrichment, and ' +
         'unit-not-in-dpr without --project.')
+    else if (AArgs.ProjectPath <> '') and (AArgs.Path = '') and (AArgs.InFile = '') then
+      Writeln(ErrOutput, { 1.44: a project-level run names no file, so "no index covers this file" was a wrong claim about a rule that DID run }
+        'drag-lint: note: project-level run (--project, no file): unit-not-in-dpr / unit-not-in-library ' +
+        'ran; the per-file store-backed rules need a file argument (and --db).')
     else
       Writeln(ErrOutput,
         'drag-lint: note: no index covers this file, so the store-backed and project ' +
@@ -34162,6 +34174,57 @@ begin
   if Result = '' then Result:= AManifest.Settings.DefaultPlatform;
 end;
 
+{ C8 (owner override 2026-11-05): the project's own index is missing and the run names the
+  project (--project). A verb that needs it builds it fresh at the project's proper path
+  (the manifest owner, else <project dir>\_D-RAG\<base>.sqlite) and says so on ONE stderr
+  line. NEVER when: --no-create; an explicit --db (ResolveConsumerDbs returned earlier);
+  no project file; a non-deployed engine (a private copy: not under third_party\dll-win64,
+  Program Files or LocalAppData\Programs) or DRAGLINT_NO_AUTOCREATE=1. Two creators must not
+  race: an exclusive <db>.creating lock; the loser creates nothing. resolve-dbs never calls this. }
+function EngineIsDeployedForCreate: Boolean;
+var
+  Dir: string;
+begin
+  if GetEnvironmentVariable('DRAGLINT_NO_AUTOCREATE') = '1' then Exit(False);
+  Dir:= LowerCase(ExtractFilePath(ParamStr(0)));
+  Result:= Dir.Contains('\third_party\dll-win64\') or Dir.Contains('\program files')
+    or Dir.Contains('\appdata\local\programs\');
+end;
+
+function TryAcquireCreateLock(const AProjDb, ALockPath: string): TFileStream;
+begin
+  try
+    TDirectory.CreateDirectory(ExtractFilePath(ExpandFileName(AProjDb)));
+    Result:= TFileStream.Create(ALockPath, fmCreate or fmShareExclusive);
+  except
+    on Exception do Result:= nil; { held by another creator, or the folder is not writable }
+  end;
+end;
+
+procedure AutoCreateMissingProjectDb(const AArgs: TArgs; const AProjDb: string);
+var
+  Lock: TFileStream;
+  LockPath: string;
+begin
+  if AArgs.NoCreate or (AProjDb = '') or (AArgs.ProjectPath = '') then Exit;
+  if TFile.Exists(AProjDb) or (not TFile.Exists(AArgs.ProjectPath)) then Exit;
+  if not EngineIsDeployedForCreate then Exit;
+  if not NoteOnce('autocreate|' + ExpandFileName(AProjDb)) then Exit;
+  LockPath:= AProjDb + '.creating';
+  Lock:= TryAcquireCreateLock(AProjDb, LockPath);
+  if Lock = nil then Exit; { another creator holds the lock (or the folder is not writable): create nothing }
+  try
+    Writeln(ErrOutput, Format('NOTE: the index of %s did not exist; building it now at %s (first use; pass --no-create to skip): drag-lint index --project "%s" --db "%s"',
+      [AArgs.ProjectPath, AProjDb, AArgs.ProjectPath, AProjDb]));
+    Flush(ErrOutput);
+    if (not ReindexOwnerProject(AArgs.ProjectPath, AProjDb)) and (not TFile.Exists(AProjDb)) then
+      Writeln(ErrOutput, 'NOTE: building it failed; the run continues without the project index.');
+  finally
+    Lock.Free;
+    TFile.Delete(LockPath);
+  end;
+end;
+
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>;
 var
   Manifest : TIndexManifest                            ;
@@ -34214,6 +34277,7 @@ begin
     begin
       if ResolveOwnProjectDb(Manifest, AArgs.ProjectPath, ProjDb, Claimants) = pdmAmbiguous then ProjDb:= '';
       LibDbs:= LibrarySectionDbs(Manifest);
+      AutoCreateMissingProjectDb(AArgs, ProjDb);
     end;
   except
     on E: Exception do
@@ -34706,6 +34770,34 @@ begin
   Result:= 0;
 end;
 
+{ C8: the exact command that builds the missing index AMissing. A manifest section whose
+  DbPath is AMissing names its own command (IndexSectionCommand); otherwise the project
+  form when a project file is known. Never raises: a manifest the plan cannot be read from
+  falls through to the generic form. }
+function MissingDbBuildCommand(const AManifest: TIndexManifest; const AMissing, AConfigPath, AProjectFile: string): string;
+var
+  Resolver: DRagLint.Project.Resolver.TProjectResolver;
+  Plan    : TIndexPlan;
+  PS      : TPlanSection;
+begin
+  Result:= '';
+  try
+    Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
+    try
+      Plan:= ResolvePlan(AManifest, nil, Resolver);
+    finally
+      Resolver.Free;
+    end;
+    for PS in Plan.Items do
+      if SameText(ExpandFileName(PS.DbPath), ExpandFileName(AMissing)) then
+        Exit(IndexSectionCommand(PS, AConfigPath));
+  except
+    on Exception do Result:= '';
+  end;
+  Result:= if AProjectFile <> '' then Format('drag-lint index --project "%s" --db "%s"', [AProjectFile, AMissing])
+    else Format('drag-lint index --all --only <section> (the section whose db is %s)', [AMissing]);
+end;
+
 function DoResolveDbsList(const AArgs: TArgs): Integer;
 var
   Manifest  : TIndexManifest                            ;
@@ -34797,6 +34889,16 @@ begin
         Writeln(ErrOutput, Format('NOTE: the config covers %s but its index is not built: %s does not exist. ' +
           'Build it with: drag-lint index --all --only <section>', [AArgs.InFile, Paths[0]]));
     end;
+    { C8: resolve-dbs stays read-only and stdout stays the bare path list (scripts capture it),
+      but EVERY path whose file is missing is marked on stderr with the exact command that builds
+      it -- not only the all-missing case above. }
+    var MissingCmd: string;
+    for P in Paths do
+    begin
+      if TFile.Exists(P) then Continue;
+      MissingCmd:= MissingDbBuildCommand(Manifest, P, ConfigPath, AArgs.ProjectPath);
+      Writeln(ErrOutput, Format('NOTE: %s (missing) -- not built yet; build it with: %s', [P, MissingCmd]));
+    end;
     if AArgs.AsJson then
     begin
       J:= TJSONArray.Create;
@@ -34844,7 +34946,9 @@ begin
     case ResolveProjectDb(Manifest, AArgs.ProjectPath, PDb, PClaimants) of
       pdmUnique:
         begin
-          if AArgs.AsJson then
+          if not TFile.Exists(PDb) then
+            Writeln(ErrOutput, Format('NOTE: %s (missing) -- not built yet; build it with: drag-lint index --project "%s" --db "%s"',
+              [PDb, AArgs.ProjectPath, PDb]));          if AArgs.AsJson then
           begin
             var JO: TJSONObject:= TJSONObject.Create;
             try
