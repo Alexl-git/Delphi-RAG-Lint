@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.38.0-alpha",
   "summary": "Names the Delphi the code is for: lint drops advice needing a newer compiler; index parses `VER<N>0` / `CompilerVersion` branches for it",
-  "intro": "Read this when your code must still build on an older Delphi (12, 10.4, XE7 ...): pass --target-compiler or set target_compiler in drag-lint-lint.json, and lint stops suggesting syntax that compiler cannot take.",
+  "intro": "Read this when your code must still build on an older Delphi (12, 10.4, XE7, 5 ...): pass --target-compiler or set target_compiler in drag-lint-lint.json, and lint stops suggesting syntax that compiler cannot take.",
   "wikiPage": "target-compiler",
   "surfaces": [
     {

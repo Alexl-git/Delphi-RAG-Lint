@@ -13187,6 +13187,23 @@ var
     ApplyRunTargetCompiler, or a run at the default target, takes no new path. }
   GRunTargetGate: TTargetRuleGate;
 
+var
+  GLegacyAssumptionNoted: Boolean = False;
+
+/// <summary>D5-COMPILERVER: says on stderr, once per run, that "auto" found nothing
+/// naming the compiler and assumed Delphi 5.</summary>
+/// <param name="AToken">The winning target-compiler token.</param>
+/// <param name="AProjectFile">The --project value.</param>
+procedure NoteLegacyCompilerAssumption(const AToken, AProjectFile: string);
+begin
+  if GLegacyAssumptionNoted or not SameText(Trim(AToken), TARGET_COMPILER_AUTO)
+    or not AutoAssumesLegacyCompiler(AProjectFile) then Exit;
+  GLegacyAssumptionNoted:= True;
+  Writeln(ErrOutput, Format('drag-lint: note: target-compiler: nothing names the compiler of %s (no .dproj beside it); '
+    + 'assuming Delphi 5 (VER130, CompilerVersion %d). Name another with --target-compiler.',
+    [AProjectFile, ASSUMED_LEGACY_COMPILER]));
+end;
+
 /// <summary>PR #8 / x139: the CompilerVersion the PREPROCESSOR describes
 /// (VER&lt;N&gt;0, CompilerVersion, RTLVersion) for this run. First source that
 /// names one wins: --target-compiler (a version token; "auto" reads --project's
@@ -13211,7 +13228,11 @@ begin
   var Explicit: Boolean:= Tok <> '';
   if (Tok = '') and SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then Tok:= TARGET_COMPILER_AUTO;
   if Tok = '' then Exit;
-  if ResolveTargetCompiler(Tok, '', '', AArgs.ProjectPath, V, Err) then SetTargetCompilerVersion(V)
+  if ResolveTargetCompiler(Tok, '', '', AArgs.ProjectPath, V, Err) then
+  begin
+    SetTargetCompilerVersion(V);
+    NoteLegacyCompilerAssumption(Tok, AArgs.ProjectPath);
+  end
   else if Explicit and not SameText(Tok, TARGET_COMPILER_AUTO) then { an unmappable "auto" stays silent: index --all resolves it per section }
   begin
     { whole-branch review 1.39: `index --target-compiler 99` used to run silently at
@@ -13241,12 +13262,13 @@ var
   Since: TArray<Integer>;
   I    : Integer;
 begin
-  Dproj:= if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then AArgs.ProjectPath else '';
+  Dproj:= if MatchText(ExtractFileExt(AArgs.ProjectPath), ['.dproj', '.dpr', '.dpk']) then AArgs.ProjectPath else '';
   if not ResolveTargetCompiler(AArgs.TargetCompiler, AConfigValue, '', Dproj, V, Err) then
   begin
     Writeln(ErrOutput, 'drag-lint: ' + Err);
     Exit(False);
   end;
+  NoteLegacyCompilerAssumption(if Trim(AArgs.TargetCompiler) <> '' then AArgs.TargetCompiler else AConfigValue, Dproj);
   SetActiveTargetCompiler(V);
   GRunTargetGate:= Default(TTargetRuleGate);
   GRunTargetGate.Target:= V;

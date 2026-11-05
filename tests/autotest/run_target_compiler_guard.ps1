@@ -91,12 +91,12 @@ end.
 
   # ---- T1 tokens ----
   foreach ($t in @(@('13', 37), @('37', 37), @('12', 36), @('12.2', 36), @('36', 36), @('Delphi 11', 35),
-                   @('10.4', 34), @('10.3', 33), @('XE7', 28), @('xe2', 23), @('2009', 20), @('6', 14))) {
+                   @('10.4', 34), @('10.3', 33), @('XE7', 28), @('xe2', 23), @('2009', 20), @('6', 14), @('5', 13))) {
     $j = RulesJson @('--target-compiler', $t[0])
     $got = if ($j) { $j.target_compiler } else { '<no json>' }
     Check "T1 token '$($t[0])' -> $($t[1])" ($got -eq $t[1]) "got $got"
   }
-  foreach ($bad in @('14.5', '5', '38', 'XE9', 'florence2')) {
+  foreach ($bad in @('14.5', '0', '38', 'XE9', 'florence2')) {
     $r = Run @('rules', '--json', '--target-compiler', $bad)
     Check "T1 unknown token '$bad' refuses (exit 2 + accepted list)" (($r.Code -eq 2) -and ($r.Err -match 'unknown version') -and ($r.Err -match 'accepted:')) "exit $($r.Code): $($r.Err.Trim())"
   }

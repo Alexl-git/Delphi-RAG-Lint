@@ -46,7 +46,8 @@ function KnownPlatforms: TArray<string>;
 /// the RAD Studio installation it resolved, so a project built with Delphi 10.3
 /// (BDS 20.0) is preprocessed with VER330 / CompilerVersion 33. Independent of
 /// --target-compiler, which gates LINT rules (DRagLint.Lint.TargetCompiler).</summary>
-/// <param name="AVersion">A CompilerVersion (33 for 10.3, 37 for 13).</param>
+/// <param name="AVersion">A CompilerVersion (33 for 10.3, 37 for 13; 13 for Delphi
+/// 5, which has no such constant but defines VER130).</param>
 procedure SetTargetCompilerVersion(AVersion: Integer);
 
 /// <summary>The compiler version PlatformBuiltins and CompilerNumerics describe.</summary>
@@ -288,6 +289,9 @@ const
 const
   // BDS numbering ran 13 behind CompilerVersion (BDS 20.0 = 10.3 = 33) up to
   // BDS 23.0 (Delphi 12, 36); Delphi 13 jumped both to 37.
+  // D6 (14) introduced CONDITIONALEXPRESSIONS and MSWINDOWS: below it the Delphi 13
+  // rows do not describe the compiler at all (see PlatformBuiltins).
+  FIRST_MODERN_BUILTINS = 14;
   BDS_COMPILER_OFFSET  = 13;
   BDS_LAST_OFFSET      = 23;
   BDS_FIRST_OFFSET     = 14;
@@ -371,6 +375,11 @@ const
 var
   Spec: string;
 begin
+  { D5-COMPILERVER (1.43): D1..D5 know VER<N>0, WIN32 and CPU386 and none of the
+    rest; only Win32 exists, whatever --platform says. UNVERIFIED: from the Delphi 5
+    documentation, no such compiler is on the build box. }
+  if GTargetCompilerVersion < FIRST_MODERN_BUILTINS then
+    Exit(TArray<string>.Create('win32', 'cpu386', 'ver' + IntToStr(GTargetCompilerVersion) + '0'));
   if SameText(APlatform, 'Win32') then Spec := WIN32_SET
   else if SameText(APlatform, 'Win64x') then Spec := WIN64X_SET
   else if SameText(APlatform, 'Linux64') then Spec := LINUX64_SET
