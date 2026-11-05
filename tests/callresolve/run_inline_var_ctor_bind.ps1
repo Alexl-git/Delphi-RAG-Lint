@@ -27,7 +27,7 @@
     R10 X.Bar / X.Ping  two sibling blocks, each its own X -> each own type
     R11 X.Add           TNotHere.Create, no project type -> no edge, type text TNotHere
     N1 X.Bar            TAmb.Create, two used units declare TAmb -> unbound
-    N2 X.Bar            TFoo.Create as IThing (operator) -> unbound
+    N2 X.Bar            TFoo.Create as IThing: the cast's type, never the chain's -> no edge, type text IThing
     N3 X.Bar            F(TFoo.Create) (a call around it) -> unbound
     N4 X.Bar            for var X in ...              -> unbound
     N5 X.Bar            var X := X.Create (self reference) -> unbound
@@ -415,6 +415,9 @@ foreach ($c in $cases) {
   Check ("{0}  {1} binds {2}" -f $c.M, $c.N, $c.Q) `
     (($r.Count -eq 1) -and ($r[0].tq -eq $c.Q)) ("rows=$($r.Count) tq=$($r[0].tq)")
 }
+$r = CallAt 'N2' 'Bar'
+Check 'N2 a cast after the chain types X as the cast, not as the chain (1.43 recv2): no edge to TFoo.Bar' `
+  (($r.Count -eq 1) -and ($null -eq $r[0].tq) -and ($r[0].rtt -eq 'IThing')) ("rows=$($r.Count) tq=$($r[0].tq) rtt=$($r[0].rtt)")
 $r = CallAt 'R11' 'Add'
 Check 'R11 a type the project does not declare: no edge, its NAME is recorded' `
   (($r.Count -eq 1) -and ($null -eq $r[0].tq) -and ($r[0].rtt -eq 'TNotHere')) ("rows=$($r.Count) tq=$($r[0].tq) rtt=$($r[0].rtt)")
@@ -425,7 +428,6 @@ Check 'R8N TFac.Create is a class FUNCTION: X is a TInner, never a TFac' `
 
 $negs = @(
   @{ M = 'N1';  N = 'Bar'; Why = 'two used units declare TAmb -- absence beats a guess' },
-  @{ M = 'N2';  N = 'Bar'; Why = 'an operator after the chain is not the chain''s type' },
   @{ M = 'N3';  N = 'Bar'; Why = 'a call around the constructor' },
   @{ M = 'N4';  N = 'Bar'; Why = 'a for-in var is the element type, not an initializer' },
   @{ M = 'N5';  N = 'Bar'; Why = 'a self reference is not a type' },

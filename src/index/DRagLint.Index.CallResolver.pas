@@ -531,9 +531,11 @@ type
     /// <returns>The type text in source spelling; '' when none is written and none is decided.</returns>
     /// <remarks>Decided shapes: `X := [Unit.]TType[&lt;args&gt;].Member[(args)]` whose head names no
     /// value in scope, and an initializer ending in a call whose result the ladder types to a type
-    /// of this index. `for var X in Ident do` takes the element type of an array Ident
-    /// (ValueElementTypeText). An operator after the chain and any other for-var answer ''. An
-    /// unresolved receiver is better than a wrong one. Pinned by
+    /// of this index. `X := Y as TType` takes the cast's type (ParseAsInit). `for var X in Ident do`
+    /// and `X := Ident[i]` take the element type of a collection Ident (ValueElementTypeText);
+    /// `X := F(x)`, `X := A.B(x)` and `X := A.Field` take a collection result as written, and
+    /// `for var X in` the same three take its element (InitResultText). An operator after the
+    /// chain and any other for-var answer ''. An unresolved receiver is better than a wrong one. Pinned by
     /// tests\callresolve\run_inline_var_ctor_bind.ps1 and run_forin_element_bind.ps1. Memoised per
     /// declaration.</remarks>
     function LocalTypeText(const ADecl: TSymbol): string;
@@ -599,10 +601,67 @@ type
     /// <param name="ASite">FileId, EnclosingSymbolId, StartLine and StartCol are consulted.</param>
     /// <param name="AName">A bare identifier.</param>
     /// <param name="AIterating">See ValueDeclaredText.</param>
-    /// <returns>T for `array of T`, `array[..] of T`, `TArray&lt;T&gt;` and a non-generic alias of
-    /// those, when TypeTextSameAt proves T; else ''. A generic class declines: nothing here
-    /// substitutes its parameter.</returns>
+    /// <returns>See CollectionElementOfText; '' when AName is not such a value.</returns>
     function ValueElementTypeText(const ASite: TReference; const AName: string; AIterating: Boolean): string;
+    /// <summary>1.43 (recv2): T of a library list written `TList&lt;T&gt;`, read by its name.</summary>
+    /// <param name="AText">The type text, generic arguments included.</param>
+    /// <param name="AFileId">The file AText is written in.</param>
+    /// <returns>The one type argument of TList or TObjectList in a unit using
+    /// System.Generics.Collections, or of IList or IReadOnlyList in a unit using Spring.Collections,
+    /// when no project type carries the name; else ''. These four enumerate and subscript to T.</returns>
+    function LibraryListElementText(const AText: string; AFileId: Int64): string;
+    /// <summary>1.43 (recv2): the element type of a collection type written AText.</summary>
+    /// <param name="AText">The type text.</param>
+    /// <param name="ADeclFile">The file AText is written in.</param>
+    /// <param name="ADeclScope">The level AText is written at.</param>
+    /// <param name="ASiteFile">The file of the local that takes the element type.</param>
+    /// <param name="ASiteScope">That local's routine.</param>
+    /// <returns>T for `array of T`, `array[..] of T`, `TArray&lt;T&gt;`, a library list
+    /// (LibraryListElementText) and a non-generic alias of those, when TypeTextSameAt proves T;
+    /// else ''. Any other generic class declines: nothing here substitutes its parameter.</returns>
+    function CollectionElementOfText(const AText: string; ADeclFile, ADeclScope, ASiteFile, ASiteScope: Int64): string;
+    /// <summary>1.43 (recv2): the declared type of member AName of a type of this index.</summary>
+    /// <param name="AOwnerId">The type's symbol id.</param>
+    /// <param name="AName">The member's name.</param>
+    /// <param name="AFile">Receives the file the text is written in.</param>
+    /// <param name="AScope">Receives the level the text is written at.</param>
+    /// <returns>The return type of the ONE method of the name on the chain, or the type of a field
+    /// or property; '' for an overload set, an override pair or anything else.</returns>
+    function MemberResultText(AOwnerId: Int64; const AName: string; out AFile, AScope: Int64): string;
+    /// <summary>1.43 (recv2): the declared type of a parsed `F(x)`, `A.B(x)` or `A.Field`.</summary>
+    /// <param name="ASite">FileId, EnclosingSymbolId, StartLine and StartCol are consulted.</param>
+    /// <param name="AHead">The expression's first identifier.</param>
+    /// <param name="AChain">Everything before the member, as written; '' for a bare F(x).</param>
+    /// <param name="AMember">The last identifier; '' for a bare F(x).</param>
+    /// <param name="AFile">Receives the file the text is written in.</param>
+    /// <param name="AScope">Receives the level the text is written at.</param>
+    /// <returns>The text; '' for a with member, a head that is a value called, a chain of more than
+    /// one receiver, a receiver of a generic type, a bare name a library ancestor could declare, or
+    /// a bare name more than one visible routine or any type or unit value carries.</returns>
+    /// <remarks>Reads the declaration directly, not through the receiver ladder: the ladder cuts a
+    /// result type at `&lt;`, and it falls back to a chain's last segment as a type name.</remarks>
+    function InitResultText(const ASite: TReference; const AHead, AChain, AMember: string; out AFile, AScope: Int64): string;
+    /// <summary>1.43 (recv2): InitResultText for `A.B`, one receiver of a declared non-generic type.</summary>
+    /// <param name="ASite">FileId, EnclosingSymbolId, StartLine and StartCol are consulted.</param>
+    /// <param name="AHead">The receiver.</param>
+    /// <param name="AMember">The member.</param>
+    /// <param name="AFile">Receives the file the text is written in.</param>
+    /// <param name="AScope">Receives the level the text is written at.</param>
+    /// <returns>The text; '' when the receiver's type is not proved at ASite.</returns>
+    function InitMemberResultText(const ASite: TReference; const AHead, AMember: string; out AFile, AScope: Int64): string;
+    /// <summary>1.43 (recv2): InitResultText for a bare `F(x)`.</summary>
+    /// <param name="ASite">FileId, EnclosingSymbolId, StartLine and StartCol are consulted.</param>
+    /// <param name="AHead">The routine's name.</param>
+    /// <param name="AFile">Receives the file the text is written in.</param>
+    /// <param name="AScope">Receives the level the text is written at.</param>
+    /// <returns>The text; '' unless the enclosing class chain or exactly one visible unit routine
+    /// answers, and nothing nearer or of another kind carries the name.</returns>
+    function InitBareResultText(const ASite: TReference; const AHead: string; out AFile, AScope: Int64): string;
+    /// <summary>1.43 (recv2): whether a routine enclosing ASite declares AName itself.</summary>
+    /// <param name="ASite">FileId, EnclosingSymbolId, StartLine and StartCol are consulted.</param>
+    /// <param name="AName">The identifier.</param>
+    /// <returns>True for a local, parameter, local const or type, or nested routine of the name.</returns>
+    function RoutineDeclaresName(const ASite: TReference; const AName: string): Boolean;
     /// <summary>Review 2026-10-23 (N-07, W5-res2): whether ARef sits inside an
     /// anonymous method's body within its enclosing routine, and the declared
     /// return type of the innermost one.</summary>
@@ -7054,6 +7113,10 @@ begin
     Result:= PosAtOrBefore(ALine, ACol, ADecl.EndLine, ADecl.EndCol);
 end;
 
+const
+  { What may follow a complete initializer expression, as '|tok|' tests. }
+  INLINE_INIT_END = '|;|end|else|until|except|finally|';
+
 type
   { 1.43: the parts of the one initializer shape an inline var is typed from. }
   TInlineInit = record
@@ -7067,11 +7130,12 @@ type
   end;
 
 { 1.43 (INLINE-VAR-CTOR-UNTYPED): parses `Name := A[.B...][<args>].Member[(args)]`,
-  or `Name := F(args)`, at ADecl into AInit. False for every other text: an operator
+  or `Name := F(args)`, at ADecl into AInit; with AForIn the same after `Name in`, up to
+  `do`. False for every other text: an operator
   or a further segment after the chain, a call in the middle of it, an inner `:` type.
   The tokens skip comments and string literals, so `;` in an argument cannot end it.
   Also a staleness guard: the name must be at the declaration's own position. }
-function ParseInlineInit(ALines: TStringList; const ADecl: TSymbol; out AInit: TInlineInit): Boolean;
+function ParseInlineInit(ALines: TStringList; const ADecl: TSymbol; out AInit: TInlineInit; AForIn: Boolean = False): Boolean;
 const
   MAX_INIT_LINES = 16;
   MIN_INIT_TOKENS = 4; // name, :=, type, dot
@@ -7127,7 +7191,8 @@ begin
   Result:= False;
   AInit := Default(TInlineInit);
   Toks  := CodeTokens(ALines, ADecl.StartLine, ADecl.StartCol, Min(ADecl.StartLine + MAX_INIT_LINES, ALines.Count), MaxInt);
-  if (Length(Toks) < MIN_INIT_TOKENS) or (Toks[0].Text <> LowerCase(ADecl.Name)) or (Toks[1].Text <> ':=') then Exit;
+  if (Length(Toks) < MIN_INIT_TOKENS) or (Toks[0].Text <> LowerCase(ADecl.Name))
+     or (Toks[1].Text <> (if AForIn then 'in' else ':=')) then Exit;
   AInit.Line:= Toks[2].Line;
   AInit.Col := Toks[2].Col;
   Args:= '';
@@ -7150,7 +7215,7 @@ begin
   if (Length(Segs) = 0) or ((Args <> '') and (GenericAt <> High(Segs) - 1)) then Exit;
   var Group: string;
   if (I <= High(Toks)) and (Toks[I].Text = '(') and not SkipGroup('(', ')', Group) then Exit;
-  Result:= (I <= High(Toks)) and '|;|end|else|until|except|finally|'.Contains('|' + Toks[I].Text + '|')
+  Result:= (I <= High(Toks)) and (if AForIn then Toks[I].Text = 'do' else INLINE_INIT_END.Contains('|' + Toks[I].Text + '|'))
     and ((Length(Segs) >= 2) or (Group <> ''));
   AInit.Head:= Segs[0];
   if Length(Segs) >= 2 then
@@ -7262,8 +7327,10 @@ function IsPlainTypeRef(const AText: string): Boolean;
 begin
   Result:= (AText <> '') and IsIdentStart(AText[1]);
   for var I: Integer:= 1 to Length(AText) do
-    Result:= Result and (IsIdentPart(AText[I]) or CharInSet(AText[I], ['.', '<', '>', ','])
-                         or ((AText[I] = ' ') and (I > 1) and (AText[I - 1] = ',')));
+  begin
+    var BlankAfterComma: Boolean:= (AText[I] = ' ') and (I > 1) and (AText[I - 1] = ',');
+    Result:= Result and (IsIdentPart(AText[I]) or CharInSet(AText[I], ['.', '<', '>', ',']) or BlankAfterComma);
+  end;
 end;
 
 { 1.43 (recv2): `Name in Ident do` at ADecl, a for-in over a bare identifier. }
@@ -7283,6 +7350,86 @@ begin
   AIdent:= Toks[COLLECTION_TOK].Text;
   ALine := Toks[COLLECTION_TOK].Line;
   ACol  := Toks[COLLECTION_TOK].Col;
+end;
+
+{ 1.43 (recv2): `Name := Ident[one subscript]` at ADecl, then the statement's end. A comma
+  at the group's own depth is a second dimension, whichever way it is read. }
+function ParseIndexInit(ALines: TStringList; const ADecl: TSymbol; out AIdent: string; out ALine, ACol: Integer): Boolean;
+const
+  MAX_INIT_LINES = 16;
+  IDENT_TOK = 2;     // name, :=, Ident, [
+var
+  Toks : TArray<TCodeTok>;
+  I    : Integer         ;
+  Depth: Integer         ;
+begin
+  Result:= False;
+  AIdent:= '';
+  ALine := 0;
+  ACol  := 0;
+  Toks  := CodeTokens(ALines, ADecl.StartLine, ADecl.StartCol, Min(ADecl.StartLine + MAX_INIT_LINES, ALines.Count), MaxInt);
+  if (Length(Toks) <= IDENT_TOK + 1) or (Toks[0].Text <> LowerCase(ADecl.Name)) or (Toks[1].Text <> ':=') then Exit;
+  if (not IsIdentStart(Toks[IDENT_TOK].Text[1])) or (Toks[IDENT_TOK + 1].Text <> '[') then Exit;
+  I    := IDENT_TOK + 1;
+  Depth:= 0;
+  repeat
+    if (Toks[I].Text = '[') or (Toks[I].Text = '(') then Inc(Depth)
+    else if (Toks[I].Text = ']') or (Toks[I].Text = ')') then Dec(Depth)
+    else if (Toks[I].Text = ',') and (Depth = 1) then Exit;
+    Inc(I);
+  until (Depth = 0) or (I > High(Toks));
+  if (Depth <> 0) or (I > High(Toks)) or not INLINE_INIT_END.Contains('|' + Toks[I].Text + '|') then Exit;
+  AIdent:= Toks[IDENT_TOK].Text;
+  ALine := Toks[IDENT_TOK].Line;
+  ACol  := Toks[IDENT_TOK].Col;
+  Result:= True;
+end;
+
+{ 1.43 (recv2): `Name := Value as [Unit.]TType[<args>]` at ADecl, then the statement's end.
+  `as` binds tighter than `+` and as tight as `*`, so any operator outside a group before it
+  means the cast is not the whole expression: only a selector chain may stand there. }
+function ParseAsInit(ALines: TStringList; const ADecl: TSymbol; out AType: string): Boolean;
+const
+  MAX_INIT_LINES = 16;
+  VALUE_TOK = 2;     // name, :=, value...
+  WORD_OPS = '|not|and|or|xor|div|mod|shl|shr|in|is|inherited|nil|';
+var
+  Toks : TArray<TCodeTok>;
+  I    : Integer         ;
+  Depth: Integer         ;
+begin
+  Result:= False;
+  AType := '';
+  Toks  := CodeTokens(ALines, ADecl.StartLine, ADecl.StartCol, Min(ADecl.StartLine + MAX_INIT_LINES, ALines.Count), MaxInt);
+  if (Length(Toks) <= VALUE_TOK) or (Toks[0].Text <> LowerCase(ADecl.Name)) or (Toks[1].Text <> ':=') then Exit;
+  I    := VALUE_TOK;
+  Depth:= 0;
+  while (I <= High(Toks)) and ((Depth > 0) or (Toks[I].Text <> 'as')) do
+  begin
+    var Tok: string:= Toks[I].Text;
+    var Grouping: Boolean:= CharInSet(Tok[1], ['(', '[', ')', ']']);
+    if (Tok = '(') or (Tok = '[') then Inc(Depth)
+    else if (Tok = ')') or (Tok = ']') then Dec(Depth);
+    var Selector: Boolean:= (IsIdentStart(Tok[1]) and not WORD_OPS.Contains('|' + Tok + '|')) or (Tok = '.') or (Tok = '^');
+    if (Depth < 0) or ((Depth = 0) and not (Grouping or Selector)) then Exit;
+    Inc(I);
+  end;
+  if (I = VALUE_TOK) or (I >= High(Toks)) then Exit;
+  Inc(I);
+  var Parts: TArray<string>:= [];
+  var Generic: Integer:= 0;
+  while (I <= High(Toks)) and ((Generic > 0) or not INLINE_INIT_END.Contains('|' + Toks[I].Text + '|')) do
+  begin
+    { Two names in a row are a second operator, Y as A as B. }
+    if (Generic = 0) and IsIdentStart(Toks[I].Text[1]) and (Length(Parts) > 0) and (Parts[High(Parts)] <> '.') then Exit;
+    if Toks[I].Text = '<' then Inc(Generic)
+    else if Toks[I].Text = '>' then Dec(Generic);
+    Parts:= Parts + [Copy(ALines[Toks[I].Line - 1], Toks[I].Col, Length(Toks[I].Text))];
+    Inc(I);
+  end;
+  if I > High(Toks) then Exit;
+  AType := string.Join('', Parts);
+  Result:= AType <> '';
 end;
 
 function TCallResolver.ScopeNamesGeneric(AScopeId: Int64; const ALc: string): Boolean;
@@ -7313,7 +7460,7 @@ begin
   end;
 end;
 
-function TCallResolver.ValueDeclaredText(const ASite: TReference; const AName: string; AIterating: Boolean;
+function TCallResolver.ValueDeclaredText(const ASite: TReference; const AName: string; AIterating: Boolean;  // dl:ok too-many-exit-points@7b27 -- REVIEWED 2026-11-05: each exit is one independent decline (with member, uncovered local, local const, non-value member, outer class, library ancestor); a found flag would only hide them.
   out ADecl: TSymbol): string;
 var
   Handled : Boolean       ;
@@ -7335,7 +7482,7 @@ begin
   var Scope: TSymbol:= SymbolById(ASite.EnclosingSymbolId);
   while (Scope.Id > 0) and (Scope.Kind in METHOD_KINDS) do
   begin
-    if Pos('|' + Lc + '|', LocalDeclNamesOf(Scope.Id, ASite.FileId)) > 0 then Exit;
+    if LocalDeclNamesOf(Scope.Id, ASite.FileId).Contains('|' + Lc + '|') then Exit;
     Scope:= SymbolById(Scope.ParentId);
   end;
   EnclosingClassChainDeclares(ASite.EnclosingSymbolId, '', ClassId);
@@ -7362,17 +7509,47 @@ begin
 end;
 
 function TCallResolver.ValueElementTypeText(const ASite: TReference; const AName: string; AIterating: Boolean): string;
-const
-  MAX_ALIAS_HOPS = 4; // the bound TypeOfSelectorChain walks aliases to
 var
   Decl: TSymbol;
 begin
+  Result:= ValueDeclaredText(ASite, AName, AIterating, Decl);
+  if Result <> '' then
+    Result:= CollectionElementOfText(Result, Decl.FileId, Decl.ParentId, ASite.FileId, ASite.EnclosingSymbolId);
+end;
+
+function TCallResolver.LibraryListElementText(const AText: string; AFileId: Int64): string;
+var
+  Depth: Integer;
+begin
   Result:= '';
-  var Text: string:= ValueDeclaredText(ASite, AName, AIterating, Decl);
-  if Text = '' then Exit;
-  var FromFile: Int64:= Decl.FileId;
-  var FromScope: Int64:= Decl.ParentId;
+  var Open: Integer:= AText.IndexOf('<');
+  if (Open <= 0) or not AText.EndsWith('>') then Exit;
+  var Head: string:= LowerCase(AText.Substring(0, Open));
+  var IsSystem: Boolean:= (Head = 'tlist') or (Head = 'tobjectlist');
+  if not (IsSystem or (Head = 'ilist') or (Head = 'ireadonlylist')) or FNameToCands.ContainsKey(Head) then Exit;
+  var UsesUnit: Boolean:= False;
+  for var U: string in FileUsesUnits(AFileId) do
+    UsesUnit:= UsesUnit or (if IsSystem then (U = 'system.generics.collections') or (U = 'generics.collections') else U = 'spring.collections');
+  if not UsesUnit then Exit;
+  var Arg: string:= AText.Substring(Open + 1, Length(AText) - Open - 2);
+  Depth:= 0;
+  for var C: Char in Arg do
+    if C = '<' then Inc(Depth)
+    else if C = '>' then Dec(Depth)
+    else if (C = ',') and (Depth = 0) then Exit;
+  Result:= Trim(Arg);
+end;
+
+function TCallResolver.CollectionElementOfText(const AText: string; ADeclFile, ADeclScope, ASiteFile, ASiteScope: Int64): string;
+const
+  MAX_ALIAS_HOPS = 4; // the bound TypeOfSelectorChain walks aliases to
+begin
+  Result:= '';
+  var Text: string:= AText;
+  var FromFile: Int64:= ADeclFile;
+  var FromScope: Int64:= ADeclScope;
   var Element: string:= ArrayElementTypeText(Text);
+  if Element = '' then Element:= LibraryListElementText(Text, FromFile);
   var Hop: Integer:= 0;
   while (Element = '') and (Hop < MAX_ALIAS_HOPS) do
   begin
@@ -7384,8 +7561,121 @@ begin
     FromFile := Alias.FileId;
     FromScope:= Alias.ParentId;
     Element  := ArrayElementTypeText(Text);
+    if Element = '' then Element:= LibraryListElementText(Text, FromFile);
   end;
-  if TypeTextSameAt(Element, FromFile, FromScope, ASite.FileId, ASite.EnclosingSymbolId) then Result:= Element;
+  if TypeTextSameAt(Element, FromFile, FromScope, ASiteFile, ASiteScope) then Result:= Element;
+end;
+
+function TCallResolver.MemberResultText(AOwnerId: Int64; const AName: string; out AFile, AScope: Int64): string;
+var
+  Matches: TList<TSymbol>;
+begin
+  Result:= '';
+  AFile := 0;
+  AScope:= 0;
+  Matches:= TList<TSymbol>.Create;
+  try
+    AddMethodsOnTypeChain(AOwnerId, AName, Matches);
+    if Matches.Count = 1 then
+    begin
+      Result:= SignatureReturnType(Matches[0].Signature);
+      AFile := Matches[0].FileId;
+      AScope:= Matches[0].Id;
+    end
+    else if Matches.Count = 0 then
+    begin
+      var Member: TSymbol:= NearestClassMember(AOwnerId, AName);
+      if Member.Kind in [skField, skProperty] then
+      begin
+        Result:= Trim(Member.Signature);
+        AFile := Member.FileId;
+        AScope:= Member.ParentId;
+      end;
+    end;
+  finally
+    Matches.Free;
+  end;
+end;
+
+function TCallResolver.InitResultText(const ASite: TReference; const AHead, AChain, AMember: string; out AFile, AScope: Int64): string;
+var
+  Handled: Boolean;
+begin
+  Result:= '';
+  AFile := 0;
+  AScope:= 0;
+  var Saved: TWithScopeStats:= FWith.Stats;
+  TypeReceiverThroughWith(ASite, AHead, Handled);
+  FWith.Stats:= Saved;
+  if Handled then Exit;
+  if AMember = '' then
+    Result:= InitBareResultText(ASite, AHead, AFile, AScope)
+  else if SameText(AChain, AHead) then
+    Result:= InitMemberResultText(ASite, AHead, AMember, AFile, AScope);
+end;
+
+function TCallResolver.InitMemberResultText(const ASite: TReference; const AHead, AMember: string; out AFile, AScope: Int64): string;
+var
+  Decl: TSymbol;
+begin
+  Result:= '';
+  AFile := 0;
+  AScope:= 0;
+  var Text: string:= ValueDeclaredText(ASite, AHead, True, Decl);
+  if Text.Contains('<') or not TypeTextSameAt(Text, Decl.FileId, Decl.ParentId, ASite.FileId, ASite.EnclosingSymbolId) then Exit;
+  var OwnerId: Int64:= DerefPointerAlias(ResolveTypeNameToSymbol(Text, ASite.FileId));
+  if (OwnerId > 0) and (SymbolById(OwnerId).Kind in TYPE_KINDS) then
+    Result:= MemberResultText(OwnerId, AMember, AFile, AScope);
+end;
+
+function TCallResolver.RoutineDeclaresName(const ASite: TReference; const AName: string): Boolean;
+begin
+  LocalInScopeAt(ASite, AName, Result);
+  var Scope: TSymbol:= SymbolById(ASite.EnclosingSymbolId);
+  while (not Result) and (Scope.Id > 0) and (Scope.Kind in METHOD_KINDS) do
+  begin
+    Result:= LocalDeclNamesOf(Scope.Id, ASite.FileId).Contains('|' + LowerCase(AName) + '|')
+      or (FindChildOfKind(Scope.Id, AName, METHOD_KINDS).Id > 0);
+    Scope := SymbolById(Scope.ParentId);
+  end;
+end;
+
+function TCallResolver.InitBareResultText(const ASite: TReference; const AHead: string; out AFile, AScope: Int64): string;
+var
+  ClassId: Int64         ;
+  L      : TList<TSymbol>;
+begin
+  Result:= '';
+  AFile := 0;
+  AScope:= 0;
+  if RoutineDeclaresName(ASite, AHead) then Exit;
+  EnclosingClassChainDeclares(ASite.EnclosingSymbolId, '', ClassId);
+  if ClassId > 0 then
+  begin
+    if NearestClassMember(ClassId, AHead).Id > 0 then Exit(MemberResultText(ClassId, AHead, AFile, AScope));
+    { Nothing on the project chain: an outer class or a library ancestor may still declare it. }
+    var Outer: TSymbol:= SymbolById(SymbolById(ClassId).ParentId);
+    var Hidden: Boolean:= (Outer.Id > 0) and (Outer.Kind in TYPE_KINDS);
+    for var Anc: TTypeAncestor in AncestorsOf(ClassId) do
+      Hidden:= Hidden or not Anc.Resolved;
+    if Hidden then Exit;
+  end;
+  var Lc: string:= LowerCase(AHead);
+  if FNameToCands.ContainsKey(Lc) or FNameToUnitValues.ContainsKey(Lc) or not FNameToRoutines.TryGetValue(Lc, L) then Exit;
+  var Hit: TSymbol:= Default(TSymbol);
+  var Hits: Integer:= 0;
+  for var S: TSymbol in L do
+    if (S.FileId = ASite.FileId) or (SameText(S.Section, 'interface') and CandInScope(ASite.FileId, S.FileId)) then
+    begin
+      Inc(Hits);
+      Hit:= S;
+    end;
+  if Hits = 1 then
+  begin
+    Result:= SignatureReturnType(Hit.Signature);
+    AFile := Hit.FileId;
+    AScope:= Hit.Id;
+  end;
 end;
 
 function TCallResolver.DecideInlineInitType(const ADecl: TSymbol): string;
@@ -7393,6 +7683,8 @@ var
   Lines: TStringList;
   IsFor: Boolean    ;
   Init : TInlineInit;
+  FromFile : Int64  ;
+  FromScope: Int64  ;
 begin
   Result:= '';
   Lines := LinesOf(ADecl.FileId);
@@ -7405,9 +7697,22 @@ begin
   begin
     var Collection: string;
     if ParseForInIdent(Lines, ADecl, Collection, Site.StartLine, Site.StartCol) then
-      Result:= ValueElementTypeText(Site, Collection, True);
+      Result:= ValueElementTypeText(Site, Collection, True)
+    else if ParseInlineInit(Lines, ADecl, Init, True) then
+    begin
+      Site.StartLine:= Init.Line;
+      Site.StartCol := Init.Col;
+      var Text: string:= InitResultText(Site, Init.Head, Init.TypeText, Init.Member, FromFile, FromScope);
+      if Text <> '' then Result:= CollectionElementOfText(Text, FromFile, FromScope, ADecl.FileId, ADecl.ParentId);
+    end;
     Exit;
   end;
+  var CastType: string;
+  if ParseAsInit(Lines, ADecl, CastType) then
+    Exit(if TypeTextSameAt(CastType, ADecl.FileId, ADecl.ParentId, ADecl.FileId, ADecl.ParentId) then CastType else '');
+  var Subscripted: string;
+  if ParseIndexInit(Lines, ADecl, Subscripted, Site.StartLine, Site.StartCol) then
+    Exit(ValueElementTypeText(Site, Subscripted, False));
   if not ParseInlineInit(Lines, ADecl, Init) then Exit;
   Site.StartLine        := Init.Line;
   Site.StartCol         := Init.Col;
@@ -7425,6 +7730,13 @@ begin
   end;
   if (Result = '') and (Init.Call <> '') then
     Result:= InlineInitCallType(Site, Init.Head, Init.Call);
+  if Result = '' then
+  begin
+    var Text: string:= InitResultText(Site, Init.Head, Init.TypeText, Init.Member, FromFile, FromScope);
+    if (Text <> '') and TypeTextSameAt(Text, FromFile, FromScope, ADecl.FileId, ADecl.ParentId)
+       and (CollectionElementOfText(Text, FromFile, FromScope, ADecl.FileId, ADecl.ParentId) <> '') then
+      Result:= Text;
+  end;
 end;
 
 function TCallResolver.LocalInScopeAt(const ARef: TReference; const AName: string;
