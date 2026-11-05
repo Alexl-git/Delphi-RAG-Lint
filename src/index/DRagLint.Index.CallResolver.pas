@@ -509,11 +509,21 @@ type
     /// <param name="AName">The identifier, matched case-insensitively.</param>
     /// <param name="ADeclared">True when the routine declares a local or
     /// parameter of that name at all, whether or not it covers the site.</param>
-    /// <returns>The declaration in scope at the site; a zero-Id symbol when none
-    /// is declared or none covers the site.</returns>
+    /// <returns>The declaration in scope at the site, an outer routine's included (1.43); a
+    /// zero-Id symbol when none is declared or none covers the site.</returns>
     /// <remarks>ADeclared with a zero-Id result is 'ambiguous': the caller
     /// declines, and the name still shadows fields, unit values and types.</remarks>
     function LocalInScopeAt(const ARef: TReference; const AName: string; out ADeclared: Boolean): TSymbol;
+    /// <summary>1.43 (RECV-UNDECIDABLE slice): for a site in a nested routine, the parameter or
+    /// local named AName of the nearest outer routine that declares it before the site.</summary>
+    /// <param name="ARef">EnclosingSymbolId, FileId, StartLine and StartCol are consulted.</param>
+    /// <param name="AName">The identifier, matched case-insensitively.</param>
+    /// <returns>The declaration; a zero-Id symbol when none is visible.</returns>
+    /// <remarks>An outer declaration after the site -- a var section following the nested
+    /// routine, an inline var in the outer body -- is out of scope and shadows nothing, so the
+    /// walk goes on. Stops at the first symbol that is not a routine. Pinned by
+    /// tests\callresolve\run_nested_outer_local_bind.ps1.</remarks>
+    function OuterLocalInScopeAt(const ARef: TReference; const AName: string): TSymbol;
     /// <summary>1.43 (INLINE-VAR-CTOR-UNTYPED): the type text of a value declaration:
     /// its written type, or, for an inline var with none, the type its initializer
     /// decides, exactly as if `var X: TFoo` had been written.</summary>
@@ -7229,6 +7239,27 @@ begin
   ADeclared:= Length(Values) > 0;
   for S in Values do
     if LocalScopeCovers(S, ARef.FileId, ARef.StartLine, ARef.StartCol) then Exit(S);
+  if not ADeclared then Result:= OuterLocalInScopeAt(ARef, AName);
+  ADeclared:= ADeclared or (Result.Id > 0);
+end;
+
+function TCallResolver.OuterLocalInScopeAt(const ARef: TReference; const AName: string): TSymbol;
+var
+  Values: TArray<TSymbol>;
+begin
+  Result:= Default(TSymbol);
+  var Scope: TSymbol:= SymbolById(SymbolById(ARef.EnclosingSymbolId).ParentId);
+  while (Scope.Id > 0) and (Scope.Kind in METHOD_KINDS) do
+  begin
+    var Kids: TList<TSymbol>:= ChildrenOf(Scope.Id);
+    Values:= [];
+    if Kids <> nil then
+      for var S: TSymbol in Kids do
+        if (S.Kind in [skLocalVar, skParam]) and SameText(S.Name, AName) then InsertNearestFirst(Values, S);
+    for var S: TSymbol in Values do
+      if LocalScopeCovers(S, ARef.FileId, ARef.StartLine, ARef.StartCol) then Exit(S);
+    Scope:= SymbolById(Scope.ParentId);
+  end;
 end;
 
 { The return type text of the anonymous method whose `function` keyword is
