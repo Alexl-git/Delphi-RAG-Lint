@@ -3687,6 +3687,10 @@ var
   GTrigramWarned: Boolean = False;
 
 const
+  { Decline reason ScopedResolveDeclineReason gives when a run recorded no file writes;
+    ResolveCallTargets replaces it with the clear when one was asked for. }
+  RESOLVE_REASON_NO_WRITES = 'this run recorded no file writes, so it cannot know what changed';
+
   { The ONE symbol_facts column list every reader selects (through
     SymbolFactsSelectCols), so that ReadSymbolFactsFromQuery -- the one
     column -> TSymbolFacts mapper, shared by GetSymbolFacts and
@@ -6793,7 +6797,7 @@ begin
     if FScopeWholeWhy <> '' then Exit(FScopeWholeWhy)
     else Exit('the whole-database latch was set (clear/prune/eviction, or the changed-file share)');
   if FScopeFiles.Count = 0 then
-    Exit('this run recorded no file writes, so it cannot know what changed');
+    Exit(RESOLVE_REASON_NO_WRITES);
   { The coverage limit is enforced during accumulation (NoteScopeRemoval latches
     FScopeWhole the moment it is crossed), so by here it can only be re-checked,
     not newly discovered. Kept as an assertion of the same rule at the point of
@@ -15238,7 +15242,10 @@ begin
     else ScopedResolveDeclineReason;
   { A clear forces the whole database, but only names itself when nothing more
     specific applies: a new database also clears, and says so in its own reason. }
-  if AClearFirst and (DeclineWhy = '') then DeclineWhy:= 'a full edge clear was asked for (a stale resolver or --resolve-only)';
+  { The vague "no file writes" reason is what an unchanged-DB --resolve-only
+    reaches first; the clear is the more direct cause, so it replaces it. }
+  if AClearFirst and ((DeclineWhy = '') or (DeclineWhy = RESOLVE_REASON_NO_WRITES)) then
+    DeclineWhy:= 'a full edge clear was asked for (a stale resolver or --resolve-only)';
   Scoped:= DeclineWhy = '';
   { ANNOUNCED BEFORE THE PASS, NOT AFTER IT. The completion lines at the bottom
     of this routine already say which shape ran -- but they print when it is
@@ -15899,7 +15906,10 @@ begin
     { Make the staleness VISIBLE. Silence here is what let a stale index degrade
       unnoticed: counts only went down and nothing errored. If this line ever
       appears, the fix is to REINDEX the named tree, not to re-run the resolve. }
-    if StaleFileCount > 0 then
+    if (StaleFileCount > 0) and AClearFirst then
+      ResolveLog(Format('calls      %d file(s) WITHHELD -- their source no longer matches the index, and this pass cleared all call edges first, so these files now have NO call edges or receivers until you reindex',
+        [StaleFileCount]))
+    else if StaleFileCount > 0 then
       ResolveLog(Format('calls      %d file(s) WITHHELD -- their source no longer matches the index, so their call edges and receivers were left alone (reindex to refresh)',
         [StaleFileCount]));
     if SkippedStaleRcv > 0 then

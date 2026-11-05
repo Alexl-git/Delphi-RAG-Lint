@@ -316,7 +316,9 @@ const
   // Built-in stale base-name glob patterns (case-insensitive via TGlob.Matches).
   // Note: date-stamp detection (_YYYYMMDD) is handled separately by TRegEx
   // in IsStaleName; the dead *_20######* glob has been removed.
-  STALE_GLOBS: array[0..4] of string = ( '*_OLD*', '* - Copy*', '*-Copy*', '*BACKUP*', '*-bad*' );
+  // BACKUP only counts when set off by _ - or a space (uCache_BACKUP): a bare *BACKUP*
+  // also matched live units such as DRagLint.Convert.Backup.
+  STALE_GLOBS: array[0..6] of string = ( '*_OLD*', '* - Copy*', '*-Copy*', '*_BACKUP*', '*-BACKUP*', '* BACKUP*', '*-bad*' );
 
   // --------------------------------------------------------------------------
 

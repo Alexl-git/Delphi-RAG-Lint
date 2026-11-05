@@ -1050,6 +1050,13 @@ function MakeSiblingStoreResolver(const AArgs: TArgs;
   const AOwned: TObjectList<TObject>): DRagLint.Lint.SharedScope.TSiblingStoreResolver; forward;
 function MakeSiblingProjectLister(const AArgs: TArgs): DRagLint.Lint.SharedScope.TSiblingProjectLister; forward;
 
+var
+  { The manifest an `index` / `index --all` run was given with --config, or ''. Set by those two
+    verbs only (their --config IS a manifest; lint's is not), read by ResolveLibraryDb so the
+    library gate (EvaluateLibraryGate) sees the same manifest as the run instead of the
+    engine-dir one. LIBRARY-GATE-IGNORES-CONFIG: a stub json used to mark real DBs pending. }
+  GLibraryManifestPath: string = '';
+
 // v0.14: load defaults from `.drag-lint.json` in cwd (or any parent),
 // before CLI flags. Recognized keys:
 //   { "db": "...", "project": "...", "path": "...", "rule": "...",
@@ -5376,6 +5383,7 @@ begin
   if ConfigPath <> '' then
   begin
     if not TFile.Exists(ConfigPath) then begin Writeln('ERROR: config file not found: ', ConfigPath); Exit(2); end;
+    GLibraryManifestPath:= ConfigPath;
     var Content:= TFile.ReadAllText(ConfigPath);
     var RootDir:= ExtractFilePath(TPath.GetFullPath(ConfigPath));
     try
@@ -6748,6 +6756,13 @@ begin
     the Database: line is unaffected. }
   if IdxArgs.DbFromConfig and SameText(ResolvedDb, IdxArgs.DbPath) then
     Writeln('          (the "db" key of ', IdxArgs.DbConfigFile, '; pass --db to write elsewhere)');
+  { ORM3DB-WRITER: a directory index with no --db silently CREATED a database in a project root
+    (C:\Projects\DB\ORM3\drag-lint.sqlite, 192 MB). Refusing would break the documented
+    `index <folder>` use, so a database this run is about to create, with no --db to name it,
+    says so on its own line (the Database: line above is unchanged). }
+  if (not AArgs.DryRun) and (Length(IdxArgs.DbPaths) = 0) and (not TFile.Exists(ResolvedDb)) then
+    Writeln('          (new database: this file does not exist yet and no --db was given, so this run CREATES it; ',
+            'pass --db <file.sqlite> to write elsewhere)');
 
   { CREATE THE _D-RAG HOME BEFORE OPENING. The --all path already does this
     for a manifest item; this single-target path never did, because the old
@@ -33931,7 +33946,10 @@ begin
   Result:= '';
   try
     EngineDir:= ExtractFilePath(ParamStr(0));
-    Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
+    if (GLibraryManifestPath <> '') and TFile.Exists(GLibraryManifestPath) then
+      Manifest:= TManifestIO.ParseText(TFile.ReadAllText(GLibraryManifestPath),
+                   ExtractFilePath(TPath.GetFullPath(GLibraryManifestPath)))
+    else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
 
     if AArgs.CheckPlatform <> '' then Platform:= AArgs.CheckPlatform
     else
