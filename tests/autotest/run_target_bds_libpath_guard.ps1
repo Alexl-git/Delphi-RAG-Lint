@@ -220,13 +220,13 @@ WriteProject $accented '18.8'
 $cAcc = ClosureOf "$accented\P.dproj" $reg
 Check 'uLibOnly.pas is in the closure' (Named ($cAcc | Where-Object { $_ -like "$team20*" }) 'uLibOnly.pas') ($cAcc -join ';')
 Check 'and its own use uLibDeep.pas' (Named $cAcc 'uLibDeep.pas') ($cAcc -join ';')
-Check 'and no shadow-project path leaked into the closure' (-not (($cAcc -join ';') -match 'dl-closure-tail')) ($cAcc -join ';')
+Check 'and no temp-project path leaked into the closure' (-not (($cAcc -join ';') -match 'dl-closure-tail')) ($cAcc -join ';')
 
-Write-Host '[11] a bad path never aborts a section (BDS23: only a foreign target took the shadow-source path)'
-# Each body holds text the `in` scan used to take for a path: a literal that closes on the
+Write-Host '[11] a bad path never aborts a section (BDS23: a foreign target once scanned .dpr text for `in`)'
+# Each body holds text that scan took for a path: a literal that closes on the
 # NEXT line (CR/LF in the "path"), and one on a single line with a < in it.
 # The real clause names a SUBFOLDER and the dproj names no unit, so uLibOnly is reached
-# only if the shadow source still makes the real path absolute: the positive control.
+# only if the real in-clause is still honoured: the positive control.
 $bodies = @(
   @('next-line', "Writeln('it is in ' + pPath);`n  Writeln('next');"),
   @('less-than', "Writeln('a in ', pPath < 'b', ' c');")
@@ -243,7 +243,7 @@ foreach ($b in $bodies) {
   Check "$($b[0]): foreign target, index exits 0" ($exitT -eq 0) $idxT
   Check "$($b[0]): no exception reached the run" (-not ($idxT -match 'Invalid characters|FATAL')) $idxT
   Check "$($b[0]): control, the real in-clause unit is indexed" ($filesT -match 'sub\\uCaller\.pas') $filesT
-  Check "$($b[0]): control, the library-only unit behind it is reached through the shadow source" ($filesT -match 'uLibOnly\.pas') $filesT
+  Check "$($b[0]): control, the library-only unit behind it is reached through the tail" ($filesT -match 'uLibOnly\.pas') $filesT
   # check-unit reads the same dpr through ReadDprUsesPaths (any target, the older sibling).
   $walk = Dl @('check-unit', "$pText\sub\uCaller.pas", '--project', "$pText\P.dproj", '--db', $dbT) $reg
   Check "$($b[0]): check-unit does not die on the text" (-not ($walk -match 'Invalid characters|FATAL')) $walk
@@ -263,6 +263,53 @@ Check 'each unusable entry is named, once, in a warning' ((@($idxB -split "`r?`n
 Check 'a real path in double quotes is still used' ($filesB -match 'uLibOnly\.pas') $filesB
 Check 'and is not warned about' (-not ($idxB -match 'warning: .*path entry skipped.*Team20')) $idxB
 Check 'an unexpanded macro is an absent folder, as ever, not a warning' (-not ($idxB -match 'warning: .*NOT_A_MACRO')) $idxB
+
+Write-Host '[12] the tail is one walk over the real project: no temp project, own copies first'
+# A child created and deleted in a folder still moves the folder's mtime, so a temp project
+# leaves this evidence behind even though it removes itself.
+$quietTemp = Join-Path $Scratch 'QuietTemp'
+[void][IO.Directory]::CreateDirectory($quietTemp)
+$longAgo = [DateTime]::new(2000, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
+[IO.Directory]::SetLastWriteTimeUtc($quietTemp, $longAgo)
+$savedTmp = $env:TMP; $savedTemp = $env:TEMP
+$env:TMP = $quietTemp; $env:TEMP = $quietTemp
+$cTemp = ClosureOf "$p103\P.dproj" $reg
+$env:TMP = $savedTmp; $env:TEMP = $savedTemp
+Check 'a foreign-target closure writes nothing under the temp folder' ([IO.Directory]::GetLastWriteTimeUtc($quietTemp) -eq $longAgo) ([IO.Directory]::GetLastWriteTimeUtc($quietTemp).ToString('o'))
+Check 'control: that closure did reach the library-only unit' (Named $cTemp 'uLibOnly.pas') ($cTemp -join ';')
+# The using unit's own folder beats the tail, and the tail copy is not added beside it.
+$pTwin = Join-Path $Scratch 'PTwin'
+WriteText "$pTwin\P.dproj" (DprojText '18.8' 'P')
+WriteText "$pTwin\P.dpr" "program P;`nuses uCaller in 'sub\uCaller.pas';`nbegin`nend.`n"
+WriteUnit "$pTwin\sub\uCaller.pas" 'uCaller' 'uTwin' 'procedure CallIt;' "procedure CallIt;`nbegin`nend;"
+WriteUnit "$pTwin\sub\uTwin.pas" 'uTwin' '' '' ''
+WriteUnit "$team20\uTwin.pas" 'uTwin' '' '' ''
+$cTwin = ClosureOf "$pTwin\P.dproj" $reg
+Check 'the unit''s own folder wins over the tail' (Named ($cTwin | Where-Object { $_ -like "$pTwin*" }) 'uTwin.pas') ($cTwin -join ';')
+Check 'and the tail copy is not added beside it' (-not (Named ($cTwin | Where-Object { $_ -like "$team20*" }) 'uTwin.pas')) ($cTwin -join ';')
+# The project's own search path beats the tail.
+$pOwn = Join-Path $Scratch 'POwn'
+WriteText "$pOwn\P.dproj" "<Project><PropertyGroup><ProjectVersion>18.8</ProjectVersion><DCC_UnitSearchPath>own</DCC_UnitSearchPath><MainSource>P.dpr</MainSource></PropertyGroup></Project>`n"
+WriteText "$pOwn\P.dpr" "program P;`nuses uLibOnly;`nbegin`nend.`n"
+WriteUnit "$pOwn\own\uLibOnly.pas" 'uLibOnly' '' 'procedure LibProc;' "procedure LibProc;`nbegin`nend;"
+$cOwn = ClosureOf "$pOwn\P.dproj" $reg
+Check 'the project search path wins over the tail' (Named ($cOwn | Where-Object { $_ -like "$pOwn*" }) 'uLibOnly.pas') ($cOwn -join ';')
+Check 'and the tail copy stays out' (-not (Named ($cOwn | Where-Object { $_ -like "$team20*" }) 'uLibOnly.pas')) ($cOwn -join ';')
+# The main source's own uses reach the tail, without a DCCReference.
+$pSeed = Join-Path $Scratch 'PSeed'
+WriteText "$pSeed\P.dproj" "<Project><PropertyGroup><ProjectVersion>18.8</ProjectVersion><MainSource>P.dpr</MainSource></PropertyGroup></Project>`n"
+WriteText "$pSeed\P.dpr" "program P;`nuses uLibOnly;`nbegin`nend.`n"
+$cSeed = ClosureOf "$pSeed\P.dproj" $reg
+Check 'a library-only unit named by the .dpr itself is reached' (Named ($cSeed | Where-Object { $_ -like "$team20*" }) 'uLibOnly.pas') ($cSeed -join ';')
+Check 'and through it its own use' (Named $cSeed 'uLibDeep.pas') ($cSeed -join ';')
+# An in-clause outside the project folder is one file, not two spellings of it (1.42 listed it
+# as app\..\lib\uRel.pas and again as lib\uRel.pas from its temp project: drag-lint.dproj, 573 for 290).
+$pRel = Join-Path $Scratch 'PRel\app'
+WriteText "$pRel\P.dproj" "<Project><PropertyGroup><ProjectVersion>18.8</ProjectVersion><MainSource>P.dpr</MainSource></PropertyGroup></Project>`n"
+WriteText "$pRel\P.dpr" "program P;`nuses uRel in '..\lib\uRel.pas';`nbegin`nend.`n"
+WriteUnit (Join-Path $Scratch 'PRel\lib\uRel.pas') 'uRel' '' '' ''
+$cRel = ClosureOf "$pRel\P.dproj" $reg
+Check 'a project-relative reference is listed once' (@($cRel | Where-Object { [IO.Path]::GetFileName($_) -ieq 'uRel.pas' }).Count -eq 1) ($cRel -join ';')
 
 Write-Host ''
 Write-Host "target-bds-libpath: pass=$script:pass fail=$script:fail"

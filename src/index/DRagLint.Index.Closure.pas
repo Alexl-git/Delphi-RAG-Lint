@@ -64,6 +64,7 @@ type
   TClosureResolver = class
     strict private
       FLibraryRoots: TArray<string>;
+      FLibraryTail : TArray<string>; // GH #13: searched after the project's own paths; see SetLibraryTail
 
       // PP-Task-10: per-config file discovery. When FPreprocessEnabled, source
       // content is run through the in-process directive preprocessor under
@@ -360,6 +361,15 @@ type
       /// </remarks>
       procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
 
+      /// <summary>Names the folders Resolve searches for a unit after the project's own
+      /// search paths and after the using unit's own folder, as dcc reads a library
+      /// path. Also searched for include files.</summary>
+      /// <param name="ATail">The folders, in search order; nil for none (the default),
+      /// which leaves Resolve exactly as it is without a tail.</param>
+      /// <remarks>Stays set for later Resolve calls on this instance. A file under an
+      /// ALibraryRoot stays out of the closure even when the tail finds it.</remarks>
+      procedure SetLibraryTail(const ATail: TArray<string>);
+
       /// <summary>Resolve the compile closure of a .dpr or .dproj project.
       /// Returns the set of project-local .pas/.inc files that get compiled:
       /// the project member units + transitive project-local uses + {$I} files.
@@ -422,6 +432,11 @@ begin
   FPreprocessEnabled := AEnabled;
   FProfile           := AProfile;
   FPreprocessFellBack:= False;   // reset the one-shot fallback latch per configure
+end;
+
+procedure TClosureResolver.SetLibraryTail(const ATail: TArray<string>);
+begin
+  FLibraryTail:= ATail;
 end;
 
 procedure TClosureResolver.LogFallbackOnce(const AFileLabel: string; const AError: Exception);
@@ -942,7 +957,8 @@ var
   UnitFilePaths: TStringList;
   DprojRefFiles: TStringList;
 
-  SearchArr   : TArray<string>;
+  SearchArr   : TArray<string>; // the project's own paths, then the library tail
+  OwnPaths    : TArray<string>; // the project's own paths only: units ask these first
   Item        : TWorkItem     ;
   ResolvedFile: string        ;
   UnitDir     : string        ;
@@ -954,6 +970,7 @@ var
   BaseName    : string        ;
   ProjSource  : string        ; // lane INC: the .dpr/.dpk whose own includes are scanned too
   UnitFileMemo: TDictionary<string, string>; // unit name AS WRITTEN -> FindUnitFile's answer
+  TailFileMemo: TDictionary<string, string>; // the same, over FLibraryTail
 
   { FindUnitFile over SearchArr, once per name (PR #10, Jonathas Paiva). The walk
     asks for the same library units -- System.SysUtils, Vcl.Forms, Windows -- from
@@ -966,8 +983,19 @@ var
   begin
     if not UnitFileMemo.TryGetValue(AName, Result) then
     begin
-      Result:= FindUnitFile(AName, SearchArr);
+      Result:= FindUnitFile(AName, OwnPaths);
       UnitFileMemo.Add(AName, Result);
+    end;
+  end;
+
+  { GH #13: the library tail, asked last so a project's own copy always wins. Same
+    memo reasoning: nearly every member asks it for the same RTL names. }
+  function FindTailFileOnce(const AName: string): string;
+  begin
+    if not TailFileMemo.TryGetValue(AName, Result) then
+    begin
+      Result:= FindUnitFile(AName, FLibraryTail);
+      TailFileMemo.Add(AName, Result);
     end;
   end;
 
@@ -1036,6 +1064,7 @@ begin
   UnitFilePaths:= TStringList.Create;
   DprojRefFiles:= TStringList.Create;
   UnitFileMemo := TDictionary<string, string>.Create;
+  TailFileMemo := TDictionary<string, string>.Create;
   try
     // --- Step 1: build search paths -------------------------------------------
     // Always include the project base directory first
@@ -1097,6 +1126,9 @@ begin
     end;
 
     if (ProjSource = '') and (Ext <> '.dproj') then ProjSource:= ProjectAbs;
+    OwnPaths:= SearchPaths.ToStringArray;
+    for var TailDir: string in FLibraryTail do
+      if SearchPaths.IndexOf(TailDir) < 0 then SearchPaths.Add(TailDir);
     SearchArr:= SearchPaths.ToStringArray;
 
     // --- Step 2: seed the worklist -------------------------------------------
@@ -1126,6 +1158,7 @@ begin
       end;
 
       if ResolvedFile = '' then ResolvedFile:= FindUnitFileOnce(UN);
+      if ResolvedFile = '' then ResolvedFile:= FindTailFileOnce(UN);
 
       if (ResolvedFile <> '') and not IsLibraryFile(ResolvedFile) then
       begin
@@ -1176,6 +1209,7 @@ begin
         ResolvedFile:= FindUnitFileOnce(SubName);
         // Also try relative to the unit's own directory (not always on path)
         if (ResolvedFile = '') and TFile.Exists(TPath.Combine(UnitDir, SubName + '.pas')) then ResolvedFile:= TPath.GetFullPath( TPath.Combine(UnitDir, SubName + '.pas'));
+        if ResolvedFile = '' then ResolvedFile:= FindTailFileOnce(SubName);
 
         if (ResolvedFile <> '') and not IsLibraryFile(ResolvedFile) then
         begin
@@ -1196,6 +1230,7 @@ begin
     Result.UsedBy  := UsedByList.ToArray;
     Result.SearchPaths:= SearchArr;
   finally
+    TailFileMemo.Free;
     UnitFileMemo.Free;
     DprojRefFiles.Free;
     UnitFilePaths.Free;
