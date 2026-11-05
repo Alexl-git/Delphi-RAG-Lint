@@ -24,7 +24,7 @@ referencesProvider, signatureHelpProvider, workspaceSymbolProvider
 | | Highlighting | Language server | Status |
 |---|---|---|---|
 | **VS Code** | **TextMate grammar -- shipped, v1.5** | **yes** | **ready -- extension included** |
-| **Zed** | tree-sitter (shipped separately) | yes | **needs a small Rust extension -- not built; see below** |
+| **Zed** | tree-sitter (shipped separately) | yes | **Rust extension in `tree-sitter-delphi13/editors/zed/`; see below** |
 | Neovim / Helix | tree-sitter (shipped separately) | yes | configure `drag-lint lsp` as an LSP command |
 
 **VS Code cannot use tree-sitter for highlighting.** VS Code highlights with
@@ -353,102 +353,31 @@ missing"*.
 
 Zed can already **highlight** Delphi: the tree-sitter grammars
 (`tree-sitter-delphi13`, `tree-sitter-dfm`) ship `queries/highlights.scm` and
-`queries/outline.scm`, and the Zed extension scaffold lives in
+`queries/outline.scm`, and the Zed extension lives in
 `tree-sitter-delphi13/editors/zed/`.
 
-**What is missing is the language-server registration, and it cannot be done in
-JSON.** Zed has no settings path that points at an arbitrary LSP binary; a custom
-server must be registered by an extension compiled to `wasm32-wasip1`. That
-requires a Rust toolchain.
+**The language-server registration is built.** Zed has no settings path that points at
+an arbitrary LSP binary, so a custom server has to be registered by a compiled Rust
+extension. That extension exists: `tree-sitter-delphi13/editors/zed/` (id `delphi13`,
+crate `zed_delphi13`, `src/delphi13.rs`). It runs `drag-lint lsp` from
+`lsp.drag-lint.binary` in the Zed settings, else from PATH. The manual test run against
+Zed 1.10.3 is recorded in `tree-sitter-delphi13/editors/ZED-TESTING.md`.
 
-**We have not built this**, and the honest reason is that no Rust toolchain is
-installed on the machine where drag-lint is developed. The work is small and
-fully specified below, so anyone with `rustup` can finish it. Contributions
-welcome.
-
-### What has to be written
-
-**1. `extension.toml`** -- add a `[lib]` section to the existing scaffold:
-
-```toml
-id = "delphi"
-name = "Delphi"
-version = "0.1.0"
-schema_version = 1
-
-[lib]
-kind = "rust"
-
-[grammars.delphi13]
-repository = "https://github.com/<org>/tree-sitter-delphi13"
-commit = "<pin a commit SHA>"
-
-[grammars.dfm]
-repository = "https://github.com/<org>/tree-sitter-dfm"
-commit = "<pin a commit SHA>"
-
-[language_servers.drag-lint]
-name = "drag-lint"
-languages = ["Delphi"]
-```
-
-**2. `Cargo.toml`**
-
-```toml
-[package]
-name = "zed_delphi"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
-zed_extension_api = "0.1"
-```
-
-**3. `src/lib.rs`** -- the whole extension is one trait method. It must return
-the command Zed should spawn:
-
-```rust
-use zed_extension_api::{self as zed, Command, LanguageServerId, Result, Worktree};
-
-struct DelphiExtension;
-
-impl zed::Extension for DelphiExtension {
-    fn new() -> Self { DelphiExtension }
-
-    fn language_server_command(
-        &mut self,
-        _id: &LanguageServerId,
-        worktree: &Worktree,
-    ) -> Result<Command> {
-        // Prefer an explicit setting, else fall back to PATH.
-        // Pass NO --db: drag-lint resolves databases from the drag-lint.json
-        // beside the exe, which keeps Zed following the project layout.
-        let path = worktree
-            .which("drag-lint")
-            .ok_or_else(|| "drag-lint not found on PATH".to_string())?;
-        Ok(Command {
-            command: path,
-            args: vec!["lsp".to_string()],
-            env: Default::default(),
-        })
-    }
-}
-
-zed::register_extension!(DelphiExtension);
-```
-
-**4. Build and install**
+### Build and install
 
 ```bash
-rustup target add wasm32-wasip1
-cargo build --release --target wasm32-wasip1
-# then: Zed -> Extensions -> Install Dev Extension -> pick the folder
+rustup target add wasm32-wasip2
+cargo build --release --target wasm32-wasip2
+# then: Zed -> Extensions -> Install Dev Extension -> pick the editors/zed folder
 ```
 
-### Notes for whoever builds it
+To pin a build or pass your own arguments, set them in the Zed settings:
+
+```json
+"lsp": { "drag-lint": { "binary": { "path": "C:/path/to/drag-lint.exe", "arguments": ["lsp"] } } }
+```
+
+### Notes
 
 * **`drag-lint lsp` needs no engine changes.** It was driven directly with an
   `initialize` request and answers correctly as a stock stdio LSP server. Nothing
