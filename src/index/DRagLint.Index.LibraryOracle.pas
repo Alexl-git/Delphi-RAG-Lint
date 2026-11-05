@@ -69,6 +69,9 @@ type
     FAncestors: TDictionary<string, TArray<TTypeAncestor>>;
     FStems    : TDictionary<string, string>;
     FFileUses : TDictionary<string, TArray<string>>;
+    FHelperMembers: TDictionary<string, string>;
+    function HelpersDeclare(const AStore: ISymbolStore; const AStoreTag, ATypeName, AMember: string): Boolean;
+    function CandProvesAbsent(const ACand: TLibCand; const AMember: string; const AProjectStore: ISymbolStore): Boolean;
     function Key(AStore: Integer; AId: Int64): string;
     function UnitStemOf(AStore: Integer; AFileId: Int64): string;
     function LibraryUses(AStore: Integer; AFileId: Int64): TArray<string>;
@@ -124,6 +127,22 @@ type
     /// <returns>The qualified name, or '' with AReason set.</returns>
     function BindBare(const AName: string; const AUsesUnits: TArray<string>; const AScopeType: string;
       out AReason: string): string;
+    /// <summary>True only when the library PROVES that a type named ATypeText cannot supply
+    /// AMember, so a `with` target descending from it does not hide an outer AMember.</summary>
+    /// <param name="ATypeText">The ancestor's name as the project wrote it; generics and unit
+    /// qualifier are ignored.</param>
+    /// <param name="AMember">The bare name being looked up.</param>
+    /// <param name="AProjectStore">The project's store: a helper the project declares on a
+    /// library type counts as a member. May be nil.</param>
+    /// <returns>True when at least one library type has that leaf name and EVERY one of them
+    /// has a chain wholly inside its store (TObject / IInterface / IUnknown excepted) that
+    /// declares no AMember and carries no helper declaring it. False for anything else: no
+    /// store, no such type, a chain leaving the library, a declaration, a helper.</returns>
+    /// <remarks>Every same-leaf candidate must agree, instead of Pick's uses-based choice,
+    /// because the ancestor's name was written in the DECLARING unit of a type possibly far
+    /// from the site. Helper targets match by exact name (type_helpers.target_name). Does not
+    /// touch the outcome counters: it binds nothing.</remarks>
+    function MemberProvablyAbsent(const ATypeText, AMember: string; const AProjectStore: ISymbolStore): Boolean;
     /// <summary>Outcome counters since Create.</summary>
     property Stats: TOracleStats read FStats;
   end;
@@ -134,6 +153,12 @@ type
 /// <returns>The leaf (`TStream`, `TList`, `^TRec`), or '' when the text is not a plain type
 /// name (`array of T`, `class of T`, a set, a procedural type).</returns>
 function NormalizeTypeLeaf(const ATypeText: string): string;
+
+/// <summary>True for an ancestor every class or interface has whether or not it is indexed.</summary>
+/// <param name="AName">The ancestor's name as written, possibly unit-qualified.</param>
+/// <returns>True for TObject, IInterface and IUnknown, whose members the caller answers from
+/// its own floor list.</returns>
+function IsRootAncestorName(const AName: string): Boolean;
 
 implementation
 
@@ -216,6 +241,13 @@ begin
   Result:= S;
 end;
 
+function IsRootAncestorName(const AName: string): Boolean;
+begin
+  var N: string:= LowerCase(AName);
+  if LastDelimiter('.', N) > 0 then N:= Copy(N, LastDelimiter('.', N) + 1, MaxInt);
+  Result:= (N = 'tobject') or (N = 'iinterface') or (N = 'iunknown');
+end;
+
 function InUses(const AStem: string; const AUses: TArray<string>): Boolean;
 begin
   for var U: string in AUses do
@@ -234,10 +266,12 @@ begin
   FAncestors:= TDictionary<string, TArray<TTypeAncestor>>.Create;
   FStems    := TDictionary<string, string>.Create;
   FFileUses := TDictionary<string, TArray<string>>.Create;
+  FHelperMembers:= TDictionary<string, string>.Create;
 end;
 
 destructor TLibraryOracle.Destroy;
 begin
+  FHelperMembers.Free;
   FFileUses.Free;
   FStems.Free;
   FAncestors.Free;
@@ -418,6 +452,56 @@ begin
         Exit(True);
       end;
   Result:= False;
+end;
+
+function TLibraryOracle.HelpersDeclare(const AStore: ISymbolStore; const AStoreTag, ATypeName, AMember: string): Boolean;
+var
+  CacheKey: string;
+  Names   : string;
+begin
+  { One `;name;name;` list per store and type: a with target is asked about many names. }
+  CacheKey:= AStoreTag + '#' + LowerCase(ATypeName);
+  if not FHelperMembers.TryGetValue(CacheKey, Names) then
+  begin
+    Names:= ';';
+    for var H: THelperEdge in AStore.FindHelpersOfType(ATypeName) do
+      for var S: TSymbol in AStore.FindAllChildSymbols(H.HelperSymbolId) do
+        Names:= Names + LowerCase(S.Name) + ';';
+    FHelperMembers.Add(CacheKey, Names);
+  end;
+  Result:= Names.Contains(';' + LowerCase(AMember) + ';');
+end;
+
+function TLibraryOracle.CandProvesAbsent(const ACand: TLibCand; const AMember: string;
+  const AProjectStore: ISymbolStore): Boolean;
+var
+  Hit  : TSymbol;
+  Chain: TArray<string>;
+begin
+  if DeclaringMember(ACand, AMember, Hit) then Exit(False);
+  Chain:= [ACand.Name, 'TObject'];
+  for var Id: Int64 in ACand.Ids do
+    for var A: TTypeAncestor in Ancestors(ACand.Store, Id) do
+      if A.Resolved and (A.SymbolId > 0) then Chain:= Chain + [NormalizeTypeLeaf(A.Name)]
+      else if not IsRootAncestorName(A.Name) then Exit(False);
+  for var TypeName: string in Chain do
+  begin
+    if (AProjectStore <> nil) and HelpersDeclare(AProjectStore, 'project', TypeName, AMember) then Exit(False);
+    for var Si:= 0 to High(FStores) do
+      if (FStores[Si] <> nil) and HelpersDeclare(FStores[Si], IntToStr(Si), TypeName, AMember) then Exit(False);
+  end;
+  Result:= True;
+end;
+
+function TLibraryOracle.MemberProvablyAbsent(const ATypeText, AMember: string;
+  const AProjectStore: ISymbolStore): Boolean;
+begin
+  var Leaf: string:= NormalizeTypeLeaf(ATypeText);
+  if (Length(FStores) = 0) or (Leaf = '') or Leaf.StartsWith('^') then Exit(False);
+  var Cands: TArray<TLibCand>:= Cached(FTypes, Leaf, TYPE_KINDS, True);
+  Result:= Length(Cands) > 0;
+  for var C: TLibCand in Cands do
+    Result:= Result and CandProvesAbsent(C, AMember, AProjectStore);
 end;
 
 function TLibraryOracle.StepPending(var ACand: TLibCand; const APending: string; out AReason: string): Boolean;
