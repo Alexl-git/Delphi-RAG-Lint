@@ -23,7 +23,7 @@ into `out\`. Baseline program output: `baseline-run.txt` (identical after the DL
 | LabDir (A/B) | interface `uses` entry inside `{$IFDEF}`, entry unused | refused `directive` | delete the guarded entry (unused) |
 | LabGuard (A/B) | same, entry used by a class field type | refused `directive` / class bodies | restructure by hand; both branches must stay consistent |
 | LabInc (A/B) | `uses {$I file.inc}` | NOT DETECTED: index parse error on LabIncA, no cycle line | none seen by DL; known blind spot (`uses-in-include`) |
-| `illegal\` IllOrders/IllCustomers | interface loop, F2047 | `cycles --f2047` names both edges and symbols; `--fix` dry run says "mechanical" but `--apply` rolls back (compile-error F2047) | merge the two classes into one unit (forward `TIllOrder = class;`) |
+| `illegal\` IllOrders/IllCustomers | interface loop, F2047 | `cycles --f2047` names both edges and symbols; on 1.36 `--fix` said "mechanical" and `--apply` rolled back (compile-error F2047); since 1.43 `--apply` merges both classes into one leaf and the project builds | merge the two classes into one unit (forward `TIllOrder = class;`) |
 
 ## Recorded results (this run)
 Index 32 files. 10 groups before; 7 after DL's five auto fixes (see `out\09-cycles-after.txt`);

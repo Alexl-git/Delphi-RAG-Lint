@@ -133,6 +133,10 @@
       "command": "drag-lint cycles --plan --db <file.sqlite>"
     },
     {
+      "ask": "Can it fix two units whose classes use each other in their interfaces (F2047)?",
+      "command": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> --unit <stem> --apply"
+    },
+    {
       "ask": "Why was this cycle refused?",
       "command": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> --cycle <n>"
     }

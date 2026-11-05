@@ -102,6 +102,10 @@ type
     /// <summary>Plan B3: symbols.id of every top-level routine of B the edge binds, in the order of
     /// its first reference; empty when it binds none. Set whatever else the edge binds.</summary>
     RoutineIds: TArray<Int64>;
+    /// <summary>R1 (lane cyc4): the globals of ToStem that the consumer names qualified (`ToUnit.G`) and
+    /// that move into the leaf; the plan rewrites that text to `Leaf.G`, so it is no `qualified-ref`
+    /// refusal. Filled by the planner, empty otherwise.</summary>
+    QualifiedMoved: TArray<string>;
   end;
 
   /// <summary>The index access BuildEdgeSurface needs from the cycle planner.</summary>
@@ -392,11 +396,15 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 /// admits any of them and none has a default parameter, otherwise the refusal stays), `signature-unknown`
 /// (a function with no stored signature), `routine-not-called`
 /// (a ref of the edge is neither a call nor an assignment value -- `@Foo` refuses; W6 C7: `X := Foo` is
-/// redirected to the pointer),
+/// redirected to the pointer; lane cyc4: so is `F(x, Foo)`, a whole argument on one line, for a procedure or a
+/// function with a required parameter -- a parameterless function there is its result and refuses),
 /// `qualified-ref` (the consumer names anything but the routine itself as `B.X`, B the declaring unit; W6 C7:
-/// `B.Foo(...)` of the inverted routine becomes the pointer call, except behind `@`), `init-order` (a call line lies in
-/// A's initialization section, or that section -- from `initialization` to `end.` --
-/// names the enclosing routine as a whole word: the variable is still nil there),
+/// `B.Foo(...)` of the inverted routine becomes the pointer call, except behind `@`; lane cyc4: only code counts, not a
+/// comment or a string, and a global in TEdgeSurface.QualifiedMoved is no finding), `init-order` (a call line lies in
+/// A's initialization section, or that section -- from `initialization` to `finalization` or `end.` --
+/// names the enclosing routine as a whole word: the variable is still nil there), `finalization-order` (lane cyc4: the same
+/// for A's finalization section, when B -- finalized first after the cut -- has a statement in its finalization section
+/// or a unit-level variable of a type not known to need no finalization),
 /// `unsupported-directive` (varargs, or a directive word it cannot classify, on the declaration).
 /// The planner (DRagLint.Report.CyclePlan, PlanInversion) refuses one more after this one:
 /// `duplicate-identifier` (the leaf declares the pointer's names differently and every suffix up to 99 is taken --
@@ -1208,7 +1216,9 @@ begin
 end;
 
 { J4, conservative: the call runs in the consumer's initialization section, or
-  that section names the routine that holds the call (as code: a comment naming it is not a use). }
+  that section names the routine that holds the call (as code: a comment naming it is not a use).
+  Lane cyc4: the section ends at `finalization`: code there runs long after every initialization, so
+  the variable is assigned by then (FinalOrderWhy holds what can go wrong there instead). }
 function InitOrderWhy(const pLines: TArray<string>; const pRef: TEdgeRef; const pUnit: string): string;
 begin
   Result:= '';
@@ -1217,6 +1227,8 @@ begin
   if Init = 0 then Exit;
   var Stop:= LastKeywordLine(Code, 'end.');
   if Stop < Init then Stop:= Length(Code) + 1;
+  var Fin:= LastKeywordLine(Code, 'finalization');
+  if (Fin > Init) and (Fin < Stop) then Stop:= Fin;
   if (pRef.Line > Init) and (pRef.Line < Stop) then
     Exit(Format('the call at line %d runs in the initialization section of `%s`, before the variable ' +
       'may be assigned', [pRef.Line, pUnit]));
@@ -1226,6 +1238,54 @@ begin
     if TRegEx.IsMatch(LineOf(Code, L), '\b' + TRegEx.Escape(Encl) + '\b', [roIgnoreCase]) then
       Exit(Format('`%s` (it makes the call at line %d) is named at line %d, in the initialization section of ' +
         '`%s`: it may run before the variable is assigned', [Encl, pRef.Line, L, pUnit]));
+end;
+
+{ Lane cyc4: why the state of the declaring unit may be gone when a routine runs from the consumer's
+  finalization section. The declaring unit keeps using the consumer after the cut, so it initializes
+  later and FINALIZES FIRST, whatever the order was before. Safe only when finalizing it does nothing
+  the routine could see: no statement in its finalization section and no unit-level variable the
+  compiler finalizes (a string, an interface, a dynamic array, a record ...). The types below are the
+  ones known to need no finalization; any other type counts as managed, unless it binds to a class or a
+  plain procedural type. '' when safe, or when the section does not run the call at all. }
+function FinalOrderWhy(const pSource: IEdgeSurfaceSource; const pLines: TArray<string>; const pRef: TEdgeRef;
+  const pUnit: string; pDeclFid: Int64; const pDeclUnit: string): string;
+const
+  CUnmanagedType = '^(Integer|Cardinal|Boolean|ByteBool|WordBool|LongBool|Byte|Word|ShortInt|SmallInt|LongInt|LongWord|Int8|' +
+    'Int16|Int32|Int64|UInt8|UInt16|UInt32|UInt64|NativeInt|NativeUInt|Single|Double|Extended|Real|Currency|Char|AnsiChar|' +
+    'WideChar|Pointer|TObject|TClass|TDateTime|TDate|TTime|THandle|DWORD|HWND)$';
+var
+  Owner: TSymbol;
+  Stem : string;
+begin
+  Result:= '';
+  var Code:= CodeOnlyLines(pLines);
+  var Fin := LastKeywordLine(Code, 'finalization');
+  if Fin = 0 then Exit;
+  var Stop:= LastKeywordLine(Code, 'end.');
+  if Stop < Fin then Stop:= Length(Code) + 1;
+  var Runs:= (pRef.Line > Fin) and (pRef.Line < Stop);
+  var Encl:= pRef.Enclosing.Substring(pRef.Enclosing.LastIndexOf('.') + 1);
+  if (not Runs) and (Encl <> '') then
+    for var L:= Fin + 1 to Stop - 1 do
+      if TRegEx.IsMatch(LineOf(Code, L), '\b' + TRegEx.Escape(Encl) + '\b', [roIgnoreCase]) then Runs:= True;
+  if not Runs then Exit;
+  var Lead:= Format('the call at line %d runs from the finalization section of `%s`, and after the cut `%s` is ' +
+    'finalized first: ', [pRef.Line, pUnit, pDeclUnit]);
+  var DeclCode:= CodeOnlyLines(pSource.FileLines(pDeclFid));
+  var DeclFin := LastKeywordLine(DeclCode, 'finalization');
+  var DeclEnd := LastKeywordLine(DeclCode, 'end.');
+  if DeclFin > 0 then
+    for var L:= DeclFin + 1 to DeclEnd - 1 do
+      if Trim(LineOf(DeclCode, L)) <> '' then
+        Exit(Lead + Format('its finalization section (line %d) has already run', [L]));
+  for var S in pSource.Store.FindSymbolsByFile(pSource.Store.GetFilePath(pDeclFid)) do
+  begin
+    if S.Kind <> skVarDecl then Continue;
+    var T:= Trim(S.Signature);
+    if TRegEx.IsMatch(T, CUnmanagedType, [roIgnoreCase]) or TRegEx.IsMatch(T, '^(procedure|function)\b', [roIgnoreCase]) then Continue;
+    if pSource.BindName(pDeclFid, S.StartLine, T, Owner, Stem) and (Owner.Kind = skClass) then Continue;
+    Exit(Lead + Format('its variable `%s` (`%s`) may be finalized already', [S.Name, T]));
+  end;
 end;
 
 { The declaring unit's edit: the assignments (B3: one per inverted routine) as the first
@@ -1540,17 +1600,19 @@ end;
   surface, but needs the uses entry the cut removes): its line, member in pMember; 0 for none.
   `<DeclUnit>.<more>` that is itself a unit of the project (e.g. its Untangle leaf) is skipped.
   W6 C7: `<DeclUnit>.<pAllowName>` alone (the inverted routine) is not a finding when pAllowedLines is
-  given -- its line is collected there instead. }
+  given -- its line is collected there instead. Lane cyc4: only code counts (a comment or a string that
+  reads `Unit. Word` is no use), and a name in pMoved is no finding: the plan rewrites it to the leaf. }
 function UnitQualifiedLine(const pSource: IEdgeSurfaceSource; const pLines: TArray<string>;
   const pDeclUnit: string; out pMember: string; const pAllowName: string = '';
-  pAllowedLines: TList<Integer> = nil): Integer;
+  pAllowedLines: TList<Integer> = nil; const pMoved: TArray<string> = nil): Integer;
 begin
   pMember:= '';
   var Parts:= pDeclUnit.Split(['.']);
   for var I:= 0 to High(Parts) do Parts[I]:= TRegEx.Escape(Parts[I]);
   var Rx:= '(?<![\w.])' + string.Join('\s*\.\s*', Parts) + '\s*\.\s*([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)';
-  for var L:= 1 to Length(pLines) do
-    for var M in TRegEx.Matches(BareCode(pLines[L - 1]), Rx, [roIgnoreCase]) do
+  var Code:= CodeOnlyLines(pLines);
+  for var L:= 1 to Length(Code) do
+    for var M in TRegEx.Matches(Code[L - 1], Rx, [roIgnoreCase]) do
     begin
       var Tail:= TRegEx.Replace(M.Groups[1].Value, '\s', '').Split(['.']);
       var IsUnit:= False;
@@ -1560,7 +1622,7 @@ begin
         Name:= Name + '.' + Seg;
         if pSource.FidOfStem(LowerCase(Name)) > 0 then IsUnit:= True;
       end;
-      if IsUnit then Continue;
+      if IsUnit or MatchText(Tail[0], pMoved) then Continue;
       if (pAllowedLines <> nil) and (Length(Tail) = 1) and SameText(Tail[0], pAllowName) then
       begin
         if not pAllowedLines.Contains(L) then pAllowedLines.Add(L);
@@ -1579,15 +1641,35 @@ begin
   Result:= TRegEx.IsMatch(pText, ':=\s*(?:[A-Za-z_][\w.]*\s*\.\s*)?' + TRegEx.Escape(pName) + '\b(?!\s*\()', [roIgnoreCase]);
 end;
 
+{ Lane cyc4: whether pText passes pName as a whole ARGUMENT (`F(x, Name)`, `F(Unit.Name, y)`). pText must be
+  one line of code; an argument on a continuation line of its own shows no `(` or `,` before it and stays
+  refused. }
+function IsArgumentUse(const pText, pName: string): Boolean;
+begin
+  Result:= TRegEx.IsMatch(CodeOnlyLines([pText])[0], '[(,]\s*(?:[A-Za-z_][\w.]*\s*\.\s*)?' + TRegEx.Escape(pName) + '\s*[,)]', [roIgnoreCase]);
+end;
+
+{ Lane cyc4: whether naming pRoutine without arguments can only mean the routine, never a call of it: a
+  procedure has no value, a function with a required parameter cannot be called without it. A parameterless
+  function as an argument is its RESULT, and `Pointer(F)` would read a variable differently: refused. }
+function NameIsTheRoutine(const pRoutine: TSymbol; const pSig: string): Boolean;
+var
+  HasDefault: Boolean;
+begin
+  if pRoutine.Kind = skProcedure then Exit(True);
+  Result:= (SignatureArity(pSig, HasDefault) > 0) and not HasDefault;
+end;
+
 { W6 C7: the qualified use `<DeclUnit>.<Name>` on pLine, classified like a bare ref: a call (arguments, or a
-  statement of its own) or an assignment value; `@` before it, or any other shape, is refused. }
-function QualifiedUseOk(const pText, pName, pDeclUnit: string): Boolean;
+  statement of its own), an assignment value or (lane cyc4, when pAllowArg) a whole argument; `@` before it,
+  or any other shape, is refused. }
+function QualifiedUseOk(const pText, pName, pDeclUnit: string; pAllowArg: Boolean): Boolean;
 begin
   var Parts:= pDeclUnit.Split(['.']);
   for var I:= 0 to High(Parts) do Parts[I]:= TRegEx.Escape(Parts[I]);
   var Q:= '(?<![\w.@])' + string.Join('\s*\.\s*', Parts) + '\s*\.\s*' + TRegEx.Escape(pName) + '\b';
   Result:= TRegEx.IsMatch(pText, Q + '\s*\(', [roIgnoreCase]) or TRegEx.IsMatch(pText, '^\s*' + Q + '\s*;', [roIgnoreCase]) or
-    IsValueUse(pText, pName);
+    IsValueUse(pText, pName) or (pAllowArg and IsArgumentUse(pText, pName));
   if TRegEx.IsMatch(pText, '@\s*(?:[A-Za-z_][\w.]*\s*\.\s*)?' + TRegEx.Escape(pName) + '\b', [roIgnoreCase]) then Result:= False;
 end;
 
@@ -1595,21 +1677,26 @@ end;
   anywhere in the consumer (the uses entry it needs would be removed), init order (J4).
   W6 C7: the inverted routine itself, qualified (`B.Foo(...)`) or assigned as a value (`X := Foo`), is
   redirected to the pointer under the same init-order check; any other `B.X` and `@Foo` still refuse.
-  pQualified receives the lines that name the inverted routine qualified. }
+  pQualified receives the lines that name the inverted routine qualified.
+  Lane cyc4: a routine passed as a whole argument (`F(x, Foo)`) is redirected too (see NameIsTheRoutine), a
+  `B.G` the plan moves (pSurface.QualifiedMoved) is rewritten, and a call that runs from the finalization
+  section refuses finalization-order when the declaring unit's finalization can be seen (FinalOrderWhy). }
 function CallRefusal(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface; pFromFid: Int64;
-  const pLines: TArray<string>; const pFromUnit, pDeclUnit: string; pQualified: TList<Integer>): TRecipeRefusal;
+  const pLines: TArray<string>; const pFromUnit, pDeclUnit: string; pQualified: TList<Integer>;
+  const pRoutine: TSymbol; pDeclFid: Int64): TRecipeRefusal;
 var
   Member: string;
 begin
   Result:= Default(TRecipeRefusal);
   var Name:= pSurface.RoutineName;
-  var Q:= UnitQualifiedLine(pSource, pLines, pDeclUnit, Member, Name, pQualified);
+  var AllowArg:= NameIsTheRoutine(pRoutine, pSurface.RoutineSig);
+  var Q:= UnitQualifiedLine(pSource, pLines, pDeclUnit, Member, Name, pQualified, pSurface.QualifiedMoved);
   if Q > 0 then
     Exit(MakeRefusal('qualified-ref', Member, pFromFid, Q, Format('line %d names `%s` qualified by its unit ' +
       '(`%s`); that use keeps needing the uses entry the cut removes', [Q, Member, Trim(pLines[Q - 1])])));
   for var L in pQualified do
   begin
-    if not QualifiedUseOk(BareCode(LineOf(pLines, L)), Name, pDeclUnit) then
+    if not QualifiedUseOk(BareCode(LineOf(pLines, L)), Name, pDeclUnit, AllowArg) then
       Exit(MakeRefusal('qualified-ref', Name, pFromFid, L, Format('line %d names `%s` qualified by its unit in a ' +
         'shape the plan cannot redirect (`%s`)', [L, Name, Trim(LineOf(pLines, L))])));
     var Ref:= Default(TEdgeRef);
@@ -1618,15 +1705,19 @@ begin
     if Encl.Id > 0 then Ref.Enclosing:= Encl.Name;
     var QWhy:= InitOrderWhy(pLines, Ref, pFromUnit);
     if QWhy <> '' then Exit(MakeRefusal('init-order', Name, pFromFid, L, QWhy));
+    QWhy:= FinalOrderWhy(pSource, pLines, Ref, pFromUnit, pDeclFid, pDeclUnit);
+    if QWhy <> '' then Exit(MakeRefusal('finalization-order', Name, pFromFid, L, QWhy));
   end;
   for var R in pSurface.Refs do
   begin
-    if (R.Kind <> erCall) and not (IsValueUse(R.LineText, Name) and not TRegEx.IsMatch(R.LineText, '@\s*' + TRegEx.Escape(Name) + '\b',
-      [roIgnoreCase])) then
+    if (R.Kind <> erCall) and not ((IsValueUse(R.LineText, Name) or (AllowArg and IsArgumentUse(R.LineText, Name))) and
+      not TRegEx.IsMatch(R.LineText, '@\s*' + TRegEx.Escape(Name) + '\b', [roIgnoreCase])) then
       Exit(MakeRefusal('routine-not-called', Name, pFromFid, R.Line, Format('line %d uses `%s` without ' +
         'calling it (`%s`)', [R.Line, Name, R.LineText])));
     var Why:= InitOrderWhy(pLines, R, pFromUnit);
     if Why <> '' then Exit(MakeRefusal('init-order', Name, pFromFid, R.Line, Why));
+    Why:= FinalOrderWhy(pSource, pLines, R, pFromUnit, pDeclFid, pDeclUnit);
+    if Why <> '' then Exit(MakeRefusal('finalization-order', Name, pFromFid, R.Line, Why));
   end;
 end;
 
@@ -1654,7 +1745,7 @@ begin
     if pRefusal.Kind = '' then
       pRefusal:= CallRefusal(pSource, pSurface, FromFid, Lines,
         ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(FromFid)), ''),
-        ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(DeclFid)), ''), Qualified);
+        ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(DeclFid)), ''), Qualified, Routine, DeclFid);
     if (pRefusal.Kind = '') and not DeclConvention(pSource.FileLines(DeclFid), Routine.StartLine, Name, Conv, Why) then
       pRefusal:= MakeRefusal('unsupported-directive', Name, DeclFid, Routine.StartLine, Format('`%s`: %s', [Name, Why]));
     if pRefusal.Kind <> '' then Exit;
