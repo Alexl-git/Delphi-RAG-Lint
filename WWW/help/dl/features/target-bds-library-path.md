@@ -92,6 +92,10 @@ No note appears when the project names no target: no .dproj, no `<ProjectVersion
 
 The LSP and MCP servers read no library path; they read the DB.
 
+### A bad path entry
+
+A library path or `.dproj` search path entry that cannot be a path (`|`, `<`, a stray double quote) is skipped with one line on stderr, `drag-lint: warning: path entry skipped, it cannot be a path: <entry>`, and the section goes on. A real path wrapped in double quotes is unquoted and used. An unexpanded `$(MACRO)` is an absent folder, as before: skipped without a warning. Text in `.dpr` code that only looks like an `in '...'` clause is left alone.
+
 ### Incremental
 
 The closure is recomputed on every `index --project`, so a library path change alone reaches the next run: added units are indexed and stored callers bind, with no source touched and no `--rebuild`. A folder that LEAVES the path keeps its rows until `--rebuild`, the existing `files > walked` state.

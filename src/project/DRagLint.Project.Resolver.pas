@@ -160,13 +160,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.ReadDProj (DRagLint.Project.Resolver.pas), DRagLint.Project.Resolver.TProjectResolver.ReadLibraryPaths/3 (DRagLint.Project.Resolver.pas)</para>
-      /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, DRagLint.Project.Resolver.TProjectResolver.ExpandMacros</para>
+      /// <para>Calls: DRagLint.Project.Resolver.IsUsablePathText, DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, DRagLint.Project.Resolver.TProjectResolver.ExpandMacros, DRagLint.Project.Resolver.WarnSkippedPathEntry</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Project.Resolver.IsUsablePathText"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ExpandMacros"/>
+      /// <seealso cref="DRagLint.Project.Resolver.WarnSkippedPathEntry"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure AddSemicolonList(AList: TList<string>; const ASemicolonList: string; const ABaseDir: string);
@@ -246,13 +246,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders (DRagLint.Project.Resolver.pas)</para>
-      /// <para>Calls: Copy, DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, Pos, PosEx</para>
+      /// <para>Calls: Copy, DRagLint.Project.Resolver.IsUsablePathText, DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal, Pos, PosEx</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Project.Resolver.IsUsablePathText"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddFolderIfReal"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.AddSemicolonList"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureLibraryRoots"/>
       /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ClosureSearchTail"/>
-      /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CollectProjectFolders"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ReadDprUsesPaths(const ADprPath  : string; AList: TList<string>);
