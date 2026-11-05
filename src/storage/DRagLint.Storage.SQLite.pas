@@ -6099,15 +6099,44 @@ end; // procedure
   FireDAC (TxOptions.EnableNested, default True) runs a nested transaction on
   SQLite as SAVEPOINT / RELEASE / ROLLBACK TO. So a file that fails still undoes
   only itself. The outer transaction is committed at the start of the first file
-  past a group limit, when no file savepoint is open. }
+  past a group limit, when no file savepoint is open.
+
+  THE WAL CHECKPOINT THRESHOLD IS RAISED FOR THE WALK (PARSE-THROUGHPUT, 1.43).
+  At SQLite's default of 1000 pages (4 MB) every group commit of a re-parse
+  crossed the threshold, so every group, every 5 s, ran a checkpoint with its two
+  flushes of the whole file: the bimodal 40-60 s stall on arbitrary small files
+  in the 1.42 library logs, where files over 10 s hold 87% of the Win32 walk. On a
+  33-file sample the commits were 55-70% of the walk at 1000 pages and 2-3% here.
+  A first parse rarely shows it. FILE_BATCH_WAL_PAGES keeps those pages in the WAL until there are
+  enough to be worth a flush. It is per connection and is not restored: the resolve
+  passes that follow gain the same way, and Checkpoint still folds everything into
+  the main file at the end. A killed process loses nothing it did not lose before;
+  an OS crash can lose more of the last groups, whose files are simply re-parsed,
+  because each file's resume stamp shares its transaction. }
 const
   FILE_BATCH_MAX_FILES = 256 ; { files per group }
   MS_PER_SECOND        = 1000;
   FILE_BATCH_MAX_MS    = 5000; { or this long, whichever comes first, so readers and a resume never lag far }
+  FILE_BATCH_WAL_PAGES = 65536; { wal_autocheckpoint during a walk: 256 MB at the 4 KB page size }
 
 procedure TSQLiteSymbolStore.BeginFileBatch;
+var
+  Q: TFDQuery;
 begin
   if FBatchOpen or FReadOnly then Exit;
+  { A query of its own, opened and CLOSED: the pragma returns a row, and a statement
+    left in progress blocks the commits that follow (see RunPragma in Checkpoint). }
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text  := Format('PRAGMA wal_autocheckpoint = %d', [FILE_BATCH_WAL_PAGES]);
+    Q.Open;
+    if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+      Writeln(ErrOutput, 'file batch: wal_autocheckpoint ', Q.Fields[0].AsString, ' page(s)');
+    Q.Close;
+  finally
+    Q.Free;
+  end;
   FConn.StartTransaction;
   FBatchOpen := True;
   FBatchFiles:= 0;
