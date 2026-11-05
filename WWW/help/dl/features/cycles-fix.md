@@ -255,11 +255,11 @@ The engine never guesses; every kind it can give:
   implementation uses, or removed when nothing uses it, and the refusal stays only when a
   lexical hit names an identifier and line), `edge-still-used` (after
   an R1 / R2 cut the consumer still uses the declaring unit for another name, so the uses
-  entry -- and the edge -- would stay), `manual-edit` (the default for any edit the planner
+  entry -- and the edge -- would stay), `coupling-remains` (since 1.43: the moved declarations of two units need each other and cannot share one new unit, see below, or the plan's own prediction still shows the interface coupling; before 1.43 such a plan printed `mechanical`), `manual-edit` (the default for any edit the planner
   cannot make mechanically).
 * **R1 (routine-call inversion):** `not-a-routine`, `signature-in-cycle`,
-  `overloaded-routine`, `signature-unknown`, `qualified-ref`, `routine-not-called`,
-  `init-order`, `unsupported-directive`, `duplicate-identifier` (the leaf already declares the
+  `overloaded-routine`, `signature-unknown`, `qualified-ref` (a name qualified by the declaring unit that cannot follow a move, a routine for one; a comment or a string is not a use, and a global moves and is rewritten, see below), `routine-not-called` (`@F`, a parameterless function as an argument, an argument on a line of its own; a routine passed as a whole argument is redirected, see below),
+  `init-order` (the consumer's initialization section runs the call), `finalization-order` (since 1.43: the consumer's finalization section runs the call, and the declaring unit, finalized first after the cut, has statements in its finalization section or a variable of a type the compiler may finalize), `unsupported-directive`, `duplicate-identifier` (the leaf already declares the
   pointer type or variable differently and every suffix up to 99 is taken; an identical declaration is
   reused, a different one gets the lowest free suffix). `unit-leaves-program` is NOT a refusal
   any more (since 1.34.1): when the declaring unit is used only by the consumer and the
@@ -289,6 +289,32 @@ The engine never guesses; every kind it can give:
   (no IInterface ancestor outside the cycle; the walk continues past one declared inside it),
   `exception-semantics`, `ancestry-unknown`, `with-member`, `unresolved-qualified-type`,
   `type-unresolved`, `leaf-uses-cycle`.
+
+#### Four shapes that are cut since 1.43
+
+* **Two units whose moved types need each other (the F2047 shape, `cycle-lab\illegal`).** One new
+  unit per source would use the other in its interface, which is F2047 again. They share ONE new unit,
+  `<First>.Untangle`, in one `type` block: a class or interface used before its place gets a forward
+  declaration (`TIllOrder = class;`); an ancestor, a record held by value and every other type comes
+  complete first. Both old `uses` entries are removed. Only plain types without bodies merge, in new
+  units: a const or variable in the set, a class with method bodies, a generic class, an existing leaf or
+  a by-value loop refuses `coupling-remains`.
+* **`finalization` is not `initialization`.** `init-order` used to count the finalization section:
+  a routine named there runs long after the pointer is assigned. It can still run too late, for another
+  reason: the declaring unit keeps using the consumer, so it is finalized FIRST. The call is planned only
+  when that cannot be seen (no statement in the declaring unit's finalization section, and every variable
+  of a type known to need no finalization: an ordinal, a float, a pointer, a class, a plain procedural
+  type); otherwise `finalization-order`. The check reads the declaring unit only, not what the routine
+  calls.
+* **`Unit.GVar`.** A qualified name is no reference in the index. A global of the declaring unit that the
+  consumer names qualified now moves with the edge, and every code occurrence of `<Unit>.<Name>` of a moved
+  declaration, in the source and in every unit that uses it (Part A and Part B), becomes
+  `<Unit>.Untangle.<Name>`. Strings and comments stay. A `Unit.Y` that does not move keeps the uses entry,
+  and on an R1 edge a qualified routine still refuses `qualified-ref`.
+* **A routine passed as an argument (`AddItem(x, Foo)`).** The pointer is passed instead: a procedural
+  type or a method reference with the same parameters takes it, under the same order checks as a call.
+  It holds for a procedure, and for a function with a required parameter. A parameterless function as an
+  argument is its RESULT, so that stays refused.
 
 #### A library member through a `with` body or a cast (R2, since 1.43)
 
@@ -386,7 +412,7 @@ Measured on 1.36.0-alpha; the playbook text alone was handed to Haiku.
 |---|---|---|
 | DL fixes (compile-gated, `cycles --fix --apply`) | Part A leaf units; the build and the program output stay identical | the four circular-demo groups, LabInit, LabExc |
 | DL reports, you cut by hand | `Verdict: refused` with the kind and line, or `Nothing can be moved mechanically` + a MANUAL list | LabVar, LabCtor, LabRc, LabCls (`blocked-symbol`), LabDir, LabGuard (`directive`) |
-| DL reports only | `cycles --f2047` names both interface edges and symbols; `--fix --apply` rolls back (F2047 stays) | `illegal\` |
+| DL fixes since 1.43 | `--fix --apply` puts both classes into one new unit behind a forward declaration; the F2047 is gone and the project builds | `illegal\` |
 | DL does not see it | `uses {$I file.inc}`: parse error at index time, no cycle line | LabInc |
 
 Haiku (playbook only, no shell): the build stayed green and the output identical, but of the six

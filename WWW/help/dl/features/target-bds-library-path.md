@@ -7,7 +7,7 @@ group: indexing
 order: 10011
 since: 1.42.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.43.0-alpha
 ---
 
 # Library path of the project's Delphi
@@ -61,6 +61,15 @@ drag-lint query find-callers --name LibProc --resolved --db app.sqlite
 These stay out of the closure: folders under that Studio's root or any `\Embarcadero\` folder, and folders on 37.0's library path, which the platform library DB covers. The library DBs are still built from Delphi 13, so a 10.3 project sees 13's RTL symbols.
 
 A project on Delphi 13 is untouched: no tail, no output, the same closure byte for byte.
+
+### A unit the project lists is never searched for
+
+Neither the project's own folders nor the tail answer for a unit the project lists, on any Delphi. The `.dpr`'s `uses X in 'path'` binds first, as dcc reads it, then `DCCReference` entries; names match in any case and dotted names bind whole. So `B.pas` with `uses Lib` takes the `Shared\Lib.pas` the `.dpr` names, and an `Other\Lib.pas` on the search path stays out.
+
+- A listed file that is not on disk binds nothing: the next listing, then the search, answers for that name, with no new message.
+- `DCCReference` and `in` naming different files: the `.dpr` file wins, the `DCCReference` file is left out, and the run prints `WARN: unit X is listed twice`.
+- Resolving the `.dpr` itself (`reconcile-project`), `DCCReference` entries bind but do not seed: a listed unit nothing uses stays out of the closure.
+- Every closure entry is one full path, so the printed count is the number of distinct files.
 
 ### When the key is not installed
 

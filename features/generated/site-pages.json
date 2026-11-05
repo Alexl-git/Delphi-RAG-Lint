@@ -76,7 +76,7 @@
     "version": "1.35.1-alpha"
   },
   "features/circular-uses-report-cycles-fix-plan.md": {
-    "hash": "09f0b4bd80d7a27a37e8975487c1e14ff030644c9c11a9cbb258e327886f4d61",
+    "hash": "f5ecc711c819a622ceef85755653df591812b39e8cee60d82cd6fe3e9de1d90c",
     "version": "1.43.0-alpha"
   },
   "features/class-surface.md": {
@@ -216,7 +216,7 @@
     "version": "1.35.1-alpha"
   },
   "features/cycles-fix.md": {
-    "hash": "ffcd9aa493dfa812a0a78a0c20c413ed01957fe9262fe1882589e83be8e5513b",
+    "hash": "0497d91705306892732ffd3bc3e430b33645986c5b2028aaf224f67ace296d57",
     "version": "1.43.0-alpha"
   },
   "features/datamodule-form-global.md": {
@@ -504,8 +504,8 @@
     "version": "1.42.0-alpha"
   },
   "features/lsp-full-rules.md": {
-    "hash": "2e0c4c2473e004c44155c35e30916b3108fb30a2b3b1d711dae63c99845acbbb",
-    "version": "1.39.2-alpha"
+    "hash": "96965f2536772c45470bbe6a9d6b34452af65adcb0902440c77c1bc13730b77e",
+    "version": "1.43.0-alpha"
   },
   "features/lsp-protocol-extensions.md": {
     "hash": "0d456aa4540be51561ac302a4321769894c2509e6410c8371e0ab0bfb3d1971e",
@@ -520,8 +520,8 @@
     "version": "1.39.2-alpha"
   },
   "features/lsp.md": {
-    "hash": "8cdfdcdb71e16af34885920d950ef20eb0e25d6d41324775937b36a85f829248",
-    "version": "1.42.0-alpha"
+    "hash": "b79b57dce500ca5250f6b6a476944aa19f25290fd9d8c2db9ad94f58ae62e4db",
+    "version": "1.43.0-alpha"
   },
   "features/maintenance.md": {
     "hash": "b880c95ae36ec3086769089c61fa0662ad531a2c62d3edaba207c4d91e74741d",
@@ -764,8 +764,8 @@
     "version": "1.42.0-alpha"
   },
   "features/target-bds-library-path.md": {
-    "hash": "e3c2c449e866b5048f7571c44425190f46d7e981a14eae7e5cea20dceb577f8e",
-    "version": "1.42.0-alpha"
+    "hash": "eb174ea5dee975b29d8f22bb0603f439a9751e88e5b3d82f45a96d1ee8e2d6d3",
+    "version": "1.43.0-alpha"
   },
   "features/target-compiler.md": {
     "hash": "c376320acb51f6f4f4dc439f32d109cc9787072bb0ceba6fa703ea07a9f1e120",
