@@ -26,6 +26,15 @@ These stay out of the closure: folders under that Studio's root or any `\Embarca
 
 A project on Delphi 13 is untouched: no tail, no output, the same closure byte for byte.
 
+## A unit the project lists is never searched for
+
+Neither the project's own folders nor the tail answer for a unit the project lists, on any Delphi. The `.dpr`'s `uses X in 'path'` binds first, as dcc reads it, then `DCCReference` entries; names match in any case and dotted names bind whole. So `B.pas` with `uses Lib` takes the `Shared\Lib.pas` the `.dpr` names, and an `Other\Lib.pas` on the search path stays out.
+
+- A listed file that is not on disk binds nothing: the next listing, then the search, answers for that name, with no new message.
+- `DCCReference` and `in` naming different files: the `.dpr` file wins, the `DCCReference` file is left out, and the run prints `WARN: unit X is listed twice`.
+- Resolving the `.dpr` itself (`reconcile-project`), `DCCReference` entries bind but do not seed: a listed unit nothing uses stays out of the closure.
+- Every closure entry is one full path, so the printed count is the number of distinct files.
+
 ## When the key is not installed
 
 The run falls back to 37.0 and prints one line:
