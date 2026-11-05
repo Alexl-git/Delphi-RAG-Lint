@@ -87,6 +87,10 @@ try {
   Eq 'S2 a folder is saved normalised and loads back'          'settings.folder'  'file:///C:/dl-help'
   Eq 'S3 empty on disk reads as the default'                   'settings.empty'   $site
 
+  Write-Host '-- N: ShowInfoInline default (owner ruling 2026-11-05: ON)' -ForegroundColor Cyan
+  Eq 'N1 DefaultSettings.ShowInfoInline is True'               'info.default'   'True'
+  Eq 'N2 a saved 0 still wins: the user stays OFF'              'info.saved_off' 'False'
+  Eq 'N3 no stored value (fresh install) -> ON'                 'info.fresh'     'True'
   Write-Host '-- I: offline feature list (index-sample.json)' -ForegroundColor Cyan
   Eq 'I1 LoadFromFile succeeds on the fixture'                 'index.load'    'True'
   Eq 'I2 six rows'                                             'index.count'   '6'
