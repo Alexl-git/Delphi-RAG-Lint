@@ -61,6 +61,11 @@ type
     /// <param name="AValue">The value when pnkConst is returned.</param>
     /// <returns>pnkUnknown, pnkDeclared or pnkConst (see TPPNameKind).</returns>
     function LookupInUnit(const AUnit, AName: string; out AValue: TPPValue): TPPNameKind;
+    /// <summary>YADF6: whether a miss in LookupInUnit proves anything about the
+    /// platform library.</summary>
+    /// <returns>True when at least one library DB could be opened; False when the
+    /// run has no library at all, so a miss only means nobody could be asked.</returns>
+    function HasLibraryEvidence: Boolean;
   end;
 
   /// <summary>The declaration scanner (see the unit header).</summary>

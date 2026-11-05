@@ -88,6 +88,9 @@ type
     /// <param name="AValue">The value when pnkConst is returned.</param>
     /// <returns>How AUnit declares AName.</returns>
     function LookupInUnit(const AUnit, AName: string; out AValue: TPPValue): TPPNameKind;
+    /// <summary>See IPPUnitSource.HasLibraryEvidence.</summary>
+    /// <returns>True when a library DB opened; opens them on first need.</returns>
+    function HasLibraryEvidence: Boolean;
     /// <summary>How many lookups answered pnkUnknown since the last AddUnitFiles
     /// -- zero means no IF needed a unit the source could not see, so a second
     /// closure pass would decide nothing differently.</summary>
@@ -359,6 +362,17 @@ begin
     Result:= A.Kind;
   finally
     if Result = pnkUnknown then Inc(FUnknownAnswers);
+    FLock.Leave;
+  end;
+end;
+
+function TPPUnitSourceResolver.HasLibraryEvidence: Boolean;
+begin
+  FLock.Enter;
+  try
+    OpenStores;
+    Result:= Length(FLibStores) > 0;
+  finally
     FLock.Leave;
   end;
 end;

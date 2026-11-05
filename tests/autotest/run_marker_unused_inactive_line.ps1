@@ -13,7 +13,7 @@
 
   FIXTURE uInact.pas: dl:ok self-assignment markers (no finding anywhere) on
     L_IFDEF    inside {$IFDEF <never defined>}
-    L_DECLARED inside {$IF DECLARED(<no such symbol>)}
+    L_DECLARED inside {$IF NOT DECLARED(<no such symbol>)}: with no library DECLARED reads True (1.43, run_pp_declared_no_library.ps1), so this THEN is the inactive one
     L_ELSE     in that $IF's {$ELSE}, which IS active
     L_PLAIN    an ordinary active line
   and uInact.inc, a bare include holding the {$IFDEF} shape (L_INC, inactive).
@@ -47,7 +47,7 @@ $pasLines = @(
   '{$IFDEF DRAGLINT_NEVER_DEFINED_6}',
   '  X := 2; // dl:ok self-assignment -- inactive ifdef',
   '{$ENDIF}',
-  '{$IF DECLARED(DragLintNoSuchSymbol6)}',
+  '{$IF NOT DECLARED(DragLintNoSuchSymbol6)}',
   '  X := 3; // dl:ok self-assignment -- inactive declared',
   '{$ELSE}',
   '  X := 4; // dl:ok self-assignment -- active else',

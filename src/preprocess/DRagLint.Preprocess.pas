@@ -77,6 +77,9 @@ type
     Col  : Integer;          // 1-based column of the directive
     Expr : string;           // the directive's expression text
     Names: TArray<string>;   // the unresolved names, first-seen order
+    /// <summary>YADF6: Names are not unresolved but DECLARED names assumed True
+    /// because the run has no library; the directive was evaluated with them.</summary>
+    Assumed: Boolean;
   end;
 
   /// <summary>Lane INC3: everything a preprocess run learned besides its bytes.</summary>
@@ -181,7 +184,12 @@ uses
   System.Generics.Defaults,     // default comparer for TArray.Sort<string>
   DRagLint.Preprocess.Lexer,
   DRagLint.Preprocess.Expr,
+  DRagLint.Preprocess.Profile,  // dl:unit DRagLint.Preprocess.Profile accepted -- the one constant that says what the newest target is (YADF6)
   DRagLint.Preprocess.Tolerance; // v1.2.1 #5: opt-in dcc-tolerance pass
+
+const
+  // The numeric define LibraryMissKind reads the run's target from (lowercased).
+  COMPILER_VERSION_KEY = 'compilerversion';
 
 const
   // Cycle guard: matches preprocess.js maxIncludeDepth (option default 64).
@@ -224,6 +232,20 @@ type
     TakenBranch  : Boolean;
     AnyOuterFalse: Boolean;
   end;
+
+// YADF6 (1.43): what a name nothing answered means. With a library DB, or for an
+// older target, it is really unknown. With NO library and the newest target nobody
+// could have known: pnkNoEvidence, which DECLARED reads True (feature tests name
+// what the current compiler usually has; `not Declared(TBytes)` shims are for old
+// compilers, hence the target check). A profile with no CompilerVersion stays unknown.
+function LibraryMissKind(const ASrc: IPPUnitSource; const ANumeric: TDictionary<string, Integer>): TPPNameKind;
+var
+  Target: Integer;
+begin
+  Result:= pnkUnknown;
+  if not ANumeric.TryGetValue(COMPILER_VERSION_KEY, Target) or (Target < DEFAULT_COMPILER_VERSION) then Exit;
+  if (ASrc = nil) or not ASrc.HasLibraryEvidence then Result:= pnkNoEvidence;
+end;
 
 // First whitespace-split token of AArgs, lowercased (JS ch.args.split(/\s+/)[0]).
 // Empty when AArgs is empty/all-whitespace (guards an empty-name add/remove).
@@ -477,11 +499,12 @@ var
   function EvalIf(const AChunk: TPPChunk): Boolean;
   var
     Unres: TArray<string>;
+    Assum: TArray<string>;
     U    : TPPUnresolvedIf;
     K    : Integer;
   begin
-    Result:= EvalPPExprScoped(AChunk.Args, ADefines, ANumeric, ACtx.Lookup, Unres);
-    if (Length(Unres) > 0) and (ADepth = 0) then
+    Result:= EvalPPExprScoped(AChunk.Args, ADefines, ANumeric, ACtx.Lookup, Unres, Assum);
+    if ((Length(Unres) > 0) or (Length(Assum) > 0)) and (ADepth = 0) then
     begin
       U:= Default(TPPUnresolvedIf);
       U.Line:= AChunk.Line + 1;
@@ -490,7 +513,8 @@ var
         Dec(K);
       U.Col  := AChunk.SrcStart - K + 1;
       U.Expr := AChunk.Args;
-      U.Names:= Unres;
+      U.Assumed:= Length(Unres) = 0; // an unresolved name decided the directive: say that one
+      U.Names  := if U.Assumed then Assum else Unres;
       ACtx.Unresolved.Add(U);
     end;
     if GTracePath <> '' then
@@ -765,8 +789,10 @@ begin
         P:= LastDelimiter('.', AName);
         if P > 0 then
         begin
-          if Src = nil then Exit(pnkUnknown);
-          Exit(Src.LookupInUnit(Copy(AName, 1, P - 1), Copy(AName, P + 1, MaxInt), AValue));
+          if Src = nil then Exit(LibraryMissKind(Src, Numeric));
+          Result:= Src.LookupInUnit(Copy(AName, 1, P - 1), Copy(AName, P + 1, MaxInt), AValue);
+          if Result = pnkUnknown then Result:= LibraryMissKind(Src, Numeric);
+          Exit;
         end;
         if Ctx.Scanner.TryGet(AName, D) then
         begin
@@ -775,7 +801,7 @@ begin
           AValue:= D.Value;
           Exit(pnkConst);
         end;
-        if Src = nil then Exit(pnkUnknown);
+        if Src = nil then Exit(LibraryMissKind(Src, Numeric));
         U:= Ctx.Scanner.UsedUnits;
         for var I: Integer:= High(U) downto 0 do
         begin
@@ -783,6 +809,7 @@ begin
           if Result <> pnkUnknown then Exit;
         end;
         Result:= Src.LookupInUnit('System', AName, AValue);
+        if Result = pnkUnknown then Result:= LibraryMissKind(Src, Numeric);
       end;
     Ctx.Lookup:= Lookup;
     Ctx.Scanner.OnEvalConst:=

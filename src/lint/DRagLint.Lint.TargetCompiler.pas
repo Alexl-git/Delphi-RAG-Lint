@@ -26,8 +26,16 @@ const
   /// <summary>The CompilerVersion a run targets when nothing names one: 37,
   /// Delphi 13 Florence -- the behaviour every release before 1.38 had.</summary>
   DEFAULT_TARGET_COMPILER = 37;
-  /// <summary>Oldest CompilerVersion a token may name (14 = Delphi 6).</summary>
+  /// <summary>Oldest CompilerVersion a BARE NUMBER may name (14 = Delphi 6). Below
+  /// it a bare number is a product (13 = Delphi 13, 5 = Delphi 5); D1..D5 are
+  /// named by product token or by VER&lt;N&gt;.</summary>
   MIN_TARGET_COMPILER = 14;
+  /// <summary>Oldest CompilerVersion a VER&lt;N&gt; token may name (VER80 = Delphi 1).</summary>
+  MIN_VER_COMPILER = 8;
+  /// <summary>Delphi 5's CompilerVersion by convention: it has no such constant
+  /// (D6 = 14.0 introduced it) and defines VER130. What "auto" assumes when a
+  /// project names no compiler at all (AutoAssumesLegacyCompiler).</summary>
+  ASSUMED_LEGACY_COMPILER = 13;
   /// <summary>Newest CompilerVersion a token may name (37 = Delphi 13).</summary>
   MAX_TARGET_COMPILER = 37;
   /// <summary>The token that derives the target from the owning .dproj's
@@ -77,8 +85,9 @@ type
 
 /// <summary>Parses one target-compiler token into a CompilerVersion.</summary>
 /// <param name="pToken">A product version (13, 12, 12.2, 11, 10.4, 10.3, XE7,
-/// 2009, 7, 6; an optional "Delphi" prefix and code names such as Athens are
-/// accepted) or a CompilerVersion number 14..37. Case- and space-insensitive.
+/// 2009, 7, 6, 5 .. 1; an optional "Delphi" prefix, D5 .. D1 and code names such
+/// as Athens are accepted), a VER&lt;N&gt; conditional symbol (VER130 = Delphi 5, VER80
+/// .. VER370) or a CompilerVersion number 14..37. Case- and space-insensitive.
 /// Not "auto" -- see ResolveTargetCompiler.</param>
 /// <param name="pVersion">Out: the CompilerVersion; DEFAULT_TARGET_COMPILER on failure.</param>
 /// <param name="pError">Out: '' on success, else a one-line message naming the
@@ -115,7 +124,8 @@ function CompilerDisplayName(pVersion: Integer): string;
 /// <param name="pContextValue">The project context file's targetCompiler, or ''
 /// (the LSP lane wires this; the CLI passes '' today).</param>
 /// <param name="pDprojPath">The owning .dproj, used only when the winning token
-/// is "auto"; '' when none is known.</param>
+/// is "auto"; a .dpr / .dpk reads its sibling .dproj, and with none assumes
+/// ASSUMED_LEGACY_COMPILER (see AutoAssumesLegacyCompiler); '' when none is known.</param>
 /// <param name="pVersion">Out: the CompilerVersion; DEFAULT_TARGET_COMPILER on failure.</param>
 /// <param name="pError">Out: '' on success, else a one-line refusal.</param>
 /// <returns>False when the winning token is unknown, or is "auto" without a
@@ -125,6 +135,14 @@ function CompilerDisplayName(pVersion: Integer): string;
 /// a person and the context file by a tool. Pure apart from reading pDprojPath.</remarks>
 function ResolveTargetCompiler(const pCmdLine, pConfigValue, pContextValue, pDprojPath: string;
   out pVersion: Integer; out pError: string): Boolean;
+
+/// <summary>True when "auto" on pProjectFile has nothing to read: a .dpr / .dpk
+/// with no .dproj beside it names neither a CompilerVersion nor a VER&lt;N&gt;, so
+/// ResolveTargetCompiler assumes Delphi 5 and the caller should say so.</summary>
+/// <param name="pProjectFile">The project file; '' answers False.</param>
+/// <returns>True for a .dpr / .dpk whose sibling .dproj does not exist.</returns>
+/// <remarks>Reads the file system only.</remarks>
+function AutoAssumesLegacyCompiler(const pProjectFile: string): Boolean;
 
 /// <summary>True when a rule (or fix entry) that needs compiler pNeedsCompiler
 /// must be silenced under pTarget.</summary>
@@ -157,7 +175,7 @@ procedure SetActiveTargetCompiler(pVersion: Integer);
 implementation
 
 uses
-  System.StrUtils, System.IOUtils, System.RegularExpressions;
+  System.Math, System.StrUtils, System.IOUtils, System.RegularExpressions;
 
 type
   TCompilerRow = record
@@ -169,7 +187,7 @@ type
 const
   { Newest first. Tokens are matched after upper-casing and removing spaces and
     a leading DELPHI. }
-  COMPILERS: array[0..22] of TCompilerRow = (
+  COMPILERS: array[0..27] of TCompilerRow = (
     (Version: 37; Name: '13';    Tokens: '13|13.0|13.1|FLORENCE'),
     (Version: 36; Name: '12';    Tokens: '12|12.0|12.1|12.2|12.3|ATHENS'),
     (Version: 35; Name: '11';    Tokens: '11|11.0|11.1|11.2|11.3|ALEXANDRIA'),
@@ -192,7 +210,12 @@ const
     (Version: 17; Name: '2005';  Tokens: '2005'),
     (Version: 16; Name: '8';     Tokens: '8'),
     (Version: 15; Name: '7';     Tokens: '7'),
-    (Version: 14; Name: '6';     Tokens: '6'));
+    (Version: 14; Name: '6';     Tokens: '6'),
+    (Version: 13; Name: '5';     Tokens: '5|5.0|D5'),
+    (Version: 12; Name: '4';     Tokens: '4|4.0|D4'),
+    (Version: 10; Name: '3';     Tokens: '3|3.0|D3'),
+    (Version: 9;  Name: '2';     Tokens: '2|2.0|D2'),
+    (Version: 8;  Name: '1';     Tokens: '1|1.0|D1'));
 
 type
   TProjectVersionRow = record
@@ -229,8 +252,14 @@ const
     (ProjectVersion: '18.2'; Version: 32),
     (ProjectVersion: '18.1'; Version: 31));
 
-  ACCEPTED_TOKENS_HINT = 'accepted: 13, 12, 11, 10.4, 10.3, 10.2, 10.1, 10, XE8..XE2, XE, 2010, 2009, 2007, 2005, 7, 6, ' +
-    'a CompilerVersion 14..37, or auto';
+  ACCEPTED_TOKENS_HINT = 'accepted: 13, 12, 11, 10.4, 10.3, 10.2, 10.1, 10, XE8..XE2, XE, 2010, 2009, 2007, 2005, 7, 6, 5..1, ' +
+    'VER80..VER370 (VER130 = Delphi 5), a CompilerVersion 14..37, or auto';
+  DPROJ_EXT = '.dproj';
+  VER_PREFIX = 'VER';
+  VER_DIVISOR = 10;
+  { The two VER symbols that do not end in 0: C++Builder 4, Delphi 2007. }
+  VER_BCB4 = 125;
+  VER_D2007 = 185;
 
 var
   GActiveTarget: Integer = DEFAULT_TARGET_COMPILER;
@@ -239,6 +268,20 @@ function NormaliseToken(const pToken: string): string;
 begin
   Result:= UpperCase(StringReplace(Trim(pToken), ' ', '', [rfReplaceAll]));
   if StartsStr('DELPHI', Result) then Result:= Copy(Result, Length('DELPHI') + 1, MaxInt);
+end;
+
+{ VER130 -> 13: the conditional symbol every compiler defines, and the only name
+  D1..D5 have for themselves. True when pTok is a VER symbol of a known range. }
+function TryVerToken(const pTok: string; out pVersion: Integer): Boolean;
+var
+  N: Integer;
+begin
+  Result:= False;
+  if not StartsStr(VER_PREFIX, pTok) then Exit;
+  if not TryStrToInt(Copy(pTok, Length(VER_PREFIX) + 1, MaxInt), N) then Exit;
+  if not ((N mod VER_DIVISOR = 0) or (N = VER_BCB4) or (N = VER_D2007)) then Exit;
+  pVersion:= N div VER_DIVISOR;
+  Result:= InRange(pVersion, MIN_VER_COMPILER, MAX_TARGET_COMPILER);
 end;
 
 function ParseCompilerToken(const pToken: string; out pVersion: Integer; out pError: string): Boolean;
@@ -252,6 +295,11 @@ begin
   Tok:= NormaliseToken(pToken);
   if Tok <> '' then
   begin
+    if TryVerToken(Tok, N) then
+    begin
+      pVersion:= N;
+      Exit(True);
+    end;
     for Row in COMPILERS do
       if MatchStr(Tok, SplitString(Row.Tokens, '|')) then
       begin
@@ -308,12 +356,19 @@ begin
   Result:= 'CompilerVersion ' + IntToStr(pVersion);
 end;
 
+function AutoAssumesLegacyCompiler(const pProjectFile: string): Boolean;
+begin
+  Result:= (MatchText(ExtractFileExt(pProjectFile), ['.dpr', '.dpk']))
+    and not TFile.Exists(ChangeFileExt(pProjectFile, DPROJ_EXT));
+end;
+
 function ResolveTargetCompiler(const pCmdLine, pConfigValue, pContextValue, pDprojPath: string;
   out pVersion: Integer; out pError: string): Boolean;
 var
   Tok   : string;
   PV    : string;
   Source: string;
+  Dproj : string;
 begin
   pVersion:= DEFAULT_TARGET_COMPILER;
   pError  := '';
@@ -338,15 +393,22 @@ begin
   end;
   if pDprojPath = '' then
   begin
-    pError:= 'target-compiler: "auto" needs the owning .dproj -- pass --project <x.dproj>, or name a version';
+    pError:= 'target-compiler: "auto" needs the owning .dproj -- pass --project <x.dproj>, or name a version '
+      + '(a Delphi 5 project: --target-compiler 5)';
     Exit(False);
   end;
-  PV:= ReadDprojProjectVersion(pDprojPath);
+  if AutoAssumesLegacyCompiler(pDprojPath) then
+  begin
+    pVersion:= ASSUMED_LEGACY_COMPILER;
+    Exit(True);
+  end;
+  Dproj:= if MatchText(ExtractFileExt(pDprojPath), ['.dpr', '.dpk']) then ChangeFileExt(pDprojPath, DPROJ_EXT) else pDprojPath;
+  PV:= ReadDprojProjectVersion(Dproj);
   if not ProjectVersionToCompiler(PV, pVersion) then
   begin
     pVersion:= DEFAULT_TARGET_COMPILER;
     pError:= Format('target-compiler: "auto" cannot map ProjectVersion "%s" of %s to a compiler -- name a version instead',
-      [PV, pDprojPath]);
+      [PV, Dproj]);
     Exit(False);
   end;
   Result:= True;
