@@ -891,7 +891,8 @@ predates it answers the standard `-32601`.
   Pascal in VS Code at all, since it has no built-in Pascal grammar.
 * **Zed** -- tree-sitter highlighting and the language-server registration both live in the
   Rust extension at `tree-sitter-delphi13/editors/zed/`; see `docs/EDITORS.md`.
-* **Neovim / Helix / any LSP editor** -- point it at `drag-lint lsp`. Add `--full-rules` (OFF by default) to
+* **Neovim / Helix / any LSP editor** -- point it at `drag-lint lsp`. Add `--full-rules` (OFF by default for the
+  bare server; the VS Code extension turns it ON through `dragLint.fullRules`, set it to `false` to switch it off) to
   publish the complete built-in rule set on every save instead of the subset; it runs `lint` out-of-process
   and reports its cost in ms on stderr. A platform-library unit (an RTL/VCL file covered by a `library-*.sqlite`)
   skips the project, flow and type-aware rules, in `lint` too: findings you cannot act on, and they blew the 8 s budget;

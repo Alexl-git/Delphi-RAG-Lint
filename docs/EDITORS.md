@@ -93,6 +93,7 @@ nothing, which reads as "the reload did not help".
 | `dragLint.engineSource` | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` | The deployed engine the extension **mirrors from** -- the same binary the Delphi IDE loads. VS Code does not run it directly. |
 | `dragLint.engineUpdate` | `onActivate` | When the private copy is refreshed: `onActivate` (VS Code start / window reload / first Pascal file), `manual` (only the command), or `off` (run the deployed engine directly). |
 | `dragLint.serverPath` | `""` (empty) | Explicit override -- run this exact exe, make no copy. Leave empty to use the managed copy. |
+| `dragLint.fullRules` | `true` | Run the language server with `--full-rules` (since 1.43): Problems shows the same rule set as the Delphi IDE panel. Cost: one out-of-process lint per save, measured 2.2-3.0 s on a large unit (8 s budget). Set `false` to get the plain, cheaper rule subset. The key is new in 1.43, so no saved value predates it: unset means ON, only an explicit `false` turns it off. Changing it restarts the server. |
 | `dragLint.databases` | `[]` (empty) | Optional explicit `--db` paths. |
 | `dragLint.colors.bdsVersion` | `auto` | Which RAD Studio install the colour commands read their editor scheme from, e.g. `37.0`. `auto` picks the newest under `HKCU\Software\Embarcadero\BDS`. See [Syntax colouring](#syntax-colouring----and-matching-the-ide-exactly). |
 | `dragLint.trace.server` | `off` | Log the LSP conversation to the *drag-lint* output channel. |
