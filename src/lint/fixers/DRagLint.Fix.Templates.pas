@@ -19,6 +19,61 @@ uses
   , DRagLint.Lint.Autofix
   ;
 
+{ ---- redundant parentheses around an atomic replacement ---- }
+
+const
+  { words after which a '(' opens a grouping, never a call's argument list }
+  GROUPING_WORDS = '|if|while|until|not|and|or|xor|then|else|do|of|in|to|downto|case|with|';
+
+{ True when AText is ONE call expression `Name(...)` whose first '(' closes at the very last
+  character (so wrapping it in parentheses adds nothing). }
+function IsAtomicCall(const AText: string): Boolean;
+var
+  I    : Integer;
+  Depth: Integer;
+  Open : Integer;
+begin
+  Result:= False;
+  Open:= Pos('(', AText);
+  if (Open < 2) or (AText[Length(AText)] <> ')') then Exit;
+  for I:= 1 to Open - 1 do
+    if not (CharInSet(AText[I], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.'])) then Exit;
+  Depth:= 0;
+  for I:= Open to Length(AText) do
+  begin
+    if AText[I] = '''' then Exit;   { a string literal: do not guess where its parentheses are }
+    if AText[I] = '(' then Inc(Depth)
+    else if AText[I] = ')' then
+    begin
+      Dec(Depth);
+      if (Depth = 0) and (I < Length(AText)) then Exit;
+    end;
+  end;
+  Result:= Depth = 0;
+end;
+
+{ True when the '(' at ALine[AOpen] groups an expression (so it may go) rather than opening a call's
+  argument list, an indexer or a typecast (so it must stay). }
+function OpensGrouping(const ALine: string; AOpen: Integer): Boolean;
+var
+  P, Q: Integer;
+begin
+  P:= AOpen - 1;
+  while (P >= 1) and (ALine[P] = ' ') do Dec(P);
+  if P < 1 then Exit(True);
+  if CharInSet(ALine[P], [')', ']', '^', '@', '''']) then Exit(False);
+  if not CharInSet(ALine[P], ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Exit(True);
+  Q:= P;
+  while (Q > 1) and CharInSet(ALine[Q - 1], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Dec(Q);
+  Result:= GROUPING_WORDS.Contains('|' + LowerCase(Copy(ALine, Q, P - Q + 1)) + '|');
+end;
+{ True when the span [AStart, AEnd) of ALine sits exactly inside a grouping pair of its own. }
+function IsGroupedSpan(const ALine: string; AStart, AEnd: Integer): Boolean;
+begin
+  Result:= (AStart > 1) and (AEnd <= Length(ALine)) and (ALine[AStart - 1] = '(') and (ALine[AEnd] = ')') and
+    OpensGrouping(ALine, AStart - 1);
+end;
+
 { The edits for one finding that carries a sidecar fix: one edit, or none when
   the span is not in the file (a stale finding) or the fix cannot be placed
   safely. A single-line span with single-line replacement text becomes a
@@ -58,6 +113,13 @@ begin
     E.EndCol    := AFinding.EndCol;
     E.Text      := NewText;
     E.ExpectText:= Copy(First, AFinding.StartCol, AFinding.EndCol - AFinding.StartCol);
+    { the replacement is one call and the span sat in a grouping pair of its own: the pair is now redundant }
+    if (AFinding.FixKind = lfkReplace) and IsGroupedSpan(First, AFinding.StartCol, AFinding.EndCol) and IsAtomicCall(NewText) then
+    begin
+      E.Col       := AFinding.StartCol - 1;
+      E.EndCol    := AFinding.EndCol + 1;
+      E.ExpectText:= Copy(First, E.Col, E.EndCol - E.Col);
+    end;
   end
   else
   begin

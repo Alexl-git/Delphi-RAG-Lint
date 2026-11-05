@@ -1188,13 +1188,44 @@ begin
   Result:= AEdit.ExpectText <> '';
 end;
 
+{ A comma-first uses clause (`  , Unit` per line, the lone `;` on its own last line): the line to insert
+  BEFORE (0-based index of the terminator) and the exact `<indent>, ` prefix the clause already uses.
+  False for any other layout, which keeps the plain insertion. }
+function CommaFirstLayout(ALines: TStrings; AUsesAt: Integer; out ATermAt: Integer; out APrefix: string): Boolean;
+var
+  M, K: Integer;
+  T   : string ;
+begin
+  Result:= False;
+  ATermAt:= -1;
+  APrefix:= '';
+  for M:= AUsesAt + 1 to ALines.Count - 1 do
+  begin
+    T:= Trim(ALines[M]);
+    if T = ';' then
+    begin
+      ATermAt:= M;
+      Break;
+    end;
+    if T.Contains(';') then Exit;   { the terminator shares a line with an entry: not this layout }
+    if (APrefix = '') and T.StartsWith(',') then
+    begin
+      K:= Length(ALines[M]) - Length(TrimLeft(ALines[M])) + 1;   { the comma's column }
+      Inc(K);
+      while (K <= Length(ALines[M])) and (ALines[M][K] = ' ') do Inc(K);
+      APrefix:= Copy(ALines[M], 1, K - 1);
+    end;
+  end;
+  Result:= (ATermAt > AUsesAt) and (APrefix <> '');
+end;
 { Lifted VERBATIM from DRagLint.CLI.BuildExceptionRewriteEdits.BuildUsesEdit
   (autofix wave A0). Insert AUnit into the implementation uses clause, as ONE
   edit. Returns False when no uses clause can be found. }
 function BuildImplUsesEdit(const APath, AUnit: string; ALines: TStrings; out AEdit: TTextEdit): Boolean;
 var
   M, ImplAt, UsesAt: Integer;
-  T                : string ;
+  TermAt           : Integer;
+  T, Prefix        : string ;
 const
   USES_KW = 'uses';
 begin
@@ -1231,7 +1262,14 @@ begin
     end;
   if UsesAt < 0 then Exit;
   AEdit.FilePath:= APath;
-  if SameText(Trim(ALines[UsesAt]), 'uses') then
+  if SameText(Trim(ALines[UsesAt]), 'uses') and CommaFirstLayout(ALines, UsesAt, TermAt, Prefix) then
+  begin
+    { follow the clause's own layout: , Unit on its own line before the lone ; }
+    AEdit.Kind:= tekInsertLines;
+    AEdit.Line:= TermAt;                 { 1-based line TermAt = the line above the terminator }
+    AEdit.Text:= Prefix + AUnit;
+  end
+  else if SameText(Trim(ALines[UsesAt]), 'uses') then
   begin
     AEdit.Kind   := tekInsertLines;
     AEdit.Line   := UsesAt + 1;          { 1-based: insert AFTER the 'uses' line }
