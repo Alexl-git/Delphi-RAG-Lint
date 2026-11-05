@@ -798,6 +798,7 @@ type
     FRefFacts: TArray<TRefFacts>; { index-aligned with FStores; nil until first asked }
     FUnitIndex: TUsesUnitIndex;   { C9; nil until first asked }
     FDbPaths : TArray<string>;
+    FOldPlatformStores: TArray<ISymbolStore>;          { --old-platform-db; never in FStores }
     FScopeStore : ISymbolStore;                        { SetScope's unit: the store indexing it }
     FScopeFileId: Int64;                               { ... and its file id there; 0 = no scope }
     FScopePath  : string;                              { ... the path SetScope was given }
@@ -864,6 +865,12 @@ type
     /// <summary>The --db paths, index-aligned with Stores (C9: they name the
     /// db of a uses_unresolved candidate). Set by the caller; may be empty.</summary>
     property DbPaths: TArray<string> read FDbPaths write FDbPaths;
+    /// <summary>The --old-platform-db indexes: the platform the code being converted
+    /// was written against (1.43 ENUMMAP). Not owned; the caller keeps them alive.</summary>
+    /// <remarks>They answer only for the OLD members of an enum type #migrate, first,
+    /// before today's --db members. Never part of Stores: a #migrate target, a #convert
+    /// type or a class member must not resolve on the platform being left.</remarks>
+    property OldPlatformStores: TArray<ISymbolStore> read FOldPlatformStores write FOldPlatformStores;
     /// <summary>Names the unit whose scope a BARE type name resolves in from
     /// now on, and the book converting it.</summary>
     /// <param name="AUnitPas">The converted unit's .pas; '' clears the scope
@@ -4995,7 +5002,7 @@ end;
 // in the supplied stores -- a type, an enum value, a const, a var or a routine,
 // never a member, a local or a parameter. A dotted name is looked up
 // qualified. False when no store declares it.
-function ResolveMigrateTarget(const ATrees: TConvertTreeCache; const AName: string;
+function ResolveMigrateIn(const AStores: TArray<ISymbolStore>; const AName: string;
   out ASym: TSymbol; out AStore: ISymbolStore): Boolean;
 const
   DECL_KINDS: set of TSymbolKind = [skClass, skInterface, skRecord, skEnum, skEnumValue, skTypeAlias,
@@ -5005,7 +5012,7 @@ begin
   AStore:= nil;
   if AName = '' then Exit(False);
   var Bare: string:= BareTypeTail(AName);
-  for var St: ISymbolStore in ATrees.Stores do
+  for var St: ISymbolStore in AStores do
   begin
     var Found: TArray<TSymbol>:= if AName.Contains('.') then St.FindSymbolsByQualifiedName(AName)
                                  else St.FindSymbolsByExactName(AName);
@@ -5018,6 +5025,14 @@ begin
       end;
   end;
   Result:= False;
+end;
+
+// ResolveMigrateIn over the run's --db stores. The old-platform indexes are NOT
+// asked: a target must exist on the platform the code is converted TO.
+function ResolveMigrateTarget(const ATrees: TConvertTreeCache; const AName: string;
+  out ASym: TSymbol; out AStore: ISymbolStore): Boolean;
+begin
+  Result:= ResolveMigrateIn(ATrees.Stores, AName, ASym, AStore);
 end;
 
 // 1.38 (D2): an enum member's name after its lowercase prefix (scoWait ->
@@ -5706,50 +5721,65 @@ var
   var
     FromSym, ToSym: TSymbol;
     FromSt, ToSt  : ISymbolStore;
+    ToMembers     : TArray<TSymbol>;
+
+    { maps the members of one declaration of From; a name already in Map stays }
+    procedure MapMembersOf(const AStore: ISymbolStore; const AEnum: TSymbol);
+    begin
+      for var FM: TSymbol in AStore.FindAllChildSymbols(AEnum.Id) do
+      begin
+        if FM.Kind <> skEnumValue then Continue;
+        var Prior: TIdentMigrate;
+        if Map.TryGetValue(UpperCase(FM.Name), Prior) then
+        begin
+          { an explicit line wins; it may be qualified with the From enum too }
+          if Prior.Qualifier = '' then
+          begin
+            Prior.Qualifier:= AT.Old;
+            Map[UpperCase(FM.Name)]:= Prior;
+          end;
+          Continue;
+        end;
+        var M: TIdentMigrate:= AT;
+        M.Old      := FM.Name;
+        M.New      := '';
+        M.Qualifier:= AT.Old;
+        M.ByName   := True;
+        var Stem: string:= EnumMemberStem(FM.Name);
+        var Hits: Integer:= 0;
+        for var TM: TSymbol in ToMembers do
+          if (TM.Kind = skEnumValue) and (Stem <> '') and SameText(EnumMemberStem(TM.Name), Stem) then
+          begin
+            Inc(Hits);
+            M.New:= TM.Name;
+          end;
+        if Hits <> 1 then
+        begin
+          M.New:= '';
+          M.Refusal:= Format('enum member %s of %s has %s in %s by its name after the lowercase prefix ("%s"); add #migrate %s -> <member>',
+            [FM.Name, AT.Old, if Hits = 0 then 'no counterpart' else Format('%d counterparts', [Hits]), AT.New, Stem, FM.Name]);
+        end;
+        Map.Add(UpperCase(FM.Name), M);
+      end;
+    end;
+
   begin
-    if not (ResolveMigrateTarget(AIn.Trees, AT.Old, FromSym, FromSt) and (FromSym.Kind = skEnum)) then
+    var HasOld: Boolean:= ResolveMigrateIn(AIn.Trees.OldPlatformStores, AT.Old, FromSym, FromSt) and (FromSym.Kind = skEnum);
+    var OldSym: TSymbol:= FromSym;
+    var OldSt : ISymbolStore:= FromSt;
+    var HasNow: Boolean:= ResolveMigrateTarget(AIn.Trees, AT.Old, FromSym, FromSt) and (FromSym.Kind = skEnum);
+    if not (HasOld or HasNow) then
     begin
       Items.Add(Item(aikMigrateCheck, afWarnings, AT, 0, Format('line %d: #migrate %s -> %s: %s resolves in no supplied index, so its enum ' +
         'members are not mapped by name -- only explicit #migrate member lines rename them', [AT.Rule.LineNo, AT.Old, AT.New, AT.Old])));
       Exit;
     end;
     ResolveMigrateTarget(AIn.Trees, AT.New, ToSym, ToSt);
-    var ToMembers: TArray<TSymbol>:= ToSt.FindAllChildSymbols(ToSym.Id);
-    for var FM: TSymbol in FromSt.FindAllChildSymbols(FromSym.Id) do
-    begin
-      if FM.Kind <> skEnumValue then Continue;
-      var Prior: TIdentMigrate;
-      if Map.TryGetValue(UpperCase(FM.Name), Prior) then
-      begin
-        { an explicit line wins; it may be qualified with the From enum too }
-        if Prior.Qualifier = '' then
-        begin
-          Prior.Qualifier:= AT.Old;
-          Map[UpperCase(FM.Name)]:= Prior;
-        end;
-        Continue;
-      end;
-      var M: TIdentMigrate:= AT;
-      M.Old      := FM.Name;
-      M.New      := '';
-      M.Qualifier:= AT.Old;
-      M.ByName   := True;
-      var Stem: string:= EnumMemberStem(FM.Name);
-      var Hits: Integer:= 0;
-      for var TM: TSymbol in ToMembers do
-        if (TM.Kind = skEnumValue) and (Stem <> '') and SameText(EnumMemberStem(TM.Name), Stem) then
-        begin
-          Inc(Hits);
-          M.New:= TM.Name;
-        end;
-      if Hits <> 1 then
-      begin
-        M.New:= '';
-        M.Refusal:= Format('enum member %s of %s has %s in %s by its name after the lowercase prefix ("%s"); add #migrate %s -> <member>',
-          [FM.Name, AT.Old, if Hits = 0 then 'no counterpart' else Format('%d counterparts', [Hits]), AT.New, Stem, FM.Name]);
-      end;
-      Map.Add(UpperCase(FM.Name), M);
-    end;
+    ToMembers:= ToSt.FindAllChildSymbols(ToSym.Id);
+    { the code being converted was written against the OLD enum, so it comes first;
+      a member only today's enum has still maps -- a token left out would be silent }
+    if HasOld then MapMembersOf(OldSt, OldSym);
+    if HasNow then MapMembersOf(FromSt, FromSym);
   end;
 
   { one identifier token Tok of line ALineNo at [AStart, AEnd) }
