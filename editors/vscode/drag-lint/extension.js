@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const radcolors = require('./lib/radcolors');
 const dlctx = require('./lib/context');
+const serverargs = require('./lib/serverargs');
 
 // Set once in activate(). restartServer() and updateEngineNow() both need the
 // extension context to locate the private engine copy, and neither is called
@@ -373,8 +374,12 @@ function makeClient(exe) {
   // row in a settings array was enough to make the server look broken.
   const dbs = (workspace.getConfiguration('dragLint').get('databases') || [])
     .filter((db) => typeof db === 'string' && db.trim() !== '');
-  const args = ['lsp'];
-  for (const db of dbs) args.push('--db', db);
+  // dragLint.fullRules is ON unless the user saved false (see lib/serverargs.js):
+  // the server then publishes the same rule set as the Delphi IDE panel, at the
+  // cost of one out-of-process lint per save (budget 8 s, measured 2.2-3.0 s on a large unit).
+  const fullRules = workspace.getConfiguration('dragLint').get('fullRules');
+  const args = serverargs.buildArgs(dbs, fullRules);
+  log('server args: ' + args.join(' ') + (fullRules === false ? ' (full rules switched OFF by dragLint.fullRules)' : ''));
 
   const serverOptions = {
     run: { command: exe, args, transport: TransportKind.stdio },
@@ -625,6 +630,11 @@ function activate(context) {
   // without reloading the window -- registering only on the happy path would
   // mean the recovery command is absent exactly when it is needed.
   context.subscriptions.push(commands.registerCommand('dragLint.restartServer', restartServer));
+  // A running server keeps the argv it was started with, so flipping the switch
+  // must restart it or the setting would appear to do nothing until a reload.
+  context.subscriptions.push(workspace.onDidChangeConfiguration((e) => {
+    if (e.affectsConfiguration('dragLint.fullRules')) restartServer();
+  }));
   context.subscriptions.push(commands.registerCommand('dragLint.updateEngine', updateEngineNow));
   context.subscriptions.push(commands.registerCommand('dragLint.refreshProblems', refreshProblems));
   // Colour commands are registered before the exe check too: they read the

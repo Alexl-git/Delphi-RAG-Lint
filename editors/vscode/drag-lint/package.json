@@ -128,6 +128,11 @@
           "default": "",
           "markdownDescription": "Explicit override: an absolute path to a `drag-lint.exe` to run AS-IS. When set, no copy is made and `#dragLint.engineSource#` / `#dragLint.engineUpdate#` are ignored. Leave EMPTY (the default) to use the managed private copy. **If you point this at the deployed path, a live VS Code session will lock that binary and engine rebuilds will fail to stage.**"
         },
+        "dragLint.fullRules": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Run the language server with `--full-rules` (default ON since 1.43): Problems shows the same rule set as the Delphi IDE panel, including circular-uses, cognitive/cyclomatic complexity, deep-nesting, method-too-long, try-except-swallowed and used-before-assignment. Cost: one out-of-process lint per save, measured 2.2-3.0 s on a 36-finding plugin unit while the machine was busy; 8 s budget per file. Turn OFF for the plain, cheaper rule subset. Not a new meaning for a saved value: this key did not exist before 1.43, so a profile only gets `false` if you set it; an unset key means ON. Changing it restarts the server."
+        },
         "dragLint.databases": {
           "type": "array",
           "items": {

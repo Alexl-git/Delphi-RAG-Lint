@@ -87,5 +87,22 @@ if (Test-Path $installed) {
   Write-Host '  [NOTE] node_modules absent -- version assertion skipped (run npm install to cover it)' -ForegroundColor DarkGray
 }
 
+Write-Host ""
+Write-Host "Full rules are ON by default (owner ruling 2026-11-05)" -ForegroundColor Cyan
+$fr = $pkg.contributes.configuration.properties.PSObject.Properties["dragLint.fullRules"]
+Check "dragLint.fullRules is contributed as a boolean" ($null -ne $fr -and $fr.Value.type -eq "boolean") ""
+Check "dragLint.fullRules defaults to true (the old default was none)" ($null -ne $fr -and $fr.Value.default -eq $true) ""
+$sa = Join-Path $Dir 'lib/serverargs.js'
+Check "lib/serverargs.js exists and extension.js uses it" ((Test-Path $sa) -and ($ext -match "serverargs")) ""
+if (Test-Path $sa) {
+  $js = 'const a=require(process.argv[1]);const o=[a.buildArgs([],undefined),a.buildArgs([],true),a.buildArgs([],false),a.buildArgs(["X.sqlite"],true)];console.log(JSON.stringify(o))'
+  $out = (& node -e $js (Resolve-Path $sa).Path) | ConvertFrom-Json
+  Check "unset setting (nothing saved) runs the server WITH --full-rules" ($out[0] -contains "--full-rules") ($out[0] -join " ")
+  Check "true runs the server with --full-rules" ($out[1] -contains "--full-rules") ""
+  Check "false (user switched it off) runs the plain lsp with NO --full-rules" (($out[2] -join " ") -eq "lsp") ($out[2] -join " ")
+  Check "databases still become --db pairs beside --full-rules" (($out[3] -join " ") -eq "lsp --db X.sqlite --full-rules") ($out[3] -join " ")
+}
+Check "changing dragLint.fullRules restarts the server (a running server keeps its old argv)" ($ext -match 'affectsConfiguration\(.dragLint\.fullRules.\)') ""
+
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
