@@ -42,10 +42,9 @@ two different builds have reported the same version; compare SHA256 and build st
   `dll-win64` staging unless given `stage`): `MainForm.pas`, `ConvertTab.pas` and the
   other forms are outside the tests' compile closure, so a tests build never sees their
   compile breaks. Testable decisions belong in the pure units below, not in forms.
-* **Model tests (no engine beside the runner, live tests SKIP): 3117 pass / 0 fail / 20 skip** on conv/startup2 (f8d91391 + conv/startup + STARTUP2 long reads behind the progress window, 2026-10-27; 3237 / 0 / 0 on the 1.36.0-alpha-20261027-142316 pin). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
+* **Model tests (no engine beside the runner, live tests SKIP): 3228 pass / 0 fail / 20 skip** on main 11211b58 (2026-11-05; 3352 / 0 / 0 on the 1.43.0-alpha-20261105-123455 pin). With the engine: `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
   `drag-lint.exe` beside the runner, else `CONVRULES_TEST_ENGINE`, else none (live
-  tests SKIP; first line says which). Baseline on the 1.36.0-alpha-20261027-142316 pin:
-  **3204 pass / 0 fail / 0 skip** (main bcbd1c35, before a1270 + drv2b; re-measure). The old 5 "VARINSP fixture" failures were a fixture defect:
+  tests SKIP; first line says which). Baseline on the 1.43.0-alpha-20261105-123455 pin: **3352 pass / 0 fail / 0 skip** (main 11211b58, 2026-11-05). The old 5 "VARINSP fixture" failures were a fixture defect:
   VARINSP is outside Micronite2027's compile closure, so its project DB never holds it; the picker / fill tests now use AssignGroups. A rebuild of `dll-win64` mid-run
   kills it: discard that run.
 * **GUI drivers** (`tests\gui\`, by hand): `pwsh -NoProfile -File <driver> -Exe

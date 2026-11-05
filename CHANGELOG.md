@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
-## v1.43.0-alpha -- unreleased
+## v1.43.0-alpha -- 2026-11-05
 
 1.43, integrated on lane/143-int. ONE bump: DRAGLINT_EXTRACTOR_VERSION 1.30.0 -> 1.31.0-alpha and
 DRAGLINT_RESOLVER_VERSION 1.18.0 -> 1.19.0-alpha -- every index re-parses once.
@@ -24,8 +24,8 @@ DRAGLINT_RESOLVER_VERSION 1.18.0 -> 1.19.0-alpha -- every index re-parses once.
 - index (lane idx4, ORM3DB-WRITER): a directory index with no `--db` names the database it is about to create.
 
 ### Fixed
-- index (lane clos, GH #13): the compile closure gives the project's own unit bindings precedence. A unit named by a .dpr `uses X in 'path'`, then by a DCCReference, is never path-searched, so a same-named file elsewhere stays out and the unit has one file in the index. A listed file missing from disk binds nothing and the search still answers. DCCReference and `in` disagreeing: the .dpr file wins, as in dcc, the DCCReference file is left out, and a WARN line names both.
-- index (lane clos, GH #13): a rooted `in` path holding `..` joined the closure unnormalised, so the printed count held a second spelling of a listed file. Every closure entry is now one full path.
+- index (lane clos, GH #13, reported by Jonathas Paiva): the compile closure gives the project's own unit bindings precedence. A unit named by a .dpr `uses X in 'path'`, then by a DCCReference, is never path-searched, so a same-named file elsewhere stays out and the unit has one file in the index. A listed file missing from disk binds nothing and the search still answers. DCCReference and `in` disagreeing: the .dpr file wins, as in dcc, the DCCReference file is left out, and a WARN line names both.
+- index (lane clos, GH #13, reported by Jonathas Paiva): a rooted `in` path holding `..` joined the closure unnormalised, so the printed count held a second spelling of a listed file. Every closure entry is now one full path.
 - index (lane extb, RESOLVE-ONLY-STAMPS): `--resolve-only` no longer stamps the indexer fingerprint over stale parses, so the next plain run re-parses them.
 - index (lane idx4, WITHHELD-LOG-TEXT, RESOLVE-REASON-TEXT): after a clear, the resolve log says the withheld files lost their edges, and names the clear as the decline reason.
 - index (lane idx4, LIBRARY-GATE-IGNORES-CONFIG): the library gate reads the `--config` manifest of `index --all`.
