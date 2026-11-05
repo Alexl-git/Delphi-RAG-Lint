@@ -1,0 +1,3 @@
+#migrate TPlatCursor -> TNewCursor, CurPlat
+#migrate TGoneCursor -> TNewGone, CurPlat
+#migrate TStuckOld -> TOnlyInOld, OldPlatDb

@@ -62,6 +62,13 @@ in the code, not a member of a converted instance:
   sites renamed (`component_part` reads as before: `skipped-no-dfm`, `skipped-no-instances` or `applied`). A unit
   with no `#migrate` site keeps the old answer (`sibling .dfm not found`,
   exit 1; `no convertible instances found`).
+* Old platform (1.43 ENUMMAP): `--old-platform-db <file>` (repeatable) names the index of the platform the
+  code was written against, for example a Delphi 5 library DB. The From enum's members are read from it first
+  and today's `--db` members are added after it, so a member today's enum lost still maps by name and is
+  never silent. An enum only the old platform declares maps too. It never answers for a target: `New` must
+  resolve in `--db`. A path that is no readable index exits 2. Without the flag the From enum is today's.
+  Build that index once, on its own: `drag-lint index <D5 root>\Source --db <d5.sqlite>`.
+  Capability `old_platform_enum_map`; guard `tests\autotest\run_convert_apply_old_platform_enum.ps1`.
 Gate: `info --json` -> `capabilities.migrate_identifiers: true`.
 Guards: `tests\autotest\run_convert_apply_migrate_type.ps1`; inherited `[n]` headers, a
 whole-streamed collection and a file-scope `#migrate` in one D5-shaped child:

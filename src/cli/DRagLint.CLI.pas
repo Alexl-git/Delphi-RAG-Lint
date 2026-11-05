@@ -751,6 +751,7 @@ type
     NoReindex     : Boolean; // --no-reindex (convert-apply, C9: do not refresh the unit's project DB after --apply)
     UnitProgress  : Boolean; // --progress (convert-apply, 1.33.0 G1: one stderr JSON line per finished unit)
     RaiseEncoding : TArray<string>; // --raise-encoding "<path>=utf8-bom" (convert-apply, 1.34.1 E2; repeatable)
+    OldPlatformDbs: TArray<string>; // --old-platform-db <file> (convert-apply, 1.43 ENUMMAP; repeatable)
     PrintParsed   : Boolean; // --print-parsed  (dump parsed rule count + lines)
     // Track 3 Batch 2a-i (Task 8): convert-reemit HIDDEN test verb. FromBlockFile
     // is the --from-block path (one F DFM `object` block, verbatim text).
@@ -1734,6 +1735,11 @@ begin
     begin
       Inc(i);
       Result.RaiseEncoding:= Result.RaiseEncoding + [ParamStr(i)];
+    end
+    else if (A = '--old-platform-db') and (i < ParamCount) and (Result.Command = 'convert-apply') then // 1.43 ENUMMAP: repeatable
+    begin
+      Inc(i);
+      Result.OldPlatformDbs:= Result.OldPlatformDbs + [ParamStr(i)];
     end
     else if A = '--no-warn-unlinked' then Result.NoWarnUnlinked:= True // convert-apply: silence the per-(type,property) unlinked warnings; the json count stays
     else if A = '--print-parsed' then Result.PrintParsed:= True // convert-validate: dump parsed rules
@@ -20265,6 +20271,7 @@ begin
         pas_uses[] status mapped for the member. }
       JCap.AddPair('migrate_members', TJSONBool.Create(True));
       JCap.AddPair('migrate_identifiers', TJSONBool.Create(True)); { 1.38 (D2): file-scope / type / enum #migrate in code }
+    JCap.AddPair('old_platform_enum_map', TJSONBool.Create(True)); { 1.43 ENUMMAP: convert-apply --old-platform-db }
       { E18 (1.33.0): cycles --fix plans, gates and (with --apply) writes the mechanical
         fix of one circular group -- cycle-fix/1 JSON, exit 0 / 1 / 2. }
       JCap.AddPair('cycle_fix', TJSONBool.Create(True));
@@ -31801,6 +31808,23 @@ begin
     Exit(2);
   end;
 
+  { 1.43 ENUMMAP: named explicitly, so an unusable one stops the run: mapping against
+    today's enum instead would leave the old members silently unrenamed. Read-only,
+    and kept out of Stores: it answers only for a #migrate enum's OLD members. }
+  var OldPlatformStores: TArray<ISymbolStore>:= nil;
+  for var OldDb: string in AArgs.OldPlatformDbs do
+  begin
+    var OldOk: Boolean:= False;
+    var OldSt: ISymbolStore:= nil;
+    if TFile.Exists(OldDb) then OldSt:= OpenReadOnlyStore(OldDb, OldOk);
+    if not OldOk then
+    begin
+      Writeln(Format('ERROR: --old-platform-db %s is not a readable drag-lint index; nothing was changed', [OldDb]));
+      Exit(2);
+    end;
+    OldPlatformStores:= OldPlatformStores + [OldSt];
+  end;
+
   CastLib     := ParseCastLib(AArgs.CastLibFile);
   BookBuilt   := 0;
   BookChecked := False;
@@ -31812,6 +31836,7 @@ begin
   Trees:= TConvertTreeCache.Create(Stores);
   try
     Trees.DbPaths:= Dbs; { C9: names the db of a uses_unresolved candidate }
+    Trees.OldPlatformStores:= OldPlatformStores;
     if Length(Units) = 1 then
     begin
       { 1.33.0 G3: the apply/1 document carries exit_code, known only once the

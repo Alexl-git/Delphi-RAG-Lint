@@ -1,0 +1,3 @@
+#migrate TPlatCursor -> TNewCursor, CurPlat
+#migrate pcrOther -> ncrNone
+#migrate pcrSQLWait -> ncrHourGlass
