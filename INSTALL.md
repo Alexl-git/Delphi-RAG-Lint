@@ -372,9 +372,8 @@ two are not duplicated features.)
 
 * **VS Code** -- an extension is included in the source repository (not in the
   release archive); install it from `editors\vscode\drag-lint\`.
-* **Zed** -- highlighting works today via the tree-sitter grammars; registering
-  the language server needs a small Rust/WASM extension that is **not yet
-  built**. It is fully specified so anyone with `rustup` can finish it.
+* **Zed** -- highlighting and the language server both come from the Rust extension at
+  `tree-sitter-delphi13/editors/zed/`; install it as a dev extension (`docs/EDITORS.md`).
 * **Neovim / Helix / anything else** -- point it at `drag-lint lsp` over stdio.
 
 Full instructions, settings and the Rust extension specification:

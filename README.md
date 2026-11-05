@@ -882,9 +882,8 @@ predates it answers the standard `-32601`.
   `HKCU\Software\Embarcadero\BDS\<ver>\Editor\Highlight`), so the colours match
   the IDE literally rather than approximately -- before v1.5 nothing coloured
   Pascal in VS Code at all, since it has no built-in Pascal grammar.
-* **Zed** -- tree-sitter highlighting ships today; the language-server
-  registration needs a small Rust/WASM extension that is **not yet built** and is
-  fully specified for contributors.
+* **Zed** -- tree-sitter highlighting and the language-server registration both live in the
+  Rust extension at `tree-sitter-delphi13/editors/zed/`; see `docs/EDITORS.md`.
 * **Neovim / Helix / any LSP editor** -- point it at `drag-lint lsp`. Add `--full-rules` (OFF by default) to
   publish the complete built-in rule set on every save instead of the subset; it runs `lint` out-of-process
   and reports its cost in ms on stderr. A platform-library unit (an RTL/VCL file covered by a `library-*.sqlite`)
