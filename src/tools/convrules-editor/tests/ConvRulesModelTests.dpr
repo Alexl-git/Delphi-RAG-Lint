@@ -3157,6 +3157,27 @@ var
     Check('batch.exit6.entry.wrote.restored', AllOf([RowOf(S1, 'A.rules').Status = csConfigError, Untouched(S1), BackupsOf(S1) = 1,
       Pos('restored', RowOf(S1, 'A.rules').Note) > 0, RowOf(S2, 'A.rules').Status = csConfigError, BackupsOf(S2) = 0, Untouched(S2)]), Describe);
 
+    // C3.1 (T1, mixed chunk): exit 6 on the chunk, but S1's own entry is an ordinary refusal
+    // (exit_code 1, e.g. unindexed) -- it stays csRefused with its own reason, nothing written;
+    // S2 (exit_code 6) is the configuration error and carries the stop.
+    Reset;
+    ExitOver:= ENGINE_EXIT_CONFIG;
+    Decide:= function(AUnit, ABook: string): Char
+      begin
+        Result:= 'r';
+      end;
+    LDoc:= '{"schema":"apply-batch/1","mode":"apply","units_count":2,"ok":false,"exit_code":6,"ok_count":0,"refused_count":2,"failed_count":0,'
+      + '"classes_built":0,"units":[{"schema":"apply/1","unit":"' + BatchJ(S1) + '","ok":false,"refused":true,"reason":"unit is not indexed",'
+      + '"error":"unit is not indexed","rule_errors":[],"edits_count":0,"exit_code":1},' + Refused6(S2) + ']}';
+    Answer:= function(AJson: string): string
+      begin
+        Result:= LDoc;
+      end;
+    Rows:= RunConversionBatched([S1, S2], ['A.rules', 'B.rules'], Fake, Index, OnRow, nil, OnStep, False, False, BATCH_MAX_UNITS);
+    Check('batch.exit6.entry.refused.stays.refused', AllOf([Length(Rows) = 2, RowOf(S1, 'A.rules').Status = csRefused,
+      Pos('unit is not indexed', RowOf(S1, 'A.rules').Note) = 1, not RowOf(S1, 'A.rules').StoppedRun, RowOf(S2, 'A.rules').Status = csConfigError,
+      RowOf(S2, 'A.rules').StoppedRun, BackupsOf(S1) = 0, BackupsOf(S2) = 0, Untouched(S1), Untouched(S2)]), Describe);
+
     // R5: S1's entry says ok=true with exit_code 2 -- the chunk is not trusted.
     Reset;
     Answer:= function(AJson: string): string

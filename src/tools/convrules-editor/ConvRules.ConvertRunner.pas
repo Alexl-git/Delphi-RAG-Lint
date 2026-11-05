@@ -51,6 +51,9 @@ const
   /// library (engine 1.28.0; 2 stays write failure / rollback, 1 a unit failure). It
   /// stops the whole run: every later apply would fail the same way.</summary>
   ENGINE_EXIT_CONFIG = 6;
+  /// <summary>An entry's own exit_code for an ordinary refusal (incl. unindexed): nothing
+  /// written. Inside an exit-6 chunk it keeps the entry a refusal (C3.1).</summary>
+  ENGINE_EXIT_REFUSED = 1;
 
 type
   /// <summary>Outcome of one results-grid row.</summary>
@@ -366,7 +369,8 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: 
 /// <returns>The same row statuses as RunConversionUnits, per unit x book attempted.</returns>
 /// <remarks>Every unit still gets ONE restore point per run (.BCK&lt;N&gt;, dropped when no
 /// book changed it). Per chunk: exit ENGINE_EXIT_CONFIG gives every unit of the chunk a
-/// csConfigError row (the first one StoppedRun) and stops the run with no reindex; an
+/// csConfigError row (the first one StoppedRun) and stops the run with no reindex -- except an
+/// entry that is a plain refusal of its own (exit_code 1, nothing written), which stays csRefused; an
 /// answer that is no apply-batch/1, whose units[] do not line up with the --unit list
 /// (BatchUnitsMatch), whose per-entry exit_code contradicts an entry (BatchEntryExitBroken),
 /// that breaks the exit contract (BatchContractBroken) or that lists
@@ -1817,6 +1821,8 @@ var
     LReason  : string;
     LError   : string;
     LAllBad  : Boolean;
+    LUnitsRead: Boolean;            // exit-6 branch: the answer is readable per unit
+    LFlagged : Boolean;             // exit-6 branch: StoppedRun already set on a row
     LPending : TArray<Integer>;     // positions in AChunk the engine converted
     LPendRows: TArray<TConvertRow>; // their rows, final once the reindex after the chunk ran
   begin
@@ -1839,6 +1845,8 @@ var
     begin
       // The run's configuration error (engine 1.28.0): every later call would fail the same way.
       Stopped:= True;
+      LUnitsRead:= BatchUnitsMatch(LDoc, LPaths);
+      LFlagged  := False; // the first csConfigError row carries StoppedRun
       for var I: Integer:= 0 to High(AChunk) do
       begin
         LRow:= NewRow(AChunk[I], LBook);
@@ -1860,7 +1868,15 @@ var
           Units[AChunk[I]].Changed:= True;
           LReason:= Format(CONFIG_STOP_WROTE_FMT, [Units[AChunk[I]].RP.Names(False)]);
         end;
-        FailUnit(AChunk[I], LRow, LReason, csConfigError, ABookNo, LAt, I = 0);
+        // C3.1: an entry that is an ordinary refusal of its own (exit_code 1, nothing written)
+        // is a refusal, not the configuration error that stopped the chunk.
+        if LUnitsRead and LRow.Apply.Refused and not LRow.Apply.Ok and (LRow.Apply.ExitCode = ENGINE_EXIT_REFUSED) and not ConfigStopMayHaveWritten(LRow.Apply) then
+          FailUnit(AChunk[I], LRow, LRow.Apply.Error + QualifyFixNote(LRow.Apply) + IndexGapHint(LRow.Apply.Error), csRefused, ABookNo, LAt, False)
+        else
+        begin
+          FailUnit(AChunk[I], LRow, LReason, csConfigError, ABookNo, LAt, not LFlagged);
+          LFlagged:= True;
+        end;
       end;
       Exit; // no reindex: the run stops, the Convert tab's final reindex follows
     end;
