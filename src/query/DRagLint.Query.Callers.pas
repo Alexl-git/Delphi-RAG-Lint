@@ -37,8 +37,8 @@ type
   /// caller ROUTINE's declaration line on resolved and callback rows (the
   /// CLI's `caller_line`) and the reference's own line on name-matched rows.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Query.Callers.pas), DRagLint.Charts.MemberAccess.CollectMemberAccess (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.GroupRoutines (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.HitsOf (DRagLint.Charts.MemberAccess.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas) (+1 more)</para>
-  /// <para>Used in units: DRagLint.Charts.MemberAccess, DRagLint.Query.Callers</para>
+  /// <para>Used by: DRagLint.Charts.MemberAccess.GroupRoutines (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Charts.MemberAccess.HitsOf (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Query.Callers.NameCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.RowOfCaller (DRagLint.Query.Callers.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.Charts.MemberAccess, DRagLint.LSP.Server, DRagLint.Query.Callers</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TQueryCallerRow = record
@@ -119,7 +119,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Query.Callers.pas), DRagLint.Charts.MemberAccess.HitsOf (DRagLint.Charts.MemberAccess.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Query.Callers.pas), DRagLint.Charts.MemberAccess.HitsOf (DRagLint.Charts.MemberAccess.pas), DRagLint.CLI.DoImpact (DRagLint.CLI.pas), DRagLint.LSP.Server.HoverResolvedCallers (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.FindCallersText (DRagLint.MCP.Server.pas) (+3 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TQueryCallerRows = TArray<TQueryCallerRow>;
@@ -128,6 +128,12 @@ type
   /// <summary>Counts of caller/callee rows per derived resolution kind, for the text
   /// totals `12 callers (9 exact, 1 ambiguous, 2 name-only)` and the context JSON
   /// `caller_resolution` object.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas) ?, DRagLint.Context.Bundler.TContextBundler.RenderJson (DRagLint.Context.Bundler.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TResolutionTally = record
     Exact    : Integer;
     Ambiguous: Integer;
@@ -135,9 +141,27 @@ type
     NameOnly : Integer;
     /// <summary>Counts one row of kind <paramref name="AKind"/> (a RESOLUTION_* value; an
     /// unknown or empty kind is not counted).</summary>
+    /// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.MemberAccess.GroupRoutines (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Charts.MemberAccess.LoadSites (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.RenderJson (DRagLint.Context.Bundler.pas) (+71 more)</para>
+    /// <para>Writes: Exact, Ambiguous, External, NameOnly</para>
+    /// <seealso cref="DRagLint.Query.Callers.TResolutionTally.ToText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Add(const AKind: string);
     /// <summary>`9 exact, 1 ambiguous, 2 name-only`: only the kinds seen, in the order
     /// exact, ambiguous, external, name-only; '' when nothing was counted.</summary>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Query.Callers.TResolutionTally.ToText.Part, Format</para>
+    /// <para>Reads: Exact, Ambiguous, External, NameOnly</para>
+    /// <seealso cref="DRagLint.Query.Callers.TResolutionTally.ToText.Part"/>
+    /// <seealso cref="DRagLint.Query.Callers.TResolutionTally.Add"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ToText: string;
   end;
 
@@ -145,12 +169,20 @@ type
 /// <param name="AConfidence">'certain' | 'ambiguous' | 'callback' | anything else.</param>
 /// <returns>'ambiguous' for 'ambiguous'; 'name-only' for 'callback' (a by-name reach, no
 /// edge); 'exact' for every other stored edge ('certain').</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoFindCallees (DRagLint.CLI.pas), DRagLint.Query.Callers.MemberUsersForName.AddRows (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.RowOfCaller (DRagLint.Query.Callers.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: RESOLUTION_AMBIGUOUS; RESOLUTION_NAME_ONLY; RESOLUTION_EXACT</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolutionOfConfidence(const AConfidence: string): string;
 
 /// <summary>Precise callers of every symbol matching <paramref name="AName"/>
 /// in one store, keyed by resolved call edges rather than by name.</summary>
 /// <param name="AStore">An open store; must not be nil.</param>
 /// <param name="AName">Bare or qualified callee name, matched exactly.</param>
+/// <param name="AWithDispatch"><!-- drag-lint:auto type -->Boolean = False</param>
 /// <returns>Rows in the CLI's historical emission order: all resolved callers
 /// grouped per matching target, then the callback reaches. Empty when nothing
 /// matches.</returns>
@@ -180,14 +212,14 @@ function ResolutionOfConfidence(const AConfidence: string): string;
 /// (<c>N := NextId</c>, bound since resolver 1.7.0-alpha) and is already a
 /// resolved row, so a line holding one is not listed again as a callback.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.MemberAccess.CollectMemberAccess (DRagLint.Charts.MemberAccess.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
-/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, ExtractFileName, Format, LowerCase, Trim</para>
-/// <para>Complexity: 15 (cyclomatic, outer body), 103 lines (full implementation)</para>
+/// <para>Called from: DRagLint.Charts.MemberAccess.CollectMemberAccess (DRagLint.Charts.MemberAccess.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.LSP.Server.HoverResolvedCallers (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.FindCallersText (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Query.Callers.DispatchCallersOf, DRagLint.Query.Callers.RowOfCaller, ExtractFileName, Format, LowerCase, Trim</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 110 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ResolvedCallersForName(const AStore: ISymbolStore; const AName: string; AWithDispatch: Boolean = False): TQueryCallerRows;
@@ -202,12 +234,22 @@ function ResolvedCallersForName(const AStore: ISymbolStore; const AName: string;
 /// 'interface', TargetQName = AImplId's qualified name and ViaCount set on the
 /// first row of each group. Empty on a database without dispatch_edges or when
 /// nothing implements through an interface.</returns>
-/// <remarks>Only 'implements' edges are reported: a virtual override is not
+/// <remarks>
+/// Only 'implements' edges are reported: a virtual override is not
 /// part of the owner ruling and would churn every class-hierarchy answer. A call
 /// whose receiver is class-typed binds to the class method (a direct caller) and
 /// never appears here. Rows keep the call edge's own confidence; the dispatch
 /// edge's confidence is ViaEdge, and an 'ambiguous' edge is marked by the
-/// renderers.</remarks>
+/// renderers.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoImpact (DRagLint.CLI.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas), DRagLint.LSP.Server.HoverResolvedCallers (DRagLint.LSP.Server.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.CrossImpact.AnswerLocalDispatch (DRagLint.Query.CrossImpact.pas) (+1 more)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindDispatchLinks, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Query.Callers.RowOfCaller</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDispatchLinks"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+/// <seealso cref="DRagLint.Query.Callers.RowOfCaller"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DispatchCallersOf(const AStore: ISymbolStore; AImplId: Int64): TQueryCallerRows;
 
 /// <summary>Name-matched callers of <paramref name="AName"/> in one store,
@@ -245,8 +287,17 @@ function NameCallersForName(const AStore: ISymbolStore; const AName: string; ACo
 /// historical behaviour). A qualified name: the refs named by its LAST segment
 /// that the resolver bound to one of ADecls -- refs.name_text never carries a
 /// dot, so matching the dotted string answered 0 for everything.</returns>
-/// <remarks>A qualified query drops UNBOUND refs: an unbound `X.Streaming`
-/// cannot be attributed to TJob rather than to any other Streaming.</remarks>
+/// <remarks>
+/// A qualified query drops UNBOUND refs: an unbound `X.Streaming`
+/// cannot be attributed to TJob rather than to any other Streaming.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUsages (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: Copy, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Query.Callers.DropMemberAccessUnderCall, LastDelimiter</para>
+/// <para>Returns: DropMemberAccessUnderCall(Kept.ToArray)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
+/// <seealso cref="DRagLint.Query.Callers.DropMemberAccessUnderCall"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UsageRefsForName(const AStore: ISymbolStore; const AName: string; const ADecls: TArray<TSymbol>): TArray<TReference>;
 
 /// <summary>The `usages` bucket a reference belongs to, given what the
@@ -259,10 +310,19 @@ function UsageRefsForName(const AStore: ISymbolStore; const AName: string; const
 /// cast `TEnum(X)`, which the parse cannot tell from a one-argument call and
 /// the resolver binds to the enum (ResolveEnumCast) without a call edge.
 /// Otherwise exactly UsageBucketOf(ARef).</returns>
-/// <remarks>The ref row itself stays kind 'call': enum-ordinal-persisted
+/// <remarks>
+/// The ref row itself stays kind 'call': enum-ordinal-persisted
 /// selects those rows. Only the usages bucket changes. A call ref bound to a
 /// routine, or unbound, is untouched. Shared by the CLI verb and the LSP
-/// draglint/usages reply. Pinned by run_refs_142_shapes.ps1.</remarks>
+/// draglint/usages reply. Pinned by run_refs_142_shapes.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUsages.GroupFor (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleUsages.GroupFor (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: DRagLint.Query.Callers.UsageBucketOf</para>
+/// <para>Returns: UsageBucketOf(ARef)</para>
+/// <para>Effect-free (proven)</para>
+/// <seealso cref="DRagLint.Query.Callers.UsageBucketOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UsageBucketIn(const ARef: TReference; const ADecls: TArray<TSymbol>): string;
 
 /// <summary>A name match's refs, minus those that cannot be a call of the name:
@@ -271,6 +331,13 @@ function UsageBucketIn(const ARef: TReference; const ADecls: TArray<TSymbol>): s
 /// <param name="ARefs">Name-matched refs (FindCallersByName and friends).</param>
 /// <returns>The refs that can still be calls, in order. Shared by `query
 /// find-callers` and the MCP find_callers tool.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.FindCallersText (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, SameText</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DropRefsThatCannotBeCallers(const AStore: ISymbolStore;
   const ARefs: TArray<TReference>): TArray<TReference>;
 
@@ -278,15 +345,28 @@ function DropRefsThatCannotBeCallers(const AStore: ISymbolStore;
 /// highest-ranked kind there ('call' over 'member-access' over 'read').</summary>
 /// <param name="ARefs">Refs in display order.</param>
 /// <returns>The refs with same-site duplicates collapsed, order preserved.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.FindCallersText (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: DRagLint.Query.Callers.CollapseRefsAtSameSite.KindRank, Format, SameText</para>
+/// <seealso cref="DRagLint.Query.Callers.CollapseRefsAtSameSite.KindRank"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollapseRefsAtSameSite(const ARefs: TArray<TReference>): TArray<TReference>;
 
 type
   /// <summary>One user of a member, as `usages --rw` lists it.</summary>
-  /// <remarks>Via says by which route the site reaches the member: 'property'
+  /// <remarks>
+  /// Via says by which route the site reaches the member: 'property'
   /// (through a property), 'field' (a mention of the property's backing field),
   /// 'getter' / 'setter' (a direct call of the accessor method), 'direct' (the
   /// member has no property in front of it). ViaName is the qualified name of the
-  /// symbol the site is bound to.</remarks>
+  /// symbol the site is bound to.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.Callers.pas) ?, DRagLint.CLI.DoUsagesReadersWriters.RowsJson (DRagLint.CLI.pas) ?, DRagLint.CLI.DoUsagesReadersWriters.WriteRows (DRagLint.CLI.pas) ?, DRagLint.Query.Callers.MemberUsersForName.AddRows (DRagLint.Query.Callers.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Query.Callers</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMemberUserRow = record
     CallerQName: string ;
     FullPath   : string ;
@@ -298,12 +378,18 @@ type
   end;
 
   /// <summary>The users of one declaration, split into readers and writers.</summary>
-  /// <remarks>Calls holds the sites that neither read nor write: the callers of a
+  /// <remarks>
+  /// Calls holds the sites that neither read nor write: the callers of a
   /// routine that is no property's accessor. ReadAccessor / WriteAccessor are set
   /// for a property only, as written in its declaration; their Kind is 'field',
   /// 'method' or 'unresolved' (declared by an ancestor, or a source the index no
   /// longer matches), '' when the property has no such accessor.
-  /// BacksProperties names the properties a field or accessor method stands behind.</remarks>
+  /// BacksProperties names the properties a field or accessor method stands behind.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.Callers.pas) ?, DRagLint.CLI.DoUsagesReadersWriters (DRagLint.CLI.pas) ?, DRagLint.Query.Callers.MemberUsersForName (DRagLint.Query.Callers.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Query.Callers</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMemberUsers = record
     Target           : TSymbol;
     FilePath         : string ;
@@ -319,6 +405,12 @@ type
 
   /// <summary>The refs carrying a name that the resolver bound to nothing, by
   /// usage direction. They may belong to any symbol of that name.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.Callers.pas) ?, DRagLint.CLI.DoUsagesReadersWriters (DRagLint.CLI.pas), DRagLint.Query.Callers.UnboundUsersForName (DRagLint.Query.Callers.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Query.Callers</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnboundUsers = record
     Reads : TArray<TReference>;
     Writes: TArray<TReference>;
@@ -335,12 +427,23 @@ type
 /// mentions. A getter gathers only reads, a setter only writes. One site appears
 /// once per direction, under its first route in that order; sites are per line,
 /// because a resolved row carries no column.</returns>
-/// <remarks>The accessor NAMES come from the property's declaration text, read from
+/// <remarks>
+/// The accessor NAMES come from the property's declaration text, read from
 /// the file on disk, because symbols.prop_access keeps only 'ro'/'rw'/'wo' and
 /// member_accesses names an accessor only for a property somebody accesses: a property
 /// with no users must still lead to its field. A source that cannot be read leaves
 /// the accessors empty and the bound sites intact. Directions are the index's:
-/// a var/out argument and Inc/Dec of a field are indexed as reads.</remarks>
+/// a var/out argument and Inc/Dec of a field are indexed as reads.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUsagesReadersWriters (DRagLint.CLI.pas)</para>
+/// <para>Calls: AccessorSymbol, AddAccessorRows, AddRows, DeclaredAccessors, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Query.Callers.MemberUsersForName.GatherMember, DRagLint.Query.Callers.MemberUsersForName.GatherProperty, DRagLint.Query.Callers.ReadLinesOrNothing, Format, LowerCase, ResolutionOfConfidence, SameText, Trim</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Query.Callers.MemberUsersForName.GatherMember"/>
+/// <seealso cref="DRagLint.Query.Callers.MemberUsersForName.GatherProperty"/>
+/// <seealso cref="DRagLint.Query.Callers.ReadLinesOrNothing"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MemberUsersForName(const AStore: ISymbolStore; const AName: string): TArray<TMemberUsers>;
 
 /// <summary>The refs named by a BARE name that the resolver left unbound.</summary>
@@ -348,6 +451,16 @@ function MemberUsersForName(const AStore: ISymbolStore; const AName: string): TA
 /// <param name="AName">The name; a qualified name answers nothing, because an
 /// unbound site cannot be attributed to one owner.</param>
 /// <returns>The unbound refs, split with the `usages` buckets.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoUsagesReadersWriters (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Query.Callers.DropMemberAccessUnderCall, DRagLint.Query.Callers.UsageBucketOf, LastDelimiter, Trim</para>
+/// <para>Returns: Default(TUnboundUsers)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
+/// <seealso cref="DRagLint.Query.Callers.DropMemberAccessUnderCall"/>
+/// <seealso cref="DRagLint.Query.Callers.UsageBucketOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnboundUsersForName(const AStore: ISymbolStore; const AName: string): TUnboundUsers;
 
 implementation

@@ -72,6 +72,12 @@ type
   /// <summary>Lane INC3: an IF / ELSEIF directive, evaluated in active code,
   /// whose expression names something the symbol table could not resolve.
   /// The directive was taken as False.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Diagnostics.ParseCache.pas) ?, declaration (DRagLint.Preprocess.pas) ?, DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas) ?, DRagLint.Diagnostics.PpChecks.TPpChecker.Check (DRagLint.Diagnostics.PpChecks.pas) ?, DRagLint.Preprocess.PreprocessInto.EvalIf (DRagLint.Preprocess.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Diagnostics.ParseCache, DRagLint.Diagnostics.PpChecks, DRagLint.Preprocess</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPUnresolvedIf = record
     Line : Integer;          // 1-based line of the directive
     Col  : Integer;          // 1-based column of the directive
@@ -83,6 +89,12 @@ type
   end;
 
   /// <summary>Lane INC3: everything a preprocess run learned besides its bytes.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas) ?, DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Scan (DRagLint.Index.PPUnitSource.pas) ?, DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas), DRagLint.Preprocess.Preprocess/3 (DRagLint.Preprocess.pas), DRagLint.Preprocess.PreprocessReport (DRagLint.Preprocess.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Diagnostics.ParseCache, DRagLint.Index.PPUnitSource, DRagLint.Preprocess</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPReport = record
     Sites     : TArray<TPPIncludeSite>;   // as Preprocess(..., out ASites)
     Unresolved: TArray<TPPUnresolvedIf>;  // top-level file only (not inside includes)
@@ -136,8 +148,8 @@ function Preprocess(const AUtf8: TBytes; const AProfile: TDefineProfile): TBytes
 /// directive is always blanked, never spliced.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Calls: DRagLint.Preprocess.PreprocessWithSites</para>
-/// <para>Returns: PreprocessWithSites(AUtf8, AOptions, nil)</para>
+/// <para>Calls: Default, DRagLint.Preprocess.PreprocessWithSites</para>
+/// <para>Returns: PreprocessWithSites(AUtf8, AOptions, nil, Report)</para>
 /// <para>Overload 2 of 3</para>
 /// <para>Pure</para>
 /// <para>Directives: overload</para>
@@ -155,8 +167,19 @@ function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions): TBytes; ov
 /// <param name="ASites">Receives the sites in source order, nested ones
 /// included (TPPIncludeSite.Depth tells them apart); empty when none.</param>
 /// <returns>A new TBytes with Length = Length(AUtf8) exactly.</returns>
-/// <remarks>Each site's Resolved bytes are the child output the recursion
-/// already produced -- no second preprocess.</remarks>
+/// <remarks>
+/// Each site's Resolved bytes are the child output the recursion
+/// already produced -- no second preprocess.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.TryPreprocessWithSites (DRagLint.Index.Closure.pas)</para>
+/// <para>Calls: Default, DRagLint.Preprocess.PreprocessWithSites</para>
+/// <para>Returns: PreprocessWithSites(AUtf8, AOptions, Sites, Report)</para>
+/// <para>Overload 3 of 3</para>
+/// <para>Mutates: ASites (out)</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Preprocess.PreprocessWithSites"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions;
   out ASites: TArray<TPPIncludeSite>): TBytes; overload;
 
@@ -167,12 +190,21 @@ function Preprocess(const AUtf8: TBytes; const AOptions: TPPOptions;
 /// <param name="AOptions">As for Preprocess(AUtf8, AOptions).</param>
 /// <param name="AReport">Receives the report (see TPPReport).</param>
 /// <returns>Bytes identical to Preprocess(AUtf8, AOptions).</returns>
-/// <remarks>IF expressions are evaluated against the constants declared
+/// <remarks>
+/// IF expressions are evaluated against the constants declared
 /// earlier in the active text, then against the units of the uses clause
 /// through the installed PPUnitSource (none installed = same-file only).
 /// Setting the environment variable DRAGLINT_PP_TRACE to a file path appends
 /// one TSV line per evaluated IF (base dir, line, result, result without the
-/// symbol table, unresolved names, expression) -- a measurement aid.</remarks>
+/// symbol table, unresolved names, expression) -- a measurement aid.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.PPUnitSource.TPPUnitSourceResolver.Scan (DRagLint.Index.PPUnitSource.pas)</para>
+/// <para>Calls: Default, DRagLint.Preprocess.PreprocessWithSites</para>
+/// <para>Returns: PreprocessWithSites(AUtf8, AOptions, Sites, AReport)</para>
+/// <para>Mutates: AReport (out)</para>
+/// <seealso cref="DRagLint.Preprocess.PreprocessWithSites"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PreprocessReport(const AUtf8: TBytes; const AOptions: TPPOptions;
   out AReport: TPPReport): TBytes;
 

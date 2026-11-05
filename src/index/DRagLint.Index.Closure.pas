@@ -34,8 +34,8 @@ type
   /// <summary>Holds the result of a compile-closure walk.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas) (+3 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Closure, DRagLint.Index.Reconcile</para>
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas) ?, DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?, DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas) ?, DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas) ? (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Closure, DRagLint.Index.Reconcile, DRagLint.Project.TargetStudio</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TClosureResult = record
@@ -57,8 +57,8 @@ type
   /// <summary>Resolves the compile closure of a Delphi .dpr or .dproj project.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas) (+2 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Reconcile, DRagLint.Refactor.MultiProjectRename</para>
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Index.Reconcile, DRagLint.Project.TargetStudio, DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TClosureResolver = class
@@ -92,20 +92,36 @@ type
       /// TEncoding.UTF8.GetString(Resolved); AContent.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Preprocess.Preprocess/2, Format, Writeln</para>
-      /// <para>Reads: FPreprocessEnabled, FProfile, FPreprocessFellBack   Writes: FPreprocessFellBack</para>
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas), DRagLint.Index.Closure.TClosureResolver.Resolve.ScanIncludes (DRagLint.Index.Closure.pas) ?</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Index.Closure.TClosureResolver.LogFallbackOnce, DRagLint.Preprocess.Preprocess/2</para>
+      /// <para>Reads: FPreprocessEnabled, FProfile</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.LogFallbackOnce"/>
       /// <seealso cref="DRagLint.Preprocess.Preprocess"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
-      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function MaybePreprocess(const AContent, AFileLabel: string): string;
 
       // Writes the one-shot PREPROCESS FALLBACK line (FPreprocessFellBack latch).
+      /// <summary><!-- drag-lint:auto sum -->Writes the one-shot PREPROCESS FALLBACK line
+      /// (FPreprocessFellBack latch).</summary>
+      /// <param name="AFileLabel"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AError"><!-- drag-lint:auto type -->const Exception</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.MaybePreprocess (DRagLint.Index.Closure.pas), DRagLint.Index.Closure.TClosureResolver.TryPreprocessWithSites (DRagLint.Index.Closure.pas)</para>
+      /// <para>Calls: Format, Writeln</para>
+      /// <para>Reads: FPreprocessFellBack   Writes: FPreprocessFellBack</para>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindIncFile"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindUnitFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure LogFallbackOnce(const AFileLabel: string; const AError: Exception);
 
       // Lane INC: the include-aware preprocess. Runs 'defines-only' under
@@ -115,6 +131,34 @@ type
       // nested ones too, in ASites. False when preprocessing is off or the
       // preprocess raised (logged once): the caller then does the old all-branch
       // raw scan for that file.
+      /// <summary><!-- drag-lint:auto sum -->Lane INC: the include-aware preprocess. Runs
+      /// 'defines-only' under FProfile with AFilePath's folder as BaseDir and
+      /// ASearchPaths, returning the resolved text in AScanText (for the uses scan --
+      /// defines an include sets now reach the host's later branches) and every ACTIVE
+      /// include site, nested ones too, in ASites. False when preprocessing is off or the
+      /// preprocess raised (logged once): the caller then does the old all-branch raw
+      /// scan for that file.</summary>
+      /// <param name="AContent"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ASearchPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+      /// <param name="AScanText"><!-- drag-lint:auto type -->out string</param>
+      /// <param name="ASites"><!-- drag-lint:auto type -->out TArray&lt;TPPIncludeSite&gt;</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True; False.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve.ScanIncludes (DRagLint.Index.Closure.pas)</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Index.Closure.TClosureResolver.LogFallbackOnce, DRagLint.Preprocess.Preprocess/3, DRagLint.Preprocess.Types.TPPOptionsDefault</para>
+      /// <para>Reads: FPreprocessEnabled, FProfile</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <para>Mutates: AScanText (out), ASites (out)</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.LogFallbackOnce"/>
+      /// <seealso cref="DRagLint.Preprocess.Preprocess"/>
+      /// <seealso cref="DRagLint.Preprocess.Types.TPPOptionsDefault"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function TryPreprocessWithSites(const AContent, AFilePath: string;
         const ASearchPaths: TArray<string>; out AScanText: string;
         out ASites: TArray<TPPIncludeSite>): Boolean;
@@ -128,7 +172,7 @@ type
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas), DRagLint.Index.Closure.TClosureResolver.Resolve.ScanIncludes (DRagLint.Index.Closure.pas) ?</para>
       /// <para>Calls: LowerCase, StringReplace</para>
       /// <para>Reads: FLibraryRoots</para>
       /// <para>Pure</para>
@@ -151,7 +195,7 @@ type
       /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve.FindTailFileOnce (DRagLint.Index.Closure.pas), DRagLint.Index.Closure.TClosureResolver.Resolve.FindUnitFileOnce (DRagLint.Index.Closure.pas)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
@@ -164,16 +208,13 @@ type
 
       // Search ASearchPaths + the dir of AFromFile for AIncName (as-given, then
       // relative to each search path).  Returns absolute path or ''.
-      /// <summary><!-- drag-lint:auto sum -->Search ASearchPaths + the dir of AFromFile
-      /// for AIncName (as-given, then relative to each search path). Returns absolute
-      /// path or ''.</summary>
       /// <param name="AIncName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AFromDir"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ASearchPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve.ScanIncludes (DRagLint.Index.Closure.pas)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
@@ -237,7 +278,7 @@ type
       /// <param name="APaths"><!-- drag-lint:auto type -->TStringList</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.ProjectSearchPaths (DRagLint.Index.Closure.pas), DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
       /// <para>Calls: Pos</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
@@ -302,7 +343,7 @@ type
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas)</para>
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve.ScanIncludes (DRagLint.Index.Closure.pas)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
@@ -337,7 +378,21 @@ type
       /// then each existing DCC_UnitSearchPath directory (macros skipped).</summary>
       /// <param name="ADproj">The .dproj path.</param>
       /// <returns>Absolute directories; just the folder when the file cannot be read.</returns>
-      /// <remarks>Never raises. lint-all uses it to rebuild an include's host context.</remarks>
+      /// <remarks>
+      /// Never raises. lint-all uses it to rebuild an include's host context.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths</para>
+      /// <para>Returns: Paths.ToStringArray</para>
+      /// <para>Catches: Exception (empty)</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindIncFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ProjectSearchPaths(const ADproj: string): TArray<string>;
 
       /// <summary>PP-Task-10: enable/disable per-config directive preprocessing of source
@@ -366,8 +421,19 @@ type
       /// path. Also searched for include files.</summary>
       /// <param name="ATail">The folders, in search order; nil for none (the default),
       /// which leaves Resolve exactly as it is without a tail.</param>
-      /// <remarks>Stays set for later Resolve calls on this instance. A file under an
-      /// ALibraryRoot stays out of the closure even when the tail finds it.</remarks>
+      /// <remarks>
+      /// Stays set for later Resolve calls on this instance. A file under an
+      /// ALibraryRoot stays out of the closure even when the tail finds it.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Project.TargetStudio.ResolveTargetClosure (DRagLint.Project.TargetStudio.pas)</para>
+      /// <para>Writes: FLibraryTail</para>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindIncFile"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindUnitFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure SetLibraryTail(const ATail: TArray<string>);
 
       /// <summary>Resolve the compile closure of a .dpr or .dproj project.
@@ -383,16 +449,17 @@ type
       /// <exception cref="Exception"><!-- drag-lint:auto exc -->Project file not found: %s</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas) (+2 more)</para>
-      /// <para>Calls: DRagLint.Index.Closure.TClosureResolver.ExtractIncludes, DRagLint.Index.Closure.TClosureResolver.ExtractUses, DRagLint.Index.Closure.TClosureResolver.FindIncFile, DRagLint.Index.Closure.TClosureResolver.FindUnitFile, DRagLint.Index.Closure.TClosureResolver.IsLibraryFile, DRagLint.Index.Closure.TClosureResolver.MaybePreprocess, DRagLint.Index.Closure.TClosureResolver.ParseDprojRefs, DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths, DRagLint.Index.Closure.TClosureResolver.ParseDprUses, DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile, LowerCase</para>
-      /// <para>Complexity: 24 (cyclomatic, outer body), 236 lines (full implementation)</para>
+      /// <para>Called from: DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Project.TargetStudio.ResolveTargetClosure (DRagLint.Project.TargetStudio.pas), DRagLint.Refactor.MultiProjectRename.ClosureUnits (DRagLint.Refactor.MultiProjectRename.pas)</para>
+      /// <para>Calls: DRagLint.Index.Closure.TClosureResolver.ExtractUses, DRagLint.Index.Closure.TClosureResolver.IsLibraryFile, DRagLint.Index.Closure.TClosureResolver.MaybePreprocess, DRagLint.Index.Closure.TClosureResolver.ParseDprojRefs, DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths, DRagLint.Index.Closure.TClosureResolver.ParseDprUses, DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile, DRagLint.Index.Closure.TClosureResolver.Resolve.FindTailFileOnce, DRagLint.Index.Closure.TClosureResolver.Resolve.FindUnitFileOnce, DRagLint.Index.Closure.TClosureResolver.Resolve.ScanIncludes, ExtractIncludes, FindIncFile, FindUnitFile, LowerCase, TryPreprocessWithSites</para>
+      /// <para>Complexity: 29 (cyclomatic, outer body), 309 lines (full implementation)</para>
+      /// <para>Reads: FLibraryTail</para>
       /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>
-      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractIncludes"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ExtractUses"/>
-      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindIncFile"/>
-      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.FindUnitFile"/>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.IsLibraryFile"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.MaybePreprocess"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ParseDprojRefs"/>
+      /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Resolve(const AProjectFile: string; const AExclude: TArray<string>): TClosureResult;

@@ -396,9 +396,15 @@ type
   /// <summary>The AST location Analyze matched for a routine (taint T1, 2026-10-27):
   /// handed back so the indexer's data_flows pass (TDataFlowFacts.Collect) reuses the
   /// SAME defProc/body/source instead of a second lookup.</summary>
-  /// <remarks>Valid only while the TAstParseCache entry of the file is alive -- the
+  /// <remarks>
+  /// Valid only while the TAstParseCache entry of the file is alive -- the
   /// indexer uses it immediately, inside the same per-file loop. Found = False (and
-  /// null nodes) when no defProc starts at ASym.ImplStartLine or the file did not parse.</remarks>
+  /// null nodes) when no defProc starts at ASym.ImplStartLine or the file did not parse.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Doc.SymbolFacts.pas) ?, DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) ?, DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas)</para>
+  /// <para>Used in units: DRagLint.Core.Indexer, DRagLint.Doc.SymbolFacts</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSymbolFactsAst = record
     /// <summary>True when a defProc was matched.</summary>
     Found: Boolean;
@@ -415,7 +421,7 @@ type
   /// group Phase 2 will ever add (see the unit banner comment).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
+  /// <para>Used by: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
   /// <para>Used in units: DRagLint.Core.Indexer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -490,16 +496,17 @@ type
       /// unit's implementation section) for the full site-collection +
       /// unanimity + object-type-gate ruleset.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
-      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent, DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams, DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites, DRagLint.Doc.SymbolFacts.AnalyzeReturnsOwner, DRagLint.Doc.SymbolFacts.AnalyzeSqlTables, DRagLint.Doc.SymbolFacts.AnalyzeTouches, DRagLint.Doc.SymbolFacts.AnalyzeUiAffinity, DRagLint.Doc.SymbolFacts.ProcsForFile, Integer, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.StartPoint</para>
+      /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+      /// <para>Calls: Default, DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build, DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent, DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams, DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites, DRagLint.Doc.SymbolFacts.AnalyzeReturnsOwner, DRagLint.Doc.SymbolFacts.AnalyzeSqlTables, DRagLint.Doc.SymbolFacts.AnalyzeTouches (+7 more)</para>
       /// <para>Returns: Default(TSymbolFacts)</para>
       /// <para>Pure</para>
+      /// <para>Mutates: AAst (out)</para>
       /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Analysis.Flow.Lattices.TRoutineVarTable.Build"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CyclomaticOf"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
       /// <seealso cref="DRagLint.Doc.SymbolFacts.AnalyzeDfmEvent"/>
       /// <seealso cref="DRagLint.Doc.SymbolFacts.AnalyzeMutatesParams"/>
-      /// <seealso cref="DRagLint.Doc.SymbolFacts.AnalyzeReadsWrites"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Analyze(const ASym: TSymbol; const AFilePath: string; const ABody: TArray<string>; const AStore: ISymbolStore;
@@ -510,6 +517,11 @@ type
 /// routines. The indexer calls it once a file's facts pass is over, beside
 /// TAstParseCache.Clear, so a file re-indexed later in the same process can
 /// never be answered from rows its previous pass read.</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ResetSymbolFactsFileCaches;
 
 implementation

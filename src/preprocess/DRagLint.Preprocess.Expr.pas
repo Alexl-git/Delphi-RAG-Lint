@@ -748,7 +748,7 @@ begin
   Result:= BoolVal(False);
 end;
 
-function TPPExprParser.ParseAtom: TPPValue; // dl:ok too-many-exit-points@8b42 -- REVIEWED 2026-10-27 one Exit per atom form
+function TPPExprParser.ParseAtom: TPPValue; // dl:ok too-many-exit-points@4472 -- REVIEWED 2026-11-05 one Exit per atom form
 var
   Id : string;
   V  : TPPValue;

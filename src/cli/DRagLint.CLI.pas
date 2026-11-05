@@ -34139,6 +34139,25 @@ begin
   if Result then GNotedOnce:= GNotedOnce + '|' + LowerCase(AKey) + '|';
 end;
 
+/// <summary>The platform a read command works in: --platform, else the platform of the
+/// --project folder, else of the current directory, else the manifest's default.</summary>
+/// <param name="AManifest">The loaded manifest.</param>
+/// <param name="AArgs">The parsed command line (CheckPlatform, ProjectPath).</param>
+/// <returns>The platform name; '' only when the manifest names no default either.</returns>
+function ReadPlatformFor(const AManifest: TIndexManifest; const AArgs: TArgs): string;
+begin
+  Result:= AArgs.CheckPlatform;
+  if Result <> '' then Exit;
+  if AArgs.ProjectPath <> '' then
+    try
+      Result:= DetectPlatformFromDproj(AManifest, ExtractFilePath(TPath.GetFullPath(AArgs.ProjectPath)));
+    except
+      Result:= '';
+    end;
+  if Result = '' then Result:= DetectPlatformFromDproj(AManifest, GetCurrentDir);
+  if Result = '' then Result:= AManifest.Settings.DefaultPlatform;
+end;
+
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>;
 var
   Manifest : TIndexManifest                            ;
@@ -34173,15 +34192,8 @@ begin
       with -- and then resolved a foreign index to match. --project is a far
       stronger signal about which project is meant than where the shell
       happens to be standing. }
-    if AArgs.CheckPlatform <> '' then Platform:= AArgs.CheckPlatform
-    else
-    begin
-      Platform:= '';
-      if AArgs.ProjectPath <> '' then
-        try Platform:= DetectPlatformFromDproj(Manifest, ExtractFilePath(TPath.GetFullPath(AArgs.ProjectPath))); except Platform:= ''; end;
-      if Platform = '' then Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
-      if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
-    end;
+    Platform:= ReadPlatformFor(Manifest, AArgs);
+
 
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
     try
@@ -34535,20 +34547,13 @@ begin
   Result:= '';
   try
     EngineDir:= ExtractFilePath(ParamStr(0));
-    if (GLibraryManifestPath <> '') and TFile.Exists(GLibraryManifestPath) then
-      Manifest:= TManifestIO.ParseText(TFile.ReadAllText(GLibraryManifestPath),
-                   ExtractFilePath(TPath.GetFullPath(GLibraryManifestPath)))
-    else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
+    Manifest:= if (GLibraryManifestPath <> '') and TFile.Exists(GLibraryManifestPath)
+      then TManifestIO.ParseText(TFile.ReadAllText(GLibraryManifestPath),
+             ExtractFilePath(TPath.GetFullPath(GLibraryManifestPath)))
+      else TManifestIO.Load(EngineDir, GetCurrentDir);
 
-    if AArgs.CheckPlatform <> '' then Platform:= AArgs.CheckPlatform
-    else
-    begin
-      Platform:= '';
-      if AArgs.ProjectPath <> '' then
-        try Platform:= DetectPlatformFromDproj(Manifest, ExtractFilePath(TPath.GetFullPath(AArgs.ProjectPath))); except Platform:= ''; end;
-      if Platform = '' then Platform:= DetectPlatformFromDproj(Manifest, GetCurrentDir);
-      if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
-    end;
+    Platform:= ReadPlatformFor(Manifest, AArgs);
+
 
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
     try

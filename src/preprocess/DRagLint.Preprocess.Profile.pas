@@ -38,7 +38,12 @@ const
 
 /// <summary>The Delphi 13 target platform names PlatformBuiltins knows.</summary>
 /// <returns>The platform names, Win32 and Win64 first.</returns>
-/// <remarks>Pure. Lets a caller walk every platform table.</remarks>
+/// <remarks>
+/// Pure. Lets a caller walk every platform table.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined (DRagLint.Lint.IfdefUndefined.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function KnownPlatforms: TArray<string>;
 
 /// <summary>extractor 1.27.0 (PR #8): the compiler version the built-ins describe --
@@ -48,10 +53,22 @@ function KnownPlatforms: TArray<string>;
 /// --target-compiler, which gates LINT rules (DRagLint.Lint.TargetCompiler).</summary>
 /// <param name="AVersion">A CompilerVersion (33 for 10.3, 37 for 13; 13 for Delphi
 /// 5, which has no such constant but defines VER130).</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyPreprocessCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure SetTargetCompilerVersion(AVersion: Integer);
 
 /// <summary>The compiler version PlatformBuiltins and CompilerNumerics describe.</summary>
 /// <returns>A CompilerVersion; 37 until SetTargetCompilerVersion is called.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.IndexerFingerprint (DRagLint.CLI.pas)</para>
+/// <para>Returns: GTargetCompilerVersion</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TargetCompilerVersion: Integer;
 
 /// <summary>The CompilerVersion of the RAD Studio installed at ARoot, read from
@@ -59,6 +76,13 @@ function TargetCompilerVersion: Integer;
 /// add 13; from BDS 37 (Delphi 13) the two numbers are equal.</summary>
 /// <param name="ARoot">A Studio root, as TStudioEnv resolves it; '' allowed.</param>
 /// <returns>The CompilerVersion, or 0 when the folder name is not a BDS number.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Project.TargetStudio.BdsKeyOfCompilerVersion (DRagLint.Project.TargetStudio.pas)</para>
+/// <para>Calls: Copy, ExcludeTrailingPathDelimiter, ExtractFileName, InRange, Pos, Trim, TryStrToInt</para>
+/// <para>Returns: 0; Bds + BDS_COMPILER_OFFSET; Bds</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CompilerVersionOfStudioRoot(const ARoot: string): Integer;
 
 /// <summary>Returns the built-in compiler defines for the given target
@@ -76,9 +100,11 @@ function CompilerVersionOfStudioRoot(const ARoot: string): Integer;
 /// <returns>Lowercased built-in define names.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas), DRagLint.Project.Facts.ReadProjectFacts (DRagLint.Project.Facts.pas)</para>
-/// <para>Calls: SameText</para>
+/// <para>Called from: DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Preprocess.Profile.BuiltinsProfile (DRagLint.Preprocess.Profile.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas), DRagLint.Project.DefineProfile.UnionWithBuiltins (DRagLint.Project.DefineProfile.pas), DRagLint.Project.Facts.ReadProjectFacts (DRagLint.Project.Facts.pas)</para>
+/// <para>Calls: IntToStr, SameText, SplitString, StringReplace</para>
 /// <para>Pure</para>
+/// <para>Returns: TArray&lt;string&gt;.Create('win32', 'cpu386', 'ver' + IntToStr(GTargetCompilerVersion) + '0'); SplitString(Spec, ',')</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 68 lines (full implementation)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function PlatformBuiltins(const APlatform: string): TArray<string>;
@@ -104,13 +130,15 @@ function PlatformBuiltins(const APlatform: string): TArray<string>;
 /// lowercased).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.ClosureUnits (DRagLint.Refactor.MultiProjectRename.pas)</para>
-/// <para>Calls: DRagLint.Preprocess.Profile.DprojEffectiveDefines, DRagLint.Preprocess.Profile.PlatformBuiltins, DRagLint.Preprocess.Profile.PlatformGroupSuffix, LowerCase</para>
+/// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Project.DefineProfile.ResolveActiveBuild (DRagLint.Project.DefineProfile.pas)</para>
+/// <para>Calls: DRagLint.Preprocess.Profile.CompilerDefaultSwitches, DRagLint.Preprocess.Profile.CompilerNumerics, DRagLint.Preprocess.Profile.DprojEffectiveDefines, DRagLint.Preprocess.Profile.DprojEffectiveSwitches, DRagLint.Preprocess.Profile.PlatformBuiltins, DRagLint.Preprocess.Profile.PlatformGroupSuffix, LowerCase, TryStrToInt</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Preprocess.Profile.CompilerDefaultSwitches"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.CompilerNumerics"/>
 /// <seealso cref="DRagLint.Preprocess.Profile.DprojEffectiveDefines"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.DprojEffectiveSwitches"/>
 /// <seealso cref="DRagLint.Preprocess.Profile.PlatformBuiltins"/>
-/// <seealso cref="DRagLint.Preprocess.Profile.PlatformGroupSuffix"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ProfileFromDproj(const ADprojPath, APlatform, AConfig: string): TDefineProfile;
@@ -159,9 +187,10 @@ type
 /// Pure: reads only AContent. Never raises.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Lint.PlatformDivergent.CollectDivergences (DRagLint.Lint.PlatformDivergent.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas), DRagLint.Project.Facts.ReadProjectFacts (DRagLint.Project.Facts.pas)</para>
-/// <para>Calls: ContainsText, DRagLint.Preprocess.Profile.DprojGroupChain, DRagLint.Preprocess.Profile.TryDccDefineInGroup, IndexText, LowerCase, StartsStr, Trim</para>
+/// <para>Calls: ContainsText, DRagLint.Preprocess.Profile.DprojGroupChain, DRagLint.Preprocess.Profile.SplitDefineToken, DRagLint.Preprocess.Profile.TryDccDefineInGroup, IndexText, LowerCase, StartsStr, Trim</para>
 /// <para>Returns: Order.ToArray</para>
 /// <seealso cref="DRagLint.Preprocess.Profile.DprojGroupChain"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.SplitDefineToken"/>
 /// <seealso cref="DRagLint.Preprocess.Profile.TryDccDefineInGroup"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -195,7 +224,7 @@ function DprojConfigNames(const AContent: string): TArray<string>;
 /// <remarks>
 /// Pure: reads only AContent. Never raises.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Preprocess.Profile.DprojEffectiveDefines (DRagLint.Preprocess.Profile.pas), DRagLint.Project.Facts.ReadProjectFacts (DRagLint.Project.Facts.pas)</para>
+/// <para>Called from: DRagLint.Preprocess.Profile.DprojEffectiveDefines (DRagLint.Preprocess.Profile.pas), DRagLint.Preprocess.Profile.DprojEffectiveSwitches (DRagLint.Preprocess.Profile.pas), DRagLint.Project.Facts.ReadProjectFacts (DRagLint.Project.Facts.pas)</para>
 /// <para>Calls: DRagLint.Preprocess.Profile.ConfigChain</para>
 /// <seealso cref="DRagLint.Preprocess.Profile.ConfigChain"/>
 /// <!-- drag-lint:auto END -->
@@ -220,21 +249,39 @@ function DprojEnabledPlatforms(const AContent: string): TArray<string>;
 /// <param name="AName">Receives the symbol ('' for a token such as '=3').</param>
 /// <param name="AValue">Receives the text after the first '=', '' when none.</param>
 /// <returns>True when the token carries a non-empty value.</returns>
-/// <remarks>Pure. Never raises.</remarks>
+/// <remarks>
+/// Pure. Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Preprocess.Profile.DprojEffectiveDefines (DRagLint.Preprocess.Profile.pas), DRagLint.Project.DefineProfile.ReadDelphiLspDefines (DRagLint.Project.DefineProfile.pas)</para>
+/// <para>Calls: Copy, Pos, Trim</para>
+/// <para>Returns: AValue &lt;&gt; ''</para>
+/// <para>Mutates: AName (out), AValue (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SplitDefineToken(const AToken: string; out AName, AValue: string): Boolean;
 
 /// <summary>Lane INC2: the compiler's own numeric constants an {$IF} can test
 /// for TargetCompilerVersion: CompilerVersion and RTLVersion, both 37 for
 /// Delphi 13 (the integer part; the evaluator is integer-only).</summary>
 /// <returns>Lowercased name / value pairs.</returns>
-/// <remarks>Reads the process-wide TargetCompilerVersion.</remarks>
+/// <remarks>
+/// Reads the process-wide TargetCompilerVersion.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Preprocess.Profile.BuiltinsProfile (DRagLint.Preprocess.Profile.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas), DRagLint.Project.DefineProfile.ResolveActiveBuild (DRagLint.Project.DefineProfile.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CompilerNumerics: TArray<TPair<string, Integer>>;
 
 /// <summary>Lane INC2: dcc's switch states with no .dproj option and no source
 /// directive, for {$IFOPT}: B- C+ D+ G+ H+ I+ J- L+ M- O+ P+ Q- R- T- U- V+ W-
 /// X+ Y+.</summary>
 /// <returns>Lowercased letter / on pairs.</returns>
-/// <remarks>Pure.</remarks>
+/// <remarks>
+/// Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Preprocess.Profile.BuiltinsProfile (DRagLint.Preprocess.Profile.pas), DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas), DRagLint.Project.DefineProfile.ResolveActiveBuild (DRagLint.Project.DefineProfile.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CompilerDefaultSwitches: TArray<TPair<string, Boolean>>;
 
 /// <summary>Lane INC2: the switch states a .dproj sets for one config +
@@ -248,14 +295,32 @@ function CompilerDefaultSwitches: TArray<TPair<string, Boolean>>;
 /// DprojEffectiveDefines.</param>
 /// <returns>Lowercased letter / on pairs, only for properties the .dproj
 /// sets.</returns>
-/// <remarks>Pure: reads only AContent. Never raises.</remarks>
+/// <remarks>
+/// Pure: reads only AContent. Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Preprocess.Profile.ProfileFromDproj (DRagLint.Preprocess.Profile.pas)</para>
+/// <para>Calls: DRagLint.Preprocess.Profile.DprojGroupChain, DRagLint.Preprocess.Profile.TryPropertyInGroup, SameText, Trim</para>
+/// <para>Returns: nil</para>
+/// <seealso cref="DRagLint.Preprocess.Profile.DprojGroupChain"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.TryPropertyInGroup"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DprojEffectiveSwitches(const AContent, APlatform, AConfig: string): TArray<TPair<string, Boolean>>;
 
 /// <summary>Lane INC2: the profile of a build with no project: the platform
 /// built-in symbols, CompilerNumerics and CompilerDefaultSwitches.</summary>
 /// <param name="APlatform">As for PlatformBuiltins.</param>
 /// <returns>The profile.</returns>
-/// <remarks>Pure.</remarks>
+/// <remarks>
+/// Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Project.DefineProfile.ResolveActiveBuild (DRagLint.Project.DefineProfile.pas)</para>
+/// <para>Calls: DRagLint.Preprocess.Profile.CompilerDefaultSwitches, DRagLint.Preprocess.Profile.CompilerNumerics, DRagLint.Preprocess.Profile.PlatformBuiltins</para>
+/// <seealso cref="DRagLint.Preprocess.Profile.CompilerDefaultSwitches"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.CompilerNumerics"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.PlatformBuiltins"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuiltinsProfile(const APlatform: string): TDefineProfile;
 
 implementation

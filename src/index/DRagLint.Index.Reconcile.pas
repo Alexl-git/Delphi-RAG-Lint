@@ -35,7 +35,7 @@ type
   /// <summary>One item in a reconcile report.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Index.Reconcile.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Index.Reconcile.EditDpr (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.EditDproj (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas) (+1 more)</para>
+  /// <para>Used by: DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.ReconcileSuggestedFix (DRagLint.CLI.pas), DRagLint.CLI.UnitNotInLibraryFindings (DRagLint.CLI.pas), DRagLint.CLI.WriteReconcileSuggestedFixes (DRagLint.CLI.pas) (+5 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Reconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -57,7 +57,7 @@ type
   /// <summary>Output of TProjectReconciler.Analyze.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Index.Reconcile.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Index.Reconcile.pas), DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.UnitNotInLibraryFindings (DRagLint.CLI.pas), DRagLint.CLI.WriteReconcileSuggestedFixes (DRagLint.CLI.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Reconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -89,7 +89,7 @@ type
   /// a caller offering revert must look at Backups, and a caller reporting
   /// 'N units added' must look at Edited.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Index.Reconcile.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.ReconcileNothingWrittenReason (DRagLint.CLI.pas), DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Index.Reconcile.pas) ?, DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.ReconcileNothingWrittenReason (DRagLint.CLI.pas) ?, DRagLint.Index.Reconcile.TProjectReconciler.Apply (DRagLint.Index.Reconcile.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Reconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -126,7 +126,7 @@ type
   /// Not thread-safe; construct and use from a single thread.
   /// Owns nothing after construction (no resources to free).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.UnitNotInLibraryFindings (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -226,7 +226,7 @@ type
       /// <param name="AStaleGlobs"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.UnitNotInLibraryFindings (DRagLint.CLI.pas)</para>
       /// <para>constructor</para>
       /// <para>Writes: FLibraryRoots, FStaleGlobs</para>
       /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
@@ -246,7 +246,7 @@ type
       /// <exception cref="Exception"><!-- drag-lint:auto exc -->Project file not found: %s; via DRagLint.Index.Closure.TClosureResolver.Resolve: Project file not found: %s</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.UnitNotInLibraryFindings (DRagLint.CLI.pas)</para>
       /// <para>Calls: DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Index.Reconcile.IsStaleName, DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers, DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers, DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath, LowerCase, SameText</para>
       /// <para>Complexity: 11 (cyclomatic, outer body), 125 lines (full implementation)</para>
       /// <para>Reads: FLibraryRoots, FStaleGlobs</para>
