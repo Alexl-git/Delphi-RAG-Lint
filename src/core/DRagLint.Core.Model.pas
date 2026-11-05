@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.42.0-alpha';
+  DRAGLINT_VERSION = '1.43.0-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -211,7 +211,20 @@ const
       Index.DataFlowFacts). Guard run_dataflow_facts (ConstWhile / ConstRepeat).
     * Storage.SQLite + CallResolver fingerprint units changed with the resolver
       fixes below (calls, sweeper-a) and doc2's doc-line split. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.30.0-alpha';
+  { 1.30.0 -> 1.31.0 (2026-11-05, 1.43, lane/143-int -- ONE bump for the wave):
+    * preprocess: Delphi 5 and older as a target (D5-COMPILERVER: Expr, Decls,
+      Preprocess, Profile, index PPUnitSource; guard run_target_compiler_d5);
+      DECLARED with no library to ask reads True at the newest target and says so
+      (YADF6; guard run_pp_declared_no_library).
+    * index: --resolve-only no longer stamps the indexer fingerprint over stale
+      parses (RESOLVE-ONLY-STAMPS; guard run_resolve_only_stale_stamp_guard);
+      the library tail is searched in one closure walk (GH13-CLOSURE-TAIL,
+      Index.Closure; guard run_target_bds_libpath_guard).
+    * Doc.SymbolFacts, Storage.SQLite (WAL threshold, stale-stamp count) and CallResolver
+      / LibraryOracle fingerprint units changed with the resolver fixes below.
+    Decided OUT of this bump: Inc/Dec and var/out arguments stay refs.kind read;
+    see the 1.43 release notes, known limitations. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.31.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
@@ -423,7 +436,14 @@ const
   /// ResolveTypeReadRefs is classified resolve surface (RESOLVER-VERGUARD, D7);
   /// ResolveAncestry never binds a heritage name to a routine-local type of another
   /// routine (YADF FP #3, guard tests\autotest\run_ancestry_routine_local.ps1).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.18.0-alpha';
+  /// <para>1.18.0-alpha -&gt; 1.19.0-alpha (2026-11-05, 1.43, rides the 1.31.0 extractor
+  /// re-parse): `var X := TFoo.Create` types X as TFoo (INLINE-VAR-CTOR-UNTYPED); an inline
+  /// var initialized by a call is typed by its result and a nested routine's receiver types
+  /// through the outer routine's locals (RECV-UNDECIDABLE slice; guards
+  /// tests\callresolve\run_inline_var_ctor_bind.ps1, run_nested_outer_local_bind.ps1); a with
+  /// target whose surface leaves the index falls through when the library proves it lacks
+  /// the name (WITH-SELF-PROP, guard tests\autotest\run_with_self_prop.ps1).</para>
+  DRAGLINT_RESOLVER_VERSION = '1.19.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
