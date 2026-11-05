@@ -3812,7 +3812,14 @@ end; // function
 /// NEVER fires, and a routine the 7.3 local-table gate marked incomplete is
 /// <c>?</c> and therefore never fires either. This is the axis on which it
 /// differs from the AST-only <c>separate-query-from-modifier</c>, which ships
-/// beside it unchanged by deliberate ruling. Never raises.</remarks>
+/// beside it unchanged by deliberate ruling. Three more cases never fire: a
+/// routine with no return type (`GetDataFrom(Value)` copies in; it answers
+/// nothing); a summary of <c>g</c> whose witness is a read (`reads SQL ...`, or
+/// `touches ...` with no `transactions:`, since the purity stage scores any
+/// touch as <c>g</c> and stores no direction); a witness that names a binding
+/// gap (`(unbound`), because the finding could not show its evidence. The stored
+/// witness is the FIRST one only, so a real effect behind such a witness is missed:
+/// absence over a wrong finding. Never raises.</remarks>
 function CollectQueryNameWithEffect(const AStore: ISymbolStore): TArray<TLintFinding>;
 const
   CEffectFreeNotProven = 0;
@@ -3834,6 +3841,27 @@ var
     Result:= False;
   end;
 
+  { `(A: T): R` has a return type, `(A: T)` and an empty signature do not. }
+  function ReturnsValue(const ASignature: string): Boolean;
+  begin
+    var P: Integer:= LastDelimiter(':)', ASignature);
+    Result:= (P > 0) and (ASignature[P] = ':');
+  end;
+
+  { Does the stored witness show a change? See the remarks above. }
+  function WitnessShowsChange(const ASum: TEffectSummary; const AWitness: string): Boolean;
+  const
+    CGapMark  = '(unbound';
+    CSqlRead  = 'reads SQL ';
+    CTouches  = 'touches ';
+    CTxnMark  = 'transactions:';
+  begin
+    if ContainsStr(AWitness, CGapMark) then Exit(False);
+    if ASum.Flags * [efHeap, efSelfFields] <> [] then Exit(True);
+    Result:= not (StartsStr(CSqlRead, AWitness) or
+      (StartsStr(CTouches, AWitness) and not ContainsStr(AWitness, CTxnMark)));
+  end;
+
 begin
   Findings:= TList<TLintFinding>.Create;
   Facts   := TDictionary<Int64, TSymbolFacts>.Create;
@@ -3841,11 +3869,12 @@ begin
     for var F in AStore.GetAllSymbolFacts do Facts.AddOrSetValue(F.SymbolId, F);
     for var Sym in AStore.FindSymbolsWithFacts do
     begin
-      if not QueryNamed(Sym.Name) then Continue;
+      if (not QueryNamed(Sym.Name)) or (not ReturnsValue(Trim(Sym.Signature))) then Continue;
       var SF: TSymbolFacts;
       if not Facts.TryGetValue(Sym.Id, SF) or (SF.EffectFree <> CEffectFreeNotProven) then Continue;
       var Sum: TEffectSummary:= TEffectSummary.Decode(SF.EffectSummary);
       if Sum.Flags * [efGlobal, efHeap, efSelfFields] = [] then Continue;
+      if not WitnessShowsChange(Sum, SF.EffectWitness) then Continue;
       var Fd: TLintFinding:= Default(TLintFinding);
       Fd.RuleId    := 'query-name-with-effect';
       Fd.FileId    := Sym.FileId;

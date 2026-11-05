@@ -12423,7 +12423,8 @@ end; // function
 /// of nothing is said on stderr), 2 on an explicit stale database.</returns>
 function DoUsagesReadersWriters(const AArgs: TArgs; const ADbs: TArray<string>): Integer;
 const
-  NOTE_DIRECTIONS = 'a var/out argument and Inc/Dec of a field are indexed as reads, so check those sites for writes';
+  NOTE_DIRECTIONS = 'the whole argument of Inc/Dec, and of a var (read+write) or out (write) parameter of a RESOLVED call, is listed as a writer (arg: inc-dec, var-arg, out-arg); '
+    + 'the same argument of an unresolved or ambiguous call, or inside a longer expression (F + 1, F.X, @F, F[I]), is still indexed as a read';
 
   function RowsJson(const ARows: TArray<TMemberUserRow>): TJSONArray;
   begin
@@ -12439,6 +12440,7 @@ const
       O.AddPair('via_name'  , ARows[I].ViaName);
       O.AddPair('confidence', ARows[I].Confidence);
       O.AddPair('resolution', ARows[I].Resolution);
+      if ARows[I].Arg <> '' then O.AddPair('arg', ARows[I].Arg);
       Result.AddElement(O);
     end;
   end;
@@ -12449,7 +12451,8 @@ const
     for var I: Integer:= 0 to High(ARows) do
     begin
       if (AArgs.Limit > 0) and (I >= AArgs.Limit) then Break;
-      Writeln(Format('    %s  (%s:%d)  [via %s %s]', [ARows[I].CallerQName, ARows[I].FullPath, ARows[I].Line, ARows[I].Via, ARows[I].ViaName]));
+      Writeln(Format('    %s  (%s:%d)  [via %s %s]%s', [ARows[I].CallerQName, ARows[I].FullPath, ARows[I].Line, ARows[I].Via, ARows[I].ViaName,
+        if ARows[I].Arg <> '' then '  [arg ' + ARows[I].Arg + ']' else '']));
     end;
   end;
 
