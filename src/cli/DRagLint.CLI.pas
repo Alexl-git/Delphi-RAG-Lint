@@ -3218,11 +3218,15 @@ end;
   forward-declared rather than moved so the fingerprint policy stays next to the
   comment that explains it. }
 function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIndexer;
-  AForceArg, ARebuild, APreprocess: Boolean; const APlatform, ACfgLimb: string): Boolean; forward;
+  AForceArg, ARebuild, APreprocess: Boolean; const APlatform, ACfgLimb: string;
+  AResolveOnly: Boolean): Boolean; forward;
 { The other half of the fingerprint gate: called ONLY after a walk finishes.
   See CommitIndexerFingerprint's own comment for why the stamp cannot happen up
   front. }
 procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
+  APreprocess: Boolean; const APlatform, ACfgLimb: string); forward;
+{ What a completed --resolve-only may stamp: it walked nothing. See its own comment. }
+procedure CommitAfterResolveOnly(const AStore: ISymbolStore;
   APreprocess: Boolean; const APlatform, ACfgLimb: string); forward;
 
 
@@ -4605,7 +4609,7 @@ begin
     { INBOX 2.3: same fingerprint gate as the single-root path -- the manifest
       path is the one that builds the big shared indexes, so it is the one where
       a silently stale parse survives longest. }
-    ApplyIndexerFingerprint(Store, Indexer, AForceReparse, ARebuild, APreprocess, AItem.Platform, SectionCfgLimb);
+    ApplyIndexerFingerprint(Store, Indexer, AForceReparse, ARebuild, APreprocess, AItem.Platform, SectionCfgLimb, AResolveOnly);
 
     { RESOLVER STALENESS -- and this path needs it MORE than the single-root one,
       not less. `index --all --only <Section>` is what tools\reindex-all.ps1
@@ -4956,8 +4960,10 @@ begin
     { The section walked to completion, so the parse in this DB really was
       produced by THIS engine -- only now may the fingerprint be recorded. A
       section that failed above exits before this point and deliberately leaves
-      the OLD fingerprint in place, so the next run re-parses it. }
-    CommitIndexerFingerprint(Store, APreprocess, AItem.Platform, SectionCfgLimb);
+      the OLD fingerprint in place, so the next run re-parses it. A --resolve-only
+      section walked nothing: it stamps only what it can vouch for. }
+    if AResolveOnly then CommitAfterResolveOnly(Store, APreprocess, AItem.Platform, SectionCfgLimb)
+    else CommitIndexerFingerprint(Store, APreprocess, AItem.Platform, SectionCfgLimb);
     { The manifest path must stamp the scan type too, and this is the site that
       matters MOST: nearly every project database is built through
       `index --all --only <Section>`, not through a bare `index`. Stamping only
@@ -6514,7 +6520,8 @@ end;
 // mass reindex the project is holding off until the schema settles. Files gain
 // protection as they are next reindexed; --force-reparse covers the rest.
 function ApplyIndexerFingerprint(const AStore: ISymbolStore; const AIndexer: IIndexer;
-  AForceArg, ARebuild, APreprocess: Boolean; const APlatform, ACfgLimb: string): Boolean;
+  AForceArg, ARebuild, APreprocess: Boolean; const APlatform, ACfgLimb: string;
+  AResolveOnly: Boolean): Boolean;
 var
   Cur, Prev: string;
 begin
@@ -6528,6 +6535,7 @@ begin
   if Result then
     if ARebuild then Writeln('Rebuild: ON (--rebuild; the index is cleared before the walk, so every file in scope is parsed fresh)')
     else if AForceArg then Writeln('Force reparse: ON (--force-reparse; ignoring the up-to-date skip)')
+    else if AResolveOnly then Writeln(Format('Indexer changed since this DB was built (%s -> %s): --resolve-only parses nothing, the stored parses stay.', [Prev, Cur]))
     else Writeln(Format('Indexer changed since this DB was built (%s -> %s): re-parsing every file in scope.', [Prev, Cur]));
   AIndexer.SetForceReparse(Result);
 
@@ -6586,7 +6594,10 @@ end;
   re-parse. It never did: the per-file stamps (ApplyIndexerFingerprint) are
   committed before the resolve, so the next run parses 0 files and resolves
   (run_index_kill_resolve_guard K4). Moving this stamp would buy nothing and would
-  make ProbeLibraryReadiness read a library killed mid-resolve as finished. }
+  make ProbeLibraryReadiness read a library killed mid-resolve as finished.
+
+  1.43: --resolve-only does not call this unconditionally. It walks nothing, so it
+  cannot claim a walk completed: see CommitAfterResolveOnly. }
 procedure CommitIndexerFingerprint(const AStore: ISymbolStore;
   APreprocess: Boolean; const APlatform, ACfgLimb: string);
 begin
@@ -6608,6 +6619,47 @@ begin
     DbMembership may answer member / notmember again. Same guarantee as above:
     a killed rebuild never reaches here and its DB keeps reading UNKNOWN. }
   AStore.SetMetaValue(REBUILD_IN_PROGRESS_META_KEY, '');
+end;
+
+{ 1.43 RESOLVE-ONLY-STAMPS-OVER-STALE-PARSES. The stamp after a --resolve-only run,
+  which walked nothing and so may not simply claim that a walk completed: stamping
+  the current fingerprint over stale parses made the next plain run read
+  Prev = Cur and keep them for ever, silently.
+
+    rebuild marker set, or no stored fingerprint  -> the walk was never known to
+        complete: resolver stamp only. With no stored fingerprint the next plain
+        run adopts one (grandfathered, ApplyIndexerFingerprint).
+    stored = current                              -> the parses are as good as they
+        were: the full stamp, as before (idempotent).
+    stored <> current, every file stamped current -> a run killed in its resolve:
+        the walk finished, the parses are this engine's, and this pass finished the
+        resolve. The full stamp: this is how a killed re-parse recovers.
+    stored <> current, some file not current      -> resolver stamp only. The next
+        plain run re-parses just those files (resume keeps the good parses).
+
+  The resolver stamp is written on every path because the pass really completed.
+  Pinned by tests\autotest\run_resolve_only_stale_stamp_guard.ps1. }
+procedure CommitAfterResolveOnly(const AStore: ISymbolStore;
+  APreprocess: Boolean; const APlatform, ACfgLimb: string);
+var
+  Cur, Prev: string;
+  NotCurrent: Int64;
+begin
+  Cur:= IndexerFingerprint(AStore, APreprocess, APlatform, ACfgLimb);
+  Prev:= AStore.GetMetaValue(INDEXER_FP_KEY);
+  NotCurrent:= AStore.CountFilesNotStampedWith(Cur);
+  if (AStore.GetMetaValue(REBUILD_IN_PROGRESS_META_KEY) = '') and (Prev <> '') and ((Prev = Cur) or (NotCurrent = 0)) then
+  begin
+    CommitIndexerFingerprint(AStore, APreprocess, APlatform, ACfgLimb);
+    Exit;
+  end;
+  AStore.SetMetaValue(RESOLVER_FP_KEY, ResolverFingerprint(AStore));
+  if AStore.GetMetaValue(REBUILD_IN_PROGRESS_META_KEY) <> '' then
+    Writeln('Resolve-only: an interrupted --rebuild is still open; the next plain index finishes its walk.')
+  else if Prev = '' then
+    Writeln('Resolve-only: this DB records no indexer fingerprint yet; the next plain index records it.')
+  else
+    Writeln(Format('Resolve-only: %d file(s) not at the current indexer fingerprint; the next plain index re-parses them (resuming, good parses kept).', [NotCurrent]));
 end;
 
 { v21: opens --library-db paths as read-only extra stores for cross-DB call
@@ -6903,7 +6955,7 @@ begin
   else Writeln('Preprocess: OFF  (--no-preprocess: raw all-branch parsing)');
   { INBOX 2.3: an engine/platform/preprocess change invalidates the stored parse
     even when every byte on disk is identical. }
-  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb);  // dl:ok duplicate-code@08f6 -- REVIEWED 2026-10-26 (extract-136 review): DoIndex (single root) and BuildPlanItem (index --all manifest path) run the SAME fingerprint + resolver-staleness gate on purpose (INBOX 2.3); the duplicated block is that gate's call sequence with each path's own args
+  ApplyIndexerFingerprint(Store, Indexer, AArgs.ForceReparse, AArgs.Rebuild, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb, AArgs.ResolveOnly);  // dl:ok duplicate-code@08f6 -- REVIEWED 2026-10-26 (extract-136 review): DoIndex (single root) and BuildPlanItem (index --all manifest path) run the SAME fingerprint + resolver-staleness gate on purpose (INBOX 2.3); the duplicated block is that gate's call sequence with each path's own args
 
   { RESOLVER STALENESS -- the sibling question, asked separately because its
     remedy is minutes rather than the ~5 hours a reparse costs.
@@ -7558,7 +7610,8 @@ begin
     Stage('', 'search', procedure begin Store.BuildSymbolSearch; end);
     { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
       stamp waits until here rather than happening before the walk. }
-    CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb);
+    if AArgs.ResolveOnly then CommitAfterResolveOnly(Store, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb)
+    else CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform, IdxCfgLimb);
     { --watch: ResolverStale was read ONCE, before the loop. This tick derived
       the edges with the current resolver and stamped it, so a later tick must
       not clear every edge again (it did, on every tick of a new or restamped DB,
