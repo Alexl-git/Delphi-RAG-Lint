@@ -29,7 +29,8 @@ The shared Output/CI flags also apply: `--format sarif`, `--fail-on <level>`,
 A `dl:ok` for a closure-dependent rule (project-scope, class-metric, taint,
 doc-drift, cross-file `duplicate-code`) on a unit whose `dl:shared` marker lists
 several projects may be live only under another project's compile closure. One
-index cannot tell, so a plain `lint-all` skips the verdict on such a marker.
+index cannot tell, so a plain `lint-all` skips the verdict on such a marker and
+says how many it left unjudged, in one note on stderr.
 `--shared-db <db>`, repeatable, names the other projects' indexes:
 ```
 drag-lint lint-all --db <A.sqlite> --shared-db <B.sqlite>
