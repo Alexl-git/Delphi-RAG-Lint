@@ -8,7 +8,8 @@ handoff it resumes; several `open` lines are normal. New handoffs are written he
 The legacy `..\RESUME-*.md` files below are gitignored (`docs/RESUME-*`) and exist only in
 the main working tree; their links do not resolve in a fresh clone or worktree.
 
-- 2026-11-04 | engine | 1.42 built + deployed, push/release blocked for owner; 1.43 14 lanes running, cut-off 05:00; integrate + bump + re-parse next | open | [HANDOFF-2026-11-04-engine-143-lanes-running.md](HANDOFF-2026-11-04-engine-143-lanes-running.md)
+- 2026-11-05 | engine | 1.43: all 14 lanes finished on branches, nothing merged; next lane/143-int merge, one bump, battery, re-parse, stage; 1.42 push/release still owner's | open | [HANDOFF-2026-11-05-engine-143-lanes-done-integrate.md](HANDOFF-2026-11-05-engine-143-lanes-done-integrate.md)
+- 2026-11-04 | engine | 1.42 built + deployed, push/release blocked for owner; 1.43 14 lanes running, cut-off 05:00; integrate + bump + re-parse next | closed | [HANDOFF-2026-11-04-engine-143-lanes-running.md](HANDOFF-2026-11-04-engine-143-lanes-running.md)
 - 2026-11-04 | engine | 1.42 int3 merged + deployed (main 649d0f9a, unpushed); BLOCKER bds23 lane running (older-target index crash); then deploy, index --all, one owner go | resumed | [HANDOFF-2026-11-04-engine-142-int3-deployed-bds23-blocker.md](HANDOFF-2026-11-04-engine-142-int3-deployed-bds23-blocker.md)
 - 2026-11-04 | engine | 1.42 re-parse DONE after calls fix; int2 battery running on lane/142-int2, ETA ~11:55, then merge + deploy | resumed | [HANDOFF-2026-11-04-engine-142-reparse-done-int2-battery.md](HANDOFF-2026-11-04-engine-142-reparse-done-int2-battery.md)
 - 2026-11-04 | converter | C8CHAIN+leftovers+drvlib on local main 2b16fa47 (unpushed); 1.42 lanes conv-apply/mig/editor handed to ENGINE 7f; HOLD conversions + re-pin until ENGINE re-parse done | open | [HANDOFF-2026-11-04-converter-c8chain-merged-hold-reparse](HANDOFF-2026-11-04-converter-c8chain-merged-hold-reparse.md)
