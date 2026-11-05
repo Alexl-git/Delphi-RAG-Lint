@@ -13,20 +13,20 @@ function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[
 $exeSrc = (Resolve-Path $Exe).Path; $exeSrcDir = Split-Path -Parent $exeSrc
 $root = "C:\TEMP\draglint_newdb_$PID"
 try {
-  $eng = "$root\eng"; $src = "$root\proj\src"
+  $eng = "$root\eng"; $src = "$root\proj\src"; $engExe = Join-Path $eng 'drag-lint.exe'
   New-Item -ItemType Directory -Path $eng,$src | Out-Null
-  Copy-Item $exeSrc "$eng\drag-lint.exe" -Force
+  Copy-Item $exeSrc $engExe -Force
   Get-ChildItem $exeSrcDir -Filter '*.dll' | ForEach-Object { Copy-Item $_.FullName "$eng\$($_.Name)" -Force }
   if (Test-Path "$exeSrcDir\rules") { Copy-Item "$exeSrcDir\rules" "$eng\rules" -Recurse -Force }
   [IO.File]::WriteAllText("$src\uA.pas", "unit uA;`r`ninterface`r`nimplementation`r`nend.`r`n", [Text.Encoding]::ASCII)
   Push-Location C:\TEMP
   try {
-    $a = (& "$eng\drag-lint.exe" index "$root\proj" 2>&1 | Out-String)
+    $a = (& $engExe index "$root\proj" 2>&1 | Out-String)
     Check 'a: Database: line present' ($a -match '(?m)^Database: ') $a
     Check 'a: names the new database' ($a -match '\(new database: this file does not exist yet') $a
-    $b = (& "$eng\drag-lint.exe" index "$root\proj" 2>&1 | Out-String)
+    $b = (& $engExe index "$root\proj" 2>&1 | Out-String)
     Check 'b: second run (DB exists) does not say new' ($b -notmatch 'new database:') $b
-    $c = (& "$eng\drag-lint.exe" index "$root\proj" --db "$root\named.sqlite" 2>&1 | Out-String)
+    $c = (& $engExe index "$root\proj" --db "$root\named.sqlite" 2>&1 | Out-String)
     Check 'c: explicit --db to a new file is not announced' (($c -match '(?m)^Database: ') -and ($c -notmatch 'new database:')) $c
   } finally { Pop-Location }
 } finally { if (Test-Path -LiteralPath $root) { [IO.Directory]::Delete($root, $true) } }

@@ -2598,7 +2598,7 @@
         {
           "type": "cli",
           "verb": "usages",
-          "usage": "drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file>]",
+          "usage": "drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file>] [--library-db <lib.sqlite>]",
           "flags": [
             {
               "name": "--name",
@@ -2631,10 +2631,14 @@
             {
               "name": "--in",
               "arg": "<file>"
+            },
+            {
+              "name": "--library-db",
+              "arg": "<lib.sqlite>"
             }
           ],
           "helpOrder": 5,
-          "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file>]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view.", "                               --limit N keeps the first N rows of each JSON group (declarations included) and adds", "                               \"limit\" and \"totals\" (the full counts); without it nothing is capped.", "                               --rw: the users of a member split into readers and writers, one block per declaration: a property with its backing field and accessor methods, a field with its properties, a getter (reads) or setter (writes). Rows name the route (property, field, getter, setter, direct).", "                               With no --db, --in <file> finds the unit's project and its database. No DB: prints the index command, exits 2. Two projects list it: names both, exits 2. No project: a library unit on an assumed platform, unless it uses units the library lacks (names them, exits 2). With neither --db nor --in the verb exits 2."]
+          "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file>] [--library-db <lib.sqlite>]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view.", "                               --limit N keeps the first N rows of each JSON group (declarations included) and adds", "                               \"limit\" and \"totals\" (the full counts); without it nothing is capped.", "                               --rw: the users of a member split into readers and writers, one block per declaration: a property with its backing field and accessor methods, a field with its properties, a getter (reads) or setter (writes). Rows name the route (property, field, getter, setter, direct).", "                               With no --db, --in <file> finds the unit's project and its database. No DB: prints the index command, exits 2. Two projects list it: names both, exits 2. No project: a library unit on an assumed platform, unless it uses units the library lacks (names them, exits 2). With neither --db nor --in the verb exits 2."]
         },
         {
           "type": "ide-menu",
@@ -2657,7 +2661,7 @@
         "date": "2026-11-05",
         "by": "ENGINE",
         "build": "1.43.0-alpha",
-        "surfaceHash": "dc6f6e7a361f313890c5d8c4a3ec529940e14401d0305f12b9d64f44193080d6"
+        "surfaceHash": "53f3893460b43fe4518da3a1e1695e542b0499beec335e963c67805a99298e67"
       }
     },
     {

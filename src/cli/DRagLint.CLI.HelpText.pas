@@ -119,7 +119,7 @@ begin
   Writeln('       ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind <k> --all');
   Writeln('       ^ --decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`)');
   Writeln('         -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.');
-  Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file>]');
+  Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file>] [--library-db <lib.sqlite>]');
   Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
   Writeln('                               --limit N keeps the first N rows of each JSON group (declarations included) and adds');
   Writeln('                               "limit" and "totals" (the full counts); without it nothing is capped.');
@@ -678,7 +678,7 @@ begin
   end;
   if pVerb = 'usages' then
   begin
-    Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file>]');
+    Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file>] [--library-db <lib.sqlite>]');
     Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
     Writeln('                               --limit N keeps the first N rows of each JSON group (declarations included) and adds');
     Writeln('                               "limit" and "totals" (the full counts); without it nothing is capped.');

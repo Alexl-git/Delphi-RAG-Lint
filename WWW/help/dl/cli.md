@@ -1815,6 +1815,7 @@ drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--dep
 | `--limit` | `N` |  |  |
 | `--rw` |  |  |  |
 | `--in` | `<file>` |  |  |
+| `--library-db` | `<lib.sqlite>` |  |  |
 
 Described in:
 

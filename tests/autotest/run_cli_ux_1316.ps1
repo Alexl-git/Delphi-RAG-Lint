@@ -35,9 +35,9 @@ Check 'B-26 with --project-rules the banner has a note but no stale doc-drift cl
 
 # B-38: 0 callers -> hint to usages on stderr, stdout unchanged; control: a real caller prints no hint
 $c = Run @('query','find-callers','--name','FName','--db',$Db)
-Check 'B-38 0 callers: stdout has 0 caller(s), stderr hints usages' (($c.Out -match '0 caller\(s\)') -and ($c.Err -match 'usages --name FName'))
+Check 'B-38 0 callers: stdout has 0 caller(s), stderr hints usages' (($c.Out -match '0 caller\(s\)') -and ($c.Err -match 'usages\s+(--rw\s+)?--name FName'))
 $d = Run @('query','find-callers','--name','TFoo','--db',$Db)
-Check 'B-38 control: a name with callers prints no hint' (($d.Err -notmatch 'usages --name') -and ($d.Out -notmatch '0 caller'))
+Check 'B-38 control: a name with callers prints no hint' (($d.Err -notmatch 'usages\s+(--rw\s+)?--name') -and ($d.Out -notmatch '0 caller'))
 
 # --fix --apply note
 $e = Run @('lint',$U,'--db',$Db,'--fix','--apply','--no-backup')

@@ -34145,15 +34145,16 @@ end;
 /// <summary>The platform a read command works in: --platform, else the platform of the
 /// --project folder, else of the current directory, else the manifest's default.</summary>
 /// <param name="AManifest">The loaded manifest.</param>
-/// <param name="AArgs">The parsed command line (CheckPlatform, ProjectPath).</param>
+/// <param name="ACheckPlatform">--platform, or ''.</param>
+/// <param name="AProjectPath">--project, or ''.</param>
 /// <returns>The platform name; '' only when the manifest names no default either.</returns>
-function ReadPlatformFor(const AManifest: TIndexManifest; const AArgs: TArgs): string;
+function ReadPlatformFor(const AManifest: TIndexManifest; const ACheckPlatform, AProjectPath: string): string;
 begin
-  Result:= AArgs.CheckPlatform;
+  Result:= ACheckPlatform;
   if Result <> '' then Exit;
-  if AArgs.ProjectPath <> '' then
+  if AProjectPath <> '' then
     try
-      Result:= DetectPlatformFromDproj(AManifest, ExtractFilePath(TPath.GetFullPath(AArgs.ProjectPath)));
+      Result:= DetectPlatformFromDproj(AManifest, ExtractFilePath(TPath.GetFullPath(AProjectPath)));
     except  // dl:ok bare-except@86a2 -- REVIEWED 2026-11-05 any failure on a bad --project path means "no platform from it"; the cwd and manifest fallbacks below still answer
       Result:= '';
     end;
@@ -34195,7 +34196,7 @@ begin
       with -- and then resolved a foreign index to match. --project is a far
       stronger signal about which project is meant than where the shell
       happens to be standing. }
-    Platform:= ReadPlatformFor(Manifest, AArgs);
+    Platform:= ReadPlatformFor(Manifest, AArgs.CheckPlatform, AArgs.ProjectPath);
 
 
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
@@ -34555,7 +34556,7 @@ begin
              ExtractFilePath(TPath.GetFullPath(GLibraryManifestPath)))
       else TManifestIO.Load(EngineDir, GetCurrentDir);
 
-    Platform:= ReadPlatformFor(Manifest, AArgs);
+    Platform:= ReadPlatformFor(Manifest, AArgs.CheckPlatform, AArgs.ProjectPath);
 
 
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;

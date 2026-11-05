@@ -33,6 +33,7 @@ Full flag list: [usages in the CLI reference](../cli.md#usages).
 | `--limit` | `N` |  |  |
 | `--rw` |  |  |  |
 | `--in` | `<file>` |  |  |
+| `--library-db` | `<lib.sqlite>` |  |  |
 
 ## Where to click
 

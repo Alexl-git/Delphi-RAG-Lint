@@ -304,9 +304,16 @@ end.
     ($skipLines.Count -eq 1) -and ($skipLines[0] -match '\b2\b') -and ($skipLines[0] -match 'UnitPopup') -and ($skipLines[0] -match 'LocalPopup'))
 
   Write-Host ''
-  Write-Host 'Keep paths, on calls the resolver left unbound' -ForegroundColor Cyan
+  Write-Host 'Keep paths, on calls the resolver left unbound (and the one it now binds)' -ForegroundColor Cyan
   $edges = (& $Exe dump-call-edges --db $db 2>$null) -join "`n"
-  Check 'no Recompute call is resolver-bound (shape check: each reaches the gate)' (-not ($edges -match 'TAncSet\.Recompute'))
+  # 1.43 (RECV-UNDECIDABLE): a nested routine's receiver now types through an outer local,
+  # so DescNested.Inner is resolver-bound; the other three still reach the gate.
+  $recomputeEdges = @(($edges -split "`r?`n") | Where-Object { $_ -match 'TAncSet\.Recompute' })
+  # A dump line is <ref id>|<target>|<confidence>: the ref's enclosing routine names the caller.
+  $boundIds = @($recomputeEdges | ForEach-Object { ($_ -split '\|')[0] }) -join ','
+  $boundOwners = if ($boundIds) { (& $Exe sql --query "SELECT s.qualified_name FROM refs r JOIN symbols s ON s.id = r.enclosing_symbol_id WHERE r.id IN ($boundIds)" --db $db --json 2>$null) -join ' ' } else { '' }
+  Check 'exactly one Recompute call is resolver-bound (shape check: the rest reach the gate)' ($recomputeEdges.Count -eq 1) ($recomputeEdges -join ' | ')
+  Check 'the bound one is DescNested.Inner (outer local)' ($boundOwners -match 'DescNested\.Inner') $boundOwners
   $c3 = Get-Called 'Sets2.TAncSet.Recompute'
   Check 'DescNested.Inner (outer local N: TAncKid, descendant) listed' ($c3.Called -match 'DescNested\.Inner \(')
   Check 'IntfCall (FIntf: IOtherIntf, interface) listed' ($c3.Called -match 'TCaller2\.IntfCall \(')

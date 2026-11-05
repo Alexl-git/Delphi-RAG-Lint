@@ -212,8 +212,9 @@ begin
   Check('token 2009 -> 20', Tok('2009') = 20);
   Check('token 6 -> 14', Tok('6') = 14);
   Check('token 14 -> 14 (CompilerVersion)', Tok('14') = 14);
-  Check('unknown tokens refuse (5, 38, 14.5, XE9, empty)',
-    (Tok('5') = -1) and (Tok('38') = -1) and (Tok('14.5') = -1) and (Tok('XE9') = -1) and (Tok('') = -1));
+  Check('token 5 -> 13 (D5-COMPILERVER: Delphi 5 is a target)', Tok('5') = 13);
+  Check('unknown tokens refuse (38, 14.5, XE9, empty)',
+    (Tok('38') = -1) and (Tok('14.5') = -1) and (Tok('XE9') = -1) and (Tok('') = -1));
   Check('a refusal names the accepted set', not ParseCompilerToken('nope', V, Err) and (Pos('accepted:', Err) > 0));
   { ProjectVersion table: 20.4 measured (Studio 37); the rest pinned from the release history }
   Check('ProjectVersion 20.4 -> 37', PV('20.4') = 37);

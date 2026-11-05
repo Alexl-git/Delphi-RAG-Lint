@@ -14,11 +14,11 @@ $w = "$env:TEMP\draglint_recon_nm_$PID"
 # Hermetic engine copy with NO drag-lint.json (the copy has none): the deployed drag-lint.json carries "*BACKUP*" in
 # indexes.exclude, and reconcile-project feeds indexes.exclude in as extra stale globs (a second,
 # separate source of the same false positive; see the lane report). This test pins the BUILT-IN glob.
-$eng = "$w\eng"; [IO.Directory]::CreateDirectory($eng) | Out-Null
-Copy-Item $exeSrc "$eng\drag-lint.exe" -Force
+$eng = "$w\eng"; [IO.Directory]::CreateDirectory($eng) | Out-Null; $engExe = Join-Path $eng 'drag-lint.exe'
+Copy-Item $exeSrc $engExe -Force
 Get-ChildItem $exeSrcDir -Filter '*.dll' | ForEach-Object { Copy-Item $_.FullName "$eng\$($_.Name)" -Force }
 if (Test-Path "$exeSrcDir\rules") { Copy-Item "$exeSrcDir\rules" "$eng\rules" -Recurse -Force }
-$Exe = "$eng\drag-lint.exe"
+$Exe = $engExe
 function Put($n, $t) { [IO.File]::WriteAllText("$w\$n", ($t -replace "`r?`n","`r`n"), [Text.Encoding]::ASCII) }
 Put 'App.dpr' "program App;`nuses`n  uMain in 'uMain.pas';`nbegin`nend.`n"
 Put 'App.dproj' "<?xml version=`"1.0`" encoding=`"utf-8`"?>`n<Project xmlns=`"http://schemas.microsoft.com/developer/msbuild/2003`">`n  <ItemGroup>`n    <DCCReference Include=`"uMain.pas`"/>`n  </ItemGroup>`n</Project>`n"
