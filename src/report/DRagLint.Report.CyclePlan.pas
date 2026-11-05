@@ -63,13 +63,14 @@ type
   /// <remarks>Kind is one of the strings of the 2026-10-10 contract 4.4:
   /// manual-edit, blocked-symbol, unresolved-edge, directive, leaf-uses-cycle,
   /// qualified-ref, class-ctor, base-class, outside-roots; R1 (E18 T5) adds
-  /// signature-in-cycle, signature-unknown, routine-not-called, init-order,
+  /// signature-in-cycle, signature-unknown, routine-not-called, init-order, finalization-order,
   /// duplicate-identifier, edge-still-used, overloaded-routine, unsupported-directive; R2 (E18 T6) adds
   /// member-write, construction, class-method, class-ref, type-decl, type-cast, other-ref,
   /// multiple-classes (several class names and no `is` / `as` operand; PlanMemberInterface),
   /// member-unsupported, no-iinterface, ref-counted, receiver-unknown,
   /// cast-unseen, with-member, ancestry-unknown, type-unresolved, unresolved-qualified-type, exception-semantics (and reuses leaf-uses-cycle,
-  /// qualified-ref, duplicate-identifier, edge-still-used, manual-edit). Line is 0 when the
+  /// qualified-ref, duplicate-identifier, edge-still-used, manual-edit); coupling-remains (lane cyc4: mutual leaves that
+  /// cannot merge, or a prediction that keeps the interface coupling). Line is 0 when the
   /// refusal has no single line (an edge, a unit).</remarks>
   TRefusal = record
     Kind    : string;
@@ -613,6 +614,11 @@ type
     FLeafPath   : TDictionary<string, string>;
     FLeafInfo   : TDictionary<string, TUntangleLeaf>;  // source stem -> the catalog's answer
     FLeafDeps   : TObjectDictionary<string, TList<string>>;
+    FLeafMerged : TDictionary<string, string>;           // lane cyc4: a stem whose leaf is merged -> the stem that keeps it
+    FMergedOrder: TDictionary<string, TArray<Int64>>;    // lane cyc4: keeping stem -> its merged items, in declaration order
+    FLeafCycleWhy: string;                               // lane cyc4: why leaves that use each other could not merge
+    FQualMoved  : TDictionary<string, Boolean>;          // lane cyc4: QualKey -> a moved `Unit.X` was rewritten there
+    FQualStill  : TDictionary<string, string>;           // lane cyc4: QualKey -> a `Unit.X` that stays and needs the entry
     FConsumers  : TObjectDictionary<Int64, TList<TConsumer>>;
     FPulledBy   : TDictionary<Int64, string>;
     FDecisions  : TList<TUsesDecision>;
@@ -680,6 +686,18 @@ type
     procedure MarkDeleted(pFid: Int64; const pRange: TLineRange);
     function IsDeleted(pFid: Int64; pLine: Integer): Boolean;
     procedure MarkReplaced(pFid: Int64; pLine: Integer; const pText: string);
+    procedure MergeLeafCycles;
+    function PlanLeafMerge(const pStems: TArray<string>; out pOrder: TArray<Int64>; out pWhy: string): Boolean;
+    function LeafNeedBlocks(const pItem: TMoveItem; const pNeed: TNeed; const pStems: TArray<string>; pPlaced: TList<Int64>): Boolean;
+    procedure RewriteQualifiedLine(const pF: TPlanFile; pLine: Integer; const pStem, pRx: string;
+      const pNames: TArray<string>; pStartBrace, pStartParen: Boolean);
+    procedure RewriteQualifiedIn(const pF: TPlanFile; const pStem, pRx: string; const pNames: TArray<string>);
+    function MergedStems(const pStem: string): TArray<string>;
+    function ForwardText(const pItem: TMoveItem): string;
+    function MergedForwards(const pOrder: TArray<Int64>): TArray<string>;
+    procedure RewriteQualifiedMoved;
+    function QualKey(pFid: Int64; pSect: TSect; const pStem: string): string;
+    function QualifiedGlobals(const pEv: TEdgeEval): TArray<TSymbol>;
     procedure MarkItemLines;
     procedure DeleteEmptyHeaders;
     procedure CollectConsumers;
@@ -756,7 +774,7 @@ type
     procedure PlanIntfCycle;
     function PlanImplCycle: TArray<TEdgeEval>;
     procedure PlanInversion(pEvals: TList<TEdgeEval>);
-    function ProbeInversionMoves(const pEv: TEdgeEval; out pMoved: TArray<string>; out pMoveIds: TArray<Int64>;
+    function ProbeInversionMoves(var pEv: TEdgeEval; out pMoved: TArray<string>; out pMoveIds: TArray<Int64>;
       out pCount: Integer): Boolean;
     procedure PlanMemberHandOver(pEvals: TList<TEdgeEval>);
     procedure SettleIfaceName(const pSurface: TEdgeSurface; const pLeaf: TUntangleLeaf; const pUnitScopes: TArray<string>;
@@ -1632,6 +1650,10 @@ begin
   FLeafPath  := TDictionary<string, string>.Create;
   FLeafInfo  := TDictionary<string, TUntangleLeaf>.Create;
   FLeafDeps  := TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
+  FLeafMerged := TDictionary<string, string>.Create;
+  FMergedOrder:= TDictionary<string, TArray<Int64>>.Create;
+  FQualMoved  := TDictionary<string, Boolean>.Create;
+  FQualStill  := TDictionary<string, string>.Create;
   FConsumers := TObjectDictionary<Int64, TList<TConsumer>>.Create([doOwnsValues]);
   FPulledBy  := TDictionary<Int64, string>.Create;
   FDecisions := TList<TUsesDecision>.Create;
@@ -1656,6 +1678,10 @@ begin
   FLeafDeps.Free;
   FLeafInfo.Free;
   FLeafPath.Free;
+  FQualStill.Free;
+  FQualMoved.Free;
+  FMergedOrder.Free;
+  FLeafMerged.Free;
   FLeafName.Free;
   FExtraEdits.Free;
   FReplaced.Free;
@@ -1900,6 +1926,11 @@ begin
   FLeafPath.Clear;
   FLeafInfo.Clear;
   FLeafDeps.Clear;
+  FLeafMerged.Clear;
+  FMergedOrder.Clear;
+  FLeafCycleWhy:= '';
+  FQualMoved.Clear;
+  FQualStill.Clear;
   FConsumers.Clear;
   FPulledBy.Clear;
   FDecisions.Clear;
@@ -2902,9 +2933,11 @@ end;
 procedure TCyclePlanner.Materialize;
 begin
   AssignLeafNames;
+  MergeLeafCycles;
   MarkItemLines;
   DeleteEmptyHeaders;
   CollectConsumers;
+  RewriteQualifiedMoved;
   CollectLeafDeps;
   DecideUses;
   DecideUnseenIntfEntries;
@@ -2930,6 +2963,305 @@ begin
   end;
 end;
 
+function CodeOnly(const pLine: string; var pInBrace, pInParen: Boolean): string; forward;
+
+{ Lane cyc4 (D1): one leaf per source stem is F2047 again when the moved declarations of two stems need each
+  other (the leaves would use each other in their interfaces). Stems that form a cycle over those needs share
+  the leaf of the first of them (FLeafMerged, FMergedOrder), when PlanLeafMerge can order the declarations;
+  otherwise FLeafCycleWhy makes the plan refuse coupling-remains. Runs before CollectConsumers, so every
+  uses entry the plan writes already names the merged leaf. }
+procedure TCyclePlanner.MergeLeafCycles;
+var
+  Stems: TList<string>;
+  Reach: TDictionary<string, Boolean>;
+  Done : TDictionary<string, Boolean>;
+  Group: TList<string>;
+  Other: TMoveItem;
+  Order: TArray<Int64>;
+  Why  : string;
+begin
+  Stems:= TList<string>.Create;
+  Reach:= TDictionary<string, Boolean>.Create;
+  Done := TDictionary<string, Boolean>.Create;
+  Group:= TList<string>.Create;
+  try
+    for var Id in FOrder do
+    begin
+      AddUnique(Stems, FItems[Id].Stem);
+      for var N in NeedsInRanges(GetFile(FItems[Id].Sym.FileId), MovedRanges(FItems[Id])) do
+        if (N.OwnerStem <> FItems[Id].Stem) and FItems.TryGetValue(N.Owner.Id, Other) then
+          Reach.AddOrSetValue(FItems[Id].Stem + '>' + Other.Stem, True);
+    end;
+    { transitive closure: the stems of one cycle are few }
+    for var K in Stems do
+      for var A in Stems do
+        for var B in Stems do
+          if Reach.ContainsKey(A + '>' + K) and Reach.ContainsKey(K + '>' + B) then Reach.AddOrSetValue(A + '>' + B, True);
+    for var A in Stems do
+    begin
+      if Done.ContainsKey(A) then Continue;
+      Group.Clear;
+      Group.Add(A);
+      for var B in Stems do
+        if (B <> A) and Reach.ContainsKey(A + '>' + B) and Reach.ContainsKey(B + '>' + A) then
+        begin
+          Group.Add(B);
+          Done.AddOrSetValue(B, True);
+        end;
+      if Group.Count < 2 then Continue;
+      if not PlanLeafMerge(Group.ToArray, Order, Why) then
+      begin
+        FLeafCycleWhy:= Format('the declarations moving out of `%s` need each other, so their new units would use ' +
+          'each other in their interfaces (F2047), and one unit cannot hold them: %s',
+          [string.Join('`, `', Group.ToArray), Why]);
+        Continue;
+      end;
+      FMergedOrder.AddOrSetValue(A, Order);
+      for var I:= 1 to Group.Count - 1 do
+      begin
+        FLeafMerged.AddOrSetValue(Group[I], A);
+        FLeafName[Group[I]]:= FLeafName[A];
+        FLeafPath[Group[I]]:= FLeafPath[A];
+      end;
+    end;
+  finally
+    Group.Free;
+    Done.Free;
+    Reach.Free;
+    Stems.Free;
+  end;
+end;
+
+{ Lane cyc4 (D1): whether pNeed keeps pItem from its place in a merged leaf: it names a type of the merge not placed
+  yet, and neither is that type a class or interface used by reference (a forward declaration covers it). }
+function TCyclePlanner.LeafNeedBlocks(const pItem: TMoveItem; const pNeed: TNeed; const pStems: TArray<string>; pPlaced: TList<Int64>): Boolean;
+var
+  Other: TMoveItem;
+begin
+  Result:= False;
+  if (pNeed.Owner.Id = pItem.Sym.Id) or pPlaced.Contains(pNeed.Owner.Id) or not FItems.TryGetValue(pNeed.Owner.Id, Other) then Exit;
+  if not MatchText(Other.Stem, pStems) then Exit;
+  if pNeed.Owner.Kind not in [skClass, skInterface] then Exit(True);
+  Result:= TRegEx.IsMatch(pItem.Sym.Heritage, '\b' + TRegEx.Escape(pNeed.Owner.Name) + '\b', [roIgnoreCase]);
+end;
+
+{ Lane cyc4 (D1): the declaration order of one merged leaf, or False with the reason. It holds a single `type`
+  block (a forward declaration is resolved only inside its own block), so only plain types without bodies, in
+  new leaves, merge. A class or interface used by mere reference can come later behind a forward declaration;
+  an ancestor, and any other type, must be complete first. Source order wherever those rules leave a choice. }
+function TCyclePlanner.PlanLeafMerge(const pStems: TArray<string>; out pOrder: TArray<Int64>; out pWhy: string): Boolean;
+var
+  Items : TList<TMoveItem>;
+  Placed: TList<Int64>;
+begin
+  pOrder:= nil;
+  pWhy  := '';
+  if FInversion.Recipe <> crNone then
+  begin
+    pWhy:= 'a routine-call inversion or member hand-over shares the leaf';
+    Exit(False);
+  end;
+  Items := TList<TMoveItem>.Create;
+  Placed:= TList<Int64>.Create;
+  try
+    for var Stem in pStems do
+    begin
+      if FLeafInfo[Stem].Decision <> udCreate then
+      begin
+        pWhy:= Format('`%s` already exists', [FLeafName[Stem]]);
+        Exit(False);
+      end;
+      var First:= Items.Count;
+      for var Id in FOrder do
+        if FItems[Id].Stem = Stem then
+        begin
+          var Item:= FItems[Id];
+          if (Item.Kind <> mvDecl) or not SameText(Item.Keyword, 'type') or
+            TRegEx.IsMatch(LineAt(GetFile(Item.Sym.FileId).Lines, Item.Sym.StartLine), '^\s*\w+\s*<') then
+          begin
+            pWhy:= Format('`%s` is not a plain type declaration without bodies', [Item.Sym.Name]);
+            Exit(False);
+          end;
+          var At:= First;
+          while (At < Items.Count) and (Items[At].Decl.First < Item.Decl.First) do Inc(At);
+          Items.Insert(At, Item);
+        end;
+    end;
+    while Items.Count > 0 do
+    begin
+      var Pick:= -1;
+      for var I:= 0 to Items.Count - 1 do
+      begin
+        var Ready:= True;
+        for var N in NeedsInRanges(GetFile(Items[I].Sym.FileId), MovedRanges(Items[I])) do
+          if LeafNeedBlocks(Items[I], N, pStems, Placed) then Ready:= False;
+        if Ready then
+        begin
+          Pick:= I;
+          Break;
+        end;
+      end;
+      if Pick < 0 then
+      begin
+        pWhy:= Format('`%s` needs a type that needs it, by value or as an ancestor', [Items[0].Sym.Name]);
+        Exit(False);
+      end;
+      Placed.Add(Items[Pick].Sym.Id);
+      Items.Delete(Pick);
+    end;
+    pOrder:= Placed.ToArray;
+    Result:= True;
+  finally
+    Placed.Free;
+    Items.Free;
+  end;
+end;
+
+{ Lane cyc4 (D1): pStem and the stems merged into its leaf. }
+function TCyclePlanner.MergedStems(const pStem: string): TArray<string>;
+var
+  L: TList<string>;
+begin
+  L:= TList<string>.Create;
+  try
+    L.Add(pStem);
+    for var Pair in FLeafMerged do
+      if Pair.Value = pStem then L.Add(Pair.Key);
+    L.Sort;
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+function TCyclePlanner.ForwardText(const pItem: TMoveItem): string;
+begin
+  Result:= Format('  %s = %s;', [pItem.Sym.Name, (if pItem.Sym.Kind = skInterface then 'interface' else 'class')]);
+end;
+
+{ Lane cyc4 (D1): the forward declarations of a merged leaf: each class or interface used before its place. }
+function TCyclePlanner.MergedForwards(const pOrder: TArray<Int64>): TArray<string>;
+var
+  L    : TList<string>;
+  Other: TMoveItem;
+begin
+  L:= TList<string>.Create;
+  try
+    for var I:= 0 to High(pOrder) do
+      for var N in NeedsInRanges(GetFile(FItems[pOrder[I]].Sym.FileId), MovedRanges(FItems[pOrder[I]])) do
+        if (N.Owner.Id <> pOrder[I]) and FItems.TryGetValue(N.Owner.Id, Other) then
+          for var J:= I + 1 to High(pOrder) do
+            if pOrder[J] = N.Owner.Id then AddUnique(L, ForwardText(Other));
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+function TCyclePlanner.QualKey(pFid: Int64; pSect: TSect; const pStem: string): string;
+begin
+  Result:= SectKey(pFid, pSect) + '>' + pStem;
+end;
+
+{ Lane cyc4 (D3): one line of RewriteQualifiedIn. The current text of the line is built on: an earlier edit of it (R1's
+  pointer, a base switch) stays. pStartBrace / pStartParen: the comment state at the start of the line. }
+procedure TCyclePlanner.RewriteQualifiedLine(const pF: TPlanFile; pLine: Integer; const pStem, pRx: string;
+  const pNames: TArray<string>; pStartBrace, pStartParen: Boolean);
+var
+  Extra : TList<TFileEdit>;
+  Earlier: string;
+begin
+  var EditAt:= -1;
+  if not FExtraEdits.TryGetValue(pF.Fid, Extra) then Extra:= nil;
+  if Extra <> nil then
+    for var K:= 0 to Extra.Count - 1 do
+      if (Extra[K].Kind = ekReplace) and (Extra[K].First = pLine) then EditAt:= K;
+  var Text:= pF.Lines[pLine - 1];
+  if EditAt >= 0 then Text:= Extra[EditAt].NewLines[0]
+  else if FReplaced.TryGetValue(LineKey(pF.Fid, pLine), Earlier) then Text:= Earlier;
+  var Sect:= SectOf(pF, pLine);
+  var DeclUnit:= UnitNameOfStem(pStem);
+  var Changed:= False;
+  var Ms:= TRegEx.Matches(CodeOnly(Text, pStartBrace, pStartParen), pRx, [roIgnoreCase]);
+  for var M:= Ms.Count - 1 downto 0 do
+  begin
+    var Name:= Ms[M].Groups[1].Value;
+    if FidOfStem(LowerCase(DeclUnit + '.' + Name)) > 0 then Continue;  { a dotted unit, e.g. its leaf }
+    if MatchText(Name, pNames) then
+    begin
+      Text:= Copy(Text, 1, Ms[M].Index - 1) + FLeafName[pStem] + '.' + Name + Copy(Text, Ms[M].Index + Ms[M].Length, MaxInt);
+      Changed:= True;
+    end
+    else FQualStill.AddOrSetValue(QualKey(pF.Fid, Sect, pStem), Format('`%s` line %d', [Name, pLine]));
+  end;
+  if not Changed then Exit;
+  FQualMoved.AddOrSetValue(QualKey(pF.Fid, Sect, pStem), True);
+  AddUses(pF.Fid, Sect, UsesEntryFor(pF, pStem));
+  if EditAt < 0 then
+  begin
+    MarkReplaced(pF.Fid, pLine, Text);
+    Exit;
+  end;
+  var E:= Extra[EditAt];
+  E.NewLines:= [Text];
+  Extra[EditAt]:= E;
+end;
+
+{ Lane cyc4 (D3): every code occurrence of pRx in pF that is no uses-clause line (a uses clause names units, not
+  members: `Unit.Untangle` there is no use of Unit) and no line that moves away. }
+procedure TCyclePlanner.RewriteQualifiedIn(const pF: TPlanFile; const pStem, pRx: string; const pNames: TArray<string>);
+begin
+  var InBrace:= False;
+  var InParen:= False;
+  for var L:= 1 to Length(pF.Lines) do
+  begin
+    var StartBrace:= InBrace;
+    var StartParen:= InParen;
+    var Code:= CodeOnly(pF.Lines[L - 1], InBrace, InParen);
+    if IsDeleted(pF.Fid, L) or not TRegEx.IsMatch(Code, pRx, [roIgnoreCase]) then Continue;
+    var InClause:= False;
+    for var U in pF.UsesList do
+      if (not U.FromInclude) and (L >= U.StartLine) and (L <= U.EndLine) then InClause:= True;
+    if not InClause then RewriteQualifiedLine(pF, L, pStem, pRx, pNames, StartBrace, StartParen);
+  end;
+end;
+
+{ Lane cyc4 (D3): `Unit.X` is no ref in the index, so a declaration that moves leaves that text behind and the
+  build fails. Every code occurrence of `<source unit>.<moved name>`, in the source and in every unit that uses
+  it, becomes `<leaf unit>.<name>` (always legal: the name now lives there) and the file gains the leaf. FQualMoved
+  and FQualStill tell DecideOne what those lines still need: a `Unit.Y` that does not move keeps the entry. }
+procedure TCyclePlanner.RewriteQualifiedMoved;
+var
+  Names: TList<string>;
+  Files: TList<Int64>;
+  Users: TList<Int64>;
+begin
+  Names:= TList<string>.Create;
+  Files:= TList<Int64>.Create;
+  try
+    for var Stem in FComp do
+    begin
+      Names.Clear;
+      for var Id in FOrder do
+        if (FItems[Id].Kind <> mvBase) and (FItems[Id].Stem = Stem) then Names.Add(FItems[Id].Sym.Name);
+      if Names.Count = 0 then Continue;
+      var Decl:= GetFile(FidOfStem(Stem));
+      Files.Clear;
+      Files.Add(Decl.Fid);
+      if FUsersOf.TryGetValue(Stem, Users) then
+        for var U in Users do
+          if not Files.Contains(U) then Files.Add(U);
+      var Parts:= Decl.UnitName.Split(['.']);
+      for var I:= 0 to High(Parts) do Parts[I]:= TRegEx.Escape(Parts[I]);
+      var Rx:= '(?<![\w.])' + string.Join('\s*\.\s*', Parts) + '\s*\.\s*([A-Za-z_]\w*)';
+      for var Fid in Files do RewriteQualifiedIn(GetFile(Fid), Stem, Rx, Names.ToArray);
+    end;
+  finally
+    Files.Free;
+    Names.Free;
+  end;
+end;
+
 function TCyclePlanner.LeafStems(pDecision: TUntangleDecision): TArray<string>;
 var
   L: TList<string>;
@@ -2937,7 +3269,8 @@ begin
   L:= TList<string>.Create;
   try
     for var Id in FOrder do
-      if FLeafInfo.ContainsKey(FItems[Id].Stem) and (FLeafInfo[FItems[Id].Stem].Decision = pDecision) then
+      if FLeafInfo.ContainsKey(FItems[Id].Stem) and (FLeafInfo[FItems[Id].Stem].Decision = pDecision) and
+        not FLeafMerged.ContainsKey(FItems[Id].Stem) then
         AddUnique(L, FItems[Id].Stem);
     if IsInversionStem(FInversion.DeclStem) and (FLeafInfo[FInversion.DeclStem].Decision = pDecision) then
       AddUnique(L, FInversion.DeclStem);
@@ -3128,13 +3461,26 @@ begin
   try
     for var N in NeedsOf(pA.Fid) do
     begin
-      if (N.OwnerStem <> Partner) or IsDeleted(pA.Fid, N.Line) then Continue;
+      if N.OwnerStem <> Partner then Continue;
+      { lane cyc4 (D1): a need on a line that moves away was seen, and needs nothing here any more }
       Had[N.Sect = scImpl]:= True;
-      if IsMovedFor(N.Owner, pA.Fid) then Continue;
+      if IsDeleted(pA.Fid, N.Line) or IsMovedFor(N.Owner, pA.Fid) then Continue;
       var Shown:= False;
       for var S in Still[N.Sect = scImpl] do
         if StartsText('`' + N.RefName + '`', S) then Shown:= True;
       if not Shown then Still[N.Sect = scImpl].Add(Format('`%s` line %d', [N.RefName, N.Line]));
+    end;
+    { lane cyc4 (D3): `Unit.X` is no need of the index: a rewritten one was seen, one that stays needs the entry }
+    for var S:= False to True do
+    begin
+      var Sect:= if S then scImpl else scIntf;
+      var Left: string;
+      if FQualMoved.ContainsKey(QualKey(pA.Fid, Sect, Partner)) then Had[S]:= True;
+      if FQualStill.TryGetValue(QualKey(pA.Fid, Sect, Partner), Left) then
+      begin
+        Had[S]:= True;
+        Still[S].Add(Left);
+      end;
     end;
     D.Fid        := pA.Fid;
     D.PartnerStem:= Partner;
@@ -3510,8 +3856,10 @@ function TCyclePlanner.UsesEntryFor(const pF: TPlanFile; const pLeafStem: string
 begin
   Result:= FLeafName[pLeafStem];
   if not pF.IsProgram then Exit;
+  var Keeper: string;
+  if not FLeafMerged.TryGetValue(pLeafStem, Keeper) then Keeper:= pLeafStem;
   for var U in pF.UsesList do
-    if (LowerCase(U.UnitName) = pLeafStem) and (U.InPath <> '') then
+    if (LowerCase(U.UnitName) = Keeper) and (U.InPath <> '') then
       Exit(Format('%s in ''%s''', [Result, ExtractFilePath(U.InPath) + Result + '.pas']));
 end;
 
@@ -4285,12 +4633,18 @@ begin
   if not FLeafName.TryGetValue(pStem, Own) then Own:= '';
   Entries:= TList<string>.Create;
   try
-    for var U in SectionEntries(P, pSect) do
-      if not FMembers.ContainsKey(LowerCase(U.UnitName)) and not SameText(U.UnitName, Own) then
-        Entries.Add(EntryText(P, U));
-    if (pSect = scIntf) and FLeafDeps.ContainsKey(pStem) then
-      for var S in FLeafDeps[pStem] do
-        if not SameText(S, Own) then AddUnique(Entries, S);
+    { lane cyc4 (D1): a merged leaf needs what each of its sources needed }
+    for var Source in MergedStems(pStem) do
+    begin
+      var SF:= GetFile(FidOfStem(Source));
+      for var U in SectionEntries(SF, pSect) do
+        if not FMembers.ContainsKey(LowerCase(U.UnitName)) and not SameText(U.UnitName, Own) then
+          AddUnique(Entries, EntryText(SF, U));
+      var Deps: TList<string>;
+      if (pSect = scIntf) and FLeafDeps.TryGetValue(Source, Deps) then
+        for var S in Deps do
+          if not SameText(S, Own) then AddUnique(Entries, S);
+    end;
     Result:= Entries.ToArray;
   finally
     Entries.Free;
@@ -4305,37 +4659,55 @@ var
   L      : TList<string>;
   Items  : TList<TMoveItem>;
   Keyword: string;
+  P      : TPlanFile;
 begin
-  var P:= GetFile(FidOfStem(pStem));
   L    := TList<string>.Create;
   Items:= TList<TMoveItem>.Create;
   try
-    { SOURCE order, not closure order: a variable is added before the type it
-      needs, and Delphi requires the type to be declared first }
-    for var Id in FOrder do
-      if FItems[Id].Stem = pStem then Items.Add(FItems[Id]);
-    Items.Sort(TComparer<TMoveItem>.Construct(
-      function(const pLeft, pRight: TMoveItem): Integer
-      begin
-        Result:= pLeft.Decl.First - pRight.Decl.First;
-      end));
     Keyword:= '';
+    var Merged: TArray<Int64>;
+    if FMergedOrder.TryGetValue(pStem, Merged) then
+    begin
+      { lane cyc4 (D1): one block, in the merge's order, forward declarations first }
+      for var Id in Merged do Items.Add(FItems[Id]);
+      var Forwards:= MergedForwards(Merged);
+      if Length(Forwards) > 0 then
+      begin
+        L.Add('');
+        L.Add('type');
+        L.AddRange(Forwards);
+        Keyword:= 'type';
+      end;
+    end
+    else
+    begin
+      { SOURCE order, not closure order: a variable is added before the type it
+        needs, and Delphi requires the type to be declared first }
+      for var Id in FOrder do
+        if FItems[Id].Stem = pStem then Items.Add(FItems[Id]);
+      Items.Sort(TComparer<TMoveItem>.Construct(
+        function(const pLeft, pRight: TMoveItem): Integer
+        begin
+          Result:= pLeft.Decl.First - pRight.Decl.First;
+        end));
+    end;
     for var Item in Items do
     begin
       var KW:= if Item.Kind = mvBase then 'type' else Item.Keyword;
       L.Add('');
-      if KW <> Keyword then L.Add(KW);
+      if not SameText(KW, Keyword) then L.Add(KW);
       Keyword:= KW;
       if Item.Kind = mvBase then L.AddRange(BaseClassText(Item))
       else if Item.SameLine then
       begin
         { W6 C6: the leaf's own keyword line opens the block; the declaration loses the keyword }
+        P:= GetFile(Item.Sym.FileId);
         var Slice:= SliceLines(P.Lines, Item.Decl);
         var K    := Item.Sym.StartLine - Item.Decl.First;
         Slice[K]:= '  ' + TrimLeft(Copy(TrimLeft(Slice[K]), Length(Item.Keyword) + 1, MaxInt));
         L.AddRange(Slice);
       end
-      else L.AddRange(SliceLines(P.Lines, Item.Decl));
+      else L.AddRange(SliceLines(GetFile(Item.Sym.FileId).Lines, Item.Decl));
       if Item.Kind = mvWithBodies then pBodies.AddRange(Item.Bodies);
     end;
     if IsInversionStem(pStem) then L.AddRange(InversionDeclLines(pStem));
@@ -4364,7 +4736,15 @@ begin
         [(if Length(FInversion.Surfaces) > 1 then 's' else ''), SurfaceClassList(', '), P.UnitName,
          (if Length(FInversion.Surfaces) > 1 then '' else 's')]))
     else
-      L.Add('// Created by `drag-lint cycles --plan`: declarations moved here from ' + P.UnitName);
+    begin
+      var Sources:= TList<string>.Create;
+      try
+        for var S in MergedStems(pStem) do Sources.Add(UnitNameOfStem(S));
+        L.Add('// Created by `drag-lint cycles --plan`: declarations moved here from ' + string.Join(', ', Sources.ToArray));
+      finally
+        Sources.Free;
+      end;
+    end;
     L.Add('// to break a circular unit dependency. This unit may use only units OUTSIDE');
     L.Add('// that cycle -- never ' + MemberNames.Replace('`', '') + '.');
     L.Add('');
@@ -4580,6 +4960,9 @@ begin
       [FCutEdge.FromStem, FCutEdge.ToStem]);
   if FPredicted.Count = 0 then
     Emit('After it, these units form no cycle at all.')
+  else if Still and (FManual.Count = 0) then
+    Emit('After it, some of these units would still use each other in their interfaces, with nothing left to ' +
+      'move: the plan is refused (coupling-remains).')
   else if Still then
     Emit('After it, some of these units still use each other in their interfaces: the MANUAL ' +
       'items were not cut. Cut them by hand, or leave them.')
@@ -4587,6 +4970,7 @@ begin
     Emit('After it, these units still form a cycle, but only through IMPLEMENTATION uses. That is ' +
       'LEGAL Delphi: it compiles, and a change to one unit no longer forces the others'' ' +
       'interfaces to recompile. Removing it as well is optional (Part B).');
+  if FLeafCycleWhy <> '' then EmitFmt('Refused (coupling-remains): %s.', [FLeafCycleWhy]);
   Emit('');
 end;
 
@@ -5148,7 +5532,34 @@ end;
   the names of the moved declarations of the declaring unit (with every signature type an
   earlier step already moved -- Part A, when Part B is predicted), pMoveIds the ids to TryAdd
   again at materialisation, pCount the number of declarations moved. Nothing stays added. }
-function TCyclePlanner.ProbeInversionMoves(const pEv: TEdgeEval; out pMoved: TArray<string>;
+{ Lane cyc4 (D3): the globals of pEv's declaring unit its consumer names qualified, as code. A qualified name is no
+  ref, so they are not on the edge's surface; left alone they keep the uses entry the cut removes. }
+function TCyclePlanner.QualifiedGlobals(const pEv: TEdgeEval): TArray<TSymbol>;
+var
+  L    : TList<TSymbol>;
+  Owner: TSymbol;
+begin
+  var F:= GetFile(FidOfStem(pEv.FromStem));
+  var D:= GetFile(FidOfStem(pEv.ToStem));
+  var Parts:= D.UnitName.Split(['.']);
+  for var I:= 0 to High(Parts) do Parts[I]:= TRegEx.Escape(Parts[I]);
+  var Rx:= '(?<![\w.])' + string.Join('\s*\.\s*', Parts) + '\s*\.\s*([A-Za-z_]\w*)';
+  var InBrace:= False;
+  var InParen:= False;
+  L:= TList<TSymbol>.Create;
+  try
+    for var Line in F.Lines do
+      for var M in TRegEx.Matches(CodeOnly(Line, InBrace, InParen), Rx, [roIgnoreCase]) do
+        for var S in D.Syms do
+          if SameText(S.Name, M.Groups[1].Value) and (S.Kind in [skVarDecl, skConstDecl]) and OwnerOf(S, Owner) and (Owner.Id = S.Id) and
+            not L.Contains(S) then L.Add(S);
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+function TCyclePlanner.ProbeInversionMoves(var pEv: TEdgeEval; out pMoved: TArray<string>;
   out pMoveIds: TArray<Int64>; out pCount: Integer): Boolean;
 var
   Why    : string;
@@ -5171,6 +5582,24 @@ begin
         if (N.Owner.Kind in [skProcedure, skFunction]) or not TryAdd(N.Owner, nil, Why) then Exit(False);
         Roots.Add(N.Owner.Id);
       end;
+    { lane cyc4 (D3): a global named `Unit.G` moves too, when it can: the plan rewrites that text. One that cannot
+      stays out, and CallRefusal refuses qualified-ref }
+    var QualNames: TArray<string> := nil;
+    for var S in QualifiedGlobals(pEv) do
+    begin
+      var Before:= FOrder.Count;
+      var Pulled:= not TryAdd(S, nil, Why);
+      for var Id in pEv.Surface.RoutineIds do
+        if FItems.ContainsKey(Id) then Pulled:= True;
+      if Pulled then
+      begin
+        Rollback(Before);
+        Continue;
+      end;
+      if not Roots.Contains(S.Id) then Roots.Add(S.Id);
+      QualNames:= QualNames + [S.Name];
+    end;
+    pEv.Surface.QualifiedMoved:= QualNames;
     var DeclFid:= FidOfStem(pEv.ToStem);
     for var Id in pEv.Surface.RoutineIds do
     begin
@@ -5705,6 +6134,14 @@ begin
     for var M in FManual do
       Add((if M.Refusal <> '' then M.Refusal else if M.Kind = mvBlocked then 'blocked-symbol' else 'manual-edit'),
         M.Sym.Name, PathOf(M.Sym.FileId), M.Reason, M.Sym.StartLine);
+    { lane cyc4 (D1): a plan that would leave F2047 behind, or that its own prediction says did not cut the interface
+      coupling, is no mechanical plan: it would build a rollback, or report DONE with the coupling in place }
+    if FLeafCycleWhy <> '' then Add('coupling-remains', '', PathOf(FidOfStem(FComp[0])), FLeafCycleWhy, 0)
+    else if pPlan.HasIntf and (FManual.Count = 0) then
+      for var G in FPredicted do
+        if G.HasIntf then
+          Add('coupling-remains', string.Join(', ', G.Members), PathOf(FidOfStem(G.Members[0])),
+            Format('after this plan `%s` would still use each other in their interfaces', [string.Join('`, `', G.Members)]), 0);
     if pPlan.HasIntf then
     begin
       for var A in FComp do

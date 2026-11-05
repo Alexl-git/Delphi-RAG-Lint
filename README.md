@@ -501,6 +501,16 @@ Per cycle it gives:
   plan on the uses graph -- plus what to do for each compile error the edits can
   produce.
 
+Since 1.43: two units whose moved types need each other (the F2047 shape) share ONE
+new unit, with forward declarations, instead of two new units that would be F2047
+again; a set that cannot share one `type` block refuses `coupling-remains`, as does
+a plan whose own prediction still shows the interface coupling. `Unit.GVar` follows
+its move to `Unit.Untangle.GVar` (code only, never a comment or a string). A routine
+passed as a whole argument goes through its pointer. A call run from the consumer's
+`finalization` section is no `init-order` case any more; it is cut unless the
+declaring unit, finalized first after the cut, could show finalized state
+(`finalization-order`).
+
 An interface-coupled cycle is cut to a legal implementation-only one (Part A); an
 **optional Part B** names the edge whose globals can move next, and re-running
 `--plan` on the edited tree prints it as the same kind of steps. On the
