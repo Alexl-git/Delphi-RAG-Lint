@@ -34154,7 +34154,7 @@ begin
   if AArgs.ProjectPath <> '' then
     try
       Result:= DetectPlatformFromDproj(AManifest, ExtractFilePath(TPath.GetFullPath(AArgs.ProjectPath)));
-    except
+    except  // dl:ok bare-except@86a2 -- REVIEWED 2026-11-05 any failure on a bad --project path means "no platform from it"; the cwd and manifest fallbacks below still answer
       Result:= '';
     end;
   if Result = '' then Result:= DetectPlatformFromDproj(AManifest, GetCurrentDir);

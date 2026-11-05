@@ -8952,7 +8952,7 @@ begin
   end;
 end;
 
-function TCallResolver.DecideInlineInitType(const ADecl: TSymbol): string;
+function TCallResolver.DecideInlineInitType(const ADecl: TSymbol): string;  // dl:ok too-many-exit-points@611b -- REVIEWED 2026-11-05 one Exit per initializer form (for-in, as, index, call), each a decision with its own result
 var
   Lines: TStringList;
   IsFor: Boolean    ;
