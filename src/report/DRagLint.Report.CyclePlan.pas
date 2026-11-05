@@ -66,7 +66,7 @@ type
   /// signature-in-cycle, signature-unknown, routine-not-called, init-order,
   /// duplicate-identifier, edge-still-used, overloaded-routine, unsupported-directive; R2 (E18 T6) adds
   /// member-write, construction, class-method, class-ref, type-decl, type-cast, other-ref,
-  /// multiple-classes (overlapping `with` bodies of two classes, or an edge naming no class; PlanMemberInterface),
+  /// multiple-classes (several class names and no `is` / `as` operand; PlanMemberInterface),
   /// member-unsupported, no-iinterface, ref-counted, receiver-unknown,
   /// cast-unseen, with-member, ancestry-unknown, type-unresolved, unresolved-qualified-type, exception-semantics (and reuses leaf-uses-cycle,
   /// qualified-ref, duplicate-identifier, edge-still-used, manual-edit). Line is 0 when the
@@ -5237,8 +5237,9 @@ begin
     if Refusal.Kind <> '' then
     begin
       Ev.Refusal:= Refusal.Kind;
-      Ev.Why    := Format('`%s` (class): refused: %s -- %s', [string.Join(', ', Ev.Surface.ClassNames), Refusal.Kind,
-        Refusal.Reason]);
+      Ev.Why    := Format('`%s` (%s): refused: %s -- %s', [(if Length(Ev.Surface.ClassNames) > 0 then
+        string.Join(', ', Ev.Surface.ClassNames) else Refusal.Symbol),
+        (if Length(Ev.Surface.ClassNames) > 0 then 'class' else 'no class'), Refusal.Kind, Refusal.Reason]);
       pEvals[I]:= Ev;
       Continue;
     end;

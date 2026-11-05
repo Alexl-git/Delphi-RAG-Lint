@@ -11,8 +11,9 @@
   compare stdout BYTE-FOR-BYTE.
 
   REFUSED shapes (planned only): r1 an ancestor already declares `GetLog` (the getter name the
-  interface needs) -> duplicate-identifier; r2 the with body reads `Tag`, a member TComponent (a
-  LIBRARY ancestor) declares -> with-member stays (only same-unit ancestors are carried); r3 the
+  interface needs) -> duplicate-identifier; r2 the with body calls `Free`, a method of a LIBRARY
+  ancestor -> with-member stays (a library field or property is carried since 1.43, see
+  run_cyclefix_r2_multiclass_dcc.ps1); r3 the
   inherited member is `strict private` in the base (no descendant method can read it) ->
   member-unsupported, or with-member when the resolver (visibility-aware) leaves the read unbound,
   which it does today: either way the edge is not cut.
@@ -160,8 +161,8 @@ try {
        Prep = { param($Dir) $g = Join-Path $Dir 'DemoGagePort.pas'
          $null = Edit-File $g "    property Log: TStrings read FLog;`n  end;" "    /// <summary>The log, as a function.</summary>`n    function GetLog: TStrings;`n    property Log: TStrings read FLog;`n  end;"
          $null = Edit-File $g "constructor TDemoGagePort.Create" "function TDemoPortBase.GetLog: TStrings;`nbegin`n  Result := FLog;`nend;`n`nconstructor TDemoGagePort.Create" } },
-    @{ Tag = 'r2'; Why = 'the with body reads Tag, a member of a LIBRARY ancestor'; Kind = 'with-member'; File = 'DemoUIConnect.pas'; Line = 'IntToStr(Tag)'
-       Prep = { param($Dir) $null = Edit-File (Join-Path $Dir 'DemoUIConnect.pas') "    Log.Add('data ' + InBuf);" "    Log.Add('data ' + InBuf + IntToStr(Tag));" } },
+    @{ Tag = 'r2'; Why = 'the with body calls Free, a method of a LIBRARY ancestor'; Kind = 'with-member'; File = 'DemoUIConnect.pas'; Line = '    Free;'
+       Prep = { param($Dir) $null = Edit-File (Join-Path $Dir 'DemoUIConnect.pas') "    Log.Add('data ' + InBuf);" "    Log.Add('data ' + InBuf);`n    Free;" } },
     @{ Tag = 'r3'; Why = 'the inherited member is strict private'; Kind = '(member-unsupported|with-member)'; File = 'DemoGagePort.pas'; Line = 'strict private'
        Prep = { param($Dir) $null = Edit-File (Join-Path $Dir 'DemoGagePort.pas') "  public`n    /// <summary>The port's log (the real form's memo).</summary>" "  strict private`n    /// <summary>The port's log (the real form's memo).</summary>" } }
   )
