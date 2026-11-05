@@ -26,14 +26,24 @@ type
     { 14.2 control: query-named, but the only blocker is an UNBOUND callee --
       summary '?', which is a gap in the proof and not a proven effect. }
     function IsReady: Boolean;
-    { 14.2 trigger, and the WITNESS JOIN control: symbol_facts.touches is the
-      two-field wire string 'resources|transactions' with the separator always
-      present, so a ONE-SIDED value is stored as 'file system|'. This one is
-      one-sided and its witness must carry NO separator. }
+    { 14.2 control since the 1.43 tuning: a touch with no transaction has no
+      direction, so it proves no change. Still the WITNESS JOIN control:
+      symbol_facts.touches is the two-field wire string 'resources|transactions'
+      with the separator always present, so a ONE-SIDED value is stored as
+      'file system|'. This one is one-sided and its stored witness must carry
+      NO separator. }
     function GetPath: string;
     { 14.2 trigger, and the other half of the join control: BOTH sides
       populated ('file system|starts, commits'). }
     function GetLog: string;
+    { 14.2 control: writes its own field, but is a procedure -- a copy-in that
+      answers no question. }
+    procedure GetFrom(AValue: Integer);
+    { 14.2 control: its summary carries 'g', from a SQL READ only. }
+    function FindRow: Integer;
+    { 14.2 control: a real write of a unit variable behind a stored witness that
+      names a binding gap -- the finding could not show its evidence. }
+    function HasGap: Boolean;
   end;
 
 function Twice(A: Integer): Integer;
@@ -44,6 +54,7 @@ var
   { Deliberately opaque so the transaction verbs stay UNBOUND: the Touches fact
     is what must reach the witness here, not a resolved callee. }
   GTx: TObject;
+  GGap: Integer;
 
 implementation
 
@@ -74,6 +85,23 @@ begin
     GTx.StartTransaction;
   GTx.Commit;
   Result:= '';
+end;
+
+procedure TBox.GetFrom(AValue: Integer);
+begin
+  FCount:= AValue;
+end;
+
+function TBox.FindRow: Integer;
+begin
+  GTx.SQL.Text:= 'SELECT ID FROM T';
+  Result:= 0;
+end;
+
+function TBox.HasGap: Boolean;
+begin
+  Result:= Nobody(1);
+  GGap:= 2;
 end;
 
 function Twice(A: Integer): Integer;

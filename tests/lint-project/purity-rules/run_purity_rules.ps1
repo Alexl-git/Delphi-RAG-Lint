@@ -65,6 +65,13 @@ function MsgOf([object[]]$Findings, [string]$Needle) {
   return ''
 }
 
+# '<effect_summary> ~ <effect_witness>' of one routine, from the index. sql --json rows are positional.
+function StoredFact([string]$Name) {
+  $sqlDoc = (& $exePath sql --db $db --json --query "select f.effect_summary, f.effect_witness from symbol_facts f join symbols s on s.id = f.symbol_id where s.name = '$Name'" 2>$null) -join "`n" | ConvertFrom-Json
+  if (@($sqlDoc.rows).Count -ne 1) { return '' }
+  return ('{0} ~ {1}' -f $sqlDoc.rows[0][0], $sqlDoc.rows[0][1])
+}
+
 Write-Host "Indexing fixture..."
 & $exePath index $dir --db $db | Out-Null
 
@@ -118,28 +125,35 @@ $a7  = @($d | Where-Object { [int]$_.start_line -eq [int]$wrapLine }).Count -eq 
 $a8  = ($d.Count -eq 1) -and ($d[0].message -like '*effect_free=1*')
 
 # --- run 2: 14.2 -------------------------------------------------------------
-$a4  = ($q.Count -eq 3) -and (@($q | Where-Object { $_.message -like '*GetAndBump*' }).Count -eq 1)
+$a4  = ($q.Count -eq 2) -and (@($q | Where-Object { $_.message -like '*GetAndBump*' }).Count -eq 1)
 # a binding gap ('?') is not a proven effect
 $a5  = @($q | Where-Object { $_.message -like '*IsReady*' }).Count -eq 0
 # a proven getter is not an effect
 $a6  = @($q | Where-Object { $_.message -like '*GetCount*' }).Count -eq 0
 # THE WITNESS-JOIN CONTROLS. One-sided touches must print no separator...
-$mPath = MsgOf $q 'GetPath'
-$a9  = ($mPath -like '*touches file system*') -and ($mPath -notlike '*|*')
+# GetPath no longer fires (next block), so the stored witness is read directly.
+$mPath = StoredFact 'GetPath'
+$a9  = ($mPath -like '*touches file system') -and ($mPath -notlike '*|*')
 # ...and a two-sided one must be JOINED, not concatenated.
 $mLog = MsgOf $q 'GetLog'
 $a10 = ($mLog -like '*touches file system; transactions: starts, commits*') -and ($mLog -notlike '*|*')
+# THE 1.43 TUNING. Each control needs the stored fact that WOULD have fired, or its
+# "no finding" would pass on a fixture that merely stopped producing the fact.
+$a11 = ((StoredFact 'GetFrom') -eq 's ~ writes field FCount') -and (@($q | Where-Object { $_.message -like '*GetFrom*' }).Count -eq 0)
+$a12 = ((StoredFact 'FindRow') -like 'g,* ~ reads SQL T') -and (@($q | Where-Object { $_.message -like '*FindRow*' }).Count -eq 0)
+$a13 = ((StoredFact 'GetPath') -like 'g,* ~ touches file system') -and (@($q | Where-Object { $_.message -like '*GetPath*' }).Count -eq 0)
+$a14 = ((StoredFact 'HasGap') -like 'g,* ~ *(unbound)') -and (@($q | Where-Object { $_.message -like '*HasGap*' }).Count -eq 0)
 
 $pass = $onDiscard -and $offQuery -and $run1Real -and $offDisable -and `
         $a1 -and $a1b -and $a2 -and $a3 -and $a7 -and $a8 -and `
-        $a4 -and $a5 -and $a6 -and $a9 -and $a10
+        $a4 -and $a5 -and $a6 -and $a9 -and $a10 -and $a11 -and $a12 -and $a13 -and $a14
 
 if ($pass) {
   Write-Host "PASS  $RuleDiscard ON / $RuleQuery OFF by default (run 1), --disable honoured (run 3), correct on --enable (run 2), line-wrap and witness-join controls hold"
   exit 0
 } else {
-  Write-Host ("FAIL  onDiscard={0} offQuery={1} run1Real={2} offDisable={3} a1={4} a1b={5} a2={6} a3={7} a7(wrap)={8} a8(evidence)={9} a4={10} a5={11} a6={12} a9(one-sided)={13} a10(joined)={14}" -f `
-    $onDiscard, $offQuery, $run1Real, $offDisable, $a1, $a1b, $a2, $a3, $a7, $a8, $a4, $a5, $a6, $a9, $a10)
+  Write-Host ("FAIL  onDiscard={0} offQuery={1} run1Real={2} offDisable={3} a1={4} a1b={5} a2={6} a3={7} a7(wrap)={8} a8(evidence)={9} a4={10} a5={11} a6={12} a9(one-sided)={13} a10(joined)={14} a11(procedure)={15} a12(sql read)={16} a13(touch)={17} a14(gap witness)={18}" -f `
+    $onDiscard, $offQuery, $run1Real, $offDisable, $a1, $a1b, $a2, $a3, $a7, $a8, $a4, $a5, $a6, $a9, $a10, $a11, $a12, $a13, $a14)
   Write-Host ("      stmtLine={0} exprLine={1} wrapLine={2}" -f $stmtLine, $exprLine, $wrapLine)
   Write-Host ("      GetPath msg = [{0}]" -f $mPath)
   Write-Host ("      GetLog  msg = [{0}]" -f $mLog)
