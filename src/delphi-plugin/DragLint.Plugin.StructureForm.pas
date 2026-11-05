@@ -332,7 +332,7 @@ end; // function
 
 function ResolveExePath: string;
 begin
-  Result:= DragLintExe;
+  Result:= EngineExeOrEmpty;
 end;
 
 procedure AddPopupItem(AMenu: TPopupMenu; const ACaption: string; AHandler: TNotifyEvent);

@@ -205,7 +205,7 @@ begin
       Block      : string;
       Reason     : string;
     begin
-      ResolvedExe:= DragLintExe;
+      ResolveEngine(ResolvedExe);
       Output:= '';
       ExitCode:= -1;
       try

@@ -226,6 +226,11 @@ var
   Why     : string;
   Job     : TDragLintJob;
 begin
+  if AExePath = '' then
+  begin
+    DLT('reindex', 'NOT queued: ' + ENGINE_NOT_FOUND_MSG);
+    Exit(False);
+  end;
   DbPath:= ActiveProjectWriteDb(ProjFile, Why);
   if DbPath = '' then
   begin
@@ -245,7 +250,7 @@ end;
 
 function EnqueueReindexThenRelint(const ATitle: string): Boolean;
 begin
-  Result:= QueueReindexJob(DragLintExe, ATitle);
+  Result:= QueueReindexJob(EngineExeOrEmpty, ATitle);
   if not Result then RequestRelint;
 end;
 
@@ -281,7 +286,7 @@ begin
     if ShouldDebounceReindex(FileName) then Exit;
 
     { v0.86: shared resolver -- honors Cfg.ExePath if set, else Win64 default. }
-    ExePath:= DragLintExe;
+    ExePath:= EngineExeOrEmpty;
 
     SavedFile:= FileName;
 

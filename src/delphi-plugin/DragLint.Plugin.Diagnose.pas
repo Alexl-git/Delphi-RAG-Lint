@@ -222,7 +222,7 @@ begin
         { The engine we would actually run. DragLintExe already performs the
           full resolution (Win64 sibling, then beside the BPL, then PATH), so
           the proposal is not a guess -- it is the path in use right now. }
-        AProposed:= DragLintExe;
+        ResolveEngine(AProposed);
         { Refuse to propose a path that is itself directory-less or absent:
           replacing one unusable value with another is not a fix. }
         if (AProposed = '') or (ExtractFilePath(AProposed) = '') then Exit;
@@ -350,9 +350,11 @@ var
   together. }
 function EngineInfoCmd(const ADbs: TArray<string>): string;
 var
-  Db: string;
+  Db : string;
+  Exe: string;
 begin
-  Result:= '"' + DragLintExe + '" info --json';
+  ResolveEngine(Exe);
+  Result:= '"' + Exe + '" info --json';
   for Db in ADbs do
     if Db <> '' then Result:= Result + ' --db "' + Db + '"';
 end;
@@ -408,7 +410,7 @@ begin
   if GEngineInfo = nil then GEngineInfo:= TDictionary<string, TEngineInfoAnswer>.Create;
   GEngineInfo.Clear;
   ASlot.Cancel;
-  if not FileExists(DragLintExe) then
+  if EngineExeOrEmpty = '' then
   begin
     ADone();  { EngineInfoJson names the missing exe }
     Exit;
@@ -443,7 +445,7 @@ begin
   Result:= False;
   AJson := nil;
   AError:= '';
-  Exe:= DragLintExe;
+  ResolveEngine(Exe);
   if not FileExists(Exe) then
   begin
     AError:= 'engine exe not found at ' + Exe;
@@ -561,7 +563,7 @@ begin
     Add(Result, Line('Engine', Info.GetValue<string>('version', '?') + '   built ' +
       Info.GetValue<string>('build_date', '?') + '   (' +
       Info.GetValue<string>('platform', '?') + ')', dsOk));
-    Add(Result, Line('Engine exe', Info.GetValue<string>('exe_path', DragLintExe)));
+    Add(Result, Line('Engine exe', Info.GetValue<string>('exe_path', EngineExeOrEmpty)));
     TsObj:= nil;
     if Info.TryGetValue<TJSONObject>('tree_sitter', TsObj) and (TsObj <> nil) then
       Add(Result, Line('tree-sitter', 'delphi13 ' + TsObj.GetValue<string>('delphi13', '?') +
@@ -620,7 +622,7 @@ begin
     end;
   end;
 
-  Exe:= DragLintExe;
+  ResolveEngine(Exe);
   if FileExists(Exe) then Add(Result, Line('Engine exe', Exe, dsOk))
   else Add(Result, Line('Engine exe', 'NOT FOUND at ' + Exe, dsBad));
 

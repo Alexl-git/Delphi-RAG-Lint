@@ -370,7 +370,7 @@ end;
 
 function ResolveExe: string;
 begin
-  Result:= DragLintExe;
+  Result:= EngineExeOrEmpty;
 end;
 
 { ============================================================

@@ -691,6 +691,7 @@ var
   ActiveProj: IOTAProject       ;
   ProjDir   : string            ;
   ExeDir    : string            ;
+  Exe       : string            ;
 begin
   { Project-scoped first: if a project is open, the manifest we read/write
     lives beside its .dproj as the DOTTED ".drag-lint.json" -- this matches
@@ -721,7 +722,11 @@ begin
     NOT ParamStr(0) (which is the IDE's bds.exe dir and is not where the CLI
     reads its global config). FSettings.ExePath is blank by default. }
   ExeDir:= ExtractFilePath(FSettings.ExePath);
-  if ExeDir = '' then ExeDir:= ExtractFilePath(DragLintExe);
+  if ExeDir = '' then
+  begin
+    ResolveEngine(Exe); { path only -- the manifest is written beside the exe, nothing is spawned }
+    ExeDir:= ExtractFilePath(Exe);
+  end;
   Result:= ExeDir + 'drag-lint.json';
 end;
 

@@ -79,7 +79,7 @@ end;
 
 function TSearchHandler.ResolveExe: string;
 begin
-  Result:= DragLintExe;
+  Result:= EngineExeOrEmpty;
 end;
 
 function TSearchHandler.DbArgs: string;
@@ -164,6 +164,11 @@ begin
     Exit;
   end;
   Exe:= ResolveExe;
+  if Exe = '' then
+  begin
+    SetEmpty(ENGINE_NOT_FOUND_MSG);
+    Exit;
+  end;
   K:= CurrentKind;
   RebuildColumns;
   SetEmpty('Searching.');
