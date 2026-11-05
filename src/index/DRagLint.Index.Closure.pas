@@ -444,8 +444,9 @@ type
       /// Files under any ALibraryRoot are silently excluded and not recursed.
       /// A file that is reached via uses AND matches an AExclude glob pattern is
       /// still added to Files but also produces a Warning entry. A unit the project
-      /// lists (DCCReference first, then the .dpr's in path; case-insensitive, first
-      /// listing wins, a different second one is a Warning) is never path-searched,
+      /// lists (the .dpr's in path first, as dcc reads it, then DCCReference;
+      /// case-insensitive, first listing wins, a different second one is a Warning,
+      /// so the .dpr file wins and the DCCReference file is left out) is never path-searched,
       /// so a same-named file elsewhere stays out; a listed file missing from disk
       /// binds nothing and the search still answers. Resolving a .dpr, DCCReference
       /// entries bind but do not seed. Files holds full paths, one spelling each.</summary>
@@ -458,7 +459,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Project.TargetStudio.ResolveTargetClosure (DRagLint.Project.TargetStudio.pas), DRagLint.Refactor.MultiProjectRename.ClosureUnits (DRagLint.Refactor.MultiProjectRename.pas)</para>
       /// <para>Calls: BindUnit, DRagLint.Index.Closure.TClosureResolver.ExtractUses, DRagLint.Index.Closure.TClosureResolver.IsLibraryFile, DRagLint.Index.Closure.TClosureResolver.MaybePreprocess, DRagLint.Index.Closure.TClosureResolver.ParseDprojRefs, DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths, DRagLint.Index.Closure.TClosureResolver.ParseDprUses, DRagLint.Index.Closure.TClosureResolver.Resolve.BindListedUnits, DRagLint.Index.Closure.TClosureResolver.Resolve.BoundFile, DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile (+11 more)</para>
-      /// <para>Complexity: 27 (cyclomatic, outer body), 341 lines (full implementation)</para>
+      /// <para>Complexity: 27 (cyclomatic, outer body), 342 lines (full implementation)</para>
       /// <para>Reads: FLibraryTail</para>
       /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>
@@ -1117,11 +1118,12 @@ var
       Warnings.Add('WARN: ' + LPath + ' is in the compile closure (used by ' + AUsingUnit + ') but matches an exclude pattern');
   end;
 
-  { GH #13: DCCReference first, then the .dpr's `in` paths. }
+  { GH #13: the .dpr's `in` paths first, because they are what dcc compiles; a
+    DCCReference binds a name the .dpr has no `in` for, or whose `in` file is missing. }
   procedure BindListedUnits;
   begin
-    for var F: string in DprojRefFiles do BindUnit(TPath.GetFileNameWithoutExtension(F), F);
     for var I: Integer:= 0 to UnitNames.Count - 1 do BindUnit(UnitNames[I], UnitFilePaths[I]);
+    for var F: string in DprojRefFiles do BindUnit(TPath.GetFileNameWithoutExtension(F), F);
   end;
 
   { Only the entry that holds its unit's binding: a second listing of a name stays out. }

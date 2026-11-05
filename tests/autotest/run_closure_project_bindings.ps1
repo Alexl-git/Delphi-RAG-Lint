@@ -6,10 +6,10 @@
   the search found Other\Lib.pas and added it beside the Shared\Lib.pas the .dpr
   names, so one unit had two files in the index.
 
-  A binding is unit name -> file. DCCReference entries bind first, .dpr
-  `uses X in 'path'` entries after them; the first binding of a name wins, and a
-  different second one is a WARN line. A binding whose file is missing is not a
-  binding: the path search still answers, as it always did.
+  A binding is unit name -> file. .dpr `uses X in 'path'` entries bind first, as
+  dcc reads them, DCCReference entries after them; the first binding of a name
+  wins, and a different second one is a WARN line. A binding whose file is missing
+  is not a binding: the next listing, then the path search, still answers.
 
   Second defect, same output: a rooted `in` path holding `..` joined the closure
   unnormalised, so the printed count held a second spelling of a listed file.
@@ -131,18 +131,22 @@ WriteDproj $d 'Other' @("$d\Elsewhere\Lib.pas", 'Other\B.pas')
 $c = Closure $d
 Check 'only Elsewhere\Lib.pas' ((Has $c "$d\Elsewhere\Lib.pas") -and (LeafCount $c 'Lib.pas') -eq 1) ($c.Files -join ' | ')
 
-# --- group 6: DCCReference beats a conflicting `in`, and says so ----------------
-Write-Host '[6] DCCReference and `in` disagree: DCCReference wins, one WARN names both'
+# --- group 6: a conflicting `in` beats DCCReference, as dcc does, and says so -----
+Write-Host '[6] DCCReference and `in` disagree: the .dpr wins, one WARN names both'
 $d = Join-Path $Scratch 'g6'
-WriteText "$d\P.dpr" "program P;`nuses`n  Lib in 'FromDpr\Lib.pas',`n  B in 'Other\B.pas';`nbegin`nend.`n"
-WriteUnit "$d\FromDpr\Lib.pas" 'Lib'
-WriteUnit "$d\FromRef\Lib.pas" 'Lib'
-WriteUnit "$d\Other\B.pas" 'B' 'Lib'
-WriteDproj $d '' @('FromRef\Lib.pas', 'Other\B.pas')
-$c = Closure $d
-Check 'FromRef\Lib.pas is listed' (Has $c "$d\FromRef\Lib.pas") ($c.Files -join ' | ')
-Check 'FromDpr\Lib.pas is NOT listed' (-not (Has $c "$d\FromDpr\Lib.pas")) ($c.Files -join ' | ')
-Check 'one WARN line names the unit and both files' ((@($c.Raw -split "`r?`n" | Where-Object { $_ -match 'WARN: unit Lib ' -and $_ -match 'FromRef' -and $_ -match 'FromDpr' })).Count -eq 1) $c.Raw
+$pd = "$d\App"
+WriteText "$pd\P.dpr" "program P;`nuses`n  A in 'A.pas',`n  Y in '..\Shared\Y.pas';`nbegin`nend.`n"
+WriteUnit "$pd\A.pas" 'A' 'Y'
+WriteUnit "$d\Shared\Y.pas" 'Y'
+WriteUnit "$d\Dup\Y.pas" 'Y'
+WriteDproj $pd '' @('A.pas', '..\Dup\Y.pas')
+$c = Closure $pd
+Check '.dproj entry: Shared\Y.pas is listed' (Has $c "$d\Shared\Y.pas") ($c.Files -join ' | ')
+Check '.dproj entry: Dup\Y.pas is NOT listed' (-not (Has $c "$d\Dup\Y.pas")) ($c.Files -join ' | ')
+Check 'one WARN line: the .dpr file wins, the DCCReference file is left out' ((@($c.Raw -split "`r?`n" | Where-Object { $_ -match 'WARN: unit Y is listed twice: \S*\\Shared\\Y\.pas wins, \S*\\Dup\\Y\.pas is left out' })).Count -eq 1) $c.Raw
+$c = Closure $pd 'P.dpr'
+Check '.dpr entry: Shared\Y.pas is listed' (Has $c "$d\Shared\Y.pas") ($c.Files -join ' | ')
+Check '.dpr entry: Dup\Y.pas is NOT listed' (-not (Has $c "$d\Dup\Y.pas")) ($c.Files -join ' | ')
 
 # --- group 7: `in` paths are relative to the .dpr -------------------------------
 Write-Host '[7] an `in` path is relative to the .dpr, wherever the using unit sits'
@@ -166,6 +170,14 @@ WriteDproj $d 'Other' @('Gone\Lib.pas', 'Other\B.pas')
 $c = Closure $d
 Check 'Other\Lib.pas answers for the missing listing' (Has $c "$d\Other\Lib.pas") ($c.Files -join ' | ')
 Check 'the missing file is not listed' (-not (Has $c "$d\Gone\Lib.pas")) ($c.Files -join ' | ')
+$d = Join-Path $Scratch 'g8b'
+WriteText "$d\P.dpr" "program P;`nuses`n  Lib in 'Gone\Lib.pas',`n  B in 'Other\B.pas';`nbegin`nend.`n"
+WriteUnit "$d\Listed\Lib.pas" 'Lib'
+WriteUnit "$d\Other\Lib.pas" 'Lib'
+WriteUnit "$d\Other\B.pas" 'B' 'Lib'
+WriteDproj $d 'Other' @('Listed\Lib.pas', 'Other\B.pas')
+$c = Closure $d
+Check 'the .dpr''s `in` file missing: the DCCReference binds' ((Has $c "$d\Listed\Lib.pas") -and (LeafCount $c 'Lib.pas') -eq 1) ($c.Files -join ' | ')
 
 # --- group 9: positive control ---------------------------------------------------
 Write-Host '[9] positive control: a unit the project does not list still resolves through the path'
