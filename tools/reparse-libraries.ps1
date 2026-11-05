@@ -153,6 +153,7 @@ if ($busy.Count -gt 0) {
   $Notes.Add("NOT ALONE: $msg; timings are not comparable")
 }
 
+Set-Location $WorkDir   # the engine reads <WorkDir>\.drag-lint.json, as the phases below do
 foreach ($s in $Steps) {
   if ($s.Phase -eq 'libraries') { $s.Total = Get-LibraryFileCount $s.Platform }
 }
