@@ -12001,6 +12001,76 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>Answers a --rule value that needs no lint run: `help` lists the catalog,
+/// and an id the catalog does not have is refused.</summary>
+/// <param name="AArgs">Parsed args; Rule, RulesDir and AsJson are read.</param>
+/// <param name="AProjectOnly">True for `lint --project` with no unit: the rules that
+/// run there are listed apart from those that need a unit.</param>
+/// <param name="AExit">Receives the verb's exit code when the result is True.</param>
+/// <returns>True when the verb is done: `help` (exit 0), unknown id (exit 2).
+/// False for a catalog id, which the run goes on to use.</returns>
+function LintRuleArgAnswered(const AArgs: TArgs; AProjectOnly: Boolean; out AExit: Integer): Boolean;
+const
+  PROJECT_LEVEL_RULES: array[0..1] of string = ('unit-not-in-dpr', UNIT_NOT_IN_LIBRARY_RULE_ID);
+
+  function IsProjectLevel(const AId: string): Boolean;
+  begin
+    Result:= False;
+    for var P: string in PROJECT_LEVEL_RULES do
+      if SameText(P, AId) then Exit(True);
+  end;
+
+var
+  Ids: TArray<string>;
+begin
+  AExit:= 0;
+  Ids:= nil;
+  var Known: Boolean:= False;
+  for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(AArgs.RulesDir, '') do
+  begin
+    Ids:= Ids + [RI.Id];
+    if SameText(RI.Id, AArgs.Rule) then Known:= True;
+  end;
+  TArray.Sort<string>(Ids);
+  if Known then Exit(False);
+  Result:= True;
+  if not SameText(AArgs.Rule, 'help') then
+  begin
+    Writeln(Format('ERROR: unknown rule "%s"', [AArgs.Rule]));
+    Writeln(Format('known rules (%d): %s', [Length(Ids), string.Join(', ', Ids)]));
+    AExit:= 2;
+    Exit;
+  end;
+  if AArgs.AsJson then
+  begin
+    var JRoot: TJSONObject:= TJSONObject.Create;
+    try
+      var JRules: TJSONArray:= TJSONArray.Create;
+      for var Id: string in Ids do JRules.Add(Id);
+      JRoot.AddPair('rules', JRules);
+      if AProjectOnly then
+      begin
+        var JProject: TJSONArray:= TJSONArray.Create;
+        for var P: string in PROJECT_LEVEL_RULES do JProject.Add(P);
+        JRoot.AddPair('project_level', JProject);
+      end;
+      Writeln(JRoot.Format(2));
+    finally
+      JRoot.Free;
+    end; // try
+    Exit;
+  end;
+  Writeln(Format('--rule takes one of these %d ids (details: drag-lint rules):', [Length(Ids)]));
+  if AProjectOnly then
+  begin
+    Writeln('run by lint --project with no unit:');
+    for var P: string in PROJECT_LEVEL_RULES do Writeln('  ' + P);
+    Writeln('need a unit (lint <file> --rule <id>) or lint-all:');
+  end;
+  for var Id: string in Ids do
+    if not (AProjectOnly and IsProjectLevel(Id)) then Writeln('  ' + Id);
+end; // function
+
 /// <summary>True when a library index declares the unit AName, as written or under
 /// one of the default unit scopes (`SysUtils` is System.SysUtils).</summary>
 /// <param name="AStore">The open library store.</param>
@@ -16705,20 +16775,8 @@ begin
     See docs\INBOX-lint-rule-filter-leaks-other-rules.md. }
   if AArgs.Rule <> '' then
   begin
-    var KnownRule: Boolean:= False;
-    var KnownIds : TArray<string>:= nil;
-    for var RI: TRuleInfo in DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog(AArgs.RulesDir, '') do
-    begin
-      KnownIds:= KnownIds + [RI.Id];
-      if SameText(RI.Id, AArgs.Rule) then KnownRule:= True;
-    end;
-    if not KnownRule then
-    begin
-      TArray.Sort<string>(KnownIds);
-      Writeln(Format('ERROR: unknown rule "%s"', [AArgs.Rule]));
-      Writeln(Format('known rules (%d): %s', [Length(KnownIds), string.Join(', ', KnownIds)]));
-      Exit(2);
-    end;
+    var RuleExit: Integer;
+    if LintRuleArgAnswered(AArgs, (AArgs.ProjectPath <> '') and (AArgs.Path = ''), RuleExit) then Exit(RuleExit);
   end;
   { D17: the rule this run NARROWS its checkers to -- AArgs.Rule, except '' for
     a review-marker-* rule (see LintNarrowRule). The report is still filtered to
@@ -24213,6 +24271,11 @@ var
   Findings   : TArray<TLintFinding> ;
   DefDisabled: TArray<string>       ;
 begin
+  if AArgs.Rule <> '' then
+  begin
+    var RuleExit: Integer;
+    if LintRuleArgAnswered(AArgs, False, RuleExit) then Exit(RuleExit);
+  end;
   if not FileExists(AArgs.DbPath) then
   begin
     Writeln(Format('Database not found: %s (pass --db <index.sqlite>)', [AArgs.DbPath]));
