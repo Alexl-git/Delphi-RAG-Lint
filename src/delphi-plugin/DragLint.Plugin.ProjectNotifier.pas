@@ -134,7 +134,7 @@ begin
   { v0.86: ACfgExePath is ignored in favor of the shared resolver -- its value
     came from the same Settings the shared unit already reads, and centralizing
     keeps ONE Win64-default policy for every spawn site. }
-  Result:= DragLintExe;
+  Result:= EngineExeOrEmpty;
 end;
 
 { ---- FileNotification ---- }
@@ -230,6 +230,7 @@ begin
   if DbPath = '' then DbPath:= ResolveDbPath(Cfg.DbPathTemplate, ProjDir, ProjName);
 
   ExePath:= ResolveExePath(Cfg.ExePath);
+  if ExePath = '' then Exit; { no usable engine: ENGINE_NOT_FOUND_MSG; nothing to spawn }
 
   { Post "indexing..." message to IDE Messages pane from main thread }
   TThread.Queue(

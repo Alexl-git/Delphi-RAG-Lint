@@ -5,7 +5,7 @@
   EnsureLspClient spawned the language server from its OWN copy of the exe lookup (win64 sibling,
   then the BPL dir, then PATH), so the Settings ExePath override that every other spawn site honours
   (DragLintExe) never reached the editor's server. Asserted, structurally:
-    1. inside the `if GLspClient = nil then` block, `ExePath:= DragLintExe` appears BEFORE any
+    1. inside the `if GLspClient = nil then` block, `ExePath:= DragLintExe` (1.44: EngineExeOrEmpty, the fail-closed wrapper) appears BEFORE any
        `FileExists(Win64Dir + ...)` lookup and before the server is started;
     2. the old lookup is only a fallback: it follows an `else` of the resolver branch;
     3. the shared resolver itself tries the Settings override FIRST (LoadSettings.ExePath before
@@ -39,7 +39,7 @@ Check 'the server-spawn block was located in Editor.pas' $spawn.Success
 $body = if ($spawn.Success) { $spawn.Groups['body'].Value } else { '' }
 
 function Has-ResolverFirst([string]$B) {
-  $r = [regex]::Match($B, 'ExePath\s*:=\s*DragLintExe\s*;')
+  $r = [regex]::Match($B, 'ExePath\s*:=\s*(?:DragLintExe|EngineExeOrEmpty)\s*;')
   $w = [regex]::Match($B, "FileExists\s*\(\s*Win64Dir")
   return ($r.Success -and $w.Success -and ($r.Index -lt $w.Index))
 }
@@ -51,7 +51,7 @@ $rb = if ($res.Success) { $res.Groups['b'].Value } else { '' }
 $iOv = $rb.IndexOf('LoadSettings.ExePath'); $iWin = $rb.IndexOf('dll-win64')
 Check '3. the shared resolver reads the Settings override before the dll-win64 sibling' (($iOv -ge 0) -and ($iWin -gt $iOv))
 
-$stripped = [regex]::Replace($body, 'ExePath\s*:=\s*DragLintExe\s*;', '')
+$stripped = [regex]::Replace($body, 'ExePath\s*:=\s*(?:DragLintExe|EngineExeOrEmpty)\s*;', '')
 Check '4. positive control: with the resolver line removed the test reports it absent' (-not (Has-ResolverFirst $stripped))
 
 if ($script:Failed) { Write-Host 'run_lsp_exe_resolver_wiring: FAIL' -ForegroundColor Red; exit 1 }

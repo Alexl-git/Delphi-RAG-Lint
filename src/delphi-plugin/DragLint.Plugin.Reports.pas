@@ -295,7 +295,7 @@ begin
     Exit;
   end;
   var Cmd: string:= Format('"%s" typeat "%s:%d:%d" --db "%s" --format json',
-    [DragLintExe, pInFile, pView.Position.Row, pView.Position.Column, Db]);
+    [EngineExeOrEmpty, pInFile, pView.Position.Row, pView.Position.Column, Db]);
   DebugLog('Reports: ' + Cmd);
   if GCaretRun = nil then GCaretRun:= TCliRunSlot.Create;
   GCaretRun.Start(Cmd, TYPEAT_TIMEOUT_MS,
@@ -414,9 +414,15 @@ begin
   if MessageDlg(Msg + sLineBreak + sLineBreak +
                 'Run the incremental reindex now, in the background? Ask the question again when it finishes.',
                 mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+  var Exe: string;
+  if not RequireEngine(Exe) then
+  begin
+    MessageDlg(ENGINE_NOT_FOUND_MSG, mtWarning, [mbOK], 0);
+    Exit;
+  end;
   for var Cmd: TReindexCommand in Cmds do
-    if Cmd.Kind = rikProject then JobQueue.Enqueue(BuildProjectIndexJob(DragLintExe, Cmd.ProjectFile, Cmd.Db, ''))
-    else JobQueue.Enqueue(SectionReindexJob(DragLintExe, Cmd.Section));
+    if Cmd.Kind = rikProject then JobQueue.Enqueue(BuildProjectIndexJob(Exe, Cmd.ProjectFile, Cmd.Db, ''))
+    else JobQueue.Enqueue(SectionReindexJob(Exe, Cmd.Section));
 end;
 
 procedure HandleReportDone(const pQuestionId, pTarget: string; pExit: Integer; const pOutput: string);
@@ -499,7 +505,7 @@ function ResolveRunTools(out pExe, pInFile: string): Boolean;
 var
   Problem: string;
 begin
-  pExe:= DragLintExe;
+  ResolveEngine(pExe);
   pInFile:= '';
   var View: IOTAEditView:= ActiveEditView;
   if View <> nil then pInFile:= View.Buffer.FileName;

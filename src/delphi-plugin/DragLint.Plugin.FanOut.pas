@@ -320,7 +320,7 @@ var
 begin
   ACtx:= Default(TRunContext);
   Result:= False;
-  ACtx.Target.Exe:= DragLintExe;
+  ACtx.Target.Exe:= EngineExeOrEmpty;
   if ACtx.Target.Exe = '' then Exit;
   ACtx.Target.UnitPath:= AUnitPath;
   ACtx.Target.Project := GetActiveProjectFilePath;

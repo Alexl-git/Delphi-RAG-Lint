@@ -44,6 +44,35 @@ interface
 /// </remarks>
 function DragLintExe: string;
 
+const
+  /// <summary>The one user-facing message every plugin site shows when no usable
+  /// engine exe resolves. Kept in one place so the wording cannot drift.</summary>
+  ENGINE_NOT_FOUND_MSG = 'drag-lint.exe not found -- check drag-lint Options.';
+
+/// <summary>Diagnostic twin of <see cref="RequireEngine"/>: same usability test, but
+/// pExe keeps the resolved path even when it is unusable so a message can name it
+/// ("not found at X").</summary>
+/// <param name="pExe">The resolved path (may be the degraded bare name).</param>
+/// <returns>True when pExe exists on disk or is the bare name found on PATH.</returns>
+/// <remarks>Display/diagnostic sites only; a site that spawns must use RequireEngine.</remarks>
+function ResolveEngine(out pExe: string): Boolean;
+
+/// <summary>Fail-closed twin of <see cref="DragLintExe"/>: resolves the engine and/// proves it is usable before a site spawns it.</summary>
+/// <param name="pExe">The resolved exe on success; '' on failure.</param>
+/// <returns>True when the resolved exe exists on disk or, for the degraded bare
+/// name, is found on PATH. False when nothing usable resolves (the caller shows
+/// <see cref="ENGINE_NOT_FOUND_MSG"/> or skips the spawn).</returns>
+/// <remarks>Same thread-safety as DragLintExe. Every plugin spawn site must use
+/// this or <see cref="EngineExeOrEmpty"/>, never DragLintExe directly
+/// (guard: tests\plugin\run_draglintexe_guarded.ps1).</remarks>
+function RequireEngine(out pExe: string): Boolean;
+
+/// <summary>Wrapper form of <see cref="RequireEngine"/> for sites that build a
+/// command string.</summary>
+/// <returns>The usable engine exe, or '' when none resolves; callers must treat ''
+/// as "engine not found" and not spawn.</returns>
+function EngineExeOrEmpty: string;
+
 implementation
 
 uses
@@ -127,6 +156,23 @@ begin
   Result:= 'drag-lint.exe';
   LogOnce('BARE-NAME -- NO Win64 ENGINE FOUND. PATH decides, and PATH has been '
         + 'wrong before. Expect implausible results', Result);
+end;
+
+function ResolveEngine(out pExe: string): Boolean;
+begin
+  pExe:= DragLintExe;
+  Result:= (pExe <> '') and (FileExists(pExe)
+    or ((ExtractFilePath(pExe) = '') and (FileSearch(pExe, GetEnvironmentVariable('PATH')) <> '')));
+end;
+
+function RequireEngine(out pExe: string): Boolean;
+begin
+  Result:= ResolveEngine(pExe);
+  if not Result then pExe:= '';
+end;
+function EngineExeOrEmpty: string;
+begin
+  RequireEngine(Result);
 end;
 
 initialization

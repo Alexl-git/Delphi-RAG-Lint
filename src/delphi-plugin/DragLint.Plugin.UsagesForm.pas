@@ -54,8 +54,8 @@ var
   Age    : TDateTime;
 begin
   ModName:= GetModuleName(HInstance);
-  if (ModName <> '') and FileAge(ModName, Age) then Result:= 'v1.1.0-alpha (BPL built ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Age) + ')'
-  else Result:= 'v1.1.0-alpha';
+  Result:= if (ModName <> '') and FileAge(ModName, Age) then 'v1.43.0-alpha (BPL built ' + FormatDateTime('yyyy-mm-dd hh:nn:ss', Age) + ')'
+    else 'v1.43.0-alpha';
 end;
 
 { ---- TUsageNodeData: stores file + line in tree node.Data ---- }
@@ -752,7 +752,7 @@ var
   Dbs: TArray<string>;
 begin
   if (ASym = '') or (FUsages = nil) then Exit;
-  Exe:= DragLintExe;
+  if not RequireEngine(Exe) then Exit;
   Dbs:= ResolveActiveIndexDbs(LoadSettings);
   FUsages.SetWidth(CurrentWidth); { set width before the query }
   FUsages.LoadUsages(ASym, Exe, Dbs);

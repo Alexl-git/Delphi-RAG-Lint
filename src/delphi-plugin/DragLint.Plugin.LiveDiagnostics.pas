@@ -980,7 +980,13 @@ begin
     { v0.86: shared resolver -- Win64 build beside the BPL by default (kept
       current with the plugin, like the LSP client), Settings.ExePath override
       still wins if the user set one, PATH as last resort. }
-    Exe:= DragLintExe;
+    Exe:= EngineExeOrEmpty;
+    if Exe = '' then
+    begin
+      FDirty:= False;
+      LiveLog(ENGINE_NOT_FOUND_MSG);
+      Exit;
+    end;
 
     Tmp:= TPath.Combine(TPath.GetTempPath, Format('drag-lint-live-%d.pas', [GetTickCount]));
     Bytes:= TEncoding.UTF8.GetBytes(BufText);

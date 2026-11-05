@@ -216,7 +216,7 @@ end;
 
 function DLExtractMethodExe: string;
 begin
-  Result:= DragLintExe;
+  Result:= EngineExeOrEmpty;
 end;
 
 /// <summary>Ctrl+Alt+M handler. Reads the active IOTAEditView's non-empty
@@ -280,6 +280,11 @@ begin
   if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
 
   ExePath:= DLExtractMethodExe;
+  if ExePath = '' then
+  begin
+    ShowMessage('drag-lint: ' + ENGINE_NOT_FOUND_MSG);
+    Exit;
+  end;
 
   Applied:= ShowExtractMethodDialog(FilePath, FromLine, ToLine, ExePath);
 

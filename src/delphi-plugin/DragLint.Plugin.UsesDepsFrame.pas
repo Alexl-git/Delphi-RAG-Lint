@@ -398,7 +398,7 @@ var
   Exe: string;
 begin
   ACmdLine:= '';
-  Exe:= DragLintExe;
+  Exe:= EngineExeOrEmpty;
   Result:= (Exe <> '') and FileExists(Exe);
   if Result then ACmdLine:= Format('"%s" %s', [Exe, AArgs]);
 end;
@@ -1040,7 +1040,7 @@ begin
     Report(Scope.Problem);
     Exit;
   end;
-  Exe:= DragLintExe;
+  Exe:= EngineExeOrEmpty;
   if (Exe = '') or not FileExists(Exe) then
   begin
     Report('drag-lint.exe not found -- check drag-lint Options.');
