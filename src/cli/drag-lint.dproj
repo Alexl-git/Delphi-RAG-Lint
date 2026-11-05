@@ -139,6 +139,7 @@
         <DCCReference Include="..\query\DRagLint.Query.IdentWords.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.Callers.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.Implementors.pas"/>
+        <DCCReference Include="..\query\DRagLint.Query.CrossImpact.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.SyntaxCount.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.SyntaxCountVerb.pas"/>
         <DCCReference Include="..\query\DRagLint.Query.HoverModel.pas"/>

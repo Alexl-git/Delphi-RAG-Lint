@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "impact",
-      "usage": "drag-lint impact --qname <Foo.Bar> [--db <file.sqlite>] [--depth N] [--format text|json]",
+      "usage": "drag-lint impact --qname <Foo.Bar> [--db <file.sqlite> | --all-projects [--platform win32|win64] [--config <manifest>]] [--depth N] [--format text|json]",
       "flags": [
         {
           "name": "--qname",
@@ -33,10 +33,21 @@
         },
         {
           "name": "--format"
+        },
+        {
+          "name": "--all-projects"
+        },
+        {
+          "name": "--platform",
+          "arg": "win32|win64"
+        },
+        {
+          "name": "--config",
+          "arg": "<manifest>"
         }
       ],
       "helpOrder": 35,
-      "help": ["  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]", "                               an interface method also lists its implementors; an implementor, the interface sites reaching it", "                               --format json: \"implementors\" [QName,...] and \"via_dispatch\" [{via,kind,sites}] (keys present only when non-empty; RB-5)"]
+      "help": ["  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite> | --all-projects [--platform win32|win64] [--config <manifest>]] [--depth N] [--format text|json]", "                               an interface method also lists its implementors; an implementor, the interface sites reaching it", "                               --format json: \"implementors\" [QName,...] and \"via_dispatch\" [{via,kind,sites}] (keys present only when non-empty; RB-5)", "                               --all-projects: asks every database the manifest names instead of one (--db is refused). A project DB answers callers and implementors, a library declarations only; a section with no DB, an old schema or an unreadable file is a line of its own with its repair command, and so is a stale one", "                               --format json with --all-projects: {qname,depth,platform,complete,found,declarations[],sections[{name,kind,db,state,repair,stale_files,target_declared,by_name_refs,levels[],implementors[{qname,edge}],via_dispatch[]}],summary}; exit 0 found, 1 found nowhere, 2 --db given or the manifest did not load. complete covers manifest sections only; a project the manifest does not name is not seen"]
     }
   ],
   "audience": "both",
@@ -48,12 +59,16 @@
     {
       "ask": "How far should the impact search reach?",
       "command": "drag-lint impact --qname <Foo.Bar> --depth N"
+    },
+    {
+      "ask": "What would changing this symbol touch in my other projects?",
+      "command": "drag-lint impact --qname <Foo.Bar> --all-projects"
     }
   ],
   "verified": {
-    "date": "2026-10-28",
+    "date": "2026-11-05",
     "by": "ENGINE",
-    "build": "1.36.0-alpha",
-    "surfaceHash": "9ff33aa762b192d127f29364855c7f133a588b606981cb87302133bc1c2e2e99"
+    "build": "1.42.0-alpha",
+    "surfaceHash": "30066e3560381b5f69f5b39ce4a8422d082ef51f66ddd3f15a12a4718b8aca22"
   }
 }
