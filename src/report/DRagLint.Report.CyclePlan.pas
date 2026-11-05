@@ -2367,11 +2367,11 @@ begin
     for var Fid in pItem.CutFids do
     begin
       var F:= GetFile(Fid);
+      var Starts:= CodeStarts(F.Lines);  { B11: a string or a comment naming the class stays as written }
       for var I:= 1 to Length(F.Lines) do
       begin
         var Line:= F.Lines[I - 1];
-        if IsCommentOnly(Line) then Continue;
-        var Code:= CodePart(Line);
+        var Code:= CodeOf(Line, Starts[I - 1]);
         if not TRegEx.IsMatch(Code, '\b' + pItem.Sym.Name + '\b', [roIgnoreCase]) then Continue;
         if TRegEx.IsMatch(Code, '\b' + pItem.Sym.Name + '\s*\.', [roIgnoreCase]) then
         begin
@@ -2381,8 +2381,7 @@ begin
         end;
         SL.Fid    := Fid;
         SL.Line   := I;
-        SL.NewText:= TRegEx.Replace(Code, '\b' + pItem.Sym.Name + '\b', pItem.BaseName, [roIgnoreCase]) +
-          Copy(Line, Length(Code) + 1, MaxInt);
+        SL.NewText:= ReplaceInCode(Line, Starts[I - 1], '\b' + pItem.Sym.Name + '\b', pItem.BaseName);
         L.Add(SL);
       end;
     end;
@@ -2497,7 +2496,7 @@ begin
       Fields:= Fields + [Field];
       Continue;
     end;
-    for var M in TRegEx.Matches(CodePart(LineAt(F.Lines, S.Line)), '\b' + pItem.Sym.Name + '\b', [roIgnoreCase]) do
+    for var M in TRegEx.Matches(CodeOf(LineAt(F.Lines, S.Line), csCode), '\b' + pItem.Sym.Name + '\b', [roIgnoreCase]) do
       case TypeSiteAt(F.Lines, S.Line, M.Index, Param) of
         tsOther: if ObjSlotAt(pItem, S.Fid, S.Line, M.Index, Slot) then Slots:= Slots + [Slot];
         tsParam:
@@ -2521,7 +2520,7 @@ begin
   begin
     var F   := GetFile(S.Fid);
     var Site:= Format('`%s:%d`', [ExtractFileName(F.Path), S.Line]);
-    for var M in TRegEx.Matches(CodePart(LineAt(F.Lines, S.Line)), '\b' + pItem.Sym.Name + '\b', [roIgnoreCase]) do
+    for var M in TRegEx.Matches(CodeOf(LineAt(F.Lines, S.Line), csCode), '\b' + pItem.Sym.Name + '\b', [roIgnoreCase]) do
     begin
       case TypeSiteAt(F.Lines, S.Line, M.Index, Param) of
         tsResult: Exit(Format('%s: a function result of type `%s`', [Site, pItem.Sym.Name]));
@@ -2529,8 +2528,8 @@ begin
           begin
             var Why:= FieldSiteRefusal(pItem, S.Fid, S.Line, Field, SlotNames(Slots, -1));
             if (Field = '') and ObjSlotAt(pItem, S.Fid, S.Line, M.Index, Slot) then Why:= ObjSlotRefusal(pItem, Slot, Fields, Slots)
-            else if (Field = '') and IsListCreation(CodePart(LineAt(F.Lines, S.Line)), pItem.Sym.Name, Fields) then Continue
-            else if (Field = '') and ClassTestSiteOk(CodePart(LineAt(F.Lines, S.Line)), M.Index, M.Length, pItem) then Continue
+            else if (Field = '') and IsListCreation(CodeOf(LineAt(F.Lines, S.Line), csCode), pItem.Sym.Name, Fields) then Continue
+            else if (Field = '') and ClassTestSiteOk(CodeOf(LineAt(F.Lines, S.Line), csCode), M.Index, M.Length, pItem) then Continue
             else if Field = '' then
               Exit(Format('%s: `%s` is used here as something other than a parameter type (a field, ' +
                 'variable, cast or type argument)', [Site, pItem.Sym.Name]));
@@ -2963,7 +2962,7 @@ begin
   end;
 end;
 
-function CodeOnly(const pLine: string; var pInBrace, pInParen: Boolean): string; forward;
+
 
 { Lane cyc4 (D1): one leaf per source stem is F2047 again when the moved declarations of two stems need each
   other (the leaves would use each other in their interfaces). Stems that form a cycle over those needs share
@@ -3506,50 +3505,6 @@ type
     Line: Integer;
   end;
 
-{ A3-a: pLine with every comment (brace and paren-star comments, which may span lines -- the open
-  state is carried in pInBrace / pInParen -- and `//`), compiler directive and string literal blanked
-  to spaces, so only code is left. }
-function CodeOnly(const pLine: string; var pInBrace, pInParen: Boolean): string;
-const
-  CPairLen = 2;
-var
-  I: Integer;
-begin
-  Result:= pLine;
-  I:= 1;
-  while I <= Length(Result) do
-  begin
-    var Pair:= Copy(Result, I, CPairLen);
-    var Opens:= (not pInBrace) and (not pInParen) and ((Result[I] = '{') or (Pair = '(*'));
-    if Opens then
-    begin
-      pInBrace:= Result[I] = '{';
-      pInParen:= not pInBrace;
-    end;
-    if (not pInBrace) and (not pInParen) and (Pair = '//') then
-      Exit(Copy(Result, 1, I - 1));
-    if (not pInBrace) and (not pInParen) and (Result[I] = '''') then
-    begin
-      var J:= PosEx('''', Result, I + 1);
-      if J = 0 then J:= Length(Result);
-      for var K:= I to J do Result[K]:= ' ';
-      I:= J + 1;
-      Continue;
-    end;
-    if pInBrace or pInParen then
-    begin
-      var Closes:= (pInBrace and (Result[I] = '}')) or (pInParen and (Pair = '*)') and not Opens);
-      if pInParen and Closes then Result[I + 1]:= ' ';
-      if Closes then
-      begin
-        pInBrace:= False;
-        pInParen:= False;
-      end;
-      Result[I]:= ' ';
-    end;
-    Inc(I);
-  end;
-end;
 
 { A3-a: every identifier of lines pFirst..pLast (1-based) in code (CodeOnly); a dotted name gives
   each of its segments; the unit names of a `uses ... ;` clause are skipped (they name units, not
