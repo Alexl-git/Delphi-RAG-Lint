@@ -590,6 +590,61 @@ function BareUsesBinding(const pBare: string; const pScopes: TArray<string>;
 /// program or package, or no .dproj sits beside it.</returns>
 function ProjectUnitScopes(const pStore: ISymbolStore): TArray<string>;
 
+type
+  /// <summary>B11: what is open where a source line starts.</summary>
+  TCodeStart = (csCode, csInBrace, csInParen);
+
+/// <summary>pLine with every comment (brace and paren-star, which may span lines; `//`), compiler
+/// directive and string literal blanked to spaces, so only code is left. Columns are unchanged; the
+/// result stops where a `//` comment starts.</summary>
+/// <param name="pLine">One source line.</param>
+/// <param name="pInBrace">In and out: a brace comment is open at the start / end of the line.</param>
+/// <param name="pInParen">In and out: a paren-star comment is open at the start / end of the line.</param>
+/// <returns>The code of the line, column-faithful to pLine.</returns>
+function CodeOnly(const pLine: string; var pInBrace, pInParen: Boolean): string;
+
+/// <summary>B11: what is open at the start of each line of a file.</summary>
+/// <param name="pLines">The file.</param>
+/// <returns>One TCodeStart per line.</returns>
+function CodeStarts(const pLines: TArray<string>): TArray<TCodeStart>;
+
+/// <summary>B11: the code of pLine (CodeOnly) from the start state pStart.</summary>
+/// <param name="pLine">The line.</param>
+/// <param name="pStart">What is open at its start (CodeStarts).</param>
+/// <returns>The code of the line, column-faithful to pLine.</returns>
+function CodeOf(const pLine: string; pStart: TCodeStart): string;
+
+/// <summary>B11: pLine with pPattern replaced in its CODE only (case-insensitive): a string literal
+/// or a comment that spells the same name stays byte-identical. pWith may name groups (`$1`).</summary>
+/// <param name="pLine">The line, possibly rewritten already; it starts in the state pStart.</param>
+/// <param name="pStart">What is open at its start (CodeStarts).</param>
+/// <param name="pPattern">The regular expression, matched against the code of the line.</param>
+/// <param name="pWith">The replacement.</param>
+/// <returns>The rewritten line.</returns>
+function ReplaceInCode(const pLine: string; pStart: TCodeStart; const pPattern, pWith: string): string;
+
+/// <summary>Why a pointer call at pRef may run before the declaring unit assigned the pointer: the
+/// line is in the initialization section of its unit, or that section names the routine holding it.</summary>
+/// <param name="pLines">The consumer's lines.</param>
+/// <param name="pRef">The call: its Line and Enclosing are read.</param>
+/// <param name="pUnit">The consumer's name, for the text.</param>
+/// <returns>'' when no such order problem is seen.</returns>
+function InitOrderWhy(const pLines: TArray<string>; const pRef: TEdgeRef; const pUnit: string): string;
+
+/// <summary>The declaring unit's edit: pAssigns as the first statements of its initialization
+/// section, creating the section when there is none.</summary>
+/// <param name="pLines">The declaring unit's lines.</param>
+/// <param name="pFid">Its file id.</param>
+/// <param name="pAssigns">The statements, indented.</param>
+/// <param name="pEdit">The edit. Replace is True only when the final `end.` line is rewritten.</param>
+/// <returns>False when the unit has no final `end.`, `initialization` or `finalization` line.</returns>
+function AssignmentEdit(const pLines: TArray<string>; pFid: Int64; const pAssigns: TArray<string>; out pEdit: TRecipeEdit): Boolean;
+
+/// <summary>Whether pName is a System type every unit sees without a uses entry.</summary>
+/// <param name="pName">A bare type name.</param>
+/// <returns>True for a built-in (Integer, string, TObject, TClass ...).</returns>
+function IsBuiltinTypeName(const pName: string): Boolean;
+
 implementation
 
 uses
@@ -614,6 +669,11 @@ const
   CDeclStartWords        = ' function procedure constructor destructor class operator type var const threadvar ' +
     'resourcestring label begin asm implementation interface initialization finalization exports uses ' +
     'property end strict private protected public published ';  { a routine declaration and its directives span at most this many lines }
+
+function IsBuiltinTypeName(const pName: string): Boolean;
+begin
+  Result:= ContainsText(CBuiltinTypes, ' ' + pName + ' ');
+end;
 
 function StemOfPath(const pPath: string): string;
 begin
@@ -1215,6 +1275,84 @@ begin
   end;
 end;
 
+function CodeOnly(const pLine: string; var pInBrace, pInParen: Boolean): string;
+const
+  CPairLen = 2;
+var
+  I: Integer;
+begin
+  Result:= pLine;
+  I:= 1;
+  while I <= Length(Result) do
+  begin
+    var Pair:= Copy(Result, I, CPairLen);
+    var Opens:= (not pInBrace) and (not pInParen) and ((Result[I] = '{') or (Pair = '(*'));
+    if Opens then
+    begin
+      pInBrace:= Result[I] = '{';
+      pInParen:= not pInBrace;
+    end;
+    if (not pInBrace) and (not pInParen) and (Pair = '//') then
+      Exit(Copy(Result, 1, I - 1));
+    if (not pInBrace) and (not pInParen) and (Result[I] = '''') then
+    begin
+      var J:= PosEx('''', Result, I + 1);
+      if J = 0 then J:= Length(Result);
+      for var K:= I to J do Result[K]:= ' ';
+      I:= J + 1;
+      Continue;
+    end;
+    if pInBrace or pInParen then
+    begin
+      var Closes:= (pInBrace and (Result[I] = '}')) or (pInParen and (Pair = '*)') and not Opens);
+      if pInParen and Closes then Result[I + 1]:= ' ';
+      if Closes then
+      begin
+        pInBrace:= False;
+        pInParen:= False;
+      end;
+      Result[I]:= ' ';
+    end;
+    Inc(I);
+  end;
+end;
+
+function CodeStarts(const pLines: TArray<string>): TArray<TCodeStart>;
+begin
+  SetLength(Result, Length(pLines));
+  var InBrace:= False;
+  var InParen:= False;
+  for var I:= 0 to High(pLines) do
+  begin
+    Result[I]:= if InBrace then csInBrace else if InParen then csInParen else csCode;
+    CodeOnly(pLines[I], InBrace, InParen);
+  end;
+end;
+
+function CodeOf(const pLine: string; pStart: TCodeStart): string;
+begin
+  var InBrace:= pStart = csInBrace;
+  var InParen:= pStart = csInParen;
+  Result:= CodeOnly(pLine, InBrace, InParen);
+end;
+
+function ReplaceInCode(const pLine: string; pStart: TCodeStart; const pPattern, pWith: string): string;
+begin
+  Result:= pLine;
+  var Ms:= TRegEx.Matches(CodeOf(pLine, pStart), pPattern, [roIgnoreCase]);
+  for var I:= Ms.Count - 1 downto 0 do
+  begin
+    var Text:= if ContainsStr(pWith, '$1') then pWith.Replace('$1', Ms[I].Groups[1].Value) else pWith;
+    Result:= Copy(Result, 1, Ms[I].Index - 1) + Text + Copy(Result, Ms[I].Index + Ms[I].Length, MaxInt);
+  end;
+end;
+
+{ The start state of 1-based line pLine; csCode past either end of the file. }
+function StartAt(const pStarts: TArray<TCodeStart>; pLine: Integer): TCodeStart;
+begin
+  Result:= if InRange(pLine, 1, Length(pStarts)) then pStarts[pLine - 1] else csCode;
+end;
+
 { J4, conservative: the call runs in the consumer's initialization section, or
   that section names the routine that holds the call (as code: a comment naming it is not a use).
   Lane cyc4: the section ends at `finalization`: code there runs long after every initialization, so
@@ -1766,6 +1904,7 @@ begin
     Qualified.Sort;
     var QualRx:= '(?<![\w.@])' + TRegEx.Escape(ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(DeclFid)), '')).Replace('\.',
       '\s*\.\s*') + '\s*\.\s*' + TRegEx.Escape(Name) + '\b';
+    var Starts:= CodeStarts(Lines);  { B11: a string or a comment naming the routine stays as written }
     for var L in Qualified do
     begin
       if Done.Contains(L) then Continue;
@@ -1774,8 +1913,8 @@ begin
       E.Fid     := FromFid;
       E.Line    := L;
       E.Replace := True;
-      E.NewLines:= [TRegEx.Replace(TRegEx.Replace(LineOf(Lines, L), QualRx, Result.PtrVar, [roIgnoreCase]),
-        '(?<![\w.])' + TRegEx.Escape(Name) + '\b', Result.PtrVar, [roIgnoreCase])];
+      E.NewLines:= [ReplaceInCode(ReplaceInCode(LineOf(Lines, L), StartAt(Starts, L), QualRx, Result.PtrVar),
+        StartAt(Starts, L), '(?<![\w.])' + TRegEx.Escape(Name) + '\b', Result.PtrVar)];
       Edits.Add(E);
     end;
     if not AssignmentEdit(pSource.FileLines(DeclFid), DeclFid, [Format('  %s := %s;', [Result.PtrVar, Name])], E) then
@@ -1881,12 +2020,13 @@ begin
     var UnitRx:= TRegEx.Escape(ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(DeclFid)), '')).Replace('\.',
       '\s*\.\s*') + '\s*\.\s*';
     Lines.Sort;
+    var Starts:= CodeStarts(FromLines);  { B11: as PlanRoutineInversion }
     for var L in Lines do
     begin
       var Text:= LineOf(FromLines, L);
       for var R in Result.Routines do
-        Text:= TRegEx.Replace(TRegEx.Replace(Text, '(?<![\w.@])' + UnitRx + TRegEx.Escape(R.Name) + '\b', R.PtrVar,
-          [roIgnoreCase]), '(?<![\w.])' + TRegEx.Escape(R.Name) + '\b', R.PtrVar, [roIgnoreCase]);
+        Text:= ReplaceInCode(ReplaceInCode(Text, StartAt(Starts, L), '(?<![\w.@])' + UnitRx + TRegEx.Escape(R.Name) + '\b',
+          R.PtrVar), StartAt(Starts, L), '(?<![\w.])' + TRegEx.Escape(R.Name) + '\b', R.PtrVar);
       E:= Default(TRecipeEdit);
       E.Fid     := Result.ConsumerFid;
       E.Line    := L;
@@ -2513,6 +2653,7 @@ type
     FFromFid : Int64;
     FClsFid  : Int64;
     FLines   : TArray<string>;
+    FStarts  : TArray<TCodeStart>;  // B11: of FLines, on first use (StartOf)
     FClsLines: TArray<string>;
     FCls     : TSymbol;
     FIface   : string;
@@ -2540,6 +2681,7 @@ type
     function CheckMethodMentions: Boolean;
     function Refuse(const pKind, pSymbol: string; pFid: Int64; pLine: Integer; const pReason: string): Boolean;
     function Stored(const pSym: TSymbol): TStoredType;
+    function StartOf(pLine: Integer): TCodeStart;
     function RefRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
     function HardCastWhat(const pR: TEdgeRef; const pCls: TSymbol): string;
     function GuardedBefore(const pX: string; pEnclosing: Int64; pLine: Integer): Boolean;
@@ -2655,6 +2797,12 @@ function TMemberPlan.Refuse(const pKind, pSymbol: string; pFid: Int64; pLine: In
 begin
   FRefusal:= MakeRefusal(pKind, pSymbol, pFid, pLine, pReason);
   Result  := False;
+end;
+
+function TMemberPlan.StartOf(pLine: Integer): TCodeStart;
+begin
+  if FStarts = nil then FStarts:= CodeStarts(FLines);
+  Result:= StartAt(FStarts, pLine);
 end;
 
 function TMemberPlan.Stored(const pSym: TSymbol): TStoredType;
@@ -2896,8 +3044,8 @@ begin
       if Why <> '' then
         Exit(Refuse('type-decl', Local.Name, FFromFid, Line, Format('line %d %s; the local `%s` declared at line %d ' +
           'can become `%s` only when the interface carries every use', [Line, Why, Local.Name, R.Line, FIface])));
-      AddEdit(FFromFid, R.Line, True, [TRegEx.Replace(LineOf(FLines, R.Line), ':\s*' + TRegEx.Escape(FCls.Name) +
-        '\b', ': ' + FIface, [roIgnoreCase])]);
+      AddEdit(FFromFid, R.Line, True, [ReplaceInCode(LineOf(FLines, R.Line), StartOf(R.Line), ':\s*' +
+        TRegEx.Escape(FCls.Name) + '\b', ': ' + FIface)]);
     end;
   finally
     Done.Free;
@@ -3357,14 +3505,14 @@ var
   Ty: string;
 begin
   var C:= TRegEx.Escape(FCls.Name);
+  var St:= StartOf(pLine);  { B11: only code is rewritten; a string or a comment that spells it stays as written }
   pText:= LineOf(FLines, pLine);
-  pText:= TRegEx.Replace(pText, '\(\s*([A-Za-z_][\w.]*)\s+is\s+' + C + '\s*\)', 'Supports($1, ' + FIface + ')', [roIgnoreCase]);
-  pText:= TRegEx.Replace(pText, '(?<![\w.)\]])([A-Za-z_][\w.]*)\s+is\s+' + C + '\b', 'Supports($1, ' + FIface + ')',
-    [roIgnoreCase]);
-  if ContainsStr(pText, 'Supports(') and not ConsumerSees(CSysUtilsUnit) then FUses.Add(CSysUtilsUnit);
+  pText:= ReplaceInCode(pText, St, '\(\s*([A-Za-z_][\w.]*)\s+is\s+' + C + '\s*\)', 'Supports($1, ' + FIface + ')');
+  pText:= ReplaceInCode(pText, St, '(?<![\w.)\]])([A-Za-z_][\w.]*)\s+is\s+' + C + '\b', 'Supports($1, ' + FIface + ')');
+  if ContainsStr(CodeOf(pText, St), 'Supports(') and not ConsumerSees(CSysUtilsUnit) then FUses.Add(CSysUtilsUnit);
   while True do
   begin
-    var M:= TRegEx.Match(pText, '(?<![\w.)\]])([A-Za-z_]\w*)\s+as\s+' + C + '\b', [roIgnoreCase]);
+    var M:= TRegEx.Match(CodeOf(pText, St), '(?<![\w.)\]])([A-Za-z_]\w*)\s+as\s+' + C + '\b', [roIgnoreCase]);
     if not M.Success then Break;
     var X:= M.Groups[1].Value;
     var Known:= ReceiverType(X, pEnclosing, Ty);
@@ -3385,7 +3533,7 @@ begin
     when X's static type lacks it; a wrong cast now raises EIntfCastError instead of reading garbage }
   while True do
   begin
-    var M:= TRegEx.Match(pText, '(?<![\w.])' + C + '\s*\(\s*([A-Za-z_]\w*)\s*\)\s*(?=\.)', [roIgnoreCase]);
+    var M:= TRegEx.Match(CodeOf(pText, St), '(?<![\w.])' + C + '\s*\(\s*([A-Za-z_]\w*)\s*\)\s*(?=\.)', [roIgnoreCase]);
     if not M.Success then Break;
     var X:= M.Groups[1].Value;
     var Known:= ReceiverType(X, pEnclosing, Ty);
@@ -3401,7 +3549,7 @@ begin
     end;
     pText:= Copy(pText, 1, M.Index - 1) + Repl + Copy(pText, M.Index + M.Length, MaxInt);
   end;
-  if TRegEx.IsMatch(PlainCode(pText), '\b' + C + '\b', [roIgnoreCase]) then
+  if TRegEx.IsMatch(CodeOf(pText, St), '\b' + C + '\b', [roIgnoreCase]) then
     Exit(Refuse('receiver-unknown', FCls.Name, FFromFid, pLine, Format('line %d still names `%s` after the rewrite ' +
       '(`%s`): an `is` / `as` operand that is not a plain name', [pLine, FCls.Name, Trim(pText)])));
   Result:= True;
