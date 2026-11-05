@@ -1870,6 +1870,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function FileIndexedFingerprint(const AFilePath: string): string;
+      /// <summary>Counts the indexed files a walk under AFingerprint has not parsed.</summary>
+      /// <param name="AFingerprint">The fingerprint to compare each file's stamp with.</param>
+      /// <returns>Files whose indexed_at_fingerprint differs from AFingerprint, NULL included.</returns>
+      /// <remarks>Implements: DRagLint.Core.Interfaces.ISymbolStore.CountFilesNotStampedWith</remarks>
+      function CountFilesNotStampedWith(const AFingerprint: string): Int64;
       /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -9304,6 +9309,22 @@ begin
     Q.ParamByName('p').AsWideString:= NormalizeStoredPath(AFilePath);
     Q.Open;
     if (not Q.IsEmpty) and (not Q.Fields[0].IsNull) then Result:= Q.Fields[0].AsString;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TSQLiteSymbolStore.CountFilesNotStampedWith(const AFingerprint: string): Int64;
+var
+  Q: TFDQuery;
+begin
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= FConn;
+    Q.SQL.Text:= 'SELECT count(*) FROM files WHERE indexed_at_fingerprint IS NULL OR indexed_at_fingerprint <> :fp';
+    Q.ParamByName('fp').AsWideString:= AFingerprint;
+    Q.Open;
+    Result:= Q.Fields[0].AsLargeInt;
   finally
     Q.Free;
   end;

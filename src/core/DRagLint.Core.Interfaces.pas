@@ -478,6 +478,12 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FileIndexedFingerprint(const AFilePath: string): string;
+    /// <summary>Counts the indexed files a walk under AFingerprint has not parsed.</summary>
+    /// <param name="AFingerprint">The fingerprint to compare each file's stamp with.</param>
+    /// <returns>Files whose indexed_at_fingerprint differs from AFingerprint; a NULL
+    /// stamp counts, because it means "unknown -- re-parse it".</returns>
+    /// <remarks>Read-only. Not thread-safe; call from the owning thread only.</remarks>
+    function CountFilesNotStampedWith(const AFingerprint: string): Int64;
     /// <param name="AToken"><!-- drag-lint:auto type -->const TFileTxToken</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->

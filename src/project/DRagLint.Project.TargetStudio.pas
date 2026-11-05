@@ -9,13 +9,11 @@ unit DRagLint.Project.TargetStudio;
   ONE MAPPING. BdsKeyOfCompilerVersion inverts CompilerVersionOfStudioRoot by
   asking it, so the BDS offset stays in Preprocess.Profile alone.
 
-  WHY THE TAIL IS NOT IN TClosureResolver. Reading the right key is not enough: the
-  closure only ever used library paths to EXCLUDE, so a unit on a path and on no
-  project search path stayed unreachable under any key. Searching the path belongs
-  in TClosureResolver, but src\index is extractor-hashed and no bump is allowed in
-  1.42 wave 2 (ledger NEXT-BUMP: GH13-CLOSURE-TAIL). So ResolveTargetClosure asks
-  the same resolver a second question about a shadow project; there is one closure
-  walk, one uses scanner and one preprocess path. }
+  THE TAIL. Reading the right key is not enough: the closure once used library paths
+  only to EXCLUDE, so a unit on a path and on no project search path stayed unreachable
+  under any key. TClosureResolver.SetLibraryTail searches it, in one walk over the real
+  project (1.43; 1.42 asked the resolver a second question about a temp shadow project
+  because src\index could not change then). }
 
 interface
 
@@ -72,12 +70,11 @@ function ResolveTargetStudio(const pProjectFile: string): TTargetStudio;
 /// <param name="pProjectFile">The .dproj, .dpr or .dpk.</param>
 /// <param name="pExclude">Exclude globs, as TClosureResolver.Resolve takes them.</param>
 /// <param name="pTail">TProjectResolver.ClosureSearchTail; nil for the plain closure.</param>
-/// <returns>TClosureResolver.Resolve's result, plus every unit (and its includes)
-/// reachable through the tail, appended in discovery order.</returns>
+/// <returns>TClosureResolver.Resolve's result; a unit found through the tail appears
+/// where the walk met it, and Result.SearchPaths ends with the tail.</returns>
 /// <exception cref="Exception">As TClosureResolver.Resolve when the project file
 /// does not exist.</exception>
-/// <remarks>Nil tail: a plain Resolve, nothing else runs. Otherwise writes and removes
-/// a shadow project under the temp folder; the project's own folder is untouched.</remarks>
+/// <remarks>Sets pTail on pClosure, replacing any earlier tail. Writes nothing to disk.</remarks>
 function ResolveTargetClosure(pClosure: TClosureResolver; const pProjectFile: string;
   const pExclude, pTail: TArray<string>): TClosureResult;
 
@@ -85,11 +82,6 @@ implementation
 
 uses
   System.SysUtils
-  , System.StrUtils
-  , System.IOUtils
-  , System.Classes
-  , System.RegularExpressions
-  , System.Generics.Collections
   , DRagLint.Lint.TargetCompiler  // dl:ok uses-global-census@d7c5 -- REVIEWED 2026-11-04: TARGET_COMPILER_AUTO is the token of the resolver call this unit makes
   , DRagLint.Preprocess.Profile
   ;
@@ -156,84 +148,11 @@ begin
       [Result.TargetName, Result.RequestedBds, DEFAULT_BDS_KEY]);
 end;
 
-{ The project's main source with every relative `in '...'` made absolute, so a
-  unit named that way is not found again under another folder by name. This is a
-  text scan: it also meets `in '` inside a string or comment, where the "path" runs
-  to whatever quote comes next. A literal cannot span lines, and text that cannot be
-  a path stays as it is -- only the quotes matter to the closure walk that reads the
-  copy, so a false match that survives the filter costs nothing. }
-function ShadowMainSource(const pSource: string): string;
-var
-  BaseDir: string;
-  Matches: TMatchCollection;
-begin
-  Result:= TFile.ReadAllText(pSource);
-  BaseDir:= ExtractFilePath(pSource);
-  Matches:= TRegEx.Matches(Result, '\bin\s+''([^''\r\n]+)''', [roIgnoreCase]);
-  for var Idx: Integer:= Matches.Count - 1 downto 0 do
-  begin
-    var Group: TGroup:= Matches[Idx].Groups[1];
-    if IsUsablePathText(Group.Value) and not TPath.IsPathRooted(Group.Value) then
-      Result:= Copy(Result, 1, Group.Index - 1) + TPath.Combine(BaseDir, Group.Value) +
-        Copy(Result, Group.Index + Group.Length, MaxInt);
-  end;
-end;
-
 function ResolveTargetClosure(pClosure: TClosureResolver; const pProjectFile: string;
   const pExclude, pTail: TArray<string>): TClosureResult;
-const
-  SHADOW_NAME = 'shadow';
-  MAIN_SOURCE_EXTS: array[0..1] of string = ('.dpr', '.dpk');
-var
-  ShadowDir: string;
-  Dproj    : TStringBuilder;
-  Shadow   : TClosureResult;
-  Seen     : TDictionary<string, Boolean>;
 begin
+  pClosure.SetLibraryTail(pTail);
   Result:= pClosure.Resolve(pProjectFile, pExclude);
-  if Length(pTail) = 0 then Exit;
-
-  Result.SearchPaths:= Result.SearchPaths + pTail;
-  ShadowDir:= TPath.Combine(TPath.GetTempPath, 'dl-closure-tail-' + TGuid.NewGuid.ToString);
-  TDirectory.CreateDirectory(ShadowDir);
-  Dproj:= TStringBuilder.Create;
-  Seen:= TDictionary<string, Boolean>.Create;
-  try
-    Dproj.Append('<Project><PropertyGroup><DCC_UnitSearchPath>')
-      .Append(string.Join(';', Result.SearchPaths))
-      .Append('</DCC_UnitSearchPath></PropertyGroup><ItemGroup>');
-    for var F: string in Result.Files do
-    begin
-      Seen.AddOrSetValue(LowerCase(F), True);
-      if SameText(ExtractFileExt(F), '.pas') then Dproj.Append('<DCCReference Include="').Append(F).Append('"/>');
-    end;
-    Dproj.Append('</ItemGroup></Project>');
-    TFile.WriteAllText(TPath.Combine(ShadowDir, SHADOW_NAME + '.dproj'), Dproj.ToString);
-    { The main source is seeded too: its own `uses` may name a library-only unit. }
-    for var Ext: string in MAIN_SOURCE_EXTS do
-    begin
-      var MainSource: string:= ChangeFileExt(TPath.GetFullPath(pProjectFile), Ext);
-      if TFile.Exists(MainSource) then
-      begin
-        TFile.WriteAllText(TPath.Combine(ShadowDir, SHADOW_NAME + Ext), ShadowMainSource(MainSource));
-        Break;
-      end;
-    end;
-
-    Shadow:= pClosure.Resolve(TPath.Combine(ShadowDir, SHADOW_NAME + '.dproj'), pExclude);
-    for var I: Integer:= 0 to High(Shadow.Files) do
-      if not Seen.ContainsKey(LowerCase(Shadow.Files[I])) then
-      begin
-        Result.Files:= Result.Files + [Shadow.Files[I]];
-        Result.UsedBy:= Result.UsedBy + [Shadow.UsedBy[I]];
-      end;
-    for var W: string in Shadow.Warnings do
-      if not MatchStr(W, Result.Warnings) then Result.Warnings:= Result.Warnings + [W];
-  finally
-    Seen.Free;
-    Dproj.Free;
-    TDirectory.Delete(ShadowDir, True);
-  end;
 end;
 
 end.

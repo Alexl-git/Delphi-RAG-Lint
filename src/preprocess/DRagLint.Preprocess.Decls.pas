@@ -282,7 +282,7 @@ begin
 end;
 
 // Section keywords at block depth 0. True when the token was one.
-function TPPDeclScanner.HandleSectionKeyword(const L: string): Boolean; // dl:ok cognitive-complexity@cdd3 -- REVIEWED 2026-10-27 a flat keyword table
+function TPPDeclScanner.HandleSectionKeyword(const L: string): Boolean;
 begin
   Result:= True;
   if L = 'interface' then
@@ -321,7 +321,7 @@ begin
   if Result then FState:= dsStart;
 end;
 
-procedure TPPDeclScanner.HandleDecl(const AText, L: string; AIsIdent, AEscaped: Boolean); // dl:ok cognitive-complexity@8c61, cyclomatic-complexity@b95e -- REVIEWED 2026-10-28 the declaration state machine, one case arm per state (EXT-E4 added the typed-const flag)
+procedure TPPDeclScanner.HandleDecl(const AText, L: string; AIsIdent, AEscaped: Boolean); // dl:ok cognitive-complexity@56ea, cyclomatic-complexity@b95e -- REVIEWED 2026-11-05 cognitive 72: the declaration state machine, one case arm per state (EXT-E4 added the typed-const flag)
 var
   Kw: Boolean;
 begin
@@ -459,7 +459,7 @@ begin
   end;
 end;
 
-procedure TPPDeclScanner.Token(const AText: string; AIsIdent, AEscaped: Boolean); // dl:ok cognitive-complexity@75e1, cyclomatic-complexity@80cd -- REVIEWED 2026-10-28 token dispatch in precedence order (const value, parens, blocks, sections)
+procedure TPPDeclScanner.Token(const AText: string; AIsIdent, AEscaped: Boolean); // dl:ok cyclomatic-complexity@80cd -- REVIEWED 2026-10-28 token dispatch in precedence order (const value, parens, blocks, sections)
 var
   L: string;
 begin
