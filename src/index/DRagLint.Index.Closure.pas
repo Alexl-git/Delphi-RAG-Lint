@@ -1194,13 +1194,22 @@ begin
     begin
       ParseDprojSearchPaths(Content, BaseDir, SearchPaths);
       // Also try to find the sibling .dpr -- or .dpk for a package project
-      var DprPath:= TPath.ChangeExtension(ProjectAbs, '.dpr');
+      // The program the project names in <MainSource> wins (B12); the sibling
+      // .dpr/.dpk answers when it names nothing or names a file that is not there.
+      var DprPath: string:= '';
+      var MainM:= TRegEx.Match(Content, '<MainSource>\s*([^<]+?)\s*</MainSource>', [roIgnoreCase]);
+      if MainM.Success then
+      begin
+        DprPath:= TPath.GetFullPath(TPath.Combine(BaseDir, MainM.Groups[1].Value));
+        if not TFile.Exists(DprPath) then DprPath:= '';
+      end;
+      if DprPath = '' then DprPath:= TPath.ChangeExtension(ProjectAbs, '.dpr');
       if not TFile.Exists(DprPath) then DprPath:= TPath.ChangeExtension(ProjectAbs, '.dpk');
       if TFile.Exists(DprPath) then
       begin
         ProjSource:= DprPath;
         var DprContent:= MaybePreprocess(TFile.ReadAllText(DprPath), DprPath);
-        ParseDprUses(DprContent, BaseDir, UnitNames, UnitFilePaths);
+        ParseDprUses(DprContent, TPath.GetDirectoryName(DprPath), UnitNames, UnitFilePaths);
       end;
       // Seed from DCCReference entries
       ParseDprojRefs(Content, BaseDir, DprojRefFiles);
