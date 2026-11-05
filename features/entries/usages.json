@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "usages",
-      "usage": "drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N]",
+      "usage": "drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw]",
       "flags": [
         {
           "name": "--name",
@@ -38,10 +38,13 @@
         {
           "name": "--limit",
           "arg": "N"
+        },
+        {
+          "name": "--rw"
         }
       ],
       "helpOrder": 5,
-      "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view.", "                               --limit N keeps the first N rows of each JSON group (declarations included) and adds", "                               \"limit\" and \"totals\" (the full counts); without it nothing is capped.", "                               --db is REQUIRED: usages never reads the manifest, so without it the verb exits 2."]
+      "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view.", "                               --limit N keeps the first N rows of each JSON group (declarations included) and adds", "                               \"limit\" and \"totals\" (the full counts); without it nothing is capped.", "                               --rw: the users of a member split into readers and writers, one block per declaration: a property with its backing field and accessor methods, a field with its properties, a getter (reads) or setter (writes). Rows name the route (property, field, getter, setter, direct).", "                               --db is REQUIRED: usages never reads the manifest, so without it the verb exits 2."]
     },
     {
       "type": "ide-menu",

@@ -33,3 +33,18 @@ drag-lint usages --name TCustomerOrder --width wide --db C:\Projects\MyApp\_D-RA
 ```
 This would list usage sites of `TCustomerOrder` as JSON, at "wide" report
 width.
+
+## Readers and writers (`--rw`)
+`usages --rw --name TFoo.Plain --db <db>` answers "who reads this and who writes it", even when
+the property has no getter or setter method:
+- for a **property**: its accesses, the mentions of a plain backing field, and direct calls of its accessor methods;
+- for a **field**: the same, for every property it backs, plus its own mentions;
+- for a **getter**: reads only; for a **setter**: writes only;
+- for a routine that is no accessor: its callers, under `calls`.
+
+Each row names the route it came by (`property`, `field`, `getter`, `setter`, `direct`). A bare name gives
+one block per declaration and counts the unbound name matches separately; a qualified name leaves them out.
+`--json` gives `targets[]` with `readers`, `writers`, `calls`, `totals`, `read_accessor` / `write_accessor` and
+`backs_properties`. Sites are per line. A symbol nobody declares or mentions exits 1.
+
+Limit: directions are the index's, so a `var`/`out` argument and `Inc`/`Dec` of a field count as reads.

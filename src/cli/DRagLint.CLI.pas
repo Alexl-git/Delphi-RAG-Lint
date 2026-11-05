@@ -444,6 +444,7 @@ type
     WiringCoverage: Boolean; // v8: --coverage for the wiring command
     ContextLines  : Integer; // v0.17: find-callers --context N
     Resolved      : Boolean; // v14 (D5 T8): find-callers --resolved (precise callers via call_edges)
+    UsagesRw      : Boolean; // usages --rw: the users of a member split into readers and writers
     // v14 (D5 T11): call-graph traversal verbs (call-path / callgraph)
     CallFrom : string ; // --from <A>  (call-path source routine name/qname)
     // CallTo reuses RenameTo: --to is parsed into RenameTo (rename verb); call-path
@@ -1710,6 +1711,7 @@ begin
     else if A = '--coverage'       then Result.WiringCoverage:= True
     else if (A = '--context') and (i < ParamCount) then begin Inc(i); Result.ContextLines:= StrToIntDef(ParamStr(i), 0); end
     else if A = '--resolved' then Result.Resolved:= True // v14 (D5 T8): find-callers --resolved
+    else if A = '--rw' then Result.UsagesRw:= True
     // v14 (D5 T11): call-path / callgraph traversal flags.
     else if (A = '--from') and (i < ParamCount) then begin Inc(i); Result.CallFrom:= ParamStr(i); end
     else if (A = '--max-depth') and (i < ParamCount) then begin Inc(i); Result.MaxDepth:= StrToIntDef(ParamStr(i), 20); end
@@ -7885,7 +7887,7 @@ function DoQueryHints(const AArgs: TArgs): Integer; forward;
 /// <remarks>Pure; stderr only, so JSON documents on stdout are untouched. Pinned by run_qcli_142_guard.ps1.</remarks>
 function ZeroCallersHint(const pName: string; pResolved: Boolean): string;
 const
-  BASE_HINT = 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --name ';
+  BASE_HINT = 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --rw --name ';
 begin
   if pResolved then Exit(BASE_HINT + pName);
   var DotAt: Integer:= LastDelimiter('.', pName);
@@ -11998,6 +12000,147 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>`usages --rw`: the users of a property or member, split into readers and
+/// writers, one block per declaration. See MemberUsersForName for what is gathered.</summary>
+/// <param name="AArgs">Parsed args; Name, Limit, AsJson / Format are read.</param>
+/// <param name="ADbs">The databases to scan; a missing file is skipped.</param>
+/// <returns>0 with any declaration or unbound site, 1 with neither (a usage answer
+/// of nothing is said on stderr), 2 on an explicit stale database.</returns>
+function DoUsagesReadersWriters(const AArgs: TArgs; const ADbs: TArray<string>): Integer;
+const
+  NOTE_DIRECTIONS = 'a var/out argument and Inc/Dec of a field are indexed as reads, so check those sites for writes';
+
+  function RowsJson(const ARows: TArray<TMemberUserRow>): TJSONArray;
+  begin
+    Result:= TJSONArray.Create;
+    for var I: Integer:= 0 to High(ARows) do
+    begin
+      if (AArgs.Limit > 0) and (I >= AArgs.Limit) then Break;
+      var O: TJSONObject:= TJSONObject.Create;
+      O.AddPair('caller'    , ARows[I].CallerQName);
+      O.AddPair('path'      , ARows[I].FullPath);
+      O.AddPair('line'      , TJSONNumber.Create(ARows[I].Line));
+      O.AddPair('via'       , ARows[I].Via);
+      O.AddPair('via_name'  , ARows[I].ViaName);
+      O.AddPair('confidence', ARows[I].Confidence);
+      O.AddPair('resolution', ARows[I].Resolution);
+      Result.AddElement(O);
+    end;
+  end;
+
+  procedure WriteRows(const ATitle: string; const ARows: TArray<TMemberUserRow>);
+  begin
+    Writeln(Format('  %s (%d):', [ATitle, Length(ARows)]));
+    for var I: Integer:= 0 to High(ARows) do
+    begin
+      if (AArgs.Limit > 0) and (I >= AArgs.Limit) then Break;
+      Writeln(Format('    %s  (%s:%d)  [via %s %s]', [ARows[I].CallerQName, ARows[I].FullPath, ARows[I].Line, ARows[I].Via, ARows[I].ViaName]));
+    end;
+  end;
+
+var
+  AsJson : Boolean;
+  JRoot  : TJSONObject;
+  JTargets: TJSONArray;
+  Found  : Integer;
+  Unbound: TUnboundUsers;
+begin
+  Result:= 0;
+  AsJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+  Found:= 0;
+  Unbound:= Default(TUnboundUsers);
+  JRoot:= TJSONObject.Create;
+  try
+    JTargets:= TJSONArray.Create;
+    JRoot.AddPair('name', AArgs.Name);
+    JRoot.AddPair('targets', JTargets);
+    for var DbPath: string in ADbs do
+    begin
+      if not TFile.Exists(DbPath) then Continue;
+      var RoOk: Boolean;
+      var Store: ISymbolStore:= OpenReadOnlyStore(DbPath, RoOk);
+      if (not RoOk) or (Store = nil) then
+      begin
+        if (not RoOk) and StaleDbRefusesRun(AArgs, 'usages', DbPath) then Exit(2);
+        Continue;
+      end;
+      for var U: TMemberUsers in MemberUsersForName(Store, AArgs.Name) do
+      begin
+        Inc(Found);
+        if AsJson then
+        begin
+          var T: TJSONObject:= TJSONObject.Create;
+          T.AddPair('qname', U.Target.QualifiedName);
+          T.AddPair('kind' , U.Target.Kind.ToText);
+          T.AddPair('file' , U.FilePath);
+          T.AddPair('line' , TJSONNumber.Create(U.Target.StartLine));
+          if U.ReadAccessor <> '' then
+          begin
+            T.AddPair('read_accessor'     , U.ReadAccessor);
+            T.AddPair('read_accessor_kind', U.ReadAccessorKind);
+          end;
+          if U.WriteAccessor <> '' then
+          begin
+            T.AddPair('write_accessor'     , U.WriteAccessor);
+            T.AddPair('write_accessor_kind', U.WriteAccessorKind);
+          end;
+          var JBacks: TJSONArray:= TJSONArray.Create;
+          for var B: string in U.BacksProperties do JBacks.Add(B);
+          T.AddPair('backs_properties', JBacks);
+          T.AddPair('readers', RowsJson(U.Readers));
+          T.AddPair('writers', RowsJson(U.Writers));
+          T.AddPair('calls'  , RowsJson(U.Calls));
+          var JTotals: TJSONObject:= TJSONObject.Create;
+          JTotals.AddPair('readers', TJSONNumber.Create(Length(U.Readers)));
+          JTotals.AddPair('writers', TJSONNumber.Create(Length(U.Writers)));
+          JTotals.AddPair('calls'  , TJSONNumber.Create(Length(U.Calls)));
+          T.AddPair('totals', JTotals);
+          JTargets.AddElement(T);
+        end
+        else
+        begin
+          Writeln(Format('%s (%s)  %s:%d', [U.Target.QualifiedName, U.Target.Kind.ToText, U.FilePath, U.Target.StartLine]));
+          if U.ReadAccessor <> '' then Writeln(Format('  read accessor: %s (%s)', [U.ReadAccessor, U.ReadAccessorKind]));
+          if U.WriteAccessor <> '' then Writeln(Format('  write accessor: %s (%s)', [U.WriteAccessor, U.WriteAccessorKind]));
+          for var B: string in U.BacksProperties do Writeln('  backs property: ' + B);
+          WriteRows('readers', U.Readers);
+          WriteRows('writers', U.Writers);
+          if Length(U.Calls) > 0 then WriteRows('calls', U.Calls);
+        end;
+      end;
+      var One: TUnboundUsers:= UnboundUsersForName(Store, AArgs.Name);
+      Unbound.Reads := Unbound.Reads  + One.Reads;
+      Unbound.Writes:= Unbound.Writes + One.Writes;
+      Unbound.Other := Unbound.Other  + One.Other;
+    end;
+    var UnboundCount: Integer:= Length(Unbound.Reads) + Length(Unbound.Writes) + Length(Unbound.Other);
+    if AsJson then
+    begin
+      var JU: TJSONObject:= TJSONObject.Create;
+      JU.AddPair('reads' , TJSONNumber.Create(Length(Unbound.Reads)));
+      JU.AddPair('writes', TJSONNumber.Create(Length(Unbound.Writes)));
+      JU.AddPair('other' , TJSONNumber.Create(Length(Unbound.Other)));
+      JRoot.AddPair('unbound', JU);
+      JRoot.AddPair('note', NOTE_DIRECTIONS);
+      Writeln(JRoot.Format(2));
+    end
+    else
+    begin
+      if UnboundCount > 0 then
+        Writeln(Format('unbound name matches (not attributed to any declaration): reads %d, writes %d, other %d; a qualified name leaves them out',
+          [Length(Unbound.Reads), Length(Unbound.Writes), Length(Unbound.Other)]));
+      if Found > 0 then Writeln('note: ' + NOTE_DIRECTIONS);
+    end;
+    if (Found = 0) and (UnboundCount = 0) then
+    begin
+      Writeln(ErrOutput, Format('usages --rw: no declaration or reference named "%s"; check the name, or that this is the project''s database.', [AArgs.Name]));
+      Result:= 1;
+    end;
+  finally
+    JRoot.Free;
+  end; // try
+end; // function
+
 // v0.42: drag-lint usages --name <X> [--width narrow|wide|very-wide]
 //        [--db ...] [--depth N] [--format text|json]
 // Find every place a symbol is used -- not just calls. After a DEEP index,
@@ -12095,6 +12238,8 @@ begin
     Writeln('Pass --db <file.sqlite>; resolve-dbs --project <x.dproj> prints the right one.');
     Exit(2);
   end;
+
+  if AArgs.UsagesRw then Exit(DoUsagesReadersWriters(AArgs, PathsToScan));
 
   JRoot:= TJSONObject.Create;
   JDecls := TJSONArray.Create; JReads := TJSONArray.Create;
