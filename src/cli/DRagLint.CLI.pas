@@ -20948,6 +20948,59 @@ begin
   end;
 end; // function
 
+/// <summary>B9 F1: the stored static type of the reference at a position, from
+/// ref_types in the store that owns the file.</summary>
+/// <param name="AStores">The open stores.</param>
+/// <param name="AFile">The file, as given to typeat.</param>
+/// <param name="ALine">1-based line.</param>
+/// <param name="ACol">1-based column: refs.start_col is 1-based, end_col exclusive.</param>
+/// <param name="AToken">The word at the cursor: a ref of another name means the
+/// file moved since it was indexed, and is no answer.</param>
+/// <param name="AQName">Out: type_qname.</param>
+/// <param name="AVia">Out: via.</param>
+/// <returns>True when a row answers; False with no table (an index older than
+/// 1.44) or no row, and the caller then has only the live resolve.</returns>
+function ReadRefTypeFact(const AStores: TArray<ISymbolStore>; const AFile: string; ALine, ACol: Integer;
+  const AToken: string; out AQName, AVia: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Result:= False;
+  AQName:= '';
+  AVia  := '';
+  if AToken = '' then Exit;
+  for var S: ISymbolStore in AStores do
+  begin
+    var FileId: Int64:= S.FindFileIdByPath(AFile);
+    if (FileId <= 0) or not (S is TSQLiteSymbolStore) then Continue;
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= (S as TSQLiteSymbolStore).GetConnection;
+      Q.SQL.Text  := 'SELECT 1 FROM sqlite_master WHERE type = ''table'' AND name = ''ref_types''';
+      Q.Open;
+      if Q.Eof then Exit;
+      Q.Close;
+      Q.SQL.Text:= 'SELECT t.type_qname, t.via FROM refs r JOIN ref_types t ON t.ref_id = r.id ' +
+                   'WHERE r.file_id = :f AND r.start_line = :l AND r.start_col <= :c AND r.end_col >= :c ' +
+                   'AND r.name_text = :n COLLATE NOCASE ORDER BY r.id LIMIT 1';
+      Q.ParamByName('f').AsLargeInt:= FileId;
+      Q.ParamByName('l').AsInteger := ALine;
+      Q.ParamByName('c').AsInteger := ACol;
+      Q.ParamByName('n').AsWideString:= AToken;
+      Q.Open;
+      if not Q.Eof then
+      begin
+        AQName:= Q.Fields[0].AsString;
+        AVia  := Q.Fields[1].AsString;
+        Result:= True;
+      end;
+    finally
+      Q.Free;
+    end;
+    Exit;
+  end;
+end;
+
 // v0.19: drag-lint typeat <file>:<line>:<col> [--db <path>] [--format text|json]
 // Resolves the identifier at the given position to a symbol in the index.
 // The position argument has the form: C:\path\to\File.pas:17:8
@@ -21007,11 +21060,34 @@ begin
 
   TAResult:= TTypeAtResolver.Resolve(Stores, FilePart, Line, Col);
 
-  Fmt:= LowerCase(AArgs.Format);
-  if Fmt = 'json' then Write(TTypeAtResolver.RenderJson(TAResult))
-  else Write(TTypeAtResolver.RenderText(TAResult));
+  { B9 F1: what the resolve pass stored about this reference, beside the live answer. }
+  var StaticType, StaticVia: string;
+  var HasStatic: Boolean:= ReadRefTypeFact(Stores, FilePart, Line, Col, TAResult.Token, StaticType, StaticVia);
 
-  if TAResult.HasResolved then Result:= 0
+  Fmt:= LowerCase(AArgs.Format);
+  if Fmt = 'json' then
+  begin
+    var Json: string:= TTypeAtResolver.RenderJson(TAResult);
+    if HasStatic then
+    begin
+      var JType: TJSONString:= TJSONString.Create(StaticType);
+      var JVia : TJSONString:= TJSONString.Create(StaticVia);
+      try
+        Json:= Json.Substring(0, Json.LastIndexOf('}')) + ',"static_type":' + JType.ToJSON + ',"static_type_via":' + JVia.ToJSON + '}';
+      finally
+        JType.Free;
+        JVia.Free;
+      end;
+    end;
+    Write(Json);
+  end
+  else
+  begin
+    Write(TTypeAtResolver.RenderText(TAResult));
+    if HasStatic then Writeln('StaticType:   ', StaticType, ' (via ', StaticVia, ')');
+  end;
+
+  if TAResult.HasResolved or HasStatic then Result:= 0
   else Result:= 1;
 end; // function
 
