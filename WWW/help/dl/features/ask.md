@@ -24,6 +24,7 @@ Full flag list: [ask in the CLI reference](../cli.md#ask).
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
+| `--question` | `<id>` |  |  |
 | `--target` | `<T>` |  |  |
 | `--project` | `<P.dproj>` |  |  |
 | `--in` | `<U.pas>` |  |  |

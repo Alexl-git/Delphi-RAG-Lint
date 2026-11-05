@@ -1241,6 +1241,42 @@ $f1 = @($accepted | Where-Object {
 Check 'F1 every accepted flag appears in --help (or is exempt)' ($f1.Count -eq 0) `
   ("$($f1.Count) accepted but undiscoverable: " + ($f1 -join ' '))
 
+# --- F1v: a verb with its OWN flag table lists those flags on its OWN help block --
+# F1 is a set check: --question sat off the `ask` block with F1 green, because `compare` also
+# spells --question. The header's "per-verb is not checkable" is about ParseArgs; these four
+# verbs parse from their own table, so for them it IS checkable, from source, with no
+# attribution guess. Checks BOTH places a reader looks: the verb's block in --help and
+# `<verb> --help`. Cross-cutting flags are documented once for every verb.
+$CrossCuttingFlags = [ordered]@{
+  '--help'            = 'every verb; the banner says so once'
+  '--output-encoding' = 'every verb; documented in the global section of --help (entry output-encoding)'
+}
+$selfParsing = [ordered]@{ 'ask' = $askFlags; 'protocol' = $protoFlags; 'mcp-config' = $mcpCfgFlags; 'syntax-count' = $scFlags }
+$f1v = New-Object System.Collections.Generic.List[string]
+foreach ($sv in $selfParsing.Keys) {
+  $svBlock = New-Object System.Text.StringBuilder
+  $inBlock = $false
+  foreach ($hl in ($helpText -split "`r?`n")) {
+    if ($hl -match '^\s+drag-lint\s+(\S+)') { $inBlock = ($Matches[1] -ceq $sv) }
+    elseif ($hl -notmatch '^\s') { $inBlock = $false }
+    if ($inBlock) { [void]$svBlock.AppendLine($hl) }
+  }
+  $svBlockSet = Get-FlagSet $svBlock.ToString() $FlagRx
+  $svOwnSet   = Get-FlagSet (& $Exe $sv --help 2>&1 | Out-String) $FlagRx
+  Check "F1v the $sv help block and its own --help were read" (($svBlockSet.Count -gt 0) -and ($svOwnSet.Count -gt 0)) `
+    "block has $($svBlockSet.Count) flag(s), own help $($svOwnSet.Count) -- the block scan is broken, not the verb"
+  foreach ($fl in $selfParsing[$sv]) {
+    if ($CrossCuttingFlags.Contains($fl)) { continue }
+    if (-not $svBlockSet.Contains($fl)) { $f1v.Add("$sv $fl (--help block)") }
+    if (-not $svOwnSet.Contains($fl))   { $f1v.Add("$sv $fl ($sv --help)") }
+  }
+}
+Check 'F1v every flag in a verb''s own table is on that verb''s help' ($f1v.Count -eq 0) `
+  ("$($f1v.Count) missing: " + ($f1v -join '; '))
+$f1vStale = @($CrossCuttingFlags.Keys | Where-Object { -not $helpSet.Contains($_) })
+Check 'F1v every cross-cutting exemption is still in --help' ($f1vStale.Count -eq 0) `
+  ("not in --help: " + ($f1vStale -join ' '))
+
 # --- F2: documented => accepted (no phantoms) -------------------------------
 $f2 = @($helpSet | Where-Object { -not $accepted.Contains($_) }) | Sort-Object
 Check 'F2 every --help flag is actually accepted' ($f2.Count -eq 0) `

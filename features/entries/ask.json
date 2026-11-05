@@ -13,8 +13,12 @@
       "type": "cli",
       "verb": "ask",
       "example": "drag-lint ask who-writes --target U.TForm.FField --project P.dproj",
-      "usage": "drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]",
+      "usage": "drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>] [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>] [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale] [--plain] [--open] [--resolve-only]",
       "flags": [
+        {
+          "name": "--question",
+          "arg": "<id>"
+        },
         {
           "name": "--target",
           "arg": "<T>"
@@ -92,7 +96,7 @@
         }
       ],
       "helpOrder": 8,
-      "help": ["  drag-lint ask <question>     --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]", "                               [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>]", "                               [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]", "                               [--plain] [--open] [--resolve-only]   one report question (27 ids; `ask --help` lists them) as text:", "                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process", "                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index."]
+      "help": ["  drag-lint ask <question>     --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]", "                               [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>]", "                               [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]", "                               [--plain] [--open] [--resolve-only]   one report question (27 ids; `ask --help` lists them) as text:", "                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process", "                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index.", "                               --question <id> is the same as the positional <question>."]
     },
     {
       "type": "ide-menu",
@@ -125,6 +129,6 @@
     "date": "2026-11-05",
     "by": "CHARTS",
     "build": "1.42.0-alpha",
-    "surfaceHash": "f88e3250ddbb3b5d882ec002509952dda68815701f6e282d4ab35dcad99589db"
+    "surfaceHash": "9439ba702440e75d8451e1a328108ae7b3050bc239b0de0886bdb5345a6a82be"
   }
 }

@@ -157,6 +157,7 @@ begin
   Writeln('                               [--plain] [--open] [--resolve-only]   one report question (27 ids; `ask --help` lists them) as text:');
   Writeln('                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process');
   Writeln('                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index.');
+  Writeln('                               --question <id> is the same as the positional <question>.');
   Writeln('  drag-lint query type-usage   --in <file.pas> (--names A,B,C | --names-file <f>) [--db ...] [--json]');
   Writeln('                               of these type names, which does THIS file actually REFERENCE? Answers a');
   Writeln('                               LIST in one pass (an RTL surface, say). Counts declarations, X.Create');
@@ -731,6 +732,7 @@ begin
     Writeln('                               [--plain] [--open] [--resolve-only]   one report question (27 ids; `ask --help` lists them) as text:');
     Writeln('                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process');
     Writeln('                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index.');
+    Writeln('                               --question <id> is the same as the positional <question>.');
     Exit;
   end;
   if pVerb = 'rules' then
