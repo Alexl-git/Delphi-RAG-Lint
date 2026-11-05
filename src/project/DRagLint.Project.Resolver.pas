@@ -35,6 +35,17 @@ const
 /// </remarks>
 function IsBdsStudioInstalled(const AStudio: string): Boolean;
 
+/// <summary>Whether text found where a path is expected can be handed to TPath at
+/// all: TPath.Combine and IsPathRooted RAISE on anything else, and the exception
+/// would abort the whole index section.</summary>
+/// <param name="pText">A library path entry, or a literal a main-source scan took
+/// for an in-clause path.</param>
+/// <returns>False when empty or holding a character no path can
+/// hold (control characters, double quote, less-than, greater-than, pipe, wildcards).
+/// True says nothing about whether the folder exists.</returns>
+/// <remarks>Pure and thread-safe; never raises.</remarks>
+function IsUsablePathText(const pText: string): Boolean;
+
 type
   // Resolves the set of folders that should be scanned for a Delphi project.
   // Inputs: a .dproj path. Outputs: deduplicated folder list combining:
@@ -773,6 +784,30 @@ begin
   Result:= (Root <> '') and TDirectory.Exists(Root);
 end;
 
+function IsUsablePathText(const pText: string): Boolean;
+begin
+  Result:= (pText <> '') and TPath.HasValidPathChars(pText, False);
+end;
+
+var
+  GWarnedPathEntries: TDictionary<string, Boolean>;
+
+{ Once per entry per process: the library is read several times a run (both value
+  names, roots and tail), and --jobs reads it from several threads. Silent outside a
+  console: the resolver also runs inside the config GUI and the IDE plugin, where
+  ErrOutput has no handle. }
+procedure WarnSkippedPathEntry(const pEntry: string);
+begin
+  if not IsConsole then Exit;
+  TMonitor.Enter(GWarnedPathEntries);
+  try
+    if GWarnedPathEntries.TryAdd(pEntry, True) then
+      Writeln(ErrOutput, 'drag-lint: warning: path entry skipped, it cannot be a path: ' + pEntry);
+  finally
+    TMonitor.Exit(GWarnedPathEntries);
+  end;
+end;
+
 { True when AFile is AFolder or lies under it; case-insensitive. }
 function IsUnderAnyRoot(const AFile: string; const ARoots: TArray<string>): Boolean;
 var
@@ -980,7 +1015,12 @@ begin
   for P in Parts do
   begin
     if P.Trim = '' then Continue;
-    Resolved:= ExpandMacros(P.Trim);
+    Resolved:= ExpandMacros(P.Trim).DeQuotedString('"');
+    if not IsUsablePathText(Resolved) then
+    begin
+      WarnSkippedPathEntry(P.Trim);
+      Continue;
+    end;
     if not TPath.IsPathRooted(Resolved) then Resolved:= TPath.Combine(ABaseDir, Resolved);
     AddFolderIfReal(AList, Resolved);
   end;
@@ -1112,6 +1152,13 @@ begin
     EndQ:= PosEx('''', Content, StartQ + 1);
     if EndQ = 0 then Break;
     Quoted:= Copy(Content, StartQ + 1, EndQ - StartQ - 1);
+    if not IsUsablePathText(Quoted) then
+    begin
+      // Code or comment text, not a clause: resume right after this quote, so the
+      // quote that closed this "literal" cannot swallow a real clause further on.
+      P:= StartQ + 1;
+      Continue;
+    end;
     Resolved:= Quoted;
     if not TPath.IsPathRooted(Resolved) then Resolved:= TPath.Combine(BaseDir, Resolved);
     FolderOf:= TPath.GetDirectoryName(Resolved);
@@ -1229,5 +1276,11 @@ begin
     List.Free;
   end; // try
 end; // function
+
+initialization
+  GWarnedPathEntries:= TDictionary<string, Boolean>.Create;
+
+finalization
+  GWarnedPathEntries.Free;
 
 end.

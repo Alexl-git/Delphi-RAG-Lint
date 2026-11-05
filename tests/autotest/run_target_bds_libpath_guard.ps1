@@ -222,6 +222,48 @@ Check 'uLibOnly.pas is in the closure' (Named ($cAcc | Where-Object { $_ -like "
 Check 'and its own use uLibDeep.pas' (Named $cAcc 'uLibDeep.pas') ($cAcc -join ';')
 Check 'and no shadow-project path leaked into the closure' (-not (($cAcc -join ';') -match 'dl-closure-tail')) ($cAcc -join ';')
 
+Write-Host '[11] a bad path never aborts a section (BDS23: only a foreign target took the shadow-source path)'
+# Each body holds text the `in` scan used to take for a path: a literal that closes on the
+# NEXT line (CR/LF in the "path"), and one on a single line with a < in it.
+# The real clause names a SUBFOLDER and the dproj names no unit, so uLibOnly is reached
+# only if the shadow source still makes the real path absolute: the positive control.
+$bodies = @(
+  @('next-line', "Writeln('it is in ' + pPath);`n  Writeln('next');"),
+  @('less-than', "Writeln('a in ', pPath < 'b', ' c');")
+)
+foreach ($b in $bodies) {
+  $pText = Join-Path $Scratch "PText-$($b[0])"
+  WriteText "$pText\P.dproj" "<Project><PropertyGroup><ProjectVersion>18.8</ProjectVersion><MainSource>P.dpr</MainSource></PropertyGroup></Project>`n"
+  WriteText "$pText\P.dpr" "program P;`nuses uCaller in 'sub\uCaller.pas';`nprocedure Say(const pPath: string);`nbegin`n  $($b[1])`nend;`nbegin`nend.`n"
+  WriteUnit "$pText\sub\uCaller.pas" 'uCaller' 'uLibOnly' 'procedure CallIt;' "procedure CallIt;`nbegin`n  LibProc;`nend;"
+  $dbT = Join-Path $Scratch "text-$($b[0]).sqlite"
+  $idxT = Dl @('index', '--project', "$pText\P.dproj", '--platform', 'win32', '--db', $dbT, '--library-db', $noLib) $reg
+  $exitT = $LASTEXITCODE
+  $filesT = Dl @('selftest', 'files', '--db', $dbT) $reg
+  Check "$($b[0]): foreign target, index exits 0" ($exitT -eq 0) $idxT
+  Check "$($b[0]): no exception reached the run" (-not ($idxT -match 'Invalid characters|FATAL')) $idxT
+  Check "$($b[0]): control, the real in-clause unit is indexed" ($filesT -match 'sub\\uCaller\.pas') $filesT
+  Check "$($b[0]): control, the library-only unit behind it is reached through the shadow source" ($filesT -match 'uLibOnly\.pas') $filesT
+  # check-unit reads the same dpr through ReadDprUsesPaths (any target, the older sibling).
+  $walk = Dl @('check-unit', "$pText\sub\uCaller.pas", '--project', "$pText\P.dproj", '--db', $dbT) $reg
+  Check "$($b[0]): check-unit does not die on the text" (-not ($walk -match 'Invalid characters|FATAL')) $walk
+  Check "$($b[0]): check-unit reached the compiler" ($walk -match '-- \d+ error') $walk
+}
+
+$pBad = Join-Path $Scratch 'PBad'; WriteProject $pBad '18.8'
+$badEntries = "C:\bad|dir;C:\bad<dir;`$(NOT_A_MACRO)\x;`"$team20`""
+$regBad = Join-Path $Scratch 'registry-bad.json'
+WriteRegistry $regBad @{ '20.0' = (Studio $s20 "$badEntries;$common"); '37.0' = (Studio $s37 $common) }
+$dbB = Join-Path $Scratch 'bad.sqlite'
+$idxB = Dl @('index', '--project', "$pBad\P.dproj", '--platform', 'win32', '--db', $dbB, '--library-db', $noLib) $regBad
+$exitB = $LASTEXITCODE
+$filesB = Dl @('selftest', 'files', '--db', $dbB) $regBad
+Check 'bad library entries: index exits 0' ($exitB -eq 0) $idxB
+Check 'each unusable entry is named, once, in a warning' ((@($idxB -split "`r?`n" | Where-Object { $_ -match 'warning: .*path entry skipped.*bad\|dir' }).Count -eq 1) -and (@($idxB -split "`r?`n" | Where-Object { $_ -match 'warning: .*path entry skipped.*bad<dir' }).Count -eq 1)) $idxB
+Check 'a real path in double quotes is still used' ($filesB -match 'uLibOnly\.pas') $filesB
+Check 'and is not warned about' (-not ($idxB -match 'warning: .*path entry skipped.*Team20')) $idxB
+Check 'an unexpanded macro is an absent folder, as ever, not a warning' (-not ($idxB -match 'warning: .*NOT_A_MACRO')) $idxB
+
 Write-Host ''
 Write-Host "target-bds-libpath: pass=$script:pass fail=$script:fail"
 if ($script:fail -gt 0) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

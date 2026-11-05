@@ -9,6 +9,7 @@ breaking changes** until v2.0.
 DRAGLINT_RESOLVER_VERSION 1.17.0 -> 1.18.0-alpha -- every index re-parses once.
 
 ### Added / changed (wave 3, other lanes)
+- index (lane bds23): a project targeting another Delphi no longer aborts when its `.dpr` code holds text like `in ' + Path` (`EInOutArgumentException: Invalid characters in path`, seen on DragLint-Switch); `check-unit --project` had the same defect on any target. A library or `.dproj` path entry that cannot be a path is skipped with one `warning: path entry skipped` naming it; a real path in double quotes is unquoted and used.
 - lint (lane ruleset): four old ROADMAP candidates as rules, all OFF: `stream-buffer-after-free`, `interfaced-object-nil-leak`, `identifier-case-mismatch`, `datamodule-form-global`.
 - lint-all (lane marku, MARKER-SHARED-UNION): `--shared-db <db>` (repeatable) judges a closure-dependent `dl:ok` on a `dl:shared` unit across project indexes; each peer is a full lint-all child.
 - find-callers / usages (lane qcli): the zero-result hint names the bare name and `--resolved`; a getter default stays a hint only; `usages` says it never reads the manifest; `usages` no longer double-counts a member access under a call (read-time collapse, stored refs unchanged).

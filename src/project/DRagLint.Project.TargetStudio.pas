@@ -157,7 +157,11 @@ begin
 end;
 
 { The project's main source with every relative `in '...'` made absolute, so a
-  unit named that way is not found again under another folder by name. }
+  unit named that way is not found again under another folder by name. This is a
+  text scan: it also meets `in '` inside a string or comment, where the "path" runs
+  to whatever quote comes next. A literal cannot span lines, and text that cannot be
+  a path stays as it is -- only the quotes matter to the closure walk that reads the
+  copy, so a false match that survives the filter costs nothing. }
 function ShadowMainSource(const pSource: string): string;
 var
   BaseDir: string;
@@ -165,11 +169,11 @@ var
 begin
   Result:= TFile.ReadAllText(pSource);
   BaseDir:= ExtractFilePath(pSource);
-  Matches:= TRegEx.Matches(Result, '\bin\s+''([^'']+)''', [roIgnoreCase]);
+  Matches:= TRegEx.Matches(Result, '\bin\s+''([^''\r\n]+)''', [roIgnoreCase]);
   for var Idx: Integer:= Matches.Count - 1 downto 0 do
   begin
     var Group: TGroup:= Matches[Idx].Groups[1];
-    if not TPath.IsPathRooted(Group.Value) then
+    if IsUsablePathText(Group.Value) and not TPath.IsPathRooted(Group.Value) then
       Result:= Copy(Result, 1, Group.Index - 1) + TPath.Combine(BaseDir, Group.Value) +
         Copy(Result, Group.Index + Group.Length, MaxInt);
   end;
