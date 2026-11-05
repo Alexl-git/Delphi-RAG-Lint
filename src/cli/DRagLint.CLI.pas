@@ -6756,6 +6756,13 @@ begin
     the Database: line is unaffected. }
   if IdxArgs.DbFromConfig and SameText(ResolvedDb, IdxArgs.DbPath) then
     Writeln('          (the "db" key of ', IdxArgs.DbConfigFile, '; pass --db to write elsewhere)');
+  { ORM3DB-WRITER: a directory index with no --db silently CREATED a database in a project root
+    (C:\Projects\DB\ORM3\drag-lint.sqlite, 192 MB). Refusing would break the documented
+    `index <folder>` use, so a database this run is about to create, with no --db to name it,
+    says so on its own line (the Database: line above is unchanged). }
+  if (not AArgs.DryRun) and (Length(IdxArgs.DbPaths) = 0) and (not TFile.Exists(ResolvedDb)) then
+    Writeln('          (new database: this file does not exist yet and no --db was given, so this run CREATES it; ',
+            'pass --db <file.sqlite> to write elsewhere)');
 
   { CREATE THE _D-RAG HOME BEFORE OPENING. The --all path already does this
     for a manifest item; this single-target path never did, because the old
