@@ -8993,7 +8993,8 @@
               "arg": "<C>"
             },
             {
-              "name": "--mode"
+              "name": "--mode",
+              "arg": "write|read|both"
             },
             {
               "name": "--max-rows",

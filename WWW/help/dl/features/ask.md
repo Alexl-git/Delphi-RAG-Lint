@@ -37,7 +37,7 @@ Full flag list: [ask in the CLI reference](../cli.md#ask).
 | `--cap` | `N` |  |  |
 | `--surface-cap` | `N` |  |  |
 | `--control` | `<C>` |  |  |
-| `--mode` |  |  |  |
+| `--mode` | `write\|read\|both` |  |  |
 | `--max-rows` | `N` |  |  |
 | `--out-root` | `<dir>` |  |  |
 | `--pairs-file` | `<f.json>` |  |  |
