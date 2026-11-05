@@ -70,8 +70,12 @@ type
   /// cannot evaluate). pnkConst: a true constant; its value is returned.
   /// pnkTypedConst (EXT-E4, 1.37.0): a TYPED constant (`X: Integer = 3`) --
   /// declared, never a true constant (dcc E2026 in an IF); the unresolved name
-  /// is reported as a typed constant so the hint can say why.</remarks>
-  TPPNameKind = (pnkUnknown, pnkDeclared, pnkConst, pnkTypedConst);
+  /// is reported as a typed constant so the hint can say why.
+  /// pnkNoEvidence (YADF6, 1.43): a miss with NOBODY to ask -- no library DB and
+  /// the newest target -- so "not found" proves nothing. DECLARED reads it True
+  /// (a feature test names what the current compiler usually has) and reports the
+  /// assumption; as a bare name in an expression it is simply unresolved.</remarks>
+  TPPNameKind = (pnkUnknown, pnkDeclared, pnkConst, pnkTypedConst, pnkNoEvidence);
 
   /// <summary>The name lookup an IF expression consults for an identifier.</summary>
   /// <remarks>AName keeps its source spelling and may be dotted
@@ -104,7 +108,22 @@ function EvalPPExpr(const AExpr: string; const ADefines: TDictionary<string,Bool
 /// <remarks>Pure apart from ALookup; thread-safe when ALookup is.</remarks>
 function EvalPPExprScoped(const AExpr: string; const ADefines: TDictionary<string,Boolean>;
   const ANumeric: TDictionary<string,Integer>; const ALookup: TPPNameLookup;
-  out AUnresolved: TArray<string>): Boolean;
+  out AUnresolved: TArray<string>): Boolean; overload;
+
+/// <summary>YADF6: EvalPPExprScoped that also says which DECLARED answers were
+/// assumed rather than known.</summary>
+/// <param name="AExpr">The expression text (ASCII).</param>
+/// <param name="ADefines">Lowercased defined symbols. Must not be nil.</param>
+/// <param name="ANumeric">Lowercased numeric defines. Must not be nil.</param>
+/// <param name="ALookup">The caller's symbol table; nil = none.</param>
+/// <param name="AUnresolved">As the other overload.</param>
+/// <param name="AAssumed">The DECLARED names ALookup answered pnkNoEvidence for,
+/// in first-seen order, without duplicates; empty when none.</param>
+/// <returns>The expression's truth value, as the other overload.</returns>
+/// <remarks>Pure apart from ALookup; thread-safe when ALookup is.</remarks>
+function EvalPPExprScoped(const AExpr: string; const ADefines: TDictionary<string,Boolean>;
+  const ANumeric: TDictionary<string,Integer>; const ALookup: TPPNameLookup;
+  out AUnresolved, AAssumed: TArray<string>): Boolean; overload;
 
 /// <summary>Lane INC3: computes the value of a constant declaration's
 /// expression (the text after '=' in <c>const X = expr;</c>).</summary>
@@ -188,6 +207,7 @@ type
     FNumeric   : TDictionary<string,Integer>;
     FLookup    : TPPNameLookup;
     FUnresolved: TArray<string>;
+    FAssumed   : TArray<string>;
     function CurChar: Char;
     function IsWordChar(C: Char): Boolean;
     procedure Skip;
@@ -218,6 +238,7 @@ type
     function Eval: TPPValue;
     function AtEnd: Boolean;
     property Unresolved: TArray<string> read FUnresolved;
+    property Assumed: TArray<string> read FAssumed;
   end;
 
 // --- TPPValue constructors + truthiness coercion ---
@@ -302,6 +323,7 @@ begin
   FNumeric   := ANumeric;
   FLookup    := ALookup;
   FUnresolved:= nil;
+  FAssumed   := nil;
 end;
 
 function TPPExprParser.CurChar: Char;
@@ -732,6 +754,7 @@ var
   V  : TPPValue;
   BT : TBasicType;
   N  : Integer;
+  Kind: TPPNameKind;
 begin
   Skip;
   if Consume('(') then
@@ -754,14 +777,18 @@ begin
   if PeekKW('declared') then
   begin
     // Declared(X): any symbol kind the table knows, a compiler built-in type,
-    // or a numeric built-in. A miss is a legitimate False, never unresolved.
+    // or a numeric built-in. A miss is a legitimate False, never unresolved --
+    // unless the lookup says nobody could have known (pnkNoEvidence): True, noted.
     SkipKW('declared');
     Consume('(');
     Id:= ReadIdent;
     Consume(')');
     if Id = '' then Exit(BoolVal(False));
     if FindBasic(Id, BT) or FNumeric.TryGetValue(Id.ToLower, N) then Exit(BoolVal(True));
-    Exit(BoolVal(Assigned(FLookup) and (FLookup(Id, V) <> pnkUnknown)));
+    if not Assigned(FLookup) then Exit(BoolVal(False));
+    Kind:= FLookup(Id, V);
+    if (Kind = pnkNoEvidence) and not MatchText(Id, FAssumed) then FAssumed:= FAssumed + [Id];
+    Exit(BoolVal(Kind <> pnkUnknown));
   end;
   Id:= ReadIdent;
   if Id = '' then raise EConvertError.Create('expected an operand');
@@ -779,9 +806,19 @@ function EvalPPExprScoped(const AExpr: string; const ADefines: TDictionary<strin
   const ANumeric: TDictionary<string,Integer>; const ALookup: TPPNameLookup;
   out AUnresolved: TArray<string>): Boolean;
 var
+  Assumed: TArray<string>;
+begin
+  Result:= EvalPPExprScoped(AExpr, ADefines, ANumeric, ALookup, AUnresolved, Assumed);
+end;
+
+function EvalPPExprScoped(const AExpr: string; const ADefines: TDictionary<string,Boolean>;
+  const ANumeric: TDictionary<string,Integer>; const ALookup: TPPNameLookup;
+  out AUnresolved, AAssumed: TArray<string>): Boolean;
+var
   Parser: TPPExprParser;
 begin
   AUnresolved:= nil;
+  AAssumed   := nil;
   Parser:= Default(TPPExprParser);
   Parser.Init(AExpr, ADefines, ANumeric, ALookup);
   try
@@ -792,6 +829,7 @@ begin
     on E: Exception do Result:= False;
   end;
   AUnresolved:= Parser.Unresolved;
+  AAssumed   := Parser.Assumed;
   if Length(AUnresolved) > 0 then Result:= False;
 end;
 

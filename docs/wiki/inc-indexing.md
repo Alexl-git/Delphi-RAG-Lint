@@ -7,7 +7,7 @@ The indexer follows `{$I file.inc}` the way the compiler would for the project's
 drag-lint index --project <file.dproj> --db <file.sqlite>
 drag-lint pp-profile --dproj <file.dproj>      (the define set the indexer sees)
 ```
-A project DB indexes only the ACTIVE includes, parsed in the includer's define context. Which include is chosen follows the exact preprocessor values: value defines, `CompilerVersion`, `IFOPT`, true constants of the same file or of a used project / library unit, `Declared()` and arithmetic in `{$IF}`. `lint-all` lints an `.inc` file in the context of its includer. When an `{$IF}` cannot be decided, `lint` reports the `pp-unresolved-if` hint instead of guessing.
+A project DB indexes only the ACTIVE includes, parsed in the includer's define context. Which include is chosen follows the exact preprocessor values: value defines, `CompilerVersion`, `IFOPT`, true constants of the same file or of a used project / library unit, `Declared()` and arithmetic in `{$IF}`. `lint-all` lints an `.inc` file in the context of its includer. When an `{$IF}` cannot be decided, `lint` reports the `pp-unresolved-if` hint instead of guessing. One exception, with the same hint: a run with no library DB and the newest target reads `Declared(X)` as True for a name nothing else answers, because a miss there proves nothing and such a test usually names what the current compiler has. With a library DB, a miss is False. For an older target it stays False.
 
 ## Reaching it in the IDE
 No IDE surface; the IDE plugin uses the same index.

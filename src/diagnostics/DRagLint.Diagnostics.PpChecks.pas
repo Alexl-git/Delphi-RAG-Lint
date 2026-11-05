@@ -47,6 +47,11 @@ const
   PP_UNRESOLVED_IF_ID = 'pp-unresolved-if';
   // The directive keyword the finding spans at least ('{$IF').
   DIRECTIVE_SPAN = 4;
+  UNRESOLVED_FORMAT = '$IF %s: cannot resolve %s -- the directive was taken as False; '
+    + 'if it is a true constant, its unit is not indexed or its value is not computable';
+  // YADF6: DECLARED answered without evidence (see LibraryMissKind).
+  ASSUMED_FORMAT = '$IF %s: DECLARED(%s) was assumed True because this run has no library DB to ask; '
+    + 'the other branch is not indexed. Name a library (--library-db, or drag-lint.json) to decide it';
 
 class function TPpChecker.Check(const AFile: string; const ACfg: TLintConfig; // dl:ok unused-parameter@8242 -- fixed signature shared by every built-in checker; this rule reads only the preprocessor report
   const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; // dl:ok unused-parameter@9a67 -- fixed checker signature
@@ -59,9 +64,7 @@ begin
     LF:= Default(TLintFinding);
     LF.RuleId   := PP_UNRESOLVED_IF_ID;
     LF.Severity := 'hint';
-    LF.Message  := Format('$IF %s: cannot resolve %s -- the directive was taken as False; '
-      + 'if it is a true constant, its unit is not indexed or its value is not computable',
-      [U.Expr, string.Join(', ', U.Names)]);
+    LF.Message:= Format(if U.Assumed then ASSUMED_FORMAT else UNRESOLVED_FORMAT, [U.Expr, string.Join(', ', U.Names)]);
     LF.FilePath := AFile;
     LF.StartLine:= U.Line;
     LF.StartCol := U.Col;
