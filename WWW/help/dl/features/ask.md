@@ -7,14 +7,14 @@ group: diagrams-charts
 order: 80001
 since: 1.30.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.43.0-alpha
 ---
 
 # ask
 
 Ask one report question and print the answer as text.
 
-Read this when you want a report answer on stdout -- `drag-lint ask <question> --target <T> --project <P.dproj>` prints the DocInsight block the Reports menu copies (or the plain answer with --plain). Every question is answered inside the engine; no PowerShell is needed.
+Read this when you want a report answer on stdout -- `drag-lint ask <question> --target <T> --project <P.dproj>` prints the DocInsight block the Reports menu copies (or the plain answer with --plain). Every question is answered inside the engine.
 
 ## How to run it
 
@@ -131,12 +131,7 @@ All twenty-seven questions (`touches-tables`, `shown-where`, `deps`,
 `protocol-trace`, `lifecycle`, `effects`, `feeds-from`, `lands-where`,
 `consumers`, `exception-paths`, `who-calls`, `what-it-calls`, `butterfly`, `hierarchy`, `wiring`, `implementors`, `path`, `architecture`, `cycles`, `who-writes`, `who-reads`, `round-trip`) are answered inside the engine, from the live
 index. `crosses-boundary` takes its counterpart from `--counterpart-db`, else from
-the pair in `report-pairs.json`; with neither it draws the one side and says so, as
-the script does. No question is handed to PowerShell: the engine answers
-all of them itself, and `charts\src\Ask-Report.ps1 -Plain` stays in the repository
-only as an internal parity oracle (not shipped, not a user tool). Twenty-six questions are held to that script's output byte for byte by the parity
-harness (`charts\src\Test-Parity.ps1 -Mode Question`); `implementors` is newer than the
-script, has no PowerShell counterpart, and is held by `tests\autotest\run_implementors_guard.ps1`.
+the pair in `report-pairs.json`; with neither it draws the one side and says so.
 
 ### Examples
 

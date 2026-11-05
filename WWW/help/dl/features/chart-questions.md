@@ -7,7 +7,7 @@ group: diagrams-charts
 order: 80003
 since: 1.20.2-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.43.0-alpha
 ---
 
 # Chart questions
@@ -71,7 +71,7 @@ formal question about one selected symbol into a clickable diagram: who calls
 this, what breaks if I change it, which tests reach it, what does this form
 wire, where does this protocol command travel. **In RAD Studio, ask from
 drag-lint > Reports** with the caret on the symbol. Outside the IDE the
-questions are answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](charts-and-the-ide.md)).
+questions are answered in-process by the engine (`drag-lint ask`) (see [Charts and the IDE](charts-and-the-ide.md)).
 The engine verb `drag-lint ask` ships; the full call design is below.
 
 drag-lint is not a model, and these charts are not drawn from prose. Every
@@ -109,7 +109,7 @@ drag-lint ask <id> --target <Unit.TType.Member | Unit | project> --db <project.s
 | `butterfly` | method | callers and callees in one chart |
 | `who-calls` | method | N-deep caller tree, cycle-guarded |
 | `what-it-calls` | method | N-deep callee tree |
-| `path` | method A + method B (`-To`) | every shortest call path A -> B, each call with its site and grade |
+| `path` | method A + method B (`--to`) | every shortest call path A -> B, each call with its site and grade |
 | `who-writes` | field / property | every routine that assigns it |
 | `who-reads` | field / property | every routine that reads it |
 | `change-impact` | method / type | everything a change here could break, by zone and hop |

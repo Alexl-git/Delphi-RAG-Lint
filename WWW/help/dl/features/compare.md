@@ -7,7 +7,7 @@ group: diagrams-charts
 order: 80005
 since: 1.28.0-alpha
 status: shipped
-updated: 1.33.0-alpha
+updated: 1.43.0-alpha
 ---
 
 # Compare a report with current code
@@ -181,7 +181,7 @@ question and target, newest 20, and are a local convenience, not a record.
 * A very long unbroken token in a report is cut for the HTML view; the diff still sees it.
 * In a chart, edges are identified by their endpoint titles, so two different edges
   between the same pair of nodes count as one.
-* The new answer is produced in-process by the engine; no PowerShell is needed or started.
+* The new answer is produced in-process by the engine.
 * A forms CSV is compared only as two saved files (`--old a.csv --new b.csv`): no
   question reruns into a CSV, so `--old a.csv` alone has nothing to compare it with.
 * `--save --open` is refused: `--save` with no old side only takes a snapshot, and a

@@ -4,7 +4,7 @@
 
 ## Asking it
 
-Answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](Charts-and-the-IDE)).
+Answered in-process by the engine (`drag-lint ask`) (see [Charts and the IDE](Charts-and-the-IDE)).
 
 ```
 drag-lint ask path --target MyApp.Orders.TOrderService.Post --to MyApp.Db.TConnection.Commit --db <project.sqlite>
@@ -14,7 +14,7 @@ In the IDE: drag-lint > Reports > **Call path from this routine to another...** 
 
 ## You select
 
-Two routines: A (`-Target`) and B (`-To`).
+Two routines: A (`--target`) and B (`--to`).
 
 ## The chart shows
 
@@ -26,7 +26,7 @@ The engine's `call-path` decides the question (found, and how many calls the sho
 
 ## Parameters
 
-`-Cap` (paths drawn, default 20). Run `charts\src\Emit-Path.ps1` directly for `-MaxDepth` (longest route searched, default 20 calls -- `call-path`'s own default).
+`--cap` (paths drawn, default 20). The search stops at routes of 20 calls; for a longer limit, use `drag-lint call-path --max-depth N`.
 
 ## Read it carefully
 

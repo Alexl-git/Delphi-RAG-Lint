@@ -43,9 +43,7 @@ menu runs the same scripts as the terminal form below.)
 The IDE takes part in two more ways:
 
 1. **The Tools-entry fallback**: RAD Studio's own *Tools > Configure Tools*
-   entry, set up once below, runs the same command with a typed target. Use it
-   where the plugin is not installed, or to keep the console open with
-   `-NoExit`.
+   entry, set up once below, runs the same command with a typed target. Use it where the plugin is not installed.
 2. **The report jumps back into the IDE**: every `@File.pas:line` in the page is
    a `draglint://` link; a click opens that file at that line in the running
    IDE (needs the drag-lint plugin loaded and the link handler registered).
@@ -71,14 +69,13 @@ Add a second entry for the pictures, identical except:
 | Title | `drag-lint: callers/callees chart` |
 | Parameters | `ask butterfly --in "$EDNAME" --open --target $PROMPT` |
 
-* `$EDNAME` is the file in the active editor tab: the script uses it only to
+* `$EDNAME` is the file in the active editor tab: the engine uses it only to
   find the project's index (any `.pas`/`.dfm` of the project works).
 * `$PROMPT` makes RAD Studio show the parameter line before running it; type the
   target at the end (`frmBlueprint4.dxDBGrid1OperationVName` for the text,
   `Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation` for the
   picture).
-* `-NoExit` keeps the console open so you can read the text answer and any
-  error; `-Open` opens `index.html` in your browser.
+* `--open` opens `index.html` in your browser.
 
 > The command line behind these entries is verified from a terminal (below);
 > the two entries themselves have not yet been clicked in a live IDE. If a macro
@@ -116,18 +113,13 @@ drag-lint ask butterfly `
 ```
 
 * Answers land in `%TEMP%\drag-lint-reports\<question>-<target>\`.
-* `-ResolveOnly` prints the three indexes it would read and stops -- a quick
+* `--resolve-only` prints the three indexes it would read and stops -- a quick
   check that setup is right.
 * Exit codes: 0 answered, 1 refused (reason on stderr), 2 setup, 3 stale index.
-* For a folder kept under the repository instead (`charts\artifacts\...`), use
-  `New-DiagramArtifact.ps1`; see [Charts and the IDE](Charts-and-the-IDE).
 
 ## Setup: owner's machine
 
-Everything is in place except the link handler, which is **stale**: it still
-points at the old `archify-ir` worktree and at a versioned PowerShell folder
-that the next PowerShell update deletes. Re-register once from the main
-checkout:
+The link handler is registered (`drag-lint protocol status` reads `ours`). To register it again, run this from the main checkout:
 
 ```
 drag-lint protocol register --dry-run
@@ -139,36 +131,31 @@ Then add the two Tools entries above.
 ## Setup: other users
 
 The release zip (`drag-lint-v*-win64.zip`) carries the engine, the rules, the
-rule-book editor and the docs. It does **not** carry the chart scripts or the
+rule-book editor and the docs. It does **not** carry the
 IDE plugin. To produce this report you need:
 
-1. **A clone of the repository** (`git clone
-   https://github.com/Alexl-git/Delphi-RAG-Lint.git`) -- the scripts live in its
-   `charts\` folder.
-2. **The engine** (`drag-lint.exe` with its `.dll` files and `rules\`); no
-   PowerShell is needed.
-4. **Graphviz 16.1** for the pictures. The engine uses the `dot.exe` named by
+1. **The engine** (`drag-lint.exe` with its `.dll` files and `rules\`).
+2. **Graphviz 16.1** for the pictures. The engine uses the `dot.exe` named by
    the `DRAGLINT_DOT` environment variable, else the one in its settings, else
    `C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe` -- set the variable
    or install Graphviz to that folder. The text trace (`round-trip`) needs no
    Graphviz.
-5. **The three indexes**, built with the engine: the client project, the server
+3. **The three indexes**, built with the engine: the client project, the server
    project and the SQL scripts. Find each with
    `drag-lint resolve-dbs --project <your .dproj>` and build it with
    `drag-lint index --project <your .dproj> --db <that path>`.
-6. **Tell the scripts which server and SQL index belong to your client
-   project**: edit `charts\report-pairs.json` (one object per project; check
+4. **Tell the engine which server and SQL index belong to your client
+   project**: edit `%APPDATA%\drag-lint\report-pairs.json` (one object per project; check
    each path with `resolve-dbs` first).
-7. **For the jump into the IDE**: the drag-lint IDE plugin installed in RAD
+5. **For the jump into the IDE**: the drag-lint IDE plugin installed in RAD
    Studio, and `drag-lint protocol register` run once.
 
-Then add the two Tools entries, with your clone's path in place of
-`C:\Projects\Delphi-RAG-lint`, and follow the steps above with your own form
+Then add the two Tools entries, with your `drag-lint.exe` path in the Program field, and follow the steps above with your own form
 and column.
 
 ## Not yet
 
-* The *drag-lint > Reports* menu runs `drag-lint ask` (no PowerShell);
+* The *drag-lint > Reports* menu runs `drag-lint ask`;
   the Tools entries above remain the fallback without the plugin.
 * `round-trip` as a picture; today it is text.
 * A Graphviz location setting for the chart scripts.

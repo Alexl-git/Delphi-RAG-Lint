@@ -24,8 +24,8 @@
     "version": "1.42.0-alpha"
   },
   "features/ask.md": {
-    "hash": "fc0a097df335e28a2818700bdb08099266eea459505538c7e064df406fd8683c",
-    "version": "1.42.0-alpha"
+    "hash": "158895ed8f66505fcab1b58bc98d78a3a270555061e260b4b4760391ccfd9aa4",
+    "version": "1.43.0-alpha"
   },
   "features/auto-document-whole-project.md": {
     "hash": "02365ba15ecc39834dc621dfe632bba3540b72c3b3b3dd03c26c9088e9923daa",
@@ -64,12 +64,12 @@
     "version": "1.33.0-alpha"
   },
   "features/chart-questions.md": {
-    "hash": "a0d58bf943362001baaa6545d1283887bc6725972cab9a1f02510fdef107ec20",
-    "version": "1.33.0-alpha"
+    "hash": "19c64c18c5d9c053b12b9e0bb37772adf854c3b4a330bd6971ef28039d758e09",
+    "version": "1.43.0-alpha"
   },
   "features/charts-and-the-ide.md": {
-    "hash": "1e585b7f53db7b47ff827db4804e0eb84a0df7dd2e21390f7704fcc08d49c477",
-    "version": "1.38.0-alpha"
+    "hash": "43847246ae2d0eae4930f0923d08db9b0b791afbc0d9a459191ddbadfb470a43",
+    "version": "1.43.0-alpha"
   },
   "features/circular-dependency-report.md": {
     "hash": "40b3e78b191b3e7d36a72b86605dcc01ed4b248c3d7b7890b4eb93c8d51593c1",
@@ -84,8 +84,8 @@
     "version": "1.35.1-alpha"
   },
   "features/compare.md": {
-    "hash": "b177484d0d96fb56989a49ca1684463b0b4f7ccfbca80bd7740c315c29cbfc51",
-    "version": "1.33.0-alpha"
+    "hash": "f9455ed8b1a5292f47a7bc74fcb134fc3651a67a27ba7b51af691cde05221d1d",
+    "version": "1.43.0-alpha"
   },
   "features/compile-buffer-unsaved.md": {
     "hash": "d113c39313d0aaa3cf35a7b4fc218946ae761f20311445c285c6b696464a4685",

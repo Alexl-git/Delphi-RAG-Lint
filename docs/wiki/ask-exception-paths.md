@@ -4,7 +4,7 @@
 
 ## Asking it
 
-Answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](Charts-and-the-IDE)).
+Answered in-process by the engine (`drag-lint ask`) (see [Charts and the IDE](Charts-and-the-IDE)).
 
 From RAD Studio: *drag-lint > Reports > Which exceptions escape this routine...* -- put the caret on the selection first (see [IDE Menu Reference](IDE-Menu-Reference#reports)).
 
@@ -34,8 +34,8 @@ A routine can catch an exception on one call and let it escape on another; the c
 
 ## Parameters
 
-* `-Depth` (default 3) -- how many caller levels each exception is followed.
-* `-Cap` -- the maximum number of callers walked per level; the rest are counted, not dropped silently.
+* `--depth` (default 3) -- how many caller levels each exception is followed.
+* `--cap` -- the maximum number of callers walked per level; the rest are counted, not dropped silently.
 
 ## Read it carefully
 

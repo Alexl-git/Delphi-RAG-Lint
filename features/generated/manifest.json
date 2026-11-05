@@ -8969,7 +8969,7 @@
       "status": "shipped",
       "since": "1.30.0-alpha",
       "summary": "Ask one report question and print the answer as text",
-      "intro": "Read this when you want a report answer on stdout -- `drag-lint ask <question> --target <T> --project <P.dproj>` prints the DocInsight block the Reports menu copies (or the plain answer with --plain). Every question is answered inside the engine; no PowerShell is needed.",
+      "intro": "Read this when you want a report answer on stdout -- `drag-lint ask <question> --target <T> --project <P.dproj>` prints the DocInsight block the Reports menu copies (or the plain answer with --plain). Every question is answered inside the engine.",
       "wikiPage": "ask",
       "surfaces": [
         {
@@ -9087,7 +9087,7 @@
       "verified": {
         "date": "2026-11-05",
         "by": "CHARTS",
-        "build": "1.42.0-alpha",
+        "build": "1.43.0-alpha",
         "surfaceHash": "9439ba702440e75d8451e1a328108ae7b3050bc239b0de0886bdb5345a6a82be"
       }
     },
@@ -9224,7 +9224,7 @@
       "status": "shipped",
       "since": "1.20.1-alpha",
       "summary": "Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio",
-      "intro": "Read this when you first ask a chart question: how to ask one from drag-lint > Reports or with drag-lint ask, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a fresh project index, and Graphviz for the pictures (the installer brings it). No PowerShell is needed.",
+      "intro": "Read this when you first ask a chart question: how to ask one from drag-lint > Reports or with drag-lint ask, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a fresh project index, and Graphviz for the pictures (the installer brings it).",
       "wikiPage": "Charts-and-the-IDE",
       "surfaces": [
         {
@@ -9254,9 +9254,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-05",
         "by": "CHARTS",
-        "build": "1.33.0-alpha",
+        "build": "1.43.0-alpha",
         "surfaceHash": "664eca395a70f798e284bd2243de9400021810653438802d51be9ae24fc5497c"
       },
       "homeOrder": 45

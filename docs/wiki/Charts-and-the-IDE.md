@@ -12,7 +12,7 @@ call path from one routine to another; on the Reports menu with the plugin's nex
 question-list update, from the scripts today). The chart
 tool-set lives in the `charts\` folder of the repository. **In RAD Studio every
 question is on the drag-lint > Reports menu** (below). Every question is answered in-process by the engine's `ask`
-verb (`drag-lint ask`), so no PowerShell is needed.
+verb (`drag-lint ask`).
 
 ## From RAD Studio: drag-lint > Reports
 
@@ -42,7 +42,7 @@ verb (`drag-lint ask`), so no PowerShell is needed.
 When the index is stale the menu says so and offers the incremental reindex
 command; when a question is refused (an ambiguous target, a missing index
 pair) the reason is shown. The menu runs `drag-lint ask` (described
-below); no PowerShell is needed, and for pictures it needs
+below); for pictures it needs
 Graphviz. **Forms for testers (CSV)...** sits on the same submenu.
 
 ## What a chart is
@@ -66,7 +66,7 @@ a text trace; every other question answers with a picture (Graphviz).
   Graphviz are found").
 * `drag-lint ask` reads the live indexes (`--project <P.dproj>`, `--in <U.pas>`
   or `--db <index>`) and refuses a stale one (exit 3; stderr names the reindex
-  command) unless you pass `--allow-stale`. No PowerShell is needed.
+  command) unless you pass `--allow-stale`.
 * Keep the output folder short: `dot.exe` cannot write a path of 260 characters
   or more, and the script refuses one before it runs.
 
@@ -94,7 +94,7 @@ drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1OperationVName ^
 
 A `round-trip` target can be a control (`<Form>.<Control>` or
 `<Unit>.<TForm>.<Control>`), a TField variable (`<Unit>.<TClass>.<FieldVar>`)
-or `TABLE.COLUMN`. The default depth is 4 call levels (`-Depth`). A
+or `TABLE.COLUMN`. The default depth is 4 call levels (`--depth`). A
 `TABLE.COLUMN` loaded by more than one dataset stops and lists the datasets --
 pass the control or the dataset field instead.
 
@@ -105,7 +105,7 @@ linked from [Diagrams and Charts](Diagrams-and-Charts) give each one.
 ## One command, for AI agents and scripts
 
 `drag-lint ask` asks any question with no setup and prints the
-answer as text; the engine answers it itself and starts no PowerShell:
+answer as text; the engine answers it itself:
 
 ```
 drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1FtrsVNum `
@@ -149,10 +149,12 @@ One folder per answer under `%TEMP%\drag-lint-reports` (change the root with
 
 ## Viewing it
 
-Open `index.html` in any browser (or pass `-Open`). There is **no chart viewer
+Open `index.html` in any browser (or pass `--open`). There is **no chart viewer
 inside RAD Studio**. The IDE's docked graph window
 (drag-lint > drag-lint Graph (dockable)) hosts the separate call-graph viewer,
 `drag_lint_graph.exe`; it does not open chart folders.
+
+The page shows the chart as a fixed picture, with no pan or zoom controls of its own. Use the browser's zoom and scroll bars, or open `graph.pdf`.
 
 ## Jumping from a chart into RAD Studio
 
@@ -181,11 +183,11 @@ drag-lint protocol status               # ours | legacy-powershell | foreign | n
 ```
 
 What it writes: one registry key, `HKCU\Software\Classes\draglint`, whose command
-runs `drag-lint-open.exe` (a GUI helper, no PowerShell) from where it sits beside
+runs `drag-lint-open.exe` (a GUI helper) from where it sits beside
 `drag-lint.exe`. A handler inside a `*-wt\` worktree, or a key that belongs to
 another program, is refused unless you pass `--force`. `--dry-run` prints what
 would be written and touches nothing; `unregister --dry-run` lists what it would
-remove. **Re-register after the merge:** a registration made with the old
+remove. **Upgrading an older registration:** a registration made with the old
 PowerShell script reads `legacy-powershell` in `status`, and `register` replaces
 it. Full details: [the draglint:// handler](Draglint-Protocol-Handler).
 
@@ -307,10 +309,6 @@ them.
 
 ## Not yet
 
-* **No chart viewer inside RAD Studio.** Charts open in a browser.
+* **No chart viewer inside RAD Studio, and no built-in pan or zoom.** Charts open in a browser as a fixed picture.
 * **`round-trip` as a chart.** It answers in text today; a picture drawn from
   that text is the next step.
-* **One engine verb, `ask`.** Shipped: `drag-lint ask` runs in-process, and the
-  IDE menu and the terminal both call it (the PowerShell scripts under
-  `charts\src` remain only as dev tooling).
-* `compare` (before / delta / after) is parked.
