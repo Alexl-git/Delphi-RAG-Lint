@@ -47,8 +47,8 @@ type
     Usage: string;
     /// <summary>cli: every flag the verb accepts (schema v2).</summary>
     Flags: TArray<TFlag>;
-    /// <summary>cli: position of this surface's block in the --help verb reference (1-based); 0 when it has none (P7).</summary>
-    HelpOrder: Integer;
+    /// <summary>cli: position of this surface's block in the --help verb reference (1-based, fractions allowed: 2.5 sorts between 2 and 3); 0 when it has none (P7).</summary>
+    HelpOrder: Double;
     /// <summary>cli: the verbatim --help lines of this surface's block, first line (the usage line, original spacing) included (P7).</summary>
     Help: TArray<string>;
     /// <summary>ide-menu / ide-context / ide-about / tool-window: click-by-click steps (schema v2).</summary>
@@ -237,7 +237,7 @@ begin
   Result.Usage := Prop(pObj, 'usage');
   Result.Steps := StrList(pObj, 'steps');
   Result.Help := StrList(pObj, 'help');
-  Result.HelpOrder := StrToIntDef(Prop(pObj, 'helpOrder'), 0);
+  Result.HelpOrder := StrToFloatDef(Prop(pObj, 'helpOrder'), 0, TFormatSettings.Invariant); { C24 #8: was StrToIntDef, which read 2.5 as 0 and dropped the block }
   lItems := ObjList(pObj, 'flags');
   SetLength(Result.Flags, Length(lItems));
   for i := 0 to High(lItems) do

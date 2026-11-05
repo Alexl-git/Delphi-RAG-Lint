@@ -29,7 +29,7 @@ type
     Id: string;
     Verb: string;
     Sub: string;
-    Order: Integer;
+    Order: Double;
     EntryIndex: Integer;
     SurfaceIndex: Integer;
   end;
@@ -74,6 +74,7 @@ implementation
 
 uses
   System.SysUtils
+  , System.Math
   , System.RegularExpressions
   , System.Generics.Collections
   , System.Generics.Defaults;
@@ -97,7 +98,7 @@ function CompareRows(const pA, pB: TRow): Integer;
 begin
   if (pA.Order > 0) and (pB.Order > 0) then
   begin
-    Result := pA.Order - pB.Order;
+    Result := CompareValue(pA.Order, pB.Order);
     if Result = 0 then
       Result := CompareStr(pA.Id, pB.Id);
   end

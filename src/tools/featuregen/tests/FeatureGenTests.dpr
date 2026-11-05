@@ -2375,6 +2375,46 @@ begin
     lList.Free;
   end;
 end;
+procedure TestHelpOrderFraction;
+var
+  lA, lB, lC: TRow;
+  lDir: string;
+  lReg: TRegistry;
+  lPath: string;
+  lText: string;
+  lOrder: Double;
+begin
+  lA := Default(TRow);
+  lA.Id := 'a';
+  lA.Order := 2;
+  lB := lA;
+  lB.Id := 'b';
+  lB.Order := 2.5;
+  lC := lA;
+  lC.Id := 'c';
+  lC.Order := 3;
+  Check('Help.FractionalOrderSortsBetween', (CompareRows(lA, lB) < 0) and (CompareRows(lB, lC) < 0) and (SortedIds([lC, lB, lA]) = 'a;b;c;'), SortedIds([lC, lB, lA]));
+  lDir := TPath.Combine(TPath.GetTempPath, 'fg_helporder_' + IntToStr(GetCurrentProcessId));
+  if TDirectory.Exists(lDir) then TDirectory.Delete(lDir, True);
+  TDirectory.Copy(MiniDir, lDir);
+  lReg := TRegistry.Create;
+  try
+    lPath := TPath.Combine(lDir, 'features\entries\outline.json');
+    lText := TFile.ReadAllText(lPath);
+    lText := StringReplace(lText, '"verb": "outline"', '"verb": "outline", "helpOrder": 2.5', []);
+    TFile.WriteAllText(lPath, lText);
+    lReg.Load(lDir);
+    lOrder := 0;
+    for var lE in lReg.Entries do
+      if lE.Id = 'outline' then
+        for var lS in lE.Surfaces do
+          if lS.Verb = 'outline' then lOrder := lS.HelpOrder;
+    Check('Model.HelpOrderKeepsFraction', lOrder = 2.5, FloatToStr(lOrder));
+  finally
+    lReg.Free;
+    TDirectory.Delete(lDir, True);
+  end;
+end;
 procedure TestHelpOrderTiebreak;
 var
   lA, lB, lC: TRow;
@@ -3825,6 +3865,7 @@ begin
       TestHelpText(lRepo);
       TestFlagAliasPolicy(lRepo);
       TestHelpOrderTiebreak;
+      TestHelpOrderFraction;
       RunLiveTest('TestPlannedSkipsLive', lRepo, TestPlannedSkipsLive);
       TestWellFormedCatchesBadEntry(lRepo);
       RunLiveTest('TestBacklogReadsVerified', lRepo, TestBacklogReadsVerified);

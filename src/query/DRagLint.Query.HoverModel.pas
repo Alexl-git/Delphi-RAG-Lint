@@ -47,6 +47,8 @@ type
     Model    : THoverModel   ;
     /// <summary>Formatted Phase-2 fact lines; empty when the symbol has none.</summary>
     FactLines: TArray<string>;
+    /// <summary>One line (Implemented by: TFoo.Bar, ...) naming the methods that answer an INTERFACE method; empty for every other symbol. Computed whatever AWithFacts is, so hover --format plain can print it; with AWithFacts it is also appended to FactLines (md, json, LSP hoverBundle).</summary>
+    ImplLines: TArray<string>;
     /// <summary>The mined Result:=/Exit() expressions, in first-seen order --
     /// what RenderHoverMarkdown takes as its AReturnRhs.</summary>
     ReturnRhs: TArray<string>;
@@ -92,11 +94,18 @@ implementation
 uses
   System.SysUtils              ,
   System.RegularExpressions    ,
+  System.Math                  ,
+  System.StrUtils              ,
   DRagLint.Core .LiveDocs ,
   DRagLint.Hover.Returns  ,
   DRagLint.Doc  .Facts    ,
   DRagLint.Doc  .Regions  ,
+  DRagLint.Query.Implementors,
   DRagLint.Index.Manifest ;
+
+const
+  /// <summary>Answering methods named on the hover line before "(+N more)".</summary>
+  IMPL_LINE_CAP = 6;
 
 { The `const` / `var` / `out` / `constref` in front of AParamName within a
   routine signature, or '' when the parameter is passed by value.
@@ -301,6 +310,18 @@ begin
     Result.Model.EffectFree   := Facts.EffectFree;
     Result.Model.EffectSummary:= Facts.EffectSummary;
     Result.Model.EffectWitness:= Facts.EffectWitness;
+  end;
+  { C22: an interface METHOD names its answering methods (ImplementingMethodsOf, the
+    LSP implementation / code-lens primitive). [] for any other symbol. }
+  var Answering: TArray<TSymbol>:= ImplementingMethodsOf(AStore, ASym);
+  if Length(Answering) > 0 then
+  begin
+    var Line: string:= '';
+    for var K:= 0 to Min(Length(Answering), IMPL_LINE_CAP) - 1 do
+      Line:= Line + IfThen(K = 0, '', ', ') + Answering[K].QualifiedName;
+    if Length(Answering) > IMPL_LINE_CAP then Line:= Line + Format(' (+%d more)', [Length(Answering) - IMPL_LINE_CAP]);
+    Result.ImplLines:= TArray<string>.Create('Implemented by: ' + Line);
+    if AWithFacts then Result.FactLines:= Result.FactLines + Result.ImplLines;
   end;
 end; // function
 

@@ -235,7 +235,12 @@ function Get-Stamp([string]$Path) {
 function Test-SamePath([string]$A, [string]$B) {
   if (($A -eq '') -or ($B -eq '')) { return $false }
   # a relative path is the ENGINE's, and every engine run here starts in $root
-  return ([IO.Path]::GetFullPath($A, $root).TrimEnd('\') -ieq [IO.Path]::GetFullPath($B, $root).TrimEnd('\'))
+  # one-argument GetFullPath only: the two-argument overload does not exist on Windows PowerShell 5.1 (.NET Framework)
+  try {
+    $fa = [IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($A)) { $A } else { Join-Path $root $A }))
+    $fb = [IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($B)) { $B } else { Join-Path $root $B }))
+    return ($fa.TrimEnd('\') -ieq $fb.TrimEnd('\'))
+  } catch { return $false }  # text that is not a path (5.1 throws on illegal characters) is not the same path
 }
 
 $micronite = 'C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite'
@@ -253,7 +258,7 @@ $rdProj = Invoke-Engine $exe1 $root @('resolve-dbs', '--project', 'proj\Hello.dp
 $foreign = @(($rdAll.Text + "`n" + $rdProj.Text) -split "`r?`n" |
   Where-Object { $_ -match '[A-Za-z]:\\' -and $_ -notmatch [regex]::Escape($root) })
 $isolated = ($foreign.Count -eq 0) -and ($rdAll.Text -notmatch 'loaded defaults from') -and
-            (Test-SamePath $rdProj.Text.Trim() $helloDb)
+            (Test-SamePath (@($rdProj.Text -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '\.sqlite$' })[0]) $helloDb)
 Check 'resolve-dbs names only paths under the temp root, loads no global defaults, and resolves Hello to the fixture DB' `
   $isolated ("foreign=[{0}] project=[{1}]" -f ($foreign -join ' ; '), $rdProj.Text.Trim())
 # eng2 is a SECOND engine copy with its own manifest; it is isolated separately.
