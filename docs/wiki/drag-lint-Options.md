@@ -39,7 +39,7 @@ by default: errors, warnings, hints and info. Info is the most common severity
 That is intended: the owner's ruling of 2026-11-05 is to fix false positives in
 the rules rather than hide a whole severity.
 
-To turn markers off, open Tools > Options > Third Party > drag-lint > Linter,
+To turn markers off, open the Tools menu, Options, Third Party, drag-lint, Linter page,
 group "Inline Markers":
 
 * untick "Show info inline" to hide only info markers;

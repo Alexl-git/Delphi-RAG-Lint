@@ -4,6 +4,25 @@ Finds `uses` cycles among indexed units and, on request, proposes a followable
 refactoring plan to break them. Reach for it when the compiler is fighting
 circular references, or a project's dependency graph feels tangled.
 
+This works because of the thorough index of the Delphi platform library (RTL, VCL and the rest) and of your
+project: every unit, `uses` edge, symbol and reference is already in a local SQLite database, so the engine knows
+which symbol ties a cycle together and who uses it. The work runs locally and needs no AI and no internet:
+`cycles`, `--plan` and `--fix` make no network call and no model call. The only programs they start are your own
+Delphi compiler build (`msbuild`, to prove the edit) and this same engine re-indexing the project. A model can
+follow the `--plan` playbook (measured below), but that is optional.
+
+## Step by step
+1. Index the project once (and again after every edit outside this tool):
+   `drag-lint index --project <X.dproj> --db <db>`
+2. See the groups: `drag-lint cycles --db <db> --causes`. An interface-coupled group is Part A, an
+   implementation-only one is Part B.
+3. Dry run, no source file written (it does build the project first):
+   `drag-lint cycles --fix --project <X.dproj> --db <db> [--unit <stem>]`. Exit 0 = the engine can do it, 1 = refused with a named kind (see
+   [Refusal kinds](#refusal-kinds)).
+4. Apply: the same command plus `--apply` (every touched file is first backed up as `<file>.BCK<n>`; a compile
+   error rolls everything back; after a rollback rebuild the project). Then run `drag-lint cycles --db <db>`: it
+   prints what the plan predicted, and the next group is the next run.
+5. A refused group: `drag-lint cycles --db <db> --plan > cycle-plan.md` prints the by-hand playbook.
 ## Running it from the CLI
 ```
 drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--format json|text]
@@ -245,6 +264,7 @@ leaf + interface name.
 * **Overlapping `with` bodies** (nested, or one `with X as TA, Y as TB do`, since 1.43): each class checks every bare
   name of its whole body, so a name either class declares is carried by that class or the edge is refused, and
   the nesting order, unchanged by the rewrite, decides between two carriers as it did between the classes.
+  Measured on 1.43.0-alpha (un_cyclefix_r2_multiclass_dcc.ps1, 153 checks): the nested form, the comma form and a head spread over two lines each plan exit 0 with two interfaces, the followed copy builds and prints byte-identical output; a library method such as Free bare inside the overlapping bodies refuses with-member (not multiple-classes) and nothing is planned.
 * **Still refused:** `other-ref` for an `is` / `as` operand that is no class (an interface or an alias the planner
   could not move out either; the refusal names the line); the `with-member` shapes above.
 * `--plan`, `tools\follow-cycle-plan.ps1` and `--fix --apply` apply the same bytes; guard
@@ -272,7 +292,7 @@ These cases used to refuse and are now applied (lane CYC-C), or are predicted th
 * **Plan agrees with fix.** A routine edge whose signature names a type that Part A already moves is predicted as
   cut by routine-call inversion (not `signature-in-cycle`) when Part B is re-run,.
 
-Still manual: type declarations and type casts of the moved name, several classes in one move, unsupported
+Still manual: type declarations and type casts of the moved name, an edge that names several classes but tests none of them with `is` / `as` (`multiple-classes`; with an `is` / `as` operand several classes are cut, see above), unsupported
 members, unresolved types, non-ASCII text in a comment or an identifier (in a string literal it becomes a `#code`).
 ### What stays manual
 

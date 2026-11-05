@@ -454,6 +454,13 @@ Notes:
 
 ### Untangling unit dependencies (cycles + uses cleanup)
 
+This works because of the thorough index of the Delphi platform library and of your project: every unit, `uses`
+edge, symbol and reference is already in a local database, so drag-lint knows which symbol ties a cycle together
+and who uses it. The work runs locally and needs no AI and no internet: `cycles`, `--plan` and `--fix` make no
+network or model call (the only programs they start are your own `msbuild`, to prove an edit, and this engine
+re-indexing). In short: `index --project X.dproj --db d.sqlite`, then `cycles --db d.sqlite --causes`, then
+`cycles --fix --project X.dproj --db d.sqlite` (dry run), then the same with `--apply`; the steps are spelled out on the
+wiki page [Circular Uses Report (cycles + fix plan)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Uses-Report-cycles-fix-plan).
 Find circular unit dependencies and the exact `uses` lines that form them:
 
 ```
