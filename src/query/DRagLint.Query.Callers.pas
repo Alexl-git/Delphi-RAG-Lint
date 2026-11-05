@@ -868,9 +868,7 @@ begin
   AKind := '';
   if AName = '' then Exit;
   Result:= AStore.FindChildSymbolByName(AProp.ParentId, AName);
-  if Result.Id <= 0 then AKind:= 'unresolved'
-  else if Result.Kind in [skFunction, skProcedure, skMethod] then AKind:= 'method'
-  else AKind:= 'field';
+  AKind:= if Result.Id <= 0 then 'unresolved' else if Result.Kind in [skFunction, skProcedure, skMethod] then 'method' else 'field';
 end;
 
 function ReadLinesOrNothing(const APath: string): TArray<string>;

@@ -65,8 +65,8 @@ begin
       for var F: string in TDirectory.GetFiles(Dir, '*.dpr') do
         if not TFile.Exists(ChangeFileExt(F, '.dproj')) then Result:= Result + [F];
     except
-      on E: EInOutError do ; { an unreadable folder owns nothing we can see }
-      on E: EDirectoryNotFoundException do ;
+      { An unreadable folder owns nothing we can see; the search goes on above it. }
+      on E: Exception do Writeln(ErrOutput, 'NOTE: cannot list ', Dir, ': ', E.Message);
     end;
     var Parent: string:= ExcludeTrailingPathDelimiter(ExtractFilePath(Dir));
     if (Parent = '') or SameText(Parent, Dir) then Break;
@@ -82,11 +82,8 @@ begin
   for var M: TMatch in TRegEx.Matches(AText, REFERENCE, [roIgnoreCase]) do
   begin
     var Rel: string:= if M.Groups[1].Success and (M.Groups[1].Value <> '') then M.Groups[1].Value else M.Groups[2].Value;
-    try
-      if SameText(TPath.GetFullPath(TPath.Combine(ABaseDir, Rel)), AFile) then Exit(True);
-    except
-      on E: EArgumentException do Continue; { `in '` inside program text, not a path }
-    end;
+    { `in '` can sit inside program text, which is not a path. }
+    if TPath.HasValidPathChars(Rel, False) and SameText(TPath.GetFullPath(TPath.Combine(ABaseDir, Rel)), AFile) then Exit(True);
   end;
 end;
 

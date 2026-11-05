@@ -1712,7 +1712,7 @@ begin
     else if A = '--coverage'       then Result.WiringCoverage:= True
     else if (A = '--context') and (i < ParamCount) then begin Inc(i); Result.ContextLines:= StrToIntDef(ParamStr(i), 0); end
     else if A = '--resolved' then Result.Resolved:= True // v14 (D5 T8): find-callers --resolved
-    else if A = '--rw' then Result.UsagesRw:= True
+    else if A = '--rw' then Result.UsagesRw:= True  // dl:ok duplicate-code@115a -- ParseArgs is a flat else-if flag chain; the repeated tokens are its shape, not copied logic
     // v14 (D5 T11): call-path / callgraph traversal flags.
     else if (A = '--from') and (i < ParamCount) then begin Inc(i); Result.CallFrom:= ParamStr(i); end
     else if (A = '--max-depth') and (i < ParamCount) then begin Inc(i); Result.MaxDepth:= StrToIntDef(ParamStr(i), 20); end
@@ -12086,6 +12086,55 @@ begin
       if S.Kind = skUnit then Exit(True);
 end;
 
+/// <summary>The library half of UsagesDbForFile: no project owns AAbs, so it is a
+/// library unit on the assumed platform, if what it uses says so.</summary>
+/// <param name="AArgs">Parsed args; InFile and LibraryDbs are read.</param>
+/// <param name="AAbs">The file, expanded.</param>
+/// <param name="ALib">The library database; may be '' or missing.</param>
+/// <param name="ALibHoldsFile">True when ALib holds AAbs: what it uses is not questioned.</param>
+/// <param name="APlatform">The platform so far; '' assumes Win64.</param>
+/// <param name="ADb">Receives ALib on 0.</param>
+/// <returns>0, or 2 with the reason and what to do on stderr.</returns>
+function UsagesLibraryDb(const AArgs: TArgs; const AAbs, ALib: string; ALibHoldsFile: Boolean; const APlatform: string; out ADb: string): Integer;
+begin
+  Result:= 2;
+  ADb:= '';
+  var Platform: string:= APlatform;
+  if Length(AArgs.LibraryDbs) > 0 then
+  begin
+    if ContainsText(ALib, 'win64') then Platform:= 'Win64'
+    else if ContainsText(ALib, 'win32') then Platform:= 'Win32';
+  end;
+  if Platform = '' then Platform:= 'Win64';
+  if (ALib = '') or not TFile.Exists(ALib) then
+  begin
+    Writeln(ErrOutput, Format('ERROR: usages: no project lists %s and no %s library index exists to treat it as a library unit.', [AArgs.InFile, Platform]));
+    Writeln(ErrOutput, '  Pass --db <project db>; resolve-dbs --project <x.dproj> prints it. Or pass --library-db <lib.sqlite>.');
+    Exit;
+  end;
+  var RoOk: Boolean;
+  var Store: ISymbolStore:= OpenReadOnlyStore(ALib, RoOk);
+  if (not RoOk) or (Store = nil) then
+  begin
+    Writeln(ErrOutput, 'ERROR: usages: the library index cannot be read: ', ALib);
+    Exit;
+  end;
+  var Foreign: TArray<string>:= nil;
+  if not ALibHoldsFile then
+    for var U: string in UnitsUsedBy(AAbs) do
+      if not LibraryHasUnit(Store, U) then Foreign:= Foreign + [U];
+  if Length(Foreign) > 0 then
+  begin
+    Writeln(ErrOutput, Format('ERROR: usages: no project lists %s, and it uses units the %s library does not have: %s.', [AArgs.InFile, Platform, string.Join(', ', Foreign)]));
+    Writeln(ErrOutput, '  Which project is it part of? Pass that project''s database with --db; resolve-dbs --project <x.dproj> prints it,');
+    Writeln(ErrOutput, '  and drag-lint index --project <x.dproj> creates it.');
+    Exit;
+  end;
+  Writeln(ErrOutput, Format('usages: no project lists %s; treating it as a library unit, assumed platform %s, database %s', [AArgs.InFile, Platform, ALib]));
+  ADb:= ALib;
+  Result:= 0;
+end; // function
+
 /// <summary>Finds the database `usages --in F` with no --db answers from: a unit does
 /// not exist by itself (owner Q2, 2026-11-04).</summary>
 /// <param name="AArgs">Parsed args; InFile, CheckPlatform, LibraryDbs are read.</param>
@@ -12150,12 +12199,11 @@ begin
     if Named or (TFile.Exists(Db) and DbContainsFile(Db, Abs)) then AddOwner(Proj, Db);
   end;
 
-  var LibDbs: TArray<string>:= nil;
   var Platform: string:= AArgs.CheckPlatform;
   if HaveManifest then
   begin
     if Platform = '' then Platform:= Manifest.Settings.DefaultPlatform;
-    LibDbs:= LibrarySectionDbs(Manifest);
+    var LibDbs: TArray<string>:= LibrarySectionDbs(Manifest);
     var Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
     try
       for var Cand: string in TDbSelect.Resolve(Manifest, Platform, Resolver, True) do
@@ -12203,40 +12251,7 @@ begin
     Exit(0);
   end;
 
-  { No project owns it: a library unit, if what it uses says so. }
-  if Length(AArgs.LibraryDbs) > 0 then
-  begin
-    if ContainsText(Lib, 'win64') then Platform:= 'Win64'
-    else if ContainsText(Lib, 'win32') then Platform:= 'Win32';
-  end;
-  if Platform = '' then Platform:= 'Win64';
-  if (Lib = '') or not TFile.Exists(Lib) then
-  begin
-    Writeln(ErrOutput, Format('ERROR: usages: no project lists %s and no %s library index exists to treat it as a library unit.', [AArgs.InFile, Platform]));
-    Writeln(ErrOutput, '  Pass --db <project db>; resolve-dbs --project <x.dproj> prints it. Or pass --library-db <lib.sqlite>.');
-    Exit;
-  end;
-  var RoOk: Boolean;
-  var Store: ISymbolStore:= OpenReadOnlyStore(Lib, RoOk);
-  if (not RoOk) or (Store = nil) then
-  begin
-    Writeln(ErrOutput, 'ERROR: usages: the library index cannot be read: ', Lib);
-    Exit;
-  end;
-  var Foreign: TArray<string>:= nil;
-  if not LibHoldsFile then
-    for var U: string in UnitsUsedBy(Abs) do
-      if not LibraryHasUnit(Store, U) then Foreign:= Foreign + [U];
-  if Length(Foreign) > 0 then
-  begin
-    Writeln(ErrOutput, Format('ERROR: usages: no project lists %s, and it uses units the %s library does not have: %s.', [AArgs.InFile, Platform, string.Join(', ', Foreign)]));
-    Writeln(ErrOutput, '  Which project is it part of? Pass that project''s database with --db; resolve-dbs --project <x.dproj> prints it,');
-    Writeln(ErrOutput, '  and drag-lint index --project <x.dproj> creates it.');
-    Exit;
-  end;
-  Writeln(ErrOutput, Format('usages: no project lists %s; treating it as a library unit, assumed platform %s, database %s', [AArgs.InFile, Platform, Lib]));
-  ADb:= Lib;
-  Result:= 0;
+  Result:= UsagesLibraryDb(AArgs, Abs, Lib, LibHoldsFile, Platform, ADb);
 end; // function
 
 /// <summary>`usages --rw`: the users of a property or member, split into readers and
