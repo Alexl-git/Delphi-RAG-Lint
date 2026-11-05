@@ -13,7 +13,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 * [Ancestor not in project (lint rule)](features/ancestor-not-in-project.md) -- Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library.
 * [Data module reaching a global form (lint rule)](features/datamodule-form-global.md) -- Project lint rule, OFF by default: a data module unit reads or writes another unit's global form variable.
-* [Effect-free call in a loop that could move out (lint rule)](features/effect-free-in-loop-invariant.md) -- Project-wide lint rule, OFF by default: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop.
+* [Effect-free call in a loop that could move out (lint rule)](features/effect-free-in-loop-invariant.md) -- Project-wide lint rule, ON by default since 1.43: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop.
 * [Identifier case mismatch (lint rule)](features/identifier-case-mismatch.md) -- Lint rule, OFF by default: a name spelled in a different case from its declaration.
 * [Interfaced object set to nil (lint rule)](features/interfaced-object-nil-leak.md) -- Lint rule, OFF by default: an object reference to a TInterfacedObject descendant is set to nil while it holds a fresh instance, which leaks it.
 * [Opaque to analysis (lint rule)](features/opaque-to-analysis.md) -- Project-wide lint rule (info, off by default): a routine whose non-library calls are mostly unresolvable, so impact and call trees are blind inside it.

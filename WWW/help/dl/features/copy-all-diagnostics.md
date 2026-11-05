@@ -7,7 +7,7 @@ group: linting
 order: 30004
 since: 0.1.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.43.0-alpha
 ---
 
 # Copy All Diagnostics
@@ -92,6 +92,11 @@ drag-lint lint C:\Projects\MyApp\Unit1.pas --json
 
 This would print `Unit1.pas`'s findings as JSON; the IDE action copies the
 equivalent findings text to the clipboard instead.
+
+### Which rules can `--rule` take
+`--rule help`, on `lint <file>`, `lint --project` and `lint-project`, lists every id in the catalog and exits 0
+(`--json`: `rules[]`). On `lint --project` with no unit, the rules that run there (`unit-not-in-dpr`,
+`unit-not-in-library`) are listed apart from those that need a unit. An id the catalog does not have exits 2.
 
 ---
 

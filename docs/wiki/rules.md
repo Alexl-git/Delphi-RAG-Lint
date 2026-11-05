@@ -4,7 +4,7 @@ Lists the full lint rule catalog: every rule drag-lint can check, with its
 category, and its default enabled/fixable status. Reach for it to see what a
 lint run can find, or to filter by category.
 
-The catalog currently holds 298 rules -- 248 enabled by default, 110 marked
+The catalog currently holds 298 rules -- 251 enabled by default, 110 marked
 fixable -- across 18 categories. Of the 298, 205 are built-in and 93 are
 external `.scm` rule files.
 

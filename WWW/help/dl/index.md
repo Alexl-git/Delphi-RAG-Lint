@@ -83,7 +83,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Copy Selected Diagnostics](features/copy-selected-diagnostics.md) | Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard | 1.28.3-alpha |
 | [Data module reaching a global form (lint rule)](features/datamodule-form-global.md) | Project lint rule, OFF by default: a data module unit reads or writes another unit's global form variable | 1.42.0-alpha |
 | [drag-lint: Project Rules](features/drag-lint-project-rules.md) | Right-click a project in the Project Manager to make it the active project and open its Lint Options tab in the drag-lint dock | 0.95.0-alpha |
-| [Effect-free call in a loop that could move out (lint rule)](features/effect-free-in-loop-invariant.md) | Project-wide lint rule, OFF by default: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop | 1.42.0-alpha |
+| [Effect-free call in a loop that could move out (lint rule)](features/effect-free-in-loop-invariant.md) | Project-wide lint rule, ON by default since 1.43: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop | 1.42.0-alpha |
 | [exceptions-sync](features/exceptions-sync.md) | Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites | 1.8.0-alpha |
 | [Fix all in project](features/fix-all-in-project.md) | Applies autofixes for every fixable finding across the whole project, starting from the Structure form | 0.61.0-alpha |
 | [Fix all in unit](features/fix-all-in-unit.md) | Applies autofixes for every fixable finding in the current unit, starting from the Structure form | 0.1.0-alpha |

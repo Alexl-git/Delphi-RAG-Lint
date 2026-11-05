@@ -1,18 +1,18 @@
 ---
 id: effect-free-in-loop-invariant
 title: Effect-free call in a loop that could move out (lint rule)
-summary: "Project-wide lint rule, OFF by default: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop"
+summary: "Project-wide lint rule, ON by default since 1.43: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop"
 product: DL
 group: linting
 order: 30009
 since: 1.42.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.43.0-alpha
 ---
 
 # Effect-free call in a loop that could move out (lint rule)
 
-Project-wide lint rule, OFF by default: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop.
+Project-wide lint rule, ON by default since 1.43: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop.
 
 Read this to see when effect-free-in-loop-invariant fires and why it stays silent. It reads the stored purity facts in lint-all and names the loop the call can move out of.
 
@@ -26,7 +26,7 @@ No IDE surface: this feature runs from the CLI (see How to run it).
 
 ## Details
 
-A project-wide lint rule, severity **info**, OFF by default: a call to a PROVEN effect-free, value-returning routine inside a loop, where every iteration would get the same answer. The call can move in front of the loop.
+A project-wide lint rule, severity **info**, ON by default since 1.43 (owner ruling: rules are ON unless they cost time or give many false positives; turn it off with `--disable effect-free-in-loop-invariant`): a call to a PROVEN effect-free, value-returning routine inside a loop, where every iteration would get the same answer. The call can move in front of the loop.
 
 ```pascal
 for var O in Row do

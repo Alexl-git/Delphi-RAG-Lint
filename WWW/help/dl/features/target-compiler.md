@@ -7,14 +7,14 @@ group: linting
 order: 30033
 since: 1.38.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.43.0-alpha
 ---
 
 # Target compiler (--target-compiler)
 
 Names the Delphi the code is for: lint drops advice needing a newer compiler; index parses `VER<N>0` / `CompilerVersion` branches for it.
 
-Read this when your code must still build on an older Delphi (12, 10.4, XE7 ...): pass --target-compiler or set target_compiler in drag-lint-lint.json, and lint stops suggesting syntax that compiler cannot take.
+Read this when your code must still build on an older Delphi (12, 10.4, XE7, 5 ...): pass --target-compiler or set target_compiler in drag-lint-lint.json, and lint stops suggesting syntax that compiler cannot take.
 
 ## How to run it
 
@@ -41,9 +41,14 @@ drag-lint lint-all --db <db> --target-compiler 10.4
 drag-lint lint-all --db <db> --project <x.dproj> --target-compiler auto   (from the .dproj ProjectVersion)
 drag-lint rules --json --target-compiler 36              (target_active per rule at that target)
 ```
-Accepted tokens: product versions `13`, `12`, `12.2`, `11`, `10.4`, `10.3`, `10.2`, `10.1`, `10`, `XE8` .. `XE2`, `XE`, `2010`, `2009`, `2007`, `2005`, `7`, `6` (an optional `Delphi` prefix and the code names `Florence`, `Athens`, `Alexandria`, `Sydney`, `Rio`, `Tokyo`, `Berlin`, `Seattle` work too), or a CompilerVersion `14` .. `37`. An unknown token exits 2 and lists the accepted set; drag-lint never guesses.
+Accepted tokens: product versions `13`, `12`, `12.2`, `11`, `10.4`, `10.3`, `10.2`, `10.1`, `10`, `XE8` .. `XE2`, `XE`, `2010`, `2009`, `2007`, `2005`, `7`, `6`, `5` .. `1` (an optional `Delphi` prefix, `D5` .. `D1` and the code names `Florence`, `Athens`, `Alexandria`, `Sydney`, `Rio`, `Tokyo`, `Berlin`, `Seattle` work too), a conditional symbol `VER80` .. `VER370` (`VER130` = Delphi 5), or a CompilerVersion `14` .. `37`. A bare `13` is Delphi 13, never CompilerVersion 13. An unknown token exits 2 and lists the accepted set.
 
-`auto` reads the `<ProjectVersion>` of the `.dproj` named by `--project` (20.4 -> 37, 20.1-20.3 -> 36, 19.3-19.5 -> 35, 19.0-19.2 -> 34, 18.5-18.8 -> 33, 18.2-18.4 -> 32, 18.1 -> 31). A value outside that table exits 2. ProjectVersion says which IDE last saved the project, not which compilers must accept it -- name the version when they differ.
+### Delphi 5 and older (1.43)
+Delphi 5 has no `CompilerVersion` constant (Delphi 6 = 14.0 introduced it); it defines `VER130`. drag-lint numbers `VER80` .. `VER130` as 8 .. 13, so D5 is target 13: `--target-compiler 5`. The preprocessor then describes that compiler's own symbols: `VER130`, `WIN32`, `CPU386`, and not `CONDITIONALEXPRESSIONS`, `UNICODE`, `MSWINDOWS` or `WIN64`, whatever `--platform` says. That set comes from the Delphi 5 documentation and has not been measured against a D5 compiler. Nothing here turns code into Delphi 5 code: D5 is upconvert only.
+
+Nothing is detected from the machine: on a D5 VM with no RAD Studio a run with no token and no config still describes 37. Pass the token or set `target_compiler`.
+
+`auto` reads the `<ProjectVersion>` of the `.dproj` named by `--project` (20.4 -> 37, 20.1-20.3 -> 36, 19.3-19.5 -> 35, 19.0-19.2 -> 34, 18.5-18.8 -> 33, 18.2-18.4 -> 32, 18.1 -> 31). A value outside that table exits 2. On a `.dpr` / `.dpk` it reads the `.dproj` beside it; with none, nothing names the compiler, so it assumes Delphi 5 (13) and says so on stderr. `auto` with no project at all exits 2. ProjectVersion says which IDE last saved the project, not which compilers must accept it -- name the version when they differ.
 
 ### The config key
 ```json

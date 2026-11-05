@@ -7,7 +7,7 @@ group: search-navigation
 order: 20034
 since: 0.33.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.43.0-alpha
 ---
 
 # usages
@@ -31,6 +31,8 @@ Full flag list: [usages in the CLI reference](../cli.md#usages).
 | `--format` |  |  |  |
 | `--json` |  |  |  |
 | `--limit` | `N` |  |  |
+| `--rw` |  |  |  |
+| `--in` | `<file>` |  |  |
 
 ## Where to click
 
@@ -68,6 +70,30 @@ drag-lint usages --name TCustomerOrder --width wide --db C:\Projects\MyApp\_D-RA
 ```
 This would list usage sites of `TCustomerOrder` as JSON, at "wide" report
 width.
+
+### Readers and writers (`--rw`)
+`usages --rw --name TFoo.Plain --db <db>` answers "who reads this and who writes it", even when
+the property has no getter or setter method:
+- for a **property**: its accesses, the mentions of a plain backing field, and direct calls of its accessor methods;
+- for a **field**: the same, for every property it backs, plus its own mentions;
+- for a **getter**: reads only; for a **setter**: writes only;
+- for a routine that is no accessor: its callers, under `calls`.
+
+Each row names the route it came by (`property`, `field`, `getter`, `setter`, `direct`). A bare name gives
+one block per declaration and counts the unbound name matches separately; a qualified name leaves them out.
+`--json` gives `targets[]` with `readers`, `writers`, `calls`, `totals`, `read_accessor` / `write_accessor` and
+`backs_properties`. Sites are per line. A symbol nobody declares or mentions exits 1.
+
+Limit: directions are the index's, so a `var`/`out` argument and `Inc`/`Dec` of a field count as reads.
+
+### No `--db`: name the unit (`--in`)
+A unit does not exist by itself, so `usages --name X --in <file.pas>` with no `--db` finds its context:
+1. The project: a `.dproj`, `.dpr` or `.dpk` in the file's folder or an ancestor that names it, or whose index holds it, or a manifest project whose index holds it. Its database answers; stderr says which.
+2. That project has no index: exit 2 and the `drag-lint index --project ... --db ...` command to create it.
+3. Two projects own it: exit 2, both named with their `--db`. Nothing is guessed.
+4. No project: a library unit on an assumed platform (stderr says which), answered from the library index, or `--library-db`. If it uses units that library lacks, exit 2 and the message names them and asks for the project. A file the library itself holds is not asked about.
+
+The CLI cannot prompt: every "ask" is a message on stderr and a non-zero exit, with stdout left empty.
 
 ---
 

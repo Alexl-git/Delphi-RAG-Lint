@@ -650,7 +650,7 @@
   {
     "id": "effect-free-in-loop-invariant",
     "title": "Effect-free call in a loop that could move out (lint rule)",
-    "summary": "Project-wide lint rule, OFF by default: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop",
+    "summary": "Project-wide lint rule, ON by default since 1.43: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop",
     "group": "linting",
     "order": 30009,
     "since": "1.42.0-alpha",

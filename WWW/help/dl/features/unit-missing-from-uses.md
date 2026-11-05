@@ -7,7 +7,7 @@ group: uses-dependencies
 order: 130002
 since: 1.38.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.43.0-alpha
 ---
 
 # Missing unit in uses (unit-missing-from-uses)
@@ -19,7 +19,7 @@ Read this when the IDE says Undeclared identifier for a name another unit declar
 ## How to run it
 
 ```text
-drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
+drag-lint lint <path> [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]
 ```
 
 Example:

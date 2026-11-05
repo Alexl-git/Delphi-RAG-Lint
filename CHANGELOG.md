@@ -3,7 +3,44 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
-## v1.42.0-alpha -- unreleased
+## v1.43.0-alpha -- unreleased
+
+1.43, integrated on lane/143-int. ONE bump: DRAGLINT_EXTRACTOR_VERSION 1.30.0 -> 1.31.0-alpha and
+DRAGLINT_RESOLVER_VERSION 1.18.0 -> 1.19.0-alpha -- every index re-parses once.
+
+### Added
+- usages (lane qcli2, FIND-USERS-READ-WRITE): `--rw` splits the users of a property or member into readers and writers, per declaration, including a property backed by a plain private field; each row names its route (property, field, getter, setter, direct). The find-callers 0-row hint points here.
+- usages (lane qcli2, USAGES-PROJECT-CONTEXT): `--in <file>` with no `--db` finds the unit's project and database.
+- impact (lane impact, CROSS-PROJECT-IMPACT): `--all-projects`, the blast radius over every manifest DB: callers and implementors from project DBs, declarations from library DBs, and a row per section that could not be answered. New unit DRagLint.Query.CrossImpact. MCP `get_impact` and the IDE stay single-DB.
+- convert-apply (lane convd5, ENUMMAP mechanism): `--old-platform-db` reads an enum `#migrate`'s From members from the old platform's index. The D5 data for it is still blocked on the D5 VM Source folder.
+- tools (lane parse): `tools\reparse-libraries.ps1`, a bump re-parse as libraries in parallel first and projects after, with one SUMMARY, progress and ETA. It refuses when engines are busy unless `-AllowBusy`. Not yet driven on a real re-parse.
+- target-compiler (lane d5b, D5-COMPILERVER): Delphi 5 and older as a target.
+
+### Changed
+- lint (lane effect2, owner Q3): `property-getter-with-effect`, `ui-access-in-thread-transitive` and `effect-free-in-loop-invariant` are ON by default; `side-effect-in-short-circuit` stays OFF. Rule counts: 298 rules, 251 enabled by default. They are project-wide: they fire in `lint-all`, not `lint <file>`.
+- lint (lane qcli2, LINT-PROJECT-RULE-HELP): `--rule help` lists every rule on `lint`, `lint --project` and `lint-project`; `lint-project` refuses an unknown id.
+- index (lane parse, PARSE-THROUGHPUT): a CLI walk raises `wal_autocheckpoint` to 65536 pages, so a re-parse no longer checkpoints at every group commit (one 33-file library sample: 657 s -> 235 s; the gain on a whole library is not yet measured).
+- index (lane extb, GH13-CLOSURE-TAIL): the library tail of a project's closure is searched in one walk.
+- index (lane idx4, ORM3DB-WRITER): a directory index with no `--db` names the database it is about to create.
+
+### Fixed
+- index (lane extb, RESOLVE-ONLY-STAMPS): `--resolve-only` no longer stamps the indexer fingerprint over stale parses, so the next plain run re-parses them.
+- index (lane idx4, WITHHELD-LOG-TEXT, RESOLVE-REASON-TEXT): after a clear, the resolve log says the withheld files lost their edges, and names the clear as the decline reason.
+- index (lane idx4, LIBRARY-GATE-IGNORES-CONFIG): the library gate reads the `--config` manifest of `index --all`.
+- reconcile-project (lane idx4, RECONCILE-BACKUP-NAME-FP, built-in half): the built-in BACKUP stale glob needs a separator, so the live unit `DRagLint.Convert.Backup` is no longer stale.
+- resolve (lane recv, INLINE-VAR-CTOR-UNTYPED, RECV-UNDECIDABLE slice): `var X := TFoo.Create` types X as TFoo, an inline var initialized by a call is typed by its result, and a nested routine's receiver types through the outer routine's locals (drag-lint's own DB: opaque routines 250 -> 74, edges 30932 -> 31287, none lost).
+- resolve (lane withself, WITH-SELF-PROP): a `with` target whose surface leaves the index falls through when the library proves it lacks the name; with no library it stays undecided (Micronite2027: +24 bound refs, +8 edges, 0 lost).
+- preprocess (lane d5b, YADF6): `DECLARED` with no library to ask reads True at the newest target, and says so.
+- cycles --fix (lane cyc3, CYC-C): R2 carries chain members that a `with` body or a cast names; overlapping `with` bodies of two classes are cut; an operand with no class refuses with `other-ref`, naming its line. A run refused after the writes prints `Verdict: refused`, as its JSON says.
+- ConvRulesEditor (lane gui, GUILOCK): the dpr MessageBox in RunNativeDialog is gated; `gui-run.ps1` treats a lock timeout as final and kills by tree after 15 minutes; book-depth waits on the saved file. DRV2B and DRVLIB proof still needs an unlocked desktop.
+
+### Tests and docs
+- lsp (lane lsp, G0): headless parity guard: the plugin's lint command and `lsp --full-rules` publish the same set. docs\EDITORS.md: the Zed extension exists.
+
+### Known limitation
+- `usages --rw`: `Inc(X)`, `Dec(X)` and a var / out argument are indexed as reads, so those writers are listed as readers only.
+
+## v1.42.0-alpha -- 2026-11-05
 
 1.42 wave 1, integrated on lane/142-int1. ONE bump: DRAGLINT_EXTRACTOR_VERSION 1.29.0 -> 1.30.0-alpha and
 DRAGLINT_RESOLVER_VERSION 1.17.0 -> 1.18.0-alpha -- every index re-parses once.

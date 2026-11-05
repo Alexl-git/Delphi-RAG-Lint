@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70006
 since: 1.33.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.43.0-alpha
 ---
 
 # Cycles fix (mechanical, compile-gated)
@@ -258,12 +258,11 @@ The engine never guesses; every kind it can give:
   `V := X as TX`, `V := nil`, `Assigned(V)`, a compare with nil or `V.M` with M a member the
   interface carries; a field, a parameter, a global, an inline `var`, `A, B: TX` and any other
   use of the local, `V.Free` or `FreeAndNil(V)` included, still refuse), `other-ref`, `multiple-classes` (since 1.42 an edge through several
-  classes is cut with one interface per class, see below; only `with` bodies of two different classes that overlap, nested or as one
-  `with X as TA, Y as TB do`, and an edge that names no class at all still refuse), `member-unsupported` (an inherited
+  classes is cut with one interface per class, see below), `member-unsupported` (an inherited
   member that no ancestor declared in the class's own unit declares, or one that is `strict private`
   there -- since 1.42 a member of a same-unit ancestor is carried like an own one, its getter reading
   it by name, and an ancestor that already declares `Get<M>` / `Set<M>` refuses `duplicate-identifier`;
-  a member of a library ancestor read inside a `with` body still refuses `with-member` --, a `default` array property or a write to an indexed property; a plain indexed property
+  a member of a library ancestor named inside a `with` body is carried too, see below --, a `default` array property or a write to an indexed property; a plain indexed property
   is carried for reading, its index list verbatim), `duplicate-identifier` (the class has a `Get<M>`
   that is not exactly `function Get<M>: <T>;` read by the property -- that one is reused -- or the
   leaf declares `I<Class>Surface` differently with every suffix taken; an identical interface is
@@ -271,6 +270,26 @@ The engine never guesses; every kind it can give:
   (no IInterface ancestor outside the cycle; the walk continues past one declared inside it),
   `exception-semantics`, `ancestry-unknown`, `with-member`, `unresolved-qualified-type`,
   `type-unresolved`, `leaf-uses-cycle`.
+
+#### A library member through a `with` body or a cast (R2, since 1.43)
+
+The same carrying applies to `(X as TClass).M` and `TClass(X).M` with M a library member; there a library method
+refuses `class-method`, and any other member that cannot be carried `member-unsupported`.
+
+After the rewrite a `with X as TClass do` body sees the interface, not the class, so a bare name the class
+inherited from a library ancestor would silently bind to something else. A public or published, non-indexed
+field or property of a library ancestor therefore goes on the interface as well: its getter reads it by name, a
+plain write adds a setter, and an accessor name the chain already declares takes the suffix `Surface`
+(`TPersistent.GetOwner` -> `GetOwnerSurface`). A name private to its library unit is invisible to the consumer
+and is ignored. The same goes for a public or published field or property of a project class of the chain that the edge
+itself does not list (the index binds a bare name to the innermost `with` only). A `with` head may span several lines. These still refuse `with-member`, on purpose:
+
+* **A library method** (`Free`, `Show`). `Free` through an interface leaves a temporary to release on a freed
+  object; rewrite that line by hand.
+* **A protected library member.** The consumer sees it only if it descends from its class; carrying it could
+  itself change what the name binds to.
+* **An indexed property**, a type that is not a plain name, or a library source the index no longer finds
+  (visibility unknown).
 
 #### An edge through several classes (R2, since 1.42)
 
@@ -290,9 +309,11 @@ leaf + interface name.
   descendant; split the edge by hand if that hits you.
 * **An existing leaf** is settled per interface: an identical declaration is reused, a different one takes the
   lowest suffix free in the leaf and on the edge, and the others are not affected.
-* **Still refused:** `multiple-classes` for `with` bodies of two different classes that overlap (a bare name
-  there has two candidates, which the check of one interface cannot judge; split the `with` first) and for an
-  edge that names no class at all; `with-member` for a member of a library ancestor used inside a `with` body.
+* **Overlapping `with` bodies** (nested, or one `with X as TA, Y as TB do`, since 1.43): each class checks every bare
+  name of its whole body, so a name either class declares is carried by that class or the edge is refused, and
+  the nesting order, unchanged by the rewrite, decides between two carriers as it did between the classes.
+* **Still refused:** `other-ref` for an `is` / `as` operand that is no class (an interface or an alias the planner
+  could not move out either; the refusal names the line); the `with-member` shapes above.
 * `--plan`, `tools\follow-cycle-plan.ps1` and `--fix --apply` apply the same bytes; guard
   `tests\autotest\run_cyclefix_r2_multiclass_dcc.ps1`.
 

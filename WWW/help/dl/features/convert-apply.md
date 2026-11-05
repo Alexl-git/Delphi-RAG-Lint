@@ -7,7 +7,7 @@ group: component-conversion
 order: 60001
 since: 1.2.0-alpha
 status: shipped
-updated: 1.40.0-alpha
+updated: 1.43.0-alpha
 ---
 
 # convert-apply
@@ -35,6 +35,7 @@ Full flag list: [convert-apply in the CLI reference](../cli.md#convert-apply).
 | `--no-warn-unlinked` |  |  |  |
 | `--no-reconcile-uses` |  |  |  |
 | `--no-reindex` |  |  |  |
+| `--old-platform-db` | `<file>` |  |  |
 | `--format` |  |  |  |
 | `--json` |  |  |  |
 
