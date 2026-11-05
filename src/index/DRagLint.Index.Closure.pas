@@ -172,7 +172,7 @@ type
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas), DRagLint.Index.Closure.TClosureResolver.Resolve.ScanIncludes (DRagLint.Index.Closure.pas) ?</para>
+      /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve (DRagLint.Index.Closure.pas), DRagLint.Index.Closure.TClosureResolver.Resolve.ScanIncludes (DRagLint.Index.Closure.pas) ?, DRagLint.Index.Closure.TClosureResolver.Resolve.SeedListedRefs (DRagLint.Index.Closure.pas) ?</para>
       /// <para>Calls: LowerCase, StringReplace</para>
       /// <para>Reads: FLibraryRoots</para>
       /// <para>Pure</para>
@@ -213,6 +213,8 @@ type
       /// <param name="ASearchPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
       /// <remarks>
+      /// <!-- drag-lint:auto -->Search ASearchPaths + the dir of AFromFile for AIncName (as-given,
+      /// then relative to each search path). Returns absolute path or ''.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Index.Closure.TClosureResolver.Resolve.ScanIncludes (DRagLint.Index.Closure.pas)</para>
       /// <para>Touches: file system</para>
@@ -441,7 +443,12 @@ type
       /// the project member units + transitive project-local uses + {$I} files.
       /// Files under any ALibraryRoot are silently excluded and not recursed.
       /// A file that is reached via uses AND matches an AExclude glob pattern is
-      /// still added to Files but also produces a Warning entry.</summary>
+      /// still added to Files but also produces a Warning entry. A unit the project
+      /// lists (DCCReference first, then the .dpr's in path; case-insensitive, first
+      /// listing wins, a different second one is a Warning) is never path-searched,
+      /// so a same-named file elsewhere stays out; a listed file missing from disk
+      /// binds nothing and the search still answers. Resolving a .dpr, DCCReference
+      /// entries bind but do not seed. Files holds full paths, one spelling each.</summary>
       /// <param name="AProjectFile">Absolute or relative path to the .dpr or .dproj.</param>
       /// <param name="AExclude">Glob patterns for "stale" files (still included in
       /// closure but warned). Pass [] for no exclusion warnings.</param>
@@ -450,8 +457,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Project.TargetStudio.ResolveTargetClosure (DRagLint.Project.TargetStudio.pas), DRagLint.Refactor.MultiProjectRename.ClosureUnits (DRagLint.Refactor.MultiProjectRename.pas)</para>
-      /// <para>Calls: DRagLint.Index.Closure.TClosureResolver.ExtractUses, DRagLint.Index.Closure.TClosureResolver.IsLibraryFile, DRagLint.Index.Closure.TClosureResolver.MaybePreprocess, DRagLint.Index.Closure.TClosureResolver.ParseDprojRefs, DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths, DRagLint.Index.Closure.TClosureResolver.ParseDprUses, DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile, DRagLint.Index.Closure.TClosureResolver.Resolve.FindTailFileOnce, DRagLint.Index.Closure.TClosureResolver.Resolve.FindUnitFileOnce, DRagLint.Index.Closure.TClosureResolver.Resolve.ScanIncludes, ExtractIncludes, FindIncFile, FindUnitFile, LowerCase, TryPreprocessWithSites</para>
-      /// <para>Complexity: 29 (cyclomatic, outer body), 309 lines (full implementation)</para>
+      /// <para>Calls: BindUnit, DRagLint.Index.Closure.TClosureResolver.ExtractUses, DRagLint.Index.Closure.TClosureResolver.IsLibraryFile, DRagLint.Index.Closure.TClosureResolver.MaybePreprocess, DRagLint.Index.Closure.TClosureResolver.ParseDprojRefs, DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths, DRagLint.Index.Closure.TClosureResolver.ParseDprUses, DRagLint.Index.Closure.TClosureResolver.Resolve.BindListedUnits, DRagLint.Index.Closure.TClosureResolver.Resolve.BoundFile, DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile (+11 more)</para>
+      /// <para>Complexity: 27 (cyclomatic, outer body), 341 lines (full implementation)</para>
       /// <para>Reads: FLibraryTail</para>
       /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>
@@ -710,7 +717,8 @@ begin
     if (M.Groups.Count > 2) and M.Groups[2].Success then
     begin
       UFile:= M.Groups[2].Value.Trim;
-      if (UFile <> '') and (not TPath.IsPathRooted(UFile)) then UFile:= TPath.GetFullPath(TPath.Combine(ABaseDir, UFile));
+      // Rooted too: an `in 'C:\Proj\..\Shared\X.pas'` is a second spelling of a listed file (GH #13).
+      if UFile <> '' then UFile:= TPath.GetFullPath(if TPath.IsPathRooted(UFile) then UFile else TPath.Combine(ABaseDir, UFile));
     end;
 
     AUnitNames.Add(UName);
@@ -1038,6 +1046,28 @@ var
   ProjSource  : string        ; // lane INC: the .dpr/.dpk whose own includes are scanned too
   UnitFileMemo: TDictionary<string, string>; // unit name AS WRITTEN -> FindUnitFile's answer
   TailFileMemo: TDictionary<string, string>; // the same, over FLibraryTail
+  Bindings    : TDictionary<string, string>; // GH #13: lowercase unit name -> the file the project lists for it
+
+  { GH #13: dcc never path-searches a unit the project lists. The first listing of
+    a name wins; a different second one is said aloud, because that file now leaves
+    the closure. A listed file that is not on disk binds nothing, so the search
+    still answers for that name: today's behaviour, with no new diagnostic. }
+  procedure BindUnit(const AName, AFile: string);
+  var
+    LKey     : string;
+    LExisting: string;
+  begin
+    if (AFile = '') or not TFile.Exists(AFile) then Exit;
+    LKey:= LowerCase(AName);
+    if not Bindings.TryGetValue(LKey, LExisting) then Bindings.Add(LKey, AFile)
+    else if not SameText(LExisting, AFile) then
+      Warnings.Add(Format('WARN: unit %s is listed twice: %s wins, %s is left out', [AName, LExisting, AFile]));
+  end;
+
+  function BoundFile(const AName: string): string;
+  begin
+    if not Bindings.TryGetValue(LowerCase(AName), Result) then Result:= '';
+  end;
 
   { FindUnitFile over SearchArr, once per name (PR #10, Jonathas Paiva). The walk
     asks for the same library units -- System.SysUtils, Vcl.Forms, Windows -- from
@@ -1071,18 +1101,35 @@ var
     LKey: string   ;
     W2  : TWorkItem;
   begin
-    LKey:= LowerCase(AAbsPath);
+    // One spelling per file, whatever route it came by (GH #13): this is the only way into Files.
+    var LPath: string:= TPath.GetFullPath(AAbsPath);
+    LKey:= LowerCase(LPath);
     if Visited.ContainsKey(LKey) then Exit;
     Visited.Add(LKey, True);
-    Files     .Add(AAbsPath  );
+    Files     .Add(LPath     );
     UsedByList.Add(AUsingUnit);
     W2.UnitName := '';
-    W2.FilePath := AAbsPath;
+    W2.FilePath := LPath;
     W2.UsingUnit:= AUsingUnit;
     Queue.Enqueue(W2);
     // Exclude-but-in-closure warning
-    if TGlob.MatchesAny(TPath.GetFileName(AAbsPath), AExclude) then
-      Warnings.Add('WARN: ' + AAbsPath + ' is in the compile closure (used by ' + AUsingUnit + ') but matches an exclude pattern');
+    if TGlob.MatchesAny(TPath.GetFileName(LPath), AExclude) then
+      Warnings.Add('WARN: ' + LPath + ' is in the compile closure (used by ' + AUsingUnit + ') but matches an exclude pattern');
+  end;
+
+  { GH #13: DCCReference first, then the .dpr's `in` paths. }
+  procedure BindListedUnits;
+  begin
+    for var F: string in DprojRefFiles do BindUnit(TPath.GetFileNameWithoutExtension(F), F);
+    for var I: Integer:= 0 to UnitNames.Count - 1 do BindUnit(UnitNames[I], UnitFilePaths[I]);
+  end;
+
+  { Only the entry that holds its unit's binding: a second listing of a name stays out. }
+  procedure SeedListedRefs;
+  begin
+    for var F: string in DprojRefFiles do
+      if TFile.Exists(F) and not IsLibraryFile(F) and SameText(BoundFile(TPath.GetFileNameWithoutExtension(F)), F) then
+        EnqueueFile(F, '<project>');
   end;
 
   { Lane INC: the project-local include files ARaw (the text of AFile) pulls
@@ -1132,6 +1179,7 @@ begin
   DprojRefFiles:= TStringList.Create;
   UnitFileMemo := TDictionary<string, string>.Create;
   TailFileMemo := TDictionary<string, string>.Create;
+  Bindings     := TDictionary<string, string>.Create;
   try
     // --- Step 1: build search paths -------------------------------------------
     // Always include the project base directory first
@@ -1171,19 +1219,22 @@ begin
         and reconcile reported it as EXTRA -- "listed but never reached via
         uses" -- which was false. Reproduced 2026-08-26.
 
-        SEARCH PATHS ONLY -- deliberately NOT ParseDprojRefs. Seeding the
-        DCCReference members here would make the EXTRA set vacuously empty:
-        every listed unit would be in the closure BECAUSE it was listed, and
-        reconcile would go green without ever reaching anything through uses.
-        That is the wrong kind of green, and it would hide the very defect the
-        verb exists to find. }
+        DCCReference MEMBERS ARE NOT SEEDED HERE (SeedRefs below). Seeding them
+        would make the EXTRA set vacuously empty: every listed unit would be in
+        the closure BECAUSE it was listed, and reconcile would go green without
+        ever reaching anything through uses. That is the wrong kind of green, and
+        it would hide the very defect the verb exists to find. They do BIND
+        (GH #13): a unit reached through uses takes its listed file, and a listed
+        unit nothing reaches stays out. }
       var SiblingDproj: string := TPath.ChangeExtension(ProjectAbs, '.dproj');
       if TFile.Exists(SiblingDproj) then
         try
-          ParseDprojSearchPaths(TFile.ReadAllText(SiblingDproj), BaseDir, SearchPaths);
+          var SiblingContent: string:= TFile.ReadAllText(SiblingDproj);
+          ParseDprojSearchPaths(SiblingContent, BaseDir, SearchPaths);
+          ParseDprojRefs(SiblingContent, BaseDir, DprojRefFiles);
         except
           { An unreadable or malformed .dproj must not take the .dpr walk down;
-            it simply contributes no extra search paths. }
+            it simply contributes no extra search paths and no bindings. }
         end;
 
       // PP-Task-10: preprocess the .dpr/.dpk source before its uses-scan so the
@@ -1198,31 +1249,18 @@ begin
       if SearchPaths.IndexOf(TailDir) < 0 then SearchPaths.Add(TailDir);
     SearchArr:= SearchPaths.ToStringArray;
 
-    // --- Step 2: seed the worklist -------------------------------------------
-    // .dproj: seed from DCCReference paths
-    for var F in DprojRefFiles do
-    begin
-      if TFile.Exists(F) and not IsLibraryFile(F) then
-      begin
-        Wi.UnitName:= TPath.GetFileNameWithoutExtension(F);
-        Wi.FilePath := F;
-        Wi.UsingUnit:= '<project>';
-        EnqueueFile(F, '<project>');
-      end;
-    end;
+    // --- Step 2: the project's own bindings, before anything asks a path --------
+    BindListedUnits;
+
+    // --- Step 3: seed the worklist -------------------------------------------
+    // .dproj: seed from DCCReference paths. A .dpr binds from them but never seeds.
+    if Ext = '.dproj' then SeedListedRefs;
 
     // .dpr / sibling .dpr for .dproj: seed from parsed uses clause
     for var I:= 0 to UnitNames.Count - 1 do
     begin
-      var UN:= UnitNames    [I];
-      var UF:= UnitFilePaths[I];
-      ResolvedFile:= '';
-
-      if UF <> '' then
-      begin
-        // `in 'path'` specifier: use that path directly
-        if TFile.Exists(UF) then ResolvedFile:= UF;
-      end;
+      var UN:= UnitNames[I];
+      ResolvedFile:= BoundFile(UN);
 
       if ResolvedFile = '' then ResolvedFile:= FindUnitFileOnce(UN);
       if ResolvedFile = '' then ResolvedFile:= FindTailFileOnce(UN);
@@ -1247,7 +1285,7 @@ begin
         EnqueueFile(PI_, '<project>');
     end;
 
-    // --- Step 3: BFS ---------------------------------------------------------
+    // --- Step 4: BFS ---------------------------------------------------------
     while Queue.Count > 0 do
     begin
       Item:= Queue.Dequeue;
@@ -1273,7 +1311,8 @@ begin
       for SubName in SubUses do
       begin
         if SubName = '' then Continue;
-        ResolvedFile:= FindUnitFileOnce(SubName);
+        ResolvedFile:= BoundFile(SubName);
+        if ResolvedFile = '' then ResolvedFile:= FindUnitFileOnce(SubName);
         // Also try relative to the unit's own directory (not always on path)
         if (ResolvedFile = '') and TFile.Exists(TPath.Combine(UnitDir, SubName + '.pas')) then ResolvedFile:= TPath.GetFullPath( TPath.Combine(UnitDir, SubName + '.pas'));
         if ResolvedFile = '' then ResolvedFile:= FindTailFileOnce(SubName);
@@ -1297,6 +1336,7 @@ begin
     Result.UsedBy  := UsedByList.ToArray;
     Result.SearchPaths:= SearchArr;
   finally
+    Bindings.Free;
     TailFileMemo.Free;
     UnitFileMemo.Free;
     DprojRefFiles.Free;
