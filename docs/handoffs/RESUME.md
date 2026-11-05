@@ -8,6 +8,7 @@ handoff it resumes; several `open` lines are normal. New handoffs are written he
 The legacy `..\RESUME-*.md` files below are gitignored (`docs/RESUME-*`) and exist only in
 the main working tree; their links do not resolve in a fresh clone or worktree.
 
+- 2026-11-05 | charts | docs cleanup merged and pushed after 1.43; IDE test (docs\TEST-1.43-owner-checklist.html, live click included) and panel spike await the owner | open | [HANDOFF-2026-11-05-charts-docs-branch-panel-spike.md](HANDOFF-2026-11-05-charts-docs-branch-panel-spike.md)
 - 2026-11-05 | engine | 1.43: all 14 lanes finished on branches, nothing merged; next lane/143-int merge, one bump, battery, re-parse, stage; 1.42 push/release still owner's | open | [HANDOFF-2026-11-05-engine-143-lanes-done-integrate.md](HANDOFF-2026-11-05-engine-143-lanes-done-integrate.md)
 - 2026-11-04 | engine | 1.42 built + deployed, push/release blocked for owner; 1.43 14 lanes running, cut-off 05:00; integrate + bump + re-parse next | closed | [HANDOFF-2026-11-04-engine-143-lanes-running.md](HANDOFF-2026-11-04-engine-143-lanes-running.md)
 - 2026-11-04 | engine | 1.42 int3 merged + deployed (main 649d0f9a, unpushed); BLOCKER bds23 lane running (older-target index crash); then deploy, index --all, one owner go | resumed | [HANDOFF-2026-11-04-engine-142-int3-deployed-bds23-blocker.md](HANDOFF-2026-11-04-engine-142-int3-deployed-bds23-blocker.md)
