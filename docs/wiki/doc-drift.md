@@ -22,6 +22,13 @@ breadth-first and cycle-safe, capped at 256 visited symbols
 graph. A raise beyond three hops, or past the cap, is still reported. It used
 to be one hop.
 
+A call into the RTL has no call edge, so the same question goes to the platform
+library index (`--library-db`, else the manifest's): `Ini.WriteString` satisfies
+`<exception cref="EIniFileException">` because `TIniFile.WriteString`'s body raises
+it. An abstract method counts its overrides. Only a raise actually found there
+silences the finding: with no library, or a callee the library does not hold, it
+stands. A class the project itself declares is never asked about.
+
 ## `Used in units:` holds units only
 A class name found in a stored `Used in units:` list (one this index resolves
 as a class, interface or record and not as a unit) is drift: the fix moves it

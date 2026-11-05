@@ -204,6 +204,14 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FactsBuildTicks: Int64;
+    /// <summary>Tells the exception check how to reach the platform library index, so a
+    /// documented exception raised inside an RTL callee is not reported as never raised.</summary>
+    /// <param name="ALocator">Opens the library store; may return nil (no library, wrong
+    /// schema). nil means no library is consulted, which leaves the finding standing.</param>
+    /// <remarks>Called once per cref nothing else satisfied, never per declaration; the
+    /// store it returns is released when that check ends, so no connection outlives the
+    /// run. A process-wide setting: Analyze's callers are single-threaded.</remarks>
+    class procedure SetLibraryLocator(const ALocator: TFunc<ISymbolStore>);
   end;
 
 implementation
@@ -672,8 +680,9 @@ end;
   CONTROL-1 fails if anyone tries it.
 
   FAIL-SAFE IN ONE DIRECTION ONLY: suppression requires a POSITIVELY mined
-  raise in a resolved callee. An unresolved edge (TargetSymbolId = 0, i.e. RTL
-  or cross-DB), a missing symbol, or a bodyless callee all leave the finding
+  raise in a resolved callee (or, C9 below, in a library body the library index
+  holds). An unresolved edge (TargetSymbolId = 0, i.e. RTL or cross-DB) the library
+  cannot answer, a missing symbol, or a bodyless callee all leave the finding
   exactly as it was -- unless that bodyless callee's own <exception cref>
   contract names the class (E17, BodylessContractDeclares). Absence of
   information never silences the rule. The other exception is positive by contract: the shared miner's known OS-error raiser
@@ -793,6 +802,188 @@ begin
       Frontier:= Next;
     end;
   finally
+    Visited.Free;
+  end;
+end;
+
+{ C9 (1.44): a call into the RTL has no call_edges row, so the walk above never
+  sees it, and `Ini.WriteString` read as "never raises EIniFileException" while
+  TIniFile.WriteString raises exactly that. The library index holds the body.
+  The fail-safe stays one-directional: only a POSITIVELY mined raise (or the
+  contract of a bodyless callee) suppresses. A run with no library, a callee the
+  library does not hold, or an unreadable library source leave the finding as it
+  was. A virtual reached through its base reads the base body only, unless the
+  base is abstract: then the descendants' overrides are the only bodies there are.
+  Pinned by tests\autotest\run_doc_exception_rtl_callee.ps1. }
+const
+  { Free routines of one name the library may hold before the bare-call lookup
+    gives up; overrides of one abstract method it will mine. Both are fan-out
+    caps: past them the finding stands, as with CREF_RAISE_MAX_VISITS. }
+  LIB_BARE_MAX      = 32;
+  LIB_OVERRIDES_MAX = 16;
+
+var
+  GLibraryLocator: TFunc<ISymbolStore> = nil;
+
+class procedure TDocDrift.SetLibraryLocator(const ALocator: TFunc<ISymbolStore>);
+begin
+  GLibraryLocator:= ALocator;
+end;
+
+function IsLibTypeKind(AKind: TSymbolKind): Boolean;
+begin
+  Result:= AKind in [skClass, skRecord, skInterface];
+end;
+
+function DeclaresType(const AStore: ISymbolStore; const ATypeName: string): Boolean;
+begin
+  for var S in AStore.FindSymbolsByExactName(ATypeName) do
+    if IsLibTypeKind(S.Kind) then Exit(True);
+  Result:= False;
+end;
+
+{ One library routine: its own raises and its callees within the library, or the
+  contract when it has no body. }
+function LibraryRoutineRaises(const ALib: ISymbolStore; const ACand: TSymbol;
+  const ATypeName: string): Boolean;
+begin
+  if ACand.ImplStartLine <= 0 then Exit(BodylessContractDeclares(ALib, ACand.Id, ATypeName));
+  for var D in TDocFactsBuilder.MineRaisesDetailed(ALib, ACand) do
+    if SameText(D.ExcClass, ATypeName) then Exit(True);
+  var Edges: TArray<TCallEdge>:= nil;
+  var Loaded: Boolean:= False;
+  Result:= CalleeRaisesType(ALib, ACand, ATypeName, Edges, Loaded);
+end;
+
+{ An abstract method raises what its overrides raise. }
+function LibraryOverrideRaises(const ALib: ISymbolStore; const AAbstract: TSymbol;
+  const ATypeName: string): Boolean;
+begin
+  Result:= False;
+  var Owner: TSymbol:= ALib.GetSymbolById(AAbstract.ParentId);
+  if Owner.Id <= 0 then Exit;
+  var Mined: Integer:= 0;
+  for var Name in ALib.FindDescendantNames(Owner.Name) do
+    for var Ty in ALib.FindSymbolsByExactName(Name) do
+    begin
+      if not IsLibTypeKind(Ty.Kind) then Continue;
+      for var Cand in ALib.FindSymbolsByQualifiedName(Ty.QualifiedName + '.' + AAbstract.Name) do
+      begin
+        if Cand.ImplStartLine <= 0 then Continue;
+        if Mined >= LIB_OVERRIDES_MAX then Exit(False); { bounded: report }
+        Inc(Mined);
+        if LibraryRoutineRaises(ALib, Cand, ATypeName) then Exit(True);
+      end;
+    end;
+end;
+
+function LibraryCandidatesRaise(const ALib: ISymbolStore; const ACands: TArray<TSymbol>;
+  const ATypeName: string): Boolean;
+begin
+  for var C in ACands do
+  begin
+    if LibraryRoutineRaises(ALib, C, ATypeName) then Exit(True);
+    if (C.ImplStartLine <= 0) and LibraryOverrideRaises(ALib, C, ATypeName) then Exit(True);
+  end;
+  Result:= False;
+end;
+
+{ AMember on the library type named ATypeLeaf, or on its nearest ancestor that has it. }
+function LibraryMemberRaises(const ALib: ISymbolStore; const ATypeLeaf, AMember,
+  ATypeName: string): Boolean;
+begin
+  for var Ty in ALib.FindSymbolsByExactName(ATypeLeaf) do
+  begin
+    if not IsLibTypeKind(Ty.Kind) then Continue;
+    var Cands: TArray<TSymbol>:= ALib.FindSymbolsByQualifiedName(Ty.QualifiedName + '.' + AMember);
+    if Length(Cands) = 0 then
+      for var A in ALib.GetTransitiveAncestors(Ty.Id) do
+      begin
+        if A.SymbolId <= 0 then Continue;
+        Cands:= ALib.FindSymbolsByQualifiedName(
+          ALib.GetSymbolById(A.SymbolId).QualifiedName + '.' + AMember);
+        if Length(Cands) > 0 then Break;
+      end;
+    if LibraryCandidatesRaise(ALib, Cands, ATypeName) then Exit(True);
+  end;
+  Result:= False;
+end;
+
+{ A bare call: a free routine of that name. The library cannot say which unit the
+  caller meant, so any of them raising counts: the cref then reads as plausible,
+  and this rule only ever reports what is provably absent. }
+function LibraryFreeRoutineRaises(const ALib: ISymbolStore; const AName, ATypeName: string): Boolean;
+begin
+  var Cands: TArray<TSymbol>:= nil;
+  for var S in ALib.FindSymbolsByExactName(AName) do
+    if S.Kind in [skFunction, skProcedure] then
+    begin
+      if Length(Cands) >= LIB_BARE_MAX then Exit(False); { bounded: report }
+      if ALib.GetSymbolById(S.ParentId).Kind = skUnit then Cands:= Cands + [S];
+    end;
+  { A bare bodyless routine is an `external` import, not an abstract method. }
+  for var C in Cands do
+    if (C.ImplStartLine > 0) and LibraryRoutineRaises(ALib, C, ATypeName) then Exit(True);
+  Result:= False;
+end;
+
+{ One unresolved call ref. refs.external_target is only there when the index ran
+  with a library; receiver_type_text always is, so both shapes are read. A dot in
+  the type text is a pending chain (see TCallEdge.ReceiverTypeText): not a type. }
+function LibraryCallRaises(const ALib: ISymbolStore; const ARef: TReference;
+  const ATypeName: string): Boolean;
+begin
+  if (ARef.ExternalTarget <> '')
+     and LibraryCandidatesRaise(ALib, ALib.FindSymbolsByQualifiedName(ARef.ExternalTarget), ATypeName) then
+    Exit(True);
+  var TypeLeaf: string:= ARef.ReceiverTypeText;
+  if TypeLeaf = '' then
+  begin
+    if ARef.ReceiverText = '' then Exit(LibraryFreeRoutineRaises(ALib, ARef.NameText, ATypeName));
+    TypeLeaf:= ARef.ReceiverText; { TIniFile.Create: the receiver IS the type }
+  end;
+  Result:= (not TypeLeaf.Contains('.')) and LibraryMemberRaises(ALib, TypeLeaf, ARef.NameText, ATypeName);
+end;
+
+{ The routine and the project callees CalleeRaisesType walks: any of their
+  unresolved calls may land in the library. Asked last, only for a cref nothing
+  else satisfied, and a class the project declares is never the library's to raise. }
+function LibraryCalleeRaisesType(const AStore: ISymbolStore; const ASym: TSymbol;
+  const ATypeName: string): Boolean;
+begin
+  Result:= False;
+  if (not Assigned(GLibraryLocator)) or DeclaresType(AStore, ATypeName) then Exit;
+  var Lib: ISymbolStore:= GLibraryLocator();
+  if (Lib = nil) or (not DeclaresType(Lib, ATypeName)) then Exit;
+  var Visited: TDictionary<Int64, Boolean>:= TDictionary<Int64, Boolean>.Create;
+  var Asked: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+  try
+    Visited.Add(ASym.Id, True);
+    var Frontier: TArray<Int64>:= [ASym.Id];
+    for var Hop: Integer:= 0 to CREF_RAISE_MAX_HOPS do
+    begin
+      var Next: TArray<Int64>:= nil;
+      for var Id in Frontier do
+      begin
+        for var R in AStore.GetUnresolvedCallsFromSymbol(Id) do
+        begin
+          var Key: string:= LowerCase(R.ExternalTarget + '|' + R.ReceiverTypeText + '|' + R.ReceiverText + '|' + R.NameText);
+          if Asked.ContainsKey(Key) then Continue;
+          Asked.Add(Key, True);
+          if LibraryCallRaises(Lib, R, ATypeName) then Exit(True);
+        end;
+        for var E in AStore.GetCallEdgesFromSymbol(Id) do
+          if (E.TargetSymbolId > 0) and not Visited.ContainsKey(E.TargetSymbolId) then
+          begin
+            if Visited.Count >= CREF_RAISE_MAX_VISITS then Exit(False); { bounded: report }
+            Visited.Add(E.TargetSymbolId, True);
+            Next:= Next + [E.TargetSymbolId];
+          end;
+      end;
+      Frontier:= Next;
+    end;
+  finally
+    Asked.Free;
     Visited.Free;
   end;
 end;
@@ -1208,6 +1399,8 @@ begin
               Break;
             end;
         end;
+        if (not Raised) and LibraryCalleeRaisesType(AStore, ASym, DE.TypeName) then
+          Raised:= True;
         if not Raised then
           Findings.Add(MakeFinding(ddExceptionNotRaised,
             Format('documented <exception cref="%s"> but the body never raises it', [DE.TypeName]),

@@ -2811,6 +2811,24 @@ begin
   if Prim = '' then Prim:= AArgs.DbPath;
   Result:= TDocFactsRenderOptions.Make(AArgs.DocSeeAlso, OpenExtraStoresExcept(AArgs, Prim),
                                        LoadDocMaxReturnCases, LoadDocMaxCallers, LoadDocHandlesOptions);
+  { C9: the doc-drift exception check asks the library about RTL callees. Resolved
+    on first use only: ResolveLibraryDb walks the manifest, and most runs never get
+    as far as a cref nothing else satisfied. }
+  var LibArgs: TArgs:= AArgs;
+  var LibDb: string:= '';
+  var LibAsked: Boolean:= False;
+  TDocDrift.SetLibraryLocator(
+    function: ISymbolStore
+    var
+      Why: string;
+    begin
+      if not LibAsked then
+      begin
+        LibDb:= LintLibraryDb(LibArgs);
+        LibAsked:= True;
+      end;
+      Result:= OpenLibraryStoreIfCurrent(LibDb, Why);
+    end);
   { WHICH STORES THE CHECKER IS USING IS OTHERWISE INVISIBLE, and getting it
     wrong produces a doc-drift finding no command can clear -- the symptom looks
     like a stale index, not like a store-selection bug. One line under the
@@ -12949,6 +12967,7 @@ var
   AccountOut: string                             ;
   PeerStale : TList<TPeerStaleHint>              ;
   PeerUnjudged: TDictionary<string, Boolean>     ;
+  LeftUnjudged: Integer                          ;
   PpLineCache   : TDictionary<string, TArray<string>>;
 
   { The join key between a finding and the marker that suppressed it.
@@ -13073,6 +13092,7 @@ begin
   AccountOut:= GetEnvironmentVariable(MARKER_ACCOUNT_ENV);
   PeerStale := TList<TPeerStaleHint>.Create;
   PeerUnjudged:= TDictionary<string, Boolean>.Create;
+  LeftUnjudged:= 0;
   PpLineCache:= TDictionary<string, TArray<string>>.Create;
   try
     for F in AFindings do
@@ -13500,7 +13520,11 @@ begin
                 if (AccountOut <> '') and not Accounted.ContainsKey(UKey)
                    and (IsUndecidedSite(SF, LN, M.RuleId) or LineIsPreprocessorInactive(SF, LN)) then
                   PeerUnjudged.AddOrSetValue(UKey, True);
-                if AUnion = nil then Continue;
+                if AUnion = nil then
+                begin
+                  if not Accounted.ContainsKey(UKey) then Inc(LeftUnjudged);
+                  Continue;
+                end;
                 if (1 + AUnion.PeersScanning(SF) < Listed) or AUnion.IsUnjudged(UKey) then
                 begin
                   AUnion.NoteLeftUnjudged;
@@ -13542,7 +13566,14 @@ begin
             end;
     if AccountOut <> '' then
       TMarkerUnion.WriteAccount(AccountOut, AScannedFiles, Accounted.Keys.ToArray, PeerUnjudged.Keys.ToArray,
-        PeerStale.ToArray);
+        PeerStale.ToArray)
+    { Silence is not a verdict: one index left these standing without looking, and
+      `lint-all --shared-db` is what can judge them. lint-all only (AUnjudgedRules =
+      nil): `lint <file>` skips far more than this, by contract. }
+    else if (LeftUnjudged > 0) and (AUnjudgedRules = nil) then
+      Writeln(ErrOutput, Format('lint-all: %d dl:ok marker(s) on dl:shared units left unjudged: their rule depends ' +
+        'on the project closure and this run read one index. Pass --shared-db <db> per other project to judge them.',
+        [LeftUnjudged]));
 
     Result:= Kept.ToArray + Extra.ToArray;
   finally
