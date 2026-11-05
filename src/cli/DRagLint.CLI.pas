@@ -2807,6 +2807,24 @@ begin
   if Prim = '' then Prim:= AArgs.DbPath;
   Result:= TDocFactsRenderOptions.Make(AArgs.DocSeeAlso, OpenExtraStoresExcept(AArgs, Prim),
                                        LoadDocMaxReturnCases, LoadDocMaxCallers, LoadDocHandlesOptions);
+  { C9: the doc-drift exception check asks the library about RTL callees. Resolved
+    on first use only: ResolveLibraryDb walks the manifest, and most runs never get
+    as far as a cref nothing else satisfied. }
+  var LibArgs: TArgs:= AArgs;
+  var LibDb: string:= '';
+  var LibAsked: Boolean:= False;
+  TDocDrift.SetLibraryLocator(
+    function: ISymbolStore
+    var
+      Why: string;
+    begin
+      if not LibAsked then
+      begin
+        LibDb:= LintLibraryDb(LibArgs);
+        LibAsked:= True;
+      end;
+      Result:= OpenLibraryStoreIfCurrent(LibDb, Why);
+    end);
   { WHICH STORES THE CHECKER IS USING IS OTHERWISE INVISIBLE, and getting it
     wrong produces a doc-drift finding no command can clear -- the symptom looks
     like a stale index, not like a store-selection bug. One line under the
