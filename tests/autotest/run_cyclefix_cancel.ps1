@@ -161,6 +161,22 @@ Check 'c6 the tree is byte-identical to before (no new leaf, no .BCK, no recover
 Check 'c7 the parked build is gone (the engine killed its own build tree)' ((Parked).Count -eq 0) ("still alive: " + ((Parked | ForEach-Object ProcessId) -join ','))
 Stop-Parked
 
+# ---------------------------------------------------------------- (c-text) the text verdict of a cancelled run
+Write-Host '== (c-text) a cancelled run does not print a mechanical verdict' -ForegroundColor Cyan
+$CT = New-Demo 'ct'
+$fakeCT = New-FakeRsvars 'ct' $CT.Proj 'after'
+$runCT = Start-Fix $CT @('--unit', 'demogageport', '--apply', '--build-timeout', '600', '--rsvars', $fakeCT.Bat, '--format', 'text') 'ct'
+$parkedCT = Wait-For { (Test-Path $fakeCT.Flag) -or $runCT.P.HasExited } 240
+Check 'setup: the text run reached the after-build' ($parkedCT -and (Test-Path $fakeCT.Flag)) ''
+$null = & $Exe shutdown --db $CT.Db --wait 60 2>&1 | Out-String
+$exitedCT = Wait-For { $runCT.P.HasExited } 60
+if (-not $exitedCT) { try { $runCT.P.Kill($true) } catch { } ; $runCT.P.WaitForExit(10000) | Out-Null }
+$textCT = Read-Text $runCT.Out
+Check 'c8 positive: the text says cancelled -- rolled back' ($textCT -match 'cancelled -- rolled back') $textCT
+Check 'c9 its verdict line is refused' ($textCT -match '(?m)^Verdict: refused') $textCT
+Check 'c10 no line says Verdict: mechanical' (-not ($textCT -match 'Verdict: mechanical')) $textCT
+Stop-Parked
+
 # ---------------------------------------------------------------- (t) --build-timeout
 Write-Host '== (t) --build-timeout 3 on a build that never finishes' -ForegroundColor Cyan
 $T = New-Demo 't'
