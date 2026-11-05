@@ -22,7 +22,7 @@ function formatStatus(ctx) {
   if (ctx.config) parts.push(ctx.config);
   const notice = ctx.notice ? String(ctx.notice) : '';
   const tip = [ctx.source ? 'source: ' + ctx.source : '', notice].filter(Boolean).join('\n');
-  return { text: 'DL: ' + parts.join(' | '), tooltip: tip || 'drag-lint context', warning: notice !== '' };
+  return { text: 'DL: ' + parts.join(' | '), tooltip: tip || 'drag-lint context', warning: notice !== '' && ctx.level !== 'info' };
 }
 
 function initOptions(get) {

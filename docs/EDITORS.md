@@ -285,6 +285,23 @@ complement to this, not a replacement.
 declaring `source.pascal` conflicts with this grammar, and some start their own
 language server, which double-publishes into the Problems panel.
 
+### Which project and platform a file answers from
+
+The server works this out per file, and the status-bar item shows the result:
+
+* `dragLint.project` / `dragLint.platform` win when set (commands **drag-lint: Select
+  Project** and **Select Platform**, `dragLint.selectProject` / `dragLint.selectPlatform`).
+* Otherwise the project is the one whose index holds the file. No index holds it (a
+  worktree, a unit not indexed yet, an index being rebuilt): a `.dlcontext.json`, then the
+  `.dproj` or `.dpr` that lists that exact file, searched up to the repository root.
+* The platform is the project's active selection, else what the `.dproj` declares: `Win64`
+  if targeted, else `Win32`.
+
+A project found this way in another checkout does not borrow the main tree's index: answers
+come from the library, and an info message gives the `drag-lint index --project` command.
+When nothing is known the message says so once per folder, at info level, and names the
+two commands and `.dlcontext.json`. Details: `docs\wiki\lsp.md`.
+
 ### The Problems panel
 
 Lint findings and syntax errors appear in VS Code's **Problems** panel, one row

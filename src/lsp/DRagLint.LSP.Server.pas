@@ -120,6 +120,10 @@ type
     ProjectDbOverride, LibraryDbOverride: string;
     /// <summary>A .dlcontext.json found stale (its .dproj changed) and bypassed, or ''.</summary>
     StaleContextFile: string;
+    /// <summary>The other projects that also hold this file, for display, or ''. The one
+    /// in Project is the first in a fixed order (manifest order for an index, nearest
+    /// then path order for a project file); this names what it was chosen over.</summary>
+    AlsoHeldBy: string;
   end;
 
   /// <summary>The authoritative DB pair for one (project, platform): the
@@ -260,7 +264,10 @@ type
       FDefaultsRead  : Boolean;
       FSets          : TList<TStoreSet>;        { LRU, most recent first, at most LSP_STORE_SET_LRU }
       FCtxCache      : TDictionary<string, TCtxEntry>;
-      FNoticed       : TDictionary<string, Byte>; { lower(path)|reason already shown }
+      FNoticed       : TDictionary<string, Byte>; { lower(path or folder)|reason already shown }
+      FNoticeWarns   : Boolean;                   { the last ContextNotice text holds a warning-level reason }
+      FNearProjects  : TDictionary<string, TArray<string>>; { lower(folder) -> project files in and just under it; session-long }
+      FProjectUnits  : TObjectDictionary<string, TDictionary<string, Byte>>; { lower(project)|stamp -> lower(listed unit paths) }
       FPending       : TObjectList<TJSONObject>;  { notifications queued for the stdio loop }
       FQueueNotices  : Boolean;                   { True only inside Run: proxy mode never writes to stdout }
       FNoticeSink    : TProc<string>;           { proxy mode: where queued notifications go (the relay's client writer); nil = stdout via SendRawNotification }
@@ -305,6 +312,11 @@ type
       function  ComputeFileContext(const APath: string): TLspFileContext;
       function  IsLibraryPath(const APath: string): Boolean;
       function  OwningStartupProjectDb(const APath: string): string;
+      function  NearProjects(const ADir: string): TArray<string>;
+      function  ProjectListsUnit(const AProject, AUnitLower: string): Boolean;
+      function  FindListingProject(const APath: string; out AOthers: string): string;
+      function  OtherOwningStores(const APath, AProject: string): string;
+      function  StartupLibraryPlatformOf(const APath: string): string;
       function  StartupLibraryFor(const APlatform: string): string;
       function  DbSetFor(const APath: string; const ACtx: TLspFileContext): TLspDbSet;
       function  OpenReaderStore(const APath: string): ISymbolStore;
@@ -1444,6 +1456,7 @@ implementation
 
 uses
   System.StrUtils, { LSP-1 CORE: MatchText }
+  System.RegularExpressions, { 1.44 lspctx: a project file's units and declared platform }
   DRagLint.Query.Implementors, { 1.40 ifrpt: the implementors counts of draglint/callerCounts }
   DRagLint.Lint.MissingUses, { MISSING_USES_RULE: publish + codeAction } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
   DRagLint.Project.DefineProfile,
@@ -1478,6 +1491,11 @@ const
   LSP_CMD_SET_CONTEXT      = 'draglint.setContext';
   LSP_NOTIFY_CONTEXT       = 'draglint/context';
   LSP_MSG_TYPE_WARNING     = 2; // window/showMessage MessageType.Warning
+  LSP_MSG_TYPE_INFO        = 3; // window/showMessage MessageType.Info
+  { 1.44 lspctx: how far FindListingProject climbs when no repository root stops it. }
+  LSP_PROJECT_SEARCH_LEVELS = 4;
+  { 1.44 lspctx: most sub-folders one NearProjects look lists; a huge parent stays cheap. }
+  LSP_PROJECT_SEARCH_DIRS = 256;
   LSP_ERR_INVALID_PARAMS   = -32602;
   LSP_CONFIG_SECTION       = 'dragLint';
   LSP_CONTEXT_FILE_EXT     = '.dlcontext.json';
@@ -1707,6 +1725,8 @@ begin
   FSets    := TList<TStoreSet>.Create;
   FCtxCache:= TDictionary<string, TCtxEntry>.Create;
   FNoticed := TDictionary<string, Byte>.Create;
+  FNearProjects:= TDictionary<string, TArray<string>>.Create;
+  FProjectUnits:= TObjectDictionary<string, TDictionary<string, Byte>>.Create([doOwnsValues]);
   FResolved:= TDictionary<string, TLspDbSet>.Create;
   FWorkLock      := TCriticalSection.Create;
   FStopEvent     := TEvent.Create(nil, True, False, '');
@@ -1760,6 +1780,8 @@ begin
   FWorkLock.Free;
   FPending.Free;
   FNoticed.Free;
+  FProjectUnits.Free;
+  FNearProjects.Free;
   FResolved.Free;
   FCtxCache.Free;
   FSets.Free;
@@ -2779,11 +2801,182 @@ begin
   Result:= Entry.Ctx;
 end;
 
+{ 1.44 lspctx: the platform a .dproj DECLARES when it carries no active selection
+  (no $(Platform) marker, no delphilsp.json): of the platforms it targets, Win64 if
+  targeted, else Win32, else the first. BorlandProject's <Platform value=..>True first,
+  then the TargetedPlatforms mask (bit 1 Win32, bit 2 Win64), then a plain <Platform>.
+  '' = it declares none. Never raises: a project file we cannot read declares nothing. }
+function DprojDeclaredPlatform(const ADproj: string): string;
+const
+  MASK_WIN32 = 1;
+  MASK_WIN64 = 2;
+var
+  Text : string;
+  Mask : Integer;
+  First: string;
+begin
+  Result:= '';
+  try
+    Text:= TFile.ReadAllText(ADproj); // dl:ok taint-path-traversal -- REVIEWED 2026-11-05: read only, for a project file the user's own context file or manifest names; a regex takes one platform name from it
+    First:= '';
+    for var M: TMatch in TRegEx.Matches(Text, '<Platform\s+value="([^"]+)"\s*>\s*True\s*</Platform>', [roIgnoreCase]) do
+    begin
+      var Name: string:= M.Groups[1].Value;
+      if SameText(Name, 'Win64') then Exit('Win64');
+      if SameText(Name, 'Win32') then Result:= 'Win32';
+      if First = '' then First:= Name;
+    end;
+    if Result <> '' then Exit;
+    if First <> '' then Exit(First);
+    var T: TMatch:= TRegEx.Match(Text, '<TargetedPlatforms>\s*(\d+)\s*</TargetedPlatforms>', [roIgnoreCase]);
+    if T.Success and TryStrToInt(T.Groups[1].Value, Mask) then
+    begin
+      if (Mask and MASK_WIN64) <> 0 then Exit('Win64');
+      if (Mask and MASK_WIN32) <> 0 then Exit('Win32');
+    end;
+    var Plain: TMatch:= TRegEx.Match(Text, '<Platform>\s*([^<$\s]+)\s*</Platform>', [roIgnoreCase]);
+    if Plain.Success then Result:= Plain.Groups[1].Value;
+  except
+    on E: Exception do Result:= ''; // fail-open: the caller falls back to the notice
+  end;
+end;
+
+{ A folder FindListingProject never looks inside: index, build and VCS output. }
+function IsProjectSearchSkipped(const AName: string): Boolean;
+begin
+  Result:= MatchText(AName, ['_D-RAG', '__history', '__recovery', 'Win32', 'Win64', '.git', '.hg', 'node_modules']);
+end;
+
+{ The checkout's top: a .git folder, a .git FILE (a worktree) or an .hg folder. }
+function IsRepositoryRoot(const ADir: string): Boolean;
+var
+  Git: string;
+begin
+  Git:= TPath.Combine(ADir, '.git');
+  Result:= TDirectory.Exists(Git) or TFile.Exists(Git) or TDirectory.Exists(TPath.Combine(ADir, '.hg'));
+end;
+
+{ Project files directly in ADir, sorted; a .dpr only when no .dproj of its name exists. }
+function ProjectFilesIn(const ADir: string): TArray<string>;
+begin
+  Result:= nil;
+  try
+    Result:= TDirectory.GetFiles(ADir, '*.dproj');
+    { *.dpr also matches .dproj through the 8.3 name: test the real extension. }
+    for var F: string in TDirectory.GetFiles(ADir, '*.dpr') do
+      if SameText(ExtractFileExt(F), '.dpr') and not TFile.Exists(ChangeFileExt(F, '.dproj')) then
+        Result:= Result + [F];
+    TArray.Sort<string>(Result);
+  except
+    on E: Exception do Result:= nil; // an unreadable folder holds no candidate
+  end;
+end;
+
+function TLSPServer.NearProjects(const ADir: string): TArray<string>;
+var
+  Key: string;
+begin
+  Key:= LowerCase(ADir);
+  if FNearProjects.TryGetValue(Key, Result) then Exit;
+  Result:= ProjectFilesIn(ADir);
+  try
+    var Subs: TArray<string>:= TDirectory.GetDirectories(ADir);
+    TArray.Sort<string>(Subs);
+    if Length(Subs) > LSP_PROJECT_SEARCH_DIRS then SetLength(Subs, LSP_PROJECT_SEARCH_DIRS);
+    for var D: string in Subs do
+      if not IsProjectSearchSkipped(ExtractFileName(D)) then Result:= Result + ProjectFilesIn(D);
+  except
+    on E: Exception do Writeln(ErrOutput, 'drag-lint LSP: project search skipped ', ADir, ': ', E.Message);
+  end;
+  FNearProjects.Add(Key, Result);
+end;
+
+{ Does the project file LIST this exact unit path? A .dproj's DCCReference, a .dpr's
+  `in '...'`, each resolved from the project's own folder -- so a relocated checkout
+  still matches, and a same-named unit elsewhere never does. Memoised per project +
+  stamp: the files of one folder share one read. }
+function TLSPServer.ProjectListsUnit(const AProject, AUnitLower: string): Boolean;
+var
+  Key  : string;
+  Units: TDictionary<string, Byte>;
+begin
+  Result:= False;
+  try
+    Key:= LowerCase(AProject) + '|' + DprojStamp(AProject);
+    if not FProjectUnits.TryGetValue(Key, Units) then
+    begin
+      Units:= TDictionary<string, Byte>.Create;
+      FProjectUnits.Add(Key, Units);
+      var Text: string:= TFile.ReadAllText(AProject);
+      var Pattern: string:= if SameText(ExtractFileExt(AProject), '.dproj') then '<DCCReference\s+Include="([^"]+)"'
+        else '\bin\s+''([^'']+)''';
+      for var M: TMatch in TRegEx.Matches(Text, Pattern, [roIgnoreCase]) do
+        Units.AddOrSetValue(LowerCase(ExpandFileName(TPath.Combine(ExtractFilePath(AProject), M.Groups[1].Value))), 1);
+    end;
+    Result:= Units.ContainsKey(AUnitLower);
+  except
+    on E: Exception do Writeln(ErrOutput, 'drag-lint LSP: cannot read project ', AProject, ': ', E.Message);
+  end;
+end;
+
+{ 1.44 lspctx: the project of a unit no index holds -- a worktree, a copy, a unit not
+  indexed yet, an index mid-rebuild. Climbs from the unit's folder to the repository
+  root (at most LSP_PROJECT_SEARCH_LEVELS without one), looking at each level in the
+  folder and its immediate sub-folders, because a project is often a SIBLING of the
+  unit's folder (src\cli\drag-lint.dproj, src\report\X.pas), not an ancestor. The
+  nearest level with a project LISTING the unit wins, then path order; AOthers names
+  the rest. Only ever a project that lists this exact path: never a guess. }
+function TLSPServer.FindListingProject(const APath: string; out AOthers: string): string;
+begin
+  Result := '';
+  AOthers:= '';
+  var Full: string:= ExpandFileName(APath);
+  var UnitLower: string:= LowerCase(Full);
+  var Dir: string:= ExcludeTrailingPathDelimiter(ExtractFilePath(Full));
+  for var Level:= 0 to LSP_PROJECT_SEARCH_LEVELS do
+  begin
+    if (Dir = '') or not TDirectory.Exists(Dir) then Exit;
+    for var P: string in NearProjects(Dir) do
+      if ProjectListsUnit(P, UnitLower) then
+        if Result = '' then Result:= P
+        else AOthers:= if AOthers = '' then ExtractFileName(P) else AOthers + ', ' + ExtractFileName(P);
+    if (Result <> '') or IsRepositoryRoot(Dir) then Exit;
+    var Parent: string:= ExcludeTrailingPathDelimiter(ExtractFilePath(Dir));
+    if SameText(Parent, Dir) then Exit;
+    Dir:= Parent;
+  end;
+end;
+
+{ The startup project stores holding APath other than AProject's own, by DB file name,
+  or ''. Already-open stores, one indexed lookup each, once per file (FCtxCache). }
+function TLSPServer.OtherOwningStores(const APath, AProject: string): string;
+begin
+  Result:= '';
+  var Own: string:= ChangeFileExt(ExtractFileName(AProject), '.sqlite');
+  for var I:= 0 to High(FStores) do
+    if (I <= High(FStorePaths)) and not IsLibraryPath(FStorePaths[I])
+       and not SameText(ExtractFileName(FStorePaths[I]), Own) and (FStores[I].FindFileIdByPath(APath) > 0) then
+      Result:= if Result = '' then ExtractFileName(FStorePaths[I]) else Result + ', ' + ExtractFileName(FStorePaths[I]);
+end;
+
+{ The platform of the startup library store holding APath, or '': a library unit's
+  platform is known even though it has no project. }
+function TLSPServer.StartupLibraryPlatformOf(const APath: string): string;
+const
+  LIBRARY_PREFIX = 'library-';
+begin
+  Result:= '';
+  for var I:= 0 to High(FStores) do
+    if (I <= High(FStorePaths)) and IsLibraryPath(FStorePaths[I]) and (FStores[I].FindFileIdByPath(APath) > 0) then
+      Exit(Copy(ChangeFileExt(ExtractFileName(FStorePaths[I]), ''), Length(LIBRARY_PREFIX) + 1, MaxInt));
+end;
+
 function TLSPServer.ComputeFileContext(const APath: string): TLspFileContext;
 var
   Ctx    : TProjectContext;
   HaveCtx: Boolean;
   P, C   : string;
+  PlatSrc: string;
   LspDefs: TArray<string>;
   LspNum : TArray<TPair<string, Integer>>;
   LspSw  : TArray<TPair<string, Boolean>>;
@@ -2827,18 +3020,47 @@ begin
         Result.Project:= if Ctx.Project <> '' then Ctx.Project else Ctx.SourceFile;
       end;
     end;
-  end;
-  if SameText(ExtractFileExt(Result.Project), '.dproj') then
-    if not ReadDprojActiveSelection(Result.Project, P, C) then
+    { 1.44 lspctx: no index holds the path and no context file names a project: the
+      project file that LISTS it. }
+    if Result.Project = '' then
     begin
-      P:= '';
-      C:= '';
+      Result.Project:= FindListingProject(APath, Result.AlsoHeldBy);
+      if Result.Project <> '' then Result.Source:= lcsDproj;
+    end
+    else if (Result.Source = lcsDproj) and (Result.StaleContextFile = '') then
+      Result.AlsoHeldBy:= OtherOwningStores(APath, Result.Project);
+  end;
+  { 1.44 lspctx: a project known as a bare .dpr / .dpk (a manifest section names one
+    that way) still has a platform: the .dproj of its name > its own .dlcontext.json >
+    a .dproj that lists the unit, which then IS the project. }
+  PlatSrc:= Result.Project;
+  if (Result.Source = lcsDproj) and (Result.Project <> '') and not SameText(ExtractFileExt(Result.Project), '.dproj') then
+  begin
+    if TFile.Exists(ChangeFileExt(Result.Project, '.dproj')) then PlatSrc:= ChangeFileExt(Result.Project, '.dproj')
+    else if FindProjectContextForUnit(Result.Project, Ctx) and not Ctx.Stale
+      and SameText(if Ctx.Project <> '' then Ctx.Project else Ctx.SourceFile, Result.Project) then HaveCtx:= True
+    else
+    begin
+      var Others: string;
+      var Listing: string:= FindListingProject(APath, Others);
+      if SameText(ExtractFileExt(Listing), '.dproj') then
+      begin
+        Result.Project:= Listing;
+        PlatSrc       := Listing;
+      end;
     end;
-  if (P = '') and SameText(ExtractFileExt(Result.Project), '.dproj') then
-    if not ReadDelphiLspDefines(Result.Project, P, LspDefs, LspNum, LspSw) then P:= '';
+  end;
+  if SameText(ExtractFileExt(PlatSrc), '.dproj') and not ReadDprojActiveSelection(PlatSrc, P, C) then
+  begin
+    P:= '';
+    C:= '';
+  end;
+  if (P = '') and SameText(ExtractFileExt(PlatSrc), '.dproj') and not ReadDelphiLspDefines(PlatSrc, P, LspDefs, LspNum, LspSw) then P:= '';
+  if (P = '') and SameText(ExtractFileExt(PlatSrc), '.dproj') then P:= DprojDeclaredPlatform(PlatSrc);
+  if (P = '') and (Result.Project = '') then P:= StartupLibraryPlatformOf(APath);
 
-  { Platform: startup > client > context file > the project's active platform >
-    central defaults > placeholder. }
+  { Platform: startup > client > context file > the project's active platform > the
+    platform it declares > central defaults > placeholder. }
   if FStartPlatform <> '' then Result.Platform:= FStartPlatform
   else if FClientPlatform <> '' then Result.Platform:= FClientPlatform
   else if HaveCtx and (Ctx.PlatformName <> '') then Result.Platform:= Ctx.PlatformName
@@ -3222,6 +3444,7 @@ var
 
   procedure Add(const AReason, AText: string);
   begin
+    FNoticeWarns:= True;
     Acc:= if Acc = '' then AText else Acc + ' ' + AText;
     if not AQueue then Exit;
     var Key: string:= LowerCase(APath) + '|' + AReason;
@@ -3233,16 +3456,41 @@ var
     QueueNotification('window/showMessage', Params);
   end;
 
+  { 1.44 lspctx: advice, not a fault: info level, once per FOLDER. AInText = False keeps
+    it out of the per-file text (status bar, hover footer) for what is normal for a file. }
+  procedure AddAdvice(const AReason, AText: string; AInText: Boolean = True);
+  begin
+    if AInText then Acc:= if Acc = '' then AText else Acc + ' ' + AText;
+    if not AQueue then Exit;
+    var Key: string:= LowerCase(ExtractFileDir(APath)) + '|' + AReason;
+    if FNoticed.ContainsKey(Key) then Exit;
+    FNoticed.Add(Key, 1);
+    var Params: TJSONObject:= TJSONObject.Create;
+    Params.AddPair('type'   , TJSONNumber.Create(LSP_MSG_TYPE_INFO));
+    Params.AddPair('message', AText);
+    QueueNotification('window/showMessage', Params);
+  end;
+
 begin
   Result:= '';
   Acc   := '';
+  FNoticeWarns:= False;
   if APath = '' then Exit;
   if ACtx.Project = '' then
-    Add('unknown-project', Format('drag-lint: no project is known for %s -- answering from the %s library only. '
-      + 'Name it with draglint.setContext or a .dlcontext.json.', [ExtractFileName(APath), ACtx.Platform]));
-  if ACtx.PlatformDefaulted then
-    Add('default-platform', Format('drag-lint: no platform is known for %s -- using the default %s.',
+    AddAdvice('unknown-project', Format('drag-lint: no project is known for %s -- answering from the %s library only. '
+      + 'Pick one with dragLint.selectProject (draglint.setContext outside VS Code) or name it in a .dlcontext.json.',
       [ExtractFileName(APath), ACtx.Platform]));
+  if ACtx.PlatformDefaulted then
+    AddAdvice('default-platform', Format('drag-lint: no platform is known for %s -- using the default %s. '
+      + 'Pick one with dragLint.selectPlatform (draglint.setContext outside VS Code) or name it in a .dlcontext.json.',
+      [ExtractFileName(APath), ACtx.Platform]));
+  if ACtx.AlsoHeldBy <> '' then
+    AddAdvice('several-projects', Format('drag-lint: %s belongs to several projects -- using %s, also in %s. '
+      + 'Pick another with dragLint.selectProject.',
+      [ExtractFileName(APath), ExtractFileName(ACtx.Project), ACtx.AlsoHeldBy]), False);
+  if (ACtx.Project <> '') and (ADbs.ProjectDb = '') and not FExplicitDbs and (ACtx.Source = lcsDproj) then
+    AddAdvice('no-project-index', Format('drag-lint: %s has no index here -- answering from the %s library only. '
+      + 'Build it with: drag-lint index --project "%s"', [ExtractFileName(ACtx.Project), ACtx.Platform, ACtx.Project]));
   if ACtx.StaleContextFile <> '' then
     Add('stale-context', Format('drag-lint: %s is stale (its .dproj changed) -- reading the .dproj instead.',
       [ExtractFileName(ACtx.StaleContextFile)]));
@@ -3348,7 +3596,10 @@ begin
   Params.AddPair('platform', Ctx.Platform);
   Params.AddPair('config'  , Ctx.Config);
   Params.AddPair('source'  , LSP_SOURCE_NAMES[Ctx.Source]);
-  Params.AddPair('notice'  , ContextNotice(APath, Ctx, Dbs, False));
+  var Notice: string:= ContextNotice(APath, Ctx, Dbs, False);
+  Params.AddPair('notice'  , Notice);
+  { 1.44 lspctx: the status bar paints a warning only for a warning-level reason. }
+  if (Notice <> '') and not FNoticeWarns then Params.AddPair('level', 'info');
   QueueNotification(LSP_NOTIFY_CONTEXT, Params);
 end;
 

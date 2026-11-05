@@ -20,6 +20,10 @@ assert.strictEqual(a.warning, false);
 const b = ctx.formatStatus({ project: '', platform: '', config: '', source: 'unknown', notice: 'no project' });
 assert.strictEqual(b.text, 'DL: no project | default platform');
 assert.strictEqual(b.warning, true);
+// 1.44: the server marks advice (no project / no platform known) level=info: no warning paint, text kept
+const i = ctx.formatStatus({ project: '', platform: 'Win64', config: '', source: 'placeholder', notice: 'no platform', level: 'info' });
+assert.strictEqual(i.warning, false);
+assert.ok(i.tooltip.includes('no platform'));
 assert.ok(b.tooltip.includes('unknown') && b.tooltip.includes('no project'));
 assert.deepStrictEqual(ctx.initOptions(() => undefined), { project: '', platform: '', config: '' });
 console.log('context.test.js: all assertions passed');
