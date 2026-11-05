@@ -20,7 +20,7 @@ LEFT FOR THE OWNER (write-up recommendation in brackets):
 * DEC-14 force a mid-session VS Code engine refresh [retire].
 * DEC-15 committed= counter on the section summary line [park/close].
 * DEC-16 lint the legacy "// note // dl:shared A" marker [won't-fix].
-* DEC-17 flip ShowInfoInline [leave off].
+* DEC-17 flip ShowInfoInline [SUPERSEDED: ON by default, owner ruling 2026-11-05; the code default was already True since 2026-08-26 (9f78db38)].
 * DEC-18 DCU-only library indexing [keep parked].
 Not independently re-verified here: the DEC-7 and DEC-8 closures rest on the walkthrough's wording, not on a fresh git check.
 # Owner decisions DEC-1 .. DEC-6 -- detailed background
@@ -1637,6 +1637,10 @@ the estate is cheaper than carrying a permanent rule for a population that has b
 ---
 
 ## DEC-17 -- IDE: flip ShowInfoInline?
+
+> SUPERSEDED 2026-11-05 by the owner: diagnostic icons and ShowInfoInline are ON by default. The code default
+> (DragLint.Plugin.Settings.pas, DefaultSettings) has been True since 2026-08-26 (9f78db38). A value saved in the
+> registry still wins. The "leave it off" recommendation and the "remains 0" statement below are history, not advice.
 
 ### 1. The question in one sentence
 Should the RAD Studio IDE plugin start rendering INFO-severity findings inline in the editor gutter and message

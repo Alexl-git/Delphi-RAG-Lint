@@ -12,6 +12,7 @@ program HelpLineHarness;
 uses
   System.SysUtils
   , System.IOUtils
+  , System.Win.Registry
   , DragLint.Plugin.Settings
   , DragLint.Plugin.HelpIndex
   , DragLint.Plugin.JobQueue
@@ -60,6 +61,33 @@ begin
   S.HelpRoot:= '';
   SaveSettings(S);
   Put('settings.empty', LoadSettings.HelpRoot);
+  SaveSettings(DefaultSettings);
+end; // procedure
+
+procedure RunInfoInlineDefault;
+var
+  S: TDragLintSettings;
+  Reg: TRegistry;
+begin
+  // Owner ruling 2026-08-26 / 2026-11-05: info markers are ON by default.
+  Put('info.default', BoolToStr(DefaultSettings.ShowInfoInline, True));
+  S:= DefaultSettings;
+  S.ShowInfoInline:= False;
+  SaveSettings(S);
+  // A SAVED value wins over the default: a user who stored 0 stays OFF.
+  Put('info.saved_off', BoolToStr(LoadSettings.ShowInfoInline, True));
+  Reg:= TRegistry.Create;
+  try
+    if Reg.OpenKey('Software\drag-lint\DelphiPlugin.Test', False) then
+    begin
+      Reg.DeleteValue('ShowInfoInline');
+      Reg.CloseKey;
+    end;
+  finally
+    Reg.Free;
+  end; // try
+  // No stored value at all (fresh install): the default applies.
+  Put('info.fresh', BoolToStr(LoadSettings.ShowInfoInline, True));
   SaveSettings(DefaultSettings);
 end; // procedure
 
@@ -249,6 +277,7 @@ begin
     RunQueueText;
     RunMatcher(ParamStr(1));
     RunSettingsRoundTrip;
+    RunInfoInlineDefault;
     RunIndex(ParamStr(1), ParamStr(2));
     RunLocator(ParamStr(2));
     Writeln('DONE');
