@@ -199,6 +199,7 @@ begin
     '         [--depth N] [--cap N] [--surface-cap N] [--control <C>] [--mode write|read|both] [--max-rows N]',
     '         [--out-root <dir>] [--pairs-file <report-pairs.json>] [--allow-stale] [--plain] [--open] [--resolve-only]',
     '  <question>: ' + string.Join(', ', QuestionIds),
+    '  --question <id>: the same as the positional <question>.',
     '  Default output: the DocInsight /// <remarks> block; --plain: the plain answer (header, COMMAND, BUNDLE, INDEX, text).',
     '  Exit: 0 answered, 1 refused, 2 usage/setup, 3 stale index (stderr names the reindex command).'];
 end;
