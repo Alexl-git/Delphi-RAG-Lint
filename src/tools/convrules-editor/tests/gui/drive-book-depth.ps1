@@ -188,6 +188,8 @@ trap { $script:fail++; "FAIL  driver.crash  $($_.Exception.Message) [line $($_.I
 . "$PSScriptRoot\vcl-atoms.ps1"; 'NOTE  ' + (VclAtomsReclaim)   # ATOMLOCK: start from a reclaimed atom table (idempotent)
 function Check($name, $cond, $detail = '') { if ($cond -and $env:DRIVE_FORCE_FAIL -ne $name) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
+# GUILOCK: wait for a CONDITION, not a fixed sleep: poll up to $sec s until the book file matches $pattern (the save is asynchronous). Returns after the deadline either way; the Check that follows reports a miss.
+function WaitSaved($path, $pattern, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { try { if ([IO.File]::ReadAllText($path) -match $pattern) { return } } catch {}; Start-Sleep -Milliseconds 100 } }
 function WaitFor($procId, $caption, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
 function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; do { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; if (((Get-Date) - $t0).TotalSeconds -ge $sec) { break }; Start-Sleep -Milliseconds 250 } while ($true); return [IntPtr]::Zero }
 function TopsNow($procId) { (Forms $procId | ForEach-Object { $h = $_; $s = '{0}/{1}' -f [W]::Cls($h), [W]::Txt($h); if ([W]::Cls($h) -eq '#32770') { $s += ' [' + ((Find $h 'Static' $null | ForEach-Object { [W]::Txt($_) } | Where-Object { $_ }) -join ' ') + ']' }; $s }) -join ' | ' }
@@ -272,7 +274,7 @@ try {
     # commits once. Wait past it before saving.
     Start-Sleep -Milliseconds 1500
     Check 'depth.change.invoke.save' ([W]::InvokeMenu($main, 'File|Save'))
-    Start-Sleep -Milliseconds 800
+    WaitSaved $d3 '(?m)^#depth 7\r$' 10
     $txt = [IO.File]::ReadAllText($d3)
     Check 'depth.change.saved' (($txt -match '(?m)^#depth 7\r$') -and ($txt -notmatch '#depth 3')) $txt
     Check 'depth.change.one.line' (([regex]::Matches($txt, '#depth')).Count -eq 1) $txt
@@ -361,7 +363,7 @@ foreach ($b in $bad) {
       Start-Sleep -Milliseconds 1500
       Check ("depth.$($b.name).pick.five.selected") ((Sel $cb) -eq 4) ("sel=" + (Sel $cb))
       Check ("depth.$($b.name).pick.five.saved") ([W]::InvokeMenu($main, 'File|Save'))
-      Start-Sleep -Milliseconds 800
+      WaitSaved $b.file '(?m)^#depth 5\r$' 10
       $txt = [IO.File]::ReadAllText($b.file)
       Check ("depth.$($b.name).pick.five.repairs") (($txt -match '(?m)^#depth 5\r$') -and (([regex]::Matches($txt, '#depth')).Count -eq 1) -and ($txt -notmatch 'deep|#depth 2|#depth 9')) $txt
     }

@@ -311,7 +311,16 @@ begin
     Form.LoadFile(ParamStr(1));
   except
     on E: Exception do
-      Application.MessageBox(PChar('Could not open ' + ParamStr(1) + #13#10 + E.ClassName + ': ' + E.Message), 'ConvRulesEditor', 0);
+    begin
+      // GUILOCK: Application.MessageBox runs a native loop that never calls Application.OnMessage; run it through
+      // RunNativeDialog so NativeLoopVerdict refuses a command posted under it (dlggap), as for every native dialog.
+      var LText: string:= 'Could not open ' + ParamStr(1) + #13#10 + E.ClassName + ': ' + E.Message;
+      RunNativeDialog(function: Boolean
+        begin
+          Application.MessageBox(PChar(LText), 'ConvRulesEditor', 0);
+          Result:= True;
+        end);
+    end;
   end;
   // C12: the --convert-request runs after the file above has loaded (LoadFile may pump).
   Form.PostPendingRequest;
