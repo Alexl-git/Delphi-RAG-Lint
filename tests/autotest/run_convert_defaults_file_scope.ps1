@@ -95,7 +95,9 @@ Check 'B4b and the ignored file is named in one note' `
 # convert run at all: it must not convert, and must not use the config "db".
 $b5 = Run $subDb @('--quiet', 'convert-apply', '--unit', 'U.pas', '--rules', 'use.rules')
 Check 'B5 a leading flag does not run convert-apply on the config db' `
-      ((-not ($b5 -match 'convert-apply: ')) -and (-not ($b5 -match [regex]::Escape($cfgDb)))) $b5
+      (($b5 -match 'unknown-verb') -and (-not ($b5 -match '(?m)^convert-apply: ')) -and (-not ($b5 -match [regex]::Escape($cfgDb)))) $b5
+# Anchored at line start: the usage text printed on the refusal mentions convert-apply too.
+Check 'B5b POSITIVE CONTROL a real run prints the line B5 looks for' ($b4 -match '(?m)^convert-apply: ') $b4
 # ---- B2: a file contributing nothing is silent for convert-* ----------------
 $b2 = Run $subInert @('convert-validate', '--rules', 'nosuch.rules', '--db', 'nosuch.sqlite')
 Check 'B2 an inert defaults file is silent for convert-validate (no banner, no note)' `

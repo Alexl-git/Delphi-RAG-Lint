@@ -22884,7 +22884,11 @@ begin
     lives in the manifest (and the per-project DBs moved OUT of it in August), and
     handing a Win32 run the Win64 library is the same class of mis-selection that
     made used-unit-not-resolvable fire 99 times on DataCopy. }
-  if LibDb = '' then LibDb:= ResolveLibraryDb(AArgs);
+  { --library-db none is the caller saying "no library": it beats the manifest, which would
+    otherwise answer from a machine-level setting (int3: opaque-to-analysis, which must stay
+    silent without a library, fired on any engine whose manifest names one). }
+  if (Length(AArgs.LibraryDbs) > 0) and SameText(AArgs.LibraryDbs[0], 'none') then LibDb:= ''
+  else if LibDb = '' then LibDb:= ResolveLibraryDb(AArgs);
   DropUnreadableLibraryDb(LibDb);
   if ProjectDb = '' then begin EmitStatusLine(AArgs, 'ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.'); Exit (2 ); end;
 

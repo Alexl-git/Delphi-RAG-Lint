@@ -108,7 +108,7 @@
     "version": "1.35.1-alpha"
   },
   "features/compliance-labels.md": {
-    "hash": "025ae1ad80b18af53179217d4149a0be494ab09d3b45911c99a313cb756dde7d",
+    "hash": "9b1489be16acf41574a2c68f7f994c5be7d16358d2679b7721a89dee6e635dcd",
     "version": "1.42.0-alpha"
   },
   "features/concept-search.md": {
@@ -220,7 +220,7 @@
     "version": "1.42.0-alpha"
   },
   "features/datamodule-form-global.md": {
-    "hash": "4ffe8d2e4590c7d6c16f935489d17db8c58c426d41b7540a70e26790fb1b18ef",
+    "hash": "8932892be041a8bfe1fbcb46982a84c4b9b3f873a39235d0e26f12df30218060",
     "version": "1.42.0-alpha"
   },
   "features/deps-report.md": {
@@ -440,7 +440,7 @@
     "version": "1.39.2-alpha"
   },
   "features/identifier-case-mismatch.md": {
-    "hash": "ca56ab7b4e28285f36d8ef6d0020917816173af268291b61c7dbe3044c646ac6",
+    "hash": "c778973fb40031a19df6bb86eddc4814c2d3c09839280fd0dbf5e44b2895c909",
     "version": "1.42.0-alpha"
   },
   "features/impact-blast-radius-symbol.md": {
@@ -476,7 +476,7 @@
     "version": "1.40.0-alpha"
   },
   "features/interfaced-object-nil-leak.md": {
-    "hash": "aedcdd3190c3f7c064e99021bfe7acf30861f2378a81a86a40dd715237d99b92",
+    "hash": "27be7c17f453cc2c7463644097582b028f7986eed0443755534e8e289dc4c9ea",
     "version": "1.42.0-alpha"
   },
   "features/library-drift-check.md": {
@@ -744,7 +744,7 @@
     "version": "1.35.1-alpha"
   },
   "features/stream-buffer-after-free.md": {
-    "hash": "0401fd1f4be5101e92136fc721724aa5d2576d48fd8a270b3a04f015af7bdb40",
+    "hash": "6f36fb25dd8d2aa8dd8e7e1e76a6b8e40d7a3bd4c8454184b4b97f1d44450485",
     "version": "1.42.0-alpha"
   },
   "features/symbol-search.md": {
@@ -784,7 +784,7 @@
     "version": "1.42.0-alpha"
   },
   "features/type-name-prefix-origin.md": {
-    "hash": "b2af06cf224223f5a6c5299e32a06aeefb3725bea2f53778326d4764609fa529",
+    "hash": "fff27f62c912ed6a25c3ca94d02b4bcc2e1cfbaab4bace9db9b934ce57fa264f",
     "version": "1.42.0-alpha"
   },
   "features/unit-missing-from-uses.md": {
