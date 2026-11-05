@@ -453,6 +453,8 @@ type
     // B-28: routine id -> '|name|...|' its text declares as a const or an
     // inline const/var, lowercased; built on first use (LocalDeclNamesOf).
     FLocalDecls: TDictionary<Int64, string>;
+    /// <summary>1.43: per untyped inline var, by symbol id, the type its initializer decided; '' declined.</summary>
+    FInlineInitTypes: TDictionary<Int64, string>;
     // B-31: counters of the type_use pass.
     FTypeUseStats: TTypeUseStats;
     // B-31: file id -> its type symbols and its root (unit/program) symbol.
@@ -512,7 +514,37 @@ type
     /// <remarks>ADeclared with a zero-Id result is 'ambiguous': the caller
     /// declines, and the name still shadows fields, unit values and types.</remarks>
     function LocalInScopeAt(const ARef: TReference; const AName: string; out ADeclared: Boolean): TSymbol;
-    /// <summary>Review 2026-10-23 (N-07, W5-res2): whether ARef sits inside an
+    /// <summary>1.43 (INLINE-VAR-CTOR-UNTYPED): the type text of a value declaration:
+    /// its written type, or, for an inline var with none, the type its initializer
+    /// decides, exactly as if `var X: TFoo` had been written.</summary>
+    /// <param name="ADecl">A local_var, param, field or property; a zero-Id symbol answers ''.</param>
+    /// <returns>The type text in source spelling; '' when none is written and none is decided.</returns>
+    /// <remarks>Decided shape: `X := [Unit.]TType[&lt;args&gt;].Member[(args)]`, and nothing else --
+    /// an operator after the chain, a call around it, a for-var and a head that names a value in
+    /// scope all answer ''. An unresolved receiver is better than a wrong one. Pinned by
+    /// tests\callresolve\run_inline_var_ctor_bind.ps1. Memoised per declaration.</remarks>
+    function LocalTypeText(const ADecl: TSymbol): string;
+    /// <summary>1.43: decides the type of the untyped inline var ADecl from its initializer.</summary>
+    /// <param name="ADecl">A local_var with an empty signature.</param>
+    /// <returns>The type text; '' on every decline, including a stale or unreadable file.</returns>
+    function DecideInlineInitType(const ADecl: TSymbol): string;
+    /// <summary>1.43: whether AHead, the first identifier of an initializer at ASite, could be a
+    /// value or a routine rather than a type or unit qualifier.</summary>
+    /// <param name="ASite">FileId, EnclosingSymbolId, StartLine and StartCol are consulted.</param>
+    /// <param name="AHead">The identifier.</param>
+    /// <returns>True when any local, parameter, class-chain member, project routine, project
+    /// unit-level value or with member of the name exists, visible here or not.</returns>
+    /// <remarks>Over-answers on purpose: True only declines the inference.</remarks>
+    function InlineInitHeadIsValue(const ASite: TReference; const AHead: string): Boolean;
+    /// <summary>1.43: the type `TType.Member` yields, for a TType of this index.</summary>
+    /// <param name="ATypeId">The type's symbol id.</param>
+    /// <param name="ATypeText">TType as written, returned for a constructor.</param>
+    /// <param name="AMember">The member's name.</param>
+    /// <param name="AFileId">The file of the initializer.</param>
+    /// <returns>ATypeText for constructors only, and for a `Create` the chain does not declare
+    /// (TObject's or a library ancestor's); the declared return type of the one non-generic
+    /// function of the name, when it names the same type from both files; else ''.</returns>
+    function InlineInitMemberType(ATypeId: Int64; const ATypeText, AMember: string; AFileId: Int64): string;    /// <summary>Review 2026-10-23 (N-07, W5-res2): whether ARef sits inside an
     /// anonymous method's body within its enclosing routine, and the declared
     /// return type of the innermost one.</summary>
     /// <param name="ARef">FileId, StartLine, StartCol and EnclosingSymbolId are
@@ -2564,6 +2596,7 @@ begin
   FUnitFileOf := TDictionary<string, Int64>.Create;
   FWriteScopes:= TDictionary<Int64, TWriteScope>.Create;
   FLocalDecls := TDictionary<Int64, string>.Create;
+  FInlineInitTypes:= TDictionary<Int64, string>.Create;
   FFileTypes  := TDictionary<Int64, TArray<TSymbol>>.Create;
   FWriteStats := Default(TWriteResolveStats);
   FOracle    := TLibraryOracle.Create(AExtraStores);
@@ -2586,6 +2619,7 @@ begin
   FUnitFileOf.Free;
   FFileTypes.Free;
   FLocalDecls.Free;
+  FInlineInitTypes.Free;
   FWriteScopes.Free;
   FStaleFiles.Free;
   FChildCache.Free;
@@ -4810,8 +4844,8 @@ begin
   { A local or parameter: the nearest declaration covering the site. One that
     covers nothing here types to nothing, and still shadows everything below. }
   M:= LocalInScopeAt(ARef, AName, Declared);
-  ATypeText:= Trim(M.Signature);
-  if M.Id > 0 then Exit(ResolveTypeNameToSymbol(M.Signature, ARef.FileId));
+  ATypeText:= Trim(LocalTypeText(M));
+  if M.Id > 0 then Exit(ResolveTypeNameToSymbol(ATypeText, ARef.FileId));
   if Declared then Exit(0);
   EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
   M:= LookupMemberOnType(ClassId, AName);
@@ -5706,7 +5740,7 @@ var
     if (Decl.Id <= 0) and (not Declared) and (Encl.ParentId > 0) and not SameText(AName, 'Result') then
       Decl:= FindChildOfKind(Encl.ParentId, AName, [skField, skProperty]);
     if Decl.Id > 0 then
-      TypeText:= Trim(Decl.Signature)
+      TypeText:= Trim(LocalTypeText(Decl))
     else if Declared then
       Exit(False) // a local of that name exists but none covers the site
     else if SameText(AName, 'Result') and (Encl.Kind in [skFunction, skMethod]) then
@@ -6132,8 +6166,9 @@ begin
   Member:= LocalInScopeAt(ACallRef, AReceiverExpr, Declared);
   if Member.Id > 0 then
   begin
-    AText.Text:= NormalizeTypeLeaf(Member.Signature);
-    Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
+    var LocalType: string:= LocalTypeText(Member);
+    AText.Text:= NormalizeTypeLeaf(LocalType);
+    Exit(ResolveTypeNameToSymbol(LocalType, ACallRef.FileId));
   end;
   if Declared then
     Exit; // a local/param of that name exists but none covers the site -> 0
@@ -6943,6 +6978,178 @@ begin
           and (Length(Lines[ADecl.StartLine - 1]) >= ADecl.StartCol + 2)
           and CharInSet(Lines[ADecl.StartLine - 1][ADecl.StartCol + 2], [' ', #9]) then
     Result:= PosAtOrBefore(ALine, ACol, ADecl.EndLine, ADecl.EndCol);
+end;
+
+type
+  { 1.43: the parts of the one initializer shape an inline var is typed from. }
+  TInlineInit = record
+    Head    : string ; // the first identifier: a type or a unit qualifier
+    Leaf    : string ; // the type's own name
+    TypeText: string ; // [Unit.]TType[<args>], source spelling
+    Member  : string ; // the last identifier
+    Line    : Integer; // where the expression starts
+    Col     : Integer;
+  end;
+
+{ 1.43 (INLINE-VAR-CTOR-UNTYPED): parses `Name := A[.B...][<args>].Member[(args)]`
+  at ADecl into AInit. False for every other text: an operator or a further segment
+  after the chain, a call in the middle of it, a call around it, an inner `:` type.
+  The tokens skip comments and string literals, so `;` in an argument cannot end it.
+  Also a staleness guard: the name must be at the declaration's own position. }
+function ParseInlineInit(ALines: TStringList; const ADecl: TSymbol; out AInit: TInlineInit): Boolean;
+const
+  MAX_INIT_LINES = 16;
+  MIN_INIT_TOKENS = 4; // name, :=, type, dot
+var
+  Toks: TArray<TCodeTok>;
+  Segs: TArray<string>  ;
+  Args: string          ;
+  I   : Integer         ;
+  GenericAt: Integer    ;
+
+  function Raw(const ATok: TCodeTok): string;
+  begin
+    Result:= Copy(ALines[ATok.Line - 1], ATok.Col, Length(ATok.Text));
+  end;
+
+  { Past the balanced group opening at Toks[I], collecting its source text. }
+  function SkipGroup(const AOpen, AClose: string; out AText: string): Boolean;
+  var
+    Depth: Integer       ;
+    Parts: TArray<string>;
+  begin
+    Result:= False;
+    Depth := 0;
+    Parts := [];
+    while (I <= High(Toks)) and not Result do
+    begin
+      if Toks[I].Text = AOpen then Inc(Depth)
+      else if Toks[I].Text = AClose then Dec(Depth);
+      Parts := Parts + [Raw(Toks[I])];
+      Result:= Depth = 0;
+      Inc(I);
+    end;
+    AText:= string.Join('', Parts);
+  end;
+
+begin
+  Result:= False;
+  AInit := Default(TInlineInit);
+  Toks  := CodeTokens(ALines, ADecl.StartLine, ADecl.StartCol, Min(ADecl.StartLine + MAX_INIT_LINES, ALines.Count), MaxInt);
+  if (Length(Toks) < MIN_INIT_TOKENS) or (Toks[0].Text <> LowerCase(ADecl.Name)) or (Toks[1].Text <> ':=') then Exit;
+  AInit.Line:= Toks[2].Line;
+  AInit.Col := Toks[2].Col;
+  Args:= '';
+  I   := 2;
+  GenericAt:= -1;
+  while (I <= High(Toks)) and IsIdentStart(Toks[I].Text[1]) do
+  begin
+    Segs:= Segs + [Raw(Toks[I])];
+    Inc(I);
+    if (I <= High(Toks)) and (Toks[I].Text = '<') then
+    begin
+      if (Args <> '') or not SkipGroup('<', '>', Args) then Exit;
+      if (I > High(Toks)) or (Toks[I].Text <> '.') then Exit;
+      GenericAt:= High(Segs);
+    end;
+    if (I > High(Toks)) or (Toks[I].Text <> '.') then Break;
+    Inc(I);
+  end;
+  { Generic arguments belong to the type itself, the segment before the member. }
+  if (Length(Segs) < 2) or ((Args <> '') and (GenericAt <> High(Segs) - 1)) then Exit;
+  var Group: string;
+  if (I <= High(Toks)) and (Toks[I].Text = '(') and not SkipGroup('(', ')', Group) then Exit;
+  Result:= (I <= High(Toks)) and '|;|end|else|until|except|finally|'.Contains('|' + Toks[I].Text + '|');
+  AInit.Head    := Segs[0];
+  AInit.Leaf    := Segs[High(Segs) - 1];
+  AInit.Member  := Segs[High(Segs)];
+  AInit.TypeText:= string.Join('.', Segs, 0, High(Segs)) + Args;
+end;
+
+function TCallResolver.LocalTypeText(const ADecl: TSymbol): string;
+begin
+  Result:= ADecl.Signature;
+  if (Result <> '') or (ADecl.Kind <> skLocalVar) or (ADecl.Id <= 0) then Exit;
+  if FInlineInitTypes.TryGetValue(ADecl.Id, Result) then Exit;
+  Result:= DecideInlineInitType(ADecl);
+  FInlineInitTypes.Add(ADecl.Id, Result);
+end;
+
+function TCallResolver.InlineInitHeadIsValue(const ASite: TReference; const AHead: string): Boolean;
+var
+  Declared: Boolean;
+  ClassId : Int64  ;
+  Handled : Boolean;
+begin
+  LocalInScopeAt(ASite, AHead, Declared);
+  var Keyword: Boolean:= SameText(AHead, 'Self') or SameText(AHead, 'Result');
+  var UnitLevel: Boolean:= FNameToRoutines.ContainsKey(LowerCase(AHead)) or FNameToUnitValues.ContainsKey(LowerCase(AHead));
+  if Declared or Keyword or UnitLevel or EnclosingClassChainDeclares(ASite.EnclosingSymbolId, AHead, ClassId) then Exit(True);
+  var Saved: TWithScopeStats:= FWith.Stats;
+  TypeReceiverThroughWith(ASite, AHead, Handled);
+  FWith.Stats:= Saved;
+  Result:= Handled;
+end;
+
+function TCallResolver.InlineInitMemberType(ATypeId: Int64; const ATypeText, AMember: string; AFileId: Int64): string;
+var
+  Matches: TList<TSymbol>;
+  Ctors  : Integer       ;
+begin
+  Result:= '';
+  var Owner: TSymbol:= SymbolById(ATypeId);
+  if Owner.Kind = skInterface then Exit;
+  Matches:= TList<TSymbol>.Create;
+  try
+    AddMethodsOnTypeChain(ATypeId, AMember, Matches);
+    Ctors:= 0;
+    for var S: TSymbol in Matches do
+      if S.Kind = skConstructor then Inc(Ctors);
+    if Matches.Count = 0 then
+    begin
+      if SameText(AMember, 'Create') and (LookupMemberOnType(ATypeId, AMember).Id = 0) then Result:= ATypeText;
+    end
+    else if Ctors = Matches.Count then
+      Result:= ATypeText
+    else if (Matches.Count = 1) and (Owner.GenericParams = '') then
+    begin
+      { The same text must name the same type where the method declares it and where
+        the initializer reads it, since the local is resolved from the latter. }
+      var Ret: string:= SignatureReturnType(Matches[0].Signature);
+      if (Ret <> '') and (ResolveTypeNameToSymbol(Ret, Matches[0].FileId) = ResolveTypeNameToSymbol(Ret, AFileId)) then
+        Result:= Ret;
+    end;
+  finally
+    Matches.Free;
+  end;
+end;
+
+function TCallResolver.DecideInlineInitType(const ADecl: TSymbol): string;
+var
+  Lines: TStringList;
+  IsFor: Boolean    ;
+  Init : TInlineInit;
+begin
+  Result:= '';
+  Lines := LinesOf(ADecl.FileId);
+  if (Lines = nil) or FileIsStale(ADecl.FileId) or (ADecl.StartLine < 1) or (ADecl.StartLine > Lines.Count) then Exit;
+  if (not InlineVarAt(Lines, ADecl.StartLine, ADecl.StartCol, IsFor)) or IsFor then Exit;
+  if not ParseInlineInit(Lines, ADecl, Init) then Exit;
+  var Site: TReference:= Default(TReference);
+  Site.FileId           := ADecl.FileId;
+  Site.EnclosingSymbolId:= ADecl.ParentId;
+  Site.StartLine        := Init.Line;
+  Site.StartCol         := Init.Col;
+  if InlineInitHeadIsValue(Site, Init.Head) then Exit;
+  var TypeId: Int64:= ResolveTypeNameToSymbol(Init.TypeText, ADecl.FileId);
+  if TypeId > 0 then
+    Result:= InlineInitMemberType(TypeId, Init.TypeText, Init.Member, ADecl.FileId)
+  { No type of the name here: a library class, recorded by NAME for the oracle. Only
+    `Create`, the one member whose result is its own type without looking, and only a
+    name that reads as a type: an inherited library value must not become a type name. }
+  else if (not FNameToCands.ContainsKey(LowerCase(Init.Leaf))) and SameText(Init.Member, 'Create')
+     and (Length(Init.Leaf) >= 2) and (Init.Leaf[1] = 'T') and CharInSet(Init.Leaf[2], ['A'..'Z']) then
+    Result:= Init.TypeText;
 end;
 
 function TCallResolver.LocalInScopeAt(const ARef: TReference; const AName: string;
