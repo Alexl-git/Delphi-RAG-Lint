@@ -76,7 +76,7 @@ drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db
 | `--cap` | `N` |  |  |
 | `--surface-cap` | `N` |  |  |
 | `--control` | `<C>` |  |  |
-| `--mode` |  |  |  |
+| `--mode` | `write\|read\|both` |  |  |
 | `--max-rows` | `N` |  |  |
 | `--out-root` | `<dir>` |  |  |
 | `--pairs-file` | `<f.json>` |  |  |
