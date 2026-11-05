@@ -1003,7 +1003,7 @@ end;
 // list (F4). AOwnReads/AOwnWrites are the UNCAPPED own lists behind the two
 // capped CSVs. A free routine (ASym.ParentId <= 0) yields '' for both CSVs
 // and empty arrays -- the renderer then omits the whole Reads/Writes line.
-procedure AnalyzeReadsWrites(const AProc, ABody: TTSNode; const ASrc: TBytes;  // dl:ok too-many-parameters@036e -- pre-existing (12 before the v23 sweep dropped AFilePath, 11 now): the two own + two held out-arrays are the F1 contract with ApplyInheritedFieldFacts; grouping them into a record is a separate refactor
+procedure AnalyzeReadsWrites(const AProc, ABody: TTSNode; const ASrc: TBytes;  // dl:ok too-many-parameters@2bfd, unused-parameter@237a -- REVIEWED 2026-11-05: AProc is unused but removing it is a code change in a fingerprint unit, out of scope for a comment-only pass; 12 parameters: the two own + two held out-arrays are the F1 contract with ApplyInheritedFieldFacts; grouping them into a record is a separate refactor
   const ASym: TSymbol; const AStore: ISymbolStore; AVars: TRoutineVarTable;
   out AReadsCsv, AWritesCsv: string;
   out AOwnReads, AOwnWrites, AHeldReads, AHeldWrites: TArray<string>);
