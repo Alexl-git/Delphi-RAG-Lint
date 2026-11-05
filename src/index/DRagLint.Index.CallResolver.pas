@@ -1334,6 +1334,17 @@ type
     /// <param name="ATypeId">A with target's type.</param>
     /// <returns>True for a complete surface.</returns>
     function SurfaceComplete(ATypeId: Int64): Boolean;
+    /// <summary>WITH-SELF-PROP: the library's word on a name the indexed surface of
+    /// ATypeId lacks, when that surface leaves this index.</summary>
+    /// <param name="ATypeId">A with target's type, its surface incomplete here.</param>
+    /// <param name="AName">The bare name.</param>
+    /// <returns>True when TLibraryOracle.MemberProvablyAbsent holds for EVERY ancestor this
+    /// index did not resolve (TObject / IInterface excepted); then the target cannot supply
+    /// the name, and it falls through to Self and the outer scopes.</returns>
+    /// <remarks>False with no library store: an ancestor outside every index may declare
+    /// anything, and a wrong fall-through is the `with` hiding bug itself. Pinned by
+    /// tests\autotest\run_with_self_prop.ps1.</remarks>
+    function LibraryProvesAbsent(ATypeId: Int64; const AName: string): Boolean;
     /// <summary>The with scope's verdict on the bare name AName written at
     /// ALine/ACol of ARef's file: targets innermost first, and within one
     /// statement the LAST-listed entity first, exactly as Delphi binds.</summary>
@@ -4999,20 +5010,24 @@ end;
 function TCallResolver.SurfaceComplete(ATypeId: Int64): Boolean;
 var
   A: TTypeAncestor;
-  N: string       ;
 begin
   if FWith.SurfaceComplete.TryGetValue(ATypeId, Result) then Exit;
   Result:= True;
   for A in AncestorsOf(ATypeId) do
-    if not A.Resolved or (A.SymbolId <= 0) then
-    begin
-      N:= LowerCase(A.Name);
-      if LastDelimiter('.', N) > 0 then N:= Copy(N, LastDelimiter('.', N) + 1, MaxInt);
-      { TObject / IInterface are the floor WithMemberKind already answers for;
-        any other ancestor outside this index may declare anything. }
-      if (N <> 'tobject') and (N <> 'iinterface') and (N <> 'iunknown') then Result:= False;
-    end;
+    { TObject / IInterface are the floor WithMemberKind already answers for;
+      any other ancestor outside this index may declare anything. }
+    if (not A.Resolved or (A.SymbolId <= 0)) and not IsRootAncestorName(A.Name) then Result:= False;
   FWith.SurfaceComplete.Add(ATypeId, Result);
+end;
+
+function TCallResolver.LibraryProvesAbsent(ATypeId: Int64; const AName: string): Boolean;
+var
+  A: TTypeAncestor;
+begin
+  Result:= True;
+  for A in AncestorsOf(ATypeId) do
+    if Result and (not A.Resolved or (A.SymbolId <= 0)) and not IsRootAncestorName(A.Name) then
+      Result:= FOracle.MemberProvablyAbsent(A.Name, AName, FStore);
 end;
 
 function TCallResolver.LayerVerdict(const ARef: TReference; const AStmts: TArray<TWithStatement>;
@@ -5031,9 +5046,9 @@ begin
     Result    := wvMember;
     ALayerType:= LT;
   end
-  { Absent from a surface that leaves the index is not absent. }
-  else if SurfaceComplete(LT) then Result:= wvNone
-  else Result:= wvUndecided;
+  { Absent from a surface that leaves the index is not absent, unless the library
+    holds the rest of that surface and it lacks the name too. }
+  else Result:= if SurfaceComplete(LT) or LibraryProvesAbsent(LT, AName) then wvNone else wvUndecided;
 end;
 
 function TCallResolver.WithScopeAt(const ARef: TReference; ALine, ACol: Integer;
