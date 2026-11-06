@@ -17,7 +17,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Initialization reaching a unit that initializes later (lint rule)](features/init-order-hazard.md) -- Project lint rule: an initialization section reaches a global that a unit initializing later in the computed order sets in its own initialization.
 * [Narrow parameter types (compile-gated)](features/narrow-param.md) -- Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate.
 * [Remove redundant casts (compile-gated)](features/redundant-cast-fix.md) -- Removes hard casts whose operand already has exactly the target type, proved from the index's static types and written through the compile gate.
-* [Lint rules on the static type of a reference](features/ref-type-rules.md) -- Project lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows and three more; sharper redundant-cast and unsafe casts.
+* [Lint rules on the static type of a reference](features/ref-type-rules.md) -- Lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows, UI access from a thread; sharper redundant-cast and unsafe casts.
 * [unwith](features/unwith.md) -- Removes with blocks, proving every name binds to what it bound before.
 
 ## 1.42.0-alpha

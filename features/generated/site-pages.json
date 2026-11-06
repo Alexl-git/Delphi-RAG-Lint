@@ -268,7 +268,7 @@
     "version": "1.35.1-alpha"
   },
   "features/drag-lint-options.md": {
-    "hash": "298f95fcbefd2cc1bda9a6310bde0bd8fdaaa3a98d0db8e578333e5de66199f1",
+    "hash": "b3d7750217d3e3407a5bcc017dc403f149240f31bb03a4090c3bfeaa36c47bf4",
     "version": "1.44.1-alpha"
   },
   "features/drag-lint-panel-dockable.md": {
@@ -364,7 +364,7 @@
     "version": "1.44.1-alpha"
   },
   "features/fix-all-in-unit.md": {
-    "hash": "f2e8caa8a63cc6f5e0a1808d3d0346e61b57ecb41faaebedb9bc2631ae4d7fd6",
+    "hash": "6f21e1c8d5d7d7f05021195b7268c91566e213976380fee25da45ec56c2043ca",
     "version": "1.44.1-alpha"
   },
   "features/fix-all-reliability.md": {
@@ -372,7 +372,7 @@
     "version": "1.44.1-alpha"
   },
   "features/fix-it.md": {
-    "hash": "6e9ec6e2f61a2cbe2619ac3a40d3d88f7ba9399168caf6adc43019ed17fa145c",
+    "hash": "4aae726606ba64623dab2dc580aa1c7403ed928db630421f3848db586a1735c5",
     "version": "1.44.1-alpha"
   },
   "features/format-whole-project-with-yadf.md": {
@@ -512,7 +512,7 @@
     "version": "1.44.1-alpha"
   },
   "features/lint-rules.md": {
-    "hash": "45997d047a63c1fe0c4333532801948b59354a7e324e4e8427d89ab0a990f447",
+    "hash": "d676a898eabcdb4cd06d5de7ff6180ece9ee0fc160e0d125efc7a2c720e956d6",
     "version": "1.44.1-alpha"
   },
   "features/lint-tree.md": {
@@ -680,7 +680,7 @@
     "version": "1.44.1-alpha"
   },
   "features/ref-type-rules.md": {
-    "hash": "ea33f05d4d4624b0aaf4f8fbf87be885d734a86cde3e2a536a0bc7072b4e545b",
+    "hash": "1d7a9094ab4ba30e34e1b15c440f03904b67639c647c421eee835042c2f60e6d",
     "version": "1.44.1-alpha"
   },
   "features/register-project.md": {
@@ -712,7 +712,7 @@
     "version": "1.44.1-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "5e1419918fc0a3c2248247929543d4e84836f9a21b1fbfd8cf01ffe8c17fd600",
+    "hash": "b23a98f6250b2c01e8858a4cc2c331b5b9557e8c5c12cef6f75929d02180532b",
     "version": "1.44.1-alpha"
   },
   "features/safe-delete.md": {

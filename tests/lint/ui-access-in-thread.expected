@@ -1,3 +1,16 @@
 # direct UI access in Execute (15) fires; access inside the Synchronize anon method (19) must not
 ui-access-in-thread 15
 !ui-access-in-thread 19
+# widened 1.45: a file-local base chain, thread-start lambdas, SendToBack/ProcessMessages, a named method in Synchronize/Queue
+ui-access-in-thread 36
+ui-access-in-thread 37
+!ui-access-in-thread 38
+!ui-access-in-thread 39
+!ui-access-in-thread 44
+!ui-access-in-thread 49
+ui-access-in-thread 53
+ui-access-in-thread 58
+!ui-access-in-thread 62
+ui-access-in-thread 68
+ui-access-in-thread 74
+!ui-access-in-thread 79

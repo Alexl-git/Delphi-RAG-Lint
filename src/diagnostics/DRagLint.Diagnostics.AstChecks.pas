@@ -438,15 +438,17 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CheckUseAfterFree(const AFile: string): TArray<TLintFinding>;
-      /// <summary>UI (VCL/FMX) access inside a TThread.Execute that is not on the main thread.</summary>
+      /// <summary>UI (VCL/FMX) access in thread code the file itself proves, not on the main thread.</summary>
       /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
       /// <returns>'ui-access-in-thread' findings; empty if none.</returns>
       /// <remarks>
-      /// Heuristic, tuned for low false positives: only inside a method named 'Execute' whose
-      /// class (declared in the same file) has a base type whose name contains 'Thread', and only for
-      /// strong UI members (assignment to '.Caption'; calls to '.SetFocus'/'.Repaint'/'.BringToFront').
-      /// Access inside a nested anonymous method (a likely Synchronize/Queue body) is skipped. Pure AST;
-      /// no DB. Never raises.
+      /// Heuristic, tuned for low false positives. Thread code: a method named 'Execute' whose class
+      /// reaches, through base types declared in the same file, a name containing 'Thread'; and a lambda
+      /// passed to TThread.CreateAnonymousThread, TTask.Run/Create/Future or TParallel.For, as written.
+      /// Only strong UI members: assignment to '.Caption'; '.SetFocus', '.Repaint', '.BringToFront',
+      /// '.SendToBack', '.ProcessMessages'. The arguments of Synchronize/Queue/ForceQueue and any other
+      /// nested anonymous method are skipped. Pure AST; no DB. Never raises. With an index,
+      /// ui-access-in-thread-typed answers the same question on the receiver's static type.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
       /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.CollectClasses, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Flag, Format, Integer, LowerCase, NodeStr, Pos, SameText, WalkExec</para>
@@ -4716,6 +4718,57 @@ var
     for I:= 0 to N.NamedChildCount - 1 do CollectClasses(N.NamedChild(I));
   end;
 
+  { True when the class's chain of bases, as far as this file declares it, reaches a name
+    containing 'thread'. A base declared elsewhere ends the chain: no index here to follow it. }
+  function IsThreadClass(const AClass: string): Boolean;
+  const
+    MAX_CHAIN = 16;
+  var
+    Name: string;
+    Base: string;
+    Hop : Integer;
+  begin
+    Result:= False;
+    Name:= LowerCase(AClass);
+    for Hop:= 1 to MAX_CHAIN do
+    begin
+      if not ClassBase.TryGetValue(Name, Base) then Exit;
+      Name:= LowerCase(Base);
+      if Name.Contains('thread') then Exit(True);
+    end;
+  end;
+
+  function CalleeLast(const ACall: TTSNode): string;
+  var
+    Ent: TTSNode;
+  begin
+    Result:= '';
+    Ent:= ACall.ChildByField('entity');
+    if Ent.IsNull then Exit;
+    if Ent.NodeType = 'identifier' then Result:= NodeStr(Ent)
+    else if Ent.NodeType = 'exprDot' then Result:= NodeStr(Ent.ChildByField('rhs'));
+  end;
+
+  { TThread.CreateAnonymousThread, TTask.Run/Create/Future, TParallel.For, as written. }
+  function IsThreadStart(const ACall: TTSNode): Boolean;
+  const
+    STARTS: array[0..4] of string = ('tthread.createanonymousthread', 'ttask.run', 'ttask.create', 'ttask.future', 'tparallel.for');
+  var
+    Ent  : TTSNode;
+    Name : string ;
+    Lt   : Integer;
+    Start: string ;
+  begin
+    Result:= False;
+    Ent:= ACall.ChildByField('entity');
+    if Ent.IsNull or (Ent.NodeType = 'identifier') then Exit;
+    Name:= LowerCase(StringReplace(StringReplace(NodeStr(Ent), '&', '', [rfReplaceAll]), ' ', '', [rfReplaceAll]));
+    Lt:= Pos('<', Name);
+    if Lt > 0 then Name:= Copy(Name, 1, Lt - 1);
+    for Start in STARTS do
+      if (Name = Start) or Name.EndsWith('.' + Start) then Exit(True);
+  end;
+
   procedure Flag(const ANode: TTSNode; const AMember: string);
   var
     P: TTSPoint    ;
@@ -4725,7 +4778,7 @@ var
     F:= Default(TLintFinding);
     F.RuleId  := 'ui-access-in-thread';
     F.Severity:= 'warning';
-    F.Message := Format('UI access (.%s) inside a TThread.Execute -- VCL/FMX is not thread-safe; wrap it in Synchronize/Queue', [AMember]);
+    F.Message := Format('UI access (.%s) in thread code -- VCL/FMX is not thread-safe; wrap it in Synchronize/Queue', [AMember]);
     F.FilePath:= AFile;
     F.StartLine:= Integer(P.Row   ) + 1;
     F.StartCol := Integer(P.Column) + 1;
@@ -4743,6 +4796,9 @@ var
   begin
     if N.IsNull or (Findings.Count >= 200) then Exit;
     if (N.NodeType = 'lambda') or (N.NodeType = 'defProc') then Exit; { likely Synchronize/Queue body, or nested routine }
+    { Synchronize(Form1.Repaint) names the method on the main thread's behalf. }
+    if (N.NodeType = 'exprCall') and (SameText(CalleeLast(N), 'Synchronize') or SameText(CalleeLast(N), 'Queue')
+      or SameText(CalleeLast(N), 'ForceQueue')) then Exit;
     if N.NodeType = 'assignment' then
     begin
       Lhs:= N.ChildByField('lhs');
@@ -4758,7 +4814,8 @@ var
       if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then
       begin
         Mname:= NodeStr(Rhs);
-        if SameText(Mname, 'SetFocus') or SameText(Mname, 'Repaint') or SameText(Mname, 'BringToFront') then Flag(N, Mname);
+        if SameText(Mname, 'SetFocus') or SameText(Mname, 'Repaint') or SameText(Mname, 'BringToFront')
+          or SameText(Mname, 'SendToBack') or SameText(Mname, 'ProcessMessages') then Flag(N, Mname);
       end;
     end;
     for I:= 0 to N.ChildCount - 1 do WalkExec(N.Child(I));
@@ -4772,9 +4829,22 @@ var
     Lhs  : TTSNode;
     Rhs  : TTSNode;
     Body : TTSNode;
-    Base : string ;
+    Args : TTSNode;
+    Arg  : TTSNode;
+    A, B : Integer;
   begin
     if N.IsNull then Exit;
+    if (N.NodeType = 'exprCall') and IsThreadStart(N) then
+    begin
+      Args:= N.ChildByField('args');
+      if not Args.IsNull then
+        for A:= 0 to Args.NamedChildCount - 1 do
+        begin
+          Arg:= Args.NamedChild(A);
+          if Arg.NodeType = 'lambda' then
+            for B:= 0 to Arg.NamedChildCount - 1 do WalkExec(Arg.NamedChild(B));
+        end;
+    end;
     if N.NodeType = 'defProc' then
     begin
       Hdr:= N.ChildByField('header');
@@ -4786,7 +4856,7 @@ var
           Lhs:= Nm.ChildByField('lhs');
           Rhs:= Nm.ChildByField('rhs');
           if (not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier') and SameText(NodeStr(Rhs), 'Execute') then
-            if ClassBase.TryGetValue(LowerCase(NodeStr(Lhs)), Base) and (Pos('thread', LowerCase(Base)) > 0) then
+            if IsThreadClass(NodeStr(Lhs)) then
             begin
               Body:= N.ChildByField('body');
               if not Body.IsNull then WalkExec(Body);

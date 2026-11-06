@@ -261,6 +261,7 @@
   "type-name-prefix": {},
   "ui-access-in-thread": {"cwe": ["CWE-567"]},
   "ui-access-in-thread-transitive": {"cwe": ["CWE-567"]},
+  "ui-access-in-thread-typed": {"cwe": ["CWE-567"]},
   "unbalanced-begin-end": {},
   "unconditional-recursion": {"cwe": ["CWE-674"], "misra": ["MISRA-C-2012-R17.2"]},
   "undocumented-check-suppression": {},

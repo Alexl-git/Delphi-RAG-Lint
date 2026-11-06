@@ -624,6 +624,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [type-name-prefix](rules#type-name-prefix) -- naming, info, fixable
 * [ui-access-in-thread](rules#ui-access-in-thread) -- bug-patterns, warning
 * [ui-access-in-thread-transitive](rules#ui-access-in-thread-transitive) -- project-wide, warning
+* [ui-access-in-thread-typed](rules#ui-access-in-thread-typed) -- project-wide, warning
 * [unbalanced-begin-end](rules#unbalanced-begin-end) -- bug-patterns, warning
 * [unconditional-recursion](rules#unconditional-recursion) -- bug-patterns, warning
 * [undocumented-check-suppression](rules#undocumented-check-suppression) -- other, hint
