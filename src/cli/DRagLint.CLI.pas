@@ -1014,6 +1014,7 @@ end;
 // these helpers that are defined later in the file.
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
+procedure AutoCreateMissingProjectDb(const AArgs: TArgs; const AProjDb: string); forward;
 function ManifestStartDir(const AProjectPath: string): string; forward;
 function LoadManifestForProject(const AEngineDir, AProjectPath: string): TIndexManifest; forward;
 procedure WarmRuleCache(const AProjectDb, ALibraryDb: string); forward;
@@ -12427,6 +12428,13 @@ begin
 
   if Length(OwnerDbs) = 1 then
   begin
+    if not TFile.Exists(OwnerDbs[0]) then
+    begin
+      { C8: the file named its project, so this verb builds that project's missing index under the same limits as --project. }
+      var OwnerArgs: TArgs:= AArgs;
+      OwnerArgs.ProjectPath:= Owners[0];
+      AutoCreateMissingProjectDb(OwnerArgs, OwnerDbs[0]);
+    end;
     if not TFile.Exists(OwnerDbs[0]) then
     begin
       Writeln(ErrOutput, Format('ERROR: usages: %s belongs to project %s, which has no index yet. Create it:', [AArgs.InFile, Owners[0]]));
@@ -34209,7 +34217,7 @@ end;
   project (--project). A verb that needs it builds it fresh at the project's proper path
   (the manifest owner, else <project dir>\_D-RAG\<base>.sqlite) and says so on ONE stderr
   line. NEVER when: --no-create; an explicit --db (ResolveConsumerDbs returned earlier);
-  no project file; a non-deployed engine (a private copy: not under third_party\dll-win64,
+  no project file; the servers (lsp, serve); a non-deployed engine (a private copy: not under third_party\dll-win64,
   Program Files or LocalAppData\Programs) or DRAGLINT_NO_AUTOCREATE=1. Two creators must not
   race: an exclusive <db>.creating lock; the loser creates nothing. resolve-dbs never calls this. }
 function EngineIsDeployedForCreate: Boolean;
@@ -34238,6 +34246,7 @@ var
   LockPath: string;
 begin
   if AArgs.NoCreate or (AProjDb = '') or (AArgs.ProjectPath = '') then Exit;
+  if (AArgs.Command = 'lsp') or (AArgs.Command = 'serve') then Exit; { the servers are read-only: opening a file never builds an index }
   if TFile.Exists(AProjDb) or (not TFile.Exists(AArgs.ProjectPath)) then Exit;
   if not EngineIsDeployedForCreate then Exit;
   if not NoteOnce('autocreate|' + ExpandFileName(AProjDb)) then Exit;

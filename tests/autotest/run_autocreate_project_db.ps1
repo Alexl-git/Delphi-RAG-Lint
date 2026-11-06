@@ -13,6 +13,10 @@ THE LIMITS, each an arm:
   E  an explicit --db: that path is used as given, nothing is built at the _D-RAG path
   F  race: another creator holds <db>.creating exclusively -> this run builds nothing, does not hang
   G  resolve-dbs --project never builds (read-only)
+  H  usages --in finds the project itself: built on a deployed engine, one NOTE
+  I  usages --in --no-create: nothing built, the 'no index yet' error stands
+  J  usages --in on a private copy: nothing built
+  K,L  the servers (lsp, serve) never build, even given --project on a deployed engine
 POSITIVE CONTROL: arm A shows the fixture CAN be built, so the nothing-built arms are not vacuous.
 
 Usage: pwsh -NoProfile -File tests\autotest\run_autocreate_project_db.ps1 [-Exe <drag-lint.exe>]
@@ -105,6 +109,35 @@ try {
   $pg = New-Proj 'pg'
   $null = Invoke-Q $deployed @('resolve-dbs', '--project', "$pg\App.dpr")
   Check 'G: resolve-dbs --project never builds' (-not (Test-Path (Db $pg))) ''
+
+  # H -- usages --in finds its project by itself: the same rule
+  $ph = New-Proj 'ph'
+  $rh = Invoke-Q $deployed @('usages', '--name', 'FooMarker', '--in', "$ph\uA.pas")
+  Check 'H: usages --in on a deployed engine -- the owner project index was built' (Test-Path (Db $ph)) ("stderr=" + $rh.Err.Trim())
+  Check 'H: exactly one NOTE says so' (([regex]::Matches($rh.Err, 'building it now')).Count -eq 1) ("stderr=" + $rh.Err.Trim())
+  Check 'H: the answer comes from that index, exit 0' (($rh.Exit -eq 0) -and ($rh.Err -match 'usages: project ')) ("exit=" + $rh.Exit + " stderr=" + $rh.Err.Trim())
+
+  # I -- usages --in --no-create: nothing built, the old "Create it" error stands
+  $pi_ = New-Proj 'pi'
+  $ri = Invoke-Q $deployed @('usages', '--name', 'FooMarker', '--in', "$pi_\uA.pas", '--no-create')
+  Check 'I: usages --in --no-create -- nothing built, says how' ((-not (Test-Path (Db $pi_))) -and ($ri.Exit -eq 2) -and ($ri.Err -match 'no index yet')) ("exit=" + $ri.Exit + " stderr=" + $ri.Err.Trim())
+
+  # J -- usages --in on a private engine copy
+  $pj = New-Proj 'pj'
+  $rj = Invoke-Q $private @('usages', '--name', 'FooMarker', '--in', "$pj\uA.pas")
+  Check 'J: usages --in on a private engine copy -- nothing built' ((-not (Test-Path (Db $pj))) -and ($rj.Err -match 'no index yet')) ("stderr=" + $rj.Err.Trim())
+
+  # K, L -- the servers are read-only: they must never create, with a project and a deployed engine.
+  # stdin at EOF ends the session right after the start-up DB resolution.
+  [IO.File]::WriteAllText("$WorkDir\empty.txt", '')
+  foreach ($verb in @(@('K', 'lsp'), @('L', 'serve'))) {
+    $ps = New-Proj ('p' + $verb[1])
+    $o = "$WorkDir\so.txt"; $e = "$WorkDir\se.txt"
+    $sp = Start-Process -FilePath "$deployed\drag-lint.exe" -ArgumentList @($verb[1], '--project', "$ps\App.dpr") -NoNewWindow -PassThru -WorkingDirectory $cwd `
+            -RedirectStandardInput "$WorkDir\empty.txt" -RedirectStandardOutput $o -RedirectStandardError $e
+    if (-not $sp.WaitForExit(60000)) { $sp.Kill($true) }
+    Check ($verb[0] + ': ' + $verb[1] + ' --project on a deployed engine -- nothing built') (-not (Test-Path (Db $ps))) ("stderr=" + [IO.File]::ReadAllText($e).Trim())
+  }
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { try { [IO.Directory]::Delete($WorkDir, $true) } catch { Write-Host "  (cleanup: $_)" } }
 }
