@@ -1,0 +1,73 @@
+{
+  "id": "narrow-param",
+  "title": "Narrow parameter types (compile-gated)",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.44.0-alpha",
+  "summary": "Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate",
+  "intro": "Read this when a routine asks for a wider dependency than it needs: a parameter typed TLeaf whose body only uses what TBase declares. The verb narrows it only when it can prove every use still binds to the same member, names every refusal, and with --apply builds the project before and after and rolls back on any error.",
+  "wikiPage": "narrow-param",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "narrow-param",
+      "example": "drag-lint narrow-param --routine <QName> --plan --db <db>",
+      "usage": "drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]",
+      "flags": [
+        {
+          "name": "--routine",
+          "arg": "<QName>"
+        },
+        {
+          "name": "--param",
+          "arg": "<name>"
+        },
+        {
+          "name": "--all"
+        },
+        {
+          "name": "--plan"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--platform",
+          "arg": "<p>"
+        },
+        {
+          "name": "--rsvars",
+          "arg": "<bat>"
+        },
+        {
+          "name": "--build-timeout",
+          "arg": "<s>"
+        },
+        {
+          "name": "--no-compile"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--format",
+          "arg": "json"
+        }
+      ],
+      "help": ["  drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]   - retype a class parameter to the deepest ancestor its uses need: static proof, every refusal named, --apply through the compile gate"]
+    }
+  ]
+}

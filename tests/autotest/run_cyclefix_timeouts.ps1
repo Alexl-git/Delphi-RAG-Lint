@@ -59,6 +59,9 @@ function Src([string]$Rel) { $p = Join-Path $Root $Rel; if (Test-Path $p) { retu
 $engineSrc = Join-Path $Root 'src\cli\DRagLint.CLI.CycleFix.pas'
 $pluginSrc = Join-Path $Root 'src\delphi-plugin\DragLint.Plugin.CycleFix.pas'
 $e = Get-IntConsts $engineSrc
+# lane 144 T0: the child-wait constants moved with RunBounded into the shared compile gate
+$gateConsts = Get-IntConsts (Join-Path $Root 'src\refactor\DRagLint.Refactor.CompileGate.pas')
+foreach ($k in $gateConsts.Keys) { if (-not $e.ContainsKey($k)) { $e[$k] = $gateConsts[$k] } }
 $p = Get-IntConsts $pluginSrc
 $eNames = 'CDefaultBuildTimeoutS', 'CSecondBuild', 'CReindexTimeoutMs', 'CReindexSteps', 'CKillMarginMs', 'CChildStandDownMs'
 $pNames = 'CYCLE_FIX_TIMEOUT_MS', 'CYCLE_FIX_CANCEL_GRACE_MS'

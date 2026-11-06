@@ -1,0 +1,62 @@
+{
+  "id": "redundant-cast-fix",
+  "title": "Remove redundant casts (compile-gated)",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.44.0-alpha",
+  "summary": "Removes hard casts whose operand already has exactly the target type, proved from the index's static types and written through the compile gate",
+  "intro": "Read this when lint reports redundant-cast. The fix removes a cast only when the index proves the operand has the very type it is cast to; everything it cannot prove stays in the source and is listed with a named refusal. With --apply it builds the project first and after, and rolls back on any error.",
+  "wikiPage": "redundant-cast-fix",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint --fix --fix-rule redundant-cast --db <db> --project <X.dproj> --apply",
+      "usage": "drag-lint lint --fix --fix-rule redundant-cast --db <db> [--project <X.dproj> --apply] [--file <f.pas>] [--fix-line <L>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]",
+      "flags": [
+        {
+          "name": "--fix"
+        },
+        {
+          "name": "--fix-rule",
+          "arg": "redundant-cast"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--fix-line",
+          "arg": "<L>"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--rsvars",
+          "arg": "<bat>"
+        },
+        {
+          "name": "--build-timeout",
+          "arg": "<s>"
+        },
+        {
+          "name": "--no-compile"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<db>"
+        }
+      ],
+      "help": ["  drag-lint lint --fix --fix-rule redundant-cast --db <db> [--project <X.dproj> --apply] [--file <f.pas>] [--fix-line <L>] [--no-backup] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]   - remove identity casts: proved from ref_types, every refusal named, --apply builds before and after and rolls back"]
+    }
+  ]
+}

@@ -138,6 +138,8 @@ uses
   , DRagLint.Lint.UsesAudit { TUsesAuditor -- the uses-audit core shared with the uses-movable-to-implementation rule (G8) }
   , DRagLint.Index.LibraryOracle { TLibraryOracle -- find-callees binds a value receiver typed by name to a library routine (item 4) }
   , DRagLint.Lint.Autofix   { IsFixableRule & co. + BuildAutofixEdits -- the autofix registry (lane A0) }
+  , DRagLint.Refactor.RedundantCast { lane 144 item 1: the gated redundant-cast fix }
+  , DRagLint.Refactor.NarrowParam   { lane 144 item 2: narrow-param }
   , DRagLint.Lint.TargetCompiler { --target-compiler: ResolveTargetCompiler, TTargetRuleGate (1.38) }
   , DRagLint.Project.TargetStudio { GH #13: the library path of the project's Delphi }
   { DRagLint.Core.Model moved to the INTERFACE uses (for DRAGLINT_VERSION); it
@@ -517,6 +519,8 @@ type
     // narrows the fixable set; unset = no filter. Default FixLine:=0, FixRule:=''.
     FixLine      : Integer; // --fix-line <L> (1-based; 0 = all lines)
     FixRule      : string ; // --fix-rule <id> ('' = all rules)
+    NpRoutine    : string ; // narrow-param --routine <QName>
+    NpParam      : string ; // narrow-param --param <name>
     FixNaming    : Boolean; // --fix-naming (batch --fix: explicit consent to the opt-in naming fixes)
     { --stand-in-for <realpath>: analyse THIS file's text, but answer as though
       it were <realpath>. The IDE lints an unsaved buffer by writing a snapshot
@@ -1034,6 +1038,7 @@ const
   { T-22: the third-party half of "used, but neither in the project nor in the
     library". Shared by DoLint, DoLintAll and LintUnevaluatedRules. }
   UNIT_NOT_IN_LIBRARY_RULE_ID = 'unit-not-in-library';
+  REDUNDANT_CAST_RULE_ID = 'redundant-cast';
 
 { Forward: DoLint and DoLintAll run unit-not-in-library; it is implemented beside
   DoReconcileProject, whose analysis it reuses. }
@@ -1825,6 +1830,8 @@ begin
     // AutoFix Chunk 1 (Task 3): single-finding fix targeting (lint --fix)
     else if (A = '--fix-line') and (i < ParamCount) then begin Inc(i); Result.FixLine:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--fix-rule') and (i < ParamCount) then begin Inc(i); Result.FixRule:= ParamStr(i); end
+    else if (A = '--routine') and (i < ParamCount) then begin Inc(i); Result.NpRoutine:= ParamStr(i); end
+    else if (A = '--param') and (i < ParamCount) then begin Inc(i); Result.NpParam:= ParamStr(i); end
     else if A = '--fix-naming' then Result.FixNaming:= True
     else if (A = '--stand-in-for') and (i < ParamCount) then begin Inc(i); Result.StandInFor:= ParamStr(i); end
     else if A = '--project-rules' then Result.ProjectRules:= True
@@ -15088,6 +15095,13 @@ begin
       Writeln(ErrOutput, Format('drag-lint: note: %d rule(s) here are not fixed because "autofix_off" lists them: %s.',
         [Length(BrakedIds), string.Join(', ', BrakedIds)]));
 
+    { lane 144 item 1: the one fix that needs the compile gate is not part of a batch }
+    var GatedCasts: Integer:= 0;
+    for F in Targeted do
+      if SameText(F.RuleId, REDUNDANT_CAST_RULE_ID) then Inc(GatedCasts);
+    if GatedCasts > 0 then
+      Writeln(ErrOutput, Format('drag-lint: note: %d redundant-cast finding(s) not fixed here: that fix passes the compile gate. ' +
+        'Run lint --fix --fix-rule redundant-cast --db <db> --project <X.dproj> [--apply].', [GatedCasts]));
     var FixCount: Integer                                               ;
     { lane A5B: the store-backed registered fixers (DRagLint.Fix.Store) read the run's store }
     SetAutofixStore(AStore);
@@ -16862,6 +16876,75 @@ begin
   Result:= Result + [F];
 end;
 
+{ lane 144: the platform library a rewrite's proof reads, read-only and silent on stdout (a JSON document follows):
+  every --library-db, 'none' = none, or the one the manifest names. }
+function RefactorLibraries(const AArgs: TArgs): TArray<ISymbolStore>;
+begin
+  Result:= nil;
+  var Paths:= AArgs.LibraryDbs;
+  if Length(Paths) = 0 then
+  begin
+    var P:= ResolveLibraryDb(AArgs);
+    if P <> '' then Paths:= [P];
+  end;
+  for var P in Paths do
+  begin
+    if SameText(P, 'none') or not TFile.Exists(P) then Continue;
+    var Ok: Boolean;
+    var S:= OpenReadOnlyStore(P, Ok, True);
+    if Ok then Result:= Result + [S];
+  end;
+end;
+
+{ lane 144 item 1: `lint --fix --fix-rule redundant-cast` does not lint: it proves the casts from ref_types
+  and writes through the compile gate. }
+function DoRedundantCastFix(const AArgs: TArgs): Integer;
+begin
+  var Opts:= Default(TRedundantCastOptions);
+  Opts.Project     := AArgs.ProjectPath;
+  Opts.Platform    := AArgs.CheckPlatform;
+  Opts.RsVars      := AArgs.CycleRsVars;
+  Opts.BuildTimeout:= AArgs.CycleBuildTimeout;
+  Opts.Target      := AArgs.Target;
+  Opts.Line        := AArgs.FixLine;
+  Opts.Apply       := AArgs.Apply;
+  Opts.NoBackup    := AArgs.NoBackup;
+  Opts.NoCompile   := AArgs.NoCompile;
+  Opts.Json        := AArgs.AsJson or SameText(AArgs.Format, 'json');
+  if AArgs.DbPath = '' then
+  begin
+    Writeln('ERROR: lint --fix --fix-rule redundant-cast needs --db: it reads the static types the index holds');
+    Exit(2);
+  end;
+  var Ok: Boolean;
+  var Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+  if not Ok then Exit(2);
+  Result:= RunRedundantCastFix(Store, RefactorLibraries(AArgs), Opts);
+end;
+
+{ lane 144 item 2: narrow-param }
+function DoNarrowParam(const AArgs: TArgs): Integer;
+begin
+  var Opts:= Default(TNarrowParamOptions);
+  Opts.Routine     := AArgs.NpRoutine;
+  Opts.Param       := AArgs.NpParam;
+  Opts.All         := AArgs.IndexAll;
+  Opts.Project     := AArgs.ProjectPath;
+  Opts.Platform    := AArgs.CheckPlatform;
+  Opts.RsVars      := AArgs.CycleRsVars;
+  Opts.BuildTimeout:= AArgs.CycleBuildTimeout;
+  Opts.Apply       := AArgs.Apply;
+  Opts.NoBackup    := AArgs.NoBackup;
+  Opts.NoCompile   := AArgs.NoCompile;
+  Opts.Json        := AArgs.AsJson or SameText(AArgs.Format, 'json');
+  if not ExplicitDbsExist(AArgs, 'narrow-param') then Exit(2);
+  if NoDbResolved(AArgs.DbPath, 'narrow-param') then Exit(2);
+  var Ok: Boolean;
+  var Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+  if not Ok then Exit(2);
+  Result:= RunNarrowParam(Store, RefactorLibraries(AArgs), Opts);
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter      : DRagLint.Lint.Linter.TLinter;
@@ -16885,8 +16968,9 @@ var
     start reporting markers in files the run deliberately does not report on. }
   ScannedFiles: TArray<string>              ;
 begin
-  if not ApplyRunTargetCompiler(AArgs, LoadLintConfig(AArgs).TargetCompiler) then Exit(2);
   if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
+  if AArgs.Fix and SameText(AArgs.FixRule, REDUNDANT_CAST_RULE_ID) then Exit(DoRedundantCastFix(AArgs));
+  if not ApplyRunTargetCompiler(AArgs, LoadLintConfig(AArgs).TargetCompiler) then Exit(2);
   TraceLintChecker('setup');
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
@@ -38264,6 +38348,7 @@ begin
     else if Args.Command = 'exceptions-sync'   then Result:= DoExceptionsSync  (Args)
     else if Args.Command = 'lint-project'      then Result:= DoLintProject     (Args)
     else if Args.Command = 'cycles'            then Result:= DoCycles          (Args)
+    else if Args.Command = 'narrow-param'      then Result:= DoNarrowParam     (Args)
     else if Args.Command = 'uses-audit'        then Result:= DoUsesAudit       (Args)
     else if Args.Command = 'uses-fix'          then Result:= DoUsesFix         (Args)
     else if Args.Command = 'forms-csv'         then Result:= DoFormsCsv        (Args)
