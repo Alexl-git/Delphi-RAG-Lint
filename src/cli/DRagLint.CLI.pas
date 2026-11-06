@@ -17654,7 +17654,7 @@ begin
       { v0.61: unit-level global variable whose type is the form class -- potential leak }
       if (NarrowRule = '') or (NarrowRule = 'global-form-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars(EffPath);
       { v0.80: any unit-level writable var -- Fowler "Global Data" refactoring smell (#14) }
-      if (NarrowRule = '') or (NarrowRule = 'mutable-global-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars(EffPath);
+      if (NarrowRule = '') or (NarrowRule = 'mutable-global-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars(EffPath, FlowStore, FlowFid);
       { v0.83: value-returning function that also mutates a field -- Command-Query Separation (OFF) }
       if (NarrowRule = '') or (NarrowRule = 'separate-query-from-modifier') then Findings:= Findings
         + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(EffPath);
@@ -17676,7 +17676,7 @@ begin
       { v0.63: try..except that swallows the exception (no raise/log/HandleException) }
       if (NarrowRule = '') or (NarrowRule = 'try-except-swallowed') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(EffPath);
       { v0.63: dataset opened without a matching Close in a finally block }
-      if (NarrowRule = '') or (NarrowRule = 'dataset-open-without-close') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen(EffPath);
+      if (NarrowRule = '') or (NarrowRule = 'dataset-open-without-close') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen(EffPath, FlowStore, FlowFid);
       { v0.63: critical section acquired without a matching Leave/Release in finally }
       if (NarrowRule = '') or (NarrowRule = 'criticalsection-not-released') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(EffPath);
       { v0.63: routine with more than 5 Exit statements }
@@ -24051,7 +24051,7 @@ begin
         if LintRuleWants(Nr, ['global-form-variable']) then
           ScanAdd(14, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars           (PasPath));
         if LintRuleWants(Nr, ['mutable-global-variable']) then
-          ScanAdd(15, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars        (PasPath));
+          ScanAdd(15, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars        (PasPath, Store, Store.FindFileIdByPath(PasPath)));
         if LintRuleWants(Nr, ['separate-query-from-modifier']) then
           ScanAdd(16, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(PasPath)); { v0.83: CQS (OFF) }
         if LintRuleWants(Nr, ['unsafe-shellexecute']) then
@@ -24068,7 +24068,7 @@ begin
         if LintRuleWants(Nr, ['try-except-swallowed']) then
           ScanAdd(22, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(PasPath));
         if LintRuleWants(Nr, ['dataset-open-without-close']) then
-          ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath));
+          ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath, Store, Store.FindFileIdByPath(PasPath)));
         if LintRuleWants(Nr, ['criticalsection-not-released']) then
           ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath));
         if LintRuleWants(Nr, ['too-many-exit-points']) then
