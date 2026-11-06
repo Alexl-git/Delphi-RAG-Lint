@@ -2893,6 +2893,7 @@ var
     Result:= RefStaticTypeAt(AStore, AFileId, Integer(AId.StartPoint.Row) + 1, Integer(AId.StartPoint.Column) + 1, NodeStr(AId), ATypeLeaf);
   end;
 
+
   { v0.71: collect 'x is TFoo' guards into a set of 'x|TFoo' keys (both lowercased).
     lhs must be a simple identifier; rhs is taken by source text (single token) so
     this is independent of whether the grammar labels the type node identifier/typeref.
@@ -3468,6 +3469,7 @@ var
       if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then
       begin
         var Un: string:= NodeStr(Entity);
+        var FactLeafU: string;
         if LooksLikeClassType(Un) and not SameText(Un, 'TObject') then
         begin
           Args:= N.ChildByField('args');
@@ -3478,7 +3480,8 @@ var
             begin
               var Xn: string:= NodeStr(A0);
               if (SameText(Trim(T), 'TObject') or (LooksLikeClassType(T) and not SameText(Trim(T), Un)))
-                 and not Guards.ContainsKey(LowerCase(Xn) + '|' + LowerCase(Un)) then
+                 and not Guards.ContainsKey(LowerCase(Xn) + '|' + LowerCase(Un))
+                 and not FactTypeOf(A0, FactLeafU) then { the index knows its type: DRagLint.Lint.RefTypeRules answers, with the library's ancestry }
               begin
                 P:= Entity.StartPoint;
                 F:= Default(TLintFinding);

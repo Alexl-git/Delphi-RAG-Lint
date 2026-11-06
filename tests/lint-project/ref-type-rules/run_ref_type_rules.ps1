@@ -71,6 +71,11 @@ try {
   # positive-control: redundant-cast (chain, result, as; and the lexical check overruled by the fact)
   CheckRule $db $src 'redundant-cast' 'REDUNDANT'
 
+  # positive-control: unsafe-typecast-without-is (chain and result; a proven upcast overruled by the fact)
+  CheckRule $db $src 'unsafe-typecast-without-is' 'UNSAFE'
+  $offRun = @((Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)) | Where-Object { $_.rule -eq 'unsafe-typecast-without-is' })
+  Check 'a plain lint-all: unsafe-typecast-without-is stays OFF' ($offRun.Count -eq 0) "$($offRun.Count) finding(s)"
+
   $plain = @(Parse-Findings (& $exePath lint-all --db $db --format json 2>$null))
   foreach ($on in @('is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast')) {
     Check "a plain lint-all: $on ships ON" (@($plain | Where-Object { $_.rule -eq $on }).Count -gt 0) ''

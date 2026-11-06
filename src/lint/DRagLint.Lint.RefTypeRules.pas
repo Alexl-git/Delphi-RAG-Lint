@@ -35,6 +35,9 @@ uses
 const
   /// <summary>Rule id: `x is T` where the static type of x already descends from T.</summary>
   IS_ALWAYS_TRUE_RULE = 'is-always-true';
+  /// <summary>Rule id, shared with the lexical check in AstChecks: this unit answers every
+  /// hard cast whose operand has a ref_types row, and that check only the others.</summary>
+  UNSAFE_TYPECAST_RULE = 'unsafe-typecast-without-is';
   /// <summary>Rule id, shared with the lexical check in AstChecks: this unit answers the
   /// shapes that check cannot type, a member chain or a call result, and `x as T`.</summary>
   REDUNDANT_CAST_RULE = 'redundant-cast';
@@ -47,9 +50,9 @@ const
   /// <summary>Rule id: a cast to an ancestor and straight back down, TLeaf(TBase(x)).</summary>
   UPCAST_THEN_DOWNCAST_RULE = 'upcast-then-downcast';
   /// <summary>Every project rule this unit emits, as `--rule` and dl:ok markers spell them.</summary>
-  REF_TYPE_RULES: array[0..5] of string = (IS_ALWAYS_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE, INTERFACE_HOLDER_RULE, ARGUMENT_NARROWS_RULE, REDUNDANT_CAST_RULE);
+  REF_TYPE_RULES: array[0..6] of string = (IS_ALWAYS_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE, INTERFACE_HOLDER_RULE, ARGUMENT_NARROWS_RULE, REDUNDANT_CAST_RULE, UNSAFE_TYPECAST_RULE);
   /// <summary>The ones that ship OFF; each names why in the catalog.</summary>
-  REF_TYPE_RULES_OFF: array of string = [];
+  REF_TYPE_RULES_OFF: array of string = [UNSAFE_TYPECAST_RULE];
 
 /// <summary>True when the rule ships OFF by default (see the catalog).</summary>
 /// <param name="ARuleId">One of REF_TYPE_RULES.</param>
@@ -193,6 +196,9 @@ type
       FFileId  : Int64;
       FSrc     : TBytes;
       FSymbols : TDictionary<Int64, TSymbol>;
+      { 'operand text|type', lower case: the `x is T` tests of the current file. File-scoped,
+        as the lexical check's are: a guard elsewhere silences, which errs towards silence. }
+      FGuards  : TDictionary<string, Boolean>;
       FWithDepth: Integer;
       FOwnRefCount: TArray<string>;
       FOwnRefCountRead: Boolean;
@@ -215,6 +221,8 @@ type
       function CastParts(const ANode: TTSNode; out ATarget: TTypeFacts; out AOperand: TTSNode): Boolean;
       procedure CheckUpcastThenDowncast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);
       procedure CheckRedundantCast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);
+      procedure CollectGuards(const ANode: TTSNode);
+      procedure CheckUnsafeCast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);
       procedure CheckCast(const ANode: TTSNode);
       procedure CheckWith(const ANode: TTSNode);
       function OwnRefCountClasses: TArray<string>;
@@ -331,6 +339,7 @@ begin
   FById    := TDictionary<Int64, TTypeFacts>.Create;
   FLibName := TDictionary<string, TTypeFacts>.Create;
   FSymbols := TDictionary<Int64, TSymbol>.Create;
+  FGuards  := TDictionary<string, Boolean>.Create;
   FQuery   := TFDQuery.Create(nil);
   FQuery.Connection:= (AStore as TSQLiteSymbolStore).GetConnection;
 end;
@@ -339,6 +348,7 @@ destructor TRefTypeScan.Destroy;
 begin
   FQuery.Free;
   FSymbols.Free;
+  FGuards.Free;
   FLibName.Free;
   FById.Free;
   FByName.Free;
@@ -696,6 +706,38 @@ begin
   Emit(REDUNDANT_CAST_RULE, ANode, Format('Redundant cast: %s is already of type %s', [Text(AOperand), AOuter.Name]), SEV_HINT);
 end;
 
+procedure TRefTypeScan.CollectGuards(const ANode: TTSNode);
+begin
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = NODE_BINARY then
+  begin
+    var Op: TTSNode:= ANode.ChildByField(FIELD_OP);
+    if (not Op.IsNull) and SameText(Text(Op).Trim, OP_IS) then
+      FGuards.AddOrSetValue(Text(ANode.ChildByField(FIELD_LHS)).Trim.ToLower + '|' + LeafOf(Text(ANode.ChildByField(FIELD_RHS))).ToLower, True);
+  end;
+  for var I: Integer:= 0 to Integer(ANode.NamedChildCount) - 1 do
+    CollectGuards(ANode.NamedChild(I));
+end;
+
+procedure TRefTypeScan.CheckUnsafeCast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);
+var
+  Inner  : TTypeFacts;
+  InnerOp: TTSNode;
+begin
+  if ANode.NodeType <> NODE_CALL then Exit;
+  if SameText(AOuter.Name, ROOT_CLASS) then Exit;
+  { A cast of a cast is upcast-then-downcast's. }
+  if CastParts(AOperand, Inner, InnerOp) then Exit;
+  var Source: TExprType:= StaticType(AOperand);
+  if (not Source.Known) or (not Source.Facts.IsClass) then Exit;
+  if Source.Facts.HasAncestor(AOuter.Name.ToLower) then Exit; { an upcast cannot fail }
+  var OperandText: string:= Text(AOperand).Trim;
+  if FGuards.ContainsKey(OperandText.ToLower + '|' + AOuter.Name.ToLower) then Exit;
+  Emit(UNSAFE_TYPECAST_RULE, ANode,
+    Format('Unchecked hard cast %s(%s): its static type is %s, with no ''is %s'' guard; a wrong run-time type crashes or corrupts. Guard with ''is'' or use the ''as'' operator.',
+      [AOuter.Name, OperandText, Source.Facts.Name, AOuter.Name]));
+end;
+
 procedure TRefTypeScan.CheckCast(const ANode: TTSNode);
 var
   Outer  : TTypeFacts;
@@ -705,6 +747,7 @@ begin
   if (not Outer.IsClass) or Outer.Homonym then Exit;
   if Wants(UPCAST_THEN_DOWNCAST_RULE) then CheckUpcastThenDowncast(ANode, Outer, Operand);
   if Wants(REDUNDANT_CAST_RULE) then CheckRedundantCast(ANode, Outer, Operand);
+  if Wants(UNSAFE_TYPECAST_RULE) then CheckUnsafeCast(ANode, Outer, Operand);
 end;
 
 procedure TRefTypeScan.CheckWith(const ANode: TTSNode);
@@ -917,6 +960,8 @@ begin
   LoadRefs(AFileId);
   if FRefs.Count = 0 then Exit;
   FWithDepth:= 0;
+  FGuards.Clear;
+  if Wants(UNSAFE_TYPECAST_RULE) then CollectGuards(PF.Tree.RootNode);
   Walk(PF.Tree.RootNode);
 end;
 

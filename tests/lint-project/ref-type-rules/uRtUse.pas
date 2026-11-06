@@ -12,8 +12,22 @@ procedure HolderTests(AComp: TRtCompThing; ACounted: TRtCountedThing; ARef: TRtR
 procedure NarrowTests(AWide: Int64; AKey: TRtKey2; ASmall: Integer; ADouble: Double);
 procedure RedundantTests(ALeaf: TRtLeaf; ABase: TRtBase);
 procedure RedundantShadow;
+procedure UnsafeTests(ALeaf: TRtLeaf; ABase: TRtBase);
 
 implementation
+
+procedure UnsafeTests(ALeaf: TRtLeaf; ABase: TRtBase);
+var
+  Sink: Integer;
+begin
+  Sink:= TRtMid(ALeaf.Base).Tag;  // TRIGGER-UNSAFE-CHAIN
+  Sink:= TRtMid(MakeBase).Tag;  // TRIGGER-UNSAFE-RESULT
+  Sink:= TRtMid(ABase).Tag;  // TRIGGER-UNSAFE-LEXICAL
+  Sink:= TRtBase(ALeaf).Tag;  // CONTROL-UNSAFE-LEXICALUP
+  Sink:= TRtBase(ALeaf.Link).Tag + Sink;  // CONTROL-UNSAFE-CHAINUP
+  if ALeaf.Link.Base is TRtMid then
+    Sink:= TRtMid(ALeaf.Link.Base).Tag;  // CONTROL-UNSAFE-GUARDED
+end;
 
 procedure RedundantTests(ALeaf: TRtLeaf; ABase: TRtBase);
 var
@@ -24,7 +38,7 @@ begin
   Sink:= TRtLeaf(ALeaf.Link).Tag;  // TRIGGER-REDUNDANT-CHAIN
   Sink:= TRtLeaf(MakeLeaf).Tag;  // TRIGGER-REDUNDANT-RESULT
   Sink:= (ALeaf as TRtLeaf).Tag;  // TRIGGER-REDUNDANT-AS
-  Sink:= TRtLeaf(ALeaf.Base).Tag;  // CONTROL-REDUNDANT-CHAINDOWN
+  Sink:= TRtLeaf(ALeaf.Base).Tag;  // CONTROL-REDUNDANT-CHAINDOWN // TRIGGER-UNSAFE-DOWN
   Sink:= (ABase as TRtLeaf).Tag;  // CONTROL-REDUNDANT-ASDOWN
   Sink:= TRtBase(ALeaf.Link).Tag;  // CONTROL-REDUNDANT-UP
   GShadow:= ALeaf;
@@ -35,7 +49,7 @@ procedure RedundantShadow;
 var
   Sink: Integer;
 begin
-  Sink:= TRtLeaf(GShadow).Tag;  // CONTROL-REDUNDANT-SHADOW
+  Sink:= TRtLeaf(GShadow).Tag;  // CONTROL-REDUNDANT-SHADOW // TRIGGER-UNSAFE-SHADOW
   Sink:= Sink + 1;
 end;
 
@@ -105,7 +119,7 @@ begin
   Sink:= ((ALeaf as TRtBase) as TRtMid).Tag;  // TRIGGER-UPDOWN-AS
   Sink:= TRtMid(TObject(ALeaf)).Tag;  // TRIGGER-UPDOWN-OBJECT
   Sink:= TRtLeaf(ABase).Tag;  // CONTROL-UPDOWN-ONECAST
-  Sink:= TRtLeaf(TRtMid(ABase)).Tag;  // CONTROL-UPDOWN-INNERNARROWS
+  Sink:= TRtLeaf(TRtMid(ABase)).Tag;  // CONTROL-UPDOWN-INNERNARROWS // TRIGGER-UNSAFE-INNER
   Sink:= TRtBase(TRtMid(ALeaf)).Tag + Sink;  // CONTROL-UPDOWN-BOTHUP
 end;
 
