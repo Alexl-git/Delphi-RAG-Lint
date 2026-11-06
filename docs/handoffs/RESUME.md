@@ -8,6 +8,7 @@ handoff it resumes; several `open` lines are normal. New handoffs are written he
 The legacy `..\RESUME-*.md` files below are gitignored (`docs/RESUME-*`) and exist only in
 the main working tree; their links do not resolve in a fresh clone or worktree.
 
+- 2026-11-06 | engine | 1.44.1 PUBLISHED b1716abc; IDE test + backlog plan pages by subagents; backlog wave waits for owner answers; 1.45 int battery on lane/145-int | open | [HANDOFF-2026-11-06-engine-1441-published-backlog-wave-plan.md](HANDOFF-2026-11-06-engine-1441-published-backlog-wave-plan.md)
 - 2026-11-06 | engine | 1.44.1 checks done, publish waits for owner go; 1.45: 14 lanes on branches, int running on lane/145-int | resumed | [HANDOFF-2026-11-06-engine-1441-checks-done-145-int-running.md](HANDOFF-2026-11-06-engine-1441-checks-done-145-int-running.md)
 - 2026-11-06 | engine | 1.44.1 local main a30ccb45 deployed, re-resolve running, then checks + publish; lanes\145 F1/F2 rule lanes; then full triage | resumed | [HANDOFF-2026-11-06-engine-1441-reresolve-145-rule-lanes.md](HANDOFF-2026-11-06-engine-1441-reresolve-145-rule-lanes.md)
 - 2026-11-05 | engine | 1.43 on local main 334e2bb4, deployed, re-parse running (ETA 16:50), unpushed; 1.44 planned, lanes facts + ctorinv running as subagents | resumed | [HANDOFF-2026-11-05-engine-143-reparse-144-lanes-early.md](HANDOFF-2026-11-05-engine-143-reparse-144-lanes-early.md)
