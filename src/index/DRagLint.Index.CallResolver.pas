@@ -416,6 +416,23 @@ type
     Head   : string;
   end;
 
+  /// <summary>B9 F1 (resolver 1.20.0-alpha): the static type of one reference, one
+  /// ref_types row.</summary>
+  /// <remarks>
+  /// TypeSymbolId is 0 when the type is not in this index (a library type):
+  /// TypeQName then holds its leaf-normalised text, otherwise the symbol's
+  /// qualified name. Via names where the type came from: decl, result, member,
+  /// cast, ctor, inline; literal is reserved (no rung types a literal yet).
+  /// </remarks>
+  TRefStaticType = record
+    /// <summary>The type's symbol in this index; 0 for a library type.</summary>
+    TypeSymbolId: Int64;
+    /// <summary>The symbol's qualified name, or the type text when it has none.</summary>
+    TypeQName   : string;
+    /// <summary>Where the type came from; '' when the target has no type.</summary>
+    Via         : string;
+  end;
+
   /// <summary>Item 4: per-run receiver counters, printed on the calls stage's
   /// `receivers:` ResolveLog line.</summary>
   /// <remarks>
@@ -552,6 +569,8 @@ type
     FLocalDecls: TDictionary<Int64, string>;
     /// <summary>1.43: per untyped inline var, by symbol id, the type its initializer decided; '' declined.</summary>
     FInlineInitTypes: TDictionary<Int64, string>;
+    { B9 F1: the static type by target symbol, negatives too: one per symbol, read per ref. }
+    FTargetStaticTypes: TDictionary<Int64, TRefStaticType>;
     // B-31: counters of the type_use pass.
     FTypeUseStats: TTypeUseStats;
     // B-31: file id -> its type symbols and its root (unit/program) symbol.
@@ -1206,6 +1225,11 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveTypeNameToSymbol(const ATypeText: string; ADeclFileId: Int64): Int64;
+    /// <summary>B9 F1: the static type a reference to ATarget has. Memoised on the
+    /// target. Via = '' when it has none (a procedure, a type name).</summary>
+    /// <param name="ATarget">The symbol the reference is bound to.</param>
+    /// <returns>Its type; a Default record when it has none.</returns>
+    function TargetStaticType(const ATarget: TSymbol): TRefStaticType;
     /// <summary>Item 4 (replaces v21's ResolveExternally): offers a site the
     /// primary index could not bind to the library oracle, and answers with a
     /// QUALIFIED NAME or ''. The type text the oracle gets: the receiver's
@@ -3243,6 +3267,24 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveBareValueRead(const ARef: TReference; out AReason: string): Int64;
+    /// <summary>B9 F1 (resolver 1.20.0-alpha): the static type of a reference,
+    /// from what this pass already knows about it. No new inference.</summary>
+    /// <param name="ARef">The ref after the call streams: SymbolId is its certain
+    /// binding, ReceiverText its receiver.</param>
+    /// <param name="AReceiverTypeId">call_edges.receiver_type_symbol_id; 0 none.</param>
+    /// <param name="AReceiverTypeText">refs.receiver_type_text; '' none.</param>
+    /// <param name="AType">Out: the type, meaningful when the result is True.</param>
+    /// <returns>True when the reference has a type this pass can state.</returns>
+    /// <remarks>
+    /// A constructor reference is typed by its RECEIVER, because `TThing.Create`
+    /// bound to an inherited TBase.Create makes a TThing. An unbound `Create` on a
+    /// typed receiver is a constructor of a library class, by name only. An
+    /// unbound bare call that names exactly one type is a cast. Refs bound to a
+    /// routine with no return type, or to a type name, have no static type.
+    /// Not thread-safe: the pass's one resolver, one thread.
+    /// </remarks>
+    function RefStaticType(const ARef: TReference; AReceiverTypeId: Int64;
+      const AReceiverTypeText: string; out AType: TRefStaticType): Boolean;
 
     /// <summary>Per-run counters of the value-read pass.</summary>
     /// <remarks>Cumulative over the resolver's lifetime.</remarks>
@@ -4000,6 +4042,7 @@ begin
   FWriteScopes:= TDictionary<Int64, TWriteScope>.Create;
   FLocalDecls := TDictionary<Int64, string>.Create;
   FInlineInitTypes:= TDictionary<Int64, string>.Create;
+  FTargetStaticTypes:= TDictionary<Int64, TRefStaticType>.Create;
   FFileTypes  := TDictionary<Int64, TArray<TSymbol>>.Create;
   FWriteStats := Default(TWriteResolveStats);
   FOracle    := TLibraryOracle.Create(AExtraStores);
@@ -4023,6 +4066,7 @@ begin
   FFileTypes.Free;
   FLocalDecls.Free;
   FInlineInitTypes.Free;
+  FTargetStaticTypes.Free;
   FWriteScopes.Free;
   FStaleFiles.Free;
   FChildCache.Free;
@@ -9694,6 +9738,109 @@ begin
     if (Result.ReceiverTypeText = '') and (RcvType.Text <> '') then
       Result.ReceiverTypeText:= RcvType.Text;
   end;
+end;
+
+function TCallResolver.TargetStaticType(const ATarget: TSymbol): TRefStaticType;
+var
+  TypeText: string;
+begin
+  if FTargetStaticTypes.TryGetValue(ATarget.Id, Result) then Exit;
+  Result  := Default(TRefStaticType);
+  TypeText:= '';
+  case ATarget.Kind of
+    skFunction, skMethod:
+    begin
+      TypeText  := SignatureReturnType(ATarget.Signature);
+      Result.Via:= 'result';
+    end;
+    skProperty, skField:
+    begin
+      TypeText  := ATarget.Signature;
+      Result.Via:= 'member';
+    end;
+    skVarDecl, skConstDecl, skParam:
+    begin
+      TypeText  := ATarget.Signature;
+      Result.Via:= 'decl';
+    end;
+    skLocalVar:
+    begin
+      TypeText  := LocalTypeText(ATarget);
+      Result.Via:= if ATarget.Signature = '' then 'inline' else 'decl';
+    end;
+    skEnumValue:
+    begin
+      Result.TypeSymbolId:= ATarget.ParentId;
+      Result.TypeQName   := if ATarget.ParentId > 0 then SymbolById(ATarget.ParentId).QualifiedName else '';
+      Result.Via         := 'decl';
+    end;
+  end;
+  if TypeText <> '' then
+  begin
+    { In the DECLARING unit's scope, where the type is written, as TypeOfFunctionResult does. }
+    Result.TypeSymbolId:= ResolveTypeNameToSymbol(TypeText, ATarget.FileId);
+    Result.TypeQName   := if Result.TypeSymbolId > 0 then SymbolById(Result.TypeSymbolId).QualifiedName
+                          else NormalizeTypeLeaf(TypeText);
+  end;
+  if Result.TypeQName = '' then Result:= Default(TRefStaticType);
+  FTargetStaticTypes.Add(ATarget.Id, Result);
+end;
+
+function TCallResolver.RefStaticType(const ARef: TReference; AReceiverTypeId: Int64;
+  const AReceiverTypeText: string; out AType: TRefStaticType): Boolean;
+const
+  CTOR_NAME  = 'Create';
+  RESULT_VAR = 'Result';
+var
+  Target : TSymbol;
+  RcvText: TRcvTypeText;
+begin
+  AType:= Default(TRefStaticType);
+  if ARef.SymbolId > 0 then
+  begin
+    Target:= SymbolById(ARef.SymbolId);
+    if Target.Kind = skConstructor then
+    begin
+      AType.TypeSymbolId:= if AReceiverTypeId > 0 then AReceiverTypeId else Target.ParentId;
+      AType.Via         := 'ctor';
+    end
+    else if SameText(ARef.Kind, REF_KIND_CALL) and (Target.Kind in [skClass, skInterface, skRecord, skEnum, skTypeAlias]) then
+    begin
+      AType.TypeSymbolId:= Target.Id; { a hard cast the enum-cast stream bound }
+      AType.Via         := 'cast';
+    end
+    else
+      AType:= TargetStaticType(Target);
+    if (AType.TypeQName = '') and (AType.TypeSymbolId > 0) then
+      AType.TypeQName:= SymbolById(AType.TypeSymbolId).QualifiedName;
+  end
+  else if ARef.ReceiverText <> '' then
+  begin
+    { An unbound Create on a typed receiver: a constructor no project symbol declares.
+      A '.' in the text is a chain the ladder did not finish: no type. }
+    if SameText(ARef.NameText, CTOR_NAME) and (AReceiverTypeText <> '') and not AReceiverTypeText.Contains('.') then
+    begin
+      AType.TypeSymbolId:= if AReceiverTypeId > 0 then AReceiverTypeId else ResolveTypeNameToSymbol(AReceiverTypeText, ARef.FileId);
+      AType.TypeQName   := if AType.TypeSymbolId > 0 then SymbolById(AType.TypeSymbolId).QualifiedName else AReceiverTypeText;
+      AType.Via         := 'ctor';
+    end;
+  end
+  else if SameText(ARef.NameText, RESULT_VAR) then
+  begin
+    AType.TypeSymbolId:= TypeReceiverCore(ARef, RESULT_VAR, RcvText);
+    AType.TypeQName   := if AType.TypeSymbolId > 0 then SymbolById(AType.TypeSymbolId).QualifiedName else RcvText.Text;
+    AType.Via         := 'result';
+  end
+  else if SameText(ARef.Kind, REF_KIND_CALL) and FNameToCands.ContainsKey(LowerCase(ARef.NameText)) then
+  begin
+    AType.TypeSymbolId:= ResolveTypeNameToSymbol(ARef.NameText, ARef.FileId);
+    if AType.TypeSymbolId > 0 then
+    begin
+      AType.TypeQName:= SymbolById(AType.TypeSymbolId).QualifiedName;
+      AType.Via      := 'cast';
+    end;
+  end;
+  Result:= AType.TypeQName <> '';
 end;
 
 function TCallResolver.OracleStats: TOracleStats;

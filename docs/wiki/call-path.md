@@ -12,6 +12,9 @@ drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]
 bounds the search. Exit code 1 means no path was found. `--json` emits
 machine-readable output.
 
+A unit's sections are nodes too: `--from MyUnit.initialization` or
+`--from MyUnit.finalization` walks the calls those sections make.
+
 ## Reaching it in the IDE
 In the IDE choose drag-lint > Uses & Dependencies > Call Path Between Two Routines... with the caret on the first routine.
 

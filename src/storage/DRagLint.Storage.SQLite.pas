@@ -771,6 +771,37 @@ type
       /// the life of the instance: `index --watch` keeps one store across ticks,
       /// and without this the latch tick 1 sets (a new database is always whole)
       /// held for every later tick (run_watch_scope_reset).</remarks>
+      /// <summary>B10 F2 (resolver 1.20.0-alpha): attributes every ref with a NULL
+      /// enclosing_symbol_id that lies inside an initialization / finalization
+      /// symbol's start..end lines to that section.</summary>
+      /// <returns>Refs attributed.</returns>
+      /// <remarks>
+      /// Runs inside the calls transaction BEFORE the first stream, because
+      /// TypeReceiver gives up on a NULL enclosing symbol. Whole database on every
+      /// shape: it reads parse facts only, so a stale file is safe, and it touches
+      /// only NULL rows, so it is idempotent. A re-emitted file starts NULL again.
+      /// </remarks>
+      function ResolveSectionEnclosing: Int64;
+      /// <summary>B9 F1 (resolver 1.20.0-alpha): the calls stage's LAST stream.
+      /// Writes one ref_types row per read / write / member-access / call ref
+      /// TCallResolver.RefStaticType can type.</summary>
+      /// <param name="AResolver">The pass's resolver, maps already built. Owned by
+      /// the caller.</param>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a
+      /// whole-database run.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when none
+      /// is stale.</param>
+      /// <param name="ACandidates">Out: refs offered to the resolver.</param>
+      /// <param name="ABound">Out: rows written.</param>
+      /// <remarks>
+      /// Last because it reads what the other streams wrote: refs.symbol_id,
+      /// refs.receiver_text, refs.receiver_type_text, call_edges. Deletes exactly
+      /// what it is about to rewrite, so a stale file keeps its rows, and a row
+      /// goes with its ref by FK cascade when a file is re-emitted.
+      /// </remarks>
+      procedure ResolveRefTypes(AResolver: TCallResolver;
+        const AScopeWhere, AStaleWhere: string;
+        out ACandidates, ABound: Int64);
       procedure ResetResolveScope;
       /// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AReadOnly"><!-- drag-lint:auto type -->Boolean</param>
@@ -5023,6 +5054,17 @@ begin
           '  PRIMARY KEY (ref_id, arg_index))');
   TryExec('CREATE INDEX IF NOT EXISTS idx_classref_args_class ON classref_args(class_symbol_id)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_classref_args_param ON classref_args(param_symbol_id)');
+  { B9 F1 (1.44, lane facts): the static type of a reference, written by ResolveRefTypes.
+    ADDITIVE and probed for by its reader (typeat), so no SCHEMA_VERSION bump: the
+    classref_args precedent. type_symbol_id's FK child column has its index (the v0.85 PERF
+    rule below), and SET NULL because a reindex of ANOTHER file can remove the type while
+    this ref's own row stays until the next pass reaches it. Semantics: docs\wiki\schema.md. }
+  TryExec('CREATE TABLE IF NOT EXISTS ref_types (' +
+          '  ref_id         INTEGER PRIMARY KEY REFERENCES refs(id) ON DELETE CASCADE,' +
+          '  type_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
+          '  type_qname     TEXT NOT NULL,' +
+          '  via            TEXT NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_ref_types_type ON ref_types(type_symbol_id)');
   { 2026-10-27 (taint wave T0, plan 2026-10-27-taint-interprocedural-plan.md section 2):
     per-routine data-flow facts, written by the indexer (PutDataFlows) inside the file tx.
     ADDITIVE and probed for (HasDataFlows), so NO SCHEMA_VERSION bump -- the member_accesses /
@@ -15134,6 +15176,125 @@ begin
   FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + TREAD_WRITTEN + Suffix);  // dl:ok sql-injection-concat@6ada -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveTypeUseRefs uses.
   BindRefStream(TREAD_UNIVERSE, 'read', Suffix, AResolver.ResolveTypeRead, ACandidates, ABound);
 end;
+
+function TSQLiteSymbolStore.ResolveSectionEnclosing: Int64;
+var
+  QSections: TFDQuery;
+  UpdRefs  : TFDQuery;
+begin
+  Result   := 0;
+  QSections:= TFDQuery.Create(nil);
+  UpdRefs  := TFDQuery.Create(nil);
+  try
+    QSections.Connection:= FConn;
+    QSections.SQL.Text  := 'SELECT id, file_id, start_line, end_line FROM symbols ' +
+                           'WHERE kind IN (''initialization'', ''finalization'')';
+    UpdRefs.Connection  := FConn;
+    UpdRefs.SQL.Text    := 'UPDATE refs SET enclosing_symbol_id = :sid WHERE file_id = :fid ' +
+                           'AND start_line BETWEEN :sl AND :el AND enclosing_symbol_id IS NULL';
+    UpdRefs.ParamByName('sid').DataType:= ftLargeint;
+    UpdRefs.ParamByName('fid').DataType:= ftLargeint;
+    UpdRefs.ParamByName('sl' ).DataType:= ftInteger;
+    UpdRefs.ParamByName('el' ).DataType:= ftInteger;
+    UpdRefs.Prepare;
+    QSections.Open;
+    var FId  : TField:= QSections.FieldByName('id');
+    var FFile: TField:= QSections.FieldByName('file_id');
+    var FFrom: TField:= QSections.FieldByName('start_line');
+    var FTo  : TField:= QSections.FieldByName('end_line');
+    while not QSections.Eof do
+    begin
+      UpdRefs.ParamByName('sid').AsLargeInt:= FId.AsLargeInt;
+      UpdRefs.ParamByName('fid').AsLargeInt:= FFile.AsLargeInt;
+      UpdRefs.ParamByName('sl' ).AsInteger := FFrom.AsInteger;
+      UpdRefs.ParamByName('el' ).AsInteger := FTo.AsInteger;
+      UpdRefs.ExecSQL;
+      Inc(Result, UpdRefs.RowsAffected);
+      QSections.Next;
+    end;
+  finally
+    QSections.Free;
+    UpdRefs.Free;
+  end;
+end;
+
+procedure TSQLiteSymbolStore.ResolveRefTypes(AResolver: TCallResolver;
+  const AScopeWhere, AStaleWhere: string; out ACandidates, ABound: Int64);
+const
+  RT_UNIVERSE = 'refs.kind IN (''read'', ''write'', ''member-access'', ''call'')';
+var
+  Suffix: string;
+  Q     : TFDQuery;
+  Ins   : TFDQuery;
+begin
+  ACandidates:= 0;
+  ABound     := 0;
+  Suffix     := '';
+  if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
+  if Suffix = '' then FConn.ExecSQL('DELETE FROM ref_types')  // dl:ok sql-update-delete-without-where@556b -- a whole-database pass rewrites every row of this derived table
+  else FConn.ExecSQL('DELETE FROM ref_types WHERE ref_id IN (SELECT refs.id FROM refs WHERE ' + RT_UNIVERSE + Suffix + ')');  // dl:ok sql-injection-concat@472b -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text
+  Q  := TFDQuery.Create(nil);
+  Ins:= TFDQuery.Create(nil);
+  try
+    Ins.Connection:= FConn;
+    Ins.SQL.Text  := 'INSERT OR REPLACE INTO ref_types(ref_id, type_symbol_id, type_qname, via) VALUES (:rid, :tid, :q, :v)';
+    Ins.ParamByName('rid').DataType:= ftLargeint;
+    Ins.ParamByName('tid').DataType:= ftLargeint;
+    Ins.ParamByName('q'  ).DataType:= ftString;
+    Ins.ParamByName('v'  ).DataType:= ftString;
+    Ins.Prepare;
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT refs.id, refs.symbol_id, refs.file_id, refs.kind, refs.name_text, refs.start_line, refs.start_col, ' +
+                   '  refs.enclosing_symbol_id, refs.receiver_text, refs.receiver_type_text, ce.receiver_type_symbol_id AS rcv_type_id ' +
+                   'FROM refs LEFT JOIN call_edges ce ON ce.ref_id = refs.id WHERE ' + RT_UNIVERSE + Suffix;
+    BeatStreamOpen(FConn, Q, 'resolve ref types');
+    var FId     : TField:= Q.FieldByName('id');
+    var FFile   : TField:= Q.FieldByName('file_id');
+    var FKind   : TField:= Q.FieldByName('kind');
+    var FName   : TField:= Q.FieldByName('name_text');
+    var FLine   : TField:= Q.FieldByName('start_line');
+    var FCol    : TField:= Q.FieldByName('start_col');
+    var FSym    : TField:= Q.FieldByName('symbol_id');
+    var FEncl   : TField:= Q.FieldByName('enclosing_symbol_id');
+    var FRcv    : TField:= Q.FieldByName('receiver_text');
+    var FRcvId  : TField:= Q.FieldByName('rcv_type_id');
+    var FRcvText: TField:= Q.FieldByName('receiver_type_text');
+    while not Q.Eof do
+    begin
+      var Ref: TReference:= Default(TReference);
+      Ref.Id       := FId.AsLargeInt;
+      Ref.FileId   := FFile.AsLargeInt;
+      Ref.Kind     := FKind.AsString;
+      Ref.NameText := FName.AsString;
+      Ref.StartLine:= FLine.AsInteger;
+      Ref.StartCol := FCol.AsInteger;
+      if not FSym.IsNull then Ref.SymbolId:= FSym.AsLargeInt;
+      if not FEncl.IsNull then Ref.EnclosingSymbolId:= FEncl.AsLargeInt;
+      if not FRcv.IsNull then Ref.ReceiverText:= FRcv.AsString;
+      var RcvTypeId: Int64:= if FRcvId.IsNull then 0 else FRcvId.AsLargeInt;
+      var RcvTypeText: string:= if FRcvText.IsNull then '' else FRcvText.AsString;
+      Inc(ACandidates);
+      var RefType: TRefStaticType;
+      if AResolver.RefStaticType(Ref, RcvTypeId, RcvTypeText, RefType) then
+      begin
+        Ins.ParamByName('rid').AsLargeInt:= Ref.Id;
+        if RefType.TypeSymbolId > 0 then Ins.ParamByName('tid').AsLargeInt:= RefType.TypeSymbolId
+        else Ins.ParamByName('tid').Clear;
+        Ins.ParamByName('q').AsWideString:= RefType.TypeQName;
+        Ins.ParamByName('v').AsWideString:= RefType.Via;
+        Ins.ExecSQL;
+        Inc(ABound);
+      end;
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    Q.Free;
+    Ins.Free;
+  end;
+end;
+
 procedure TSQLiteSymbolStore.WriteExternalStores(const AExtraStores: TArray<ISymbolStore>; AScoped: Boolean);
 const
   KEY = 'external_stores';
@@ -15166,7 +15327,7 @@ begin
   SetMetaValue(KEY, '[' + string.Join(',', Parts) + ']');
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@da1c, deep-nesting@6ffc, cyclomatic-complexity@04ec, cognitive-complexity@61bd -- REVIEWED 2026-11-05: one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and 1.43 added only log text here (WITHHELD-LOG-TEXT, RESOLVE-REASON-TEXT)
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@335f, deep-nesting@6ffc, cyclomatic-complexity@04ec, cognitive-complexity@61bd -- REVIEWED 2026-11-05: one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams
@@ -15245,6 +15406,10 @@ var
   Scoped    : Boolean       ; { re-resolving only the affected refs -- see ScopedResolveIsSound }
   ScopeWhere: string        ; { the predicate that selects them ('' when not scoped)           }
   DataVersion0: Int64       ; { PRAGMA data_version right after the transaction opened (item 12) }
+  SectionRefs   : Int64     ; { F2: refs attributed to an initialization/finalization section }
+  RefTypeCandidates: Int64  ; { F1: refs offered to RefStaticType                             }
+  RefTypeBound  : Int64     ; { F1: ref_types rows written                                    }
+  TRefTypes     : Double    ; { F1: seconds the ref-types stream took                         }
 begin
   T0:= TStopwatch.GetTimeStamp;
   { The accumulators cost two QueryPerformanceCounter reads per ref, which on a
@@ -15543,6 +15708,8 @@ begin
       end
       else
         ClearCallEdges; // rebuild every edge each run (like ResolveAncestry's DELETE)
+      { B10 F2: before every stream, which all read enclosing_symbol_id. }
+      SectionRefs:= ResolveSectionEnclosing;
       SkippedStaleRcv:= 0;
       BeatRefs:= 0;
       BeatStreamOpen(FConn, Q, 'resolve calls');
@@ -15713,6 +15880,10 @@ begin
       TMark:= TStopwatch.GetTimeStamp;
       ResolveWriteRefs(Resolver, ScopeWhere, StaleWhere, WriteCandidates, WriteBound);
       TWrites:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
+      { B9 F1: the LAST stream, it reads what all the others wrote. }
+      TMark:= TStopwatch.GetTimeStamp;
+      ResolveRefTypes(Resolver, ScopeWhere, StaleWhere, RefTypeCandidates, RefTypeBound);
+      TRefTypes:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
       FConn.Commit;
     except
       on E: Exception do
@@ -15899,6 +16070,8 @@ begin
     { X6 / G1 (2026-10-25). The enum hard-cast stream. }
     ResolveLog(Format('calls      enum-casts: %d of %d enum-named call ref(s) bound', [CastBound, CastCandidates]));
     ResolveLog(Format('calls      type-reads: %d of %d type-named read ref(s) bound', [TReadBound, TReadCandidates]));
+    ResolveLog(Format('calls      sections: %d ref(s) attributed to an initialization/finalization section', [SectionRefs]));
+    ResolveLog(Format('calls      ref-types: %d of %d read/write/member-access/call ref(s) typed  [%.1fs]', [RefTypeBound, RefTypeCandidates, TRefTypes]));
     { 2026-09-23 (D13). Every decline by reason, for the same reason as the two
       lines above: a declined write stores nothing anywhere else. }
     ResolveLog(Format('calls      writes: %d of %d write ref(s) bound; declined result %d, own-name %d, ' +
