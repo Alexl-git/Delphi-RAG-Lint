@@ -1179,4 +1179,6 @@
 #   Superseded: 1.31.0-alpha|4d3ba5d2f6860e1f572be4491df63281b29a42d490dbd00e3e326c3acab14008
 # 2026-11-05 lane clos: hash updated WITHOUT a version bump -- the .dpr in path now binds before DCCReference, as dcc reads it; still scope, not what a parse extracts.
 #   Superseded: 1.31.0-alpha|effc7c18bc198a77ab7235f301f736e878c9084bba69f28f76cd18f20da5f112
-1.31.0-alpha|7fac1b77b94785d6cf0619966e22b48e34ada206b405b73114a6d7e3253a3dc7
+# 2026-11-05 lane 144-closure (B12): hash updated WITHOUT a version bump -- a .dproj's <MainSource> selects the program that seeds the closure; still scope, not what a parse extracts.
+#   Superseded: 1.31.0-alpha|7fac1b77b94785d6cf0619966e22b48e34ada206b405b73114a6d7e3253a3dc7
+1.31.0-alpha|75bffa73acde4bd4aafe9dda8e83a2486a0b4b7b33f3838955f0a7b59e0e73de
