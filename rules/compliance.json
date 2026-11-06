@@ -44,6 +44,7 @@
   "datamodule-form-global": {"cwe": ["CWE-1054"]},
   "upcast-then-downcast": {"cwe": ["CWE-704"]},
   "with-on-temporary": {"cwe": ["CWE-401"]},
+  "interface-holder-of-non-refcounted": {"cwe": ["CWE-416"]},
   "is-always-true": {"cwe": ["CWE-571"]},
   "dataset-open-without-close": {"cwe": ["CWE-772"]},
   "deep-inheritance": {"cwe": ["CWE-1074"]},

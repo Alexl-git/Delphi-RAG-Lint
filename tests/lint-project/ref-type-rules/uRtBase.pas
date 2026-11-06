@@ -49,10 +49,51 @@ type
     procedure Free;
   end;
 
+  IRtThing = interface
+  end;
+
+  TRtCompThing = class(TRtComp, IRtThing)
+  public
+    Holder: IRtThing;
+    procedure Hook;
+    procedure HookOther(const AThing: IRtThing);
+  end;
+
+  TRtCountedThing = class(TComponent, IRtThing)
+  public
+    function _AddRef: Integer; stdcall;
+  end;
+
+  TRtRefThing = class(TRtPlain, IRtThing)
+  public
+    Holder: IRtThing;
+    procedure Hook;
+  end;
+
 function MakeBase: TRtBase;
 function MakeLeaf: TRtLeaf;
 
 implementation
+
+procedure TRtCompThing.Hook;
+begin
+  Holder:= Self;  // TRIGGER-HOLDER-SELF
+end;
+
+procedure TRtCompThing.HookOther(const AThing: IRtThing);
+begin
+  Holder:= AThing;  // CONTROL-HOLDER-INTERFACE
+end;
+
+function TRtCountedThing._AddRef: Integer;
+begin
+  Result:= 1;
+end;
+
+procedure TRtRefThing.Hook;
+begin
+  Holder:= Self;  // CONTROL-HOLDER-SELFCOUNTED
+end;
 
 constructor TComponent.Create(AOwner: TComponent);
 begin

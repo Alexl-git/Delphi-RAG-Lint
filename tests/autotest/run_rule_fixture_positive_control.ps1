@@ -93,6 +93,7 @@ $OwnRunner = @{
     'datamodule-form-global'    = 'tests\lint-project\datamodule-form-global\run_datamodule_form_global.ps1'
     'upcast-then-downcast'      = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
     'with-on-temporary'         = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
+    'interface-holder-of-non-refcounted'= 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
     'is-always-true'            = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
 }
 function HasOwnRunner([string]$Id, [hashtable]$Map = $OwnRunner) {

@@ -62,13 +62,16 @@ try {
   # positive-control: with-on-temporary
   CheckRule $db $src 'with-on-temporary' 'WITH'
 
+  # positive-control: interface-holder-of-non-refcounted
+  CheckRule $db $src 'interface-holder-of-non-refcounted' 'HOLDER'
+
   $plain = @(Parse-Findings (& $exePath lint-all --db $db --format json 2>$null))
-  foreach ($on in @('is-always-true', 'upcast-then-downcast', 'with-on-temporary')) {
+  foreach ($on in @('is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted')) {
     Check "a plain lint-all: $on ships ON" (@($plain | Where-Object { $_.rule -eq $on }).Count -gt 0) ''
   }
   $file = Join-Path $src 'uRtUse.pas'
   $one = @(Parse-Findings (& $exePath lint $file --db $db --format json 2>$null))
-  foreach ($on in @('is-always-true', 'upcast-then-downcast', 'with-on-temporary')) {
+  foreach ($on in @('is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted')) {
     Check "lint <file> with an index: $on fires" (@($one | Where-Object { $_.rule -eq $on }).Count -gt 0) ''
   }
 

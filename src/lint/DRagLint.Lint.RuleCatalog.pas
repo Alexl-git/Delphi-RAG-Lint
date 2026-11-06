@@ -880,6 +880,7 @@ begin
     B('datamodule-form-global', 'project-wide', 'warning', 'A unit declaring a TDataModule descendant reaches another unit''s global form variable -- the data layer now needs that form to exist', False);
     B('upcast-then-downcast', 'project-wide', 'warning', 'TLeaf(TBase(x)) or (x as TBase) as TLeaf where x already is a TBase: the inner cast adds nothing and the outer one is unchecked narrowing; needs a 1.44 index (ref_types)');
     B('with-on-temporary', 'project-wide', 'warning', 'with TFoo.Create do where the body never frees the object and no owner takes it: the only name it had is gone, so it leaks; needs a 1.44 index (ref_types)');
+    B('interface-holder-of-non-refcounted', 'project-wide', 'warning', 'An interface variable is assigned a TComponent-like object: _AddRef does nothing, so the holder keeps nothing alive and dangles once the owner frees the object; needs a 1.44 index (ref_types)');
     B('is-always-true', 'project-wide', 'warning', 'x is T where the static type of x already descends from T: the test only asks whether x is nil; needs a 1.44 index (ref_types)'); { ON (1.44 lane rulesf1): YADF 0, Loader2025 0, Micronite2027 1, a true positive read in the source }
     { taint wave T2: store-backed interprocedural taint (DRagLint.Lint.TaintRules; catalogues rules\taint-*.json) }
     B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');

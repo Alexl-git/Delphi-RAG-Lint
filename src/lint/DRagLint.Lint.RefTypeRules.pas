@@ -35,12 +35,14 @@ uses
 const
   /// <summary>Rule id: `x is T` where the static type of x already descends from T.</summary>
   IS_ALWAYS_TRUE_RULE = 'is-always-true';
+  /// <summary>Rule id: an interface variable assigned an object that is not reference counted.</summary>
+  INTERFACE_HOLDER_RULE = 'interface-holder-of-non-refcounted';
   /// <summary>Rule id: `with TFoo.Create do` that nobody frees.</summary>
   WITH_ON_TEMPORARY_RULE = 'with-on-temporary';
   /// <summary>Rule id: a cast to an ancestor and straight back down, TLeaf(TBase(x)).</summary>
   UPCAST_THEN_DOWNCAST_RULE = 'upcast-then-downcast';
   /// <summary>Every project rule this unit emits, as `--rule` and dl:ok markers spell them.</summary>
-  REF_TYPE_RULES: array[0..2] of string = (IS_ALWAYS_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE);
+  REF_TYPE_RULES: array[0..3] of string = (IS_ALWAYS_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE, INTERFACE_HOLDER_RULE);
   /// <summary>The ones that ship OFF; each names why in the catalog.</summary>
   REF_TYPE_RULES_OFF: array of string = [];
 
@@ -94,6 +96,14 @@ const
   FIELD_ARGS       = 'args';
   OP_IS            = 'is';
   ROOT_CLASS       = 'tobject';
+  NODE_ASSIGN      = 'assignment';
+  OP_NODE_ASSIGN   = 'kAssign';
+  SELF_WORD        = 'Self';
+  ADDREF_NAME      = '_AddRef';
+  { Bases whose _AddRef / _Release do nothing. }
+  NON_REFCOUNTED: array[0..2] of string = ('tcomponent', 'tnorefcountobject', 'tsingletonimplementation');
+  { How far a nested routine's parents are climbed to reach its class. }
+  MAX_PARENT_HOPS  = 8;
   CLASS_COMPONENT  = 'tcomponent';
   CLASS_THREAD     = 'tthread';
   FIELD_BODY       = 'body';
@@ -156,6 +166,8 @@ type
       FFileId  : Int64;
       FSrc     : TBytes;
       FWithDepth: Integer;
+      FOwnRefCount: TArray<string>;
+      FOwnRefCountRead: Boolean;
       function Wants(const ARuleId: string): Boolean;
       function Text(const ANode: TTSNode): string;
       function FactAt(const ANode: TTSNode; out AFact: TRefFact): Boolean;
@@ -176,6 +188,9 @@ type
       procedure CheckUpcastThenDowncast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);
       procedure CheckCast(const ANode: TTSNode);
       procedure CheckWith(const ANode: TTSNode);
+      function OwnRefCountClasses: TArray<string>;
+      function SelfType(const AAssignLhs: TTSNode): TExprType;
+      procedure CheckAssign(const ANode: TTSNode);
       procedure CheckIs(const ANode: TTSNode);
       procedure Walk(const ANode: TTSNode);
     public
@@ -616,12 +631,70 @@ begin
   end;
 end;
 
+function TRefTypeScan.OwnRefCountClasses: TArray<string>;
+begin
+  if not FOwnRefCountRead then
+  begin
+    FOwnRefCountRead:= True;
+    for var S: TSymbol in FStore.FindSymbolsByExactName(ADDREF_NAME) do
+      if S.ParentId > 0 then FOwnRefCount:= FOwnRefCount + [FStore.GetSymbolById(S.ParentId).Name.ToLower];
+  end;
+  Result:= FOwnRefCount;
+end;
+
+function TRefTypeScan.SelfType(const AAssignLhs: TTSNode): TExprType;
+var
+  Fact: TRefFact;
+begin
+  Result:= Default(TExprType);
+  var Name: TTSNode:= if AAssignLhs.NodeType = NODE_DOT then AAssignLhs.ChildByField(FIELD_RHS) else AAssignLhs;
+  if (not FactAt(Name, Fact)) or (Fact.Enclosing <= 0) then Exit;
+  var Id: Int64:= Fact.Enclosing;
+  for var Hop: Integer:= 1 to MAX_PARENT_HOPS do
+  begin
+    if Id <= 0 then Exit;
+    var Sym: TSymbol:= FStore.GetSymbolById(Id);
+    if Sym.Kind = skClass then
+    begin
+      Result.Facts:= FactsOfId(Id);
+      Result.Known:= True;
+      Exit;
+    end;
+    Id:= Sym.ParentId;
+  end;
+end;
+
+procedure TRefTypeScan.CheckAssign(const ANode: TTSNode);
+begin
+  var Op: TTSNode:= ANode.ChildByField(FIELD_OP);
+  if Op.IsNull or (Op.NodeType <> OP_NODE_ASSIGN) then Exit;
+  var LhsN: TTSNode:= ANode.ChildByField(FIELD_LHS);
+  var Holder: TExprType:= StaticType(LhsN);
+  if (not Holder.Known) or not Holder.Facts.IsIntf then Exit;
+  var RhsN: TTSNode:= ANode.ChildByField(FIELD_RHS);
+  while (not RhsN.IsNull) and (RhsN.NodeType = NODE_PARENS) do RhsN:= RhsN.NamedChild(0);
+  if RhsN.IsNull then Exit;
+  if IsAsNode(RhsN) then RhsN:= RhsN.ChildByField(FIELD_LHS);
+  var Source: TExprType:= if SameText(Text(RhsN), SELF_WORD) then SelfType(LhsN) else StaticType(RhsN);
+  if (not Source.Known) or not Source.Facts.IsClass then Exit;
+  var Base: string:= '';
+  for var S: string in NON_REFCOUNTED do
+    if Source.Facts.HasAncestor(S) then Base:= S;
+  if Base = '' then Exit;
+  for var S: string in OwnRefCountClasses do
+    if Source.Facts.HasAncestor(S) then Exit; { its class counts references itself }
+  Emit(INTERFACE_HOLDER_RULE, ANode,
+    Format('Interface variable %s of type %s holds a %s, whose %s does not count references: the variable keeps nothing alive and dangles once the object is freed.',
+      [Text(LhsN), Holder.Facts.Name, Source.Facts.Name, Base]));
+end;
+
 procedure TRefTypeScan.Walk(const ANode: TTSNode);
 begin
   if ANode.IsNull then Exit;
   var NT: string:= ANode.NodeType;
   if IsAsNode(ANode) or (NT = NODE_CALL) then CheckCast(ANode)
-  else if NT = NODE_BINARY then CheckIs(ANode);
+  else if NT = NODE_BINARY then CheckIs(ANode)
+  else if (NT = NODE_ASSIGN) and Wants(INTERFACE_HOLDER_RULE) then CheckAssign(ANode);
   var IsWith: Boolean:= NT = NODE_WITH;
   if IsWith and Wants(WITH_ON_TEMPORARY_RULE) then CheckWith(ANode);
   if IsWith then Inc(FWithDepth);

@@ -8,8 +8,23 @@ uses
 procedure IsTests(ALeaf: TRtLeaf; ABase: TRtBase; const AObj: TObject);
 procedure CastTests(ALeaf: TRtLeaf; ABase: TRtBase);
 procedure WithTests(ALeaf: TRtLeaf; AOwner: TComponent);
+procedure HolderTests(AComp: TRtCompThing; ACounted: TRtCountedThing; ARef: TRtRefThing);
 
 implementation
+
+procedure HolderTests(AComp: TRtCompThing; ACounted: TRtCountedThing; ARef: TRtRefThing);
+var
+  Thing: IRtThing;
+  Obj  : TRtComp;
+begin
+  Thing:= AComp;  // TRIGGER-HOLDER-VARIABLE
+  Thing:= AComp as IRtThing;  // TRIGGER-HOLDER-AS
+  Thing:= TRtCompThing.Create(nil);  // TRIGGER-HOLDER-CTOR
+  Thing:= ACounted;  // CONTROL-HOLDER-OWNCOUNT
+  Thing:= ARef;  // CONTROL-HOLDER-COUNTED
+  Obj:= AComp;  // CONTROL-HOLDER-OBJECTVAR
+  Thing:= Thing;  // CONTROL-HOLDER-SAME
+end;
 
 procedure WithTests(ALeaf: TRtLeaf; AOwner: TComponent);
 begin
