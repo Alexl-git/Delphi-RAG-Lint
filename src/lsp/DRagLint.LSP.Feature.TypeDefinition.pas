@@ -71,7 +71,7 @@ function IdentStartCol1(const APath: string; ALine0, ACol0: Integer): Integer;
 begin
   Result:= 0;
   var Lines: TArray<string>;
-  try Lines:= TLiveDocuments.ReadLines(APath); except on Exception do Exit; end;
+  try Lines:= TLiveDocuments.ReadLines(APath); except on Exception do Exit; end; // dl:ok try-except-swallowed -- an unreadable file only means no identifier start, the type then falls back to the declared type
   if (ALine0 < 0) or (ALine0 >= Length(Lines)) then Exit;
   var L: string:= Lines[ALine0];
   var I: Integer:= ACol0 + 1;
