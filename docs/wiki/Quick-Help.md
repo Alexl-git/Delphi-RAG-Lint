@@ -232,7 +232,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
   aliases: connect claude code, first run, get started, setup, wire
 * **Installation** -- Getting the CLI, the IDE plugin, or the LSP running. Read this to get drag-lint running: the command-line engine, the RAD Studio plugin and the language server for other editors install independently, and most people want the first two. It lists what to unzip and which files must stay together, including the rules\ folder beside the exe (the .scm and .json rules plus builtin-symbols.txt and enum-persist-sinks.txt). [More](Installation)
 * **LSP full rule set on save** -- Runs the full lint rule set on save so the editor shows what the CLI shows. Read this when the editor should publish the same findings as drag-lint lint, including dl:ok markers, instead of the small built-in set. It is the lsp --full-rules flag: opt-in on the bare server, ON by default in VS Code through the dragLint.fullRules setting (set it to false to switch it off). A separate mode from lsp --proxy, which ignores it. A slow machine never loses findings: the lint child is killed only when it makes no progress. [More](lsp-proxy-merge)
-* **LSP protocol extensions** -- Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index. Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens and parameter hints, all answered from the index. Tokens and hints come from a parse of the preprocessed text, so code in an inactive {$IFDEF} branch gets none, and rename never edits it. The defines are those of the file's own project's active build. [More](lsp-proxy-merge)
+* **LSP protocol extensions** -- Answers outline, implementation, rename, lens, tokens, inlay hints, call and type hierarchy, type definition, highlights, folding and commands from the index. Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens, parameter hints, call and type hierarchy, go to type definition and same-file highlights, all answered from the index (folding comes from a parse and needs no index). Tokens and hints come from a parse of the preprocessed text, so code in an inactive {$IFDEF} branch gets none, and rename never edits it. The defines are those of the file's own project's active build. [More](lsp-proxy-merge)
 * **LSP proxy merge** -- Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session. Read this when you run an editor against DelphiLSP and want drag-lint answers merged into the same session. lsp --proxy forwards to DelphiLSP and four merge flags add drag-lint results. It is a separate mode from lsp --full-rules: with --proxy the engine only relays and merges, and --full-rules is ignored. [More](lsp-proxy-merge)
 * **lsp** -- Starts the LSP (Language Server Protocol) stdio server. Read this when you want hover, completion, go-to-definition and diagnostics in an editor other than RAD Studio. It starts the language server over stdio; the IDE plugin launches it by itself, and it is not the same as the MCP server (serve) used by AI clients. [More](lsp)
 * **MCP server** -- Exposes the index to MCP clients as 15 tools. The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 15 tools. It opens every index read-only (an old schema is refused, never migrated), find_callers answers from the call graph, a tool that fails answers isError instead of ending the server, and a stale index adds a freshness note. [More](Register-MCP-Server)
@@ -316,14 +316,23 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Installation: procedure docs\wiki\Installation.md
 * Interface Implementors Report: lsp textDocument/codeLens
 * Interface Implementors Report: lsp textDocument/implementation
+* LSP protocol extensions: lsp callHierarchy/incomingCalls
+* LSP protocol extensions: lsp callHierarchy/outgoingCalls
 * LSP protocol extensions: lsp draglint/ping
 * LSP protocol extensions: lsp textDocument/codeLens
 * LSP protocol extensions: lsp textDocument/declaration
+* LSP protocol extensions: lsp textDocument/documentHighlight
 * LSP protocol extensions: lsp textDocument/documentSymbol
+* LSP protocol extensions: lsp textDocument/foldingRange
 * LSP protocol extensions: lsp textDocument/implementation
 * LSP protocol extensions: lsp textDocument/inlayHint
+* LSP protocol extensions: lsp textDocument/prepareCallHierarchy
+* LSP protocol extensions: lsp textDocument/prepareTypeHierarchy
 * LSP protocol extensions: lsp textDocument/rename
 * LSP protocol extensions: lsp textDocument/semanticTokens/full
+* LSP protocol extensions: lsp textDocument/typeDefinition
+* LSP protocol extensions: lsp typeHierarchy/subtypes
+* LSP protocol extensions: lsp typeHierarchy/supertypes
 * LSP protocol extensions: lsp workspace/executeCommand
 * Maintenance: procedure docs\wiki\Maintenance.md
 * Member migration (#migrate): menu 'Classes tab > Members list > Add...' inside ConvRulesEditor.exe

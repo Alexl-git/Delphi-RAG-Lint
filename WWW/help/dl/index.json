@@ -2294,7 +2294,7 @@
   {
     "id": "lsp-protocol-extensions",
     "title": "LSP protocol extensions",
-    "summary": "Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index",
+    "summary": "Answers outline, implementation, rename, lens, tokens, inlay hints, call and type hierarchy, type definition, highlights, folding and commands from the index",
     "group": "editor-integration",
     "order": 110014,
     "since": "1.33.0-alpha",

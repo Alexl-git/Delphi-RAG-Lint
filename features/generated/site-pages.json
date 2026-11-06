@@ -524,8 +524,8 @@
     "version": "1.43.0-alpha"
   },
   "features/lsp-protocol-extensions.md": {
-    "hash": "0d456aa4540be51561ac302a4321769894c2509e6410c8371e0ab0bfb3d1971e",
-    "version": "1.39.2-alpha"
+    "hash": "290ef34115688a3ac52b5aa20cf07865c743815883d7c7b4ca50bd88030fddc2",
+    "version": "1.45.0-alpha"
   },
   "features/lsp-proxy-merge.md": {
     "hash": "d04c697850efd58c6207f1389d91f97370be237dcd8c5397a682b8ed47e7e338",
@@ -536,8 +536,8 @@
     "version": "1.39.2-alpha"
   },
   "features/lsp.md": {
-    "hash": "c4fe4e70337a6727181bfa0fb4b5c110d3055a10692616a96f91720ffc8e203a",
-    "version": "1.44.0-alpha"
+    "hash": "2dbf5a67de058e648ef36f450a3a7001944002f8246d6f47457927e9690a9873",
+    "version": "1.45.0-alpha"
   },
   "features/maintenance.md": {
     "hash": "b880c95ae36ec3086769089c61fa0662ad531a2c62d3edaba207c4d91e74741d",
@@ -712,8 +712,8 @@
     "version": "1.44.1-alpha"
   },
   "features/run-lint-all-full-report.md": {
-    "hash": "b23a98f6250b2c01e8858a4cc2c331b5b9557e8c5c12cef6f75929d02180532b",
-    "version": "1.44.1-alpha"
+    "hash": "8d474c9f2dbd07152debb15c1bf9b3e6d4eb84bd5345e6ea97a5c16d15b22c3d",
+    "version": "1.45.0-alpha"
   },
   "features/safe-delete.md": {
     "hash": "a0312cf4d5d7d9ede44654ff69da1c027fe878995c926c855c6bcb011e4aa00b",

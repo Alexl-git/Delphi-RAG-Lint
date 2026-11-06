@@ -892,6 +892,8 @@ begin
   Writeln('  doc-drift report a block no command could clear (fixed 2026-08-25).');
   Writeln('  A second --db of lint-all is that library slot, not another project: to judge a dl:ok');
   Writeln('  on a dl:shared unit across projects, name them with --shared-db <db> (repeatable).');
+  Writeln('  lint-all --library-db <lib.sqlite> names the library slot (wins over a second --db and the');
+  Writeln('  manifest; a file that does not exist refuses, exit 2); --library-db none means no library.');
   Writeln('  Omit --db entirely and the manifest resolver supplies the full set in order.');
   Writeln('  [--size-guard-mb N] [--force32] apply wherever a db is OPENED (index, query, lsp, serve):');
   Writeln('  the 32-bit build refuses a database larger than the guard because it would run out of');

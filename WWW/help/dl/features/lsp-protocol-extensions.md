@@ -1,20 +1,20 @@
 ---
 id: lsp-protocol-extensions
 title: LSP protocol extensions
-summary: Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index
+summary: Answers outline, implementation, rename, lens, tokens, inlay hints, call and type hierarchy, type definition, highlights, folding and commands from the index
 product: DL
 group: editor-integration
 order: 110014
 since: 1.33.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.45.0-alpha
 ---
 
 # LSP protocol extensions
 
-Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index.
+Answers outline, implementation, rename, lens, tokens, inlay hints, call and type hierarchy, type definition, highlights, folding and commands from the index.
 
-Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens and parameter hints, all answered from the index. Tokens and hints come from a parse of the preprocessed text, so code in an inactive {$IFDEF} branch gets none, and rename never edits it. The defines are those of the file's own project's active build.
+Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens, parameter hints, call and type hierarchy, go to type definition and same-file highlights, all answered from the index (folding comes from a parse and needs no index). Tokens and hints come from a parse of the preprocessed text, so code in an inactive {$IFDEF} branch gets none, and rename never edits it. The defines are those of the file's own project's active build.
 
 ## Details
 

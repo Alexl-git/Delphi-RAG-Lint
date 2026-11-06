@@ -276,7 +276,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [Installation](features/installation.md) | Getting the CLI, the IDE plugin, or the LSP running | 0.21.0-alpha |
 | [lsp](features/lsp.md) | Starts the LSP (Language Server Protocol) stdio server | 0.6.0-alpha |
 | [LSP full rule set on save](features/lsp-full-rules.md) | Runs the full lint rule set on save so the editor shows what the CLI shows | 1.33.0-alpha |
-| [LSP protocol extensions](features/lsp-protocol-extensions.md) | Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index | 1.33.0-alpha |
+| [LSP protocol extensions](features/lsp-protocol-extensions.md) | Answers outline, implementation, rename, lens, tokens, inlay hints, call and type hierarchy, type definition, highlights, folding and commands from the index | 1.33.0-alpha |
 | [LSP proxy merge](features/lsp-proxy-merge.md) | Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session | 1.33.0-alpha |
 | [Switch VS Code Delphi MCP entry](features/lsp-switch-vscode.md) | Turns the VS Code Delphi MCP entry off and on with a backup | 1.33.0-alpha |
 | [Register the MCP server (Claude Code, VS Code, Cursor)](features/mcp-config-writer.md) | Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable | 1.26.1-alpha |

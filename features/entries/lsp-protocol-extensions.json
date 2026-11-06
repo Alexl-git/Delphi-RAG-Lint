@@ -5,7 +5,7 @@
   "owner": "LSP",
   "status": "shipped",
   "since": "1.33.0-alpha",
-  "summary": "Answers outline, implementation, rename, code lens, semantic tokens, inlay hints, call and type hierarchy, type definition, highlights, folding and commands from the index",
+  "summary": "Answers outline, implementation, rename, lens, tokens, inlay hints, call and type hierarchy, type definition, highlights, folding and commands from the index",
   "intro": "Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens, parameter hints, call and type hierarchy, go to type definition and same-file highlights, all answered from the index (folding comes from a parse and needs no index). Tokens and hints come from a parse of the preprocessed text, so code in an inactive {$IFDEF} branch gets none, and rename never edits it. The defines are those of the file's own project's active build.",
   "wikiPage": "lsp-proxy-merge",
   "surfaces": [
@@ -100,9 +100,9 @@
     "build": "1.33.0-alpha"
   },
   "verified": {
-    "date": "2026-10-26",
-    "by": "LSP",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "c1294941637d6b47f90f1ba5b5b942c37de2b7884c87acc1811fe5f106cab49d"
+    "date": "2026-11-06",
+    "by": "ENGINE",
+    "build": "1.45.0-alpha",
+    "surfaceHash": "76ddaa3ab7aeb9e4ed6489b218b0a8138498c9bff2cd0f909023f46267f8403f"
   }
 }

@@ -6,7 +6,7 @@ finding. Reach for it as the overall project health check.
 
 ## Running it from the CLI
 ```
-drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--shared-db <db> ...]
+drag-lint lint-all [--db <file.sqlite>] [--library-db <lib>|none] [--project <.dproj>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--shared-db <db> ...]
 ```
 `--project <.dproj|.dpr>` reports only on the units that project compiles (its
 compile closure + their `.dfm` siblings) -- use it when one folder holds
@@ -48,6 +48,8 @@ the same `--rule`, `--enable`, `--disable`, `--config`, `--platform`,
   judged and left.
 
 `--db A --db B` is NOT this: the second `--db` is the library slot.
+
+`--library-db <lib>` names that slot as well: it wins over a second `--db` and the manifest, a file that does not exist refuses (exit 2), and `none` means no library. The type-aware rules read the library for ancestry (`TLabel`, `TStringList`, `TThread`), so without it they stay silent on those types.
 
 ## Reaching it in the IDE
 drag-lint > Code Quality > Run Lint All (Full Report)...
