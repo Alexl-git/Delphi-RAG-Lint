@@ -1833,8 +1833,16 @@ begin
     // AutoFix Chunk 1 (Task 3): single-finding fix targeting (lint --fix)
     else if (A = '--fix-line') and (i < ParamCount) then begin Inc(i); Result.FixLine:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--fix-rule') and (i < ParamCount) then begin Inc(i); Result.FixRule:= ParamStr(i); end
-    else if (A = '--routine') and (i < ParamCount) then begin Inc(i); Result.NpRoutine:= ParamStr(i); end
-    else if (A = '--param') and (i < ParamCount) then begin Inc(i); Result.NpParam:= ParamStr(i); end
+    else if (A = '--routine') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.NpRoutine:= ParamStr(i);
+    end
+    else if (A = '--param') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.NpParam:= ParamStr(i);
+    end
     else if A = '--fix-naming' then Result.FixNaming:= True
     else if (A = '--stand-in-for') and (i < ParamCount) then begin Inc(i); Result.StandInFor:= ParamStr(i); end
     else if A = '--project-rules' then Result.ProjectRules:= True
@@ -22678,7 +22686,7 @@ end; // function
 /// <param name="AArgs">Parsed CLI args.</param>
 /// <returns>RunUnwith's code; 2 on a usage error.</returns>
 /// <remarks>Opens the DB read-only; a stale DB refuses. The platform library comes from --library-db, else the manifest.</remarks>
-function DoUnwith(const AArgs: TArgs): Integer;
+function DoUnwith(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@c87f -- one guard per refused flag combination, in the order --help names them
 begin
   if AArgs.Apply = AArgs.Plan then
   begin
@@ -24960,20 +24968,7 @@ end;
   'none' = none, or the one the manifest names. }
 function RenameLibraries(const AArgs: TArgs): TArray<ISymbolStore>;
 begin
-  Result:= nil;
-  var Paths:= AArgs.LibraryDbs;
-  if Length(Paths) = 0 then
-  begin
-    var P:= ResolveLibraryDb(AArgs);
-    if P <> '' then Paths:= [P];
-  end;
-  for var P in Paths do
-  begin
-    if SameText(P, 'none') or not TFile.Exists(P) then Continue;
-    var Ok: Boolean;
-    var S:= OpenReadOnlyStore(P, Ok, True);
-    if Ok then Result:= Result + [S];
-  end;
+  Result:= RefactorLibraries(AArgs);
 end;
 
 { Lane 144 item 3: the tail every rename path shares. --plan reports and exits 0; a dry run lists the proved edits and
@@ -25079,7 +25074,7 @@ end;
 // v0.24: drag-lint rename --qname Foo.TBar.Baz --to NewName
 //   [--db PATH] [--dry-run] [--no-backup]
 // Resolves the symbol, proves every occurrence (RenameProof), then reports, or applies through the compile gate.
-function DoRename(const AArgs: TArgs): Integer;
+function DoRename(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@65a5, cyclomatic-complexity@b51e, cognitive-complexity@7f07 -- the rename verb, one Exit per refusal, read top to bottom; splitting it is not for a release branch
 var
   Store: ISymbolStore;
   Proof: TRenameProof;
@@ -25172,7 +25167,11 @@ begin
       end;
       Exit(FinishRename(AArgs, Proof, QN, AArgs.Apply));
     end // if
-    else begin Writeln('ERROR: --kind must be symbol or param'); Exit (2 ); end;
+    else
+    begin
+      Writeln('ERROR: --kind must be symbol or param');
+      Exit(2);
+    end;
   end; // if
   { ----- legacy --qname path below (unchanged) ----- }
 

@@ -68,7 +68,7 @@ const
     + 'the other branch is not indexed. Name a library (--library-db, or drag-lint.json) to decide it';
 
 class function TPpChecker.Check(const AFile: string; const ACfg: TLintConfig; // dl:ok unused-parameter@8242 -- fixed signature shared by every built-in checker; this rule reads only the preprocessor report
-  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; // dl:ok unused-parameter@9a67 -- fixed checker signature
+  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; // dl:ok unused-parameter@255c -- fixed checker signature
 var
   LF: TLintFinding;
 begin

@@ -832,7 +832,7 @@ end;
 { ---- the checker entry point -------------------------------------------- }
 
 class function TBoundsNilChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@0855 -- REVIEWED 2026-10-27: signature fixed by the shared checker shape (LINT_GATE_BOUNDS_NIL call sites); the rules are threshold-free
-  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;  // dl:ok unused-parameter@9a67 -- REVIEWED 2026-10-27: signature fixed by the shared checker shape; the rules are store-free
+  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;  // dl:ok unused-parameter@255c -- signature fixed by the shared checker shape; the rules are store-free
 var
   PF : TParsedFile;
   Run: TBnRun;

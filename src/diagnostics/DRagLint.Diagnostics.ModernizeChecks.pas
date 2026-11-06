@@ -234,7 +234,7 @@ begin
 end;
 
 class function TModernizeChecker.Check(const AFile: string; const ACfg: TLintConfig; // dl:ok unused-parameter@2dbb -- fixed signature shared by every built-in checker; this rule is AST-only
-  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; // dl:ok unused-parameter@9a67 -- fixed checker signature
+  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; // dl:ok unused-parameter@255c -- fixed checker signature
 var
   PF      : TParsedFile;
   Findings: TArray<TLintFinding>;

@@ -1563,15 +1563,15 @@ end;
 /// <summary>Deletes the run's log folder, unless a message of this run sends the reader to a file in it.</summary>
 /// <param name="pDir">The folder FreshScratchName gave.</param>
 /// <param name="pDetail">What the run tells the user.</param>
-/// <remarks>Never raises: a log folder that will not go is no reason to fail the verb.</remarks>
+/// <remarks>An I/O failure is swallowed: a log folder that will not go is no reason to fail the verb.</remarks>
 procedure DropUnwithLogs(const pDir, pDetail: string);
 begin
   if GScratchCited or pDetail.Contains(ExcludeTrailingPathDelimiter(pDir)) then Exit;
   try
-    if TDirectory.Exists(pDir) then TDirectory.Delete(pDir, True);
-  except
-    on E: EInOutError do ;  // dl:ok empty-except -- leftovers in the scratch root are harmless; see the summary
-    on E: EDirectoryNotFoundException do ;  // dl:ok empty-except -- already gone
+    if TDirectory.Exists(pDir) then TDirectory.Delete(pDir, True);  // dl:ok taint-path-traversal@b8f1 -- a fresh scratch dir; only its PID part can come from the environment, a test seam
+  except  // dl:ok try-except-swallowed@a59f -- leftovers in the scratch root are harmless; see the remarks
+    on E: EInOutError do ;  // dl:ok empty-on-handler@8192 -- the log folder is left behind, harmless; see the remarks
+    on E: EDirectoryNotFoundException do ;  // dl:ok empty-on-handler@431d -- the log folder is left behind, harmless; see the remarks
   end;
 end;
 
@@ -1668,11 +1668,11 @@ begin
   end;
   { The copy can be gigabytes: it never outlives the run. The logs stay only when a message names one (DropUnwithLogs). }
   for var Tail: string in ['', '-wal', '-shm'] do
-    System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);
+    System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);  // dl:ok taint-path-traversal@ce76 -- a fresh scratch dir; only its PID part can come from the environment, a test seam
   if (ProofFailure = '') and (Length(Result.Rebinds) = 0) then
   begin
     Result.Applied:= True;
-    TDirectory.Delete(Dir, True);
+    TDirectory.Delete(Dir, True);  // dl:ok taint-path-traversal@8e7d -- a fresh scratch dir; only its PID part can come from the environment, a test seam
     Exit;
   end;
   var Failure:= RollBack(Gate.Tx);

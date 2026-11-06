@@ -1095,7 +1095,7 @@ begin
 end;
 
 class function TOwnershipChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@1578
-  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;  // dl:ok unused-parameter@9a67
+  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;  // dl:ok unused-parameter@255c
 var
   PF  : TParsedFile    ;
   Scan: TOwnershipScan ;
