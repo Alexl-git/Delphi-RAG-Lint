@@ -86,6 +86,7 @@ uses
   System.SysUtils
   , System.IOUtils
   , System.StrUtils
+  , System.Math
   , System.RegularExpressions
   , System.Generics.Collections
   , System.Generics.Defaults
@@ -99,6 +100,10 @@ const
   CONFIDENCE_CERTAIN = 'certain';
   SEVERITY_WARNING = 'warning';
   SEVERITY_HINT = 'hint';
+  MESSAGE_INIT_ORDER = 'The initialization of %s reaches %s.%s through %s, but %s initializes after %s in %s: '
+    + 'its own initialization has not set the variable yet. Break the uses cycle, or move the call out of the section.';
+  MESSAGE_FINAL_ORDER = 'The finalization of %s reaches %s.%s through %s, but %s is finalized before %s in %s: '
+    + 'its own finalization has already torn the variable down. Break the uses cycle, or test the variable first.';
   CREATE_STATEMENT_LINES = 3;
   KNOWN_RTL_CLASSES: array[0..16] of string = ('TStringList', 'TList', 'TObjectList', 'TThreadList', 'TInterfaceList', 'TDictionary',
     'TObjectDictionary', 'TQueue', 'TStack', 'TMemoryStream', 'TFileStream', 'TCriticalSection', 'TEvent', 'TComponent',
@@ -150,7 +155,7 @@ type
   end;
 
   { The index read once, for the rules of this unit: units, uses, refs by enclosing symbol, call edges. }
-  TInitGraph = class
+  TInitGraph = class  // dl:ok high-response -- REVIEWED 2026-11-05: one read-once cache over the store for the four rules of this unit; its methods are short readers, and splitting it would only spread the shared maps
   private
     FStore     : ISymbolStore;
     FUnits     : TDictionary<string, TUnitNode>;
@@ -310,8 +315,11 @@ function IsInsideSpan(const ASpans: TArray<TLineSpan>; ALine, ACol: Integer): Bo
 begin
   Result:= False;
   for var S in ASpans do
-    if ((ALine > S.FromLine) or ((ALine = S.FromLine) and (ACol > S.FromCol)))
-      and ((ALine < S.ToLine) or ((ALine = S.ToLine) and (ACol <= S.ToCol))) then Exit(True);
+  begin
+    var AfterStart: Boolean:= (ALine > S.FromLine) or ((ALine = S.FromLine) and (ACol > S.FromCol));
+    var BeforeEnd : Boolean:= (ALine < S.ToLine) or ((ALine = S.ToLine) and (ACol <= S.ToCol));
+    if AfterStart and BeforeEnd then Exit(True);
+  end;
 end;
 
 constructor TInitGraph.Create(const AStore: ISymbolStore);
@@ -347,7 +355,7 @@ begin
   FByFile.Free;
   FAmbiguous.Free;
   FUnits.Free;
-  inherited;
+  inherited Destroy;
 end;
 
 { A name two units of the index share (a directory index over several projects) has no one position:
@@ -528,7 +536,7 @@ begin
   var Lines: TArray<string>:= LinesOf(AFileId);
   Result:= '';
   for var I:= ALine to ALine + ACount - 1 do
-    if (I >= 1) and (I <= Length(Lines)) then Result:= Result + Lines[I - 1] + sLineBreak;
+    if InRange(I, 1, Length(Lines)) then Result:= Result + Lines[I - 1] + sLineBreak;
 end;
 
 function TInitGraph.FileText(AFileId: Int64): string;
@@ -561,8 +569,7 @@ begin
       for var E in EdgesOf(Item.Key.Id) do
       begin
         var Anchor: TReference:= Item.Value;
-        if Item.Key.Id = ASectionId then
-          if not ById.TryGetValue(E.RefId, Anchor) then Continue;
+        if (Item.Key.Id = ASectionId) and not ById.TryGetValue(E.RefId, Anchor) then Continue;
         if not Done.ContainsKey(E.TargetSymbolId) then
         begin
           Done.Add(E.TargetSymbolId, True);
@@ -641,7 +648,7 @@ begin
   FSeen.Free;
   FFindings.Free;
   FState.Free;
-  inherited;
+  inherited Destroy;
 end;
 
 function TOrderWalk.SectionOf(const ANode: TUnitNode): Int64;
@@ -752,14 +759,8 @@ begin
   F.EndLine   := AAnchor.EndLine;
   F.EndCol    := AAnchor.EndCol;
   F.SymbolName:= AState.VarName;
-  if FKind = skiInit then
-    F.Message:= Format('The initialization of %s reaches %s.%s through %s, but %s initializes after %s in %s: '
-      + 'its own initialization has not set the variable yet. Break the uses cycle, or move the call out of the section.',
-      [Own, Later, AState.VarName, AVia.QualifiedName, Later, Own, AProgramName])
-  else
-    F.Message:= Format('The finalization of %s reaches %s.%s through %s, but %s is finalized before %s in %s: '
-      + 'its own finalization has already torn the variable down. Break the uses cycle, or test the variable first.',
-      [Own, Later, AState.VarName, AVia.QualifiedName, Later, Own, AProgramName]);
+  var Pattern: string:= if FKind = skiInit then MESSAGE_INIT_ORDER else MESSAGE_FINAL_ORDER;
+  F.Message:= Format(Pattern, [Own, Later, AState.VarName, AVia.QualifiedName, Later, Own, AProgramName]);
   FFindings.Add(F);
 end;
 
@@ -840,25 +841,19 @@ end;
   names. TPath is not here: it computes strings. }
 function HeavyCategoryOfRef(const AReference: TReference): string;
 begin
-  Result:= '';
   var Head: string:= ReceiverHead(AReference.ReceiverText);
   var Name: string:= AReference.NameText;
-  if MatchText(Head, HEAVY_TYPES_FILE) or MatchText(Name, HEAVY_TYPES_FILE) then Exit(CATEGORY_FILE);
-  if MatchText(Head, HEAVY_TYPES_REGISTRY) or MatchText(Name, HEAVY_TYPES_REGISTRY) then Exit(CATEGORY_REGISTRY);
-  if MatchText(Head, HEAVY_TYPES_NETWORK) or MatchText(Name, HEAVY_TYPES_NETWORK) then Exit(CATEGORY_NETWORK);
-  if AReference.Kind <> REF_CALL then
-    if AReference.Kind <> REF_MEMBER then Exit;
-  if AReference.ReceiverText = '' then
-  begin
-    if MatchText(Name, HEAVY_BARE_FILE) then Exit(CATEGORY_FILE);
-    if MatchText(Name, HEAVY_BARE_DIALOG) then Exit(CATEGORY_DIALOG);
-  end
-  else
-  begin
-    if MatchText(Name, HEAVY_MEMBER_FILE) then Exit(CATEGORY_FILE);
-    if MatchText(Name, HEAVY_MEMBER_DB) then Exit(CATEGORY_DATABASE);
-    if MatchText(Name, HEAVY_BARE_DIALOG) then Exit(CATEGORY_DIALOG);
-  end;
+  var IsBare: Boolean:= AReference.ReceiverText = '';
+  var IsCall: Boolean:= (AReference.Kind = REF_CALL) or (AReference.Kind = REF_MEMBER);
+  if MatchText(Head, HEAVY_TYPES_FILE) or MatchText(Name, HEAVY_TYPES_FILE) then Result:= CATEGORY_FILE
+  else if MatchText(Head, HEAVY_TYPES_REGISTRY) or MatchText(Name, HEAVY_TYPES_REGISTRY) then Result:= CATEGORY_REGISTRY
+  else if MatchText(Head, HEAVY_TYPES_NETWORK) or MatchText(Name, HEAVY_TYPES_NETWORK) then Result:= CATEGORY_NETWORK
+  else if not IsCall then Result:= ''
+  else if MatchText(Name, HEAVY_BARE_DIALOG) then Result:= CATEGORY_DIALOG
+  else if IsBare and MatchText(Name, HEAVY_BARE_FILE) then Result:= CATEGORY_FILE
+  else if (not IsBare) and MatchText(Name, HEAVY_MEMBER_FILE) then Result:= CATEGORY_FILE
+  else if (not IsBare) and MatchText(Name, HEAVY_MEMBER_DB) then Result:= CATEGORY_DATABASE
+  else Result:= '';
 end;
 
 function CollectHeavyInitialization(const AStore: ISymbolStore): TArray<TLintFinding>;
