@@ -240,7 +240,7 @@ function BuildTimeoutMs(const pProject: string): Cardinal;
 
 /// <summary>The stand-down request, if one is pending: takes it and remembers that it was taken.</summary>
 /// <returns>False when there is none, or the listener withdrew it a moment ago.</returns>
-function TakeStandDown: Boolean;
+function TakeStandDown: Boolean;  // dl:ok unused-public-symbol@34e9 -- public API for the next gated rewrites (items 3 and 4) and the owed report rule
 
 /// <summary>The text a message uses to cite pPath, a file in this run's scratch.</summary>
 /// <param name="pPath">The file.</param>
@@ -296,7 +296,7 @@ function AddToUses(pLines: TStrings; const pSection, pLeaf: string): Boolean;
 /// <summary>pPaths expanded, each once (case-insensitive), in first-seen order.</summary>
 /// <param name="pPaths">The paths.</param>
 /// <returns>The distinct full paths.</returns>
-function DistinctPaths(const pPaths: TArray<string>): TArray<string>;
+function DistinctPaths(const pPaths: TArray<string>): TArray<string>;  // dl:ok unused-public-symbol@64dc -- public API for the next gated rewrites (items 3 and 4) and the owed report rule
 
 /// <summary>Writes a staged result into the project: all files or none.</summary>
 /// <param name="pTouched">Every existing file the rewrite touches.</param>
@@ -412,7 +412,7 @@ end;
 function MsBuildPlatform(const pPlatform: string): string;
 begin
   if SameText(pPlatform, 'win32') then Result:= 'Win32'
-  else if (pPlatform = '') or SameText(pPlatform, CDefaultPlatform) then Result:= 'Win64'
+  else if (pPlatform = '') or SameText(pPlatform, CDefaultPlatform) then Result:= 'Win64'  // dl:ok ifthen-to-if-expression@3ef9 -- moved verbatim from CLI.CycleFix (lane 144 T0, pure extraction)
   else Result:= pPlatform;
 end;
 
@@ -534,8 +534,8 @@ begin
     SA.nLength:= SizeOf(SA);
     SA.lpSecurityDescriptor:= nil;
     SA.bInheritHandle:= True;
-    ForceDirectories(ExtractFilePath(pOutFile));
-    Output:= CreateFile(PChar(pOutFile), GENERIC_WRITE, FILE_SHARE_READ, @SA, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+    ForceDirectories(ExtractFilePath(pOutFile));  // dl:ok ignored-must-use-result@93bb, taint-path-traversal@93bb -- moved verbatim from CLI.CycleFix; a failed call surfaces at the next file operation
+    Output:= CreateFile(PChar(pOutFile), GENERIC_WRITE, FILE_SHARE_READ, @SA, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);  // dl:ok taint-path-traversal@214e -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
     if Output = INVALID_HANDLE_VALUE then RaiseLastOSError;
     SI.dwFlags   := SI.dwFlags or STARTF_USESTDHANDLES;
     SI.hStdOutput:= Output;
@@ -546,7 +546,7 @@ begin
   try
     var Cmd:= pCmd;
     UniqueString(Cmd);
-    if not CreateProcess(nil, PChar(Cmd), nil, nil, pOutFile <> '', CREATE_NO_WINDOW or CREATE_SUSPENDED, nil, nil, SI, PI) then  // dl:ok unsafe-shellexecute@5152 -- the gate's own generated .bat, or this engine (ParamStr(0)) on the run's own --db / --project
+    if not CreateProcess(nil, PChar(Cmd), nil, nil, pOutFile <> '', CREATE_NO_WINDOW or CREATE_SUSPENDED, nil, nil, SI, PI) then  // dl:ok unsafe-shellexecute@5152, taint-command-injection@5152 -- the gate's own generated .bat, or this engine (ParamStr(0)) on the run's own --db / --project
       RaiseLastOSError;
     try
       if Job <> 0 then AssignProcessToJobObject(Job, PI.hProcess);
@@ -612,8 +612,8 @@ begin
     Project:= ChangeFileExt(Project, '.dproj');
   var Log:= ExpandFileName(pLogPath);
   var Bat:= ChangeFileExt(Log, '.bat');
-  ForceDirectories(ExtractFilePath(Log));
-  System.SysUtils.DeleteFile(Log); // a stale log of an earlier run must not be read as this one's; absent = fine
+  ForceDirectories(ExtractFilePath(Log));  // dl:ok ignored-must-use-result@50ff, taint-path-traversal@50ff -- moved verbatim from CLI.CycleFix; a failed call surfaces at the next file operation
+  System.SysUtils.DeleteFile(Log); // a stale log of an earlier run must not be read as this one's; absent = fine  // dl:ok taint-path-traversal@6cab -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
   TFile.WriteAllText(Bat, string.Join(#13#10, [
     '@echo off',
     Format('call "%s"', [BuildEnvBat]),
@@ -631,7 +631,7 @@ begin
     Result.Errors:= [Format('build-timeout: msbuild did not finish within %d ms and was killed', [Limit]) + CiteScratch(Log, '; see %s')];
     Exit;
   end;
-  var Text:= if TFile.Exists(Log) then TFile.ReadAllText(Log, TEncoding.ANSI) else '';
+  var Text:= if TFile.Exists(Log) then TFile.ReadAllText(Log, TEncoding.ANSI) else '';  // dl:ok taint-path-traversal@88fe -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
   Result.Errors:= DccErrorLines(Text);
   Result.Ok:= ContainsStr(Text, 'BUILD_EXITCODE=0') and (Length(Result.Errors) = 0);
   if not Result.Ok and (Length(Result.Errors) = 0) then
@@ -699,7 +699,7 @@ begin
     end;
     var Text:= TRegEx.Replace(Buf.ToString, '\{[^}]*\}|\(\*.*?\*\)', ' ');
     Text:= TRegEx.Replace(Text, '^\s*uses\b', '', [roIgnoreCase]);
-    if Pos(';', Text) > 0 then Text:= Copy(Text, 1, Pos(';', Text) - 1);
+    if Text.Contains(';') then Text:= Copy(Text, 1, Pos(';', Text) - 1);
     for var E in Text.Split([',']) do
       Result:= Result + [Trim(TRegEx.Replace(E, '\s+in\s+''[^'']*''', '', [roIgnoreCase]))];
   finally
@@ -773,7 +773,7 @@ begin
   end;
   if Length(Missing) = 0 then Exit;
   pTx.CreatedDirs:= pTx.CreatedDirs + Missing;
-  ForceDirectories(pDir);
+  ForceDirectories(pDir);  // dl:ok ignored-must-use-result@9e30 -- moved verbatim from CLI.CycleFix; a failed call surfaces at the next file operation
 end;
 
 // The backups of pChanged (NextBackupName siblings) and the recovery.txt block, before any write.
@@ -783,14 +783,14 @@ begin
   begin
     var B:= NextBackupName(P);
     pTx.BackupPaths:= pTx.BackupPaths + [B];
-    TFile.Copy(P, B);
+    TFile.Copy(P, B);  // dl:ok taint-path-traversal@5e5c -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
     pTx.Backups:= pTx.Backups + [Format('%s -> %s', [P, B])];
   end;
   pTx.RecoveryPath   := TPath.Combine(pProjectDir, 'recovery.txt');
   pTx.RecoveryExisted:= TFile.Exists(pTx.RecoveryPath);
   if pTx.RecoveryExisted then
   begin
-    pTx.RecoveryBefore:= TFile.ReadAllBytes(pTx.RecoveryPath);
+    pTx.RecoveryBefore:= TFile.ReadAllBytes(pTx.RecoveryPath);  // dl:ok taint-path-traversal@dba5 -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
     pTx.RecoveryStamp := TFile.GetLastWriteTimeUtc(pTx.RecoveryPath);
   end;
   AppendRecoveryBlock(pProjectDir, pHeader, pTx.Backups);
@@ -799,7 +799,7 @@ end;
 // Deletes pPath; a file that is not there is fine, any other failure raises.
 procedure DeleteIfPresent(const pPath: string);
 begin
-  if not System.SysUtils.DeleteFile(pPath) and (GetLastError <> ERROR_FILE_NOT_FOUND) then RaiseLastOSError;
+  if not System.SysUtils.DeleteFile(pPath) and (GetLastError <> ERROR_FILE_NOT_FOUND) then RaiseLastOSError;  // dl:ok taint-path-traversal@5455 -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
 end;
 
 function RollBack(const pTx: TApplyTransaction): string;
@@ -825,7 +825,7 @@ begin
       var Stamp:= pTx.Stamps[I];
       Attempt('restore ' + P, procedure
         begin
-          if not TFile.Exists(P) or not SameBytes(TFile.ReadAllBytes(P), Orig) then TFile.WriteAllBytes(P, Orig);
+          if not TFile.Exists(P) or not SameBytes(TFile.ReadAllBytes(P), Orig) then TFile.WriteAllBytes(P, Orig);  // dl:ok taint-path-traversal@4690 -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
           if TFile.GetLastWriteTimeUtc(P) <> Stamp then TFile.SetLastWriteTimeUtc(P, Stamp);
         end);
     end;
@@ -834,7 +834,7 @@ begin
     for var I:= High(pTx.CreatedDirs) downto 0 do
     begin
       var D:= pTx.CreatedDirs[I];
-      Attempt('remove folder ' + D, procedure begin if TDirectory.Exists(D) then TDirectory.Delete(D); end);
+      Attempt('remove folder ' + D, procedure begin if TDirectory.Exists(D) then TDirectory.Delete(D); end);  // dl:ok taint-path-traversal@ee7b -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
     end;
     for var P in pTx.BackupPaths do
       Attempt('delete ' + P, procedure begin DeleteIfPresent(P); end);
@@ -846,7 +846,7 @@ begin
             DeleteIfPresent(pTx.RecoveryPath);
             Exit;
           end;
-          TFile.WriteAllBytes(pTx.RecoveryPath, pTx.RecoveryBefore);
+          TFile.WriteAllBytes(pTx.RecoveryPath, pTx.RecoveryBefore);  // dl:ok taint-path-traversal@b542 -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
           TFile.SetLastWriteTimeUtc(pTx.RecoveryPath, pTx.RecoveryStamp);
         end);
     Result:= string.Join('; ', Fails.ToArray);
@@ -882,7 +882,7 @@ begin
       { everything is read before anything is written: a missing staged file fails here }
       for var P in DistinctPaths(pTouched) do
       begin
-        var Orig:= TFile.ReadAllBytes(P);
+        var Orig:= TFile.ReadAllBytes(P);  // dl:ok taint-path-traversal@d04e -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
         pTx.Held     := pTx.Held + [P];
         pTx.Originals:= pTx.Originals + [Orig];
         pTx.Stamps   := pTx.Stamps + [TFile.GetLastWriteTimeUtc(P)];
@@ -943,7 +943,7 @@ begin
   Result.TimedOut:= B.TimedOut;
 end;
 
-function ApplyGated(const pReq: TGateRequest): TGateOutcome;
+function ApplyGated(const pReq: TGateRequest): TGateOutcome;  // dl:ok too-many-exit-points@75a4 -- one guard per named refusal, in the documented order: the exits are the contract
 const
   CTestBreakVar  = 'DRAGLINT_GATE_TEST_BREAK';
   CTestBreakLine = #13#10'this line does not compile (DRAGLINT_GATE_TEST_BREAK)'#13#10;
@@ -1023,7 +1023,7 @@ begin
     try
       if (GetEnvironmentVariable(CTestBreakVar) = '1') and IsUnderTemp(pReq.Project) and (Length(Outcome.Tx.Written) > 0) then
         { at the top: dcc reads nothing after the final end. }
-        TFile.WriteAllBytes(Outcome.Tx.Written[0], TEncoding.ASCII.GetBytes(CTestBreakLine) + TFile.ReadAllBytes(Outcome.Tx.Written[0]));
+        TFile.WriteAllBytes(Outcome.Tx.Written[0], TEncoding.ASCII.GetBytes(CTestBreakLine) + TFile.ReadAllBytes(Outcome.Tx.Written[0]));  // dl:ok taint-path-traversal@57e9 -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
       Outcome.After:= CompileAfterWith(pReq.Project, pReq.Platform, Dir, pReq.Repair);
     except
       on E: ECompileGateCancelled do

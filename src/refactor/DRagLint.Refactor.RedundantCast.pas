@@ -75,19 +75,19 @@ type
     procedure Scan;
   public
     /// <summary>The file; '' for CreateFromText.</summary>
-    Path: string;
+    Path: string;  // dl:ok public-field@4449 -- a read-only view of one file, read in tight scan loops; the class owns no invariant to guard
     /// <summary>The decoded text.</summary>
-    Text: string;
+    Text: string;  // dl:ok public-field@c27a -- a read-only view of one file, read in tight scan loops; the class owns no invariant to guard
     /// <summary>The file's encoding; nil for CreateFromText.</summary>
-    Enc: TEncoding;
+    Enc: TEncoding;  // dl:ok public-field@df5f -- a read-only view of one file, read in tight scan loops; the class owns no invariant to guard
     /// <summary>Text with comments and strings blanked.</summary>
-    Masked: string;
+    Masked: string;  // dl:ok public-field@4fd5 -- a read-only view of one file, read in tight scan loops; the class owns no invariant to guard
     /// <summary>The 1-based offset of each line; index 0 is unused.</summary>
-    Starts: TArray<Integer>;
+    Starts: TArray<Integer>;  // dl:ok public-field@1872 -- a read-only view of one file, read in tight scan loops; the class owns no invariant to guard
     /// <summary>Per line: inside, or holding an edge of, a conditional region.</summary>
-    CondAt: TArray<Boolean>;
+    CondAt: TArray<Boolean>;  // dl:ok public-field@c356 -- a read-only view of one file, read in tight scan loops; the class owns no invariant to guard
     /// <summary>Per line: holds a compiler directive.</summary>
-    DirAt: TArray<Boolean>;
+    DirAt: TArray<Boolean>;  // dl:ok public-field@b487 -- a read-only view of one file, read in tight scan loops; the class owns no invariant to guard
     /// <summary>Reads and scans a file.</summary>
     /// <param name="pPath">The file.</param>
     constructor Create(const pPath: string);
@@ -129,7 +129,7 @@ type
 /// neither the type nor the operand is declared under a conditional (conditional-decl); no `with` precedes it in its
 /// routine (with-body); every ancestor of the enclosing class is indexed (unresolved-ancestor).</remarks>
 /// <exception cref="ENoRefTypes">The index has no ref_types table.</exception>
-function PlanRedundantCasts(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
+function PlanRedundantCasts(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;  // dl:ok unused-public-symbol@8fa5 -- public API for the next gated rewrites (items 3 and 4) and the owed report rule
   const pOpts: TRedundantCastOptions): TCastPlan;
 
 /// <summary>Runs the verb: prints the plan and, with --apply, writes the fixes through ApplyGated.</summary>
@@ -157,7 +157,7 @@ function LastCodeChar(const pMasked: string; pAt: Integer; out pOffset: Integer)
 implementation
 
 uses
-  System.IOUtils, System.JSON, System.StrUtils, System.RegularExpressions, System.Hash, Winapi.Windows,
+  System.IOUtils, System.JSON, System.StrUtils, System.RegularExpressions, System.Hash, System.Math, Winapi.Windows,
   System.Generics.Collections, System.Generics.Defaults,
   FireDAC.Comp.Client,
   DRagLint.Core.FileTime, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate,
@@ -186,7 +186,7 @@ type
   end;
 
   /// <summary>One planning run; owns the file and symbol caches.</summary>
-  TCastPlanner = class
+  TCastPlanner = class  // dl:ok high-response@2693 -- one planner class holds one proof and its caches
   strict private
     FStore     : ISymbolStore;
     FConn      : TFDConnection;
@@ -504,9 +504,9 @@ var
       while not Q.Eof do
       begin
         var R: TNameRow;
-        R.Kind         := Q.Fields[0].AsString;
-        R.QName        := Q.Fields[1].AsString;
-        R.GenericParams:= Q.Fields[2].AsString;
+        R.Kind         := Q.FieldByName('kind').AsString;  // dl:ok field-by-name-in-loop@bdc2 -- a few thousand rows at most; column names beat positions (magic-literal) here
+        R.QName        := Q.FieldByName('qualified_name').AsString;
+        R.GenericParams:= Q.FieldByName('generic_params').AsString;
         Rows.Add(R);
         Q.Next;
       end;
@@ -543,15 +543,15 @@ begin
     if not Q.Eof then
     begin
       Result.Found        := True;
-      Result.Kind         := Q.Fields[0].AsString;
-      Result.QName        := Q.Fields[1].AsString;
-      Result.Signature    := Q.Fields[2].AsString;
-      Result.Heritage     := Q.Fields[3].AsString;
-      Result.GenericParams:= Q.Fields[4].AsString;
-      Result.ParentId     := Q.Fields[5].AsLargeInt;
-      Result.StartLine    := Q.Fields[6].AsInteger;
-      Result.ImplStart    := Q.Fields[7].AsInteger;
-      Result.Path         := Q.Fields[8].AsString;
+      Result.Kind         := Q.FieldByName('kind').AsString;
+      Result.QName        := Q.FieldByName('qualified_name').AsString;
+      Result.Signature    := Q.FieldByName('signature').AsString;
+      Result.Heritage     := Q.FieldByName('heritage').AsString;
+      Result.GenericParams:= Q.FieldByName('generic_params').AsString;
+      Result.ParentId     := Q.FieldByName('parent_id').AsLargeInt;
+      Result.StartLine    := Q.FieldByName('start_line').AsInteger;
+      Result.ImplStart    := Q.FieldByName('impl_start_line').AsInteger;
+      Result.Path         := Q.FieldByName('path').AsString;
     end;
   finally
     Q.Free;
@@ -603,7 +603,7 @@ function TCastPlanner.UnresolvedAncestorOf(pEnclosing: Int64): string;
         Q.ParamByName('n').AsWideString:= pName;
         Q.Open;
         pHit:= not Q.Eof;
-        if pHit then Result:= Q.Fields[0].AsString;
+        if pHit then Result:= Q.FieldByName('heritage').AsString;
       finally
         Q.Free;
       end;
@@ -623,10 +623,10 @@ function TCastPlanner.UnresolvedAncestorOf(pEnclosing: Int64): string;
   function ParentOf(const pHeritage: string): string;
   begin
     Result:= Trim(pHeritage);
-    if Pos(',', Result) > 0 then Result:= Trim(Copy(Result, 1, Pos(',', Result) - 1));
-    if Pos('<', Result) > 0 then Result:= Copy(Result, 1, Pos('<', Result) - 1);
+    if Result.Contains(',') then Result:= Trim(Copy(Result, 1, Pos(',', Result) - 1));
+    if Result.Contains('<') then Result:= Copy(Result, 1, Pos('<', Result) - 1);
     Result:= Trim(Result);
-    while Pos('.', Result) > 0 do Result:= Copy(Result, Pos('.', Result) + 1, MaxInt);
+    while Result.Contains('.') do Result:= Copy(Result, Pos('.', Result) + 1, MaxInt);
   end;
 
 begin
@@ -695,7 +695,7 @@ begin
   Result:= False;
   if not pSym.Found or (pSym.Path = '') or not TFile.Exists(pSym.Path) then Exit;
   var F:= FileOf(pSym.Path);
-  Result:= (pSym.StartLine >= 1) and (pSym.StartLine <= High(F.CondAt)) and F.CondAt[pSym.StartLine];
+  Result:= InRange(pSym.StartLine, 1, High(F.CondAt)) and F.CondAt[pSym.StartLine];
 end;
 
 procedure TCastPlanner.Refuse(const pSite: TCastSite; const pKind, pReason: string);
@@ -707,7 +707,7 @@ begin
   FRefused.Add(S);
 end;
 
-procedure TCastPlanner.Decide(pFileId: Int64; const pPath: string; pLine, pCol: Integer; const pName: string;
+procedure TCastPlanner.Decide(pFileId: Int64; const pPath: string; pLine, pCol: Integer; const pName: string;  // dl:ok cyclomatic-complexity@5ab6, too-many-exit-points@6420 -- one branch per named refusal, documented on the public function
   pTypeId, pEnclosing: Int64);
 const
   CTypeKinds: array[0..4] of string = ('class', 'record', 'interface', 'enum', 'type');
@@ -806,10 +806,10 @@ begin
     HasRow:= not Q.Eof;
     if HasRow then
     begin
-      OperandSym  := Q.Fields[0].AsLargeInt;
-      OperandType := Q.Fields[1].AsLargeInt;
-      OperandQName:= Q.Fields[2].AsString;
-      OperandVia  := Q.Fields[3].AsString;
+      OperandSym  := Q.FieldByName('symbol_id').AsLargeInt;
+      OperandType := Q.FieldByName('type_symbol_id').AsLargeInt;
+      OperandQName:= Q.FieldByName('type_qname').AsString;
+      OperandVia  := Q.FieldByName('via').AsString;
     end;
   finally
     Q.Free;
@@ -848,7 +848,7 @@ begin
       Refuse(Site, 'generic-type', Format('%s has a generic form; the symbol id does not carry the type arguments', [pName]));
       Exit;
     end;
-  if Pos('<', TypeSym.QName) > 0 then
+  if TypeSym.QName.Contains('<') then
   begin
     Refuse(Site, 'generic-type', Format('%s has a generic form; the symbol id does not carry the type arguments', [pName]));
     Exit;
@@ -915,13 +915,13 @@ begin
       while not Q.Eof do
       begin
         var R: TCastRow;
-        R.FileId   := Q.Fields[0].AsLargeInt;
-        R.Path     := Q.Fields[1].AsString;
-        R.Line     := Q.Fields[2].AsInteger;
-        R.Col      := Q.Fields[3].AsInteger;
-        R.Name     := Q.Fields[4].AsString;
-        R.TypeId   := Q.Fields[5].AsLargeInt;
-        R.Enclosing:= Q.Fields[6].AsLargeInt;
+        R.FileId   := Q.FieldByName('file_id').AsLargeInt;  // dl:ok field-by-name-in-loop@48e6 -- a few thousand rows at most; column names beat positions (magic-literal) here
+        R.Path     := Q.FieldByName('path').AsString;
+        R.Line     := Q.FieldByName('start_line').AsInteger;
+        R.Col      := Q.FieldByName('start_col').AsInteger;
+        R.Name     := Q.FieldByName('name_text').AsString;
+        R.TypeId   := Q.FieldByName('type_symbol_id').AsLargeInt;
+        R.Enclosing:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
         Rows.Add(R);
         Q.Next;
       end;
@@ -954,9 +954,9 @@ begin
     Q.Open;
     while not Q.Eof do
     begin
-      if InScope(Q.Fields[1].AsString, Q.Fields[2].AsInteger) then
-        Decide(Q.Fields[0].AsLargeInt, Q.Fields[1].AsString, Q.Fields[2].AsInteger, Q.Fields[3].AsInteger,
-          Q.Fields[4].AsString, 0, Q.Fields[5].AsLargeInt);
+      if InScope(Q.FieldByName('path').AsString, Q.FieldByName('start_line').AsInteger) then  // dl:ok field-by-name-in-loop@656f -- a few thousand rows at most; column names beat positions (magic-literal) here
+        Decide(Q.FieldByName('file_id').AsLargeInt, Q.FieldByName('path').AsString, Q.FieldByName('start_line').AsInteger, Q.FieldByName('start_col').AsInteger,
+          Q.FieldByName('name_text').AsString, 0, Q.FieldByName('enclosing_symbol_id').AsLargeInt);
       Q.Next;
     end;
   finally
@@ -1149,7 +1149,7 @@ begin
     Ran := True;
     if not GScratchCited and TDirectory.Exists(Req.LogDir) then
     try
-      TDirectory.Delete(Req.LogDir, True);
+      TDirectory.Delete(Req.LogDir, True);  // dl:ok taint-path-traversal@ff48 -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
     except
       on EInOutError do Writeln(ErrOutput, 'drag-lint: note: scratch not deleted: ', Req.LogDir); // best effort: a locked log must not change the result
     end;
