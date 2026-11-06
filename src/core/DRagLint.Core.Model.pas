@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.44.1-alpha';
+  DRAGLINT_VERSION = '1.45.0-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -224,7 +224,12 @@ const
       / LibraryOracle fingerprint units changed with the resolver fixes below.
     Decided OUT of this bump: Inc/Dec and var/out arguments stay refs.kind read;
     see the 1.43 release notes, known limitations. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.31.0-alpha';
+  { 1.31.0 -> 1.32.0 (2026-11-06, 1.45, lane/145-int -- ONE bump for the wave):
+    * parser: ref-gap G6, a member read off a call-rooted receiver (H.Names().FLeaf)
+      now emits a refs row (Parser.Delphi13.IsCallRootedReceiver, complement of G5),
+      so ref_types, member_accesses and call_edges grow for those shapes. Guards
+      run_ref_type_helpers, run_facts_ref_types. The resolver code is unchanged. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.32.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
