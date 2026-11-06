@@ -196,6 +196,7 @@ uses
   , DRagLint.Context    .Bundler
   , DRagLint.Resolver   .TypeAt
   , DRagLint.Refactor   .Rename
+  , DRagLint.Refactor   .RenameProof // dl:ok uses-global-census@61f3 -- lane 144 item 3: its consts and routines are the public surface; every rename occurrence proved, then the compile gate
   , DRagLint.Refactor   .TextEdit
   , DRagLint.Refactor   .NamingFix
   , DRagLint.Refactor   .MultiProjectRename { a naming fix on a unit several project DBs own (lint --fix) }
@@ -24951,15 +24952,133 @@ begin
   end;
 end;
 
+{ Lane 144 item 3: the platform libraries rename's proof reads, read-only and silent on stdout: every --library-db,
+  'none' = none, or the one the manifest names. }
+function RenameLibraries(const AArgs: TArgs): TArray<ISymbolStore>;
+begin
+  Result:= nil;
+  var Paths:= AArgs.LibraryDbs;
+  if Length(Paths) = 0 then
+  begin
+    var P:= ResolveLibraryDb(AArgs);
+    if P <> '' then Paths:= [P];
+  end;
+  for var P in Paths do
+  begin
+    if SameText(P, 'none') or not TFile.Exists(P) then Continue;
+    var Ok: Boolean;
+    var S:= OpenReadOnlyStore(P, Ok, True);
+    if Ok then Result:= Result + [S];
+  end;
+end;
+
+{ Lane 144 item 3: the tail every rename path shares. --plan reports and exits 0; a dry run lists the proved edits and
+  notes the rest; --apply refuses whatever is not proved, exit 2, and writes only through the compile gate. }
+function FinishRename(const AArgs: TArgs; const pProof: TRenameProof; const pQName: string; pApply: Boolean): Integer; // dl:ok too-many-exit-points@4223 -- one Exit per outcome of the verb, each with its own exit code
+const
+  CRefused = 'ERROR: cannot rename -- ';
+begin
+  if AArgs.Plan then
+  begin
+    if AArgs.AsJson then Writeln(RenamePlanJson(pProof, pQName, AArgs.RenameTo))
+    else
+    begin
+      Writeln(TRenameRefactoring.RenderDryRun(pProof.Edits));
+      Writeln(RenderRenamePlan(pProof, pQName, AArgs.RenameTo));
+    end;
+    Exit(0);
+  end;
+  if not pApply or AArgs.AsJson then
+    for var R in pProof.Refusals do Writeln(ErrOutput, 'drag-lint: note: ' + RefusalLine(R));
+  { a ref that moved on disk after indexing is refused, never retargeted }
+  var StaleReason: string:= TRenameRefactoring.StaleEditReason(pProof.Edits);
+  if StaleReason <> '' then
+  begin
+    Writeln(CRefused + StaleReason);
+    Exit(2);
+  end;
+  if AArgs.AsJson then
+  begin
+    var Arr: TJSONArray:= TJSONArray.Create;
+    try
+      for var Ed in pProof.Edits do // dl:ok duplicate-code@d4d6 -- the --json edit list as every refactor verb prints it; each owns its own shape
+      begin
+        var O: TJSONObject:= TJSONObject.Create;
+        O.AddPair('file', Ed.FilePath);
+        O.AddPair('line', TJSONNumber.Create(Ed.Line));
+        O.AddPair('col' , TJSONNumber.Create(Ed.Col ));
+        O.AddPair('old', Ed.OldName);
+        O.AddPair('new', Ed.NewName);
+        Arr.AddElement(O);
+      end;
+      Writeln(Arr.ToJson);
+    finally
+      Arr.Free;
+    end;
+    Exit(0);
+  end;
+  if not pApply then
+  begin
+    Writeln(TRenameRefactoring.RenderDryRun(pProof.Edits));
+    Writeln(Format('Dry run: %d edit(s) across %d file(s). Pass --apply --project <X.dproj> to write.', [Length(pProof.Edits), CountDistinctFiles(pProof.Edits)]));
+    Exit(0);
+  end;
+  if Length(pProof.Refusals) > 0 then
+  begin
+    for var R in pProof.Refusals do Writeln(CRefused + RefusalLine(R));
+    Writeln(Format('Nothing written: %d occurrence(s) not proved. --plan lists them.', [Length(pProof.Refusals)]));
+    Exit(2);
+  end;
+  if AArgs.NoCompile then
+  begin
+    Writeln(CRefused + 'refused [' + CRefuseNoCompile + ']: --no-compile is for --plan and a dry run; every write passes the compile gate');
+    Exit(2);
+  end;
+  if RenameUngatedSeam(pProof.Edits) then
+  begin
+    var Touched: Integer:= TRenameRefactoring.Apply(pProof.Edits, not AArgs.NoBackup);
+    Writeln(Format('Applied: %d edit(s), %d file(s).', [Length(pProof.Edits), Touched]));
+    Exit(0);
+  end;
+  { --project, or the project a DB at its proper place belongs to: <folder>\_D-RAG\<base>.sqlite is <folder>\<base>.dproj's
+    (the IDE's Rename Symbol passes --db only). }
+  var GateProject:= if AArgs.ProjectFromConfig then '' else AArgs.ProjectPath;
+  if (GateProject = '') and SameText(ExtractFileName(ExcludeTrailingPathDelimiter(ExtractFilePath(AArgs.DbPath))), '_D-RAG') then
+  begin
+    var Sibling:= TPath.Combine(ExtractFilePath(ExcludeTrailingPathDelimiter(ExtractFilePath(AArgs.DbPath))),
+      ChangeFileExt(ExtractFileName(AArgs.DbPath), '.dproj'));
+    if TFile.Exists(Sibling) then GateProject:= Sibling;
+  end;
+  if GateProject = '' then
+  begin
+    Writeln(CRefused + 'refused [' + CRefuseNoProject + ']: rename --apply writes through the compile gate: pass --project <X.dproj>');
+    Exit(2);
+  end;
+  var Opts:= Default(TRenameGateOptions);
+  Opts.Project         := GateProject;
+  Opts.Platform        := AArgs.CheckPlatform;
+  Opts.RsVars          := AArgs.CycleRsVars;
+  Opts.BuildTimeoutSecs:= StrToIntDef(AArgs.CycleBuildTimeout, 0);
+  Opts.NoBackup        := AArgs.NoBackup;
+  var Gate:= ApplyRenameGated(pProof.Edits, Opts);
+  if not Gate.Applied then
+  begin
+    Writeln(CRefused + 'refused [' + Gate.Refusal + ']: ' + Gate.Detail);
+    Exit(if Gate.RollbackFailed then 2 else 1);
+  end;
+  Writeln(Format('Applied: %d edit(s), %d file(s); the compile gate built the project before and after (%d after-build(s)).',
+    [Length(pProof.Edits), CountDistinctFiles(pProof.Edits), Gate.After.Builds]));
+  for var B in Gate.Tx.Backups do Writeln('  ' + B);
+  Result:= 0;
+end;
+
 // v0.24: drag-lint rename --qname Foo.TBar.Baz --to NewName
 //   [--db PATH] [--dry-run] [--no-backup]
-// Resolves the symbol, finds all caller refs, builds an edit set, then
-// either dry-runs (prints plan) or applies edits in-place with .bak backup.
+// Resolves the symbol, proves every occurrence (RenameProof), then reports, or applies through the compile gate.
 function DoRename(const AArgs: TArgs): Integer;
 var
-  Store       : ISymbolStore       ;
-  Edits       : TArray<TRenameEdit>;
-  FilesTouched: Integer            ;
+  Store: ISymbolStore;
+  Proof: TRenameProof;
 begin
   { v0.69 D2a: --kind symbol|param path (dry-run default, --apply writes, --json edit set).
     Collision notes: --kind parsed into AArgs.Kind; --file parsed into AArgs.InFile.
@@ -24974,7 +25093,20 @@ begin
         Exit   (2                                                          );
       end;
       if TRenameRefactoring.IsReservedWord(AArgs.RenameTo) then begin Writeln(Format('ERROR: "%s" is a reserved word', [AArgs.RenameTo])); Exit(2); end;
-      Edits:= TRenameRefactoring.BuildLocal( AArgs.InFile, AArgs.RefLine, AArgs.RefCol, AArgs.RenameTo);
+      var LocalStore: ISymbolStore:= nil;
+      if (AArgs.DbPath <> '') and FileExists(AArgs.DbPath) then
+      begin
+        var LOk: Boolean;
+        LocalStore:= OpenReadOnlyStore(AArgs.DbPath, LOk);
+        if not LOk then Exit(2);
+      end;
+      Proof:= ProveLocalRename(LocalStore, AArgs.InFile, AArgs.RefLine, AArgs.RefCol, AArgs.RenameTo);
+      if not Proof.Found then
+      begin
+        Writeln('No edits computed.');
+        Exit(1);
+      end;
+      Exit(FinishRename(AArgs, Proof, AArgs.InFile, AArgs.Apply));
     end
     else if SameText(AArgs.Kind, 'symbol') then
     begin
@@ -25021,53 +25153,22 @@ begin
         Writeln('ERROR: cannot rename -- ' + Reason);
         Exit(2);
       end;
-      Edits:= TRenameRefactoring.Build(KStore, QN, AArgs.RenameTo);
-      { W5-D: a binary or unindexed .dfm that may bind the name is REPORTED on
-        stderr (stdout stays the edit list / --json array), never refused }
-      for var SkipNote: string in TRenameRefactoring.SkippedDfmNotes(KStore, QN) do
-        Writeln(ErrOutput, 'drag-lint: note: ' + SkipNote);
-      { E5: an unbound ref another indexed symbol also names is left unrenamed; say so }
-      for var CandNote: string in TRenameRefactoring.UnresolvedCandidateNotes(KStore, QN) do
-        Writeln(ErrOutput, 'drag-lint: note: ' + CandNote);
+      { a ref that moved on disk after indexing is refused, never retargeted }
+      Reason:= TRenameRefactoring.StaleEditReason(TRenameRefactoring.Build(KStore, QN, AArgs.RenameTo));
+      if Reason <> '' then
+      begin
+        Writeln('ERROR: cannot rename -- ' + Reason);
+        Exit(2);
+      end;
+      Proof:= ProveRename(KStore, RenameLibraries(AArgs), QN, AArgs.RenameTo);
+      if not Proof.Found or ((Length(Proof.Edits) = 0) and (Length(Proof.Refusals) = 0)) then
+      begin
+        Writeln('No edits computed.');
+        Exit(1);
+      end;
+      Exit(FinishRename(AArgs, Proof, QN, AArgs.Apply));
     end // if
     else begin Writeln('ERROR: --kind must be symbol or param'); Exit (2 ); end;
-
-    if Length(Edits) = 0 then
-    begin Writeln('No edits computed.'); Exit(1); end;
-    { a ref that moved on disk after indexing is refused, never retargeted }
-    var StaleReason: string:= TRenameRefactoring.StaleEditReason(Edits);
-    if StaleReason <> '' then
-    begin
-      Writeln('ERROR: cannot rename -- ' + StaleReason);  // dl:ok duplicate-code@5675 -- REVIEWED 2026-10-24 (lint sweep b0bad3cf..HEAD): the refactor verbs' refuse / no-edits / emit tail (rename, extract-method); each verb owns its own refusal text and exit code
-      Exit(2);
-    end;
-
-    if AArgs.AsJson then
-    begin
-      var Arr: TJSONArray:= TJSONArray.Create;
-      try
-        for var Ed in Edits do
-        begin
-          var O: TJSONObject:= TJSONObject.Create;
-          O.AddPair('file', Ed.FilePath);
-          O.AddPair('line', TJSONNumber.Create(Ed.Line));
-          O.AddPair('col' , TJSONNumber.Create(Ed.Col ));
-          O.AddPair('old', Ed.OldName);
-          O.AddPair('new', Ed.NewName);
-          Arr.AddElement(O);
-        end;
-        Writeln(Arr.ToJson);
-      finally
-        Arr.Free;
-      end;
-      Exit(0);
-    end; // if
-
-    if not AArgs.Apply then begin Writeln(TRenameRefactoring.RenderDryRun(Edits)); Writeln(Format('Dry run: %d edit(s). Pass --apply to write.', [Length(Edits)])); Exit(0); end;
-
-    var Touched: Integer:= TRenameRefactoring.Apply(Edits, not AArgs.NoBackup);
-    Writeln(Format('Applied: %d edit(s), %d file(s).', [Length(Edits), Touched]));
-    Exit(0);
   end; // if
   { ----- legacy --qname path below (unchanged) ----- }
 
@@ -25101,35 +25202,21 @@ begin
     Writeln('ERROR: cannot rename -- ' + IncReason);
     Exit(2);
   end;
-  Edits:= TRenameRefactoring.Build(Store, AArgs.QName, AArgs.RenameTo);
-  for var SkipNote: string in TRenameRefactoring.SkippedDfmNotes(Store, AArgs.QName) do
-    Writeln(ErrOutput, 'drag-lint: note: ' + SkipNote);
-  for var CandNote: string in TRenameRefactoring.UnresolvedCandidateNotes(Store, AArgs.QName) do
-    Writeln(ErrOutput, 'drag-lint: note: ' + CandNote);
-  if Length(Edits) = 0 then
+  IncReason:= TRenameRefactoring.StaleEditReason(TRenameRefactoring.Build(Store, AArgs.QName, AArgs.RenameTo));
+  if IncReason <> '' then
+  begin
+    Writeln('ERROR: cannot rename -- ' + IncReason);
+    Exit(2);
+  end;
+  Proof:= ProveRename(Store, RenameLibraries(AArgs), AArgs.QName, AArgs.RenameTo);
+  if not Proof.Found or ((Length(Proof.Edits) = 0) and (Length(Proof.Refusals) = 0)) then
   begin
     Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName]));
     var Hint: string:= TRenameRefactoring.NotFoundHint(Store, AArgs.QName, AArgs.InFile);
     if Hint <> '' then Writeln(Hint);
     Exit(1);
   end;
-  IncReason:= TRenameRefactoring.StaleEditReason(Edits);
-  if IncReason <> '' then
-  begin
-    Writeln('ERROR: cannot rename -- ' + IncReason);
-    Exit(2);
-  end;
-
-  if AArgs.DryRun then
-  begin
-    Writeln(TRenameRefactoring.RenderDryRun(Edits));
-    Writeln(Format('Dry run: %d edits across %d files', [Length(Edits), CountDistinctFiles(Edits)]));
-    Exit(0);
-  end;
-
-  FilesTouched:= TRenameRefactoring.Apply(Edits, not AArgs.NoBackup);
-  Writeln(Format('Renamed: %d edits, %d files touched. ' + 'Re-run `drag-lint index` to refresh.', [Length(Edits), FilesTouched]));
-  Result:= 0;
+  Result:= FinishRename(AArgs, Proof, AArgs.QName, not AArgs.DryRun);
 end; // function
 
 // v0.26: drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]

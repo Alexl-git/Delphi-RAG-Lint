@@ -15,6 +15,7 @@ param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$WorkDir = "$env:TEMP\drag-lint-rename-qhints-$PID"
 )
+$env:DRAGLINT_RENAME_TEST_UNGATED = '1' # lane 144: no library in this fixture
 try {
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false

@@ -499,6 +499,7 @@ type
 implementation
 
 uses
+  DRagLint.Refactor.RenameProof, // dl:ok uses-global-census@7543 -- its consts and routines are the public surface
   Winapi.Windows
   , DRagLint.Doc.Regions
   , DRagLint.Query.Implementors { get_implementors (interface report, 1.40) }
@@ -771,10 +772,12 @@ begin
 
   Tools.AddElement(ToolDescriptor(
       'rename_symbol', 'Rename every occurrence of a Delphi symbol (declaration + all references) ' + 'by its qualified name. In dry_run mode returns the edit list without '
-        + 'modifying files; otherwise applies edits in place and writes .bak backups.',
+        + 'modifying files; otherwise proves every occurrence and writes through the compile gate (needs project; a rename it cannot prove answers applied:false with the reason).',
       '{"type":"object","properties":{' + '"qname":{"type":"string","description":"Qualified name of the symbol to rename (e.g. Unit.TClass.Method)"},'
         + '"to":{"type":"string","description":"New short name for the symbol"},'
         + '"dry_run":{"type":"boolean","description":"If true, return edits without applying them (optional, default false)"},'
+        + '"project":{"type":"string","description":"The .dproj the compile gate builds; required unless dry_run"},'
+        + '"library_db":{"type":"string","description":"The platform library database the proof reads; without it a write refuses"},'
         + '"db":{"type":"string","description":"Path to .sqlite database (optional if --db passed at startup)"}' + '},"required":["qname","to"]}'));
 
   // v0.31: run AST-based diagnostics (no compiler required).
@@ -1587,6 +1590,7 @@ begin
       else
       begin
         var RenEditsJson:= FormatRenameEditsAsJson(RenEdits);
+        var RenApplyError: string:= '';
         var RenFilesTouched: Integer;
         var RenApplied     : Boolean;
         if RenDryRun then
@@ -1604,8 +1608,33 @@ begin
         end
         else
         begin
-          RenFilesTouched:= TRenameRefactoring.Apply(RenEdits, True);
-          RenApplied:= True;
+          { lane 144 item 3: a write is proved occurrence by occurrence and passes the compile gate. }
+          RenApplied:= False;
+          RenFilesTouched:= 0;
+          var RenLibs: TArray<ISymbolStore>:= nil;
+          if Args.GetValue('library_db') <> nil then
+            RenLibs:= [TSQLiteSymbolStore.Create(Args.GetValue('library_db').Value, True) as ISymbolStore];
+          var RenProof:= ProveRename(RenStore, RenLibs, RenQName, RenTo);
+          RenEdits:= RenProof.Edits;
+          RenEditsJson:= FormatRenameEditsAsJson(RenEdits);
+          if Length(RenProof.Refusals) > 0 then
+            RenApplyError:= RefusalLine(RenProof.Refusals[0]) + Format(' (%d not proved)', [Length(RenProof.Refusals)])
+          else if RenameUngatedSeam(RenEdits) then
+          begin
+            RenFilesTouched:= TRenameRefactoring.Apply(RenEdits, True);
+            RenApplied:= True;
+          end
+          else if Args.GetValue('project') = nil then
+            RenApplyError:= 'refused [' + CRefuseNoProject + ']: dry_run=false writes through the compile gate: pass project';
+          if (RenApplyError = '') and not RenApplied then
+          begin
+            var RenOpts:= Default(TRenameGateOptions);
+            RenOpts.Project:= Args.GetValue('project').Value;
+            var RenGate:= ApplyRenameGated(RenEdits, RenOpts);
+            RenApplied:= RenGate.Applied;
+            if RenApplied then RenFilesTouched:= Length(RenGate.Tx.Written)
+            else RenApplyError:= 'refused [' + RenGate.Refusal + ']: ' + RenGate.Detail;
+          end;
         end;
         var RenAppliedStr: string;
         if RenApplied then RenAppliedStr:= 'true' else RenAppliedStr:= 'false';
@@ -1618,7 +1647,8 @@ begin
         for var RenCand: string in TRenameRefactoring.UnresolvedCandidateNotes(RenStore, RenQName) do
           RenCands:= RenCands + (if RenCands = '' then '' else ',') + '"' + JsonEscape(RenCand) + '"';
         ResultText:= '{"edits":' + RenEditsJson + ',"files_touched":' + IntToStr(RenFilesTouched) + ',"applied":' + RenAppliedStr +
-          ',"skipped_dfm":[' + RenSkipped + '],"unresolved_candidates":[' + RenCands + ']}';
+          ',"skipped_dfm":[' + RenSkipped + '],"unresolved_candidates":[' + RenCands + ']' +
+          (if RenApplyError = '' then '' else ',"error":"cannot rename -- ' + JsonEscape(RenApplyError) + '"') + '}';
       end; // else
     end // if
     else if ToolName = 'run_ast_checks' then

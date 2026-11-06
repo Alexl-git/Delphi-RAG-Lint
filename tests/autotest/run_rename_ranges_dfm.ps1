@@ -23,6 +23,7 @@ param(
 )
 try {
 $ErrorActionPreference = 'Stop'
+$env:DRAGLINT_RENAME_TEST_UNGATED = '1' # lane 144: these fixtures do not compile; run_rename_precise.ps1 proves the gate
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }

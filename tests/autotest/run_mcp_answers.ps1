@@ -30,6 +30,7 @@ param(
 )
 try {
 $ErrorActionPreference = 'Stop'; $fail = $false
+$env:DRAGLINT_RENAME_TEST_UNGATED = '1' # lane 144: these fixtures do not compile; run_rename_precise.ps1 proves the gate
 function Check($n, $ok, $d) {
   Write-Host ("[{0}] {1}" -f (@('FAIL', 'PASS')[[int][bool]$ok]), $n) -ForegroundColor (@('Red', 'Green')[[int][bool]$ok])
   if (-not $ok) { if ($d) { Write-Host "      $d" -ForegroundColor DarkGray }; $script:fail = $true }

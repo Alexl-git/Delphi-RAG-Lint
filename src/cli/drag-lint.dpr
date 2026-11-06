@@ -182,6 +182,7 @@ uses
   DRagLint.Context.Bundler in '..\context\DRagLint.Context.Bundler.pas',
   DRagLint.Resolver.TypeAt in '..\resolver\DRagLint.Resolver.TypeAt.pas',
   DRagLint.Refactor.Rename in '..\refactor\DRagLint.Refactor.Rename.pas',
+  DRagLint.Refactor.RenameProof in '..\refactor\DRagLint.Refactor.RenameProof.pas',
   DRagLint.Refactor.TextEdit in '..\refactor\DRagLint.Refactor.TextEdit.pas',
   DRagLint.Refactor.CompileGate in '..\refactor\DRagLint.Refactor.CompileGate.pas',
   DRagLint.Refactor.RedundantCast in '..\refactor\DRagLint.Refactor.RedundantCast.pas',

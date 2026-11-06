@@ -27,6 +27,7 @@ param(
 )
 try {
 $ErrorActionPreference = 'Stop'
+$env:DRAGLINT_RENAME_TEST_UNGATED = '1' # lane 144: these fixtures do not compile; run_rename_precise.ps1 proves the gate
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }
@@ -168,24 +169,24 @@ Check 'J json exits 0' ($e.Exit -eq 0) "exit=$($e.Exit)"
 $exp = @('Unit1.pas:13', 'Unit1.pas:8', 'Unit3.pas:16')
 Check 'J edit set is exact (no Unit3.pas:17, no Unit2)' (($e.Got -join ',') -ceq (($exp | Sort-Object) -join ',')) "got=$($e.Got -join ',')"
 
-Check 'J note names the candidate (E5, wired in CLI)' ($e.Out -cmatch 'drag-lint: note: .*Unit3\.pas:17:\d+: unresolved reference to "Process" not renamed') "out=$($e.Out)"
+Check 'J note names the candidate (E5, wired in CLI)' ($e.Out -cmatch 'drag-lint: note: .*Unit3\.pas:17:\d+: refused \[receiver-untyped\]: unresolved reference to "Process" not renamed') "out=$($e.Out)"
 
 Write-Host 'Fixture A: --apply leaves the candidate and Unit2 alone' -ForegroundColor Cyan
 $a = New-Fixture 'A'
 $h2 = FileHash $a 'Unit2.pas'
 $r = Run-Rename $a ($RenArgs + @('--apply', '--no-backup'))
-Check 'A apply exits 0' ($r.Exit -eq 0) "exit=$($r.Exit) $($r.Out)"
+Check 'A apply refuses (lane 144: exit 2, a candidate is not proved), naming it' ($r.Exit -eq 2 -and $r.Out -cmatch 'refused \[receiver-untyped\]') "exit=$($r.Exit) $($r.Out)"
 $u3 = Get-Content -Raw (Join-Path $a.Src 'Unit3.pas')
-Check 'A Unit3 bound call renamed'        ($u3 -cmatch '  A\.Run;\r\n')
+Check 'A nothing written: the bound call too'  ($u3 -cmatch '  A\.Process;\r\n')
 Check 'A Unit3 unbound candidate kept'    ($u3 -cmatch '  ExtThing\.Process;\r\n')
 Check 'A Unit2.pas byte-identical'        ((FileHash $a 'Unit2.pas') -ceq $h2)
 
-Write-Host 'Fixture P (positive control): a name no other symbol carries is still renamed' -ForegroundColor Cyan
+Write-Host 'Fixture P: a name no other symbol carries; lane 144: that is no proof, the receiver is untyped' -ForegroundColor Cyan
 $p = New-Fixture 'P' @('Unit2.pas')
 $e = Edit-Set $p
-$exp = @('Unit1.pas:13', 'Unit1.pas:8', 'Unit3.pas:16', 'Unit3.pas:17')
-Check 'P edit set includes the unbound ref' (($e.Got -join ',') -ceq (($exp | Sort-Object) -join ',')) "got=$($e.Got -join ',')"
-Check 'P no candidate note when nothing else carries the name' ($e.Out -cnotmatch 'unresolved reference') "out=$($e.Out)"
+$exp = @('Unit1.pas:13', 'Unit1.pas:8', 'Unit3.pas:16')
+Check 'P edit set leaves the unbound ref out: no other bearer is no proof (lane 144)' (($e.Got -join ',') -ceq (($exp | Sort-Object) -join ',')) "got=$($e.Got -join ',')"
+Check 'P still noted as refused' ($e.Out -cmatch 'refused \[receiver-untyped\]: unresolved reference') "out=$($e.Out)"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
