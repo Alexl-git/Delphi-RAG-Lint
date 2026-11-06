@@ -318,6 +318,8 @@ const
   CUnusedUnitRule = 'unused-unit-in-uses';
   { E18 T15b: the rule whose fix is `cycles --fix` (the tree's two cycle items) }
   CCircularUsesRule = 'circular-uses';
+  { its fix writes through the compile gate (engine: exit 2 without --project), so 'Fix it' names the active project }
+  CRedundantCastRule = 'redundant-cast';
 
 var
   GStructureForm: TDragLintStructureForm = nil;
@@ -1484,6 +1486,22 @@ begin
           [ResolveExePath, FCurrentFile, FixProj, FixDb,
            LowerCase(GetActivePlatformForLibrary), UnitName]),
         CUsesFixTimeoutMs, UnitName);
+      Exit;
+    end;
+    if SameText(ND.Code, CRedundantCastRule) then
+    begin
+      { builds the project before and after and rolls back on an error, so the uses-fix time limit, not 60 s }
+      var CastProj, CastWhy: string;
+      var CastDb: string:= ActiveProjectWriteDb(CastProj, CastWhy);
+      if CastDb = '' then
+      begin
+        DLT('autofix', 'redundant-cast NOT run: ' + CastWhy);
+        Exit;
+      end;
+      RunFixJob(Format('Fix %s line %d', [ND.Code, ND.Line]),
+        Format('"%s" lint --file "%s" --fix --fix-line %d --fix-rule "%s" --project "%s" --db "%s" --platform %s --apply',
+          [ResolveExePath, FCurrentFile, ND.Line, ND.Code, CastProj, CastDb, LowerCase(GetActivePlatformForLibrary)]),
+        CUsesFixTimeoutMs);
       Exit;
     end;
     { --db: a naming fix renames every use the index knows about, and the

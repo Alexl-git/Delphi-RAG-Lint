@@ -59,7 +59,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
-      const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; static;
+      const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -278,7 +278,7 @@ begin
 end;
 
 class function TExprChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@ae41 -- REVIEWED 2026-10-27: gate-fixed checker signature shared by all LINT_GATE_* checkers; these rules need no config
-  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>;  // dl:ok unused-parameter@9a67 -- REVIEWED 2026-10-27: gate-fixed checker signature; pure-AST rules need no symbol store
+  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;  // dl:ok unused-parameter@9a67 -- REVIEWED 2026-10-27: gate-fixed checker signature; pure-AST rules need no symbol store
 var
   PF      : TParsedFile;
   Src     : TBytes;

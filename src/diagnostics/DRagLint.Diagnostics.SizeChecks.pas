@@ -46,7 +46,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
-      const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; static;
+      const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -155,7 +155,7 @@ begin
     Result:= ScalarBytes(AText);
 end;
 class function TSizeChecker.Check(const AFile: string; const ACfg: TLintConfig;
-  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; // dl:ok unused-parameter@9a67 -- AStore and AFileId are fixed by the shared checker-gate signature; this AST-only checker needs no index
+  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; // dl:ok unused-parameter@9a67 -- AStore and AFileId are fixed by the shared checker-gate signature; this AST-only checker needs no index
 var
   PF         : TParsedFile                 ;
   Findings   : TList<TLintFinding>         ;

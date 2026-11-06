@@ -55,7 +55,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
-      const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; static;
+      const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -113,7 +113,7 @@ type
     procedure CheckLoop(const AFor: TTSNode);
     procedure VisitRoutines(const N: TTSNode);
   public
-    constructor Create(const AFile: string; const ASrc: TBytes; const AStore: ISymbolStore; AFileId: Integer);
+    constructor Create(const AFile: string; const ASrc: TBytes; const AStore: ISymbolStore; AFileId: Int64);
     destructor Destroy; override;
     function Run(const ARoot: TTSNode): TArray<TLintFinding>;
   end;
@@ -121,7 +121,7 @@ type
 { ---------------------------------------------------------------- plumbing }
 
 constructor TParityRun.Create(const AFile: string; const ASrc: TBytes; const AStore: ISymbolStore;
-  AFileId: Integer);
+  AFileId: Int64);
 begin
   inherited Create;
   FFile     := AFile;
@@ -733,7 +733,7 @@ end;
 { ------------------------------------------------------- TDeclParityChecker }
 
 class function TDeclParityChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@5416 -- fixed checker signature shared by every gate unit
-  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>;
+  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 var
   PF : TParsedFile;
   Run: TParityRun;

@@ -30,6 +30,7 @@ param(
   [switch]$KeepScratch
 )
 $ErrorActionPreference = 'Stop'
+$UwStart = Get-Date
 $script:Failed = $false
 $script:Passed = 0
 function Check($n, $ok, $d = '') {
@@ -209,6 +210,10 @@ try {
   [IO.File]::AppendAllText("$D\UwRefused.pas", "`r`n{ edited after the index }`r`n")
   $Plan = Invoke-Plan $D 'UwRefused.pas'
   Check '(i) a file edited after the index refuses stale-file' (@($Plan.sites | Where-Object { $_.refusal -ne 'stale-file' }).Count -eq 0 -and $Plan.sites.Count -gt 0) "$($Plan.refused)"
+
+  # (j) int2 1.44.1: a failed apply (rebind-after, gate refusal, nothing-to-apply) names no log, so it leaves no folder.
+  $LeftDirs = @(Get-ChildItem -LiteralPath 'C:\TEMP' -Directory -Filter 'draglint_cyclefix_*_unwith' | Where-Object { $_.CreationTime -ge $UwStart })
+  Check '(j) no log folder is left in C:\TEMP by this run' ($LeftDirs.Count -eq 0) (($LeftDirs | ForEach-Object Name) -join ' ')
 }
 finally {
   $env:UW_HIDDEN = ''

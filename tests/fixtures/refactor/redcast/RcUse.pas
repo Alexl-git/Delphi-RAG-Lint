@@ -76,6 +76,8 @@ var
 begin
   B:= nil; D:= nil; I:= nil; E:= eA; A:= nil; PV:= nil; BX:= nil; Hold:= Self; Dup:= nil; Named:= nil; N:= 0; Cnd:= nil; PR:= nil;
   R.V:= 0;
+  E:= TEn(R.V); // NONE
+  N:= TCnt(R.V); // REFUSE operand-type-unresolved
   B:= TBase(B); // FIX
   R:= TRec(R); // FIX
   I:= IFoo(I); // FIX

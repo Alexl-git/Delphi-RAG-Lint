@@ -141,6 +141,19 @@ try {
     $third = Plan-Json $B
     Check 'A10 the third pass finds nothing left to fix (fixed point)' (($r2.applied -eq $true) -and (@($third.fixes).Count -eq 0)) (@($third.fixes | ForEach-Object cast) -join ' ')
 
+    # the IDE's 'Fix it' (int2 1.44.1): the flags StructureForm.FixItClick builds; without --project it exited 2
+    Write-Host 'the IDE command'
+    $I = New-Project 'ide'
+    $iSrc = [IO.File]::ReadAllLines($I.Use)
+    $iLine = [Array]::IndexOf($iSrc, '  B:= TBase(B); // FIX') + 1
+    $iBase = @('--file', $I.Use, '--fix', '--fix-line', $iLine, '--fix-rule', 'redundant-cast', '--library-db', 'none', '--db', $I.Db, '--apply')
+    & $Exe lint @iBase *> $null
+    Check 'I1 control: the old command, no --project, exits 2 and writes nothing' (($LASTEXITCODE -eq 2) -and ([IO.File]::ReadAllLines($I.Use)[$iLine - 1] -ceq $iSrc[$iLine - 1])) "exit $LASTEXITCODE"
+    & $Exe lint @iBase --project $I.Proj --platform win64 *> $null
+    Check 'I2 with --project it exits 0 and removes that cast' (($LASTEXITCODE -eq 0) -and ([IO.File]::ReadAllLines($I.Use)[$iLine - 1] -ceq '  B:= B; // FIX')) "exit $LASTEXITCODE"
+    $iForm = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\..\src\delphi-plugin\DragLint.Plugin.StructureForm.pas'))
+    Check 'I3 the plugin sends --project for this rule' ($iForm -match 'CRedundantCastRule\) then' -and $iForm.Contains('--fix-rule "%s" --project "%s" --db "%s" --platform %s --apply'))
+
     Write-Host 'rollback'
     $C = New-Project 'broken'
     $cBefore = Tree-Hash $C.Dir

@@ -823,6 +823,11 @@ begin
   begin
     { a name the project does not declare: `Integer(N)` has no cast row at all, so this is its only proof }
     if pTypeId <= 0 then Refuse(Site, 'type-not-indexed', Format('%s is not a type this index holds', [pName]))
+    { TCommandID(Hdr.CommandID): the operand's type has another name than a target that is its own type (enum, class,
+      record, not an alias): not the identity this fix removes, whatever the bare text means. No write either way;
+      a conversion is counted, not refused. A plain alias target stays refused: it could be the operand's very type. }
+    else if not SameText(SymOf(pTypeId).Kind, 'type') and
+      not SameText(OperandQName.Substring(OperandQName.LastIndexOf('.') + 1), pName) then Inc(FNotIdent)
     else Refuse(Site, 'operand-type-unresolved', Format('the type of %s is the bare text %s', [OperandName, OperandQName]));
     Exit;
   end;

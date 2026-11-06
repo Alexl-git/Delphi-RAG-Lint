@@ -19,6 +19,7 @@ type
   end;
   TEn = (eA, eB);
   TAlias = type TBase;
+  TCnt = Cardinal;
   TProc1 = procedure(pX: Integer);
   TBox = class(TBase)
   end;

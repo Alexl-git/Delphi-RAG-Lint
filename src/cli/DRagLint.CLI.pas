@@ -23761,6 +23761,10 @@ begin
   if (Length(AArgs.LibraryDbs) > 0) and SameText(AArgs.LibraryDbs[0], 'none') then LibDb:= ''
   else if LibDb = '' then LibDb:= ResolveLibraryDb(AArgs);
   DropUnreadableLibraryDb(LibDb);
+  { int2 1.44.1: Loader2025 gave 3410 findings against 4210 with its library, and said nothing. --library-db none means it. }
+  if (LibDb = '') and (Length(AArgs.LibraryDbs) = 0) and not (HasSwitch('--quiet') or JsonOutputRequested) then
+    Writeln(ErrOutput, 'drag-lint: warning: no platform library for this run (no drag-lint.json names one, no --library-db): ' +
+      'findings that need library types are dropped. Say --library-db <lib.sqlite>, or --library-db none if that is meant.');
   if ProjectDb = '' then begin EmitStatusLine(AArgs, 'ERROR: no drag-lint index found. Pass --db <index.sqlite> or build the index first.'); Exit (2 ); end;
 
   { Open project store }

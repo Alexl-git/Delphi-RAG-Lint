@@ -48,7 +48,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
-      const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; static;
+      const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -1095,7 +1095,7 @@ begin
 end;
 
 class function TOwnershipChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@1578
-  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>;  // dl:ok unused-parameter@9a67
+  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;  // dl:ok unused-parameter@9a67
 var
   PF  : TParsedFile    ;
   Scan: TOwnershipScan ;

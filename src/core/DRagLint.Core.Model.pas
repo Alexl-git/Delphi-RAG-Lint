@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.44.0-alpha';
+  DRAGLINT_VERSION = '1.44.1-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -443,7 +443,7 @@ const
   /// tests\callresolve\run_inline_var_ctor_bind.ps1, run_nested_outer_local_bind.ps1); a with
   /// target whose surface leaves the index falls through when the library proves it lacks
   /// the name (WITH-SELF-PROP, guard tests\autotest\run_with_self_prop.ps1).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.19.0-alpha';
+  DRAGLINT_RESOLVER_VERSION = '1.20.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

@@ -58,7 +58,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
-      const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; static;
+      const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -732,7 +732,7 @@ begin
 end;
 
 class function TParityExtChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@5fb0 -- REVIEWED 2026-10-27: fixed checker signature shared by every gate (CLI.pas); these rules are same-file and need neither config nor store
-  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>;  // dl:ok unused-parameter@9a67 -- REVIEWED 2026-10-27: fixed checker signature shared by every gate (CLI.pas)
+  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;  // dl:ok unused-parameter@9a67 -- REVIEWED 2026-10-27: fixed checker signature shared by every gate (CLI.pas)
 var
   PF : TParsedFile;
   Run: TParityRun;

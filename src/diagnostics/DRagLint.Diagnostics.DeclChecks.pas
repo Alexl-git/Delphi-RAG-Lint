@@ -53,7 +53,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
-      const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; static;
+      const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -852,7 +852,7 @@ end;
 { ------------------------------------------------------------- TDeclChecker }
 
 class function TDeclChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@7a51 -- fixed checker signature shared by every gate unit
-  const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>;  // dl:ok unused-parameter@9a67 -- AStore/AFileId reserved: rules are same-file AST only
+  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;  // dl:ok unused-parameter@9a67 -- AStore/AFileId reserved: rules are same-file AST only
 var
   PF : TParsedFile;
   Run: TDeclRun;

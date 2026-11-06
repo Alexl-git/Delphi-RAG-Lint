@@ -1560,6 +1560,21 @@ begin
   if TFile.Exists(pDb + '-shm') then TFile.Copy(pDb + '-shm', Result + '-shm', True);  // dl:ok taint-path-traversal@af1c -- REVIEWED 2026-11-05: the path is the user's own --db or a fresh scratch dir; a CLI writing where its user says is the contract
 end;
 
+/// <summary>Deletes the run's log folder, unless a message of this run sends the reader to a file in it.</summary>
+/// <param name="pDir">The folder FreshScratchName gave.</param>
+/// <param name="pDetail">What the run tells the user.</param>
+/// <remarks>Never raises: a log folder that will not go is no reason to fail the verb.</remarks>
+procedure DropUnwithLogs(const pDir, pDetail: string);
+begin
+  if GScratchCited or pDetail.Contains(ExcludeTrailingPathDelimiter(pDir)) then Exit;
+  try
+    if TDirectory.Exists(pDir) then TDirectory.Delete(pDir, True);
+  except
+    on E: EInOutError do ;  // dl:ok empty-except -- leftovers in the scratch root are harmless; see the summary
+    on E: EDirectoryNotFoundException do ;  // dl:ok empty-except -- already gone
+  end;
+end;
+
 function UnwithApply(const pPlans: TArray<TUnwithFilePlan>; const pOpts: TUnwithApplyOptions): TUnwithApplyResult;
 var
   Req: TGateRequest;
@@ -1617,6 +1632,7 @@ begin
   begin
     Result.Refusal:= 'nothing-to-apply';
     Result.Detail:= 'no with statement is a candidate';
+    DropUnwithLogs(Dir, Result.Detail);
     Exit;
   end;
   GGateVerb:= 'unwith';
@@ -1627,6 +1643,7 @@ begin
     Result.Refusal:= Gate.Refusal;
     Result.Detail:= Gate.Detail;
     Result.RollbackFailed:= Gate.RollbackFailed;
+    DropUnwithLogs(Dir, Result.Detail);
     Exit;
   end;
   { The build says it compiles. Now: does it still MEAN the same? }
@@ -1649,7 +1666,7 @@ begin
     on E: ECompileGateCancelled do ProofFailure:= 'cancelled';
     on E: Exception do ProofFailure:= E.ClassName + ': ' + E.Message;
   end;
-  { The copy can be gigabytes: it never outlives the run. The logs stay only when something went wrong. }
+  { The copy can be gigabytes: it never outlives the run. The logs stay only when a message names one (DropUnwithLogs). }
   for var Tail: string in ['', '-wal', '-shm'] do
     System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);
   if (ProofFailure = '') and (Length(Result.Rebinds) = 0) then
@@ -1672,6 +1689,7 @@ begin
       [Length(Result.Rebinds), Result.ProofPoints, Result.Rebinds[0]]);
   end;
   Result.Detail:= Result.Detail + (if Failure = '' then '; rolled back, project not changed' else '; ROLLBACK FAILED: ' + Failure);
+  DropUnwithLogs(Dir, Result.Detail);
 end;
 
 end.
