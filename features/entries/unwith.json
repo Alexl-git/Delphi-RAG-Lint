@@ -61,6 +61,22 @@
       ],
       "helpOrder": 62,
       "help": ["  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json]  - remove with blocks, proved binding by binding"]
+    },
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint --fix --fix-rule with-statement --db <db> --in <f.pas> --apply --project <X.dproj>",
+      "usage": "drag-lint lint --fix --fix-rule with-statement --db <db> [--in <f.pas> [--fix-line <L>]] [--apply --project <X.dproj>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <db>|none] [--no-backup] [--json]",
+      "flags": [
+        { "name": "--fix" },
+        { "name": "--fix-rule", "arg": "with-statement" },
+        { "name": "--db", "arg": "<db>" },
+        { "name": "--in", "arg": "<f.pas>" },
+        { "name": "--fix-line", "arg": "<L>" },
+        { "name": "--apply" },
+        { "name": "--project", "arg": "<X.dproj>" }
+      ],
+      "help": ["  drag-lint lint --fix --fix-rule with-statement --db <db> [--in <f.pas> [--fix-line <L>]] [--apply --project <X.dproj>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <db>|none] [--no-backup] [--json]   - the same as `unwith`: no --apply = --plan"]
     }
   ],
   "audience": "both",

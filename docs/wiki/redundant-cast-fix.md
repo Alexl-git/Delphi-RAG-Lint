@@ -47,3 +47,8 @@ A plain `lint --fix` no longer touches `redundant-cast`: it says so on stderr an
 
 The compile gate: `DRagLint.Refactor.CompileGate`, shared with [`cycles --fix`](Circular-Uses-Report-cycles-fix-plan). Guard:
 `tests\autotest\run_refact_redundant_cast.ps1`.
+
+## Cancel
+
+An `--apply` run listens on the maintenance control channel: `drag-lint shutdown --db <db>` (or the IDE's Cancel) kills the
+build the gate waits on, restores every written file and ends the run with exit 1 and the refusal `cancelled`.

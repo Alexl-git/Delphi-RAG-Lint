@@ -343,12 +343,26 @@ function RollBack(const pTx: TApplyTransaction): string;
 /// prove the rollback on a rewrite that is itself sound.</remarks>
 function ApplyGated(const pReq: TGateRequest): TGateOutcome;
 
+/// <summary>Opens the control channel of a gated `--apply` run, so `drag-lint shutdown` and the IDE's Cancel
+/// reach it while it waits on a build (E-NARROW-CHANNEL).</summary>
+/// <param name="pVerb">The verb hosting the run; must be one ControlChannelEnabledFor accepts.</param>
+/// <param name="pDb">The run's --db; the channel answers `shutdown --db` for it.</param>
+/// <returns>True when the channel listens (GStandDown is set). False when the verb does not listen or the
+/// pipe could not start (said on stderr: a cancel then kills the run instead of rolling it back).</returns>
+/// <remarks>Main thread only. Pair with CloseGateStandDown in a finally. A request taken while ApplyGated
+/// builds kills the build and rolls back: ApplyGated returns Refusal = CGateCancelled.</remarks>
+function OpenGateStandDown(const pVerb, pDb: string): Boolean;
+
+/// <summary>Closes the channel OpenGateStandDown opened; a pending or taken request is answered `exiting`.</summary>
+/// <remarks>Safe when no channel is open. Call after the run's files are rolled back or kept.</remarks>
+procedure CloseGateStandDown;
+
 implementation
 
 uses
   System.IOUtils, System.StrUtils, System.RegularExpressions, System.Diagnostics, System.Math,
   System.Generics.Collections,
-  DRagLint.Convert.Backup, DRagLint.Core.StudioEnv, DRagLint.Refactor.TextEdit;
+  DRagLint.Convert.Backup, DRagLint.Core.StudioEnv, DRagLint.Core.Model, DRagLint.Refactor.TextEdit;
 
 const
   CDefaultPlatform = 'win64';
@@ -1050,5 +1064,29 @@ begin
   end;
   Result:= Outcome;
 end;
+function OpenGateStandDown(const pVerb, pDb: string): Boolean;
+begin
+  Result:= False;
+  if (GStandDown <> nil) or not ControlChannelEnabledFor(pVerb) then Exit;
+  var Ctl:= TControlChannel.Create([ExpandFileName(pDb)], DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, pVerb);
+  var Err: string;
+  if Ctl.Start(Err) then
+  begin
+    GStandDown  := Ctl;
+    GCancelTaken:= False;
+    GProgressDb := ExpandFileName(pDb); { the progress lines name the shutdown --db that cancels the run }
+    Exit(True);
+  end;
+  Writeln(ErrOutput, pVerb, ': control channel NOT started (', Err, '); a cancel will kill this run instead of rolling it back');
+  Ctl.Free;
+end;
 
+procedure CloseGateStandDown;
+begin
+  if GStandDown = nil then Exit;
+  var Ctl:= GStandDown;
+  GStandDown:= nil;
+  Ctl.StandDownComplete;
+  Ctl.Free;
+end;
 end.

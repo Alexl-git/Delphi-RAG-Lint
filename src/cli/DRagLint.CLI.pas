@@ -1021,6 +1021,7 @@ end;
 // these helpers that are defined later in the file.
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
+function DoUnwith(const AArgs: TArgs): Integer; forward;
 procedure AutoCreateMissingProjectDb(const AArgs: TArgs; const AProjDb: string); forward;
 function ManifestStartDir(const AProjectPath: string): string; forward;
 function LoadManifestForProject(const AEngineDir, AProjectPath: string): TIndexManifest; forward;
@@ -1044,6 +1045,7 @@ const
     library". Shared by DoLint, DoLintAll and LintUnevaluatedRules. }
   UNIT_NOT_IN_LIBRARY_RULE_ID = 'unit-not-in-library';
   REDUNDANT_CAST_RULE_ID = 'redundant-cast';
+  WITH_STATEMENT_RULE_ID = 'with-statement';
 
 { Forward: DoLint and DoLintAll run unit-not-in-library; it is implemented beside
   DoReconcileProject, whose analysis it reuses. }
@@ -16932,7 +16934,13 @@ begin
   var Ok: Boolean;
   var Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
-  Result:= RunRedundantCastFix(Store, RefactorLibraries(AArgs), Opts);
+  { E-NARROW-CHANNEL: an --apply run listens, so shutdown / Cancel stop its build and roll it back. }
+  if Opts.Apply then OpenGateStandDown('redundant-cast', AArgs.DbPath);
+  try
+    Result:= RunRedundantCastFix(Store, RefactorLibraries(AArgs), Opts);
+  finally
+    CloseGateStandDown;
+  end;
 end;
 
 { lane 144 item 2: narrow-param }
@@ -16955,9 +16963,92 @@ begin
   var Ok: Boolean;
   var Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
-  Result:= RunNarrowParam(Store, RefactorLibraries(AArgs), Opts);
+  { E-NARROW-CHANNEL: an --apply run listens, so shutdown / Cancel stop its build and roll it back. }
+  if Opts.Apply then OpenGateStandDown('narrow-param', AArgs.DbPath);
+  try
+    Result:= RunNarrowParam(Store, RefactorLibraries(AArgs), Opts);
+  finally
+    CloseGateStandDown;
+  end;
 end;
 
+/// <summary>Writes a verb's text edits through the compile gate (E-COMPILEGATE-ADOPT): baseline build,
+/// all-or-nothing write under backups, after build, rollback on a compile error.</summary>
+/// <param name="AEdits">The verb's edits, any number of files.</param>
+/// <param name="AVerb">The verb the progress lines and the backup header name.</param>
+/// <param name="AArgs">Parsed CLI args: --project (the .dproj the gate builds), --platform, --rsvars,
+/// --build-timeout, --no-backup.</param>
+/// <param name="ATouched">Files written; 0 when refused.</param>
+/// <returns>True when the project builds with the edits applied (and they are on disk); False when refused, the
+/// reason is on stderr and nothing is changed.</returns>
+/// <remarks>Used only when --apply AND --project are given. Without --project the verb writes as it always did, with
+/// no build: the gate is opt-in because a verb that never needed a project must keep working without one.</remarks>
+function ApplyEditsGated(const AEdits: TArray<TTextEdit>; const AVerb: string; const AArgs: TArgs; out ATouched: Integer): Boolean;
+begin
+  ATouched:= 0;
+  var Req:= Default(TGateRequest);
+  var ByFile:= TObjectDictionary<string, TList<TTextEdit>>.Create([doOwnsValues]);
+  try
+    try
+      for var E in AEdits do
+      begin
+        var Rows: TList<TTextEdit>;
+        if not ByFile.TryGetValue(E.FilePath, Rows) then
+        begin
+          Rows:= TList<TTextEdit>.Create;
+          ByFile.Add(E.FilePath, Rows);
+        end;
+        Rows.Add(E);
+      end;
+      for var Pair in ByFile do
+      begin
+        var Text: string;
+        var Fmt:= TTextFileFormat.ReadFile(Pair.Key, Text);
+        var GF: TGateFile;
+        GF.Path := ExpandFileName(Pair.Key);
+        GF.Bytes:= Fmt.Encode(TTextEditApplier.ApplyToText(Pair.Key, Text, Pair.Value.ToArray));
+        Req.Files:= Req.Files + [GF];
+      end;
+    except
+      on Ex: Exception do
+      begin
+        Writeln(ErrOutput, 'REFUSED (', CGateWriteFailed, '): ', AVerb, ': the rewrite could not be computed: ', Ex.Message, '; nothing written');
+        Exit(False);
+      end;
+    end;
+  finally
+    ByFile.Free;
+  end;
+  if AArgs.CycleRsVars <> '' then Req.RsVars:= ExpandFileName(AArgs.CycleRsVars);
+  var Secs:= StrToIntDef(AArgs.CycleBuildTimeout, 0);
+  GBuildTimeoutMs:= if Secs <= 0 then INFINITE else Cardinal(Secs) * MSecsPerSec;
+  Req.Project := ExpandFileName(AArgs.ProjectPath);
+  Req.Platform:= AArgs.CheckPlatform;
+  Req.Verb    := AVerb;
+  Req.NoBackup:= AArgs.NoBackup;
+  Req.Header  := Format('[%s] %s --apply: %d edit(s)', [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), AVerb, Length(AEdits)]);
+  Req.LogDir  := FreshScratchName('_build');
+  var Gate:= ApplyGated(Req);
+  try
+    if not GScratchCited and TDirectory.Exists(Req.LogDir) then TDirectory.Delete(Req.LogDir, True);  // dl:ok taint-path-traversal@a3c1 -- LogDir is FreshScratchName's: a folder this run made under C:\TEMP
+  except
+    on EInOutError do Writeln(ErrOutput, 'drag-lint: note: scratch not deleted: ', Req.LogDir);  // best effort: a locked log must not change the result
+  end;
+  Result:= Gate.Applied;
+  if Result then ATouched:= Length(Gate.Tx.Written)
+  else Writeln(ErrOutput, 'REFUSED (', Gate.Refusal, '): ', AVerb, ': ', Gate.Detail);
+end;
+{ E-UNWITH-LINTFIX: `lint --fix --fix-rule with-statement` does not lint: it is `unwith`, which proves each
+  `with` binding from the index and writes through the compile gate. No --apply = `unwith --plan`;
+  --apply needs --project and --db, as unwith does. A file TARGET narrows to `--in`, --fix-line to `--line`. }
+function DoUnwithFix(const AArgs: TArgs): Integer;
+begin
+  var U:= AArgs;
+  U.Plan:= not AArgs.Apply;
+  if (U.InFile = '') and (AArgs.Target <> '') and TFile.Exists(AArgs.Target) then U.InFile:= AArgs.Target;
+  if AArgs.FixLine > 0 then U.RefLine:= AArgs.FixLine;
+  Result:= DoUnwith(U);
+end;
 { O2 (1.45): the type oracle for the .scm rules of `lint <file>`, which run BEFORE the flow store below
   is opened. Same membership rule as that block (the --db first, then ResolveConsumerDbs, the
   index must CONTAIN the file), a second read-only open. nil when no index owns the file: the
@@ -17022,6 +17113,7 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
   if AArgs.Fix and SameText(AArgs.FixRule, REDUNDANT_CAST_RULE_ID) then Exit(DoRedundantCastFix(AArgs));
+  if AArgs.Fix and SameText(AArgs.FixRule, WITH_STATEMENT_RULE_ID) then Exit(DoUnwithFix(AArgs));
   if not ApplyRunTargetCompiler(AArgs, LoadLintConfig(AArgs).TargetCompiler) then Exit(2);
   TraceLintChecker('setup');
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
@@ -22411,7 +22503,22 @@ begin
   end;
 
   Applied:= AArgs.Apply and (Res.Action = ehaBuilt) and (Length(Res.Edits) > 0);
-  if Applied then TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
+  var GateRefused:= False;
+  if Applied then
+  begin
+    var Touched: Integer;
+    if AArgs.ProjectPath <> '' then
+    begin
+      OpenGateStandDown('create-enum-helper', AArgs.DbPath);
+      try
+        Applied:= ApplyEditsGated(Res.Edits, 'create-enum-helper', AArgs, Touched);
+      finally
+        CloseGateStandDown;
+      end;
+      GateRefused:= not Applied;
+    end
+    else TTextEditApplier.Apply(Res.Edits, not AArgs.NoBackup);
+  end;
 
   if AArgs.AsJson then
   begin
@@ -22426,7 +22533,7 @@ begin
     finally
       O.Free;
     end; // try
-    if Res.Action <> ehaBuilt then Exit(1);
+    if (Res.Action <> ehaBuilt) or GateRefused then Exit(1);
     Exit(0);
   end; // if
 
@@ -22435,6 +22542,7 @@ begin
     Writeln(ErrOutput, Format('REFUSED: %s', [Res.Message]));
     Exit(1);
   end;
+  if GateRefused then Exit(1);  { the compile gate refused: said on stderr, nothing written }
 
   if not AArgs.Apply then
   begin
@@ -22726,7 +22834,12 @@ begin
     Writeln(Format('Dry run: extract "%s". Pass --apply to write.', [AArgs.Name]));
     Exit(0);
   end;
-  var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
+  var Touched: Integer;
+  if AArgs.ProjectPath <> '' then
+  begin
+    if not ApplyEditsGated(Edits, 'extract-method', AArgs, Touched) then Exit(1);
+  end
+  else Touched:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
   Writeln(Format('Applied: extracted "%s" (%d file).', [AArgs.Name, Touched]));
   Result:= 0;
 end; // function

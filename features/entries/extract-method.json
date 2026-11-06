@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "extract-method",
-      "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] - pull a statement run into a new method",
+      "usage": "drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - pull a statement run into a new method",
       "flags": [
         {
           "name": "--in",
@@ -31,6 +31,22 @@
           "arg": "<N>"
         },
         {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--platform",
+          "arg": "<p>"
+        },
+        {
+          "name": "--rsvars",
+          "arg": "<bat>"
+        },
+        {
+          "name": "--build-timeout",
+          "arg": "<s>"
+        },
+        {
           "name": "--json"
         },
         {
@@ -41,7 +57,7 @@
         }
       ],
       "helpOrder": 61,
-      "help": ["  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method"]
+      "help": ["  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - pull a statement run into a new method"]
     },
     {
       "type": "ide-menu",
