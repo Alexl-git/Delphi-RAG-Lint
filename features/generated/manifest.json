@@ -3959,7 +3959,7 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "1.44.1-alpha",
-      "summary": "Project lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows and three more; sharper redundant-cast and unsafe casts",
+      "summary": "Lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows, UI access from a thread; sharper redundant-cast and unsafe casts",
       "intro": "Read this to see which rules stand on ref_types, what each reports and what keeps it silent. They run in lint-all and lint-project over a 1.44 index.",
       "wikiPage": "ref-type-rules",
       "surfaces": [
@@ -18227,7 +18227,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "UI access inside a TThread.Execute (not thread-safe) (bug-patterns, warning)",
+        "summary": "UI access (.Caption :=, .SetFocus, Application.ProcessMessages, ...) in thread code named in the same file: Execute of a class whose... (bug-patterns, warning)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -18259,6 +18259,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "ui-access-in-thread-transitive"
+      },
+      {
+        "id": "rule.ui-access-in-thread-typed",
+        "title": "ui-access-in-thread-typed",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Thread code (Execute of any TThread descendant, a lambda or routine passed to TThread.CreateAnonymousThread, TTask.Run/Create/Future,... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule ui-access-in-thread-typed"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "ui-access-in-thread-typed"
       },
       {
         "id": "rule.unbalanced-begin-end",

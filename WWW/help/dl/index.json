@@ -914,7 +914,7 @@
   {
     "id": "ref-type-rules",
     "title": "Lint rules on the static type of a reference",
-    "summary": "Project lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows and three more; sharper redundant-cast and unsafe casts",
+    "summary": "Lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows, UI access from a thread; sharper redundant-cast and unsafe casts",
     "group": "linting",
     "order": 30031,
     "since": "1.44.1-alpha",

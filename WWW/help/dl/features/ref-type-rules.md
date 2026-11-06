@@ -1,7 +1,7 @@
 ---
 id: ref-type-rules
 title: Lint rules on the static type of a reference
-summary: "Project lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows and three more; sharper redundant-cast and unsafe casts"
+summary: "Lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows, UI access from a thread; sharper redundant-cast and unsafe casts"
 product: DL
 group: linting
 order: 30031
@@ -12,7 +12,7 @@ updated: 1.44.1-alpha
 
 # Lint rules on the static type of a reference
 
-Project lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows and three more; sharper redundant-cast and unsafe casts.
+Lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows, UI access from a thread; sharper redundant-cast and unsafe casts.
 
 Read this to see which rules stand on ref_types, what each reports and what keeps it silent. They run in lint-all and lint-project over a 1.44 index.
 
@@ -54,6 +54,26 @@ drag-lint lint-all --db <project.sqlite> --rule argument-narrows
 | `argument-narrows` | ON | A variable, field or function result passed to a narrower by-value numeric parameter of a project routine |
 | `redundant-cast` | ON | Also `T(a.b)`, `T(F(x))` and `x as T`; the index overrules the per-file type map for `T(x)` |
 | `unsafe-typecast-without-is` | OFF | Also `T(a.b)` and `T(F(x))`; with a row in `ref_types` the rule fires only when both ends are classes and the cast narrows |
+
+| `ui-access-in-thread-typed` | OFF | Thread code reads, writes or calls a member of a receiver whose static type is a UI class, directly or over resolved calls; see below |
+
+### `ui-access-in-thread-typed`
+
+The typed answer to "does a thread touch the VCL". `ui-access-in-thread` (lexical, no index) and
+`ui-access-in-thread-transitive` (`ui_affinity`) keep their ids, so their `dl:ok` markers stay valid.
+
+| Question | Answer |
+|---|---|
+| Thread code | `Execute` of any `TThread` descendant through the indexed ancestry; a lambda or named routine passed to `TThread.CreateAnonymousThread`, `TTask.Run`, `TTask.Create`, `TTask.Future` or `TParallel.For` |
+| UI classes | Descendants of `TControl`, `TCustomForm`, `TFmxObject`; `TApplication` and `TScreen`. `Application` and `Screen` count as globals when unbound and the unit names a Forms unit but not `SvcMgr` or `WebBroker` |
+| What fires | `Label1.Caption := x`, `if Label1.Visible`, `Label1.Hide`, `TLabel(x).Hide`, `TLabel.Create(nil)`, `Memo1.Lines.Add` (because of `Memo1`), and a bare `Caption` or `Close` in a form's own lambda or method when the library declares it on a UI class |
+| Over calls | Up to 5 certain call edges; the finding sits on the call in the thread code and prints the path and the first access |
+| Safe | The arguments of `Synchronize`, `Queue`, `ForceQueue`; a body naming `MainThreadID` or `CurrentThread`; a called routine naming `Synchronize` or `Queue` (taken to marshal itself) |
+| Silent | An untyped receiver, a subscript, a `with` body, a stored lambda; a member the project declares (a plain field of a form; its methods are followed as calls); `Tag`, `Name`, `ClassName` and the other `TObject` / `TComponent` data; `Application.Terminated`, `ExeName`, `Handle` |
+| Not UI here | `TStrings`, `TBitmap`, `TCanvas`, menus: `Lst.Add`, `Bmp.Canvas` stay silent. A `TStrings` held apart from its control has no type that names the control |
+
+It needs the library index for the ancestry: without it only `Application` and `Screen` answer.
+A project class named `TControl`, `TTask` or the like silences that name for the whole index.
 
 ### What keeps a rule silent
 
