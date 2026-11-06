@@ -4547,7 +4547,7 @@ var
         if U.Kind <> skUnit then Continue;
         AFound:= True;
         Fp:= AFrom.GetMetaValue(CResolverKey);
-        if Pos(CResolverLimb, Fp) <> 1 then Exit;
+        if not Fp.StartsWith(CResolverLimb) then Exit;
         Ver:= Copy(Fp, Length(CResolverLimb) + 1, MaxInt);
         if Pos(';', Ver) > 0 then Ver:= Copy(Ver, 1, Pos(';', Ver) - 1);
         if (Ver = '') or (CompareDottedVersions(Ver, CMinSectionResolver) < 0) then Exit;
@@ -4571,7 +4571,7 @@ var
           end
           else if MatchText(R.NameText, ['True', 'False', 'nil']) then Continue;
           Active:= True;
-          if Pos(',' + LowerCase(R.NameText) + ',', ',' + LowerCase(Names) + ',') = 0 then
+          if not (',' + LowerCase(Names) + ',').Contains(',' + LowerCase(R.NameText) + ',') then
             Names:= if Names = '' then R.NameText else Names + ',' + R.NameText;
         end;
         Result:= if Active then Names else '#';
@@ -5000,7 +5000,7 @@ begin
                   even informational: the unit is excluded outright (D3). }
                 if UnitHasSideEffectSection(U.UnitName, HasInit) and not HasInit then Continue;
                 var InitInfo: string:= if HasInit then InitSectionInfo(U.UnitName) else '';
-                if HasInit and (InitInfo <> '#') then UF.Severity:= 'info' else UF.Severity:= 'warning';
+                UF.Severity:= if HasInit and (InitInfo <> '#') then 'info' else 'warning';
                 if InitInfo = '#' then
                   UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Its initialization section only assigns the unit''s own variables and constants (no registration, no call), so removing it changes nothing.', [U.UnitName])
                 else if HasInit then
