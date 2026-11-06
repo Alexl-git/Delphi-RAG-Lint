@@ -3667,6 +3667,20 @@ var
     Aliased : TDictionary<string, string>;  { X (lower) -> X's original-case source text, aliased into an interface var }
     FreedAt : TDictionary<string, TTSNode>; { X (lower) -> the manual-free node (fire site) }
 
+    { 1.45 la (row 20): True only when index fact F1 types X and the ancestry says it is a TComponent,
+      a TNoRefCountObject or a TSingletonImplementation: such an object ignores _AddRef/_Release, so an
+      interface alias of it plus a manual Free is no dual handle. No store, no table, no row or an
+      ancestry that does not name one of them: False, the finding stands. }
+    function IsNonRefCounted(const AX: TTSNode): Boolean;
+    var
+      Leaf: string;
+    begin
+      Result:= False;
+      if (Reader = nil) or not Reader.TypeLeafOf(AX, Leaf) then Exit;
+      Result:= (Reader.Descends(Leaf, 'TComponent') = tdYes) or (Reader.Descends(Leaf, 'TNoRefCountObject') = tdYes)
+               or (Reader.Descends(Leaf, 'TSingletonImplementation') = tdYes);
+    end;
+
     { 'I := X' / 'I := X as ISomething' where I is interface-typed and X is a
       simple class-typed identifier -> record X (lower key, original-case
       value) in Aliased. }
@@ -3703,7 +3717,8 @@ var
             Xn:= LowerCase(NodeStr(Src2));
             { X must be a declared CLASS-typed local (an object handle), not itself
               an interface -- that is what makes it a genuine dual handle. }
-            if TypeMap.TryGetValue(Xn, TX) and LooksLikeClassType(TX) and (not TypeTextIsInterface(TX)) then
+            if TypeMap.TryGetValue(Xn, TX) and LooksLikeClassType(TX) and (not TypeTextIsInterface(TX))
+               and not IsNonRefCounted(Src2) then
               Aliased.AddOrSetValue(Xn, NodeStr(Src2));
           end;
         end;

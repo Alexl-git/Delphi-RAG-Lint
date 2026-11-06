@@ -59,7 +59,7 @@ try {
   $have = @(& $exePath sql --db $db --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1) -join ' '
   Check 'the fixture DB has the ref_types table' ($have -match '\b1 row') $have
 
-  $ruleArgs = @('--enable', 'string-equality-comparison,exhaustive-enum-case')
+  $ruleArgs = @('--enable', 'string-equality-comparison,exhaustive-enum-case,interface-object-mixing')
   $on  = Parse-Findings (& $exePath lint-all --db $db --format json @ruleArgs 2>$null)
   $off = Parse-Findings (& $exePath lint-all --db $old --format json @ruleArgs 2>$null)
   $nod = Parse-Findings (& $exePath lint $file --format json @ruleArgs 2>$null)
@@ -94,7 +94,14 @@ try {
   Check 'dataset-open has a trigger and a control in the fixture' (($dTrig.Count -gt 0) -and ($dCtl.Count -gt 0))
   Check 'dataset-open without the table: today, the CONTROL lines are reported too' ((@(DsLines $off) -join ',') -eq ($dAll -join ',')) "got [$(@(DsLines $off) -join ',')]"
   $nodDs = Parse-Findings (& $exePath lint (Join-Path $src 'uAfDs.pas') --format json 2>$null)
-  Check 'dataset-open without an index: today, the CONTROL lines are reported too' ((@(DsLines $nodDs) -join ',') -eq ($dAll -join ',')) "got [$(@(DsLines $nodDs) -join ',')]"} finally {
+  Check 'dataset-open without an index: today, the CONTROL lines are reported too' ((@(DsLines $nodDs) -join ',') -eq ($dAll -join ',')) "got [$(@(DsLines $nodDs) -join ',')]"  # row 20, interface-object-mixing: a non-reference-counted class aliased into an interface is no dual handle
+  $mFile = Join-Path $src 'uAfMix.pas'
+  $mTrig = @(Markers $mFile 'TRIGGER-MIX'); $mCtl = @(Markers $mFile 'CONTROL-MIX')
+  function MixLines($F) { return @($F | Where-Object { $_.rule -eq 'interface-object-mixing' -and $_.file_path -like '*uAfMix*' } | ForEach-Object { [int]$_.start_line } | Sort-Object) }
+  $mAll = @(($mTrig + $mCtl) | Sort-Object)
+  Check 'interface-object-mixing with the table: only the TRIGGER-MIX line' ((@(MixLines $on) -join ',') -eq ($mTrig -join ',')) "got [$(@(MixLines $on) -join ',')] want [$($mTrig -join ',')]"
+  Check 'interface-object-mixing has a trigger and a control in the fixture' (($mTrig.Count -gt 0) -and ($mCtl.Count -gt 0))
+  Check 'interface-object-mixing without the table: today, the CONTROL line is reported too' ((@(MixLines $off) -join ',') -eq ($mAll -join ',')) "got [$(@(MixLines $off) -join ',')]"} finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
 }
 if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }
