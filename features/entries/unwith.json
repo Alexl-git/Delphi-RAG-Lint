@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "unwith",
-      "usage": "drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json] - remove with blocks, proved binding by binding",
+      "usage": "drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json] - remove with blocks, proved binding by binding",
       "flags": [
         {
           "name": "--db",
@@ -60,7 +60,7 @@
         }
       ],
       "helpOrder": 62,
-      "help": ["  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json]  - remove with blocks, proved binding by binding"]
+      "help": ["  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json]  - remove with blocks, proved binding by binding"]
     }
   ],
   "audience": "both",
@@ -79,6 +79,6 @@
     "date": "2026-11-06",
     "by": "ENGINE",
     "build": "1.44.1-alpha",
-    "surfaceHash": "98d5f22687a6e8f41827b525898c426ccdbbd804c1638d3976ea78ace8e2eba8"
+    "surfaceHash": "7426434ce539017495092f70912a8e63770ae77871211fdb0ad321085b89dd0c"
   }
 }

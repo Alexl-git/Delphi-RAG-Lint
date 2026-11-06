@@ -136,7 +136,8 @@ Check '2 the frame writes no source file itself (the engine owns the edit)' `
 # BOTH command lines, COUNTED -- not one regex that either could satisfy.
 # The RED sweep caught this: dropping --only from the uses-fix arm alone left
 # the check green, because the reconcile-project arm still matched.
-$onlyArms = ([regex]::Matches($src, '--only %s --apply')).Count
+# Only the Format() calls count: a doc comment quoting the command line (e759dca9) is not an arm.
+$onlyArms = ([regex]::Matches($src, 'Format\(''[^''\r\n]*--only %s --apply')).Count
 Check '2b BOTH apply command lines pass the ticked names as --only' `
   ($onlyArms -eq 2) `
   "found $onlyArms of 2 -- without --only that button applies EVERYTHING regardless of what was ticked"

@@ -19,7 +19,7 @@
     1. Ping's "Called from:" names UsePing (positive control: the line exists
        and is read).
     2. ... names 'main block (app.dpr)' for the .dpr call.
-    3. ... names 'initialization/finalization (uBody.pas)' for the unit call.
+    3. ... names 'uBody.initialization (uBody.pas)' for the unit call: since RESOLVER 1.20.0 the section is a symbol.
     4. ... does NOT name 'declaration' (the defect; RED before the fix).
     5. TRec's "Used by:" still names 'declaration' (B11 is kept for a type --
        positive control that the fix did not just delete the word).
@@ -115,8 +115,8 @@ $used   = ([regex]::Match($rec,  'Used by:[^\r\n]*')).Value
 Write-Host 'Ping: a call with no enclosing routine is not a declaration' -ForegroundColor Cyan
 Check 'Called from: names UsePing (positive control)' ($called -match '\bUsePing\b') $called
 Check 'Called from: names main block (app.dpr)' ($called -match 'main block \(app\.dpr\)') $called
-Check 'Called from: names initialization/finalization (uBody.pas)' `
-  ($called -match 'initialization/finalization \(uBody\.pas\)') $called
+Check 'Called from: names uBody.initialization (uBody.pas)' `
+  ($called -match 'uBody\.initialization \(uBody\.pas\)') $called
 Check 'Called from: does NOT name declaration' (-not ($called -match '\bdeclaration\b')) $called
 Write-Host 'TRec: a declaration-position use still reads declaration (B11 kept)' -ForegroundColor Cyan
 Check 'Used by: names declaration (uBody.pas)' ($used -match 'declaration \(uBody\.pas\)') $used

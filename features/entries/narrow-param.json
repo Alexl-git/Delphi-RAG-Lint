@@ -13,7 +13,7 @@
       "type": "cli",
       "verb": "narrow-param",
       "example": "drag-lint narrow-param --routine <QName> --plan --db <db>",
-      "usage": "drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]",
+      "usage": "drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
       "flags": [
         {
           "name": "--routine",
@@ -67,7 +67,7 @@
           "arg": "json"
         }
       ],
-      "help": ["  drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]   - retype a class parameter to the deepest ancestor its uses need: static proof, every refusal named, --apply through the compile gate"]
+      "help": ["  drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - retype a class parameter to the deepest ancestor its uses need: static proof, every refusal named, --apply through the compile gate"]
     }
   ],
   "audience": "both",
@@ -75,6 +75,6 @@
     "date": "2026-11-06",
     "by": "ENGINE",
     "build": "1.44.1-alpha",
-    "surfaceHash": "715d68829ac54d76c933572e8ac230ad28f12709c53947b5b5d153e44e53f040"
+    "surfaceHash": "b490a52384bb1cb7fb000bf7cc26c2dcfdf39c0accb20e5489fe4195dd66e2e0"
   }
 }

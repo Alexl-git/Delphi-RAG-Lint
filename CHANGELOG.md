@@ -23,7 +23,7 @@ breaking changes** until v2.0.
 
 ### Changed
 - `rename`: every occurrence is proved. `--apply` refuses, by name, what it cannot decide, checks the new name for capture and shadowing, renames a method with its overloads, overrides and implementers, and writes only through the compile gate. `--plan [--json]` reports it.
-- References inside initialization / finalization now belong to the section symbol, so `call-path --from <Unit>.initialization` works and a dotted receiver in a section types.
+- References inside initialization / finalization now belong to the section symbol, so `call-path --from <Unit>.initialization` works and a dotted receiver in a section types. A generated doc body's `Called from:` names `uBody.initialization` where it said `initialization/finalization`.
 - `redundant-cast` also reports `T(a.b)`, `T(F(x))` and `x as T`. `unsafe-typecast-without-is` (OFF) also reports `T(a.b)` and `T(F(x))`, and no longer reports record casts or upcasts when the operand has a `ref_types` row.
 - `lint-all` with no platform library says so on one stderr line (not with `--quiet`, `--json` or an explicit `--library-db none`): a run with no `drag-lint.json` beside the engine silently lost findings (Loader2025: 3410 against 4210).
 

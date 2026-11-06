@@ -1254,7 +1254,7 @@ Described in [migrate-dbs](../../docs/wiki/migrate-dbs.md).
 Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate.
 
 ```text
-drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]
+drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1839,7 +1839,7 @@ Described in [Type at Cursor](../../docs/wiki/Type-at-Cursor.md).
 Removes with blocks, proving every name binds to what it bound before.
 
 ```text
-drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json] - remove with blocks, proved binding by binding
+drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json] - remove with blocks, proved binding by binding
 ```
 
 | Flag | Argument | Meaning | Default |
