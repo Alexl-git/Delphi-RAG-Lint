@@ -5,8 +5,8 @@
   "owner": "LSP",
   "status": "shipped",
   "since": "1.33.0-alpha",
-  "summary": "Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index",
-  "intro": "Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens and parameter hints, all answered from the index. Tokens and hints come from a parse of the preprocessed text, so code in an inactive {$IFDEF} branch gets none, and rename never edits it. The defines are those of the file's own project's active build.",
+  "summary": "Answers outline, implementation, rename, code lens, semantic tokens, inlay hints, call and type hierarchy, type definition, highlights, folding and commands from the index",
+  "intro": "Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens, parameter hints, call and type hierarchy, go to type definition and same-file highlights, all answered from the index (folding comes from a parse and needs no index). Tokens and hints come from a parse of the preprocessed text, so code in an inactive {$IFDEF} branch gets none, and rename never edits it. The defines are those of the file's own project's active build.",
   "wikiPage": "lsp-proxy-merge",
   "surfaces": [
     {
@@ -36,6 +36,42 @@
     {
       "type": "lsp",
       "method": "textDocument/inlayHint"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/prepareCallHierarchy"
+    },
+    {
+      "type": "lsp",
+      "method": "callHierarchy/incomingCalls"
+    },
+    {
+      "type": "lsp",
+      "method": "callHierarchy/outgoingCalls"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/prepareTypeHierarchy"
+    },
+    {
+      "type": "lsp",
+      "method": "typeHierarchy/supertypes"
+    },
+    {
+      "type": "lsp",
+      "method": "typeHierarchy/subtypes"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/typeDefinition"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/documentHighlight"
+    },
+    {
+      "type": "lsp",
+      "method": "textDocument/foldingRange"
     },
     {
       "type": "lsp",
