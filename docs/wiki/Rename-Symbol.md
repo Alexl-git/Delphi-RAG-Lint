@@ -48,6 +48,8 @@ A method renames with its overloads, overrides and interface implementers, all o
 is checked: a bare `Helper` that bound to a global would bind to a member renamed to `Helper` inside its class, and that
 compiles. So would a call renamed to a name a local of that routine already has.
 
+A symbol declared inside a routine (a local, a parameter, a local constant or type, a nested routine) is proved inside that routine, in every form of the verb: no other unit can name it or capture the new name, and no library is needed. A parameter's implementation header renames with its declaration. Any bare occurrence of the new name in the routine, a declaration included, refuses (`capture-local`); so does an `{$I}` inside the routine (`no-ref-occurrence`), because included text holds no refs.
+
 | refusal | why |
 |---|---|
 | `receiver-untyped` | an unbound ref whose receiver has no typed ref: `A[i].X`, a chain over lines, a library-only cast |
@@ -62,7 +64,7 @@ compiles. So would a call renamed to a name a local of that routine already has.
 | `new-name-collides`, `new-name-in-library` | the new name meets a member of the class family, a unit-level symbol, or the library |
 | `capture-bare`, `capture-unbound`, `capture-no-ref`, `capture-in-with` | an occurrence of the new name could bind to the renamed symbol |
 | `shadowed-at-site`, `shadowed-in-with` | something nearer answers to the new name at a renamed site |
-| `with-undecided`, `with-needs-index`, `capture-local` | `--kind param`: an occurrence under a `with`, or a routine already using the name |
+| `with-undecided`, `with-needs-index`, `capture-local` | a routine's local: an occurrence under a `with`, or a routine already using the name |
 | `no-facts` | the index predates `ref_receivers`: run `index --resolve-only` |
 | `no-project`, `no-compile` | a write needs the compile gate |
 

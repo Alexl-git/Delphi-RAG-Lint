@@ -142,7 +142,9 @@ type
 /// <remarks>Reads every source file the index lists that holds either name. Writes nothing. Identity needs a
 /// `type_symbol_id`: a NULL, a missing row or an unresolved ancestor is a refusal, never a guess. A chain that reaches a
 /// library type ends there: a library class cannot descend from a project class (refused when the target's qualified
-/// name is in the library too).</remarks>
+/// name is in the library too). A symbol declared inside a routine (a local, a parameter, a local constant or type, a
+/// nested routine) is scoped: only the owning routine's own lines are read, no other unit can name it or capture the new
+/// name, and any bare occurrence of the new name in those lines refuses as CRefuseCaptureLocal. No library is needed.</remarks>
 function ProveRename(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
   const pQName, pNewName: string): TRenameProof;
 
@@ -196,6 +198,7 @@ uses
   System.StrUtils,
   System.Math,
   System.JSON,
+  System.RegularExpressions,
   System.Generics.Collections,
   System.Generics.Defaults,
   Data.DB,
@@ -226,12 +229,13 @@ const
   CRootClass      = 'TObject';
   CNotLocal       = '''' + CKindParam + ''', ''' + CKindLocal + '''';
   CTypeKinds      = '''class'', ''form'', ''interface'', ''record'', ''type'', ''object''';
+  CRoutineKinds: array[0..4] of string = (CKindMethod, 'procedure', 'function', 'constructor', 'destructor');
 
 type
   TSymRow = record
     Id, FileId, ParentId: Int64;
     Kind, Name, QName, Modifiers, Directives: string;
-    Line, Col, ImplLine: Integer;
+    Line, Col, EndLine, ImplLine, ImplEndLine: Integer;
     VisExplicit: Boolean;
   end;
 
@@ -246,6 +250,12 @@ type
 
   TWithSpan = record
     StartLine, StartCol, EndLine, EndCol: Integer;
+  end;
+
+  { Lines of one file a routine-local symbol can be named on. }
+  TScopeSpan = record
+    FileId: Int64;
+    First, Last: Integer;
   end;
 
   { One identifier token of a source file. }
@@ -279,6 +289,8 @@ type
     FLibRoots  : TList<string>;
     FIsMember  : Boolean;
     FIsRoutineLocal: Boolean;
+    FScoped    : Boolean;
+    FScope     : TList<TScopeSpan>;
     FTargetInLib: Boolean;
     FOldSyms   : TArray<TSymRow>;
     FNewSyms   : TArray<TSymRow>;
@@ -314,7 +326,11 @@ type
     function PropertyOwnerAt(pFileId: Int64; pLine: Integer): Int64;
     function IsSpecifierToken(const pText: string; pStart: Integer): Boolean;
     function DecideInherited(pFileId: Int64; pLine: Integer; out pKind, pWhy: string): TChainVerdict;
-    function IsDeclArgName(const pPath: string; pLine, pByteCol: Integer): Boolean;
+    function IsDeclArgName(const pPath: string; pLine, pByteCol: Integer; out pRoutineLine: Integer): Boolean;
+    function InScope(pFileId: Int64; pLine: Integer): Boolean;
+    function IsTargetsOwnHeader(pRoutineLine: Integer): Boolean;
+    procedure BuildScope;
+    procedure CheckScopeIncludes(pFileId: Int64; const pPath: string; pLines: TStringList);
     function ChainMemberExists(pClass: Int64; const pName: string): Boolean;
     procedure BuildGroup;
     procedure BuildFamily;
@@ -401,6 +417,7 @@ begin
   FPropCache := TDictionary<Int64, TArray<TSymRow>>.Create;
   FEdits     := TList<TRenameEdit>.Create;
   FRefusals  := TList<TRenameRefusal>.Create;
+  FScope     := TList<TScopeSpan>.Create;
   FSeenRefuse:= TDictionary<string, Boolean>.Create;
 end;
 
@@ -408,6 +425,7 @@ destructor TProver.Destroy;
 begin
   FSeenRefuse.Free;
   FRefusals.Free;
+  FScope.Free;
   FEdits.Free;
   FPropCache.Free;
   FWithCache.Free;
@@ -462,13 +480,15 @@ begin
   Result.Directives:= pQ.FieldByName('directives').AsString;
   Result.Line      := pQ.FieldByName('start_line').AsInteger;
   Result.Col       := pQ.FieldByName('start_col').AsInteger;
+  Result.EndLine   := pQ.FieldByName('end_line').AsInteger;
   Result.ImplLine  := pQ.FieldByName('impl_start_line').AsInteger;
+  Result.ImplEndLine:= pQ.FieldByName('impl_end_line').AsInteger;
   Result.VisExplicit:= pQ.FieldByName('vis_explicit').AsInteger <> 0;
 end;
 
 const
   CSymCols = 'SELECT id, file_id, parent_id, kind, name, qualified_name, modifiers, directives, start_line, start_col, ' +
-             'impl_start_line, vis_explicit FROM symbols WHERE ';
+             'end_line, impl_start_line, impl_end_line, vis_explicit FROM symbols WHERE ';
 
 function TProver.SymRow(pId: Int64): TSymRow;
 begin
@@ -975,13 +995,15 @@ begin
   Result:= MatchText(Copy(pText, P + 1, E - P), ['read', 'write', 'stored']);
 end;
 
-{ True when the token names a parameter in a header the index keeps no symbol for (a procedural type, a forward header):
-  a declaration binds to nothing. A token in the parameter's TYPE is not one. }
-function TProver.IsDeclArgName(const pPath: string; pLine, pByteCol: Integer): Boolean;
+{ True when the token names a parameter in a header the index keeps no symbol for (a procedural type, a forward header,
+  an implementation header): a declaration binds to nothing. A token in the parameter's TYPE is not one. pRoutineLine:
+  the first line of the routine whose implementation header holds the token; 0 for any other header. }
+function TProver.IsDeclArgName(const pPath: string; pLine, pByteCol: Integer; out pRoutineLine: Integer): Boolean;
 var
   Found: Boolean;
+  FoundLine: Integer;
 
-  procedure Walk(const pNode, pParent: TTSNode);
+  procedure Walk(const pNode, pParent: TTSNode; pHeaderOf: Integer);
   begin
     if Found or pNode.IsNull then Exit;
     var SL:= Integer(pNode.StartPoint.Row) + 1;
@@ -992,16 +1014,82 @@ var
       if pParent.IsNull or (pParent.NodeType <> 'declArg') then Exit;
       var TypeNode:= pParent.ChildByField('type');
       Found:= TypeNode.IsNull or (pNode.StartByte < TypeNode.StartByte);
+      if Found then FoundLine:= pHeaderOf;
       Exit;
     end;
-    for var I:= 0 to pNode.NamedChildCount - 1 do Walk(pNode.NamedChild(I), pNode);
+    var IsProc:= pNode.NodeType = 'defProc';
+    var Header:= if IsProc then pNode.ChildByField('header') else Default(TTSNode);
+    for var I:= 0 to pNode.NamedChildCount - 1 do
+    begin
+      var Ch:= pNode.NamedChild(I);
+      if not IsProc then Walk(Ch, pNode, pHeaderOf)
+      else if Ch = Header then Walk(Ch, pNode, SL)
+      else Walk(Ch, pNode, 0);
+    end;
   end;
 
 begin
   Found:= False;
+  FoundLine:= 0;
   var PF:= TAstParseCache.Get(pPath);
-  if PF.Tree <> nil then Walk(PF.Tree.RootNode, Default(TTSNode));
+  if PF.Tree <> nil then Walk(PF.Tree.RootNode, Default(TTSNode), 0);
   Result:= Found;
+  pRoutineLine:= FoundLine;
+end;
+
+function TProver.InScope(pFileId: Int64; pLine: Integer): Boolean;
+begin
+  Result:= False;
+  for var Span in FScope do
+    if (Span.FileId = pFileId) and InRange(pLine, Span.First, Span.Last) then Exit(True);
+end;
+
+{ True when pRoutineLine starts the implementation of the routine a parameter of the group belongs to. }
+function TProver.IsTargetsOwnHeader(pRoutineLine: Integer): Boolean;
+begin
+  Result:= False;
+  if pRoutineLine <= 0 then Exit;
+  for var S in FGroup.Values do
+    if SameText(S.Kind, CKindParam) and (SymRow(S.ParentId).ImplLine = pRoutineLine) then Exit(True);
+end;
+
+{ A symbol declared inside a routine has a scope the index knows: the routine's declaration and implementation lines. }
+procedure TProver.BuildScope;
+
+  procedure AddSpan(pFileId: Int64; pFirst, pLast: Integer);
+  var
+    Span: TScopeSpan;
+  begin
+    Span.FileId:= pFileId;
+    Span.First:= pFirst;
+    Span.Last:= Max(pFirst, pLast);
+    FScope.Add(Span);
+  end;
+
+begin
+  FScoped:= FGroup.Count > 0;
+  for var S in FGroup.Values do
+    if not MatchText(SymRow(S.ParentId).Kind, CRoutineKinds) then FScoped:= False;
+  if not FScoped then Exit;
+  for var S in FGroup.Values do
+  begin
+    var P:= SymRow(S.ParentId);
+    AddSpan(S.FileId, S.Line, S.EndLine);
+    AddSpan(P.FileId, P.Line, P.EndLine);
+    if P.ImplLine > 0 then AddSpan(P.FileId, P.ImplLine, P.ImplEndLine);
+  end;
+end;
+
+{ The index holds no refs inside an include: one inside the routine could use either name. }
+procedure TProver.CheckScopeIncludes(pFileId: Int64; const pPath: string; pLines: TStringList);
+const
+  CIncludeDirective = '(\{|\(\*)\$(I|INCLUDE)\s';
+begin
+  for var Span in FScope do
+    if Span.FileId = pFileId then
+      for var L:= Span.First to Min(Span.Last, pLines.Count) do
+        if TRegEx.IsMatch(pLines[L - 1], CIncludeDirective, [roIgnoreCase]) then
+          Refuse(CRefuseNoRefOccurrence, pPath, L, 0, 'an {$I} inside the routine: included text holds no refs, so an occurrence there cannot be decided');
 end;
 
 { `inherited Name` holds no ref: it names what the enclosing method's class's PARENT answers to. }
@@ -1191,6 +1279,8 @@ end;
 
 procedure TProver.CheckNewNameDeclarations;
 begin
+  { A local hides what the new name means elsewhere; only its own routine can tell, and ClassifyNewToken asks that. }
+  if FScoped then Exit;
   var Path0:= '';
   for var S in FGroup.Values do
   begin
@@ -1310,8 +1400,8 @@ begin
       end;
     Cur:= Sc.ParentId;
   end;
-  { A unit-level target is met by a member of the enclosing class first. }
-  if not FIsMember then
+  { A unit-level target is met by a member of the enclosing class first. A routine's own local is met first itself. }
+  if not FIsMember and not FScoped then
   begin
     var Cls:= EnclosingClass(pRef.Enclosing);
     if (Cls > 0) and ChainMemberExists(Cls, FNew) then
@@ -1362,9 +1452,12 @@ begin
     TakeVerdict(pTok, V, Kind, '`inherited ' + FOld + '`: ' + Why);
     Exit;
   end;
-  if IsDeclArgName(pTok.Path, pTok.Line, pTok.ByteCol) then
+  var RoutineLine: Integer;
+  if IsDeclArgName(pTok.Path, pTok.Line, pTok.ByteCol, RoutineLine) then
   begin
-    Inc(FOther);
+    { The parameter's own implementation header carries no symbol: it renames with the declaration, or dcc says E2037. }
+    if FScoped and IsTargetsOwnHeader(RoutineLine) then AddEdit(pTok.Path, pTok.Line, pTok.Col)
+    else Inc(FOther);
     Exit;
   end;
   Refuse(CRefuseNoRefOccurrence, pTok.Path, pTok.Line, pTok.Col,
@@ -1467,11 +1560,19 @@ procedure TProver.ClassifyNewToken(const pTok: TTok; pDecls: TDeclMap);
 var
   Rows: TList<TRefRow>;
 begin
+  { Inside the routine every bare use of the new name, a declaration included, would meet the renamed symbol. }
+  if FScoped then
+  begin
+    if not pTok.Qualified then
+      Refuse(CRefuseCaptureLocal, pTok.Path, pTok.Line, pTok.Col, Format('the routine already uses "%s" here; it would bind to the renamed local, and that can compile', [FNew]));
+    Exit;
+  end;
   if pDecls.ContainsKey(Format('%d:%d', [pTok.Line, pTok.Col])) then Exit;
   if not FNewRefs.TryGetValue(KeyOf(pTok.FileId, pTok.Line, pTok.ByteCol), Rows) then
   begin
+    var RoutineLine: Integer;
     var Explained:= ((PropertyOwnerAt(pTok.FileId, pTok.Line) > 0) and IsSpecifierToken(pTok.Text, pTok.Start))
-      or IsDeclArgName(pTok.Path, pTok.Line, pTok.ByteCol);
+      or IsDeclArgName(pTok.Path, pTok.Line, pTok.ByteCol, RoutineLine);
     if not Explained then
       Refuse(CRefuseCaptureNoRef, pTok.Path, pTok.Line, pTok.Col, Format('the new name "%s" sits here and the index holds no ref for it', [FNew]));
     Exit;
@@ -1511,6 +1612,12 @@ procedure TProver.ScanFile(pFileId: Int64; const pPath: string);
 var
   Text: string;
 begin
+  if FScoped then
+  begin
+    var Mine:= False;
+    for var Span in FScope do Mine:= Mine or (Span.FileId = pFileId);
+    if not Mine then Exit;
+  end;
   if not TFile.Exists(pPath) then Exit;
   TTextFileFormat.ReadFile(pPath, Text);
   var HasOld:= ContainsText(Text, FOld);
@@ -1521,6 +1628,7 @@ begin
   var NewDecls:= TDeclMap.Create;
   try
     Lines.Text:= Text;
+    if FScoped then CheckScopeIncludes(pFileId, pPath, Lines);
     AddDeclTokens(FOldSyms, pFileId, Lines, OldDecls);
     AddDeclTokens(FNewSyms, pFileId, Lines, NewDecls);
     var Len:= Length(Text);
@@ -1555,7 +1663,7 @@ begin
         while (I <= Len) and CharInSet(Text[I], ['A'..'Z', 'a'..'z', '_', '0'..'9']) do Inc(I);
         var IsOld:= (I - Start = Length(FOld)) and SameText(Copy(Text, Start, I - Start), FOld);
         var IsNew:= (I - Start = Length(FNew)) and SameText(Copy(Text, Start, I - Start), FNew);
-        if IsOld or IsNew then
+        if (IsOld or IsNew) and (not FScoped or InScope(pFileId, Line)) then
         begin
           var Tok: TTok;
           Tok.Path   := pPath;
@@ -1709,6 +1817,7 @@ begin
     Probe.Free;
   end;
   BuildFamily;
+  BuildScope;
   FTargetInLib:= LibHasQName(FQName);
   FOldSyms:= ReadSyms('name = :n COLLATE NOCASE', FOld);
   FNewSyms:= ReadSyms('name = :n COLLATE NOCASE', FNew);
@@ -1728,8 +1837,11 @@ begin
   finally
     Q.Free;
   end;
-  ProcessDfmRefs;
-  CheckDfmNames;
+  if not FScoped then { no form can name a routine's local }
+  begin
+    ProcessDfmRefs;
+    CheckDfmNames;
+  end;
   Result:= ProofOf(FEdits, FRefusals);
   Result.Found:= True;
   Result.Bound:= FBound;

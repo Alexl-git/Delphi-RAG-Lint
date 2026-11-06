@@ -1372,6 +1372,17 @@ begin
   end;
 end;
 
+{ True when the name's symbols are declared inside routines: nothing outside the owner can name them. }
+function IsDeclaredInRoutine(const AStore: ISymbolStore; const AQName: string): Boolean;
+var
+  Syms: TArray<TSymbol>;
+begin
+  Syms:= AStore.FindSymbolsByQualifiedName(AQName);
+  Result:= Length(Syms) > 0;
+  for var S in Syms do
+    if (S.ParentId <= 0) or not CanBeCallTarget(AStore.GetSymbolById(S.ParentId).Kind) then Exit(False);
+end;
+
 class function TRenameRefactoring.IncludeUseReason(const AStore: ISymbolStore;
   const AQName: string): string;
 var
@@ -1382,6 +1393,8 @@ begin
   Result:= '';
   ShortName:= LastDotSegment(AQName);
   if ShortName = '' then Exit;
+  // RenameProof refuses an include inside the owning routine; one elsewhere cannot hold this name
+  if IsDeclaredInRoutine(AStore, AQName) then Exit;
   Hits:= TStringList.Create;
   try
     for Stamp in AStore.GetAllFileStamps do
@@ -1418,6 +1431,7 @@ begin
   ShortName:= LastDotSegment(AQName);
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
   if (ShortName = '') or (Length(Syms) = 0) then Exit;
+  if IsDeclaredInRoutine(AStore, AQName) then Exit; { no form can name a routine's local }
   DfmPath:= ChangeFileExt(AStore.GetFilePath(Syms[0].FileId), '.dfm');
   if not FileExists(DfmPath) then Exit;
   Bytes:= TFile.ReadAllBytes(DfmPath);
