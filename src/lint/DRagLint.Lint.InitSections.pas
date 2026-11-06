@@ -845,14 +845,16 @@ begin
   var Name: string:= AReference.NameText;
   var IsBare: Boolean:= AReference.ReceiverText = '';
   var IsCall: Boolean:= (AReference.Kind = REF_CALL) or (AReference.Kind = REF_MEMBER);
-  if MatchText(Head, HEAVY_TYPES_FILE) or MatchText(Name, HEAVY_TYPES_FILE) then Result:= CATEGORY_FILE
-  else if MatchText(Head, HEAVY_TYPES_REGISTRY) or MatchText(Name, HEAVY_TYPES_REGISTRY) then Result:= CATEGORY_REGISTRY
-  else if MatchText(Head, HEAVY_TYPES_NETWORK) or MatchText(Name, HEAVY_TYPES_NETWORK) then Result:= CATEGORY_NETWORK
-  else if not IsCall then Result:= ''
-  else if MatchText(Name, HEAVY_BARE_DIALOG) then Result:= CATEGORY_DIALOG
-  else if IsBare and MatchText(Name, HEAVY_BARE_FILE) then Result:= CATEGORY_FILE
-  else if (not IsBare) and MatchText(Name, HEAVY_MEMBER_FILE) then Result:= CATEGORY_FILE
-  else Result:= if (not IsBare) and MatchText(Name, HEAVY_MEMBER_DB) then CATEGORY_DATABASE else '';
+  Result:=
+    if MatchText(Head, HEAVY_TYPES_FILE) or MatchText(Name, HEAVY_TYPES_FILE) then CATEGORY_FILE
+    else if MatchText(Head, HEAVY_TYPES_REGISTRY) or MatchText(Name, HEAVY_TYPES_REGISTRY) then CATEGORY_REGISTRY
+    else if MatchText(Head, HEAVY_TYPES_NETWORK) or MatchText(Name, HEAVY_TYPES_NETWORK) then CATEGORY_NETWORK
+    else if not IsCall then ''
+    else if MatchText(Name, HEAVY_BARE_DIALOG) then CATEGORY_DIALOG
+    else if IsBare and MatchText(Name, HEAVY_BARE_FILE) then CATEGORY_FILE
+    else if (not IsBare) and MatchText(Name, HEAVY_MEMBER_FILE) then CATEGORY_FILE
+    else if (not IsBare) and MatchText(Name, HEAVY_MEMBER_DB) then CATEGORY_DATABASE
+    else '';
 end;
 
 function CollectHeavyInitialization(const AStore: ISymbolStore): TArray<TLintFinding>;
