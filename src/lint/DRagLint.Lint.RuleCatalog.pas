@@ -910,6 +910,10 @@ begin
     B('interfaced-object-nil-leak', 'resource-lifetime', 'warning', 'Object reference of a TInterfacedObject descendant is set to nil while it holds a fresh instance -- an object reference holds no count, so nil releases nothing and the instance leaks', False);
     B('identifier-case-mismatch', 'naming', 'info', 'A name is spelled in a different case from its declaration -- locals and parameters from the AST, bound refs from the index', False);
     B('datamodule-form-global', 'project-wide', 'warning', 'A unit declaring a TDataModule descendant reaches another unit''s global form variable -- the data layer now needs that form to exist', False);
+    B('global-set-in-initialization-never-freed', 'project-wide', 'hint', 'A unit''s initialization sets its own global to a new object and no source that names the variable frees it -- it lives to process exit and shows in every leak report');
+    B('heavy-initialization', 'project-wide', 'hint', 'An initialization section reaches the file system, the registry, the network, a database or a dialog -- it can fail or block before the application has an exception handler or a window');
+    B('finalization-after-dependency', 'project-wide', 'warning', 'A finalization section reaches a global that a unit finalized earlier in the computed order tears down in its own finalization -- the read sees a freed object');
+    B('init-order-hazard', 'project-wide', 'warning', 'An initialization section reaches a global that a unit initializing later in the computed order sets in its own initialization -- works by accident in one uses order, reads an unset variable in another');
     { taint wave T2: store-backed interprocedural taint (DRagLint.Lint.TaintRules; catalogues rules\taint-*.json) }
     B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');
     B('taint-command-injection', 'security', 'error', 'Tainted data reaches a process launch sink -- a catalogued source flows across routines into ShellExecute / CreateProcess / WinExec (CWE-78)');

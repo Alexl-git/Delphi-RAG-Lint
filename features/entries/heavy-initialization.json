@@ -1,0 +1,19 @@
+{
+  "id": "heavy-initialization",
+  "title": "Heavy work in an initialization section (lint rule)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.44.0-alpha",
+  "summary": "Project lint rule: an initialization section reaches the file system, the registry, the network, a database or a dialog",
+  "intro": "Read this to see what heavy-initialization counts as heavy and what it cannot see. It runs in lint-all and lint-project over a project index.",
+  "wikiPage": "heavy-initialization",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --rule heavy-initialization"
+    }
+  ],
+  "audience": "both"
+}

@@ -247,6 +247,7 @@ uses
   DRagLint.Lint.UnusedEnumValue, { CollectUnusedEnumValue -- lane B-ENUM } // dl:unit DRagLint.Lint.UnusedEnumValue accepted -- UNUSED_ENUM_VALUE_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectUnusedEnumValue, the collector this unit calls
   DRagLint.Lint.UnusedGlobal, { CollectUnusedGlobal -- 1.40 lane unusedg } // dl:unit DRagLint.Lint.UnusedGlobal accepted -- UNUSED_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectUnusedGlobal, the collector this unit calls
   DRagLint.Lint.DataModuleFormGlobal, { CollectDataModuleFormGlobal -- 1.42 lane ruleset } // dl:unit DRagLint.Lint.DataModuleFormGlobal accepted -- DATAMODULE_FORM_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectDataModuleFormGlobal, the collector this unit calls
+  DRagLint.Lint.InitSections, { the F2 section rules -- 1.44 lane rulesf2 } // dl:unit DRagLint.Lint.InitSections accepted -- the *_RULE ids are what the dispatch (WantRule / OptedIn) names; they travel with the collectors this unit calls
   DRagLint.Lint.ReadNeverAssigned, { CollectReadNeverAssigned -- owner request #5b } // dl:unit DRagLint.Lint.ReadNeverAssigned accepted -- READ_NEVER_ASSIGNED_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectReadNeverAssigned, the collector this unit calls
   DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
   DRagLint.Lint.AncestorNotInProject, { ancestor-not-in-project (1.42 enum) }
@@ -4687,6 +4688,14 @@ begin
     if WantRule(READ_NEVER_ASSIGNED_RULE) and OptedIn(READ_NEVER_ASSIGNED_RULE) then
       for var Rn in CollectReadNeverAssigned(AStore, ALibraryStore) do Findings.Add(Rn);
     { datamodule-form-global (1.42 lane ruleset): OFF; whole-project by nature (both ends live in the index). }
+    if WantRule(INIT_ORDER_HAZARD_RULE) and OptedIn(INIT_ORDER_HAZARD_RULE) then
+      for var Is_ in CollectInitOrderHazard(AStore) do Findings.Add(Is_);
+    if WantRule(FINALIZATION_AFTER_DEPENDENCY_RULE) and OptedIn(FINALIZATION_AFTER_DEPENDENCY_RULE) then
+      for var Is_ in CollectFinalizationAfterDependency(AStore) do Findings.Add(Is_);
+    if WantRule(HEAVY_INITIALIZATION_RULE) and OptedIn(HEAVY_INITIALIZATION_RULE) then
+      for var Is_ in CollectHeavyInitialization(AStore) do Findings.Add(Is_);
+    if WantRule(GLOBAL_NEVER_FREED_RULE) and OptedIn(GLOBAL_NEVER_FREED_RULE) then
+      for var Is_ in CollectGlobalNeverFreed(AStore, ALibraryStore) do Findings.Add(Is_);
     if WantRule(DATAMODULE_FORM_GLOBAL_RULE) and OptedIn(DATAMODULE_FORM_GLOBAL_RULE) then
       for var Dm in CollectDataModuleFormGlobal(AStore, ALibraryStore) do Findings.Add(Dm);
     { gap-rules wave, lane G8. The two DFM rules and uses-movable-to-implementation are ON by
