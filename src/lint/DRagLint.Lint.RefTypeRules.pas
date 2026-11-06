@@ -35,6 +35,9 @@ uses
 const
   /// <summary>Rule id: `x is T` where the static type of x already descends from T.</summary>
   IS_ALWAYS_TRUE_RULE = 'is-always-true';
+  /// <summary>Rule id, shared with the lexical check in AstChecks: this unit answers the
+  /// shapes that check cannot type, a member chain or a call result, and `x as T`.</summary>
+  REDUNDANT_CAST_RULE = 'redundant-cast';
   /// <summary>Rule id: an argument wider than the parameter it is passed to.</summary>
   ARGUMENT_NARROWS_RULE = 'argument-narrows';
   /// <summary>Rule id: an interface variable assigned an object that is not reference counted.</summary>
@@ -44,7 +47,7 @@ const
   /// <summary>Rule id: a cast to an ancestor and straight back down, TLeaf(TBase(x)).</summary>
   UPCAST_THEN_DOWNCAST_RULE = 'upcast-then-downcast';
   /// <summary>Every project rule this unit emits, as `--rule` and dl:ok markers spell them.</summary>
-  REF_TYPE_RULES: array[0..4] of string = (IS_ALWAYS_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE, INTERFACE_HOLDER_RULE, ARGUMENT_NARROWS_RULE);
+  REF_TYPE_RULES: array[0..5] of string = (IS_ALWAYS_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE, INTERFACE_HOLDER_RULE, ARGUMENT_NARROWS_RULE, REDUNDANT_CAST_RULE);
   /// <summary>The ones that ship OFF; each names why in the catalog.</summary>
   REF_TYPE_RULES_OFF: array of string = [];
 
@@ -52,6 +55,19 @@ const
 /// <param name="ARuleId">One of REF_TYPE_RULES.</param>
 /// <returns>The value to hand TLintConfig.ShouldKeep as ADefaultDisabled.</returns>
 function RefTypeRuleDefaultOff(const ARuleId: string): Boolean;
+
+/// <summary>The static type ref_types records for the reference at a position.</summary>
+/// <param name="AStore">The index; nil or a store that is not SQLite answers False.</param>
+/// <param name="AFileId">The file's id in AStore; 0 answers False.</param>
+/// <param name="ALine">1-based line.</param>
+/// <param name="ACol">1-based column.</param>
+/// <param name="AName">The name written there: a ref of another name is no answer.</param>
+/// <param name="ATypeLeaf">Out: the type's leaf name.</param>
+/// <returns>False with no table (an index older than 1.44) or no row: the caller
+/// keeps what it knew without the fact.</returns>
+/// <remarks>Two queries per call, for rule candidates and not for every expression.</remarks>
+function RefStaticTypeAt(const AStore: ISymbolStore; AFileId: Int64; ALine, ACol: Integer; const AName: string;
+  out ATypeLeaf: string): Boolean;
 
 /// <summary>Runs the rules on index fact F1 over a project index.</summary>
 /// <param name="AStore">The project index; nil, a store that is not SQLite, or an
@@ -115,10 +131,12 @@ const
   CLASS_THREAD     = 'tthread';
   FIELD_BODY       = 'body';
   VIA_CTOR         = 'ctor';
+  VIA_RESULT       = 'result';
   NIL_WORD         = 'nil';
   { A call that ends the object's life, or hands the job to the object. }
   FREE_WORDS_RX    = '\b(free|destroy|release|disposeof|freeandnil|freeonterminate)\b';
   SEV_WARNING      = 'warning';
+  SEV_HINT         = 'hint';
   { Bits of the line in a position key; a column stays far below 2^20. }
   POS_LINE_SHIFT   = 20;
 
@@ -146,6 +164,8 @@ type
     Closure   : TArray<string>;
     /// <summary>False when some ancestor could not be followed.</summary>
     Complete  : Boolean;
+    /// <summary>The type's symbol in the project index; 0 for a library type or a homonym.</summary>
+    SymbolId  : Int64;
     /// <summary>The name stands for several types, so it identifies none of them.</summary>
     Homonym   : Boolean;
     function HasAncestor(const ALeaf: string): Boolean;
@@ -180,7 +200,7 @@ type
       function Text(const ANode: TTSNode): string;
       function FactAt(const ANode: TTSNode; out AFact: TRefFact): Boolean;
       procedure LoadRefs(AFileId: Int64);
-      procedure Emit(const ARuleId: string; const ANode: TTSNode; const AMessage: string);
+      procedure Emit(const ARuleId: string; const ANode: TTSNode; const AMessage: string; const ASeverity: string = SEV_WARNING);
       function ClosureFromStore(const AStore: ISymbolStore; const ASym: TSymbol; AOutermost: Boolean;
         var AFacts: TTypeFacts): Boolean;
       function FactsOfSymbol(const AStore: ISymbolStore; const ASym: TSymbol; AOutermost: Boolean): TTypeFacts;
@@ -194,6 +214,7 @@ type
       function StaticType(const ANode: TTSNode): TExprType;
       function CastParts(const ANode: TTSNode; out ATarget: TTypeFacts; out AOperand: TTSNode): Boolean;
       procedure CheckUpcastThenDowncast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);
+      procedure CheckRedundantCast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);
       procedure CheckCast(const ANode: TTSNode);
       procedure CheckWith(const ANode: TTSNode);
       function OwnRefCountClasses: TArray<string>;
@@ -408,13 +429,13 @@ begin
     and SameText(AFact.Name, Text(ANode));
 end;
 
-procedure TRefTypeScan.Emit(const ARuleId: string; const ANode: TTSNode; const AMessage: string);
+procedure TRefTypeScan.Emit(const ARuleId: string; const ANode: TTSNode; const AMessage: string; const ASeverity: string);
 var
   F: TLintFinding;
 begin
   F:= Default(TLintFinding);
   F.RuleId   := ARuleId;
-  F.Severity := SEV_WARNING;
+  F.Severity := ASeverity;
   F.Message  := AMessage;
   F.FileId   := FFileId;
   F.FilePath := FPath;
@@ -475,6 +496,7 @@ begin
   Result        := Default(TTypeFacts);
   Result.Known  := True;
   Result.Name   := ASym.Name;
+  if AOutermost then Result.SymbolId:= ASym.Id;
   Result.IsClass:= ASym.Kind = skClass;
   Result.IsIntf := ASym.Kind = skInterface;
   if not (Result.IsClass or Result.IsIntf) then Exit;
@@ -500,6 +522,7 @@ begin
     end;
     { A homonym: only what ALL of them agree on survives. }
     Result.Homonym := True;
+    Result.SymbolId:= 0;
     Result.IsClass := Result.IsClass and One.IsClass;
     Result.IsIntf  := Result.IsIntf and One.IsIntf;
     Result.Complete:= Result.Complete and One.Complete;
@@ -659,6 +682,20 @@ begin
       [Text(InnerOp), Source.Facts.Name, Inner.Name, AOuter.Name]));
 end;
 
+procedure TRefTypeScan.CheckRedundantCast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);
+begin
+  { A hard cast of a single variable is AstChecks' shape (it finds it without an index);
+    a bare function call, which its type map cannot type, is this one's. }
+  var Fact: TRefFact;
+  if (ANode.NodeType = NODE_CALL) and (AOperand.NodeType = TYPE_NODE_ID)
+     and not (FactAt(AOperand, Fact) and (Fact.Via = VIA_RESULT)) then Exit;
+  var Source: TExprType:= StaticType(AOperand);
+  if (not Source.Known) or (not Source.Facts.IsClass) or Source.Facts.Homonym then Exit;
+  if not SameText(Source.Facts.Name, AOuter.Name) then Exit;
+  if (Source.Facts.SymbolId <> AOuter.SymbolId) and (Source.Facts.SymbolId > 0) and (AOuter.SymbolId > 0) then Exit;
+  Emit(REDUNDANT_CAST_RULE, ANode, Format('Redundant cast: %s is already of type %s', [Text(AOperand), AOuter.Name]), SEV_HINT);
+end;
+
 procedure TRefTypeScan.CheckCast(const ANode: TTSNode);
 var
   Outer  : TTypeFacts;
@@ -667,6 +704,7 @@ begin
   if not CastParts(ANode, Outer, Operand) then Exit;
   if (not Outer.IsClass) or Outer.Homonym then Exit;
   if Wants(UPCAST_THEN_DOWNCAST_RULE) then CheckUpcastThenDowncast(ANode, Outer, Operand);
+  if Wants(REDUNDANT_CAST_RULE) then CheckRedundantCast(ANode, Outer, Operand);
 end;
 
 procedure TRefTypeScan.CheckWith(const ANode: TTSNode);
@@ -880,6 +918,36 @@ begin
   if FRefs.Count = 0 then Exit;
   FWithDepth:= 0;
   Walk(PF.Tree.RootNode);
+end;
+
+function RefStaticTypeAt(const AStore: ISymbolStore; AFileId: Int64; ALine, ACol: Integer; const AName: string;
+  out ATypeLeaf: string): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Result   := False;
+  ATypeLeaf:= '';
+  if (AStore = nil) or (AFileId <= 0) or (AStore is not TSQLiteSymbolStore) then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= (AStore as TSQLiteSymbolStore).GetConnection;
+    Q.SQL.Text  := 'SELECT 1 FROM sqlite_master WHERE type = ''table'' AND name = ''ref_types''';
+    Q.Open;
+    if Q.Eof then Exit;
+    Q.Close;
+    Q.SQL.Text:= 'SELECT t.type_qname FROM refs r JOIN ref_types t ON t.ref_id = r.id ' +
+                 'WHERE r.file_id = :f AND r.start_line = :l AND r.start_col = :c AND r.name_text = :n COLLATE NOCASE LIMIT 1';
+    Q.ParamByName('f').AsLargeInt  := AFileId;
+    Q.ParamByName('l').AsInteger   := ALine;
+    Q.ParamByName('c').AsInteger   := ACol;
+    Q.ParamByName('n').AsWideString:= AName;
+    Q.Open;
+    if Q.Eof then Exit;
+    ATypeLeaf:= LeafOf(Q.Fields[0].AsString);
+    Result   := True;
+  finally
+    Q.Free;
+  end;
 end;
 
 function RefTypeRuleDefaultOff(const ARuleId: string): Boolean;

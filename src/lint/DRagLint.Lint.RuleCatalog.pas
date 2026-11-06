@@ -591,7 +591,7 @@ begin
       Opt back in per project with "enabled":["commented-out-code"]. }
     B('commented-out-code',    'dead-code', 'hint',    'Comment appears to be commented-out code (assignment or call)', False);
     B('function-result-ignored','dead-code','hint',    'Result of a same-unit function call is discarded', False); { OFF by default -- FP-prone (builders/adders/runners legitimately discard results); opt in via "enabled" }
-    B('redundant-cast',        'dead-code', 'hint',    'Cast of a value to the type it already has (no-op)');
+    B('redundant-cast',        'dead-code', 'hint',    'Cast of a value to the type it already has (no-op); with a 1.44 index (ref_types) also T(a.b), T(F(x)) and x as T, and the index overrules the per-file type map');
 
     { --- data-flow --- }
     B('used-before-assignment','data-flow', 'error',   'Variable used before assignment');

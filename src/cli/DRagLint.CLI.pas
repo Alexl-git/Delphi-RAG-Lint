@@ -15668,7 +15668,7 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak');
-  LINT_GATE_PROJECT_RULES: array[0..36] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..37] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
@@ -15678,28 +15678,28 @@ const
     'unused-enum-value', 'unused-global', 'read-never-assigned',
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
     'effect-free-in-loop-invariant', 'ancestor-not-in-project', 'opaque-to-analysis', 'datamodule-form-global',
-    'is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows');
+    'is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
     index it never evaluates them unless --rule names one: a dl:ok for one of them
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..22] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..23] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
     'unused-enum-value', 'unused-global', 'read-never-assigned',
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
     'effect-free-in-loop-invariant', 'opaque-to-analysis', 'datamodule-form-global',
-    'is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows');
+    'is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
     is answered exactly for one file -- its own call sites, narrowed by AOnlyFileId
     -- so the IDE gutter and lint-all agree. Every other PROJECT_RULES_OPTIN_GATED
     id ships OFF and stays --rule-only on this verb.
     tests\autotest\run_lint_file_discarded_effect_free.ps1. }
-  LINT_FILE_OPTIN_ON: array[0..5] of string = ('discarded-effect-free-result', 'is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows');
+  LINT_FILE_OPTIN_ON: array[0..6] of string = ('discarded-effect-free-result', 'is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast');
   { The store rules of lane B-EFFECT and 1.42 (DRagLint.Lint.EffectRules). Only side-effect-in-short-circuit ships OFF (1.43, owner Q3); the loops below pass that per id. }
   LANE_BEFFECT_RULES: array[0..3] of string = (
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',

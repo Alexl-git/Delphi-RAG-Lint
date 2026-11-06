@@ -70,6 +70,9 @@ type
     procedure Hook;
   end;
 
+var
+  GShadow: TRtBase;
+
 function MakeBase: TRtBase;
 function MakeLeaf: TRtLeaf;
 

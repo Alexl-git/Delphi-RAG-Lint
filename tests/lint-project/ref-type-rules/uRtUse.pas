@@ -10,8 +10,34 @@ procedure CastTests(ALeaf: TRtLeaf; ABase: TRtBase);
 procedure WithTests(ALeaf: TRtLeaf; AOwner: TComponent);
 procedure HolderTests(AComp: TRtCompThing; ACounted: TRtCountedThing; ARef: TRtRefThing);
 procedure NarrowTests(AWide: Int64; AKey: TRtKey2; ASmall: Integer; ADouble: Double);
+procedure RedundantTests(ALeaf: TRtLeaf; ABase: TRtBase);
+procedure RedundantShadow;
 
 implementation
+
+procedure RedundantTests(ALeaf: TRtLeaf; ABase: TRtBase);
+var
+  Sink: Integer;
+  GShadow: TRtLeaf;
+begin
+  Sink:= TRtLeaf(ALeaf).Tag;  // TRIGGER-REDUNDANT-LEXICAL
+  Sink:= TRtLeaf(ALeaf.Link).Tag;  // TRIGGER-REDUNDANT-CHAIN
+  Sink:= TRtLeaf(MakeLeaf).Tag;  // TRIGGER-REDUNDANT-RESULT
+  Sink:= (ALeaf as TRtLeaf).Tag;  // TRIGGER-REDUNDANT-AS
+  Sink:= TRtLeaf(ALeaf.Base).Tag;  // CONTROL-REDUNDANT-CHAINDOWN
+  Sink:= (ABase as TRtLeaf).Tag;  // CONTROL-REDUNDANT-ASDOWN
+  Sink:= TRtBase(ALeaf.Link).Tag;  // CONTROL-REDUNDANT-UP
+  GShadow:= ALeaf;
+  Sink:= GShadow.Tag;
+end;
+
+procedure RedundantShadow;
+var
+  Sink: Integer;
+begin
+  Sink:= TRtLeaf(GShadow).Tag;  // CONTROL-REDUNDANT-SHADOW
+  Sink:= Sink + 1;
+end;
 
 procedure NarrowTests(AWide: Int64; AKey: TRtKey2; ASmall: Integer; ADouble: Double);
 const

@@ -68,13 +68,16 @@ try {
   # positive-control: argument-narrows
   CheckRule $db $src 'argument-narrows' 'NARROW'
 
+  # positive-control: redundant-cast (chain, result, as; and the lexical check overruled by the fact)
+  CheckRule $db $src 'redundant-cast' 'REDUNDANT'
+
   $plain = @(Parse-Findings (& $exePath lint-all --db $db --format json 2>$null))
-  foreach ($on in @('is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows')) {
+  foreach ($on in @('is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast')) {
     Check "a plain lint-all: $on ships ON" (@($plain | Where-Object { $_.rule -eq $on }).Count -gt 0) ''
   }
   $file = Join-Path $src 'uRtUse.pas'
   $one = @(Parse-Findings (& $exePath lint $file --db $db --format json 2>$null))
-  foreach ($on in @('is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows')) {
+  foreach ($on in @('is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast')) {
     Check "lint <file> with an index: $on fires" (@($one | Where-Object { $_.rule -eq $on }).Count -gt 0) ''
   }
 

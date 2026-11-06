@@ -1023,6 +1023,9 @@ type
 
 implementation
 
+uses
+  DRagLint.Lint.RefTypeRules; { RefStaticTypeAt: index fact F1 for redundant-cast and unsafe-typecast-without-is }
+
 function tree_sitter_delphi13: PTSLanguage; cdecl;
 external 'tree-sitter-delphi13';
 
@@ -2882,6 +2885,14 @@ var
       Result:= False;
   end;
 
+  { 1.44 lane rulesf1: the static type index fact F1 records for a name, which beats the
+    flat TypeMap: the map cannot tell a local from the global of the same name another
+    routine reads. False with no store, no table or no row: the map's answer stands. }
+  function FactTypeOf(const AId: TTSNode; out ATypeLeaf: string): Boolean;
+  begin
+    Result:= RefStaticTypeAt(AStore, AFileId, Integer(AId.StartPoint.Row) + 1, Integer(AId.StartPoint.Column) + 1, NodeStr(AId), ATypeLeaf);
+  end;
+
   { v0.71: collect 'x is TFoo' guards into a set of 'x|TFoo' keys (both lowercased).
     lhs must be a simple identifier; rhs is taken by source text (single token) so
     this is independent of whether the grammar labels the type node identifier/typeref.
@@ -3418,6 +3429,7 @@ var
       if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then
       begin
         var En: string:= NodeStr(Entity);
+        var FactLeaf: string;
         if (Length(En) >= 2) and (En[1] = 'T') and (En[2] >= 'A') and (En[2] <= 'Z') then
         begin
           Args:= N.ChildByField('args');
@@ -3426,7 +3438,8 @@ var
             A0:= Args.NamedChild(0);
             if (A0.NodeType = 'identifier')
                and LookupType(A0, T)
-               and SameText(Trim(T), En) then
+               and SameText(Trim(T), En)
+               and not (FactTypeOf(A0, FactLeaf) and not SameText(FactLeaf, En)) then
             begin
               P:= Entity.StartPoint;
               F:= Default(TLintFinding);
