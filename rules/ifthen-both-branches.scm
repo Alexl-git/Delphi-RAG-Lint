@@ -13,6 +13,13 @@
 ; docs/INBOX-parenless-constructor-call-is-member-access.md for the same
 ; ambiguity biting a different rule.
 ;
+; O2 (1.45): with an index that has ref_types, an identifier argument whose reference the
+; resolver typed as a variable (via decl: a var, const, parameter or typed local; via inline:
+; an untyped inline var) is INERT too -- reading a variable has no side effect -- so
+; IfThen(B, S1, S2) over two variables stays silent. A callee (via result), a field/property
+; (via member: a property getter can run code), an unknown identifier and every run without the
+; fact keep today's behaviour: #not-oracle-via? passes whenever the fact is missing.
+;
 ; The tree-sitter query language has no way to negate a node's TYPE directly
 ; (only #eq?/#not-eq?/#match?/#not-match?/#any-of?/#not-any-of? on captured
 ; TEXT are supported -- see rules/README.md). The two patterns below combine
@@ -35,6 +42,7 @@
       (_) @b2)) @warn
   (#eq? @fn "IfThen")
   (#not-match? @b1 "(?i)^('.*'|-?[0-9]+(\\.[0-9]+)?|True|False|nil)$")
+  (#not-oracle-via? @b1 "^(decl|inline)$")
   (#not-eq? @b1 @b2)
 )
 
@@ -48,6 +56,24 @@
   (#eq? @fn "IfThen")
   (#match?     @b1 "(?i)^('.*'|-?[0-9]+(\\.[0-9]+)?|True|False|nil)$")
   (#not-match? @b2 "(?i)^('.*'|-?[0-9]+(\\.[0-9]+)?|True|False|nil)$")
+  (#not-oracle-via? @b2 "^(decl|inline)$")
+  (#not-eq? @b1 @b2)
+)
+
+; Pattern B2 (O2) -- @b1 is a variable the index proved inert (so A skips it) and @b2 is not:
+; the case A used to report. Without the fact #oracle-via? never passes and this pattern is dead,
+; which leaves A exactly as it was.
+(
+  (exprCall
+    entity: (identifier) @fn
+    args: (exprArgs
+      (_)
+      (_) @b1
+      (_) @b2)) @warn
+  (#eq? @fn "IfThen")
+  (#oracle-via? @b1 "^(decl|inline)$")
+  (#not-match? @b2 "(?i)^('.*'|-?[0-9]+(\\.[0-9]+)?|True|False|nil)$")
+  (#not-oracle-via? @b2 "^(decl|inline)$")
   (#not-eq? @b1 @b2)
 )
 
@@ -93,6 +119,7 @@
   (#eq? @fn "IfThen")
   (#eq? @b2exists "")
   (#not-match? @val "(?i)^('.*'|-?[0-9]+(\\.[0-9]+)?|True|False|nil)$")
+  (#not-oracle-via? @val "^(decl|inline)$")
 )
 
 ; Pattern D -- identical then/else branches (autofix wave A1, 2026-10-27):

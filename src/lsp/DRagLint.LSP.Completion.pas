@@ -404,6 +404,7 @@ implementation
 
 uses
   DRagLint.Doc.Regions
+  , DRagLint.Lint.QueryRules { TQueryTypeOracleScope -- the .scm rules' type oracle (O2) }
   , DRagLint.Core.LiveDocs  { v(live-buffer): unsaved editor text, consulted before disk }
   , DRagLint.Lint.RuleCatalog  { BUILTIN_RULES_OFF_BY_DEFAULT -- the CLI's default-off set }
   , System.Math                { Max: the H2 doc-comment marker span }
@@ -1157,7 +1158,15 @@ begin
   // --- Lint findings ---
   if Assigned(ALinter) then
   begin
-    Findings:= ALinter.LintFile(AFile);
+    { O2 (1.45): the .scm predicates may ask the index for a static type or an ancestry. }
+    var QueryOracle: ITypeOracle:= nil;
+    if AStore <> nil then QueryOracle:= CreateStoreTypeOracle(AStore, AStore.FindFileIdByPath(AFile));
+    var QueryScope:= TQueryTypeOracleScope.Create(QueryOracle);
+    try
+      Findings:= ALinter.LintFile(AFile);
+    finally
+      QueryScope.Free;
+    end;
     { When a store is present, the precise type-aware built-in supersedes the
       type-BLIND .scm 'string-equality-comparison' rule for the SAME concern.
       The .scm regex fires on any non-literal '=' -- including `Key = VK_F10`
