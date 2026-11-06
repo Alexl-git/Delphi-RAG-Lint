@@ -89,7 +89,8 @@ Check 'A3 stderr names the project and DB' (($err -match 'AppA\.dpr') -and ($err
 Ask @('--name', 'TuB', '--in', $uB)
 Check 'B project in an ancestor folder' (($code -eq 0) -and ($out -match 'declarations: 1') -and ($err -match 'AppB\.dpr')) "exit=$code out=$out err=$err"
 
-Ask @('--name', 'TuC', '--in', $uC, '--json')
+# --no-create: without it a deployed engine now builds the index (1.44 C8, run_autocreate_project_db arm H).
+Ask @('--name', 'TuC', '--in', $uC, '--json', '--no-create')
 Check 'C1 no DB: exit 2' ($code -eq 2) "exit=$code err=$err"
 Check 'C2 prints the create command' (($err -match 'index --project') -and ($err -match 'AppC\.dpr') -and ($err -match '_D-RAG.AppC\.sqlite')) "err=$err"
 Check 'C3 stdout stays empty (it is the document)' ($out -eq '') "out=$out"

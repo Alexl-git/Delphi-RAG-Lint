@@ -45,7 +45,7 @@ try {
   $private  = "$WorkDir\private"
   foreach ($d in @($deployed, $private)) {
     New-Item -ItemType Directory -Path $d -Force | Out-Null
-    Copy-Item $Exe "$d\drag-lint.exe" -Force
+    Copy-Item $Exe "$d\drag-lint.exe" -Force  # exe-freshness: absent
     Get-ChildItem -Path $exeDir -Filter '*.dll' | ForEach-Object { Copy-Item $_.FullName "$d\$($_.Name)" -Force }
     if (Test-Path "$exeDir\rules") { Copy-Item "$exeDir\rules" "$d\rules" -Recurse -Force }
     # an own, empty manifest: the shared one names real project databases
@@ -61,7 +61,8 @@ try {
   }
   function Invoke-Q([string]$EngineDir, [string[]]$A) {
     $o = "$WorkDir\o.txt"; $e = "$WorkDir\e.txt"
-    $p = Start-Process -FilePath "$EngineDir\drag-lint.exe" -ArgumentList $A -NoNewWindow -Wait -PassThru -WorkingDirectory $cwd `
+    $engine = "$EngineDir\drag-lint.exe"  # exe-freshness: absent
+    $p = Start-Process -FilePath $engine -ArgumentList $A -NoNewWindow -Wait -PassThru -WorkingDirectory $cwd `
            -RedirectStandardOutput $o -RedirectStandardError $e
     [pscustomobject]@{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); Err = [IO.File]::ReadAllText($e) }
   }
@@ -133,7 +134,8 @@ try {
   foreach ($verb in @(@('K', 'lsp'), @('L', 'serve'))) {
     $ps = New-Proj ('p' + $verb[1])
     $o = "$WorkDir\so.txt"; $e = "$WorkDir\se.txt"
-    $sp = Start-Process -FilePath "$deployed\drag-lint.exe" -ArgumentList @($verb[1], '--project', "$ps\App.dpr") -NoNewWindow -PassThru -WorkingDirectory $cwd `
+    $engine = "$deployed\drag-lint.exe"  # exe-freshness: absent
+    $sp = Start-Process -FilePath $engine -ArgumentList @($verb[1], '--project', "$ps\App.dpr") -NoNewWindow -PassThru -WorkingDirectory $cwd `
             -RedirectStandardInput "$WorkDir\empty.txt" -RedirectStandardOutput $o -RedirectStandardError $e
     if (-not $sp.WaitForExit(60000)) { $sp.Kill($true) }
     Check ($verb[0] + ': ' + $verb[1] + ' --project on a deployed engine -- nothing built') (-not (Test-Path (Db $ps))) ("stderr=" + [IO.File]::ReadAllText($e).Trim())
