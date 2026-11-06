@@ -180,6 +180,7 @@ try {
   Invoke-Index $D
   $Res = Invoke-Apply $D 'UwCases.pas'
   Check '(g) applied, exit 0' (($script:ApplyCode -eq 0) -and $Res.apply.applied) "exit $script:ApplyCode $($Res.apply.refusal): $($Res.apply.detail)"
+  Check '(g) no copy of the DB outlives the run' (@(Get-ChildItem 'C:\TEMP\draglint_cyclefix_*_unwith\after-proof.sqlite*' -ErrorAction SilentlyContinue).Count -eq 0)
   Check '(g) the after-proof compared refs' ($Res.apply.proof_points -gt 30) "$($Res.apply.proof_points)"
   $Text = [IO.File]::ReadAllBytes("$D\UwCases.pas")
   Check '(g) 7-bit ASCII' (@($Text | Where-Object { $_ -gt 127 }).Count -eq 0)

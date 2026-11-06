@@ -285,7 +285,7 @@ type
     constructor CreateKind(const pKind, pDetail: string);
   end;
 
-  TAnalyzer = class  // dl:ok god-class@35c9, high-response@35c9
+  TAnalyzer = class  // dl:ok god-class@35c9, high-response@35c9 -- REVIEWED 2026-11-05: one analysis of one file sharing its position tables; private to this unit
   private
     FStore, FLib: ISymbolStore;
     FFile: string;
@@ -1119,7 +1119,7 @@ begin
     VisitBody(N.NamedChild(I), InT, pC, pLinks, pSite, pPrefixAt);
 end;
 
-function TAnalyzer.TryUnwrap(const W, Body: TTSNode; out pSplices: TArray<TSplice>): Boolean;  // dl:ok too-many-exit-points@9282, cyclomatic-complexity@5c4b
+function TAnalyzer.TryUnwrap(const W, Body: TTSNode; out pSplices: TArray<TSplice>): Boolean;  // dl:ok too-many-exit-points@9282, cyclomatic-complexity@5c4b -- REVIEWED 2026-11-05: each branch is one precondition for unwrapping; failing any keeps the begin..end, which is safe
 var
   Block: TTSNode;
 
@@ -1649,9 +1649,13 @@ begin
     on E: ECompileGateCancelled do ProofFailure:= 'cancelled';
     on E: Exception do ProofFailure:= E.ClassName + ': ' + E.Message;
   end;
+  { The copy can be gigabytes: it never outlives the run. The logs stay only when something went wrong. }
+  for var Tail: string in ['', '-wal', '-shm'] do
+    if TFile.Exists(TPath.Combine(Dir, 'after-proof.sqlite') + Tail) then TFile.Delete(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);
   if (ProofFailure = '') and (Length(Result.Rebinds) = 0) then
   begin
     Result.Applied:= True;
+    TDirectory.Delete(Dir, True);
     Exit;
   end;
   var Failure:= RollBack(Gate.Tx);
