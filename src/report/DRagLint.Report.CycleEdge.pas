@@ -400,7 +400,9 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 /// function with a required parameter -- a parameterless function there is its result and refuses),
 /// `qualified-ref` (the consumer names anything but the routine itself as `B.X`, B the declaring unit; W6 C7:
 /// `B.Foo(...)` of the inverted routine becomes the pointer call, except behind `@`; lane cyc4: only code counts, not a
-/// comment or a string, and a global in TEdgeSurface.QualifiedMoved is no finding), `init-order` (a call line lies in
+/// comment or a string, and a global in TEdgeSurface.QualifiedMoved is no finding), `name-shadowed` (lane cycq: a line
+/// to edit also holds the name bound to something else, or `B` there is a declaration of A: the rewrite is text),
+/// `init-order` (a call line lies in
 /// A's initialization section, or that section -- from `initialization` to `finalization` or `end.` --
 /// names the enclosing routine as a whole word: the variable is still nil there), `finalization-order` (lane cyc4: the same
 /// for A's finalization section, when B -- finalized first after the cut -- has a statement in its finalization section
@@ -408,7 +410,8 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 /// `unsupported-directive` (varargs, or a directive word it cannot classify, on the declaration).
 /// The planner (DRagLint.Report.CyclePlan, PlanInversion) refuses one more after this one:
 /// `duplicate-identifier` (the leaf declares the pointer's names differently and every suffix up to 99 is taken --
-/// W6 C2: identical declarations are reused, different ones get the lowest free `FooPtr2`, `FooPtr3`...). A declaring
+/// W6 C2: identical declarations are reused, different ones get the lowest free `FooPtr2`, `FooPtr3`...); this function
+/// refuses it itself when A, B or a class member declares the pointer's name, which would win over it (lane cycq). A declaring
 /// unit that would drop out of the program after the cut (so its initialization never ran) is no refusal since A2:
 /// the planner adds it to the program's uses clause instead (RegisterDecl).</para>
 /// <para>A calling convention on the declaration (register pascal cdecl stdcall safecall
@@ -607,6 +610,12 @@ function CodeOnly(const pLine: string; var pInBrace, pInParen: Boolean): string;
 /// <param name="pLines">The file.</param>
 /// <returns>One TCodeStart per line.</returns>
 function CodeStarts(const pLines: TArray<string>): TArray<TCodeStart>;
+
+const
+  /// <summary>Lane cycq: what may precede a unit qualifier in a pattern: no word character and no member dot. A `..`
+  /// is no member dot: `array[0..Unit.cMax]` names the unit, and reading it as a chain hid the use from the planner
+  /// (E2242 after the entry was removed).</summary>
+  CUnitQualifierStart = '(?<!\w)(?<![^.]\.)';
 
 /// <summary>B11: the code of pLine (CodeOnly) from the start state pStart.</summary>
 /// <param name="pLine">The line.</param>
@@ -1747,7 +1756,7 @@ begin
   pMember:= '';
   var Parts:= pDeclUnit.Split(['.']);
   for var I:= 0 to High(Parts) do Parts[I]:= TRegEx.Escape(Parts[I]);
-  var Rx:= '(?<![\w.])' + string.Join('\s*\.\s*', Parts) + '\s*\.\s*([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)';
+  var Rx:= CUnitQualifierStart + string.Join('\s*\.\s*', Parts) + '\s*\.\s*([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)';
   var Code:= CodeOnlyLines(pLines);
   for var L:= 1 to Length(Code) do
     for var M in TRegEx.Matches(Code[L - 1], Rx, [roIgnoreCase]) do
@@ -1811,6 +1820,95 @@ begin
   if TRegEx.IsMatch(pText, '@\s*(?:[A-Za-z_][\w.]*\s*\.\s*)?' + TRegEx.Escape(pName) + '\b', [roIgnoreCase]) then Result:= False;
 end;
 
+{ Lane cycq: PlanRoutineInversion rewrites `Name` and `<DeclUnit>.Name` as TEXT on every line it edits, so each
+  occurrence on such a line has to BE the routine. Same-named things bind by scope: `Foo(1); DUnit.Foo(2);` in a
+  method of a class with its own Foo became `FooPtr(1); FooPtr(2);`, which compiled and called the wrong routine; a
+  local named like the unit makes `DUnit.Foo` a member of that local. The refs of the file say which is which: a bare
+  name must have one ref bound to the routine per occurrence (a count, so a column that reads differently cannot
+  pass it), a qualified one must not be bound to anything else. A unit-level routine of another used unit counts when
+  the uses order binds the name to this routine (BindName decides that for the surface too). Refuses name-shadowed,
+  naming the line; a qualified call of ANOTHER overload of the routine refuses overloaded-routine. }
+function ShadowRefusal(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface; pFromFid, pDeclFid: Int64;
+  const pLines: TArray<string>; const pDeclUnit: string; pQualified: TList<Integer>; const pRoutine: TSymbol): TRecipeRefusal;
+var
+  Edited: TList<Integer>;
+  Owner : TSymbol;
+  Stem  : string;
+begin
+  Result:= Default(TRecipeRefusal);
+  var Name:= pSurface.RoutineName;
+  var Parts:= pDeclUnit.Split(['.']);
+  var Escaped:= Copy(Parts);
+  for var I:= 0 to High(Escaped) do Escaped[I]:= TRegEx.Escape(Escaped[I]);
+  var QualRx:= '(?<![\w.@])(' + string.Join('\s*\.\s*', Escaped) + ')\s*\.\s*(' + TRegEx.Escape(Name) + ')\b';
+  var BareRx:= '(?<![\w.])' + TRegEx.Escape(Name) + '\b';
+  var Code  := CodeOnlyLines(pLines);
+  var Refs  := pSource.Store.GetReferencesFromFile(pFromFid);
+  Edited:= TList<Integer>.Create;
+  try
+    Edited.AddRange(pQualified);
+    for var R in pSurface.Refs do
+      if not Edited.Contains(R.Line) then Edited.Add(R.Line);
+    for var L in Edited do
+    begin
+      if (L < 1) or (L > Length(Code)) then Continue;
+      var Bound:= 0;
+      for var R in Refs do
+        if (R.StartLine = L) and (R.ReceiverText = '') and SameText(R.NameText, Name) then
+        begin
+          if R.SymbolId = pRoutine.Id then Inc(Bound)
+          else
+          begin
+            { an unresolved ref (two used units export the name) or another unit's routine: the uses order decides }
+            var Outside:= R.SymbolId <= 0;
+            if not Outside then
+            begin
+              var Target:= pSource.Store.GetSymbolById(R.SymbolId);
+              Outside:= (Target.FileId <> pFromFid) and (Target.Kind in [skProcedure, skFunction]);
+            end;
+            if Outside and pSource.BindName(pFromFid, L, Name, Owner, Stem) and (Owner.FileId = pDeclFid) then Inc(Bound);
+          end;
+        end;
+      if TRegEx.Matches(Code[L - 1], BareRx, [roIgnoreCase]).Count <> Bound then
+        Exit(MakeRefusal('name-shadowed', Name, pFromFid, L, Format('line %d also names something else called `%s` ' +
+          '(`%s`): the plan rewrites a line as text, so that name would become the pointer too', [L, Name, Trim(pLines[L - 1])])));
+      for var M in TRegEx.Matches(Code[L - 1], QualRx, [roIgnoreCase]) do
+        for var R in Refs do
+        begin
+          if (R.StartLine <> L) or (R.SymbolId <= 0) then Continue;
+          if (R.StartCol = M.Groups[2].Index) and SameText(R.NameText, Name) and (R.SymbolId <> pRoutine.Id) then
+            if pSource.Store.GetSymbolById(R.SymbolId).FileId = pDeclFid then
+              Exit(MakeRefusal('overloaded-routine', Name, pDeclFid, pRoutine.StartLine, Format('line %d calls another ' +
+                'overload of `%s` (`%s`)', [L, Name, Trim(pLines[L - 1])])))
+            else
+              Exit(MakeRefusal('name-shadowed', Name, pFromFid, L, Format('line %d: `%s` there is not the routine of ' +
+                '`%s` (`%s`)', [L, Trim(M.Value), pDeclUnit, Trim(pLines[L - 1])])));
+          if (R.StartCol = M.Groups[1].Index) and SameText(R.NameText, Parts[0]) and
+            (pSource.Store.GetSymbolById(R.SymbolId).Kind <> skUnit) then
+            Exit(MakeRefusal('name-shadowed', Parts[0], pFromFid, L, Format('line %d: `%s` there is a declaration of ' +
+              'the consumer, not the unit `%s` (`%s`)', [L, Parts[0], pDeclUnit, Trim(pLines[L - 1])])));
+        end;
+    end;
+  finally
+    Edited.Free;
+  end;
+end;
+
+{ Lane cycq: a symbol that would win over the pointer variable in the consumer, or over the assignment in the
+  declaring unit: anything of those two files (their own scope comes before a used unit), or a member of any class
+  (a method body sees its class first). A declaration in another used unit loses: the leaf goes last in the uses. }
+function PointerHider(const pSource: IEdgeSurfaceSource; const pPtrVar: string; pFromFid, pDeclFid: Int64; out pHider: TSymbol): Boolean;
+begin
+  for var S in pSource.Store.FindSymbolsByExactName(pPtrVar) do
+    if (S.FileId = pFromFid) or (S.FileId = pDeclFid) or (S.Kind in [skMethod, skField, skProperty]) then
+    begin
+      pHider:= S;
+      Exit(True);
+    end;
+  pHider:= Default(TSymbol);
+  Result:= False;
+end;
+
 { R1 refusals a call site can give: not a call, a name qualified by the declaring unit
   anywhere in the consumer (the uses entry it needs would be removed), init order (J4).
   W6 C7: the inverted routine itself, qualified (`B.Foo(...)`) or assigned as a value (`X := Foo`), is
@@ -1832,6 +1930,8 @@ begin
   if Q > 0 then
     Exit(MakeRefusal('qualified-ref', Member, pFromFid, Q, Format('line %d names `%s` qualified by its unit ' +
       '(`%s`); that use keeps needing the uses entry the cut removes', [Q, Member, Trim(pLines[Q - 1])])));
+  Result:= ShadowRefusal(pSource, pSurface, pFromFid, pDeclFid, pLines, pDeclUnit, pQualified, pRoutine);
+  if Result.Kind <> '' then Exit;
   for var L in pQualified do
   begin
     if not QualifiedUseOk(BareCode(LineOf(pLines, L)), Name, pDeclUnit, AllowArg) then
@@ -1893,6 +1993,14 @@ begin
     Result.DeclStem   := pSurface.ToStem;
     Result.ConsumerFid:= FromFid;
     Result.PtrVar     := Name + 'Ptr' + (if pSuffix > 1 then IntToStr(pSuffix) else '');
+    var Hider: TSymbol;
+    if PointerHider(pSource, Result.PtrVar, FromFid, DeclFid, Hider) then
+    begin
+      pRefusal:= MakeRefusal('duplicate-identifier', Result.PtrVar, Hider.FileId, Hider.StartLine, Format('`%s` is already ' +
+        'declared at `%s:%d` and would win over the pointer of that name', [Result.PtrVar,
+        ExtractFileName(pSource.Store.GetFilePath(Hider.FileId)), Hider.StartLine]));
+      Exit(Default(TRecipeSteps));
+    end;
     Result.PtrType    := 'T' + Result.PtrVar;
     Result.TypeDecl   := Format('%s = %s%s;%s', [Result.PtrType,
       (if Routine.Kind = skFunction then 'function' else 'procedure'), pSurface.RoutineSig,

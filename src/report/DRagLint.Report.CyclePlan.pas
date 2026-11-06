@@ -69,7 +69,7 @@ type
   /// multiple-classes (several class names and no `is` / `as` operand; PlanMemberInterface),
   /// member-unsupported, no-iinterface, ref-counted, receiver-unknown,
   /// cast-unseen, with-member, ancestry-unknown, type-unresolved, unresolved-qualified-type, exception-semantics (and reuses leaf-uses-cycle,
-  /// qualified-ref, duplicate-identifier, edge-still-used, manual-edit); coupling-remains (lane cyc4: mutual leaves that
+  /// qualified-ref, name-shadowed, duplicate-identifier, edge-still-used, manual-edit); coupling-remains (lane cyc4: mutual leaves that
   /// cannot merge, or a prediction that keeps the interface coupling); ctor-inversion-surface (B8: a class a consumer
   /// constructs, whose constructor inversion is outside its closed whitelist; the reason names the line). Line is 0 when the
   /// refusal has no single line (an edge, a unit).</remarks>
@@ -3538,7 +3538,7 @@ begin
           if not Files.Contains(U) then Files.Add(U);
       var Parts:= Decl.UnitName.Split(['.']);
       for var I:= 0 to High(Parts) do Parts[I]:= TRegEx.Escape(Parts[I]);
-      var Rx:= '(?<![\w.])' + string.Join('\s*\.\s*', Parts) + '\s*\.\s*([A-Za-z_]\w*)';
+      var Rx:= CUnitQualifierStart + string.Join('\s*\.\s*', Parts) + '\s*\.\s*([A-Za-z_]\w*)';
       for var Fid in Files do RewriteQualifiedIn(GetFile(Fid), Stem, Rx, Names.ToArray);
     end;
   finally
@@ -5874,7 +5874,7 @@ begin
   var D:= GetFile(FidOfStem(pEv.ToStem));
   var Parts:= D.UnitName.Split(['.']);
   for var I:= 0 to High(Parts) do Parts[I]:= TRegEx.Escape(Parts[I]);
-  var Rx:= '(?<![\w.])' + string.Join('\s*\.\s*', Parts) + '\s*\.\s*([A-Za-z_]\w*)';
+  var Rx:= CUnitQualifierStart + string.Join('\s*\.\s*', Parts) + '\s*\.\s*([A-Za-z_]\w*)';
   var InBrace:= False;
   var InParen:= False;
   L:= TList<TSymbol>.Create;
