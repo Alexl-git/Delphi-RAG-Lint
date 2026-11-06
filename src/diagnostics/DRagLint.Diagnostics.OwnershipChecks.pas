@@ -893,8 +893,7 @@ var
 begin
   Result:= False;
   if FFotClasses.Count = 0 then Exit;
-  if not ALocals.TryGetValue(ATarget, T) then
-    if not FFieldType.TryGetValue(LowerCase(StripGeneric(ClassOf(ARoutine))) + '.' + ATarget, T) then Exit;
+  if not (ALocals.TryGetValue(ATarget, T) or FFieldType.TryGetValue(LowerCase(StripGeneric(ClassOf(ARoutine))) + '.' + ATarget, T)) then Exit;
   Result:= FFotClasses.ContainsKey(LowerCase(StripGeneric(T)));
 end;
 
