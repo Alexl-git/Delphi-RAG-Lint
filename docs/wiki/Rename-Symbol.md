@@ -48,6 +48,8 @@ A method renames with its overloads, overrides and interface implementers, all o
 is checked: a bare `Helper` that bound to a global would bind to a member renamed to `Helper` inside its class, and that
 compiles. So would a call renamed to a name a local of that routine already has.
 
+A form component (a published field of a form class) renames with its form: `object Name: TType`, `inherited Name: TType`, `Prop = Name` and `Prop = Owner.Name` in the owning form's and its descendants' text `.dfm`. A same-named component of another form is that form's and is left alone. Text in strings, such as `FindComponent('Name')`, is not looked at.
+
 A symbol declared inside a routine (a local, a parameter, a local constant or type, a nested routine) is proved inside that routine, in every form of the verb: no other unit can name it or capture the new name, and no library is needed. A parameter's implementation header renames with its declaration. Any bare occurrence of the new name in the routine, a declaration included, refuses (`capture-local`); so does an `{$I}` inside the routine (`no-ref-occurrence`), because included text holds no refs.
 
 | refusal | why |
@@ -60,7 +62,7 @@ A symbol declared inside a routine (a local, a parameter, a local constant or ty
 | `low-confidence`, `conflicting-binding` | the resolver's binding of the token is not certain |
 | `override-of-library`, `implements-unindexed`, `group-name-differs`, `group-uncertain` | the method group cannot be renamed whole |
 | `redeclared-property` | a descendant republishes the property |
-| `dfm-not-rewritten`, `dfm-name-unbound` | a form may name it and nothing rewrites that form |
+| `dfm-not-rewritten`, `dfm-name-unbound` | a form may name it and cannot be rewritten: binary, a published property, or a component name under an `inline`, in a list, in a form whose root class is not indexed |
 | `new-name-collides`, `new-name-in-library` | the new name meets a member of the class family, a unit-level symbol, or the library |
 | `capture-bare`, `capture-unbound`, `capture-no-ref`, `capture-in-with` | an occurrence of the new name could bind to the renamed symbol |
 | `shadowed-at-site`, `shadowed-in-with` | something nearer answers to the new name at a renamed site |

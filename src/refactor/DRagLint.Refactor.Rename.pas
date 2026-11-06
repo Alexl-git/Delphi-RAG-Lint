@@ -397,6 +397,12 @@ function ByteColToCharCol(const ALine: string; AByteCol: Integer): Integer;
 /// <param name="APos">1-based position.</param>
 /// <returns>APos itself when none starts there.</returns>
 function SkipNonIdent(const AText: string; APos: Integer): Integer;
+/// <summary>The class a text form file streams: the root object's type, as the sibling .pas declares it.</summary>
+/// <param name="AStore">The project index.</param>
+/// <param name="ADfmPath">The form file.</param>
+/// <returns>The class; Id = 0 when the file is binary or missing, or the sibling .pas holds no such class.</returns>
+function DfmRootSymbol(const AStore: ISymbolStore; const ADfmPath: string): TSymbol;
+
 /// <summary>True when an event binding in ADfmPath binds the method AName of class AOwner (X-25).</summary>
 /// <param name="AStore">The project index.</param>
 /// <param name="ADfmPath">The form file.</param>
@@ -631,6 +637,15 @@ begin
     if Anc.SymbolId = AOwnerId then Exit(True);
 end;
 
+function DfmRootSymbol(const AStore: ISymbolStore; const ADfmPath: string): TSymbol;
+begin
+  Result:= Default(TSymbol);
+  var RootName:= DfmRootClassName(ADfmPath);
+  if RootName = '' then Exit;
+  for var Cand in AStore.FindSymbolsByFile(ChangeFileExt(ADfmPath, '.pas')) do
+    if (Cand.Kind in [skClass, skForm]) and SameText(Cand.Name, RootName) then Exit(Cand);
+end;
+
 // True when an event binding in ADfmPath binds the method AName of class
 // AOwner (X-25): the form's root class (declared in the sibling .pas) IS
 // AOwner, or descends from it with no class from the root down to AOwner
@@ -642,20 +657,13 @@ function DfmBindingBelongsTo(const AStore: ISymbolStore; const ADfmPath: string;
 var
   RootName: string;
   Root    : TSymbol;
-  Cand    : TSymbol;
   Anc     : TTypeAncestor;
 begin
   Result:= False;
   RootName:= '';
   if AOwner.Kind in [skClass, skForm] then RootName:= DfmRootClassName(ADfmPath);
   if RootName = '' then Exit;
-  Root:= Default(TSymbol);
-  for Cand in AStore.FindSymbolsByFile(ChangeFileExt(ADfmPath, '.pas')) do
-    if (Cand.Kind in [skClass, skForm]) and SameText(Cand.Name, RootName) then
-    begin
-      Root:= Cand;
-      Break;
-    end;
+  Root:= DfmRootSymbol(AStore, ADfmPath);
   if Root.Id = AOwner.Id then Exit(True);
   if (Root.Id = 0) or (AStore.FindChildSymbolByName(Root.Id, AName).Id <> 0)
      or not ClassDescendsFrom(AStore, Root.Id, AOwner.Id) then Exit;

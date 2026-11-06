@@ -54,7 +54,7 @@ const
   CRefuseRedeclaredProperty = 'redeclared-property';
   /// <summary>A binary or unindexed form file may bind the name; a form that no longer loads is no compile error.</summary>
   CRefuseDfmNotRewritten = 'dfm-not-rewritten';
-  /// <summary>A text form file names a published field or property; nothing rewrites it.</summary>
+  /// <summary>A text form file names a published property, or a component where nothing can tell which one is meant.</summary>
   CRefuseDfmNameUnbound = 'dfm-name-unbound';
   /// <summary>The new name is already a member in the class family, or a unit-level symbol.</summary>
   CRefuseNewNameCollides = 'new-name-collides';
@@ -144,7 +144,11 @@ type
 /// library type ends there: a library class cannot descend from a project class (refused when the target's qualified
 /// name is in the library too). A symbol declared inside a routine (a local, a parameter, a local constant or type, a
 /// nested routine) is scoped: only the owning routine's own lines are read, no other unit can name it or capture the new
-/// name, and any bare occurrence of the new name in those lines refuses as CRefuseCaptureLocal. No library is needed.</remarks>
+/// name, and any bare occurrence of the new name in those lines refuses as CRefuseCaptureLocal. No library is needed.
+/// A published field of a form class is a component: its name in the owning form's and descendants' text .dfm
+/// (`object Name: TType`, `inherited Name: TType`, `Prop = Name`, `Prop = Owner.Name`) is an edit. Another form's
+/// own component of that name is another symbol's. What cannot be told apart (under an `inline`, inside a list, a form
+/// whose root class is not indexed, an enum value of the same name) refuses as CRefuseDfmNameUnbound.</remarks>
 function ProveRename(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
   const pQName, pNewName: string): TRenameProof;
 
@@ -230,6 +234,7 @@ const
   CNotLocal       = '''' + CKindParam + ''', ''' + CKindLocal + '''';
   CTypeKinds      = '''class'', ''form'', ''interface'', ''record'', ''type'', ''object''';
   CRoutineKinds: array[0..4] of string = (CKindMethod, 'procedure', 'function', 'constructor', 'destructor');
+  CBinaryDfmNote  = 'binary .dfm';
 
 type
   TSymRow = record
@@ -345,6 +350,8 @@ type
     procedure ScanFile(pFileId: Int64; const pPath: string);
     procedure ProcessDfmRefs;
     procedure ScanDfmNames(const pPath, pText: string);
+    procedure ScanDfmComponent(const pPath, pText: string; pInstances: TStringList);
+    function OwnerInstances: TStringList;
     procedure CheckDfmNames;
   public
     constructor Create(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>; const pQName, pNewName: string);
@@ -1755,18 +1762,145 @@ begin
   end;
 end;
 
-{ A published field or property named in a text form: nothing rewrites it, and a form that no longer loads is no compile
-  error. Binary and unindexed forms: SkippedDfmNotes. }
+{ The name each owner's form file gives its root object: `Prop = DM1.Name` in another form means the owner's component. }
+function TProver.OwnerInstances: TStringList;
+begin
+  Result:= TStringList.Create;
+  Result.CaseSensitive:= False;
+  for var S in FGroup.Values do
+  begin
+    var Dfm:= ChangeFileExt(FStore.GetFilePath(S.FileId), '.dfm');
+    if not TFile.Exists(Dfm) then Continue;
+    var Text: string;
+    TTextFileFormat.ReadFile(Dfm, Text);
+    var M:= TRegEx.Match(Text, '^\s*(?:object|inherited|inline)\s+(\w+)\s*:', [roIgnoreCase, roMultiLine]);
+    if M.Success then Result.Add(M.Groups[1].Value);
+  end;
+end;
+
+{ A component's name in a text form, line by line. Who owns the form decides a bare name; only what the line's shape can
+  tell apart is decided at all: the rest refuses, because a form that no longer loads is no compile error. }
+procedure TProver.ScanDfmComponent(const pPath, pText: string; pInstances: TStringList); // dl:ok cognitive-complexity,cyclomatic-complexity -- one line-shape ladder over a small text format, read top to bottom
+const
+  CValueSep = ' = ';
+begin
+  var Root:= DfmRootSymbol(FStore, pPath);
+  var Mine:= False;
+  for var S in FGroup.Values do
+    if DfmBindingBelongsTo(FStore, pPath, FStore.GetSymbolById(S.ParentId), FOld) then Mine:= True;
+  var IsEnum:= (Length(ReadSyms('name = :n COLLATE NOCASE AND kind = ''enum_value''', FOld)) > 0)
+    or LibAny('SELECT 1 FROM symbols WHERE name = :n COLLATE NOCASE AND kind = ''enum_value'' LIMIT 1', FOld);
+  var Lines:= TStringList.Create;
+  try
+    Lines.Text:= pText;
+    var Depth:= 0;
+    var InlineAt:= 0;
+    var InBlob:= False;
+    for var L:= 0 to Lines.Count - 1 do
+    begin
+      var S:= Lines[L];
+      if InBlob then
+      begin
+        InBlob:= Pos('}', S) = 0;
+        Continue;
+      end;
+      var T:= Trim(S);
+      var FirstWord:= Copy(T, 1, Pos(' ', T + ' ') - 1);
+      if SameText(T, 'end') or SameText(T, 'end>') then
+      begin
+        if Depth = InlineAt then InlineAt:= 0;
+        Dec(Depth);
+        Continue;
+      end;
+      if SameText(T, 'item') then
+      begin
+        Inc(Depth);
+        Continue;
+      end;
+      var Colon:= Pos(':', S);
+      var IsHeader:= MatchText(FirstWord, ['object', 'inherited', 'inline']) and (Colon > 0);
+      var InInline:= InlineAt > 0;
+      var Eq:= if IsHeader then 0 else Pos(CValueSep, S);
+      var Value:= if Eq > 0 then Trim(Copy(S, Eq + Length(CValueSep), MaxInt)) else '';
+      var At:= 1;
+      var InStr:= False;
+      while At <= Length(S) do
+      begin
+        if S[At] = '''' then InStr:= not InStr
+        else if not InStr and (S[At] = '{') then
+        begin
+          InBlob:= Pos('}', S, At) = 0;
+          Break;
+        end
+        else if not InStr and IsIdentAt(S, FOld, At) then
+        begin
+          var Undecided:= True;
+          var IsEdit:= False;
+          if IsHeader then
+          begin
+            Undecided:= (At < Colon) and (InInline or (Root.Id = 0));
+            IsEdit:= (At < Colon) and Mine and not Undecided;
+          end
+          else if (Eq > 0) and (At < Eq) then Undecided:= False { a property's own name }
+          else if Eq > 0 then
+          begin
+            if SameText(Value, FOld) or StartsText(FOld + '.', Value) then
+            begin
+              Undecided:= InInline or (Root.Id = 0) or (Mine and IsEnum);
+              IsEdit:= Mine and not Undecided;
+            end
+            else if (At >= 2) and (S[At - 1] = '.') and SameText(Copy(Value, Length(Value) - Length(FOld), MaxInt), '.' + FOld) then
+            begin
+              var Qualifier:= Copy(Value, 1, Length(Value) - Length(FOld) - 1);
+              Undecided:= pInstances.IndexOf(Qualifier) < 0;
+              IsEdit:= not Undecided;
+            end;
+          end;
+          if Undecided then
+            Refuse(CRefuseDfmNameUnbound, pPath, L + 1, At,
+              Format('this form names "%s" where nothing tells which component it means: fix it by hand', [FOld]))
+          else if IsEdit then
+          begin
+            AddEdit(pPath, L + 1, At);
+            Inc(FBound);
+          end
+          else Inc(FOther);
+          Inc(At, Length(FOld) - 1);
+        end;
+        Inc(At);
+      end;
+      if IsHeader then
+      begin
+        Inc(Depth);
+        if SameText(FirstWord, 'inline') and (Depth > 1) and (InlineAt = 0) then InlineAt:= Depth;
+      end;
+    end;
+  finally
+    Lines.Free;
+  end;
+end;
+
+{ A published field or property named in a text form. A field is a component and its form is rewritten; a property's name
+  in a form is not, and a form that no longer loads is no compile error. Binary and unindexed forms: SkippedDfmNotes. }
 procedure TProver.CheckDfmNames;
 begin
-  for var S in FGroup.Values do
-    for var Note in TRenameRefactoring.SkippedDfmNotes(FStore, S.QName) do
-      Refuse(CRefuseDfmNotRewritten, FStore.GetFilePath(S.FileId), S.Line, 0, Note);
   var Streamed:= False;
+  var Component:= True;
   for var S in FGroup.Values do
+  begin
+    if not SameText(S.Kind, CKindField) then Component:= False;
     if MatchText(S.Kind, [CKindField, CKindProperty]) and MatchText(SymRow(S.ParentId).Kind, [CKindClass, CKindForm])
        and (HasWord(S.Modifiers, 'published') or not S.VisExplicit) then Streamed:= True;
+  end;
+  Component:= Component and Streamed;
+  for var S in FGroup.Values do
+    for var Note in TRenameRefactoring.SkippedDfmNotes(FStore, S.QName) do
+      { a text form outside the index is read below all the same; only a binary one stays out of reach }
+      if not Component or ContainsText(Note, CBinaryDfmNote) then
+        Refuse(CRefuseDfmNotRewritten, FStore.GetFilePath(S.FileId), S.Line, 0, Note);
   if not Streamed then Exit;
+  var Instances: TStringList:= nil;
+  if Component then Instances:= OwnerInstances;
   var Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
@@ -1788,13 +1922,15 @@ begin
         var Text: string;
         TTextFileFormat.ReadFile(Path, Text);
         if not ContainsText(Text, FOld) then Continue;
-        ScanDfmNames(Path, Text);
+        if Component then ScanDfmComponent(Path, Text, Instances)
+        else ScanDfmNames(Path, Text);
       end;
     finally
       Dfms.Free;
     end;
   finally
     Q.Free;
+    Instances.Free;
   end;
 end;
 
