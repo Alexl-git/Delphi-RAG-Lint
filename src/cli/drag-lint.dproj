@@ -211,6 +211,7 @@
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.SemanticTokens.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.SyntaxTree.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.InlayHint.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Feature.FoldingRange.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.DocumentHighlight.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.TypeDefinition.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.TypeHierarchy.pas"/>

@@ -171,6 +171,7 @@ uses
   DRagLint.LSP.Feature.SemanticTokens in '..\lsp\DRagLint.LSP.Feature.SemanticTokens.pas',
   DRagLint.LSP.SyntaxTree in '..\lsp\DRagLint.LSP.SyntaxTree.pas',
   DRagLint.LSP.Feature.InlayHint in '..\lsp\DRagLint.LSP.Feature.InlayHint.pas',
+  DRagLint.LSP.Feature.FoldingRange in '..\lsp\DRagLint.LSP.Feature.FoldingRange.pas',
   DRagLint.LSP.Feature.DocumentHighlight in '..\lsp\DRagLint.LSP.Feature.DocumentHighlight.pas',
   DRagLint.LSP.Feature.TypeDefinition in '..\lsp\DRagLint.LSP.Feature.TypeDefinition.pas',
   DRagLint.LSP.Feature.TypeHierarchy in '..\lsp\DRagLint.LSP.Feature.TypeHierarchy.pas',

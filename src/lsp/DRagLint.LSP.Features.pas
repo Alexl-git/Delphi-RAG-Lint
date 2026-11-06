@@ -24,6 +24,7 @@ uses
   , DRagLint.LSP.Feature.TypeHierarchy  // dl:ok unused-unit-in-uses -- linked for its initialization (RegisterLspFeature); no identifier is referenced
   , DRagLint.LSP.Feature.TypeDefinition  // dl:ok unused-unit-in-uses -- linked for its initialization (RegisterLspFeature); no identifier is referenced
   , DRagLint.LSP.Feature.DocumentHighlight  // dl:ok unused-unit-in-uses -- linked for its initialization (RegisterLspFeature); no identifier is referenced
+  , DRagLint.LSP.Feature.FoldingRange  // dl:ok unused-unit-in-uses -- linked for its initialization (RegisterLspFeature); no identifier is referenced
   , DRagLint.LSP.Feature.ExecuteCommand  // dl:ok unused-unit-in-uses@91b8 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
   ;
 
