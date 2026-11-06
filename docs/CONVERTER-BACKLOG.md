@@ -20,6 +20,9 @@ before working on an item.**
   D5 and Studio 37, and DataDB-to-FireDAC.rules:54 already has the singular.
 * **REPIN held** for the 1.43 re-parse (extractor 1.31.0); then re-verify convert-apply
   `--old-platform-db` (lane/143-convd5). DRVLIB rerun, DRV2B, GUILOCK, ENUMMAP: ENGINE lanes.
+* **ENUMMAP closed (2026-11-05, ENGINE lane/144-enummap 64caa16a):** 0 D5 -> Win64 enum #migrate lines
+  needed (379/474 types pair by name, every member kept; 95 unmatched listed in REPORT.md). Open for us:
+  **dcrX -> gcrX** (Data.DB TDBScreenCursor -> FireDAC) is a FireDAC-rules question in convrules -- unscheduled.
 ## State 2026-10-28 (convrules-editor-31) -- adds to the 10-26 state below
 
 * **SHIPPED 10-27/28 (ENGINE-merged to local main):** conv/regreview -> 4582c280 (15 registry entries
