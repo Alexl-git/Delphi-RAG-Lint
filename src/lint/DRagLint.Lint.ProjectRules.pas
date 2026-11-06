@@ -4666,6 +4666,7 @@ begin
     if WantRule(UPCAST_THEN_DOWNCAST_RULE) and OptedIn('upcast-then-downcast') then RefTypeWanted:= RefTypeWanted + [UPCAST_THEN_DOWNCAST_RULE];
     if WantRule(WITH_ON_TEMPORARY_RULE) and OptedIn('with-on-temporary') then RefTypeWanted:= RefTypeWanted + [WITH_ON_TEMPORARY_RULE];
     if WantRule(INTERFACE_HOLDER_RULE) and OptedIn('interface-holder-of-non-refcounted') then RefTypeWanted:= RefTypeWanted + [INTERFACE_HOLDER_RULE];
+    if WantRule(ARGUMENT_NARROWS_RULE) and OptedIn('argument-narrows') then RefTypeWanted:= RefTypeWanted + [ARGUMENT_NARROWS_RULE];
     for var Rt in CollectRefTypeRules(AStore, ALibraryStore, RefTypeWanted, AOnlyFileId) do Findings.Add(Rt);
     { gap-rules wave, lane G8. The two DFM rules and uses-movable-to-implementation are ON by
       default and walk one table each (uses-movable back ON in lane IMOV after REFTYPE: 0 FP on

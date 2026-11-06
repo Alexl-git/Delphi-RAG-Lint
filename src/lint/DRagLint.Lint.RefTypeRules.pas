@@ -35,6 +35,8 @@ uses
 const
   /// <summary>Rule id: `x is T` where the static type of x already descends from T.</summary>
   IS_ALWAYS_TRUE_RULE = 'is-always-true';
+  /// <summary>Rule id: an argument wider than the parameter it is passed to.</summary>
+  ARGUMENT_NARROWS_RULE = 'argument-narrows';
   /// <summary>Rule id: an interface variable assigned an object that is not reference counted.</summary>
   INTERFACE_HOLDER_RULE = 'interface-holder-of-non-refcounted';
   /// <summary>Rule id: `with TFoo.Create do` that nobody frees.</summary>
@@ -42,7 +44,7 @@ const
   /// <summary>Rule id: a cast to an ancestor and straight back down, TLeaf(TBase(x)).</summary>
   UPCAST_THEN_DOWNCAST_RULE = 'upcast-then-downcast';
   /// <summary>Every project rule this unit emits, as `--rule` and dl:ok markers spell them.</summary>
-  REF_TYPE_RULES: array[0..3] of string = (IS_ALWAYS_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE, INTERFACE_HOLDER_RULE);
+  REF_TYPE_RULES: array[0..4] of string = (IS_ALWAYS_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE, INTERFACE_HOLDER_RULE, ARGUMENT_NARROWS_RULE);
   /// <summary>The ones that ship OFF; each names why in the catalog.</summary>
   REF_TYPE_RULES_OFF: array of string = [];
 
@@ -96,6 +98,11 @@ const
   FIELD_ARGS       = 'args';
   OP_IS            = 'is';
   ROOT_CLASS       = 'tobject';
+  OVERLOAD_WORD    = 'overload';
+  { How many aliases of an alias are followed. }
+  MAX_ALIAS_HOPS   = 4;
+  { Storage of the signed and unsigned integer types and the floats: a rank, not a promise of sizeof. }
+  WIDTH_FLOAT_BASE = 100;
   NODE_ASSIGN      = 'assignment';
   OP_NODE_ASSIGN   = 'kAssign';
   SELF_WORD        = 'Self';
@@ -165,6 +172,7 @@ type
       FPath    : string;
       FFileId  : Int64;
       FSrc     : TBytes;
+      FSymbols : TDictionary<Int64, TSymbol>;
       FWithDepth: Integer;
       FOwnRefCount: TArray<string>;
       FOwnRefCountRead: Boolean;
@@ -191,6 +199,10 @@ type
       function OwnRefCountClasses: TArray<string>;
       function SelfType(const AAssignLhs: TTSNode): TExprType;
       procedure CheckAssign(const ANode: TTSNode);
+      function SymbolOf(AId: Int64): TSymbol;
+      function ResolveAlias(const ATypeName: string): string;
+      function NumericName(const ANode: TTSNode; out AFact: TRefFact): Boolean;
+      procedure CheckArguments(const ANode: TTSNode);
       procedure CheckIs(const ANode: TTSNode);
       procedure Walk(const ANode: TTSNode);
     public
@@ -203,6 +215,61 @@ type
       /// <summary>The findings so far, in scan order.</summary>
       function Findings: TArray<TLintFinding>;
   end;
+
+/// <summary>Bytes of a numeric type name, plus WIDTH_FLOAT_BASE for a float; 0 for any other type.</summary>
+function NumericWidth(const ALowerType: string): Integer;
+const
+  WIDTH_1: array[0..1] of string = ('shortint', 'byte');
+  WIDTH_2: array[0..1] of string = ('smallint', 'word');
+  WIDTH_4: array[0..5] of string = ('integer', 'longint', 'cardinal', 'longword', 'fixedint', 'fixeduint');
+  WIDTH_8: array[0..5] of string = ('int64', 'uint64', 'nativeint', 'nativeuint', 'intptr', 'uintptr');
+  BYTES_1 = 1; BYTES_2 = 2; BYTES_4 = 4; BYTES_8 = 8;  // dl:ok multiple-statements-per-line -- the sizes read as one row
+begin
+  Result:= 0;
+  for var S: string in WIDTH_1 do if S = ALowerType then Exit(BYTES_1);  // dl:ok multiple-statements-per-line -- a lookup table in code form
+  for var S: string in WIDTH_2 do if S = ALowerType then Exit(BYTES_2);  // dl:ok multiple-statements-per-line -- a lookup table in code form
+  for var S: string in WIDTH_4 do if S = ALowerType then Exit(BYTES_4);  // dl:ok multiple-statements-per-line -- a lookup table in code form
+  for var S: string in WIDTH_8 do if S = ALowerType then Exit(BYTES_8);  // dl:ok multiple-statements-per-line -- a lookup table in code form
+  if ALowerType = 'single' then Exit(WIDTH_FLOAT_BASE + BYTES_4);
+  if (ALowerType = 'double') or (ALowerType = 'real') then Exit(WIDTH_FLOAT_BASE + BYTES_8);
+end;
+
+/// <summary>The by-value parameter types of a routine signature in order; '' for a
+/// var / out / untyped / array parameter, which never narrows.</summary>
+function ParamTypes(const ASignature: string): TArray<string>;
+begin
+  Result:= nil;
+  var Open: Integer:= ASignature.IndexOf('(');
+  if Open < 0 then Exit;
+  var Depth: Integer:= 0;
+  var Close: Integer:= -1;
+  for var I: Integer:= Open to ASignature.Length - 1 do
+  begin
+    if ASignature.Chars[I] = '(' then Inc(Depth)
+    else if ASignature.Chars[I] = ')' then
+    begin
+      Dec(Depth);
+      if Depth = 0 then
+      begin
+        Close:= I;
+        Break;
+      end;
+    end;
+  end;
+  if Close < 0 then Exit;
+  for var Part: string in ASignature.Substring(Open + 1, Close - Open - 1).Split([';']) do
+  begin
+    var P: string:= Part.Trim;
+    var Colon: Integer:= P.IndexOf(':');
+    var Names: string:= if Colon >= 0 then P.Substring(0, Colon) else P;
+    var TypeText: string:= '';
+    if Colon >= 0 then TypeText:= P.Substring(Colon + 1).Split(['='])[0].Trim;
+    var Low: string:= Names.Trim.ToLower;
+    if Low.StartsWith('var ') or Low.StartsWith('out ') then TypeText:= '';
+    for var N: string in Names.Split([',']) do
+      Result:= Result + [TypeText];
+  end;
+end;
 
 function IsAsNode(const ANode: TTSNode): Boolean;
 begin
@@ -242,6 +309,7 @@ begin
   FByName  := TDictionary<string, TTypeFacts>.Create;
   FById    := TDictionary<Int64, TTypeFacts>.Create;
   FLibName := TDictionary<string, TTypeFacts>.Create;
+  FSymbols := TDictionary<Int64, TSymbol>.Create;
   FQuery   := TFDQuery.Create(nil);
   FQuery.Connection:= (AStore as TSQLiteSymbolStore).GetConnection;
 end;
@@ -249,6 +317,7 @@ end;
 destructor TRefTypeScan.Destroy;
 begin
   FQuery.Free;
+  FSymbols.Free;
   FLibName.Free;
   FById.Free;
   FByName.Free;
@@ -688,11 +757,107 @@ begin
       [Text(LhsN), Holder.Facts.Name, Source.Facts.Name, Base]));
 end;
 
+function TRefTypeScan.SymbolOf(AId: Int64): TSymbol;
+begin
+  if FSymbols.TryGetValue(AId, Result) then Exit;
+  Result:= FStore.GetSymbolById(AId);
+  FSymbols.Add(AId, Result);
+end;
+
+function TRefTypeScan.ResolveAlias(const ATypeName: string): string;
+begin
+  Result:= LeafOf(ATypeName);
+  for var Hop: Integer:= 1 to MAX_ALIAS_HOPS do
+  begin
+    if NumericWidth(Result.ToLower) > 0 then Exit;
+    var Target: string:= '';
+    var Count : Integer:= 0;
+    for var S: TSymbol in FStore.FindSymbolsByExactName(Result) do
+      if S.Kind = skTypeAlias then
+      begin
+        Inc(Count);
+        Target:= S.Signature;
+      end;
+    { A homonym names no one type. }
+    if (Count <> 1) or (Target = '') then Exit;
+    Result:= LeafOf(Target);
+  end;
+end;
+
+function TRefTypeScan.NumericName(const ANode: TTSNode; out AFact: TRefFact): Boolean;
+begin
+  Result:= False;
+  AFact := Default(TRefFact);
+  var Name: TTSNode:= Default(TTSNode);
+  if ANode.NodeType = TYPE_NODE_ID then
+  begin
+    if FWithDepth > 0 then Exit;
+    Name:= ANode;
+  end
+  else if ANode.NodeType = NODE_DOT then Name:= ANode.ChildByField(FIELD_RHS)
+  else if ANode.NodeType = NODE_CALL then
+  begin
+    var Ent: TTSNode:= ANode.ChildByField(FIELD_ENTITY);
+    if Ent.IsNull then Exit;
+    if Ent.NodeType = TYPE_NODE_ID then
+    begin
+      if FWithDepth > 0 then Exit;
+      Name:= Ent;
+    end
+    else if Ent.NodeType = NODE_DOT then Name:= Ent.ChildByField(FIELD_RHS);
+  end;
+  if Name.IsNull or (Name.NodeType <> TYPE_NODE_ID) then Exit;
+  if (not FactAt(Name, AFact)) or (AFact.TypeQName = '') or (AFact.SymbolId <= 0) then Exit;
+  { A constant's value is known to fit, or the compiler said so. }
+  Result:= SymbolOf(AFact.SymbolId).Kind <> skConstDecl;
+end;
+
+procedure TRefTypeScan.CheckArguments(const ANode: TTSNode);
+var
+  Callee: TRefFact;
+  Arg   : TRefFact;
+begin
+  var Ent: TTSNode:= ANode.ChildByField(FIELD_ENTITY);
+  var Args: TTSNode:= ANode.ChildByField(FIELD_ARGS);
+  if Ent.IsNull or Args.IsNull then Exit;
+  var Name: TTSNode:= if Ent.NodeType = NODE_DOT then Ent.ChildByField(FIELD_RHS) else Ent;
+  if Name.IsNull or (Name.NodeType <> TYPE_NODE_ID) then Exit;
+  if (Ent.NodeType = TYPE_NODE_ID) and (FWithDepth > 0) then Exit;
+  if (not FactAt(Name, Callee)) or (Callee.SymbolId <= 0) then Exit;
+  var Sym: TSymbol:= SymbolOf(Callee.SymbolId);
+  if not (Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor]) then Exit;
+  { The resolver's overload choice is the part a width argument cannot rest on. }
+  if Sym.Directives.ToLower.Contains(OVERLOAD_WORD) or Sym.Modifiers.ToLower.Contains(OVERLOAD_WORD) then Exit;
+  var Params: TArray<string>:= ParamTypes(Sym.Signature);
+  if Integer(Args.NamedChildCount) > Length(Params) then Exit;
+  for var I: Integer:= 0 to Integer(Args.NamedChildCount) - 1 do
+  begin
+    if Params[I] = '' then Continue;
+    var ArgN: TTSNode:= Args.NamedChild(I);
+    if not NumericName(ArgN, Arg) then Continue;
+    var ArgType  : string:= ResolveAlias(Arg.TypeQName);
+    var ParamType: string:= ResolveAlias(Params[I]);
+    var ArgW  : Integer:= NumericWidth(ArgType.ToLower);
+    var ParamW: Integer:= NumericWidth(ParamType.ToLower);
+    if (ArgW = 0) or (ParamW = 0) then Continue;
+    if (ArgW > WIDTH_FLOAT_BASE) <> (ParamW > WIDTH_FLOAT_BASE) then Continue;
+    if ArgW <= ParamW then Continue;
+    Emit(ARGUMENT_NARROWS_RULE, ArgN,
+      Format('%s is %s but parameter %d of %s is %s: the value is truncated silently. Widen the parameter, or narrow it explicitly after a range check.',
+        [Text(ArgN), ArgType, I + 1, Sym.Name, ParamType]));
+  end;
+end;
+
 procedure TRefTypeScan.Walk(const ANode: TTSNode);
 begin
   if ANode.IsNull then Exit;
   var NT: string:= ANode.NodeType;
-  if IsAsNode(ANode) or (NT = NODE_CALL) then CheckCast(ANode)
+  if NT = NODE_CALL then
+  begin
+    CheckCast(ANode);
+    if Wants(ARGUMENT_NARROWS_RULE) then CheckArguments(ANode);
+  end
+  else if IsAsNode(ANode) then CheckCast(ANode)
   else if NT = NODE_BINARY then CheckIs(ANode)
   else if (NT = NODE_ASSIGN) and Wants(INTERFACE_HOLDER_RULE) then CheckAssign(ANode);
   var IsWith: Boolean:= NT = NODE_WITH;

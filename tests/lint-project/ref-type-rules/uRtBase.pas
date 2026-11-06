@@ -73,7 +73,48 @@ type
 function MakeBase: TRtBase;
 function MakeLeaf: TRtLeaf;
 
+type
+  TRtKey = Int64;
+  TRtKey2 = TRtKey;
+
+procedure TakeInt(AValue: Integer);
+procedure TakeTwo(const AFirst: Int64; ASecond: Byte = 0);
+procedure TakeVar(var AValue: Integer);
+procedure TakeOver(AValue: Integer); overload;
+procedure TakeOver(AValue: Int64); overload;
+procedure TakeSingle(AValue: Single);
+function WideResult: Int64;
+
 implementation
+
+procedure TakeInt(AValue: Integer);
+begin
+end;
+
+procedure TakeTwo(const AFirst: Int64; ASecond: Byte);
+begin
+end;
+
+procedure TakeVar(var AValue: Integer);
+begin
+end;
+
+procedure TakeOver(AValue: Integer);
+begin
+end;
+
+procedure TakeOver(AValue: Int64);
+begin
+end;
+
+procedure TakeSingle(AValue: Single);
+begin
+end;
+
+function WideResult: Int64;
+begin
+  Result:= 0;
+end;
 
 procedure TRtCompThing.Hook;
 begin

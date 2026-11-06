@@ -9,8 +9,29 @@ procedure IsTests(ALeaf: TRtLeaf; ABase: TRtBase; const AObj: TObject);
 procedure CastTests(ALeaf: TRtLeaf; ABase: TRtBase);
 procedure WithTests(ALeaf: TRtLeaf; AOwner: TComponent);
 procedure HolderTests(AComp: TRtCompThing; ACounted: TRtCountedThing; ARef: TRtRefThing);
+procedure NarrowTests(AWide: Int64; AKey: TRtKey2; ASmall: Integer; ADouble: Double);
 
 implementation
+
+procedure NarrowTests(AWide: Int64; AKey: TRtKey2; ASmall: Integer; ADouble: Double);
+const
+  CFit = Int64(5);
+var
+  Narrow: Integer;
+begin
+  TakeInt(AWide);  // TRIGGER-NARROW-VARIABLE
+  TakeInt(AKey);  // TRIGGER-NARROW-ALIAS
+  TakeInt(WideResult);  // TRIGGER-NARROW-RESULT
+  TakeTwo(AWide, ASmall);  // TRIGGER-NARROW-SECOND
+  TakeSingle(ADouble);  // TRIGGER-NARROW-FLOAT
+  TakeInt(ASmall);  // CONTROL-NARROW-SAME
+  TakeTwo(ASmall);  // CONTROL-NARROW-WIDENS
+  TakeVar(Narrow);  // CONTROL-NARROW-VAR
+  TakeOver(AWide);  // CONTROL-NARROW-OVERLOAD
+  TakeInt(CFit);  // CONTROL-NARROW-CONST
+  TakeInt(Integer(AWide));  // CONTROL-NARROW-EXPLICIT
+  TakeInt(AWide div 2);  // CONTROL-NARROW-EXPRESSION
+end;
 
 procedure HolderTests(AComp: TRtCompThing; ACounted: TRtCountedThing; ARef: TRtRefThing);
 var
