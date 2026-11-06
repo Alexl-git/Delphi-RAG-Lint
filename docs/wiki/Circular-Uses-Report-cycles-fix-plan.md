@@ -192,10 +192,10 @@ The engine never guesses; every kind it can give:
   entry -- and the edge -- would stay), `coupling-remains` (since 1.43: the moved declarations of two units need each other and cannot share one new unit, see below, or the plan's own prediction still shows the interface coupling; before 1.43 such a plan printed `mechanical`), `manual-edit` (the default for any edit the planner
   cannot make mechanically).
 * **R1 (routine-call inversion):** `not-a-routine`, `signature-in-cycle`,
-  `overloaded-routine`, `signature-unknown`, `qualified-ref` (a name qualified by the declaring unit that cannot follow a move, a routine for one; a comment or a string is not a use, and a global moves and is rewritten, see below), `routine-not-called` (`@F`, a parameterless function as an argument, an argument on a line of its own; a routine passed as a whole argument is redirected, see below),
+  `overloaded-routine`, `signature-unknown`, `qualified-ref` (a name qualified by the declaring unit that the plan can neither redirect nor move: another routine of that unit, or the inverted routine in a shape it cannot rewrite, such as `@Unit.Foo`; `Unit.Foo(2)` of the inverted routine itself becomes `FooPtr(2)`, a comment or a string is not a use, and a global moves and is rewritten, see below), `name-shadowed` (since 1.44: a line to rewrite also holds `Foo` bound to something else, a nested routine, a method or a parameter, as in `Foo(1); Unit.Foo(2);`, or `Unit` there is a local of the consumer; the rewrite works on the text of the line, so it would call the pointer instead; on separate lines the plan is sound and goes ahead), `routine-not-called` (`@F`, a parameterless function as an argument, an argument on a line of its own; a routine passed as a whole argument is redirected, see below),
   `init-order` (the consumer's initialization section runs the call), `finalization-order` (since 1.43: the consumer's finalization section runs the call, and the declaring unit, finalized first after the cut, has statements in its finalization section or a variable of a type the compiler may finalize), `unsupported-directive`, `duplicate-identifier` (the leaf already declares the
   pointer type or variable differently and every suffix up to 99 is taken; an identical declaration is
-  reused, a different one gets the lowest free suffix). `unit-leaves-program` is NOT a refusal
+  reused, a different one gets the lowest free suffix; since 1.44 also when the consumer, the declaring unit or a class member already declares `FooPtr`, which would win over the pointer). `unit-leaves-program` is NOT a refusal
   any more (since 1.34.1): when the declaring unit is used only by the consumer and the
   program's `.dpr` does not list it, the plan adds the unit to the `.dpr` uses (and a
   `DCCReference` to the `.dproj` when absent), because after the cut the linker would drop it,
@@ -243,8 +243,8 @@ The engine never guesses; every kind it can give:
 * **`Unit.GVar`.** A qualified name is no reference in the index. A global of the declaring unit that the
   consumer names qualified now moves with the edge, and every code occurrence of `<Unit>.<Name>` of a moved
   declaration, in the source and in every unit that uses it (Part A and Part B), becomes
-  `<Unit>.Untangle.<Name>`. Strings and comments stay. A `Unit.Y` that does not move keeps the uses entry,
-  and on an R1 edge a qualified routine still refuses `qualified-ref`.
+  `<Unit>.Untangle.<Name>`. Strings and comments stay. A `Unit.Y` that does not move keeps the uses entry (in an interface declaration that means `coupling-remains`, before any build; since 1.44 this includes a subrange bound, `array[0..Unit.cMax]`, whose `..` used to hide the name, so the entry was removed and the build failed with `E2242`),
+  and on an R1 edge a qualified routine other than the inverted one still refuses `qualified-ref`; `Unit.Foo(2)` of the inverted routine goes through the pointer.
 * **A routine passed as an argument (`AddItem(x, Foo)`).** The pointer is passed instead: a procedural
   type or a method reference with the same parameters takes it, under the same order checks as a call.
   It holds for a procedure, and for a function with a required parameter. A parameterless function as an
@@ -332,8 +332,8 @@ leaf + interface name.
   name of its whole body, so a name either class declares is carried by that class or the edge is refused, and
   the nesting order, unchanged by the rewrite, decides between two carriers as it did between the classes.
   Measured on 1.43.0-alpha (un_cyclefix_r2_multiclass_dcc.ps1, 153 checks): the nested form, the comma form and a head spread over two lines each plan exit 0 with two interfaces, the followed copy builds and prints byte-identical output; a library method such as Free bare inside the overlapping bodies refuses with-member (not multiple-classes) and nothing is planned.
-* **Still refused:** `other-ref` for an `is` / `as` operand that is no class (an interface or an alias the planner
-  could not move out either; the refusal names the line); the `with-member` shapes above.
+* **Still refused:** `other-ref` on the edge's line for an `as` operand that is an interface, or an `is` / `as` operand that is an alias, which the planner
+  could not move out either (the refusal names the line); the `with-member` shapes above. Read the edge's line: the verdict of the whole cycle is often `coupling-remains`, because the other direction would have to move a class with bodies. `X is <interface>` is not one of these shapes: it does not compile (`E2015`, for a class or an interface on the left), so only `as` reaches the planner; an interface or alias that can move goes to the leaf and the plan is mechanical.
 * `--plan`, `tools\follow-cycle-plan.ps1` and `--fix --apply` apply the same bytes; guard
   `tests\autotest\run_cyclefix_r2_multiclass_dcc.ps1`.
 
