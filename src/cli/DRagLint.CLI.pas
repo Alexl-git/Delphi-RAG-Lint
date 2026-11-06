@@ -136,7 +136,7 @@ uses
   , TreeSitter
   , DRagLint.Core.DeclText { v(A2): TDeclTextReader -- `query find --decl-contains` }
   , DRagLint.Core.ForwardStub { C2.5: PairForwardStubs/HasChildInSet -- `outline` tags a forward stub row (S6) }
-  , DRagLint.Lint.RefTypeRules { REF_TYPE_RULES, RefTypeRuleDefaultOff: the opt-in defaults of lint-all / lint-project }
+  , DRagLint.Lint.RefTypeRules { REF_TYPE_RULES, RefTypeRuleDefaultOff: the opt-in defaults of lint-all / lint-project } // dl:unit DRagLint.Lint.RefTypeRules accepted -- REF_TYPE_RULES travels with RefTypeRuleDefaultOff, the function the opt-in loops call
   , DRagLint.Lint.RuleCache // dl:unit DRagLint.Lint.RuleCache accepted -- CACHED_RULES travels with the cache that defines which rules it may hold, so lint and the indexer warm cannot drift apart
   , DRagLint.Lint.UsesAudit { TUsesAuditor -- the uses-audit core shared with the uses-movable-to-implementation rule (G8) }
   , DRagLint.Index.LibraryOracle { TLibraryOracle -- find-callees binds a value receiver typed by name to a library routine (item 4) }

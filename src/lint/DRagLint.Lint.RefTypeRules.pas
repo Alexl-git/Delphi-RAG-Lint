@@ -93,9 +93,8 @@ uses
   System.SysUtils
   , System.Generics.Collections
   , System.RegularExpressions
-  , Data.DB
   , FireDAC.Comp.Client
-  , FireDAC.Stan.Param
+  , FireDAC.Stan.Param  // dl:ok unused-unit-in-uses@c61d -- REVIEWED 2026-11-05: TFDParam.SetAsLargeInt is inline, and without this unit the compiler says H2443 at every parameter assignment
   , TreeSitter
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Storage.SQLite
@@ -181,7 +180,7 @@ type
   end;
 
   /// <summary>One run over a project index.</summary>
-  TRefTypeScan = class
+  TRefTypeScan = class  // dl:ok god-class@9eb0, high-response@9eb0 -- REVIEWED 2026-11-05: one scan and its caches; the rules share the type closure and the per-file ref map, and splitting them would only pass that state around
     strict private
       FStore   : ISymbolStore;
       FLib     : ISymbolStore;
@@ -246,19 +245,19 @@ type
   end;
 
 /// <summary>Bytes of a numeric type name, plus WIDTH_FLOAT_BASE for a float; 0 for any other type.</summary>
-function NumericWidth(const ALowerType: string): Integer;
+function NumericWidth(const ALowerType: string): Integer;  // dl:ok too-many-exit-points@f4c0 -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
 const
   WIDTH_1: array[0..1] of string = ('shortint', 'byte');
   WIDTH_2: array[0..1] of string = ('smallint', 'word');
   WIDTH_4: array[0..5] of string = ('integer', 'longint', 'cardinal', 'longword', 'fixedint', 'fixeduint');
   WIDTH_8: array[0..5] of string = ('int64', 'uint64', 'nativeint', 'nativeuint', 'intptr', 'uintptr');
-  BYTES_1 = 1; BYTES_2 = 2; BYTES_4 = 4; BYTES_8 = 8;  // dl:ok multiple-statements-per-line -- the sizes read as one row
+  BYTES_1 = 1; BYTES_2 = 2; BYTES_4 = 4; BYTES_8 = 8;
 begin
   Result:= 0;
-  for var S: string in WIDTH_1 do if S = ALowerType then Exit(BYTES_1);  // dl:ok multiple-statements-per-line -- a lookup table in code form
-  for var S: string in WIDTH_2 do if S = ALowerType then Exit(BYTES_2);  // dl:ok multiple-statements-per-line -- a lookup table in code form
-  for var S: string in WIDTH_4 do if S = ALowerType then Exit(BYTES_4);  // dl:ok multiple-statements-per-line -- a lookup table in code form
-  for var S: string in WIDTH_8 do if S = ALowerType then Exit(BYTES_8);  // dl:ok multiple-statements-per-line -- a lookup table in code form
+  for var S: string in WIDTH_1 do if S = ALowerType then Exit(BYTES_1);
+  for var S: string in WIDTH_2 do if S = ALowerType then Exit(BYTES_2);
+  for var S: string in WIDTH_4 do if S = ALowerType then Exit(BYTES_4);
+  for var S: string in WIDTH_8 do if S = ALowerType then Exit(BYTES_8);
   if ALowerType = 'single' then Exit(WIDTH_FLOAT_BASE + BYTES_4);
   if (ALowerType = 'double') or (ALowerType = 'real') then Exit(WIDTH_FLOAT_BASE + BYTES_8);
 end;
@@ -395,7 +394,7 @@ end;
 
 procedure TRefTypeScan.LoadRefs(AFileId: Int64);
 const
-  COL_LINE = 0; COL_COL = 1; COL_NAME = 2; COL_SYM = 3; COL_ENCL = 4; COL_TID = 5; COL_QNAME = 6; COL_VIA = 7;  // dl:ok multiple-statements-per-line -- a column map reads as one row of the SELECT below
+  COL_LINE = 0; COL_COL = 1; COL_NAME = 2; COL_SYM = 3; COL_ENCL = 4; COL_TID = 5; COL_QNAME = 6; COL_VIA = 7;
 begin
   FRefs.Clear;
   FQuery.SQL.Text:= 'SELECT r.start_line, r.start_col, r.name_text, r.symbol_id, r.enclosing_symbol_id, ' +
@@ -493,8 +492,7 @@ begin
       for var N: string in Lib.Closure do
         if not Names.Contains(N) then Names.Add(N);
     end;
-    if ASym.Kind = skClass then
-      if not Names.Contains(ROOT_CLASS) then Names.Add(ROOT_CLASS);
+    if (ASym.Kind = skClass) and not Names.Contains(ROOT_CLASS) then Names.Add(ROOT_CLASS);
     AFacts.Closure:= Names.ToArray;
   finally
     Names.Free;
@@ -522,7 +520,7 @@ begin
   var First: Boolean:= True;
   for var S: TSymbol in ASyms do
   begin
-    if not (S.Kind in TYPE_KINDS) then Continue;
+    if S.Kind not in TYPE_KINDS then Continue;
     var One: TTypeFacts:= FactsOfSymbol(AStore, S, AOutermost);
     if First then
     begin
@@ -607,7 +605,7 @@ begin
   Result:= True;
 end;
 
-function TRefTypeScan.StaticType(const ANode: TTSNode): TExprType;
+function TRefTypeScan.StaticType(const ANode: TTSNode): TExprType;  // dl:ok too-many-exit-points@f142 -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
 var
   Fact: TRefFact;
 begin
@@ -719,7 +717,7 @@ begin
     CollectGuards(ANode.NamedChild(I));
 end;
 
-procedure TRefTypeScan.CheckUnsafeCast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);
+procedure TRefTypeScan.CheckUnsafeCast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);  // dl:ok too-many-exit-points@701b -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
 var
   Inner  : TTypeFacts;
   InnerOp: TTSNode;
@@ -814,7 +812,7 @@ begin
   end;
 end;
 
-procedure TRefTypeScan.CheckAssign(const ANode: TTSNode);
+procedure TRefTypeScan.CheckAssign(const ANode: TTSNode);  // dl:ok too-many-exit-points@c598 -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
 begin
   var Op: TTSNode:= ANode.ChildByField(FIELD_OP);
   if Op.IsNull or (Op.NodeType <> OP_NODE_ASSIGN) then Exit;
@@ -893,7 +891,7 @@ begin
   Result:= SymbolOf(AFact.SymbolId).Kind <> skConstDecl;
 end;
 
-procedure TRefTypeScan.CheckArguments(const ANode: TTSNode);
+procedure TRefTypeScan.CheckArguments(const ANode: TTSNode);  // dl:ok too-many-exit-points@d8e0 -- REVIEWED 2026-11-05: guard clauses, each declining a shape the rule cannot prove
 var
   Callee: TRefFact;
   Arg   : TRefFact;
@@ -906,7 +904,7 @@ begin
   if (Ent.NodeType = TYPE_NODE_ID) and (FWithDepth > 0) then Exit;
   if (not FactAt(Name, Callee)) or (Callee.SymbolId <= 0) then Exit;
   var Sym: TSymbol:= SymbolOf(Callee.SymbolId);
-  if not (Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor]) then Exit;
+  if Sym.Kind not in [skProcedure, skFunction, skMethod, skConstructor] then Exit;
   { The resolver's overload choice is the part a width argument cannot rest on. }
   if Sym.Directives.ToLower.Contains(OVERLOAD_WORD) or Sym.Modifiers.ToLower.Contains(OVERLOAD_WORD) then Exit;
   var Params: TArray<string>:= ParamTypes(Sym.Signature);
