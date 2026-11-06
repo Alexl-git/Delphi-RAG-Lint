@@ -17,7 +17,7 @@ uses
   System.SysUtils,
   DRagLint.Core.Interfaces,
   DRagLint.Refactor.Rename,
-  DRagLint.Refactor.CompileGate; // dl:ok uses-global-census -- GBuildTimeoutMs and GScratchCited are how the gate is configured; its request record has no field for them
+  DRagLint.Refactor.CompileGate; // dl:ok uses-global-census@4ebc -- GBuildTimeoutMs and GScratchCited are how the gate is configured; its request record has no field for them
 
 const
   /// <summary>The index holds no ref_receivers table: re-resolve it.</summary>

@@ -196,7 +196,7 @@ uses
   , DRagLint.Context    .Bundler
   , DRagLint.Resolver   .TypeAt
   , DRagLint.Refactor   .Rename
-  , DRagLint.Refactor   .RenameProof // dl:ok uses-global-census -- lane 144 item 3: its consts and routines are the public surface; every rename occurrence proved, then the compile gate
+  , DRagLint.Refactor   .RenameProof // dl:ok uses-global-census@61f3 -- lane 144 item 3: its consts and routines are the public surface; every rename occurrence proved, then the compile gate
   , DRagLint.Refactor   .TextEdit
   , DRagLint.Refactor   .NamingFix
   , DRagLint.Refactor   .MultiProjectRename { a naming fix on a unit several project DBs own (lint --fix) }

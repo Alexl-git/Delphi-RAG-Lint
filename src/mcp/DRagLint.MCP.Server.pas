@@ -418,7 +418,7 @@ type
 implementation
 
 uses
-  DRagLint.Refactor.RenameProof, // dl:ok uses-global-census -- its consts and routines are the public surface
+  DRagLint.Refactor.RenameProof, // dl:ok uses-global-census@7543 -- its consts and routines are the public surface
   Winapi.Windows
   , DRagLint.Doc.Regions
   , DRagLint.Query.Implementors { get_implementors (interface report, 1.40) }
