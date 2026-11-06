@@ -321,7 +321,7 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckTypeAware(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0): TArray<TLintFinding>;
+      class function CheckTypeAware(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;
       /// <summary>Removes each <c>concat-in-loop</c> finding whose assignment target is
       /// PROVEN not to be a string: a numeric, boolean, enum or pointer type by the
       /// store's category, or a dynamic array / set by its declared type text.</summary>
@@ -812,7 +812,7 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckDatasetOpen(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0): TArray<TLintFinding>;
+      class function CheckDatasetOpen(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;
       /// <summary>Flags a critical section acquired (X.Enter or X.Acquire) in a routine with
       /// no matching X.Leave / X.Release in a finally block -- a lock leaked on an exception
       /// path deadlocks.</summary>
@@ -2781,7 +2781,7 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckTypeAware(const AFile: string; const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
+class function TAstChecker.CheckTypeAware(const AFile: string; const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 var
   Src     : TBytes                    ;
   PF      : TParsedFile        ;
@@ -3819,7 +3819,7 @@ begin
   Scopes  := TObjectList<TDictionary<string,string>>.Create(True);
   ScopeEnd:= TObjectList<TDictionary<string,Int64>>.Create(True);
   try
-    if (AStore <> nil) and (AFileId > 0) then Reader:= TExprTypeReader.Create(AStore, nil, AFileId, Src);
+    if (AStore <> nil) and (AFileId > 0) then Reader:= TExprTypeReader.Create(AStore, ALibStore, AFileId, Src);
     if PF.Tree <> nil then
     begin
       CollectDeclTypes(PF.Tree.RootNode, Src, TypeMap, True); { inline `var X: T` too (Gitea #5) }
@@ -8698,7 +8698,7 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckDatasetOpen(const AFile: string; const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
+class function TAstChecker.CheckDatasetOpen(const AFile: string; const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 var
   Reader         : TExprTypeReader            ;  // 1.45 la: F1 static type of the receiver; nil without a store
   Src            : TBytes                     ;
@@ -8993,7 +8993,7 @@ begin
   PlainActiveTypes:= TDictionary<string, Boolean>.Create;
   LocalTypes:= TDictionary<string, string>.Create;
   try
-    if (AStore <> nil) and (AFileId > 0) then Reader:= TExprTypeReader.Create(AStore, nil, AFileId, Src);
+    if (AStore <> nil) and (AFileId > 0) then Reader:= TExprTypeReader.Create(AStore, ALibStore, AFileId, Src);
     CollectPlainActiveTypes(PF.Tree.RootNode);
     VisitProcs(PF.Tree.RootNode);
     Result:= Findings.ToArray;

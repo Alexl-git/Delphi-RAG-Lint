@@ -37,6 +37,10 @@ type
     /// <param name="AAncestorLeaf">The ancestor name, leaf only.</param>
     /// <returns>True only when the whole ancestry was followed and the ancestor is in it.</returns>
     function ClassDescends(const AClassLeaf, AAncestorLeaf: string): Boolean;
+    /// <summary>Whether a type name is a metaclass (`class of T`) in the project or the library index.</summary>
+    /// <param name="ALeaf">The type's leaf name; case-insensitive.</param>
+    /// <returns>True only on a classref symbol of that name, with no class of the same name in that index.</returns>
+    function IsMetaclass(const ALeaf: string): Boolean;
   end;
 
   /// <summary>One entry of a rule sidecar's "fix" key (autofix wave A0,
@@ -472,10 +476,20 @@ type
 /// <summary>An oracle over the project index for ONE file.</summary>
 /// <param name="AStore">The project index; nil or a store that is not SQLite answers nil.</param>
 /// <param name="AFileId">The file's id in AStore; 0 answers nil.</param>
+/// <param name="ALibStore">The platform library index, or nil. Without it ClassDescends cannot
+/// follow an ancestor outside the project and answers False.</param>
 /// <returns>An oracle, or nil when there is nothing to ask.</returns>
 /// <remarks>Reads the file's ref_types rows once, on the first question. No ref_types table
 /// (an index older than 1.44) = TypeAt answers False for ever.</remarks>
-function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64): ITypeOracle;
+function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore = nil): ITypeOracle; overload;
+/// <summary>CreateStoreTypeOracle with a library opened only if a rule asks about an ancestry.</summary>
+/// <param name="AStore">See the other overload.</param>
+/// <param name="AFileId">See the other overload.</param>
+/// <param name="ALibOpener">Called at most once, on the first ClassDescends; may return nil.</param>
+/// <returns>An oracle, or nil when there is nothing to ask.</returns>
+/// <remarks>For `lint &lt;file&gt;`, whose .scm pass runs before the library store is open: most files
+/// never ask, and resolving the library costs a manifest load.</remarks>
+function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64; const ALibOpener: TFunc<ISymbolStore>): ITypeOracle; overload;
 /// <summary>Whether the index PROVES a rule's receiver is some other class (1.45 lane lj, row 10).</summary>
 /// <param name="AOracle">May be nil: nothing is proven.</param>
 /// <param name="ARecv">The receiver expression: an identifier, or a dotted name (its last identifier is asked).</param>
@@ -515,7 +529,7 @@ implementation
 uses
   FireDAC.Comp.Client    { TFDQuery -- the store oracle reads ref_types }
   , DRagLint.Storage.SQLite { TSQLiteSymbolStore -- the connection behind ISymbolStore }
-  , DRagLint.Lint.RefTypeRules { TypeDescendsFrom -- ancestry for the class oracle }
+  , DRagLint.Lint.RefTypeRules { TExprTypeReader -- ancestry for the class oracle }
   , System.Diagnostics       { TStopwatch -- the per-rule .scm timing below }
   , System.Threading        { TParallel.For -- the loader compiles the .scm queries in parallel }
   , System.StrUtils        { IndexText -- capture-name lookup for sidecar fixes }
@@ -1362,24 +1376,31 @@ type
       FFileId: Int64;
       FLoaded: Boolean;
       FRows  : TDictionary<string, TArray<string>>;
+      FLib   : ISymbolStore;
+      FOpener: TFunc<ISymbolStore>;
+      FReader: TExprTypeReader;
       procedure Load;
     public
-      constructor Create(const AStore: ISymbolStore; AFileId: Int64);
+      constructor Create(const AStore: ISymbolStore; AFileId: Int64; const ALib: ISymbolStore; const AOpener: TFunc<ISymbolStore>);
       destructor Destroy; override;
       function TypeAt(ALine, ACol: Integer; const AName: string; out ALeaf, AVia: string): Boolean;
       function ClassDescends(const AClassLeaf, AAncestorLeaf: string): Boolean;
+      function IsMetaclass(const ALeaf: string): Boolean;
   end;
 
-constructor TStoreTypeOracle.Create(const AStore: ISymbolStore; AFileId: Int64);
+constructor TStoreTypeOracle.Create(const AStore: ISymbolStore; AFileId: Int64; const ALib: ISymbolStore; const AOpener: TFunc<ISymbolStore>);
 begin
   inherited Create;
   FStore := AStore;
   FFileId:= AFileId;
+  FLib   := ALib;
+  FOpener:= AOpener;
   FRows  := TDictionary<string, TArray<string>>.Create;
 end;
 
 destructor TStoreTypeOracle.Destroy;
 begin
+  FReader.Free;
   FRows.Free;
   inherited Destroy;
 end;
@@ -1473,13 +1494,64 @@ begin
 end;
 function TStoreTypeOracle.ClassDescends(const AClassLeaf, AAncestorLeaf: string): Boolean;
 begin
-  Result:= (FStore <> nil) and (TypeDescendsFrom(FStore, nil, AClassLeaf, AAncestorLeaf) = tdYes);
+  if FStore = nil then Exit(False);
+  if FReader = nil then
+  begin
+    if (FLib = nil) and Assigned(FOpener) then
+    begin
+      FLib   := FOpener();
+      FOpener:= nil;
+    end;
+    FReader:= TExprTypeReader.Create(FStore, FLib, 0, nil);
+  end;
+  Result:= FReader.Descends(AClassLeaf, AAncestorLeaf) = tdYes;
 end;
 
-function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64): ITypeOracle;
+function TStoreTypeOracle.IsMetaclass(const ALeaf: string): Boolean;
+
+  function Answer(const AStore: ISymbolStore; out AKnown: Boolean): Boolean;
+  begin
+    Result:= False;
+    AKnown:= False;
+    if AStore = nil then Exit;
+    for var S: TSymbol in AStore.FindSymbolsByExactName(ALeaf) do
+      case S.Kind of
+        skClassRef:
+        begin
+          AKnown:= True;
+          Result:= True;
+        end;
+        skClass, skInterface, skRecord:
+        begin
+          AKnown:= True;
+          Exit(False);
+        end;
+      end;
+  end;
+
+var
+  Known: Boolean;
+begin
+  Result:= Answer(FStore, Known);
+  if Known then Exit;
+  if (FLib = nil) and Assigned(FOpener) then
+  begin
+    FLib   := FOpener();
+    FOpener:= nil;
+  end;
+  Result:= Answer(FLib, Known);
+end;
+
+function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): ITypeOracle;
 begin
   if (AStore = nil) or (AFileId <= 0) then Exit(nil);
-  Result:= TStoreTypeOracle.Create(AStore, AFileId);
+  Result:= TStoreTypeOracle.Create(AStore, AFileId, ALibStore, nil);
+end;
+
+function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64; const ALibOpener: TFunc<ISymbolStore>): ITypeOracle;
+begin
+  if (AStore = nil) or (AFileId <= 0) then Exit(nil);
+  Result:= TStoreTypeOracle.Create(AStore, AFileId, nil, ALibOpener);
 end;
 
 type
@@ -1791,6 +1863,49 @@ begin
   end;
 end;
 
+{ (#not-metaclass-receiver? @recv) -- passes unless the capture's declared or indexed type is a
+  metaclass, whose `.Create` really does allocate: an inline `class of T`, a `T = class of`
+  in this source, TClass, a classref symbol the oracle finds, or with no index answer a name
+  of the `T*Class` convention (TComponentClass) that is not a known class. No type at all passes. }
+function EvalNotMetaclassReceiver(const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;
+  ACache: TDeclScopeCache): Boolean;
+const
+  OP_CAPTURE_NAME = 2;
+  CAP_ARG         = 1;
+var
+  Node: TTSNode;
+  Name: string ;
+  Ty  : string ;
+  Via : string ;
+  Cur : TTSNode;
+begin
+  Result:= True;
+  if (Length(AArgs) < OP_CAPTURE_NAME) or (not AArgs[CAP_ARG].IsCapture) then Exit;
+  Node:= ResolveCaptureNode(AMatch, AArgs[CAP_ARG].CaptureIndex);
+  if Node.IsNull or (Node.NodeType <> 'identifier') then Exit;
+  Name:= NodeText(Node, ASource);
+  Ty  := '';
+  Cur := Node.Parent;
+  while (Ty = '') and not Cur.IsNull do
+  begin
+    if ACache.Find(Cur, ASource, Name, Node.StartByte, Ty) and (Ty = '') then Break;
+    Cur:= Cur.Parent;
+  end;
+  if (Ty = '') and (ACache.Oracle <> nil) then
+    if not ACache.Oracle.TypeAt(Integer(Node.StartPoint.Row) + 1, Integer(Node.StartPoint.Column) + 1, Name, Ty, Via) then Ty:= '';
+  if Ty = '' then Exit;
+  if ContainsText(Ty, 'class of') then Exit(False);
+  var Leaf: string:= Ty.Substring(Ty.LastIndexOf('.') + 1);
+  if SameText(Leaf, 'TClass') then Exit(False);
+  if ACache.Oracle <> nil then
+  begin
+    if ACache.Oracle.IsMetaclass(Leaf) then Exit(False);
+    if ACache.Oracle.ClassDescends(Leaf, 'TObject') then Exit;
+  end;
+  if TRegEx.IsMatch(TEncoding.UTF8.GetString(ASource), '\b' + TRegEx.Escape(Leaf) + '\s*=\s*class\s+of\b', [roIgnoreCase]) then Exit(False);
+  if (ACache.Oracle = nil) and EndsText('Class', Leaf) then Exit(False);
+end;
+
 { (#enclosing-class-descends? @cap "TThread") / (#not-enclosing-class-descends? @cap "TThread")
   -- O2. The positive form passes only when the oracle PROVES the class of the routine that
   encloses @cap descends from the named ancestor. The negative form passes otherwise (no
@@ -1914,6 +2029,8 @@ begin
     Exit(EvalDeclaredType(AMatch, ASource, AArgs, ACache));
   if (Op = 'oracle-via?') or (Op = 'not-oracle-via?') then
     Exit(EvalOracleVia(AMatch, ASource, AArgs, ACache, Op = 'not-oracle-via?'));
+  if Op = 'not-metaclass-receiver?' then
+    Exit(EvalNotMetaclassReceiver(AMatch, ASource, AArgs, ACache));
   if (Op = 'enclosing-class-descends?') or (Op = 'not-enclosing-class-descends?') then
     Exit(EvalEnclosingDescends(AMatch, ASource, AArgs, ACache, Op = 'not-enclosing-class-descends?'));
 

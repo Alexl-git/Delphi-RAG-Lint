@@ -16985,7 +16985,14 @@ begin
   if not Ok then Exit;
   Fid:= Store.FindFileIdByPath(AIdent);
   if Fid <= 0 then Fid:= Store.FindFileIdByPath(Abs);
-  Result:= CreateStoreTypeOracle(Store, Fid);
+  var RunArgs: TArgs:= AArgs;
+  Result:= CreateStoreTypeOracle(Store, Fid,
+    function: ISymbolStore
+    var
+      Why: string;
+    begin
+      Result:= OpenLibraryStoreIfCurrent(LintLibraryDb(RunArgs), Why);
+    end);
 end;
 
 function DoLint(const AArgs: TArgs): Integer;
@@ -17549,7 +17556,10 @@ begin
       if (FlowStore <> nil) and
          (LintRuleWants(NarrowRule, ['with-hides-outer-symbol', 'enum-read-inside-with'])
           or LintRuleWants(NarrowRule, LINT_GATE_FLOW) or LintRuleWants(NarrowRule, LINT_GATE_PROJECT_RULES)
-          or LintRuleWants(NarrowRule, ['type-name-prefix', MISSING_USES_RULE])) then
+          or LintRuleWants(NarrowRule, ['type-name-prefix', MISSING_USES_RULE])
+          or LintRuleWants(NarrowRule, LINT_GATE_TYPE_AWARE) or LintRuleWants(NarrowRule, LINT_GATE_DEAD_CODE)
+          or LintRuleWants(NarrowRule, LINT_GATE_EXPR) or LintRuleWants(NarrowRule, LINT_GATE_CONCURRENCY)
+          or LintRuleWants(NarrowRule, LINT_GATE_EXCEPTION_THREAD) or LintRuleWants(NarrowRule, ['dataset-open-without-close'])) then
       begin
         var FlowLibDb: string := LintLibraryDb(AArgs);
         { A STALE library index degrades to project-only exactly like an
@@ -17640,7 +17650,7 @@ begin
       if LintRuleWants(NarrowRule, LINT_GATE_TYPE_AWARE) and (not FlowIsLibrary) then
       begin
         TraceLintChecker('type-aware');
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(EffPath, FlowStore, FlowFid) do
+        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(EffPath, FlowStore, FlowFid, FlowLibStore) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       end;
       { v0.49: FireDAC Open/ExecSQL vs SQL-kind mismatch }
@@ -17676,7 +17686,7 @@ begin
       { v0.63: try..except that swallows the exception (no raise/log/HandleException) }
       if (NarrowRule = '') or (NarrowRule = 'try-except-swallowed') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(EffPath);
       { v0.63: dataset opened without a matching Close in a finally block }
-      if (NarrowRule = '') or (NarrowRule = 'dataset-open-without-close') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen(EffPath, FlowStore, FlowFid);
+      if (NarrowRule = '') or (NarrowRule = 'dataset-open-without-close') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen(EffPath, FlowStore, FlowFid, FlowLibStore);
       { v0.63: critical section acquired without a matching Leave/Release in finally }
       if (NarrowRule = '') or (NarrowRule = 'criticalsection-not-released') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(EffPath);
       { v0.63: routine with more than 5 Exit statements }
@@ -17761,7 +17771,7 @@ begin
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       TraceLintChecker('expr');
       if LintRuleWants(NarrowRule, LINT_GATE_EXPR) then
-        for F in DRagLint.Diagnostics.ExprChecks.TExprChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+        for F in DRagLint.Diagnostics.ExprChecks.TExprChecker.Check(EffPath, Cfg, FlowStore, FlowFid, FlowLibStore) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       TraceLintChecker('decl');
       if LintRuleWants(NarrowRule, LINT_GATE_DECL) then
@@ -17773,7 +17783,7 @@ begin
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       TraceLintChecker('concurrency');
       if LintRuleWants(NarrowRule, LINT_GATE_CONCURRENCY) then
-        for F in DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+        for F in DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check(EffPath, Cfg, FlowStore, FlowFid, FlowLibStore) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       TraceLintChecker('disallowed');
       if LintRuleWants(NarrowRule, LINT_GATE_DISALLOWED) then
@@ -17798,7 +17808,7 @@ begin
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       TraceLintChecker('exceptionthread');
       if LintRuleWants(NarrowRule, LINT_GATE_EXCEPTION_THREAD) then
-        for F in DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check(EffPath, Cfg, FlowStore, FlowFid) do
+        for F in DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check(EffPath, Cfg, FlowStore, FlowFid, FlowLibStore) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       TraceLintChecker('declparity');
       if LintRuleWants(NarrowRule, LINT_GATE_DECL_PARITY) then
@@ -23745,6 +23755,11 @@ begin
       Writeln(ErrOutput, Format('ERROR: lint-all: --shared-db does not exist: %s. Nothing was answered.', [SharedDb]));
       Exit(2);
     end;
+  if (Length(AArgs.LibraryDbs) > 0) and (not SameText(AArgs.LibraryDbs[0], 'none')) and not TFile.Exists(AArgs.LibraryDbs[0]) then
+  begin
+    Writeln(ErrOutput, Format('ERROR: lint-all: --library-db does not exist: %s. Nothing was answered.', [AArgs.LibraryDbs[0]]));
+    Exit(2);
+  end;
   TailPhase:= 0;
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
@@ -23804,7 +23819,11 @@ begin
   { --library-db none is the caller saying "no library": it beats the manifest, which would
     otherwise answer from a machine-level setting (int3: opaque-to-analysis, which must stay
     silent without a library, fired on any engine whose manifest names one). }
+  { 1.45: a named --library-db wins over a second --db and over the manifest, as on `lint`. Until
+    1.45 this verb never read it: the run took the manifest's library, or none, and said nothing.
+    A named file that does not exist was refused above. }
   if (Length(AArgs.LibraryDbs) > 0) and SameText(AArgs.LibraryDbs[0], 'none') then LibDb:= ''
+  else if Length(AArgs.LibraryDbs) > 0 then LibDb:= AArgs.LibraryDbs[0]
   else if LibDb = '' then LibDb:= ResolveLibraryDb(AArgs);
   DropUnreadableLibraryDb(LibDb);
   { int2 1.44.1: Loader2025 gave 3410 findings against 4210 with its library, and said nothing. --library-db none means it. }
@@ -24001,7 +24020,7 @@ begin
         GScanPrev:= TStopwatch.GetTimeStamp;
         var LintF: TArray<TLintFinding>;
         var QueryOracle: ITypeOracle:= nil;
-        if Store <> nil then QueryOracle:= CreateStoreTypeOracle(Store, Store.FindFileIdByPath(PasPath)); { O2 (1.45) }
+        if Store <> nil then QueryOracle:= CreateStoreTypeOracle(Store, Store.FindFileIdByPath(PasPath), LibStore); { O2 (1.45) }
         var QueryScope:= TQueryTypeOracleScope.Create(QueryOracle);
         try
           LintF:= Linter.LintFile(PasPath);
@@ -24037,7 +24056,7 @@ begin
           for F in RoutineMetricFindings(PasPath, 'method-too-long', Cfg) do Findings:= Findings + [F];
         ScanMark(8);
         if LintRuleWants(Nr, LINT_GATE_TYPE_AWARE) then
-          for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(PasPath, Store, Store.FindFileIdByPath(PasPath)) do { v11 (M1): exact type resolution }
+          for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore) do { v11 (M1): exact type resolution }
             Findings:= Findings + [F];
         ScanMark(9);
         if LintRuleWants(Nr, ['firedac-open-execsql-mismatch']) then
@@ -24068,7 +24087,7 @@ begin
         if LintRuleWants(Nr, ['try-except-swallowed']) then
           ScanAdd(22, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(PasPath));
         if LintRuleWants(Nr, ['dataset-open-without-close']) then
-          ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath, Store, Store.FindFileIdByPath(PasPath)));
+          ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore));
         if LintRuleWants(Nr, ['criticalsection-not-released']) then
           ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath));
         if LintRuleWants(Nr, ['too-many-exit-points']) then
@@ -24108,13 +24127,13 @@ begin
         if LintRuleWants(Nr, LINT_GATE_CONTROL_FLOW) then
           for F in DRagLint.Diagnostics.ControlFlowChecks.TControlFlowChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_EXPR) then
-          for F in DRagLint.Diagnostics.ExprChecks.TExprChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+          for F in DRagLint.Diagnostics.ExprChecks.TExprChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_DECL) then
           for F in DRagLint.Diagnostics.DeclChecks.TDeclChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_SIZE) then
           for F in DRagLint.Diagnostics.SizeChecks.TSizeChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_CONCURRENCY) then
-          for F in DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+          for F in DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_DISALLOWED) then
           for F in DRagLint.Diagnostics.DisallowedChecks.TDisallowedChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_MODERNIZE) then
@@ -24127,7 +24146,7 @@ begin
         if LintRuleWants(Nr, LINT_GATE_BOUNDS_NIL) then
           for F in DRagLint.Diagnostics.BoundsNilChecks.TBoundsNilChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_EXCEPTION_THREAD) then
-          for F in DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+          for F in DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_DECL_PARITY) then
           for F in DRagLint.Diagnostics.DeclParityChecks.TDeclParityChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_PARITY_EXT) then

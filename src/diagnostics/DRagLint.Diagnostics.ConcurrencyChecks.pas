@@ -44,7 +44,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
-      const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; static;
+      const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -59,7 +59,7 @@ uses
   ;
 
 class function TConcurrencyChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@7485 -- REVIEWED 2026-10-28: gate-fixed checker signature (LINT_GATE_CONCURRENCY call sites); the rules are threshold-free
-  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
+  const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 const
   LOCK_TYPES: array[0..6] of string = (
     'tcriticalsection', 'tmonitor', 'tmutex', 'tspinlock', 'tlightweightmrew',
@@ -132,7 +132,7 @@ var
     if D.NodeType <> 'exprDot' then Exit;
     R:= D.ChildByField('lhs');
     if R.IsNull then Exit;
-    if Reader = nil then Reader:= TExprTypeReader.Create(AStore, nil, AFileId, Src);
+    if Reader = nil then Reader:= TExprTypeReader.Create(AStore, ALibStore, AFileId, Src);
     if not (Reader.Ready and Reader.TypeLeafOf(R, Leaf)) then Exit;
     Leaf:= LowerCase(Leaf);
     Proven:= True;

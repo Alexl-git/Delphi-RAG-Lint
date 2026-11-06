@@ -1,8 +1,9 @@
 unit DRagLint.Diagnostics.ExprChecks;
 
 { Clippy-parity wave (plan 2026-10-27-clippy-rules-plan.md), lane L6.
-  Pure AST rules (no symbol store needed); AStore is accepted for the uniform
-  checker signature and ignored.
+  Pure AST rules, except double-dictionary-lookup: it asks the type oracle (index
+  fact F1, then the ancestry, through ALibStore) whether the receiver is another
+  class. With no store the rules answer from the tree alone.
   Rules:
     bad-bit-mask            : (X and M) = V with V holding a bit outside M (never true),
                               (X or M) = V with M holding a bit outside V (never true);
@@ -59,7 +60,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
-      const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; static;
+      const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -279,7 +280,7 @@ begin
 end;
 
 class function TExprChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@ae41 -- REVIEWED 2026-10-27: gate-fixed checker signature shared by all LINT_GATE_* checkers; these rules need no config
-  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;  // dl:ok unused-parameter@255c -- gate-fixed checker signature; pure-AST rules need no symbol store
+  const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 var
   PF      : TParsedFile;
   Src     : TBytes;
@@ -419,7 +420,7 @@ var
     if (Oracle = nil) and not OracleTried then
     begin
       OracleTried:= True;
-      Oracle:= CreateStoreTypeOracle(AStore, AFileId);
+      Oracle:= CreateStoreTypeOracle(AStore, AFileId, ALibStore);
     end;
     ThenN:= N.ChildByField('then');
     if ThenN.IsNull then Exit;

@@ -5,7 +5,7 @@
 # MyQuote returns it quoted, GetLine(out S) fills S from ParamStr) is indexed into a temp LIBRARY
 # db; the project tests\lint-project\taint-lib\proj\uUseLib.pas calls all three and passes the
 # results to GDb.ExecSQL. lint-all takes its library store as a SECOND --db (SplitConsumerDbs in
-# DoLintAll; it does NOT read --library-db), lint <file> takes --library-db (LintLibraryDb). Both are
+# DoLintAll; since 1.45 --library-db too), lint <file> takes --library-db (LintLibraryDb). Both are
 # pointed at the temp db so the run never opens the machine's real library index.
 #
 # Two index modes for the PROJECT: with `--library-db <tmpLib>` (refs.external_target filled) and

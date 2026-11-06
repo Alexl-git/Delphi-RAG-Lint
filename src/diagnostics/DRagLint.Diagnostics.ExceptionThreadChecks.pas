@@ -47,7 +47,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
-      const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; static;
+      const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -76,7 +76,7 @@ const
   MAX_ANCESTRY = 16;
 
 class function TExceptionThreadChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@5857 -- signature fixed by the shared checker gate; no thresholds
-  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
+  const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 var
   Src      : TBytes;
   PF       : TParsedFile;
@@ -201,7 +201,7 @@ var
   begin
     Result:= tdUnknown;
     if AStore = nil then Exit;
-    if Reader = nil then Reader:= TExprTypeReader.Create(AStore, nil, AFileId, Src);
+    if Reader = nil then Reader:= TExprTypeReader.Create(AStore, ALibStore, AFileId, Src);
     if Reader.Ready then Result:= Reader.Descends(ACls, AAnc);
   end;
 
