@@ -78,6 +78,14 @@ try {
     $g = @(Lines $run[1] 'float-equality-comparison')
     Check "today's logic stands $($run[0]): TODAY-FLOAT still fires" (($today.Count -gt 0) -and (@($today | Where-Object { $g -notcontains $_ }).Count -eq 0)) "got [$($g -join ',')]"
   }
+  # row 2, concat-in-loop: the fact DROPS the numeric accumulations the maps cannot type
+  $loop = Join-Path $src 'uAfLoop.pas'
+  $cTrig = @(Markers $loop 'TRIGGER-CONCAT'); $cCtl = @(Markers $loop 'CONTROL-CONCAT')
+  function LoopLines($F) { return @($F | Where-Object { $_.rule -eq 'concat-in-loop' -and $_.file_path -like '*uAfLoop*' } | ForEach-Object { [int]$_.start_line } | Sort-Object) }
+  $cOn = @(LoopLines $on); $cOff = @(LoopLines $off)
+  Check 'concat-in-loop with the table: only the TRIGGER-CONCAT lines remain' (($cOn -join ',') -eq ($cTrig -join ',')) "got [$($cOn -join ',')] want [$($cTrig -join ',')]"
+  Check 'concat-in-loop has a trigger and a control in the fixture' (($cTrig.Count -gt 0) -and ($cCtl.Count -gt 0))
+  Check 'concat-in-loop without the table: today, the CONTROL-CONCAT lines are reported too' ((($cOff | Sort-Object) -join ',') -eq ((@($cTrig) + @($cCtl) | Sort-Object) -join ',')) "got [$($cOff -join ',')]"
 } finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
 }

@@ -3834,6 +3834,7 @@ var
   NonString: TDictionary<string, Boolean>; { 'line:col' of a proven non-string target }
   Scopes   : TObjectList<TDictionary<string, string>>; { per-routine decl maps, innermost last }
   HasConcat: Boolean;
+  Reader   : TExprTypeReader; { 1.45 la: F1 type of a target the declared-type maps cannot type; nil without a store }
 
   { True when ATypeText names a container that is never a string. }
   function IsContainerType(const ATypeText: string): Boolean;
@@ -3933,6 +3934,10 @@ var
         Target:= LowerCase(Trim(SrcText(Lhs, PF.Src)));
         if Target = 'result' then TypeText:= Ret
         else if not LookupType(Target, TypeText) then TypeText:= '';
+        { an inline var with no written type, a field of an ancestor in another unit: the fact types what the maps cannot }
+        var FactLeaf: string;
+        if ((TypeText = '') or (TypeText = AMBIGUOUS_DECL_TYPE)) and (Reader <> nil) and Reader.TypeLeafOf(Lhs, FactLeaf) then
+          TypeText:= FactLeaf;
         if ProvenNonString(TypeText) then
         begin
           P:= N.StartPoint;
@@ -3960,7 +3965,9 @@ begin
   TypeMap  := TDictionary<string, string>.Create;
   NonString:= TDictionary<string, Boolean>.Create;
   Scopes   := TObjectList<TDictionary<string, string>>.Create(True);
+  Reader   := nil;
   try
+    if AFileId > 0 then Reader:= TExprTypeReader.Create(AStore, nil, AFileId, PF.Src);
     CollectDeclTypes(PF.Tree.RootNode, PF.Src, TypeMap, True); { inline `var X: T` too }
     Walk(PF.Tree.RootNode, '');
     if NonString.Count = 0 then Exit;
@@ -3969,6 +3976,7 @@ begin
       if not (SameText(F.RuleId, RULE_ID) and NonString.ContainsKey(Format('%d:%d', [F.StartLine, F.StartCol]))) then
         Result:= Result + [F];
   finally
+    Reader.Free;
     Scopes.Free;
     NonString.Free;
     TypeMap.Free;

@@ -32,6 +32,7 @@ type
     FName : string;
     FArr  : TArray<Integer>;
     Svc   : IAfSvc;
+    FCost : Double;
     State : TAfKind;
     Rec   : TAfRec;
     Node  : TAfNode;
