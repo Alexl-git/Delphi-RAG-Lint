@@ -16,6 +16,9 @@ breaking changes** until v2.0.
 
 ### Fixed
 - cycles --fix / --plan: a rewrite no longer touches a string literal or a comment on an edited line: `Writeln('Foo says ', Foo(1))` used to become `Writeln('FooPtr says ', FooPtr(1))`, which compiled and printed something else.
+- cycles --fix / --plan: an R1 rewrite no longer turns a same-named local, method or parameter into the pointer: `Foo(1); DUnit.Foo(2);` compiled and called the wrong routine. Refuses `name-shadowed`; on separate lines the plan is sound. A local named like the unit also refuses.
+- cycles --fix / --plan: `duplicate-identifier` when the consumer, the declaring unit or a class member already declares `FooPtr`, which would win over the pointer.
+- cycles --fix / --plan: `array[0..Unit.cMax]`: the `..` hid the name, the entry was removed and the build failed E2242. Now the entry stays and `coupling-remains` refuses before any build, or the text follows a constant that moves.
 - index --project: a .dproj's `<MainSource>` now selects the program whose uses seed the closure (was always the sibling `<name>.dpr`); sibling fallback unchanged.
 - doc-drift: an `<exception cref>` raised inside an RTL callee (`TIniFile.WriteString` -> `EIniFileException`) is no longer reported as never raised: the check asks the platform library index. With no library the finding stands.
 - implementors: `--output` obeys `--output-encoding` and writes no BOM.
