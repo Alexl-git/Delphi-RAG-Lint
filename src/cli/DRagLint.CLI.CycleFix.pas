@@ -19,7 +19,7 @@ interface
 
 uses
   System.SysUtils, System.Generics.Collections,
-  DRagLint.Core.Interfaces, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.TextEdit; // dl:unit DRagLint.Report.CyclePlan accepted -- uses-global-census counts one shared const (CCycleNone, the no-cycle line both print); the unit is needed anyway for the planner itself (TCyclePlanView, TRefusal, VisitCyclePlans), so the const stays with the planner it belongs to
+  DRagLint.Core.Interfaces, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.TextEdit, DRagLint.Refactor.CompileGate; // dl:unit DRagLint.Report.CyclePlan accepted -- uses-global-census counts one shared const (CCycleNone, the no-cycle line both print); the unit is needed anyway for the planner itself (TCyclePlanView, TRefusal, VisitCyclePlans), so the const stays with the planner it belongs to
 
 type
   /// <summary>The `cycles --fix` flags, as DoCycles parsed them.</summary>
@@ -63,86 +63,8 @@ type
     BuildTimeout: string;
   end;
 
-  /// <summary>Raised inside a `cycles --fix` run once a stand-down request (the maintenance control
-  /// channel: `drag-lint shutdown`, or the IDE's Cancel) is taken while the run waits on a child.</summary>
-  /// <remarks>The child's process tree is already gone when it is raised. ApplyGroup turns it into a
-  /// rollback and the refusal `cancelled`; RunCycleFix turns one raised before any file was written into
-  /// "cancelled -- nothing written". Either way the run exits 1.</remarks>
-  ECycleFixCancelled = class(Exception);
-
-  /// <summary>The outcome of one msbuild run of a whole project (RunMsBuild).</summary>
-  TBuildOutcome = record
-    /// <summary>True when msbuild exited 0 and printed no `error E`/`fatal F` line.</summary>
-    Ok: Boolean;
-    /// <summary>The distinct dcc error lines, trimmed, in log order (empty when Ok).</summary>
-    Errors: TArray<string>;
-    /// <summary>Wall-clock seconds of the build.</summary>
-    Seconds: Double;
-    /// <summary>True when the build ran past its time limit and was killed (Ok is False).</summary>
-    TimedOut: Boolean;
-  end;
-
-  /// <summary>One bounded repair (R4) the compile gate made; an item of `repairs[]` in cycle-fix/1.</summary>
-  TRepair = record
-    /// <summary>The dcc code repaired: E2003, E2015 or E2010.</summary>
-    Code: string;
-    /// <summary>The file the dcc line names, as found in the build tree.</summary>
-    FilePath: string;
-    /// <summary>The line the dcc line names.</summary>
-    Line: Integer;
-    /// <summary>What was changed, in words.</summary>
-    Action: string;
-  end;
-
-  /// <summary>The result of the after-gate (CompileAfter).</summary>
-  TCompileAfterResult = record
-    /// <summary>True when the last build was clean.</summary>
-    Ok: Boolean;
-    /// <summary>The dcc error lines of the last build.</summary>
-    Errors: TArray<string>;
-    /// <summary>The repairs made between the first and the second build; empty = no retry.</summary>
-    Repairs: TArray<TRepair>;
-    /// <summary>1, or 2 when a repair was retried.</summary>
-    Builds: Integer;
-    /// <summary>Seconds of every build together.</summary>
-    Seconds: Double;
-    /// <summary>True when the last build was killed at its time limit.</summary>
-    TimedOut: Boolean;
-  end;
-
-  /// <summary>What WriteAll wrote and everything RollBack needs to undo it.</summary>
-  /// <remarks>Owns no object; the original bytes are held in memory, so a rollback never depends on
-  /// the backup files.</remarks>
-  TApplyTransaction = record
-    /// <summary>The project paths written, new files first, in write order.</summary>
-    Written: TArray<string>;
-    /// <summary>The new files among Written.</summary>
-    NewFiles: TArray<string>;
-    /// <summary>Every existing file the plan touches (written or not: a repair may edit it).</summary>
-    Held: TArray<string>;
-    /// <summary>The original bytes of Held, index for index.</summary>
-    Originals: TArray<TBytes>;
-    /// <summary>The original last-write times of Held (UTC), restored with the bytes so the index sees no change.</summary>
-    Stamps: TArray<TDateTime>;
-    /// <summary>The "orig -&gt; backup" lines of the backups made (empty with --no-backup).</summary>
-    Backups: TArray<string>;
-    /// <summary>The backup files made.</summary>
-    BackupPaths: TArray<string>;
-    /// <summary>The folders created for new files, outermost first.</summary>
-    CreatedDirs: TArray<string>;
-    /// <summary>recovery.txt in the project folder ('' with --no-backup).</summary>
-    RecoveryPath: string;
-    /// <summary>True when recovery.txt existed before the write.</summary>
-    RecoveryExisted: Boolean;
-    /// <summary>Its bytes before the write.</summary>
-    RecoveryBefore: TBytes;
-    /// <summary>Its last-write time (UTC) before the write.</summary>
-    RecoveryStamp: TDateTime;
-    /// <summary>Why the write failed; '' when it succeeded.</summary>
-    Error: string;
-    /// <summary>When the write failed: the files the rollback could not restore; '' = restored.</summary>
-    RollbackFailure: string;
-  end;
+  /// <summary>The gate's stand-down exception, under the name this verb's handlers and doc-comments use.</summary>
+  ECycleFixCancelled = ECompileGateCancelled;
 
   /// <summary>The post-apply verification (VerifyAfter): the child re-index and the comparison.</summary>
   TVerifyResult = record
@@ -163,34 +85,6 @@ type
     /// <summary>'' when verified; else `not re-indexed`, `re-index failed` or `the cycles output differs from the prediction`.</summary>
     Reason: string;
   end;
-
-/// <summary>Builds a whole project with msbuild, the recipe of tools\score-cycle-playbook.ps1
-/// Invoke-Build: a generated `.bat` calls rsvars.bat, changes to the project folder and runs
-/// `msbuild /t:Build /p:Config=Debug /p:Platform=&lt;p&gt; /v:minimal`, output to pLogPath.</summary>
-/// <param name="pProject">The .dproj to build.</param>
-/// <param name="pPlatform">win32 / win64 (any case); '' = Win64.</param>
-/// <param name="pLogPath">The build log; the `.bat` is written next to it (same name, .bat).
-/// Its folder is created; neither file is in the project.</param>
-/// <returns>Ok, the distinct `error E`/`fatal F` lines and the seconds taken. A missing rsvars.bat
-/// gives Ok = False with one line saying so (CompilerAvailable tells beforehand).</returns>
-/// <remarks>The build writes what any build of the project writes (dcu, exe) into the project's
-/// own output folders; it writes no source file. The build is UNBOUNDED by default (owner ruling
-/// 2026-10-26); --build-timeout &lt;s&gt; bounds it: a run past the limit is killed with its whole process tree
-/// (a job object) and returns Ok = False, TimedOut = True and one `build-timeout` line. The test seam
-/// DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS (milliseconds, so a test can force an instant timeout) overrides
-/// the flag for a project under %TEMP% / C:\TEMP only.
-/// While it waits the build reports progress (owner ruling D4, 2026-11-03): `cycles --fix: &lt;pWhat&gt; --
-/// started`, then every 10 s `cycles --fix: &lt;pWhat&gt; -- &lt;n&gt; s ...` on stderr, and the heartbeat step
-/// `&lt;pWhat&gt; &lt;n&gt; s` (the IDE status strip).</remarks>
-/// <param name="pWhat">The step the progress names, e.g. 'baseline build'.</param>
-/// <exception cref="ECycleFixCancelled">A stand-down request arrived on the run's control channel while
-/// the build ran: the build's process tree was killed.</exception>
-function RunMsBuild(const pProject, pPlatform, pLogPath: string; const pWhat: string = 'build'): TBuildOutcome;
-
-/// <summary>True when the RAD Studio rsvars.bat RunMsBuild calls exists.</summary>
-/// <returns>False when no Studio root resolves (TStudioEnv: $BDS, the registry, the fallback) or
-/// its rsvars.bat is missing.</returns>
-function CompilerAvailable: Boolean;
 
 /// <summary>The baseline gate: builds the UNTOUCHED project before anything is staged.</summary>
 /// <param name="pOpts">The flags (Project, Platform).</param>
@@ -245,14 +139,6 @@ function CompileAfter(const pView: TCyclePlanView; const pProjectDir, pBuildProj
 /// written. Each write passes FailWriteForTests (DRAGLINT_TEST_FAIL_WRITE_AT).</remarks>
 function WriteAll(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string; pNoBackup: Boolean;
   out pTx: TApplyTransaction): Boolean;
-
-/// <summary>Undoes WriteAll byte-identically.</summary>
-/// <param name="pTx">The transaction WriteAll returned.</param>
-/// <returns>'' when every file is restored; else the files that could not be, with the reason.</returns>
-/// <remarks>Restores every held original whose bytes changed (a repair's edits included) with its last-write time, deletes
-/// the new files and the folders made for them, the backups made, and restores recovery.txt (or
-/// deletes it when the write created it). Never raises.</remarks>
-function RollBack(const pTx: TApplyTransaction): string;
 
 /// <summary>The post-apply verification: re-index the project DB in a child process, run
 /// `cycles` on it and compare with the plan's prediction.</summary>
@@ -422,16 +308,7 @@ const
   CPartAll          = 'all';
   CReindexSteps     = 3; // the re-index steps of one --apply: the A1 pre-plan re-index, VerifyAfterCore's re-index and `cycles`
   CKillMarginMs     = 10 * 60 * 1000; // slack above one --apply's own limits for start-up, writes and backups
-  CChildStandDownMs = 60 * 1000; // how long a child `cycles --fix` gets to roll back after a forwarded stand-down
-  CPipeConnectMs    = 2000;  // how long to wait for a child's control pipe to accept the forwarded request
-  CChildKillWaitMs = 5000;  // how long to wait for a killed child to exit
-  CKilledExitCode  = 1;     // the exit code a killed child is given
   CExitApplyUnverified = 1; // --apply: written and compiled, but not verified
-  { Progress of a child wait (owner ruling D4, 2026-11-03: no time limit -- show progress, let the user
-    cancel). The heartbeat step is refreshed every CProgressTickMs (the IDE status strip reads it); a
-    stderr line repeats every CProgressLineMs. tests\autotest\run_cyclefix_progress.ps1 pins both. }
-  CProgressTickMs   = 1000;
-  CProgressLineMs   = 10 * 1000;
 
 function MakeRefusal(const pKind, pSymbol, pFile, pReason: string; pLine: Integer): TRefusal;
 begin
@@ -488,42 +365,6 @@ end;
 var
   GShadowPick: string; // the default shadow dir this process picked (never one that existed); '' = not asked yet
   GBuildPick : string; // the same for the compile gate's _build dir
-  GRsVars    : string; // W6 C7: --rsvars, expanded; '' = TStudioEnv
-  GBuildTimeoutMs: Cardinal = INFINITE; // --build-timeout in ms; INFINITE = no limit (CDefaultBuildTimeoutS)
-  GStandDown : TControlChannel; // the run's control channel (RunCycleFix); nil = not listening
-  GCancelTaken: Boolean; // a stand-down request was taken: every later child wait raises at once
-  GScratchCited: Boolean; // a message of this run names a file in its scratch: DeleteDefaultScratch keeps it
-  GProgressDb : string; // the run's --db, expanded: the progress lines name the `shutdown --db` that cancels it
-
-// The text a message uses to cite pPath, a file in this run's scratch: Format(pFmt, [pPath]) when the file
-// exists -- and the scratch is then kept at exit (E18 final review F5, amended) -- else '' (a message never
-// names a file that is not there, e.g. the log of a build killed before msbuild opened it).
-function CiteScratch(const pPath, pFmt: string): string;
-begin
-  if not TFile.Exists(pPath) then Exit('');
-  GScratchCited:= True;
-  Result:= Format(pFmt, [pPath]);
-end;
-
-// A scratch name under C:\TEMP that does not exist NOW: the pid-based name, else the same with a random
-// suffix. A leftover dir of an earlier process with this pid is therefore never reused (its contents
-// never reach a build) and never deleted: whatever exists under a picked name at the end of the run,
-// THIS run created.
-function FreshScratchName(const pTail: string): string;
-const
-  CGuidHexFrom = 2; // past the opening brace
-  CGuidHexLen  = 8;
-var
-  Pid: string;
-begin
-  { DRAGLINT_TEST_SCRATCH_PID (test seam, only names a dir under C:\TEMP): stands in for the pid, so a runner
-    can plant the would-be name before the run }
-  Pid:= GetEnvironmentVariable('DRAGLINT_TEST_SCRATCH_PID');
-  if Pid = '' then Pid:= IntToStr(GetCurrentProcessId);
-  Result:= Format('C:\TEMP\draglint_cyclefix_%s%s\', [Pid, pTail]); // dl:ok hardcoded-absolute-path@022b -- the debug shadow location is fixed by the E18 design; --shadow-out overrides it
-  if TDirectory.Exists(Result) then
-    Result:= Format('C:\TEMP\draglint_cyclefix_%s_%s%s\', [Pid, Copy(GUIDToString(TGUID.NewGuid), CGuidHexFrom, CGuidHexLen), pTail]); // dl:ok hardcoded-absolute-path@b155 -- same fixed location
-end;
 
 function DefaultShadowDir: string;
 begin
@@ -797,14 +638,6 @@ end;
 { ---- the compile gate (E18 Task 10) ---------------------------------------------------------- }
 
 type
-  // One dcc error line, parsed.
-  TDccLine = record
-    FileName: string;
-    Line    : Integer;
-    Code    : string;
-    Message : string;
-  end;
-
   // One file TryRepair edits: its lines in its own encoding, and whether it ended in a line break.
   TRepairFile = class
   strict private
@@ -847,8 +680,6 @@ const
   CStatusSkipped = 'skipped';
   CStatusF2047   = 'f2047-in-group';
   CKindBuildTimeout = 'build-timeout';
-  CSectionStop   = '^\s*(type|const|var|threadvar|resourcestring|procedure|function|constructor|destructor|' +
-                   'class|begin|initialization|finalization|exports|end\.)\b';
 
 constructor TRepairFile.Create(const pPath: string);
 begin
@@ -874,69 +705,11 @@ begin
   TFile.WriteAllBytes(FPath, EncodeSource(Text, FEnc));
 end;
 
-{ The Studio build-environment batch, from the repo's one Studio-root resolver (T17b D4:
-  run_studio_root_guard); '' when no root resolves. }
-function BuildEnvBat: string;
-begin
-  if GRsVars <> '' then Exit(GRsVars);  { W6 C7: --rsvars }
-  Result:= if TStudioEnv.RootOrEmpty = '' then '' else TStudioEnv.RsvarsBat;
-end;
-
-function CompilerAvailable: Boolean;
-begin
-  var Bat:= BuildEnvBat;
-  Result:= (Bat <> '') and TFile.Exists(Bat);
-end;
-
-function MsBuildPlatform(const pPlatform: string): string;
-begin
-  if SameText(pPlatform, 'win32') then Result:= 'Win32'
-  else if (pPlatform = '') or SameText(pPlatform, CDefaultPlatform) then Result:= 'Win64'
-  else Result:= pPlatform;
-end;
-
 // The folder of the gate's .bat files and logs: never inside the project or the shadow tree.
 function BuildScratchDir: string;
 begin
   if GBuildPick = '' then GBuildPick:= FreshScratchName('_build');
   Result:= GBuildPick;
-end;
-
-// The distinct `error E....` / `fatal F....` lines of a build log, trimmed, in log order.
-function DccErrorLines(const pLog: string): TArray<string>;
-var
-  L: TList<string>;
-begin
-  L:= TList<string>.Create;
-  try
-    for var M in TRegEx.Matches(pLog, '^.*\b(error|fatal) [EF]\d{4}\b.*$', [roMultiLine]) do
-    begin
-      var S:= Trim(M.Value);
-      if not L.Contains(S) then L.Add(S);
-    end;
-    Result:= L.ToArray;
-  finally
-    L.Free;
-  end;
-end;
-
-function IsUnderTemp(const pPath: string): Boolean;
-begin
-  var Full:= ExpandFileName(pPath);
-  var Temp:= GetEnvironmentVariable('TEMP');
-  Result:= StartsText('C:\TEMP\', Full) or // dl:ok hardcoded-absolute-path@485b -- the test seams' fixed scratch root (ruling T10)
-    ((Temp <> '') and StartsText(IncludeTrailingPathDelimiter(ExpandFileName(Temp)), Full));
-end;
-
-// The time limit of a build of pProject: --build-timeout (INFINITE = none, the default), or the test seam
-// DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS (milliseconds) for a project under %TEMP% / C:\TEMP. The seam stays
-// beside the flag on purpose: the flag counts whole seconds, and a test that must time out the FIRST build
-// before it can finish needs a limit of 1 ms.
-function BuildTimeoutMs(const pProject: string): Cardinal;
-begin
-  Result:= GBuildTimeoutMs;
-  var Seam:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS'), 0);
-  if (Seam > 0) and IsUnderTemp(pProject) then Result:= Seam;
 end;
 
 // The limit of a child that is one whole --apply (a --part all iteration, the A1 re-run): its three builds
@@ -949,210 +722,9 @@ begin
     UInt64(INFINITE - 1)));
 end;
 
-// The stand-down request, if one is pending: takes it (the listener can no longer withdraw it) and remembers
-// that it was taken. False when there is none, or the listener withdrew it a moment ago.
-function TakeStandDown: Boolean;
-begin
-  if not GCancelTaken and (GStandDown <> nil) and GStandDown.StandDownRequested then GCancelTaken:= True;
-  Result:= GCancelTaken;
-end;
-
-// A stand-down taken while pPI ran: a child `cycles --fix` (pEngineChild) is asked to stand down in turn and
-// given CChildStandDownMs to roll back and exit -- True, its exit code in pCode; otherwise (or when it does not
-// exit in time) the whole job is terminated and False is returned.
-function StandDownChild(const pPI: TProcessInformation; pJob: THandle; pEngineChild: Boolean; out pCode: Integer): Boolean;
-var
-  Code: Cardinal;
-begin
-  pCode:= -1;
-  if pEngineChild then
-  begin
-    var Reply, Err: string;
-    { blocks until the child answers: `exiting` once it rolled back and closed its stores, else `busy` }
-    ControlRequest(ControlPipeNameFor(pPI.dwProcessId), CONTROL_MSG_SHUTDOWN + #9 + IntToStr(CChildStandDownMs),
-      CPipeConnectMs, Reply, Err);
-    if WaitForSingleObject(pPI.hProcess, CChildStandDownMs) = WAIT_OBJECT_0 then
-    begin
-      GetExitCodeProcess(pPI.hProcess, Code);
-      pCode:= Integer(Code);
-      Exit(True);
-    end;
-  end;
-  if pJob <> 0 then TerminateJobObject(pJob, CKilledExitCode)
-  else TerminateProcess(pPI.hProcess, CKilledExitCode);
-  WaitForSingleObject(pPI.hProcess, CChildKillWaitMs);
-  Result:= False;
-end;
-
-{ Runs pCmd as a child in its own job object and waits at most pTimeoutMs (INFINITE = no limit). pOutFile
-  <> '': the child's stdout and stderr go to that file (created). On expiry the WHOLE job is terminated (a
-  cmd.exe -> msbuild -> dcc tree dies with it) and pTimedOut is set. Returns the exit code, or -1 after a
-  kill. Raises EOSError when the child cannot start. Replaces TCompileChecker.RunCommand for the gate's
-  builds: that one waits INFINITE (CompileCheck.pas), and stays so for its callers.
-  CANCEL (lane X-BT): the wait also watches the run's stand-down request (GStandDown). Once it is taken the
-  child is stopped (StandDownChild) and ECycleFixCancelled is raised -- except for a child `cycles --fix`
-  (pEngineChild) that stood down by itself: its exit code is returned, so the caller relays its own
-  (rolled-back) result. A request taken earlier raises before anything is spawned.
-  PROGRESS (lane 142-cyc, owner ruling D4): pWhat names the step ('baseline build', 're-index', ...). The
-  run says `cycles --fix: <pWhat> -- started` on stderr, then every CProgressLineMs `... -- <n> s ...`, and
-  keeps the heartbeat step at `<pWhat> <n> s` (refreshed every CProgressTickMs), which is what the IDE's
-  status strip shows. Main thread only, so a progress line never lands inside a document on stdout. }
-procedure ReportWaitProgress(const pWhat: string; pElapsedMs: UInt64; pLine: Boolean);
-begin
-  var Secs:= pElapsedMs div CMsPerSec;
-  BeatStep(Format('%s %d s', [pWhat, Secs]));
-  if pLine then
-    Writeln(ErrOutput, Format('cycles --fix: %s -- %d s (no time limit; Cancel, or drag-lint shutdown --db "%s", stops it)',
-      [pWhat, Secs, GProgressDb]));
-end;
-
-function RunBounded(const pWhat, pCmd, pOutFile: string; pTimeoutMs: Cardinal; out pTimedOut: Boolean;
-  pEngineChild: Boolean = False): Integer;
-var
-  SA     : TSecurityAttributes;
-  SI     : TStartupInfo;
-  PI     : TProcessInformation;
-  Job    : THandle;
-  Output : THandle;
-  Code   : Cardinal;
-  Waits  : array[0..1] of THandle;
-begin
-  Result:= -1; { every path below Exit()s with a value or raises; this is the -1 of "no exit code" }
-  pTimedOut:= False;
-  if GCancelTaken then raise ECycleFixCancelled.Create('cancelled');
-  Output:= INVALID_HANDLE_VALUE;
-  FillChar(SI, SizeOf(SI), 0);
-  SI.cb         := SizeOf(SI);
-  SI.dwFlags    := STARTF_USESHOWWINDOW;
-  SI.wShowWindow:= SW_HIDE;
-  if pOutFile <> '' then
-  begin
-    SA.nLength:= SizeOf(SA);
-    SA.lpSecurityDescriptor:= nil;
-    SA.bInheritHandle:= True;
-    ForceDirectories(ExtractFilePath(pOutFile));
-    Output:= CreateFile(PChar(pOutFile), GENERIC_WRITE, FILE_SHARE_READ, @SA, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-    if Output = INVALID_HANDLE_VALUE then RaiseLastOSError;
-    SI.dwFlags   := SI.dwFlags or STARTF_USESTDHANDLES;
-    SI.hStdOutput:= Output;
-    SI.hStdError := Output;
-    SI.hStdInput := 0;
-  end;
-  Job:= CreateJobObject(nil, nil);
-  try
-    var Cmd:= pCmd;
-    UniqueString(Cmd);
-    if not CreateProcess(nil, PChar(Cmd), nil, nil, pOutFile <> '', CREATE_NO_WINDOW or CREATE_SUSPENDED, nil, nil, SI, PI) then  // dl:ok unsafe-shellexecute@5152 -- the gate's own generated .bat, or this engine (ParamStr(0)) on the run's own --db / --project
-      RaiseLastOSError;
-    try
-      if Job <> 0 then AssignProcessToJobObject(Job, PI.hProcess);
-      ResumeThread(PI.hThread);
-      Waits[0]:= PI.hProcess;
-      if GStandDown <> nil then Waits[1]:= GStandDown.RequestEvent;
-      var Started:= GetTickCount64;
-      var Deadline:= if pTimeoutMs = INFINITE then High(UInt64) else Started + pTimeoutMs;
-      var NextLine:= Started + CProgressLineMs;
-      Writeln(ErrOutput, 'cycles --fix: ', pWhat, ' -- started');
-      ReportWaitProgress(pWhat, 0, False);
-      repeat
-        var Tick:= GetTickCount64;
-        var Left:= if Deadline = High(UInt64) then INFINITE else Cardinal(Max(Int64(Deadline) - Int64(Tick), 0));
-        var Rc:= WaitForMultipleObjects(if GStandDown <> nil then 2 else 1, @Waits[0], False, Min(Left, CProgressTickMs));
-        if (Rc = WAIT_TIMEOUT) and (GetTickCount64 < Deadline) then
-        begin
-          { a progress tick, not the limit }
-          Tick:= GetTickCount64;
-          ReportWaitProgress(pWhat, Tick - Started, Tick >= NextLine);
-          if Tick >= NextLine then NextLine:= Tick + CProgressLineMs;
-          Continue;
-        end;
-        if Rc = WAIT_OBJECT_0 then
-        begin
-          GetExitCodeProcess(PI.hProcess, Code);
-          Exit(Integer(Code));
-        end;
-        if Rc = WAIT_OBJECT_0 + 1 then
-        begin
-          if not TakeStandDown then Continue; { withdrawn by the listener a moment ago: keep waiting }
-          var Stood: Integer;
-          if StandDownChild(PI, Job, pEngineChild, Stood) then Exit(Stood);
-          raise ECycleFixCancelled.Create('cancelled');
-        end;
-        { WAIT_TIMEOUT (or a failed wait): the limit is up }
-        pTimedOut:= True;
-        if Job <> 0 then TerminateJobObject(Job, CKilledExitCode)
-        else TerminateProcess(PI.hProcess, CKilledExitCode);
-        WaitForSingleObject(PI.hProcess, CChildKillWaitMs);
-        Exit(-1);
-      until False;
-    finally
-      CloseHandle(PI.hThread);
-      CloseHandle(PI.hProcess);
-    end;
-  finally
-    if Job <> 0 then CloseHandle(Job);
-    if Output <> INVALID_HANDLE_VALUE then CloseHandle(Output);
-  end;
-end;
-
-function RunMsBuild(const pProject, pPlatform, pLogPath: string; const pWhat: string = 'build'): TBuildOutcome;
-begin
-  Result:= Default(TBuildOutcome);
-  if not CompilerAvailable then
-  begin
-    Result.Errors:= ['cannot build: the RAD Studio build environment was not found: ' + BuildEnvBat];
-    Exit;
-  end;
-  var Project:= ExpandFileName(pProject);
-  if SameText(ExtractFileExt(Project), '.dpr') and TFile.Exists(ChangeFileExt(Project, '.dproj')) then
-    Project:= ChangeFileExt(Project, '.dproj');
-  var Log:= ExpandFileName(pLogPath);
-  var Bat:= ChangeFileExt(Log, '.bat');
-  ForceDirectories(ExtractFilePath(Log));
-  System.SysUtils.DeleteFile(Log); // a stale log of an earlier run must not be read as this one's; absent = fine
-  TFile.WriteAllText(Bat, string.Join(#13#10, [
-    '@echo off',
-    Format('call "%s"', [BuildEnvBat]),
-    Format('cd /d "%s"', [ExcludeTrailingPathDelimiter(ExtractFilePath(Project))]),
-    Format('msbuild /t:Build /p:Config=Debug /p:Platform=%s /v:minimal "%s" > "%s" 2>&1',
-      [MsBuildPlatform(pPlatform), Project, Log]),
-    { redirection FIRST: `echo X=%ERRORLEVEL%>> f` expands to `X=0>> f`, a redirect of handle 0 }
-    Format('>> "%s" echo BUILD_EXITCODE=%%ERRORLEVEL%%', [Log])]) + #13#10, TEncoding.ASCII);
-  var Watch:= TStopwatch.StartNew;
-  var Limit:= BuildTimeoutMs(Project);
-  RunBounded(pWhat, 'cmd.exe /c ""' + Bat + '""', '', Limit, Result.TimedOut);
-  Result.Seconds:= Watch.Elapsed.TotalSeconds;
-  if Result.TimedOut then
-  begin
-    Result.Errors:= [Format('build-timeout: msbuild did not finish within %d ms and was killed', [Limit]) + CiteScratch(Log, '; see %s')];
-    Exit;
-  end;
-  var Text:= if TFile.Exists(Log) then TFile.ReadAllText(Log, TEncoding.ANSI) else '';
-  Result.Errors:= DccErrorLines(Text);
-  Result.Ok:= ContainsStr(Text, 'BUILD_EXITCODE=0') and (Length(Result.Errors) = 0);
-  if not Result.Ok and (Length(Result.Errors) = 0) then
-    Result.Errors:= ['msbuild failed without a dcc error line' + CiteScratch(Log, '; see %s')];
-end;
-
 function BaselineCompile(const pOpts: TCycleFixOptions; const pLogDir: string): TBuildOutcome;
 begin
   Result:= RunMsBuild(pOpts.Project, pOpts.Platform, IncludeTrailingPathDelimiter(pLogDir) + 'baseline.log', 'baseline build');
-end;
-
-// `File.pas(57): error E2015: Message [proj]` (msbuild) or `[dcc64 Error] File.pas(57): E2015 Message` (dcc).
-function ParseDccLine(const pText: string; out pLine: TDccLine): Boolean;
-const
-  CPattern = '^\s*(?:\[dcc\w*\s+\w+\]\s*)?(?<file>.+?)\((?<line>\d+)(?:,\d+)?\)\s*:?\s*(?:(?:error|fatal)\s*:?\s*)?' +
-             '(?<code>[EF]\d{4})\s*:?\s*(?<msg>.*?)\s*(?:\[[^\[\]]*\])?\s*$';
-begin
-  pLine:= Default(TDccLine);
-  var M:= TRegEx.Match(pText, CPattern, [roIgnoreCase]);
-  Result:= M.Success;
-  if not Result then Exit;
-  pLine.FileName:= Trim(M.Groups['file'].Value);
-  pLine.Line    := StrToIntDef(M.Groups['line'].Value, 0);
-  pLine.Code    := UpperCase(M.Groups['code'].Value);
-  pLine.Message := M.Groups['msg'].Value;
 end;
 
 // Where pPath of the plan is in pTreeDir: itself when the tree IS the project folder, else its shadow path.
@@ -1179,86 +751,6 @@ begin
     (MatchText(pName, [pView.PtrType, pView.PtrVar]) or MatchText(pName, pView.IfaceNames)) then
     Exit(pView.InversionUnit);
   Result:= '';
-end;
-
-function LineIndexOf(pLines: TStrings; const pPattern: string; pFrom, pTo: Integer): Integer;
-begin
-  for var I:= pFrom to pTo - 1 do
-    if TRegEx.IsMatch(pLines[I], pPattern, [roIgnoreCase]) then Exit(I);
-  Result:= -1;
-end;
-
-// interface / implementation / program: the section holding 0-based line pIdx.
-function SectionNameOf(pLines: TStrings; pIdx: Integer): string;
-begin
-  var Impl:= LineIndexOf(pLines, '^\s*implementation\b', 0, pLines.Count);
-  if (Impl >= 0) and (pIdx > Impl) then Exit('implementation');
-  Result:= if LineIndexOf(pLines, '^\s*interface\b', 0, pLines.Count) >= 0 then 'interface' else 'program';
-end;
-
-// The [pLo, pHi) lines of the named section, pLo the line after its keyword.
-procedure SectionRange(pLines: TStrings; const pName: string; out pLo, pHi: Integer);
-begin
-  var Impl:= LineIndexOf(pLines, '^\s*implementation\b', 0, pLines.Count);
-  pLo:= 0;
-  pHi:= pLines.Count;
-  if pName = 'implementation' then pLo:= Impl + 1
-  else if pName = 'interface' then
-  begin
-    pLo:= LineIndexOf(pLines, '^\s*interface\b', 0, pLines.Count) + 1;
-    if Impl >= 0 then pHi:= Impl;
-  end;
-end;
-
-// The unit names of the uses clause that starts at line pUses (comments and `in '...'` dropped).
-function UsesEntries(pLines: TStrings; pUses: Integer): TArray<string>;
-var
-  Buf: TStringBuilder;
-begin
-  Result:= nil;
-  Buf:= TStringBuilder.Create;
-  try
-    for var I:= pUses to pLines.Count - 1 do
-    begin
-      var S:= TRegEx.Replace(pLines[I], '//.*$', '');
-      Buf.Append(S).Append(' ');
-      if ContainsStr(S, ';') then Break;
-    end;
-    var Text:= TRegEx.Replace(Buf.ToString, '\{[^}]*\}|\(\*.*?\*\)', ' ');
-    Text:= TRegEx.Replace(Text, '^\s*uses\b', '', [roIgnoreCase]);
-    if Pos(';', Text) > 0 then Text:= Copy(Text, 1, Pos(';', Text) - 1);
-    for var E in Text.Split([',']) do
-      Result:= Result + [Trim(TRegEx.Replace(E, '\s+in\s+''[^'']*''', '', [roIgnoreCase]))];
-  finally
-    Buf.Free;
-  end;
-end;
-
-// Adds pLeaf as the first entry of the section's uses clause (a section without one gets one).
-// False when it is there already or the section has no place for it.
-function AddToUses(pLines: TStrings; const pSection, pLeaf: string): Boolean;
-var
-  Lo, Hi: Integer;
-begin
-  SectionRange(pLines, pSection, Lo, Hi);
-  var Stop:= LineIndexOf(pLines, CSectionStop, Lo, Hi);
-  var U:= LineIndexOf(pLines, '^\s*uses\b', Lo, if Stop >= 0 then Stop else Hi);
-  if U >= 0 then
-  begin
-    if MatchText(pLeaf, UsesEntries(pLines, U)) then Exit(False);
-    var M:= TRegEx.Match(pLines[U], '^(\s*uses)\b(.*)$', [roIgnoreCase]);
-    var Rest:= Trim(M.Groups[2].Value);
-    if Rest = '' then pLines.Insert(U + 1, '  ' + pLeaf + ',')
-    else pLines[U]:= M.Groups[1].Value + ' ' + pLeaf + ', ' + Rest;
-  end
-  else if pSection = 'program' then Exit(False)
-  else
-  begin
-    pLines.Insert(Lo, '  ' + pLeaf + ';');
-    pLines.Insert(Lo, 'uses');
-    pLines.Insert(Lo, '');
-  end;
-  Result:= True;
 end;
 
 function TryRepair(const pView: TCyclePlanView; const pErrors: TArray<string>;
@@ -1412,223 +904,39 @@ end;
 function CompileAfter(const pView: TCyclePlanView; const pProjectDir, pBuildProject, pPlatform,
   pLogDir: string): TCompileAfterResult;
 begin
-  Result:= Default(TCompileAfterResult);
-  var Dir:= IncludeTrailingPathDelimiter(pLogDir);
-  var B:= RunMsBuild(pBuildProject, pPlatform, Dir + 'after-1.log', 'build after the edit');
-  Result.Builds := 1;
-  Result.Seconds:= B.Seconds;
-  if not B.Ok then
-  begin
-    Result.Repairs:= TryRepair(pView, B.Errors, pProjectDir, ExtractFilePath(ExpandFileName(pBuildProject)));
-    if Length(Result.Repairs) > 0 then
+  var View:= pView;
+  var ProjectDir:= pProjectDir;
+  var Tree:= ExtractFilePath(ExpandFileName(pBuildProject));
+  Result:= CompileAfterWith(pBuildProject, pPlatform, pLogDir,
+    function(const pErrors: TArray<string>): TArray<TRepair>
     begin
-      B:= RunMsBuild(pBuildProject, pPlatform, Dir + Format('after-%d.log', [CSecondBuild]), 'build after the repairs');
-      Result.Builds := CSecondBuild;
-      Result.Seconds:= Result.Seconds + B.Seconds;
-    end;
-  end;
-  Result.Ok      := B.Ok;
-  Result.Errors  := B.Errors;
-  Result.TimedOut:= B.TimedOut;
+      Result:= TryRepair(View, pErrors, ProjectDir, Tree);
+    end);
 end;
 
 { ---- the write, the rollback, the verification (E18 Task 11) ---------------------------------- }
 
-function SameBytes(const pA, pB: TBytes): Boolean;
-begin
-  Result:= (Length(pA) = Length(pB)) and ((Length(pA) = 0) or CompareMem(@pA[0], @pB[0], Length(pA)));
-end;
-
-// pPaths expanded, each once (case-insensitive), in first-seen order.
-function DistinctPaths(const pPaths: TArray<string>): TArray<string>;
-var
-  Seen: TList<string>;
-begin
-  Seen:= TList<string>.Create;
-  try
-    Result:= nil;
-    for var P in pPaths do
-    begin
-      var Full:= ExpandFileName(P);
-      if Seen.Contains(LowerCase(Full)) then Continue;
-      Seen.Add(LowerCase(Full));
-      Result:= Result + [Full];
-    end;
-  finally
-    Seen.Free;
-  end;
-end;
-
-// Creates pDir and records every folder it had to make, outermost first.
-procedure MakeDirs(const pDir: string; var pTx: TApplyTransaction);
-begin
-  var Missing: TArray<string>:= nil;
-  var D:= ExcludeTrailingPathDelimiter(pDir);
-  while (D <> '') and not TDirectory.Exists(D) do
-  begin
-    Missing:= [D] + Missing;
-    var Up:= ExcludeTrailingPathDelimiter(ExtractFilePath(D));
-    if Up = D then Break;
-    D:= Up;
-  end;
-  if Length(Missing) = 0 then Exit;
-  pTx.CreatedDirs:= pTx.CreatedDirs + Missing;
-  ForceDirectories(pDir);
-end;
-
-// The backups of pChanged (NextBackupName siblings) and the recovery.txt block, before any write.
-procedure BackUpChanged(const pChanged: TArray<string>; const pProjectDir, pHeader: string; var pTx: TApplyTransaction);
-begin
-  for var P in pChanged do
-  begin
-    var B:= NextBackupName(P);
-    pTx.BackupPaths:= pTx.BackupPaths + [B];
-    TFile.Copy(P, B);
-    pTx.Backups:= pTx.Backups + [Format('%s -> %s', [P, B])];
-  end;
-  pTx.RecoveryPath   := TPath.Combine(pProjectDir, 'recovery.txt');
-  pTx.RecoveryExisted:= TFile.Exists(pTx.RecoveryPath);
-  if pTx.RecoveryExisted then
-  begin
-    pTx.RecoveryBefore:= TFile.ReadAllBytes(pTx.RecoveryPath);
-    pTx.RecoveryStamp := TFile.GetLastWriteTimeUtc(pTx.RecoveryPath);
-  end;
-  AppendRecoveryBlock(pProjectDir, pHeader, pTx.Backups);
-end;
-
 function WriteAll(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string; pNoBackup: Boolean;
   out pTx: TApplyTransaction): Boolean;
-var
-  Changed: TList<string>;
-  Staged : TDictionary<string, TBytes>;
-  Writes : Integer;
-
-  function StagedBytes(const pPath: string): TBytes;
-  begin
-    var S:= ShadowPathOf(pShadowDir, pProjectDir, pPath);
-    if not TFile.Exists(S) then raise EInOutError.CreateFmt('the shadow holds no staged copy of %s (%s)', [pPath, S]);
-    Result:= TFile.ReadAllBytes(S);
-  end;
-
-  procedure WriteOne(const pPath: string);
-  begin
-    Inc(Writes);
-    { the write-failure test seam acts only on a project under %TEMP% / C:\TEMP (fix round 1);
-      TextEdit.FailWriteForTests itself stays unscoped for convert-apply }
-    if IsUnderTemp(pProjectDir) then FailWriteForTests(Writes, pPath);
-    TFile.WriteAllBytes(pPath, Staged[LowerCase(pPath)]);
-    pTx.Written:= pTx.Written + [pPath];
-  end;
-
 begin
-  pTx:= Default(TApplyTransaction);
-  Changed:= TList<string>.Create;
-  Staged := TDictionary<string, TBytes>.Create;
-  try
-    try
-      { everything is read before anything is written: a missing staged file fails here }
-      for var P in DistinctPaths(pView.TouchedPaths) do
-      begin
-        var Orig:= TFile.ReadAllBytes(P);
-        pTx.Held     := pTx.Held + [P];
-        pTx.Originals:= pTx.Originals + [Orig];
-        pTx.Stamps   := pTx.Stamps + [TFile.GetLastWriteTimeUtc(P)];
-        var Bytes:= StagedBytes(P);
-        if SameBytes(Bytes, Orig) then Continue;
-        Changed.Add(P);
-        Staged.AddOrSetValue(LowerCase(P), Bytes);
-      end;
-      var News: TArray<string>:= nil;
-      for var N in pView.NewUnits do News:= News + [N.Path];
-      News:= DistinctPaths(News);
-      for var P in News do
-      begin
-        if TFile.Exists(P) then raise EInOutError.CreateFmt('the new unit''s file already exists: %s', [P]);
-        Staged.AddOrSetValue(LowerCase(P), StagedBytes(P));
-      end;
-      if not pNoBackup then
-        BackUpChanged(Changed.ToArray, pProjectDir, Format('[%s] cycles --fix --apply: cycle %d (%s), %d file(s) changed, %d new',
-          [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), pView.CycleIndex, string.Join(' <-> ', pView.Units), Changed.Count, Length(News)]), pTx);
-      Writes:= 0;
-      for var P in News do
-      begin
-        MakeDirs(ExtractFilePath(P), pTx);
-        pTx.NewFiles:= pTx.NewFiles + [P];
-        WriteOne(P);
-      end;
-      for var P in Changed do WriteOne(P);
-      Result:= True;
-    except
-      on E: Exception do
-      begin
-        pTx.Error          := E.Message;
-        pTx.RollbackFailure:= RollBack(pTx);
-        Result:= False;
-      end;
-    end;
-  finally
-    Staged.Free;
-    Changed.Free;
-  end;
-end;
-
-// Deletes pPath; a file that is not there is fine, any other failure raises.
-procedure DeleteIfPresent(const pPath: string);
-begin
-  if not System.SysUtils.DeleteFile(pPath) and (GetLastError <> ERROR_FILE_NOT_FOUND) then RaiseLastOSError;
-end;
-
-function RollBack(const pTx: TApplyTransaction): string;
-var
-  Fails: TList<string>;
-
-  procedure Attempt(const pWhat: string; const pStep: TProc);
-  begin
-    try
-      pStep();
-    except
-      on E: Exception do Fails.Add(pWhat + ': ' + E.Message);
-    end;
-  end;
-
-begin
-  Fails:= TList<string>.Create;
-  try
-    for var I:= 0 to High(pTx.Held) do
+  var News: TArray<string>:= nil;
+  for var N in pView.NewUnits do News:= News + [N.Path];
+  var ProjectDir:= pProjectDir;
+  var ShadowDir:= pShadowDir;
+  var CycleIndex:= pView.CycleIndex;
+  var UnitList:= string.Join(' <-> ', pView.Units);
+  Result:= WriteStaged(pView.TouchedPaths, News, pProjectDir, pNoBackup,
+    function(pPath: string): TBytes
     begin
-      var P:= pTx.Held[I];
-      var Orig:= pTx.Originals[I];
-      var Stamp:= pTx.Stamps[I];
-      Attempt('restore ' + P, procedure
-        begin
-          if not TFile.Exists(P) or not SameBytes(TFile.ReadAllBytes(P), Orig) then TFile.WriteAllBytes(P, Orig);
-          if TFile.GetLastWriteTimeUtc(P) <> Stamp then TFile.SetLastWriteTimeUtc(P, Stamp);
-        end);
-    end;
-    for var P in pTx.NewFiles do
-      Attempt('delete ' + P, procedure begin DeleteIfPresent(P); end);
-    for var I:= High(pTx.CreatedDirs) downto 0 do
+      var S:= ShadowPathOf(ShadowDir, ProjectDir, pPath);
+      if not TFile.Exists(S) then raise EInOutError.CreateFmt('the shadow holds no staged copy of %s (%s)', [pPath, S]);
+      Result:= TFile.ReadAllBytes(S);
+    end,
+    function(pChanged, pNew: Integer): string
     begin
-      var D:= pTx.CreatedDirs[I];
-      Attempt('remove folder ' + D, procedure begin if TDirectory.Exists(D) then TDirectory.Delete(D); end);
-    end;
-    for var P in pTx.BackupPaths do
-      Attempt('delete ' + P, procedure begin DeleteIfPresent(P); end);
-    if pTx.RecoveryPath <> '' then
-      Attempt('restore ' + pTx.RecoveryPath, procedure
-        begin
-          if not pTx.RecoveryExisted then
-          begin
-            DeleteIfPresent(pTx.RecoveryPath);
-            Exit;
-          end;
-          TFile.WriteAllBytes(pTx.RecoveryPath, pTx.RecoveryBefore);
-          TFile.SetLastWriteTimeUtc(pTx.RecoveryPath, pTx.RecoveryStamp);
-        end);
-    Result:= string.Join('; ', Fails.ToArray);
-  finally
-    Fails.Free;
-  end;
+      Result:= Format('[%s] cycles --fix --apply: cycle %d (%s), %d file(s) changed, %d new',
+        [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), CycleIndex, UnitList, pChanged, pNew]);
+    end, pTx);
 end;
 
 // The lines of a `cycles` output without the informational ones (blank, `(loaded ...`, notes, resolver).

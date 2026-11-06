@@ -221,6 +221,7 @@
         <DCCReference Include="..\resolver\DRagLint.Resolver.TypeAt.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.Rename.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.TextEdit.pas"/>
+        <DCCReference Include="..\refactor\DRagLint.Refactor.CompileGate.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.DocStub.pas"/>
         <DCCReference Include="..\doc\DRagLint.Doc.GitSince.pas"/>
         <DCCReference Include="..\doc\DRagLint.Doc.Facts.pas"/>
