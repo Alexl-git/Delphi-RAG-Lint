@@ -1,0 +1,78 @@
+{
+  "id": "unwith",
+  "title": "unwith",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.44.0-alpha",
+  "summary": "Removes with blocks, proving every name binds to what it bound before",
+  "intro": "Read this when you want a with statement gone without a name silently changing meaning. --plan names, for every with in a file or a project, whether it can be removed and exactly why not; --apply rewrites through the compile gate, then re-indexes a copy of the DB and rolls back if any reference binds elsewhere.",
+  "wikiPage": "unwith",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "unwith",
+      "usage": "drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json] - remove with blocks, proved binding by binding",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--in",
+          "arg": "<F>"
+        },
+        {
+          "name": "--line",
+          "arg": "<N>"
+        },
+        {
+          "name": "--plan"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--platform",
+          "arg": "<p>"
+        },
+        {
+          "name": "--rsvars",
+          "arg": "<bat>"
+        },
+        {
+          "name": "--build-timeout",
+          "arg": "<s>"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<L>|none"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--json"
+        }
+      ],
+      "helpOrder": 62,
+      "help": ["  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json]  - remove with blocks, proved binding by binding"]
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "Which with statements in this project can be removed safely, and why not the others?",
+      "command": "drag-lint unwith --db <db> --plan"
+    },
+    {
+      "ask": "How do I remove one with statement?",
+      "command": "drag-lint unwith --db <db> --in <F> --line <N> --apply --project <X.dproj>"
+    }
+  ],
+  "notes": "lane 144 unwith; guard tests\\autotest\\run_unwith.ps1"
+}
