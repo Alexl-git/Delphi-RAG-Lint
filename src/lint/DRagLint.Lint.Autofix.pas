@@ -560,7 +560,7 @@ end; // begin
 /// type info:
 ///   self-assignment       -> delete the offending statement line(s);
 ///   redundant-parentheses -> strip the outer '(' ')' of the flagged span;
-///   redundant-cast        -> strip a 'TFoo(x)' cast where x is one identifier;
+///   redundant-cast        -> no edit here: the gated path (DRagLint.Refactor.RedundantCast);
 ///   redundant-not-not     -> strip the two leading 'not' keywords;
 ///   redundant-as-tobject  -> strip the ' as TObject' suffix;
 ///   boolean-comparison-true -> X=True/X&lt;&gt;False->X; X=False/X&lt;&gt;True->not X;
@@ -797,33 +797,8 @@ begin
           end; // if
         end; // if
       end
-      else if SameText(F.RuleId, 'redundant-cast') and (F.StartLine = F.EndLine) then
-      begin
-        { redundant-cast fires only on 'TFoo(x)' with x a SINGLE identifier (the
-          rule's precondition), so there is no nested paren: the ')' is the first
-          one after the '('. The finding span [StartCol, EndCol) covers the entity
-          name 'TFoo'; scan on to '(' then to ')' and replace 'TFoo(x)' with 'x'. }
-        SL:= LinesFor(F.FilePath);
-        if (F.StartLine >= 1) and (F.StartLine <= SL.Count) then
-        begin
-          Ln:= SL[F.StartLine - 1];
-          var OpenP: Integer:= F.EndCol; { 1-based; '(' expected at/after the name }
-          while (OpenP <= Length(Ln)) and (Ln[OpenP] <> '(') do Inc(OpenP);
-          if (OpenP <= Length(Ln)) and (Ln[OpenP] = '(') then
-          begin
-            var CloseP: Integer:= OpenP + 1;
-            while (CloseP <= Length(Ln)) and (Ln[CloseP] <> ')') do Inc(CloseP);
-            if (CloseP <= Length(Ln)) and (Ln[CloseP] = ')') then
-            begin
-              var Inner: string:= Trim(Copy(Ln, OpenP + 1, CloseP - OpenP - 1));
-              if Inner <> '' then
-              begin
-                AddReplaceEdit(F, CloseP + 1, Inner); { exclusive end -- one past the ')' }
-              end;
-            end;
-          end; // if
-        end; // if
-      end // if
+      { redundant-cast has no text fix: DRagLint.Refactor.RedundantCast proves it from ref_types and writes through
+        the compile gate (lint --fix --fix-rule redundant-cast --project). }
       else if SameText(F.RuleId, 'redundant-not-not') and (F.StartLine = F.EndLine) and (F.EndCol > F.StartCol) then
       begin
         { span covers 'not not X' (the outer exprUnary). Strip the two leading

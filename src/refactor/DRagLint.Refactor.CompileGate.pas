@@ -339,7 +339,7 @@ function RollBack(const pTx: TApplyTransaction): string;
 /// <param name="pReq">The rewrite.</param>
 /// <returns>Applied, or the refusal with its detail. Never raises.</returns>
 /// <remarks>Nothing is written when the baseline does not build. Test seam: DRAGLINT_GATE_TEST_BREAK=1, for a project
-/// under %TEMP% / C:\TEMP, appends a line dcc rejects to the first written file before the after build, so a guard can
+/// under %TEMP% / C:\TEMP, puts a line dcc rejects at the top of the first written file before the after build, so a guard can
 /// prove the rollback on a rewrite that is itself sound.</remarks>
 function ApplyGated(const pReq: TGateRequest): TGateOutcome;
 
@@ -1022,7 +1022,8 @@ begin
     end;
     try
       if (GetEnvironmentVariable(CTestBreakVar) = '1') and IsUnderTemp(pReq.Project) and (Length(Outcome.Tx.Written) > 0) then
-        TFile.AppendAllText(Outcome.Tx.Written[0], CTestBreakLine, TEncoding.ASCII);
+        { at the top: dcc reads nothing after the final end. }
+        TFile.WriteAllBytes(Outcome.Tx.Written[0], TEncoding.ASCII.GetBytes(CTestBreakLine) + TFile.ReadAllBytes(Outcome.Tx.Written[0]));
       Outcome.After:= CompileAfterWith(pReq.Project, pReq.Platform, Dir, pReq.Repair);
     except
       on E: ECompileGateCancelled do
