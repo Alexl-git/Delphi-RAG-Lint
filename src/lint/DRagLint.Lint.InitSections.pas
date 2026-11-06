@@ -25,6 +25,8 @@ uses
 const
   /// <summary>The rule id, as `rules --json`, `--rule` and dl:ok markers spell it.</summary>
   INIT_ORDER_HAZARD_RULE = 'init-order-hazard';
+  /// <summary>The rule id, as `rules --json`, `--rule` and dl:ok markers spell it.</summary>
+  FINALIZATION_AFTER_DEPENDENCY_RULE = 'finalization-after-dependency';
 
 /// <summary>An initialization section reaches a global variable of a unit that initializes LATER in
 /// the computed order, and that unit's own initialization is what sets the variable: the read sees
@@ -36,6 +38,17 @@ const
 /// and callbacks are not walked. A routine that also assigns the variable (lazy creation) or tests it
 /// against nil stays silent. An index holding no .dpr has no root and yields nothing.</remarks>
 function CollectInitOrderHazard(const AStore: ISymbolStore): TArray<TLintFinding>;
+
+/// <summary>A finalization section reaches a global variable of a unit that is finalized EARLIER, and
+/// that unit's own finalization tears the variable down: the read sees a freed object. Finalization runs
+/// in reverse, so "finalized earlier" is "initializes later" in the computed order.</summary>
+/// <param name="AStore">The project index; nil yields no findings.</param>
+/// <returns>One 'finalization-after-dependency' warning per (section's unit, earlier unit, variable),
+/// anchored at the call or the reference in the section that starts the path.</returns>
+/// <remarks>Not thread-safe. The same walk and the same silences as init-order-hazard: certain call
+/// edges only; a routine that assigns the variable or tests it against nil stays silent, which covers
+/// the FreeAndNil + Assigned idiom. An index holding no .dpr yields nothing.</remarks>
+function CollectFinalizationAfterDependency(const AStore: ISymbolStore): TArray<TLintFinding>;
 
 implementation
 
@@ -483,7 +496,8 @@ begin
   var Later: string:= FGraph.Units[AState.UnitKey].Name;
   var Own  : string:= FGraph.Units[AKey].Name;
   var F: TLintFinding:= Default(TLintFinding);
-  F.RuleId    := INIT_ORDER_HAZARD_RULE;
+  F.RuleId    := if FKind = skiInit then INIT_ORDER_HAZARD_RULE else FINALIZATION_AFTER_DEPENDENCY_RULE;
+
   F.Severity  := SEVERITY_WARNING;
   F.FileId    := FGraph.Units[AKey].FileId;
   F.FilePath  := FGraph.Store.GetFilePath(F.FileId);
@@ -492,9 +506,14 @@ begin
   F.EndLine   := AAnchor.EndLine;
   F.EndCol    := AAnchor.EndCol;
   F.SymbolName:= AState.VarName;
-  F.Message   := Format('The initialization of %s reaches %s.%s through %s, but %s initializes after %s in %s: '
-    + 'its own initialization has not set the variable yet. Break the uses cycle, or move the call out of the section.',
-    [Own, Later, AState.VarName, AVia.QualifiedName, Later, Own, AProgramName]);
+  if FKind = skiInit then
+    F.Message:= Format('The initialization of %s reaches %s.%s through %s, but %s initializes after %s in %s: '
+      + 'its own initialization has not set the variable yet. Break the uses cycle, or move the call out of the section.',
+      [Own, Later, AState.VarName, AVia.QualifiedName, Later, Own, AProgramName])
+  else
+    F.Message:= Format('The finalization of %s reaches %s.%s through %s, but %s is finalized before %s in %s: '
+      + 'its own finalization has already torn the variable down. Break the uses cycle, or test the variable first.',
+      [Own, Later, AState.VarName, AVia.QualifiedName, Later, Own, AProgramName]);
   FFindings.Add(F);
 end;
 
@@ -581,13 +600,13 @@ begin
   Result:= FFindings.ToArray;
 end;
 
-function CollectInitOrderHazard(const AStore: ISymbolStore): TArray<TLintFinding>;
+function RunOrderWalk(const AStore: ISymbolStore; AKind: TSectionKind): TArray<TLintFinding>;
 begin
   Result:= nil;
   if AStore = nil then Exit;
   var Graph: TInitGraph:= TInitGraph.Create(AStore);
   try
-    var Walk: TOrderWalk:= TOrderWalk.Create(Graph, skiInit);
+    var Walk: TOrderWalk:= TOrderWalk.Create(Graph, AKind);
     try
       Result:= Walk.Run;
     finally
@@ -596,6 +615,16 @@ begin
   finally
     Graph.Free;
   end;
+end;
+
+function CollectInitOrderHazard(const AStore: ISymbolStore): TArray<TLintFinding>;
+begin
+  Result:= RunOrderWalk(AStore, skiInit);
+end;
+
+function CollectFinalizationAfterDependency(const AStore: ISymbolStore): TArray<TLintFinding>;
+begin
+  Result:= RunOrderWalk(AStore, skiFinal);
 end;
 
 end.

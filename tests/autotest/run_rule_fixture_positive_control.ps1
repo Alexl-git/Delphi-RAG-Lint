@@ -91,6 +91,7 @@ $OwnRunner = @{
     'read-never-assigned'       = 'tests\lint-project\read-never-assigned\run_read_never_assigned.ps1'
     'opaque-to-analysis'        = 'tests\autotest\run_opaque_to_analysis.ps1'
     'datamodule-form-global'    = 'tests\lint-project\datamodule-form-global\run_datamodule_form_global.ps1'
+    'finalization-after-dependency' = 'tests\lint-project\finalization-after-dependency\run_finalization_after_dependency.ps1'
     'init-order-hazard' = 'tests\lint-project\init-order-hazard\run_init_order_hazard.ps1'
 }
 function HasOwnRunner([string]$Id, [hashtable]$Map = $OwnRunner) {

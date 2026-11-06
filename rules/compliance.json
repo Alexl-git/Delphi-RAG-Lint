@@ -92,6 +92,7 @@
   "field-by-name-in-loop": {"cwe": ["CWE-1050"], "weak": ["CWE-1050"]},
   "field-created-not-freed": {"cwe": ["CWE-401"], "cert": ["MEM31-C"], "misra": ["MISRA-C-2012-R22.1"], "weak": ["MISRA-C-2012-R22.1"]},
   "field-name-prefix": {},
+  "finalization-after-dependency": {"cwe": ["CWE-672"]},
   "firedac-open-execsql-mismatch": {},
   "fixed-random-seed": {"cwe": ["CWE-336"], "cert": ["MSC32-C"]},
   "float-equality-comparison": {"cwe": ["CWE-1077"], "misra": ["MISRA-CPP-2008-6-2-2"]},

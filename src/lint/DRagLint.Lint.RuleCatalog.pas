@@ -110,7 +110,7 @@ const
     { 1.42 lane opaque }
     'opaque-to-analysis',
     { 1.42 lane ruleset: the old ROADMAP candidates }
-    'stream-buffer-after-free', 'interfaced-object-nil-leak', 'identifier-case-mismatch', 'datamodule-form-global', 'init-order-hazard'];
+    'stream-buffer-after-free', 'interfaced-object-nil-leak', 'identifier-case-mismatch', 'datamodule-form-global', 'finalization-after-dependency', 'init-order-hazard'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -878,6 +878,7 @@ begin
     B('interfaced-object-nil-leak', 'resource-lifetime', 'warning', 'Object reference of a TInterfacedObject descendant is set to nil while it holds a fresh instance -- an object reference holds no count, so nil releases nothing and the instance leaks', False);
     B('identifier-case-mismatch', 'naming', 'info', 'A name is spelled in a different case from its declaration -- locals and parameters from the AST, bound refs from the index', False);
     B('datamodule-form-global', 'project-wide', 'warning', 'A unit declaring a TDataModule descendant reaches another unit''s global form variable -- the data layer now needs that form to exist', False);
+    B('finalization-after-dependency', 'project-wide', 'warning', 'A finalization section reaches a global that a unit finalized earlier in the computed order tears down in its own finalization -- the read sees a freed object', False);
     B('init-order-hazard', 'project-wide', 'warning', 'An initialization section reaches a global that a unit initializing later in the computed order sets in its own initialization -- works by accident in one uses order, reads an unset variable in another', False);
     { taint wave T2: store-backed interprocedural taint (DRagLint.Lint.TaintRules; catalogues rules\taint-*.json) }
     B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');
