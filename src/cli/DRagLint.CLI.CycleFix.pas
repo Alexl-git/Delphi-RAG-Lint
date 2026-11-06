@@ -274,7 +274,6 @@ uses
   DRagLint.Core.FileTime,
   System.Classes, System.IOUtils, System.JSON, System.DateUtils, System.Hash,
   System.StrUtils, System.RegularExpressions, System.Diagnostics, System.Math, Winapi.Windows,
-  DRagLint.Convert.Backup, DRagLint.Core.StudioEnv,
   DRagLint.Core.ControlChannel, // lane X-BT: the stand-down request (Cancel) the run listens for
   DRagLint.Core.Model;          // DRAGLINT_VERSION / DRAGLINT_EXTRACTOR_VERSION, what the channel's `status` reports
 
