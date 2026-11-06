@@ -476,6 +476,14 @@ type
 /// <remarks>Reads the file's ref_types rows once, on the first question. No ref_types table
 /// (an index older than 1.44) = TypeAt answers False for ever.</remarks>
 function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64): ITypeOracle;
+/// <summary>Whether the index PROVES a rule's receiver is some other class (1.45 lane lj, row 10).</summary>
+/// <param name="AOracle">May be nil: nothing is proven.</param>
+/// <param name="ARecv">The receiver expression: an identifier, or a dotted name (its last identifier is asked).</param>
+/// <param name="ASource">The file's bytes the node belongs to.</param>
+/// <param name="ARoots">Leaf names the rule is about (TDataSet, TDictionary, ...); a receiver that is one of them or descends from one is kept.</param>
+/// <returns>True only when ref_types gives a leaf type whose whole ancestry is known (it reaches TObject)
+/// and neither it nor an ancestor is in ARoots. No table, no row, an interface or a half-known ancestry = False.</returns>
+function ReceiverProvenOtherClass(const AOracle: ITypeOracle; const ARecv: TTSNode; const ASource: TBytes; const ARoots: array of string): Boolean;
 /// <summary>The declared type of AName as seen from byte offset AByte of a
 /// parsed file -- the same scope walk #declared-type? makes.</summary>
 /// <param name="ARoot">Root node of the file's tree.</param>
@@ -1443,6 +1451,26 @@ begin
   end;
 end;
 
+function ReceiverProvenOtherClass(const AOracle: ITypeOracle; const ARecv: TTSNode; const ASource: TBytes; const ARoots: array of string): Boolean;
+var
+  Id  : TTSNode;
+  Leaf: string ;
+  Via : string ;
+  Root: string ;
+  P   : Integer;
+begin
+  Result:= False;
+  if (AOracle = nil) or ARecv.IsNull then Exit;
+  Id:= ARecv;
+  if Id.NodeType = 'exprDot' then Id:= Id.ChildByField('rhs');
+  if Id.IsNull or (Id.NodeType <> 'identifier') then Exit;
+  if not AOracle.TypeAt(Integer(Id.StartPoint.Row) + 1, Integer(Id.StartPoint.Column) + 1, NodeText(Id, ASource), Leaf, Via) then Exit;
+  P:= Pos('<', Leaf);
+  if P > 0 then Leaf:= Copy(Leaf, 1, P - 1);
+  for Root in ARoots do
+    if SameText(Leaf, Root) or AOracle.ClassDescends(Leaf, Root) then Exit;
+  Result:= AOracle.ClassDescends(Leaf, 'TObject');
+end;
 function TStoreTypeOracle.ClassDescends(const AClassLeaf, AAncestorLeaf: string): Boolean;
 begin
   Result:= (FStore <> nil) and (TypeDescendsFrom(FStore, nil, AClassLeaf, AAncestorLeaf) = tdYes);
