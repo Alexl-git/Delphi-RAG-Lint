@@ -1829,12 +1829,13 @@ end;
   the uses order binds the name to this routine (BindName decides that for the surface too). Refuses name-shadowed,
   naming the line; a qualified call of ANOTHER overload of the routine refuses overloaded-routine. }
 function ShadowRefusal(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface; pFromFid, pDeclFid: Int64;
-  const pLines: TArray<string>; const pDeclUnit: string; pQualified: TList<Integer>; const pRoutine: TSymbol): TRecipeRefusal;
+  const pDeclUnit: string; pQualified: TList<Integer>; const pRoutine: TSymbol): TRecipeRefusal;
 var
   Edited: TList<Integer>;
   Owner : TSymbol;
   Stem  : string;
 begin
+  var Lines:= pSource.FileLines(pFromFid);
   Result:= Default(TRecipeRefusal);
   var Name:= pSurface.RoutineName;
   var Parts:= pDeclUnit.Split(['.']);
@@ -1842,7 +1843,7 @@ begin
   for var I:= 0 to High(Escaped) do Escaped[I]:= TRegEx.Escape(Escaped[I]);
   var QualRx:= '(?<![\w.@])(' + string.Join('\s*\.\s*', Escaped) + ')\s*\.\s*(' + TRegEx.Escape(Name) + ')\b';
   var BareRx:= '(?<![\w.])' + TRegEx.Escape(Name) + '\b';
-  var Code  := CodeOnlyLines(pLines);
+  var Code  := CodeOnlyLines(Lines);
   var Refs  := pSource.Store.GetReferencesFromFile(pFromFid);
   Edited:= TList<Integer>.Create;
   try
@@ -1871,7 +1872,7 @@ begin
         end;
       if TRegEx.Matches(Code[L - 1], BareRx, [roIgnoreCase]).Count <> Bound then
         Exit(MakeRefusal('name-shadowed', Name, pFromFid, L, Format('line %d also names something else called `%s` ' +
-          '(`%s`): the plan rewrites a line as text, so that name would become the pointer too', [L, Name, Trim(pLines[L - 1])])));
+          '(`%s`): the plan rewrites a line as text, so that name would become the pointer too', [L, Name, Trim(Lines[L - 1])])));
       for var M in TRegEx.Matches(Code[L - 1], QualRx, [roIgnoreCase]) do
         for var R in Refs do
         begin
@@ -1879,14 +1880,14 @@ begin
           if (R.StartCol = M.Groups[2].Index) and SameText(R.NameText, Name) and (R.SymbolId <> pRoutine.Id) then
             if pSource.Store.GetSymbolById(R.SymbolId).FileId = pDeclFid then
               Exit(MakeRefusal('overloaded-routine', Name, pDeclFid, pRoutine.StartLine, Format('line %d calls another ' +
-                'overload of `%s` (`%s`)', [L, Name, Trim(pLines[L - 1])])))
+                'overload of `%s` (`%s`)', [L, Name, Trim(Lines[L - 1])])))
             else
               Exit(MakeRefusal('name-shadowed', Name, pFromFid, L, Format('line %d: `%s` there is not the routine of ' +
-                '`%s` (`%s`)', [L, Trim(M.Value), pDeclUnit, Trim(pLines[L - 1])])));
+                '`%s` (`%s`)', [L, Trim(M.Value), pDeclUnit, Trim(Lines[L - 1])])));
           if (R.StartCol = M.Groups[1].Index) and SameText(R.NameText, Parts[0]) and
             (pSource.Store.GetSymbolById(R.SymbolId).Kind <> skUnit) then
             Exit(MakeRefusal('name-shadowed', Parts[0], pFromFid, L, Format('line %d: `%s` there is a declaration of ' +
-              'the consumer, not the unit `%s` (`%s`)', [L, Parts[0], pDeclUnit, Trim(pLines[L - 1])])));
+              'the consumer, not the unit `%s` (`%s`)', [L, Parts[0], pDeclUnit, Trim(Lines[L - 1])])));
         end;
     end;
   finally
@@ -1930,7 +1931,7 @@ begin
   if Q > 0 then
     Exit(MakeRefusal('qualified-ref', Member, pFromFid, Q, Format('line %d names `%s` qualified by its unit ' +
       '(`%s`); that use keeps needing the uses entry the cut removes', [Q, Member, Trim(pLines[Q - 1])])));
-  Result:= ShadowRefusal(pSource, pSurface, pFromFid, pDeclFid, pLines, pDeclUnit, pQualified, pRoutine);
+  Result:= ShadowRefusal(pSource, pSurface, pFromFid, pDeclFid, pDeclUnit, pQualified, pRoutine);
   if Result.Kind <> '' then Exit;
   for var L in pQualified do
   begin
