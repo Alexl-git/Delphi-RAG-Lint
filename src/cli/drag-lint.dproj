@@ -211,6 +211,7 @@
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.SemanticTokens.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.SyntaxTree.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.InlayHint.pas"/>
+        <DCCReference Include="..\lsp\DRagLint.LSP.Feature.TypeHierarchy.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.CallHierarchy.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.HierarchyUtil.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Feature.ExecuteCommand.pas"/>
