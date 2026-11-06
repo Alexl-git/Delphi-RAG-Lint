@@ -15198,12 +15198,16 @@ begin
     UpdRefs.ParamByName('el' ).DataType:= ftInteger;
     UpdRefs.Prepare;
     QSections.Open;
+    var FId  : TField:= QSections.FieldByName('id');
+    var FFile: TField:= QSections.FieldByName('file_id');
+    var FFrom: TField:= QSections.FieldByName('start_line');
+    var FTo  : TField:= QSections.FieldByName('end_line');
     while not QSections.Eof do
     begin
-      UpdRefs.ParamByName('sid').AsLargeInt:= QSections.FieldByName('id'        ).AsLargeInt;
-      UpdRefs.ParamByName('fid').AsLargeInt:= QSections.FieldByName('file_id'   ).AsLargeInt;
-      UpdRefs.ParamByName('sl' ).AsInteger := QSections.FieldByName('start_line').AsInteger;
-      UpdRefs.ParamByName('el' ).AsInteger := QSections.FieldByName('end_line'  ).AsInteger;
+      UpdRefs.ParamByName('sid').AsLargeInt:= FId.AsLargeInt;
+      UpdRefs.ParamByName('fid').AsLargeInt:= FFile.AsLargeInt;
+      UpdRefs.ParamByName('sl' ).AsInteger := FFrom.AsInteger;
+      UpdRefs.ParamByName('el' ).AsInteger := FTo.AsInteger;
       UpdRefs.ExecSQL;
       Inc(Result, UpdRefs.RowsAffected);
       QSections.Next;
@@ -15228,8 +15232,8 @@ begin
   Suffix     := '';
   if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
   if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
-  if Suffix = '' then FConn.ExecSQL('DELETE FROM ref_types')
-  else FConn.ExecSQL('DELETE FROM ref_types WHERE ref_id IN (SELECT refs.id FROM refs WHERE ' + RT_UNIVERSE + Suffix + ')');  // dl:ok sql-injection-concat@0000 -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text
+  if Suffix = '' then FConn.ExecSQL('DELETE FROM ref_types')  // dl:ok sql-update-delete-without-where@556b -- a whole-database pass rewrites every row of this derived table
+  else FConn.ExecSQL('DELETE FROM ref_types WHERE ref_id IN (SELECT refs.id FROM refs WHERE ' + RT_UNIVERSE + Suffix + ')');  // dl:ok sql-injection-concat@472b -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text
   Q  := TFDQuery.Create(nil);
   Ins:= TFDQuery.Create(nil);
   try
@@ -15245,20 +15249,31 @@ begin
                    '  refs.enclosing_symbol_id, refs.receiver_text, refs.receiver_type_text, ce.receiver_type_symbol_id AS rcv_type_id ' +
                    'FROM refs LEFT JOIN call_edges ce ON ce.ref_id = refs.id WHERE ' + RT_UNIVERSE + Suffix;
     BeatStreamOpen(FConn, Q, 'resolve ref types');
+    var FId     : TField:= Q.FieldByName('id');
+    var FFile   : TField:= Q.FieldByName('file_id');
+    var FKind   : TField:= Q.FieldByName('kind');
+    var FName   : TField:= Q.FieldByName('name_text');
+    var FLine   : TField:= Q.FieldByName('start_line');
+    var FCol    : TField:= Q.FieldByName('start_col');
+    var FSym    : TField:= Q.FieldByName('symbol_id');
+    var FEncl   : TField:= Q.FieldByName('enclosing_symbol_id');
+    var FRcv    : TField:= Q.FieldByName('receiver_text');
+    var FRcvId  : TField:= Q.FieldByName('rcv_type_id');
+    var FRcvText: TField:= Q.FieldByName('receiver_type_text');
     while not Q.Eof do
     begin
       var Ref: TReference:= Default(TReference);
-      Ref.Id       := Q.FieldByName('id'        ).AsLargeInt;
-      Ref.FileId   := Q.FieldByName('file_id'   ).AsLargeInt;
-      Ref.Kind     := Q.FieldByName('kind'      ).AsString;
-      Ref.NameText := Q.FieldByName('name_text' ).AsString;
-      Ref.StartLine:= Q.FieldByName('start_line').AsInteger;
-      Ref.StartCol := Q.FieldByName('start_col' ).AsInteger;
-      if not Q.FieldByName('symbol_id').IsNull then Ref.SymbolId:= Q.FieldByName('symbol_id').AsLargeInt;
-      if not Q.FieldByName('enclosing_symbol_id').IsNull then Ref.EnclosingSymbolId:= Q.FieldByName('enclosing_symbol_id').AsLargeInt;
-      if not Q.FieldByName('receiver_text').IsNull then Ref.ReceiverText:= Q.FieldByName('receiver_text').AsString;
-      var RcvTypeId: Int64:= if Q.FieldByName('rcv_type_id').IsNull then 0 else Q.FieldByName('rcv_type_id').AsLargeInt;
-      var RcvTypeText: string:= if Q.FieldByName('receiver_type_text').IsNull then '' else Q.FieldByName('receiver_type_text').AsString;
+      Ref.Id       := FId.AsLargeInt;
+      Ref.FileId   := FFile.AsLargeInt;
+      Ref.Kind     := FKind.AsString;
+      Ref.NameText := FName.AsString;
+      Ref.StartLine:= FLine.AsInteger;
+      Ref.StartCol := FCol.AsInteger;
+      if not FSym.IsNull then Ref.SymbolId:= FSym.AsLargeInt;
+      if not FEncl.IsNull then Ref.EnclosingSymbolId:= FEncl.AsLargeInt;
+      if not FRcv.IsNull then Ref.ReceiverText:= FRcv.AsString;
+      var RcvTypeId: Int64:= if FRcvId.IsNull then 0 else FRcvId.AsLargeInt;
+      var RcvTypeText: string:= if FRcvText.IsNull then '' else FRcvText.AsString;
       Inc(ACandidates);
       var RefType: TRefStaticType;
       if AResolver.RefStaticType(Ref, RcvTypeId, RcvTypeText, RefType) then
@@ -15312,7 +15327,7 @@ begin
   SetMetaValue(KEY, '[' + string.Join(',', Parts) + ']');
 end;
 
-procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@da1c, deep-nesting@6ffc, cyclomatic-complexity@04ec, cognitive-complexity@61bd -- REVIEWED 2026-11-05: one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and 1.43 added only log text here (WITHHELD-LOG-TEXT, RESOLVE-REASON-TEXT)
+procedure TSQLiteSymbolStore.ResolveCallTargets(const AExtraStores: TArray<ISymbolStore>; AClearFirst: Boolean);  // dl:ok method-too-long@335f, deep-nesting@6ffc, cyclomatic-complexity@04ec, cognitive-complexity@61bd -- REVIEWED 2026-11-05: one transaction over one resolver with shared maps; a split is its own change with its own re-resolve measurement, and lane facts (1.44) added only two calls, three counters and two log lines here
 { v14 (D5): whole-DB call-resolution pass. Mirrors ResolveAncestry's structure
   (wipe the table, resolve in memory, batch-write in one transaction). Builds one
   TCallResolver (its name/scope maps cost O(symbols) to build ONCE), then streams

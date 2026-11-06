@@ -1227,6 +1227,8 @@ type
     function ResolveTypeNameToSymbol(const ATypeText: string; ADeclFileId: Int64): Int64;
     /// <summary>B9 F1: the static type a reference to ATarget has. Memoised on the
     /// target. Via = '' when it has none (a procedure, a type name).</summary>
+    /// <param name="ATarget">The symbol the reference is bound to.</param>
+    /// <returns>Its type; a Default record when it has none.</returns>
     function TargetStaticType(const ATarget: TSymbol): TRefStaticType;
     /// <summary>Item 4 (replaces v21's ResolveExternally): offers a site the
     /// primary index could not bind to the library oracle, and answers with a
@@ -9816,7 +9818,7 @@ begin
   begin
     { An unbound Create on a typed receiver: a constructor no project symbol declares.
       A '.' in the text is a chain the ladder did not finish: no type. }
-    if SameText(ARef.NameText, CTOR_NAME) and (AReceiverTypeText <> '') and (Pos('.', AReceiverTypeText) = 0) then
+    if SameText(ARef.NameText, CTOR_NAME) and (AReceiverTypeText <> '') and not AReceiverTypeText.Contains('.') then
     begin
       AType.TypeSymbolId:= if AReceiverTypeId > 0 then AReceiverTypeId else ResolveTypeNameToSymbol(AReceiverTypeText, ARef.FileId);
       AType.TypeQName   := if AType.TypeSymbolId > 0 then SymbolById(AType.TypeSymbolId).QualifiedName else AReceiverTypeText;

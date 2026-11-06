@@ -20972,7 +20972,7 @@ begin
   for var S: ISymbolStore in AStores do
   begin
     var FileId: Int64:= S.FindFileIdByPath(AFile);
-    if (FileId <= 0) or not (S is TSQLiteSymbolStore) then Continue;
+    if (FileId <= 0) or (S is not TSQLiteSymbolStore) then Continue;
     Q:= TFDQuery.Create(nil);
     try
       Q.Connection:= (S as TSQLiteSymbolStore).GetConnection;
@@ -21087,8 +21087,7 @@ begin
     if HasStatic then Writeln('StaticType:   ', StaticType, ' (via ', StaticVia, ')');
   end;
 
-  if TAResult.HasResolved or HasStatic then Result:= 0
-  else Result:= 1;
+  Result:= if TAResult.HasResolved or HasStatic then 0 else 1;
 end; // function
 
 // v0.25: drag-lint generate-docs --qname X [--format xmldoc|pasdoc] [--db PATH]
