@@ -351,6 +351,7 @@ begin
   Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses');
   Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
   Writeln('  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method');
+  Writeln('  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json]  - remove with blocks, proved binding by binding');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text]   (no --db: caches only into the project''s unique manifest owner, else reports uncached; no index is required, the compile and report still run; exit 1 iff an Error finding)');
   Writeln('  drag-lint refresh-findings --project <X.dproj> [--db <db>] [--full] [--json]   (recompile stale units + refresh compiler_findings; >=2 stale -> full build; no --db = the project''s own DB)');
@@ -1099,6 +1100,11 @@ begin
     Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
     Exit;
   end;
+  if pVerb = 'unwith' then
+  begin
+    Writeln('  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json]  - remove with blocks, proved binding by binding');
+    Exit;
+  end;
   if pVerb = 'extract-method' then
   begin
     Writeln('  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method');
@@ -1106,7 +1112,8 @@ begin
   end;
   if pVerb = 'find-deadcode' then
   begin
-    Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
+    Writeln('  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json]  - remove with blocks, proved binding by binding');
+  Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
     Exit;
   end;
   if pVerb = 'compile-check' then

@@ -214,6 +214,8 @@ uses
   , DRagLint.Refactor   .DeadCode
   , DRagLint.Refactor   .TestStub
   , DRagLint.Refactor   .ExtractMethod
+  , DRagLint.CLI.Unwith
+  , DRagLint.Refactor.CompileGate
   , DRagLint.Refactor   .EnumHelper
   , DRagLint.Format     .Yadf
   , DRagLint.Diagnostics.CompileCheck
@@ -22533,6 +22535,78 @@ begin
   Result:= 0;
 end; // function
 
+/// <summary>drag-lint unwith --db D [--in F [--line N]] (--plan | --apply --project P) [--platform P] [--rsvars R]
+/// [--build-timeout S] [--library-db L|none] [--no-backup] [--json]: removes `with` blocks, proved binding by binding.</summary>
+/// <param name="AArgs">Parsed CLI args.</param>
+/// <returns>RunUnwith's code; 2 on a usage error.</returns>
+/// <remarks>Opens the DB read-only; a stale DB refuses. The platform library comes from --library-db, else the manifest.</remarks>
+function DoUnwith(const AArgs: TArgs): Integer;
+begin
+  if AArgs.Apply = AArgs.Plan then
+  begin
+    Writeln(ErrOutput, 'ERROR: unwith needs exactly one of --plan and --apply');
+    Exit(2);
+  end;
+  if AArgs.Apply and (AArgs.ProjectPath = '') then
+  begin
+    Writeln(ErrOutput, 'ERROR: unwith --apply needs --project <X.dproj>: the compile gate builds it');
+    Exit(2);
+  end;
+  if (AArgs.RefLine > 0) and (AArgs.InFile = '') then
+  begin
+    Writeln(ErrOutput, 'ERROR: unwith --line needs --in');
+    Exit(2);
+  end;
+  if NoDbResolved(AArgs.DbPath, 'unwith') then Exit(2);
+  if not TFile.Exists(AArgs.DbPath) then
+  begin
+    Writeln(ErrOutput, 'ERROR: database not found: ', AArgs.DbPath);
+    Exit(2);
+  end;
+  var RoOk: Boolean;
+  var Store: ISymbolStore:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if (not RoOk) and StaleDbRefusesRun(AArgs, 'unwith', AArgs.DbPath) then Exit(2);
+  var LibPath:= '';
+  if Length(AArgs.LibraryDbs) > 0 then
+  begin
+    if not SameText(AArgs.LibraryDbs[0], 'none') then LibPath:= AArgs.LibraryDbs[0];
+  end
+  else
+  begin
+    var Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    var LibDbs:= LibrarySectionDbs(Manifest);
+    var LibRes:= DRagLint.Project.Resolver.TProjectResolver.Create;
+    try
+      for var D in TDbSelect.Resolve(Manifest, (if AArgs.CheckPlatform <> '' then AArgs.CheckPlatform else 'win64'), LibRes, True) do
+        if (LibPath = '') and IsLibrarySectionDb(LibDbs, D) and TFile.Exists(D) then LibPath:= D;
+    finally
+      LibRes.Free;
+    end;
+  end;
+  var Lib: ISymbolStore:= nil;
+  if LibPath <> '' then
+  begin
+    var LibOk: Boolean;
+    Lib:= OpenReadOnlyStore(LibPath, LibOk);
+    if not LibOk then Lib:= nil;
+  end;
+  TAstParseCache.SetPreprocess(not AArgs.NoPreprocess, ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  InstallFileProfileResolver(AArgs, [AArgs.DbPath], ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  if AArgs.CycleRsVars <> '' then GRsVars:= ExpandFileName(AArgs.CycleRsVars);
+  var Secs:= StrToIntDef(AArgs.CycleBuildTimeout, 0);
+  if Secs > 0 then GBuildTimeoutMs:= Cardinal(Secs) * MSecsPerSec;
+  var Opts: TUnwithRunOptions:= Default(TUnwithRunOptions);
+  Opts.InFile:= AArgs.InFile;
+  Opts.Line:= AArgs.RefLine;
+  Opts.Apply:= AArgs.Apply;
+  Opts.Project:= AArgs.ProjectPath;
+  Opts.Platform:= AArgs.CheckPlatform;
+  Opts.Db:= AArgs.DbPath;
+  Opts.NoBackup:= AArgs.NoBackup;
+  Opts.Json:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+  Result:= RunUnwith(Opts, Store, Lib);
+end;
+
 // v0.25: drag-lint find-deadcode [--kind K] [--include-private] [--db PATH]
 // Lists symbols with no callers in the index. Exit 0 if any found, 1 if none,
 // 2 on usage error.
@@ -38080,6 +38154,7 @@ begin
     else if Args.Command = 'find-unit'         then Result:= DoFindUnit        (Args)
     else if Args.Command = 'safe-delete'       then Result:= DoSafeDelete      (Args)
     else if Args.Command = 'extract-method'    then Result:= DoExtractMethod   (Args)
+    else if Args.Command = 'unwith'            then Result:= DoUnwith          (Args)
     else if Args.Command = 'find-deadcode'     then Result:= DoFindDeadCode    (Args)
     else if Args.Command = 'compile-check'     then Result:= DoCompileCheck    (Args)
     else if Args.Command = 'refresh-findings'  then Result:= DoRefreshFindings (Args)

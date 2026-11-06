@@ -1095,6 +1095,7 @@ false`); text output ends `, N declined (...)`.
 | `find-unit --name <X> --in <file> --apply` | Add the declaring unit to `uses` | |
 | [`safe-delete`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/safe-delete) `--name <q> --db <db>` | Delete a symbol iff it has zero references | `--apply`, `--json` |
 | [`extract-method`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/extract-method) `--in <f> --from-line --to-line --name <n>` | Pull a statement run into a new method | `--apply` |
+| [`unwith`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/unwith) `--db <db> [--in <f> [--line <n>]] --plan` | Remove `with` blocks, proved binding by binding; every refusal named | `--apply --project` |
 | [`create-enum-helper`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/create-enum-helper) `--qname <TEnum>` | Generate a Byte-family record helper for an enum | `--methods <csv>`, `--tostring rtti\|case` |
 | `uses-audit <unit.pas> --db <db>` | Propose interface->implementation moves + unused units | `--format text\|json` |
 | `uses-fix <unit.pas> --project <dproj> --db <db>` | Compiler-verified `uses` cleanup; `--only <Unit>` also decides a library (RTL/VCL) unit: remove, else move to implementation | `--apply`, `--remove-unused`, `--format json\|text`, `--only <unit,...>` |
