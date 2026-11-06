@@ -71,6 +71,7 @@ uses
   , System.RegularExpressions
   , TreeSitter
   , DRagLint.Diagnostics.ParseCache
+  , DRagLint.Lint.QueryRules { ITypeOracle -- the index's static types (1.45 lj) }
   ;
 
 const
@@ -283,6 +284,8 @@ var
   PF      : TParsedFile;
   Src     : TBytes;
   Findings: TList<TLintFinding>;
+  Oracle  : ITypeOracle;
+  OracleTried: Boolean;
 
   procedure EmitAt(const ANode: TTSNode; const ARuleId, AMessage, ASeverity: string);
   var
@@ -413,6 +416,11 @@ var
     EntTxt, Recv, Key: string;
     I: Integer;
   begin
+    if (Oracle = nil) and not OracleTried then
+    begin
+      OracleTried:= True;
+      Oracle:= CreateStoreTypeOracle(AStore, AFileId);
+    end;
     ThenN:= N.ChildByField('then');
     if ThenN.IsNull then Exit;
     Calls:= TList<TTSNode>.Create;
@@ -429,6 +437,8 @@ var
         Recv:= Trim(Copy(EntTxt, 1, Length(EntTxt) - Length('.containskey')));
         Key := ArgsKey(Args, Src);
         if (Recv = '') or (Key = '') or (Key.Contains('(')) or (Key.Contains(',')) then Continue;
+        { 1.45 lj (row 10): a receiver the index proves is some other class has no TryGetValue to advise. }
+        if ReceiverProvenOtherClass(Oracle, Ent.ChildByField('lhs'), Src, ['TDictionary', 'IDictionary']) then Continue;
         if ReadsSubscript(ThenN, Recv, Key) then
         begin
           EmitAt(N, 'double-dictionary-lookup',
