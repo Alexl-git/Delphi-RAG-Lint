@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "rename",
-      "usage": "drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db> - cross-unit rename",
+      "usage": "drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] --db <db> - cross-unit rename, proved per occurrence; --apply passes the compile gate",
       "flags": [
         {
           "name": "--kind"
@@ -37,6 +37,17 @@
           "name": "--apply"
         },
         {
+          "name": "--plan"
+        },
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<lib>"
+        },
+        {
           "name": "--no-backup"
         },
         {
@@ -45,7 +56,7 @@
         }
       ],
       "helpOrder": 52,
-      "help": ["  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename", "  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)", "  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--in <F>] [--db PATH] [--dry-run] [--no-backup]   (--in: file the name was asked from; ranks the not-found candidates)", "      (--qname and --kind symbol refuse, exit 2, and name the file(s) when the old name is used as an identifier in an .inc file: the index records no identifier references inside {$I} included text)", "      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2, naming the file; other binary or unindexed .dfm files are reported as not rewritten, never skipped silently)"]
+      "help": ["  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] --db <db>   - cross-unit rename, every occurrence proved; --apply refuses what it cannot prove (exit 2) and passes the compile gate", "  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--db <db>] [--json|--plan|--apply|--no-backup] [--project <X.dproj>]  - routine-local rename (param/var autofix)", "  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--in <F>] [--db PATH] [--dry-run] [--no-backup]   (--in: file the name was asked from; ranks the not-found candidates)", "      (--qname and --kind symbol refuse, exit 2, and name the file(s) when the old name is used as an identifier in an .inc file: the index records no identifier references inside {$I} included text)", "      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2, naming the file; other binary or unindexed .dfm files are reported as not rewritten, never skipped silently)"]
     }
   ],
   "audience": "both",
@@ -53,11 +64,11 @@
   "questions": [
     {
       "ask": "How do I rename a symbol in every unit that uses it?",
-      "command": "drag-lint rename --kind symbol --name <QName> --to <New> --db <db> --apply"
+      "command": "drag-lint rename --kind symbol --name <QName> --to <New> --db <db> --project <X.dproj> --apply"
     },
     {
       "ask": "Can I preview a rename before it writes anything?",
-      "command": "drag-lint rename --kind symbol --name <QName> --to <New> --db <db>"
+      "command": "drag-lint rename --kind symbol --name <QName> --to <New> --db <db> --plan"
     }
   ],
   "verified": {

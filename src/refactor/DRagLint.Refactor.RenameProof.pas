@@ -1,4 +1,4 @@
-unit DRagLint.Refactor.RenameProof;
+unit DRagLint.Refactor.RenameProof; // dl:ok unit-too-large -- one proof, in one place; 1 in 3 lines is the public refusal catalogue and its comments
 
 // ---------------------------------------------------------------------------
 // The proof behind `rename --apply` (lane 144 item 3, docs\wiki\Rename-Symbol.md).
@@ -194,13 +194,13 @@ uses
   System.Classes,
   System.IOUtils,
   System.StrUtils,
+  System.Math,
   System.JSON,
   System.Generics.Collections,
   System.Generics.Defaults,
   Data.DB,
   FireDAC.Comp.Client,
   TreeSitter,
-  DRagLint.Core.Model,
   DRagLint.Diagnostics.ParseCache,
   DRagLint.Refactor.TextEdit,
   DRagLint.Storage.SQLite;
@@ -248,11 +248,21 @@ type
     StartLine, StartCol, EndLine, EndCol: Integer;
   end;
 
+  { One identifier token of a source file. }
+  TTok = record
+    Path: string;
+    FileId: Int64;
+    Line, Col, ByteCol: Integer;
+    Qualified: Boolean;
+    Text: string;
+    Start: Integer;
+  end;
+
   TRefMap = TObjectDictionary<string, TList<TRefRow>>;
   TDeclMap = TDictionary<string, TSymRow>;
 
   { One proof run. Holds the two names' refs and symbols, the group, the class family and the per-file caches. }
-  TProver = class
+  TProver = class // dl:ok god-class -- one proof run: its readers and its caches are private to this unit and live one call // dl:ok high-response -- the same: the response set is the SQL it reads
   private
     FStore     : ISymbolStore;
     FConn      : TFDConnection;
@@ -293,6 +303,7 @@ type
     function LibHasUnitLevel(const pName: string): Boolean;
     function LibHasMember(const pName: string): Boolean;
     function LibHasQName(const pQName: string): Boolean;
+    function LibAny(const pSql, pName: string): Boolean;
     function HelperDeclares(pType: Int64; const pName: string): Boolean;
     function Members(pType: Int64; const pName: string): TArray<TSymRow>;
     function FollowAlias(const pAlias: TSymRow; out pNext: Int64; out pKind, pWhy: string): TChainVerdict;
@@ -303,18 +314,21 @@ type
     function PropertyOwnerAt(pFileId: Int64; pLine: Integer): Int64;
     function IsSpecifierToken(const pText: string; pStart: Integer): Boolean;
     function DecideInherited(pFileId: Int64; pLine: Integer; out pKind, pWhy: string): TChainVerdict;
+    function IsDeclArgName(const pPath: string; pLine, pByteCol: Integer): Boolean;
     function ChainMemberExists(pClass: Int64; const pName: string): Boolean;
     procedure BuildGroup;
     procedure BuildFamily;
     procedure CheckNewNameDeclarations;
     procedure AddDeclTokens(const pSyms: TArray<TSymRow>; pFileId: Int64; pLines: TStringList; pMap: TDeclMap);
-    procedure ClassifyOldToken(const pPath: string; pFileId: Int64; pLine, pCol, pByteCol: Integer; pQualified: Boolean;
-      const pText: string; pStart: Integer; pDecls: TDeclMap);
-    procedure CheckBareSite(const pPath: string; const pRef: TRefRow; pLine, pCol, pByteCol: Integer);
-    procedure ClassifyNewToken(const pPath: string; pFileId: Int64; pLine, pCol, pByteCol: Integer; pQualified: Boolean;
-      const pText: string; pStart: Integer; pDecls: TDeclMap);
+    procedure TakeVerdict(const pTok: TTok; pVerdict: TChainVerdict; const pKind, pWhy: string);
+    procedure ClassifyNoRef(const pTok: TTok);
+    procedure ClassifyUnbound(const pTok: TTok; const pRow: TRefRow);
+    procedure ClassifyOldToken(const pTok: TTok; pDecls: TDeclMap);
+    procedure CheckBareSite(const pTok: TTok; const pRef: TRefRow);
+    procedure ClassifyNewToken(const pTok: TTok; pDecls: TDeclMap);
     procedure ScanFile(pFileId: Int64; const pPath: string);
     procedure ProcessDfmRefs;
+    procedure ScanDfmNames(const pPath, pText: string);
     procedure CheckDfmNames;
   public
     constructor Create(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>; const pQName, pNewName: string);
@@ -355,6 +369,10 @@ begin
       if Result = 0 then Result:= pB.Col - pA.Col;
     end);
   pEdits.Sort(Comparer);
+  { One position, one edit: two rows on one token would rewrite it twice. }
+  for var I:= pEdits.Count - 1 downto 1 do
+    if SameText(pEdits[I].FilePath, pEdits[I - 1].FilePath) and (pEdits[I].Line = pEdits[I - 1].Line) and (pEdits[I].Col = pEdits[I - 1].Col) then
+      pEdits.Delete(I);
   Result.Edits:= pEdits.ToArray;
   Result.Refusals:= pRefusals.ToArray;
 end;
@@ -401,7 +419,7 @@ begin
   FGroup.Free;
   FOldRefs.Free;
   FNewRefs.Free;
-  inherited;
+  inherited Destroy;
 end;
 
 procedure TProver.Refuse(const pKind, pFile: string; pLine, pCol: Integer; const pWhy: string);
@@ -503,21 +521,33 @@ begin
                  'WHERE r.name_text = :n COLLATE NOCASE';
     Q.ParamByName('n').AsWideString:= pName;
     Q.Open;
+    var FId:= Q.FieldByName('id');
+    var FFile:= Q.FieldByName('file_id');
+    var FSym:= Q.FieldByName('symbol_id');
+    var FEncl:= Q.FieldByName('enclosing_symbol_id');
+    var FKind:= Q.FieldByName('kind');
+    var FRcv:= Q.FieldByName('receiver_text');
+    var FExt:= Q.FieldByName('external_target');
+    var FConf:= Q.FieldByName('confidence');
+    var FLine:= Q.FieldByName('start_line');
+    var FCol:= Q.FieldByName('start_col');
+    var FRcvRef:= Q.FieldByName('receiver_ref_id');
+    var FRcvType:= Q.FieldByName('type_symbol_id');
     while not Q.Eof do
     begin
       var Row:= Default(TRefRow);
-      Row.Id            := Q.FieldByName('id').AsLargeInt;
-      Row.FileId        := Q.FieldByName('file_id').AsLargeInt;
-      Row.SymbolId      := Q.FieldByName('symbol_id').AsLargeInt;
-      Row.Enclosing     := Q.FieldByName('enclosing_symbol_id').AsLargeInt;
-      Row.Kind          := Q.FieldByName('kind').AsString;
-      Row.ReceiverText  := Q.FieldByName('receiver_text').AsString;
-      Row.ExternalTarget:= Q.FieldByName('external_target').AsString;
-      Row.Confidence    := Q.FieldByName('confidence').AsString;
-      Row.Line          := Q.FieldByName('start_line').AsInteger;
-      Row.Col           := Q.FieldByName('start_col').AsInteger;
-      Row.HasReceiverRow:= not Q.FieldByName('receiver_ref_id').IsNull;
-      Row.ReceiverType  := Q.FieldByName('type_symbol_id').AsLargeInt;
+      Row.Id            := FId.AsLargeInt;
+      Row.FileId        := FFile.AsLargeInt;
+      Row.SymbolId      := FSym.AsLargeInt;
+      Row.Enclosing     := FEncl.AsLargeInt;
+      Row.Kind          := FKind.AsString;
+      Row.ReceiverText  := FRcv.AsString;
+      Row.ExternalTarget:= FExt.AsString;
+      Row.Confidence    := FConf.AsString;
+      Row.Line          := FLine.AsInteger;
+      Row.Col           := FCol.AsInteger;
+      Row.HasReceiverRow:= not FRcvRef.IsNull;
+      Row.ReceiverType  := FRcvType.AsLargeInt;
       var Key:= KeyOf(Row.FileId, Row.Line, Row.Col);
       var Rows: TList<TRefRow>;
       if not Result.TryGetValue(Key, Rows) then
@@ -542,7 +572,7 @@ begin
     var Q:= TFDQuery.Create(nil);
     try
       Q.Connection:= Conn;
-      Q.SQL.Text:= 'SELECT kind FROM symbols WHERE name = :n COLLATE NOCASE AND kind IN (' + CTypeKinds + ') LIMIT 1';
+      Q.SQL.Text:= 'SELECT kind FROM symbols WHERE name = :n COLLATE NOCASE AND kind IN (' + CTypeKinds + ') LIMIT 1'; // dl:ok sql-injection-concat -- every concatenated part is a constant of this unit; the names are parameters
       Q.ParamByName('n').AsWideString:= pName;
       Q.Open;
       if not Q.Eof then
@@ -584,9 +614,9 @@ begin
           Q.Open;
           while not Q.Eof do
           begin
-            if Q.FieldByName('hits').AsInteger > 0 then Exit(True);
+            if Q.Fields[1].AsInteger > 0 then Exit(True);
             QA.Close;
-            QA.ParamByName('i').AsLargeInt:= Q.FieldByName('id').AsLargeInt;
+            QA.ParamByName('i').AsLargeInt:= Q.Fields[0].AsLargeInt;
             QA.Open;
             while not QA.Eof do
             begin
@@ -607,7 +637,7 @@ begin
   end;
 end;
 
-function TProver.LibHasUnitLevel(const pName: string): Boolean;
+function TProver.LibAny(const pSql, pName: string): Boolean;
 begin
   Result:= False;
   for var Conn in FLibs do
@@ -615,7 +645,7 @@ begin
     var Q:= TFDQuery.Create(nil);
     try
       Q.Connection:= Conn;
-      Q.SQL.Text:= 'SELECT 1 FROM symbols s JOIN symbols p ON p.id = s.parent_id WHERE s.name = :n COLLATE NOCASE AND p.kind = ''' + CKindUnit + ''' LIMIT 1';
+      Q.SQL.Text:= pSql;
       Q.ParamByName('n').AsWideString:= pName;
       Q.Open;
       if not Q.Eof then Exit(True);
@@ -623,42 +653,21 @@ begin
       Q.Free;
     end;
   end;
+end;
+
+function TProver.LibHasUnitLevel(const pName: string): Boolean;
+begin
+  Result:= LibAny('SELECT 1 FROM symbols s JOIN symbols p ON p.id = s.parent_id WHERE s.name = :n COLLATE NOCASE AND p.kind = ''' + CKindUnit + ''' LIMIT 1', pName); // dl:ok sql-injection-concat -- every concatenated part is a constant of this unit; the names are parameters
 end;
 
 function TProver.LibHasMember(const pName: string): Boolean;
 begin
-  Result:= False;
-  for var Conn in FLibs do
-  begin
-    var Q:= TFDQuery.Create(nil);
-    try
-      Q.Connection:= Conn;
-      Q.SQL.Text:= 'SELECT 1 FROM symbols s JOIN symbols p ON p.id = s.parent_id WHERE s.name = :n COLLATE NOCASE AND p.kind IN (' + CTypeKinds + ') LIMIT 1';
-      Q.ParamByName('n').AsWideString:= pName;
-      Q.Open;
-      if not Q.Eof then Exit(True);
-    finally
-      Q.Free;
-    end;
-  end;
+  Result:= LibAny('SELECT 1 FROM symbols s JOIN symbols p ON p.id = s.parent_id WHERE s.name = :n COLLATE NOCASE AND p.kind IN (' + CTypeKinds + ') LIMIT 1', pName); // dl:ok sql-injection-concat -- every concatenated part is a constant of this unit; the names are parameters
 end;
 
 function TProver.LibHasQName(const pQName: string): Boolean;
 begin
-  Result:= False;
-  for var Conn in FLibs do
-  begin
-    var Q:= TFDQuery.Create(nil);
-    try
-      Q.Connection:= Conn;
-      Q.SQL.Text:= 'SELECT 1 FROM symbols WHERE qualified_name = :n COLLATE NOCASE LIMIT 1';
-      Q.ParamByName('n').AsWideString:= pQName;
-      Q.Open;
-      if not Q.Eof then Exit(True);
-    finally
-      Q.Free;
-    end;
-  end;
+  Result:= LibAny('SELECT 1 FROM symbols WHERE qualified_name = :n COLLATE NOCASE LIMIT 1', pQName);
 end;
 
 function TProver.HelperDeclares(pType: Int64; const pName: string): Boolean;
@@ -709,7 +718,8 @@ begin
   var Plain:= Head <> '';
   for var C in Head do
     if not CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '_']) then Plain:= False;
-  if not Plain or SameText(Head, pAlias.Name) or ContainsText(Sig, ' ') then
+  var Followable:= Plain and not SameText(Head, pAlias.Name) and not ContainsText(Sig, ' ');
+  if not Followable then
   begin
     pKind:= CRefuseReceiverUntyped;
     pWhy := Format('the receiver''s type %s is an alias of "%s", which no member lookup follows', [pAlias.Name, Sig]);
@@ -766,7 +776,7 @@ begin
   end;
 end;
 
-function TProver.DecideChain(pType, pFromFile: Int64; out pKind, pWhy: string): TChainVerdict;
+function TProver.DecideChain(pType, pFromFile: Int64; out pKind, pWhy: string): TChainVerdict; // dl:ok too-many-exit-points -- a ladder of final verdicts: each Exit is one reason the walk stops
 var
   FirstVerdict: TChainVerdict;
 begin
@@ -916,8 +926,11 @@ begin
   end;
   Result:= False;
   for var S in Spans do
-    if ((pLine > S.StartLine) or ((pLine = S.StartLine) and (pByteCol >= S.StartCol)))
-       and ((pLine < S.EndLine) or ((pLine = S.EndLine) and (pByteCol < S.EndCol))) then Exit(True);
+  begin
+    var AtOrAfterStart:= (pLine > S.StartLine) or ((pLine = S.StartLine) and (pByteCol >= S.StartCol));
+    var BeforeEnd     := (pLine < S.EndLine) or ((pLine = S.EndLine) and (pByteCol < S.EndCol));
+    if AtOrAfterStart and BeforeEnd then Exit(True);
+  end;
 end;
 
 function TProver.PropertyOwnerAt(pFileId: Int64; pLine: Integer): Int64;
@@ -931,16 +944,15 @@ begin
     var Q:= TFDQuery.Create(nil);
     try
       Q.Connection:= FConn;
-      Q.SQL.Text:= 'SELECT id, parent_id, start_line, end_line FROM symbols WHERE file_id = :f AND kind = ''' + CKindProperty + '''';
+      Q.SQL.Text:= 'SELECT parent_id, start_line, end_line FROM symbols WHERE file_id = :f AND kind = ''' + CKindProperty + ''''; // dl:ok sql-injection-concat -- every concatenated part is a constant of this unit; the names are parameters
       Q.ParamByName('f').AsLargeInt:= pFileId;
       Q.Open;
       while not Q.Eof do
       begin
         var R:= Default(TSymRow);
-        R.Id:= Q.Fields[0].AsLargeInt;
-        R.ParentId:= Q.Fields[1].AsLargeInt;
-        R.Line:= Q.Fields[2].AsInteger;
-        R.ImplLine:= Q.Fields[3].AsInteger; { the end line, in this cache }
+        R.ParentId:= Q.Fields[0].AsLargeInt;
+        R.Line:= Q.Fields[1].AsInteger;
+        R.ImplLine:= Q.Fields[2].AsInteger; { the end line, in this cache }
         Props:= Props + [R];
         Q.Next;
       end;
@@ -950,7 +962,7 @@ begin
     FPropCache.Add(pFileId, Props);
   end;
   for var P in Props do
-    if (pLine >= P.Line) and (pLine <= P.ImplLine) then Exit(P.ParentId);
+    if InRange(pLine, P.Line, P.ImplLine) then Exit(P.ParentId);
 end;
 
 { True when the word before the token is a property specifier and the token is not behind a dot. }
@@ -961,6 +973,35 @@ begin
   var E:= P;
   while (P >= 1) and CharInSet(pText[P], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Dec(P);
   Result:= MatchText(Copy(pText, P + 1, E - P), ['read', 'write', 'stored']);
+end;
+
+{ True when the token names a parameter in a header the index keeps no symbol for (a procedural type, a forward header):
+  a declaration binds to nothing. A token in the parameter's TYPE is not one. }
+function TProver.IsDeclArgName(const pPath: string; pLine, pByteCol: Integer): Boolean;
+var
+  Found: Boolean;
+
+  procedure Walk(const pNode, pParent: TTSNode);
+  begin
+    if Found or pNode.IsNull then Exit;
+    var SL:= Integer(pNode.StartPoint.Row) + 1;
+    var EL:= Integer(pNode.EndPoint.Row) + 1;
+    if (pLine < SL) or (pLine > EL) then Exit;
+    if (pNode.NodeType = 'identifier') and (SL = pLine) and (Integer(pNode.StartPoint.Column) + 1 = pByteCol) then
+    begin
+      if pParent.IsNull or (pParent.NodeType <> 'declArg') then Exit;
+      var TypeNode:= pParent.ChildByField('type');
+      Found:= TypeNode.IsNull or (pNode.StartByte < TypeNode.StartByte);
+      Exit;
+    end;
+    for var I:= 0 to pNode.NamedChildCount - 1 do Walk(pNode.NamedChild(I), pNode);
+  end;
+
+begin
+  Found:= False;
+  var PF:= TAstParseCache.Get(pPath);
+  if PF.Tree <> nil then Walk(PF.Tree.RootNode, Default(TTSNode));
+  Result:= Found;
 end;
 
 { `inherited Name` holds no ref: it names what the enclosing method's class's PARENT answers to. }
@@ -1156,6 +1197,9 @@ begin
     Path0:= FStore.GetFilePath(S.FileId);
     Break;
   end;
+  { The index holds no refs inside an include, so an occurrence of the new name there cannot be decided. }
+  var IncReason:= TRenameRefactoring.IncludeUseReason(FStore, FNew);
+  if IncReason <> '' then Refuse(CRefuseCaptureNoRef, Path0, 0, 0, 'the new name: ' + IncReason);
   for var S in FNewSyms do
   begin
     if MatchText(S.Kind, [CKindParam, CKindLocal]) then Continue;
@@ -1219,7 +1263,7 @@ begin
   for var S in pSyms do
   begin
     if S.FileId <> pFileId then Continue;
-    if (S.Line >= 1) and (S.Line <= pLines.Count) then
+    if InRange(S.Line, 1, pLines.Count) then
     begin
       var L:= pLines[S.Line - 1];
       var C:= ByteColToCharCol(L, S.Col);
@@ -1249,7 +1293,7 @@ begin
   end;
 end;
 
-procedure TProver.CheckBareSite(const pPath: string; const pRef: TRefRow; pLine, pCol, pByteCol: Integer);
+procedure TProver.CheckBareSite(const pTok: TTok; const pRef: TRefRow);
 begin
   { A local or parameter of the enclosing routine, or of a routine around it, answers first. }
   var Cur:= pRef.Enclosing;
@@ -1260,7 +1304,7 @@ begin
     for var S in FNewSyms do
       if (S.ParentId = Sc.Id) and MatchText(S.Kind, [CKindParam, CKindLocal]) then
       begin
-        Refuse(CRefuseShadowedAtSite, pPath, pLine, pCol,
+        Refuse(CRefuseShadowedAtSite, pTok.Path, pTok.Line, pTok.Col,
           Format('%s is in scope here: the renamed reference would bind to it, and that can compile', [S.QName]));
         Exit;
       end;
@@ -1272,83 +1316,127 @@ begin
     var Cls:= EnclosingClass(pRef.Enclosing);
     if (Cls > 0) and ChainMemberExists(Cls, FNew) then
     begin
-      Refuse(CRefuseShadowedAtSite, pPath, pLine, pCol,
+      Refuse(CRefuseShadowedAtSite, pTok.Path, pTok.Line, pTok.Col,
         Format('%s or an ancestor declares "%s": the renamed reference would bind to that member', [SymRow(Cls).QName, FNew]));
       Exit;
     end;
   end;
-  if InWith(pPath, pLine, pByteCol) and
+  if InWith(pTok.Path, pTok.Line, pTok.ByteCol) and
      ((Length(ReadSyms('name = :n COLLATE NOCASE AND kind NOT IN (' + CNotLocal + ')', FNew)) > 0) or LibHasMember(FNew)) then
-    Refuse(CRefuseShadowedInWith, pPath, pLine, pCol,
+    Refuse(CRefuseShadowedInWith, pTok.Path, pTok.Line, pTok.Col,
       Format('this site is inside a `with`, and a member named "%s" exists: its target may answer first', [FNew]));
 end;
 
-procedure TProver.ClassifyOldToken(const pPath: string; pFileId: Int64; pLine, pCol, pByteCol: Integer; pQualified: Boolean;
-  const pText: string; pStart: Integer; pDecls: TDeclMap);
+procedure TProver.TakeVerdict(const pTok: TTok; pVerdict: TChainVerdict; const pKind, pWhy: string);
+begin
+  case pVerdict of
+    cvTarget:
+    begin
+      AddEdit(pTok.Path, pTok.Line, pTok.Col);
+      Inc(FBound);
+    end;
+    cvOther: Inc(FOther);
+    else Refuse(pKind, pTok.Path, pTok.Line, pTok.Col, pWhy);
+  end;
+end;
+
+{ A token no ref sits on: a property's specifier, an `inherited` call and a parameter's declaration can still be decided. }
+procedure TProver.ClassifyNoRef(const pTok: TTok);
+const
+  CInherited = 'inherited';
+var
+  Kind, Why: string;
+begin
+  var Owner:= PropertyOwnerAt(pTok.FileId, pTok.Line);
+  if (Owner > 0) and not pTok.Qualified and IsSpecifierToken(pTok.Text, pTok.Start) then
+  begin
+    var V:= DecideChain(Owner, pTok.FileId, Kind, Why);
+    TakeVerdict(pTok, V, Kind, 'a property specifier names "' + FOld + '": ' + Why);
+    Exit;
+  end;
+  var Before:= pTok.Start - 1;
+  while (Before >= 1) and CharInSet(pTok.Text[Before], [' ', #9, #13, #10]) do Dec(Before);
+  if (Before >= Length(CInherited)) and SameText(Copy(pTok.Text, Before - Length(CInherited) + 1, Length(CInherited)), CInherited) then
+  begin
+    var V:= DecideInherited(pTok.FileId, pTok.Line, Kind, Why);
+    TakeVerdict(pTok, V, Kind, '`inherited ' + FOld + '`: ' + Why);
+    Exit;
+  end;
+  if IsDeclArgName(pTok.Path, pTok.Line, pTok.ByteCol) then
+  begin
+    Inc(FOther);
+    Exit;
+  end;
+  Refuse(CRefuseNoRefOccurrence, pTok.Path, pTok.Line, pTok.Col,
+    Format('"%s" sits here and the index holds no ref for it: an inactive {$IFDEF} branch, a chain the parse dropped, a field name in a record constant', [FOld]));
+end;
+
+{ Only unbound rows on the token: the receiver's static type decides, or nothing does. }
+procedure TProver.ClassifyUnbound(const pTok: TTok; const pRow: TRefRow);
+var
+  Kind, Why: string;
+begin
+  { Nothing qualified can name a routine's local. }
+  if FIsRoutineLocal and pTok.Qualified then
+  begin
+    Inc(FOther);
+    Exit;
+  end;
+  var Prefix:= 'unresolved reference to "' + FOld + '" not renamed -- ';
+  if not FHasFacts then
+    Refuse(CRefuseNoFacts, pTok.Path, pTok.Line, pTok.Col, Prefix + 'the index predates ref_receivers: run index --resolve-only')
+  else if pRow.ReceiverText = '' then
+    Refuse(CRefuseBareUnbound, pTok.Path, pTok.Line, pTok.Col, Prefix + 'no receiver, and the resolver bound it to nothing')
+  else if pRow.ReceiverType <= 0 then
+    Refuse(CRefuseReceiverUntyped, pTok.Path, pTok.Line, pTok.Col,
+      Prefix + Format('the receiver "%s" has no static type in the index', [pRow.ReceiverText]))
+  else
+  begin
+    var Verdict:= DecideChain(pRow.ReceiverType, pTok.FileId, Kind, Why);
+    case Verdict of
+      cvTarget:
+      begin
+        AddEdit(pTok.Path, pTok.Line, pTok.Col);
+        Inc(FTyped);
+      end;
+      cvOther:
+      begin
+        Inc(FTyped);
+        Inc(FOther);
+      end;
+      else Refuse(Kind, pTok.Path, pTok.Line, pTok.Col, Prefix + Why);
+    end;
+  end;
+end;
+
+procedure TProver.ClassifyOldToken(const pTok: TTok; pDecls: TDeclMap);
 var
   Rows: TList<TRefRow>;
   Decl: TSymRow;
 begin
   { A declaration or an implementation header: the symbol's own token. }
-  if pDecls.TryGetValue(Format('%d:%d', [pLine, pCol]), Decl) then
+  if pDecls.TryGetValue(Format('%d:%d', [pTok.Line, pTok.Col]), Decl) then
   begin
-    if FGroup.ContainsKey(Decl.Id) then AddEdit(pPath, pLine, pCol)
+    if FGroup.ContainsKey(Decl.Id) then AddEdit(pTok.Path, pTok.Line, pTok.Col)
     else
     begin
       Inc(FOther);
       if SameText(Decl.Kind, CKindProperty) and FDescend.ContainsKey(Decl.ParentId) then
-        Refuse(CRefuseRedeclaredProperty, pPath, pLine, pCol, Format('%s republishes the property of the same name', [Decl.QName]));
+        Refuse(CRefuseRedeclaredProperty, pTok.Path, pTok.Line, pTok.Col, Format('%s republishes the property of the same name', [Decl.QName]));
     end;
     Exit;
   end;
-
-  if not FOldRefs.TryGetValue(KeyOf(pFileId, pLine, pByteCol), Rows) then
+  if not FOldRefs.TryGetValue(KeyOf(pTok.FileId, pTok.Line, pTok.ByteCol), Rows) then
   begin
-    { No ref: a property's read / write / stored names a member of its own class. }
-    var Owner:= PropertyOwnerAt(pFileId, pLine);
-    if (Owner > 0) and not pQualified and IsSpecifierToken(pText, pStart) then
-    begin
-      var K, W: string;
-      case DecideChain(Owner, pFileId, K, W) of
-        cvTarget:
-        begin
-          AddEdit(pPath, pLine, pCol);
-          Inc(FBound);
-        end;
-        cvOther: Inc(FOther);
-        else Refuse(K, pPath, pLine, pCol, 'a property specifier names "' + FOld + '": ' + W);
-      end;
-      Exit;
-    end;
-    var Before:= pStart - 1;
-    while (Before >= 1) and CharInSet(pText[Before], [' ', #9, #13, #10]) do Dec(Before);
-    if (Before >= Length('inherited')) and SameText(Copy(pText, Before - Length('inherited') + 1, Length('inherited')), 'inherited') then
-    begin
-      var K, W: string;
-      case DecideInherited(pFileId, pLine, K, W) of
-        cvTarget:
-        begin
-          AddEdit(pPath, pLine, pCol);
-          Inc(FBound);
-        end;
-        cvOther: Inc(FOther);
-        else Refuse(K, pPath, pLine, pCol, '`inherited ' + FOld + '`: ' + W);
-      end;
-      Exit;
-    end;
-    Refuse(CRefuseNoRefOccurrence, pPath, pLine, pCol,
-      Format('"%s" sits here and the index holds no ref for it: an inactive {$IFDEF} branch, a chain the parse dropped, a field name in a record constant', [FOld]));
+    ClassifyNoRef(pTok);
     Exit;
   end;
-
   var ToTarget:= False;
   var ToOther := False;
   var LowConf := False;
-  var Unbound : Boolean:= False;
   var UnboundRow: TRefRow:= Default(TRefRow);
   var BoundRow  : TRefRow:= Default(TRefRow);
   for var R in Rows do
-  begin
     if R.SymbolId > 0 then
     begin
       if (R.Confidence <> '') and not SameText(R.Confidence, CCertain) then LowConf:= True;
@@ -1360,114 +1448,62 @@ begin
       else ToOther:= True;
     end
     else if R.ExternalTarget <> '' then ToOther:= True
-    else
-    begin
-      Unbound:= True;
-      UnboundRow:= R;
-    end;
-  end;
+    else UnboundRow:= R;
   if ToTarget and ToOther then
+    Refuse(CRefuseConflictingBinding, pTok.Path, pTok.Line, pTok.Col, 'two refs on this token bind to the target and to another symbol')
+  else if (ToTarget or ToOther) and LowConf then
+    Refuse(CRefuseLowConfidence, pTok.Path, pTok.Line, pTok.Col, 'the resolver''s binding of this token is not certain')
+  else if ToTarget then
   begin
-    Refuse(CRefuseConflictingBinding, pPath, pLine, pCol, 'two refs on this token bind to the target and to another symbol');
-    Exit;
-  end;
-  if (ToTarget or ToOther) and LowConf then
-  begin
-    Refuse(CRefuseLowConfidence, pPath, pLine, pCol, 'the resolver''s binding of this token is not certain');
-    Exit;
-  end;
-  if ToTarget then
-  begin
-    AddEdit(pPath, pLine, pCol);
+    AddEdit(pTok.Path, pTok.Line, pTok.Col);
     Inc(FBound);
-    if not pQualified then CheckBareSite(pPath, BoundRow, pLine, pCol, pByteCol);
-    Exit;
-  end;
-  if ToOther then
-  begin
-    Inc(FOther);
-    Exit;
-  end;
-  { Nothing qualified can name a routine's local. }
-  if FIsRoutineLocal and pQualified then
-  begin
-    Inc(FOther);
-    Exit;
-  end;
-  { Only unbound rows: the receiver's static type decides, or nothing does. }
-  if not FHasFacts then
-  begin
-    Refuse(CRefuseNoFacts, pPath, pLine, pCol, 'unresolved reference to "' + FOld + '" not renamed -- the index predates ref_receivers: run index --resolve-only');
-    Exit;
-  end;
-  if UnboundRow.ReceiverText = '' then
-  begin
-    Refuse(CRefuseBareUnbound, pPath, pLine, pCol, 'unresolved reference to "' + FOld + '" not renamed -- no receiver, and the resolver bound it to nothing');
-    Exit;
-  end;
-  if UnboundRow.ReceiverType <= 0 then
-  begin
-    Refuse(CRefuseReceiverUntyped, pPath, pLine, pCol,
-      Format('unresolved reference to "%s" not renamed -- the receiver "%s" has no static type in the index', [FOld, UnboundRow.ReceiverText]));
-    Exit;
-  end;
-  var Why, Kind: string;
-  case DecideChain(UnboundRow.ReceiverType, pFileId, Kind, Why) of
-    cvTarget:
-    begin
-      AddEdit(pPath, pLine, pCol);
-      Inc(FTyped);
-    end;
-    cvOther:
-    begin
-      Inc(FTyped);
-      Inc(FOther);
-    end;
-    else Refuse(Kind, pPath, pLine, pCol, 'unresolved reference to "' + FOld + '" not renamed -- ' + Why);
-  end;
+    if not pTok.Qualified then CheckBareSite(pTok, BoundRow);
+  end
+  else if ToOther then Inc(FOther)
+  else ClassifyUnbound(pTok, UnboundRow);
 end;
 
-procedure TProver.ClassifyNewToken(const pPath: string; pFileId: Int64; pLine, pCol, pByteCol: Integer; pQualified: Boolean;
-  const pText: string; pStart: Integer; pDecls: TDeclMap);
+procedure TProver.ClassifyNewToken(const pTok: TTok; pDecls: TDeclMap);
 var
   Rows: TList<TRefRow>;
 begin
-  if pDecls.ContainsKey(Format('%d:%d', [pLine, pCol])) then Exit;
-  if not FNewRefs.TryGetValue(KeyOf(pFileId, pLine, pByteCol), Rows) then
+  if pDecls.ContainsKey(Format('%d:%d', [pTok.Line, pTok.Col])) then Exit;
+  if not FNewRefs.TryGetValue(KeyOf(pTok.FileId, pTok.Line, pTok.ByteCol), Rows) then
   begin
-    if (PropertyOwnerAt(pFileId, pLine) > 0) and IsSpecifierToken(pText, pStart) then Exit;
-    Refuse(CRefuseCaptureNoRef, pPath, pLine, pCol,
-      Format('the new name "%s" sits here and the index holds no ref for it', [FNew]));
+    var Explained:= ((PropertyOwnerAt(pTok.FileId, pTok.Line) > 0) and IsSpecifierToken(pTok.Text, pTok.Start))
+      or IsDeclArgName(pTok.Path, pTok.Line, pTok.ByteCol);
+    if not Explained then
+      Refuse(CRefuseCaptureNoRef, pTok.Path, pTok.Line, pTok.Col, Format('the new name "%s" sits here and the index holds no ref for it', [FNew]));
     Exit;
   end;
-  if pQualified then
+  if pTok.Qualified then
   begin
     for var R in Rows do
       if (R.SymbolId > 0) or (R.ExternalTarget <> '') then Exit;
-    Refuse(CRefuseCaptureUnbound, pPath, pLine, pCol,
+    Refuse(CRefuseCaptureUnbound, pTok.Path, pTok.Line, pTok.Col,
       Format('"%s" here has a receiver nothing typed: it could become the renamed member', [FNew]));
     Exit;
   end;
-  if InWith(pPath, pLine, pByteCol) then
+  if InWith(pTok.Path, pTok.Line, pTok.ByteCol) then
   begin
-    Refuse(CRefuseCaptureInWith, pPath, pLine, pCol, Format('a bare "%s" inside a `with`: its target could answer after the rename', [FNew]));
+    Refuse(CRefuseCaptureInWith, pTok.Path, pTok.Line, pTok.Col, Format('a bare "%s" inside a `with`: its target could answer after the rename', [FNew]));
     Exit;
   end;
   for var R in Rows do
   begin
     var S:= SymRow(R.SymbolId);
     if MatchText(S.Kind, [CKindParam, CKindLocal]) then Continue; { a nearer scope stays nearer }
+    var BindsTo:= if S.Id > 0 then S.QName else 'something outside the index';
     if FIsMember then
     begin
       var Cls:= EnclosingClass(R.Enclosing);
       if FStartCls.ContainsKey(Cls) or FDescend.ContainsKey(Cls) then
-        Refuse(CRefuseCaptureBare, pPath, pLine, pCol,
-          Format('this bare "%s" binds to %s; inside %s it would bind to the renamed member, and that can compile',
-            [FNew, if S.Id > 0 then S.QName else 'something outside the index', SymRow(Cls).QName]));
+        Refuse(CRefuseCaptureBare, pTok.Path, pTok.Line, pTok.Col,
+          Format('this bare "%s" binds to %s; inside %s it would bind to the renamed member, and that can compile', [FNew, BindsTo, SymRow(Cls).QName]));
     end
     else if (S.Id = 0) or not IsClassKind(SymRow(S.ParentId).Kind) then
-      Refuse(CRefuseCaptureBare, pPath, pLine, pCol,
-        Format('this bare "%s" binds to %s; a second unit-level "%s" makes the uses order decide', [FNew, if S.Id > 0 then S.QName else 'something outside the index', FNew]));
+      Refuse(CRefuseCaptureBare, pTok.Path, pTok.Line, pTok.Col,
+        Format('this bare "%s" binds to %s; a second unit-level "%s" makes the uses order decide', [FNew, BindsTo, FNew]));
   end;
 end;
 
@@ -1521,13 +1557,19 @@ begin
         var IsNew:= (I - Start = Length(FNew)) and SameText(Copy(Text, Start, I - Start), FNew);
         if IsOld or IsNew then
         begin
-          var Col:= Start - LineStart + 1;
-          var ByteCol:= TEncoding.UTF8.GetByteCount(Copy(Text, LineStart, Col - 1)) + 1;
+          var Tok: TTok;
+          Tok.Path   := pPath;
+          Tok.FileId := pFileId;
+          Tok.Line   := Line;
+          Tok.Col    := Start - LineStart + 1;
+          Tok.ByteCol:= TEncoding.UTF8.GetByteCount(Copy(Text, LineStart, Tok.Col - 1)) + 1;
+          Tok.Text   := Text;
+          Tok.Start  := Start;
           var P:= Start - 1;
           while (P >= 1) and CharInSet(Text[P], [' ', #9, #13, #10]) do Dec(P);
-          var Qualified:= (P >= 1) and (Text[P] = '.') and not ((P >= 2) and (Text[P - 1] = '.'));
-          if IsOld then ClassifyOldToken(pPath, pFileId, Line, Col, ByteCol, Qualified, Text, Start, OldDecls)
-          else ClassifyNewToken(pPath, pFileId, Line, Col, ByteCol, Qualified, Text, Start, NewDecls);
+          Tok.Qualified:= (P >= 1) and (Text[P] = '.') and not ((P >= 2) and (Text[P - 1] = '.'));
+          if IsOld then ClassifyOldToken(Tok, OldDecls)
+          else ClassifyNewToken(Tok, NewDecls);
         end;
       end
       else
@@ -1578,6 +1620,33 @@ begin
     end;
 end;
 
+procedure TProver.ScanDfmNames(const pPath, pText: string);
+begin
+  var Lines:= TStringList.Create;
+  try
+    Lines.Text:= pText;
+    for var L:= 0 to Lines.Count - 1 do
+    begin
+      var S:= Lines[L];
+      var At:= 1;
+      var InStr:= False;
+      while At <= Length(S) do
+      begin
+        if S[At] = '''' then InStr:= not InStr
+        else if not InStr and IsIdentAt(S, FOld, At) then
+        begin
+          Refuse(CRefuseDfmNameUnbound, pPath, L + 1, At,
+            Format('this form names "%s" (a component or a property value); nothing rewrites a form''s names', [FOld]));
+          Break;
+        end;
+        Inc(At);
+      end;
+    end;
+  finally
+    Lines.Free;
+  end;
+end;
+
 { A published field or property named in a text form: nothing rewrites it, and a form that no longer loads is no compile
   error. Binary and unindexed forms: SkippedDfmNotes. }
 procedure TProver.CheckDfmNames;
@@ -1611,29 +1680,7 @@ begin
         var Text: string;
         TTextFileFormat.ReadFile(Path, Text);
         if not ContainsText(Text, FOld) then Continue;
-        var Lines:= TStringList.Create;
-        try
-          Lines.Text:= Text;
-          for var L:= 0 to Lines.Count - 1 do
-          begin
-            var S:= Lines[L];
-            var At:= 1;
-            var InStr:= False;
-            while At <= Length(S) do
-            begin
-              if S[At] = '''' then InStr:= not InStr
-              else if not InStr and IsIdentAt(S, FOld, At) then
-              begin
-                Refuse(CRefuseDfmNameUnbound, Path, L + 1, At,
-                  Format('this form names "%s" (a component or a property value); nothing rewrites a form''s names', [FOld]));
-                Break;
-              end;
-              Inc(At);
-            end;
-          end;
-        finally
-          Lines.Free;
-        end;
+        ScanDfmNames(Path, Text);
       end;
     finally
       Dfms.Free;
@@ -1758,7 +1805,7 @@ begin
         var Conn:= (pStore as TSQLiteSymbolStore).GetConnection;
         var Fid: Int64:= 0;
         var Target: Int64:= 0;
-        var MemberNew:= False;
+        var MemberNew: Boolean;
         var Q:= TFDQuery.Create(nil);
         try
           Q.Connection:= Conn;
@@ -1768,7 +1815,7 @@ begin
           if not Q.Eof then Fid:= Q.Fields[0].AsLargeInt;
           Q.Close;
           { the local's symbol: the row the declaration identifier sits on }
-          Q.SQL.Text:= 'SELECT id FROM symbols WHERE file_id = :f AND name = :n COLLATE NOCASE AND kind IN (' + CNotLocal + ') AND start_line = :l';
+          Q.SQL.Text:= 'SELECT id FROM symbols WHERE file_id = :f AND name = :n COLLATE NOCASE AND kind IN (' + CNotLocal + ') AND start_line = :l'; // dl:ok sql-injection-concat -- every concatenated part is a constant of this unit; the names are parameters
           Q.ParamByName('f').AsLargeInt:= Fid;
           Q.ParamByName('n').AsWideString:= WithSites[0].OldName;
           Q.ParamByName('l').AsInteger:= pLine;
@@ -1777,7 +1824,7 @@ begin
           Q.Next;
           if not Q.Eof then Target:= 0; { two on the line: no identity }
           Q.Close;
-          Q.SQL.Text:= 'SELECT 1 FROM symbols WHERE name = :n COLLATE NOCASE AND kind NOT IN (' + CNotLocal + ') LIMIT 1';
+          Q.SQL.Text:= 'SELECT 1 FROM symbols WHERE name = :n COLLATE NOCASE AND kind NOT IN (' + CNotLocal + ') LIMIT 1'; // dl:ok sql-injection-concat -- every concatenated part is a constant of this unit; the names are parameters
           Q.ParamByName('n').AsWideString:= pNewName;
           Q.Open;
           MemberNew:= not Q.Eof;
@@ -1906,6 +1953,7 @@ var
   Req: TGateRequest;
 begin
   Result:= Default(TGateOutcome);
+  Req:= Default(TGateRequest);
   var ByFile:= TObjectDictionary<string, TList<TTextEdit>>.Create([doOwnsValues]);
   try
     try
@@ -1927,7 +1975,6 @@ begin
         TE.ExpectText:= E.OldName;
         Rows.Add(TE);
       end;
-      Req:= Default(TGateRequest);
       for var Pair in ByFile do
       begin
         var Text: string;
@@ -1938,10 +1985,10 @@ begin
         Req.Files:= Req.Files + [GF];
       end;
     except
-      on E: Exception do
+      on Ex: Exception do
       begin
         Result.Refusal:= CGateWriteFailed;
-        Result.Detail := 'the rewrite could not be computed: ' + E.Message + '; nothing written';
+        Result.Detail := 'the rewrite could not be computed: ' + Ex.Message + '; nothing written';
         Exit;
       end;
     end;
@@ -1958,7 +2005,7 @@ begin
   Req.LogDir  := FreshScratchName('_build');
   Result:= ApplyGated(Req);
   try
-    if not GScratchCited and TDirectory.Exists(Req.LogDir) then TDirectory.Delete(Req.LogDir, True);
+    if not GScratchCited and TDirectory.Exists(Req.LogDir) then TDirectory.Delete(Req.LogDir, True); // dl:ok taint-path-traversal -- LogDir is FreshScratchName's: a folder this run made under C:\TEMP
   except
     on EInOutError do Writeln(ErrOutput, 'drag-lint: note: scratch not deleted: ', Req.LogDir); // best effort: a locked log must not change the result
   end;

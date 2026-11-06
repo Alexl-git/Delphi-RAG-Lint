@@ -958,8 +958,11 @@ var
 
   function EditOf(const N: TTSNode): TRenameEdit;
   begin
-    Result.FilePath:= AFile; Result.Line:= NLine(N); Result.Col:= NColOf(N);
-    Result.OldName:= Target; Result.NewName:= ANewName;
+    Result.FilePath:= AFile;
+    Result.Line    := NLine(N);
+    Result.Col     := NColOf(N);
+    Result.OldName := Target;
+    Result.NewName := ANewName;
   end;
 
   procedure AddEdit(const N: TTSNode);

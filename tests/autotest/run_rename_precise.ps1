@@ -110,6 +110,14 @@ if (-not (Build-Lab $base.Root)) { Write-Host "FATAL: the untouched fixture does
 $script:Expected = Stdout-Of $base.Root
 Check 'fixture runs and prints' ($script:Expected -match 'TKid\.Run' -and $script:Expected -match '300')
 
+Write-Host 'ref_receivers: a whole pass and an incremental one agree' -ForegroundColor Cyan
+function Rcv-Count($P) { $j = (& $Exe sql --db $P.Db --query 'select count(*) from ref_receivers' --json 2>$null | Out-String | ConvertFrom-Json); return [int]$j.rows[0][0] }
+$rp = New-Lab
+$before = Rcv-Count $rp
+Check 'rcv the join writes rows' ($before -gt 0) "rows=$before"
+[IO.File]::AppendAllText($rp.Use, "`r`n", $Ascii)
+Push-Location $WorkDir; try { $null | & $Exe index --project $rp.Dproj --db $rp.Db --library-db none *> "$($rp.Db).log2" } finally { Pop-Location }
+Check 'rcv an incremental re-emit of one file keeps the count' ((Rcv-Count $rp) -eq $before) "before=$before after=$(Rcv-Count $rp)"
 Write-Host 'Same-named members: only the target edited, per token on one line' -ForegroundColor Cyan
 Sound 'c1' 'RnTypes.TTwoA.Count' 'Tally' {
   param($p)
@@ -183,6 +191,12 @@ $p = New-Lab; $h = Get-SrcHash $p.Root
 Push-Location $WorkDir
 try { $o = ($null | & $Exe rename --kind symbol --name RnTypes.TTwoA.Count --to Tally --db $p.Db --library-db $script:Lib --apply --no-backup 2>&1 | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
 Check 'g1 no --project: [no-project], exit 2, bytes same' ($c -eq 2 -and $o -match 'refused \[no-project\]' -and (Get-SrcHash $p.Root) -eq $h) $o
+$dr = Join-Path $p.Root '_D-RAG'; New-Item -ItemType Directory -Force $dr | Out-Null
+$sibDb = Join-Path $dr 'PrecRen.sqlite'
+Push-Location $WorkDir
+try { $null | & $Exe index --project $p.Dproj --db $sibDb --library-db none *> "$sibDb.log"; $o = ($null | & $Exe rename --qname RnTypes.TTwoA.Count --to Tally --db $sibDb --library-db $script:Lib --no-backup 2>&1 | Out-String); $c = $LASTEXITCODE } finally { Pop-Location }
+Check 'g4 the IDE''s form (--qname --db, no --project): the DB''s own project, through the gate' ($c -eq 0 -and $o -match 'compile gate' -and (Stdout-Of $p.Root) -ceq $script:Expected) $o
+$p = New-Lab; $h = Get-SrcHash $p.Root
 $a = Apply $p 'RnTypes.TTwoA.Count' 'Tally' @('--no-compile')
 Check 'g2 --no-compile with --apply: [no-compile], exit 2, bytes same' ($a.Exit -eq 2 -and $a.Out -match 'refused \[no-compile\]' -and (Get-SrcHash $p.Root) -eq $h) $a.Out
 $p = New-Lab; $h = Get-SrcHash $p.Root

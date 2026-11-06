@@ -24743,7 +24743,7 @@ end;
 
 { Lane 144 item 3: the tail every rename path shares. --plan reports and exits 0; a dry run lists the proved edits and
   notes the rest; --apply refuses whatever is not proved, exit 2, and writes only through the compile gate. }
-function FinishRename(const AArgs: TArgs; const pProof: TRenameProof; const pQName: string; pApply: Boolean): Integer;
+function FinishRename(const AArgs: TArgs; const pProof: TRenameProof; const pQName: string; pApply: Boolean): Integer; // dl:ok too-many-exit-points -- one Exit per outcome of the verb, each with its own exit code
 const
   CRefused = 'ERROR: cannot rename -- ';
 begin
@@ -24770,7 +24770,7 @@ begin
   begin
     var Arr: TJSONArray:= TJSONArray.Create;
     try
-      for var Ed in pProof.Edits do
+      for var Ed in pProof.Edits do // dl:ok duplicate-code -- the --json edit list as every refactor verb prints it; each owns its own shape
       begin
         var O: TJSONObject:= TJSONObject.Create;
         O.AddPair('file', Ed.FilePath);
@@ -24809,13 +24809,22 @@ begin
     Writeln(Format('Applied: %d edit(s), %d file(s).', [Length(pProof.Edits), Touched]));
     Exit(0);
   end;
-  if (AArgs.ProjectPath = '') or AArgs.ProjectFromConfig then
+  { --project, or the project a DB at its proper place belongs to: <folder>\_D-RAG\<base>.sqlite is <folder>\<base>.dproj's
+    (the IDE's Rename Symbol passes --db only). }
+  var GateProject:= if AArgs.ProjectFromConfig then '' else AArgs.ProjectPath;
+  if (GateProject = '') and SameText(ExtractFileName(ExcludeTrailingPathDelimiter(ExtractFilePath(AArgs.DbPath))), '_D-RAG') then
+  begin
+    var Sibling:= TPath.Combine(ExtractFilePath(ExcludeTrailingPathDelimiter(ExtractFilePath(AArgs.DbPath))),
+      ChangeFileExt(ExtractFileName(AArgs.DbPath), '.dproj'));
+    if TFile.Exists(Sibling) then GateProject:= Sibling;
+  end;
+  if GateProject = '' then
   begin
     Writeln(CRefused + 'refused [' + CRefuseNoProject + ']: rename --apply writes through the compile gate: pass --project <X.dproj>');
     Exit(2);
   end;
   var Opts:= Default(TRenameGateOptions);
-  Opts.Project         := AArgs.ProjectPath;
+  Opts.Project         := GateProject;
   Opts.Platform        := AArgs.CheckPlatform;
   Opts.RsVars          := AArgs.CycleRsVars;
   Opts.BuildTimeoutSecs:= StrToIntDef(AArgs.CycleBuildTimeout, 0);

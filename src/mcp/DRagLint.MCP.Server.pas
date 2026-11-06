@@ -15,7 +15,6 @@ uses
   , DRagLint.Context    .Bundler
   , DRagLint.Resolver   .TypeAt
   , DRagLint.Refactor   .Rename
-  , DRagLint.Refactor   .RenameProof
   , DRagLint.Diagnostics.CompileCheck
   , DRagLint.Diagnostics.AstChecks
   , DRagLint.Wiring
@@ -419,6 +418,7 @@ type
 implementation
 
 uses
+  DRagLint.Refactor.RenameProof,
   Winapi.Windows
   , DRagLint.Doc.Regions
   , DRagLint.Query.Implementors { get_implementors (interface report, 1.40) }

@@ -1023,7 +1023,7 @@ begin
     try
       if (GetEnvironmentVariable(CTestBreakVar) = '1') and IsUnderTemp(pReq.Project) and (Length(Outcome.Tx.Written) > 0) then
         { at the top: dcc reads nothing after the final end. }
-        TFile.WriteAllBytes(Outcome.Tx.Written[0], TEncoding.ASCII.GetBytes(CTestBreakLine) + TFile.ReadAllBytes(Outcome.Tx.Written[0]));
+        TFile.WriteAllBytes(Outcome.Tx.Written[0], TEncoding.ASCII.GetBytes(CTestBreakLine) + TFile.ReadAllBytes(Outcome.Tx.Written[0])); // dl:ok taint-path-traversal -- the test seam, for a project under %TEMP%; Written is this transaction's own list
       Outcome.After:= CompileAfterWith(pReq.Project, pReq.Platform, Dir, pReq.Repair);
     except
       on E: ECompileGateCancelled do

@@ -27,6 +27,8 @@ An index IS required. The project's DB lives at
 The resolve pass writes these from stored parses, so a re-resolve refreshes them
 without a re-parse.
 
+`ref_receivers(ref_id, receiver_ref_id)` joins a member access to the ref of its receiver: `A.Item.Bar`, Bar to Item, and `F(x).Bar`, Bar to F. A resolve-pass fact from positions the parse stored, same file and line; an indexer `A[i].Bar`, a chain over lines or a space around the dot has no row. Separate from `ref_types` because the refs that need it are the unbound ones, which have no `ref_types` row. Read by `rename`'s proof.
+
 `ref_types` holds the static type of a reference, at most one row per `refs` row
 of kind read, write, member-access or call. No row means the pass has no type to
 state: a procedure, a type name, an unresolved member.
