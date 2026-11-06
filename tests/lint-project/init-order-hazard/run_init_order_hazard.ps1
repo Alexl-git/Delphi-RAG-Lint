@@ -3,7 +3,7 @@
 
   An initialization section reaches a global of a unit that initializes later in the order computed
   from the .dpr, and that unit's initialization is what sets it. RUN 1: exactly the TRIGGER-* lines of
-  uIohSecond. RUN 2: a plain lint-all, the rule ships OFF. RUN 3: the same units with the .dpr listing
+  uIohSecond. RUN 2: a plain lint-all, the rule ships ON. RUN 3: the same units with the .dpr listing
   uIohSecond first: the order flips, so uIohSecond goes silent and uIohFirst's read of GSecond fires,
   so it is the COMPUTED ORDER that decides, not the shape of the code. RUN 4: no .dpr in the index: no
   order, no finding.
@@ -60,7 +60,7 @@ try {
   Check 'RUN 1 the message names the program and the variable' (@($hits | Where-Object { $_.message -match 'GFirst' -and $_.message -match 'fxIoh\.dpr' }).Count -eq 1) ''
 
   $off = RuleFindings $db @()
-  Check 'RUN 2 plain lint-all: the rule ships OFF' ($off.Count -eq 0) "$($off.Count) finding(s)"
+  Check 'RUN 2 plain lint-all: the rule ships ON' ($off.Count -eq $hits.Count -and $hits.Count -gt 0) "$($off.Count) finding(s)"
 
   $src3 = Fresh 'b'
   $dpr = Join-Path $src3 'fxIoh.dpr'

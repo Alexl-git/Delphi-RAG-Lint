@@ -1,6 +1,6 @@
 # Heavy work in an initialization section (`heavy-initialization`)
 
-An initialization section reaches the file system, the registry, the network, a database or a dialog. That work runs before the application has an exception handler or a window, and every process that links the unit pays for it at start, including a test runner. OFF by default.
+An initialization section reaches the file system, the registry, the network, a database or a dialog. That work runs before the application has an exception handler or a window, and every process that links the unit pays for it at start, including a test runner. ON by default in `lint-all` and `lint-project`.
 
 ## Running it
 ```

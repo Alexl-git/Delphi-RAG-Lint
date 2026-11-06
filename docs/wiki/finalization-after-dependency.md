@@ -1,6 +1,6 @@
 # Finalization reaching a unit already finalized (`finalization-after-dependency`)
 
-A finalization section reaches a global variable of a unit that has already been finalized, and that unit's finalization is what tears the variable down. The read sees a freed object, usually as an access violation on exit. OFF by default.
+A finalization section reaches a global variable of a unit that has already been finalized, and that unit's finalization is what tears the variable down. The read sees a freed object, usually as an access violation on exit. ON by default in `lint-all` and `lint-project`.
 
 ## Running it
 ```

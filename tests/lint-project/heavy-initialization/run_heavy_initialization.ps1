@@ -3,7 +3,7 @@
 
   An initialization section reaches a file, the registry, the network, a database or a dialog. RUN 1:
   exactly the TRIGGER lines, one per section; a routine nobody calls, TPath string work and a
-  finalization stay silent. RUN 2: plain lint-all, the rule ships OFF. RUN 3: the section of uHiChain
+  finalization stay silent. RUN 2: plain lint-all, the rule ships ON. RUN 3: the section of uHiChain
   stops calling Boot, so the same routine is unreachable and the finding goes: the WALK fires it, not
   the name in the file.
 
@@ -58,7 +58,7 @@ try {
   Check 'RUN 1 nothing fires in uHiLight' (@($hits | Where-Object { $_.file_path -like '*uHiLight.pas' }).Count -eq 0) ''
 
   $off = RuleFindings $db @()
-  Check 'RUN 2 plain lint-all: the rule ships OFF' ($off.Count -eq 0) "$($off.Count) finding(s)"
+  Check 'RUN 2 plain lint-all: the rule ships ON' ($off.Count -eq $hits.Count -and $hits.Count -gt 0) "$($off.Count) finding(s)"
 
   $f = Join-Path $src 'uHiChain.pas'
   $t = [IO.File]::ReadAllText($f).Replace("  Boot; // TRIGGER-CHAIN", "  // no call")

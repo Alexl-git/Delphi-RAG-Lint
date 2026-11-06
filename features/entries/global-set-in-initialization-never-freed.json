@@ -1,0 +1,19 @@
+{
+  "id": "global-set-in-initialization-never-freed",
+  "title": "Global set in initialization and never freed (lint rule)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.44.0-alpha",
+  "summary": "Project lint rule: a unit's initialization sets its own global to a new object and no source that names the variable frees it",
+  "intro": "Read this to see when global-set-in-initialization-never-freed fires and what silences it. It runs in lint-all and lint-project over a project index.",
+  "wikiPage": "global-set-in-initialization-never-freed",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --rule global-set-in-initialization-never-freed"
+    }
+  ],
+  "audience": "both"
+}

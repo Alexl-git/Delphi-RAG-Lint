@@ -1,6 +1,6 @@
 # Initialization reaching a later unit (`init-order-hazard`)
 
-An initialization section reaches a global variable of a unit that initializes later, and that unit's own initialization is what sets the variable. The read sees the value from before it was set: the classic "works in Debug, access violation at startup in Release" bug, which appears or goes away when someone reorders a `uses` clause. OFF by default.
+An initialization section reaches a global variable of a unit that initializes later, and that unit's own initialization is what sets the variable. The read sees the value from before it was set: the classic "works in Debug, access violation at startup in Release" bug, which appears or goes away when someone reorders a `uses` clause. ON by default in `lint-all` and `lint-project`.
 
 ## Running it
 ```

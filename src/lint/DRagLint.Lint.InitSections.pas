@@ -29,6 +29,8 @@ const
   FINALIZATION_AFTER_DEPENDENCY_RULE = 'finalization-after-dependency';
   /// <summary>The rule id, as `rules --json`, `--rule` and dl:ok markers spell it.</summary>
   HEAVY_INITIALIZATION_RULE = 'heavy-initialization';
+  /// <summary>The rule id, as `rules --json`, `--rule` and dl:ok markers spell it.</summary>
+  GLOBAL_NEVER_FREED_RULE = 'global-set-in-initialization-never-freed';
 
 /// <summary>An initialization section reaches a global variable of a unit that initializes LATER in
 /// the computed order, and that unit's own initialization is what sets the variable: the read sees
@@ -64,6 +66,20 @@ function CollectFinalizationAfterDependency(const AStore: ISymbolStore): TArray<
 /// no branch conditions. TPath alone is not a file access. Certain call edges only.</remarks>
 function CollectHeavyInitialization(const AStore: ISymbolStore): TArray<TLintFinding>;
 
+/// <summary>A unit's initialization sets its own global variable to a new object (`G:= TFoo.Create`) and
+/// no source that names the variable frees it, so the object lives to process exit and shows as a leak in
+/// every leak report.</summary>
+/// <param name="AStore">The project index; nil yields no findings.</param>
+/// <param name="ALibraryStore">The platform library index, or nil. It proves a library type is a class:
+/// a record has a Create too (TRegEx, TFormatSettings). Without it only project classes and a short list
+/// of common RTL classes count, and any other type is silent.</param>
+/// <returns>One 'global-set-in-initialization-never-freed' hint per variable, at the assignment.</returns>
+/// <remarks>Not thread-safe. Counts a section's assignment and one in a routine of the unit the section
+/// calls. Silent on an interface-typed variable, a type not proven a class, a factory call (only `.Create` proves a new
+/// object), an owner argument, FreeOnTerminate, a variable handed to a container or a Register* call, and
+/// any text that frees it: the check is lexical, so a free in a comment also silences it.</remarks>
+function CollectGlobalNeverFreed(const AStore: ISymbolStore; const ALibraryStore: ISymbolStore = nil): TArray<TLintFinding>;
+
 implementation
 
 uses
@@ -83,6 +99,11 @@ const
   CONFIDENCE_CERTAIN = 'certain';
   SEVERITY_WARNING = 'warning';
   SEVERITY_HINT = 'hint';
+  CREATE_STATEMENT_LINES = 3;
+  KNOWN_RTL_CLASSES: array[0..16] of string = ('TStringList', 'TList', 'TObjectList', 'TThreadList', 'TInterfaceList', 'TDictionary',
+    'TObjectDictionary', 'TQueue', 'TStack', 'TMemoryStream', 'TFileStream', 'TCriticalSection', 'TEvent', 'TComponent',
+    'TBitmap', 'TIniFile', 'TMemIniFile');
+  NOT_AN_OWNER: array[0..2] of string = ('nil', 'True', 'False');
   COMMENT_LINE = '//';
   COMMENT_PAREN_OPEN = '(*';
   COMMENT_PAREN_CLOSE = '*)';
@@ -147,6 +168,7 @@ type
     procedure LoadUnits;
     function UsesOfFile(AFileId: Int64): TArray<string>;
     procedure LoadRefsOfFile(AFileId: Int64);
+    function LinesOf(AFileId: Int64): TArray<string>;
   public
     constructor Create(const AStore: ISymbolStore);
     destructor Destroy; override;
@@ -168,6 +190,10 @@ type
     function FileUses(AFileId: Int64; const ALowerUnit: string): Boolean;
     /// <summary>The body of ASym, joined; '' when the source cannot be read.</summary>
     function BodyText(const ASym: TSymbol): string;
+    /// <summary>The whole source of AFileId; '' when it cannot be read.</summary>
+    function FileText(AFileId: Int64): string;
+    /// <summary>ACount lines of AFileId from the 1-based ALine, joined.</summary>
+    function LineText(AFileId: Int64; ALine, ACount: Integer): string;
     /// <summary>Every routine reachable from ASectionId by certain call edges, breadth first, the section
     /// itself first (its anchor is empty); each with the ref in the section that starts its path.</summary>
     function Reach(ASectionId: Int64): TArray<TPair<TSymbol, TReference>>;
@@ -482,28 +508,39 @@ begin
     if U = ALowerUnit then Exit(True);
 end;
 
-function TInitGraph.BodyText(const ASym: TSymbol): string;
-var
-  Lines: TArray<string>;
+function TInitGraph.LinesOf(AFileId: Int64): TArray<string>;
 begin
-  if not FLines.TryGetValue(ASym.FileId, Lines) then
-  begin
-    Lines:= nil;
-    var Path: string:= FStore.GetFilePath(ASym.FileId);
-    if (Path <> '') and TFile.Exists(Path) then
-      try
-        Lines:= TFile.ReadAllLines(Path);
-      except
-        on EInOutError do Lines:= nil;
-        on EEncodingError do Lines:= nil;
-      end;
-    FLines.Add(ASym.FileId, Lines);
-  end;
+  if FLines.TryGetValue(AFileId, Result) then Exit;
+  Result:= nil;
+  var Path: string:= FStore.GetFilePath(AFileId);
+  if (Path <> '') and TFile.Exists(Path) then
+    try
+      Result:= TFile.ReadAllLines(Path);
+    except
+      on EInOutError do Result:= nil;
+      on EEncodingError do Result:= nil;
+    end;
+  FLines.Add(AFileId, Result);
+end;
+
+function TInitGraph.LineText(AFileId: Int64; ALine, ACount: Integer): string;
+begin
+  var Lines: TArray<string>:= LinesOf(AFileId);
+  Result:= '';
+  for var I:= ALine to ALine + ACount - 1 do
+    if (I >= 1) and (I <= Length(Lines)) then Result:= Result + Lines[I - 1] + sLineBreak;
+end;
+
+function TInitGraph.FileText(AFileId: Int64): string;
+begin
+  Result:= string.Join(sLineBreak, LinesOf(AFileId));
+end;
+
+function TInitGraph.BodyText(const ASym: TSymbol): string;
+begin
   var First: Integer:= BodyFirstLine(ASym);
   var Last : Integer:= if ASym.ImplEndLine > 0 then ASym.ImplEndLine else ASym.EndLine;
-  Result:= '';
-  for var I:= First to Last do
-    if (I >= 1) and (I <= Length(Lines)) then Result:= Result + Lines[I - 1] + sLineBreak;
+  Result:= LineText(ASym.FileId, First, Last - First + 1);
 end;
 
 function TInitGraph.Reach(ASectionId: Int64): TArray<TPair<TSymbol, TReference>>;
@@ -894,6 +931,125 @@ begin
     Result:= Findings.ToArray;
   finally
     Witness.Free;
+    Findings.Free;
+    Graph.Free;
+  end;
+end;
+
+{ Does anything prove this name is a class? A Create call proves nothing by itself: TRegEx.Create is a
+  record's (12 false findings of 12 on the drag-lint index before this test). The stores answer for what
+  they hold; KNOWN_RTL_CLASSES answers for the commonest classes when no library index is loaded. An
+  unknown name is silent. }
+function IsProvenClass(const AStore, ALibraryStore: ISymbolStore; const AType: string): Boolean;
+begin
+  if MatchText(AType, KNOWN_RTL_CLASSES) then Exit(True);
+  for var S in AStore.FindSymbolsByExactName(AType) do
+    if S.Kind = skClass then Exit(True);
+  Result:= False;
+  if ALibraryStore <> nil then
+    for var S in ALibraryStore.FindSymbolsByExactName(AType) do
+      if S.Kind = skClass then Exit(True);
+end;
+
+{ A declared type that holds a reference count, not an object reference. `IFoo` with no row in either store
+  counts too: an unknown class is rarely spelled I + capital. }
+function IsInterfaceTyped(const AStore, ALibraryStore: ISymbolStore; const ASignature: string): Boolean;
+begin
+  var T: string:= Trim(ASignature);
+  if (Length(T) > 1) and (T[1] = 'I') and CharInSet(T[2], ['A'..'Z']) then Exit(True);
+  for var S in AStore.FindSymbolsByExactName(T) do
+    if S.Kind = skInterface then Exit(True);
+  Result:= False;
+  if ALibraryStore <> nil then
+    for var S in ALibraryStore.FindSymbolsByExactName(T) do
+      if S.Kind = skInterface then Exit(True);
+end;
+
+function TextFreesVariable(const AText, AVarName: string): Boolean;
+begin
+  var N: string:= TRegEx.Escape(AVarName);
+  Result:= TRegEx.IsMatch(AText,
+    '\b' + N + '\s*\.\s*(Free|Destroy|DisposeOf|Release|FreeOnTerminate)\b'    { a direct free }
+    + '|\bFree\w*\s*\(\s*' + N + '\b'                                          { FreeAndNil(G), FreeObject(G) }
+    + '|\b(Add|AddObject|Insert|Push|Enqueue|Register\w*)\s*\([^;]*\b' + N + '\b', { handed to an owner }
+    [roIgnoreCase]);
+end;
+
+function CollectGlobalNeverFreed(const AStore, ALibraryStore: ISymbolStore): TArray<TLintFinding>;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  var Graph: TInitGraph:= TInitGraph.Create(AStore);
+  var Findings: TList<TLintFinding>:= TList<TLintFinding>.Create;
+  var AllFiles: TArray<Int64>:= AStore.GetAllFileIds;
+  var Seen: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+  try
+    for var Pair in Graph.Units do
+    begin
+      if Pair.Value.InitId = 0 then Continue;
+      var Vars: TDictionary<string, TSymbol>:= TDictionary<string, TSymbol>.Create;
+      try
+        for var Ch in AStore.FindAllChildSymbols(Pair.Value.UnitId) do
+          if Ch.Kind = skVarDecl then Vars.AddOrSetValue(LowerCase(Ch.Name), Ch);
+        for var Item in Graph.Reach(Pair.Value.InitId) do
+        begin
+          if Item.Key.FileId <> Pair.Value.FileId then Continue;
+          for var R in Graph.RefsOf(Item.Key) do
+          begin
+            var Key: string:= LowerCase(R.NameText);
+            var V: TSymbol;
+            if (R.Kind <> REF_WRITE) or (R.ReceiverText <> '') or not Vars.TryGetValue(Key, V) then Continue;
+            if Seen.ContainsKey(Pair.Key + '|' + Key) then Continue;
+            var Match: TMatch:= TRegEx.Match(Graph.LineText(Item.Key.FileId, R.StartLine, CREATE_STATEMENT_LINES),
+              '\b' + TRegEx.Escape(R.NameText) + '\s*:=\s*([A-Za-z_][\w.]*(?:<[^>]*>)?)\s*\.\s*Create\b\s*(?:\(\s*([^,)]*))?',
+              [roIgnoreCase]);
+            if not Match.Success then Continue;
+            var TypeName: string:= Match.Groups[1].Value;
+            var Generic: Integer:= Pos('<', TypeName);
+            if Generic > 0 then TypeName:= Copy(TypeName, 1, Generic - 1);
+            var Arg: string:= if Match.Groups.Count > 2 then Trim(Match.Groups[2].Value) else '';
+            if (not IsProvenClass(AStore, ALibraryStore, TypeName)) or IsInterfaceTyped(AStore, ALibraryStore, V.Signature) then Continue;
+            { An owner argument: an identifier that is not a nil or a boolean. A literal is a plain parameter. }
+            if TRegEx.IsMatch(Arg, '^[A-Za-z_]') and not MatchText(Arg, NOT_AN_OWNER) then Continue;
+            Seen.Add(Pair.Key + '|' + Key, True);
+            var Freed: Boolean:= False;
+            var Named: TDictionary<Int64, Boolean>:= TDictionary<Int64, Boolean>.Create;
+            try
+              Named.AddOrSetValue(Pair.Value.FileId, True);
+              for var Other in AStore.FindRefsNamingInFiles(AllFiles, [Key]) do Named.AddOrSetValue(Other.FileId, True);
+              for var Fid in Named.Keys do
+                if TextFreesVariable(Graph.FileText(Fid), V.Name) then
+                begin
+                  Freed:= True;
+                  Break;
+                end;
+            finally
+              Named.Free;
+            end;
+            if Freed then Continue;
+            var F: TLintFinding:= Default(TLintFinding);
+            F.RuleId    := GLOBAL_NEVER_FREED_RULE;
+            F.Severity  := SEVERITY_HINT;
+            F.FileId    := Pair.Value.FileId;
+            F.FilePath  := AStore.GetFilePath(F.FileId);
+            F.StartLine := R.StartLine;
+            F.StartCol  := R.StartCol;
+            F.EndLine   := R.EndLine;
+            F.EndCol    := R.EndCol;
+            F.SymbolName:= V.Name;
+            F.Message   := Format('%s is set to a new %s by the initialization of %s, and no source that names it frees it: '
+              + 'the object lives to process exit and shows in every leak report. Free it in the unit''s finalization.',
+              [V.Name, TypeName, Pair.Value.Name]);
+            Findings.Add(F);
+          end;
+        end;
+      finally
+        Vars.Free;
+      end;
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Seen.Free;
     Findings.Free;
     Graph.Free;
   end;

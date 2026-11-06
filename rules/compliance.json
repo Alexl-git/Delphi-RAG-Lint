@@ -110,6 +110,7 @@
   "gettickcount-wraparound": {"cwe": ["CWE-190"]},
   "global-form-variable": {"cwe": ["CWE-1108"], "weak": ["CWE-1108"]},
   "global-only-uses-edge": {},
+  "global-set-in-initialization-never-freed": {"cwe": ["CWE-401"]},
   "god-class": {},
   "goto-statement": {"cwe": ["CWE-1075"], "misra": ["MISRA-C-2012-R15.1"]},
   "guid-on-generic-interface": {},

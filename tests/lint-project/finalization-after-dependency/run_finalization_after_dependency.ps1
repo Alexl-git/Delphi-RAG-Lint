@@ -3,7 +3,7 @@
 
   A finalization section reaches a global that a unit finalized earlier tears down. RUN 1: exactly the
   TRIGGER line of uFadSecond; the guarded read and the variable nobody tears down stay silent. RUN 2:
-  plain lint-all, the rule ships OFF. RUN 3: the .dpr lists uFadSecond first, the order flips, so
+  plain lint-all, the rule ships ON. RUN 3: the .dpr lists uFadSecond first, the order flips, so
   uFadFirst's read of GSecond fires and uFadSecond goes silent: the computed order decides.
 
   Usage: pwsh -File tests\lint-project\finalization-after-dependency\run_finalization_after_dependency.ps1 [-Exe <drag-lint.exe>]
@@ -57,7 +57,7 @@ try {
   Check 'RUN 1 it fires in uFadSecond, on GFirst' (@($hits | Where-Object { $_.file_path -like '*uFadSecond.pas' -and $_.message -match 'GFirst' -and $_.message -match 'fxFad\.dpr' }).Count -eq 1) ''
 
   $off = RuleFindings $db @()
-  Check 'RUN 2 plain lint-all: the rule ships OFF' ($off.Count -eq 0) "$($off.Count) finding(s)"
+  Check 'RUN 2 plain lint-all: the rule ships ON' ($off.Count -eq $hits.Count -and $hits.Count -gt 0) "$($off.Count) finding(s)"
 
   $src3 = Fresh 'b'
   $dpr = Join-Path $src3 'fxFad.dpr'
