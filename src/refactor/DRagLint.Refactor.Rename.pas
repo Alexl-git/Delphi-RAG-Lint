@@ -1073,8 +1073,8 @@ var
   begin
     Result:= Default(TTSNode);
     if N.IsNull then Exit;
-    if (N.NodeType = 'identifier') and (NLine(N) = ALine)
-       and ((not AByChar and (NColOf(N) = ACol)) or (AByChar and (NCharCol(N) = ACol))) then
+    var ColOf:= if AByChar then NCharCol(N) else NColOf(N);
+    if (N.NodeType = 'identifier') and (NLine(N) = ALine) and (ColOf = ACol) then
       Exit(N);
     for I:= 0 to N.NamedChildCount - 1 do
     begin
@@ -1166,10 +1166,7 @@ var
 
     function Squeezed(const AText: string): string;
     begin
-      Result:= '';
-      for var C in AText do
-        if not CharInSet(C, [' ', #9, #13, #10]) then Result:= Result + C;
-      Result:= LowerCase(Result);
+      Result:= LowerCase(AText.Replace(' ', '').Replace(#9, '').Replace(#13, '').Replace(#10, ''));
     end;
 
     { `const A, B: T = 0` as `const a:t;const b:t;`: grouping and default values may differ between the two headers. }
@@ -1196,7 +1193,7 @@ var
           if Ch.NodeType = 'identifier' then
           begin
             PrefixDone:= True;
-            Result:= Result + Squeezed(Prefix) + ' ' + Squeezed(NStr(Ch)) + ':' + Squeezed(TypeText) + ';';
+            Result:= Result + Squeezed(Prefix) + ' ' + Squeezed(NStr(Ch)) + ':' + Squeezed(TypeText) + ';'; // dl:ok concat-in-loop -- one header's parameters, a handful
           end
           else if not PrefixDone then Prefix:= Prefix + NStr(Ch);
         end;
@@ -1259,7 +1256,8 @@ var
     end;
 
   begin
-    if not (OutermostProc(ARoot) = OwnerProc) then Exit;
+    var IsTopLevel:= OutermostProc(ARoot) = OwnerProc;
+    if not IsTopLevel then Exit;
     var Header:= OwnerProc.ChildByField('header');
     if Header.IsNull then Exit;
     var OwnerName:= Squeezed(NStr(Header.ChildByField('name')));

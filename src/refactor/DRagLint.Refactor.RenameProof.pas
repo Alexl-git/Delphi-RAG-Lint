@@ -1780,15 +1780,52 @@ end;
 
 { A component's name in a text form, line by line. Who owns the form decides a bare name; only what the line's shape can
   tell apart is decided at all: the rest refuses, because a form that no longer loads is no compile error. }
-procedure TProver.ScanDfmComponent(const pPath, pText: string; pInstances: TStringList); // dl:ok cognitive-complexity,cyclomatic-complexity -- one line-shape ladder over a small text format, read top to bottom
+procedure TProver.ScanDfmComponent(const pPath, pText: string; pInstances: TStringList);
 const
   CValueSep = ' = ';
+var
+  S, Value: string;
+  Colon, Eq: Integer;
+  IsHeader, InInline, RootKnown, Mine, IsEnum: Boolean;
+
+  { One token of the old name at pAt of line pLine. }
+  procedure Decide(pLine, pAt: Integer);
+  begin
+    var Undecided:= True;
+    var IsEdit:= False;
+    if IsHeader then
+    begin
+      Undecided:= (pAt < Colon) and (InInline or not RootKnown);
+      IsEdit:= (pAt < Colon) and Mine and not Undecided;
+    end
+    else if (Eq > 0) and (pAt < Eq) then Undecided:= False { a property's own name }
+    else if (Eq > 0) and (SameText(Value, FOld) or StartsText(FOld + '.', Value)) then
+    begin
+      Undecided:= InInline or not RootKnown or (Mine and IsEnum);
+      IsEdit:= Mine and not Undecided;
+    end
+    else if (Eq > 0) and (pAt >= 2) and (S[pAt - 1] = '.') and EndsText('.' + FOld, Value) then
+    begin
+      Undecided:= pInstances.IndexOf(Copy(Value, 1, Length(Value) - Length(FOld) - 1)) < 0;
+      IsEdit:= not Undecided;
+    end;
+    if Undecided then
+      Refuse(CRefuseDfmNameUnbound, pPath, pLine, pAt,
+        Format('this form names "%s" where nothing tells which component it means: fix it by hand', [FOld]))
+    else if IsEdit then
+    begin
+      AddEdit(pPath, pLine, pAt);
+      Inc(FBound);
+    end
+    else Inc(FOther);
+  end;
+
 begin
-  var Root:= DfmRootSymbol(FStore, pPath);
-  var Mine:= False;
-  for var S in FGroup.Values do
-    if DfmBindingBelongsTo(FStore, pPath, FStore.GetSymbolById(S.ParentId), FOld) then Mine:= True;
-  var IsEnum:= (Length(ReadSyms('name = :n COLLATE NOCASE AND kind = ''enum_value''', FOld)) > 0)
+  RootKnown:= DfmRootSymbol(FStore, pPath).Id <> 0;
+  Mine:= False;
+  for var G in FGroup.Values do
+    if DfmBindingBelongsTo(FStore, pPath, FStore.GetSymbolById(G.ParentId), FOld) then Mine:= True;
+  IsEnum:= (Length(ReadSyms('name = :n COLLATE NOCASE AND kind = ''enum_value''', FOld)) > 0)
     or LibAny('SELECT 1 FROM symbols WHERE name = :n COLLATE NOCASE AND kind = ''enum_value'' LIMIT 1', FOld);
   var Lines:= TStringList.Create;
   try
@@ -1798,14 +1835,13 @@ begin
     var InBlob:= False;
     for var L:= 0 to Lines.Count - 1 do
     begin
-      var S:= Lines[L];
+      S:= Lines[L];
       if InBlob then
       begin
-        InBlob:= Pos('}', S) = 0;
+        InBlob:= not S.Contains('}');
         Continue;
       end;
       var T:= Trim(S);
-      var FirstWord:= Copy(T, 1, Pos(' ', T + ' ') - 1);
       if SameText(T, 'end') or SameText(T, 'end>') then
       begin
         if Depth = InlineAt then InlineAt:= 0;
@@ -1817,11 +1853,12 @@ begin
         Inc(Depth);
         Continue;
       end;
-      var Colon:= Pos(':', S);
-      var IsHeader:= MatchText(FirstWord, ['object', 'inherited', 'inline']) and (Colon > 0);
-      var InInline:= InlineAt > 0;
-      var Eq:= if IsHeader then 0 else Pos(CValueSep, S);
-      var Value:= if Eq > 0 then Trim(Copy(S, Eq + Length(CValueSep), MaxInt)) else '';
+      var FirstWord:= Copy(T, 1, Pos(' ', T + ' ') - 1);
+      Colon:= Pos(':', S);
+      IsHeader:= MatchText(FirstWord, ['object', 'inherited', 'inline']) and (Colon > 0);
+      InInline:= InlineAt > 0;
+      Eq:= if IsHeader then 0 else Pos(CValueSep, S);
+      Value:= if Eq > 0 then Trim(Copy(S, Eq + Length(CValueSep), MaxInt)) else '';
       var At:= 1;
       var InStr:= False;
       while At <= Length(S) do
@@ -1834,37 +1871,7 @@ begin
         end
         else if not InStr and IsIdentAt(S, FOld, At) then
         begin
-          var Undecided:= True;
-          var IsEdit:= False;
-          if IsHeader then
-          begin
-            Undecided:= (At < Colon) and (InInline or (Root.Id = 0));
-            IsEdit:= (At < Colon) and Mine and not Undecided;
-          end
-          else if (Eq > 0) and (At < Eq) then Undecided:= False { a property's own name }
-          else if Eq > 0 then
-          begin
-            if SameText(Value, FOld) or StartsText(FOld + '.', Value) then
-            begin
-              Undecided:= InInline or (Root.Id = 0) or (Mine and IsEnum);
-              IsEdit:= Mine and not Undecided;
-            end
-            else if (At >= 2) and (S[At - 1] = '.') and SameText(Copy(Value, Length(Value) - Length(FOld), MaxInt), '.' + FOld) then
-            begin
-              var Qualifier:= Copy(Value, 1, Length(Value) - Length(FOld) - 1);
-              Undecided:= pInstances.IndexOf(Qualifier) < 0;
-              IsEdit:= not Undecided;
-            end;
-          end;
-          if Undecided then
-            Refuse(CRefuseDfmNameUnbound, pPath, L + 1, At,
-              Format('this form names "%s" where nothing tells which component it means: fix it by hand', [FOld]))
-          else if IsEdit then
-          begin
-            AddEdit(pPath, L + 1, At);
-            Inc(FBound);
-          end
-          else Inc(FOther);
+          Decide(L + 1, At);
           Inc(At, Length(FOld) - 1);
         end;
         Inc(At);
