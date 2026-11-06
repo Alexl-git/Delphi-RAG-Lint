@@ -792,10 +792,12 @@ type
       /// matching X.Close / X.Active := False in a finally block -- leaks a server cursor
       /// on an exception path.</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <param name="AStore">Optional project index. With a ref_types table (index fact F1) an `X.Open` whose receiver has a known static type with no TDataSet in its whole ancestry is not reported; nil, no table, no row or an unfollowable ancestry keep the finding.</param>
+      /// <param name="AFileId">The unit's id in AStore; 0 skips the fact.</param>
       /// <returns>One finding per opened-but-not-finally-closed dataset variable.</returns>
       /// <remarks>
       /// Severity warning. Per-routine flow analysis (mirrors CheckUnprotectedFree).
-      /// Pure AST; no DB. Never raises.
+      /// Pure AST, plus the optional F1 receiver type. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
       /// <para>Calls: CollectLocalTypes, DeclNames, Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.CollectPlainActiveTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, HasActiveField, Integer (+9 more)</para>
@@ -808,7 +810,7 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckDatasetOpen(const AFile: string): TArray<TLintFinding>;
+      class function CheckDatasetOpen(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0): TArray<TLintFinding>;
       /// <summary>Flags a critical section acquired (X.Enter or X.Acquire) in a routine with
       /// no matching X.Leave / X.Release in a finally block -- a lock leaked on an exception
       /// path deadlocks.</summary>
@@ -8564,8 +8566,9 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckDatasetOpen(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckDatasetOpen(const AFile: string; const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 var
+  Reader         : TExprTypeReader            ;  // 1.45 la: F1 static type of the receiver; nil without a store
   Src            : TBytes                     ;
   PF      : TParsedFile        ;
   Findings       : TList<TLintFinding>        ;
@@ -8751,6 +8754,25 @@ var
     Result:= LocalTypes.TryGetValue(AVar, Ty) and PlainActiveTypes.ContainsKey(Ty);
   end;
 
+  { 1.45 la (row 10): True only when index fact F1 types the receiver of the X.M node N and the whole
+    ancestry of that type is known and has no TDataSet in it (a port, a connection, a report). No
+    store, no ref_types table, no row, an unknown or library-only ancestry: False, and the finding
+    stands as it always did. }
+  function ReceiverKnownNotDataset(const N: TTSNode): Boolean;
+  var
+    Dot : TTSNode;
+    Leaf: string ;
+  begin
+    Result:= False;
+    if Reader = nil then Exit;
+    Dot:= N;
+    if N.NodeType = 'exprCall' then Dot:= N.ChildByField('entity');
+    if Dot.IsNull then Exit;
+    var L: TTSNode:= Dot.ChildByField('lhs');
+    if L.IsNull or not Reader.TypeLeafOf(L, Leaf) then Exit;
+    Result:= Reader.Descends(Leaf, 'TDataSet') = tdNo;
+  end;
+
   procedure WalkBody(const N: TTSNode; AInFinally: Boolean);
   var
     I   : Integer;
@@ -8763,7 +8785,7 @@ var
     if DotMethod(N, V, M) then
     begin
       if SameText(M, 'Open') then
-      begin if IsWholeStatement(N) and not Opened.ContainsKey(V) then Opened.Add(V, N.StartPoint); end
+      begin if IsWholeStatement(N) and not Opened.ContainsKey(V) and not ReceiverKnownNotDataset(N) then Opened.Add(V, N.StartPoint); end
       else if SameText(M, 'Close') and AInFinally then ClosedInFinally.AddOrSetValue(V, True);
     end
     else if IsActiveAssign(N, True, V) then
@@ -8834,14 +8856,17 @@ begin
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
+  Reader:= nil;
   Findings:= TList<TLintFinding>.Create;
   PlainActiveTypes:= TDictionary<string, Boolean>.Create;
   LocalTypes:= TDictionary<string, string>.Create;
   try
+    if (AStore <> nil) and (AFileId > 0) then Reader:= TExprTypeReader.Create(AStore, nil, AFileId, Src);
     CollectPlainActiveTypes(PF.Tree.RootNode);
     VisitProcs(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
+    Reader.Free;
     LocalTypes.Free;
     PlainActiveTypes.Free;
     Findings.Free;

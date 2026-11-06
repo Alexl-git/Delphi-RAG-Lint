@@ -86,7 +86,15 @@ try {
   Check 'concat-in-loop with the table: only the TRIGGER-CONCAT lines remain' (($cOn -join ',') -eq ($cTrig -join ',')) "got [$($cOn -join ',')] want [$($cTrig -join ',')]"
   Check 'concat-in-loop has a trigger and a control in the fixture' (($cTrig.Count -gt 0) -and ($cCtl.Count -gt 0))
   Check 'concat-in-loop without the table: today, the CONTROL-CONCAT lines are reported too' ((($cOff | Sort-Object) -join ',') -eq ((@($cTrig) + @($cCtl) | Sort-Object) -join ',')) "got [$($cOff -join ',')]"
-} finally {
+  # row 10, dataset-open-without-close: the fact drops a receiver that is provably no TDataSet
+  $dTrig = @(Markers (Join-Path $src 'uAfDs.pas') 'TRIGGER-DSOPEN'); $dCtl = @(Markers (Join-Path $src 'uAfDs.pas') 'CONTROL-DSOPEN')
+  function DsLines($F) { return @($F | Where-Object { $_.rule -eq 'dataset-open-without-close' -and $_.file_path -like '*uAfDs*' } | ForEach-Object { [int]$_.start_line } | Sort-Object) }
+  $dAll = @(($dTrig + $dCtl) | Sort-Object)
+  Check 'dataset-open with the table: only the TRIGGER-DSOPEN lines' ((@(DsLines $on) -join ',') -eq ($dTrig -join ',')) "got [$(@(DsLines $on) -join ',')] want [$($dTrig -join ',')]"
+  Check 'dataset-open has a trigger and a control in the fixture' (($dTrig.Count -gt 0) -and ($dCtl.Count -gt 0))
+  Check 'dataset-open without the table: today, the CONTROL lines are reported too' ((@(DsLines $off) -join ',') -eq ($dAll -join ',')) "got [$(@(DsLines $off) -join ',')]"
+  $nodDs = Parse-Findings (& $exePath lint (Join-Path $src 'uAfDs.pas') --format json 2>$null)
+  Check 'dataset-open without an index: today, the CONTROL lines are reported too' ((@(DsLines $nodDs) -join ',') -eq ($dAll -join ',')) "got [$(@(DsLines $nodDs) -join ',')]"} finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
 }
 if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }

@@ -17638,7 +17638,7 @@ begin
       { v0.63: try..except that swallows the exception (no raise/log/HandleException) }
       if (NarrowRule = '') or (NarrowRule = 'try-except-swallowed') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(EffPath);
       { v0.63: dataset opened without a matching Close in a finally block }
-      if (NarrowRule = '') or (NarrowRule = 'dataset-open-without-close') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen(EffPath);
+      if (NarrowRule = '') or (NarrowRule = 'dataset-open-without-close') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen(EffPath, FlowStore, FlowFid);
       { v0.63: critical section acquired without a matching Leave/Release in finally }
       if (NarrowRule = '') or (NarrowRule = 'criticalsection-not-released') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(EffPath);
       { v0.63: routine with more than 5 Exit statements }
@@ -24022,7 +24022,7 @@ begin
         if LintRuleWants(Nr, ['try-except-swallowed']) then
           ScanAdd(22, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(PasPath));
         if LintRuleWants(Nr, ['dataset-open-without-close']) then
-          ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath));
+          ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath, Store, Store.FindFileIdByPath(PasPath)));
         if LintRuleWants(Nr, ['criticalsection-not-released']) then
           ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath));
         if LintRuleWants(Nr, ['too-many-exit-points']) then
