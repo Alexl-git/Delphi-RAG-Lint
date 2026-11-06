@@ -27,6 +27,8 @@ const
   INIT_ORDER_HAZARD_RULE = 'init-order-hazard';
   /// <summary>The rule id, as `rules --json`, `--rule` and dl:ok markers spell it.</summary>
   FINALIZATION_AFTER_DEPENDENCY_RULE = 'finalization-after-dependency';
+  /// <summary>The rule id, as `rules --json`, `--rule` and dl:ok markers spell it.</summary>
+  HEAVY_INITIALIZATION_RULE = 'heavy-initialization';
 
 /// <summary>An initialization section reaches a global variable of a unit that initializes LATER in
 /// the computed order, and that unit's own initialization is what sets the variable: the read sees
@@ -50,6 +52,18 @@ function CollectInitOrderHazard(const AStore: ISymbolStore): TArray<TLintFinding
 /// the FreeAndNil + Assigned idiom. An index holding no .dpr yields nothing.</remarks>
 function CollectFinalizationAfterDependency(const AStore: ISymbolStore): TArray<TLintFinding>;
 
+/// <summary>An initialization section reaches the file system, the registry, the network, a database or
+/// a dialog: work that can fail or block before the application has an exception handler or a window,
+/// and that every process using the unit pays for at start.</summary>
+/// <param name="AStore">The project index; nil yields no findings.</param>
+/// <returns>One 'heavy-initialization' hint per section, anchored at the call or reference that starts
+/// the first path; the message names each category and a routine that shows it.</returns>
+/// <remarks>Not thread-safe. Evidence is positive only: the section's refs and the reached routines'
+/// refs against the curated names below, plus symbol_facts.touches (registry, network, transactions)
+/// and sql_reads / sql_writes of a reached routine. A path behind an `if` counts, because the index has
+/// no branch conditions. TPath alone is not a file access. Certain call edges only.</remarks>
+function CollectHeavyInitialization(const AStore: ISymbolStore): TArray<TLintFinding>;
+
 implementation
 
 uses
@@ -68,6 +82,29 @@ const
   ALLOCATING_INTRINSICS: array[0..2] of string = ('New', 'GetMem', 'SetLength');
   CONFIDENCE_CERTAIN = 'certain';
   SEVERITY_WARNING = 'warning';
+  SEVERITY_HINT = 'hint';
+  COMMENT_LINE = '//';
+  COMMENT_PAREN_OPEN = '(*';
+  COMMENT_PAREN_CLOSE = '*)';
+  ASSIGN_TOKEN = ':=';
+  CLOSURE_OPENERS: array[0..3] of string = ('begin', 'case', 'try', 'asm');
+  ROUTINE_KEYWORDS: array[0..1] of string = ('function', 'procedure');
+  CLOSURE_PREDECESSORS: array[0..3] of string = ('(', ',', '[', ASSIGN_TOKEN);
+  REF_MEMBER = 'member-access';
+  TOUCH_SEPARATOR = '|';
+  CATEGORY_FILE = 'file system';
+  CATEGORY_REGISTRY = 'registry';
+  CATEGORY_NETWORK = 'network';
+  CATEGORY_DATABASE = 'database';
+  CATEGORY_DIALOG = 'dialog';
+  HEAVY_CATEGORY_ORDER: array[0..4] of string = (CATEGORY_DATABASE, CATEGORY_NETWORK, CATEGORY_FILE, CATEGORY_REGISTRY, CATEGORY_DIALOG);
+  HEAVY_TYPES_FILE: array[0..5] of string = ('TFile', 'TDirectory', 'TStreamWriter', 'TFileStream', 'TIniFile', 'TMemIniFile');
+  HEAVY_TYPES_REGISTRY: array[0..1] of string = ('TRegistry', 'TRegistryIniFile');
+  HEAVY_TYPES_NETWORK: array[0..3] of string = ('THTTPClient', 'TIdHTTP', 'TNetHTTPClient', 'TIdTCPClient');
+  HEAVY_BARE_FILE: array[0..3] of string = ('AssignFile', 'Rewrite', 'Reset', 'FindFirst');
+  HEAVY_MEMBER_FILE: array[0..1] of string = ('LoadFromFile', 'SaveToFile');
+  HEAVY_MEMBER_DB: array[0..3] of string = ('ExecSQL', 'StartTransaction', 'Commit', 'Rollback');
+  HEAVY_BARE_DIALOG: array[0..3] of string = ('ShowMessage', 'MessageDlg', 'MessageBox', 'InputBox');
 
 type
   TUnitNode = record
@@ -86,6 +123,11 @@ type
 
   TSectionKind = (skiInit, skiFinal);
 
+  { A span of source, 1-based lines. }
+  TLineSpan = record
+    FromLine, FromCol, ToLine, ToCol: Integer;
+  end;
+
   { The index read once, for the rules of this unit: units, uses, refs by enclosing symbol, call edges. }
   TInitGraph = class
   private
@@ -100,6 +142,8 @@ type
     FSymbols   : TDictionary<Int64, TSymbol>;
     FLines     : TDictionary<Int64, TArray<string>>;
     FOwnNames  : TObjectDictionary<Int64, TDictionary<string, Boolean>>;
+    FLiveRefs  : TDictionary<Int64, TArray<TReference>>;
+    FClosureRef: TDictionary<Int64, Boolean>;
     procedure LoadUnits;
     function UsesOfFile(AFileId: Int64): TArray<string>;
     procedure LoadRefsOfFile(AFileId: Int64);
@@ -111,7 +155,8 @@ type
     /// <summary>Lower-case unit name -> position in the order AProgram initializes its units.</summary>
     /// <remarks>The caller owns the result.</remarks>
     function ComputeOrder(AProgram: Int64): TDictionary<string, Integer>;
-    /// <summary>The refs enclosed by ASym; empty when none.</summary>
+    /// <summary>The refs enclosed by ASym that run when ASym runs: a reference inside an anonymous
+    /// method's body is left out, since passing a closure does not call it.</summary>
     function RefsOf(const ASym: TSymbol): TArray<TReference>;
     /// <summary>The certain, resolved call edges out of ASymbolId.</summary>
     function EdgesOf(ASymbolId: Int64): TArray<TCallEdge>;
@@ -123,10 +168,125 @@ type
     function FileUses(AFileId: Int64; const ALowerUnit: string): Boolean;
     /// <summary>The body of ASym, joined; '' when the source cannot be read.</summary>
     function BodyText(const ASym: TSymbol): string;
+    /// <summary>Every routine reachable from ASectionId by certain call edges, breadth first, the section
+    /// itself first (its anchor is empty); each with the ref in the section that starts its path.</summary>
+    function Reach(ASectionId: Int64): TArray<TPair<TSymbol, TReference>>;
     property Units: TDictionary<string, TUnitNode> read FUnits;
     property ByFile: TDictionary<Int64, string> read FByFile;
     property Store: ISymbolStore read FStore;
   end;
+
+function BodyFirstLine(const ASym: TSymbol): Integer;
+begin
+  Result:= if ASym.ImplStartLine > 0 then ASym.ImplStartLine else ASym.StartLine;
+end;
+
+{ The anonymous method bodies in a routine's text. Lexical, because the index keeps no symbol for one: a
+  `function` or `procedure` keyword right after `(`, `,`, `[` or `:=` is an expression (`F: function` and
+  `T = function` are types, and a named local routine is followed by its name after any other token), and
+  its body runs to the `end` that balances the first `begin`. Comments and strings are skipped. }
+function ClosureSpans(const AText: string; AFirstLine: Integer): TArray<TLineSpan>;
+var
+  I, Line, LineStart, Depth: Integer;
+  Prev: string;
+  InClosure: Boolean;
+  Span: TLineSpan;
+
+  function ColHere: Integer;
+  begin
+    Result:= I - LineStart;
+  end;
+
+  procedure SkipUntil(const AStop: string);
+  begin
+    while (I <= Length(AText)) and (Copy(AText, I, Length(AStop)) <> AStop) do
+    begin
+      if AText[I] = #10 then
+      begin
+        Inc(Line);
+        LineStart:= I + 1;
+      end;
+      Inc(I);
+    end;
+    Inc(I, Length(AStop));
+  end;
+
+begin
+  Result:= nil;
+  I:= 1;
+  Line:= AFirstLine;
+  LineStart:= 1;
+  Depth:= 0;
+  Prev:= '';
+  InClosure:= False;
+  Span:= Default(TLineSpan);
+  while I <= Length(AText) do
+  begin
+    var C: Char:= AText[I];
+    if C = #10 then
+    begin
+      Inc(Line);
+      LineStart:= I + 1;
+      Inc(I);
+    end
+    else if CharInSet(C, [#9, #13, ' ']) then Inc(I)
+    else if (C = '/') and (Copy(AText, I, Length(COMMENT_LINE)) = COMMENT_LINE) then
+    begin
+      while (I <= Length(AText)) and (AText[I] <> #10) do Inc(I);
+    end
+    else if C = '{' then SkipUntil('}')
+    else if (C = '(') and (Copy(AText, I, Length(COMMENT_PAREN_OPEN)) = COMMENT_PAREN_OPEN) then SkipUntil(COMMENT_PAREN_CLOSE)
+    else if C = '''' then
+    begin
+      Inc(I);
+      while (I <= Length(AText)) and not CharInSet(AText[I], ['''', #10]) do Inc(I);
+      Inc(I);
+      Prev:= 'literal';
+    end
+    else if CharInSet(C, ['A'..'Z', 'a'..'z', '_']) then
+    begin
+      var From: Integer:= I;
+      while (I <= Length(AText)) and CharInSet(AText[I], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(I);
+      var Word: string:= LowerCase(Copy(AText, From, I - From));
+      if InClosure then
+      begin
+        if MatchStr(Word, CLOSURE_OPENERS) then Inc(Depth)
+        else if (Word = 'end') and (Depth > 0) then
+        begin
+          Dec(Depth);
+          if Depth = 0 then
+          begin
+            Span.ToLine:= Line;
+            Span.ToCol:= ColHere;
+            Result:= Result + [Span];
+            InClosure:= False;
+          end;
+        end;
+      end
+      else if MatchStr(Word, ROUTINE_KEYWORDS) and MatchStr(Prev, CLOSURE_PREDECESSORS) then
+      begin
+        InClosure:= True;
+        Depth:= 0;
+        Span.FromLine:= Line;
+        Span.FromCol:= From - LineStart;
+      end;
+      Prev:= Word;
+    end
+    else
+    begin
+      Prev:= if Copy(AText, I, Length(ASSIGN_TOKEN)) = ASSIGN_TOKEN then ASSIGN_TOKEN else string(C);
+      Inc(I, Length(Prev));
+    end;
+  end;
+end;
+
+function IsInsideSpan(const ASpans: TArray<TLineSpan>; ALine, ACol: Integer): Boolean;
+begin
+  Result:= False;
+  for var S in ASpans do
+    if ((ALine > S.FromLine) or ((ALine = S.FromLine) and (ACol > S.FromCol)))
+      and ((ALine < S.ToLine) or ((ALine = S.ToLine) and (ACol <= S.ToCol))) then Exit(True);
+end;
 
 constructor TInitGraph.Create(const AStore: ISymbolStore);
 begin
@@ -142,11 +302,15 @@ begin
   FSymbols   := TDictionary<Int64, TSymbol>.Create;
   FLines     := TDictionary<Int64, TArray<string>>.Create;
   FOwnNames  := TObjectDictionary<Int64, TDictionary<string, Boolean>>.Create([doOwnsValues]);
+  FLiveRefs  := TDictionary<Int64, TArray<TReference>>.Create;
+  FClosureRef:= TDictionary<Int64, Boolean>.Create;
   LoadUnits;
 end;
 
 destructor TInitGraph.Destroy;
 begin
+  FClosureRef.Free;
+  FLiveRefs.Free;
   FOwnNames.Free;
   FLines.Free;
   FSymbols.Free;
@@ -265,17 +429,28 @@ end;
 
 function TInitGraph.RefsOf(const ASym: TSymbol): TArray<TReference>;
 begin
+  if FLiveRefs.TryGetValue(ASym.Id, Result) then Exit;
   LoadRefsOfFile(ASym.FileId);
   var L: TList<TReference>;
-  if FRefs.TryGetValue(ASym.Id, L) then Result:= L.ToArray else Result:= nil;
+  Result:= nil;
+  if FRefs.TryGetValue(ASym.Id, L) then
+  begin
+    var Closures: TArray<TLineSpan>:= ClosureSpans(BodyText(ASym), BodyFirstLine(ASym));
+    for var R in L do
+      if IsInsideSpan(Closures, R.StartLine, R.StartCol) then FClosureRef.AddOrSetValue(R.Id, True)
+      else Result:= Result + [R];
+  end;
+  FLiveRefs.Add(ASym.Id, Result);
 end;
 
 function TInitGraph.EdgesOf(ASymbolId: Int64): TArray<TCallEdge>;
 begin
   if FEdges.TryGetValue(ASymbolId, Result) then Exit;
+  RefsOf(Symbol(ASymbolId));
   Result:= nil;
   for var E in FStore.GetCallEdgesFromSymbol(ASymbolId) do
-    if (E.TargetSymbolId > 0) and (E.Confidence = CONFIDENCE_CERTAIN) then Result:= Result + [E];
+    if (E.TargetSymbolId > 0) and (E.Confidence = CONFIDENCE_CERTAIN) and not FClosureRef.ContainsKey(E.RefId) then
+      Result:= Result + [E];
   FEdges.Add(ASymbolId, Result);
 end;
 
@@ -324,11 +499,46 @@ begin
       end;
     FLines.Add(ASym.FileId, Lines);
   end;
-  var First: Integer:= if ASym.ImplStartLine > 0 then ASym.ImplStartLine else ASym.StartLine;
+  var First: Integer:= BodyFirstLine(ASym);
   var Last : Integer:= if ASym.ImplEndLine > 0 then ASym.ImplEndLine else ASym.EndLine;
   Result:= '';
   for var I:= First to Last do
     if (I >= 1) and (I <= Length(Lines)) then Result:= Result + Lines[I - 1] + sLineBreak;
+end;
+
+function TInitGraph.Reach(ASectionId: Int64): TArray<TPair<TSymbol, TReference>>;
+begin
+  var Section: TSymbol:= Symbol(ASectionId);
+  var ById: TDictionary<Int64, TReference>:= TDictionary<Int64, TReference>.Create;
+  var Done: TDictionary<Int64, Boolean>:= TDictionary<Int64, Boolean>.Create;
+  var Items: TList<TPair<TSymbol, TReference>>:= TList<TPair<TSymbol, TReference>>.Create;
+  try
+    for var R in RefsOf(Section) do ById.AddOrSetValue(R.Id, R);
+    Done.Add(ASectionId, True);
+    Items.Add(TPair<TSymbol, TReference>.Create(Section, Default(TReference)));
+    var Head: Integer:= 0;
+    while Head < Items.Count do
+    begin
+      var Item: TPair<TSymbol, TReference>:= Items[Head];
+      Inc(Head);
+      for var E in EdgesOf(Item.Key.Id) do
+      begin
+        var Anchor: TReference:= Item.Value;
+        if Item.Key.Id = ASectionId then
+          if not ById.TryGetValue(E.RefId, Anchor) then Continue;
+        if not Done.ContainsKey(E.TargetSymbolId) then
+        begin
+          Done.Add(E.TargetSymbolId, True);
+          Items.Add(TPair<TSymbol, TReference>.Create(Symbol(E.TargetSymbolId), Anchor));
+        end;
+      end;
+    end;
+    Result:= Items.ToArray;
+  finally
+    Items.Free;
+    Done.Free;
+    ById.Free;
+  end;
 end;
 
 { --------------------------------------------------------------------------------------------- }
@@ -497,7 +707,6 @@ begin
   var Own  : string:= FGraph.Units[AKey].Name;
   var F: TLintFinding:= Default(TLintFinding);
   F.RuleId    := if FKind = skiInit then INIT_ORDER_HAZARD_RULE else FINALIZATION_AFTER_DEPENDENCY_RULE;
-
   F.Severity  := SEVERITY_WARNING;
   F.FileId    := FGraph.Units[AKey].FileId;
   F.FilePath  := FGraph.Store.GetFilePath(F.FileId);
@@ -545,39 +754,11 @@ end;
 procedure TOrderWalk.WalkFrom(const AKey: string; const ANode: TUnitNode; const AProgramName: string;
   AOrder: TDictionary<string, Integer>);
 begin
-  var SecId: Int64:= SectionOf(ANode);
-  var Section: TSymbol:= FGraph.Symbol(SecId);
-  var ById: TDictionary<Int64, TReference>:= TDictionary<Int64, TReference>.Create;
-  var Done: TDictionary<Int64, Boolean>:= TDictionary<Int64, Boolean>.Create;
-  var Queue: TQueue<TPair<Int64, TReference>>:= TQueue<TPair<Int64, TReference>>.Create;
-  try
-    for var R in FGraph.RefsOf(Section) do ById.AddOrSetValue(R.Id, R);
-    CheckBody(AKey, Section, Default(TReference), False, AProgramName, AOrder);
-    Done.Add(SecId, True);
-    for var E in FGraph.EdgesOf(SecId) do
-    begin
-      var R: TReference;
-      if (not Done.ContainsKey(E.TargetSymbolId)) and ById.TryGetValue(E.RefId, R) then
-      begin
-        Done.Add(E.TargetSymbolId, True);
-        Queue.Enqueue(TPair<Int64, TReference>.Create(E.TargetSymbolId, R));
-      end;
-    end;
-    while Queue.Count > 0 do
-    begin
-      var Item: TPair<Int64, TReference>:= Queue.Dequeue;
-      CheckBody(AKey, FGraph.Symbol(Item.Key), Item.Value, True, AProgramName, AOrder);
-      for var E in FGraph.EdgesOf(Item.Key) do
-        if not Done.ContainsKey(E.TargetSymbolId) then
-        begin
-          Done.Add(E.TargetSymbolId, True);
-          Queue.Enqueue(TPair<Int64, TReference>.Create(E.TargetSymbolId, Item.Value));
-        end;
-    end;
-  finally
-    Queue.Free;
-    Done.Free;
-    ById.Free;
+  var IsSection: Boolean:= True;
+  for var Item in FGraph.Reach(SectionOf(ANode)) do
+  begin
+    CheckBody(AKey, Item.Key, Item.Value, not IsSection, AProgramName, AOrder);
+    IsSection:= False;
   end;
 end;
 
@@ -613,6 +794,107 @@ begin
       Walk.Free;
     end;
   finally
+    Graph.Free;
+  end;
+end;
+
+{ What one ref shows, or '' for nothing. TYPE names count anywhere, as a receiver or as the ref itself;
+  a member name only as a member, a bare routine only with no receiver: `Reset` and `Commit` are ordinary
+  names. TPath is not here: it computes strings. }
+function HeavyCategoryOfRef(const AReference: TReference): string;
+begin
+  Result:= '';
+  var Head: string:= ReceiverHead(AReference.ReceiverText);
+  var Name: string:= AReference.NameText;
+  if MatchText(Head, HEAVY_TYPES_FILE) or MatchText(Name, HEAVY_TYPES_FILE) then Exit(CATEGORY_FILE);
+  if MatchText(Head, HEAVY_TYPES_REGISTRY) or MatchText(Name, HEAVY_TYPES_REGISTRY) then Exit(CATEGORY_REGISTRY);
+  if MatchText(Head, HEAVY_TYPES_NETWORK) or MatchText(Name, HEAVY_TYPES_NETWORK) then Exit(CATEGORY_NETWORK);
+  if AReference.Kind <> REF_CALL then
+    if AReference.Kind <> REF_MEMBER then Exit;
+  if AReference.ReceiverText = '' then
+  begin
+    if MatchText(Name, HEAVY_BARE_FILE) then Exit(CATEGORY_FILE);
+    if MatchText(Name, HEAVY_BARE_DIALOG) then Exit(CATEGORY_DIALOG);
+  end
+  else
+  begin
+    if MatchText(Name, HEAVY_MEMBER_FILE) then Exit(CATEGORY_FILE);
+    if MatchText(Name, HEAVY_MEMBER_DB) then Exit(CATEGORY_DATABASE);
+    if MatchText(Name, HEAVY_BARE_DIALOG) then Exit(CATEGORY_DIALOG);
+  end;
+end;
+
+function CollectHeavyInitialization(const AStore: ISymbolStore): TArray<TLintFinding>;
+var
+  Witness: TDictionary<string, string>;
+  Anchor : TReference;
+
+  procedure Note(const ACategory: string; const AVia: TSymbol; const AAt: TReference);
+  begin
+    if Witness.ContainsKey(ACategory) then Exit;
+    Witness.Add(ACategory, AVia.QualifiedName);
+    if Anchor.StartLine = 0 then Anchor:= AAt;
+  end;
+
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  var Graph: TInitGraph:= TInitGraph.Create(AStore);
+  var Findings: TList<TLintFinding>:= TList<TLintFinding>.Create;
+  Witness:= TDictionary<string, string>.Create;
+  try
+    for var Pair in Graph.Units do
+    begin
+      if Pair.Value.InitId = 0 then Continue;
+      Witness.Clear;
+      Anchor:= Default(TReference);
+      var IsSection: Boolean:= True;
+      for var Item in Graph.Reach(Pair.Value.InitId) do
+      begin
+        for var R in Graph.RefsOf(Item.Key) do
+        begin
+          var Category: string:= HeavyCategoryOfRef(R);
+          if Category = '' then Continue;
+          if IsSection then Note(Category, Item.Key, R) else Note(Category, Item.Key, Item.Value);
+        end;
+        if not IsSection then
+        begin
+          var Facts: TSymbolFacts:= AStore.GetSymbolFacts(Item.Key.Id);
+          var Bar: Integer:= Pos(TOUCH_SEPARATOR, Facts.Touches);
+          if (Facts.SqlReads <> '') or (Facts.SqlWrites <> '') or ((Bar > 0) and (Bar < Length(Facts.Touches))) then
+            Note(CATEGORY_DATABASE, Item.Key, Item.Value);
+          if ContainsText(Facts.Touches, CATEGORY_REGISTRY) then Note(CATEGORY_REGISTRY, Item.Key, Item.Value);
+          if ContainsText(Facts.Touches, CATEGORY_NETWORK) then Note(CATEGORY_NETWORK, Item.Key, Item.Value);
+        end;
+        IsSection:= False;
+      end;
+      if Witness.Count = 0 then Continue;
+
+      var Parts: TArray<string>:= nil;
+      for var C in HEAVY_CATEGORY_ORDER do
+      begin
+        var Via: string;
+        if Witness.TryGetValue(C, Via) then Parts:= Parts + [Format('%s (%s)', [C, Via])];
+      end;
+      var F: TLintFinding:= Default(TLintFinding);
+      F.RuleId    := HEAVY_INITIALIZATION_RULE;
+      F.Severity  := SEVERITY_HINT;
+      F.FileId    := Pair.Value.FileId;
+      F.FilePath  := AStore.GetFilePath(F.FileId);
+      F.StartLine := Anchor.StartLine;
+      F.StartCol  := Anchor.StartCol;
+      F.EndLine   := Anchor.EndLine;
+      F.EndCol    := Anchor.EndCol;
+      F.SymbolName:= Pair.Value.Name;
+      F.Message   := Format('The initialization of %s reaches %s: this runs before the application has an exception '
+        + 'handler or a window, in every process that links the unit. Move it to an explicit start-up call.',
+        [Pair.Value.Name, string.Join(', ', Parts)]);
+      Findings.Add(F);
+    end;
+    Result:= Findings.ToArray;
+  finally
+    Witness.Free;
+    Findings.Free;
     Graph.Free;
   end;
 end;

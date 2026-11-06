@@ -118,6 +118,7 @@
   "hardcoded-connection-string": {"cwe": ["CWE-798", "CWE-259"], "cert": ["MSC41-C"]},
   "hardcoded-credential": {"cwe": ["CWE-798", "CWE-259"], "cert": ["MSC41-C"]},
   "hardcoded-ip-address": {"cwe": ["CWE-1051"]},
+  "heavy-initialization": {},
   "hides-ancestor-virtual": {},
   "high-coupling": {"cwe": ["CWE-1048"], "weak": ["CWE-1048"]},
   "high-response": {},

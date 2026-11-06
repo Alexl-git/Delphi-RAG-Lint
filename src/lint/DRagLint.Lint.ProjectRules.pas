@@ -4661,6 +4661,8 @@ begin
       for var Is_ in CollectInitOrderHazard(AStore) do Findings.Add(Is_);
     if WantRule(FINALIZATION_AFTER_DEPENDENCY_RULE) and OptedIn(FINALIZATION_AFTER_DEPENDENCY_RULE) then
       for var Is_ in CollectFinalizationAfterDependency(AStore) do Findings.Add(Is_);
+    if WantRule(HEAVY_INITIALIZATION_RULE) and OptedIn(HEAVY_INITIALIZATION_RULE) then
+      for var Is_ in CollectHeavyInitialization(AStore) do Findings.Add(Is_);
     if WantRule(DATAMODULE_FORM_GLOBAL_RULE) and OptedIn(DATAMODULE_FORM_GLOBAL_RULE) then
       for var Dm in CollectDataModuleFormGlobal(AStore, ALibraryStore) do Findings.Add(Dm);
     { gap-rules wave, lane G8. The two DFM rules and uses-movable-to-implementation are ON by
