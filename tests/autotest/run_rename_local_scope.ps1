@@ -9,6 +9,12 @@
   POSITIVE CONTROLS: l4 and l8 (a real capture and an include inside the routine still refuse, so the scope did not
   blind the proof); l9 (a unit-level symbol still answers for the other unit's bare ref, so the scope is not blanket).
   RED on 1.44.1-alpha: l1 and l2 refuse on LsB, l5 misses the implementation header, l7 refuses shadowed-at-site.
+
+  E-SYNCFWD-HEADERS, the s cases: --kind param syncs the ONE header the routine implements. RED on 1.44.1-alpha: a sibling
+  overload's headers get the edit and a class member's declaration does not, so the compile gate stops it at E2037.
+
+  E-BUILDLOCAL-BYTES, the b cases: --kind param edits carry character columns on a non-ASCII line, in a UTF-8 and an ANSI
+  file. RED on 1.44.1-alpha: byte columns, so StaleEditReason refuses the line as out of date.
 #>
 [CmdletBinding()]
 param(
@@ -107,8 +113,112 @@ end;
 end.
 '@
 $Files['LsInc.inc'] = "  Q:= 2;`r`n"
+$Files['LsC.pas'] = @"
+unit LsC;
+
+interface
+
+type
+  TA = class
+  public
+    procedure Ov(pX: Integer); overload;
+    procedure Ov(pX: string); overload;
+    procedure Bare(pZ: Integer);
+    procedure Def(pD: Integer = 0);
+    procedure Grp(pG, pH: Integer);
+  end;
+  TB = class
+  public
+    procedure Ov(pX: Integer);
+  end;
+
+procedure Free1(pX: Integer); overload;
+procedure Free1(pX: string); overload;
+
+implementation
+
+procedure TA.Ov(pX: Integer);
+begin
+  pX:= 1;
+end;
+
+procedure TA.Ov(pX: string);
+begin
+  pX:= '';
+end;
+
+procedure TA.Bare;
+begin
+  pZ:= 1;
+end;
+
+procedure TA.Def(pD: Integer);
+begin
+  pD:= 1;
+end;
+
+procedure TA.Grp(pG: Integer; pH: Integer);
+begin
+  pG:= pH;
+end;
+
+procedure TB.Ov(pX: Integer);
+begin
+  pX:= 2;
+end;
+
+procedure Free1(pX: Integer);
+begin
+  pX:= 3;
+end;
+
+procedure Free1(pX: string);
+begin
+  pX:= '';
+end;
+
+end.
+"@
+# ~ is one non-ASCII character: a byte column and a character column differ after it.
+$Bytes = @"
+unit NAME;
+
+interface
+
+implementation
+
+type
+  TP = record
+    Z: Integer;
+  end;
+
+procedure Go;
+var
+  N: TP;
+  {~} R: Integer;
+begin
+  {~} R:= 1; Inc(R);
+  {~} with N do R:= 2;
+end;
+
+end.
+"@
+$Ansi = [Text.Encoding]::GetEncoding(1252)
+$Umlaut = [string][char]0xFC
 function Reset-Fx {
   foreach ($k in $Files.Keys) { [IO.File]::WriteAllText((Join-Path $Src $k), (Crlf $Files[$k]), $Ascii) }
+  [IO.File]::WriteAllText((Join-Path $Src 'LsE8.pas'), (Crlf ($Bytes -replace 'NAME', 'LsE8' -replace '~', $Umlaut)), [Text.UTF8Encoding]::new($true))
+  [IO.File]::WriteAllText((Join-Path $Src 'LsEA.pas'), (Crlf ($Bytes -replace 'NAME', 'LsEA' -replace '~', $Umlaut)), $Ansi)
+}
+function Param-Plan([string]$Unit, [int]$Line, [int]$Col, [string]$To) {
+  $o = ($null | & $Exe rename --kind param --in (Join-Path $Src $Unit) --line $Line --col $Col --to $To --db $Db --plan --json 2>$null | Out-String)
+  $j = $null; try { $j = $o | ConvertFrom-Json } catch { }
+  return @{ Raw = $o; Json = $j; Lines = @($j.edits | ForEach-Object { [int]$_.line }) }
+}
+function Line-Of([string]$Unit, [string]$Exact, [int]$Nth = 1) {
+  $n = 0; $i = 0
+  foreach ($l in ((Text-Of $Unit) -split "`r`n")) { $i++; if ($l -ceq $Exact) { $n++; if ($n -eq $Nth) { return $i } } }
+  return 0
 }
 function Text-Of([string]$Name) { return [IO.File]::ReadAllText((Join-Path $Src $Name), $Ascii) }
 function Run-Engine([string[]]$A) {
@@ -165,6 +275,50 @@ try {
   Write-Host 'A local hides a member it does not use' -ForegroundColor Cyan
   $p = Plan-Symbol 'LsA.TA.Go.R' 'Caption'
   Check 'l7 a field of the class named the new name, unused in the routine: 0 undecided' ($p.Json -and @($p.Json.refusals).Count -eq 0 -and @($p.Json.edits).Count -eq 4) $p.Raw
+
+  Write-Host '--kind param: the one header the routine implements' -ForegroundColor Cyan
+  $declInt = Line-Of 'LsC.pas' '    procedure Ov(pX: Integer); overload;'
+  $declStr = Line-Of 'LsC.pas' '    procedure Ov(pX: string); overload;'
+  $hdrInt  = Line-Of 'LsC.pas' 'procedure TA.Ov(pX: Integer);'
+  $hdrStr  = Line-Of 'LsC.pas' 'procedure TA.Ov(pX: string);'
+  $declTB  = Line-Of 'LsC.pas' '    procedure Ov(pX: Integer);'
+  $hdrTB   = Line-Of 'LsC.pas' 'procedure TB.Ov(pX: Integer);'
+  $q = Param-Plan 'LsC.pas' $hdrInt 17 'pQ'
+  Check 's1 the method''s own declaration is an edit' ($q.Lines -contains $declInt) $q.Raw
+  Check 's1 own header and body are edits' (($q.Lines -contains $hdrInt) -and ($q.Lines -contains ($hdrInt + 2))) $q.Raw
+  Check 's1 the sibling overload is not touched' (($q.Lines -notcontains $declStr) -and ($q.Lines -notcontains $hdrStr)) $q.Raw
+  Check 's1 another class''s method is not touched' (($q.Lines -notcontains $declTB) -and ($q.Lines -notcontains $hdrTB)) $q.Raw
+  $declF1 = Line-Of 'LsC.pas' 'procedure Free1(pX: Integer); overload;'
+  $declF2 = Line-Of 'LsC.pas' 'procedure Free1(pX: string); overload;'
+  $hdrF1  = Line-Of 'LsC.pas' 'procedure Free1(pX: Integer);'
+  $q = Param-Plan 'LsC.pas' $hdrF1 17 'pQ'
+  Check 's2 a free routine: its own forward header, not the overload''s' (($q.Lines -contains $declF1) -and ($q.Lines -notcontains $declF2)) $q.Raw
+  $q = Param-Plan 'LsC.pas' (Line-Of 'LsC.pas' 'procedure TA.Def(pD: Integer);') 18 'pQ'
+  Check 's3 a default value only in the declaration still matches' ($q.Lines -contains (Line-Of 'LsC.pas' '    procedure Def(pD: Integer = 0);')) $q.Raw
+  $q = Param-Plan 'LsC.pas' ((Line-Of 'LsC.pas' 'procedure TA.Bare;') + 2) 3 'pQ'
+  Check 's4 an implementation header with no list still finds the declaration' ($q.Lines -contains (Line-Of 'LsC.pas' '    procedure Bare(pZ: Integer);')) $q.Raw
+  $q = Param-Plan 'LsC.pas' (Line-Of 'LsC.pas' 'procedure TA.Grp(pG: Integer; pH: Integer);') 18 'pQ'
+  Check 's5 grouped and ungrouped lists match' ($q.Lines -contains (Line-Of 'LsC.pas' '    procedure Grp(pG, pH: Integer);')) $q.Raw
+
+  Write-Host '--kind param on a non-ASCII line: character columns' -ForegroundColor Cyan
+  foreach ($u in @(@{ N = 'LsE8.pas'; Enc = [Text.Encoding]::UTF8 }, @{ N = 'LsEA.pas'; Enc = $Ansi })) {
+    $f = Join-Path $Src $u.N
+    $decl = 0; $i = 0
+    foreach ($l in ([IO.File]::ReadAllText($f, $u.Enc) -split "`r`n")) { $i++; if ($l -match 'R: Integer;') { $decl = $i } }
+    $q = Param-Plan $u.N $decl 7 'ARect'
+    Check "b1 $($u.N) plan by character column: 4 edits, 0 undecided" ($q.Json -and @($q.Json.edits).Count -eq 4 -and @($q.Json.refusals).Count -eq 0) $q.Raw
+    $cols = @($q.Json.edits | Where-Object { [int]$_.line -eq $decl } | ForEach-Object { [int]$_.col })
+    Check "b1 $($u.N) the column is the character's" ($cols.Count -eq 1 -and $cols[0] -eq 7) $q.Raw
+    $q2 = Param-Plan $u.N $decl 8 'ARect'
+    Check "b2 $($u.N) the byte column finds it too (a lint finding's)" ($q2.Json -and @($q2.Json.edits).Count -eq 4) $q2.Raw
+    $before = [IO.File]::ReadAllBytes($f)[0..2] -join ','
+    $r = Run-Engine @('rename', '--kind', 'param', '--in', $f, '--line', "$decl", '--col', '7', '--to', 'ARect', '--db', $Db, '--apply')
+    $after = [IO.File]::ReadAllText($f, $u.Enc)
+    Check "b3 $($u.N) applies, exit 0" ($r.Exit -eq 0) $r.Out
+    $mark = "{$Umlaut}"
+    Check "b3 $($u.N) every site rewritten" ($after.Contains("$mark ARect: Integer;") -and $after.Contains("$mark ARect:= 1; Inc(ARect);") -and $after.Contains("$mark with N do ARect:= 2;")) $after
+    Check "b3 $($u.N) encoding kept" ((([IO.File]::ReadAllBytes($f)[0..2]) -join ',') -eq $before)
+  }
 } finally { Pop-Location }
 Write-Host ("run_rename_local_scope: {0} pass, {1} fail" -f $script:Passed, $script:FailCount)
 if ($script:Failed) { Write-Host 'FAILED' -ForegroundColor Red; exit 1 }

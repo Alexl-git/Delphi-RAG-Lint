@@ -328,14 +328,16 @@ type
       /// <summary>Routine-local rename of the parameter or local variable whose
       /// declaration identifier sits at (ALine, ACol) (1-based) in AFile. Emits a
       /// TRenameEdit for the declaration, every in-scope use within the owning
-      /// routine body, and the matching parameter in any same-named forward/interface
-      /// declProc header. Shadowing nested routines, qualified members (X.Name) on
+      /// routine body, and the matching parameter in the header this routine implements:
+      /// its class member's or forward/interface declProc, the same class path, the same
+      /// routine name and the same parameter list (or any, when the implementation header
+      /// repeats none). Shadowing nested routines, qualified members (X.Name) on
       /// both exprDot and genericDot rhs sides, and with-statement members are
       /// conservatively skipped. Empty array if no param/local decl is found at that
       /// position. Pure AST -- no symbol store.
-      /// Known limitations (deliberate conservative choices): occurrences inside a
-      /// with block are skipped entirely; a same-named param in an unrelated same-name
-      /// overload header may be touched (header-only, not a body rename).</summary>
+      /// Known limitation (deliberate conservative choice): occurrences inside a
+      /// with block are skipped entirely. A nested routine's forward header is not
+      /// followed; the compile gate reports it.</summary>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
       /// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
@@ -1136,27 +1138,51 @@ var
     if N.NodeType = 'with' then Dec(WithDepth);
   end;
 
-  { Add the matching parameter in any forward/interface declProc with the same
-    routine name as OwnerProc. Scans all declProc nodes in the file.
+  { Add the matching parameter in the declaration OwnerProc implements: same class path, same routine name, same
+    parameter list; any list when the implementation header repeats none, as Delphi allows. A sibling overload, another
+    class's method and another routine's implementation header are not it.
     NOTE: declProc has 'args' as a direct child field (no 'header' wrapper). }
   procedure SyncForwardHeaders(const ARoot: TTSNode);
-  var I   : Integer;
-    OwnerName: string;
+  var
+    OwnerShort, OwnerClass, OwnerSig: string;
 
-    function HdrName(const AProc: TTSNode): string;
-    var H, Nm: TTSNode;
+    function Squeezed(const AText: string): string;
     begin
       Result:= '';
-      { defProc: name is under header field }
-      H:= AProc.ChildByField('header');
-      if not H.IsNull then
+      for var C in AText do
+        if not CharInSet(C, [' ', #9, #13, #10]) then Result:= Result + C;
+      Result:= LowerCase(Result);
+    end;
+
+    { `const A, B: T = 0` as `const a:t;const b:t;`: grouping and default values may differ between the two headers. }
+    function ArgsSig(const AHeader: TTSNode): string;
+    var
+      AN, Arg, Ch, TN: TTSNode;
+      K, J: Integer;
+    begin
+      Result:= '';
+      AN:= AHeader.ChildByField('args');
+      if AN.IsNull then Exit;
+      for K:= 0 to AN.NamedChildCount - 1 do
       begin
-        Nm:= H.ChildByField('name');
-        if not Nm.IsNull then begin Result:= Trim(NStr(Nm)); Exit; end;
+        Arg:= AN.NamedChild(K);
+        if Arg.NodeType <> 'declArg' then Continue;
+        TN:= Arg.ChildByField('type');
+        var TypeText:= if TN.IsNull then '' else NStr(TN);
+        var Prefix:= '';
+        var PrefixDone:= False;
+        for J:= 0 to Arg.NamedChildCount - 1 do
+        begin
+          Ch:= Arg.NamedChild(J);
+          if Ch = TN then Break;
+          if Ch.NodeType = 'identifier' then
+          begin
+            PrefixDone:= True;
+            Result:= Result + Squeezed(Prefix) + ' ' + Squeezed(NStr(Ch)) + ':' + Squeezed(TypeText) + ';';
+          end
+          else if not PrefixDone then Prefix:= Prefix + NStr(Ch);
+        end;
       end;
-      { declProc: name is a direct child field }
-      Nm:= AProc.ChildByField('name');
-      if not Nm.IsNull then Result:= Trim(NStr(Nm));
     end;
 
     procedure ScanDeclArgs(const AProc: TTSNode);
@@ -1181,28 +1207,50 @@ var
       end;
     end;
 
-  var
-    Stack: TList<TTSNode>;
-    Cur  : TTSNode;
-  begin
-    OwnerName:= HdrName(OwnerProc);
-    if OwnerName = '' then Exit;
-    Stack:= TList<TTSNode>.Create;
-    try
-      Stack.Add(ARoot);
-      while Stack.Count > 0 do
+    { The outermost defProc around OwnerProc: OwnerProc itself unless it is nested. }
+    function OutermostProc(const N: TTSNode): TTSNode;
+    var I: Integer;
+    begin
+      Result:= Default(TTSNode);
+      if N.IsNull or (N.StartByte > OwnerProc.StartByte) or (N.EndByte < OwnerProc.EndByte) then Exit;
+      if N.NodeType = 'defProc' then Exit(N);
+      for I:= 0 to N.NamedChildCount - 1 do
       begin
-        Cur:= Stack[Stack.Count - 1];
-        Stack.Delete(Stack.Count - 1);
-        if Cur.NodeType = 'declProc' then
-        begin
-          if SameText(HdrName(Cur), OwnerName) then ScanDeclArgs(Cur);
-        end;
-        for I:= 0 to Cur.NamedChildCount - 1 do Stack.Add(Cur.NamedChild(I));
+        Result:= OutermostProc(N.NamedChild(I));
+        if not Result.IsNull then Exit;
       end;
-    finally
-      Stack.Free;
     end;
+
+    procedure Visit(const N: TTSNode; const AClassPath: string);
+    var I: Integer;
+    begin
+      if N.IsNull or (N.NodeType = 'defProc') then Exit;
+      if N.NodeType = 'declProc' then
+      begin
+        if (Squeezed(NStr(N.ChildByField('name'))) = OwnerShort) and (AClassPath = OwnerClass)
+           and ((OwnerSig = '') or (ArgsSig(N) = OwnerSig)) then ScanDeclArgs(N);
+        Exit;
+      end;
+      var Path:= AClassPath;
+      if N.NodeType = 'declType' then
+      begin
+        var TypeName:= Squeezed(NStr(N.ChildByField('name')));
+        Path:= if Path = '' then TypeName else Path + '.' + TypeName;
+      end;
+      for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I), Path);
+    end;
+
+  begin
+    if not (OutermostProc(ARoot) = OwnerProc) then Exit;
+    var Header:= OwnerProc.ChildByField('header');
+    if Header.IsNull then Exit;
+    var OwnerName:= Squeezed(NStr(Header.ChildByField('name')));
+    if OwnerName = '' then Exit;
+    var Dot:= LastDelimiter('.', OwnerName);
+    OwnerShort:= Copy(OwnerName, Dot + 1, MaxInt);
+    OwnerClass:= Copy(OwnerName, 1, Dot - 1);
+    OwnerSig:= ArgsSig(Header);
+    Visit(ARoot, '');
   end;
 
 var
