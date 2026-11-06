@@ -19080,7 +19080,9 @@ var
             + 'carries the type arguments, e.g. TComparer<TFoo>.'
     else if Key = 'refs.receiver_text' then
       ADesc:= 'The receiver expression, when the reference is qualified '
-            + '(the "A" of A.B). Empty for a bare name.';
+            + '(the "A" of A.B). Empty for a bare name. On a reraise, and on a '
+            + 'raise-expr naming the handler variable: the type of the nearest '
+            + 'enclosing on..do, empty under a bare except.';
 
     Result:= (ADesc <> '') or (AValues <> '');
   end;

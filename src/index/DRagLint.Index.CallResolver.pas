@@ -3320,6 +3320,15 @@ type
     /// </remarks>
     function ResolveTypeUse(const ARef: TReference; out AReason: string): Int64;
 
+    /// <summary>The exception type a `raise T.Create` or `on E: T do` row names: the
+    /// lookup ResolveTypeUse makes, certain or nothing.</summary>
+    /// <param name="ARef">The raise / handle ref; the fields ResolveTypeUse consults.</param>
+    /// <param name="AReason">OUT: '' when bound, else the reason ResolveTypeUse gives.</param>
+    /// <returns>The type's id, or 0.</returns>
+    /// <remarks>Spec 2026-11-06-raise-handle-type-facts, 3.2. Not counted into
+    /// TypeUseStats, which reports on `type_use` refs only. Identity only.</remarks>
+    function ResolveExceptionType(const ARef: TReference; out AReason: string): Int64;
+
     /// <summary>X6 / gap G1 (2026-10-25): the ENUM type a hard cast `TEnum(x)`
     /// names -- certain or nothing.</summary>
     /// <param name="ARef">The `call` ref the cast was extracted as (name_text =
@@ -9345,6 +9354,11 @@ begin
   else if AReason = 'ambiguous' then Inc(FTypeUseStats.Ambiguous)
   else if AReason = 'not-found' then Inc(FTypeUseStats.NotFound)
   else Inc(FTypeUseStats.Unreadable);
+end;
+
+function TCallResolver.ResolveExceptionType(const ARef: TReference; out AReason: string): Int64;
+begin
+  Result:= LookupTypeName(ARef, AReason);
 end;
 
 function TCallResolver.ResolveEnumCast(const ARef: TReference; out AReason: string): Int64;

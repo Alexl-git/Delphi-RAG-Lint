@@ -298,6 +298,7 @@ raise-expr read reraise sql_table_ref type_use write`. Notes: a dotted call emit
 `call` and a co-located `member-access` ref at the same span; only `call` is resolved to
 `call_edges`. `raise`/`raise-expr`/`reraise`/`handle`/`handle-all` are exception facts
 (deep parse only; never resolved); `event-binding` is a DFM event hookup (name = handler).
+A `reraise`, and a `raise-expr` naming the handler variable, carry the type of the nearest enclosing `on .. do` in `receiver_text` (empty under a bare `except`). `raise` and `handle` rows get `symbol_id` from the resolver when the DB holds the type; `on E: Exception` in a project DB stays NULL.
 
 **call_edges.confidence**: `certain`, `ambiguous`. **member_accesses.mode**: `read`, `write`.
 **dispatch_edges.kind**: `override`, `implements`.

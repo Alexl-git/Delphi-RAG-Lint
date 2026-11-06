@@ -2559,7 +2559,11 @@ const
   /// RERAISE: bare `raise;`. HANDLE: `on [E:] T do`, name = T.
   /// HANDLE_ALL: an `except` with no handler (name 'except') and the `else`
   /// after handlers (name 'else').</summary>
-  /// <remarks>Emitted only by a deep (usage-ref) parse, like 'read'.</remarks>
+  /// <remarks>Emitted only by a deep (usage-ref) parse, like 'read'. Spec
+  /// 2026-11-06-raise-handle-type-facts: on RERAISE, and on a RAISE_EXPR naming the
+  /// handler variable, receiver_text is the TYPE of the nearest enclosing `on .. do`
+  /// ('' under a bare except, an else, or outside a handler). RAISE and HANDLE get
+  /// symbol_id from the resolver when the DB holds the type.</remarks>
   REF_KIND_RAISE      = 'raise';
   /// <summary>See REF_KIND_RAISE.</summary>
   REF_KIND_RAISE_EXPR = 'raise-expr';

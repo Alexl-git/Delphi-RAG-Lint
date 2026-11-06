@@ -305,8 +305,20 @@ begin
 end; // function
 
 type
+  { b5 (spec 2026-11-06-raise-handle-type-facts, sec. 3.1): one open `except` context, by byte
+    range. TypeName is '' for a bare `except` body and an `else` part: a raise there re-raises
+    an unknown type, and must not inherit the type of an outer handler. }
+  THandlerFrame = record
+    StartByte: Cardinal;
+    EndByte  : Cardinal;
+    VarName  : string  ;
+    TypeName : string  ;
+  end;
+
   TWalkState = class
     Source     : TBytes              ;
+    { b5: the except contexts Walk has entered; see EnclosingHandlerFrame. }
+    HandlerFrames: TArray<THandlerFrame>;
     { X4: the SCOPEDENUMS switches of Source, in source order (see
       ScanScopedEnumSwitches); read by ScopedEnumsAt. }
     ScopedEnumSwitches: TArray<TScopedEnumSwitch>;
@@ -837,15 +849,50 @@ begin
   Result:= Default(TTSNode);
 end; // function
 
+{ b5: record an except context. A frame may open after the current node (a try
+  pushes its bare-except frame before its try part is walked), which is why the
+  lookup tests containment and does not simply take the top of the stack. }
+procedure PushHandlerFrame(const ANode: TTSNode; const AVarName, ATypeName: string; const AState: TWalkState);
+var
+  Frame: THandlerFrame;
+begin
+  Frame.StartByte:= ANode.StartByte;
+  Frame.EndByte  := ANode.EndByte;
+  Frame.VarName  := AVarName;
+  Frame.TypeName := ATypeName;
+  AState.HandlerFrames:= AState.HandlerFrames + [Frame];
+end; // procedure
+
+{ b5: the innermost except context holding ANode; a zeroed frame outside any.
+  Walk visits in source order, so a top frame that ended before ANode is closed
+  for good and is dropped here: no restore, no change to Walk's Exit paths.
+  LIMIT (spec 3.1): an anonymous method inside a handler counts as inside it. }
+function EnclosingHandlerFrame(const ANode: TTSNode; const AState: TWalkState): THandlerFrame;
+var
+  i, Count: Integer;
+  At: Cardinal;
+begin
+  Result:= Default(THandlerFrame);
+  At:= ANode.StartByte;
+  Count:= Length(AState.HandlerFrames);
+  while (Count > 0) and (AState.HandlerFrames[Count - 1].EndByte <= At) do Dec(Count);
+  SetLength(AState.HandlerFrames, Count);
+  for i:= Count - 1 downto 0 do
+    if (AState.HandlerFrames[i].StartByte <= At) and (At < AState.HandlerFrames[i].EndByte) then
+      Exit(AState.HandlerFrames[i]);
+end; // function
+
 procedure EmitRaiseReference(const ANode: TTSNode; const AState: TWalkState);
 var
   Expr, Callee, Ctor, TypeNode, Root: TTSNode;
   Receiver: string;
+  Frame: THandlerFrame;
 begin
   Expr:= ANode.ChildByField('exception');
+  Frame:= EnclosingHandlerFrame(ANode, AState);
   if Expr.IsNull then
   begin
-    AState.EmitRef(REF_KIND_RERAISE, 'raise', ANode);
+    AState.EmitRef(REF_KIND_RERAISE, 'raise', ANode, Frame.TypeName);
     Exit;
   end;
   { `raise T.Create*(..)` and the paren-less `raise T.Create;` (an exprDot with
@@ -871,7 +918,13 @@ begin
     end;
   end;
   Root:= RootIdentifierOf(Expr);
-  if not Root.IsNull then AState.EmitRef(REF_KIND_RAISE_EXPR, NodeText(Root, AState.Source), Root);
+  if Root.IsNull then Exit;
+  { b5: `raise E` naming the handler variable raises the handler's type. Only the
+    bare identifier: `raise E.Inner` raises something else. }
+  Receiver:= '';
+  if (Expr.NodeType = 'identifier') and (Frame.VarName <> '')
+     and SameText(Frame.VarName, NodeText(Root, AState.Source)) then Receiver:= Frame.TypeName;
+  AState.EmitRef(REF_KIND_RAISE_EXPR, NodeText(Root, AState.Source), Root, Receiver);
 end; // procedure
 
 { Item 4: on E: T do declares E for the handler clause. Emitted as a local_var
@@ -895,9 +948,14 @@ end; // procedure
 
 procedure EmitHandlerReference(const ANode: TTSNode; const AState: TWalkState);
 var
-  TypeRef, TypeExpr, NameNode: TTSNode;
-  Receiver: string;
+  TypeRef, TypeExpr, NameNode, VarNode: TTSNode;
+  Receiver, VarName: string;
 begin
+  { b5: the frame goes up first, typeless. If the type cannot be read below, a raise
+    in this handler must still not inherit the type of an outer one. }
+  VarNode:= ANode.ChildByField('variable');
+  VarName:= if VarNode.IsNull then '' else NodeText(VarNode, AState.Source);
+  PushHandlerFrame(ANode, VarName, '', AState);
   TypeRef:= ANode.ChildByField('exception');
   if TypeRef.IsNull or (TypeRef.NamedChildCount = 0) then Exit;
   TypeExpr:= TypeRef.NamedChild(0);
@@ -911,6 +969,7 @@ begin
   end
   else NameNode:= TypeExpr;
   if NameNode.IsNull or (NameNode.NodeType <> 'identifier') then Exit;
+  AState.HandlerFrames[High(AState.HandlerFrames)].TypeName:= NodeText(NameNode, AState.Source);
   AState.EmitRef(REF_KIND_HANDLE, NodeText(NameNode, AState.Source), NameNode, Receiver);
 end; // procedure
 
@@ -934,6 +993,15 @@ begin
     else if C.NodeType = 'exceptionElse' then ElseNode:= C;
   end;
   if ExceptTok.IsNull then Exit;
+  { b5: a bare except body and an else part are typeless contexts (see THandlerFrame).
+    Both frames open after the try part, which EnclosingHandlerFrame allows for. A bare
+    except runs from its token to the end of the try. }
+  if not HasHandler then
+  begin
+    PushHandlerFrame(ANode, '', '', AState);
+    AState.HandlerFrames[High(AState.HandlerFrames)].StartByte:= ExceptTok.StartByte;
+  end
+  else if not ElseNode.IsNull then PushHandlerFrame(ElseNode, '', '', AState);
   if not HasHandler then AState.EmitRef(REF_KIND_HANDLE_ALL, 'except', ExceptTok)
   else if (not ElseNode.IsNull) and (ElseNode.NamedChildCount > 0) then
   begin

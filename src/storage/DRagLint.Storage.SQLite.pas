@@ -689,6 +689,22 @@ type
       procedure ResolveTypeUseRefs(AResolver: TCallResolver;
         const AScopeWhere, AStaleWhere: string;
         out ACandidates, ABound: Int64);
+      /// <summary>Spec 2026-11-06-raise-handle-type-facts, 3.2: binds `raise` and `handle`
+      /// rows to the exception type, through TCallResolver.ResolveExceptionType.</summary>
+      /// <param name="AResolver">The pass's resolver, maps already built. Owned
+      /// by the caller.</param>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a
+      /// whole-database run.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when
+      /// none is stale.</param>
+      /// <param name="ACandidates">Out: rows offered to the resolver.</param>
+      /// <param name="ABound">Out: rows whose symbol_id was set.</param>
+      /// <remarks>IDENTITY ONLY, no call edge. No other writer binds these two kinds,
+      /// so NULLing them in scope first can never erase another stream's answer. A type
+      /// the DB does not hold (a project DB and System.SysUtils) stays NULL.</remarks>
+      procedure ResolveExceptionTypeRefs(AResolver: TCallResolver;
+        const AScopeWhere, AStaleWhere: string;
+        out ACandidates, ABound: Int64);
       /// <summary>The query-and-bind loop shared by the identity-only streams
       /// (ResolveTypeUseRefs, ResolveEnumCastRefs): selects the refs matching
       /// AUniverse + ASuffix, asks ABind for each, and sets refs.symbol_id when
@@ -15163,6 +15179,23 @@ begin
   BindRefStream(TYPE_UNIVERSE, 'type_use', Suffix, AResolver.ResolveTypeUse, ACandidates, ABound);
 end;
 
+{ b5: the raise / handle stream. The contract lives on the declaration. }
+procedure TSQLiteSymbolStore.ResolveExceptionTypeRefs(AResolver: TCallResolver;
+  const AScopeWhere, AStaleWhere: string; out ACandidates, ABound: Int64);
+const
+  KINDS = 'refs.kind IN (''' + REF_KIND_RAISE + ''', ''' + REF_KIND_HANDLE + ''')';
+  EXC_UNIVERSE = KINDS + ' AND refs.name_text COLLATE NOCASE IN ' +
+                 '(SELECT name FROM symbols WHERE kind IN (''class'', ''interface'', ''record'', ''type'', ''enum''))';
+var
+  Suffix: string;
+begin
+  Suffix:= '';
+  if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
+  FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + KINDS + ' AND refs.symbol_id IS NOT NULL' + Suffix);  // dl:ok sql-injection-concat@b5e1 -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveTypeUseRefs uses.
+  BindRefStream(EXC_UNIVERSE, REF_KIND_RAISE, Suffix, AResolver.ResolveExceptionType, ACandidates, ABound);
+end;
+
 { X6 / G1: the enum hard-cast stream. The contract lives on the declaration. }
 procedure TSQLiteSymbolStore.ResolveEnumCastRefs(AResolver: TCallResolver;
   const AScopeWhere, AStaleWhere: string; out ACandidates, ABound: Int64);
@@ -15516,6 +15549,8 @@ var
   ValueBound     : Int64    ; { of those, the rows whose symbol_id was set                  }
   TypeCandidates : Int64    ; { B-31 type_use stream -- type_use rows offered to the resolver }
   TypeBound      : Int64    ; { of those, the rows whose symbol_id was set                  }
+  ExcCandidates  : Int64    ; { b5: raise / handle rows offered to the resolver             }
+  ExcBound       : Int64    ; { of those, the rows whose symbol_id was set                  }
   CastCandidates : Int64    ; { X6/G1 enum-cast stream -- unbound enum-named call rows offered }
   CastBound      : Int64    ; { of those, the rows whose symbol_id was set                  }
   TReadCandidates: Int64    ; { GAP-CALLERS type-read stream -- unbound type-named read rows offered }
@@ -15639,6 +15674,8 @@ begin
   ValueBound     := 0;
   TypeCandidates := 0;
   TypeBound      := 0;
+  ExcCandidates  := 0;
+  ExcBound       := 0;
   CastCandidates := 0;
   CastBound      := 0;
   TReadCandidates:= 0;
@@ -16008,6 +16045,8 @@ begin
       ResolveValueReadRefs(Resolver, ScopeWhere, StaleWhere, ValueCandidates, ValueBound);
       { B-31 (2026-10-23): the SEVENTH stream, type_use refs, identity only. }
       ResolveTypeUseRefs(Resolver, ScopeWhere, StaleWhere, TypeCandidates, TypeBound);
+      { b5 (spec 2026-11-06-raise-handle-type-facts): raise / handle rows, identity only. }
+      ResolveExceptionTypeRefs(Resolver, ScopeWhere, StaleWhere, ExcCandidates, ExcBound);
       { X6 / G1 (2026-10-25): the EIGHTH stream, enum hard casts, identity only. }
       ResolveEnumCastRefs(Resolver, ScopeWhere, StaleWhere, CastCandidates, CastBound);
       { GAP-CALLERS (1.40): the NINTH stream, type-name reads, identity only;
@@ -16207,6 +16246,7 @@ begin
       [TypeBound, TypeCandidates,
        Resolver.TypeUseStats.Generic, Resolver.TypeUseStats.Qualified, Resolver.TypeUseStats.Unlisted,
        Resolver.TypeUseStats.Ambiguous, Resolver.TypeUseStats.NotFound, Resolver.TypeUseStats.Unreadable]));
+    ResolveLog(Format('calls      exception-types: %d of %d raise/handle ref(s) bound', [ExcBound, ExcCandidates]));
     { X6 / G1 (2026-10-25). The enum hard-cast stream. }
     ResolveLog(Format('calls      enum-casts: %d of %d enum-named call ref(s) bound', [CastBound, CastCandidates]));
     ResolveLog(Format('calls      type-reads: %d of %d type-named read ref(s) bound', [TReadBound, TReadCandidates]));
