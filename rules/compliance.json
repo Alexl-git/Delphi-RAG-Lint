@@ -42,6 +42,7 @@
   "cycle-participant-unit": {"cwe": ["CWE-1047"], "weak": ["CWE-1047"]},
   "cyclomatic-complexity": {"cwe": ["CWE-1121"]},
   "datamodule-form-global": {"cwe": ["CWE-1054"]},
+  "is-always-true": {"cwe": ["CWE-571"]},
   "dataset-open-without-close": {"cwe": ["CWE-772"]},
   "deep-inheritance": {"cwe": ["CWE-1074"]},
   "deep-nesting": {"cwe": ["CWE-1124"]},

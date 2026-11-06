@@ -136,6 +136,7 @@ uses
   , TreeSitter
   , DRagLint.Core.DeclText { v(A2): TDeclTextReader -- `query find --decl-contains` }
   , DRagLint.Core.ForwardStub { C2.5: PairForwardStubs/HasChildInSet -- `outline` tags a forward stub row (S6) }
+  , DRagLint.Lint.RefTypeRules { REF_TYPE_RULES, RefTypeRuleDefaultOff: the opt-in defaults of lint-all / lint-project }
   , DRagLint.Lint.RuleCache // dl:unit DRagLint.Lint.RuleCache accepted -- CACHED_RULES travels with the cache that defines which rules it may hold, so lint and the indexer warm cannot drift apart
   , DRagLint.Lint.UsesAudit { TUsesAuditor -- the uses-audit core shared with the uses-movable-to-implementation rule (G8) }
   , DRagLint.Index.LibraryOracle { TLibraryOracle -- find-callees binds a value receiver typed by name to a library routine (item 4) }
@@ -15667,7 +15668,7 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak');
-  LINT_GATE_PROJECT_RULES: array[0..31] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..32] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
@@ -15676,27 +15677,29 @@ const
     'dfm-event-handler-missing', 'dfm-password-edit-unmasked', 'uses-movable-to-implementation', 'virtual-never-overridden',
     'unused-enum-value', 'unused-global', 'read-never-assigned',
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
-    'effect-free-in-loop-invariant', 'ancestor-not-in-project', 'opaque-to-analysis', 'datamodule-form-global');
+    'effect-free-in-loop-invariant', 'ancestor-not-in-project', 'opaque-to-analysis', 'datamodule-form-global',
+    'is-always-true');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
     index it never evaluates them unless --rule names one: a dl:ok for one of them
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..17] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..18] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
     'unused-enum-value', 'unused-global', 'read-never-assigned',
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
-    'effect-free-in-loop-invariant', 'opaque-to-analysis', 'datamodule-form-global');
+    'effect-free-in-loop-invariant', 'opaque-to-analysis', 'datamodule-form-global',
+    'is-always-true');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
     is answered exactly for one file -- its own call sites, narrowed by AOnlyFileId
     -- so the IDE gutter and lint-all agree. Every other PROJECT_RULES_OPTIN_GATED
     id ships OFF and stays --rule-only on this verb.
     tests\autotest\run_lint_file_discarded_effect_free.ps1. }
-  LINT_FILE_OPTIN_ON: array[0..0] of string = ('discarded-effect-free-result');
+  LINT_FILE_OPTIN_ON: array[0..1] of string = ('discarded-effect-free-result', 'is-always-true');
   { The store rules of lane B-EFFECT and 1.42 (DRagLint.Lint.EffectRules). Only side-effect-in-short-circuit ships OFF (1.43, owner Q3); the loops below pass that per id. }
   LANE_BEFFECT_RULES: array[0..3] of string = (
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
@@ -24116,6 +24119,8 @@ begin
       OptIn:= OptIn + ['virtual-never-overridden'];
     if Cfg.ShouldKeep('datamodule-form-global', {ADefaultDisabled=}True) then   { 1.42 lane ruleset }
       OptIn:= OptIn + ['datamodule-form-global'];
+    for var Rt in REF_TYPE_RULES do   { 1.44 lane rulesf1 }
+      if Cfg.ShouldKeep(Rt, RefTypeRuleDefaultOff(Rt)) then OptIn:= OptIn + [Rt];
     if Cfg.ShouldKeep('unused-enum-value', {ADefaultDisabled=}False) then   { B-ENUM; ON since ENUMRULES 2026-10-28 }
       OptIn:= OptIn + ['unused-enum-value'];
     if Cfg.ShouldKeep('unused-global', {ADefaultDisabled=}False) then   { 1.40 unusedg }
@@ -24628,6 +24633,8 @@ begin
       OptIn2:= OptIn2 + ['opaque-to-analysis'];
     if LoadLintConfig(AArgs).ShouldKeep('datamodule-form-global', {ADefaultDisabled=}True) then   { 1.42 lane ruleset }
       OptIn2:= OptIn2 + ['datamodule-form-global'];
+    for var Rt2 in REF_TYPE_RULES do   { 1.44 lane rulesf1 }
+      if LoadLintConfig(AArgs).ShouldKeep(Rt2, RefTypeRuleDefaultOff(Rt2)) then OptIn2:= OptIn2 + [Rt2];
     if LoadLintConfig(AArgs).ShouldKeep('unused-enum-value', {ADefaultDisabled=}False) then   { B-ENUM; ON since ENUMRULES 2026-10-28 }
       OptIn2:= OptIn2 + ['unused-enum-value'];
     if LoadLintConfig(AArgs).ShouldKeep('unused-global', {ADefaultDisabled=}False) then   { 1.40 unusedg }
