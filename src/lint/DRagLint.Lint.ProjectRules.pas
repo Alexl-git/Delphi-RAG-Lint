@@ -246,6 +246,7 @@ uses
   DRagLint.Lint.EnumOrdinalPersisted, { CollectEnumOrdinalPersisted -- lane X6 }
   DRagLint.Lint.UnusedEnumValue, { CollectUnusedEnumValue -- lane B-ENUM } // dl:unit DRagLint.Lint.UnusedEnumValue accepted -- UNUSED_ENUM_VALUE_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectUnusedEnumValue, the collector this unit calls
   DRagLint.Lint.UnusedGlobal, { CollectUnusedGlobal -- 1.40 lane unusedg } // dl:unit DRagLint.Lint.UnusedGlobal accepted -- UNUSED_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectUnusedGlobal, the collector this unit calls
+  DRagLint.Lint.RefTypeRules, { CollectRefTypeRules -- 1.44 lane rulesf1 } // dl:unit DRagLint.Lint.RefTypeRules accepted -- the rule-id constants the dispatch names travel with CollectRefTypeRules, the collector this unit calls
   DRagLint.Lint.DataModuleFormGlobal, { CollectDataModuleFormGlobal -- 1.42 lane ruleset } // dl:unit DRagLint.Lint.DataModuleFormGlobal accepted -- DATAMODULE_FORM_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectDataModuleFormGlobal, the collector this unit calls
   DRagLint.Lint.InitSections, { the F2 section rules -- 1.44 lane rulesf2 } // dl:unit DRagLint.Lint.InitSections accepted -- the *_RULE ids are what the dispatch (WantRule / OptedIn) names; they travel with the collectors this unit calls
   DRagLint.Lint.ReadNeverAssigned, { CollectReadNeverAssigned -- owner request #5b } // dl:unit DRagLint.Lint.ReadNeverAssigned accepted -- READ_NEVER_ASSIGNED_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectReadNeverAssigned, the collector this unit calls
@@ -4698,6 +4699,17 @@ begin
       for var Is_ in CollectGlobalNeverFreed(AStore, ALibraryStore) do Findings.Add(Is_);
     if WantRule(DATAMODULE_FORM_GLOBAL_RULE) and OptedIn(DATAMODULE_FORM_GLOBAL_RULE) then
       for var Dm in CollectDataModuleFormGlobal(AStore, ALibraryStore) do Findings.Add(Dm);
+    { The rules on index fact F1 (1.44 lane rulesf1): OptedIn-gated -- one refs read and one parse per file.
+      An index older than 1.44 answers nothing (see the unit). }
+    var RefTypeWanted: TArray<string>:= nil;
+    if WantRule(IS_ALWAYS_TRUE_RULE) and OptedIn('is-always-true') then RefTypeWanted:= RefTypeWanted + [IS_ALWAYS_TRUE_RULE];
+    if WantRule(UPCAST_THEN_DOWNCAST_RULE) and OptedIn('upcast-then-downcast') then RefTypeWanted:= RefTypeWanted + [UPCAST_THEN_DOWNCAST_RULE];
+    if WantRule(WITH_ON_TEMPORARY_RULE) and OptedIn('with-on-temporary') then RefTypeWanted:= RefTypeWanted + [WITH_ON_TEMPORARY_RULE];
+    if WantRule(INTERFACE_HOLDER_RULE) and OptedIn('interface-holder-of-non-refcounted') then RefTypeWanted:= RefTypeWanted + [INTERFACE_HOLDER_RULE];
+    if WantRule(ARGUMENT_NARROWS_RULE) and OptedIn('argument-narrows') then RefTypeWanted:= RefTypeWanted + [ARGUMENT_NARROWS_RULE];
+    if WantRule(REDUNDANT_CAST_RULE) and OptedIn('redundant-cast') then RefTypeWanted:= RefTypeWanted + [REDUNDANT_CAST_RULE];
+    if WantRule(UNSAFE_TYPECAST_RULE) and OptedIn('unsafe-typecast-without-is') then RefTypeWanted:= RefTypeWanted + [UNSAFE_TYPECAST_RULE];
+    for var Rt in CollectRefTypeRules(AStore, ALibraryStore, RefTypeWanted, AOnlyFileId) do Findings.Add(Rt);
     { gap-rules wave, lane G8. The two DFM rules and uses-movable-to-implementation are ON by
       default and walk one table each (uses-movable back ON in lane IMOV after REFTYPE: 0 FP on
       engine 114 / ORM3 243, and the engine dogfood --fix --apply builds); virtual-never-overridden

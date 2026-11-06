@@ -166,6 +166,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.UnusedGlobal.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.DataModuleFormGlobal.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.InitSections.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.RefTypeRules.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.SharedScope.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.MarkerUnion.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ReadNeverAssigned.pas"/>

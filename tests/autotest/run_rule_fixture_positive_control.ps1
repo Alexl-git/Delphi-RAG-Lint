@@ -95,6 +95,11 @@ $OwnRunner = @{
     'heavy-initialization' = 'tests\lint-project\heavy-initialization\run_heavy_initialization.ps1'
     'finalization-after-dependency' = 'tests\lint-project\finalization-after-dependency\run_finalization_after_dependency.ps1'
     'init-order-hazard' = 'tests\lint-project\init-order-hazard\run_init_order_hazard.ps1'
+    'upcast-then-downcast'      = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
+    'with-on-temporary'         = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
+    'interface-holder-of-non-refcounted'= 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
+    'argument-narrows'          = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
+    'is-always-true'            = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
 }
 function HasOwnRunner([string]$Id, [hashtable]$Map = $OwnRunner) {
   if (-not $Map.ContainsKey($Id)) { return $false }

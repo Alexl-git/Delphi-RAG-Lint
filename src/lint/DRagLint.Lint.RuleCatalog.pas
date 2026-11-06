@@ -525,7 +525,7 @@ begin
     B('criticalsection-not-released',  'bug-patterns', 'error',   'Critical section acquired without a matching Leave/Release/TMonitor.Exit in finally');
     B('ui-access-in-thread',           'bug-patterns', 'warning', 'UI access inside a TThread.Execute (not thread-safe)');
     B('global-form-variable',          'bug-patterns', 'warning', 'Unit-level global variable of the form class type -- potential leak');
-    B('unsafe-typecast-without-is',    'bug-patterns', 'warning', 'Hard cast TFoo(x) of an object reference with no guarding ''x is TFoo''', False); { OFF by default -- heuristic; many unguarded casts are provably safe. Opt in via "enabled" }
+    B('unsafe-typecast-without-is',    'bug-patterns', 'warning', 'Hard cast TFoo(x) of an object reference with no guarding ''x is TFoo''; with a 1.44 index (ref_types) also T(a.b) and T(F(x)), and only when the index and the library prove both ends are classes and the cast narrows (no record casts, no upcasts)', False); { OFF by default -- heuristic; many unguarded casts are provably safe. Opt in via "enabled" }
     B('exception-constructed-but-not-raised', 'bug-patterns', 'warning', 'Exception E...Create(...) constructed as a statement but never raised');
     B('duplicate-exception-handler',   'bug-patterns', 'warning', 'Two ''on <Class>'' handlers for the same class in one try -- the second is unreachable');
     B('repeated-else-if-condition',    'bug-patterns', 'warning', 'The same condition repeats in an if/else-if chain -- the later branch is unreachable');
@@ -623,7 +623,7 @@ begin
       Opt back in per project with "enabled":["commented-out-code"]. }
     B('commented-out-code',    'dead-code', 'hint',    'Comment appears to be commented-out code (assignment or call)', False);
     B('function-result-ignored','dead-code','hint',    'Result of a same-unit function call is discarded', False); { OFF by default -- FP-prone (builders/adders/runners legitimately discard results); opt in via "enabled" }
-    B('redundant-cast',        'dead-code', 'hint',    'Cast of a value to the type it already has (no-op)');
+    B('redundant-cast',        'dead-code', 'hint',    'Cast of a value to the type it already has (no-op); with a 1.44 index (ref_types) also T(a.b), T(F(x)) and x as T, and the index overrules the per-file type map');
 
     { --- data-flow --- }
     B('used-before-assignment','data-flow', 'error',   'Variable used before assignment');
@@ -914,6 +914,11 @@ begin
     B('heavy-initialization', 'project-wide', 'hint', 'An initialization section reaches the file system, the registry, the network, a database or a dialog -- it can fail or block before the application has an exception handler or a window');
     B('finalization-after-dependency', 'project-wide', 'warning', 'A finalization section reaches a global that a unit finalized earlier in the computed order tears down in its own finalization -- the read sees a freed object');
     B('init-order-hazard', 'project-wide', 'warning', 'An initialization section reaches a global that a unit initializing later in the computed order sets in its own initialization -- works by accident in one uses order, reads an unset variable in another');
+    B('upcast-then-downcast', 'project-wide', 'warning', 'TLeaf(TBase(x)) or (x as TBase) as TLeaf where x already is a TBase: the inner cast adds nothing and the outer one is unchecked narrowing; needs a 1.44 index (ref_types)');
+    B('with-on-temporary', 'project-wide', 'warning', 'with TFoo.Create do where the body never frees the object and no owner takes it: the only name it had is gone, so it leaks; needs a 1.44 index (ref_types)');
+    B('interface-holder-of-non-refcounted', 'project-wide', 'warning', 'An interface variable is assigned a TComponent-like object: _AddRef does nothing, so the holder keeps nothing alive and dangles once the owner frees the object; needs a 1.44 index (ref_types)');
+    B('argument-narrows', 'project-wide', 'warning', 'A call passes a variable, field or function result of a wider numeric type than the by-value parameter (Int64 to Integer): the compiler truncates silently; needs a 1.44 index (ref_types)');
+    B('is-always-true', 'project-wide', 'warning', 'x is T where the static type of x already descends from T: the test only asks whether x is nil; needs a 1.44 index (ref_types)'); { ON (1.44 lane rulesf1): YADF 0, Loader2025 0, Micronite2027 1, a true positive read in the source }
     { taint wave T2: store-backed interprocedural taint (DRagLint.Lint.TaintRules; catalogues rules\taint-*.json) }
     B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');
     B('taint-command-injection', 'security', 'error', 'Tainted data reaches a process launch sink -- a catalogued source flows across routines into ShellExecute / CreateProcess / WinExec (CWE-78)');
