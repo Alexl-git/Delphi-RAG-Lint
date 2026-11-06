@@ -1651,7 +1651,7 @@ begin
   end;
   { The copy can be gigabytes: it never outlives the run. The logs stay only when something went wrong. }
   for var Tail: string in ['', '-wal', '-shm'] do
-    if TFile.Exists(TPath.Combine(Dir, 'after-proof.sqlite') + Tail) then TFile.Delete(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);
+    System.SysUtils.DeleteFile(TPath.Combine(Dir, 'after-proof.sqlite') + Tail);
   if (ProofFailure = '') and (Length(Result.Rebinds) = 0) then
   begin
     Result.Applied:= True;
