@@ -606,7 +606,7 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckMutableGlobalVars(const AFile: string): TArray<TLintFinding>;
+      class function CheckMutableGlobalVars(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0): TArray<TLintFinding>;
       /// <summary>Flags a value-returning FUNCTION that also mutates observable state
       /// (a Command-Query Separation violation, Fowler): a query that is also a command.
       /// The conservative mutation predicate is a write to a class FIELD -- either an
@@ -5783,7 +5783,7 @@ begin
   end;
 end;
 
-class function TAstChecker.CheckMutableGlobalVars(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckMutableGlobalVars(const AFile: string; const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 var
   Src     : TBytes;
   PF      : TParsedFile;
@@ -5796,6 +5796,47 @@ var
     SetLength(B, Integer(ANode.EndByte) - Integer(ANode.StartByte));
     Move(Src[ANode.StartByte], B[0], Length(B));
     Result:= TEncoding.UTF8.GetString(B);
+  end;
+
+  { 1.45 la (row 21, index fact F2): True when the variable declared at ALine has at least one write
+    and EVERY write the index knows sits inside this unit's initialization section: a value set once
+    before the program runs is not shared MUTABLE state. Writes are the refs of kind 'write' bound to
+    the variable (any unit), plus the same-named refs of this file the resolver left unbound; the
+    first one outside an initialization section, or one with no enclosing symbol, answers False.
+    No store, no section attribution (an index older than 1.44) or no write at all: False, the
+    variable is reported as before. }
+  function WrittenOnlyInInitialization(const AName: string; ALine: Integer): Boolean;
+  const
+    REF_KIND_WRITE = 'write';
+  var
+    S      : TSymbol;
+    R      : TReference;
+    Writes : Integer;
+    Bound  : TDictionary<Int64, Boolean>;
+  begin
+    Result:= False;
+    if (AStore = nil) or (AFileId <= 0) then Exit;
+    for S in AStore.FindSymbolsByExactName(AName) do
+    begin
+      if (S.Kind <> skVarDecl) or (S.FileId <> AFileId) or (S.StartLine <> ALine) then Continue;
+      Writes:= 0;
+      Bound := TDictionary<Int64, Boolean>.Create;
+      try
+        for R in AStore.FindReferencesTo(S.Id) do
+        begin
+          Bound.AddOrSetValue(R.Id, True);
+          if R.Kind <> REF_KIND_WRITE then Continue;
+          if (R.EnclosingSymbolId = 0) or (AStore.GetSymbolById(R.EnclosingSymbolId).Kind <> skInitialization) then Exit;
+          Inc(Writes);
+        end;
+        for R in AStore.GetReferencesFromFile(AFileId) do
+          if (not Bound.ContainsKey(R.Id)) and (R.Kind = REF_KIND_WRITE) and (R.ReceiverText = '') and SameText(R.NameText, AName)
+             and ((R.EnclosingSymbolId = 0) or (AStore.GetSymbolById(R.EnclosingSymbolId).Kind <> skInitialization)) then Exit;
+      finally
+        Bound.Free;
+      end;
+      Exit(Writes > 0);
+    end;
   end;
 
   { Find every unit-scope declVars -> declVar and emit one finding per declared identifier.
@@ -5830,6 +5871,7 @@ var
           VarName:= NodeStr(NameId);
           if VarName = '' then Continue;
           P:= NameId.StartPoint;
+          if WrittenOnlyInInitialization(VarName, Integer(P.Row) + 1) then Continue;
           F:= Default(TLintFinding);
           F.RuleId  := 'mutable-global-variable';
           F.Severity:= 'info';

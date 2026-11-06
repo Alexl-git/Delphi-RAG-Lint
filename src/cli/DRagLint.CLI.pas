@@ -17616,7 +17616,7 @@ begin
       { v0.61: unit-level global variable whose type is the form class -- potential leak }
       if (NarrowRule = '') or (NarrowRule = 'global-form-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars(EffPath);
       { v0.80: any unit-level writable var -- Fowler "Global Data" refactoring smell (#14) }
-      if (NarrowRule = '') or (NarrowRule = 'mutable-global-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars(EffPath);
+      if (NarrowRule = '') or (NarrowRule = 'mutable-global-variable') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars(EffPath, FlowStore, FlowFid);
       { v0.83: value-returning function that also mutates a field -- Command-Query Separation (OFF) }
       if (NarrowRule = '') or (NarrowRule = 'separate-query-from-modifier') then Findings:= Findings
         + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(EffPath);
@@ -24005,7 +24005,7 @@ begin
         if LintRuleWants(Nr, ['global-form-variable']) then
           ScanAdd(14, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars           (PasPath));
         if LintRuleWants(Nr, ['mutable-global-variable']) then
-          ScanAdd(15, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars        (PasPath));
+          ScanAdd(15, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars        (PasPath, Store, Store.FindFileIdByPath(PasPath)));
         if LintRuleWants(Nr, ['separate-query-from-modifier']) then
           ScanAdd(16, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(PasPath)); { v0.83: CQS (OFF) }
         if LintRuleWants(Nr, ['unsafe-shellexecute']) then

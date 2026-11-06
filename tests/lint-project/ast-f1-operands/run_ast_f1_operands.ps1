@@ -59,7 +59,7 @@ try {
   $have = @(& $exePath sql --db $db --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1) -join ' '
   Check 'the fixture DB has the ref_types table' ($have -match '\b1 row') $have
 
-  $ruleArgs = @('--enable', 'string-equality-comparison,exhaustive-enum-case,interface-object-mixing')
+  $ruleArgs = @('--enable', 'string-equality-comparison,exhaustive-enum-case,interface-object-mixing,mutable-global-variable')
   $on  = Parse-Findings (& $exePath lint-all --db $db --format json @ruleArgs 2>$null)
   $off = Parse-Findings (& $exePath lint-all --db $old --format json @ruleArgs 2>$null)
   $nod = Parse-Findings (& $exePath lint $file --format json @ruleArgs 2>$null)
@@ -101,7 +101,20 @@ try {
   $mAll = @(($mTrig + $mCtl) | Sort-Object)
   Check 'interface-object-mixing with the table: only the TRIGGER-MIX line' ((@(MixLines $on) -join ',') -eq ($mTrig -join ',')) "got [$(@(MixLines $on) -join ',')] want [$($mTrig -join ',')]"
   Check 'interface-object-mixing has a trigger and a control in the fixture' (($mTrig.Count -gt 0) -and ($mCtl.Count -gt 0))
-  Check 'interface-object-mixing without the table: today, the CONTROL line is reported too' ((@(MixLines $off) -join ',') -eq ($mAll -join ',')) "got [$(@(MixLines $off) -join ',')]"} finally {
+  Check 'interface-object-mixing without the table: today, the CONTROL line is reported too' ((@(MixLines $off) -join ',') -eq ($mAll -join ',')) "got [$(@(MixLines $off) -join ',')]"  # row 21, mutable-global-variable (F2): a variable written only inside initialization is write-once
+  $gFile = Join-Path $src 'uAfGlob.pas'
+  $gTrig = @(Markers $gFile 'TRIGGER-GLOB'); $gCtl = @(Markers $gFile 'CONTROL-GLOB')
+  function GlobLines($F) { return @($F | Where-Object { $_.rule -eq 'mutable-global-variable' -and $_.file_path -like '*uAfGlob*' } | ForEach-Object { [int]$_.start_line } | Sort-Object) }
+  $gAll = @(($gTrig + $gCtl) | Sort-Object)
+  Check 'mutable-global-variable with the index: only the TRIGGER-GLOB lines' ((@(GlobLines $on) -join ',') -eq ($gTrig -join ',')) "got [$(@(GlobLines $on) -join ',')] want [$($gTrig -join ',')]"
+  Check 'mutable-global-variable has a trigger and a control in the fixture' (($gTrig.Count -gt 0) -and ($gCtl.Count -gt 0))
+  $noSec = Join-Path $scratch 'nosec.sqlite'
+  Copy-Item $db $noSec
+  $py2 = Join-Path $scratch 'nosec.py'
+  [IO.File]::WriteAllText($py2, "import sqlite3, sys`nc = sqlite3.connect(sys.argv[1])`nc.execute('UPDATE refs SET enclosing_symbol_id = NULL')`nc.commit()`nc.close()`n")
+  python $py2 $noSec
+  $nsF = Parse-Findings (& $exePath lint-all --db $noSec --format json @ruleArgs 2>$null)
+  Check 'mutable-global-variable with no section attribution (enclosing_symbol_id NULL): today, the CONTROL line is reported too' ((@(GlobLines $nsF) -join ',') -eq ($gAll -join ',')) "got [$(@(GlobLines $nsF) -join ',')]"} finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
 }
 if ($script:fail) { Write-Host 'FAIL'; exit 1 } else { Write-Host 'PASS'; exit 0 }
