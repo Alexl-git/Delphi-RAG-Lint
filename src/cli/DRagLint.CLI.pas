@@ -17752,7 +17752,7 @@ begin
       if LintRuleWants(NarrowRule, LINT_GATE_DEAD_CODE) then
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
           EffPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
-          Cfg.ThresholdFor('message-chain', 4)) do
+          Cfg.ThresholdFor('message-chain', 4), FlowStore, FlowFid, FlowLibStore) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       { Clippy-parity wave (L0): the seven new per-file checker units. }
       TraceLintChecker('controlflow');
@@ -24103,7 +24103,7 @@ begin
         if LintRuleWants(Nr, LINT_GATE_DEAD_CODE) then
           for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
             PasPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
-            Cfg.ThresholdFor('message-chain', 4)) do Findings:= Findings + [F];
+            Cfg.ThresholdFor('message-chain', 4), Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];
         { Clippy-parity wave (L0): the seven new per-file checker units. }
         if LintRuleWants(Nr, LINT_GATE_CONTROL_FLOW) then
           for F in DRagLint.Diagnostics.ControlFlowChecks.TControlFlowChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
