@@ -510,7 +510,8 @@ end;
   text (`S[First]`) is recovered from the source by the resolve pass, exactly as
   for `A[i].Method;`, which EmitStatementCall already emitted as a call.
 
-  A CALL receiver (`F(x).M`) still answers False: deliberately out of scope.
+  A CALL receiver (`F(x).M`) answers False here: see IsHardCastRootedReceiver and
+  IsCallRootedReceiver.
 
   X1 (2026-10-25): a POSTFIX DEREFERENCE of such a receiver -- `P^`, `A[i]^`,
   `R.P^` (an exprUnary whose operator follows its operand) -- answers True as
@@ -559,8 +560,8 @@ end;
   and does not try: it records the receiver text, and the resolver decides --
   kind 6 types `T(X)` as the cast target when T names a type, kind 11 types
   `F(X)` by F's declared result, and an unknown head binds nothing. Only a
-  BARE identifier head qualifies: `O.Mk(x).L` (a method call segment) is left
-  to the call stream as before, which keeps this extraction change narrow. }
+  BARE identifier head with one argument qualifies: every other call receiver
+  is IsCallRootedReceiver's. }
 function IsHardCastRootedReceiver(const ANode: TTSNode): Boolean;
 begin
   Result:= False;
@@ -576,6 +577,25 @@ begin
   if R.IsNull or (R.NodeType <> 'identifier') then Exit;
   Result:= IsHardCastRootedReceiver(ANode.ChildByField('lhs'));
 end;
+
+{ Ref-gap G6 support (lane 145): is this node a CALL receiver that G5 does not
+  take -- `O.Mk(x)`, `F()`, `F(a, b)` -- or a dotted chain of identifier members
+  rooted in one, `O.Mk(x).A.B`? The call stream records a member that is itself
+  CALLED (`H.Names().Make(2)`) and nothing records one that is only read:
+  `M:= H.Names().FLeaf` had no ref for FLeaf at all, so ref_types, find-callers
+  and unused-public-symbol could not see it. Exactly the complement of G5 among
+  call-rooted receivers, so one member never gets two rows from these rungs. }
+function IsCallRootedReceiver(const ANode: TTSNode): Boolean;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'exprCall' then Exit(not IsHardCastRootedReceiver(ANode));
+  if ANode.NodeType <> 'exprDot' then Exit;
+  var R:= ANode.ChildByField('rhs');
+  if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+  Result:= IsCallRootedReceiver(ANode.ChildByField('lhs'));
+end;
+
 const
   { T-11: a longer receiver is not recorded at parse ('' -> NULL), and the
     resolver falls back to its line scan for it. }
@@ -3695,6 +3715,15 @@ begin
         var RG5:= ANode.ChildByField('rhs');
         if (not RG5.IsNull) and (RG5.NodeType = 'identifier') then
           AState.EmitRef('member-access', NodeText(RG5, AState.Source), RG5, ReceiverTextOf(ANode, AState.Source));
+      end;
+      // Ref-gap G6 (lane 145): the same capture when the receiver is any other
+      // CALL -- `H.Names().FLeaf`, `F().L`, `O.Mk(x).A.B`. See
+      // IsCallRootedReceiver; the resolver types the receiver text (call chain).
+      if IsCallRootedReceiver(L) then
+      begin
+        var RG6:= ANode.ChildByField('rhs');
+        if (not RG6.IsNull) and (RG6.NodeType = 'identifier') then
+          AState.EmitRef('member-access', NodeText(RG6, AState.Source), RG6, ReceiverTextOf(ANode, AState.Source));
       end;
       for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
       Exit;

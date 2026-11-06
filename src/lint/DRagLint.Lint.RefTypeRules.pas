@@ -103,9 +103,9 @@ type
   /// <summary>Static types of expressions in ONE unit, from ref_types (index fact F1).</summary>
   /// <remarks>Not thread-safe. Owns its caches and a query on AStore's connection, so it must not
   /// outlive the store. Creating it costs one query for the file's refs; ask many nodes of the same
-  /// file from one reader. Inside a `with` body a bare name may bind to a member of the
-  /// with-expression, which the index cannot check: the reader does not track `with`, so a caller
-  /// must not ask about nodes inside one (the rules of this unit answer nothing there).</remarks>
+  /// file from one reader. Safe inside a `with`, no caller has to guard: there a name may bind to
+  /// a member of the with-subject, so the reader answers only when the resolver decided the name
+  /// (see TypeLeafOf). The first with-subject is outside its own scope; a later one is inside.</remarks>
   TExprTypeReader = class
     strict private
       FScan : TObject;
@@ -125,7 +125,11 @@ type
       /// `A.B(x)`: the result type), a parenthesised expression, `x as T` or `T(x)`.</param>
       /// <param name="ALeaf">Out: the type's leaf name as written in the index; '' when false.</param>
       /// <returns>False with no table, no row, a conflicting row, or an expression shape that has
-      /// no static type (a subscript, a dereference, arithmetic): the caller keeps what it knew.</returns>
+      /// no static type (a subscript, a dereference, arithmetic): the caller keeps what it knew.
+      /// Inside a `with` scope also False unless a ref_types row proves it: the expression's own row
+      /// and the row of its leftmost name (or an explicit Self), neither of them a cast. The written
+      /// type of `x as T` or `T(x)` is no proof there, and neither is a chain rooted in a subscript or
+      /// parentheses. Never a wrong type: unknown instead.</returns>
       function TypeLeafOf(const ANode: TTSNode; out ALeaf: string): Boolean;
       /// <summary>TypeDescendsFrom on this reader's caches.</summary>
       /// <param name="ATypeLeaf">See TypeDescendsFrom.</param>
@@ -205,6 +209,8 @@ const
   FIELD_BODY       = 'body';
   VIA_CTOR         = 'ctor';
   VIA_RESULT       = 'result';
+  VIA_CAST         = 'cast';
+  KEYWORD_NODE_PREFIX = 'k';
   NIL_WORD         = 'nil';
   { A call that ends the object's life, or hands the job to the object. }
   FREE_WORDS_RX    = '\b(free|destroy|release|disposeof|freeandnil|freeonterminate)\b';
@@ -315,6 +321,12 @@ type
       procedure Attach(AFileId: Int64; const ASrc: TBytes);
       /// <summary>The static type leaf of an expression; False when no fact answers.</summary>
       function ExprTypeLeaf(const ANode: TTSNode; out ALeaf: string): Boolean;
+      { True when a name in ANode may bind to a member of an enclosing with-subject. }
+      function InWithScope(const ANode: TTSNode): Boolean;
+      { The identifier whose ref carries the type of the (parens-free) expression; null when none. }
+      function LastHopName(const AInner: TTSNode): TTSNode;
+      { ExprTypeLeaf inside a with scope: answers only on proof, see TExprTypeReader.TypeLeafOf. }
+      function WithProofLeaf(const AInner: TTSNode; out ALeaf: string): Boolean;
       /// <summary>Descent of a type name from an ancestor leaf over the closure.</summary>
       function DescentOf(const ATypeLeaf, AAncestorLeaf: string): TDescent;
       /// <summary>The findings so far, in scan order.</summary>
@@ -1083,6 +1095,10 @@ begin
   ALeaf := '';
   Result:= False;
   if ANode.IsNull then Exit;
+  var Inner: TTSNode:= ANode;
+  while (not Inner.IsNull) and (Inner.NodeType = NODE_PARENS) do Inner:= Inner.NamedChild(0);
+  if Inner.IsNull then Exit;
+  if InWithScope(ANode) then Exit(WithProofLeaf(Inner, ALeaf));
   var T: TExprType:= StaticType(ANode);
   if T.Known and (T.Facts.Name <> '') then
   begin
@@ -1090,21 +1106,72 @@ begin
     Exit(True);
   end;
   { A type the store has no class for (a record, a simple type) still has its recorded name. }
-  var Inner: TTSNode:= ANode;
-  while (not Inner.IsNull) and (Inner.NodeType = NODE_PARENS) do Inner:= Inner.NamedChild(0);
-  if Inner.IsNull then Exit;
-  var Name: TTSNode:= Default(TTSNode);
-  if Inner.NodeType = TYPE_NODE_ID then Name:= Inner
-  else if Inner.NodeType = NODE_DOT then Name:= Inner.ChildByField(FIELD_RHS)
-  else if Inner.NodeType = NODE_CALL then
-  begin
-    var Ent: TTSNode:= Inner.ChildByField(FIELD_ENTITY);
-    if Ent.IsNull then Exit;
-    if Ent.NodeType = TYPE_NODE_ID then Name:= Ent
-    else if Ent.NodeType = NODE_DOT then Name:= Ent.ChildByField(FIELD_RHS);
-  end;
   var Fact: TRefFact;
+  var Name: TTSNode:= LastHopName(Inner);
   if Name.IsNull or (Name.NodeType <> TYPE_NODE_ID) or not FactAt(Name, Fact) or (Fact.TypeQName = '') then Exit;
+  ALeaf := LeafOf(Fact.TypeQName);
+  Result:= ALeaf <> '';
+end;
+
+function TRefTypeScan.InWithScope(const ANode: TTSNode): Boolean;
+begin
+  Result:= False;
+  var P: TTSNode:= ANode.Parent;
+  while not P.IsNull do
+  begin
+    if P.NodeType = NODE_WITH then
+    begin
+      { The first subject is evaluated outside its own with; every other child is inside. The
+        grammar's keywords are named children (kWith first). A comment before the subject reads as
+        the first child: that errs towards unknown. }
+      var First: TTSNode:= Default(TTSNode);
+      for var I: Integer:= 0 to Integer(P.NamedChildCount) - 1 do
+      begin
+        First:= P.NamedChild(I);
+        if not First.NodeType.StartsWith(KEYWORD_NODE_PREFIX) then Break;
+      end;
+      if First.IsNull or (ANode.StartByte < First.StartByte) or (ANode.EndByte > First.EndByte) then Exit(True);
+    end;
+    P:= P.Parent;
+  end;
+end;
+
+function TRefTypeScan.LastHopName(const AInner: TTSNode): TTSNode;
+begin
+  Result:= Default(TTSNode);
+  if AInner.NodeType = TYPE_NODE_ID then Result:= AInner
+  else if AInner.NodeType = NODE_DOT then Result:= AInner.ChildByField(FIELD_RHS)
+  else if AInner.NodeType = NODE_CALL then
+  begin
+    var Ent: TTSNode:= AInner.ChildByField(FIELD_ENTITY);
+    if Ent.IsNull then Exit;
+    if Ent.NodeType = TYPE_NODE_ID then Result:= Ent
+    else if Ent.NodeType = NODE_DOT then Result:= Ent.ChildByField(FIELD_RHS);
+  end;
+end;
+
+function TRefTypeScan.WithProofLeaf(const AInner: TTSNode; out ALeaf: string): Boolean;
+var
+  Fact: TRefFact;
+begin
+  ALeaf := '';
+  Result:= False;
+  var Name: TTSNode:= LastHopName(AInner);
+  if Name.IsNull or (Name.NodeType <> TYPE_NODE_ID) or not FactAt(Name, Fact) then Exit;
+  if (Fact.TypeQName = '') or (Fact.Via = VIA_CAST) then Exit;
+  { The resolver's with verdict decided the chain's leftmost name, unless that name is a cast head:
+    the cast rung takes any call whose name is a type, without asking the with scope. }
+  var Root: TTSNode:= AInner;
+  while not Root.IsNull do
+    if Root.NodeType = NODE_DOT then Root:= Root.ChildByField(FIELD_LHS)
+    else if Root.NodeType = NODE_CALL then Root:= Root.ChildByField(FIELD_ENTITY)
+    else Break;
+  if Root.IsNull or (Root.NodeType <> TYPE_NODE_ID) then Exit;
+  if not SameText(Text(Root), SELF_WORD) then
+  begin
+    var RootFact: TRefFact;
+    if (not FactAt(Root, RootFact)) or (RootFact.TypeQName = '') or (RootFact.Via = VIA_CAST) then Exit;
+  end;
   ALeaf := LeafOf(Fact.TypeQName);
   Result:= ALeaf <> '';
 end;
