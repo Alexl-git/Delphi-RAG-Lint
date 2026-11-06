@@ -878,6 +878,7 @@ begin
     B('interfaced-object-nil-leak', 'resource-lifetime', 'warning', 'Object reference of a TInterfacedObject descendant is set to nil while it holds a fresh instance -- an object reference holds no count, so nil releases nothing and the instance leaks', False);
     B('identifier-case-mismatch', 'naming', 'info', 'A name is spelled in a different case from its declaration -- locals and parameters from the AST, bound refs from the index', False);
     B('datamodule-form-global', 'project-wide', 'warning', 'A unit declaring a TDataModule descendant reaches another unit''s global form variable -- the data layer now needs that form to exist', False);
+    B('upcast-then-downcast', 'project-wide', 'warning', 'TLeaf(TBase(x)) or (x as TBase) as TLeaf where x already is a TBase: the inner cast adds nothing and the outer one is unchecked narrowing; needs a 1.44 index (ref_types)');
     B('is-always-true', 'project-wide', 'warning', 'x is T where the static type of x already descends from T: the test only asks whether x is nil; needs a 1.44 index (ref_types)'); { ON (1.44 lane rulesf1): YADF 0, Loader2025 0, Micronite2027 1, a true positive read in the source }
     { taint wave T2: store-backed interprocedural taint (DRagLint.Lint.TaintRules; catalogues rules\taint-*.json) }
     B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');

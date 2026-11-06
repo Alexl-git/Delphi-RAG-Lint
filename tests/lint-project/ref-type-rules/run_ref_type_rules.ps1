@@ -56,13 +56,16 @@ try {
   # positive-control: is-always-true
   CheckRule $db $src 'is-always-true' 'ALWAYS'
 
+  # positive-control: upcast-then-downcast
+  CheckRule $db $src 'upcast-then-downcast' 'UPDOWN'
+
   $plain = @(Parse-Findings (& $exePath lint-all --db $db --format json 2>$null))
-  foreach ($on in @('is-always-true')) {
+  foreach ($on in @('is-always-true', 'upcast-then-downcast')) {
     Check "a plain lint-all: $on ships ON" (@($plain | Where-Object { $_.rule -eq $on }).Count -gt 0) ''
   }
   $file = Join-Path $src 'uRtUse.pas'
   $one = @(Parse-Findings (& $exePath lint $file --db $db --format json 2>$null))
-  foreach ($on in @('is-always-true')) {
+  foreach ($on in @('is-always-true', 'upcast-then-downcast')) {
     Check "lint <file> with an index: $on fires" (@($one | Where-Object { $_.rule -eq $on }).Count -gt 0) ''
   }
 

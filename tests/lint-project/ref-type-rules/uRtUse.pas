@@ -6,8 +6,21 @@ uses
   uRtBase;
 
 procedure IsTests(ALeaf: TRtLeaf; ABase: TRtBase; const AObj: TObject);
+procedure CastTests(ALeaf: TRtLeaf; ABase: TRtBase);
 
 implementation
+
+procedure CastTests(ALeaf: TRtLeaf; ABase: TRtBase);
+var
+  Sink: Integer;
+begin
+  Sink:= TRtLeaf(TRtBase(ALeaf)).Tag;  // TRIGGER-UPDOWN-CALL
+  Sink:= ((ALeaf as TRtBase) as TRtMid).Tag;  // TRIGGER-UPDOWN-AS
+  Sink:= TRtMid(TObject(ALeaf)).Tag;  // TRIGGER-UPDOWN-OBJECT
+  Sink:= TRtLeaf(ABase).Tag;  // CONTROL-UPDOWN-ONECAST
+  Sink:= TRtLeaf(TRtMid(ABase)).Tag;  // CONTROL-UPDOWN-INNERNARROWS
+  Sink:= TRtBase(TRtMid(ALeaf)).Tag + Sink;  // CONTROL-UPDOWN-BOTHUP
+end;
 
 procedure IsTests(ALeaf: TRtLeaf; ABase: TRtBase; const AObj: TObject);
 var

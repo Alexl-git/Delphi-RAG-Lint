@@ -35,8 +35,10 @@ uses
 const
   /// <summary>Rule id: `x is T` where the static type of x already descends from T.</summary>
   IS_ALWAYS_TRUE_RULE = 'is-always-true';
+  /// <summary>Rule id: a cast to an ancestor and straight back down, TLeaf(TBase(x)).</summary>
+  UPCAST_THEN_DOWNCAST_RULE = 'upcast-then-downcast';
   /// <summary>Every project rule this unit emits, as `--rule` and dl:ok markers spell them.</summary>
-  REF_TYPE_RULES: array[0..0] of string = (IS_ALWAYS_TRUE_RULE);
+  REF_TYPE_RULES: array[0..1] of string = (IS_ALWAYS_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE);
   /// <summary>The ones that ship OFF; each names why in the catalog.</summary>
   REF_TYPE_RULES_OFF: array of string = [];
 
@@ -78,7 +80,8 @@ const
   NODE_DOT         = 'exprDot';
   NODE_CALL        = 'exprCall';
   NODE_PARENS      = 'exprParens';
-  NODE_AS          = 'exprAs';
+  { The grammar aliases exprAs to exprBinary: `x as T` is told apart by its operator node. }
+  OP_NODE_AS       = 'kAs';
   NODE_BINARY      = 'exprBinary';
   NODE_WITH        = 'with';
   FIELD_LHS        = 'lhs';
@@ -159,6 +162,9 @@ type
       function WrittenType(const ANode: TTSNode): TTypeFacts;
       function CastTarget(const ANode: TTSNode; out AFacts: TTypeFacts; out AOperand: TTSNode): Boolean;
       function StaticType(const ANode: TTSNode): TExprType;
+      function CastParts(const ANode: TTSNode; out ATarget: TTypeFacts; out AOperand: TTSNode): Boolean;
+      procedure CheckUpcastThenDowncast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);
+      procedure CheckCast(const ANode: TTSNode);
       procedure CheckIs(const ANode: TTSNode);
       procedure Walk(const ANode: TTSNode);
     public
@@ -171,6 +177,12 @@ type
       /// <summary>The findings so far, in scan order.</summary>
       function Findings: TArray<TLintFinding>;
   end;
+
+function IsAsNode(const ANode: TTSNode): Boolean;
+begin
+  Result:= (ANode.NodeType = NODE_BINARY) and (not ANode.ChildByField(FIELD_OP).IsNull)
+    and (ANode.ChildByField(FIELD_OP).NodeType = OP_NODE_AS);
+end;
 
 function LeafOf(const AName: string): string;
 var
@@ -475,7 +487,7 @@ begin
   if ANode.IsNull then Exit;
   var NT: string:= ANode.NodeType;
   if NT = NODE_PARENS then Exit(StaticType(ANode.NamedChild(0)));
-  if NT = NODE_AS then
+  if IsAsNode(ANode) then
   begin
     Result.Facts:= WrittenType(ANode.ChildByField(FIELD_RHS));
     Result.Known:= Result.Facts.IsClass or Result.Facts.IsIntf;
@@ -521,11 +533,53 @@ begin
         [Text(LhsN), Lhs.Facts.Name, Target.Name, Text(LhsN)]));
 end;
 
+function TRefTypeScan.CastParts(const ANode: TTSNode; out ATarget: TTypeFacts; out AOperand: TTSNode): Boolean;
+begin
+  Result  := False;
+  ATarget := Default(TTypeFacts);
+  AOperand:= Default(TTSNode);
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = NODE_CALL then Exit(CastTarget(ANode, ATarget, AOperand));
+  if ANode.NodeType = NODE_PARENS then Exit(CastParts(ANode.NamedChild(0), ATarget, AOperand));
+  if not IsAsNode(ANode) then Exit;
+  ATarget := WrittenType(ANode.ChildByField(FIELD_RHS));
+  AOperand:= ANode.ChildByField(FIELD_LHS);
+  Result  := ATarget.IsClass or ATarget.IsIntf;
+end;
+
+procedure TRefTypeScan.CheckUpcastThenDowncast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);
+var
+  Inner  : TTypeFacts;
+  InnerOp: TTSNode;
+begin
+  if not CastParts(AOperand, Inner, InnerOp) then Exit;
+  if (not Inner.IsClass) or Inner.Homonym then Exit;
+  var Source: TExprType:= StaticType(InnerOp);
+  if (not Source.Known) or not Source.Facts.IsClass then Exit;
+  var InnerLeaf: string:= Inner.Name.ToLower;
+  if not (Source.Facts.HasAncestor(InnerLeaf) and AOuter.HasAncestor(InnerLeaf)) then Exit;
+  if SameText(AOuter.Name, Inner.Name) then Exit;
+  Emit(UPCAST_THEN_DOWNCAST_RULE, ANode,
+    Format('''%s'' is declared %s: the cast to %s adds nothing and the cast on to %s narrows it unchecked. Cast once, with ''as'' or behind an ''is'' test, or fix the declared type.',
+      [Text(InnerOp), Source.Facts.Name, Inner.Name, AOuter.Name]));
+end;
+
+procedure TRefTypeScan.CheckCast(const ANode: TTSNode);
+var
+  Outer  : TTypeFacts;
+  Operand: TTSNode;
+begin
+  if not CastParts(ANode, Outer, Operand) then Exit;
+  if (not Outer.IsClass) or Outer.Homonym then Exit;
+  if Wants(UPCAST_THEN_DOWNCAST_RULE) then CheckUpcastThenDowncast(ANode, Outer, Operand);
+end;
+
 procedure TRefTypeScan.Walk(const ANode: TTSNode);
 begin
   if ANode.IsNull then Exit;
   var NT: string:= ANode.NodeType;
-  if NT = NODE_BINARY then CheckIs(ANode);
+  if IsAsNode(ANode) or (NT = NODE_CALL) then CheckCast(ANode)
+  else if NT = NODE_BINARY then CheckIs(ANode);
   var IsWith: Boolean:= NT = NODE_WITH;
   if IsWith then Inc(FWithDepth);
   for var I: Integer:= 0 to Integer(ANode.NamedChildCount) - 1 do
