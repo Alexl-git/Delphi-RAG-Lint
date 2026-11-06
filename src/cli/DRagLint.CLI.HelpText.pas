@@ -119,7 +119,7 @@ begin
   Writeln('       ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind <k> --all');
   Writeln('       ^ --decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`)');
   Writeln('         -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.');
-  Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file>] [--library-db <lib.sqlite>]');
+  Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]');
   Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
   Writeln('                               --limit N keeps the first N rows of each JSON group (declarations included) and adds');
   Writeln('                               "limit" and "totals" (the full counts); without it nothing is capped.');
@@ -185,7 +185,7 @@ begin
   Writeln('                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,');
   Writeln('                               unit-name and the reported path)');
   Writeln('  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr|unit-not-in-library|help] [--json]');
-  Writeln('  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)');
+  Writeln('  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)');
   Writeln('                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.');
   Writeln('                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to');
   Writeln('                               apply every fixable finding in the file. Only rules whose catalog entry has');
@@ -525,6 +525,10 @@ begin
   Writeln('       ^ no synonyms and no embeddings: remove does not find delete.');
   Writeln('       ^ exit 3 = this index has no concept-search table yet; run index once (backfills from existing rows, no re-parse).');
   Writeln('       see wiki page: concept-search');
+  Writeln('  drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact] [--project <x.dproj> [--no-create]]');
+  Writeln('       ^ a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.');
+  Writeln('       ^ STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed.');
+  Writeln('       see wiki page: query-name-like');
   Writeln('  drag-lint query --text "<phrase>" --near <QName> [--hops 1..3] [--hops-uses] [--near-boost] [--db ...] [--json]');
   Writeln('       ^ The default RESTRICTS: a hit outside N hops is dropped, not demoted; --near-boost keeps it.');
   Writeln('       ^ A hop is one resolved call edge, callers and callees; --hops 4 is refused (use impact --depth).');
@@ -678,7 +682,7 @@ begin
   end;
   if pVerb = 'usages' then
   begin
-    Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file>] [--library-db <lib.sqlite>]');
+    Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]');
     Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
     Writeln('                               --limit N keeps the first N rows of each JSON group (declarations included) and adds');
     Writeln('                               "limit" and "totals" (the full counts); without it nothing is capped.');
@@ -753,7 +757,7 @@ begin
     Writeln('                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,');
     Writeln('                               unit-name and the reported path)');
     Writeln('  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr|unit-not-in-library|help] [--json]');
-    Writeln('  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)');
+    Writeln('  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)');
     Writeln('                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.');
     Writeln('                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to');
     Writeln('                               apply every fixable finding in the file. Only rules whose catalog entry has');

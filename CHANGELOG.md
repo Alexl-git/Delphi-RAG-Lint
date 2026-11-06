@@ -3,6 +3,39 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.44.0-alpha -- 2026-11-05
+
+1.44 wave 1, integrated on lane/144-int. NO extractor or resolver bump: no re-parse, no re-resolve. Lane facts (ref_types, section attribution) follows as 1.44.1-alpha with the resolver bump.
+
+### Added
+- hover: an interface method lists the methods that implement it (`Implemented by: TA.Work, TB.Work`, at most six, then `(+N more)`), in plain, md, json and the LSP hover bundle.
+- First use of a project: a verb that needs the project's index, given `--project` and no `--db`, builds a missing index at its proper path and says so on one stderr line; `--no-create` skips that. `usages --in <file>` finds the project itself and follows the same rule. Never with an explicit `--db`, with no project known, from a private engine copy, or under the `lsp` and `serve` servers; two creators cannot race (`<db>.creating`).
+- cycles --fix / --plan: constructor inversion: a class the other unit constructs (`S := TX.Create(a)`) and whose bodies keep it in its unit is cut through a base class and a New<TX> pointer in the leaf. A site outside the whitelist refuses `ctor-inversion-surface` and names the line. cycle-lab: LabCtor is fixed mechanically; new case LabCtorStr.
+- lint-all: a single-index run says how many closure-dependent `dl:ok` markers on `dl:shared` units it left unjudged, and names `--shared-db`.
+- docs: PARSE-THROUGHPUT-2026-11-05 (the 1.43 re-parse, 3 h 13 min against the 5-5.5 h target).
+
+### Fixed
+- cycles --fix / --plan: a rewrite no longer touches a string literal or a comment on an edited line: `Writeln('Foo says ', Foo(1))` used to become `Writeln('FooPtr says ', FooPtr(1))`, which compiled and printed something else.
+- index --project: a .dproj's `<MainSource>` now selects the program whose uses seed the closure (was always the sibling `<name>.dpr`); sibling fallback unchanged.
+- doc-drift: an `<exception cref>` raised inside an RTL callee (`TIniFile.WriteString` -> `EIniFileException`) is no longer reported as never raised: the check asks the platform library index. With no library the finding stands.
+- implementors: `--output` obeys `--output-encoding` and writes no BOM.
+- resolve-dbs: each path not built yet gets a stderr NOTE, `(missing)` and the exact index command; stdout stays the bare path list, exit code unchanged. resolve-dbs never builds.
+- lint --fix: a unit added to a comma-first uses clause now follows that layout (`, Unit` line before the `;`).
+- lint --fix manual-inrange (and any sidecar call replacement): the parentheses that become redundant around `InRange(..)` are dropped.
+- lint --project: `--rule unit-not-in-dpr` no longer closes with "no index covers this file" on a project-level run.
+- LSP / VS Code: a unit no index holds (a worktree, a unit not indexed yet, an index mid-rebuild) now finds the .dproj or .dpr that lists it, up to the repository root, and its platform; another checkout's index is never borrowed, and an info message gives the index command.
+- LSP: a .dproj with no active platform uses the one it declares (Win64 if targeted, else Win32) without a warning; a bare .dpr takes the .dproj of its name or its .dlcontext.json.
+- LSP / VS Code: "no project / no platform is known" is now info level, once per folder, and says what to do (dragLint.selectProject, dragLint.selectPlatform, .dlcontext.json); the status bar no longer paints it as a warning.
+- LSP: a file several projects hold names the one used and the others, once per folder.
+- plugin: every engine spawn site now fails closed (RequireEngine / EngineExeOrEmpty) instead of spawning the bare name `drag-lint.exe` when no engine is found.
+- plugin: About and Help show the real plugin version (was v1.1.0-alpha).
+- convrules-editor: an entry that is a plain refusal (exit_code 1) inside an exit-6 batch chunk stays a refusal instead of being relabelled as a cast-library error.
+- featuregen: a fractional `helpOrder` (2.5) keeps its place instead of dropping the block.
+- tests: run_effect_rules passes under Windows PowerShell 5.1; the nodb guard uses the 1-arg GetFullPath.
+
+### Docs
+- `lint --fix --apply --no-backup` listed in --help and README.
+
 ## v1.43.0-alpha -- 2026-11-05
 
 1.43, integrated on lane/143-int. ONE bump: DRAGLINT_EXTRACTOR_VERSION 1.30.0 -> 1.31.0-alpha and

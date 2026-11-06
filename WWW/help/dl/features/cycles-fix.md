@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70006
 since: 1.33.0-alpha
 status: shipped
-updated: 1.43.0-alpha
+updated: 1.44.0-alpha
 ---
 
 # Cycles fix (mechanical, compile-gated)
@@ -245,7 +245,8 @@ The engine never guesses; every kind it can give:
   an IMPLEMENTATION edge that no other recipe cuts is tried with the base class too (ranked after
   R2), and there `X is TX` and `(X as TX).M` -- M pulled into the base, never assigned -- switch to
   the base class as well; a hard cast `TX(X)` stays refused, the refusal naming its line),
-  `blocked-symbol` (a declaration the move needs cannot move: a
+  `ctor-inversion-surface` (since 1.44: the consumer constructs the class and the constructor inversion does not cover
+  the site, see below; the reason names the line), `blocked-symbol` (a declaration the move needs cannot move: a
   routine, a class whose method bodies use the cycle, an unrecognised declaration block -- an
   indented `type` / `var` / `const` header and the same-line form `var GX: T = v;` are recognised),
   `directive` (a conditional compiler directive inside an edited region; `{$REGION}`,
@@ -315,6 +316,46 @@ The engine never guesses; every kind it can give:
   type or a method reference with the same parameters takes it, under the same order checks as a call.
   It holds for a procedure, and for a function with a required parameter. A parameterless function as an
   argument is its RESULT, so that stays refused.
+
+#### Constructor inversion (since 1.44)
+
+A class whose bodies use the cycle cannot move, and a consumer that constructs it used to refuse `blocked-symbol`
+(`TX.` is the class itself). Now the constructor goes through a pointer, in the R1 shape, next to the base class:
+
+```pascal
+// the leaf
+TXBase = class(TAnc) ... end;               // the members the consumer uses; methods `virtual; abstract;`
+TNewTXPtr = function(<ctor params>): TXBase;
+var NewTXPtr: TNewTXPtr;
+
+// TX's unit
+function NewTX(<ctor params>): TXBase; begin Result := TX.Create(<names>); end;
+initialization
+  NewTXPtr := NewTX;
+
+// the consumer: `FX: TX;` becomes `FX: TXBase;`, `FX := TX.Create(a);` becomes `FX := NewTXPtr(a);`
+```
+
+Same constructor, same arguments, same owner, one indirection. The parameter list is verbatim, default values
+included; an inherited constructor (`TDataModule.Create(AOwner)`) is read from the platform library. The consumer loses
+its `uses` of TX's unit, so for an edge this usually ends the cycle rather than only its interface coupling.
+
+Only this closed set is planned, every other site refuses `ctor-inversion-surface` and names the line (on an implementation edge the kind stays R2's `construction`, and the reason adds `through a base class: refused: ctor-inversion-surface -- ...`):
+
+* the call is `S := TX.<ctor>[(args)]` as a whole statement, S a field or local of type TX that switches to the base class;
+* every other use of S is on the base class whitelist: a member read, a call of a method pulled into the base,
+  `Free`, `FreeAndNil(S)`, `Assigned(S)`, a nil test, a store to or from another such slot;
+* one constructor per class, not overloaded, every parameter type a plain name that is a System built-in or
+  lives in a unit outside the cycle that the interface of TX's unit already uses;
+* the program lists TX's unit (nothing else may use it after the cut, and its initialization assigns the pointer);
+* the consumer's initialization section neither holds the call nor names the routine that makes it, its finalization
+  does not hold it (`init-order`'s check of R1).
+
+Stays refused on purpose: a temporary (`TX.Create(nil).Show`, `with TX.Create do`), `Result := TX.Create`, a global or
+a property of the class type, the slot passed as an argument, a property written through it, `TX.ClassMethod`
+(`blocked-symbol` as before), a class reference as a value (`Application.CreateForm(TX, V)`), an `override` the base
+class would have to carry, `var` / `out` of type TX. T is always the base class: a library ancestor would need no new
+class when it covers every use, but the base class is sound in every case the whitelist admits.
 
 #### A library member through a `with` body or a cast (R2, since 1.43)
 
@@ -411,7 +452,8 @@ Measured on 1.36.0-alpha; the playbook text alone was handed to Haiku.
 | Layer | What happens | Cases |
 |---|---|---|
 | DL fixes (compile-gated, `cycles --fix --apply`) | Part A leaf units; the build and the program output stay identical | the four circular-demo groups, LabInit, LabExc |
-| DL reports, you cut by hand | `Verdict: refused` with the kind and line, or `Nothing can be moved mechanically` + a MANUAL list | LabVar, LabCtor, LabRc, LabCls (`blocked-symbol`), LabDir, LabGuard (`directive`) |
+| DL reports, you cut by hand | `Verdict: refused` with the kind and line, or `Nothing can be moved mechanically` + a MANUAL list | LabVar, LabRc, LabCls (`blocked-symbol`), LabDir, LabGuard (`directive`) |
+| DL fixes since 1.44 | constructor inversion: the owner calls a pointer, the base class carries what it uses; the cycle is gone, the build and the output stay identical | LabCtor, LabCtorStr |
 | DL fixes since 1.43 | `--fix --apply` puts both classes into one new unit behind a forward declaration; the F2047 is gone and the project builds | `illegal\` |
 | DL does not see it | `uses {$I file.inc}`: parse error at index time, no cycle line | LabInc |
 

@@ -1,5 +1,5 @@
 {
-  "product": "1.43.0-alpha",
+  "product": "1.44.0-alpha",
   "extractor": "1.31.0-alpha",
   "resolver": "1.19.0-alpha",
   "schema": 23,
@@ -736,7 +736,7 @@
         }
       ],
       "audience": "both",
-      "pitfalls": ["never guess a DB path. Also --project `<P.dproj>` and --platform `<win32|win64>`."],
+      "pitfalls": ["never guess a DB path. Also --project `<P.dproj>` and --platform `<win32|win64>`. Read-only: a DB that is not built yet stays on stdout as a bare path, with a stderr NOTE that marks it (missing) and prints the exact index command."],
       "questions": [
         {
           "ask": "Which index database will drag-lint use for this project?",
@@ -748,9 +748,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-21",
+        "date": "2026-11-05",
         "by": "ENGINE",
-        "build": "1.33.0-alpha",
+        "build": "1.44.0-alpha",
         "surfaceHash": "114b4503d5e5be415d7beb7ce0d7f897905e73234774f281a99b7ad8d555e784"
       }
     },
@@ -1538,7 +1538,7 @@
       "owner": "ENGINE",
       "status": "shipped",
       "since": "0.7.0-alpha",
-      "summary": "Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers",
+      "summary": "Hover card for the symbol under the caret: signature, type, documentation, callers; an interface method also lists its implementers",
       "intro": "Read this to check what a symbol is and who calls it without leaving the line you are on. With the caret on it choose drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line, hover --qname Foo.Bar gives the same card. The IDE never waits for the engine: the card appears when the answer arrives, and a busy engine shows 'drag-lint: engine busy' instead of freezing the editor, and an answer that arrives after that deadline is still delivered as a late result.",
       "wikiPage": "Hover-at-Cursor",
       "surfaces": [
@@ -1584,9 +1584,9 @@
         }
       ],
       "verified": {
-        "date": "2026-10-30",
+        "date": "2026-11-05",
         "by": "ENGINE",
-        "build": "1.38.0-alpha",
+        "build": "1.44.0-alpha",
         "surfaceHash": "c69cb05880f5f5bd5b68dbddc39404b274f23a964817fca00b6e6466cae29b4b"
       }
     },
@@ -1797,7 +1797,7 @@
         {
           "type": "cli",
           "verb": "query",
-          "usage": "drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact]",
+          "usage": "drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact] [--project <x.dproj> [--no-create]]",
           "flags": [
             {
               "name": "--name",
@@ -1837,10 +1837,10 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-05",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "a122f7ec700783a420926549b93400971bb5f4f4b0f7c87d9014d5467b5aa622"
+        "build": "1.44.0-alpha",
+        "surfaceHash": "887c7fc73b88057ad6e63babcad3ef2022a549275592a888098565725c9878de"
       }
     },
     {
@@ -2381,7 +2381,7 @@
         {
           "type": "cli",
           "verb": "query",
-          "usage": "drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact]",
+          "usage": "drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact] [--project <x.dproj> [--no-create]]",
           "flags": [
             {
               "name": "--name",
@@ -2415,10 +2415,10 @@
         }
       ],
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-05",
         "by": "ENGINE",
-        "build": "1.35.1-alpha",
-        "surfaceHash": "89e3eaefa499eea3df21d43bf338dc4e85b25faf5494c3ed92e5b8ddbe5fbf59"
+        "build": "1.44.0-alpha",
+        "surfaceHash": "d90c5ad136fd69266869616ed102138c13fe522763b702afafb342da26fecf09"
       }
     },
     {
@@ -2598,7 +2598,7 @@
         {
           "type": "cli",
           "verb": "usages",
-          "usage": "drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file>] [--library-db <lib.sqlite>]",
+          "usage": "drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]",
           "flags": [
             {
               "name": "--name",
@@ -2635,10 +2635,13 @@
             {
               "name": "--library-db",
               "arg": "<lib.sqlite>"
+            },
+            {
+              "name": "--no-create"
             }
           ],
           "helpOrder": 5,
-          "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file>] [--library-db <lib.sqlite>]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view.", "                               --limit N keeps the first N rows of each JSON group (declarations included) and adds", "                               \"limit\" and \"totals\" (the full counts); without it nothing is capped.", "                               --rw: the users of a member split into readers and writers, one block per declaration: a property with its backing field and accessor methods, a field with its properties, a getter (reads) or setter (writes). Rows name the route (property, field, getter, setter, direct).", "                               With no --db, --in <file> finds the unit's project and its database. No DB: prints the index command, exits 2. Two projects list it: names both, exits 2. No project: a library unit on an assumed platform, unless it uses units the library lacks (names them, exits 2). With neither --db nor --in the verb exits 2."]
+          "help": ["  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N] [--rw] [--in <file> [--no-create]] [--library-db <lib.sqlite>]", "                               grouped usage report; backs the IDE Symbol Search dialog's Usages view.", "                               --limit N keeps the first N rows of each JSON group (declarations included) and adds", "                               \"limit\" and \"totals\" (the full counts); without it nothing is capped.", "                               --rw: the users of a member split into readers and writers, one block per declaration: a property with its backing field and accessor methods, a field with its properties, a getter (reads) or setter (writes). Rows name the route (property, field, getter, setter, direct).", "                               With no --db, --in <file> finds the unit's project and its database. No DB: prints the index command, exits 2. Two projects list it: names both, exits 2. No project: a library unit on an assumed platform, unless it uses units the library lacks (names them, exits 2). With neither --db nor --in the verb exits 2."]
         },
         {
           "type": "ide-menu",
@@ -2660,8 +2663,8 @@
       "verified": {
         "date": "2026-11-05",
         "by": "ENGINE",
-        "build": "1.43.0-alpha",
-        "surfaceHash": "53f3893460b43fe4518da3a1e1695e542b0499beec335e963c67805a99298e67"
+        "build": "1.44.0-alpha",
+        "surfaceHash": "c97d58b4081d81db327f53d3bcbb62f517798c5ea98c1351b93be8fcc35047ed"
       }
     },
     {
@@ -2868,7 +2871,7 @@
             }
           ],
           "helpOrder": 15,
-          "help": ["  drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]", "                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project", "                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)", "                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)", "                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).", "                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:", "                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE's 8s budget)", "                               [--stand-in-for <realpath>]  (analyse <path>'s TEXT as though it were <realpath>:", "                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,", "                               unit-name and the reported path)", "  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr|unit-not-in-library|help] [--json]", "  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)", "                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.", "                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to", "                               apply every fixable finding in the file. Only rules whose catalog entry has", "                               \"fixable\": true are ever applied -- see `drag-lint rules --json`.", "                               --fix-naming: kept for compatibility, a no-op since 1.37.0 -- every fix, the naming renames (across", "                               every owning project) included, is ON by default; only \"autofix_off\": [...] in drag-lint-lint.json withholds one;", "                               with it the run still prints \"rename-local: <N>\" (stderr) for the single-project renames.", "                               This is what the IDE Structure form's right-click Fix it / Fix all in unit run."]
+          "help": ["  drag-lint lint  <path>       [--profile <name>] [--target-compiler <ver|auto>] [--rule <id>|help] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>] [--build-config <name>]", "                               [--db <index.sqlite>]  (a store enables the type-aware and ancestry checks, and the project", "                               rules for this file, incl. the ON opt-in discarded-effect-free-result; the OFF opt-in ones run only under --rule)", "                               <path> may be a FOLDER: every scanned .pas/.inc/.dpr gets the same checks as lint <file> (their union)", "                               [--output <file>]: with --json or --format sarif the document is written to the file instead of stdout (a note on stderr).", "                               [--project-rules]  (also run doc-drift/missing-doc for this file -- OFF by default:", "                               they rebuild facts PER DECL, ~16ms each, and can exceed the IDE's 8s budget)", "                               [--stand-in-for <realpath>]  (analyse <path>'s TEXT as though it were <realpath>:", "                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,", "                               unit-name and the reported path)", "  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr|unit-not-in-library|help] [--json]", "  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)", "                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.", "                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to", "                               apply every fixable finding in the file. Only rules whose catalog entry has", "                               \"fixable\": true are ever applied -- see `drag-lint rules --json`.", "                               --fix-naming: kept for compatibility, a no-op since 1.37.0 -- every fix, the naming renames (across", "                               every owning project) included, is ON by default; only \"autofix_off\": [...] in drag-lint-lint.json withholds one;", "                               with it the run still prints \"rename-local: <N>\" (stderr) for the single-project renames.", "                               This is what the IDE Structure form's right-click Fix it / Fix all in unit run."]
         }
       ],
       "audience": "both",
@@ -2881,8 +2884,8 @@
       "verified": {
         "date": "2026-11-05",
         "by": "ENGINE",
-        "build": "1.43.0-alpha",
-        "surfaceHash": "43bfdd1b662a54a1cc602c042c31e71683d52230c1f3a39b6f6f721f01456992"
+        "build": "1.44.0-alpha",
+        "surfaceHash": "c423eab58a2cabac1bfdeb78558897e339443d9ecd252cb7b40b8c4e30e97e39"
       }
     },
     {
@@ -4429,9 +4432,9 @@
         }
       ],
       "verified": {
-        "date": "2026-11-04",
+        "date": "2026-11-05",
         "by": "ENGINE",
-        "build": "1.42.0-alpha",
+        "build": "1.44.0-alpha",
         "surfaceHash": "34bb135e3fd6246d01bc5198932f19af50c3bee4d7b07d595dc1fbd8e5a66f89"
       }
     },
@@ -4963,9 +4966,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-26",
+        "date": "2026-11-05",
         "by": "ENGINE",
-        "build": "1.35.0-alpha",
+        "build": "1.44.0-alpha",
         "surfaceHash": "e7129abd51f83d6c910608813277b6334776faf78f049f08c54738b8a63f15b2"
       }
     },
@@ -7718,7 +7721,7 @@
       "verified": {
         "date": "2026-11-05",
         "by": "ENGINE",
-        "build": "1.43.0-alpha",
+        "build": "1.44.0-alpha",
         "surfaceHash": "47efe1b777ffdc1d0396f463947d8a9470832fdf8773c9c3bf43f5c8c3e865a0"
       }
     },
@@ -7965,6 +7968,10 @@
           "command": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> --unit <stem> --apply"
         },
         {
+          "ask": "Can it cut a cycle where one unit constructs a class of the other?",
+          "command": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> --unit <stem>"
+        },
+        {
           "ask": "Why was this cycle refused?",
           "command": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> --cycle <n>"
         }
@@ -7972,7 +7979,7 @@
       "verified": {
         "date": "2026-11-05",
         "by": "ENGINE",
-        "build": "1.43.0-alpha",
+        "build": "1.44.0-alpha",
         "surfaceHash": "206891e12b498297a6652a1e022e15b43f34b12f8b08a57d9647d3f19c93d59a"
       }
     },
@@ -8491,10 +8498,10 @@
         }
       ],
       "verified": {
-        "date": "2026-11-01",
+        "date": "2026-11-05",
         "by": "ENGINE",
-        "build": "1.39.2-alpha",
-        "surfaceHash": "921beeaac8825a8d374494c362deb07b718d23e8fc660c02ae186d549dfc469b"
+        "build": "1.44.0-alpha",
+        "surfaceHash": "a4ef8fdb7f0088b64ea4b58b9408d41f7f3442969abf0ae182ab1e80d029dc82"
       }
     },
     {
@@ -10888,9 +10895,9 @@
         "by": "ENGINE"
       },
       "verified": {
-        "date": "2026-10-30",
+        "date": "2026-11-05",
         "by": "ENGINE",
-        "build": "1.38.0-alpha",
+        "build": "1.44.0-alpha",
         "surfaceHash": "382a804739cefb86c690c97b9791c70d40f522947fa32409a1c16ddb8fb67f58"
       }
     },

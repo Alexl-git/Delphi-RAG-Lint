@@ -7,7 +7,7 @@ group: editor-integration
 order: 110012
 since: 0.6.0-alpha
 status: shipped
-updated: 1.43.0-alpha
+updated: 1.44.0-alpha
 ---
 
 # lsp
@@ -247,8 +247,9 @@ First hit wins, per field:
 
 1. explicit startup `--project` / `--platform`;
 2. the client: `initializationOptions` `{project, platform, config}`, `workspace/didChangeConfiguration` section `dragLint` (same keys), `workspace/executeCommand` `draglint.setContext` with `arguments: [{project, platform, config}]`, or -- in `--proxy` mode -- the `<Project>.delphilsp.json` the IDE names (`settingsFile`). `project` may also name a `*.dlcontext.json`;
-3. the owning `.dproj` (its active platform and config);
+3. the owning `.dproj`: the index that holds the file's path (manifest order; several: the first, and an info message says which), else the sole `.dproj` in its folder. Platform: its active selection, else `<Project>.delphilsp.json`, else what it declares (`Win64` if targeted, else `Win32`, else the first). A section's bare `.dpr` takes the `.dproj` of its name, then its own `.dlcontext.json`;
 4. the nearest `<Base>.dlcontext.json`, only when no `.dproj` exists (a stale one, whose `.dproj` changed, is bypassed);
+   then, for a unit no index holds (a worktree, a unit not indexed yet, an index mid-rebuild), the project file that LISTS that exact path (`DCCReference`, `.dpr` `in '...'`), searched from the unit's folder up to the repository root, in each folder and its immediate sub-folders. The project is named; another checkout's index is not borrowed, and an info message gives the `index --project` command. Read once per folder and project file, not per request;
 5. `%LOCALAPPDATA%\drag-lint\context-defaults.json` (read only; `DRAGLINT_CONTEXT_DEFAULTS` overrides the path);
 6. the placeholder `Win64`.
 
@@ -256,9 +257,10 @@ The library DB for the platform: an explicit `--db library-<Platform>.sqlite`, e
 
 What you see:
 
-- `window/showMessage` once per file and reason: no project known, platform defaulted, no library index for the platform, a stale `.dlcontext.json`, a re-index in progress or failed;
+- `window/showMessage` at info level, once per FOLDER and reason, saying what to do: no project known (`dragLint.selectProject`, `draglint.setContext` outside VS Code, or a `.dlcontext.json`), platform defaulted (`dragLint.selectPlatform`, same), a file several projects hold, a project with no index here;
+- `window/showMessage` as a warning, once per file and reason: no library index for the platform, a stale `.dlcontext.json`, a re-index in progress or failed;
 - a hover footer `context: <project|none> -- <platform> [default]`, followed by the same notice text;
-- a `draglint/context` notification `{uri, project, platform, config, source, notice}` on open and after every context change, for a status bar. `source` is the step that won: `startup`, `client`, `dproj`, `dlcontext`, `defaults` or `placeholder`.
+- a `draglint/context` notification `{uri, project, platform, config, source, notice}` on open and after every context change, for a status bar; `level: "info"` when the notice holds only advice, which VS Code does not paint as a warning. `source` is the step that won: `startup`, `client`, `dproj`, `dlcontext`, `defaults` or `placeholder`.
 
 A project index that needs re-resolve (library-first resolve) is re-indexed by a separate `drag-lint index --project <dproj> --db <db>` process in the background -- one run per DB, never retried after a failure. Answers continue meanwhile; when it exits the index is reopened, the notice clears and diagnostics are republished. Not in `--proxy` mode.
 

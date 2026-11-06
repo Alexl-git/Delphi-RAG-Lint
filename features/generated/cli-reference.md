@@ -811,7 +811,7 @@ Described in [helpers-of](../../docs/wiki/helpers-of.md).
 
 ### hover
 
-Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers.
+Hover card for the symbol under the caret: signature, type, documentation, callers; an interface method also lists its implementers.
 
 ```text
 drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json]
@@ -1809,6 +1809,7 @@ drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--dep
 | `--rw` |  |  |  |
 | `--in` | `<file>` |  |  |
 | `--library-db` | `<lib.sqlite>` |  |  |
+| `--no-create` |  |  |  |
 
 Described in:
 

@@ -10,6 +10,8 @@ drag-lint > Hover at Cursor
 Keyboard shortcut: Ctrl+Alt+H.
 
 ## Running it from the CLI
+
+An interface METHOD also gets an `Implemented by: TA.Work, TB.Work` line (at most six, then `(+N more)`), in plain, md, json and the LSP hover bundle (since 1.44). It reads the same index as `implementors --target IFoo.Bar`, which gives the full list.
 In the IDE this action is served in-process (the feature map's Mechanism
 column marks it "in-process") -- no exe is spawned per hover. The same
 capability is also exposed as a standalone CLI verb, and over stdio by the

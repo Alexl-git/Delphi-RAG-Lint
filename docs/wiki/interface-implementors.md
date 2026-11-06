@@ -21,6 +21,8 @@ reach it *via* the interface.
 
 ## CLI
 
+`--output <file>` obeys `--output-encoding` and writes no BOM (since 1.44), like every other text report.
+
 ```
 drag-lint implementors --target IJob.Execute --db <project.sqlite>
 drag-lint implementors --target IJob --db <project.sqlite> --library-db <library.sqlite> --include-library

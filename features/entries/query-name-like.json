@@ -12,7 +12,7 @@
     {
       "type": "cli",
       "verb": "query",
-      "usage": "drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact]",
+      "usage": "drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact] [--project <x.dproj> [--no-create]]",
       "flags": [
         {
           "name": "--name",
@@ -52,9 +52,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-11-05",
     "by": "ENGINE",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "a122f7ec700783a420926549b93400971bb5f4f4b0f7c87d9014d5467b5aa622"
+    "build": "1.44.0-alpha",
+    "surfaceHash": "887c7fc73b88057ad6e63babcad3ef2022a549275592a888098565725c9878de"
   }
 }

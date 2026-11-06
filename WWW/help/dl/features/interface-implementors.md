@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70014
 since: 1.40.0-alpha
 status: shipped
-updated: 1.40.0-alpha
+updated: 1.44.0-alpha
 ---
 
 # Interface Implementors Report
@@ -70,6 +70,8 @@ call is never fanned out to the implementors. Only an implementor target lists t
 reach it *via* the interface.
 
 ### CLI
+
+`--output <file>` obeys `--output-encoding` and writes no BOM (since 1.44), like every other text report.
 
 ```text
 drag-lint implementors --target IJob.Execute --db <project.sqlite>

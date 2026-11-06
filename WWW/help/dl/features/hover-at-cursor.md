@@ -1,18 +1,18 @@
 ---
 id: hover-at-cursor
 title: Hover at Cursor
-summary: "Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers"
+summary: "Hover card for the symbol under the caret: signature, type, documentation, callers; an interface method also lists its implementers"
 product: DL
 group: search-navigation
 order: 20016
 since: 0.7.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.44.0-alpha
 ---
 
 # Hover at Cursor
 
-Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers.
+Hover card for the symbol under the caret: signature, type, documentation, callers; an interface method also lists its implementers.
 
 Read this to check what a symbol is and who calls it without leaving the line you are on. With the caret on it choose drag-lint > Hover at Cursor (Ctrl+Alt+H); on the command line, hover --qname Foo.Bar gives the same card. The IDE never waits for the engine: the card appears when the answer arrives, and a busy engine shows 'drag-lint: engine busy' instead of freezing the editor, and an answer that arrives after that deadline is still delivered as a late result.
 
@@ -42,6 +42,8 @@ documentation, and callers. Reach for it to check what a symbol is and how
 it is used without leaving the line you are on.
 
 ### Running it from the CLI
+
+An interface METHOD also gets an `Implemented by: TA.Work, TB.Work` line (at most six, then `(+N more)`), in plain, md, json and the LSP hover bundle (since 1.44). It reads the same index as `implementors --target IFoo.Bar`, which gives the full list.
 In the IDE this action is served in-process (the feature map's Mechanism
 column marks it "in-process") -- no exe is spawned per hover. The same
 capability is also exposed as a standalone CLI verb, and over stdio by the

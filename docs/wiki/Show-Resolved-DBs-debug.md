@@ -17,6 +17,8 @@ guessing. `--in <file.pas>` prints the read list the IDE would open for that
 file (the active project's DB first, then the folder-matched DB); omit
 `--project` to model "no project active".
 
+resolve-dbs is read-only and never builds an index. A path that is not built yet stays bare on stdout, so scripts that capture it keep working; stderr carries one line per missing path: `NOTE: <path> (missing) -- not built yet; build it with: <exact command>` (since 1.44). The exit code does not change.
+
 ## Reaching it in the IDE
 drag-lint > Index & Maintenance > Show Resolved DBs (debug)...
 

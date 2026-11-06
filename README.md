@@ -344,7 +344,7 @@ is refused (exit 2, naming both and suggesting `resolve-dbs --project <x>`), lea
 the DB byte-identical; `--rebuild` proceeds with a NOTE, replacing the other closure
 wholesale. An untagged DB (fresh, folder-built, or pre-1.18) is accepted. (1.31.2)
 
-**First use builds the project index (1.44).** A query verb given `--project <x.dproj>` and no `--db` builds a missing project index at its proper path (the manifest owner, else `<project dir>\_D-RAG\<base>.sqlite`) and says so on one stderr line; `--no-create` skips that. It never builds with an explicit `--db`, with no project known, or from a private engine copy, and `resolve-dbs` stays read-only: it marks each missing path on stderr and prints the index command.
+**First use builds the project index (1.44).** A query verb given `--project <x.dproj>` and no `--db` builds a missing project index at its proper path (the manifest owner, else `<project dir>\_D-RAG\<base>.sqlite`) and says so on one stderr line; `--no-create` skips that. It never builds with an explicit `--db`, with no project known, or from a private engine copy, and `resolve-dbs` stays read-only: it marks each missing path on stderr and prints the index command. `usages --in <file>` finds the project itself and follows the same rule; the `lsp` and `serve` servers never build.
 
 **MODE is chosen per run, independently of type:**
 
@@ -609,7 +609,7 @@ written with `--no-reindex`, unverified); 1 refused, rolled back after a compile
 timeout, or written but not verified; 2 error -- a write or build failed part-way (rolled back,
 project not changed, or the rollback failure is named), or bad flags (`--part all` applies
 Part A then Part B in one run). A group the engine cannot cut
-mechanically is refused with a named reason, never guessed at. The IDE offers it under
+mechanically is refused with a named reason, never guessed at. A class the consumer constructs goes through a New<TX> pointer next to its base class (constructor inversion, since 1.44); a site outside its whitelist refuses `ctor-inversion-surface`. The IDE offers it under
 *Uses & Dependencies*, on the Uses & Deps tab's *Circular uses* section, and on a
 `circular-uses` finding in the Structure window; details on the wiki page
 [Circular Uses Report (cycles + fix plan)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Uses-Report-cycles-fix-plan).
@@ -1275,7 +1275,7 @@ CLI-only verbs).
 ### Lint rule pack (298 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.43.0-alpha: **298 rules across 18 categories -- 205
+external `.scm`). As of v1.44.0-alpha: **298 rules across 18 categories -- 205
 built-in and 93 external `.scm`, 251 enabled by default, and 110 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 

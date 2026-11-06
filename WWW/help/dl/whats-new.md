@@ -438,7 +438,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 0.7.0-alpha
 
-* [Hover at Cursor](features/hover-at-cursor.md) -- Shows a hover card for the symbol under the editor caret: signature, declared type, documentation, and callers.
+* [Hover at Cursor](features/hover-at-cursor.md) -- Hover card for the symbol under the caret: signature, type, documentation, callers; an interface method also lists its implementers.
 
 ## 0.6.0-alpha
 

@@ -7,7 +7,7 @@ group: indexing
 order: 10010
 since: 0.60.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.44.0-alpha
 ---
 
 # Show Resolved DBs (debug)
@@ -37,7 +37,7 @@ Full flag list: [resolve-dbs in the CLI reference](../cli.md#resolve-dbs).
 
 ## Pitfalls
 
-* never guess a DB path. Also --project `<P.dproj>` and --platform `<win32|win64>`.
+* never guess a DB path. Also --project `<P.dproj>` and --platform `<win32|win64>`. Read-only: a DB that is not built yet stays on stdout as a bare path, with a stderr NOTE that marks it (missing) and prints the exact index command.
 
 ## Details
 
@@ -57,6 +57,8 @@ it exits 2 and names the sections if none or several claim it, rather than
 guessing. `--in <file.pas>` prints the read list the IDE would open for that
 file (the active project's DB first, then the folder-matched DB); omit
 `--project` to model "no project active".
+
+resolve-dbs is read-only and never builds an index. A path that is not built yet stays bare on stdout, so scripts that capture it keep working; stderr carries one line per missing path: `NOTE: <path> (missing) -- not built yet; build it with: <exact command>` (since 1.44). The exit code does not change.
 
 ### What it needs
 No index required -- this command has no `--db` flag; it only resolves and
