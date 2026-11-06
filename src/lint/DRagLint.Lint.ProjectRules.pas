@@ -4549,7 +4549,7 @@ var
         Fp:= AFrom.GetMetaValue(CResolverKey);
         if not Fp.StartsWith(CResolverLimb) then Exit;
         Ver:= Copy(Fp, Length(CResolverLimb) + 1, MaxInt);
-        if Pos(';', Ver) > 0 then Ver:= Copy(Ver, 1, Pos(';', Ver) - 1);
+        if Ver.Contains(';') then Ver:= Copy(Ver, 1, Pos(';', Ver) - 1);
         if (Ver = '') or (CompareDottedVersions(Ver, CMinSectionResolver) < 0) then Exit;
         SecId   := 0;
         HasOther:= False;
@@ -5002,12 +5002,11 @@ begin
                 if UnitHasSideEffectSection(U.UnitName, HasInit) and not HasInit then Continue;
                 var InitInfo: string:= if HasInit then InitSectionInfo(U.UnitName) else '';
                 UF.Severity:= if HasInit and (InitInfo <> '#') then 'info' else 'warning';
-                if InitInfo = '#' then
+                if InitInfo = '#' then  // dl:ok ifthen-to-if-expression@5813 -- REVIEWED 2026-11-06: three outcomes, not two: the first arm is a guard, so one if-expression cannot replace the chain without nesting
                   UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Its initialization section only assigns the unit''s own variables and constants (no registration, no call), so removing it changes nothing.', [U.UnitName])
-                else if HasInit then
-                  UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- possible dead import. It HAS an initialization section, so it may still be doing its work through that: removing it can build cleanly and fail at runtime. VERIFY BEFORE REMOVING.', [U.UnitName])
                 else
-                  UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Type-helper members and classes instantiated by the sibling .dfm ARE counted, and this unit has no initialization section.', [U.UnitName]);
+                  UF.Message:= if HasInit then Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- possible dead import. It HAS an initialization section, so it may still be doing its work through that: removing it can build cleanly and fail at runtime. VERIFY BEFORE REMOVING.', [U.UnitName])
+                    else Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Type-helper members and classes instantiated by the sibling .dfm ARE counted, and this unit has no initialization section.', [U.UnitName]);
                 if (InitInfo <> '') and (InitInfo <> '#') then UF.Message:= UF.Message + ' Its initialization section references: ' + InitInfo + '.';
                 UF.Message  := UF.Message + U.IncludeSuffix; { N-06 }
                 UF.FilePath := Path;

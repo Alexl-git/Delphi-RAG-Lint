@@ -2988,7 +2988,7 @@ begin
     if (AStore <> nil) and (AFileId > 0) then
     begin
       Reader:= TExprTypeReader.Create(AStore, ALibStore, AFileId, Src);
-      if not Reader.Ready then FreeAndNil(Reader);
+      if not Reader.Ready then FreeAndNil(Reader);  // dl:ok unprotected-object-free@9f17 -- REVIEWED 2026-11-06: Reader is freed by the enclosing finally; this only drops a reader that is not ready
     end;
     { v0.74: unit-too-large (#6) -- one info finding when the unit exceeds
       AMaxUnitLines source lines (root node's last row). }

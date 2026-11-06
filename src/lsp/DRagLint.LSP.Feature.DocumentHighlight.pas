@@ -69,7 +69,7 @@ begin
   ACaps.AddPair('documentHighlightProvider', TJSONBool.Create(True));
 end;
 
-procedure TLspDocumentHighlightFeature.Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject);
+procedure TLspDocumentHighlightFeature.Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject);  // dl:ok deep-nesting@f956 -- REVIEWED 2026-11-06: the request envelope above plus one loop over the matches; the depth is the envelope, shared with the sibling features
 begin
   if AId = nil then Exit;
   var Res: TJSONArray:= TJSONArray.Create;

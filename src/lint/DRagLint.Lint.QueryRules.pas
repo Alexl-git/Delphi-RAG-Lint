@@ -1743,7 +1743,7 @@ begin
   if not ACache.Oracle.TypeAt(Integer(ANode.StartPoint.Row) + 1, Integer(ANode.StartPoint.Column) + 1, Name, Ty, Via) then Exit;
   try
     Result:= TRegEx.IsMatch(Ty, ATypeRx, [roIgnoreCase]);
-  except  // dl:ok try-except-swallowed@c2a4 -- REVIEWED 2026-11-06: same as above, a malformed rule regex answers no match
+  except  { same as above: a malformed rule regex answers no match }
     on ERegularExpressionError do Result:= False;
   end;
 end;
@@ -1867,7 +1867,7 @@ end;
   metaclass, whose `.Create` really does allocate: an inline `class of T`, a `T = class of`
   in this source, TClass, a classref symbol the oracle finds, or with no index answer a name
   of the `T*Class` convention (TComponentClass) that is not a known class. No type at all passes. }
-function EvalNotMetaclassReceiver(const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;
+function EvalNotMetaclassReceiver(const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;  // dl:ok too-many-exit-points@912f -- REVIEWED 2026-11-06: guard clauses, each one the answer for one way a receiver can be a metaclass or unknown
   ACache: TDeclScopeCache): Boolean;
 const
   OP_CAPTURE_NAME = 2;
@@ -1891,8 +1891,8 @@ begin
     if ACache.Find(Cur, ASource, Name, Node.StartByte, Ty) and (Ty = '') then Break;
     Cur:= Cur.Parent;
   end;
-  if (Ty = '') and (ACache.Oracle <> nil) then
-    if not ACache.Oracle.TypeAt(Integer(Node.StartPoint.Row) + 1, Integer(Node.StartPoint.Column) + 1, Name, Ty, Via) then Ty:= '';
+  if (Ty = '') and (ACache.Oracle <> nil)
+     and not ACache.Oracle.TypeAt(Integer(Node.StartPoint.Row) + 1, Integer(Node.StartPoint.Column) + 1, Name, Ty, Via) then Ty:= '';
   if Ty = '' then Exit;
   if ContainsText(Ty, 'class of') then Exit(False);
   var Leaf: string:= Ty.Substring(Ty.LastIndexOf('.') + 1);

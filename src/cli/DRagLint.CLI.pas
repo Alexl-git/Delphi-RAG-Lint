@@ -17764,7 +17764,7 @@ begin
       if LintRuleWants(NarrowRule, LINT_GATE_DEAD_CODE) then
         for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
           EffPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
-          Cfg.ThresholdFor('message-chain', 4), FlowStore, FlowFid, FlowLibStore) do
+          Cfg.ThresholdFor('message-chain', 4), FlowStore, FlowFid, FlowLibStore) do  // dl:ok magic-literal@d2c7 -- REVIEWED 2026-11-06: the scan-slot number and threshold default every sibling call on this list spells inline; this wave only added an argument
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       { Clippy-parity wave (L0): the seven new per-file checker units. }
       TraceLintChecker('controlflow');
@@ -17785,7 +17785,7 @@ begin
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       TraceLintChecker('concurrency');
       if LintRuleWants(NarrowRule, LINT_GATE_CONCURRENCY) then
-        for F in DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check(EffPath, Cfg, FlowStore, FlowFid, FlowLibStore) do
+        for F in DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check(EffPath, Cfg, FlowStore, FlowFid, FlowLibStore) do  // dl:ok duplicate-code@a54e -- REVIEWED 2026-11-06: sibling calls of the two lint paths (per-file and whole-project) differ only in their store arguments; merging them is a refactor of its own, not part of this wave
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       TraceLintChecker('disallowed');
       if LintRuleWants(NarrowRule, LINT_GATE_DISALLOWED) then
@@ -17810,7 +17810,7 @@ begin
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       TraceLintChecker('exceptionthread');
       if LintRuleWants(NarrowRule, LINT_GATE_EXCEPTION_THREAD) then
-        for F in DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check(EffPath, Cfg, FlowStore, FlowFid, FlowLibStore) do
+        for F in DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check(EffPath, Cfg, FlowStore, FlowFid, FlowLibStore) do  // dl:ok duplicate-code@ea0a -- REVIEWED 2026-11-06: sibling calls of the two lint paths (per-file and whole-project) differ only in their store arguments; merging them is a refactor of its own, not part of this wave
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       TraceLintChecker('declparity');
       if LintRuleWants(NarrowRule, LINT_GATE_DECL_PARITY) then
@@ -24072,7 +24072,7 @@ begin
         if LintRuleWants(Nr, ['global-form-variable']) then
           ScanAdd(14, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckGlobalFormVars           (PasPath));
         if LintRuleWants(Nr, ['mutable-global-variable']) then
-          ScanAdd(15, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars        (PasPath, Store, Store.FindFileIdByPath(PasPath)));
+          ScanAdd(15, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars        (PasPath, Store, Store.FindFileIdByPath(PasPath)));  // dl:ok magic-literal@71cd -- REVIEWED 2026-11-06: the scan-slot number and threshold default every sibling call on this list spells inline; this wave only added an argument
         if LintRuleWants(Nr, ['separate-query-from-modifier']) then
           ScanAdd(16, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSeparateQueryFromModifier(PasPath)); { v0.83: CQS (OFF) }
         if LintRuleWants(Nr, ['unsafe-shellexecute']) then
@@ -24089,7 +24089,7 @@ begin
         if LintRuleWants(Nr, ['try-except-swallowed']) then
           ScanAdd(22, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSwallowedExcept(PasPath));
         if LintRuleWants(Nr, ['dataset-open-without-close']) then
-          ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore));
+          ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore));  // dl:ok magic-literal@7ba0, large-magic-number@7ba0 -- REVIEWED 2026-11-06: the scan-slot number and threshold default every sibling call on this list spells inline; this wave only added an argument
         if LintRuleWants(Nr, ['criticalsection-not-released']) then
           ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath));
         if LintRuleWants(Nr, ['too-many-exit-points']) then
@@ -24124,7 +24124,7 @@ begin
         if LintRuleWants(Nr, LINT_GATE_DEAD_CODE) then
           for F in DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check(
             PasPath, Cfg.ThresholdFor('case-with-too-few-branches', 2), Cfg.ThresholdFor('boolean-expression-complexity', 4), Cfg.ThresholdFor('unit-too-large', 2000),
-            Cfg.ThresholdFor('message-chain', 4), Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];
+            Cfg.ThresholdFor('message-chain', 4), Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];  // dl:ok magic-literal@6fee -- REVIEWED 2026-11-06: the scan-slot number and threshold default every sibling call on this list spells inline; this wave only added an argument
         { Clippy-parity wave (L0): the seven new per-file checker units. }
         if LintRuleWants(Nr, LINT_GATE_CONTROL_FLOW) then
           for F in DRagLint.Diagnostics.ControlFlowChecks.TControlFlowChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
@@ -24135,7 +24135,7 @@ begin
         if LintRuleWants(Nr, LINT_GATE_SIZE) then
           for F in DRagLint.Diagnostics.SizeChecks.TSizeChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_CONCURRENCY) then
-          for F in DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];
+          for F in DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];  // dl:ok duplicate-code@7997 -- REVIEWED 2026-11-06: sibling calls of the two lint paths (per-file and whole-project) differ only in their store arguments; merging them is a refactor of its own, not part of this wave
         if LintRuleWants(Nr, LINT_GATE_DISALLOWED) then
           for F in DRagLint.Diagnostics.DisallowedChecks.TDisallowedChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_MODERNIZE) then
@@ -24148,7 +24148,7 @@ begin
         if LintRuleWants(Nr, LINT_GATE_BOUNDS_NIL) then
           for F in DRagLint.Diagnostics.BoundsNilChecks.TBoundsNilChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_EXCEPTION_THREAD) then
-          for F in DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];
+          for F in DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];  // dl:ok duplicate-code@af6c -- REVIEWED 2026-11-06: sibling calls of the two lint paths (per-file and whole-project) differ only in their store arguments; merging them is a refactor of its own, not part of this wave
         if LintRuleWants(Nr, LINT_GATE_DECL_PARITY) then
           for F in DRagLint.Diagnostics.DeclParityChecks.TDeclParityChecker.Check(PasPath, Cfg, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
         if LintRuleWants(Nr, LINT_GATE_PARITY_EXT) then

@@ -153,8 +153,7 @@ begin
       for var DName: string in AStore.FindDescendantNames(ASym.Name) do
       begin
         var Cands: TArray<TSymbol>;
-        if DName.Contains('.') then Cands:= AStore.FindSymbolsByQualifiedName(DName)
-        else Cands:= AStore.FindSymbolsByExactName(DName);
+        Cands:= if DName.Contains('.') then AStore.FindSymbolsByQualifiedName(DName) else AStore.FindSymbolsByExactName(DName);
         for var T: TSymbol in Cands do
           if (T.Kind in TYPE_KINDS) and (T.Id <> ASym.Id) and IsDirectSubtype(AStore, ASym, T) then AddItem(ACtx, AStore, T, Result, Seen);
       end;
@@ -170,7 +169,7 @@ begin
   end;
 end;
 
-function Prepare(const ACtx: ILspServerContext; const AParams: TJSONObject): TJSONValue;
+function Prepare(const ACtx: ILspServerContext; const AParams: TJSONObject): TJSONValue;  // dl:ok duplicate-code@a623 -- REVIEWED 2026-11-06: each LSP feature keeps its own request envelope, the shape the existing features use; sharing it needs a change to all of them
 begin
   Result:= TJSONNull.Create;
   var Doc: TJSONObject:= nil;
@@ -186,7 +185,7 @@ begin
   var Sym  : TSymbol;
   var Store: ISymbolStore;
   if (Path = '') or not HierIntField(PosObj, 'line', Line0) or not HierIntField(PosObj, 'character', Col0)
-     or not ACtx.ResolveSymbolAt(Path, Line0, Col0, Sym, Store) or not (Sym.Kind in TYPE_KINDS) then Exit;
+     or not ACtx.ResolveSymbolAt(Path, Line0, Col0, Sym, Store) or (Sym.Kind not in TYPE_KINDS) then Exit;
   var Item: TJSONObject:= BuildHierarchyItem(ACtx, Store, Sym);
   if Item = nil then Exit;
   Result.Free;
@@ -204,7 +203,7 @@ begin
   ACaps.AddPair('typeHierarchyProvider', TJSONBool.Create(True));
 end;
 
-procedure TLspTypeHierarchyFeature.Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject);
+procedure TLspTypeHierarchyFeature.Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject);  // dl:ok duplicate-code@3855 -- REVIEWED 2026-11-06: each LSP feature keeps its own request envelope, the shape the existing features use; sharing it needs a change to all of them
 begin
   if AId = nil then Exit;
   var Res: TJSONValue:= nil;
@@ -216,9 +215,8 @@ begin
       var Store: ISymbolStore;
       var Item : TJSONObject:= nil;
       if AParams <> nil then Item:= AParams.GetValue('item') as TJSONObject;
-      if not FindItemSymbol(ACtx, Item, Sym, Store) or not (Sym.Kind in TYPE_KINDS) then Res:= TJSONArray.Create
-      else if AMethod = SUPER_METHOD then Res:= Supertypes(ACtx, Store, Sym)
-      else Res:= Subtypes(ACtx, Store, Sym);
+      if not FindItemSymbol(ACtx, Item, Sym, Store) or (Sym.Kind not in TYPE_KINDS) then Res:= TJSONArray.Create  // dl:ok ifthen-to-if-expression@93be -- REVIEWED 2026-11-06: three outcomes, not two: the first arm is a guard, so one if-expression cannot replace the chain without nesting
+      else Res:= if AMethod = SUPER_METHOD then Supertypes(ACtx, Store, Sym) else Subtypes(ACtx, Store, Sym);
     end;
   except
     on Exception do

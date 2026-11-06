@@ -20,11 +20,11 @@ uses
   , DRagLint.LSP.Feature.Rename  // dl:ok unused-unit-in-uses@6450 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
   , DRagLint.LSP.Feature.SemanticTokens  // dl:ok unused-unit-in-uses@e4e0 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
   , DRagLint.LSP.Feature.InlayHint  // dl:ok unused-unit-in-uses@c103 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.CallHierarchy  // dl:ok unused-unit-in-uses -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.TypeHierarchy  // dl:ok unused-unit-in-uses -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.TypeDefinition  // dl:ok unused-unit-in-uses -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.DocumentHighlight  // dl:ok unused-unit-in-uses -- linked for its initialization (RegisterLspFeature); no identifier is referenced
-  , DRagLint.LSP.Feature.FoldingRange  // dl:ok unused-unit-in-uses -- linked for its initialization (RegisterLspFeature); no identifier is referenced
+  , DRagLint.LSP.Feature.CallHierarchy  // dl:ok unused-unit-in-uses@b0b0 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
+  , DRagLint.LSP.Feature.TypeHierarchy  // dl:ok unused-unit-in-uses@a85c -- linked for its initialization (RegisterLspFeature); no identifier is referenced
+  , DRagLint.LSP.Feature.TypeDefinition  // dl:ok unused-unit-in-uses@abd4 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
+  , DRagLint.LSP.Feature.DocumentHighlight  // dl:ok unused-unit-in-uses@7468 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
+  , DRagLint.LSP.Feature.FoldingRange  // dl:ok unused-unit-in-uses@38b9 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
   , DRagLint.LSP.Feature.ExecuteCommand  // dl:ok unused-unit-in-uses@91b8 -- linked for its initialization (RegisterLspFeature); no identifier is referenced
   ;
 

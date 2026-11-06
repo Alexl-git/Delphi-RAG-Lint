@@ -68,7 +68,7 @@ begin
   var V: TJSONValue:= nil;
   if AObj <> nil then V:= AObj.GetValue(AName);
   Result:= V is TJSONNumber;
-  if Result then AValue:= (V as TJSONNumber).AsInt else AValue:= 0;
+  AValue:= if Result then (V as TJSONNumber).AsInt else 0;
 end;
 
 function HierRange(ASLine, ASCol, AELine, AECol: Integer): TJSONObject;
@@ -171,6 +171,7 @@ end;
 function FindItemSymbol(const ACtx: ILspServerContext; const AItem: TJSONObject; out ASym: TSymbol; out AStore: ISymbolStore): Boolean;
 begin
   Result:= False;
+  ASym  := Default(TSymbol);
   AStore:= nil;
   if AItem = nil then Exit;
   var Data: TJSONObject:= AItem.GetValue('data') as TJSONObject;

@@ -169,7 +169,7 @@ type
 /// <returns>False when no fact answers; see TExprTypeReader.TypeLeafOf.</returns>
 /// <remarks>Loads the unit's refs on every call: for more than a few nodes of one unit make a
 /// TExprTypeReader.</remarks>
-function StaticTypeLeafOfExpr(const AStore: ISymbolStore; AFileId: Int64; const ANode: TTSNode; const ASrc: TBytes;
+function StaticTypeLeafOfExpr(const AStore: ISymbolStore; AFileId: Int64; const ANode: TTSNode; const ASrc: TBytes;  // dl:ok unused-public-symbol@1e97 -- REVIEWED 2026-11-06: public for tests\lint-project\ref-type-helpers, the harness that pins it (H4/O1); the rules reach it through the type reader
   out ALeaf: string): Boolean;
 /// <summary>Runs the rules on index fact F1 over a project index.</summary>
 /// <param name="AStore">The project index; nil, a store that is not SQLite, or an
@@ -1692,7 +1692,7 @@ begin
   LoadRefs(AFileId);
 end;
 
-function TRefTypeScan.ExprTypeLeaf(const ANode: TTSNode; out ALeaf: string): Boolean;  // dl:ok too-many-exit-points -- REVIEWED 2026-11-06: guard clauses, each declining a shape that has no static type
+function TRefTypeScan.ExprTypeLeaf(const ANode: TTSNode; out ALeaf: string): Boolean;
 begin
   ALeaf := '';
   Result:= False;

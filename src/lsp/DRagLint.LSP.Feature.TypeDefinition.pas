@@ -71,7 +71,7 @@ function IdentStartCol1(const APath: string; ALine0, ACol0: Integer): Integer;
 begin
   Result:= 0;
   var Lines: TArray<string>;
-  try Lines:= TLiveDocuments.ReadLines(APath); except on Exception do Exit; end; // dl:ok try-except-swallowed -- an unreadable file only means no identifier start, the type then falls back to the declared type
+  try Lines:= TLiveDocuments.ReadLines(APath); except on Exception do Exit; end; // dl:ok try-except-swallowed@35b1 -- an unreadable file only means no identifier start, the type then falls back to the declared type
   if (ALine0 < 0) or (ALine0 >= Length(Lines)) then Exit;
   var L: string:= Lines[ALine0];
   var I: Integer:= ACol0 + 1;
@@ -85,7 +85,7 @@ function DeclaredTypeLeaf(const ASym: TSymbol): string;
 begin
   Result:= '';
   var P: Integer:= LastDelimiter(':', ASym.Signature);
-  if (P = 0) and not (ASym.Kind in [skField, skVarDecl, skConstDecl, skParam, skLocalVar, skProperty]) then Exit; // a variable-like signature is the bare type text
+  if (P = 0) and (ASym.Kind not in [skField, skVarDecl, skConstDecl, skParam, skLocalVar, skProperty]) then Exit; // a variable-like signature is the bare type text
   var S: string:= Trim(Copy(ASym.Signature, P + 1, MaxInt));
   var E: Integer:= 1;
   while (E <= Length(S)) and (IsIdentChar(S[E]) or (S[E] = '.')) do Inc(E);
@@ -99,6 +99,8 @@ end;
 function UniqueType(const ACtx: ILspServerContext; const AHit: ISymbolStore; const ALeaf: string; out ASym: TSymbol; out AStore: ISymbolStore): Boolean;
 begin
   Result:= False;
+  ASym  := Default(TSymbol);
+  AStore:= nil;
   if ALeaf = '' then Exit;
   var Stores: TArray<ISymbolStore>:= [AHit] + ACtx.Stores;
   var Found: Integer:= 0;
@@ -141,7 +143,7 @@ begin
   ACaps.AddPair('typeDefinitionProvider', TJSONBool.Create(True));
 end;
 
-procedure TLspTypeDefinitionFeature.Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject);
+procedure TLspTypeDefinitionFeature.Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject);  // dl:ok duplicate-code@dafc -- REVIEWED 2026-11-06: each LSP feature keeps its own request envelope, the shape the existing features use; sharing it needs a change to all of them
 begin
   if AId = nil then Exit;
   var Res: TJSONArray:= TJSONArray.Create;

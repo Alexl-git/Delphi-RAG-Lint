@@ -307,12 +307,13 @@ type
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64 = 0</param>
+      /// <param name="ALibStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed: nil;
       /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
-      /// <para>Calls: CatOf, CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.CollectDeclTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectEnums, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectGuards, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+27 more)</para>
+      /// <para>Calls: CatOf, CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.CollectDeclTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectEnums, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectGuards, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+32 more)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.CollectDeclTypes"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr"/>
@@ -345,12 +346,12 @@ type
       /// Never raises; a file that does not parse returns AFindings unchanged.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
-      /// <para>Calls: AliasContainerTarget, DRagLint.Diagnostics.AstChecks.CollectDeclTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat.Walk, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, IsContainerType, LookupType, LowerCase, ProvenNonString, SameText, SrcText, Trim</para>
+      /// <para>Calls: AliasContainerTarget, DRagLint.Diagnostics.AstChecks.CollectDeclTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat.Walk, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.RefTypeRules.TExprTypeReader.Create, Format, Integer, IsContainerType, LookupType, LowerCase, ProvenNonString, SameText, SrcText, Trim</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.CollectDeclTypes"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat.Walk"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Create"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function DropNonStringConcat(const AFile: string; const AStore: ISymbolStore; AFileId: Int64; const AFindings: TArray<TLintFinding>): TArray<TLintFinding>;
@@ -451,7 +452,7 @@ type
       /// ui-access-in-thread-typed answers the same question on the receiver's static type.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.CollectClasses, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Flag, Format, Integer, LowerCase, NodeStr, Pos, SameText, WalkExec</para>
+      /// <para>Calls: CalleeLast, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.CollectClasses, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Flag, Format, Integer, IsThreadClass (+7 more)</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.CollectClasses"/>
@@ -594,12 +595,14 @@ type
       class function CheckEnumBareReadScoped(const AFile: string; const AStore: ISymbolStore;
         AFileId: Int64): TArray<TLintFinding>;
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64 = 0</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed: nil;
       /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Move, NodeStr</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, InInitialization, Integer, Move, NodeStr, SameText, WrittenOnlyInInitialization</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
@@ -796,20 +799,21 @@ type
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
       /// <param name="AStore">Optional project index. With a ref_types table (index fact F1) an `X.Open` whose receiver has a known static type with no TDataSet in its whole ancestry is not reported; nil, no table, no row or an unfollowable ancestry keep the finding.</param>
       /// <param name="AFileId">The unit's id in AStore; 0 skips the fact.</param>
+      /// <param name="ALibStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
       /// <returns>One finding per opened-but-not-finally-closed dataset variable.</returns>
       /// <remarks>
       /// Severity warning. Per-routine flow analysis (mirrors CheckUnprotectedFree).
       /// Pure AST, plus the optional F1 receiver type. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: CollectLocalTypes, DeclNames, Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.CollectPlainActiveTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, HasActiveField, Integer (+9 more)</para>
+      /// <para>Calls: CollectLocalTypes, DeclNames, Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.CollectPlainActiveTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.RefTypeRules.TExprTypeReader.Create, Format, HasActiveField (+11 more)</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.CollectPlainActiveTypes"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Create"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CheckDatasetOpen(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;

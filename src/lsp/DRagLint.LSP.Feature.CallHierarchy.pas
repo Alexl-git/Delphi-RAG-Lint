@@ -70,8 +70,8 @@ type
   // One call-hierarchy node being assembled: the far-end symbol and the sites that reach it.
   TCallNode = class
   public
-    Sym   : TSymbol;
-    Ranges: TJSONArray;
+    Sym   : TSymbol;  // dl:ok public-field@a8d7 -- REVIEWED 2026-11-06: a node class private to this implementation section, no surface to encapsulate
+    Ranges: TJSONArray;  // dl:ok public-field@7d5d -- REVIEWED 2026-11-06: a node class private to this implementation section, no surface to encapsulate
     constructor Create(const ASym: TSymbol);
     destructor Destroy; override;
   end;
@@ -86,7 +86,7 @@ end;
 destructor TCallNode.Destroy;
 begin
   Ranges.Free;
-  inherited;
+  inherited Destroy;
 end;
 
 procedure AddSite(const ANode: TCallNode; ALine1, ACol1, ALen: Integer);
@@ -138,7 +138,7 @@ begin
     begin
       if (C.Mode <> '') or (C.EnclosingSymbolId <= 0) then Continue; // a property/field access is not a call
       var Caller: TSymbol:= AStore.GetSymbolById(C.EnclosingSymbolId);
-      if (Caller.Id = 0) or not (Caller.Kind in ROUTINE_KINDS) then Continue;
+      if (Caller.Id = 0) or (Caller.Kind not in ROUTINE_KINDS) then Continue;
       AddSite(NodeFor(Nodes, Index, Caller), C.CallSiteLine, C.CallSiteCol, Length(ASym.Name));
     end;
     Result:= NodesToJson(ACtx, AStore, Nodes, 'from');
@@ -162,7 +162,7 @@ begin
       var Ref: TReference;
       if (E.TargetSymbolId <= 0) or not Refs.TryGetValue(E.RefId, Ref) then Continue;
       var Callee: TSymbol:= AStore.GetSymbolById(E.TargetSymbolId);
-      if (Callee.Id = 0) or not (Callee.Kind in ROUTINE_KINDS) then Continue;
+      if (Callee.Id = 0) or (Callee.Kind not in ROUTINE_KINDS) then Continue;
       var Node: TCallNode:= NodeFor(Nodes, Index, Callee);
       if (Ref.EndLine = Ref.StartLine) and (Ref.EndCol > Ref.StartCol) then AddSite(Node, Ref.StartLine, Ref.StartCol, Ref.EndCol - Ref.StartCol)
       else AddSite(Node, Ref.StartLine, Ref.StartCol, Length(Callee.Name));
@@ -191,7 +191,7 @@ begin
   var Sym  : TSymbol;
   var Store: ISymbolStore;
   if (Path = '') or not HierIntField(PosObj, 'line', Line0) or not HierIntField(PosObj, 'character', Col0)
-     or not ACtx.ResolveSymbolAt(Path, Line0, Col0, Sym, Store) or not (Sym.Kind in ROUTINE_KINDS) then Exit;
+     or not ACtx.ResolveSymbolAt(Path, Line0, Col0, Sym, Store) or (Sym.Kind not in ROUTINE_KINDS) then Exit;
   var Item: TJSONObject:= BuildHierarchyItem(ACtx, Store, Sym);
   if Item = nil then Exit;
   Result.Free;
@@ -221,9 +221,8 @@ begin
       var Store: ISymbolStore;
       var Item : TJSONObject:= nil;
       if AParams <> nil then Item:= AParams.GetValue('item') as TJSONObject;
-      if not FindItemSymbol(ACtx, Item, Sym, Store) then Res:= TJSONArray.Create
-      else if AMethod = INCOMING_METHOD then Res:= Incoming(ACtx, Store, Sym)
-      else Res:= Outgoing(ACtx, Store, Sym);
+      if not FindItemSymbol(ACtx, Item, Sym, Store) then Res:= TJSONArray.Create  // dl:ok ifthen-to-if-expression@e74c -- REVIEWED 2026-11-06: three outcomes, not two: the first arm is a guard, so one if-expression cannot replace the chain without nesting
+      else Res:= if AMethod = INCOMING_METHOD then Incoming(ACtx, Store, Sym) else Outgoing(ACtx, Store, Sym);
     end;
   except
     on Exception do

@@ -64,7 +64,7 @@ uses
   , System.IOUtils
   , System.Generics.Collections
   , FireDAC.Comp.Client
-  , FireDAC.Stan.Param
+  , FireDAC.Stan.Param  // dl:ok unused-unit-in-uses@c61d -- REVIEWED 2026-11-06: needed to expand the inline TFDParam setters (removing it gives H2443); no identifier names it
   , DRagLint.Storage.SQLite
   , DRagLint.Lint.RefTypeRules
   ;
