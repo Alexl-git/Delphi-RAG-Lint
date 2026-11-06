@@ -15354,8 +15354,8 @@ begin
   Suffix     := '';
   if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
   if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
-  if Suffix = '' then FConn.ExecSQL('DELETE FROM ref_receivers')  // dl:ok sql-update-delete-without-where -- a whole-database pass rewrites every row of this derived table
-  else FConn.ExecSQL('DELETE FROM ref_receivers WHERE ref_id IN (SELECT refs.id FROM refs WHERE ' + RR_UNIVERSE + Suffix + ')');  // dl:ok sql-injection-concat -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text
+  if Suffix = '' then FConn.ExecSQL('DELETE FROM ref_receivers')  // dl:ok sql-update-delete-without-where@cf4d -- a whole-database pass rewrites every row of this derived table
+  else FConn.ExecSQL('DELETE FROM ref_receivers WHERE ref_id IN (SELECT refs.id FROM refs WHERE ' + RR_UNIVERSE + Suffix + ')');  // dl:ok sql-injection-concat@3449 -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text
   Q      := TFDQuery.Create(nil);
   Ins    := TFDQuery.Create(nil);
   EndAt  := TDictionary<string, TRcvCand>.Create;

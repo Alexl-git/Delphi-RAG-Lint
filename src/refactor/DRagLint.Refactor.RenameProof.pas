@@ -1,4 +1,4 @@
-unit DRagLint.Refactor.RenameProof; // dl:ok unit-too-large -- one proof, in one place; 1 in 3 lines is the public refusal catalogue and its comments
+unit DRagLint.Refactor.RenameProof; // dl:ok unit-too-large@ed8a -- one proof, in one place; 1 in 3 lines is the public refusal catalogue and its comments
 
 // ---------------------------------------------------------------------------
 // The proof behind `rename --apply` (lane 144 item 3, docs\wiki\Rename-Symbol.md).
@@ -17,7 +17,7 @@ uses
   System.SysUtils,
   DRagLint.Core.Interfaces,
   DRagLint.Refactor.Rename,
-  DRagLint.Refactor.CompileGate;
+  DRagLint.Refactor.CompileGate; // dl:ok uses-global-census -- GBuildTimeoutMs and GScratchCited are how the gate is configured; its request record has no field for them
 
 const
   /// <summary>The index holds no ref_receivers table: re-resolve it.</summary>
@@ -262,7 +262,7 @@ type
   TDeclMap = TDictionary<string, TSymRow>;
 
   { One proof run. Holds the two names' refs and symbols, the group, the class family and the per-file caches. }
-  TProver = class // dl:ok god-class -- one proof run: its readers and its caches are private to this unit and live one call // dl:ok high-response -- the same: the response set is the SQL it reads
+  TProver = class // dl:ok god-class@2b0a -- one proof run: its readers and its caches are private to this unit and live one call // dl:ok high-response@2b0a -- the same: the response set is the SQL it reads
   private
     FStore     : ISymbolStore;
     FConn      : TFDConnection;
@@ -572,7 +572,7 @@ begin
     var Q:= TFDQuery.Create(nil);
     try
       Q.Connection:= Conn;
-      Q.SQL.Text:= 'SELECT kind FROM symbols WHERE name = :n COLLATE NOCASE AND kind IN (' + CTypeKinds + ') LIMIT 1'; // dl:ok sql-injection-concat -- every concatenated part is a constant of this unit; the names are parameters
+      Q.SQL.Text:= 'SELECT kind FROM symbols WHERE name = :n COLLATE NOCASE AND kind IN (' + CTypeKinds + ') LIMIT 1'; // dl:ok sql-injection-concat@62ce -- every concatenated part is a constant of this unit; the names are parameters
       Q.ParamByName('n').AsWideString:= pName;
       Q.Open;
       if not Q.Eof then
@@ -657,12 +657,12 @@ end;
 
 function TProver.LibHasUnitLevel(const pName: string): Boolean;
 begin
-  Result:= LibAny('SELECT 1 FROM symbols s JOIN symbols p ON p.id = s.parent_id WHERE s.name = :n COLLATE NOCASE AND p.kind = ''' + CKindUnit + ''' LIMIT 1', pName); // dl:ok sql-injection-concat -- every concatenated part is a constant of this unit; the names are parameters
+  Result:= LibAny('SELECT 1 FROM symbols s JOIN symbols p ON p.id = s.parent_id WHERE s.name = :n COLLATE NOCASE AND p.kind = ''' + CKindUnit + ''' LIMIT 1', pName); // dl:ok sql-injection-concat@fe89 -- every concatenated part is a constant of this unit; the names are parameters
 end;
 
 function TProver.LibHasMember(const pName: string): Boolean;
 begin
-  Result:= LibAny('SELECT 1 FROM symbols s JOIN symbols p ON p.id = s.parent_id WHERE s.name = :n COLLATE NOCASE AND p.kind IN (' + CTypeKinds + ') LIMIT 1', pName); // dl:ok sql-injection-concat -- every concatenated part is a constant of this unit; the names are parameters
+  Result:= LibAny('SELECT 1 FROM symbols s JOIN symbols p ON p.id = s.parent_id WHERE s.name = :n COLLATE NOCASE AND p.kind IN (' + CTypeKinds + ') LIMIT 1', pName); // dl:ok sql-injection-concat@216c -- every concatenated part is a constant of this unit; the names are parameters
 end;
 
 function TProver.LibHasQName(const pQName: string): Boolean;
@@ -776,7 +776,7 @@ begin
   end;
 end;
 
-function TProver.DecideChain(pType, pFromFile: Int64; out pKind, pWhy: string): TChainVerdict; // dl:ok too-many-exit-points -- a ladder of final verdicts: each Exit is one reason the walk stops
+function TProver.DecideChain(pType, pFromFile: Int64; out pKind, pWhy: string): TChainVerdict; // dl:ok too-many-exit-points@9753 -- a ladder of final verdicts: each Exit is one reason the walk stops
 var
   FirstVerdict: TChainVerdict;
 begin
@@ -944,7 +944,7 @@ begin
     var Q:= TFDQuery.Create(nil);
     try
       Q.Connection:= FConn;
-      Q.SQL.Text:= 'SELECT parent_id, start_line, end_line FROM symbols WHERE file_id = :f AND kind = ''' + CKindProperty + ''''; // dl:ok sql-injection-concat -- every concatenated part is a constant of this unit; the names are parameters
+      Q.SQL.Text:= 'SELECT parent_id, start_line, end_line FROM symbols WHERE file_id = :f AND kind = ''' + CKindProperty + ''''; // dl:ok sql-injection-concat@45a4 -- every concatenated part is a constant of this unit; the names are parameters
       Q.ParamByName('f').AsLargeInt:= pFileId;
       Q.Open;
       while not Q.Eof do
@@ -1815,7 +1815,7 @@ begin
           if not Q.Eof then Fid:= Q.Fields[0].AsLargeInt;
           Q.Close;
           { the local's symbol: the row the declaration identifier sits on }
-          Q.SQL.Text:= 'SELECT id FROM symbols WHERE file_id = :f AND name = :n COLLATE NOCASE AND kind IN (' + CNotLocal + ') AND start_line = :l'; // dl:ok sql-injection-concat -- every concatenated part is a constant of this unit; the names are parameters
+          Q.SQL.Text:= 'SELECT id FROM symbols WHERE file_id = :f AND name = :n COLLATE NOCASE AND kind IN (' + CNotLocal + ') AND start_line = :l'; // dl:ok sql-injection-concat@864f -- every concatenated part is a constant of this unit; the names are parameters
           Q.ParamByName('f').AsLargeInt:= Fid;
           Q.ParamByName('n').AsWideString:= WithSites[0].OldName;
           Q.ParamByName('l').AsInteger:= pLine;
@@ -1824,7 +1824,7 @@ begin
           Q.Next;
           if not Q.Eof then Target:= 0; { two on the line: no identity }
           Q.Close;
-          Q.SQL.Text:= 'SELECT 1 FROM symbols WHERE name = :n COLLATE NOCASE AND kind NOT IN (' + CNotLocal + ') LIMIT 1'; // dl:ok sql-injection-concat -- every concatenated part is a constant of this unit; the names are parameters
+          Q.SQL.Text:= 'SELECT 1 FROM symbols WHERE name = :n COLLATE NOCASE AND kind NOT IN (' + CNotLocal + ') LIMIT 1'; // dl:ok sql-injection-concat@9cf7 -- every concatenated part is a constant of this unit; the names are parameters
           Q.ParamByName('n').AsWideString:= pNewName;
           Q.Open;
           MemberNew:= not Q.Eof;
@@ -2005,7 +2005,7 @@ begin
   Req.LogDir  := FreshScratchName('_build');
   Result:= ApplyGated(Req);
   try
-    if not GScratchCited and TDirectory.Exists(Req.LogDir) then TDirectory.Delete(Req.LogDir, True); // dl:ok taint-path-traversal -- LogDir is FreshScratchName's: a folder this run made under C:\TEMP
+    if not GScratchCited and TDirectory.Exists(Req.LogDir) then TDirectory.Delete(Req.LogDir, True); // dl:ok taint-path-traversal@c08a -- LogDir is FreshScratchName's: a folder this run made under C:\TEMP
   except
     on EInOutError do Writeln(ErrOutput, 'drag-lint: note: scratch not deleted: ', Req.LogDir); // best effort: a locked log must not change the result
   end;

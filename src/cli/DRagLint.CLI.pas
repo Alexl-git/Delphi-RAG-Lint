@@ -196,7 +196,7 @@ uses
   , DRagLint.Context    .Bundler
   , DRagLint.Resolver   .TypeAt
   , DRagLint.Refactor   .Rename
-  , DRagLint.Refactor   .RenameProof // lane 144 item 3: every rename occurrence proved, then the compile gate
+  , DRagLint.Refactor   .RenameProof // dl:ok uses-global-census -- lane 144 item 3: its consts and routines are the public surface; every rename occurrence proved, then the compile gate
   , DRagLint.Refactor   .TextEdit
   , DRagLint.Refactor   .NamingFix
   , DRagLint.Refactor   .MultiProjectRename { a naming fix on a unit several project DBs own (lint --fix) }
@@ -24743,7 +24743,7 @@ end;
 
 { Lane 144 item 3: the tail every rename path shares. --plan reports and exits 0; a dry run lists the proved edits and
   notes the rest; --apply refuses whatever is not proved, exit 2, and writes only through the compile gate. }
-function FinishRename(const AArgs: TArgs; const pProof: TRenameProof; const pQName: string; pApply: Boolean): Integer; // dl:ok too-many-exit-points -- one Exit per outcome of the verb, each with its own exit code
+function FinishRename(const AArgs: TArgs; const pProof: TRenameProof; const pQName: string; pApply: Boolean): Integer; // dl:ok too-many-exit-points@4223 -- one Exit per outcome of the verb, each with its own exit code
 const
   CRefused = 'ERROR: cannot rename -- ';
 begin
@@ -24770,7 +24770,7 @@ begin
   begin
     var Arr: TJSONArray:= TJSONArray.Create;
     try
-      for var Ed in pProof.Edits do // dl:ok duplicate-code -- the --json edit list as every refactor verb prints it; each owns its own shape
+      for var Ed in pProof.Edits do // dl:ok duplicate-code@d4d6 -- the --json edit list as every refactor verb prints it; each owns its own shape
       begin
         var O: TJSONObject:= TJSONObject.Create;
         O.AddPair('file', Ed.FilePath);
