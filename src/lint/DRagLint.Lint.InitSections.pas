@@ -155,7 +155,7 @@ type
   end;
 
   { The index read once, for the rules of this unit: units, uses, refs by enclosing symbol, call edges. }
-  TInitGraph = class  // dl:ok high-response -- REVIEWED 2026-11-05: one read-once cache over the store for the four rules of this unit; its methods are short readers, and splitting it would only spread the shared maps
+  TInitGraph = class  // dl:ok high-response@a5ce -- REVIEWED 2026-11-05: one read-once cache over the store for the four rules of this unit; its methods are short readers, and splitting it would only spread the shared maps
   private
     FStore     : ISymbolStore;
     FUnits     : TDictionary<string, TUnitNode>;
@@ -852,8 +852,7 @@ begin
   else if MatchText(Name, HEAVY_BARE_DIALOG) then Result:= CATEGORY_DIALOG
   else if IsBare and MatchText(Name, HEAVY_BARE_FILE) then Result:= CATEGORY_FILE
   else if (not IsBare) and MatchText(Name, HEAVY_MEMBER_FILE) then Result:= CATEGORY_FILE
-  else if (not IsBare) and MatchText(Name, HEAVY_MEMBER_DB) then Result:= CATEGORY_DATABASE
-  else Result:= '';
+  else Result:= if (not IsBare) and MatchText(Name, HEAVY_MEMBER_DB) then CATEGORY_DATABASE else '';
 end;
 
 function CollectHeavyInitialization(const AStore: ISymbolStore): TArray<TLintFinding>;
