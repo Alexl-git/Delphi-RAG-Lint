@@ -117,7 +117,7 @@
                                for editor buffers snapshotted to a temp file -- fixes store membership, file id,
                                unit-name and the reported path)
   drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr|unit-not-in-library|help] [--json]
-  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)
+  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)
                                DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.
                                --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to
                                apply every fixable finding in the file. Only rules whose catalog entry has
