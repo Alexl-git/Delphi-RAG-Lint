@@ -366,7 +366,10 @@ uses
   , System.StrUtils
   , System.Diagnostics
   , System.RegularExpressions
+  , FireDAC.Comp.Client
   , DRagLint.Lint.Config
+  , DRagLint.Lint.RefTypeRules
+  , DRagLint.Storage.SQLite
   ;
 
 const
@@ -434,6 +437,8 @@ type
     Name    : string ;
     Receiver: string ;
     RecvType: string ;
+    { The receiver's static type leaf from index fact F1 (ref_receivers + ref_types); '' = no fact. }
+    F1Type  : string ;
   end;
 
   TTaintWalker = class  // dl:ok god-class@700f, high-response@700f -- REVIEWED 2026-10-27: ONE demand-driven fixpoint; its fields are the per-run caches (refs, edges, symbols, rows, memo, stack) every slot evaluator shares, and its methods are the mutually recursive evaluators of plan section 4 (ref, call, slot, callers, field, global). Splitting them would hand the memo and the cycle stack a second owner.
@@ -456,6 +461,11 @@ type
     FMembers     : TDictionary<Int64, Int64>;
     FProjNames   : TDictionary<string, Boolean>;
     FTypeIs      : TDictionary<string, Boolean>;
+    FF1Types     : TDictionary<Int64, string>;
+    FF1Query     : TFDQuery;
+    FF1Probed    : Boolean;
+    FF1Ready     : Boolean;
+    FTypeReader  : TExprTypeReader;
     FWeakRegex   : TRegEx;
     FLibDepth    : Integer;
     FEvalDepth   : Integer;
@@ -477,6 +487,8 @@ type
     function  IsRoutine(const S: TSymbol): Boolean;
     function  DeclaredTypeOf(AStore: Integer; const X: TSymbol; const AIdent: string): string;
     function  TypeIs(AStore: Integer; AFileId: Int64; const AType, AWanted: string): Boolean;
+    function  ReceiverTypeOf(AStore: Integer; const ARefs: TArray<TReference>): string;
+    function  InputControlVerdict(const AType: string): TDescent;
     function  Resolve(AStore: Integer; const X: TSymbol; AFileId: Int64; ALine, ACol: Integer;
                       const AName: string): TResolved;
     function  NameMatches(const AEntry: string; const R: TResolved; AFileId: Int64; out AWeak: Boolean): Boolean;
@@ -904,6 +916,7 @@ begin
   FMembers     := nil;
   FProjNames   := TDictionary<string, Boolean>.Create;
   FTypeIs      := TDictionary<string, Boolean>.Create;
+  FF1Types     := TDictionary<Int64, string>.Create;
   if FCfg.WeakReceiverRegex <> '' then FWeakRegex:= TRegEx.Create(FCfg.WeakReceiverRegex, [roIgnoreCase]);
 end;
 
@@ -923,6 +936,9 @@ begin
   FMembers.Free;
   FProjNames.Free;
   FTypeIs.Free;
+  FF1Types.Free;
+  FF1Query.Free;
+  FTypeReader.Free;
   inherited Destroy;
 end;
 
@@ -1156,6 +1172,69 @@ begin
   FTypeIs.Add(K, Result);
 end;
 
+{ The static type leaf of the receiver of one of ARefs, from the F1 facts: ref_receivers
+  names the receiver's ref, ref_types its type. '' without the tables, without a row, or in
+  the library store: the caller keeps today's logic. Needs no declared type, so a dotted
+  receiver (`Self.Edit1`, `Dm.Conn`) is typed like a bare one. }
+function TTaintWalker.ReceiverTypeOf(AStore: Integer; const ARefs: TArray<TReference>): string;
+var
+  R: TReference;
+  C: TFDConnection;
+begin
+  Result:= '';
+  if (AStore <> STORE_PROJECT) or (FStores[AStore] is not TSQLiteSymbolStore) then Exit;
+  C:= TSQLiteSymbolStore(FStores[AStore]).GetConnection;
+  if not FF1Probed then
+  begin
+    FF1Probed:= True;
+    FF1Query := TFDQuery.Create(nil);
+    FF1Query.Connection:= C;
+    FF1Query.SQL.Text  := 'SELECT COUNT(*) FROM sqlite_master WHERE type = ''table'' AND name IN (''ref_receivers'', ''ref_types'')';
+    FF1Query.Open;
+    FF1Ready:= FF1Query.Fields[0].AsInteger = 2;
+    FF1Query.Close;
+    FF1Query.SQL.Text := 'SELECT t.type_qname FROM ref_receivers rr JOIN ref_types t ON t.ref_id = rr.receiver_ref_id WHERE rr.ref_id = :r LIMIT 1';
+  end;
+  if not FF1Ready then Exit;
+  for R in ARefs do
+  begin
+    if not FF1Types.TryGetValue(R.Id, Result) then
+    begin
+      FF1Query.ParamByName('r').AsLargeInt:= R.Id;
+      FF1Query.Open;
+      try
+        Result:= if FF1Query.Eof then '' else LastSeg(Trim(FF1Query.Fields[0].AsString));
+      finally
+        FF1Query.Close;
+      end;
+      FF1Types.Add(R.Id, Result);
+    end;
+    if Result <> '' then Exit;
+  end;
+end;
+
+{ Whether a known type is an input control: tdYes descends from one, tdNo is proven to
+  descend from none of them, tdUnknown (no ancestry, no library) changes nothing. }
+function TTaintWalker.InputControlVerdict(const AType: string): TDescent;
+const
+  BASES: array[0..3] of string = ('TCustomEdit', 'TCustomMemo', 'TCustomComboBox', 'TcxCustomEdit');
+var
+  B: string;
+  D: TDescent;
+  AllNo: Boolean;
+begin
+  Result:= tdUnknown;
+  if FTypeReader = nil then FTypeReader:= TExprTypeReader.Create(FStores[STORE_PROJECT], FStores[STORE_LIB], 0, nil);
+  AllNo:= True;
+  for B in BASES do
+  begin
+    D:= FTypeReader.Descends(AType, B);
+    if D = tdYes then Exit(tdYes);
+    if D <> tdNo then AllNo:= False;
+  end;
+  if AllNo then Result:= tdNo;
+end;
+
 function TTaintWalker.Resolve(AStore: Integer; const X: TSymbol; AFileId: Int64; ALine, ACol: Integer;
                               const AName: string): TResolved;
 var
@@ -1210,6 +1289,13 @@ begin
   begin
     Result.RecvType:= DeclaredTypeOf(AStore, X, Seg);
     if (Result.RecvType = '') and LooksLikeTypeName(Seg) then Result.RecvType:= Seg;
+  end;
+  { Index fact F1: the receiver ref's own static type. It types a dotted receiver, and it
+    fills a bare one the declared-type lookup could not answer. No table, no row: as before. }
+  if Seg <> '' then
+  begin
+    Result.F1Type:= ReceiverTypeOf(AStore, Refs);
+    if Result.RecvType = '' then Result.RecvType:= Result.F1Type;
   end;
 end;
 
@@ -1454,7 +1540,13 @@ begin
   if (not R.Found) and (FCfg.WeakReceiverRegex <> '') and SameText(R.Name, WEAK_TEXT_LEAF) and (R.Receiver <> '')
      and FWeakRegex.IsMatch(R.Receiver) then
   begin
-    AddHit(Result, SourceHit(AStore, X, ARow, R.Receiver + '.' + R.Name, KIND_READ, ' (weak: receiver name)', True));
+    { F1: a receiver of known type is no longer judged by its spelling. An input control is
+      a certain source; a type proven not to be one (a TLabel named ParamsLabel) is no source. }
+    var Verdict: TDescent:= tdUnknown;
+    if R.F1Type <> '' then Verdict:= InputControlVerdict(R.F1Type);
+    if Verdict = tdNo then Exit;
+    AddHit(Result, SourceHit(AStore, X, ARow, R.Receiver + '.' + R.Name, KIND_READ,
+      if Verdict = tdYes then ' (receiver type ' + R.F1Type + ')' else ' (weak: receiver name)', Verdict <> tdYes));
     Exit;
   end;
   { b. a sanitizer for this category stops the branch }
