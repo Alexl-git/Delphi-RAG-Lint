@@ -369,7 +369,8 @@ type
       /// <param name="ANewNameSites">Out: bare occurrences of ANewName in the routine. Each would bind to the
       /// renamed local afterwards, and dcc accepts that when the types agree.</param>
       /// <returns>What BuildLocal returns.</returns>
-      /// <remarks>Pure AST. Columns are the parse's, UTF-8 bytes.</remarks>
+      /// <remarks>Pure AST. ACol is either the identifier's UTF-8 byte column (a lint finding's) or its character
+      /// column; byte wins. Every returned Col is a character column, as StaleEditReason and Apply expect.</remarks>
       class function BuildLocalScan(const AFile: string; ALine, ACol: Integer; const ANewName: string;
         out AWithSites, ANewNameSites: TArray<TRenameEdit>): TArray<TRenameEdit>;
   end;
@@ -1036,11 +1037,19 @@ var
   function NColOf(const N: TTSNode): Integer;
   begin Result:= Integer(N.StartPoint.Column) + 1; end;
 
+  { The parse counts UTF-8 bytes; StaleEditReason and Apply count characters. }
+  function NCharCol(const N: TTSNode): Integer;
+  var ByteCol: Integer;
+  begin
+    ByteCol:= Integer(N.StartPoint.Column);
+    Result:= TEncoding.UTF8.GetCharCount(Src, Integer(N.StartByte) - ByteCol, ByteCol) + 1;
+  end;
+
   function EditOf(const N: TTSNode): TRenameEdit;
   begin
     Result.FilePath:= AFile;
     Result.Line    := NLine(N);
-    Result.Col     := NColOf(N);
+    Result.Col     := NCharCol(N);
     Result.OldName := Target;
     Result.NewName := ANewName;
   end;
@@ -1050,18 +1059,19 @@ var
     Edits.Add(EditOf(N));
   end;
 
-  { Find the identifier node at (ALine,ACol). Returns null node if none. }
-  function FindIdentAt(const N: TTSNode): TTSNode;
+  { Find the identifier node at (ALine,ACol), by byte or by character column. Returns null node if none. }
+  function FindIdentAt(const N: TTSNode; AByChar: Boolean): TTSNode;
   var I: Integer; Ch, R: TTSNode;
   begin
     Result:= Default(TTSNode);
     if N.IsNull then Exit;
-    if (N.NodeType = 'identifier') and (NLine(N) = ALine) and (NColOf(N) = ACol) then
+    if (N.NodeType = 'identifier') and (NLine(N) = ALine)
+       and ((not AByChar and (NColOf(N) = ACol)) or (AByChar and (NCharCol(N) = ACol))) then
       Exit(N);
     for I:= 0 to N.NamedChildCount - 1 do
     begin
       Ch:= N.NamedChild(I);
-      R:= FindIdentAt(Ch);
+      R:= FindIdentAt(Ch, AByChar);
       if not R.IsNull then Exit(R);
     end;
   end;
@@ -1269,7 +1279,8 @@ begin
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
 
-  IdNode:= FindIdentAt(PF.Tree.RootNode);
+  IdNode:= FindIdentAt(PF.Tree.RootNode, False);
+  if IdNode.IsNull then IdNode:= FindIdentAt(PF.Tree.RootNode, True);
   if IdNode.IsNull then Exit;
   Target:= Trim(NStr(IdNode));
   if Target = '' then Exit;

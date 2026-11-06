@@ -1919,7 +1919,11 @@ begin
         var Target: Int64:= 0;
         var MemberNew: Boolean;
         var Q:= TFDQuery.Create(nil);
+        var SrcLines:= TStringList.Create; { Site.Col is a character column; refs.start_col is the parse's byte column }
         try
+          var SrcText: string;
+          TTextFileFormat.ReadFile(pFile, SrcText);
+          SrcLines.Text:= SrcText;
           Q.Connection:= Conn;
           Q.SQL.Text:= 'SELECT id FROM files WHERE path = :p COLLATE NOCASE';
           Q.ParamByName('p').AsWideString:= ExpandFileName(pFile);
@@ -1950,7 +1954,7 @@ begin
             Q.Close;
             Q.ParamByName('f').AsLargeInt:= Fid;
             Q.ParamByName('l').AsInteger:= Site.Line;
-            Q.ParamByName('c').AsInteger:= Site.Col;
+            Q.ParamByName('c').AsInteger:= TEncoding.UTF8.GetByteCount(Copy(SrcLines[Site.Line - 1], 1, Site.Col - 1)) + 1;
             Q.Open;
             var ToTarget:= False;
             var ToOther := False;
@@ -1976,6 +1980,7 @@ begin
               AddRefusal(CRefuseWithUndecided, Site, 'an occurrence under a `with` the resolver did not bind: the target''s surface is not known');
           end;
         finally
+          SrcLines.Free;
           Q.Free;
         end;
       end;
