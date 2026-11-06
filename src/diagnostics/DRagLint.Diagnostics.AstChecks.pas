@@ -2787,6 +2787,7 @@ var
   EnumMems: TDictionary<string,TStringList>; { v0.74: same-file enum type (lower) -> member names }
   Scopes  : TObjectList<TDictionary<string,string>>; { INLINEVAR-SCOPE: routine / block decl maps, innermost last }
   ScopeEnd: TObjectList<TDictionary<string,Int64>>;  { parallel: an inline var's statement end byte; empty for a routine }
+  Reader  : TExprTypeReader;  { 1.45 la: F1 types of dotted / call operands; nil without a store (OperandType) }
 
   { v11 (M1): the store's resolved category for a declared type text, or
     tcUnknown when there is no store / it can't resolve (caller then falls back
@@ -3120,6 +3121,22 @@ var
     Result:= True;
   end;
 
+  { 1.45 lane la (rows 1, 18-20): the type of an operand. The declared type of a plain
+    identifier (LookupType) answers first, exactly as before; an identifier that map cannot
+    type (no declaration, or AMBIGUOUS) and every dotted chain or call (`Rec.Total`,
+    `Self.FItems`, `GetKind()`) ask the static-type fact F1 instead. No store, no ref_types
+    table or no row: False, and the caller keeps what it did without a type. }
+  function OperandType(const N: TTSNode; out AType: string): Boolean;
+  begin
+    AType:= '';
+    Result:= False;
+    if N.IsNull then Exit;
+    if (N.NodeType = 'identifier') and LookupType(N, AType) and (AType <> AMBIGUOUS_DECL_TYPE) then Exit(True);
+    AType:= '';
+    Result:= (Reader <> nil) and ((N.NodeType = 'identifier') or (N.NodeType = 'exprDot') or (N.NodeType = 'exprCall'))
+             and Reader.TypeLeafOf(N, AType);
+  end;
+
   function OperandIsFloat(const N: TTSNode): Boolean;
   var
     T  : string;
@@ -3127,15 +3144,12 @@ var
   begin
     Result:= False;
     if N.IsNull then Exit;
-    if N.NodeType = 'identifier' then
-    begin
-      if LookupType(N, T) then Result:= TypeTextIsFloat(T);
-    end
-    else if N.NodeType = 'literalNumber' then
+    if N.NodeType = 'literalNumber' then
     begin
       Txt:= NodeStr(N);
       Result:= (Pos('.', Txt) > 0) and (Pos('$', Txt) = 0);
-    end;
+    end
+    else if OperandType(N, T) then Result:= TypeTextIsFloat(T);
   end;
 
   { A quoted string/char literal ('...' or #NN) can never be a float, so it forces
@@ -3163,16 +3177,13 @@ var
   begin
     Result:= False;
     if N.IsNull then Exit;
-    if N.NodeType = 'identifier' then
-    begin
-      if LookupType(N, T) then Result:= (CatOf(T) = tcString);
-    end
-    else if N.NodeType = 'literalString' then
+    if N.NodeType = 'literalString' then
     begin
       Txt:= NodeStr(N);
       for i:= 1 to Length(Txt) do
         if CharInSet(Txt[i], ['A'..'Z', 'a'..'z']) then Exit(True);
-    end;
+    end
+    else if OperandType(N, T) then Result:= (CatOf(T) = tcString);
   end;
 
   procedure CheckExpr(const N: TTSNode);
@@ -3217,8 +3228,7 @@ var
                and ((Length(St) = 0) or (St[1] <> 'k')) then
             begin Selector:= Sc; Break; end;
           end;
-        if (not Selector.IsNull) and (Selector.NodeType = 'identifier')
-           and LookupType(Selector, T) then
+        if (not Selector.IsNull) and OperandType(Selector, T) then
         begin
           var Members: TStringList:= ResolveEnumMembers(T);
           if Members <> nil then
@@ -3337,8 +3347,7 @@ var
             if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
             begin
               A0:= Args.NamedChild(0);
-              if (not A0.IsNull) and (A0.NodeType = 'identifier')
-                 and LookupType(A0, T)
+              if (not A0.IsNull) and OperandType(A0, T)
                  and TypeTextIsString(T) then
               begin
                 P:= N.StartPoint;
@@ -3367,7 +3376,7 @@ var
         if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
         begin
           A0:= Args.NamedChild(0);
-          if (A0.NodeType = 'identifier') and LookupType(A0, T) and TypeTextIsInterface(T) then
+          if OperandType(A0, T) and TypeTextIsInterface(T) then
           begin
             P:= Entity.StartPoint;
             F:= Default(TLintFinding);
@@ -3394,7 +3403,7 @@ var
           if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
           begin
             A0:= Args.NamedChild(0);
-            if (A0.NodeType = 'identifier') and LookupType(A0, T) and TypeTextIsPointer(T) then
+            if OperandType(A0, T) and TypeTextIsPointer(T) then
             begin
               P:= Entity.StartPoint;
               F:= Default(TLintFinding);
@@ -3425,7 +3434,7 @@ var
           if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
           begin
             A0:= Args.NamedChild(0);
-            if (A0.NodeType = 'identifier') and LookupType(A0, T) then
+            if OperandType(A0, T) then
             begin
               var Tl: string:= LowerCase(Trim(T));
               if (Tl = 'nativeint') or (Tl = 'nativeuint') or (Tl = 'intptr') or (Tl = 'uintptr')
@@ -3537,7 +3546,7 @@ var
           if (not Args.IsNull) and (Args.NamedChildCount = 1) then
           begin
             A0:= Args.NamedChild(0);
-            if (A0.NodeType = 'identifier') and LookupType(A0, T) then
+            if OperandType(A0, T) then
             begin
               var Tl: string:= LowerCase(Trim(T));
               if (Tl = 'string') or (Tl = 'unicodestring') or (Tl = 'widestring') or (Tl = 'widechar') then
@@ -3783,6 +3792,7 @@ begin
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
+  Reader:= nil;
   Findings:= TList<TLintFinding>.Create;
   TypeMap := TDictionary<string,string>.Create;
   Guards  := TDictionary<string,Integer>.Create;
@@ -3790,7 +3800,7 @@ begin
   Scopes  := TObjectList<TDictionary<string,string>>.Create(True);
   ScopeEnd:= TObjectList<TDictionary<string,Int64>>.Create(True);
   try
-
+    if (AStore <> nil) and (AFileId > 0) then Reader:= TExprTypeReader.Create(AStore, nil, AFileId, Src);
     if PF.Tree <> nil then
     begin
       CollectDeclTypes(PF.Tree.RootNode, Src, TypeMap, True); { inline `var X: T` too (Gitea #5) }
@@ -3803,6 +3813,7 @@ begin
   finally
     for var Ml in EnumMems.Values do Ml.Free;
     EnumMems.Free;
+    Reader.Free;
     ScopeEnd.Free;
     Scopes.Free;
     Guards.Free;
