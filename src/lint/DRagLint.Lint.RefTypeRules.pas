@@ -35,10 +35,12 @@ uses
 const
   /// <summary>Rule id: `x is T` where the static type of x already descends from T.</summary>
   IS_ALWAYS_TRUE_RULE = 'is-always-true';
+  /// <summary>Rule id: `with TFoo.Create do` that nobody frees.</summary>
+  WITH_ON_TEMPORARY_RULE = 'with-on-temporary';
   /// <summary>Rule id: a cast to an ancestor and straight back down, TLeaf(TBase(x)).</summary>
   UPCAST_THEN_DOWNCAST_RULE = 'upcast-then-downcast';
   /// <summary>Every project rule this unit emits, as `--rule` and dl:ok markers spell them.</summary>
-  REF_TYPE_RULES: array[0..1] of string = (IS_ALWAYS_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE);
+  REF_TYPE_RULES: array[0..2] of string = (IS_ALWAYS_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE);
   /// <summary>The ones that ship OFF; each names why in the catalog.</summary>
   REF_TYPE_RULES_OFF: array of string = [];
 
@@ -67,6 +69,7 @@ implementation
 uses
   System.SysUtils
   , System.Generics.Collections
+  , System.RegularExpressions
   , Data.DB
   , FireDAC.Comp.Client
   , FireDAC.Stan.Param
@@ -91,6 +94,13 @@ const
   FIELD_ARGS       = 'args';
   OP_IS            = 'is';
   ROOT_CLASS       = 'tobject';
+  CLASS_COMPONENT  = 'tcomponent';
+  CLASS_THREAD     = 'tthread';
+  FIELD_BODY       = 'body';
+  VIA_CTOR         = 'ctor';
+  NIL_WORD         = 'nil';
+  { A call that ends the object's life, or hands the job to the object. }
+  FREE_WORDS_RX    = '\b(free|destroy|release|disposeof|freeandnil|freeonterminate)\b';
   SEV_WARNING      = 'warning';
   { Bits of the line in a position key; a column stays far below 2^20. }
   POS_LINE_SHIFT   = 20;
@@ -165,6 +175,7 @@ type
       function CastParts(const ANode: TTSNode; out ATarget: TTypeFacts; out AOperand: TTSNode): Boolean;
       procedure CheckUpcastThenDowncast(const ANode: TTSNode; const AOuter: TTypeFacts; const AOperand: TTSNode);
       procedure CheckCast(const ANode: TTSNode);
+      procedure CheckWith(const ANode: TTSNode);
       procedure CheckIs(const ANode: TTSNode);
       procedure Walk(const ANode: TTSNode);
     public
@@ -574,6 +585,37 @@ begin
   if Wants(UPCAST_THEN_DOWNCAST_RULE) then CheckUpcastThenDowncast(ANode, Outer, Operand);
 end;
 
+procedure TRefTypeScan.CheckWith(const ANode: TTSNode);
+var
+  Fact: TRefFact;
+begin
+  var Body: TTSNode:= ANode.ChildByField(FIELD_BODY);
+  if Body.IsNull then Exit;
+  for var I: Integer:= 0 to Integer(ANode.NamedChildCount) - 1 do
+  begin
+    var Ent: TTSNode:= ANode.NamedChild(I);
+    if Ent.StartByte >= Body.StartByte then Break;
+    var Callee: TTSNode:= Ent;
+    var Args  : TTSNode:= Default(TTSNode);
+    if Ent.NodeType = NODE_CALL then
+    begin
+      Callee:= Ent.ChildByField(FIELD_ENTITY);
+      Args  := Ent.ChildByField(FIELD_ARGS);
+    end;
+    if Callee.IsNull or (Callee.NodeType <> NODE_DOT) then Continue;
+    if (not FactAt(Callee.ChildByField(FIELD_RHS), Fact)) or (Fact.Via <> VIA_CTOR) then Continue;
+    { The written class, not the row's: `TFoo.Create` may bind to a constructor TFoo inherits. }
+    var Cls: TTypeFacts:= WrittenType(Callee.ChildByField(FIELD_LHS));
+    if not Cls.IsClass then Continue;
+    if Cls.HasAncestor(CLASS_THREAD) then Continue; { may free itself (FreeOnTerminate) }
+    if Cls.HasAncestor(CLASS_COMPONENT) and (not Args.IsNull) and (Args.NamedChildCount > 0)
+       and not SameText(Text(Args.NamedChild(0)).Trim, NIL_WORD) then Continue; { an owner takes it }
+    if TRegEx.IsMatch(Text(Body), FREE_WORDS_RX, [roIgnoreCase]) then Continue;
+    Emit(WITH_ON_TEMPORARY_RULE, Ent,
+      Format('with on a new %s that nothing frees: the object has no name once the block ends, so it leaks. Hold it in a variable, or free it in the block.', [Cls.Name]));
+  end;
+end;
+
 procedure TRefTypeScan.Walk(const ANode: TTSNode);
 begin
   if ANode.IsNull then Exit;
@@ -581,6 +623,7 @@ begin
   if IsAsNode(ANode) or (NT = NODE_CALL) then CheckCast(ANode)
   else if NT = NODE_BINARY then CheckIs(ANode);
   var IsWith: Boolean:= NT = NODE_WITH;
+  if IsWith and Wants(WITH_ON_TEMPORARY_RULE) then CheckWith(ANode);
   if IsWith then Inc(FWithDepth);
   for var I: Integer:= 0 to Integer(ANode.NamedChildCount) - 1 do
     Walk(ANode.NamedChild(I));

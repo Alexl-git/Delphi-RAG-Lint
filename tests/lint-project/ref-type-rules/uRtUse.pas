@@ -7,8 +7,33 @@ uses
 
 procedure IsTests(ALeaf: TRtLeaf; ABase: TRtBase; const AObj: TObject);
 procedure CastTests(ALeaf: TRtLeaf; ABase: TRtBase);
+procedure WithTests(ALeaf: TRtLeaf; AOwner: TComponent);
 
 implementation
+
+procedure WithTests(ALeaf: TRtLeaf; AOwner: TComponent);
+begin
+  with TRtPlain.Create do  // TRIGGER-WITH-CTOR
+    Tag:= 1;
+  with TRtPlain.Create(7) do  // TRIGGER-WITH-CTORARGS
+    Tag:= 1;
+  with TRtComp.Create(nil) do  // TRIGGER-WITH-NILOWNER
+    Tag:= 1;
+  with TRtPlain.Create do  // CONTROL-WITH-FREED
+    try
+      Tag:= 1;
+    finally
+      Free;
+    end;
+  with TRtComp.Create(AOwner) do  // CONTROL-WITH-OWNER
+    Tag:= 1;
+  with TRtWorker.Create(False) do  // CONTROL-WITH-THREAD
+    Tag:= 1;
+  with MakeLeaf do  // CONTROL-WITH-RESULT
+    Tag:= 1;
+  with ALeaf do  // CONTROL-WITH-VARIABLE
+    Tag:= 1;
+end;
 
 procedure CastTests(ALeaf: TRtLeaf; ABase: TRtBase);
 var
