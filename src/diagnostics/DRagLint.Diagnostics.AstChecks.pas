@@ -5808,6 +5808,11 @@ var
   function WrittenOnlyInInitialization(const AName: string; ALine: Integer): Boolean;
   const
     REF_KIND_WRITE = 'write';
+
+    function InInitialization(const ARef: TReference): Boolean;
+    begin
+      Result:= (ARef.EnclosingSymbolId > 0) and (AStore.GetSymbolById(ARef.EnclosingSymbolId).Kind = skInitialization);
+    end;
   var
     S      : TSymbol;
     R      : TReference;
@@ -5826,12 +5831,12 @@ var
         begin
           Bound.AddOrSetValue(R.Id, True);
           if R.Kind <> REF_KIND_WRITE then Continue;
-          if (R.EnclosingSymbolId = 0) or (AStore.GetSymbolById(R.EnclosingSymbolId).Kind <> skInitialization) then Exit;
+          if not InInitialization(R) then Exit;
           Inc(Writes);
         end;
         for R in AStore.GetReferencesFromFile(AFileId) do
           if (not Bound.ContainsKey(R.Id)) and (R.Kind = REF_KIND_WRITE) and (R.ReceiverText = '') and SameText(R.NameText, AName)
-             and ((R.EnclosingSymbolId = 0) or (AStore.GetSymbolById(R.EnclosingSymbolId).Kind <> skInitialization)) then Exit;
+             and not InInitialization(R) then Exit;
       finally
         Bound.Free;
       end;
