@@ -28,8 +28,10 @@ unit DRagLint.Lint.RefTypeRules;
 interface
 
 uses
-  DRagLint.Core.Model
+  System.SysUtils
+  , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
+  , TreeSitter
   ;
 
 const
@@ -72,6 +74,77 @@ function RefTypeRuleDefaultOff(const ARuleId: string): Boolean;
 function RefStaticTypeAt(const AStore: ISymbolStore; AFileId: Int64; ALine, ACol: Integer; const AName: string;
   out ATypeLeaf: string): Boolean;
 
+type
+  /// <summary>The answer to "does type A descend from type B" over the indexed ancestry.</summary>
+  /// <remarks>Three values on purpose: a rule that wants to SUPPRESS on proof uses tdYes, a rule
+  /// that wants to FIRE on proof of absence uses tdNo, and tdUnknown never changes what a rule
+  /// does today.</remarks>
+  TDescent = (
+    /// <summary>Not decidable: no such type, a homonym that disagrees, an unresolved or generic
+    /// ancestor with no library index, or not a class or interface.</summary>
+    tdUnknown,
+    /// <summary>The whole ancestry was followed and the ancestor is not in it.</summary>
+    tdNo,
+    /// <summary>The ancestor is in the ancestry of every class of that name.</summary>
+    tdYes);
+
+/// <summary>Whether a class or interface descends from an ancestor (index fact type_ancestors).</summary>
+/// <param name="AStore">The project index; nil or a store that is not SQLite answers tdUnknown.</param>
+/// <param name="ALibStore">The platform library index, or nil. Without it an ancestor outside the
+/// project is not followed: a positive answer still stands, a negative one becomes tdUnknown.</param>
+/// <param name="ATypeLeaf">The type's name; a qualified name is cut to its leaf. Case-insensitive.</param>
+/// <param name="AAncestorLeaf">The ancestor's name, leaf only. Case-insensitive. The type itself counts.</param>
+/// <returns>tdYes, tdNo or tdUnknown; see TDescent. Needs no ref_types table, only type_ancestors.</returns>
+/// <remarks>Homonyms are intersected as in the unit comment: they can turn tdYes into tdUnknown,
+/// never create one. One call builds its own caches; use TExprTypeReader.Descends in a loop.</remarks>
+function TypeDescendsFrom(const AStore, ALibStore: ISymbolStore; const ATypeLeaf, AAncestorLeaf: string): TDescent;
+
+type
+  /// <summary>Static types of expressions in ONE unit, from ref_types (index fact F1).</summary>
+  /// <remarks>Not thread-safe. Owns its caches and a query on AStore's connection, so it must not
+  /// outlive the store. Creating it costs one query for the file's refs; ask many nodes of the same
+  /// file from one reader. Inside a `with` body a bare name may bind to a member of the
+  /// with-expression, which the index cannot check: the reader does not track `with`, so a caller
+  /// must not ask about nodes inside one (the rules of this unit answer nothing there).</remarks>
+  TExprTypeReader = class
+    strict private
+      FScan : TObject;
+      FReady: Boolean;
+    public
+      /// <summary>Opens the unit's refs for reading.</summary>
+      /// <param name="AStore">The project index; nil or not SQLite makes every answer false/unknown.</param>
+      /// <param name="ALibStore">The platform library index, or nil (see TypeDescendsFrom).</param>
+      /// <param name="AFileId">The unit's id in AStore.</param>
+      /// <param name="ASrc">The unit's source bytes exactly as the node was parsed from (UTF-8).</param>
+      constructor Create(const AStore, ALibStore: ISymbolStore; AFileId: Int64; const ASrc: TBytes);
+      destructor Destroy; override;
+      /// <summary>False when the index has no ref_types table (older than 1.44) or the store is unusable.</summary>
+      property Ready: Boolean read FReady;
+      /// <summary>The static type leaf of an expression node.</summary>
+      /// <param name="ANode">An identifier, a dotted chain (`A.B.C`: the type of C), a call (`F(x)`,
+      /// `A.B(x)`: the result type), a parenthesised expression, `x as T` or `T(x)`.</param>
+      /// <param name="ALeaf">Out: the type's leaf name as written in the index; '' when false.</param>
+      /// <returns>False with no table, no row, a conflicting row, or an expression shape that has
+      /// no static type (a subscript, a dereference, arithmetic): the caller keeps what it knew.</returns>
+      function TypeLeafOf(const ANode: TTSNode; out ALeaf: string): Boolean;
+      /// <summary>TypeDescendsFrom on this reader's caches.</summary>
+      /// <param name="ATypeLeaf">See TypeDescendsFrom.</param>
+      /// <param name="AAncestorLeaf">See TypeDescendsFrom.</param>
+      /// <returns>See TypeDescendsFrom.</returns>
+      function Descends(const ATypeLeaf, AAncestorLeaf: string): TDescent;
+  end;
+
+/// <summary>One-shot TExprTypeReader.TypeLeafOf: the static type leaf of one expression node.</summary>
+/// <param name="AStore">The project index.</param>
+/// <param name="AFileId">The unit's id in AStore.</param>
+/// <param name="ANode">The expression node (see TExprTypeReader.TypeLeafOf).</param>
+/// <param name="ASrc">The unit's source bytes the node came from.</param>
+/// <param name="ALeaf">Out: the type's leaf name.</param>
+/// <returns>False when no fact answers; see TExprTypeReader.TypeLeafOf.</returns>
+/// <remarks>Loads the unit's refs on every call: for more than a few nodes of one unit make a
+/// TExprTypeReader.</remarks>
+function StaticTypeLeafOfExpr(const AStore: ISymbolStore; AFileId: Int64; const ANode: TTSNode; const ASrc: TBytes;
+  out ALeaf: string): Boolean;
 /// <summary>Runs the rules on index fact F1 over a project index.</summary>
 /// <param name="AStore">The project index; nil, a store that is not SQLite, or an
 /// index with no ref_types table yields no findings.</param>
@@ -90,12 +163,10 @@ function CollectRefTypeRules(const AStore, ALibStore: ISymbolStore; const ARules
 implementation
 
 uses
-  System.SysUtils
-  , System.Generics.Collections
+  System.Generics.Collections
   , System.RegularExpressions
   , FireDAC.Comp.Client
   , FireDAC.Stan.Param  // dl:ok unused-unit-in-uses@c61d -- REVIEWED 2026-11-05: TFDParam.SetAsLargeInt is inline, and without this unit the compiler says H2443 at every parameter assignment
-  , TreeSitter
   , DRagLint.Diagnostics.ParseCache
   , DRagLint.Storage.SQLite
   ;
@@ -240,6 +311,12 @@ type
       procedure ScanFile(AFileId: Int64);
       /// <summary>True when the index carries the ref_types table.</summary>
       function HasFact: Boolean;
+      /// <summary>Points the scan at one file's refs and source, for ExprTypeLeaf.</summary>
+      procedure Attach(AFileId: Int64; const ASrc: TBytes);
+      /// <summary>The static type leaf of an expression; False when no fact answers.</summary>
+      function ExprTypeLeaf(const ANode: TTSNode; out ALeaf: string): Boolean;
+      /// <summary>Descent of a type name from an ancestor leaf over the closure.</summary>
+      function DescentOf(const ATypeLeaf, AAncestorLeaf: string): TDescent;
       /// <summary>The findings so far, in scan order.</summary>
       function Findings: TArray<TLintFinding>;
   end;
@@ -993,6 +1070,101 @@ begin
   end;
 end;
 
+procedure TRefTypeScan.Attach(AFileId: Int64; const ASrc: TBytes);
+begin
+  FFileId   := AFileId;
+  FSrc      := ASrc;
+  FWithDepth:= 0;
+  LoadRefs(AFileId);
+end;
+
+function TRefTypeScan.ExprTypeLeaf(const ANode: TTSNode; out ALeaf: string): Boolean;  // dl:ok too-many-exit-points -- REVIEWED 2026-11-06: guard clauses, each declining a shape that has no static type
+begin
+  ALeaf := '';
+  Result:= False;
+  if ANode.IsNull then Exit;
+  var T: TExprType:= StaticType(ANode);
+  if T.Known and (T.Facts.Name <> '') then
+  begin
+    ALeaf := LeafOf(T.Facts.Name);
+    Exit(True);
+  end;
+  { A type the store has no class for (a record, a simple type) still has its recorded name. }
+  var Inner: TTSNode:= ANode;
+  while (not Inner.IsNull) and (Inner.NodeType = NODE_PARENS) do Inner:= Inner.NamedChild(0);
+  if Inner.IsNull then Exit;
+  var Name: TTSNode:= Default(TTSNode);
+  if Inner.NodeType = TYPE_NODE_ID then Name:= Inner
+  else if Inner.NodeType = NODE_DOT then Name:= Inner.ChildByField(FIELD_RHS)
+  else if Inner.NodeType = NODE_CALL then
+  begin
+    var Ent: TTSNode:= Inner.ChildByField(FIELD_ENTITY);
+    if Ent.IsNull then Exit;
+    if Ent.NodeType = TYPE_NODE_ID then Name:= Ent
+    else if Ent.NodeType = NODE_DOT then Name:= Ent.ChildByField(FIELD_RHS);
+  end;
+  var Fact: TRefFact;
+  if Name.IsNull or (Name.NodeType <> TYPE_NODE_ID) or not FactAt(Name, Fact) or (Fact.TypeQName = '') then Exit;
+  ALeaf := LeafOf(Fact.TypeQName);
+  Result:= ALeaf <> '';
+end;
+
+function TRefTypeScan.DescentOf(const ATypeLeaf, AAncestorLeaf: string): TDescent;
+begin
+  Result:= tdUnknown;
+  var F: TTypeFacts:= FactsOfName(ATypeLeaf);
+  if (not F.Known) or not (F.IsClass or F.IsIntf) then Exit;
+  if F.HasAncestor(LeafOf(AAncestorLeaf).ToLower) then Exit(tdYes);
+  if F.Complete and not F.Homonym then Result:= tdNo;
+end;
+
+constructor TExprTypeReader.Create(const AStore, ALibStore: ISymbolStore; AFileId: Int64; const ASrc: TBytes);
+begin
+  inherited Create;
+  if (AStore = nil) or (AStore is not TSQLiteSymbolStore) then Exit;
+  FScan := TRefTypeScan.Create(AStore, ALibStore, nil);
+  FReady:= TRefTypeScan(FScan).HasFact;
+  if FReady and (AFileId > 0) then TRefTypeScan(FScan).Attach(AFileId, ASrc);
+end;
+
+destructor TExprTypeReader.Destroy;
+begin
+  FScan.Free;
+  inherited Destroy;
+end;
+
+function TExprTypeReader.TypeLeafOf(const ANode: TTSNode; out ALeaf: string): Boolean;
+begin
+  ALeaf := '';
+  Result:= FReady and TRefTypeScan(FScan).ExprTypeLeaf(ANode, ALeaf);
+end;
+
+function TExprTypeReader.Descends(const ATypeLeaf, AAncestorLeaf: string): TDescent;
+begin
+  Result:= tdUnknown;
+  if FScan <> nil then Result:= TRefTypeScan(FScan).DescentOf(ATypeLeaf, AAncestorLeaf);
+end;
+
+function TypeDescendsFrom(const AStore, ALibStore: ISymbolStore; const ATypeLeaf, AAncestorLeaf: string): TDescent;
+begin
+  var R: TExprTypeReader:= TExprTypeReader.Create(AStore, ALibStore, 0, nil);
+  try
+    Result:= R.Descends(ATypeLeaf, AAncestorLeaf);
+  finally
+    R.Free;
+  end;
+end;
+
+function StaticTypeLeafOfExpr(const AStore: ISymbolStore; AFileId: Int64; const ANode: TTSNode; const ASrc: TBytes;
+  out ALeaf: string): Boolean;
+begin
+  var R: TExprTypeReader:= TExprTypeReader.Create(AStore, nil, AFileId, ASrc);
+  try
+    Result:= R.TypeLeafOf(ANode, ALeaf);
+  finally
+    R.Free;
+  end;
+end;
 function RefTypeRuleDefaultOff(const ARuleId: string): Boolean;
 begin
   Result:= False;
