@@ -232,6 +232,9 @@ type
 
 implementation
 
+uses
+  DRagLint.Lint.RefTypeRules; { TExprTypeReader: the receiver's static type, index fact F1 }
+
 { FLOWCHECKER SUB-BREAKDOWN. INBOX-flowchecker-is-half-of-lint-all.
 
   Measured 2026-08-28 on this repo's own 110 files: FlowChecker.Check is
@@ -2033,6 +2036,290 @@ begin
   Result := Found;
 end;
 
+type
+  /// <summary>What a METHOD does with an argument, from the receiver's static type (index fact F1,
+  /// ref_types): receiver type -> the method's overload set over that type's ancestry -> var/out.</summary>
+  /// <remarks>Answers pmVar or pmOut only when the proof is whole, and pmUnknown otherwise, which
+  /// means "today's logic": no store, no ref_types table, no row, a receiver inside a `with`, a type
+  /// name with more than one declaration, an ancestry that cannot be followed to its end, a member
+  /// that is not a method, a class helper with a method of that name, or overloads that do not all
+  /// say var/out at this position. It never says "by value" (lane 145 L-D): a by-value argument is
+  /// a Lattices matter, and the extractor fingerprint covers that unit.
+  /// One instance per file; not thread-safe; owns a TExprTypeReader, so it must not outlive the store.</remarks>
+  TMethodArgModes = class
+    strict private
+      FStore : ISymbolStore;
+      FLib   : ISymbolStore;
+      FSrc   : TBytes;
+      FReader: TExprTypeReader;
+      FMemo  : TDictionary<string, TParamMode>;
+      function SymbolsOf(const AName: string): TArray<TSymbol>;
+      function IsHelperName(const AName: string): Boolean;
+      function TypeIsOneDeclaration(const ATypeLeaf: string; out AIsRecord: Boolean): Boolean;
+      function MethodMode(const ATypeLeaf, AMethod: string; AIndex, AArgCount: Integer): TParamMode;
+    public
+      /// <summary>Opens the unit's refs; costs one query.</summary>
+      /// <param name="AStore">The project index; nil or not SQLite makes every answer pmUnknown.</param>
+      /// <param name="ALib">The platform library index, or nil (an ancestor outside the project then
+      /// cannot be followed, so such a type answers pmUnknown).</param>
+      /// <param name="AFileId">The unit's id in AStore.</param>
+      /// <param name="ASrc">The unit's source bytes, as the nodes were parsed from.</param>
+      constructor Create(const AStore, ALib: ISymbolStore; AFileId: Int64; const ASrc: TBytes);
+      destructor Destroy; override;
+      /// <summary>The mode of one argument of a dotted call.</summary>
+      /// <param name="ACall">An exprCall node; a call whose entity is not `receiver.member` answers pmUnknown.</param>
+      /// <param name="AIndex">0-based argument position.</param>
+      /// <param name="AArgCount">The number of arguments the call passes.</param>
+      /// <returns>pmVar, pmOut or pmUnknown; see the class remarks.</returns>
+      function ModeOfArg(const ACall: TTSNode; AIndex, AArgCount: Integer): TParamMode;
+      /// <summary>True when a named type is a static array: every symbol of that name is a type alias
+      /// written `array[...]`.</summary>
+      /// <param name="ATypeText">A local's declared type text, written out or a type's name.</param>
+      /// <returns>False on anything else, a pointer or a name the index does not know included.</returns>
+      function IsStaticArrayType(const ATypeText: string): Boolean;
+  end;
+
+const
+  { Not a Pascal identifier, so Descends answers tdNo for it exactly when the type's whole ancestry
+    was followed and has no homonym. }
+  ANCESTRY_COMPLETE_PROBE = '<no ancestor>';
+
+constructor TMethodArgModes.Create(const AStore, ALib: ISymbolStore; AFileId: Int64; const ASrc: TBytes);
+begin
+  inherited Create;
+  FStore := AStore;
+  FLib   := ALib;
+  FSrc   := ASrc;
+  FReader:= TExprTypeReader.Create(AStore, ALib, AFileId, ASrc);
+  FMemo  := TDictionary<string, TParamMode>.Create;
+end;
+
+destructor TMethodArgModes.Destroy;
+begin
+  FMemo.Free;
+  FReader.Free;
+  inherited Destroy;
+end;
+
+function TMethodArgModes.SymbolsOf(const AName: string): TArray<TSymbol>;
+begin
+  Result:= FStore.FindSymbolsByExactName(AName);
+  if FLib <> nil then Result:= Result + FLib.FindSymbolsByExactName(AName);
+end;
+
+function TMethodArgModes.IsHelperName(const AName: string): Boolean;
+begin
+  Result:= False;
+  for var S: TSymbol in SymbolsOf(AName) do
+    if S.IsHelper then Exit(True);
+end;
+
+function TMethodArgModes.TypeIsOneDeclaration(const ATypeLeaf: string; out AIsRecord: Boolean): Boolean;
+var
+  QName: string;
+begin
+  AIsRecord:= False;
+  QName    := '';
+  for var S: TSymbol in SymbolsOf(ATypeLeaf) do
+    if S.Kind in [skClass, skInterface, skRecord] then
+    begin
+      { A forward declaration has the same qualified name; another unit's type of this name does not. }
+      if (QName <> '') and not SameText(QName, S.QualifiedName) then Exit(False);
+      QName    := S.QualifiedName;
+      AIsRecord:= S.Kind = skRecord;
+    end;
+  Result:= QName <> '';
+end;
+
+function TMethodArgModes.IsStaticArrayType(const ATypeText: string): Boolean;
+const
+  ARRAY_HEAD = '^array\s*\[';
+var
+  T: string;
+begin
+  T:= Trim(ATypeText);
+  if T = '' then Exit(False);
+  if T.StartsWith('array', True) then Exit(TRegEx.IsMatch(T, ARRAY_HEAD, [roIgnoreCase]));
+  Result:= False;
+  for var S: TSymbol in SymbolsOf(T) do
+  begin
+    if (S.Kind <> skTypeAlias) or not TRegEx.IsMatch(Trim(S.Signature), ARRAY_HEAD, [roIgnoreCase]) then Exit(False);
+    Result:= True;
+  end;
+end;
+
+function TMethodArgModes.MethodMode(const ATypeLeaf, AMethod: string; AIndex, AArgCount: Integer): TParamMode;  // dl:ok too-many-exit-points@3129 -- REVIEWED 2026-11-06: each exit declines one way the proof is not whole, and all answer pmUnknown
+var
+  IsRecord, Any: Boolean;
+  Seen, M: TParamMode;
+begin
+  Result:= pmUnknown;
+  if not TypeIsOneDeclaration(ATypeLeaf, IsRecord) then Exit;
+  { An ancestor that cannot be followed may declare another overload. A record has no ancestry. }
+  if (not IsRecord) and (FReader.Descends(ATypeLeaf, ANCESTRY_COMPLETE_PROBE) <> tdNo) then Exit;
+  Any := False;
+  Seen:= pmUnknown;
+  for var S: TSymbol in SymbolsOf(AMethod) do
+  begin
+    var Hops: TArray<string>:= S.QualifiedName.Split(['.']);
+    if Length(Hops) < 2 then Continue;
+    var Owner: string:= Hops[High(Hops) - 1];
+    var Lt: Integer:= Pos('<', Owner);
+    if Lt > 0 then Owner:= Copy(Owner, 1, Lt - 1);
+    var Mine: Boolean:= SameText(Owner, ATypeLeaf);
+    if (not Mine) and not IsRecord then
+    begin
+      var D: TDescent:= FReader.Descends(ATypeLeaf, Owner);
+      if D = tdUnknown then Exit;
+      Mine:= D = tdYes;
+    end;
+    if not Mine then
+    begin
+      { A helper's method hides the type's own, and a helper is no ancestor. }
+      if (S.Kind = skMethod) and IsHelperName(Owner) then Exit;
+      Continue;
+    end;
+    if S.Kind not in [skMethod, skConstructor] then Exit; { a field or a property of this name }
+    var PS: TArray<TParamPart>:= ParseSignatureParams(S.Signature);
+    { Applicable overloads only: a call passes every parameter with no default. }
+    var Required: Integer:= 0;
+    for var P: TParamPart in PS do
+      if not P.TypeText.Contains('=') then Inc(Required);
+    if (AArgCount < Required) or (AArgCount > Length(PS)) or (AIndex > High(PS)) then Continue;
+    if SameText(PS[AIndex].Modifier, 'var') then M:= pmVar
+    else if SameText(PS[AIndex].Modifier, 'out') then M:= pmOut
+    else Exit;
+    if Any and (M <> Seen) then Exit;
+    Any := True;
+    Seen:= M;
+  end;
+  if Any then Result:= Seen;
+end;
+
+function TMethodArgModes.ModeOfArg(const ACall: TTSNode; AIndex, AArgCount: Integer): TParamMode;
+var
+  Leaf: string;
+begin
+  Result:= pmUnknown;
+  var Ent: TTSNode:= ACall.ChildByField('entity');
+  if Ent.IsNull or (Ent.NodeType <> 'exprDot') then Exit;
+  var Member: TTSNode:= Ent.ChildByField('rhs');
+  if Member.IsNull or (Member.NodeType <> 'identifier') then Exit;
+  { Inside a `with` a bare receiver may be a member of the with-expression: see TExprTypeReader. }
+  var Up: TTSNode:= ACall.Parent;
+  while not Up.IsNull do
+  begin
+    if Up.NodeType = 'with' then Exit;
+    Up:= Up.Parent;
+  end;
+  if not FReader.TypeLeafOf(Ent.ChildByField('lhs'), Leaf) then Exit;
+  { Raw spelling in the key: FindSymbolsByExactName is byte-exact first, as for the ParamMd key. }
+  var Key: string:= Leaf + '.' + NodeStr(Member, FSrc) + '#' + IntToStr(AIndex) + '/' + IntToStr(AArgCount);
+  if FMemo.TryGetValue(Key, Result) then Exit;
+  Result:= MethodMode(Leaf, NodeStr(Member, FSrc), AIndex, AArgCount);
+  FMemo.Add(Key, Result);
+end;
+
+{ SHAPE 1c of used-before-assignment: `Reader.Fill(Buf[0], 8)` with Fill's parameter `var B`.
+
+  The lattice cannot see this and must not: Flow.Lattices is extraction-hashed and asks the mode
+  oracle only for a bare-name callee, so the read reaches the replay in CheckRoutine. This withdraws
+  it there, and the possible-def it records is untouched, so nothing else moves.
+
+  True only when the item writes the local through such an argument AND no other mention of the
+  local remains in the item: `R.Fill(Buf[0], Buf[1])` and `R.Fill(Buf[Buf[1]], 8)` really read it.
+
+  ONLY STORAGE THE LOCAL ITSELF HOLDS counts as a write of it. `R.Fill(P^, 8)`, `R.Fill(P[0], 8)` and
+  `R.Fill(Obj.F, 8)` read P and Obj to find the target, which is the defect this rule exists for,
+  and `R.Fill(Rec.Obj.F, 8)` and `R.Fill(Arr[0].F, 8)` have a hop whose type this does not know. So:
+  a static array's element, or one field of a record, and nothing else. }
+function ReadIsTypedMethodWriteArg(const AItem: TTSNode; ARead: Integer; const ASrc: TBytes;
+  AVars: TRoutineVarTable; AModes: TMethodArgModes; const AStore: ISymbolStore; AFileId: Int64): Boolean;
+var
+  Written, Other: Boolean;
+
+  function IsTheLocal(const N: TTSNode): Boolean;
+  begin
+    Result:= (not N.IsNull) and (N.NodeType = 'identifier')
+             and (AVars.IndexOfAt(LowerCase(NodeStr(N, ASrc)), Integer(N.StartByte)) = ARead);
+  end;
+
+  function ArgIsOwnStorage(const AArg: TTSNode): Boolean;
+  var
+    TypeText: string;
+  begin
+    TypeText:= AVars.Get(ARead).TypeText;
+    Result:= if AArg.NodeType = 'exprSubscript' then
+               IsTheLocal(AArg.ChildByField('entity')) and AModes.IsStaticArrayType(TypeText)
+             else
+               (AArg.NodeType = 'exprDot') and IsTheLocal(AArg.ChildByField('lhs'))
+               and (AArg.ChildByField('rhs').NodeType = 'identifier') and IsRecordType(TypeText, AStore, AFileId);
+  end;
+
+  procedure Walk(const N: TTSNode; AAfterDot: Boolean); forward;
+
+  procedure WalkCall(const N: TTSNode);
+  begin
+    Walk(N.ChildByField('entity'), False);
+    var Args: TTSNode:= N.ChildByField('args');
+    if Args.IsNull then Exit;
+    var Count: Integer:= Args.NamedChildCount;
+    { A comment is a named child, so positions are not known. }
+    var Positional: Boolean:= True;
+    for var I: Integer := 0 to Count - 1 do
+      if Args.NamedChild(I).NodeType.Contains('omment') then Positional:= False;
+    for var I: Integer := 0 to Count - 1 do
+    begin
+      var Arg: TTSNode:= Args.NamedChild(I);
+      if Positional and ArgIsOwnStorage(Arg)
+         and (AModes.ModeOfArg(N, I, Count) in [pmVar, pmOut]) then
+      begin
+        Written:= True;
+        { The index expressions of `Buf[...]` are still reads; a record field has none. }
+        if Arg.NodeType = 'exprSubscript' then
+          for var J: Integer := 0 to Arg.NamedChildCount - 1 do
+          begin
+            if Arg.NamedChild(J) = Arg.ChildByField('entity') then Continue;
+            Walk(Arg.NamedChild(J), False);
+          end;
+      end
+      else
+        Walk(Arg, False);
+    end;
+  end;
+
+  procedure Walk(const N: TTSNode; AAfterDot: Boolean);
+  var
+    K: string;
+  begin
+    if N.IsNull or Other then Exit;
+    K:= N.NodeType;
+    if (K = 'type') or (K = 'typeref') or (K = 'varDef') then Exit;
+    if K = 'identifier' then
+    begin
+      if (not AAfterDot) and IsTheLocal(N) then Other:= True;
+      Exit;
+    end;
+    if K = 'exprDot' then
+    begin
+      Walk(N.ChildByField('lhs'), False);
+      Exit; { the rhs is a member name }
+    end;
+    if K = 'exprCall' then
+    begin
+      WalkCall(N);
+      Exit;
+    end;
+    for var I: Integer := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I), False);
+  end;
+
+begin
+  Written:= False;
+  Other  := False;
+  Walk(AItem, False);
+  Result:= Written and not Other;
+end;
+
 { SHAPE 3 of used-before-assignment: partial record initialisation.
 
   True when every mention of AName in the item is a FIELD access `AName.F` and,
@@ -2745,6 +3032,7 @@ var
   StoreModes  : TParamModeLookup;
   UnitSigs    : TDictionary<string, TArray<string>>;
   SameUnitClassKinds: TDictionary<string, Boolean>; { when the store answers tcUnknown }
+  MethodModes : TMethodArgModes; { built on the first candidate finding of the file }
 
   procedure Emit(const ARule, ASev, AMsg: string; ALine, ACol: Integer);
   var F: TLintFinding;
@@ -2870,6 +3158,11 @@ var
                     Shape 3 is MAY-arm only; shape 2 applies to both. }
                   if ReadIsCountBoundedElement(It.Node, V.Name, PF.Src) then Continue;
                   if ReadIsStreamFillArg(It.Node, V.Name, PF.Src) then Continue;
+                  if AStore <> nil then
+                  begin
+                    if MethodModes = nil then MethodModes := TMethodArgModes.Create(AStore, ALibStore, AFileId, PF.Src);
+                    if ReadIsTypedMethodWriteArg(It.Node, RIx, PF.Src, Vars, MethodModes, AStore, AFileId) then Continue;
+                  end;
                   if CurMay[RIx] and ReadsOnlyFieldsAssignedEarlier(It.Node, Cfg.RoutineNode, V.Name, PF.Src) then Continue;
                   COL := Integer(It.Node.StartPoint.Column) + 1;
                   { SAME-PREDICATE SUPPRESSION -- see GuardToken above.
@@ -3968,11 +4261,13 @@ begin
     end;
 
   SameUnitClassKinds := nil; { built on first need, see CheckRoutine }
+  MethodModes := nil;
   try
     Procs := CfgFindProcs(PF.Tree.RootNode);
     for PI := 0 to High(Procs) do CheckRoutine(Procs[PI]);
     Result := Findings.ToArray;
   finally
+    MethodModes.Free;
     SameUnitClassKinds.Free;
     UnitSigs.Free;
     Findings.Free;
