@@ -1,0 +1,19 @@
+{
+  "id": "init-order-hazard",
+  "title": "Initialization reaching a unit that initializes later (lint rule)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.44.0-alpha",
+  "summary": "Project lint rule: an initialization section reaches a global that a unit initializing later in the computed order sets in its own initialization",
+  "intro": "Read this to see how drag-lint computes the order units initialize in and when init-order-hazard fires. It runs in lint-all and lint-project over a project index.",
+  "wikiPage": "init-order-hazard",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --rule init-order-hazard"
+    }
+  ],
+  "audience": "both"
+}

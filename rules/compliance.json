@@ -132,6 +132,7 @@
   "indexof-result-unchecked": {"cwe": ["CWE-129"], "cert": ["ARR30-C"]},
   "infinite-loop-no-exit": {"cwe": ["CWE-835"]},
   "inherited-bare": {},
+  "init-order-hazard": {"cwe": ["CWE-696"]},
   "inline-assembly": {"misra": ["MISRA-C-2012-D4.3"]},
   "inline-on-large-routine": {},
   "insecure-temp-file": {"cwe": ["CWE-377"]},
