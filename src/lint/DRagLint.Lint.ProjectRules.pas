@@ -241,6 +241,7 @@ implementation
 
 uses
   DRagLint.Core.FileTime,
+  DRagLint.Core.Versions, { CompareDottedVersions -- the resolver-version gate of InitSectionInfo (145 lane lf) }
   DRagLint.Report.CycleEdge, { BareUsesBinding / ProjectUnitScopes -- circular-uses binds a bare
                                uses name exactly as the cycles graph does (A3-b) }
   DRagLint.Lint.EnumOrdinalPersisted, { CollectEnumOrdinalPersisted -- lane X6 }
@@ -4201,6 +4202,8 @@ var
   { unused-unit-in-uses severity split: unit name -> does it have an
     initialization section? See the finding site for the measurement. }
   UnitHasInit   : TDictionary<string, Integer>      ;
+  { unused-unit-in-uses (145 lane lf): unit name -> what InitSectionInfo said about its initialization section. }
+  UnitInitInfo  : TDictionary<string, string>       ;
   { unused-unit-in-uses (1.40, UNUSEDUNIT-INLINE): resolved call target id ->
     lowercase unit stem when that routine is `inline`, '' otherwise. }
   InlineUnitOfSym: TDictionary<Int64, string>      ;
@@ -4509,6 +4512,81 @@ var
     Result:= Flags <> 0;
   end;
 
+  { What does the used unit's `initialization` section DO? (145 lane lf, F2 section refs.)
+
+    Returns '#' = the section is IDLE: every ref enclosed by it names a variable, constant or enum
+    value the unit declares itself (`GFlag := False`, `GCount := 0`), so it registers nothing and
+    removing the unit cannot change behaviour. Returns a comma list = the names it references (what
+    the INFO message should name). Returns '' = UNKNOWN, and the caller keeps today's plain INFO.
+
+    UNKNOWN is the default for every doubt: the store that holds the unit was resolved by a resolver
+    older than CMinSectionResolver (its section refs are not backfilled, so an empty section would
+    be indistinguishable from a real one), the unit also has a finalization section or a class
+    constructor/destructor, or the unit is in no store. An unbound ref other than True/False/nil
+    counts as activity; it never counts as idle. }
+  function InitSectionInfo(const AUnitName: string): string;
+  const
+    CMinSectionResolver = '1.20.0-alpha'; { ResolveSectionEnclosing (1.44 facts) is stamped by this resolver }
+    CResolverKey        = 'resolver_fingerprint';
+    CResolverLimb       = 'r=';
+    function InfoIn(const AFrom: ISymbolStore; out AFound: Boolean): string;
+    var
+      U, Ch, Tgt: TSymbol;
+      SecId     : Int64;
+      Fp, Ver   : string;
+      R         : TReference;
+      Names     : string;
+      Active    : Boolean;
+      HasOther  : Boolean;
+    begin
+      Result:= '';
+      AFound:= False;
+      if AFrom = nil then Exit;
+      for U in AFrom.FindSymbolsByExactName(AUnitName) do
+      begin
+        if U.Kind <> skUnit then Continue;
+        AFound:= True;
+        Fp:= AFrom.GetMetaValue(CResolverKey);
+        if not Fp.StartsWith(CResolverLimb) then Exit;
+        Ver:= Copy(Fp, Length(CResolverLimb) + 1, MaxInt);
+        if Pos(';', Ver) > 0 then Ver:= Copy(Ver, 1, Pos(';', Ver) - 1);
+        if (Ver = '') or (CompareDottedVersions(Ver, CMinSectionResolver) < 0) then Exit;
+        SecId   := 0;
+        HasOther:= False;
+        for Ch in AFrom.FindAllChildSymbols(U.Id) do
+        begin
+          if Ch.Kind = skInitialization then SecId:= Ch.Id;
+          if Ch.Kind = skFinalization then HasOther:= True;
+        end;
+        if (SecId = 0) or HasOther or UnitDeclaresClassCtorDtor(AFrom, U) then Exit;
+        Names := '';
+        Active:= False;
+        for R in AFrom.GetReferencesFromFile(U.FileId) do
+        begin
+          if R.EnclosingSymbolId <> SecId then Continue;
+          if R.SymbolId > 0 then
+          begin
+            Tgt:= AFrom.GetSymbolById(R.SymbolId);
+            if (Tgt.FileId = U.FileId) and (Tgt.Kind in [skVarDecl, skConstDecl, skEnumValue]) then Continue;
+          end
+          else if MatchText(R.NameText, ['True', 'False', 'nil']) then Continue;
+          Active:= True;
+          if not (',' + LowerCase(Names) + ',').Contains(',' + LowerCase(R.NameText) + ',') then
+            Names:= if Names = '' then R.NameText else Names + ',' + R.NameText;
+        end;
+        Result:= if Active then Names else '#';
+        Break;
+      end;
+    end;
+  var
+    Found: Boolean;
+  begin
+    if UnitInitInfo.TryGetValue(AUnitName, Result) then Exit;
+    Result:= InfoIn(AStore, Found);
+    if not Found then Result:= InfoIn(ALibraryStore, Found);
+    UnitInitInfo.Add(AUnitName, Result);
+  end;
+
   { A referenced name, plus its GENERIC BASE.
 
     A reference to TComparer<TRuleInfo>.Construct arrives with the type
@@ -4563,6 +4641,7 @@ begin
   UnitIndexed:= TDictionary<string, Boolean>      .Create;
   ExportsOfUnit:= TObjectDictionary<string, TDictionary<string, Boolean>>.Create([doOwnsValues]);
   UnitHasInit  := TDictionary<string, Integer>      .Create;
+  UnitInitInfo := TDictionary<string, string>       .Create;
   InlineUnitOfSym:= TDictionary<Int64, string>     .Create;
   RefdIds    := TDictionary<Int64 , Boolean>      .Create;
   RefdNames  := TDictionary<string, Boolean>      .Create;
@@ -4920,11 +4999,15 @@ begin
                   as surely as an initialization one, but unlike it the finding is not
                   even informational: the unit is excluded outright (D3). }
                 if UnitHasSideEffectSection(U.UnitName, HasInit) and not HasInit then Continue;
-                if HasInit then UF.Severity:= 'info' else UF.Severity:= 'warning';
-                if HasInit then
+                var InitInfo: string:= if HasInit then InitSectionInfo(U.UnitName) else '';
+                UF.Severity:= if HasInit and (InitInfo <> '#') then 'info' else 'warning';
+                if InitInfo = '#' then
+                  UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Its initialization section only assigns the unit''s own variables and constants (no registration, no call), so removing it changes nothing.', [U.UnitName])
+                else if HasInit then
                   UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- possible dead import. It HAS an initialization section, so it may still be doing its work through that: removing it can build cleanly and fail at runtime. VERIFY BEFORE REMOVING.', [U.UnitName])
                 else
                   UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Type-helper members and classes instantiated by the sibling .dfm ARE counted, and this unit has no initialization section.', [U.UnitName]);
+                if (InitInfo <> '') and (InitInfo <> '#') then UF.Message:= UF.Message + ' Its initialization section references: ' + InitInfo + '.';
                 UF.Message  := UF.Message + U.IncludeSuffix; { N-06 }
                 UF.FilePath := Path;
                 UF.StartLine:= U.HostLine;
@@ -5115,6 +5198,7 @@ begin
     UnitIndexed.Free;
     ExportsOfUnit.Free;
     UnitHasInit.Free;
+    UnitInitInfo.Free;
     InlineUnitOfSym.Free;
     PathOfFile .Free;
     StemsOfName.Free;
