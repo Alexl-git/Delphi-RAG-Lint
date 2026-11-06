@@ -802,6 +802,25 @@ type
       procedure ResolveRefTypes(AResolver: TCallResolver;
         const AScopeWhere, AStaleWhere: string;
         out ACandidates, ABound: Int64);
+      /// <summary>Lane 144 item 3 (resolver 1.20.0-alpha): the calls stage's stream after
+      /// ResolveRefTypes. Writes one ref_receivers row per read / write / member-access / call
+      /// ref with a receiver_text whose receiver is a ref the join below finds.</summary>
+      /// <param name="AScopeWhere">The scoped pass's `refs` predicate, '' on a whole-database run.</param>
+      /// <param name="AStaleWhere">The stale-file exclusion predicate, '' when none is stale.</param>
+      /// <param name="ACandidates">Out: refs with a receiver_text.</param>
+      /// <param name="ABound">Out: rows written.</param>
+      /// <remarks>
+      /// A positional join over facts the parse stored, in the same file and on the same line:
+      /// `A.Item.Bar` joins Bar to the ref named Item that ends one column before Bar starts;
+      /// `F(x).Bar` (a cast or a call, the text ending in `)`) joins Bar to the ref named F that
+      /// starts where the verbatim text starts. Anything else has no row and stays undecided:
+      /// an indexer `A[i].Bar`, a chain broken over lines, a space or a comment around the dot.
+      /// A separate table and not a ref_types column: the refs a rename must decide are the
+      /// UNBOUND ones, and an unbound ref has no ref_types row. Deletes what it rewrites; a row
+      /// goes with either ref by FK cascade, and both refs live in one file.
+      /// </remarks>
+      procedure ResolveRefReceivers(const AScopeWhere, AStaleWhere: string;
+        out ACandidates, ABound: Int64);
       procedure ResetResolveScope;
       /// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AReadOnly"><!-- drag-lint:auto type -->Boolean</param>
@@ -5065,6 +5084,12 @@ begin
           '  type_qname     TEXT NOT NULL,' +
           '  via            TEXT NOT NULL)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_ref_types_type ON ref_types(type_symbol_id)');
+  { Lane 144 item 3: the receiver ref of a member access, written by ResolveRefReceivers. ADDITIVE and
+    probed for by its reader (rename's proof), as ref_types. Both FK child columns have an index. }
+  TryExec('CREATE TABLE IF NOT EXISTS ref_receivers (' +
+          '  ref_id          INTEGER PRIMARY KEY REFERENCES refs(id) ON DELETE CASCADE,' +
+          '  receiver_ref_id INTEGER NOT NULL REFERENCES refs(id) ON DELETE CASCADE)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_ref_receivers_receiver ON ref_receivers(receiver_ref_id)');
   { 2026-10-27 (taint wave T0, plan 2026-10-27-taint-interprocedural-plan.md section 2):
     per-routine data-flow facts, written by the indexer (PutDataFlows) inside the file tx.
     ADDITIVE and probed for (HasDataFlows), so NO SCHEMA_VERSION bump -- the member_accesses /
@@ -15295,6 +15320,117 @@ begin
   end;
 end;
 
+procedure TSQLiteSymbolStore.ResolveRefReceivers(const AScopeWhere, AStaleWhere: string;
+  out ACandidates, ABound: Int64);
+const
+  RR_UNIVERSE = 'refs.kind IN (''read'', ''write'', ''member-access'', ''call'')';
+  RR_HAS_TEXT = ' AND refs.receiver_text IS NOT NULL AND refs.receiver_text <> ''''';
+  POS_KEY     = '%d:%d';
+type
+  TRcvCand = record
+    Id   : Int64;
+    Name : string;
+    Typed: Boolean;
+  end;
+var
+  Suffix : string;
+  Q      : TFDQuery;
+  Ins    : TFDQuery;
+  EndAt  : TDictionary<string, TRcvCand>;
+  StartAt: TDictionary<string, TRcvCand>;
+
+  { The typed ref wins a position two rows share (a bare call and its member-access). }
+  procedure Offer(pMap: TDictionary<string, TRcvCand>; const pKey: string; const pCand: TRcvCand);
+  var
+    Have: TRcvCand;
+  begin
+    if pMap.TryGetValue(pKey, Have) and (Have.Typed or not pCand.Typed) then Exit;
+    pMap.AddOrSetValue(pKey, pCand);
+  end;
+
+begin
+  ACandidates:= 0;
+  ABound     := 0;
+  Suffix     := '';
+  if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
+  if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
+  if Suffix = '' then FConn.ExecSQL('DELETE FROM ref_receivers')  // dl:ok sql-update-delete-without-where@556b -- a whole-database pass rewrites every row of this derived table
+  else FConn.ExecSQL('DELETE FROM ref_receivers WHERE ref_id IN (SELECT refs.id FROM refs WHERE ' + RR_UNIVERSE + Suffix + ')');  // dl:ok sql-injection-concat@472b -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text
+  Q      := TFDQuery.Create(nil);
+  Ins    := TFDQuery.Create(nil);
+  EndAt  := TDictionary<string, TRcvCand>.Create;
+  StartAt:= TDictionary<string, TRcvCand>.Create;
+  try
+    Ins.Connection:= FConn;
+    Ins.SQL.Text  := 'INSERT OR REPLACE INTO ref_receivers(ref_id, receiver_ref_id) VALUES (:rid, :rcv)';
+    Ins.ParamByName('rid').DataType:= ftLargeint;
+    Ins.ParamByName('rcv').DataType:= ftLargeint;
+    Ins.Prepare;
+    Q.Connection:= FConn;
+    Q.SQL.Text  := 'SELECT refs.id, refs.file_id, refs.name_text, refs.start_line, refs.start_col, refs.end_line, refs.end_col, ' +
+                   '  refs.receiver_text, t.ref_id AS typed FROM refs LEFT JOIN ref_types t ON t.ref_id = refs.id WHERE ' +
+                   RR_UNIVERSE + Suffix + ' ORDER BY refs.file_id, refs.start_line, refs.start_col';
+    BeatStreamOpen(FConn, Q, 'resolve ref receivers');
+    var FId   : TField:= Q.FieldByName('id');
+    var FFile : TField:= Q.FieldByName('file_id');
+    var FName : TField:= Q.FieldByName('name_text');
+    var FLine : TField:= Q.FieldByName('start_line');
+    var FCol  : TField:= Q.FieldByName('start_col');
+    var FEndL : TField:= Q.FieldByName('end_line');
+    var FEndC : TField:= Q.FieldByName('end_col');
+    var FText : TField:= Q.FieldByName('receiver_text');
+    var FTyped: TField:= Q.FieldByName('typed');
+    var CurFile: Int64:= -1;
+    while not Q.Eof do
+    begin
+      if FFile.AsLargeInt <> CurFile then
+      begin
+        CurFile:= FFile.AsLargeInt;
+        EndAt.Clear;
+        StartAt.Clear;
+      end;
+      var Line: Integer:= FLine.AsInteger;
+      var Col : Integer:= FCol.AsInteger;
+      var Text: string := if FText.IsNull then '' else FText.AsString;
+      if Text <> '' then
+      begin
+        Inc(ACandidates);
+        var Cand: TRcvCand;
+        var Found: Boolean:= False;
+        if Text.EndsWith(')') then
+        begin
+          var Open: Integer:= Pos('(', Text);
+          var Head: string := Copy(Text, 1, Open - 1);
+          if (Open > 1) and StartAt.TryGetValue(Format(POS_KEY, [Line, Col - 1 - Length(Text)]), Cand) then
+            Found:= SameText(Cand.Name, Head.Substring(Head.LastIndexOf('.') + 1));
+        end
+        else if EndAt.TryGetValue(Format(POS_KEY, [Line, Col - 1]), Cand) then
+          Found:= SameText(Cand.Name, Text.Substring(Text.LastIndexOf('.') + 1));
+        if Found then
+        begin
+          Ins.ParamByName('rid').AsLargeInt:= FId.AsLargeInt;
+          Ins.ParamByName('rcv').AsLargeInt:= Cand.Id;
+          Ins.ExecSQL;
+          Inc(ABound);
+        end;
+      end;
+      var Me: TRcvCand;
+      Me.Id   := FId.AsLargeInt;
+      Me.Name := FName.AsString;
+      Me.Typed:= not FTyped.IsNull;
+      Offer(StartAt, Format(POS_KEY, [Line, Col]), Me);
+      if FEndL.AsInteger = Line then Offer(EndAt, Format(POS_KEY, [Line, FEndC.AsInteger]), Me);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    StartAt.Free;
+    EndAt.Free;
+    Q.Free;
+    Ins.Free;
+  end;
+end;
+
 procedure TSQLiteSymbolStore.WriteExternalStores(const AExtraStores: TArray<ISymbolStore>; AScoped: Boolean);
 const
   KEY = 'external_stores';
@@ -15409,6 +15545,8 @@ var
   SectionRefs   : Int64     ; { F2: refs attributed to an initialization/finalization section }
   RefTypeCandidates: Int64  ; { F1: refs offered to RefStaticType                             }
   RefTypeBound  : Int64     ; { F1: ref_types rows written                                    }
+  RcvCandidates : Int64     ; { item 3: refs with a receiver_text                             }
+  RcvBound      : Int64     ; { item 3: ref_receivers rows written                            }
   TRefTypes     : Double    ; { F1: seconds the ref-types stream took                         }
 begin
   T0:= TStopwatch.GetTimeStamp;
@@ -15884,6 +16022,8 @@ begin
       TMark:= TStopwatch.GetTimeStamp;
       ResolveRefTypes(Resolver, ScopeWhere, StaleWhere, RefTypeCandidates, RefTypeBound);
       TRefTypes:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
+      { lane 144 item 3: after ref_types, the typed receiver wins a position two refs share. }
+      ResolveRefReceivers(ScopeWhere, StaleWhere, RcvCandidates, RcvBound);
       FConn.Commit;
     except
       on E: Exception do
@@ -16072,6 +16212,7 @@ begin
     ResolveLog(Format('calls      type-reads: %d of %d type-named read ref(s) bound', [TReadBound, TReadCandidates]));
     ResolveLog(Format('calls      sections: %d ref(s) attributed to an initialization/finalization section', [SectionRefs]));
     ResolveLog(Format('calls      ref-types: %d of %d read/write/member-access/call ref(s) typed  [%.1fs]', [RefTypeBound, RefTypeCandidates, TRefTypes]));
+    ResolveLog(Format('calls      ref-receivers: %d of %d receiver text(s) joined to a ref', [RcvBound, RcvCandidates]));
     { 2026-09-23 (D13). Every decline by reason, for the same reason as the two
       lines above: a declined write stores nothing anywhere else. }
     ResolveLog(Format('calls      writes: %d of %d write ref(s) bound; declined result %d, own-name %d, ' +

@@ -37,6 +37,7 @@ src/storage/DRagLint.Storage.SQLite.pas::ResolveDispatch
 # finalization section, before the call stream reads it. F1: ref_types.
 src/storage/DRagLint.Storage.SQLite.pas::ResolveSectionEnclosing
 src/storage/DRagLint.Storage.SQLite.pas::ResolveRefTypes
+src/storage/DRagLint.Storage.SQLite.pas::ResolveRefReceivers
 
 # 2026-10-26 (polymorphic form launches): dispatch_edges + classref_args.
 # ResolveDispatch is the writer; the resolver unit is all derive logic.

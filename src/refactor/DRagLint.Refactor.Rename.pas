@@ -277,7 +277,53 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildLocal(const AFile: string; ALine, ACol: Integer; const ANewName: string): TArray<TRenameEdit>;
+      /// <summary>BuildLocal, and what BuildLocal cannot decide: the same walk, which does not stop at a
+      /// `with` but reports the bare occurrences it finds under one, and every bare occurrence of the new
+      /// name in the routine.</summary>
+      /// <param name="AFile">The source file.</param>
+      /// <param name="ALine">1-based line of the declaration identifier.</param>
+      /// <param name="ACol">1-based column of the declaration identifier.</param>
+      /// <param name="ANewName">The new name.</param>
+      /// <param name="AWithSites">Out: bare occurrences of the name under a `with`, not in the result: a `with`
+      /// target may declare the name, which pure AST cannot tell (RenameProof asks the index).</param>
+      /// <param name="ANewNameSites">Out: bare occurrences of ANewName in the routine. Each would bind to the
+      /// renamed local afterwards, and dcc accepts that when the types agree.</param>
+      /// <returns>What BuildLocal returns.</returns>
+      /// <remarks>Pure AST. Columns are the parse's, UTF-8 bytes.</remarks>
+      class function BuildLocalScan(const AFile: string; ALine, ACol: Integer; const ANewName: string;
+        out AWithSites, ANewNameSites: TArray<TRenameEdit>): TArray<TRenameEdit>;
   end;
+
+/// <summary>True when AName sits at 1-based ACol of ALine as a whole identifier, case-insensitive.</summary>
+/// <param name="ALine">The decoded line.</param>
+/// <param name="AName">The identifier.</param>
+/// <param name="ACol">1-based character column.</param>
+/// <returns>True on a whole-identifier match.</returns>
+function IsIdentAt(const ALine, AName: string; ACol: Integer): Boolean;
+/// <summary>Column of AName after the declaration keyword run (`class function`, `property`, ...) that starts at ACol.</summary>
+/// <param name="ALine">The decoded line.</param>
+/// <param name="AName">The identifier.</param>
+/// <param name="ACol">1-based character column of the run.</param>
+/// <returns>The name's column; 0 when ACol starts no such run or AName does not follow it on the line.</returns>
+function NameAfterDeclKeywords(const ALine, AName: string; ACol: Integer): Integer;
+/// <summary>An index column (1-based UTF-8 bytes) as a 1-based character column of the decoded line.</summary>
+/// <param name="ALine">The decoded line.</param>
+/// <param name="AByteCol">The index column.</param>
+/// <returns>The character column; identity on a pure-ASCII line.</returns>
+function ByteColToCharCol(const ALine: string; AByteCol: Integer): Integer;
+/// <summary>Index just past the comment, string literal or numeric run that starts at APos.</summary>
+/// <param name="AText">The source text.</param>
+/// <param name="APos">1-based position.</param>
+/// <returns>APos itself when none starts there.</returns>
+function SkipNonIdent(const AText: string; APos: Integer): Integer;
+/// <summary>True when an event binding in ADfmPath binds the method AName of class AOwner (X-25).</summary>
+/// <param name="AStore">The project index.</param>
+/// <param name="ADfmPath">The form file.</param>
+/// <param name="AOwner">The method's class.</param>
+/// <param name="AName">The method's name.</param>
+/// <returns>False when the form's root class cannot be found: a binding is only rewritten when it provably belongs.</returns>
+function DfmBindingBelongsTo(const AStore: ISymbolStore; const ADfmPath: string;
+  const AOwner: TSymbol; const AName: string): Boolean;
 
 implementation
 
@@ -877,11 +923,22 @@ end; // function
 class function TRenameRefactoring.BuildLocal(const AFile: string; ALine, ACol: Integer;
   const ANewName: string): TArray<TRenameEdit>;
 var
+  WithSites, NewSites: TArray<TRenameEdit>;
+begin
+  Result:= BuildLocalScan(AFile, ALine, ACol, ANewName, WithSites, NewSites);
+end;
+
+class function TRenameRefactoring.BuildLocalScan(const AFile: string; ALine, ACol: Integer; const ANewName: string;
+  out AWithSites, ANewNameSites: TArray<TRenameEdit>): TArray<TRenameEdit>;
+var
   PF       : TParsedFile        ;
   Src      : TBytes             ;
   Edits    : TList<TRenameEdit> ;
   Target   : string             ;
   OwnerProc: TTSNode            ;
+  WithList : TList<TRenameEdit> ;
+  NewList  : TList<TRenameEdit> ;
+  WithDepth: Integer            ;
 
   function NStr(const N: TTSNode): string;
   var S, E, L: Integer;
@@ -899,12 +956,15 @@ var
   function NColOf(const N: TTSNode): Integer;
   begin Result:= Integer(N.StartPoint.Column) + 1; end;
 
-  procedure AddEdit(const N: TTSNode);
-  var Ed: TRenameEdit;
+  function EditOf(const N: TTSNode): TRenameEdit;
   begin
-    Ed.FilePath:= AFile; Ed.Line:= NLine(N); Ed.Col:= NColOf(N);
-    Ed.OldName:= Target; Ed.NewName:= ANewName;
-    Edits.Add(Ed);
+    Result.FilePath:= AFile; Result.Line:= NLine(N); Result.Col:= NColOf(N);
+    Result.OldName:= Target; Result.NewName:= ANewName;
+  end;
+
+  procedure AddEdit(const N: TTSNode);
+  begin
+    Edits.Add(EditOf(N));
   end;
 
   { Find the identifier node at (ALine,ACol). Returns null node if none. }
@@ -960,8 +1020,8 @@ var
 
   { Walk the owning routine subtree, emitting edits for bare-identifier uses of
     Target. Skip: a nested defProc that re-declares Target (shadowing); the rhs
-    of an exprDot or genericDot (qualified member access); a 'with' statement
-    subtree (ambiguous). }
+    of an exprDot or genericDot (qualified member access). A 'with' statement
+    subtree is walked: its occurrences go to WithList, undecided. }
   procedure Walk(const N: TTSNode);
   var I: Integer; Ch: TTSNode;
   begin
@@ -969,14 +1029,18 @@ var
     { Entering a nested defProc that shadows Target -> stop descending for renames. }
     if (not (N = OwnerProc)) and (N.NodeType = 'defProc') and NestedRedeclares(N) then
       Exit;
-    { Skip with-statement subtrees (ambiguous). }
-    if N.NodeType = 'with' then Exit;
-    { An identifier matching Target. }
+    { An identifier matching Target: under a `with` a target may declare it, so it is a site to decide. }
     if (N.NodeType = 'identifier') and SameText(Trim(NStr(N)), Target) then
     begin
-      AddEdit(N);
+      if WithDepth > 0 then WithList.Add(EditOf(N)) else AddEdit(N);
       Exit;
     end;
+    if (N.NodeType = 'identifier') and SameText(Trim(NStr(N)), ANewName) then
+    begin
+      NewList.Add(EditOf(N));
+      Exit;
+    end;
+    if N.NodeType = 'with' then Inc(WithDepth);
     for I:= 0 to N.NamedChildCount - 1 do
     begin
       Ch:= N.NamedChild(I);
@@ -988,6 +1052,7 @@ var
           and (I = N.NamedChildCount - 1) then Continue;
       Walk(Ch);
     end;
+    if N.NodeType = 'with' then Dec(WithDepth);
   end;
 
   { Add the matching parameter in any forward/interface declProc with the same
@@ -1068,6 +1133,9 @@ var
   Final   : TList<TRenameEdit>;
 begin
   Result:= nil;
+  AWithSites:= nil;
+  ANewNameSites:= nil;
+  WithDepth:= 0;
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
@@ -1081,8 +1149,12 @@ begin
   if OwnerProc.IsNull then Exit;
 
   Edits:= TList<TRenameEdit>.Create;
+  WithList:= TList<TRenameEdit>.Create;
+  NewList:= TList<TRenameEdit>.Create;
   try
     Walk(OwnerProc);
+    AWithSites:= WithList.ToArray;
+    ANewNameSites:= NewList.ToArray;
     SyncForwardHeaders(PF.Tree.RootNode);
 
     { De-dup by (line,col); sort back-to-front for Apply. }
@@ -1107,6 +1179,8 @@ begin
       Dedup.Free;
     end;
   finally
+    NewList.Free;
+    WithList.Free;
     Edits.Free;
   end;
 end;

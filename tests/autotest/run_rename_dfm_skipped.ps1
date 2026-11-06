@@ -30,6 +30,7 @@ param(
 )
 try {
 $ErrorActionPreference = 'Stop'
+$env:DRAGLINT_RENAME_TEST_UNGATED = '1' # lane 144: these fixtures do not compile; run_rename_precise.ps1 proves the gate
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }
@@ -147,9 +148,9 @@ $r = Run-Rename @('--kind', 'symbol', '--name', 'Unit1.TForm1.Helper', '--to', '
 Check 'CONTROL Helper rename exits 0'  ($r.Exit -eq 0) "exit=$($r.Exit)"
 Check 'CONTROL Helper rename: no note' ((& $notes $r).Count -eq 0) $r.Err
 $r = Run-Rename @('--kind', 'symbol', '--name', 'Unit1.TForm1.Button1Click', '--to', 'OkClick', '--apply', '--no-backup')
-Check '--apply exits 0 and still notes both' (($r.Exit -eq 0) -and ((& $notes $r).Count -eq 2)) "exit=$($r.Exit) $($r.Err)"
+Check '--apply refuses (lane 144: a form that no longer loads is no compile error), exit 2, naming [dfm-not-rewritten]' (($r.Exit -eq 2) -and ($r.Out -cmatch 'refused \[dfm-not-rewritten\]')) "exit=$($r.Exit) $($r.Out) $($r.Err)"
 Check '--apply leaves Unit4.dfm (unindexed) as it was' ((Get-Content -Raw (Join-Path $src 'Unit4.dfm')) -cmatch 'OnClick = Button1Click')
-Check '--apply rewrites Unit6.dfm' ((Get-Content -Raw (Join-Path $src 'Unit6.dfm')) -cmatch 'OnClick = OkClick')
+Check '--apply wrote nothing: Unit6.dfm as it was' ((Get-Content -Raw (Join-Path $src 'Unit6.dfm')) -cmatch 'OnClick = Button1Click')
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
