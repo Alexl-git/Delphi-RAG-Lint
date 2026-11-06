@@ -13,9 +13,32 @@ uses
   , TreeSitterLib
   , TreeSitter.Query
   , DRagLint.Core.Model
+  , DRagLint.Core.Interfaces
   ;
 
 type
+  /// <summary>Static facts about the file being linted that a tree-sitter query cannot see
+  /// (index fact F1, ref_types; type ancestry), offered to the predicates of a .scm rule (O2).</summary>
+  /// <remarks>Optional everywhere: no oracle, an index older than 1.44 or an unknown answer means
+  /// the rule decides exactly as it did before. An answer may only ADD evidence; an unknown never
+  /// silences a rule. An implementation belongs to ONE file and one thread.</remarks>
+  ITypeOracle = interface
+    ['{6B1F5E0A-3C57-4B8E-9D52-1E0C7A44F2B9}']
+    /// <summary>The static type and origin ref_types records for the reference at a position.</summary>
+    /// <param name="ALine">1-based line of the identifier.</param>
+    /// <param name="ACol">1-based column of the identifier.</param>
+    /// <param name="AName">The name written there; a ref of another name is no answer.</param>
+    /// <param name="ALeaf">Out: the type's leaf name.</param>
+    /// <param name="AVia">Out: where the type came from: decl, member, result, ctor, cast or inline.</param>
+    /// <returns>False with no table, no row or a conflicting row.</returns>
+    function TypeAt(ALine, ACol: Integer; const AName: string; out ALeaf, AVia: string): Boolean;
+    /// <summary>Whether a class is PROVEN to descend from an ancestor (index fact type_ancestors).</summary>
+    /// <param name="AClassLeaf">The class name, leaf only.</param>
+    /// <param name="AAncestorLeaf">The ancestor name, leaf only.</param>
+    /// <returns>True only when the whole ancestry was followed and the ancestor is in it.</returns>
+    function ClassDescends(const AClassLeaf, AAncestorLeaf: string): Boolean;
+  end;
+
   /// <summary>One entry of a rule sidecar's "fix" key (autofix wave A0,
   /// 2026-10-27): what the autofix does with the finding's span.</summary>
   /// <remarks>
@@ -313,7 +336,8 @@ type
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.AttachFix"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string): TArray<TLintFinding>;
+      /// <param name="AOracle">Optional (O2): static facts for #declared-type?, #oracle-via? and #enclosing-class-descends?. nil asks TQueryTypeOracleScope.Current; none = the rule decides as before.</param>
+      function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string; const AOracle: ITypeOracle = nil): TArray<TLintFinding>;
       /// <summary>A literal the FILE TEXT must contain for this rule's query to
       /// be capable of matching -- a cheap pre-filter the caller may use to skip
       /// running the query at all. '' when no such literal could be proven.</summary>
@@ -426,6 +450,32 @@ type
 function QueryRuleTimings: TArray<TQueryRuleTiming>;
 
 
+type
+
+  /// <summary>Makes an oracle the .scm rules of the current thread consult until it is freed.</summary>
+  /// <remarks>Linter.LintFile runs the rules without a store, so the verbs that own one wrap the
+  /// call in a scope instead of widening that signature. Scopes nest (the previous one is
+  /// restored). Create and Free on the SAME thread; an explicit AOracle on TQueryRule.Run wins.</remarks>
+  TQueryTypeOracleScope = class
+    strict private
+      FOracle  : ITypeOracle;
+      FPrevious: TQueryTypeOracleScope;
+    public
+      /// <param name="AOracle">May be nil: the scope then answers "no oracle" to the rules.</param>
+      constructor Create(const AOracle: ITypeOracle);
+      destructor Destroy; override;
+      /// <summary>The oracle of the innermost live scope on this thread.</summary>
+      /// <returns>nil when no scope is live.</returns>
+      class function Current: ITypeOracle; static;
+  end;
+
+/// <summary>An oracle over the project index for ONE file.</summary>
+/// <param name="AStore">The project index; nil or a store that is not SQLite answers nil.</param>
+/// <param name="AFileId">The file's id in AStore; 0 answers nil.</param>
+/// <returns>An oracle, or nil when there is nothing to ask.</returns>
+/// <remarks>Reads the file's ref_types rows once, on the first question. No ref_types table
+/// (an index older than 1.44) = TypeAt answers False for ever.</remarks>
+function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64): ITypeOracle;
 /// <summary>The declared type of AName as seen from byte offset AByte of a
 /// parsed file -- the same scope walk #declared-type? makes.</summary>
 /// <param name="ARoot">Root node of the file's tree.</param>
@@ -455,7 +505,10 @@ function DeclaredTypeAt(const ARoot: TTSNode; const ASource: TBytes; AByte: UInt
 implementation
 
 uses
-  System.Diagnostics       { TStopwatch -- the per-rule .scm timing below }
+  FireDAC.Comp.Client    { TFDQuery -- the store oracle reads ref_types }
+  , DRagLint.Storage.SQLite { TSQLiteSymbolStore -- the connection behind ISymbolStore }
+  , DRagLint.Lint.RefTypeRules { TypeDescendsFrom -- ancestry for the class oracle }
+  , System.Diagnostics       { TStopwatch -- the per-rule .scm timing below }
   , System.Threading        { TParallel.For -- the loader compiles the .scm queries in parallel }
   , System.StrUtils        { IndexText -- capture-name lookup for sidecar fixes }
   , DRagLint.Lint.RuleCatalog { RegisterSidecarFixRule -- a rule with a "fix" key is fixable }
@@ -1268,6 +1321,140 @@ type
     IsInline: Boolean;
   end;
 
+{ ---- O2: the optional type oracle ---------------------------------------- }
+
+threadvar
+  GOracleScope: TQueryTypeOracleScope;
+
+constructor TQueryTypeOracleScope.Create(const AOracle: ITypeOracle);
+begin
+  inherited Create;
+  FOracle  := AOracle;
+  FPrevious:= GOracleScope;
+  GOracleScope:= Self;
+end;
+
+destructor TQueryTypeOracleScope.Destroy;
+begin
+  GOracleScope:= FPrevious;
+  inherited Destroy;
+end;
+
+class function TQueryTypeOracleScope.Current: ITypeOracle;
+begin
+  Result:= if GOracleScope = nil then nil else GOracleScope.FOracle;
+end;
+
+type
+  { ref_types for one file, read once. Key = line:col:lowername; a key with two different
+    answers is a conflict and answers False (an unknown never decides a rule). }
+  TStoreTypeOracle = class(TInterfacedObject, ITypeOracle)
+    strict private
+      FStore : ISymbolStore;
+      FFileId: Int64;
+      FLoaded: Boolean;
+      FRows  : TDictionary<string, TArray<string>>;
+      procedure Load;
+    public
+      constructor Create(const AStore: ISymbolStore; AFileId: Int64);
+      destructor Destroy; override;
+      function TypeAt(ALine, ACol: Integer; const AName: string; out ALeaf, AVia: string): Boolean;
+      function ClassDescends(const AClassLeaf, AAncestorLeaf: string): Boolean;
+  end;
+
+constructor TStoreTypeOracle.Create(const AStore: ISymbolStore; AFileId: Int64);
+begin
+  inherited Create;
+  FStore := AStore;
+  FFileId:= AFileId;
+  FRows  := TDictionary<string, TArray<string>>.Create;
+end;
+
+destructor TStoreTypeOracle.Destroy;
+begin
+  FRows.Free;
+  inherited Destroy;
+end;
+
+{ The leaf of a qualified type name: `System.Classes.TStringList` -> `TStringList`; a generic
+  keeps its arguments (`TList<System.Integer>` -> `TList<System.Integer>`). }
+function LeafOfTypeName(const AQName: string): string;
+var
+  Cut: Integer;
+  Lt : Integer;
+begin
+  Lt:= Pos('<', AQName);
+  if Lt = 0 then Lt:= Length(AQName) + 1;
+  Cut:= LastDelimiter('.', Copy(AQName, 1, Lt - 1));
+  Result:= Copy(AQName, Cut + 1, MaxInt);
+end;
+
+procedure TStoreTypeOracle.Load;
+const
+  FLD_QNAME = 3; { column positions of the SELECT below }
+  FLD_VIA   = 4;
+var
+  Q  : TFDQuery;
+  Key: string  ;
+  Old: TArray<string>;
+  New: TArray<string>;
+begin
+  FLoaded:= True;
+  if (FStore = nil) or (FFileId <= 0) or (FStore is not TSQLiteSymbolStore) then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= (FStore as TSQLiteSymbolStore).GetConnection;
+    Q.SQL.Text  := 'SELECT 1 FROM sqlite_master WHERE type = ''table'' AND name = ''ref_types''';
+    Q.Open;
+    if Q.Eof then Exit;
+    Q.Close;
+    Q.SQL.Text:= 'SELECT r.start_line, r.start_col, r.name_text, t.type_qname, t.via ' +
+                 'FROM refs r JOIN ref_types t ON t.ref_id = r.id WHERE r.file_id = :f';
+    Q.ParamByName('f').AsLargeInt:= FFileId;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      Key:= Format('%d:%d:%s', [Q.Fields[0].AsInteger, Q.Fields[1].AsInteger, LowerCase(Q.Fields[2].AsString)]);
+      New:= [LeafOfTypeName(Q.Fields[FLD_QNAME].AsString), Q.Fields[FLD_VIA].AsString];
+      if FRows.TryGetValue(Key, Old) then
+      begin
+        if (Length(Old) = 2) and ((Old[0] <> New[0]) or (Old[1] <> New[1])) then FRows[Key]:= nil;
+      end
+      else FRows.Add(Key, New);
+      Q.Next;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TStoreTypeOracle.TypeAt(ALine, ACol: Integer; const AName: string; out ALeaf, AVia: string): Boolean;
+var
+  Hit: TArray<string>;
+begin
+  ALeaf:= '';
+  AVia := '';
+  if not FLoaded then Load;
+  Result:= FRows.TryGetValue(Format('%d:%d:%s', [ALine, ACol, LowerCase(AName)]), Hit) and (Length(Hit) = 2);
+  if Result then
+  begin
+    ALeaf:= Hit[0];
+    AVia := Hit[1];
+  end;
+end;
+
+function TStoreTypeOracle.ClassDescends(const AClassLeaf, AAncestorLeaf: string): Boolean;
+begin
+  Result:= (FStore <> nil) and (TypeDescendsFrom(FStore, nil, AClassLeaf, AAncestorLeaf) = tdYes);
+end;
+
+function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64): ITypeOracle;
+begin
+  if (AStore = nil) or (AFileId <= 0) then Exit(nil);
+  Result:= TStoreTypeOracle.Create(AStore, AFileId);
+end;
+
+type
   { Per-scope declaration tables for ONE TQueryRule.Run (X-23, 2026-10-26).
 
     #declared-type? walks from a capture to every enclosing scope and asks
@@ -1284,6 +1471,7 @@ type
   TDeclScopeCache = class
   strict private
     FScopes: TObjectDictionary<string, TDictionary<string, TArray<TScopeDecl>>>;
+    FOracle: ITypeOracle;
     class procedure AddNames(AMap: TDictionary<string, TArray<TScopeDecl>>; const ADecl: TTSNode;
       const ASource: TBytes; AEndByte: UInt32; AIsInline: Boolean); static;
     class function Build(const AScope: TTSNode; const ASource: TBytes): TDictionary<string, TArray<TScopeDecl>>; static;
@@ -1292,6 +1480,9 @@ type
     destructor Destroy; override;
     function Find(const AScope: TTSNode; const ASource: TBytes; const AName: string;
       ABeforeByte: UInt32; out AType: string): Boolean;
+    { O2: the oracle of this Run, or nil. Rides on the per-Run cache because that is already
+      handed to every predicate. }
+    property Oracle: ITypeOracle read FOracle write FOracle;
   end;
 
 constructor TDeclScopeCache.Create;
@@ -1427,6 +1618,7 @@ var
   Name : string ;
   Cur  : TTSNode;
   Ty   : string ;
+  Via  : string ;
 begin
   Result:= False;
   if ANode.IsNull or (ANode.NodeType <> 'identifier') then Exit;
@@ -1436,7 +1628,7 @@ begin
   begin
     if ACache.Find(Cur, ASource, Name, ANode.StartByte, Ty) then
     begin
-      if Ty = '' then Exit;
+      if Ty = '' then Break; { an untyped inline var: the oracle may know what the source does not show }
       try
         Exit(TRegEx.IsMatch(Ty, ATypeRx, [roIgnoreCase]));
       except  // dl:ok try-except-swallowed@c2a3 -- REVIEWED 2026-10-14: a malformed rule regex answers "no match", never aborts the scan
@@ -1444,6 +1636,15 @@ begin
       end;
     end;
     Cur:= Cur.Parent;
+  end;
+  { O2: nothing typed in the declared scopes (a field, a global of another unit, an inline var):
+    ask the oracle by the capture's position. No oracle = False, as before. }
+  if ACache.Oracle = nil then Exit;
+  if not ACache.Oracle.TypeAt(Integer(ANode.StartPoint.Row) + 1, Integer(ANode.StartPoint.Column) + 1, Name, Ty, Via) then Exit;
+  try
+    Result:= TRegEx.IsMatch(Ty, ATypeRx, [roIgnoreCase]);
+  except  // dl:ok try-except-swallowed@c2a4 -- REVIEWED 2026-11-06: same as above, a malformed rule regex answers no match
+    on ERegularExpressionError do Result:= False;
   end;
 end;
 
@@ -1494,6 +1695,96 @@ begin
   if (Length(AArgs) <> OP_CAPTURE_RX) or not AArgs[CAP_ARG].IsCapture or AArgs[RX_ARG].IsCapture then Exit(True);
   Result:= DeclaredTypeMatches(ResolveCaptureNode(AMatch, AArgs[CAP_ARG].CaptureIndex), ASource,
     AArgs[RX_ARG].StringValue, ACache);
+end;
+
+{ (#oracle-via? @cap "regex") / (#not-oracle-via? @cap "regex") -- O2.
+  The positive form passes when the oracle knows the identifier at @cap and the way it got its
+  type (decl, member, result, ctor, cast, inline) matches the regex. The negative form passes
+  in every other case: no oracle, no row, not an identifier. That is the degradation rule:
+  a rule that uses the negative form behaves as before whenever the fact is missing. }
+function EvalOracleVia(const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;
+  ACache: TDeclScopeCache; ANegate: Boolean): Boolean;
+const
+  OP_CAPTURE_RX = 3;
+  CAP_ARG       = 1;
+  RX_ARG        = 2;
+var
+  Node: TTSNode;
+  Leaf: string ;
+  Via : string ;
+  Hit : Boolean;
+begin
+  if (Length(AArgs) <> OP_CAPTURE_RX) or not AArgs[CAP_ARG].IsCapture or AArgs[RX_ARG].IsCapture then Exit(True);
+  Hit:= False;
+  Node:= ResolveCaptureNode(AMatch, AArgs[CAP_ARG].CaptureIndex);
+  if (ACache.Oracle <> nil) and (not Node.IsNull) and (Node.NodeType = 'identifier') then
+  try
+    Hit:= ACache.Oracle.TypeAt(Integer(Node.StartPoint.Row) + 1, Integer(Node.StartPoint.Column) + 1,
+      NodeText(Node, ASource), Leaf, Via) and TRegEx.IsMatch(Via, AArgs[RX_ARG].StringValue);
+  except { a malformed rule regex answers no match, never aborts the scan }
+    on ERegularExpressionError do Hit:= False;
+  end;
+  Result:= Hit <> ANegate;
+end;
+
+{ The class a routine implementation belongs to, from its dotted header name:
+  `TWorker.Execute` -> `TWorker`, `TOuter.TInner.Run` -> `TInner`, `TBox<T>.Put` -> `TBox`.
+  '' for a plain routine. The nearest enclosing dotted routine wins (an anonymous method
+  inside a method belongs to the method's class). }
+function EnclosingClassLeaf(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  Cur : TTSNode;
+  Nm  : TTSNode;
+  Txt : string ;
+  Cut : Integer;
+begin
+  Result:= '';
+  if ANode.IsNull then Exit;
+  Cur:= ANode.Parent;
+  while not Cur.IsNull do
+  begin
+    if Cur.NodeType = 'defProc' then
+    begin
+      Nm:= Cur.ChildByField('header').ChildByField('name');
+      if not Nm.IsNull then
+      begin
+        Txt:= NodeText(Nm, ASource);
+        Cut:= Pos('<', Txt);
+        if Cut > 0 then Txt:= Copy(Txt, 1, Cut - 1) + Copy(Txt, Pos('>', Txt) + 1, MaxInt);
+        Cut:= LastDelimiter('.', Txt);
+        if Cut > 1 then
+        begin
+          Txt:= Copy(Txt, 1, Cut - 1);
+          Exit(Copy(Txt, LastDelimiter('.', Txt) + 1, MaxInt));
+        end;
+      end;
+    end;
+    Cur:= Cur.Parent;
+  end;
+end;
+
+{ (#enclosing-class-descends? @cap "TThread") / (#not-enclosing-class-descends? @cap "TThread")
+  -- O2. The positive form passes only when the oracle PROVES the class of the routine that
+  encloses @cap descends from the named ancestor. The negative form passes otherwise (no
+  oracle, a plain routine, an unknown or disproved ancestry). }
+function EvalEnclosingDescends(const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>;
+  ACache: TDeclScopeCache; ANegate: Boolean): Boolean;
+const
+  OP_CAPTURE_NAME = 3;
+  CAP_ARG         = 1;
+  NAME_ARG        = 2;
+var
+  Cls: string ;
+  Hit: Boolean;
+begin
+  if (Length(AArgs) <> OP_CAPTURE_NAME) or not AArgs[CAP_ARG].IsCapture or AArgs[NAME_ARG].IsCapture then Exit(True);
+  Hit:= False;
+  if ACache.Oracle <> nil then
+  begin
+    Cls:= EnclosingClassLeaf(ResolveCaptureNode(AMatch, AArgs[CAP_ARG].CaptureIndex), ASource);
+    Hit:= (Cls <> '') and ACache.Oracle.ClassDescends(Cls, AArgs[NAME_ARG].StringValue);
+  end;
+  Result:= Hit <> ANegate;
 end;
 
 // Evaluate one predicate. Returns True if it passes.
@@ -1593,6 +1884,10 @@ begin
     Exit(EvalDeclaredNumeric(AMatch, ASource, AArgs, Op = 'not-declared-numeric?'));
   if Op = 'declared-type?' then
     Exit(EvalDeclaredType(AMatch, ASource, AArgs, ACache));
+  if (Op = 'oracle-via?') or (Op = 'not-oracle-via?') then
+    Exit(EvalOracleVia(AMatch, ASource, AArgs, ACache, Op = 'not-oracle-via?'));
+  if (Op = 'enclosing-class-descends?') or (Op = 'not-enclosing-class-descends?') then
+    Exit(EvalEnclosingDescends(AMatch, ASource, AArgs, ACache, Op = 'not-enclosing-class-descends?'));
 
   // Unknown predicate - treat as pass (don't suppress matches just because
   // we don't recognise a directive).
@@ -1643,7 +1938,7 @@ begin
   end; // try
 end; // function
 
-function TQueryRule.Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string): TArray<TLintFinding>;
+function TQueryRule.Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string; const AOracle: ITypeOracle): TArray<TLintFinding>;
 var
   Cursor     : TTSQueryCursor      ;
   Match      : TTSQueryMatch       ;
@@ -1672,6 +1967,8 @@ begin
     Cursor:= TTSQueryCursor.Create;
     DeclCache:= TDeclScopeCache.Create;
     try
+      DeclCache.Oracle:= AOracle;
+      if DeclCache.Oracle = nil then DeclCache.Oracle:= TQueryTypeOracleScope.Current;
       Cursor.Execute(FQuery, ARootNode);
       while Cursor.NextMatch(Match) do
       begin

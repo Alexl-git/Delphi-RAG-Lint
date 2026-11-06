@@ -16956,6 +16956,38 @@ begin
   Result:= RunNarrowParam(Store, RefactorLibraries(AArgs), Opts);
 end;
 
+{ O2 (1.45): the type oracle for the .scm rules of `lint <file>`, which run BEFORE the flow store below
+  is opened. Same membership rule as that block (the --db first, then ResolveConsumerDbs, the
+  index must CONTAIN the file), a second read-only open. nil when no index owns the file: the
+  rules then decide as they always did. }
+function QueryOracleForFile(const AArgs: TArgs; const AIdent: string): ITypeOracle;
+var
+  Abs  : string  ;
+  Db   : string  ;
+  C    : string  ;
+  Ok   : Boolean ;
+  Store: ISymbolStore;
+  Fid  : Int64   ;
+begin
+  Result:= nil;
+  Abs:= ExpandFileName(AIdent);
+  Db := '';
+  if TFile.Exists(AArgs.DbPath) and DbContainsFile(AArgs.DbPath, Abs) then Db:= AArgs.DbPath;
+  if Db = '' then
+    for C in ResolveConsumerDbs(AArgs) do
+      if TFile.Exists(C) and DbContainsFile(C, Abs) then
+      begin
+        Db:= C;
+        Break;
+      end;
+  if Db = '' then Exit;
+  Store:= OpenReadOnlyStore(Db, Ok, {AQuiet=}True);
+  if not Ok then Exit;
+  Fid:= Store.FindFileIdByPath(AIdent);
+  if Fid <= 0 then Fid:= Store.FindFileIdByPath(Abs);
+  Result:= CreateStoreTypeOracle(Store, Fid);
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter      : DRagLint.Lint.Linter.TLinter;
@@ -17260,7 +17292,13 @@ begin
       if TFile.Exists(EffPath) then
       begin
         TraceLintChecker('scm-rules');
-        QueryFindings:= Linter.LintFile(EffPath);
+        { O2 (1.45): the .scm predicates may ask the index for a static type or an ancestry. }
+        var QueryScope:= TQueryTypeOracleScope.Create(QueryOracleForFile(AArgs, IfThen(StandInLogical <> '', StandInLogical, EffPath)));
+        try
+          QueryFindings:= Linter.LintFile(EffPath);
+        finally
+          QueryScope.Free;
+        end;
         ScannedFiles:= [EffPath];
       end
       else if TDirectory.Exists(EffPath) then
@@ -23961,7 +23999,15 @@ begin
           .scm findings so we don't double-report and so its type-blind FPs are gone. }
         GScanTgt := @Findings;              { B2 attribution -- see ScanAdd }
         GScanPrev:= TStopwatch.GetTimeStamp;
-        var LintF:= Linter.LintFile(PasPath);
+        var LintF: TArray<TLintFinding>;
+        var QueryOracle: ITypeOracle:= nil;
+        if Store <> nil then QueryOracle:= CreateStoreTypeOracle(Store, Store.FindFileIdByPath(PasPath)); { O2 (1.45) }
+        var QueryScope:= TQueryTypeOracleScope.Create(QueryOracle);
+        try
+          LintF:= Linter.LintFile(PasPath);
+        finally
+          QueryScope.Free;
+        end;
         if Store <> nil then
         begin
           var KeptSE: TArray<TLintFinding>;

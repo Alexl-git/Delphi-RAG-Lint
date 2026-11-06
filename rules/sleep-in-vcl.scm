@@ -16,9 +16,11 @@
 ; and which has no message loop to block. Those findings were never true, and
 ; the word VCL appeared only in the message.
 ;
-; WHAT THIS DELIBERATELY DOES NOT DO. A Sleep on a background thread inside a
-; VCL unit still fires; excluding it needs to know the enclosing class descends
-; from TThread, which is ancestry a query cannot see. That is a separate, larger
-; change and is NOT pretended to be fixed here.
+; O2 (1.45): a Sleep inside a method of a class the index PROVES descends from TThread
+; (type_ancestors, project index) is not on the UI thread and stays silent.
+; #not-enclosing-class-descends? passes whenever the proof is missing -- no index, a class the
+; index cannot follow to TThread, a plain routine -- so those runs fire exactly as before.
+; Still not covered: an anonymous thread body inside a UI method.
 ((exprCall entity: (identifier) @fn) @warn
- (#eq? @fn "Sleep"))
+ (#eq? @fn "Sleep")
+ (#not-enclosing-class-descends? @warn "TThread"))
