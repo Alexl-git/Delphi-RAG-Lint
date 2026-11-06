@@ -16,23 +16,67 @@ unit DragLint.Plugin.DockForm;
 
 interface
 
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.ShowDragLintDockButterfly (DragLint.Plugin.DockForm.pas), DragLint.Plugin.DockForm.ShowDragLintDockHelpLine (DragLint.Plugin.DockForm.pas), DragLint.Plugin.DockForm.ShowDragLintDockLintOptions (DragLint.Plugin.DockForm.pas), DragLint.Plugin.DockForm.ShowDragLintDockUsesDeps (DragLint.Plugin.DockForm.pas), DragLint.Plugin.Editor.InvokeDockPanel (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.DockForm.RegisterDragLintDockable, Supports</para>
+/// <seealso cref="DragLint.Plugin.DockForm.RegisterDragLintDockable"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowDragLintDock; { open / focus the dockable panel }
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.ShowDragLintDock (DragLint.Plugin.DockForm.pas), DragLint.Plugin.Wizard.Register (DragLint.Plugin.Wizard.pas)</para>
+/// <para>Calls: Supports</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterDragLintDockable; { register at startup so the IDE restores a saved docked instance }
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas), initialization/finalization (DragLint.Plugin.DockForm.pas)</para>
+/// <para>Calls: FreeAndNil, Supports</para>
+/// <para>Catches: Exception (empty)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UnregisterDragLintDock; { idempotent teardown }
 
 /// <summary>Shows the drag-lint dock and selects the Lint Options tab. Used by the
 /// Project Manager "Project Rules..." action so a right-click lands on rules.</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BtnEditRulesClick (DragLint.Plugin.OptionsFrames.pas), DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.Execute (DragLint.Plugin.ProjectMenu.pas)</para>
+/// <para>Calls: DragLint.Plugin.DockForm.ShowDragLintDock, DragLint.Plugin.DockForm.TDragLintDockFrame.SelectLintOptionsTab</para>
+/// <seealso cref="DragLint.Plugin.DockForm.ShowDragLintDock"/>
+/// <seealso cref="DragLint.Plugin.DockForm.TDragLintDockFrame.SelectLintOptionsTab"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowDragLintDockLintOptions;
 
 /// <summary>Shows the drag-lint dock and puts the caret in its help line
 /// (drag-lint &gt; Help &gt; Help on a feature...).</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeHelpOnFeature (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.DockForm.ShowDragLintDock, DragLint.Plugin.DockForm.TDragLintDockFrame.FocusHelpLine</para>
+/// <seealso cref="DragLint.Plugin.DockForm.ShowDragLintDock"/>
+/// <seealso cref="DragLint.Plugin.DockForm.TDragLintDockFrame.FocusHelpLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowDragLintDockHelpLine;
 
 /// <summary>Shows the drag-lint dock and selects the Uses &amp; Deps tab -- the
 /// reviewed-fix surface for uses-fix and reconcile-project.</summary>
-/// <remarks>Deliberately does NOT refresh either section. The tab runs nothing
+/// <remarks>
+/// Deliberately does NOT refresh either section. The tab runs nothing
 /// until asked: uses-fix shadow-compiles once per candidate, so opening the
-/// panel must never start work the user did not request.</remarks>
+/// panel must never start work the user did not request.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeUsesDepsTab (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.DockForm.ShowDragLintDock, DragLint.Plugin.DockForm.TDragLintDockFrame.SelectUsesDepsTab</para>
+/// <seealso cref="DragLint.Plugin.DockForm.ShowDragLintDock"/>
+/// <seealso cref="DragLint.Plugin.DockForm.TDragLintDockFrame.SelectUsesDepsTab"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowDragLintDockUsesDeps;
 
 /// <summary>Shows the drag-lint dock and fills the Call Graph (butterfly) tab from
@@ -41,18 +85,38 @@ procedure ShowDragLintDockUsesDeps;
 /// GDockFrame directly, since TDragLintDockFrame is declared in this unit's
 /// implementation section and is not visible from Editor.pas. No-op if the dock
 /// frame is unavailable (mirrors ShowDragLintDockLintOptions's nil guard).</summary>
+/// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ACallersJson"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ACalleesJson"><!-- drag-lint:auto type -->const string</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.ShowButterflyForQName (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.DockForm.ShowDragLintDock, DragLint.Plugin.DockForm.TDragLintDockFrame.PopulateButterfly</para>
+/// <seealso cref="DragLint.Plugin.DockForm.ShowDragLintDock"/>
+/// <seealso cref="DragLint.Plugin.DockForm.TDragLintDockFrame.PopulateButterfly"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowDragLintDockButterfly(const AQName, ACallersJson, ACalleesJson: string);
 
 /// <summary>Selects the docked panel's Diagnostics row for editor line ALine,
 /// or clears that selection when the line carries no finding.</summary>
 /// <param name="ALine">1-based editor line the caret is on.</param>
 /// <returns>True when a row was selected.</returns>
-/// <remarks>The editor -> panel half of the caret/panel link. Does not show,
+/// <remarks>
+/// The editor -> panel half of the caret/panel link. Does not show,
 /// raise or focus the dock, and does not move the editor caret, so it is a
 /// silent no-op when the panel is not open. Exported for the same reason as
 /// ShowDragLintDockButterfly: TDragLintDockFrame is declared in this unit's
 /// implementation section, so a caret poll elsewhere cannot reach GDockFrame.
-/// Never raises.</remarks>
+/// Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.DriveCaretPanelSelection (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Calls: DragLint.Plugin.StructureForm.SelectEmbeddedStructureDiagnosticForLine</para>
+/// <para>Returns: False; SelectEmbeddedStructureDiagnosticForLine(GDockFrame.FStructure, ALine)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DragLint.Plugin.StructureForm.SelectEmbeddedStructureDiagnosticForLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SelectDockedDiagnosticForLine(ALine: Integer): Boolean;
 
 { Batch E Task 3: cross-file "open at file:line" nav for butterfly tree nodes.

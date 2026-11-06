@@ -46,12 +46,22 @@ uses
 type
   /// <summary>How a diagnose line should read: healthy, suspicious, broken, or
   /// merely informational.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DiagProcess (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.Line (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.SevOf (DragLint.Plugin.Diagnose.pas) (+2 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDiagSeverity = (dsOk, dsInfo, dsWarn, dsBad);
 
   /// <summary>A configuration problem this plugin can correct by itself.</summary>
-  /// <remarks>Only settings with ONE unambiguous correct value belong here. A
+  /// <remarks>
+  /// Only settings with ONE unambiguous correct value belong here. A
   /// "Fix" button that guesses is worse than no button: it turns a visible
-  /// warning into an invisible wrong setting.</remarks>
+  /// warning into an invisible wrong setting.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.AboutForm.pas), declaration (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.AboutForm.TDLFixInvoker.Create (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Diagnose.DescribeDiagFix (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.Line (DragLint.Plugin.Diagnose.pas) (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDiagFix = (
     dfNone,       { nothing to offer                                        }
     dfExePath,    { Settings.ExePath -> the full path of the resolved engine }
@@ -59,9 +69,15 @@ type
   );
 
   /// <summary>One caption/value row of the diagnose report.</summary>
-  /// <remarks>The About screen colours Value by Severity (dsBad = red); the
+  /// <remarks>
+  /// The About screen colours Value by Severity (dsBad = red); the
   /// text report renders the same rows with a leading marker, so both surfaces
-  /// are generated from one source and cannot drift.</remarks>
+  /// are generated from one source and cannot drift.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent.RenderGroup (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Diagnose.Add (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.HasProblem (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.Line (DragLint.Plugin.Diagnose.pas) (+2 more)</para>
+  /// <para>Used in units: DragLint.Plugin.AboutForm, DragLint.Plugin.Diagnose</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDiagLine = record
     Caption : string       ;
     Value   : string       ;
@@ -69,6 +85,11 @@ type
     Fix     : TDiagFix     ;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent.RenderGroup (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Diagnose.Add (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.HasProblem (DragLint.Plugin.Diagnose.pas) (+7 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDiagLines = TArray<TDiagLine>;
 
 /// <summary>Describes what a fix would change, WITHOUT changing it.</summary>
@@ -76,17 +97,40 @@ type
 /// <param name="ACurrent">Receives the current value.</param>
 /// <param name="AProposed">Receives the value that would be written.</param>
 /// <returns>True when the fix applies and the two values differ.</returns>
-/// <remarks>Separate from ApplyDiagFix so the confirmation prompt shows the
+/// <remarks>
+/// Separate from ApplyDiagFix so the confirmation prompt shows the
 /// exact before/after. Writing to a user's registry without showing what
-/// changes is not a fix, it is a surprise. Main thread only.</remarks>
+/// changes is not a fix, it is a surprise. Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDLFixInvoker.Click (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Diagnose.ApplyDiagFix (DragLint.Plugin.Diagnose.pas)</para>
+/// <para>Calls: DragLint.Plugin.ExeResolver.ResolveEngine, DragLint.Plugin.Settings.DefaultSettings, DragLint.Plugin.Settings.LoadSettings, ExtractFilePath, FileExists, SameText, Trim</para>
+/// <para>Returns: False; not SameText(Trim(ACurrent), Trim(AProposed))</para>
+/// <para>Mutates: ACurrent (out), AProposed (out)</para>
+/// <seealso cref="DragLint.Plugin.ExeResolver.ResolveEngine"/>
+/// <seealso cref="DragLint.Plugin.Settings.DefaultSettings"/>
+/// <seealso cref="DragLint.Plugin.Settings.LoadSettings"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DescribeDiagFix(AFix: TDiagFix; out ACurrent, AProposed: string): Boolean;
 
 /// <summary>Applies a fix by writing the corrected setting to the registry.</summary>
 /// <param name="AFix">The fix to apply.</param>
 /// <param name="AError">Receives the failure reason when the result is False.</param>
 /// <returns>True when the setting was written.</returns>
-/// <remarks>Caller is expected to have confirmed with the user first -- see
-/// DescribeDiagFix. Main thread only.</remarks>
+/// <remarks>
+/// Caller is expected to have confirmed with the user first -- see
+/// DescribeDiagFix. Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDLFixInvoker.Click (DragLint.Plugin.AboutForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.Diagnose.DescribeDiagFix, DragLint.Plugin.Settings.LoadSettings, DragLint.Plugin.Settings.SaveSettings</para>
+/// <para>Returns: False; True</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AError (out)</para>
+/// <seealso cref="DragLint.Plugin.Diagnose.DescribeDiagFix"/>
+/// <seealso cref="DragLint.Plugin.Settings.LoadSettings"/>
+/// <seealso cref="DragLint.Plugin.Settings.SaveSettings"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ApplyDiagFix(AFix: TDiagFix; out AError: string): Boolean;
 
 /// <summary>Asks the engine `info --json`, off the main thread, for what DiagVersions,
@@ -96,62 +140,172 @@ function ApplyDiagFix(AFix: TDiagFix; out AError: string): Boolean;
 /// freeing the slot means ADone never runs. The caller owns it.</param>
 /// <param name="ADone">Runs once on the main thread when both answers are in, however
 /// they ended; at once when there is no engine to ask.</param>
-/// <remarks>Main thread only. The answers replace the previous ones at the start, so
-/// a screen never shows an answer older than its own request.</remarks>
+/// <remarks>
+/// Main thread only. The answers replace the previous ones at the start, so
+/// a screen never shows an answer older than its own request.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.DoCopyReport (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.DoDiagnose (DragLint.Plugin.AboutForm.pas)</para>
+/// <para>Calls: ADone, DragLint.Plugin.CliAsync.TCliRunSlot.Cancel, DragLint.Plugin.DbResolver.GetPlatformAwareLibraryDbPathEx, DragLint.Plugin.DbResolver.ResolveActiveIndexDbs, DragLint.Plugin.Diagnose.EngineInfoCmd, DragLint.Plugin.Diagnose.FetchEngineInfoStep, DragLint.Plugin.Diagnose.IndexRowDbs, DragLint.Plugin.ExeResolver.EngineExeOrEmpty, DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.Settings.LoadSettings</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Cancel"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.GetPlatformAwareLibraryDbPathEx"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.ResolveActiveIndexDbs"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.EngineInfoCmd"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.FetchEngineInfoStep"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RefreshEngineInfo(ASlot: TCliRunSlot; const ADone: TProc);
 
 /// <summary>Plugin, engine, tree-sitter and graph-viewer versions.</summary>
 /// <returns>Rows for the Versions group.</returns>
-/// <remarks>Reads the answer RefreshEngineInfo fetched; spawns nothing. Without one
-/// the engine row says so. Main thread only.</remarks>
+/// <remarks>
+/// Reads the answer RefreshEngineInfo fetched; spawns nothing. Without one
+/// the engine row says so. Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Diagnose.BuildDiagnoseReport (DragLint.Plugin.Diagnose.pas)</para>
+/// <para>Calls: DragLint.Plugin.Diagnose.Add, DragLint.Plugin.Diagnose.EngineInfoJson, DragLint.Plugin.Diagnose.Line, DragLint.Plugin.ExeResolver.EngineExeOrEmpty, ExtractFilePath, FileAge, FileExists, FormatDateTime, GetModuleName</para>
+/// <para>Returns: nil</para>
+/// <seealso cref="DragLint.Plugin.Diagnose.Add"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.EngineInfoJson"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.Line"/>
+/// <seealso cref="DragLint.Plugin.ExeResolver.EngineExeOrEmpty"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DiagVersions: TDiagLines;
 
 /// <summary>Versions of the sibling tools in the same family -- YADF, YADFOT,
 /// YADFSetup -- read from the artefacts that are actually INSTALLED.</summary>
 /// <returns>Rows for the "Related tools" group; dsInfo when a tool is simply
 /// not installed, which is normal and not a fault.</returns>
-/// <remarks>YADFOT is located through the IDE's own Known Packages list rather
+/// <remarks>
+/// YADFOT is located through the IDE's own Known Packages list rather
 /// than a guessed path, so the row reports the package the IDE actually loads.
 /// The other two are its siblings on disk. File-system reads only -- no
-/// network. Main thread only.</remarks>
+/// network. Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent (DragLint.Plugin.AboutForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.Diagnose.Add, DragLint.Plugin.Diagnose.DiagRelatedTools.AddTool, DragLint.Plugin.Diagnose.Line, DragLint.Plugin.Updates.FileVersionOf, DragLint.Plugin.Updates.FindKnownPackagePath, ExtractFilePath, FileExists</para>
+/// <para>Returns: nil</para>
+/// <seealso cref="DragLint.Plugin.Diagnose.Add"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.DiagRelatedTools.AddTool"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.Line"/>
+/// <seealso cref="DragLint.Plugin.Updates.FileVersionOf"/>
+/// <seealso cref="DragLint.Plugin.Updates.FindKnownPackagePath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DiagRelatedTools: TDiagLines;
 
 /// <summary>LSP state, engine exe presence, and whether every resolved DB
 /// exists on disk.</summary>
 /// <returns>Rows for the Connections group; dsBad on anything not usable.</returns>
-/// <remarks>Never starts an LSP server -- reads the existing client only, via
-/// CurrentLspClient. Main thread only.</remarks>
+/// <remarks>
+/// Never starts an LSP server -- reads the existing client only, via
+/// CurrentLspClient. Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Diagnose.BuildDiagnoseReport (DragLint.Plugin.Diagnose.pas)</para>
+/// <para>Calls: DragLint.Plugin.DbResolver.ResolveActiveIndexDbs, DragLint.Plugin.Diagnose.Add, DragLint.Plugin.Diagnose.Line, DragLint.Plugin.Editor.CurrentLspClient, DragLint.Plugin.ExeResolver.ResolveEngine, DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.LspClient.TDragLintLspClient.IsAlive, DragLint.Plugin.Settings.LoadSettings, FileExists, Format, FormatDateTime</para>
+/// <para>Returns: nil</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 68 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DragLint.Plugin.DbResolver.ResolveActiveIndexDbs"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.Add"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.Line"/>
+/// <seealso cref="DragLint.Plugin.Editor.CurrentLspClient"/>
+/// <seealso cref="DragLint.Plugin.ExeResolver.ResolveEngine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DiagConnections: TDiagLines;
 
 /// <summary>Free system RAM, this process's private bytes, and handle count.</summary>
 /// <returns>Rows for the Process group.</returns>
-/// <remarks>The IDE is a 32-bit process, so its ~4 GB address space and handle
-/// count are real operating limits, not trivia. Main thread only.</remarks>
+/// <remarks>
+/// The IDE is a 32-bit process, so its ~4 GB address space and handle
+/// count are real operating limits, not trivia. Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Diagnose.BuildDiagnoseReport (DragLint.Plugin.Diagnose.pas)</para>
+/// <para>Calls: DragLint.Plugin.Diagnose.Add, DragLint.Plugin.Diagnose.FormatBytes, DragLint.Plugin.Diagnose.GetProcessHandleCount, DragLint.Plugin.Diagnose.GetProcessMemoryInfo, DragLint.Plugin.Diagnose.Line, FillChar, Format, GlobalMemoryStatusEx, Int64, IntToStr</para>
+/// <para>Returns: nil</para>
+/// <seealso cref="DragLint.Plugin.Diagnose.Add"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.FormatBytes"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.GetProcessHandleCount"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.GetProcessMemoryInfo"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.Line"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DiagProcess: TDiagLines;
 
 /// <summary>Which index files are actually in use: the library index (with the
 /// rule that chose it) and every DB resolved for the active editor.</summary>
 /// <returns>Rows for the Indexes group.</returns>
-/// <remarks>File-system facts only -- see this unit's PERFORMANCE CONTRACT.
-/// Main thread only.</remarks>
+/// <remarks>
+/// File-system facts only -- see this unit's PERFORMANCE CONTRACT.
+/// Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Diagnose.BuildDiagnoseReport (DragLint.Plugin.Diagnose.pas)</para>
+/// <para>Calls: DragLint.Plugin.DbResolver.GetActivePlatformForLibrary, DragLint.Plugin.DbResolver.GetActiveProjectFilePath, DragLint.Plugin.DbResolver.GetPlatformAwareLibraryDbPathEx, DragLint.Plugin.DbResolver.ResolveActiveIndexDbs, DragLint.Plugin.Diagnose.Add, DragLint.Plugin.Diagnose.DescribeIndexFile, DragLint.Plugin.Diagnose.IndexRowDbs, DragLint.Plugin.Diagnose.IndexVerdicts, DragLint.Plugin.Diagnose.Line, DragLint.Plugin.Diagnose.VerdictLine, DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.Settings.LoadSettings, LowerCase, Pos, SameText</para>
+/// <para>Returns: nil</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DragLint.Plugin.DbResolver.GetActivePlatformForLibrary"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.GetActiveProjectFilePath"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.GetPlatformAwareLibraryDbPathEx"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.ResolveActiveIndexDbs"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.Add"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DiagIndexes: TDiagLines;
 
 /// <summary>Settings that commonly misconfigure the plugin without any visible
 /// symptom, checked against what the current layout actually requires.</summary>
 /// <returns>Rows for the Configuration group.</returns>
-/// <remarks>Added because two live misconfigurations on the author's own box --
+/// <remarks>
+/// Added because two live misconfigurations on the author's own box --
 /// a bare-name ExePath and a pre-_D-RAG DbPathTemplate -- were both invisible
-/// and both changed which index answered. Main thread only.</remarks>
+/// and both changed which index answered. Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Diagnose.BuildDiagnoseReport (DragLint.Plugin.Diagnose.pas)</para>
+/// <para>Calls: DragLint.Plugin.DbResolver.ManifestPathBesideEngine, DragLint.Plugin.Diagnose.Add, DragLint.Plugin.Diagnose.BoolLabel, DragLint.Plugin.Diagnose.Line, DragLint.Plugin.Diagnose.SevOf, DragLint.Plugin.Settings.LoadSettings, ExtractFilePath, FileExists, Format, Pos</para>
+/// <para>Returns: nil</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 88 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DragLint.Plugin.DbResolver.ManifestPathBesideEngine"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.Add"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.BoolLabel"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.Line"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.SevOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DiagConfiguration: TDiagLines;
 
 /// <summary>The full copyable "Diagnose current state" report.</summary>
 /// <param name="ALogTailLines">How many trailing plugin-log lines to append.</param>
 /// <returns>A plain-text report intended to be pasted into an issue.</returns>
-/// <remarks>Composes every DiagX group plus the log tail. Call from
-/// RefreshEngineInfo's ADone. Main thread only.</remarks>
+/// <remarks>
+/// Composes every DiagX group plus the log tail. Call from
+/// RefreshEngineInfo's ADone. Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.DoCopyReport (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.DoDiagnose (DragLint.Plugin.AboutForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.Diagnose.AppendGroup, DragLint.Plugin.Diagnose.DiagConfiguration, DragLint.Plugin.Diagnose.DiagConnections, DragLint.Plugin.Diagnose.DiagIndexes, DragLint.Plugin.Diagnose.DiagProcess, DragLint.Plugin.Diagnose.DiagVersions, DragLint.Plugin.Diagnose.TailOfPluginLog, DragLint.Plugin.LspClient.GetPluginLogPath, Format, FormatDateTime, StringOfChar</para>
+/// <para>Returns: Sb.ToString</para>
+/// <seealso cref="DragLint.Plugin.Diagnose.AppendGroup"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.DiagConfiguration"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.DiagConnections"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.DiagIndexes"/>
+/// <seealso cref="DragLint.Plugin.Diagnose.DiagProcess"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildDiagnoseReport(ALogTailLines: Integer = 40): string;
 
 /// <summary>True when any row in ALines is dsBad.</summary>
+/// <param name="ALines"><!-- drag-lint:auto type -->const TDiagLines</param>
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent (DragLint.Plugin.AboutForm.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HasProblem(const ALines: TDiagLines): Boolean;
 
 implementation

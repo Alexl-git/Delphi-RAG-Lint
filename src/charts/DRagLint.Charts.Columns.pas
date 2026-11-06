@@ -17,6 +17,12 @@ uses
 
 type
   /// <summary>Where the caller's own server SQL for T names the column (the PS -ServerSqlHit).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Chain.TBindingBuild.Outcome (DRagLint.Charts.Chain.pas), DRagLint.Charts.Columns.ColumnsNotHeld (DRagLint.Charts.Columns.pas), DRagLint.Charts.Columns.TServerSqlHit.None (DRagLint.Charts.Columns.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.RecheckColumn (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ResolveTable (DRagLint.Charts.Q.Consumers.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Columns, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.FeedsFrom, DRagLint.Charts.Q.LandsWhere, DRagLint.Charts.Trace.Anchor, DRagLint.Charts.Trace.Calc, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TServerSqlHit = record
     /// <summary>False for the PS $null (no hit).</summary>
     Present: Boolean;
@@ -28,17 +34,41 @@ type
     Routine: string;
     /// <summary>No hit.</summary>
     /// <returns>A record with Present False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.TBindingBuild.Outcome (DRagLint.Charts.Chain.pas), DRagLint.Charts.Columns.ColumnsNotHeld (DRagLint.Charts.Columns.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.RecheckColumn (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ResolveTable (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.AddTableHop (DRagLint.Charts.Q.FeedsFrom.pas) (+6 more)</para>
+    /// <para>Calls: Default</para>
+    /// <para>Returns: Default(TServerSqlHit)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.Columns.TServerSqlHit.Make"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function None: TServerSqlHit; static;
     /// <summary>A hit.</summary>
     /// <param name="pPath">File.</param>
     /// <param name="pLine">Line.</param>
     /// <param name="pRoutine">Routine.</param>
     /// <returns>A record with Present True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.RecheckColumn (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.RecheckColumn (DRagLint.Charts.Q.LandsWhere.pas)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.Columns.TServerSqlHit.None"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Make(const pPath: string; pLine: Integer; const pRoutine: string): TServerSqlHit; static;
   end;
 
   /// <summary>A quoted identifier opening a line of a table's newest declaration. Port of the
   /// Find-QuotedColumn result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Columns.pas) ?, DRagLint.Charts.Columns.FindQuotedColumn (DRagLint.Charts.Columns.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Columns</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TQuotedColumn = record
     /// <summary>False for the PS $null (scanned, nothing found).</summary>
     Found: Boolean;
@@ -51,6 +81,12 @@ type
   end;
 
   /// <summary>THE column state. Port of the Get-SqlColumnState result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Columns.pas) ?, declaration (DRagLint.Charts.Q.Consumers.pas) ?, DRagLint.Charts.Columns.ApplyOlder (DRagLint.Charts.Columns.pas) ?, DRagLint.Charts.Columns.ColumnHopLabel (DRagLint.Charts.Columns.pas) ?, DRagLint.Charts.Columns.SqlColumnState (DRagLint.Charts.Columns.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Columns, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.LandsWhere, DRagLint.Charts.Trace.Anchor</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSqlColumnState = record
     /// <summary>The table's name as declared.</summary>
     Table     : string;
@@ -81,8 +117,21 @@ type
 /// <param name="pTable">The table.</param>
 /// <param name="pCol">The column (upper case).</param>
 /// <returns>Found with the line and text; Stale when the script is not the indexed copy.</returns>
-/// <remarks>Port of Find-QuotedColumn (Emit-Common.ps1:1137): scans from the line after the
-/// declaration to its ';' terminator (or 400 lines), regex ^\s*"COL"\s, case-insensitive.</remarks>
+/// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Source.TSourceReader.SourceFresh: Test-SourceFresh:</exception>
+/// <remarks>
+/// Port of Find-QuotedColumn (Emit-Common.ps1:1137): scans from the line after the
+/// declaration to its ';' terminator (or 400 lines), regex ^\s*"COL"\s, case-insensitive.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Columns.SqlColumnState (DRagLint.Charts.Columns.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Source.PsTrim, DRagLint.Charts.Source.TSourceReader.ReadPath, DRagLint.Charts.Source.TSourceReader.SourceFresh, DRagLint.Charts.Sql.FindSqlBodyEnd, DRagLint.Charts.Sql.TSqlCatalog.StrippedSqlLines</para>
+/// <para>Returns: Default(TQuotedColumn)</para>
+/// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
+/// <seealso cref="DRagLint.Charts.Source.TSourceReader.ReadPath"/>
+/// <seealso cref="DRagLint.Charts.Source.TSourceReader.SourceFresh"/>
+/// <seealso cref="DRagLint.Charts.Sql.FindSqlBodyEnd"/>
+/// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.StrippedSqlLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindQuotedColumn(pCatalog: TSqlCatalog; pTable: TSqlTable; const pCol: string): TQuotedColumn;
 
 /// <summary>Whether pCol is a column of pTable, and on what evidence.</summary>
@@ -94,7 +143,19 @@ function FindQuotedColumn(pCatalog: TSqlCatalog; pTable: TSqlTable; const pCol: 
 /// <param name="pSqlSearched">What SQL the caller searched; '' when it names none.</param>
 /// <returns>The state; see the unit header for the precedence.</returns>
 /// <exception cref="EChartsIndex">pTable is not in pSet.</exception>
-/// <remarks>Port of Get-SqlColumnState (Emit-Common.ps1:1165).</remarks>
+/// <remarks>
+/// Port of Get-SqlColumnState (Emit-Common.ps1:1165).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Chain.TBindingBuild.Outcome (DRagLint.Charts.Chain.pas), DRagLint.Charts.Columns.ColumnsNotHeld (DRagLint.Charts.Columns.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.RecheckColumn (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ResolveTable (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.AddTableHop (DRagLint.Charts.Q.FeedsFrom.pas) (+6 more)</para>
+/// <para>Calls: Default, DRagLint.Charts.Columns.ApplyOlder, DRagLint.Charts.Columns.ColumnLine, DRagLint.Charts.Columns.FindQuotedColumn, DRagLint.Charts.Sql.TSqlTable.HasColumn, DRagLint.Charts.Sql.TSqlTableSet.Table, DRagLint.Charts.Text.FileNameOf, Format</para>
+/// <para>Returns: Default(TSqlColumnState)</para>
+/// <seealso cref="DRagLint.Charts.Columns.ApplyOlder"/>
+/// <seealso cref="DRagLint.Charts.Columns.ColumnLine"/>
+/// <seealso cref="DRagLint.Charts.Columns.FindQuotedColumn"/>
+/// <seealso cref="DRagLint.Charts.Sql.TSqlTable.HasColumn"/>
+/// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Table"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SqlColumnState(pCatalog: TSqlCatalog; pSet: TSqlTableSet; const pTable, pCol: string;
   const pServerHit: TServerSqlHit; const pSqlSearched: string): TSqlColumnState;
 
@@ -104,22 +165,47 @@ function SqlColumnState(pCatalog: TSqlCatalog; pSet: TSqlTableSet; const pTable,
 /// <param name="pTable">A table of pSet.</param>
 /// <param name="pCols">Candidate column names.</param>
 /// <returns>The names not held, in input order; a stale (unknown) column is not held.</returns>
-/// <remarks>Port of Get-ColumnsNotHeld (Emit-Common.ps1:1129): the cheap test first, the source
-/// scan only for a name it rejects.</remarks>
+/// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Columns.SqlColumnState: Get-SqlColumnState: no table %s in the SQL index -- the caller checks the table first</exception>
+/// <remarks>
+/// Port of Get-ColumnsNotHeld (Emit-Common.ps1:1129): the cheap test first, the source
+/// scan only for a name it rejects.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Chain.StepTable (DRagLint.Charts.Chain.pas)</para>
+/// <para>Calls: DRagLint.Charts.Columns.SqlColumnState, DRagLint.Charts.Columns.TServerSqlHit.None, DRagLint.Charts.Sql.TSqlTable.IsColumn, DRagLint.Charts.Sql.TSqlTableSet.Table</para>
+/// <seealso cref="DRagLint.Charts.Columns.SqlColumnState"/>
+/// <seealso cref="DRagLint.Charts.Columns.TServerSqlHit.None"/>
+/// <seealso cref="DRagLint.Charts.Sql.TSqlTable.IsColumn"/>
+/// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Table"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ColumnsNotHeld(pCatalog: TSqlCatalog; pSet: TSqlTableSet; const pTable: string;
   const pCols: TArray<string>): TArray<string>;
 
 /// <summary>feeds-from's column-hop label: a quoted column keeps its quotes.</summary>
 /// <param name="pState">A column state.</param>
 /// <returns>'column "COL"' for the quoted state, else 'column COL'.</returns>
-/// <remarks>Port of Get-ColumnHopLabel (Emit-Common.ps1:1091).</remarks>
+/// <remarks>
+/// Port of Get-ColumnHopLabel (Emit-Common.ps1:1091).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.AddTableHop (DRagLint.Charts.Q.FeedsFrom.pas)</para>
+/// <para>Calls: Format, SameText</para>
+/// <para>Returns: if SameText(pState.State, STATE_QUOTED) then Format('column "%s"', [pState.Column])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ColumnHopLabel(const pState: TSqlColumnState): string;
 
 /// <summary>The name a chart PRINTS for a column state.</summary>
 /// <param name="pState">yes | older | no | stale | anything else.</param>
 /// <returns>column | older-only | not-a-column | [stale source] | pState unchanged.</returns>
-/// <remarks>Port of Get-ColumnStateName (Emit-Common.ps1:1155). PS trap closed: `switch` on a
-/// string is case-insensitive.</remarks>
+/// <remarks>
+/// Port of Get-ColumnStateName (Emit-Common.ps1:1155). PS trap closed: `switch` on a
+/// string is case-insensitive.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.FocusLabel (DRagLint.Charts.Q.Consumers.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: 'column'; 'older-only'; 'not-a-column'; '[stale source]'; pState</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ColumnStateName(const pState: string): string;
 
 /// <summary>lands-where's row for a property the SQL index does not extract (state no).</summary>
@@ -128,7 +214,14 @@ function ColumnStateName(const pState: string): string;
 /// <param name="pCaption">The column state's label.</param>
 /// <param name="pServerSearched">The DataService class searched; '' when none was.</param>
 /// <returns>The sentence; "computed or UI-only" only when the server's SQL was searched.</returns>
-/// <remarks>Port of Format-NotAColumnNote (Emit-Common.ps1:1233).</remarks>
+/// <remarks>
+/// Port of Format-NotAColumnNote (Emit-Common.ps1:1233).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.DrawColumn (DRagLint.Charts.Q.LandsWhere.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: Format('%s is not a column of %s -- computed or UI-only: %s; the database side is empty', [pProp, pTable, pCaption])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormatNotAColumnNote(const pProp, pTable, pCaption, pServerSearched: string): string;
 
 implementation

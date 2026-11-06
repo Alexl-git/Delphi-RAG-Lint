@@ -40,6 +40,9 @@ type
   /// subtrees are never cached; only their names are kept (TClassMembers.Hidden)
   /// so that a path naming one is UNREACHABLE, not NOT FOUND (owner ruling R12,
   /// T2h). Controller ruling R8, 2026-09-30.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.PassesSurface (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TClassRef.ResolvePath (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.ResolvePath (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.ResolvePathEx (DRagLint.Convert.PropCache.pas) (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPropSurface = (psDfm, psPas);
 
@@ -58,6 +61,10 @@ type
   /// left out of Members -- a private redeclaration that hides an ancestor's
   /// member included (R11). They are never expanded and never emitted; they
   /// exist only so ResolvePathEx can answer UNREACHABLE rather than NOT FOUND.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.PropCache.pas) ?, DRagLint.Convert.PropCache.TPropMemberCache.Create (DRagLint.Convert.PropCache.pas) ?, DRagLint.Convert.PropCache.TPropMemberCache.MembersOf (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.MembersOfId (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.MembersOfSym (DRagLint.Convert.PropCache.pas) (+7 more)</para>
+  /// <para>Used in units: DRagLint.Convert.PropCache</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TClassMembers = record
     ClassId  : Int64;
@@ -80,15 +87,23 @@ type
   /// poUnreachable: every segment names an existing member, but at least one
   /// fails the surface's visibility rule -- or the path runs INTO a private
   /// member, which stops it there (its type is never expanded).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.PropCache.pas)</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPathOutcome = (poFound, poNotFound, poUnreachable);
 
   /// <summary>The outcome of TPropMemberCache.ResolvePathEx.</summary>
-  /// <remarks>Node is the leaf, Path := the path as given, for poFound only.
+  /// <remarks>
+  /// Node is the leaf, Path := the path as given, for poFound only.
   /// Member, Visibility and DeclaringClass name the FIRST offending segment
   /// (bare member name, its visibility as reported -- 'private', 'strict
   /// private', 'protected', 'public' or 'published' -- and the qualified name
   /// of the class that declares it) for poUnreachable only; '' otherwise.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.PropCache.pas) ?, DRagLint.Convert.PropCache.TClassRef.ResolvePathEx (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.ResolvePath (DRagLint.Convert.PropCache.pas) ?, DRagLint.Convert.PropCache.TPropMemberCache.ResolvePathEx (DRagLint.Convert.PropCache.pas), DRagLint.Convert.Rules.ValidateBlocks.AddUnreachable (DRagLint.Convert.Rules.pas) ? (+1 more)</para>
+  /// <para>Used in units: DRagLint.Convert.PropCache, DRagLint.Convert.Rules</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPathResolution = record
     Outcome       : TPathOutcome;
@@ -106,6 +121,10 @@ type
   /// they open. Class ids are per store, so a cache never mixes stores.
   /// Reads only; the store's own memoize write-back (TPropMemberResolver) is
   /// unchanged. Not thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.ConvertClassIn (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.CacheFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.PropCache.BuildPropTree (DRagLint.Convert.PropCache.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.PropCache</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPropMemberCache = class
   private
@@ -116,7 +135,35 @@ type
     FBuilt    : Integer;
     FOnProgress: TProc<TPropTreeProgress>; // AOpts.OnProgress; nil = none (T2e)
     FProgressMs: Integer;                  // AOpts.ProgressIntervalMs
+    /// <param name="AClass"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->TClassMembers -- Observed: Default(TClassMembers).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropCache.TPropMemberCache.MembersOf (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.MembersOfId (DRagLint.Convert.PropCache.pas)</para>
+    /// <para>Calls: Default, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers</para>
+    /// <para>Reads: FById, FResolver, FSymById   Writes: FBuilt</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.BuildTree"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.Create"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.DescendsFrom"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function MembersOfSym(const AClass: TSymbol): TClassMembers;
+    /// <param name="AClassId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto -->TClassMembers -- Observed: Default(TClassMembers).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropCache.TPropMemberCache.BuildTree.Emit (DRagLint.Convert.PropCache.pas) ?, DRagLint.Convert.PropCache.TPropMemberCache.BuildTree.Expand (DRagLint.Convert.PropCache.pas) ?, DRagLint.Convert.PropCache.TPropMemberCache.MembersOf (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.ResolvePathEx (DRagLint.Convert.PropCache.pas)</para>
+    /// <para>Calls: Default, DRagLint.Convert.PropCache.TPropMemberCache.MembersOfSym</para>
+    /// <para>Reads: FSymById</para>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.MembersOfSym"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.BuildTree"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.Create"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.DescendsFrom"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function MembersOfId(AClassId: Int64): TClassMembers;
   public
     /// <summary>Creates an empty cache over one index.</summary>
@@ -124,15 +171,52 @@ type
     /// <param name="AOpts">ToPersistent and TreatRefsAsLeaves apply exactly as
     /// in BuildPropTree; Depth is ignored -- a path is as deep as it is
     /// written.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ConvertClassIn (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.Convert.Apply.TConvertTreeCache.CacheFor (DRagLint.Convert.Apply.pas), DRagLint.Convert.PropCache.BuildPropTree (DRagLint.Convert.PropCache.pas)</para>
+    /// <para>Calls: DRagLint.Convert.PropTree.TPropMemberResolver.Create</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FResolver, FIdByQName, FById, FSymById, FOnProgress, FProgressMs</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.Create"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.BuildTree"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.DescendsFrom"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.Destroy"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.MembersOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const AStore: ISymbolStore; const AOpts: TPropTreeOptions);
     /// <summary>Frees the cache.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FSymById, FById, FIdByQName, FResolver</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.BuildTree"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.Create"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.DescendsFrom"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.MembersOf"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.MembersOfId"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>The members of the class AClassQName names.</summary>
     /// <param name="AClassQName">A fully-qualified class name.</param>
     /// <returns>The class's members; RootType = '' (and no members) when the
     /// name resolves to no class in this store.</returns>
-    /// <remarks>Cached by class id: each class is resolved once per cache, an
-    /// unresolved name is remembered too.</remarks>
+    /// <remarks>
+    /// Cached by class id: each class is resolved once per cache, an
+    /// unresolved name is remembered too.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ConvertClassIn (DRagLint.CLI.pas), DRagLint.Convert.PropCache.TClassRef.RootType (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.BuildTree (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.ResolvePathEx (DRagLint.Convert.PropCache.pas)</para>
+    /// <para>Calls: Default, DRagLint.Convert.PropCache.TPropMemberCache.MembersOfId, DRagLint.Convert.PropCache.TPropMemberCache.MembersOfSym, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveClassByQName, Trim, UpperCase</para>
+    /// <para>Returns: MembersOfSym(Sym)</para>
+    /// <para>Reads: FIdByQName, FResolver</para>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.MembersOfId"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.MembersOfSym"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ResolveClassByQName"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.BuildTree"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function MembersOf(const AClassQName: string): TClassMembers;
     /// <summary>Whether a class is, or descends from, another.</summary>
     /// <param name="AClassQName">The fully-qualified class asked about.</param>
@@ -140,8 +224,21 @@ type
     /// <returns>True when AAncestorQName is AClassQName or a class in its
     /// resolved ancestor chain (compared case-insensitively); False when
     /// either name is empty or AClassQName resolves to no class.</returns>
-    /// <remarks>1.26.1 (F2): decides whether a target's redeclared default is
-    /// more derived than the source's.</remarks>
+    /// <remarks>
+    /// 1.26.1 (F2): decides whether a target's redeclared default is
+    /// more derived than the source's.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropCache.TClassRef.DescendsFrom (DRagLint.Convert.PropCache.pas)</para>
+    /// <para>Calls: DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveClassByQName, SameText, Trim</para>
+    /// <para>Returns: False</para>
+    /// <para>Reads: FResolver</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ResolveClassByQName"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.BuildTree"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.Create"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DescendsFrom(const AClassQName, AAncestorQName: string): Boolean;
     /// <summary>Resolves a dotted member path from a root class, one segment
     /// at a time.</summary>
@@ -161,6 +258,17 @@ type
     /// BuildPropTree applies (the root's own name counts), so a path is found
     /// here exactly when a tree of sufficient depth would contain it. There is
     /// no depth limit.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropCache.TClassRef.ResolvePath (DRagLint.Convert.PropCache.pas), initialization/finalization (DRagLint.Convert.DfmReemit.pas) ?</para>
+    /// <para>Calls: DRagLint.Convert.PropCache.TPropMemberCache.ResolvePathEx</para>
+    /// <para>Returns: Res.Outcome = poFound</para>
+    /// <para>Mutates: ANode (out)</para>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.ResolvePathEx"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.BuildTree"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.Create"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.DescendsFrom"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.Destroy"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolvePath(const ARootQName, APath: string; ASurface: TPropSurface;
       out ANode: TPropNode): Boolean;
@@ -178,11 +286,24 @@ type
     /// into a private member stops there (a private redeclaration of an
     /// ancestor's member is named, not the ancestor's). Else
     /// poNotFound.</returns>
-    /// <remarks>Structural checks come first: a hop that cannot be descended
+    /// <remarks>
+    /// Structural checks come first: a hop that cannot be descended
     /// (not a class-typed property, a TreatRefsAsLeaves component reference,
     /// the per-path cycle guard) is poNotFound whatever its visibility, so a
     /// path through a referenced component stays "not a path" (R12). Reads the
-    /// cache only.</remarks>
+    /// cache only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropCache.TClassRef.ResolvePathEx (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.ResolvePath (DRagLint.Convert.PropCache.pas)</para>
+    /// <para>Calls: Default, DRagLint.Convert.PropCache.IndexOfHidden, DRagLint.Convert.PropCache.IndexOfMember, DRagLint.Convert.PropCache.IsDescendable, DRagLint.Convert.PropCache.PassesSurface, DRagLint.Convert.PropCache.TPropMemberCache.MembersOf, DRagLint.Convert.PropCache.TPropMemberCache.MembersOfId, DRagLint.Convert.PropCache.TPropMemberCache.ResolvePathEx.Offend, LowerCase, Trim</para>
+    /// <para>Returns: Default(TPathResolution)</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 71 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.Convert.PropCache.IndexOfHidden"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.IndexOfMember"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.IsDescendable"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.PassesSurface"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.MembersOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolvePathEx(const ARootQName, APath: string; ASurface: TPropSurface): TPathResolution;
     /// <summary>The flattened property tree of a class, expanded through this
     /// cache (proptree, convert-scaffold, glyph-vacuum).</summary>
@@ -206,6 +327,16 @@ type
     /// OnProgress and a ProgressIntervalMs &gt; 0, both phases hand it a
     /// TPropTreeProgress snapshot at most once per interval (the first after
     /// one full interval), on this thread; the tree itself is unaffected.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.Convert.PropCache.BuildPropTree (DRagLint.Convert.PropCache.pas)</para>
+    /// <para>Calls: Default, DRagLint.Convert.PropCache.TPropMemberCache.BuildTree.Emit, DRagLint.Convert.PropCache.TPropMemberCache.BuildTree.Expand, DRagLint.Convert.PropCache.TPropMemberCache.MembersOf, FOnProgress, IsDescendable, LowerCase, MembersOfId, Tick</para>
+    /// <para>Returns: Default(TPropTree)</para>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.BuildTree.Emit"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.BuildTree.Expand"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.MembersOf"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.Create"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.DescendsFrom"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     function BuildTree(const AClassQName: string; ADepth: Integer): TPropTree;
     /// <summary>How many classes this cache has resolved (apply/1
@@ -215,20 +346,51 @@ type
 
   /// <summary>One side of a conversion: a qualified class name and the cache
   /// of the store it resolved in.</summary>
-  /// <remarks>QName = '' or Cache = nil means "not checked here" -- every
+  /// <remarks>
+  /// QName = '' or Cache = nil means "not checked here" -- every
   /// query then answers absent and RootType is ''. The record does not own
-  /// Cache.</remarks>
+  /// Cache.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.ConvertClassIn (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate.ClassFor (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.ClassFor (DRagLint.Convert.Apply.pas) (+11 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TClassRef = record
     QName: string;
     Cache: TPropMemberCache;
     /// <summary>The class's bare name; '' when it does not resolve.</summary>
     /// <returns>MembersOf(QName).RootType, or '' when unset.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.CarryParamData (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.CarryParamData.FlushItem (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.ValidateBlocks.Missing (DRagLint.Convert.Rules.pas)</para>
+    /// <para>Calls: DRagLint.Convert.PropCache.TPropMemberCache.MembersOf</para>
+    /// <para>Returns: Cache.MembersOf(QName).RootType</para>
+    /// <para>Reads: QName, Cache</para>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.MembersOf"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TClassRef.DescendsFrom"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TClassRef.ResolvePath"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TClassRef.ResolvePathEx"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RootType: string;
     /// <summary>TPropMemberCache.ResolvePath from this class.</summary>
     /// <param name="APath">The dotted path.</param>
     /// <param name="ASurface">The visibility rule.</param>
     /// <param name="ANode">Receives the leaf.</param>
     /// <returns>False when unset, or when the path does not resolve.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.Apply.TConvertTreeCache.InferAmbiguous.DeclaresRow (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.LeafIsClassTyped (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.LeafTypeOf (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PublishedChain (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TargetRedeclaresDefault (DRagLint.Convert.DfmReemit.pas) (+1 more)</para>
+    /// <para>Calls: Default, DRagLint.Convert.PropCache.TPropMemberCache.ResolvePath</para>
+    /// <para>Returns: Cache.ResolvePath(QName, APath, ASurface, ANode)</para>
+    /// <para>Reads: QName, Cache</para>
+    /// <para>Mutates: ANode (out)</para>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.ResolvePath"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TClassRef.DescendsFrom"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TClassRef.ResolvePathEx"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TClassRef.RootType"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolvePath(const APath: string; ASurface: TPropSurface;
       out ANode: TPropNode): Boolean;
     /// <summary>TPropMemberCache.ResolvePathEx from this class.</summary>
@@ -236,10 +398,34 @@ type
     /// <param name="ASurface">The visibility rule.</param>
     /// <returns>Outcome poNotFound when unset; otherwise the cache's
     /// answer.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.Rules.ValidateBlocks.Missing (DRagLint.Convert.Rules.pas)</para>
+    /// <para>Calls: Default, DRagLint.Convert.PropCache.TPropMemberCache.ResolvePathEx</para>
+    /// <para>Returns: Default(TPathResolution); Cache.ResolvePathEx(QName, APath, ASurface)</para>
+    /// <para>Reads: QName, Cache</para>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.ResolvePathEx"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TClassRef.DescendsFrom"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TClassRef.ResolvePath"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TClassRef.RootType"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolvePathEx(const APath: string; ASurface: TPropSurface): TPathResolution;
     /// <summary>TPropMemberCache.DescendsFrom for this class.</summary>
     /// <param name="AAncestorQName">The fully-qualified candidate ancestor.</param>
     /// <returns>False when unset; otherwise the cache's answer.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TargetRedeclaresDefault (DRagLint.Convert.DfmReemit.pas)</para>
+    /// <para>Calls: DRagLint.Convert.PropCache.TPropMemberCache.DescendsFrom</para>
+    /// <para>Returns: Cache.DescendsFrom(QName, AAncestorQName)</para>
+    /// <para>Reads: QName, Cache</para>
+    /// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.DescendsFrom"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TClassRef.ResolvePath"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TClassRef.ResolvePathEx"/>
+    /// <seealso cref="DRagLint.Convert.PropCache.TClassRef.RootType"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DescendsFrom(const AAncestorQName: string): Boolean;
   end;
 
@@ -340,6 +526,13 @@ type
 /// class-typed property that would otherwise be expanded.
 /// Borrows AStore; performs no I/O of its own.
 /// Not thread-safe with respect to concurrent mutation of the store.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), DRagLint.Convert.GlyphVacuum.FactsFor (DRagLint.Convert.GlyphVacuum.pas)</para>
+/// <para>Calls: DRagLint.Convert.PropCache.TPropMemberCache.BuildTree, DRagLint.Convert.PropCache.TPropMemberCache.Create</para>
+/// <para>Returns: Cache.BuildTree(AClassQName, AOpts.Depth)</para>
+/// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.BuildTree"/>
+/// <seealso cref="DRagLint.Convert.PropCache.TPropMemberCache.Create"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function BuildPropTree(const AStore: ISymbolStore; const AClassQName: string;
   const AOpts: TPropTreeOptions): TPropTree;

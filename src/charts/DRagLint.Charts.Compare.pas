@@ -30,14 +30,25 @@ const
 
 type
   /// <summary>Where the OLD side comes from.</summary>
-  /// <remarks>csFile: a saved report, forms CSV, .dot or bundle folder (OldPath).
+  /// <remarks>
+  /// csFile: a saved report, forms CSV, .dot or bundle folder (OldPath).
   /// csRemarks: the '/// &lt;remarks&gt;' block around OldLine of the unit OldPath (S1).
   /// csAutoSnapshot: the newest snapshot under &lt;SnapshotDir&gt;\auto (S3).
   /// csOldIndex: the same question answered from the index copy OldDb (S4a).
-  /// csTwoFiles: OldPath against NewPath, nothing is rerun.</remarks>
+  /// csTwoFiles: OldPath against NewPath, nothing is rerun.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas), DRagLint.Charts.Render.SourceKind (DRagLint.Charts.Render.pas), DRagLint.CLI.CompareChooseSource (DRagLint.CLI.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCompareSource = (csFile, csRemarks, csAutoSnapshot, csOldIndex, csTwoFiles);
 
   /// <summary>What to compare and how.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.SnapshotDirFor (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.ValidateRequest (DRagLint.Charts.Compare.pas) ?, DRagLint.CLI.CompareRefuse (DRagLint.CLI.pas), DRagLint.CLI.DoCompare (DRagLint.CLI.pas) (+12 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Compare, DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCompareRequest = record
     /// <summary>Where the old side comes from.</summary>
     Source      : TCompareSource;
@@ -73,6 +84,12 @@ type
   end;
 
   /// <summary>Freshness facts of one index the new run read (C5).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.IndexFactFor (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Render.IndexText (DRagLint.Charts.Render.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.Compare, DRagLint.Charts.Render</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TIndexFact = record
     /// <summary>The index path, as the INDEX line named it.</summary>
     Db        : string;
@@ -86,8 +103,14 @@ type
   end;
 
   /// <summary>Everything a compare found.</summary>
-  /// <remarks>On exit 2 or 3 only Message, Warnings and what was loaded before the refusal
-  /// are set; Edits and Hunks are empty.</remarks>
+  /// <remarks>
+  /// On exit 2 or 3 only Message, Warnings and what was loaded before the refusal
+  /// are set; Edits and Hunks are empty.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.AddWarning (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.Refuse (DRagLint.Charts.Compare.pas) ?, DRagLint.Charts.Compare.RunCompare (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareRefuse (DRagLint.CLI.pas) (+40 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Compare, DRagLint.Charts.Render, DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCompareResult = record
     /// <summary>C6: one of the COMPARE_EXIT_* codes.</summary>
     ExitCode   : Integer;
@@ -142,7 +165,8 @@ type
 /// <param name="pRequest">What to compare; see TCompareRequest.</param>
 /// <returns>The result; ExitCode 0 or 1 carries the diff, 2 a setup refusal and 3 a stale
 /// new index, each with Message.</returns>
-/// <remarks>The command run is the old report's COMMAND, or the caller's when the old one
+/// <remarks>
+/// The command run is the old report's COMMAND, or the caller's when the old one
 /// is missing (warning WARN_NO_COMMAND) or differs (a warning naming each differing
 /// argument; the caller's wins); an auto snapshot's own COMMAND counts as the old one, the
 /// caller's command only locating the snapshot. The new run never passes AllowStale, whatever
@@ -152,7 +176,18 @@ type
 /// its format is detected by (.txt, .csv, .dot). Snapshot and update-doc happen only on
 /// exit 0 or 1; a failed snapshot is a warning, a failed update-doc is exit 2 with the rest
 /// of the result intact. Calls the producer from the calling thread; not thread-safe for
-/// two calls that update the same unit.</remarks>
+/// two calls that update the same unit.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCompare (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Compare.ApplySideEffects, DRagLint.Charts.Compare.DiffSides, DRagLint.Charts.Compare.LoadNewSide, DRagLint.Charts.Compare.LoadOldSide, DRagLint.Charts.Compare.ValidateRequest</para>
+/// <para>Returns: R</para>
+/// <seealso cref="DRagLint.Charts.Compare.ApplySideEffects"/>
+/// <seealso cref="DRagLint.Charts.Compare.DiffSides"/>
+/// <seealso cref="DRagLint.Charts.Compare.LoadNewSide"/>
+/// <seealso cref="DRagLint.Charts.Compare.LoadOldSide"/>
+/// <seealso cref="DRagLint.Charts.Compare.ValidateRequest"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunCompare(const pRequest: TCompareRequest): TCompareResult;
 
 implementation

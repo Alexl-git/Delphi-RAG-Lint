@@ -23,6 +23,12 @@ const
 
 type
   /// <summary>A review-marker-stale hint a peer run emitted.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.MarkerUnion.pas) ?, DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas) ?, DRagLint.CLI.ApplyLineMarkers.EmitHint (DRagLint.CLI.pas), DRagLint.Lint.MarkerUnion.TMarkerUnion.AddPeerAccount (DRagLint.Lint.MarkerUnion.pas), DRagLint.Lint.MarkerUnion.TMarkerUnion.Create (DRagLint.Lint.MarkerUnion.pas) ? (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.MarkerUnion</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPeerStaleHint = record
     /// <summary>The file the hint is reported on, as the peer spelled it.</summary>
     FilePath: string;
@@ -38,9 +44,15 @@ type
 
   /// <summary>What one lint-all run learned about review markers, as written by a
   /// peer and read by the primary.</summary>
-  /// <remarks>Instance is owned by the verb that ran the peers; not thread-safe, used
+  /// <remarks>
+  /// Instance is owned by the verb that ran the peers; not thread-safe, used
   /// from the main thread only. Keys come from MarkerKey, so both ends agree on the
-  /// spelling of a path.</remarks>
+  /// spelling of a path.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.CLI.ApplyLineMarkers.MarkerKey (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas) ?, DRagLint.CLI.RunMarkerPeers (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMarkerUnion = class
   strict private
     FLive: TDictionary<string, Boolean>;
@@ -50,15 +62,64 @@ type
     FPeers: Integer;
     FJudged: Integer;
     FLeftUnjudged: Integer;
+    /// <returns><!-- drag-lint:auto -->TArray&lt;TPeerStaleHint&gt; -- Observed:
+    /// FStale.ToArray.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas)</para>
+    /// <para>Reads: FStale</para>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.AddPeerAccount"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Create"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.IsLive"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.IsUnjudged"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetStaleHints: TArray<TPeerStaleHint>;
   public
+    /// <summary><!-- drag-lint:auto sum -->TMarkerUnion</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.RunMarkerPeers (DRagLint.CLI.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FLive, FUnjudged, FScanCount, FStale</para>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.AddPeerAccount"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.GetStaleHints"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.IsLive"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.IsUnjudged"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FStale, FScanCount, FUnjudged, FLive</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.AddPeerAccount"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Create"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.GetStaleHints"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.IsLive"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.IsUnjudged"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
 
     /// <summary>The normalised spelling of a source path: absolute, backslashes,
     /// lower case.</summary>
     /// <param name="AFile">The path; relative paths resolve against the process cwd.</param>
     /// <returns>The normalised path; '' for ''.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas), DRagLint.Lint.MarkerUnion.TMarkerUnion.MarkerKey (DRagLint.Lint.MarkerUnion.pas), DRagLint.Lint.MarkerUnion.TMarkerUnion.PeersScanning (DRagLint.Lint.MarkerUnion.pas), DRagLint.Lint.MarkerUnion.TMarkerUnion.WriteAccount (DRagLint.Lint.MarkerUnion.pas)</para>
+    /// <para>Calls: ExpandFileName, LowerCase, StringReplace</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.AddPeerAccount"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Create"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.GetStaleHints"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.IsLive"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function NormalPath(const AFile: string): string; static;
 
     /// <summary>The join key of a marker and the findings it reviews.</summary>
@@ -66,6 +127,19 @@ type
     /// <param name="ALine">The marker's own line.</param>
     /// <param name="ARule">The rule the marker names.</param>
     /// <returns>The key, comparable across processes that share a file tree.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers.MarkerKey (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Lint.MarkerUnion.TMarkerUnion.NormalPath, IntToStr, LowerCase</para>
+    /// <para>Returns: NormalPath(AFile) + '|' + IntToStr(ALine) + '|' + LowerCase(ARule)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.NormalPath"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.AddPeerAccount"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Create"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.GetStaleHints"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function MarkerKey(const AFile: string; ALine: Integer; const ARule: string): string; static;
 
     /// <summary>Writes one run's account for the primary to read.</summary>
@@ -75,7 +149,19 @@ type
     /// <param name="AUnjudged">Keys of markers this run has no evidence about (a line the
     /// preprocessor blanked, an undecided shared-unit site).</param>
     /// <param name="AStale">The run's review-marker-stale hints.</param>
-    /// <remarks>Ends with an END line; a file without it is read as no account at all.</remarks>
+    /// <remarks>
+    /// Ends with an END line; a file without it is read as no account at all.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Lint.MarkerUnion.TMarkerUnion.NormalPath, IntToStr</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.NormalPath"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.AddPeerAccount"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Create"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.GetStaleHints"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure WriteAccount(const APath: string; const AScanned, ALive, AUnjudged: TArray<string>;
       const AStale: TArray<TPeerStaleHint>); static;
 
@@ -84,27 +170,101 @@ type
     /// <param name="APeerDb">The peer's display name, for the hints read back.</param>
     /// <returns>False, merging nothing, when the file is missing or truncated: that peer
     /// did not take part.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.RunMarkerPeers (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Default, StrToIntDef</para>
+    /// <para>Returns: False; True</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 33 lines (full implementation)</para>
+    /// <para>Reads: FScanCount, FLive, FUnjudged, FStale   Writes: FPeers</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Create"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.GetStaleHints"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.IsLive"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.IsUnjudged"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AddPeerAccount(const APath, APeerDb: string): Boolean;
 
     /// <summary>How many merged peers scanned the file.</summary>
     /// <param name="AFile">Any spelling of the path.</param>
     /// <returns>The count; 0 when none did.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Lint.MarkerUnion.TMarkerUnion.NormalPath</para>
+    /// <para>Returns: 0</para>
+    /// <para>Reads: FScanCount</para>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.NormalPath"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.AddPeerAccount"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Create"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.GetStaleHints"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function PeersScanning(const AFile: string): Integer;
 
     /// <summary>Did any merged peer produce a finding this marker reviews?</summary>
     /// <param name="AKey">A MarkerKey.</param>
     /// <returns>True when at least one did.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas)</para>
+    /// <para>Returns: FLive.ContainsKey(AKey)</para>
+    /// <para>Reads: FLive</para>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.AddPeerAccount"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Create"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.GetStaleHints"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.IsUnjudged"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsLive(const AKey: string): Boolean;
 
     /// <summary>Did any merged peer lack the evidence to judge this marker?</summary>
     /// <param name="AKey">A MarkerKey.</param>
     /// <returns>True when at least one did; the marker then keeps the skip.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas)</para>
+    /// <para>Returns: FUnjudged.ContainsKey(AKey)</para>
+    /// <para>Reads: FUnjudged</para>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.AddPeerAccount"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Create"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.GetStaleHints"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.IsLive"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsUnjudged(const AKey: string): Boolean;
 
     /// <summary>Counts a marker the union gave a verdict.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas)</para>
+    /// <para>Writes: FJudged</para>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.AddPeerAccount"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Create"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.GetStaleHints"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.IsLive"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure NoteJudged;
 
     /// <summary>Counts a marker the union could not judge.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas)</para>
+    /// <para>Writes: FLeftUnjudged</para>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.AddPeerAccount"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Create"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.GetStaleHints"/>
+    /// <seealso cref="DRagLint.Lint.MarkerUnion.TMarkerUnion.IsLive"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure NoteLeftUnjudged;
 
     /// <summary>The merged peers' stale hints, in merge order.</summary>

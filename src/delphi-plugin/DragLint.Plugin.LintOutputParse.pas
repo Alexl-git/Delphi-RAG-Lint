@@ -52,15 +52,27 @@ uses
 /// <para>Pure and side-effect free. Callers should COUNT rejects and log the
 /// count: silently dropping a finding is its own failure mode, and a reject
 /// count that tracks the finding count means the parser is eating real output.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.LiveDiagnostics.TLintDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Calls: Copy, LastDelimiter, Pos, PosEx, Trim, TryStrToInt</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: ALineNo (out), ACol (out), ATag (out), ARest (out)</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function TryParseFindingLine(const ALine: string; out ALineNo, ACol: Integer;
   out ATag, ARest: string): Boolean;
 
 type
   /// <summary>One lint-report line, chosen for the IDE Messages pane.</summary>
-  /// <remarks>Order is the row's index AS READ: it is both the stable-sort
+  /// <remarks>
+  /// Order is the row's index AS READ: it is both the stable-sort
   /// tiebreak and the row's identity, so a row cannot be posted twice after the
-  /// list is reordered.</remarks>
+  /// list is reordered.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.LintOutputParse.pas), DragLint.Plugin.Editor.PostLintReportToMessages (DragLint.Plugin.Editor.pas), DragLint.Plugin.LintOutputParse.SelectPaneRows (DragLint.Plugin.LintOutputParse.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Editor, DragLint.Plugin.LintOutputParse</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPaneRow = record
     FileName: string ;
     Text    : string ;
@@ -89,6 +101,15 @@ type
 /// warnings, so two more would still have lost. Guaranteeing one row per rule is
 /// what makes a rule impossible to hide; depth beyond that is the report's job.</para>
 /// <para>Pure and side-effect free.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.PostLintReportToMessages (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: Copy, DragLint.Plugin.LintOutputParse.PaneRank, DragLint.Plugin.LintOutputParse.PaneRuleId, LastDelimiter, Pos, StrToIntDef</para>
+/// <para>Returns: nil; Chosen.ToArray</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 88 lines (full implementation)</para>
+/// <para>Mutates: ATotal (out), ARulesShown (out)</para>
+/// <seealso cref="DragLint.Plugin.LintOutputParse.PaneRank"/>
+/// <seealso cref="DragLint.Plugin.LintOutputParse.PaneRuleId"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function SelectPaneRows(const AReportLines: TArray<string>; ACap: Integer;
   out ATotal, ARulesShown: Integer): TArray<TPaneRow>;
@@ -96,9 +117,16 @@ function SelectPaneRows(const AReportLines: TArray<string>; ACap: Integer;
 /// <summary>Maps an engine severity word to its LSP DiagnosticSeverity.</summary>
 /// <param name="ATag">The word from between the brackets, e.g. "info".</param>
 /// <returns>1 error, 2 warning, 3 info, 4 hint. Unrecognised text yields 3.</returns>
-/// <remarks>Substring matching, because the engine has spelled these several
+/// <remarks>
+/// Substring matching, because the engine has spelled these several
 /// ways over time ("warn"/"warning"). Info is the default because it is the
-/// least alarming of the four -- an unknown tag should not paint an error.</remarks>
+/// least alarming of the four -- an unknown tag should not paint an error.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.LiveDiagnostics.TLintDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Calls: LowerCase, Pos</para>
+/// <para>Returns: 1; 2; 4; 3</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SeverityFromTag(const ATag: string): Integer;
 
 implementation

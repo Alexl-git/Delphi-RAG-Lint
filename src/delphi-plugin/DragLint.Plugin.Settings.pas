@@ -3,6 +3,12 @@ unit DragLint.Plugin.Settings;
 interface
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Plugin.DbProbe.pas), declaration (DragLint.Plugin.DbResolver.pas), DRagLint.Plugin.DbProbe.PickProjectDb (DRagLint.Plugin.DbProbe.pas), DragLint.Plugin.DbResolver.DiscoverSiblings (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.PrimaryDbForProject (DragLint.Plugin.DbResolver.pas) (+34 more)</para>
+  /// <para>Used in units: DRagLint.Plugin.DbProbe, DragLint.Plugin.DbResolver, DragLint.Plugin.Diagnose, DragLint.Plugin.Editor, DragLint.Plugin.EditViewNotifier, DragLint.Plugin.Help, DragLint.Plugin.HoverTracker, DragLint.Plugin.LiveDiagnostics, DragLint.Plugin.OptionsFrames, DragLint.Plugin.ProjectNotifier, DragLint.Plugin.SaveNotifier, DragLint.Plugin.Settings</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintSettings = record
     ExePath              : string ;
     DbPathTemplate       : string ;
@@ -55,27 +61,68 @@ type
 
 /// <summary>Applies the 2026-08-19 EnableGhostText default to an installation
 /// that already stored the old one, exactly once.</summary>
-/// <remarks>A CHANGED DEFAULT DOES NOT REACH AN EXISTING USER. DefaultSettings
+/// <remarks>
+/// A CHANGED DEFAULT DOES NOT REACH AN EXISTING USER. DefaultSettings
 /// was flipped to True on 2026-08-19, and nothing happened: LoadSettings reads
 /// the registry over the top, and
 /// HKCU\Software\drag-lint\DelphiPlugin\EnableGhostText was already 0 from
 /// the era when the feature shipped off. So the port stayed unbound and KAI
 /// kept raising `os error 10061` on every keystroke -- the exact symptom the
 /// new default was chosen to end.
-///
 /// Once, and once only: a marker value records that the migration ran, so a
 /// user who deliberately turns ghost text OFF afterwards keeps it off. Writing
 /// the default unconditionally on each load would make the setting impossible
 /// to change, which is a worse bug than the one being fixed.
-///
 /// Call from Register, BEFORE anything reads settings. Guarded -- a registry
 /// failure leaves the stored value alone rather than raising into the
-/// IDE's package load.</remarks>
+/// IDE's package load.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.Register (DragLint.Plugin.Wizard.pas)</para>
+/// <para>Catches: Exception (empty)</para>
+/// <para>Touches: registry</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure MigrateGhostTextDefault;
 
+/// <returns><!-- drag-lint:auto -->TDragLintSettings -- Observed: DefaultSettings.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AutoComplete.TAutoCompleter.OnTick (DragLint.Plugin.AutoComplete.pas), DragLint.Plugin.DbResolver.PublishLibraryDefaults (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Diagnose.ApplyDiagFix (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DescribeDiagFix (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DiagConfiguration (DragLint.Plugin.Diagnose.pas) (+41 more)</para>
+/// <para>Calls: DragLint.Plugin.HelpIndex.DLNormaliseHelpRoot, DragLint.Plugin.Settings.DefaultSettings, ExcludeTrailingPathDelimiter, ExtractFilePath, FileExists, GetModuleName, SameText</para>
+/// <para>Complexity: 41 (cyclomatic, outer body), 122 lines (full implementation)</para>
+/// <para>Touches: registry</para>
+/// <seealso cref="DragLint.Plugin.HelpIndex.DLNormaliseHelpRoot"/>
+/// <seealso cref="DragLint.Plugin.Settings.DefaultSettings"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadSettings: TDragLintSettings;
+/// <param name="ASettings"><!-- drag-lint:auto type -->const TDragLintSettings</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Diagnose.ApplyDiagFix (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.OptionsFrames.TDLPageFrame.Save (DragLint.Plugin.OptionsFrames.pas)</para>
+/// <para>Calls: DragLint.Plugin.HelpIndex.DLNormaliseHelpRoot</para>
+/// <para>Touches: registry</para>
+/// <seealso cref="DragLint.Plugin.HelpIndex.DLNormaliseHelpRoot"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure SaveSettings(const ASettings: TDragLintSettings);
+/// <returns><!-- drag-lint:auto type -->TDragLintSettings</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Diagnose.DescribeDiagFix (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Settings.LoadSettings (DragLint.Plugin.Settings.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DefaultSettings: TDragLintSettings                      ;
+/// <param name="ATemplate"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AProjDir"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AProjName"><!-- drag-lint:auto type -->const string = ''</param>
+/// <returns><!-- drag-lint:auto type -->string</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Plugin.DbProbe.PickProjectDb (DRagLint.Plugin.DbProbe.pas), DragLint.Plugin.DbResolver.DiscoverSiblings (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.FindAncestorDb (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.PrimaryDbForProject (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditServicesNotifier.EditorViewActivated (DragLint.Plugin.EditViewNotifier.pas) (+1 more)</para>
+/// <para>Calls: ExcludeTrailingPathDelimiter, StringReplace</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveDbPath(const ATemplate, AProjDir: string; const AProjName: string = ''): string;
 
 implementation

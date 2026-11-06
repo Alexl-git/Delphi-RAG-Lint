@@ -47,10 +47,23 @@ const
 /// of the type. A filler value -- named for its own ordinal, Dummy0 at 0 -- is
 /// never reported. Each finding's ScopeFile / ScopeLine is the enum type's
 /// declaration, where one dl:ok reviews every value of the type.</returns>
-/// <remarks>Reads refs file by file (one query per file) and symbols by kind;
+/// <remarks>
+/// Reads refs file by file (one query per file) and symbols by kind;
 /// never reads source text. A same-named enum pair makes typed symbols ambiguous:
 /// they bind to neither, so an implicit use through such a variable is missed
-/// and its type may be reported -- the documented false-positive shape.</remarks>
+/// and its type may be reported -- the documented false-positive shape.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Model.TLintFinding.SortByLocation, DRagLint.Lint.UnusedEnumValue.CollectUnusedEnumValue.Report, DRagLint.Lint.UnusedEnumValue.CollectUnusedEnumValue.ScanFile, DRagLint.Lint.UnusedEnumValue.DeclaredTypeName, DRagLint.Lint.UnusedEnumValue.IsOrdinalFiller, Format, LowerCase, SameText</para>
+/// <para>Returns: nil; Findings.ToArray</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 143 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Model.TLintFinding.SortByLocation"/>
+/// <seealso cref="DRagLint.Lint.UnusedEnumValue.CollectUnusedEnumValue.Report"/>
+/// <seealso cref="DRagLint.Lint.UnusedEnumValue.CollectUnusedEnumValue.ScanFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectUnusedEnumValue(const AStore: ISymbolStore): TArray<TLintFinding>;
 
 /// <summary>The bare type name a symbol's signature declares, as written:
@@ -58,8 +71,14 @@ function CollectUnusedEnumValue(const AStore: ISymbolStore): TArray<TLintFinding
 /// <param name="ASignature">A symbols.signature value (`name: type ...`, or a bare type).</param>
 /// <returns>The identifier run after the first colon with any unit / outer-type
 /// qualifier dropped; '' when there is none. Case is preserved.</returns>
-/// <remarks>Shared by unused-enum-value and enum-ordinal-persisted (DUPCODE-LEGACY, 1.41):
-/// both match a typed symbol to an enum type by this name. Pure string function.</remarks>
+/// <remarks>
+/// Shared by unused-enum-value and enum-ordinal-persisted (DUPCODE-LEGACY, 1.41):
+/// both match a typed symbol to an enum type by this name. Pure string function.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted (DRagLint.Lint.EnumOrdinalPersisted.pas), DRagLint.Lint.UnusedEnumValue.CollectUnusedEnumValue (DRagLint.Lint.UnusedEnumValue.pas)</para>
+/// <para>Calls: CharInSet, Copy, LastDelimiter, Pos, TrimLeft</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DeclaredTypeName(const ASignature: string): string;
 
 implementation

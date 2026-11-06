@@ -13,7 +13,12 @@ interface
 
 type
   /// <summary>Why a library can (lrReady) or cannot be consulted.</summary>
-  /// <remarks>lrReady = schema current, not rebuilding, completed, extractor limb equal. lrMissing = no file or the other platform's DB. lrRebuilding = rebuild_in_progress=1 (B-23). lrStaleExtractor / lrNewerThanEngine = extractor limb older / newer than this engine. lrNeverCompleted = no completed-walk stamp.</remarks>
+  /// <remarks>
+  /// lrReady = schema current, not rebuilding, completed, extractor limb equal. lrMissing = no file or the other platform's DB. lrRebuilding = rebuild_in_progress=1 (B-23). lrStaleExtractor / lrNewerThanEngine = extractor limb older / newer than this engine. lrNeverCompleted = no completed-walk stamp.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.LibraryReady.ClassifyLibraryStamps (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.LibraryReady.LibraryReadinessToken (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.LibraryReady.ProbeLibraryReadiness (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.PlanLibraryResolve (DRagLint.CLI.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLibraryReadiness = (
     lrReady,
     lrMissing,
@@ -25,12 +30,18 @@ type
     lrNeverCompleted
   );
 
-/// <summary>The outcome of evaluating the library an index run would consult (the readiness API
-/// lf-marker, lf-order and the LSP read).</summary>
-/// <remarks>Active = the run opted in (manifest libraryResolve, or an explicit --library-db) and the
-/// library is not the DB being built. State/Why come from ProbeLibraryReadiness. Refuse = the run
-/// must stop with exit 2 (--require-library and not ready). Explicit = the user named the store
-/// with --library-db: printed, never waited on, never refused.</remarks>
+  /// <summary>The outcome of evaluating the library an index run would consult (the readiness API
+  /// lf-marker, lf-order and the LSP read).</summary>
+  /// <remarks>
+  /// Active = the run opted in (manifest libraryResolve, or an explicit --library-db) and the
+  /// library is not the DB being built. State/Why come from ProbeLibraryReadiness. Refuse = the run
+  /// must stop with exit 2 (--require-library and not ready). Explicit = the user named the store
+  /// with --library-db: printed, never waited on, never refused.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas) ?, DRagLint.CLI.DoIndex (DRagLint.CLI.pas) ?, DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas) ?, DRagLint.CLI.EvaluateLibraryGate (DRagLint.CLI.pas), DRagLint.CLI.ManifestLibraryStores (DRagLint.CLI.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
 type
   TLibraryGate = record
     Active        : Boolean;
@@ -48,6 +59,13 @@ type
 /// <param name="AState">The probe result.</param>
 /// <returns>'ready', 'missing', 'unreadable', 'schema-old', 'rebuilding', 'stale-extractor',
 /// 'newer-than-engine' or 'never-completed'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ComputeInfoIndexVerdict (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.EvaluateLibraryGate (DRagLint.CLI.pas), DRagLint.CLI.PlanLibraryResolve (DRagLint.CLI.pas)</para>
+/// <para>Returns: 'ready'; 'missing'; 'unreadable'; 'schema-old'; 'rebuilding'; 'stale-extractor'</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LibraryReadinessToken(AState: TLibraryReadiness): string;
 
 /// <summary>Probes whether the library DB at ALibDb may be consulted for APlatform now.</summary>
@@ -56,8 +74,22 @@ function LibraryReadinessToken(AState: TLibraryReadiness): string;
 /// <param name="AWhy">Human reason, filled for every state including lrReady (the completed-at stamp).</param>
 /// <param name="AStampFp">The library's stored indexer_fingerprint ('' when absent).</param>
 /// <returns>lrReady only when every stamp says the library finished a walk under this engine's extractor.</returns>
-/// <remarks>Read-only (query_only handle, 5 s busy). A stale extractor counts as NOT ready (plan Q1
-/// default): binding against an old parse would record a fingerprint the next `info` calls stale.</remarks>
+/// <remarks>
+/// Read-only (query_only handle, 5 s busy). A stale extractor counts as NOT ready (plan Q1
+/// default): binding against an old parse would record a fingerprint the next `info` calls stale.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ComputeInfoIndexVerdict (DRagLint.CLI.pas), DRagLint.CLI.EvaluateLibraryGate (DRagLint.CLI.pas), DRagLint.CLI.PlanLibraryResolve (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.LibraryReady.ClassifyLibraryStamps, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, Format</para>
+/// <para>Returns: lrMissing; lrSchemaOld; lrUnreadable</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AStampFp (out), AWhy (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.LibraryReady.ClassifyLibraryStamps"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsSchemaCurrent"/>
+/// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProbeLibraryReadiness(const ALibDb, APlatform: string; out AWhy, AStampFp: string): TLibraryReadiness;
 
 /// <summary>The same decision as ProbeLibraryReadiness over already-read stamps; pure, for tests and `info`.</summary>
@@ -68,6 +100,17 @@ function ProbeLibraryReadiness(const ALibDb, APlatform: string; out AWhy, AStamp
 /// <param name="AEngineExtractor">The engine's extractor version.</param>
 /// <param name="AWhy">Human reason.</param>
 /// <returns>The readiness; schema currency is the caller's check.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.LibraryReady.ProbeLibraryReadiness (DRagLint.CLI.LibraryReady.pas)</para>
+/// <para>Calls: DRagLint.CLI.LibraryReady.FingerprintLimbValue, DRagLint.Core.Versions.CompareDottedVersions, Format, FormatDateTime, SameText, StrToInt64Def, UnixToDateTime</para>
+/// <para>Returns: lrRebuilding; lrNeverCompleted; lrMissing; lrStaleExtractor; lrNewerThanEngine; lrReady</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 36 lines (full implementation)</para>
+/// <para>Mutates: AWhy (out)</para>
+/// <seealso cref="DRagLint.CLI.LibraryReady.FingerprintLimbValue"/>
+/// <seealso cref="DRagLint.Core.Versions.CompareDottedVersions"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ClassifyLibraryStamps(const AFingerprint, AIndexedAt: string; ARebuilding: Boolean;
   const APlatform, AEngineExtractor: string; out AWhy: string): TLibraryReadiness;
 
@@ -75,6 +118,13 @@ function ClassifyLibraryStamps(const AFingerprint, AIndexedAt: string; ARebuildi
 /// <param name="AFingerprint">E.g. 'v=1.26.0-alpha;schema=23;pp=1;plat=win64'.</param>
 /// <param name="APrefix">E.g. 'plat=' (matched at a limb start).</param>
 /// <returns>The limb value, or '' when absent.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.LibraryReady.ChooseLibraryPlatform (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.LibraryReady.ClassifyLibraryStamps (DRagLint.CLI.LibraryReady.pas)</para>
+/// <para>Calls: Copy</para>
+/// <para>Returns: ''</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FingerprintLimbValue(const AFingerprint, APrefix: string): string;
 
 /// <summary>The platform a project binds its library against, project-authoritative (plan s.2.1).</summary>
@@ -84,12 +134,31 @@ function FingerprintLimbValue(const AFingerprint, APrefix: string): string;
 /// <param name="ADefaultPlatform">Manifest default platform, the last resort.</param>
 /// <param name="ASource">Out: 'arg', 'db-fingerprint', 'dproj' or 'default'.</param>
 /// <returns>A platform token such as 'Win64'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.EvaluateLibraryGate (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.LibraryReady.FingerprintLimbValue, DRagLint.CLI.LibraryReady.PlatformOfDproj, SameText</para>
+/// <para>Returns: APlatformArg; 'Win64'; 'Win32'; Plat; ADefaultPlatform</para>
+/// <para>Mutates: ASource (out)</para>
+/// <seealso cref="DRagLint.CLI.LibraryReady.FingerprintLimbValue"/>
+/// <seealso cref="DRagLint.CLI.LibraryReady.PlatformOfDproj"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ChooseLibraryPlatform(const APlatformArg, AProjectFingerprint, ADproj, ADefaultPlatform: string;
   out ASource: string): string;
 
 /// <summary>The first Win32/Win64 token of a .dproj's `Platform Condition=` element.</summary>
 /// <param name="ADproj">Path of the .dproj (a .dpr is mapped to its sibling .dproj).</param>
 /// <returns>'Win32', 'Win64' or '' (no file, no element).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.LibraryReady.ChooseLibraryPlatform (DRagLint.CLI.LibraryReady.pas)</para>
+/// <para>Calls: ChangeFileExt, Copy, ExtractFileExt, Pos, SameText, Trim</para>
+/// <para>Returns: ''</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PlatformOfDproj(const ADproj: string): string;
 
 implementation

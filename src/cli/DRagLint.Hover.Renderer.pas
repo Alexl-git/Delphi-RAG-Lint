@@ -17,22 +17,23 @@ uses
 
 /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
 /// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
+/// <param name="ADeclaredType"><!-- drag-lint:auto type -->const string = ''</param>
 /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
 /// <remarks>
+/// <para>ADeclaredType (optional): the symbol's declared type as
+/// DRagLint.Symbol.Describe.FormatDeclaredType renders it ('string' or
+/// 'string (declared in Unit.TBase)'); when non-empty it is printed as a
+/// 'Name: Type' line under the header. '' (the default) prints nothing.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.RenderHoverPlain (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.RenderHoverPlain (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Doc.Wiki.TWikiParser.StripTopics, DRagLint.Hover.Renderer.HoverHeaderName, DRagLint.Hover.Renderer.UnescapeJsonText, DRagLint.Hover.Renderer.WikiIndicatorLines, Trim</para>
-/// <para>Complexity: 11 (cyclomatic, outer body), 73 lines (full implementation)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 74 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
 /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.StripTopics"/>
 /// <seealso cref="DRagLint.Hover.Renderer.HoverHeaderName"/>
 /// <seealso cref="DRagLint.Hover.Renderer.UnescapeJsonText"/>
 /// <seealso cref="DRagLint.Hover.Renderer.WikiIndicatorLines"/>
 /// <!-- drag-lint:auto END -->
-/// <para>ADeclaredType (optional): the symbol's declared type as
-/// DRagLint.Symbol.Describe.FormatDeclaredType renders it ('string' or
-/// 'string (declared in Unit.TBase)'); when non-empty it is printed as a
-/// 'Name: Type' line under the header. '' (the default) prints nothing.</para>
 /// </remarks>
 function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc; const ADeclaredType: string = ''): string;
 
@@ -66,7 +67,7 @@ function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc; const ADe
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.RenderHoverMarkdown (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Doc.Wiki.TWikiParser.StripTopics, DRagLint.Hover.Renderer.HasAnyParamDescription, DRagLint.Hover.Renderer.HoverHeaderName, DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown, DRagLint.Hover.Renderer.UnescapeJsonText, DRagLint.Hover.Renderer.WikiIndicatorLines, Trim</para>
-/// <para>Complexity: 17 (cyclomatic, outer body), 136 lines (full implementation)</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 142 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
 /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.StripTopics"/>
 /// <seealso cref="DRagLint.Hover.Renderer.HasAnyParamDescription"/>
@@ -144,7 +145,7 @@ type
   /// lay out / color without re-parsing a flat string.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Hover.Renderer.pas), declaration (DRagLint.Query.HoverModel.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Hover.Renderer.pas), DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.Hover.Renderer.BuildHoverModel (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverJson/2 (DRagLint.Hover.Renderer.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Hover.Renderer, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -186,7 +187,7 @@ type
 /// <returns>One TParamPart per parameter name, in declaration order.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Diagnostics.FlowChecks.ModeOf (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Hover.Renderer.BuildHoverModel (DRagLint.Hover.Renderer.pas)</para>
+/// <para>Called from: DRagLint.Diagnostics.FlowChecks.ModeOf (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Hover.Renderer.BuildHoverModel (DRagLint.Hover.Renderer.pas)</para>
 /// <para>Calls: Copy, DRagLint.Hover.Renderer.LastTopLevelColon, DRagLint.Hover.Renderer.SplitTopLevel, Pos, StartsText, Trim</para>
 /// <para>Returns: Parts.ToArray</para>
 /// <para>Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)</para>

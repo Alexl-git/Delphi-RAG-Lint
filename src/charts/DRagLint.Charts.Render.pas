@@ -31,8 +31,18 @@ uses
 /// for a chart the four lists 'nodes removed (n): ...'), then 'result: ... (exit N)'.
 /// Exit 2 and 3 return the warnings and 'ERROR: ' plus the message, no diff. CRLF line
 /// ends, a final CRLF.</returns>
-/// <remarks>Nothing is printed to a stream; the CLI sends this to stdout and the ERROR
-/// line to stderr. Reads a chart's two SVG files (never writes); thread-safe.</remarks>
+/// <remarks>
+/// Nothing is printed to a stream; the CLI sends this to stdout and the ERROR
+/// line to stderr. Reads a chart's two SVG files (never writes); thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CompareEmit (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Charts.Render.AddBodyLines, DRagLint.Charts.Render.HasBody, DRagLint.Charts.Render.OutputWarnings</para>
+/// <para>Returns: string.Join(CRLF, Lines.ToArray) + CRLF</para>
+/// <seealso cref="DRagLint.Charts.Render.AddBodyLines"/>
+/// <seealso cref="DRagLint.Charts.Render.HasBody"/>
+/// <seealso cref="DRagLint.Charts.Render.OutputWarnings"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderCompareText(const pR: TCompareResult): string;
 
 /// <summary>The JSON of a compare (spec O2, schema 'compare/1').</summary>
@@ -44,8 +54,20 @@ function RenderCompareText(const pR: TCompareResult): string;
 /// graph{nodes_added, nodes_removed, edges_added, edges_removed}, snapshot, updated_file,
 /// message}. Every key is always present; a line carries 'old' for '=' and '-', 'new' for
 /// '=' and '+'. warnings holds the same withheld lines as the text output.</returns>
-/// <remarks>Built with TJSONObject, written with ToJSON. The CLI prints it after stderr is
-/// flushed. Reads a chart's two SVG files (never writes); thread-safe.</remarks>
+/// <remarks>
+/// Built with TJSONObject, written with ToJSON. The CLI prints it after stderr is
+/// flushed. Reads a chart's two SVG files (never writes); thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CompareEmit (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Charts.Adapters.FormatName, DRagLint.Charts.Render.CountsObject, DRagLint.Charts.Render.GraphObject, DRagLint.Charts.Render.HunksArray, DRagLint.Charts.Render.NewObject, DRagLint.Charts.Render.OldObject, DRagLint.Charts.Render.OutputWarnings, DRagLint.Charts.Render.StringArray</para>
+/// <para>Returns: Root.ToJSON</para>
+/// <seealso cref="DRagLint.Charts.Adapters.FormatName"/>
+/// <seealso cref="DRagLint.Charts.Render.CountsObject"/>
+/// <seealso cref="DRagLint.Charts.Render.GraphObject"/>
+/// <seealso cref="DRagLint.Charts.Render.HunksArray"/>
+/// <seealso cref="DRagLint.Charts.Render.NewObject"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderCompareJson(const pR: TCompareResult): string;
 
 /// <summary>The side-by-side HTML page of a compare (spec O3, D7).</summary>
@@ -61,10 +83,20 @@ function RenderCompareJson(const pR: TCompareResult): string;
 /// navigate, restyle the page or leave SVG parsing (R26); otherwise it is withheld, not
 /// patched: its section holds only 'chart image withheld: the SVG contains content that is
 /// not allowed (reason)', and the lists of changes still follow.</returns>
-/// <remarks>Only READS pR.OldSvgPath / pR.NewSvgPath: for a rerun compare OldSvgPath may be
+/// <remarks>
+/// Only READS pR.OldSvgPath / pR.NewSvgPath: for a rerun compare OldSvgPath may be
 /// a temp copy that the caller (the CLI) deletes afterwards, so it is never deleted here.
 /// An SVG that cannot be read is left out of the page, not an error. Pure apart from
-/// reading those two files.</remarks>
+/// reading those two files.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CompareEmit (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Charts.Render.CompareBodyHtml, DRagLint.Charts.Render.FillTemplate, DRagLint.Charts.Render.LabelOf, DRagLint.Charts.Render.WarningsHtml</para>
+/// <seealso cref="DRagLint.Charts.Render.CompareBodyHtml"/>
+/// <seealso cref="DRagLint.Charts.Render.FillTemplate"/>
+/// <seealso cref="DRagLint.Charts.Render.LabelOf"/>
+/// <seealso cref="DRagLint.Charts.Render.WarningsHtml"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderCompareHtml(const pR: TCompareResult): string;
 
 /// <summary>One report, CSV or chart as the same page the compare view uses (spec F4).</summary>
@@ -79,13 +111,31 @@ function RenderCompareHtml(const pR: TCompareResult): string;
 /// cfFormsCsv: a '&lt;table class="csv"&gt;' (first row is the header); cfGraph: the SVG in
 /// '&lt;section class="chart"&gt;' (not marked) plus the node and edge rows. Same
 /// self-contained, light/dark template as RenderCompareHtml.</returns>
-/// <remarks>Pure apart from reading pSvgPath.</remarks>
+/// <remarks>
+/// Pure apart from reading pSvgPath.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CompareShowPage (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Charts.Render.ChartHtml, DRagLint.Charts.Render.CsvTableHtml, DRagLint.Charts.Render.FillTemplate, DRagLint.Charts.Render.GraphRowsHtml, DRagLint.Charts.Render.HtmlEscape, DRagLint.Charts.Render.ReportPreHtml, DRagLint.Charts.Render.SvgMarkup, DRagLint.Charts.Render.WithheldChartHtml</para>
+/// <para>Returns: FillTemplate(pTitle, Head, '', '&lt;h1&gt;' + HtmlEscape(pTitle) + '&lt;/h1&gt;' + CRLF + Body)</para>
+/// <seealso cref="DRagLint.Charts.Render.ChartHtml"/>
+/// <seealso cref="DRagLint.Charts.Render.CsvTableHtml"/>
+/// <seealso cref="DRagLint.Charts.Render.FillTemplate"/>
+/// <seealso cref="DRagLint.Charts.Render.GraphRowsHtml"/>
+/// <seealso cref="DRagLint.Charts.Render.HtmlEscape"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderReportHtml(const pTitle, pText: string; pFormat: TChartsFormat; const pSvgPath: string): string;
 
 /// <summary>Opens a file in the default browser.</summary>
 /// <param name="pPath">The HTML file to open.</param>
-/// <remarks>ShellExecute with the verb 'open'; returns at once, the result is not checked
-/// (a missing association shows Windows' own dialog). Never called by a test.</remarks>
+/// <remarks>
+/// ShellExecute with the verb 'open'; returns at once, the result is not checked
+/// (a missing association shows Windows' own dialog). Never called by a test.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas), DRagLint.CLI.CompareOpenOrReport (DRagLint.CLI.pas)</para>
+/// <para>Calls: PChar, ShellExecute</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure OpenInBrowser(const pPath: string);
 
 implementation

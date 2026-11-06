@@ -25,9 +25,17 @@ uses
 /// <param name="AKind">LSP CompletionItemKind number.</param>
 /// <returns>'procedure', 'function', 'property', ... or '' for a kind with no
 /// natural Delphi word.</returns>
-/// <remarks>This used to return a single letter -- 'p' for a property, 'f' for
+/// <remarks>
+/// This used to return a single letter -- 'p' for a property, 'f' for
 /// a function -- which is a legend the reader must have memorised. The IDE's
-/// own completion list never asks that.</remarks>
+/// own completion list never asks that.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.CompletionForm.KindWord (DragLint.Plugin.CompletionForm.pas)</para>
+/// <para>Returns: 'method'; 'function'; 'constructor'; 'field'; 'variable'; 'class'</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 18 lines (full implementation)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CompletionKindWord(AKind: Integer): string;
 
 /// <summary>Splits a stored signature into its parameter list and return type.</summary>
@@ -38,10 +46,18 @@ function CompletionKindWord(AKind: Integer): string;
 /// empty when the symbol takes none.</param>
 /// <param name="AReturn">Receives 'string'; for a non-routine this is the
 /// declared type, which is the whole signature.</param>
-/// <remarks>Walks to the MATCHING close parenthesis rather than the first one:
+/// <remarks>
+/// Walks to the MATCHING close parenthesis rather than the first one:
 /// a parameter's own type can carry parentheses, and cutting at the first
 /// would split a parameter in half. An unbalanced signature is shown verbatim
-/// rather than guessed at.</remarks>
+/// rather than guessed at.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.CompletionForm.SplitSignature (DragLint.Plugin.CompletionForm.pas)</para>
+/// <para>Calls: Copy, Trim</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 46 lines (full implementation)</para>
+/// <para>Mutates: AParams (out), AReturn (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure SplitCompletionSignature(const ASignature: string; out AParams, AReturn: string);
 
 /// <summary>What separates a row's name from its type slot: ': ', or a plain
@@ -49,10 +65,17 @@ procedure SplitCompletionSignature(const ASignature: string; out AParams, ARetur
 /// <param name="AReturn">The return-type half from
 /// <see cref="SplitCompletionSignature"/>.</param>
 /// <returns>': ' normally; ' ' when AReturn already opens with '='.</returns>
-/// <remarks>Added with const signatures (2026-08-19). A const whose type could
+/// <remarks>
+/// Added with const signatures (2026-08-19). A const whose type could
 /// not be inferred carries only its value -- '= MaxItems * 2' -- and the fixed
 /// ': ' rendered that as `const Derived: = MaxItems * 2`. The colon belongs to
-/// a type, so it is dropped exactly when there is no type to introduce.</remarks>
+/// a type, so it is dropped exactly when there is no type to introduce.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ShowAt (DragLint.Plugin.CompletionForm.pas)</para>
+/// <para>Returns: ' '; ': '</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CompletionTypeSeparator(const AReturn: string): string;
 
 implementation

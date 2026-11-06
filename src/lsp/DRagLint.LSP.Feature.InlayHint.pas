@@ -21,15 +21,39 @@ uses
 type
   /// <summary>Answers `textDocument/inlayHint` with parameter-name hints and
   /// advertises inlayHintProvider = true.</summary>
-  /// <remarks>Stateless; registered from this unit's initialization. Lines are
-  /// 0-based, columns UTF-16 code units. No inlayHint/resolve.</remarks>
+  /// <remarks>
+  /// Stateless; registered from this unit's initialization. Lines are
+  /// 0-based, columns UTF-16 code units. No inlayHint/resolve.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Feature.InlayHint.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.InlayHint</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspInlayHintFeature = class(TLspFeature)
   public
     /// <summary>The one method: `textDocument/inlayHint`.</summary>
     /// <returns>['textDocument/inlayHint'].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: [INLAY_METHOD]</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Methods</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Handle"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Methods: TArray<string>; override;
     /// <summary>Adds `inlayHintProvider: true`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.AddCapabilities</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Handle"/>
+    /// <seealso cref="DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
     /// <summary>Replies an InlayHint[]: for each call whose callee resolves by
     /// exact name to exactly one routine whose parameter count (read from
@@ -43,6 +67,19 @@ type
     /// <param name="AId">The request id; a notification gets no reply.</param>
     /// <param name="AParams">{textDocument:{uri}, range}; a missing uri, an
     /// unknown/unreadable file or a missing range answers [].</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Copy, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.StoresForFile, DRagLint.LSP.Feature.InlayHint.GetPos, DRagLint.LSP.Feature.InlayHint.RequestPath, DRagLint.LSP.Feature.InlayHint.THintWalker.Create, DRagLint.LSP.Feature.InlayHint.THintWalker.SetRange, DRagLint.LSP.Feature.InlayHint.THintWalker.WalkSource</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+    /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Readable"/>
+    /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Reply"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.StoresForFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 
@@ -52,6 +89,14 @@ type
 /// <param name="AHasList">Receives True when the signature carries a
 /// parenthesised parameter list (an implementation that omits it is False).</param>
 /// <returns>The names in declaration order; empty for '()' or no list.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Feature.InlayHint.THintWalker.Lookup (DRagLint.LSP.Feature.InlayHint.pas)</para>
+/// <para>Calls: CharInSet, Copy, Pos, SameText, Trim</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 53 lines (full implementation)</para>
+/// <para>Mutates: AHasList (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParamNamesOfSignature(const ASignature: string; out AHasList: Boolean): TArray<string>;
 
 implementation

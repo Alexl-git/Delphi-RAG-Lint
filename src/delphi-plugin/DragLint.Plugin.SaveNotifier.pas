@@ -35,6 +35,12 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.SaveNotifier.RegisterSaveNotifierForModule (DragLint.Plugin.SaveNotifier.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.SaveNotifier</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintSaveNotifier = class(TInterfacedObject, IOTANotifier, IOTAModuleNotifier)
     private
       FModule       : IOTAModule;
@@ -42,29 +48,113 @@ type
       { PLAN-lint-tree P4, tier 1. Returns False when no .dproj could be
         resolved, which is the caller's cue to fall back to the per-file job
         rather than silently leave the index stale. }
+      /// <summary><!-- drag-lint:auto sum -->PLAN-lint-tree P4, tier 1. Returns False
+      /// when no .dproj could be resolved, which is the caller's cue to fall back to the
+      /// per-file job rather than silently leave the index stale.</summary>
+      /// <param name="AExePath"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: QueueReindexJob(AExePath,
+      /// '').</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.AfterSave (DragLint.Plugin.SaveNotifier.pas)</para>
+      /// <para>Calls: DragLint.Plugin.SaveNotifier.QueueReindexJob</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.QueueReindexJob"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.AfterSave"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.BeforeSave"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.CheckOverwrite"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function  EnqueueProjectReindex(const AExePath: string): Boolean; static;
     public
+      /// <param name="AModule"><!-- drag-lint:auto type -->const IOTAModule</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.SaveNotifier.RegisterSaveNotifierForModule (DragLint.Plugin.SaveNotifier.pas)</para>
+      /// <para>constructor</para>
+      /// <para>Reads: FNotifierIndex   Writes: FModule, FNotifierIndex</para>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.AfterSave"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.BeforeSave"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.CheckOverwrite"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.Destroyed"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.EnqueueProjectReindex"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(const AModule: IOTAModule);
       { IOTANotifier }
+      /// <summary><!-- drag-lint:auto sum -->IOTANotifier</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.DbResolver.ManifestDbForFile, DragLint.Plugin.ExeResolver.EngineExeOrEmpty, DragLint.Plugin.IndexJob.ChooseSaveReindex, DragLint.Plugin.SaveNotifier.IsDelphiSourceExt, DragLint.Plugin.SaveNotifier.QueueFileReindexJob, DragLint.Plugin.SaveNotifier.ShouldDebounceReindex, DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.EnqueueProjectReindex, DragLint.Plugin.Settings.LoadSettings, DragLint.Plugin.Telemetry.DLT, ExtractFileExt (+6 more)</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 75 lines (full implementation)</para>
+      /// <para>Reads: FModule</para>
+      /// <para>Catches: Exception (empty)</para>
+      /// <seealso cref="DragLint.Plugin.DbResolver.ManifestDbForFile"/>
+      /// <seealso cref="DragLint.Plugin.ExeResolver.EngineExeOrEmpty"/>
+      /// <seealso cref="DragLint.Plugin.IndexJob.ChooseSaveReindex"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.IsDelphiSourceExt"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.QueueFileReindexJob"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure AfterSave;
       procedure BeforeSave;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FModule   Writes: FModule, FNotifierIndex</para>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.AfterSave"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.BeforeSave"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.CheckOverwrite"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.Create"/>
+      /// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.EnqueueProjectReindex"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Destroyed;
       procedure Modified;
       { IOTAModuleNotifier }
+      /// <summary><!-- drag-lint:auto sum -->IOTAModuleNotifier</summary>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True.</returns>
       function CheckOverwrite: Boolean;
       procedure ModuleRenamed(const NewName: string);
   end;
 
+/// <param name="AModule"><!-- drag-lint:auto type -->const IOTAModule</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.FileNotification (DragLint.Plugin.ProjectNotifier.pas)</para>
+/// <para>Calls: DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.Create</para>
+/// <seealso cref="DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterSaveNotifierForModule(const AModule: IOTAModule);
 
 { v0.40: explicit teardown of every notifier we registered, so the
   IDE's module notifier lists don't end up holding interface pointers
   whose vtable lives in our BPL after the package unloads. Without this,
   any later access -- e.g., File > Exit > AllowSave -- AVs in @IntfCopy. }
+/// <summary><!-- drag-lint:auto sum -->v0.40: explicit teardown of every notifier we
+/// registered, so the IDE's module notifier lists don't end up holding interface pointers
+/// whose vtable lives in our BPL after the package unloads. Without this, any later
+/// access -- e.g., File &gt; Exit &gt; AllowSave -- AVs in @IntfCopy.</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas), initialization/finalization (DragLint.Plugin.SaveNotifier.pas)</para>
+/// <para>Catches: Exception (empty)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UnregisterAllSaveNotifiers;
 
 { v0.40: detach our notifier from a single module that the IDE is closing
   (called from ProjectNotifier on ofnFileClosing). Idempotent. }
+/// <summary><!-- drag-lint:auto sum -->v0.40: detach our notifier from a single module
+/// that the IDE is closing (called from ProjectNotifier on ofnFileClosing). Idempotent.</summary>
+/// <param name="AModule"><!-- drag-lint:auto type -->const IOTAModule</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.FileNotification (DragLint.Plugin.ProjectNotifier.pas)</para>
+/// <para>Catches: Exception (empty)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UnregisterSaveNotifierForModule(const AModule: IOTAModule);
 
 /// <summary>Queues an incremental reindex of the ACTIVE project and, when it
@@ -76,11 +166,21 @@ procedure UnregisterSaveNotifierForModule(const AModule: IOTAModule);
 /// project or the manifest names no UNIQUE owner DB for it (logged to the
 /// telemetry channel) -- a re-lint is still requested, so the panel at least
 /// reflects the buffer.</returns>
-/// <remarks>MAIN THREAD ONLY. Uses exactly the project file and DB the save
+/// <remarks>
+/// MAIN THREAD ONLY. Uses exactly the project file and DB the save
 /// path uses (GetActiveProjectFilePath + ManifestDbForProject): pairing a
 /// project with another project's DB would overwrite that DB with a foreign
 /// closure, which GLastProjectDb did on 2026-10-16.
-/// Coalesces with a pending save-triggered reindex of the same DB.</remarks>
+/// Coalesces with a pending save-triggered reindex of the same DB.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueCycleFixApply (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.StructureForm.EnqueueFixJob (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.StructureForm.EnqueueVerbJob (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.StructureForm.TDragLintStructureForm.RescanUnitClick (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.ExeResolver.EngineExeOrEmpty, DragLint.Plugin.LiveDiagnostics.RequestRelint, DragLint.Plugin.SaveNotifier.QueueReindexJob</para>
+/// <para>Returns: QueueReindexJob(EngineExeOrEmpty, ATitle)</para>
+/// <seealso cref="DragLint.Plugin.ExeResolver.EngineExeOrEmpty"/>
+/// <seealso cref="DragLint.Plugin.LiveDiagnostics.RequestRelint"/>
+/// <seealso cref="DragLint.Plugin.SaveNotifier.QueueReindexJob"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EnqueueReindexThenRelint(const ATitle: string): Boolean;
 
 { GLastProjectDb (the last .dproj OPENED) was REMOVED 2026-10-16: every write

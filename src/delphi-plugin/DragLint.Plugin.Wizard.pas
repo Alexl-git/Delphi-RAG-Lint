@@ -9,20 +9,62 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.Wizard.Register (DragLint.Plugin.Wizard.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Wizard</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintWizard = class(TInterfacedObject, IOTAWizard)
     public
       { IOTANotifier }
       procedure AfterSave;
       procedure BeforeSave;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.About.UnregisterDragLintAbout, DragLint.Plugin.DockForm.UnregisterDragLintDock, DragLint.Plugin.EditViewNotifier.UnregisterDragLintEditViewNotifier, DragLint.Plugin.FanOut.ShutdownFanOut, DragLint.Plugin.OpenSourceServer.StopOpenSourceServer, DragLint.Plugin.Options.UnregisterDragLintOptions, DragLint.Plugin.ProjectMenu.UnregisterProjectMenu, DragLint.Plugin.ProjectNotifier.UnregisterProjectNotifier, DragLint.Plugin.SaveNotifier.UnregisterAllSaveNotifiers</para>
+      /// <para>Catches: Exception (empty)</para>
+      /// <seealso cref="DragLint.Plugin.About.UnregisterDragLintAbout"/>
+      /// <seealso cref="DragLint.Plugin.DockForm.UnregisterDragLintDock"/>
+      /// <seealso cref="DragLint.Plugin.EditViewNotifier.UnregisterDragLintEditViewNotifier"/>
+      /// <seealso cref="DragLint.Plugin.FanOut.ShutdownFanOut"/>
+      /// <seealso cref="DragLint.Plugin.OpenSourceServer.StopOpenSourceServer"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Destroyed;
       procedure Modified;
       { IOTAWizard }
+      /// <summary><!-- drag-lint:auto sum -->IOTAWizard</summary>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: 'drag-lint.wizard.v021'.</returns>
       function GetIDString: string;
+      /// <returns><!-- drag-lint:auto -->string -- Observed: 'drag-lint'.</returns>
       function GetName    : string;
+      /// <returns><!-- drag-lint:auto -->TWizardState -- Observed: [wsEnabled].</returns>
       function GetState: TWizardState;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.Editor.PluginBuildTag, ShowMessage</para>
+      /// <seealso cref="DragLint.Plugin.Editor.PluginBuildTag"/>
+      /// <seealso cref="DragLint.Plugin.Wizard.TDragLintWizard.AfterSave"/>
+      /// <seealso cref="DragLint.Plugin.Wizard.TDragLintWizard.BeforeSave"/>
+      /// <seealso cref="DragLint.Plugin.Wizard.TDragLintWizard.Destroyed"/>
+      /// <seealso cref="DragLint.Plugin.Wizard.TDragLintWizard.GetIDString"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Execute;
   end;
 
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DragLint.Plugin.About.RegisterDragLintAbout, DragLint.Plugin.DbResolver.PublishLibraryDefaults, DragLint.Plugin.DockForm.RegisterDragLintDockable, DragLint.Plugin.Editor.RegisterDragLintMenu, DragLint.Plugin.GraphWindow.RegisterDragLintGraphDockable, DragLint.Plugin.OpenSourceServer.StartOpenSourceServer, DragLint.Plugin.Options.RegisterDragLintOptions, DragLint.Plugin.ProjectMenu.RegisterProjectMenu, DragLint.Plugin.Settings.MigrateGhostTextDefault, RegisterPackageWizard</para>
+/// <para>Catches: Exception (empty)</para>
+/// <seealso cref="DragLint.Plugin.About.RegisterDragLintAbout"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.PublishLibraryDefaults"/>
+/// <seealso cref="DragLint.Plugin.DockForm.RegisterDragLintDockable"/>
+/// <seealso cref="DragLint.Plugin.Editor.RegisterDragLintMenu"/>
+/// <seealso cref="DragLint.Plugin.GraphWindow.RegisterDragLintGraphDockable"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure Register;
 
 implementation

@@ -19,6 +19,12 @@ uses
 type
   /// <summary>One ide-menu surface of the registry, or (dxBar spec decision 6)
   /// an app-menu surface of an application's registry.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuRegistry.AddSurface (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuRegistry.Create (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuRegistry.HasAppMenus (DRagLint.MenuDrift.pas)</para>
+  /// <para>Used in units: DRagLint.MenuDrift</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRegistrySurface = record
     /// <summary>Id of the entry that owns the surface.</summary>
     EntryId: string;
@@ -32,22 +38,77 @@ type
 
   /// <summary>The registry side of the comparison: ide-menu surfaces and the
   /// exempted captions.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.MenuDrift.pas) ?, DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas), DRagLint.MenuDrift.AddEntrySurfaces (DRagLint.MenuDrift.pas) ?, DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.MenuDrift</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMenuRegistry = class
   private
     FSurfaces: TList<TRegistrySurface>;
     FExempt  : TList<string>;
   public
+    /// <summary><!-- drag-lint:auto sum -->---- TMenuRegistry ----</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FSurfaces, FExempt</para>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.AddSurface"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.Destroy"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.HasAppMenus"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.LoadFamilies"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.LoadFromDir"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FExempt, FSurfaces</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.AddSurface"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.Create"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.HasAppMenus"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.LoadFamilies"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.LoadFromDir"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Reads pDir\entries\*.json (surfaces of type ide-menu, and app-menu with its form), the family
     /// children of pDir\generated\manifest.json and pDir\exemptions.json (the keys of "captions").</summary>
     /// <param name="pDir">A features directory (the repo's features\, or a fixture's registry\).</param>
     /// <exception cref="EMenuDriftSetup">pDir\entries is missing or an entry is not valid JSON.</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.MenuDrift.AddEntrySurfaces, DRagLint.MenuDrift.TMenuRegistry.LoadFamilies, TJSONObject</para>
+    /// <para>Reads: FExempt</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.MenuDrift.AddEntrySurfaces"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.LoadFamilies"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.AddSurface"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.Create"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadFromDir(const pDir: string);
     /// <summary>Adds one surface (tests, or a loader).</summary>
     /// <param name="pEntryId">Owning entry id.</param>
     /// <param name="pPath">The path as written.</param>
     /// <param name="pForm">Form class of an app-menu surface; '' for ide-menu.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuDrift.AddEntrySurfaces (DRagLint.MenuDrift.pas)</para>
+    /// <para>Calls: DRagLint.MenuDrift.MenuFormPathKey</para>
+    /// <para>Reads: FSurfaces</para>
+    /// <seealso cref="DRagLint.MenuDrift.MenuFormPathKey"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.Create"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.Destroy"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.HasAppMenus"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.LoadFamilies"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddSurface(const pEntryId, pPath: string; const pForm: string = '');
     /// <summary>True when any surface is an app-menu one (has a form): menu-drift
     /// then compares the .dfm menus too (implies --with-dfm).</summary>
@@ -69,6 +130,18 @@ type
     /// manifest.json ("families": { name: [ child entries ] }) -- e.g. the
     /// chart-questions children, one per Reports item. A missing file adds nothing.</summary>
     /// <param name="pManifest">Path of features\generated\manifest.json.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuDrift.TMenuRegistry.LoadFromDir (DRagLint.MenuDrift.pas)</para>
+    /// <para>Calls: DRagLint.MenuDrift.AddEntrySurfaces, TJSONArray, TJSONObject</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.MenuDrift.AddEntrySurfaces"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.AddSurface"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.Create"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.Destroy"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuRegistry.HasAppMenus"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadFamilies(const pManifest: string);
     /// <summary>The ide-menu surfaces, in load order.</summary>
     property Surfaces: TList<TRegistrySurface> read FSurfaces;
@@ -77,6 +150,12 @@ type
   end;
 
   /// <summary>A registered path the live tree does not have (spec 7).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuDriftReport.Create (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuDriftReport.ToJson (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuDriftReport.ToText (DRagLint.MenuDrift.pas)</para>
+  /// <para>Used in units: DRagLint.MenuDrift</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDriftMissing = record
     Path : string;
     Entry: string;
@@ -85,6 +164,12 @@ type
   end;
 
   /// <summary>A registered path whose leaf caption lives under another parent.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuDriftReport.Create (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuDriftReport.ToJson (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuDriftReport.ToText (DRagLint.MenuDrift.pas)</para>
+  /// <para>Used in units: DRagLint.MenuDrift</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDriftMoved = record
     Path : string;
     Entry: string;
@@ -92,6 +177,12 @@ type
   end;
 
   /// <summary>A live leaf no registry surface covers.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuDriftReport.Create (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuDriftReport.ToJson (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuDriftReport.ToText (DRagLint.MenuDrift.pas)</para>
+  /// <para>Used in units: DRagLint.MenuDrift</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDriftUnregistered = record
     Path    : string;
     Handler : string;
@@ -100,6 +191,12 @@ type
   end;
 
   /// <summary>The drift report (spec 7/8). Owns its lists.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.MenuDrift.pas) ?, DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas) ?, DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.MenuDrift</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMenuDriftReport = class
   private
     FMissing     : TList<TDriftMissing>;
@@ -107,7 +204,31 @@ type
     FUnregistered: TList<TDriftUnregistered>;
     FNotes       : TList<string>;
   public
+    /// <summary><!-- drag-lint:auto sum -->---- TMenuDriftReport ----</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FMissing, FMoved, FUnregistered, FNotes</para>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Destroy"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.HasDrift"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.SummaryLine"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.ToJson"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.ToText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FNotes, FUnregistered, FMoved, FMissing</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Create"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.HasDrift"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.SummaryLine"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.ToJson"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.ToText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     property Missing: TList<TDriftMissing> read FMissing;
     property Moved: TList<TDriftMoved> read FMoved;
@@ -130,6 +251,18 @@ type
     function HasDrift: Boolean;
     /// <summary>'menu-drift: missing=N unregistered=N moved=N notes=N'.</summary>
     /// <returns>The one-line drift summary.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuDrift.TMenuDriftReport.ToText (DRagLint.MenuDrift.pas)</para>
+    /// <para>Calls: Format</para>
+    /// <para>Reads: FMissing, FUnregistered, FMoved, FNotes</para>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Create"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.Destroy"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.HasDrift"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.ToJson"/>
+    /// <seealso cref="DRagLint.MenuDrift.TMenuDriftReport.ToText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SummaryLine: string;
     /// <summary>MISSING / MOVED / UNREGISTERED / NOTE lines, then the summary line.</summary>
     /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
@@ -163,15 +296,35 @@ type
   end;
 
   /// <summary>Raised when the registry cannot be read (the CLI maps it to exit 2).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas) ?, DRagLint.MenuDrift.TMenuRegistry.LoadFromDir (DRagLint.MenuDrift.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.MenuDrift</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EMenuDriftSetup = class(Exception);
 
 /// <summary>Classifies the drift between a live tree and a registry (spec 7).</summary>
 /// <param name="pTree">The live tree; only non-external roots are compared.</param>
 /// <param name="pRegistry">The registry side.</param>
 /// <returns>A new report; the caller owns it.</returns>
-/// <remarks>A registered path under a parent that holds a dynamic leaf is
+/// <remarks>
+/// A registered path under a parent that holds a dynamic leaf is
 /// never reported missing (the dynamic item may be it; its note says so).
-/// Order inside a submenu is not compared.</remarks>
+/// Order inside a submenu is not compared.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.MenuDrift.CaptionMatch, DRagLint.MenuDrift.CollectContainers, DRagLint.MenuDrift.CollectStructural, DRagLint.MenuDrift.CommonPrefix, DRagLint.MenuDrift.JsonText, DRagLint.MenuDrift.LeafKey, DRagLint.MenuDrift.MenuFormPathKey, DRagLint.MenuDrift.ParentKey, DRagLint.MenuDrift.TMenuDriftReport.Create, DRagLint.MenuTree.MenuCaptionKey (+7 more)</para>
+/// <para>Returns: TMenuDriftReport.Create</para>
+/// <para>Complexity: 25 (cyclomatic, outer body), 133 lines (full implementation)</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.MenuDrift.CaptionMatch"/>
+/// <seealso cref="DRagLint.MenuDrift.CollectContainers"/>
+/// <seealso cref="DRagLint.MenuDrift.CollectStructural"/>
+/// <seealso cref="DRagLint.MenuDrift.CommonPrefix"/>
+/// <seealso cref="DRagLint.MenuDrift.JsonText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ComputeMenuDrift(pTree: TMenuTree; pRegistry: TMenuRegistry): TMenuDriftReport;
 
 /// <summary>The drift key of a path on a form: MenuPathKey(pPath), prefixed
@@ -180,6 +333,14 @@ function ComputeMenuDrift(pTree: TMenuTree; pRegistry: TMenuRegistry): TMenuDrif
 /// <param name="pForm">Form class ('' for none).</param>
 /// <param name="pPath">A display path.</param>
 /// <returns>The key; an app-menu key never equals an ide-menu key.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.MenuDrift.CollectContainers (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.ComputeMenuDrift (DRagLint.MenuDrift.pas), DRagLint.MenuDrift.TMenuRegistry.AddSurface (DRagLint.MenuDrift.pas)</para>
+/// <para>Calls: DRagLint.MenuTree.MenuPathKey, LowerCase</para>
+/// <para>Returns: if pForm = '' then MenuPathKey(pPath)</para>
+/// <seealso cref="DRagLint.MenuTree.MenuPathKey"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MenuFormPathKey(const pForm, pPath: string): string;
 
 implementation

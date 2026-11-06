@@ -19,6 +19,16 @@ uses
 /// <param name="AProjPath">Full path to the .dproj (or '').</param>
 /// <param name="ASettings">Resolver settings; DbPathTemplate drives the template file.</param>
 /// <returns>Chosen existing non-empty DB path, or '' when no candidate qualifies.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.ResolveActiveIndexDbs (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.ResolverDiagnostic (DragLint.Plugin.DbResolver.pas)</para>
+/// <para>Calls: ChangeFileExt, DRagLint.Plugin.DbProbe.ExistsNonEmpty, DragLint.Plugin.Settings.ResolveDbPath, ExtractFileName, ExtractFilePath</para>
+/// <para>Returns: ''</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Plugin.DbProbe.ExistsNonEmpty"/>
+/// <seealso cref="DragLint.Plugin.Settings.ResolveDbPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PickProjectDb(const AProjPath: string; const ASettings: TDragLintSettings): string;
 
 implementation

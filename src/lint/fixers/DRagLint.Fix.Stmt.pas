@@ -31,10 +31,23 @@ uses
 /// <param name="ANode">The expression node (an if condition, an assignment rhs).</param>
 /// <returns>True when every node of the expression is on the allow-list; False
 /// for a null node.</returns>
-/// <remarks>A bare identifier (or a field path's last name) can be a
+/// <remarks>
+/// A bare identifier (or a field path's last name) can be a
 /// parameterless FUNCTION in Delphi; the AST cannot tell, so it counts as
 /// side-effect free -- the same trade the autofix plan states for
-/// identical-then-else. Shared with G9's block-shaped identical-then-else.</remarks>
+/// identical-then-else. Shared with G9's block-shaped identical-then-else.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Fix.Stmt.DeadAssignment (DRagLint.Fix.Stmt.pas), DRagLint.Fix.Stmt.FixCaseFewBranches (DRagLint.Fix.Stmt.pas), DRagLint.Fix.Stmt.FixIdenticalAssignmentBranches (DRagLint.Fix.Stmt.pas), DRagLint.Fix.Stmt.IsSideEffectFree (DRagLint.Fix.Stmt.pas)</para>
+/// <para>Calls: DRagLint.Fix.Stmt.IsKeywordType, DRagLint.Fix.Stmt.IsSideEffectFree, MatchStr, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType</para>
+/// <para>Returns: True</para>
+/// <para>Recursive</para>
+/// <seealso cref="DRagLint.Fix.Stmt.IsKeywordType"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsSideEffectFree(const ANode: TTSNode): Boolean;
 
 /// <summary>The identical-then-else fix for the SINGLE-STATEMENT shape the
@@ -45,10 +58,23 @@ function IsSideEffectFree(const ANode: TTSNode): Boolean;
 /// <returns>One edit, or none when the condition may have a side effect (see
 /// IsSideEffectFree), the if is not a statement-list member spanning its own
 /// lines, or the touched lines are not plain 7-bit text.</returns>
-/// <remarks>NOT registered here: lane G9 owns the one registered
+/// <remarks>
+/// NOT registered here: lane G9 owns the one registered
 /// identical-then-else fixer (ParityExtChecks, block and call shapes) and
 /// delegates the shape it declines to this function, so exactly one fixer per
-/// rule id is registered.</remarks>
+/// rule id is registered.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Diagnostics.ParityExtChecks.FixIdenticalBranches (DRagLint.Diagnostics.ParityExtChecks.pas)</para>
+/// <para>Calls: DRagLint.Fix.Stmt.AncestorAt, DRagLint.Fix.Stmt.BlockInner, DRagLint.Fix.Stmt.EnsureSemi, DRagLint.Fix.Stmt.ERow, DRagLint.Fix.Stmt.IsList, DRagLint.Fix.Stmt.IsSideEffectFree, DRagLint.Fix.Stmt.ListMember, DRagLint.Fix.Stmt.NodeLines, DRagLint.Fix.Stmt.OpenFx, DRagLint.Fix.Stmt.ReplaceRows (+17 more)</para>
+/// <para>Returns: nil; [ReplaceSpan(Fx, N, StripSemi(Fx.Txt(ThenN)) + TrailSemi(Fx, N))]; [ReplaceRows(Fx, Row(N), ERow(ElseN), Part)]</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 32 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Fix.Stmt.AncestorAt"/>
+/// <seealso cref="DRagLint.Fix.Stmt.BlockInner"/>
+/// <seealso cref="DRagLint.Fix.Stmt.EnsureSemi"/>
+/// <seealso cref="DRagLint.Fix.Stmt.ERow"/>
+/// <seealso cref="DRagLint.Fix.Stmt.IsList"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FixIdenticalAssignmentBranches(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
 
 implementation

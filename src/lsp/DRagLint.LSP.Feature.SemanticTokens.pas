@@ -30,15 +30,37 @@ type
   /// tokenModifiers: declaration (bit 0).</para>
   /// <para>Stateless; registered from this unit's initialization. Columns are
   /// UTF-16 code units, lines 0-based.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Feature.SemanticTokens.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.SemanticTokens</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLspSemanticTokensFeature = class(TLspFeature)
   public
     /// <summary>The one method: `textDocument/semanticTokens/full`.</summary>
     /// <returns>['textDocument/semanticTokens/full'].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: [SEMTOK_METHOD]</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Methods</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.SemanticTokens.TLspSemanticTokensFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.SemanticTokens.TLspSemanticTokensFeature.Handle"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Methods: TArray<string>; override;
     /// <summary>Adds `semanticTokensProvider: {legend: {tokenTypes,
     /// tokenModifiers}, full: true}`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.AddCapabilities</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.SemanticTokens.TLspSemanticTokensFeature.Handle"/>
+    /// <seealso cref="DRagLint.LSP.Feature.SemanticTokens.TLspSemanticTokensFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
     /// <summary>Replies {data: [...]}: keyword, comment, string and number
     /// tokens from the parse tree plus the index's declaration names
@@ -52,6 +74,19 @@ type
     /// <param name="AId">The request id; a notification gets no reply.</param>
     /// <param name="AParams">{textDocument:{uri}}; a missing uri or an
     /// unknown/unreadable file answers {data: []}.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Copy, DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.StoresForFile, DRagLint.LSP.Feature.SemanticTokens.AddDeclarations, DRagLint.LSP.Feature.SemanticTokens.Encode, DRagLint.LSP.Feature.SemanticTokens.SplitLines, DRagLint.LSP.Feature.SemanticTokens.TByteMap.Build, DRagLint.LSP.Feature.SemanticTokens.WalkSyntax, DRagLint.LSP.SyntaxTree.ParseDelphiUtf8, DRagLint.Preprocess.Types.NormalizeLoneCR</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
+    /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Readable"/>
+    /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Reply"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 

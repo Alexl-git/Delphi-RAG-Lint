@@ -8,6 +8,12 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.RegistryColors.pas), DragLint.Plugin.EditViewNotifier.SeverityColor (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.RegistryColors.LoadEditorColors (DragLint.Plugin.RegistryColors.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.EditViewNotifier, DragLint.Plugin.RegistryColors</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintColors = record
     ErrorColor  : TColor;
     WarningColor: TColor;
@@ -15,6 +21,14 @@ type
     InfoColor   : TColor;
   end;
 
+/// <returns><!-- drag-lint:auto type -->TDragLintColors</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine (DragLint.Plugin.EditViewNotifier.pas)</para>
+/// <para>Calls: DragLint.Plugin.RegistryColors.ReadColor</para>
+/// <seealso cref="DragLint.Plugin.RegistryColors.ReadColor"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadEditorColors: TDragLintColors;
 
 implementation

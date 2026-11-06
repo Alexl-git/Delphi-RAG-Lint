@@ -33,16 +33,40 @@ uses
 type
   /// <summary>Answers `textDocument/prepareRename` and `textDocument/rename`
   /// and advertises `renameProvider: {prepareProvider: true}`.</summary>
-  /// <remarks>Stateless; registered from this unit's initialization. Never
+  /// <remarks>
+  /// Stateless; registered from this unit's initialization. Never
   /// writes a file and never mutates the server's store list. Lines and
-  /// characters in the replies are 0-based.</remarks>
+  /// characters in the replies are 0-based.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Feature.Rename.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.Rename</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspRenameFeature = class(TLspFeature)
   public
     /// <summary>The two methods this feature answers.</summary>
     /// <returns>['textDocument/prepareRename', 'textDocument/rename'].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: [PREPARE_METHOD, RENAME_METHOD]</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Methods</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.Rename.TLspRenameFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.Rename.TLspRenameFeature.Handle"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Methods: TArray<string>; override;
     /// <summary>Adds `renameProvider: {prepareProvider: true}`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.AddCapabilities</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.Rename.TLspRenameFeature.Handle"/>
+    /// <seealso cref="DRagLint.LSP.Feature.Rename.TLspRenameFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
     /// <summary>prepareRename replies {range, placeholder} -- the identifier
     /// token under the cursor and the resolved symbol's Name -- or null when
@@ -57,8 +81,19 @@ type
     /// <param name="AParams">{textDocument:{uri}, position:{line, character}}
     /// and, for rename, newName. A missing position answers null
     /// (prepareRename) or -32803 (rename).</param>
-    /// <remarks>A refusal is an error reply, never an exception: -32602 for a
-    /// missing newName, -32803 for every rule in the unit header.</remarks>
+    /// <remarks>
+    /// A refusal is an error reply, never an exception: -32602 for a
+    /// missing newName, -32803 for every rule in the unit header.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.LSP.Feature.Rename.HandlePrepare, DRagLint.LSP.Feature.Rename.HandleRename</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.Rename.HandlePrepare"/>
+    /// <seealso cref="DRagLint.LSP.Feature.Rename.HandleRename"/>
+    /// <seealso cref="DRagLint.LSP.Feature.Rename.TLspRenameFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.Rename.TLspRenameFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 

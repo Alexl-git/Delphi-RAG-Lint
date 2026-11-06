@@ -28,7 +28,7 @@ type
   /// an empty Wrapper. Width/Height/BitCount/PaletteEntries are filled for BMP
   /// only; every other format, including SVG, leaves them 0.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.ReadDibHeader (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.SaveImage (DRagLint.Convert.GlyphVacuum.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphStrip.pas) ?, DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.ReadDibHeader (DRagLint.Convert.GlyphStrip.pas) ?, DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas) ?, DRagLint.Convert.GlyphVacuum.SaveImage (DRagLint.Convert.GlyphVacuum.pas) ?</para>
   /// <para>Used in units: DRagLint.Convert.GlyphStrip, DRagLint.Convert.GlyphVacuum</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -110,6 +110,9 @@ type
   /// <para>gdfPicture -- TPicture.WriteData: one length byte, the graphic's class
   /// name, then THAT class's own framing.</para>
   /// <para>gdfUnknown -- not known; never guessed.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.GraphicClassFraming (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.ParseDataFraming (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.UnwrapPictureInner (DRagLint.Convert.GlyphStrip.pas) (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGraphicDataFraming = (gdfUnknown, gdfGraphic, gdfSized, gdfSizedInclusive, gdfPicture);
 
@@ -117,14 +120,29 @@ type
 /// <param name="AClassName">A class name, bare or unit-qualified (Vcl.Graphics.TBitmap).</param>
 /// <returns>The framing for TPicture, TBitmap, TJPEGImage, TMetafile, TIcon,
 /// TPngImage, TGIFImage, TWICImage; gdfUnknown for any other class.</returns>
-/// <remarks>VCL classes ONLY. A third-party class's framing is declared by the
+/// <remarks>
+/// VCL classes ONLY. A third-party class's framing is declared by the
 /// cast library (`dfmdata`, see ParseDataFraming), because the engine has no
-/// way to know whether a class it never read overrides ReadData.</remarks>
+/// way to know whether a class it never read overrides ReadData.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.UnwrapPictureInner (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.WrapGraphicData (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Calls: DRagLint.Convert.GlyphStrip.BareClassName, SameText</para>
+/// <para>Returns: gdfPicture; gdfSized; gdfSizedInclusive; gdfGraphic; gdfUnknown</para>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.BareClassName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GraphicClassFraming(const AClassName: string): TGraphicDataFraming;
 
 /// <summary>A castlib `dfmdata` keyword as a framing.</summary>
 /// <param name="AKeyword">'graphic' | 'bitmap' | 'metafile' | 'picture', any case.</param>
 /// <returns>The framing; gdfUnknown for any other text.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: SameText, Trim</para>
+/// <para>Returns: gdfGraphic; gdfSized; gdfSizedInclusive; gdfPicture; gdfUnknown</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseDataFraming(const AKeyword: string): TGraphicDataFraming;
 
 /// <summary>Strip a streamed graphic payload down to the bare image file.</summary>
@@ -134,11 +152,23 @@ function ParseDataFraming(const AKeyword: string): TGraphicDataFraming;
 /// <param name="AWrapper">The TPicture wrapper's class name; '' when there was none.</param>
 /// <param name="AReason">Why the payload could not be unwrapped; '' on success.</param>
 /// <returns>True when AImage is a recognised image file.</returns>
-/// <remarks>Accepts three shapes: a bare image file; [Int32 size][image]
+/// <remarks>
+/// Accepts three shapes: a bare image file; [Int32 size][image]
 /// (a TBitmap-typed property); and a TPicture stream, whose class name decides
 /// the inner framing (GraphicClassFraming). REFUSES -- never guesses -- an
 /// unknown class name, a size field that disagrees with the bytes that follow,
-/// and inner bytes that are not a recognised image.</remarks>
+/// and inner bytes that are not a recognised image.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Calls: Copy, DRagLint.Convert.GlyphStrip.IsLengthPrefixedImage, DRagLint.Convert.GlyphStrip.ReadPictureClassName, DRagLint.Convert.GlyphStrip.SniffImageFormat, DRagLint.Convert.GlyphStrip.UnwrapPictureInner, Format</para>
+/// <para>Returns: AReason = ''</para>
+/// <para>Mutates: AImage (out), AFormat (out), AWrapper (out), AReason (out)</para>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.IsLengthPrefixedImage"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.ReadPictureClassName"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.SniffImageFormat"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.UnwrapPictureInner"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnwrapGraphicData(const APayload: TBytes; out AImage: TBytes;
   out AFormat, AWrapper, AReason: string): Boolean;
 
@@ -150,6 +180,18 @@ function UnwrapGraphicData(const APayload: TBytes; out AImage: TBytes;
 /// <param name="AReason">Why it could not be framed; '' on success.</param>
 /// <returns>False for gdfUnknown, and for gdfPicture when no VCL graphic class
 /// holds AFormat.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.WrapGraphicData (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Calls: Byte, Copy, DRagLint.Convert.GlyphStrip.GraphicClassFraming, DRagLint.Convert.GlyphStrip.Int32Bytes, DRagLint.Convert.GlyphStrip.PictureClassForFormat, DRagLint.Convert.GlyphStrip.WrapGraphicData, Format</para>
+/// <para>Returns: True; (Cls &lt;&gt; '') and WrapGraphicData(AImage, AFormat, GraphicClassFraming(Cls), Inner, AReason); False</para>
+/// <para>Recursive</para>
+/// <para>Mutates: AData (out), AReason (out)</para>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.GraphicClassFraming"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.Int32Bytes"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.PictureClassForFormat"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function WrapGraphicData(const AImage: TBytes; const AFormat: string;
   AFraming: TGraphicDataFraming; out AData: TBytes; out AReason: string): Boolean;
 
@@ -158,6 +200,13 @@ function WrapGraphicData(const AImage: TBytes; const AFormat: string;
 /// <param name="ABytes">The bytes to encode.</param>
 /// <param name="AIndent">The whitespace each hex line starts with.</param>
 /// <returns>The value text, CRLF line breaks; '{}' for no bytes.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: IntToHex</para>
+/// <para>Returns: SB.ToString</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EncodeDfmHex(const ABytes: TBytes; const AIndent: string): string;
 
 implementation

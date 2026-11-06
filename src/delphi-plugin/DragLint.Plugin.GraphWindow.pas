@@ -15,8 +15,28 @@ unit DragLint.Plugin.GraphWindow;
 
 interface
 
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeGraphWindow (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.GraphWindow.RegisterDragLintGraphDockable, Supports</para>
+/// <seealso cref="DragLint.Plugin.GraphWindow.RegisterDragLintGraphDockable"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowDragLintGraph; { open / focus the dockable graph window }
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.GraphWindow.ShowDragLintGraph (DragLint.Plugin.GraphWindow.pas), DragLint.Plugin.Wizard.Register (DragLint.Plugin.Wizard.pas)</para>
+/// <para>Calls: Supports</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterDragLintGraphDockable; { register at startup so the IDE restores a saved docked instance }
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), initialization/finalization (DragLint.Plugin.GraphWindow.pas)</para>
+/// <para>Calls: FreeAndNil, Supports</para>
+/// <para>Catches: Exception (empty)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UnregisterDragLintGraph; { idempotent teardown }
 
 { v0.48 editor-sync: when the active editor unit changes, the edit-view notifier
@@ -24,6 +44,19 @@ procedure UnregisterDragLintGraph; { idempotent teardown }
   graph window is open AND its viewer child has embedded; safe to call always.
   AUnitName is the bare unit name (file name without extension), which the viewer
   resolves to a graph node and centers (recording nav history). }
+/// <summary><!-- drag-lint:auto sum -->v0.48 editor-sync: when the active editor unit
+/// changes, the edit-view notifier calls this so the embedded graph viewer follows the
+/// editor. No-op unless the graph window is open AND its viewer child has embedded; safe
+/// to call always. AUnitName is the bare unit name (file name without extension), which
+/// the viewer resolves to a graph node and centers (recording nav history).</summary>
+/// <param name="AUnitName"><!-- drag-lint:auto type -->const string</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.EditViewNotifier.TDragLintEditServicesNotifier.EditorViewActivated (DragLint.Plugin.EditViewNotifier.pas)</para>
+/// <para>Calls: AnsiString, DragLint.Plugin.GraphWindow.ResolveViewerHwnd, LPARAM, PAnsiChar, SameText, SendMessageTimeout</para>
+/// <seealso cref="DragLint.Plugin.GraphWindow.ResolveViewerHwnd"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure DragLintGraphNotifyActiveUnit(const AUnitName: string);
 
 implementation

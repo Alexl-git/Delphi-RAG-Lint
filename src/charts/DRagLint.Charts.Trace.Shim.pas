@@ -52,6 +52,12 @@ const
 
 type
   /// <summary>One keyword token of the stripped source (a keyword of the shim's set, `;` or a `:` that is not `:=`).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Shim.pas) ?, DRagLint.Charts.Trace.Calc.CalcConditions (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.CalcConditions.AddCase (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.CalcConditions.ChainOf (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.FindEnclosingCase (DRagLint.Charts.Trace.Calc.pas) (+7 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Calc, DRagLint.Charts.Trace.Shim, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TShimToken = record
     /// <summary>1-based line.</summary>
     L: Integer;
@@ -64,8 +70,14 @@ type
   end;
 
   /// <summary>What the shim read around an Exit or a statement.</summary>
-  /// <remarks>Form 'unknown' has Keyword, Condition '' and Reason set. SpanLine / SpanFrom / SpanTo are NOT
-  /// here: Trace.Walk sets them on its own record. A value record; copy freely.</remarks>
+  /// <remarks>
+  /// Form 'unknown' has Keyword, Condition '' and Reason set. SpanLine / SpanFrom / SpanTo are NOT
+  /// here: Trace.Walk sets them on its own record. A value record; copy freely.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Calc.pas) ?, declaration (DRagLint.Charts.Trace.Shim.pas) ?, DRagLint.Charts.Trace.Calc.CalcConditions (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.CalcConditions.AddAround (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Shim.NewShimResult (DRagLint.Charts.Trace.Shim.pas) (+17 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Calc, DRagLint.Charts.Trace.Shim, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TShimResult = record
     /// <summary>'inline', 'block', 'except', 'case' or 'unknown'.</summary>
     Form: string;
@@ -98,6 +110,12 @@ type
   end;
 
   /// <summary>The failure branch of an if-form guard on its `then` line, as 0-based columns [FromCol, ToCol).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Shim.pas) ?, DRagLint.Charts.Trace.Shim.GuardFailSpan (DRagLint.Charts.Trace.Shim.pas), DRagLint.Charts.Trace.Walk.DropSpan (DRagLint.Charts.Trace.Walk.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Shim, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGuardSpan = record
     /// <summary>False when the guard has no such span on the line.</summary>
     Found: Boolean;
@@ -110,6 +128,12 @@ type
   end;
 
   /// <summary>A statement's extent in the stripped source; end exclusive, columns 0-based, lines 1-based.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Calc.pas) ?, declaration (DRagLint.Charts.Trace.Shim.pas) ?, DRagLint.Charts.Trace.Calc.NewCalcInfo (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Shim.InStatementRhs (DRagLint.Charts.Trace.Shim.pas) ?, DRagLint.Charts.Trace.Shim.StatementSpan (DRagLint.Charts.Trace.Shim.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Calc, DRagLint.Charts.Trace.Shim</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TStatementSpan = record
     /// <summary>Start line.</summary>
     L1: Integer;
@@ -130,7 +154,15 @@ type
 /// <param name="pFrom">First line (clamped to 1).</param>
 /// <param name="pTo">Last line (clamped to the line count).</param>
 /// <returns>The tokens in source order (line, column); empty when the range is empty.</returns>
-/// <remarks>Port of Get-ShimTokens. Pure. Every step line of a routine asks for its enclosing chain; passing these tokens down avoids re-tokenizing per ask.</remarks>
+/// <remarks>
+/// Port of Get-ShimTokens. Pure. Every step line of a routine asks for its enclosing chain; passing these tokens down avoids re-tokenizing per ask.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Calc.CalcConditions (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Shim.EnclosingChainFromLines (DRagLint.Charts.Trace.Shim.pas), DRagLint.Charts.Trace.Shim.EnclosingConditionFromLines (DRagLint.Charts.Trace.Shim.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadLineInfo (DRagLint.Charts.Trace.Walk.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.Shim.AddTokens, Max, Min</para>
+/// <para>Returns: List.ToArray</para>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.AddTokens"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ShimTokens(const pStripped: TArray<string>; pFrom, pTo: Integer): TArray<TShimToken>;
 
 /// <summary>The guard condition around the Exit on one line (the branch holding it, read from the source).</summary>
@@ -139,7 +171,19 @@ function ShimTokens(const pStripped: TArray<string>; pFrom, pTo: Integer): TArra
 /// <param name="pExitLine">1-based line of the Exit the index anchored.</param>
 /// <param name="pRoutineStart">1-based first line of the routine (tokens are read from there).</param>
 /// <returns>The result; Form 'unknown' with a Reason for anything the shim cannot read. Never raises.</returns>
-/// <remarks>Port of Get-GuardConditionFromLines. Pure; the caller checks freshness (AC-14). Innermost guard only (T4-R4).</remarks>
+/// <remarks>
+/// Port of Get-GuardConditionFromLines. Pure; the caller checks freshness (AC-14). Innermost guard only (T4-R4).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Calc.CalcConditions (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.GuardCondition (DRagLint.Charts.Trace.Walk.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Charts.Source.PsTrim, DRagLint.Charts.Trace.Shim.AddTokens, DRagLint.Charts.Trace.Shim.NewShimUnknown, DRagLint.Charts.Trace.Shim.ResolveShimStatement, Max</para>
+/// <para>Returns: NewShimUnknown(X, 'is outside the file'); NewShimUnknown(X, 'is not an Exit in this copy of the file'); NewShimUnknown(X, 'shares its line with another Exit'); ResolveShimStatement(X, X.TokCount, pExitLine, pExitLine)</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 55 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.AddTokens"/>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.NewShimUnknown"/>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.ResolveShimStatement"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GuardConditionFromLines(const pRaw, pStripped: TArray<string>; pExitLine, pRoutineStart: Integer): TShimResult;
 
 /// <summary>The ENCLOSING condition of the statement that starts at (pLine, pCol) -- ruling T5-R1.</summary>
@@ -150,7 +194,17 @@ function GuardConditionFromLines(const pRaw, pStripped: TArray<string>; pExitLin
 /// <param name="pRoutineStart">1-based first line of the routine.</param>
 /// <param name="pAllTok">The routine's tokens (ShimTokens); nil or empty: read here.</param>
 /// <returns>The nearest if whose branch holds the statement; Keyword says when the STATEMENT runs: WHEN C in the then branch, UNLESS C in the else branch (the reverse of a guard's). Form 'unknown' when it sits in no branch, a loop, a case arm or under a directive.</returns>
-/// <remarks>Port of Get-EnclosingConditionFromLines. Innermost if only (T4-R4). Pure.</remarks>
+/// <remarks>
+/// Port of Get-EnclosingConditionFromLines. Innermost if only (T4-R4). Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Calc.CalcConditions.ChainOf (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Shim.EnclosingChainFromLines (DRagLint.Charts.Trace.Shim.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Trace.Shim.NewShimUnknown, DRagLint.Charts.Trace.Shim.ResolveShimStatement, DRagLint.Charts.Trace.Shim.ShimTokens, Max, Min, SameStr</para>
+/// <para>Returns: NewShimUnknown(X, 'is outside the file'); ResolveShimStatement(X, X.TokCount, pLine, pLine)</para>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.NewShimUnknown"/>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.ResolveShimStatement"/>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.ShimTokens"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EnclosingConditionFromLines(const pRaw, pStripped: TArray<string>; pLine, pCol, pRoutineStart: Integer;
   const pAllTok: TArray<TShimToken> = nil): TShimResult;
 
@@ -162,7 +216,16 @@ function EnclosingConditionFromLines(const pRaw, pStripped: TArray<string>; pLin
 /// <param name="pRoutineStart">1-based first line of the routine.</param>
 /// <param name="pAllTok">The routine's tokens; nil or empty: read here.</param>
 /// <returns>At most 12 results: each branch's owning statement (its if / try / case token) is asked in turn until one sits in no branch.</returns>
-/// <remarks>Port of Get-EnclosingChainFromLines. Pure.</remarks>
+/// <remarks>
+/// Port of Get-EnclosingChainFromLines. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadLineInfo (DRagLint.Charts.Trace.Walk.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.Shim.EnclosingConditionFromLines, DRagLint.Charts.Trace.Shim.ShimTokens</para>
+/// <para>Returns: List.ToArray</para>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.EnclosingConditionFromLines"/>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.ShimTokens"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EnclosingChainFromLines(const pRaw, pStripped: TArray<string>; pLine, pCol, pRoutineStart: Integer;
   const pAllTok: TArray<TShimToken> = nil): TArray<TShimResult>;
 
@@ -170,7 +233,16 @@ function EnclosingChainFromLines(const pRaw, pStripped: TArray<string>; pLine, p
 /// <param name="pG">A result of GuardConditionFromLines.</param>
 /// <param name="pStripped">The stripped `then` line (line pG.CondL2).</param>
 /// <returns>Found False for a result with no condition span, or when UNLESS/WHEN has no such span on the line (a WHEN whose else is not on the line: its lines are the guard's block). UNLESS: from the `then` to the if's own `else` or `;` on the line, else to the line end; WHEN: from that `else` to the `;` that ends it, else to the line end.</returns>
-/// <remarks>Port of Get-GuardFailSpan (final-review I1). Tokens are read from the stripped line: begin / try / case .. end nests, and an `if` nested in the branch takes the next `else` for itself. Pure.</remarks>
+/// <remarks>
+/// Port of Get-GuardFailSpan (final-review I1). Tokens are read from the stripped line: begin / try / case .. end nests, and an `if` nested in the branch takes the next `else` for itself. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadGuards (DRagLint.Charts.Trace.Walk.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Charts.Trace.Shim.IsIn, Min, SameStr</para>
+/// <para>Returns: Default(TGuardSpan)</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 65 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.IsIn"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GuardFailSpan(const pG: TShimResult; const pStripped: string): TGuardSpan;
 
 /// <summary>Is the ref at (pLine, 1-based pCol) inside the CONDITION of pG (between its `if` and `then`)?</summary>
@@ -178,7 +250,14 @@ function GuardFailSpan(const pG: TShimResult; const pStripped: string): TGuardSp
 /// <param name="pLine">1-based line.</param>
 /// <param name="pCol">1-based column (a refs.start_col).</param>
 /// <returns>True inside the condition; False for any other form (no span) and outside.</returns>
-/// <remarks>Port of Test-InShimCondition. Pure.</remarks>
+/// <remarks>
+/// Port of Test-InShimCondition. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas)</para>
+/// <para>Returns: False; After and Before</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function InShimCondition(const pG: TShimResult; pLine, pCol: Integer): Boolean;
 
 /// <summary>The extent of the statement that starts at (pLine, pCol).</summary>
@@ -187,7 +266,16 @@ function InShimCondition(const pG: TShimResult; pLine, pCol: Integer): Boolean;
 /// <param name="pCol">0-based start column.</param>
 /// <param name="pLastLine">The routine's last line (clamped to the line count).</param>
 /// <returns>The span, ending at the first depth-0 `;`, or `end` / `until` / `else` / `except` / `finally` (a statement that is a branch, or the last of a block, has no `;` of its own), else at the end of the last line. Depth counts ( ) [ ] and begin/try/case/record/repeat .. end/until; an `if` after the `:=` is a Delphi 13 conditional expression, whose `else` stays inside.</returns>
-/// <remarks>Port of Get-StatementSpan. Pure.</remarks>
+/// <remarks>
+/// Port of Get-StatementSpan. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Calc.FindCalcWrites (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.ResolveCalcRead (DRagLint.Charts.Trace.Calc.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Charts.Trace.Shim.IsIn, Min</para>
+/// <para>Returns: Default(TStatementSpan)</para>
+/// <para>Complexity: 22 (cyclomatic, outer body), 78 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.IsIn"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StatementSpan(const pStripped: TArray<string>; pLine, pCol, pLastLine: Integer): TStatementSpan;
 
 /// <summary>Is (pLine, 0-based pCol0) on the right-hand side of pSp -- after its `:=`, before its end?</summary>
@@ -195,14 +283,28 @@ function StatementSpan(const pStripped: TArray<string>; pLine, pCol, pLastLine: 
 /// <param name="pLine">1-based line.</param>
 /// <param name="pCol0">0-based column.</param>
 /// <returns>True on the right-hand side; False when the span has no `:=`.</returns>
-/// <remarks>Port of Test-InStatementRhs. Pure.</remarks>
+/// <remarks>
+/// Port of Test-InStatementRhs. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Calc.CalcHeadCall (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.InAnyRhs (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.NewCalcInfo (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.ResolveCalcRead (DRagLint.Charts.Trace.Calc.pas)</para>
+/// <para>Returns: False; After and Before</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function InStatementRhs(const pSp: TStatementSpan; pLine, pCol0: Integer): Boolean;
 
 /// <summary>The 0-based column where the receiver of the member at 0-based pMemberCol starts.</summary>
 /// <param name="pS">The stripped line.</param>
 /// <param name="pMemberCol">0-based column of the member name.</param>
 /// <returns>Back over blanks, the dot, blanks, then the (possibly dotted) identifier; -1 when the member has no dotted receiver.</returns>
-/// <remarks>Port of Get-ReceiverStart. Pure.</remarks>
+/// <remarks>
+/// Port of Get-ReceiverStart. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Calc.FindCalcWrites (DRagLint.Charts.Trace.Calc.pas)</para>
+/// <para>Calls: CharInSet</para>
+/// <para>Returns: -1; if P &lt; E then P + 1</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReceiverStart(const pS: string; pMemberCol: Integer): Integer;
 
 /// <summary>The right-hand side of the assignment whose target starts at the 1-based column pCol, as the source writes it.</summary>
@@ -210,14 +312,31 @@ function ReceiverStart(const pS: string; pMemberCol: Integer): Integer;
 /// <param name="pStripped">The same line, literals and comments blanked column for column.</param>
 /// <param name="pCol">1-based column of the assignment target.</param>
 /// <returns>The text up to the `;` that ends it on this line, trimmed; '' when the line holds no `:=` there or the statement runs on.</returns>
-/// <remarks>Port of Get-AssignExprAt. Pure.</remarks>
+/// <remarks>
+/// Port of Get-AssignExprAt. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.SelectStop (DRagLint.Charts.Trace.Walk.pas)</para>
+/// <para>Calls: Copy, DRagLint.Charts.Source.PsTrim, DRagLint.Charts.Trace.Shim.IndexOfFrom</para>
+/// <para>Returns: ''; PsTrim(Copy(pRaw, B + 1, E - B))</para>
+/// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.IndexOfFrom"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AssignExprAt(const pRaw, pStripped: string; pCol: Integer): string;
 
 /// <summary>The right-hand side of a ONE-line assignment `X:= expr;` whose expression concatenates, as written.</summary>
 /// <param name="pRaw">The line as written.</param>
 /// <param name="pStripped">The same line with literals and comments blanked.</param>
 /// <returns>The expression (a `+` outside any literal or comment); '' for any other line.</returns>
-/// <remarks>Port of Get-ConcatAssignExpr. Pure.</remarks>
+/// <remarks>
+/// Port of Get-ConcatAssignExpr. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.PayloadText (DRagLint.Charts.Trace.Walk.pas)</para>
+/// <para>Calls: Copy, DRagLint.Charts.Source.PsTrim, LastDelimiter</para>
+/// <para>Returns: ''; PsTrim(Copy(pRaw, M.Length + 1, E - M.Length))</para>
+/// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ConcatAssignExpr(const pRaw, pStripped: string): string;
 
 /// <summary>A string literal exactly as the source writes it, quotes and doubled '' included (ruling T5-R3).</summary>
@@ -227,7 +346,14 @@ function ConcatAssignExpr(const pRaw, pStripped: string): string;
 /// <param name="pRawLine">The raw source line of the literal.</param>
 /// <param name="pHasRaw">False when the line is not available (no fresh source).</param>
 /// <returns>The token read from the line when that span is one quoted token, else pText re-escaped and quoted.</returns>
-/// <remarks>Port of Get-LiteralSourceText. Pure.</remarks>
+/// <remarks>
+/// Port of Get-LiteralSourceText. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.ElseNote (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.FormatTraceLiteral (DRagLint.Charts.Trace.Walk.pas)</para>
+/// <para>Calls: Copy</para>
+/// <para>Returns: Tk; '''' + pText.Replace('''', '''''') + ''''</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LiteralSourceText(const pText: string; pCol, pEcol: Integer; const pRawLine: string; pHasRaw: Boolean): string;
 
 /// <summary>A branch for ANOTHER table (T5-R1): the statement runs WHEN pCondition and pCondition compares a value with `=` to a string literal that is a known table other than the anchor's.</summary>
@@ -236,14 +362,30 @@ function LiteralSourceText(const pText: string; pCol, pEcol: Integer; const pRaw
 /// <param name="pAnchorTable">The anchor's table.</param>
 /// <param name="pTables">The known tables.</param>
 /// <returns>True when the branch cannot let the anchor's table through: no `or` / `xor` / `not` / `&lt;&gt;`, no literal naming the anchor table; anything else keeps the step.</returns>
-/// <remarks>Port of Test-OtherTableBranch. Pure.</remarks>
+/// <remarks>
+/// Port of Test-OtherTableBranch. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadOmits (DRagLint.Charts.Trace.Walk.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.Shim.Grp, SameStr</para>
+/// <para>Returns: False; True</para>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.Grp"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OtherTableBranch(const pKeyword, pCondition, pAnchorTable: string; const pTables: TArray<string>): Boolean;
 
 /// <summary>'&lt;file leaf&gt;:&lt;line&gt;' of a path.</summary>
 /// <param name="pPath">A path (either separator).</param>
 /// <param name="pLine">The line.</param>
 /// <returns>The anchor text.</returns>
-/// <remarks>Port of Get-TraceAnchorText.</remarks>
+/// <remarks>
+/// Port of Get-TraceAnchorText.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ReadThroughRoute (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkAlso (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkRead (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkWrite (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromColumn (DRagLint.Charts.Trace.Anchor.pas) (+21 more)</para>
+/// <para>Calls: DRagLint.Charts.Trace.Shim.LeafOf, IntToStr</para>
+/// <para>Returns: LeafOf(pPath) + ':' + IntToStr(pLine)</para>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.LeafOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceAnchorText(const pPath: string; pLine: Integer): string;
 
 /// <summary>The locator a generated NOTE writes for a line of pRefFile (FW-R2).</summary>
@@ -251,26 +393,57 @@ function TraceAnchorText(const pPath: string; pLine: Integer): string;
 /// <param name="pRefFile">The file the referenced line lives in.</param>
 /// <param name="pRefLine">The line.</param>
 /// <returns>':N' when both leaf names are equal (case-insensitive), else 'File.pas:N', so the locator is never ambiguous.</returns>
-/// <remarks>Port of Get-TraceNoteLocator.</remarks>
+/// <remarks>
+/// Port of Get-TraceNoteLocator.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.PropertyReadField (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Calc.CalcFieldByNameRow (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.CalcSourceRow (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.NewCalcInfo (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.ResolveCalcField (DRagLint.Charts.Trace.Calc.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.Shim.LeafOf, DRagLint.Charts.Trace.Shim.TraceAnchorText, IntToStr, SameText</para>
+/// <para>Returns: ':' + IntToStr(pRefLine); TraceAnchorText(pRefFile, pRefLine)</para>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.LeafOf"/>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceNoteLocator(const pAnchorFile, pRefFile: string; pRefLine: Integer): string;
 
 /// <summary>Literal-derived text made safe for a step line or a note.</summary>
 /// <param name="pS">The text.</param>
 /// <param name="pMax">The length cap (72 by default).</param>
 /// <returns>Whitespace runs collapsed and trimmed, then ' -- ' to ' - ', ' @' to ' at ', ' [' to ' (', '"' to a single quote, '; ' to ', '; longer than pMax: cut to pMax-3 plus '...'. SPACE-ANCHORED on purpose: an indexer `Fields[0]` is quoted as written (ruling T3-M1).</returns>
-/// <remarks>Port of ConvertTo-TraceWord.</remarks>
+/// <remarks>
+/// Port of ConvertTo-TraceWord.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FollowDirectChain (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.Classify (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas)</para>
+/// <para>Calls: Copy, DRagLint.Charts.Source.PsTrim</para>
+/// <para>Returns: Copy(T, 1, pMax - Length(ELLIPSIS)) + ELLIPSIS; T</para>
+/// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceWord(const pS: string; pMax: Integer = TRACE_WORD_MAX): string;
 
 /// <summary>A hop's reason as a step note: the note separator '; ' cannot appear inside one.</summary>
 /// <param name="pS">The reason.</param>
 /// <returns>pS with '; ' replaced by ', '.</returns>
-/// <remarks>Port of ConvertTo-TraceNoteText.</remarks>
+/// <remarks>
+/// Port of ConvertTo-TraceNoteText.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WriteNotesAndTitle (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FollowDirectChain (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Calc.CalcFieldByNameRow (DRagLint.Charts.Trace.Calc.pas) (+3 more)</para>
+/// <para>Returns: pS.Replace('; ', ', ')</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceNoteText(const pS: string): string;
 
 /// <summary>A GENERATED stop reason made safe for a STOPS step (ruling T3-M2).</summary>
 /// <param name="pS">The reason.</param>
 /// <returns>Whitespace collapsed and trimmed, a bracket PAIR read as parentheses, ' -- ' to ' - ', ' @' to ' at ', ' [' to ' (', '; ' to ', '. Nothing is truncated: a stop that names every candidate keeps them all. Never applied to source-derived text.</returns>
-/// <remarks>Port of ConvertTo-TraceStopText.</remarks>
+/// <remarks>
+/// Port of ConvertTo-TraceStopText.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkRead (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ColumnFactNote (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Calc.CalcFieldByNameRow (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.CalcSourceRow (DRagLint.Charts.Trace.Calc.pas) (+7 more)</para>
+/// <para>Calls: DRagLint.Charts.Source.PsTrim</para>
+/// <para>Returns: T.Replace(' -- ', ' - ').Replace(' @', ' at ').Replace(' [', ' (').Replace('; ', ', ')</para>
+/// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceStopText(const pS: string): string;
 
 implementation

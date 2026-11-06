@@ -41,6 +41,13 @@ interface
 /// whatever 'drag-lint.exe' means on PATH, which on this machine has resolved
 /// to a months-old build before. There is deliberately NO 32-bit fallback --
 /// see the note at that step.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ExeResolver.ResolveEngine (DragLint.Plugin.ExeResolver.pas)</para>
+/// <para>Calls: DragLint.Plugin.ExeResolver.LogOnce, DragLint.Plugin.Settings.LoadSettings, ExcludeTrailingPathDelimiter, ExtractFilePath, FileExists, GetModuleName</para>
+/// <para>Returns: LoadSettings.ExePath; ExtractFilePath(ExcludeTrailingPathDelimiter(BplDir)) + 'dll-win64\drag-lint.exe'; 'drag-lint.exe'</para>
+/// <seealso cref="DragLint.Plugin.ExeResolver.LogOnce"/>
+/// <seealso cref="DragLint.Plugin.Settings.LoadSettings"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function DragLintExe: string;
 
@@ -54,7 +61,15 @@ const
 /// ("not found at X").</summary>
 /// <param name="pExe">The resolved path (may be the degraded bare name).</param>
 /// <returns>True when pExe exists on disk or is the bare name found on PATH.</returns>
-/// <remarks>Display/diagnostic sites only; a site that spawns must use RequireEngine.</remarks>
+/// <remarks>
+/// Display/diagnostic sites only; a site that spawns must use RequireEngine.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.About.StartBackgroundSelfInfoFetch (DragLint.Plugin.About.pas), DragLint.Plugin.Diagnose.DescribeDiagFix (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.EngineInfoCmd (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.EngineInfoJson (DragLint.Plugin.Diagnose.pas) (+3 more)</para>
+/// <para>Calls: DragLint.Plugin.ExeResolver.DragLintExe, ExtractFilePath, FileExists, FileSearch, GetEnvironmentVariable</para>
+/// <para>Mutates: pExe (out)</para>
+/// <seealso cref="DragLint.Plugin.ExeResolver.DragLintExe"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveEngine(out pExe: string): Boolean;
 
 /// <summary>Fail-closed twin of <see cref="DragLintExe"/>: resolves the engine and/// proves it is usable before a site spawns it.</summary>
@@ -62,15 +77,31 @@ function ResolveEngine(out pExe: string): Boolean;
 /// <returns>True when the resolved exe exists on disk or, for the degraded bare
 /// name, is found on PATH. False when nothing usable resolves (the caller shows
 /// <see cref="ENGINE_NOT_FOUND_MSG"/> or skips the spawn).</returns>
-/// <remarks>Same thread-safety as DragLintExe. Every plugin spawn site must use
+/// <remarks>
+/// Same thread-safety as DragLintExe. Every plugin spawn site must use
 /// this or <see cref="EngineExeOrEmpty"/>, never DragLintExe directly
-/// (guard: tests\plugin\run_draglintexe_guarded.ps1).</remarks>
+/// (guard: tests\plugin\run_draglintexe_guarded.ps1).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ExeResolver.EngineExeOrEmpty (DragLint.Plugin.ExeResolver.pas), DragLint.Plugin.Reports.OfferReindex (DragLint.Plugin.Reports.pas), DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.RunFor (DragLint.Plugin.UsagesForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.ExeResolver.ResolveEngine</para>
+/// <para>Returns: ResolveEngine(pExe)</para>
+/// <para>Mutates: pExe (out)</para>
+/// <seealso cref="DragLint.Plugin.ExeResolver.ResolveEngine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RequireEngine(out pExe: string): Boolean;
 
 /// <summary>Wrapper form of <see cref="RequireEngine"/> for sites that build a
 /// command string.</summary>
 /// <returns>The usable engine exe, or '' when none resolves; callers must treat ''
 /// as "engine not found" and not spawn.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Diagnose.DiagVersions (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.RefreshEngineInfo (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.DLExe (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.DLExe64 (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas) (+12 more)</para>
+/// <para>Calls: DragLint.Plugin.ExeResolver.RequireEngine</para>
+/// <seealso cref="DragLint.Plugin.ExeResolver.RequireEngine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EngineExeOrEmpty: string;
 
 implementation

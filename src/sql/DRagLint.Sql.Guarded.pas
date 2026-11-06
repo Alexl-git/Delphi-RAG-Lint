@@ -59,7 +59,7 @@ type
   /// run the query, which must not be confused with an error raised by the
   /// query itself.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoSql (DRagLint.CLI.pas), DRagLint.Sql.Guarded.TSqlGuard.Create (DRagLint.Sql.Guarded.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoSql (DRagLint.CLI.pas) ?, DRagLint.Sql.Guarded.TSqlGuard.Create (DRagLint.Sql.Guarded.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Sql.Guarded</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -104,8 +104,10 @@ type
       /// <param name="AResult"><!-- drag-lint:auto type -->var Integer</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Sql.Guarded.TSqlGuard.Create (DRagLint.Sql.Guarded.pas)</para>
       /// <para>Calls: SameText, Trim</para>
-      /// <para>Reads: FDenied, FDeniedName   Writes: FDenied, FDeniedCode, FDeniedName</para>
+      /// <para>Complexity: 14 (cyclomatic, outer body), 67 lines (full implementation)</para>
+      /// <para>Reads: FInSelect, FDenied, FDeniedName   Writes: FInSelect, FDenied, FDeniedCode, FDeniedName</para>
       /// <para>Mutates: AResult (var)</para>
       /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Create"/>
       /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Destroy"/>
@@ -120,6 +122,7 @@ type
       /// <param name="ACancel"><!-- drag-lint:auto type -->var Boolean</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Sql.Guarded.TSqlGuard.Create (DRagLint.Sql.Guarded.pas)</para>
       /// <para>Reads: FClock, FTimeoutMs   Writes: FTimedOut</para>
       /// <para>Mutates: ACancel (var)</para>
       /// <seealso cref="DRagLint.Sql.Guarded.TSqlGuard.Create"/>
@@ -227,7 +230,7 @@ type
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Sql.Guarded.TSqlGuard.Explain (DRagLint.Sql.Guarded.pas)</para>
 /// <para>Calls: Format</para>
-/// <para>Returns: 'CREATE INDEX'; 'CREATE TABLE'; 'CREATE TEMP INDEX'; 'CREATE TEMP TABLE'; 'CREATE TEMP TRIGGER'; 'CREATE TEMP VIEW'; 'CREATE TRIGGER'; 'CREATE VIEW'; 'DELETE'; 'DROP INDEX'; 'DROP TABLE'; 'DROP TEMP INDEX'; 'DROP TEMP TABLE'; 'DROP TEMP TRIGGER'; 'DROP TEMP VIEW'; 'DROP TRIGGER'; 'DROP VIEW'; 'INSERT'; 'PRAGMA'; 'READ'</para>
+/// <para>Returns: 'CREATE INDEX'; 'CREATE TABLE'; 'CREATE TEMP INDEX'; 'CREATE TEMP TABLE'; 'CREATE TEMP TRIGGER'; 'CREATE TEMP VIEW'</para>
 /// <para>Complexity: 34 (cyclomatic, outer body), 39 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->

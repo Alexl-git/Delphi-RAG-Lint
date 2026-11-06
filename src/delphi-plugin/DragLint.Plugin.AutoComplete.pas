@@ -13,9 +13,31 @@ unit DragLint.Plugin.AutoComplete;
 
 interface
 
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.AutoComplete.TAutoCompleter.Create</para>
+/// <seealso cref="DragLint.Plugin.AutoComplete.TAutoCompleter.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure StartAutoComplete;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), initialization/finalization (DragLint.Plugin.AutoComplete.pas)</para>
+/// <para>Calls: FreeAndNil</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure StopAutoComplete;
 { Called from the edit-view Modified hook (EditViewNotifier). }
+/// <summary><!-- drag-lint:auto sum -->Called from the edit-view Modified hook
+/// (EditViewNotifier).</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.EditViewNotifier.TDragLintEditServicesNotifier.EditorViewModified (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.Modified (DragLint.Plugin.EditViewNotifier.pas)</para>
+/// <para>Calls: DragLint.Plugin.AutoComplete.TAutoCompleter.Notify</para>
+/// <seealso cref="DragLint.Plugin.AutoComplete.TAutoCompleter.Notify"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure NotifyEditForAutoComplete;
 
 implementation

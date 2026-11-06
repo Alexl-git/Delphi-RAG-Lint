@@ -32,6 +32,12 @@ interface
 
 type
   /// <summary>A validated click-to-source target: what the handler writes to the IDE pipe.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.DragLintUri.pas) ?, DRagLint.Core.DragLintUri.CheckTarget (DRagLint.Core.DragLintUri.pas) ?, DRagLint.Core.DragLintUri.ParseDragLintUri (DRagLint.Core.DragLintUri.pas)</para>
+  /// <para>Used in units: DRagLint.Core.DragLintUri</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintTarget = record
     /// <summary>The file, percent-decoded once; an absolute local drive path to a source file.</summary>
     File_: string;
@@ -41,6 +47,12 @@ type
     Col  : string;
     /// <summary>The pipe frame: file, line and (when given) col separated by TAB, ending in LF.</summary>
     /// <returns>The UTF-8-ready text; never contains a TAB or LF inside a field (ParseDragLintUri refused them).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: IntToStr</para>
+    /// <para>Reads: File_, Line, Col</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Payload: string;
   end;
 
@@ -51,12 +63,22 @@ type
 /// non-ascii key in uri, no file= in uri, duplicate key, control character in file/line/col, line is not a number,
 /// col is not a number, reserved device name) or IsOpenableSourcePath's. '' on True.</param>
 /// <returns>True only when every rule passes.</returns>
-/// <remarks>Pure and thread-safe; never touches the file system (the gate runs BEFORE any FileExists, which on a
+/// <remarks>
+/// Pure and thread-safe; never touches the file system (the gate runs BEFORE any FileExists, which on a
 /// UNC path is itself the network access being prevented). The scheme match is CASE-INSENSITIVE, as the script's
 /// PowerShell -notmatch is; surrounding whitespace and trailing '/' are trimmed; the host/path part before '?' is
 /// ignored. Query keys are lower-cased (ASCII); a pair without '=' or with an empty key is ignored. Every key at
 /// most once -- never last-wins. Percent decoding (%XX as UTF-8 only) happens once; an invalid UTF-8 sequence stays
-/// literal; a decoded control character is refused, a '+' is not a space.</remarks>
+/// literal; a decoded control character is refused, a '+' is not a space.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: Copy, Default, DRagLint.Core.DragLintUri.CheckTarget, DRagLint.Core.DragLintUri.SplitQuery, DRagLint.Core.DragLintUri.TrimWhiteSpace, EndsStr, Pos, StartsText</para>
+/// <para>Returns: pReason = ''</para>
+/// <para>Mutates: pTarget (out), pReason (out)</para>
+/// <seealso cref="DRagLint.Core.DragLintUri.CheckTarget"/>
+/// <seealso cref="DRagLint.Core.DragLintUri.SplitQuery"/>
+/// <seealso cref="DRagLint.Core.DragLintUri.TrimWhiteSpace"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseDragLintUri(const pUri: string; out pTarget: TDragLintTarget; out pReason: string): Boolean;  // dl:ok unused-public-symbol@0cc2 -- REVIEWED 2026-10-14: called by drag-lint-open.exe (its own project) and T68, neither in this index
 
 implementation

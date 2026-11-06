@@ -28,12 +28,21 @@ uses
 /// <returns>False when the layout is not one this routine understands (an
 /// `in '...'` path, an entry mid-line with no neighbour comma, a clause that
 /// does not end in a ';' on the line it can see) -- the caller then declines.</returns>
-/// <remarks>Shared by uses-movable-to-implementation (here) and
+/// <remarks>
+/// Shared by uses-movable-to-implementation (here) and
 /// unused-unit-in-uses (DRagLint.Fix.Store, lane A5B). Every edit carries
 /// ExpectText, so a file that changed under the finding is skipped. Lane IATOM:
-/// the house leading-comma layout (`uses` / `  A` / `  , B` / `  ;`) is understood --
-/// a `  , B` line goes whole; removing the first entry promotes the next one
-/// (its comma goes); a last `  , B;` hands its ';' to the entry above.</remarks>
+/// the house leading-comma layout (`uses` / ` A` / ` , B` / ` ;`) is understood --
+/// a ` , B` line goes whole; removing the first entry promotes the next one
+/// (its comma goes); a last ` , B;` hands its ';' to the entry above.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Fix.ProjectWide.FixUsesMovable (DRagLint.Fix.ProjectWide.pas), DRagLint.Fix.Store.FixUnusedUnits (DRagLint.Fix.Store.pas), DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries (DRagLint.LSP.UsesOnSave.pas)</para>
+/// <para>Calls: ContainsText, Copy, Default, DRagLint.Fix.ProjectWide.RemoveUsesEntry.Fresh, Pos, SameText, Trim, TrimLeft, TrimRight</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 49 (cyclomatic, outer body), 183 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Fix.ProjectWide.RemoveUsesEntry.Fresh"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdits: TList<TTextEdit>): Boolean;
 
 /// <summary>A copy of AFinding whose StartCol / EndCol count CHARACTERS of the decoded
@@ -41,8 +50,16 @@ function RemoveUsesEntry(const AFinding: TLintFinding; ALines: TStringList; AEdi
 /// <param name="AFinding">A finding on one line (StartLine); its columns are index columns.</param>
 /// <param name="ALines">The file as the applier decodes it (TTextFileFormat.ReadFile).</param>
 /// <returns>AFinding with character columns; unchanged when the line is out of range or pure ASCII.</returns>
-/// <remarks>Pure ASCII lines map identically, so only a line with a non-ASCII character before
-/// the span moves (CLIFIX C3: such a file used to be declined by the uses fixers).</remarks>
+/// <remarks>
+/// Pure ASCII lines map identically, so only a line with a non-ASCII character before
+/// the span moves (CLIFIX C3: such a file used to be declined by the uses fixers).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Fix.ProjectWide.FixUsesMovable (DRagLint.Fix.ProjectWide.pas), DRagLint.Fix.Store.FixClassNameCompare (DRagLint.Fix.Store.pas), DRagLint.Fix.Store.FixUnusedUnits (DRagLint.Fix.Store.pas), DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries (DRagLint.LSP.UsesOnSave.pas)</para>
+/// <para>Calls: DRagLint.Convert.UsesReconcile.CharColumn</para>
+/// <para>Returns: AFinding</para>
+/// <seealso cref="DRagLint.Convert.UsesReconcile.CharColumn"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function WithCharColumns(const AFinding: TLintFinding; ALines: TStrings): TLintFinding;
 
 implementation
@@ -558,4 +575,4 @@ initialization
   RegisterFixer('virtual-never-overridden', FixVirtualDirective, True);
   RegisterFileFixer('uses-movable-to-implementation', FixUsesMovable);
 
-end.
+end.

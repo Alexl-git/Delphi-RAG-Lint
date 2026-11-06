@@ -34,11 +34,23 @@ const
 
 type
   /// <summary>A question was refused, failed, or is not ported.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas), DRagLint.Charts.MemberAccess.CanonicalMode (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.Butterfly.Emit (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas) (+41 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Ask, DRagLint.Charts.MemberAccess, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Effects (+15 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EChartsQuestion = class(Exception);
 
   /// <summary>Everything one chart question is asked with.</summary>
-  /// <remarks>The values Ask-Report and New-DiagramArtifact would hold after resolution:
-  /// full index path, defaults applied. A value record; nothing in it is owned.</remarks>
+  /// <remarks>
+  /// The values Ask-Report and New-DiagramArtifact would hold after resolution:
+  /// full index path, defaults applied. A value record; nothing in it is owned.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Ask.pas) ?, DRagLint.Charts.Ask.AnswerIndexLines (DRagLint.Charts.Ask.pas) ?, DRagLint.Charts.Ask.MetaJson (DRagLint.Charts.Ask.pas) ?, DRagLint.Charts.Ask.RegenerateText (DRagLint.Charts.Ask.pas) ?, DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce (DRagLint.Charts.Producer.Delphi.pas) (+46 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Ask, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Deps (+18 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TQuestionArgs = record
     /// <summary>The question id, lower case (Ask-Report R13).</summary>
     Question     : string;
@@ -85,19 +97,59 @@ type
     EngineVersion: string;
     /// <summary>The clone folder &lt;ChartsRoot&gt;\scratch\db.</summary>
     /// <returns>The folder path.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.Create (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.CrossesBoundary.FarRows (DRagLint.Charts.Q.CrossesBoundary.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.Create (DRagLint.Charts.Q.FeedsFrom.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.Create (DRagLint.Charts.Q.LandsWhere.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas) (+1 more)</para>
+    /// <para>Returns: TPath.Combine(ChartsRoot, CLONE_SUBDIR)</para>
+    /// <para>Reads: ChartsRoot</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Charts.Question.TQuestionArgs.Dot"/>
+    /// <seealso cref="DRagLint.Charts.Question.TQuestionArgs.GuardedDb"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CloneRoot: string;
     /// <summary>dot.exe: DotExe when set, else the Resolve-GraphvizDot walk from ScriptDir (or ChartsRoot\src).</summary>
     /// <returns>The full path of dot.exe.</returns>
-    /// <remarks>Called where the PS emitter's Invoke-DotRun resolves it: after the .dot text is built.
-    /// ResolveGraphvizDot raises EChartsTool, naming every place looked, when no dot.exe is found.</remarks>
+    /// <remarks>
+    /// Called where the PS emitter's Invoke-DotRun resolves it: after the .dot text is built.
+    /// ResolveGraphvizDot raises EChartsTool, naming every place looked, when no dot.exe is found.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.Butterfly.Emit (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.Emit (DRagLint.Charts.Q.Consumers.pas) (+20 more)</para>
+    /// <para>Calls: DRagLint.Charts.Tools.DragLintSettingsPath, DRagLint.Charts.Tools.ResolveGraphvizDot</para>
+    /// <para>Returns: DotExe; ResolveGraphvizDot('', DragLintSettingsPath, ChartsRoot, Scripts, SHARED_DOT_DEFAULT)</para>
+    /// <para>Reads: DotExe, ScriptDir, ChartsRoot</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Charts.Tools.DragLintSettingsPath"/>
+    /// <seealso cref="DRagLint.Charts.Tools.ResolveGraphvizDot"/>
+    /// <seealso cref="DRagLint.Charts.Question.TQuestionArgs.CloneRoot"/>
+    /// <seealso cref="DRagLint.Charts.Question.TQuestionArgs.GuardedDb"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Dot: string;
     /// <summary>The index path through the clone guard (Get-CloneDb), as the PS emitters open it.</summary>
     /// <returns>The full path.</returns>
     /// <exception cref="EChartsTool">A blank, missing, non-.sqlite or (without the override) non-clone path.</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.Butterfly.Emit (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.Create (DRagLint.Charts.Q.Consumers.pas) (+20 more)</para>
+    /// <para>Calls: DRagLint.Charts.Question.TQuestionArgs.CloneRoot, DRagLint.Charts.Tools.CloneDb</para>
+    /// <para>Returns: CloneDb(DbPath, CloneRoot, Note)</para>
+    /// <para>Reads: DbPath</para>
+    /// <seealso cref="DRagLint.Charts.Question.TQuestionArgs.CloneRoot"/>
+    /// <seealso cref="DRagLint.Charts.Tools.CloneDb"/>
+    /// <seealso cref="DRagLint.Charts.Question.TQuestionArgs.Dot"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GuardedDb: string;
   end;
 
   /// <summary>One emitter count for meta.json's "emitter" object, already JSON-encoded.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.Butterfly.Emit (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.ClassSurface.TCounts.Fields (DRagLint.Charts.Q.ClassSurface.pas) (+34 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Deps, DRagLint.Charts.Q.Effects, DRagLint.Charts.Q.EventWiring (+16 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMetaField = record
     /// <summary>The PS property name, e.g. 'Reads'.</summary>
     Name: string;
@@ -107,46 +159,149 @@ type
     /// <param name="pName">Property name.</param>
     /// <param name="pValue">Value.</param>
     /// <returns>The field.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.Butterfly.Emit (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.ClassSurface.TCounts.Fields (DRagLint.Charts.Q.ClassSurface.pas) (+26 more)</para>
+    /// <para>Calls: IntToStr</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Bool"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Null"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Obj"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Real"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.RealJson"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Int(const pName: string; pValue: Int64): TMetaField; static;
     /// <summary>A Boolean field.</summary>
     /// <param name="pName">Property name.</param>
     /// <param name="pValue">Value.</param>
     /// <returns>The field.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.Butterfly.Emit (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.Emit (DRagLint.Charts.Q.Consumers.pas) (+23 more)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Int"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Null"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Obj"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Real"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.RealJson"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Bool(const pName: string; pValue: Boolean): TMetaField; static;
     /// <summary>A string field.</summary>
     /// <param name="pName">Property name.</param>
     /// <param name="pValue">Value; escaped as ConvertTo-Json escapes it.</param>
     /// <returns>The field.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ResultFields (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas), DRagLint.Charts.Q.Effects.Emit (DRagLint.Charts.Q.Effects.pas) (+15 more)</para>
+    /// <para>Calls: DRagLint.Charts.Question.PsJsonString</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.Question.PsJsonString"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Bool"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Int"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Null"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Obj"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Str(const pName, pValue: string): TMetaField; static;
     /// <summary>A double field, as ConvertTo-Json writes a [double] (Measure-Object -Sum).</summary>
     /// <param name="pName">Property name.</param>
     /// <param name="pValue">Value.</param>
     /// <returns>The field: a whole number keeps a '.0' suffix (24.0), any other prints round-trip.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ResultFields (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.SumOf (DRagLint.Charts.Q.ExceptionPaths.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.ResultFields (DRagLint.Charts.Q.FeedsFrom.pas) (+2 more)</para>
+    /// <para>Calls: DRagLint.Charts.Question.TMetaField.RealJson</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.RealJson"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Bool"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Int"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Null"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Obj"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Real(const pName: string; pValue: Double): TMetaField; static;
     /// <summary>A JSON null: the PS wrote $null -- the value was not asked, not measured empty.</summary>
     /// <param name="pName">Property name.</param>
     /// <returns>The field, Json 'null' (never 0, which would read as a measured absence).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Hierarchy.Emit (DRagLint.Charts.Q.Hierarchy.pas), DRagLint.Charts.Q.MemberAccess.LabelField (DRagLint.Charts.Q.MemberAccess.pas), DRagLint.Charts.Q.WhoCalls.EmitTree (DRagLint.Charts.Q.WhoCalls.pas)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Bool"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Int"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Obj"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Real"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.RealJson"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Null(const pName: string): TMetaField; static;
     /// <summary>A nested object field (an [ordered] dictionary of the emitter result).</summary>
     /// <param name="pName">Property name.</param>
     /// <param name="pFields">The members, in order, already JSON-encoded.</param>
     /// <returns>The field, indented for the emitter object of meta.json (members at six
     /// spaces, the closing brace at four); '{}' when pFields is empty.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Question.PsJsonString</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.Question.PsJsonString"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Bool"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Int"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Null"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Real"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Obj(const pName: string; const pFields: TArray<TMetaField>): TMetaField; static;
     /// <summary>A string-array field, as ConvertTo-Json -Depth 4 writes a [string[]] inside the emitter object.</summary>
     /// <param name="pName">Property name.</param>
     /// <param name="pValues">The elements, in order; each is escaped as ConvertTo-Json escapes a string.</param>
     /// <returns>The field: elements at six spaces one per line, the closing bracket at four; '[]' when pValues is empty.</returns>
-    /// <remarks>Elements at six spaces one per line (PsJsonString), the closing bracket at four; '[]' when pValues is
-    /// empty; a one-element array stays an array (measured 2026-10-17 under pwsh 7). Mirrors Obj's indentation.</remarks>
+    /// <remarks>
+    /// Elements at six spaces one per line (PsJsonString), the closing bracket at four; '[]' when pValues is
+    /// empty; a one-element array stays an array (measured 2026-10-17 under pwsh 7). Mirrors Obj's indentation.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Cycles.Emit (DRagLint.Charts.Q.Cycles.pas), DRagLint.Charts.Q.MemberAccess.Emit (DRagLint.Charts.Q.MemberAccess.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ResultFields (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Question.PsJsonString</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.Question.PsJsonString"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Bool"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Int"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Null"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Obj"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function StrList(const pName: string; const pValues: TArray<string>): TMetaField; static;
     /// <summary>A double encoded as ConvertTo-Json writes it.</summary>
     /// <param name="pValue">Value.</param>
     /// <returns>'24.0' for a whole number, else the shortest round-trip text with '.' as decimal point.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Question.TMetaField.Real (DRagLint.Charts.Question.pas)</para>
+    /// <para>Calls: FloatToStr, IntToStr</para>
+    /// <para>Returns: IntToStr(Trunc(pValue)) + '.0'; FloatToStr(pValue, TFormatSettings.Invariant)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Bool"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Int"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Null"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Obj"/>
+    /// <seealso cref="DRagLint.Charts.Question.TMetaField.Real"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function RealJson(pValue: Double): string; static;
   end;
 
   /// <summary>One leaf -> full path pair of a text question's link table.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Ask.pas), declaration (DRagLint.Charts.Question.pas), DRagLint.Charts.Ask.TAnchorLinker.Create (DRagLint.Charts.Ask.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Ask, DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Question</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAnchorPath = record
     /// <summary>The file leaf as an anchor writes it (e.g. 'Blueprint4.pas'); matched case-insensitively.</summary>
     Leaf: string;
@@ -155,6 +310,12 @@ type
   end;
 
   /// <summary>What a ported chart emitter hands back (the PS emitter's result object).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Ask.MetaJson (DRagLint.Charts.Ask.pas) ?, DRagLint.Charts.Ask.TextShellHtml (DRagLint.Charts.Ask.pas) ?, DRagLint.Charts.Ask.TraceBody (DRagLint.Charts.Ask.pas) ?, DRagLint.Charts.Q.Implementors.Emit (DRagLint.Charts.Q.Implementors.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas) (+38 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Ask, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Deps, DRagLint.Charts.Q.Effects (+17 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TChartResult = record
     /// <summary>The files of the one dot layout run, and the SVG anchor count.</summary>
     Layout      : TDotLayout;
@@ -195,32 +356,67 @@ type
   /// <param name="pArgs">The question.</param>
   /// <param name="pOutDir">The bundle folder the layout files go to (they are renamed after).</param>
   /// <returns>The chart.</returns>
-  /// <remarks>Raises EChartsQuestion (or any exception) to refuse: the message is the answer.</remarks>
+  /// <remarks>
+  /// Raises EChartsQuestion (or any exception) to refuse: the message is the answer.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Question.pas), DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.RunEmitter (DRagLint.Charts.Ask.pas), DRagLint.Charts.Producer.Delphi.TDelphiProducer.AnswersInProcess (DRagLint.Charts.Producer.Delphi.pas), DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce (DRagLint.Charts.Producer.Delphi.pas) (+2 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TChartEmitter = reference to function(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;
 
 /// <summary>Registers a ported chart emitter; called from a Q unit's initialization.</summary>
 /// <param name="pId">The question id (lower case).</param>
 /// <param name="pEmitter">The emitter.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: initialization/finalization (DRagLint.Charts.Q.ClassSurface.pas), initialization/finalization (DRagLint.Charts.Q.Deps.pas), initialization/finalization (DRagLint.Charts.Q.EventWiring.pas), initialization/finalization (DRagLint.Charts.Q.ShownWhere.pas), initialization/finalization (DRagLint.Charts.Q.TouchesTables.pas) (+20 more)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterChartQuestion(const pId: string; const pEmitter: TChartEmitter);
 
 /// <summary>Finds the ported emitter of a question.</summary>
 /// <param name="pId">The question id; compared case-insensitively.</param>
 /// <param name="pEmitter">The emitter, or nil.</param>
 /// <returns>True when the question is ported.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas), DRagLint.Charts.Producer.Delphi.TDelphiProducer.AnswersInProcess (DRagLint.Charts.Producer.Delphi.pas), DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce (DRagLint.Charts.Producer.Delphi.pas)</para>
+/// <para>Returns: (GRegistry &lt;&gt; nil) and GRegistry.TryGetValue(pId, pEmitter)</para>
+/// <para>Mutates: pEmitter (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindChartQuestion(const pId: string; out pEmitter: TChartEmitter): Boolean;
 
 /// <summary>The ids of every ported question, sorted ordinally.</summary>
 /// <returns>The ids.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Producer.Delphi.TDelphiProducer.Describe (DRagLint.Charts.Producer.Delphi.pas), DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce (DRagLint.Charts.Producer.Delphi.pas)</para>
+/// <para>Returns: nil; GRegistry.Keys.ToArray</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PortedQuestionIds: TArray<string>;
 
 /// <summary>The phrase of the header sentence for a question id.</summary>
 /// <param name="pId">The question id.</param>
 /// <returns>Its menu caption without the trailing dots, or 'Report' for an unknown id.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas), DRagLint.Charts.AskVerb.FormatAskAnswer (DRagLint.Charts.AskVerb.pas)</para>
+/// <para>Calls: SameText</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function QuestionPhrase(const pId: string): string;
 
 /// <summary>Every question id the chart pipeline accepts (New-DiagramArtifact.ps1's
 /// ValidateSet), in the menu-caption order of the header-phrase table.</summary>
 /// <returns>The 27 ids, lower case (implementors is Delphi-only: no Emit-*.ps1).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.AskUsage (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.NormaliseAskQuestion (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function QuestionIds: TArray<string>;
 
 /// <summary>The two count labels of a question (New-DiagramArtifact's $vocab).</summary>
@@ -228,32 +424,68 @@ function QuestionIds: TArray<string>;
 /// <param name="pLeft">The first label, e.g. 'tables read'.</param>
 /// <param name="pRight">The second label, e.g. 'tables written'.</param>
 /// <returns>False for an unknown id (both labels '').</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: True; False</para>
+/// <para>Mutates: pLeft (out), pRight (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function QuestionVocab(const pId: string; out pLeft, pRight: string): Boolean;
 
 /// <summary>Whether a question reads the SERVER index (Ask-Report's $needServer).</summary>
 /// <param name="pId">The question id; compared case-insensitively.</param>
 /// <returns>True for round-trip and lands-where.</returns>
-/// <remarks>The same list decides New-DiagramArtifact's regenerate -ServerDbPath and
-/// Ask-Report's 'INDEX ... (server)' line.</remarks>
+/// <remarks>
+/// The same list decides New-DiagramArtifact's regenerate -ServerDbPath and
+/// Ask-Report's 'INDEX ... (server)' line.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.AnswerIndexLines (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.RegenerateText (DRagLint.Charts.Ask.pas), DRagLint.Charts.Producer.Delphi.PairedIndexes (DRagLint.Charts.Producer.Delphi.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: False; True</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function QuestionReadsServerIndex(const pId: string): Boolean;
 
 /// <summary>Whether a question reads the SQL-script index (Ask-Report's $needSql).</summary>
 /// <param name="pId">The question id; compared case-insensitively.</param>
 /// <returns>True for round-trip, lands-where, consumers and feeds-from.</returns>
-/// <remarks>The same list decides New-DiagramArtifact's regenerate -SqlDbPath and
-/// Ask-Report's 'INDEX ... (sql)' line.</remarks>
+/// <remarks>
+/// The same list decides New-DiagramArtifact's regenerate -SqlDbPath and
+/// Ask-Report's 'INDEX ... (sql)' line.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.AnswerIndexLines (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.RegenerateText (DRagLint.Charts.Ask.pas), DRagLint.Charts.Producer.Delphi.PairedIndexes (DRagLint.Charts.Producer.Delphi.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: False; True</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function QuestionReadsSqlIndex(const pId: string): Boolean;
 
 /// <summary>The -Depth a question walks when none is given (New-DiagramArtifact's $EffDepth).</summary>
 /// <param name="pId">The question id; compared case-insensitively.</param>
 /// <returns>3 for exception-paths, 4 for round-trip, else DEFAULT_DEPTH.</returns>
-/// <remarks>The value the emitter walks, meta.json's depth and the regenerate line's -Depth.</remarks>
+/// <remarks>
+/// The value the emitter walks, meta.json's depth and the regenerate line's -Depth.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce (DRagLint.Charts.Producer.Delphi.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: DEFAULT_DEPTH; D.Depth</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function QuestionDefaultDepth(const pId: string): Integer;
 
 /// <summary>Encodes a string as ConvertTo-Json writes it.</summary>
 /// <param name="pValue">The text.</param>
 /// <returns>The quoted JSON string: '"' and '\' escaped, control characters as \b \f \n \r \t
 /// or \u00XX; everything else verbatim (Newtonsoft StringEscapeHandling.Default).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.JsonPair (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.MetaJson (DRagLint.Charts.Ask.pas), DRagLint.Charts.Question.TMetaField.Obj (DRagLint.Charts.Question.pas), DRagLint.Charts.Question.TMetaField.Str (DRagLint.Charts.Question.pas), DRagLint.Charts.Question.TMetaField.StrList (DRagLint.Charts.Question.pas)</para>
+/// <para>Calls: IntToHex</para>
+/// <para>Returns: SB.ToString</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PsJsonString(const pValue: string): string;
 
 implementation

@@ -31,6 +31,11 @@ type
   /// <summary>What the user has to select before a report question can be
   /// asked. It decides how the menu groups the question and where the target
   /// comes from.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.ReportText.pas) ?, DragLint.Plugin.Reports.BuildReportsMenu (DragLint.Plugin.Reports.pas), DragLint.Plugin.ReportText.ReportGroupCaption (DragLint.Plugin.ReportText.pas) ?</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReportTargetKind = (
     rtkRoutine,   { the routine at the caret }
     rtkMember,    { the field, property or DFM control at the caret }
@@ -40,6 +45,12 @@ type
     rtkName);     { a typed table or column name }
 
   /// <summary>One question of `drag-lint ask` as the menu offers it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.ReportText.pas) ?, DragLint.Plugin.Reports.PromptSecondRoutine (DragLint.Plugin.Reports.pas) ?, DragLint.Plugin.Reports.PromptTarget (DragLint.Plugin.Reports.pas) ?, DragLint.Plugin.ReportText.FindReportQuestion (DragLint.Plugin.ReportText.pas), DragLint.Plugin.ReportText.FormatReportAsDocInsight (DragLint.Plugin.ReportText.pas) ? (+2 more)</para>
+  /// <para>Used in units: DragLint.Plugin.Reports, DragLint.Plugin.ReportText</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReportQuestion = record
     /// <summary>The -Question value, e.g. 'who-writes'.</summary>
     Id     : string;
@@ -51,12 +62,23 @@ type
 
   /// <summary>The two incremental reindex shapes `drag-lint ask` prints for a
   /// stale index.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.ReportText.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReindexKind = (
     rikProject,   { index --project '<x.dproj>' --db '<db>' }
     rikSection);  { index --all --only <Section> }
 
   /// <summary>One reindex command parsed from the ask verb's stale-index
   /// message (exit 3).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.ReportText.pas) ?, DragLint.Plugin.Reports.OfferReindex (DragLint.Plugin.Reports.pas) ?, DragLint.Plugin.ReportText.ParseReindexCommands (DragLint.Plugin.ReportText.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Reports, DragLint.Plugin.ReportText</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReindexCommand = record
     /// <summary>Which of the two shapes it is.</summary>
     Kind       : TReindexKind;
@@ -115,6 +137,13 @@ const
 /// <summary>The section header the menu shows above a group of questions.</summary>
 /// <param name="pKind">The selection kind the group is asked of.</param>
 /// <returns>A non-empty, human header such as 'Routine at the cursor'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.BuildReportsMenu (DragLint.Plugin.Reports.pas)</para>
+/// <para>Returns: 'Routine at the cursor'; 'Field, property or grid column at the cursor'; 'Type at the cursor'; 'This unit'; 'This project'; 'Table or column (typed name)'</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReportGroupCaption(pKind: TReportTargetKind): string;
 
 /// <summary>Looks a question up by its -Question id.</summary>
@@ -122,6 +151,14 @@ function ReportGroupCaption(pKind: TReportTargetKind): string;
 /// <param name="pQuestion">Receives the catalog entry; a default record when
 /// not found.</param>
 /// <returns>True when the id is in REPORT_QUESTIONS.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.ReportText.FormatReportAsDocInsight (DragLint.Plugin.ReportText.pas)</para>
+/// <para>Calls: Default, SameText</para>
+/// <para>Returns: True; False</para>
+/// <para>Mutates: pQuestion (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindReportQuestion(const pId: string; out pQuestion: TReportQuestion): Boolean;
 
 /// <summary>Turns a `drag-lint ask --plain` stdout answer into a DocInsight remarks
@@ -133,7 +170,8 @@ function FindReportQuestion(const pId: string; out pQuestion: TReportQuestion): 
 /// <returns>CRLF-separated lines, each starting with '///', opening with
 /// '/// &lt;remarks&gt;' and closing with '/// &lt;/remarks&gt;'. The first
 /// sentence names the question, the target and the date.</returns>
-/// <remarks>Guarantees, each pinned by a test: strict 7-bit ASCII (dashes and
+/// <remarks>
+/// Guarantees, each pinned by a test: strict 7-bit ASCII (dashes and
 /// arrows become -- and ->, anything else unknown becomes '?'); no line longer
 /// than REPORT_DOC_MAX_LINE (an over-long token is split); the autodoc
 /// provenance marker never appears; '&lt;' and '&amp;' are XML-escaped; a
@@ -148,13 +186,28 @@ function FindReportQuestion(const pId: string; out pQuestion: TReportQuestion): 
 /// REPORT_DOC_MAX_LINE, because the line must rerun as typed.
 /// A thin forwarder: looks pQuestionId's caption up in REPORT_QUESTIONS
 /// (case-insensitive) and calls DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight,
-/// which owns the format.</remarks>
+/// which owns the format.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.HandleReportDone (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight, DragLint.Plugin.ReportText.FindReportQuestion</para>
+/// <para>Returns: FormatAnswerAsDocInsight(Phrase, pQuestionId, pTarget, pDate, pAnswer)</para>
+/// <seealso cref="DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight"/>
+/// <seealso cref="DragLint.Plugin.ReportText.FindReportQuestion"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormatReportAsDocInsight(const pQuestionId, pTarget: string; pDate: TDateTime; const pAnswer: string): string;
 
 /// <summary>Reads the "resolved" field of `drag-lint typeat --format json`.</summary>
 /// <param name="pOutput">The captured output; notes printed before or after
 /// the JSON document are tolerated.</param>
 /// <returns>The resolved qualified name, or '' when there is none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.CaretTargetThen (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: Copy, LastDelimiter, Pos, TJSONObject, Trim</para>
+/// <para>Returns: ''; Trim(TJSONObject(V).GetValue&lt;string&gt;('resolved', ''))</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseTypeAtResolved(const pOutput: string): string;
 
 /// <summary>Parses the first line of a text DFM ('object frmX: TfrmX').</summary>
@@ -163,6 +216,13 @@ function ParseTypeAtResolved(const pOutput: string): string;
 /// <param name="pName">Receives the root component (form instance) name.</param>
 /// <param name="pClass">Receives the root class name.</param>
 /// <returns>False for anything else, including a binary DFM.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.ControlTargetFromDfm (DragLint.Plugin.Reports.pas)</para>
+/// <para>Returns: M.Success</para>
+/// <para>Mutates: pName (out), pClass (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseDfmRootObject(const pFirstLine: string; out pName, pClass: string): Boolean;
 
 /// <summary>Rewrites a typeat answer for a DFM control into the
@@ -173,11 +233,18 @@ function ParseDfmRootObject(const pFirstLine: string; out pName, pClass: string)
 /// <param name="pRootClass">The DFM root class name, '' when unknown.</param>
 /// <returns>pRootName + '.' + Control when the owning class equals pRootClass
 /// (case-insensitive); otherwise pQName unchanged.</returns>
-/// <remarks>Measured 2026-10-05 on the frozen ORM3 clones: feeds-from and
+/// <remarks>
+/// Measured 2026-10-05 on the frozen ORM3 clones: feeds-from and
 /// lands-where refuse Blueprint4.TfrmBlueprint4.dxDBGrid1OperationVName (exit
 /// 1) and answer frmBlueprint4.dxDBGrid1OperationVName (exit 0); round-trip
 /// accepts both. An ORM property (uCAUSFAIL.TmcCAUSFAIL.REASON) is not on the
-/// form's class and is left alone.</remarks>
+/// form's class and is left alone.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.ControlTargetFromDfm (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: pQName; pRootName + '.' + Parts[High(Parts)]</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormControlTarget(const pQName, pRootName, pRootClass: string): string;
 
 /// <summary>The unit part of a member qualified name -- where its DFM is.</summary>
@@ -185,25 +252,52 @@ function FormControlTarget(const pQName, pRootName, pRootClass: string): string;
 /// <returns>Everything before the last two parts, or '' when the name has
 /// fewer than three parts (an instance target such as frmX.Edit1 names no
 /// unit).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.ControlTargetFromDfm (DragLint.Plugin.Reports.pas)</para>
+/// <para>Returns: ''; string.Join('.', Parts, 0, Length(Parts) - (QNAME_MEMBER_PARTS - 1))</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function QNameUnitName(const pQName: string): string;
 
 /// <summary>True for the questions whose target is a form control and so
 /// should go through FormControlTarget.</summary>
 /// <param name="pQuestionId">The question id.</param>
 /// <returns>True for feeds-from, lands-where and round-trip.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.ChooseTargetThen (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: MatchText</para>
+/// <para>Returns: MatchText(pQuestionId, ['feeds-from', 'lands-where', 'round-trip'])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function QuestionTakesFormControl(const pQuestionId: string): Boolean;
 
 /// <summary>True for the questions that need a second routine (-To) besides
 /// the target.</summary>
 /// <param name="pQuestionId">The question id.</param>
 /// <returns>True for path (routine A is the target, routine B is -To).</returns>
-/// <remarks>The caret supplies routine A only; the menu prompts for B.</remarks>
+/// <remarks>
+/// The caret supplies routine A only; the menu prompts for B.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.InvokeReportQuestion (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: SameText(pQuestionId, 'path')</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function QuestionTakesSecondRoutine(const pQuestionId: string): Boolean;
 
 /// <summary>Whether a typed target may be sent at all.</summary>
 /// <param name="pTarget">The target from the prompt.</param>
 /// <returns>False for an empty or blank target and for one containing a double
 /// quote, which would break the quoted command-line argument.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.PromptSecondRoutine (DragLint.Plugin.Reports.pas), DragLint.Plugin.Reports.PromptTarget (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: Pos, Trim</para>
+/// <para>Returns: (Trim(pTarget) &lt;&gt; '') and (Pos('"', pTarget) = 0)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsValidReportTarget(const pTarget: string): Boolean;
 
 /// <summary>The command line that runs one question through the engine's `ask` verb.</summary>
@@ -219,16 +313,31 @@ function IsValidReportTarget(const pTarget: string): Boolean;
 /// chart opens in the browser. Every value is quoted the way CommandLineToArgvW splits it (an
 /// embedded quote becomes \", backslashes before a quote or the closing quote are doubled), so
 /// the engine receives each value exactly.</returns>
-/// <remarks>--plain is load-bearing: HandleReportDone wraps the answer in its
+/// <remarks>
+/// --plain is load-bearing: HandleReportDone wraps the answer in its
 /// own DocInsight block (FormatReportAsDocInsight), and without --plain the
 /// verb would print a block of its own, wrapped twice. No pwsh and no
 /// Ask-Report.ps1 are needed here: the engine answers every question
-/// in-process (all 26 since the CHARTS port).</remarks>
+/// in-process (all 26 since the CHARTS port).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.InvokeReportQuestion (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: DragLint.Plugin.ReportText.QuoteCmdArg, Format, Trim</para>
+/// <seealso cref="DragLint.Plugin.ReportText.QuoteCmdArg"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildAskCmdLine(const pEngine, pQuestionId, pTarget, pInFile: string; const pTo: string = ''): string;
 /// <summary>The reason `drag-lint ask` gave for a non-zero exit.</summary>
 /// <param name="pOutput">The captured stdout+stderr.</param>
 /// <returns>Everything from the first 'ask-report:' line on, with that prefix
 /// removed; the trimmed output when there is no such line.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.HandleReportDone (DragLint.Plugin.Reports.pas), DragLint.Plugin.Reports.OfferReindex (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: Copy, DragLint.Plugin.ReportText.SplitLines, StartsText, Trim, TrimLeft, TrimRight</para>
+/// <para>Returns: SB.ToString</para>
+/// <seealso cref="DragLint.Plugin.ReportText.SplitLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AskReportReason(const pOutput: string): string;
 /// <summary>The message for an engine that predates the `ask` verb.</summary>
 /// <param name="pExit">The exit code of the ask run.</param>
@@ -236,17 +345,32 @@ function AskReportReason(const pOutput: string): string;
 /// <returns>'The drag-lint engine is too old for the Reports menu (no "ask" command) --
 /// update the engine.' when pExit is 2 and a line of pOutput reads 'unknown command: ask'
 /// (any case, any prefix such as 'ERROR: '); '' otherwise.</returns>
-/// <remarks>An old engine answers `ask` with that line followed by its whole help banner,
-/// which AskReportReason would otherwise put into the dialog.</remarks>
+/// <remarks>
+/// An old engine answers `ask` with that line followed by its whole help banner,
+/// which AskReportReason would otherwise put into the dialog.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.HandleReportDone (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: DragLint.Plugin.ReportText.SplitLines, EndsText, Trim</para>
+/// <para>Returns: ''; 'The drag-lint engine is too old for the Reports menu (no "ask" command) -- update the engine.'</para>
+/// <seealso cref="DragLint.Plugin.ReportText.SplitLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AskEngineTooOldMessage(pExit: Integer; const pOutput: string): string;
 
 /// <summary>The incremental reindex commands in a stale-index message.</summary>
 /// <param name="pOutput">The captured output of a run that exited 3.</param>
 /// <returns>One entry per recognised command, in order.</returns>
-/// <remarks>Accepts exactly the two shapes `drag-lint ask` prints -- `index
+/// <remarks>
+/// Accepts exactly the two shapes `drag-lint ask` prints -- `index
 /// --project '&lt;p&gt;' --db '&lt;db&gt;'` and `index --all --only
 /// &lt;Section&gt;` -- and nothing else: a folder target (which would widen a
-/// project DB into a directory DB) and a --rebuild are never returned.</remarks>
+/// project DB into a directory DB) and a --rebuild are never returned.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.OfferReindex (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: Default, DragLint.Plugin.ReportText.SplitLines</para>
+/// <seealso cref="DragLint.Plugin.ReportText.SplitLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseReindexCommands(const pOutput: string): TArray<TReindexCommand>;
 
 implementation

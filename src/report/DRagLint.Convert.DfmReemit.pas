@@ -54,7 +54,7 @@ type
   /// verbatim in ValueText, not modelled as child nodes. Only a dnkSubObject has
   /// children: its properties + nested objects.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.EmitDotted (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas) (+17 more)</para>
+  /// <para>Used by: DRagLint.Convert.DfmReemit.CloneNode (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ParseDfmBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.PlaceAtPath (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.WalkNodeInto (DRagLint.Convert.DfmReemit.pas) (+17 more)</para>
   /// <para>Used in units: DRagLint.Convert.DfmReemit, DRagLint.Convert.GlyphVacuum</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -130,7 +130,7 @@ type
   /// only the rule book can say which of the two they meant. Existing carries
   /// the value that WON so the report can be read without the .dfm to hand.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas)</para>
   /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -153,7 +153,7 @@ type
   /// account of where it came from. Informational, not remainder: the work was
   /// DONE, this says so.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas)</para>
   /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -176,7 +176,7 @@ type
   /// `map` addition to the .castlib, and the rule line so the operator can find
   /// the `#link ... : Cast` that asked for it.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
   /// <para>Used in units: DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -190,10 +190,16 @@ type
 
   /// <summary>One value a VALUE cast (castlib `value`, 1.27.0 -- StripDB)
   /// looked at on the .dfm side.</summary>
-  /// <remarks>Changed: the value was rewritten (OldValue -> NewValue, both
+  /// <remarks>
+  /// Changed: the value was rewritten (OldValue -> NewValue, both
   /// literal texts as written). Not Changed: the value is not ONE string
   /// literal, so nothing was written and the operator checks it by hand. A
-  /// literal the transform leaves as it is produces no record.</remarks>
+  /// literal the transform leaves as it is produces no record.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.Convert.Apply.ValueCastDfmItems (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReemitValueCast = record
     CastName: string;
     FromPath: string;
@@ -222,10 +228,16 @@ type
 
   /// <summary>One fired '#warn' (1.26.3): the SOURCE block streams FromPath, so
   /// the book's text is reported, expanded, for this instance.</summary>
-  /// <remarks>Value is the streamed value (a simple quoted string unquoted);
+  /// <remarks>
+  /// Value is the streamed value (a simple quoted string unquoted);
   /// Text the template with &lt;value&gt;, &lt;name&gt; and every brace
   /// placeholder replaced (an absent placeholder property expands to '').
-  /// REMAINDER: convert-apply reports it as a warning.</remarks>
+  /// REMAINDER: convert-apply reports it as a warning.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldBookChecks (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ReportBookChecks (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReemitBookWarning = record
     FromPath: string;
     Value   : string;
@@ -236,8 +248,14 @@ type
   /// <summary>One '#check-ref' value to verify (1.26.3): the CONVERTED block
   /// carries Value at ToPath. The re-emit is pure, so it only reports what it
   /// wrote; convert-apply checks it against the project index.</summary>
-  /// <remarks>Value is unquoted like TReemitBookWarning.Value. RefTargets is
-  /// the rule's 'Class.Prop' list.</remarks>
+  /// <remarks>
+  /// Value is unquoted like TReemitBookWarning.Value. RefTargets is
+  /// the rule's 'Class.Prop' list.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldBookChecks (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ReportBookChecks (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReemitRefCheck = record
     ToPath    : string;
     Value     : string;
@@ -334,7 +352,7 @@ type
   /// block, or no #convert header in the rules. Error carries the reason when Ok
   /// is False.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.SpliceIntoParent (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.SpliceIntoParent (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

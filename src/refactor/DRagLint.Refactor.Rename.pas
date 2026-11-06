@@ -18,7 +18,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.MCP.Server.pas), DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.BuildWorkspaceEdit (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas) (+12 more)</para>
+  /// <para>Used by: declaration (DRagLint.MCP.Server.pas), DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.BuildWorkspaceEdit (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas) (+14 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Feature.Rename, DRagLint.MCP.Server, DRagLint.Refactor.NamingFix, DRagLint.Refactor.Rename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -32,7 +32,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.MultiProjectRename.CandidateWhy (DRagLint.Refactor.MultiProjectRename.pas) (+2 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.ExtractMethod.TExtractMethodRefactoring.Build (DRagLint.Refactor.ExtractMethod.pas), DRagLint.Refactor.MultiProjectRename.CandidateWhy (DRagLint.Refactor.MultiProjectRename.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Feature.Rename, DRagLint.MCP.Server, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.NamingFix</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -60,15 +60,15 @@ type
       /// List.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.NamingFix.BuildTargetEdits (DRagLint.Refactor.NamingFix.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.Rename.CompareEdits, DRagLint.Refactor.Rename.FindIdentFrom, DRagLint.Refactor.Rename.LastDotSegment, DRagLint.Refactor.Rename.SnapEditsToToken, IntToStr, UpperCase</para>
-      /// <para>Complexity: 13 (cyclomatic, outer body), 124 lines (full implementation)</para>
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.NamingFix.BuildTargetEdits (DRagLint.Refactor.NamingFix.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Refactor.Rename.CompareEdits, DRagLint.Refactor.Rename.DecodedLines, DRagLint.Refactor.Rename.DfmBindingBelongsTo, DRagLint.Refactor.Rename.FindIdentFrom, DRagLint.Refactor.Rename.IndexColsToCharCols, DRagLint.Refactor.Rename.LastDotSegment (+6 more)</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 166 lines (full implementation)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
       /// <seealso cref="DRagLint.Refactor.Rename.CompareEdits"/>
-      /// <seealso cref="DRagLint.Refactor.Rename.FindIdentFrom"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Build(const AStore: ISymbolStore; const AQName, ANewName: string): TArray<TRenameEdit>;
@@ -85,18 +85,20 @@ type
       /// restored byte-for-byte and the exception is re-raised.</summary>
       /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TRenameEdit&gt;</param>
       /// <param name="AWriteBackups"><!-- drag-lint:auto type -->Boolean</param>
-      /// <returns><!-- drag-lint:auto -->Integer -- Observed: FilesTouched.</returns>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed:
+      /// TTextEditApplier.Apply(TEs.ToArray, AWriteBackups).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: Copy, SameText</para>
-      /// <para>Complexity: 16 (cyclomatic, outer body), 111 lines (full implementation)</para>
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: Copy, Default, DRagLint.Refactor.Rename.DecodedLines, DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/2, SameText</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 83 lines (full implementation)</para>
+      /// <para>Catches: Exception (empty); Exception (re-raise)</para>
       /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Refactor.Rename.DecodedLines"/>
+      /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BinaryDfmReason"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Build"/>
       /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal"/>
-      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason"/>
-      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.IncludeUseReason"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Apply(const AEdits: TArray<TRenameEdit>; AWriteBackups: Boolean) : Integer            ; // returns files touched
@@ -143,7 +145,7 @@ type
       /// same scope', [ANewName]).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.MultiProjectRename.CandidateWhy (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.NamingFix.FreeCandidates (DRagLint.Refactor.NamingFix.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.MultiProjectRename.CandidateWhy (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.NamingFix.FreeCandidates (DRagLint.Refactor.NamingFix.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Refactor.Rename.TRenameRefactoring.IsReservedWord, Format</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
@@ -165,12 +167,25 @@ type
       /// dot segment is matched (case-insensitive, whole identifier).</param>
       /// <returns>'' when no indexed .inc file uses the name; else a message that
       /// names every such .inc file.</returns>
-      /// <remarks>A text scan, deliberately conservative: comments ({ }, (* *), //)
+      /// <remarks>
+      /// A text scan, deliberately conservative: comments ({ }, (* *), //)
       /// and string literals are skipped, but any other same-named identifier in an
       /// include refuses the rename even if it binds to a different symbol. An .inc
       /// that is listed but missing on disk is ignored. N-06: an include that holds
       /// a uses entry naming the short name (a unit_uses row with origin_path) is
-      /// named too, even when the index keeps no files row for that .inc.</remarks>
+      /// named too, even when the index keeps no files row for that .inc.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindUsersOfUnit, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps, DRagLint.Core.Model.TUnitUse.FromInclude, DRagLint.Refactor.Rename.IdentOccursIn, DRagLint.Refactor.Rename.LastDotSegment, ExtractFileExt, FileExists, Format, LowerCase, SameText</para>
+      /// <para>Returns: ''</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindUsersOfUnit"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps"/>
+      /// <seealso cref="DRagLint.Core.Model.TUnitUse.FromInclude"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.IdentOccursIn"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.LastDotSegment"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function IncludeUseReason(const AStore: ISymbolStore; const AQName: string): string;
       /// <summary>Non-empty human reason when the unit declaring AQName has a
       /// BINARY form file (sibling .dfm) that contains the symbol's short name as
@@ -185,10 +200,23 @@ type
       /// <returns>'' when the symbol is unknown, its unit has no .dfm, the .dfm is
       /// text, or the binary .dfm does not contain the name; else a message naming
       /// the .dfm and saying it is binary.</returns>
-      /// <remarks>A byte scan, deliberately conservative: any same-named
+      /// <remarks>
+      /// A byte scan, deliberately conservative: any same-named
       /// identifier in the binary stream refuses (a component or property of that
       /// name, too). Binary = the file starts with the resource header byte $FF or
-      /// with the 'TPF0' signature.</remarks>
+      /// with the 'TPF0' signature.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.Rename.FindIdentFrom, DRagLint.Refactor.Rename.IsBinaryDfm, DRagLint.Refactor.Rename.LastDotSegment, FileExists, Format</para>
+      /// <para>Returns: ''</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.FindIdentFrom"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.IsBinaryDfm"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.LastDotSegment"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function BinaryDfmReason(const AStore: ISymbolStore; const AQName: string): string;
       /// <summary>The form files rename leaves alone although they may bind the
       /// method AQName -- one note per file, for the caller to REPORT (W5-D): it
@@ -202,10 +230,24 @@ type
       /// <returns>Empty when the symbol is unknown, is not a member of a class,
       /// or no such file exists; else one human-readable note per file, naming
       /// the file and why it was not rewritten.</returns>
-      /// <remarks>The owner's OWN binary .dfm is BinaryDfmReason's refusal;
+      /// <remarks>
+      /// The owner's OWN binary .dfm is BinaryDfmReason's refusal;
       /// callers ask that first, so in practice it is never noted here. A
       /// text .dfm that IS indexed is rewritten by Build and never noted.
-      /// Reads the files; does not write.</remarks>
+      /// Reads the files; does not write.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Refactor.Rename.ClassDescendsFrom, DRagLint.Refactor.Rename.FindIdentFrom, DRagLint.Refactor.Rename.IdentOccursIn (+6 more)</para>
+      /// <para>Returns: nil; Notes.ToArray</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 53 lines (full implementation)</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function SkippedDfmNotes(const AStore: ISymbolStore; const AQName: string): TArray<string>;
       /// <summary>One note per reference Build leaves UNRENAMED because the
       /// resolver could not bind it and another indexed symbol carries the same
@@ -219,8 +261,20 @@ type
       /// <returns>Empty when the symbol is unknown or every by-name ref is bound,
       /// a .dfm event binding, or unambiguous; else one note per source position
       /// (line and col as the index records them).</returns>
-      /// <remarks>Reads the store only. Guard:
-      /// tests\autotest\run_rename_unresolved_by_name.ps1.</remarks>
+      /// <remarks>
+      /// Reads the store only. Guard:
+      /// tests\autotest\run_rename_unresolved_by_name.ps1.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Model.CanBeCallTarget, DRagLint.Refactor.Rename.LastDotSegment, DRagLint.Refactor.Rename.UnresolvedCandidates, Format</para>
+      /// <para>Returns: nil</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+      /// <seealso cref="DRagLint.Core.Model.CanBeCallTarget"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function UnresolvedCandidateNotes(const AStore: ISymbolStore; const AQName: string): TArray<string>;
       /// <summary>Explains a rename that matched nothing: the name must be
       /// qualified, and up to 5 indexed symbols whose last segment equals the
@@ -231,8 +285,20 @@ type
       /// <returns>'' when no indexed symbol carries the short name; else
       /// `Qualify the name (Unit.Type.Member). Candidates: A.B.R; C.D.R` with at
       /// most 5 candidates, then ` (+N more)` when there are others.</returns>
-      /// <remarks>Reads the store only. Guard:
-      /// tests\autotest\run_rename_qname_local_hints.ps1.</remarks>
+      /// <remarks>
+      /// Reads the store only. Guard:
+      /// tests\autotest\run_rename_qname_local_hints.ps1.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas)</para>
+      /// <para>Calls: CompareStr, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.Rename.LastDotSegment, ExtractFilePath, Format, SameText</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.LastDotSegment"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Apply"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BinaryDfmReason"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function NotFoundHint(const AStore: ISymbolStore; const AQName: string; const AFromFile: string = ''): string;
       /// <summary>Non-empty human reason when any edit's recorded position no
       /// longer holds its old name on disk; '' when every edit is still in place.
@@ -243,9 +309,21 @@ type
       /// <returns>'' when, for every edit, the file exists and OldName sits at
       /// (Line, Col) as a whole identifier (case-insensitive); else a message
       /// "index out of date for File:Line ..." naming the first stale edit.</returns>
-      /// <remarks>Never scans for the name elsewhere: a reference that moved on
+      /// <remarks>
+      /// Never scans for the name elsewhere: a reference that moved on
       /// disk (other line, or other column on its line) is stale, not retargeted.
-      /// Reads each file once.</remarks>
+      /// Reads each file once.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Refactor.Rename.DecodedLines, DRagLint.Refactor.Rename.IsIdentAt, Format</para>
+      /// <para>Returns: ''</para>
+      /// <seealso cref="DRagLint.Refactor.Rename.DecodedLines"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.IsIdentAt"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Apply"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BinaryDfmReason"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Build"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function StaleEditReason(const AEdits: TArray<TRenameEdit>): string;
       /// <summary>Routine-local rename of the parameter or local variable whose
       /// declaration identifier sits at (ALine, ACol) (1-based) in AFile. Emits a

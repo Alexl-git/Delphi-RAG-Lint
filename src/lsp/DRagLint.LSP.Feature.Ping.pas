@@ -15,19 +15,49 @@ uses
 
 type
   /// <summary>Raised by the test-only `draglint/testRaise` feature.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.LSP.Feature.Ping.TLspTestRaiseFeature.Handle (DRagLint.LSP.Feature.Ping.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.Ping</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   ETestRaise = class(Exception);
 
   /// <summary>Answers `draglint/ping` with {pong: true, version, stores} and
   /// advertises capabilities.draglint.ping = true.</summary>
-  /// <remarks>Stateless; registered from this unit's initialization.</remarks>
+  /// <remarks>
+  /// Stateless; registered from this unit's initialization.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Feature.Ping.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.Ping</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPingFeature = class(TLspFeature)
   public
     /// <summary>The one method: `draglint/ping`.</summary>
     /// <returns>['draglint/ping'].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: [PING_METHOD]</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Methods</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.Ping.TPingFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.Ping.TPingFeature.Handle"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Methods: TArray<string>; override;
     /// <summary>Adds or extends the vendor `draglint` capability object with
     /// `ping: true`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.AddCapabilities</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.Ping.TPingFeature.Handle"/>
+    /// <seealso cref="DRagLint.LSP.Feature.Ping.TPingFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
     /// <summary>Replies {pong: true, version: DRAGLINT_VERSION, stores: N},
     /// N being Length(ACtx.Stores): the configured --db stores only, never a
@@ -36,21 +66,57 @@ type
     /// <param name="AMethod">Always `draglint/ping`.</param>
     /// <param name="AId">The request id; a notification gets no reply.</param>
     /// <param name="AParams">Ignored.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.Stores</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Reply"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Stores"/>
+    /// <seealso cref="DRagLint.LSP.Feature.Ping.TPingFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.Ping.TPingFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 
   /// <summary>TEST-ONLY feature: `draglint/testRaise` always raises, so the
   /// guard can prove the server's feature dispatch isolates an exception (S8).</summary>
-  /// <remarks>Registered from this unit's initialization ONLY when the
+  /// <remarks>
+  /// Registered from this unit's initialization ONLY when the
   /// environment variable DRAGLINT_LSP_TEST_RAISE is non-empty; in production
-  /// the method does not exist and answers -32601. Advertises nothing.</remarks>
+  /// the method does not exist and answers -32601. Advertises nothing.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Feature.Ping.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.Ping</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspTestRaiseFeature = class(TLspFeature)
   public
     /// <summary>The one method: `draglint/testRaise`.</summary>
     /// <returns>['draglint/testRaise'].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: [TESTRAISE_METHOD]</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Methods</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.Ping.TLspTestRaiseFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.Ping.TLspTestRaiseFeature.Handle"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Methods: TArray<string>; override;
     /// <summary>Adds nothing: a test hook is never advertised.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction; untouched.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.AddCapabilities</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.Ping.TLspTestRaiseFeature.Handle"/>
+    /// <seealso cref="DRagLint.LSP.Feature.Ping.TLspTestRaiseFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
     /// <summary>Raises ETestRaise('draglint/testRaise: deliberate test failure').</summary>
     /// <param name="ACtx">The server surface; unused.</param>
@@ -58,6 +124,14 @@ type
     /// <param name="AId">The request id; unused.</param>
     /// <param name="AParams">Ignored.</param>
     /// <exception cref="ETestRaise">Always.</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.Ping.TLspTestRaiseFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.Ping.TLspTestRaiseFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 

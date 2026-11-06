@@ -44,8 +44,8 @@ type
   /// be pure cost. If a threaded host is ever added, wrap the class in a lock
   /// rather than making the callers defensive.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Handle (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.SemanticTokens.TLspSemanticTokensFeature.Handle (DRagLint.LSP.Feature.SemanticTokens.pas) (+10 more)</para>
-  /// <para>Used in units: DRagLint.LSP.Completion, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.SemanticTokens, DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
+  /// <para>Used by: DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas) (+19 more)</para>
+  /// <para>Used in units: DRagLint.Lint.MissingUses, DRagLint.LSP.Completion, DRagLint.LSP.Feature.DocumentSymbol, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.Rename, DRagLint.LSP.Feature.SemanticTokens, DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLiveDocuments = class
@@ -69,6 +69,16 @@ type
       /// </remarks>
       class function Key(const APath: string): string; static;
     public
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>constructor</para>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Clear"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Count"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Destroy"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.HasText"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Key"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class constructor Create;
       class destructor Destroy;
 
@@ -94,7 +104,7 @@ type
       /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Core.LiveDocs.TLiveDocuments.Remove (DRagLint.Core.LiveDocs.pas) ?, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleDidChange (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas) (+3 more)</para>
+      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleDidChange (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidChangeWatchedFiles (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas) (+8 more)</para>
       /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
       /// <para>Pure</para>
       /// <para>Directives: static</para>
@@ -159,7 +169,7 @@ type
       /// <returns>Empty array when the path is neither open nor on disk.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas) (+3 more)</para>
+      /// <para>Called from: DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas) (+9 more)</para>
       /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: static</para>
@@ -180,7 +190,7 @@ type
       /// <returns><!-- drag-lint:auto type -->TBytes</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Handle (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.SemanticTokens.TLspSemanticTokensFeature.Handle (DRagLint.LSP.Feature.SemanticTokens.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Handle (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.SemanticTokens.TLspSemanticTokensFeature.Handle (DRagLint.LSP.Feature.SemanticTokens.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
       /// <para>Mutates: AFromOverlay (out)</para>
       /// <para>Touches: file system</para>

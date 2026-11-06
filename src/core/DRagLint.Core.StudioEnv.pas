@@ -71,7 +71,7 @@ type
   /// cache is kept -- a cached root would go stale across an install without
   /// any way to notice.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.BuildEnvBat (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas) (+2 more)</para>
+  /// <para>Used by: DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.BuildEnvBat (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas), [dclDragLintWizard]DRagLint.Project.Resolver.TProjectResolver.StudioCommonDir (DRagLint.Project.Resolver.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Diagnostics.CompileCheck, DRagLint.LSP.Proxy, DRagLint.Project.Resolver</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -97,11 +97,11 @@ type
     /// <para>Catches: Exception (swallowed)</para>
     /// <para>Touches: registry</para>
     /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.CommonDirOf"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest"/>
-    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.TryRoot"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function ReadRegistryRoot: string; static;
@@ -125,10 +125,10 @@ type
     /// <para>Touches: file system</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.CommonDirOf"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
-    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function TryRoot(out ARoot: string; out ADiagnostic: string): Boolean; static;
@@ -142,16 +142,16 @@ type
     /// <see cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/> so the failure
     /// names Studio.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.CycleFix.BuildEnvBat (DRagLint.CLI.CycleFix.pas), DRagLint.Core.StudioEnv.TStudioEnv.SelfTest (DRagLint.Core.StudioEnv.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas)</para>
+    /// <para>Called from: DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.BuildEnvBat (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Core.StudioEnv.TStudioEnv.SelfTest (DRagLint.Core.StudioEnv.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), [dclDragLintWizard]DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas)</para>
     /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.TryRoot</para>
     /// <para>Returns: ''</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.TryRoot"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.CommonDirOf"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
-    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RootOrEmpty: string; static;
@@ -171,10 +171,10 @@ type
     /// <para>Pure</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.TryRoot"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.CommonDirOf"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
-    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Root: string; static;
@@ -192,10 +192,10 @@ type
     /// <para>Touches: file system</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.CommonDirOf"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest"/>
-    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.TryRoot"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RsvarsBat: string; static;
@@ -204,8 +204,22 @@ type
     /// <param name="ARoot">The Studio's root; '' goes straight to the fallback.</param>
     /// <param name="AStudioKey">Its BDS key, e.g. 23.0.</param>
     /// <returns>The folder without a trailing delimiter; it need not exist.</returns>
-    /// <remarks>Reads one file on each call; the caller caches. Not under the root:
-    /// the folder is the version's Public Documents.</remarks>
+    /// <remarks>
+    /// Reads one file on each call; the caller caches. Not under the root:
+    /// the folder is the version's Public Documents.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Project.Resolver.TProjectResolver.StudioCommonDir (DRagLint.Project.Resolver.pas)</para>
+    /// <para>Calls: ExcludeTrailingPathDelimiter, GetEnvironmentVariable</para>
+    /// <para>Returns: ''; ExcludeTrailingPathDelimiter(Found.Groups[1].Value); TPath.Combine(TPath.Combine(GetEnvironmentVariable('PUBLIC'), PUBLIC_REL), AStudioKey)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CommonDirOf(const ARoot, AStudioKey: string): string; static;
     /// <summary>Checks the parts of the contract a test can control: that $BDS
     /// wins, that a trailing delimiter and surrounding whitespace are
@@ -234,7 +248,7 @@ type
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RootOrEmpty"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.RsvarsBat"/>
     /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.SelfTest.Expect"/>
-    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.ReadRegistryRoot"/>
+    /// <seealso cref="DRagLint.Core.StudioEnv.TStudioEnv.CommonDirOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function SelfTest(out AFailure: string): Boolean; static;

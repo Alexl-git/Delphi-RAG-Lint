@@ -48,19 +48,33 @@ const
 
 /// <summary>Runs the rule over a project index.</summary>
 /// <param name="AStore">The project index; nil yields no findings.</param>
+/// <param name="AShared">SHARED-UNIT-SCOPE (1.41): judges an interface symbol of a unit other
+/// projects list by all of them -- reported only when none names it, silent when one does or when a
+/// listing project's index is missing or stale. nil: a unit with a `dl:shared` header naming
+/// another project is skipped for interface symbols (the 1.40 behaviour).</param>
 /// <returns>One 'unused-global' hint per unit-level const / var / type nothing
 /// names: implementation-section declarations (const, var, type alias, class,
 /// record, interface) when nothing in the declaring file names them; interface
 /// section declarations (const, var, type alias) when nothing in any file does,
 /// unless another project that lists the unit names them (see AShared). Anchored at the declaration.</returns>
-/// <remarks>Name-keyed and conservative: a homonym used anywhere in scope keeps
+/// <remarks>
+/// Name-keyed and conservative: a homonym used anywhere in scope keeps
 /// a symbol silent, and so does a mention in a comment or string (text
 /// fallback). Not thread-safe. A symbol used only inside an inactive {$IFDEF}
-/// branch is invisible to the refs but visible to the text fallback.</remarks>
-/// <param name="AShared">SHARED-UNIT-SCOPE (1.41): judges an interface symbol of a unit other
-/// projects list by all of them -- reported only when none names it, silent when one does or when a
-/// listing project's index is missing or stale. nil: a unit with a `dl:shared` header naming
-/// another project is skipped for interface symbols (the 1.40 behaviour).</param>
+/// branch is invisible to the refs but visible to the text fallback.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: CharInSet, Copy, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Model.TLintFinding.SortByLocation, DRagLint.Lint.SharedScope.NoteUndecidedSite, DRagLint.Lint.SharedScope.TSharedScope.Judge, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf, DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal.AddCandidates (+8 more)</para>
+/// <para>Returns: nil; Findings.ToArray</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 187 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Core.Model.TLintFinding.SortByLocation"/>
+/// <seealso cref="DRagLint.Lint.SharedScope.NoteUndecidedSite"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectUnusedGlobal(const AStore: ISymbolStore; const AShared: TSharedScope = nil): TArray<TLintFinding>;
 
 implementation

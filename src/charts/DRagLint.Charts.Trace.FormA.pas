@@ -54,9 +54,21 @@ const
 
 type
   /// <summary>A refusal of the model (a text the writer or parser cannot keep faithful); the message is the PowerShell throw text.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ItemNumber (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ResolveInto (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadHandler (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.CheckAscii (DRagLint.Charts.Trace.Chart.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Anchor, DRagLint.Charts.Trace.Calc, DRagLint.Charts.Trace.Chart, DRagLint.Charts.Trace.FormA, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EChartsTrace = class(Exception);
 
   /// <summary>The recomputed END TRACE counts (never stored on the model).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.FormA.pas) ?, DRagLint.Charts.Trace.FormA.FormatTraceEndLine (DRagLint.Charts.Trace.FormA.pas) ?, DRagLint.Charts.Trace.FormA.ReadFormA (DRagLint.Charts.Trace.FormA.pas), DRagLint.Charts.Trace.FormA.TraceCounts (DRagLint.Charts.Trace.FormA.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.FormA</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTraceCounts = record
     /// <summary>Numbered lines across all sections.</summary>
     Steps     : Integer;
@@ -69,7 +81,13 @@ type
   end;
 
   /// <summary>A line under a step: a condition (Kind 'cond') or a facet (Kind 'facet').</summary>
-  /// <remarks>One class; the two PowerShell objects differ by Kind. Owned by its TTraceItem.</remarks>
+  /// <remarks>
+  /// One class; the two PowerShell objects differ by Kind. Owned by its TTraceItem.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas) ?, declaration (DRagLint.Charts.Trace.Chart.pas) ?, DRagLint.Charts.Trace.Chart.TChartBuilder.BuildCondCell (DRagLint.Charts.Trace.Chart.pas) ?, DRagLint.Charts.Trace.FormA.NewTraceCond (DRagLint.Charts.Trace.FormA.pas), DRagLint.Charts.Trace.FormA.NewTraceFacet (DRagLint.Charts.Trace.FormA.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Chart, DRagLint.Charts.Trace.FormA, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTraceChild = class
   private
     FKind: string;
@@ -103,8 +121,14 @@ type
   end;
 
   /// <summary>One numbered line of the trace (Kind step | stops | crosses) with its child lines.</summary>
-  /// <remarks>Owns Children. The walker fields (Line .. Omits) are set by Trace.Walk and ignored by
-  /// WriteFormA; they are Add-Member properties in the PowerShell. Number is assigned by WriteFormA.</remarks>
+  /// <remarks>
+  /// Owns Children. The walker fields (Line .. Omits) are set by Trace.Walk and ignored by
+  /// WriteFormA; they are Add-Member properties in the PowerShell. Number is assigned by WriteFormA.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.Disown (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.AddNotWalked (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Trace.FormA.NewTraceStep (DRagLint.Charts.Trace.FormA.pas) (+42 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Anchor, DRagLint.Charts.Trace.Calc, DRagLint.Charts.Trace.Chart, DRagLint.Charts.Trace.FormA, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTraceItem = class
   private
     FKind: string;
@@ -157,13 +181,32 @@ type
     /// <summary>Trace.Walk only: True on an OMITS step.</summary>
     property Omits: Boolean read FOmits write FOmits;
     /// <summary>Constructor: creates an empty item with an empty Children list.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.FormA.NewTraceStep (DRagLint.Charts.Trace.FormA.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.FormA.TTraceItem.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees Children.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Trace.FormA.TTraceItem.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
   /// <summary>A named group of items.</summary>
-  /// <remarks>Owns Items. Note stands for an EMPTY section (or leads DERIVED's rows).</remarks>
+  /// <remarks>
+  /// Owns Items. Note stands for an EMPTY section (or leads DERIVED's rows).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas) ?, declaration (DRagLint.Charts.Trace.FormA.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.AddNotWalked (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.PlaceServerItems (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Trace.FormA.AddTraceSection (DRagLint.Charts.Trace.FormA.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.FormA, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTraceSection = class
   private
     FName: string;
@@ -177,13 +220,32 @@ type
     /// <summary>The numbered items; owned.</summary>
     property Items: TObjectList<TTraceItem> read FItems write FItems;
     /// <summary>Constructor: creates an empty section.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.FormA.AddTraceSection (DRagLint.Charts.Trace.FormA.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.FormA.TTraceSection.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees Items.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Trace.FormA.TTraceSection.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
   /// <summary>The whole trace: header attributes plus sections.</summary>
-  /// <remarks>Owns Sections and everything under them. Free it when done.</remarks>
+  /// <remarks>
+  /// Owns Sections and everything under them. Free it when done.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas) ?, declaration (DRagLint.Charts.Trace.Chart.pas) ?, DRagLint.Charts.Trace.Chart.TChartBuilder.Create (DRagLint.Charts.Trace.Chart.pas) ?, DRagLint.Charts.Trace.Chart.TraceChart (DRagLint.Charts.Trace.Chart.pas) ?, DRagLint.Charts.Trace.FormA.NewTrace (DRagLint.Charts.Trace.FormA.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Chart, DRagLint.Charts.Trace.FormA</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTrace = class
   private
     FName: string;
@@ -212,8 +274,21 @@ type
     /// <summary>The sections in order; owned.</summary>
     property Sections: TObjectList<TTraceSection> read FSections write FSections;
     /// <summary>Constructor: creates an empty trace.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.FormA.NewTrace (DRagLint.Charts.Trace.FormA.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.FormA.TTrace.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees Sections.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Trace.FormA.TTrace.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
@@ -226,7 +301,17 @@ type
 /// <param name="pRegenerate">The REGENERATE command.</param>
 /// <param name="pTiers">The TIERS chain.</param>
 /// <returns>A new trace; the caller frees it.</returns>
-/// <remarks>Refuses (EChartsTrace, via TestTraceTitle) a title that carries a double-quote.</remarks>
+/// <remarks>
+/// Refuses (EChartsTrace, via TestTraceTitle) a title that carries a double-quote.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.FormA.ReadFormA (DRagLint.Charts.Trace.FormA.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.TestTraceTitle, DRagLint.Charts.Trace.FormA.TTrace.Create</para>
+/// <para>Returns: TTrace.Create</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.TestTraceTitle"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.TTrace.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NewTrace(const pName, pTitle, pFrom, pIndex, pAsOf, pRegenerate, pTiers: string): TTrace;
 
 /// <summary>Appends an empty section to pTrace.</summary>
@@ -234,6 +319,17 @@ function NewTrace(const pName, pTitle, pFrom, pIndex, pAsOf, pRegenerate, pTiers
 /// <param name="pName">An upper-case word (case-sensitive ^[A-Z]+$).</param>
 /// <returns>The section (owned by pTrace).</returns>
 /// <exception cref="EChartsTrace">The name is not an upper-case word.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.FormA.ReadFormA (DRagLint.Charts.Trace.FormA.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.Refuse, DRagLint.Charts.Trace.FormA.Rx, DRagLint.Charts.Trace.FormA.TTraceSection.Create</para>
+/// <para>Returns: TTraceSection.Create</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Rx"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.TTraceSection.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AddTraceSection(pTrace: TTrace; const pName: string): TTraceSection;
 
 /// <summary>Creates a numbered item.</summary>
@@ -247,6 +343,20 @@ function AddTraceSection(pTrace: TTrace; const pName: string): TTraceSection;
 /// <param name="pActor">'' or one of FORMA_ACTORS (case-sensitive); an actor word in pText is refused instead.</param>
 /// <returns>A new item; the caller adds it to a section (which owns it) or frees it.</returns>
 /// <exception cref="EChartsTrace">Bad kind, anchor ('AC-11'), grade, actor, or a text TestTraceText refuses.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BackStep (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ReadThroughRoute (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkAlso (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkRead (DRagLint.Charts.Q.RoundTrip.pas) (+21 more)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.InList, DRagLint.Charts.Trace.FormA.Refuse, DRagLint.Charts.Trace.FormA.Rx, DRagLint.Charts.Trace.FormA.TestTraceText, DRagLint.Charts.Trace.FormA.TTraceItem.Create, SameText</para>
+/// <para>Returns: TTraceItem.Create</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 20 lines (full implementation)</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.InList"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Rx"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.TestTraceText"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.TTraceItem.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NewTraceStep(const pKind, pText, pAnchor: string; const pGrade: string = ''; const pRoutine: string = '';
   const pNote: string = ''; const pAsk: string = ''; const pActor: string = ''): TTraceItem;
 
@@ -259,6 +369,18 @@ function NewTraceStep(const pKind, pText, pAnchor: string; const pGrade: string 
 /// <param name="pRoutine">Set when the condition hangs on a step of ANOTHER routine; written as the note's 'in Routine'.</param>
 /// <returns>A new child; the caller adds it to an item's Children (owned) or frees it.</returns>
 /// <exception cref="EChartsTrace">Bad keyword or anchor, empty condition, a condition TraceCondProblem names, or a line break.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Calc.NewCalcFieldItems (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.FormA.ReadFormA (DRagLint.Charts.Trace.FormA.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.AddBranchConds (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.AddExceptConds (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadGuards (DRagLint.Charts.Trace.Walk.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.InList, DRagLint.Charts.Trace.FormA.Refuse, DRagLint.Charts.Trace.FormA.Rx, DRagLint.Charts.Trace.FormA.TraceCondProblem, Trim</para>
+/// <para>Returns: TTraceChild.Create</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.InList"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Rx"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.TraceCondProblem"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NewTraceCond(const pKeyword, pCondition, pAnchor: string; const pNote: string = ''; const pAsk: string = '';
   const pRoutine: string = ''): TTraceChild;
 
@@ -269,11 +391,32 @@ function NewTraceCond(const pKeyword, pCondition, pAnchor: string; const pNote: 
 /// <param name="pNote">The free-text note part.</param>
 /// <returns>A new child; the caller adds it to an item's Children or frees it.</returns>
 /// <exception cref="EChartsTrace">Bad head, bad anchor, or a text TestTraceText refuses.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BackStep (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ReadThroughRoute (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WriteThroughCrossing (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Calc.NewCalcFieldItems (DRagLint.Charts.Trace.Calc.pas) (+2 more)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.InList, DRagLint.Charts.Trace.FormA.ListText, DRagLint.Charts.Trace.FormA.Refuse, DRagLint.Charts.Trace.FormA.Rx, DRagLint.Charts.Trace.FormA.TestTraceText</para>
+/// <para>Returns: TTraceChild.Create</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.InList"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.ListText"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Rx"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.TestTraceText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NewTraceFacet(const pHead, pText: string; const pAnchor: string = ''; const pNote: string = ''): TTraceChild;
 
 /// <summary>Why a condition cannot be written unquoted and read back verbatim.</summary>
 /// <param name="pCondition">The condition text.</param>
 /// <returns>'' when it can; else the reason (it reads as its anchor, or as its note).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.FormA.NewTraceCond (DRagLint.Charts.Trace.FormA.pas), DRagLint.Charts.Trace.Shim.NewShimResult (DRagLint.Charts.Trace.Shim.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.NewOmitStep (DRagLint.Charts.Trace.Walk.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.Rx</para>
+/// <para>Returns: ''; 'carries '' @&lt;file&gt;:&lt;line&gt;'', which reads as its anchor'; 'carries '' -- '', which reads as its note'</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Rx"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceCondProblem(const pCondition: string): string;
 
 /// <summary>Refuses a text the line regexes would misread.</summary>
@@ -281,33 +424,76 @@ function TraceCondProblem(const pCondition: string): string;
 /// <param name="pWhat">Names the field in the message ('step text', 'facet text').</param>
 /// <param name="pHead">True for a STEP text: adds the head-word rules (counted words, section word before STOPS, lone annotation).</param>
 /// <exception cref="EChartsTrace">The text is empty, has a line break, ' @', ' [', ' -- ', a leading '--', a trailing ' --', or a refused head.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.FormA.NewTraceFacet (DRagLint.Charts.Trace.FormA.pas), DRagLint.Charts.Trace.FormA.NewTraceStep (DRagLint.Charts.Trace.FormA.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.Refuse, DRagLint.Charts.Trace.FormA.Rx, Trim</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 25 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Rx"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure TestTraceText(const pText, pWhat: string; pHead: Boolean = False);
 
 /// <summary>Refuses a title that cannot be quoted verbatim.</summary>
 /// <param name="pTitle">The title to check.</param>
 /// <exception cref="EChartsTrace">The title carries a double-quote.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.FormA.NewTrace (DRagLint.Charts.Trace.FormA.pas), DRagLint.Charts.Trace.FormA.WriteFormA (DRagLint.Charts.Trace.FormA.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.Refuse</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure TestTraceTitle(const pTitle: string);
 
 /// <summary>The END TRACE line of pCounts; the ONE builder, so the text and the chart cannot word it two ways.</summary>
 /// <param name="pCounts">The counts to word.</param>
 /// <returns>'END TRACE  n steps, n conditions, n crossings, n unresolved.'</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.LegendHtml (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.FormA.WriteFormA (DRagLint.Charts.Trace.FormA.pas)</para>
+/// <para>Calls: IntToStr</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormatTraceEndLine(const pCounts: TTraceCounts): string;
 
 /// <summary>The counts recomputed from the items (AC-3).</summary>
 /// <param name="pTrace">The trace to count.</param>
 /// <returns>Steps, conditions (cond children), crossings and unresolved (stops items, in every section).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ResultFields (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.LegendHtml (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.FormA.ReadFormA (DRagLint.Charts.Trace.FormA.pas), DRagLint.Charts.Trace.FormA.WriteFormA (DRagLint.Charts.Trace.FormA.pas)</para>
+/// <para>Calls: Default, SameText</para>
+/// <para>Returns: Default(TTraceCounts)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceCounts(pTrace: TTrace): TTraceCounts;
 
 /// <summary>How many items and children carry a non-empty anchor.</summary>
 /// <param name="pTrace">The trace to count.</param>
 /// <returns>The anchor count.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceAnchors(pTrace: TTrace): Integer;
 
 /// <summary>AC-11: the numbered lines of a Form A text whose own anchor is not a clickable source span.</summary>
 /// <param name="pText">A Form A text.</param>
 /// <returns>The offending lines, in order.</returns>
-/// <remarks>The anchor is the last thing before the first ' -- ', so one quoted in the note does not count;
-/// 'index:0' is not clickable either.</remarks>
+/// <remarks>
+/// The anchor is the last thing before the first ' -- ', so one quoted in the note does not count;
+/// 'index:0' is not clickable either.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas)</para>
+/// <para>Calls: Copy, DRagLint.Charts.Trace.FormA.Rx, Pos</para>
+/// <para>Returns: Found.ToArray</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Rx"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceUnclickable(const pText: string): TArray<string>;
 
 /// <summary>Joins the note parts: 'in Routine; free text; ask E'.</summary>
@@ -316,6 +502,15 @@ function TraceUnclickable(const pText: string): TArray<string>;
 /// <param name="pAsk">One word with no ';', or ''.</param>
 /// <returns>The joined note, '' when all three are empty.</returns>
 /// <exception cref="EChartsTrace">A part is malformed ('; ' in the note, a line break, a routine or ask that is not one word).</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.FormatTraceChartTip (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.BuildCondCell (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.FormA.WriteFormA (DRagLint.Charts.Trace.FormA.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.Refuse, DRagLint.Charts.Trace.FormA.Rx</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 31 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Rx"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormatTraceNote(const pRoutine, pNote, pAsk: string): string;
 
 /// <summary>Splits a note back into its parts.</summary>
@@ -323,18 +518,52 @@ function FormatTraceNote(const pRoutine, pNote, pAsk: string): string;
 /// <param name="pRoutine">The 'in X' part, only when it is the FIRST piece.</param>
 /// <param name="pAsk">The 'ask X' part.</param>
 /// <returns>The remaining free text, pieces joined by '; '.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.FormA.ReadFormA (DRagLint.Charts.Trace.FormA.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.Grp</para>
+/// <para>Mutates: pRoutine (out), pAsk (out)</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Grp"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SplitTraceNote(const pNote: string; out pRoutine, pAsk: string): string;
 
 /// <summary>The canonical Form A text. Numbers the items in place, recomputes the counts, refuses any byte outside 0x20-0x7E/CR/LF.</summary>
 /// <param name="pTrace">The trace to write.</param>
 /// <returns>The text, CRLF line ends, ending in the END TRACE line.</returns>
 /// <exception cref="EChartsTrace">An empty or multi-line header, a quote in the title, a note with steps, or non-ASCII ('not 7-bit ASCII').</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.FormatTraceEndLine, DRagLint.Charts.Trace.FormA.FormatTraceNote, DRagLint.Charts.Trace.FormA.Refuse, DRagLint.Charts.Trace.FormA.Rx, DRagLint.Charts.Trace.FormA.TestTraceTitle, DRagLint.Charts.Trace.FormA.TraceCounts, DRagLint.Charts.Trace.FormA.WriteFormA.HeaderValue, Format, IntToHex, IntToStr, Pos, PosEx, SameStr, SameText, Trim</para>
+/// <para>Returns: Sb.ToString</para>
+/// <para>Complexity: 20 (cyclomatic, outer body), 111 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.FormatTraceEndLine"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.FormatTraceNote"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Refuse"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Rx"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.TestTraceTitle"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function WriteFormA(pTrace: TTrace): string;
 
 /// <summary>Reads the canonical layout back into a model; any line it cannot place is an error and the END TRACE counts must recompute.</summary>
 /// <param name="pText">A Form A text as WriteFormA emits it.</param>
 /// <returns>A new trace; the caller frees it.</returns>
 /// <exception cref="EChartsTrace">E-EOL (bare LF or no final CRLF), E-NO-END, E-COUNTS, or an unparseable line.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Trace.FormA.AddTraceSection, DRagLint.Charts.Trace.FormA.CheckCount, DRagLint.Charts.Trace.FormA.Grp, DRagLint.Charts.Trace.FormA.NewTrace, DRagLint.Charts.Trace.FormA.NewTraceCond, DRagLint.Charts.Trace.FormA.NewTraceFacet, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.FormA.Refuse, DRagLint.Charts.Trace.FormA.Rx, DRagLint.Charts.Trace.FormA.SplitTraceNote, DRagLint.Charts.Trace.FormA.TraceCounts, StrToInt</para>
+/// <para>Returns: NewTrace('x', 'x', 'x', 'x', 'x', 'x', 'x')</para>
+/// <para>Complexity: 27 (cyclomatic, outer body), 132 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.AddTraceSection"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.CheckCount"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.Grp"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.NewTrace"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceCond"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadFormA(const pText: string): TTrace;
 
 implementation

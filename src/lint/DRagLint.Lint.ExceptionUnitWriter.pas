@@ -57,7 +57,7 @@ type
   /// authoritative for identity; Name is authoritative for what raise sites
   /// must say.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.Lint.ExceptionUnitWriter.ParseExceptionBlock (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.Lint.ExceptionUnitWriter.PlanExceptionEntries (DRagLint.Lint.ExceptionUnitWriter.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.Lint.ExceptionUnitWriter.ParseExceptionBlock (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.Lint.ExceptionUnitWriter.RenderExceptionBlock (DRagLint.Lint.ExceptionUnitWriter.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ExceptionUnitWriter</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -74,7 +74,7 @@ type
   /// prints it, and the applying run produces the same record and then writes
   /// NewText. The two cannot disagree about what would happen.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.Lint.ExceptionUnitWriter.PlanExceptionEntries (DRagLint.Lint.ExceptionUnitWriter.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.ExceptionUnitWriter</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

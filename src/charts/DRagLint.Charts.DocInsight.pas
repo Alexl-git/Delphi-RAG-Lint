@@ -42,7 +42,8 @@ const
 /// <returns>CRLF-separated lines, each starting with '///', opening with
 /// '/// &lt;remarks&gt;' and closing with '/// &lt;/remarks&gt;' plus a final
 /// CRLF. The first sentence names the question, the target and the date.</returns>
-/// <remarks>Guarantees, each pinned by a test: strict 7-bit ASCII (dashes and
+/// <remarks>
+/// Guarantees, each pinned by a test: strict 7-bit ASCII (dashes and
 /// arrows become -- and ->, anything else unknown becomes '?'); no line longer
 /// than DOCINSIGHT_MAX_LINE (an over-long token is split); the autodoc
 /// provenance marker never appears; '&lt;' and '&amp;' are XML-escaped; a
@@ -57,7 +58,19 @@ const
 /// emitted on ONE line, unwrapped -- the only line allowed past
 /// DOCINSIGHT_MAX_LINE, because the line must rerun as typed. An answer without
 /// the header lines is formatted exactly as before the header existed.
-/// Pure function; thread-safe.</remarks>
+/// Pure function; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.FormatAskAnswer (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.UpdateDoc (DRagLint.Charts.Compare.pas), [dclDragLintWizard]DragLint.Plugin.ReportText.FormatReportAsDocInsight (DragLint.Plugin.ReportText.pas)</para>
+/// <para>Calls: DRagLint.Charts.DocInsight.EmitWrapped, DRagLint.Charts.DocInsight.RemoveAutodocMarker, DRagLint.Charts.DocInsight.RenderAnswerLine, DRagLint.Charts.DocInsight.ScrubLine, DRagLint.Charts.DocInsight.SplitAnswerLines, DRagLint.Charts.DocInsight.XmlEscape, Format, FormatDateTime, Trim, TrimRight</para>
+/// <para>Returns: RemoveAutodocMarker(SB.ToString)</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 56 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.DocInsight.EmitWrapped"/>
+/// <seealso cref="DRagLint.Charts.DocInsight.RemoveAutodocMarker"/>
+/// <seealso cref="DRagLint.Charts.DocInsight.RenderAnswerLine"/>
+/// <seealso cref="DRagLint.Charts.DocInsight.ScrubLine"/>
+/// <seealso cref="DRagLint.Charts.DocInsight.SplitAnswerLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormatAnswerAsDocInsight(const pPhrase, pQuestionId, pTarget: string; pDate: TDateTime;
   const pAnswer: string): string;
 
@@ -72,7 +85,15 @@ function FormatAnswerAsDocInsight(const pPhrase, pQuestionId, pTarget: string; p
 /// character outside 7-bit replaced by '?', and every control character (tab
 /// included) replaced by a space. A character above U+FFFF is two UTF-16
 /// surrogates and becomes '??'.</returns>
-/// <remarks>Pure; thread-safe.</remarks>
+/// <remarks>
+/// Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapter.Text.CollectPlain (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.NormaliseKey (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight (DRagLint.Charts.DocInsight.pas)</para>
+/// <para>Calls: DRagLint.Charts.DocInsight.ScrubChar</para>
+/// <para>Returns: SB.ToString</para>
+/// <seealso cref="DRagLint.Charts.DocInsight.ScrubChar"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ScrubLine(const pLine: string): string;
 
 /// <summary>Defuses the autodoc provenance marker.</summary>
@@ -80,7 +101,13 @@ function ScrubLine(const pLine: string): string;
 /// <returns>pText with every occurrence of the marker (matched
 /// case-insensitively) replaced by 'drag-lint auto', so a pasted block is never
 /// mistaken for generated documentation.</returns>
-/// <remarks>Pure; thread-safe.</remarks>
+/// <remarks>
+/// Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapter.Text.MapPlainLine (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight (DRagLint.Charts.DocInsight.pas)</para>
+/// <para>Calls: ContainsText, StringReplace</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RemoveAutodocMarker(const pText: string): string;
 
 /// <summary>Renders a row's file anchors the DocInsight way.</summary>
@@ -88,20 +115,39 @@ function RemoveAutodocMarker(const pText: string): string;
 /// <returns>pLine with each '@File.ext' or '@File.ext:12' token (preceded by
 /// the line start or whitespace, followed by the line end, whitespace, ',' or
 /// ';') rewritten as '(File.ext)' / '(File.ext:12)'.</returns>
-/// <remarks>Case-sensitive TRegEx; [A-Za-z0-9] covers both cases of the
-/// extension. Pure; thread-safe.</remarks>
+/// <remarks>
+/// Case-sensitive TRegEx; [A-Za-z0-9] covers both cases of the
+/// extension. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.DocInsight.RenderAnswerLine (DRagLint.Charts.DocInsight.pas)</para>
+/// <para>Returns: TRegEx.Replace(pLine, '(^|\s)@([^\s@]+\.[A-Za-z0-9]+(?::\d+)?)(?=$|[\s,;])', '$1($2)')</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderAnchors(const pLine: string): string;
 
 /// <summary>Counts the leading spaces of a line.</summary>
 /// <param name="pLine">One line.</param>
 /// <returns>The number of ' ' characters before the first other character
 /// (tabs are not counted).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapter.Text.CollectDocInsight (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.Continues (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.IsCut (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.WrapHappened (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.DocInsight.RenderAnswerLine (DRagLint.Charts.DocInsight.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LeadingSpaces(const pLine: string): Integer;
 
 /// <summary>Splits a text into lines on CRLF, CR or LF.</summary>
 /// <param name="pText">The text.</param>
 /// <returns>The lines without their line ends; a final line end yields a final
 /// empty element. A BOM is NOT removed.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapter.Text.SplitPhysical (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.AskVerb.AnswerLines (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.HeaderOf (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.LoadRemarksSide (DRagLint.Charts.Compare.pas), [dclDragLintWizard]DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight (DRagLint.Charts.DocInsight.pas)</para>
+/// <para>Calls: StringReplace</para>
+/// <para>Returns: StringReplace(StringReplace(pText, #13#10, #10, [rfReplaceAll]), #13, #10, [rfReplaceAll]).Split([#10])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SplitAnswerLines(const pText: string): TArray<string>;
 
 /// <summary>Maps ONE answer line to what the formatter emits for it, before
@@ -116,8 +162,19 @@ function SplitAnswerLines(const pText: string): TArray<string>;
 /// <returns>False when the line is dropped: an 'ask-report:' or 'WARNING:' line
 /// (case-insensitive), an UNINDENTED 'BUNDLE ' or 'INDEX ' line, a 'REGENERATE '
 /// line at any indent, a 'CHART ' line without ' -- ', or a line left empty.</returns>
-/// <remarks>'CHART x -- rest' becomes 'Totals: rest.', 'TARGET x' becomes
-/// 'Selected: x', and anchors are rendered by RenderAnchors. Pure; thread-safe.</remarks>
+/// <remarks>
+/// 'CHART x -- rest' becomes 'Totals: rest.', 'TARGET x' becomes
+/// 'Selected: x', and anchors are rendered by RenderAnchors. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapter.Text.MapPlainLine (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight (DRagLint.Charts.DocInsight.pas)</para>
+/// <para>Calls: Copy, DRagLint.Charts.DocInsight.LeadingSpaces, DRagLint.Charts.DocInsight.RenderAnchors, Pos, StartsStr, StartsText, Trim</para>
+/// <para>Returns: False; True; pText &lt;&gt; ''</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 27 lines (full implementation)</para>
+/// <para>Mutates: pIndent (out), pText (out)</para>
+/// <seealso cref="DRagLint.Charts.DocInsight.LeadingSpaces"/>
+/// <seealso cref="DRagLint.Charts.DocInsight.RenderAnchors"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenderAnswerLine(const pRaw: string; out pIndent, pText: string): Boolean;
 
 implementation

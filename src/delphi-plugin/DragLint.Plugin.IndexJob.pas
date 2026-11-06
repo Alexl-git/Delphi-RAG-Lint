@@ -49,6 +49,12 @@ const
 /// <param name="APlatform">Win32/Win64; omitted entirely when empty, rather
 /// than emitted as a bare flag with nothing after it.</param>
 /// <returns>A quoted command line with NO --rebuild.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.IndexJob.BuildProjectIndexJob (DragLint.Plugin.IndexJob.pas), DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.SpawnIndexer (DragLint.Plugin.ProjectNotifier.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildProjectIndexCmdLine(const AExePath, AProjectFile, ADbPath,
                                   APlatform: string): string;
 
@@ -56,6 +62,13 @@ function BuildProjectIndexCmdLine(const AExePath, AProjectFile, ADbPath,
 /// a Save All collapses to a single run.</summary>
 /// <param name="ADbPath">The project's index database.</param>
 /// <returns>'index:' followed by the lowercased DB path.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.IndexJob.BuildProjectIndexJob (DragLint.Plugin.IndexJob.pas)</para>
+/// <para>Calls: LowerCase</para>
+/// <para>Returns: 'index:' + LowerCase(ADbPath)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProjectIndexCoalesceKey(const ADbPath: string): string;
 
 /// <summary>A ready-to-enqueue tier-1 reindex job.</summary>
@@ -64,9 +77,20 @@ function ProjectIndexCoalesceKey(const ADbPath: string): string;
 /// <param name="ADbPath">That project's index database.</param>
 /// <param name="APlatform">Win32/Win64, or '' to leave it to the engine.</param>
 /// <returns>A TDragLintJob the caller hands to the queue, which then owns it.</returns>
-/// <remarks>Not streaming: there is no progress worth showing for a run that
+/// <remarks>
+/// Not streaming: there is no progress worth showing for a run that
 /// is normally under two seconds, and a marquee that flickers on every save is
-/// worse than none.</remarks>
+/// worse than none.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Reports.OfferReindex (DragLint.Plugin.Reports.pas), DragLint.Plugin.SaveNotifier.QueueReindexJob (DragLint.Plugin.SaveNotifier.pas)</para>
+/// <para>Calls: ChangeFileExt, DragLint.Plugin.IndexJob.BuildProjectIndexCmdLine, DragLint.Plugin.IndexJob.ProjectIndexCoalesceKey, DragLint.Plugin.JobQueue.TDragLintJob.Create, ExtractFileName, Format</para>
+/// <para>Returns: TDragLintJob.Create</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DragLint.Plugin.IndexJob.BuildProjectIndexCmdLine"/>
+/// <seealso cref="DragLint.Plugin.IndexJob.ProjectIndexCoalesceKey"/>
+/// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJob.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildProjectIndexJob(const AExePath, AProjectFile, ADbPath,
                               APlatform: string): TDragLintJob;
 
@@ -75,10 +99,17 @@ function BuildProjectIndexJob(const AExePath, AProjectFile, ADbPath,
 /// <param name="ADbPath">The index database the file belongs to.</param>
 /// <param name="AFilePath">The saved source file.</param>
 /// <returns>'index-file:' + lowercased DB + '|' + lowercased file.</returns>
-/// <remarks>Per FILE, not per DB: the fallback indexes only the file it names,
+/// <remarks>
+/// Per FILE, not per DB: the fallback indexes only the file it names,
 /// so collapsing two different files would leave all but the last one stale.
 /// A re-save of the SAME file still collapses. The 'index-file:' prefix keeps it
-/// from ever superseding a pending project reindex of the same DB.</remarks>
+/// from ever superseding a pending project reindex of the same DB.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.IndexJob.BuildFileIndexJob (DragLint.Plugin.IndexJob.pas)</para>
+/// <para>Calls: LowerCase</para>
+/// <para>Returns: 'index-file:' + LowerCase(ADbPath) + '|' + LowerCase(AFilePath)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FileIndexCoalesceKey(const ADbPath, AFilePath: string): string;
 
 /// <summary>A ready-to-enqueue per-file fallback reindex job:
@@ -88,11 +119,21 @@ function FileIndexCoalesceKey(const ADbPath, AFilePath: string): string;
 /// <param name="ADbPath">The DB the manifest says covers AFilePath.</param>
 /// <returns>A jkReindex TDragLintJob the caller hands to the queue, which then
 /// owns it.</returns>
-/// <remarks>The save path's fallback when no active project has a unique owner
+/// <remarks>
+/// The save path's fallback when no active project has a unique owner
 /// DB (deep review F6). Going through the queue means it waits out an
 /// ide-release hold, coalesces per file, and reports its exit code -- which the
 /// detached CreateProcessW spawn it replaces did not. --deep keeps the identifier
-/// usage refs the project DB was built with.</remarks>
+/// usage refs the project DB was built with.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SaveNotifier.QueueFileReindexJob (DragLint.Plugin.SaveNotifier.pas)</para>
+/// <para>Calls: DragLint.Plugin.IndexJob.FileIndexCoalesceKey, DragLint.Plugin.JobQueue.TDragLintJob.Create, ExtractFileName, Format</para>
+/// <para>Returns: TDragLintJob.Create</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DragLint.Plugin.IndexJob.FileIndexCoalesceKey"/>
+/// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJob.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildFileIndexJob(const AExePath, AFilePath, ADbPath: string): TDragLintJob;
 
 /// <summary>The database a save-time reindex of AProjectFile may write: the
@@ -105,15 +146,27 @@ function BuildFileIndexJob(const AExePath, AFilePath, ADbPath: string): TDragLin
 /// when a DB is returned.</param>
 /// <returns>AOwnerDb when AProjectFile is set, AMatch is pdmUnique and AOwnerDb
 /// is not blank; '' otherwise -- the caller then queues NOTHING.</returns>
-/// <remarks>Pure. Exists because the save path used to take the last-OPENED
+/// <remarks>
+/// Pure. Exists because the save path used to take the last-OPENED
 /// project's DB (GLastProjectDb) and pair it with the ACTIVE project, writing
 /// one project's closure into another project's index (2026-10-16). A missing
-/// or ambiguous owner is a refusal, never permission to guess.</remarks>
+/// or ambiguous owner is a refusal, never permission to guess.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.ActiveProjectWriteDb (DragLint.Plugin.DbResolver.pas)</para>
+/// <para>Returns: ''; AOwnerDb</para>
+/// <para>Mutates: AWhy (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReindexTargetDb(const AProjectFile: string; AMatch: TProjectDbMatch;
                          const AOwnerDb: string; out AWhy: string): string;
 
 type
   /// <summary>What a save-time reindex actually started.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.IndexJob.pas), DragLint.Plugin.IndexJob.ChooseSaveReindex (DragLint.Plugin.IndexJob.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSaveReindexAction = (sraNone, sraProject, sraFile);
 
 /// <summary>Decides what AfterSave started, so the Messages pane only announces a
@@ -122,7 +175,14 @@ type
 /// <param name="AFallbackDb">The DB the manifest assigns to the saved file, '' if none.</param>
 /// <returns>sraProject when a job was queued; else sraFile when AFallbackDb is not blank;
 /// else sraNone (nothing started: do not post "reindexing...").</returns>
-/// <remarks>Pure.</remarks>
+/// <remarks>
+/// Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.AfterSave (DragLint.Plugin.SaveNotifier.pas)</para>
+/// <para>Returns: sraProject; sraFile; sraNone</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ChooseSaveReindex(AProjectQueued: Boolean; const AFallbackDb: string): TSaveReindexAction;
 
 implementation

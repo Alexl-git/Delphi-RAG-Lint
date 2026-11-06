@@ -47,9 +47,15 @@ type
   /// the hashes, the idle clock, the generation counter and the two
   /// short-circuits, so the only thing left in the IDE-bound runner is reading
   /// the buffer and calling the hook.</summary>
-  /// <remarks>NOT thread-safe, and deliberately so -- it is driven from the
+  /// <remarks>
+  /// NOT thread-safe, and deliberately so -- it is driven from the
   /// runner's timer on the main thread. NoteFingerprint arrives from a worker,
-  /// so its caller must marshal (TThread.Queue).</remarks>
+  /// so its caller must marshal (TThread.Queue).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.LiveDiagnostics.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.LiveDiagnostics</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFanOutGate = record
   private
     FFile           : string  ;
@@ -66,17 +72,25 @@ type
   public
     /// <summary>Take back the launch the last Consider authorised, because the
     /// caller could not start it.</summary>
-    /// <remarks>Consider COMMITS when it answers True -- it advances the
+    /// <remarks>
+    /// Consider COMMITS when it answers True -- it advances the
     /// launched-shape marker so the same edit cannot fire twice. If the caller
     /// then declines (the worker is still unwinding), that commit makes the
     /// edit VANISH: the gate reports "interface unchanged since the last
     /// launch" forever after, and the change is never fanned out. Measured
     /// 2026-09-11: two consecutive edits lost exactly this way while a 6m22s
     /// tier-3 compile held the worker.
-    ///
     /// The generation is deliberately NOT rewound. It is the staleness token;
     /// reusing a number that was already handed out would make a late result
-    /// from the abandoned run look current.</remarks>
+    /// from the abandoned run look current.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LiveDiagnostics.TLiveRunner.OnTick (DragLint.Plugin.LiveDiagnostics.pas)</para>
+    /// <para>Reads: FHashBeforeLaunch   Writes: FHashAtLaunch, FLastWhy</para>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.TFanOutGate.Consider"/>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.TFanOutGate.NoteFingerprint"/>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.TFanOutGate.Reset"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure UndoLaunch;
 
     /// <summary>Why the last Consider answered as it did -- DIAGNOSIS ONLY.</summary>
@@ -89,6 +103,15 @@ type
 
     /// <summary>Forgets every hash and clock, keeping the generation counter so
     /// a late result from a previous file can still be recognised as stale.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LiveDiagnostics.TLiveRunner.Create (DragLint.Plugin.LiveDiagnostics.pas), DragLint.Plugin.SurfaceSplit.TFanOutGate.Consider (DragLint.Plugin.SurfaceSplit.pas)</para>
+    /// <para>Writes: FFile, FBufHash, FBufSeen, FIfaceHash, FHashAtLaunch, FSilentShape, FHashBeforeLaunch, FLastFingerprint (+1 more)</para>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.TFanOutGate.Consider"/>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.TFanOutGate.NoteFingerprint"/>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.TFanOutGate.UndoLaunch"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Reset;
 
     /// <summary>Feeds the current buffer and answers whether a fan-out should
@@ -103,16 +126,40 @@ type
     /// call authorises, or 0 when the answer is False -- always assigned, so a
     /// caller cannot pass a stale generation on to the worker by accident.</param>
     /// <returns>True exactly once per settled interface change.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LiveDiagnostics.TLiveRunner.OnTick (DragLint.Plugin.LiveDiagnostics.pas)</para>
+    /// <para>Calls: DragLint.Plugin.SurfaceSplit.CheapBufferHash, DragLint.Plugin.SurfaceSplit.InterfaceHalfHash, DragLint.Plugin.SurfaceSplit.TFanOutGate.Reset, Format, SameText</para>
+    /// <para>Returns: False; True</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 77 lines (full implementation)</para>
+    /// <para>Reads: FFile, FIfaceHash, FBufSeen, FBufHash, FHashAtLaunch, FSilentShape, FLastChangeTick, FGeneration   Writes: FLastWhy, FFile, FBufHash, FBufSeen, FIfaceHash, FHashAtLaunch, FLastChangeTick, FHashBeforeLaunch (+1 more)</para>
+    /// <para>Mutates: AGeneration (out)</para>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.CheapBufferHash"/>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.InterfaceHalfHash"/>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.TFanOutGate.Reset"/>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.TFanOutGate.NoteFingerprint"/>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.TFanOutGate.UndoLaunch"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Consider(const AFile, ABufText: string; ANowTick, AIdleMs: UInt64;
                       out AGeneration: Integer): Boolean;
 
     /// <summary>Records the surface fingerprint the engine reported for the
     /// last launch.</summary>
     /// <param name="AFingerprint">The engine's fingerprint, or '' to forget.</param>
-    /// <remarks>When it equals the previous run's, the shape just launched is
+    /// <remarks>
+    /// When it equals the previous run's, the shape just launched is
     /// marked as yielding no new work, so editing BACK to it (an undo) does not
     /// pay for the same answer twice. The mark lapses on its own as soon as the
-    /// interface hash moves somewhere else.</remarks>
+    /// interface hash moves somewhere else.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LiveDiagnostics.NotifyFanOutFingerprint (DragLint.Plugin.LiveDiagnostics.pas)</para>
+    /// <para>Reads: FLastFingerprint, FHashAtLaunch   Writes: FLastFingerprint, FSilentShape</para>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.TFanOutGate.Consider"/>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.TFanOutGate.Reset"/>
+    /// <seealso cref="DragLint.Plugin.SurfaceSplit.TFanOutGate.UndoLaunch"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure NoteFingerprint(const AFingerprint: string);
 
     /// <summary>Generation of the most recent launch; 0 before the first.</summary>
@@ -129,6 +176,16 @@ type
 /// <param name="ACandidates">How many `implementation` keywords were seen
 /// outside comments and strings. More than one means at least one sits in a
 /// conditional branch; the LAST wins, which over-fires rather than missing.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SurfaceSplit.InterfaceHalf (DragLint.Plugin.SurfaceSplit.pas)</para>
+/// <para>Calls: CharInSet, DragLint.Plugin.SurfaceSplit.IsIdentChar, DragLint.Plugin.SurfaceSplit.WordAtIs</para>
+/// <para>Complexity: 29 (cyclomatic, outer body), 124 lines (full implementation)</para>
+/// <para>Mutates: AIfaceStart (out), AImplStart (out), ACandidates (out)</para>
+/// <seealso cref="DragLint.Plugin.SurfaceSplit.IsIdentChar"/>
+/// <seealso cref="DragLint.Plugin.SurfaceSplit.WordAtIs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure FindSplit(const ABufText: string; out AIfaceStart, AImplStart: Integer;
                     out ACandidates: Integer);
 
@@ -138,15 +195,31 @@ procedure FindSplit(const ABufText: string; out AIfaceStart, AImplStart: Integer
 /// <returns>The interface text, or the whole buffer if the unit has no
 /// recognisable `implementation` -- the conservative answer, since a buffer
 /// this scanner cannot read is one whose interface edits must still fire.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SurfaceSplit.InterfaceHalfHash (DragLint.Plugin.SurfaceSplit.pas)</para>
+/// <para>Calls: Copy, DragLint.Plugin.SurfaceSplit.FindSplit</para>
+/// <para>Returns: Copy(ABufText, IfaceStart, ImplStart - IfaceStart)</para>
+/// <seealso cref="DragLint.Plugin.SurfaceSplit.FindSplit"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function InterfaceHalf(const ABufText: string): string;
 
 /// <summary>SHA-256 of <see cref="InterfaceHalf"/>, lowercase hex.</summary>
 /// <param name="ABufText">Unit source.</param>
 /// <returns>64 hex characters; '' only for an empty interface half.</returns>
-/// <remarks>SHA-256 rather than the runner's 32-bit CheapHash on purpose: a
+/// <remarks>
+/// SHA-256 rather than the runner's 32-bit CheapHash on purpose: a
 /// collision here is a fan-out that never fires, and a rolling 32-bit hash over
 /// text a developer is editing one character at a time is exactly the input a
-/// weak hash collides on.</remarks>
+/// weak hash collides on.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SurfaceSplit.TFanOutGate.Consider (DragLint.Plugin.SurfaceSplit.pas)</para>
+/// <para>Calls: DragLint.Plugin.SurfaceSplit.InterfaceHalf</para>
+/// <para>Returns: THashSHA2.GetHashString(Half)</para>
+/// <seealso cref="DragLint.Plugin.SurfaceSplit.InterfaceHalf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function InterfaceHalfHash(const ABufText: string): string;
 
 /// <summary>Cheap rolling hash of a whole buffer, used only to skip the split
@@ -154,6 +227,13 @@ function InterfaceHalfHash(const ABufText: string): string;
 /// <param name="S">Any text.</param>
 /// <returns>A 32-bit hash. Never used to decide that a fan-out is
 /// unnecessary -- only that a poll saw no edit whatsoever.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SurfaceSplit.TFanOutGate.Consider (DragLint.Plugin.SurfaceSplit.pas)</para>
+/// <para>Calls: Cardinal</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CheapBufferHash(const S: string): Cardinal;
 
 implementation

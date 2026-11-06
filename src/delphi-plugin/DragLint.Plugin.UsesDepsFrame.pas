@@ -67,20 +67,37 @@ uses
 
 type
   /// <summary>Which engine verb a section drives.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.HandleApply (DragLint.Plugin.UsesDepsFrame.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesVerb = (uvUnitCleanup, uvProjectMembers, uvCircularUses);
 
   /// <summary>How a section reports a user-visible message to its host.</summary>
-  /// <remarks>A METHOD POINTER, not TProc&lt;string&gt;: Delphi will not
+  /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+  /// <remarks>
+  /// A METHOD POINTER, not TProc&lt;string&gt;: Delphi will not
   /// implicitly convert a method to an anonymous-method reference, and the
   /// closure that would be needed captures Self for the life of a child
-  /// control. A plain `of object` pointer has neither problem.</remarks>
+  /// control. A plain `of object` pointer has neither problem.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create (DragLint.Plugin.UsesDepsFrame.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesReportProc = procedure (const AText: string) of object;
 
   /// <summary>One reviewable row. Mirrors an `items[]` entry of the uses-fix/1
   /// document, or one MISSING entry of the reconcile-project document.</summary>
-  /// <remarks>A RECORD, not a class: a pure data carrier held in a list
+  /// <remarks>
+  /// A RECORD, not a class: a pure data carrier held in a list
   /// parallel to the TCheckListBox, so a row's identity never depends on
-  /// parsing its rendered caption back out.</remarks>
+  /// parsing its rendered caption back out.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.UsesDepsFrame.pas) ?, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FillFromDryRun (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Render (DragLint.Plugin.UsesDepsFrame.pas) ?</para>
+  /// <para>Used in units: DragLint.Plugin.UsesDepsFrame</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesDepsRow = record
     /// <summary>What --only is given for this row.</summary>
     UnitName  : string ;
@@ -96,14 +113,25 @@ type
     Actionable: Boolean;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.UsesDepsFrame.pas) ?, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create (DragLint.Plugin.UsesDepsFrame.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesDepsRows = TList<TUsesDepsRow>;
 
   /// <summary>One reviewable section: a checklist of candidates for ONE engine
   /// verb, with Refresh / Tick all / Apply selected.</summary>
-  /// <remarks>Not thread-safe; VCL, main thread only. Reports progress through
+  /// <remarks>
+  /// Not thread-safe; VCL, main thread only. Reports progress through
   /// the callback given at construction rather than owning a status label, so
   /// two sections can share one status line without either knowing about the
-  /// other.</remarks>
+  /// other.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.UsesDepsFrame.pas) ?, DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls (DragLint.Plugin.UsesDepsFrame.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.UsesDepsFrame</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesDepsSection = class(TGroupBox)
     private
       FVerb      : TUsesVerb    ;
@@ -112,15 +140,167 @@ type
       FReport    : TUsesReportProc;
       FApplying  : Boolean      ;
       FAfterRefresh: TProc      ;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls.MakeButton</para>
+      /// <para>Reads: FBar, FList   Writes: FBar, FBtnRefresh, FBtnTickAll, FBtnApply, FList</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls.MakeButton"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.DryRunArgs"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure BuildControls;
+      /// <summary><!-- drag-lint:auto sum -->The ticked rows as a --only value. Only
+      /// ACTIONABLE rows can contribute: a disabled row cannot be ticked through the UI,
+      /// but this is the gate the apply actually passes through, so it is enforced here
+      /// too rather than trusted.</summary>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: string.Join(',', Names).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.HandleApply (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Reads: FList, FRows</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.DryRunArgs"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function  TickedNames: string;
+      /// <summary><!-- drag-lint:auto sum -->The dry-run query. --remove-unused IS PASSED
+      /// ON THE DRY RUN TOO: without it the engine never emits a single `remove`
+      /// candidate, so the unused half of the unit section would be permanently empty and
+      /// read as a clean unit. It writes nothing without --apply; only the verification
+      /// compiles.</summary>
+      /// <param name="APas"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AProj"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ADb"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: Format('reconcile-project
+      /// "%s" --json', [AProj]).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.StartRefresh (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: Format</para>
+      /// <para>Reads: FVerb</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FillFromDryRun"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function  DryRunArgs (const APas, AProj, ADb: string): string;
+      /// <summary><!-- drag-lint:auto sum -->--only carries the review. The engine still
+      /// decides what is safe -- uses-fix re-verifies every selected candidate by
+      /// compiling it -- so a tick is a request, never an instruction to skip
+      /// verification.</summary>
+      /// <param name="APas"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AProj"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ADb"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AOnly"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: Format('reconcile-project
+      /// "%s" --only %s --apply --json', [AProj, AOnly]).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.HandleApply (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: Format</para>
+      /// <para>Reads: FVerb</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.DryRunArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FillFromDryRun"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function  ApplyArgs  (const APas, AProj, ADb, AOnly: string): string;
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Refresh</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Refresh"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleRefresh(Sender: TObject);
+      /// <summary><!-- drag-lint:auto sum -->Ticks every ACTIONABLE row and leaves the
+      /// rest alone. It is a selection helper, not a second apply mode -- "Apply
+      /// selected" stays the only thing that writes, so a mis-click here costs a click to
+      /// undo and nothing else.</summary>
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Reads: FList, FRows</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.DryRunArgs"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleTickAll(Sender: TObject);
+      /// <param name="AExitCode"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AOutput"><!-- drag-lint:auto type -->const string</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.StartRefresh (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FillFromDryRun, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FinishRefresh, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Report</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FillFromDryRun"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FinishRefresh"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Report"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ShowDryRun(AExitCode: Integer; const AOutput: string);
+      /// <param name="AOutput"><!-- drag-lint:auto type -->const string</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ShowDryRun (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: Default, DragLint.Plugin.UsesDepsFrame.ParseDoc, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Render, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Report, Format, SameText</para>
+      /// <para>Reads: FVerb, FRows</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.ParseDoc"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Render"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Report"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure FillFromDryRun(const AOutput: string);
+      /// <param name="AValue"><!-- drag-lint:auto type -->Boolean</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FinishApply (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.HandleApply (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Reads: FBtnApply, FBtnRefresh, FBtnTickAll   Writes: FApplying</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.DryRunArgs"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure SetApplying(AValue: Boolean);
+      /// <param name="AExitCode"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AOutput"><!-- drag-lint:auto type -->const string</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.HandleApply (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.DescribeOutcome, DragLint.Plugin.UsesDepsFrame.ReadOutcome, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Refresh, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Report, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.SetApplying</para>
+      /// <para>Reads: FVerb</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.DescribeOutcome"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.ReadOutcome"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Refresh"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Report"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.SetApplying"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure FinishApply(AExitCode: Integer; const AOutput: string);
     protected
       { The list query in flight; an apply or a newer refresh supersedes it. }
@@ -133,18 +313,88 @@ type
       /// <summary>Forwards AText to the host's status line (dropped when the
       /// constructor was given nil).</summary>
       /// <param name="AText">The message, shown verbatim.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.ShowCycles (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.StartRefresh (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FillFromDryRun (DragLint.Plugin.UsesDepsFrame.pas) (+4 more)</para>
+      /// <para>Calls: FReport</para>
+      /// <para>Reads: FReport</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.DryRunArgs"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Report(const AText: string);
       /// <summary>Repaints the checklist from the section's rows.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FillFromDryRun (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.StartRefresh (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: Format</para>
+      /// <para>Overridden by: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Render</para>
+      /// <para>virtual</para>
+      /// <para>Reads: FList, FRows, FVerb</para>
+      /// <para>Directives: virtual</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.DryRunArgs"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Render; virtual;
       /// <summary>The Apply button: runs the verb's --apply for the ticked rows.</summary>
       /// <param name="Sender">The button; unused.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.CliAsync.RunCliAsync, DragLint.Plugin.CliAsync.TCliRunSlot.Cancel, DragLint.Plugin.UsesDepsFrame.EngineCmdLine, DragLint.Plugin.UsesDepsFrame.ReadOutcome, DragLint.Plugin.UsesDepsFrame.ReloadModules, DragLint.Plugin.UsesDepsFrame.ResolveScope, DragLint.Plugin.UsesDepsFrame.SaveAllModules, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FinishApply, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Report, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.SetApplying, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.TickedNames</para>
+      /// <para>Overridden by: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleApply</para>
+      /// <para>virtual</para>
+      /// <para>Reads: FApplying, FRun, FVerb</para>
+      /// <para>Directives: virtual</para>
+      /// <seealso cref="DragLint.Plugin.CliAsync.RunCliAsync"/>
+      /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Cancel"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.EngineCmdLine"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.ReadOutcome"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.ReloadModules"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleApply(Sender: TObject); virtual;
       /// <summary>Starts this section's query off the main thread.</summary>
       /// <returns>True when a run started and its answer will call
       /// FinishRefresh; False when there is nothing to wait for.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Refresh (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.CliAsync.TCliRunSlot.Cancel, DragLint.Plugin.CliAsync.TCliRunSlot.Start, DragLint.Plugin.UsesDepsFrame.EngineCmdLine, DragLint.Plugin.UsesDepsFrame.ResolveScope, DragLint.Plugin.UsesDepsFrame.SaveAllModules, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.DryRunArgs, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Render, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Report</para>
+      /// <para>Returns: False; True</para>
+      /// <para>Overridden by: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.StartRefresh</para>
+      /// <para>virtual</para>
+      /// <para>Reads: FApplying, FRun, FRows, FVerb</para>
+      /// <para>Directives: virtual</para>
+      /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Cancel"/>
+      /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Start"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.EngineCmdLine"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.ResolveScope"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.SaveAllModules"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function StartRefresh: Boolean; virtual;
       /// <summary>Hands over to the next section of a "Refresh all", if any.</summary>
-      /// <remarks>Every run StartRefresh started must end here.</remarks>
+      /// <remarks>
+      /// Every run StartRefresh started must end here.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.ShowCycles (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Refresh (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ShowDryRun (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: Next</para>
+      /// <para>Reads: FAfterRefresh   Writes: FAfterRefresh</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.DryRunArgs"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure FinishRefresh;
     public
       /// <summary>Builds the section into AParent for AVerb.</summary>
@@ -154,18 +404,69 @@ type
       /// <param name="ACaption">Group-box caption; names the scope to the user.</param>
       /// <param name="AOnReport">Receives every user-visible message this section
       /// produces. May be nil, in which case messages are dropped.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls</para>
+      /// <para>Overridden by: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FRun, FVerb, FReport, FRows</para>
+      /// <para>UI thread only -- touches AParent</para>
+      /// <para>Directives: reintroduce</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.DryRunArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FillFromDryRun"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(AOwner: TComponent; AParent: TWinControl; AVerb: TUsesVerb;
                          const ACaption: string; AOnReport: TUsesReportProc); reintroduce;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Overridden by: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Destroy</para>
+      /// <para>Reads: FRun, FRows</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.DryRunArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FillFromDryRun"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
       /// <summary>Re-queries this section and repaints it when the answer arrives.
       /// Never called on tab activation -- only from a button or the frame's
       /// "Refresh both".</summary>
-      /// <remarks>Returns at once (IDE-MAINTHREAD-CLI): the engine runs off the main
-      /// thread and a newer Refresh supersedes it. Refused while an apply runs.</remarks>
+      /// <remarks>
+      /// Returns at once (IDE-MAINTHREAD-CLI): the engine runs off the main
+      /// thread and a newer Refresh supersedes it. Refused while an apply runs.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.RefreshAll (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FinishApply (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.HandleRefresh (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.RefreshThen (DragLint.Plugin.UsesDepsFrame.pas) (+3 more)</para>
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FinishRefresh, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.StartRefresh</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FinishRefresh"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.StartRefresh"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Refresh;
       /// <summary>Refresh, then ANext once this section is done, however it ended, so
       /// a "Refresh all" runs the engines one after the other as it always has.</summary>
       /// <param name="ANext">Runs on the main thread; never once the section is freed.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.RefreshAll (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Refresh</para>
+      /// <para>Writes: FAfterRefresh</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Refresh"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.ApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure RefreshThen(const ANext: TProc);
   end;
 
@@ -173,36 +474,187 @@ type
   /// component (SCC) of the project's uses graph, read from
   /// `cycles --format json --causes`, with Dry run and Apply for the ONE
   /// ticked SCC (`cycles --fix --cycle n`).</summary>
-  /// <remarks>Ticks are radio-like: ticking a row unticks every other, because
+  /// <remarks>
+  /// Ticks are radio-like: ticking a row unticks every other, because
   /// --cycle takes one SCC and fixing one changes the graph the others were
   /// computed on. The engine owns the edit (atomic, compiler-verified, rolled
   /// back on failure); this section only passes --cycle and, on Apply, --apply.
   /// After an apply every `written[]` path is reloaded. Dry run and Apply run
   /// as a Busy job on the plugin's JobQueue (off the main thread, no time limit;
   /// Cancel stands the engine down); both buttons are disabled while it is in flight and
-  /// a second start is refused. Not thread-safe; VCL, main thread only.</remarks>
+  /// a second start is refused. Not thread-safe; VCL, main thread only.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.UsesDepsFrame.pas) ?, DragLint.Plugin.UsesDepsFrame.IsLiveCycleSection (DragLint.Plugin.UsesDepsFrame.pas) ?, DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls (DragLint.Plugin.UsesDepsFrame.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.UsesDepsFrame</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCircularUsesSection = class(TUsesDepsSection)
     private
       FCycles : TArray<TCycleRow>;
       FRunning: Boolean;
+      /// <summary><!-- drag-lint:auto sum -->The ticked SCC's 1-based --cycle number; 0
+      /// when none is ticked.</summary>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: 0.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Reads: FCycles, FList</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleApply"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleClickCheck"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function  TickedCycle: Integer;
+      /// <summary><!-- drag-lint:auto sum -->Both fix buttons follow the in-flight state;
+      /// Refresh stays enabled, it is also how a section recovers from a job the queue
+      /// dropped (see Refresh).</summary>
+      /// <param name="AValue"><!-- drag-lint:auto type -->Boolean</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.StartRefresh (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Reads: FBtnTickAll, FBtnApply   Writes: FRunning</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleApply"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleClickCheck"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure SetRunning(AValue: Boolean);
+      /// <param name="AApply"><!-- drag-lint:auto type -->Boolean</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto -->OFF THE MAIN THREAD, through the plugin's JobQueue -- the same
+      /// Busy-job shape as StructureForm.EnqueueFixJob: a fix that builds the project two or three
+      /// times would otherwise freeze the IDE for minutes. Busy gives the wait cursor and makes
+      /// JobQueueBusy refuse a second fix anywhere in the plugin. No time limit
+      /// (CYCLE_FIX_TIMEOUT_MS = 0, owner ruling 2026-10-26); the status strip's Cancel asks the
+      /// engine to stand down and roll back, and kills only after CYCLE_FIX_CANCEL_GRACE_MS, so a
+      /// kill never lands in the middle of an --apply the engine could still undo.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleApply (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleDryRun (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.CliAsync.TCliRunSlot.Cancel, DragLint.Plugin.CycleFix.CycleFixApplyArgs, DragLint.Plugin.CycleFix.CycleFixApplyConfirmText, DragLint.Plugin.CycleFix.CycleFixDryRunArgs, DragLint.Plugin.DbResolver.GetActivePlatformForLibrary, DragLint.Plugin.ExeResolver.EngineExeOrEmpty, DragLint.Plugin.JobQueue.JobQueue, DragLint.Plugin.JobQueue.JobQueueBusy, DragLint.Plugin.JobQueue.TDragLintJob.Create, DragLint.Plugin.JobQueue.TDragLintJobQueue.Enqueue (+11 more)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 65 lines (full implementation)</para>
+      /// <para>Reads: FRunning, FCycles, FRun</para>
+      /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Cancel"/>
+      /// <seealso cref="DragLint.Plugin.CycleFix.CycleFixApplyArgs"/>
+      /// <seealso cref="DragLint.Plugin.CycleFix.CycleFixApplyConfirmText"/>
+      /// <seealso cref="DragLint.Plugin.CycleFix.CycleFixDryRunArgs"/>
+      /// <seealso cref="DragLint.Plugin.DbResolver.GetActivePlatformForLibrary"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure RunFix(AApply: Boolean);
+      /// <param name="AExitCode"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AOutput"><!-- drag-lint:auto type -->const string</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.StartRefresh (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.CycleFix.ParseCycleRows, DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Render, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FinishRefresh, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Report, Format</para>
+      /// <para>Reads: FCycles   Writes: FCycles</para>
+      /// <seealso cref="DragLint.Plugin.CycleFix.ParseCycleRows"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Render"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.FinishRefresh"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Report"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ShowCycles(AExitCode: Integer; const AOutput: string);
+      /// <param name="AApply"><!-- drag-lint:auto type -->Boolean</param>
+      /// <param name="AExit"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AOutput"><!-- drag-lint:auto type -->const string</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto -->Main thread (the job's OnDone). Re-enables the buttons first,
+      /// whatever the outcome -- completion, failure or timeout.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.CycleFix.CycleFixWroteFiles, DragLint.Plugin.CycleFix.DescribeCycleFixOutcome, DragLint.Plugin.CycleFix.ParseCycleFixOutcome, DragLint.Plugin.UsesDepsFrame.ReloadModules, DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.SetRunning, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Refresh, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Report, Format</para>
+      /// <seealso cref="DragLint.Plugin.CycleFix.CycleFixWroteFiles"/>
+      /// <seealso cref="DragLint.Plugin.CycleFix.DescribeCycleFixOutcome"/>
+      /// <seealso cref="DragLint.Plugin.CycleFix.ParseCycleFixOutcome"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.ReloadModules"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.SetRunning"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure FinishFix(AApply: Boolean; AExit: Integer; const AOutput: string);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleApply"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleDryRun    (Sender: TObject);
+      /// <summary><!-- drag-lint:auto sum -->Radio-like: --cycle takes ONE SCC.</summary>
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Reads: FList</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleApply"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleDryRun"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleClickCheck(Sender: TObject);
     protected
       /// <summary>One row per SCC: units, fix state, fix.reason.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.ShowCycles (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.StartRefresh (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.CycleFix.CycleRowCaption</para>
+      /// <para>Overrides: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Render</para>
+      /// <para>Reads: FCycles, FList</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.CycleFix.CycleRowCaption"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleApply"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Render; override;
       /// <summary>Runs `cycles --fix --cycle n --apply` for the ticked SCC, after a
       /// Yes/No confirmation (CycleFixApplyConfirmText; default No).</summary>
       /// <param name="Sender">The button; unused.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix</para>
+      /// <para>Overrides: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.HandleApply</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleClickCheck"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleApply(Sender: TObject); override;
       /// <summary>Starts the SCC list query off the main thread. Writes nothing;
       /// never called on tab activation.</summary>
       /// <returns>True when a run started; False when a fix is running or the scope
       /// has no project.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.CliAsync.TCliRunSlot.Cancel, DragLint.Plugin.CliAsync.TCliRunSlot.Start, DragLint.Plugin.CycleFix.CycleListArgs, DragLint.Plugin.DbResolver.GetActivePlatformForLibrary, DragLint.Plugin.JobQueue.JobQueueBusy, DragLint.Plugin.UsesDepsFrame.EngineCmdLine, DragLint.Plugin.UsesDepsFrame.ResolveScope, DragLint.Plugin.UsesDepsFrame.SaveAllModules, DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Render, DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.SetRunning, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Report</para>
+      /// <para>Returns: False; True</para>
+      /// <para>Overrides: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.StartRefresh</para>
+      /// <para>Reads: FRunning, FCycles, FRun</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Cancel"/>
+      /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Start"/>
+      /// <seealso cref="DragLint.Plugin.CycleFix.CycleListArgs"/>
+      /// <seealso cref="DragLint.Plugin.DbResolver.GetActivePlatformForLibrary"/>
+      /// <seealso cref="DragLint.Plugin.JobQueue.JobQueueBusy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function StartRefresh: Boolean; override;
     public
       /// <summary>Builds the section and re-captions its strip to
@@ -211,15 +663,47 @@ type
       /// <param name="AParent">Control the section is parented into -- the frame.</param>
       /// <param name="ACaption">Group-box caption; names the scope to the user.</param>
       /// <param name="AOnReport">Receives every user-visible message; may be nil.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Overrides: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create</para>
+      /// <para>constructor</para>
+      /// <para>Reads: FBtnTickAll, FBtnApply, FList</para>
+      /// <para>UI thread only -- touches AParent</para>
+      /// <para>Directives: reintroduce</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleApply"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleClickCheck"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleDryRun"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(AOwner: TComponent; AParent: TWinControl; const ACaption: string;
                          AOnReport: TUsesReportProc); reintroduce;
       /// <summary>Unregisters the section, so a cycles --fix job that finishes
       /// after the dock is gone does not call into a freed object.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Overrides: DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Destroy</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleApply"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleClickCheck"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.HandleDryRun"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
   end;
 
   /// <summary>The Uses &amp; Deps dock tab: a scope strip, three sections and one
   /// shared status line.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.UsesDepsFrame.CreateEmbeddedUsesDeps (DragLint.Plugin.UsesDepsFrame.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.UsesDepsFrame</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesDepsFrame = class(TForm)
     private
       FTopPanel     : TPanel         ;
@@ -231,13 +715,72 @@ type
       FSplitter2    : TSplitter      ;
       FCycleSec     : TCircularUsesSection;
       FStatus       : TLabel         ;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.Create (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create</para>
+      /// <para>Reads: FTopPanel, FLblScope, FBtnRefreshAll, FStatus, FUnitSec, FSplitter, FProjSec, FSplitter2 (+1 more)   Writes: FTopPanel, FLblScope, FBtnRefreshAll, FStatus, FUnitSec, FSplitter, FProjSec, FSplitter2 (+1 more)</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.HandleRefreshAll"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.RefreshAll"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure BuildControls;
+      /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Reads: FStatus</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.HandleRefreshAll"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.RefreshAll"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure SetStatus(const AText: string);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.RefreshAll</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.RefreshAll"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.Create"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.SetStatus"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleRefreshAll(Sender: TObject);
     public
+      /// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.CreateEmbeddedUsesDeps (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: CreateNew, DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls</para>
+      /// <para>constructor</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.HandleRefreshAll"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.RefreshAll"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.SetStatus"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(AOwner: TComponent); override;
       /// <summary>Re-queries EVERY section. Public so the dock can offer one
       /// "refresh everything" entry point; never called automatically.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.HandleRefreshAll (DragLint.Plugin.UsesDepsFrame.pas)</para>
+      /// <para>Calls: DragLint.Plugin.UsesDepsFrame.ResolveScope, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Refresh, DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.RefreshThen, ExtractFileName, Format</para>
+      /// <para>Reads: FLblScope, FCycleSec, FProjSec, FUnitSec</para>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.ResolveScope"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.Refresh"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsSection.RefreshThen"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.BuildControls"/>
+      /// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure RefreshAll;
   end;
 
@@ -246,8 +789,16 @@ type
 /// dock tabs.</summary>
 /// <param name="AOwner">Component owner; frees the frame with the dock.</param>
 /// <param name="AParent">The tab sheet the frame fills (alClient).</param>
-/// <remarks>Runs no query -- see the unit header. Never raises: a tab that
-/// throws during dock construction takes the whole panel with it.</remarks>
+/// <remarks>
+/// Runs no query -- see the unit header. Never raises: a tab that
+/// throws during dock construction takes the whole panel with it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.HandleInitTimer (DragLint.Plugin.DockForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.Create</para>
+/// <para>UI thread only -- touches Frame, AParent</para>
+/// <seealso cref="DragLint.Plugin.UsesDepsFrame.TUsesDepsFrame.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure CreateEmbeddedUsesDeps(AOwner: TComponent; AParent: TWinControl);
 
 implementation

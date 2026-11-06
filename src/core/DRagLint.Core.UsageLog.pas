@@ -29,17 +29,42 @@ const
   USAGE_BYTES_PER_TOKEN = 4;
 
 /// <summary>True unless DRAGLINT_USAGE_LOG=0.</summary>
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed:
+/// GetEnvironmentVariable(USAGE_LOG_ENV) &lt;&gt; '0'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.CLI.LogReaderUsage (DRagLint.CLI.pas), DRagLint.Core.UsageLog.RecordUsage (DRagLint.Core.UsageLog.pas)</para>
+/// <para>Calls: GetEnvironmentVariable</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UsageLogEnabled: Boolean;
 
 /// <summary>Full path of the per-user usage log: %LOCALAPPDATA%\drag-lint\usage.log.</summary>
 /// <returns>The path, or '' when no per-user folder can be determined.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoGain (DRagLint.CLI.pas), DRagLint.Core.UsageLog.RecordUsage (DRagLint.Core.UsageLog.pas)</para>
+/// <para>Calls: GetEnvironmentVariable</para>
+/// <para>Returns: TPath.Combine(TPath.Combine(Base, AUDIT_DIR), AUDIT_FILE)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UsageLogPath: string;
 
 /// <summary>Sums the sizes of the distinct, existing files in APaths.</summary>
 /// <param name="APaths">Absolute file paths; duplicates (case-insensitive) count once.</param>
 /// <param name="AUnits">Out: how many distinct existing files were counted.</param>
 /// <returns>Total bytes of those files; 0 when none exist.</returns>
-/// <remarks>Never raises; an unreadable path is skipped.</remarks>
+/// <remarks>
+/// Never raises; an unreadable path is skipped.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.LogReaderUsage (DRagLint.CLI.pas)</para>
+/// <para>Calls: LowerCase</para>
+/// <para>Catches: Exception (empty)</para>
+/// <para>Mutates: AUnits (out)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SumDistinctFileBytes(const APaths: TArray<string>; out AUnits: Integer): Int64;
 
 /// <summary>Appends one usage line. Best effort: never raises, writes nothing when disabled.</summary>
@@ -48,7 +73,19 @@ function SumDistinctFileBytes(const APaths: TArray<string>; out AUnits: Integer)
 /// <param name="ATokensReturned">Estimated tokens the verb printed.</param>
 /// <param name="ASourceBytesAvoided">Bytes of source the reader would otherwise have read.</param>
 /// <param name="AUnitsAvoided">Number of distinct source files those bytes span.</param>
-/// <remarks>Not thread-safe across processes beyond the OS append atomicity of one short line.</remarks>
+/// <remarks>
+/// Not thread-safe across processes beyond the OS append atomicity of one short line.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.LogReaderUsage (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.FileTime.NowUtc, DRagLint.Core.UsageLog.Clean, DRagLint.Core.UsageLog.UsageLogEnabled, DRagLint.Core.UsageLog.UsageLogPath, ExtractFilePath, ForceDirectories, Format, FormatDateTime</para>
+/// <para>Catches: Exception (empty)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.FileTime.NowUtc"/>
+/// <seealso cref="DRagLint.Core.UsageLog.Clean"/>
+/// <seealso cref="DRagLint.Core.UsageLog.UsageLogEnabled"/>
+/// <seealso cref="DRagLint.Core.UsageLog.UsageLogPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RecordUsage(const AVerb, ADbTag: string; ATokensReturned, ASourceBytesAvoided: Int64; AUnitsAvoided: Integer);
 
 /// <summary>Renders the `gain` report from a usage log.</summary>
@@ -56,6 +93,19 @@ procedure RecordUsage(const AVerb, ADbTag: string; ATokensReturned, ASourceBytes
 /// <param name="ASince">Optional date prefix (yyyy-mm-dd); lines older than it are skipped.</param>
 /// <param name="AAsJson">True for the JSON form, false for the text table.</param>
 /// <returns>The report text, without a trailing newline.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoGain (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Core.UsageLog.AddTo, DRagLint.Core.UsageLog.TotalsToJson, DRagLint.Core.UsageLog.TotalsToRow, Format, TrimRight</para>
+/// <para>Returns: JRoot.Format(2); TrimRight(SB.ToString)</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 89 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.UsageLog.AddTo"/>
+/// <seealso cref="DRagLint.Core.UsageLog.TotalsToJson"/>
+/// <seealso cref="DRagLint.Core.UsageLog.TotalsToRow"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildGainReport(const ALogPath, ASince: string; AAsJson: Boolean): string;
 
 implementation

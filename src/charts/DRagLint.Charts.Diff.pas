@@ -12,9 +12,15 @@ const
 
 type
   /// <summary>One comparable item: what is SHOWN and what is COMPARED.</summary>
-  /// <remarks>Key is compared with ordinal string equality (case-sensitive): an adapter
+  /// <remarks>
+  /// Key is compared with ordinal string equality (case-sensitive): an adapter
   /// that wants case-blind matching lowercases its key. PS trap handled: PowerShell's -eq
-  /// is case-insensitive and would not have told two keys apart by case; this does.</remarks>
+  /// is case-insensitive and would not have told two keys apart by case; this does.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Adapter.FormsCsv.pas) ?, declaration (DRagLint.Charts.Adapter.Graph.pas) ?, DRagLint.Charts.Adapter.FormsCsv.FormsCsvItems (DRagLint.Charts.Adapter.FormsCsv.pas), DRagLint.Charts.Adapter.Graph.GraphItems (DRagLint.Charts.Adapter.Graph.pas), DRagLint.Charts.Adapter.Text.ReportItems (DRagLint.Charts.Adapter.Text.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Adapter.FormsCsv, DRagLint.Charts.Adapter.Graph, DRagLint.Charts.Adapter.Text, DRagLint.Charts.Adapters, DRagLint.Charts.Compare, DRagLint.Charts.Diff</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDiffItem = record
     /// <summary>The text a renderer shows for this item.</summary>
     Text: string;
@@ -24,15 +30,33 @@ type
     /// <param name="pText">Display text.</param>
     /// <param name="pKey">Comparison key.</param>
     /// <returns>The item.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Adapter.FormsCsv.FormsCsvItems (DRagLint.Charts.Adapter.FormsCsv.pas), DRagLint.Charts.Adapter.Graph.GraphItems (DRagLint.Charts.Adapter.Graph.pas), DRagLint.Charts.Adapter.Text.ReportItems (DRagLint.Charts.Adapter.Text.pas)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Make(const pText, pKey: string): TDiffItem; static;
   end;
 
   /// <summary>Kind of one edit-script step.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Diff.pas), DRagLint.Charts.Diff.MakeEdit (DRagLint.Charts.Diff.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDiffOp = (doEqual, doDelete, doInsert);
 
   /// <summary>One step of the edit script.</summary>
-  /// <remarks>OldIndex and NewIndex are 0-based into the old / new arrays; OldIndex is
-  /// DIFF_NO_INDEX for doInsert, NewIndex is DIFF_NO_INDEX for doDelete.</remarks>
+  /// <remarks>
+  /// OldIndex and NewIndex are 0-based into the old / new arrays; OldIndex is
+  /// DIFF_NO_INDEX for doInsert, NewIndex is DIFF_NO_INDEX for doDelete.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas), declaration (DRagLint.Charts.Diff.pas), DRagLint.Charts.Diff.MakeEdit (DRagLint.Charts.Diff.pas), DRagLint.Charts.Diff.MyersDiff (DRagLint.Charts.Diff.pas), DRagLint.Charts.Diff.NextChange (DRagLint.Charts.Diff.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Compare, DRagLint.Charts.Diff, DRagLint.Charts.Render</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDiffEdit = record
     /// <summary>What this step does.</summary>
     Op      : TDiffOp;
@@ -43,11 +67,17 @@ type
   end;
 
   /// <summary>A group of changes with unchanged context around them, unified-diff style.</summary>
-  /// <remarks>Starts are 1-based line numbers and counts are the old / new lines the hunk
+  /// <remarks>
+  /// Starts are 1-based line numbers and counts are the old / new lines the hunk
   /// holds, exactly as in a unified diff's "@@ -OldStart,OldCount +NewStart,NewCount @@".
   /// A side with NO lines in the hunk (count 0) carries the line AFTER which the change
   /// sits, as GNU diff does: a pure insert after old line 2 is -2,0, an empty old side is
-  /// -0,0.</remarks>
+  /// -0,0.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas), declaration (DRagLint.Charts.Diff.pas), DRagLint.Charts.Diff.BuildHunks (DRagLint.Charts.Diff.pas), DRagLint.Charts.Render.HunkHeader (DRagLint.Charts.Render.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Compare, DRagLint.Charts.Diff, DRagLint.Charts.Render</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDiffHunk = record
     /// <summary>1-based first old line (see remarks for count 0).</summary>
     OldStart: Integer;
@@ -68,9 +98,18 @@ type
 /// <param name="pNew">The new sequence.</param>
 /// <returns>Edits in order; replaying equals and inserts yields pNew, replaying equals and
 /// deletes yields pOld. Two empty inputs give an empty script.</returns>
-/// <remarks>Keys compare ordinally (see TDiffItem). A moved block is a deletion plus an
+/// <remarks>
+/// Keys compare ordinally (see TDiffItem). A moved block is a deletion plus an
 /// insertion (D3). Memory is O((N+M)D) for the trace -- fine for report-sized inputs.
-/// Pure; thread-safe.</remarks>
+/// Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.DiffSides (DRagLint.Charts.Compare.pas)</para>
+/// <para>Calls: Copy, DRagLint.Charts.Diff.MakeEdit, DRagLint.Charts.Diff.StepsDown</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 88 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Diff.MakeEdit"/>
+/// <seealso cref="DRagLint.Charts.Diff.StepsDown"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MyersDiff(const pOld, pNew: TArray<TDiffItem>): TArray<TDiffEdit>;
 
 /// <summary>Groups an edit script into hunks, keeping pContext equal items on each side of
@@ -79,8 +118,17 @@ function MyersDiff(const pOld, pNew: TArray<TDiffItem>): TArray<TDiffEdit>;
 /// <param name="pContext">Equal items kept before and after each change; a negative value
 /// counts as 0.</param>
 /// <returns>Hunks in order; none when the script holds no change.</returns>
-/// <remarks>Two changes separated by at most 2 * pContext equal items share one hunk, as
-/// in GNU diff. Ranges follow the TDiffHunk rules. Pure; thread-safe.</remarks>
+/// <remarks>
+/// Two changes separated by at most 2 * pContext equal items share one hunk, as
+/// in GNU diff. Ranges follow the TDiffHunk rules. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.DiffSides (DRagLint.Charts.Compare.pas)</para>
+/// <para>Calls: Copy, DRagLint.Charts.Diff.NextChange, Max, Min</para>
+/// <para>Returns: Hunks.ToArray</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 57 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Diff.NextChange"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildHunks(const pEdits: TArray<TDiffEdit>; pContext: Integer = 3): TArray<TDiffHunk>;
 
 /// <summary>Counts equal / deleted / inserted edits.</summary>
@@ -89,6 +137,13 @@ function BuildHunks(const pEdits: TArray<TDiffEdit>; pContext: Integer = 3): TAr
 /// <param name="pDeleted">Receives the number of doDelete edits.</param>
 /// <param name="pInserted">Receives the number of doInsert edits.</param>
 /// <returns>True when at least one edit is not doEqual.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.DiffSides (DRagLint.Charts.Compare.pas), DRagLint.Charts.Render.AddBodyLines (DRagLint.Charts.Render.pas), DRagLint.Charts.Render.CountsObject (DRagLint.Charts.Render.pas)</para>
+/// <para>Returns: (pDeleted + pInserted) &gt; 0</para>
+/// <para>Mutates: pEqual (out), pDeleted (out), pInserted (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CountEdits(const pEdits: TArray<TDiffEdit>; out pEqual, pDeleted, pInserted: Integer): Boolean;
 
 implementation

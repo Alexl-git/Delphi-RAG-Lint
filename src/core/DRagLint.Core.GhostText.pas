@@ -55,6 +55,11 @@ type
   /// <returns>The completion text, or '' when there is no honest answer.
   /// Returning '' is the DEFAULT and the safe case -- see the unit header on
   /// why an empty completion beats an invented one.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.GhostText.pas), DRagLint.Core.GhostText.TGhostTextServer.Create (DRagLint.Core.GhostText.pas), DRagLint.Core.GhostText.TGhostTextServer.StartWhen (DRagLint.Core.GhostText.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGhostCompletionFunc = reference to function(const APrompt, ASuffix: string): string;
 
   /// <summary>A minimal loopback HTTP server serving the two request shapes a
@@ -66,8 +71,20 @@ type
   /// provider that cannot start must not take the IDE down with it.</remarks>
   /// <summary>Optional teardown/diagnostic sink. The host assigns it; this unit
   /// has no log of its own and must not acquire one.</summary>
+  /// <param name="AMsg"><!-- drag-lint:auto type -->const string</param>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.GhostText.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGhostTraceProc = reference to procedure(const AMsg: string);
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.GhostText.pas) ?, declaration (DragLint.Plugin.Editor.pas) ?, DRagLint.Core.GhostText.TAcceptThread.Create (DRagLint.Core.GhostText.pas) ?, DRagLint.Core.GhostText.TGhostTextServer.StartWhen (DRagLint.Core.GhostText.pas), DragLint.Plugin.Editor.StartGhostTextServer (DragLint.Plugin.Editor.pas)</para>
+  /// <para>Used in units: DRagLint.Core.GhostText, DragLint.Plugin.Editor</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGhostTextServer = class
     private
       FPort    : Integer             ;
@@ -80,26 +97,120 @@ type
         timeout -- see the note on Stop. }
       FClient  : TSocket             ;
       FClientCS: TCriticalSection    ;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.GhostText.TAcceptThread.Execute (DRagLint.Core.GhostText.pas)</para>
+      /// <para>Calls: accept, closesocket, DRagLint.Core.GhostText.TGhostTextServer.ServeOne</para>
+      /// <para>Reads: FStopping, FListen, FClientCS, FClient   Writes: FClient</para>
+      /// <para>Catches: Exception (empty)</para>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.ServeOne"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Create"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Start"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.StartWhen"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure AcceptLoop;
+      /// <param name="ASock"><!-- drag-lint:auto type -->TSocket</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.GhostText.TGhostTextServer.AcceptLoop (DRagLint.Core.GhostText.pas)</para>
+      /// <para>Calls: Copy, DRagLint.Core.GhostText.HttpResponse, DRagLint.Core.GhostText.JsonQuote, DRagLint.Core.GhostText.JsonStringMember, DRagLint.Core.GhostText.SendAll, FProvider, LowerCase, Move, Pos, RawByteString (+6 more)</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 108 lines (full implementation)</para>
+      /// <para>Reads: FProvider</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <seealso cref="DRagLint.Core.GhostText.HttpResponse"/>
+      /// <seealso cref="DRagLint.Core.GhostText.JsonQuote"/>
+      /// <seealso cref="DRagLint.Core.GhostText.JsonStringMember"/>
+      /// <seealso cref="DRagLint.Core.GhostText.SendAll"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.AcceptLoop"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ServeOne(ASock: TSocket);
     public
       /// <param name="APort">TCP port on 127.0.0.1. 8765 matches the KAI default.</param>
       /// <param name="AProvider">Completion source; nil means every request is
       /// answered with an empty completion, which is a valid configuration.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.GhostText.TGhostTextServer.StartWhen (DRagLint.Core.GhostText.pas)</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FPort, FProvider, FListen, FStopping, FClient, FClientCS</para>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.AcceptLoop"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.ServeOne"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Start"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.StartWhen"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(APort: Integer; const AProvider: TGhostCompletionFunc);
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DRagLint.Core.GhostText.TGhostTextServer.Stop, FreeAndNil</para>
+      /// <para>Reads: FClientCS</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Stop"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.AcceptLoop"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Create"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.ServeOne"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Start"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
       /// <summary>Binds and starts serving. False when the port is taken or
       /// WinSock is unavailable; the caller carries on regardless.</summary>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.GhostText.TGhostTextServer.StartWhen (DRagLint.Core.GhostText.pas), DragLint.Plugin.About.StartBackgroundSelfInfoFetch (DragLint.Plugin.About.pas) ?, DragLint.Plugin.Editor.RunCompileDiagnoseAsync (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.Editor.RunFullCompileSweepAsync (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.Editor.RunGhostCheckAsync (DragLint.Plugin.Editor.pas) ? (+3 more)</para>
+      /// <para>Calls: bind, closesocket, DRagLint.Core.GhostText.TAcceptThread.Create, FillChar, htonl, htons, listen, setsockopt, socket, TSockAddr, Word, WSAStartup</para>
+      /// <para>Reads: FListen, FPort   Writes: FListen, FThread</para>
+      /// <seealso cref="DRagLint.Core.GhostText.TAcceptThread.Create"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.AcceptLoop"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Create"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.ServeOne"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function  Start: Boolean;
       /// <summary>Stops serving and waits for the accept thread.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Core.GhostText.TGhostTextServer.Destroy (DRagLint.Core.GhostText.pas), DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+      /// <para>Calls: closesocket, DRagLint.Core.GhostText.GT, Format, FreeAndNil, WaitForSingleObject</para>
+      /// <para>Reads: FListen, FStopping, FClientCS, FClient, FThread   Writes: FListen, FClient, FThread</para>
+      /// <seealso cref="DRagLint.Core.GhostText.GT"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.AcceptLoop"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Create"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.ServeOne"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Stop;
       /// <summary>The whole start decision in one place: returns a RUNNING
       /// server, or nil when AEnabled is false or the port could not be
       /// bound.</summary>
-      /// <remarks>The gate lives here rather than in the caller so that "off
+      /// <param name="AEnabled"><!-- drag-lint:auto type -->Boolean</param>
+      /// <param name="APort"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AProvider"><!-- drag-lint:auto type -->const TGhostCompletionFunc</param>
+      /// <returns><!-- drag-lint:auto -->TGhostTextServer -- Observed: nil;
+      /// TGhostTextServer.Create(APort, AProvider).</returns>
+      /// <remarks>
+      /// The gate lives here rather than in the caller so that "off
       /// means off" is a property of a unit that can be driven by a test
       /// harness. An unchecked box must leave NOTHING listening -- no socket,
-      /// no thread -- and that is only credible if something checks it.</remarks>
+      /// no thread -- and that is only credible if something checks it.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Editor.StartGhostTextServer (DragLint.Plugin.Editor.pas)</para>
+      /// <para>Calls: DRagLint.Core.GhostText.TGhostTextServer.Create, DRagLint.Core.GhostText.TGhostTextServer.Start, FreeAndNil</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Create"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Start"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.AcceptLoop"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.Destroy"/>
+      /// <seealso cref="DRagLint.Core.GhostText.TGhostTextServer.ServeOne"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function StartWhen(AEnabled: Boolean; APort: Integer;
                                const AProvider: TGhostCompletionFunc): TGhostTextServer; static;
       property Port: Integer read FPort;

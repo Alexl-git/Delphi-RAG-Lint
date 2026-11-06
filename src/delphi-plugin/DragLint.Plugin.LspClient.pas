@@ -14,13 +14,42 @@ uses
   , DragLint.Plugin.LspWriteQueue
   ;
 
+/// <param name="AMsg"><!-- drag-lint:auto type -->const string</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.EngineInfoJson (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.IndexVerdicts (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.RefreshEngineInfo (DragLint.Plugin.Diagnose.pas) (+25 more)</para>
+/// <para>Calls: AnsiString, DragLint.Plugin.LspClient.GetPluginLogPath, FileExists, Format, FormatDateTime</para>
+/// <para>Catches: Exception (empty)</para>
+/// <seealso cref="DragLint.Plugin.LspClient.GetPluginLogPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure DebugLog(const AMsg: string); // appends to GetPluginLogPath
+/// <returns><!-- drag-lint:auto -->string -- Observed: PluginLogPath(PLUGIN_LOG_NAME).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.About.FormatErrorBlock (DragLint.Plugin.About.pas), DragLint.Plugin.About.FormatLiveBlock (DragLint.Plugin.About.pas), DragLint.Plugin.Diagnose.BuildDiagnoseReport (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.TailOfPluginLog (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas) (+2 more)</para>
+/// <para>Calls: DragLint.Plugin.LogPaths.PluginLogPath</para>
+/// <seealso cref="DragLint.Plugin.LogPaths.PluginLogPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GetPluginLogPath: string; // single source of truth (v0.40.1)
 
 type
+  /// <param name="AMethod"><!-- drag-lint:auto type -->const string</param>
+  /// <param name="AParams"><!-- drag-lint:auto type -->TJSONValue</param>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.LspClient.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspNotificationHandler = reference to procedure(const AMethod: string; AParams: TJSONValue);
 
   /// <summary>How an asynchronous request ended.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.Editor.DoCompletion (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGoToDefinition (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeSignatureHelp (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverBundleAsync (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverTextAsync (DragLint.Plugin.Editor.pas) (+5 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLLspReplyStatus = (
     lrsResult , { the engine answered with a 'result' member     }
     lrsError  , { the engine answered with an 'error' member     }
@@ -29,25 +58,35 @@ type
   );
 
   /// <summary>Receives the answer to RequestAsync, on the MAIN thread.</summary>
-  /// <remarks>Late results (owner ruling 2026-11-01): when the budget passes the
-  /// callback runs ONCE with lrsTimeout -- a notice that the answer is late, so
-  /// the caller can show it as pending -- and AGAIN with lrsResult / lrsError
-  /// when the answer arrives. A caller that no longer wants it (superseded by a
-  /// newer request) calls CancelRequest; nothing else drops a late answer.</remarks>
   /// <param name="AId">The id RequestAsync returned.</param>
   /// <param name="AStatus">How the request ended.</param>
   /// <param name="AReply">The FULL JSON-RPC envelope (jsonrpc, id, result |
   /// error) for lrsResult / lrsError; nil otherwise. Owned by the client and
   /// freed when the callback returns -- clone anything kept.</param>
+  /// <remarks>
+  /// Late results (owner ruling 2026-11-01): when the budget passes the
+  /// callback runs ONCE with lrsTimeout -- a notice that the answer is late, so
+  /// the caller can show it as pending -- and AGAIN with lrsResult / lrsError
+  /// when the answer arrives. A caller that no longer wants it (superseded by a
+  /// newer request) calls CancelRequest; nothing else drops a late answer.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.LspClient.pas), DragLint.Plugin.LspClient.DeliverReply (DragLint.Plugin.LspClient.pas), DragLint.Plugin.LspClient.TDragLintLspClient.RequestAsync (DragLint.Plugin.LspClient.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspReplyProc = reference to procedure(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue);
 
   /// <summary>Lifecycle state of the LSP child process, for status display.</summary>
-  /// <remarks>Added 2026-08-17. The plugin previously had NO readable connection
+  /// <remarks>
+  /// Added 2026-08-17. The plugin previously had NO readable connection
   /// state at all, so the only way it could report trouble was a modal dialog at
   /// the moment of failure -- and that dialog said "handshake failed" for a
   /// handshake that had actually succeeded 56 s after the client stopped
   /// waiting. A readable state lets the UI show what is true continuously
-  /// instead of asserting something false once.</remarks>
+  /// instead of asserting something false once.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.LspClient.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintLspState = (
     dlsDown,      { never started, or stopped                     }
     dlsStarting,  { process spawned, initialize not yet answered  }
@@ -56,6 +95,12 @@ type
   );
 
   /// <summary>One request sent and not yet answered.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.LspClient.pas), DragLint.Plugin.LspClient.OutstandingNow (DragLint.Plugin.LspClient.pas), DragLint.Plugin.LspClient.TDragLintLspClient.Create (DragLint.Plugin.LspClient.pas), DragLint.Plugin.LspClient.TDragLintLspClient.IsBusy (DragLint.Plugin.LspClient.pas), DragLint.Plugin.LspClient.TDragLintLspClient.IsStuck (DragLint.Plugin.LspClient.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.LspClient</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLOutstanding = record
     /// <summary>GetTickCount64 when it was sent.</summary>
     Sent      : UInt64 ;
@@ -63,6 +108,12 @@ type
     Background: Boolean;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas) ?, DragLint.Plugin.Editor.CurrentLspClient (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.SyncLiveBufferToLsp (DragLint.Plugin.Editor.pas) ? (+14 more)</para>
+  /// <para>Used in units: DragLint.Plugin.Diagnose, DragLint.Plugin.Editor, DragLint.Plugin.HoverTracker, DragLint.Plugin.LspClient</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintLspClient = class
     strict private
       FProcessHandle  : THandle                         ;
@@ -111,25 +162,243 @@ type
       FTickerStop     : TEvent                          ;
       FBusyAfterMs    : Cardinal                        ;
       FStuckAfterMs   : Cardinal                        ;
+      /// <summary><!-- drag-lint:auto sum -->ERROR_NO_DATA (232) and ERROR_BROKEN_PIPE
+      /// (109) both mean the server is no longer reading us. Anything else is a transient
+      /// write problem and is left alone -- declaring the client dead on, say, a partial
+      /// write would throw away a working server. Latched, so the log records the
+      /// transition once instead of once per message: the 2026-08-21 log is 40 identical
+      /// failure lines and the repetition is what made it look like noise rather than a
+      /// state change.</summary>
+      /// <param name="ALastError"><!-- drag-lint:auto type -->DWORD</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.StartWorkers (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: DragLint.Plugin.LspClient.DebugLog, Format</para>
+      /// <para>Reads: FPipeBroken   Writes: FPipeBroken, FLastError, FState</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure NotePipeError(ALastError: DWORD);
+      /// <param name="AJson"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ACoalesceKey"><!-- drag-lint:auto type -->const string = ''</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.Notify (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: Copy, DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue, Format</para>
+      /// <para>Reads: FWriter</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure WriteFramedMessage(const AJson: string; const ACoalesceKey: string = '');
+      /// <param name="AId"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AMethod"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AParams"><!-- drag-lint:auto type -->TJSONValue</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (FWriter &lt;&gt; nil) and
+      /// FWriter.Enqueue(TEncoding.UTF8.GetBytes(Format('Content-Length: %d'#13#10#13#10,
+      /// [Length(Body)])) + Body).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.Request (DragLint.Plugin.LspClient.pas), DragLint.Plugin.LspClient.TDragLintLspClient.RequestAsync (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: BoolToStr, DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue, Format</para>
+      /// <para>Reads: FWriter</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function SendRequestFrame(AId: Integer; const AMethod: string; AParams: TJSONValue): Boolean;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.LspClient.TDLLspTickerThread.Create, DragLint.Plugin.LspClient.TDragLintLspClient.NotePipeError, DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create, Format</para>
+      /// <para>Reads: FStdInWrite, FTickerStop   Writes: FLastRxTick, FWriter, FTickerStop, FTicker</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDLLspTickerThread.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.NotePipeError"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure StartWorkers;
+      /// <param name="ABudgetMs"><!-- drag-lint:auto type -->Cardinal</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.Stop (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: Cardinal, DragLint.Plugin.LspClient.DebugLog, FreeAndNil, WaitForSingleObject</para>
+      /// <para>Reads: FTicker, FTickerStop, FWriter   Writes: FTicker, FTickerStop</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure StopWorkers(ABudgetMs: Cardinal);
+      /// <summary><!-- drag-lint:auto sum -->After Stop NO callback runs -- not for
+      /// requests still waiting, and not for answers already queued to the main thread
+      /// (their flags are still in FFlags, which is pruned only once a delivery has run).
+      /// A callback may capture the client or state the caller is about to free with it,
+      /// so "told lrsFailed later" would be a use-after-free; callers watching for an
+      /// answer notice the client was replaced instead.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.Stop (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: DragLint.Plugin.LspClient.IDLReplyFlag.SetCancelled, TDLFlagHolder</para>
+      /// <para>Reads: FLock, FFlags, FAsync</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.IDLReplyFlag.SetCancelled"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure CancelAllAsync;
     private
       { Accessible to TLspReaderThread in same unit }
+      /// <summary><!-- drag-lint:auto sum -->Accessible to TLspReaderThread in same unit</summary>
+      /// <param name="AMsg"><!-- drag-lint:auto type -->TJSONValue</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TLspReaderThread.Execute (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: DragLint.Plugin.LspClient.DeliverReply, FOnNotification, TDLAsyncEntry</para>
+      /// <para>Reads: FLock, FOutstanding, FPendingRequests, FResponses, FAsync, FOnNotification   Writes: FLastRxTick</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.DeliverReply"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure DispatchMessage(AMsg: TJSONValue);
       { Accessible to the ticker thread in same unit }
+      /// <summary><!-- drag-lint:auto sum -->Accessible to the ticker thread in same unit</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDLLspTickerThread.Execute (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.LspClient.DeliverReply, DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineBeat, DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineCpu, Format, TDLAsyncEntry</para>
+      /// <para>Reads: FLock, FAsync</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.DeliverReply"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineBeat"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineCpu"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ExpireTimedOut;
+      /// <summary><!-- drag-lint:auto sum -->Called by the ticker thread. An async
+      /// request past its budget gets ONE lrsTimeout notice and STAYS in FAsync and
+      /// FOutstanding (owner ruling 2026-11-01, fix/late-results): the engine is still
+      /// working on it, its answer is delivered when it arrives, and the engine is not
+      /// told to stop. A hung engine is the watchdog's business (IsStuck), not a
+      /// per-request clock. Under FLock, from the ticker: moves the CPU progress mark
+      /// when the server process has burnt CPU_PROGRESS_100NS since the last one. No
+      /// process handle (pipes attached directly) = no sample.</summary>
+      /// <param name="ANow"><!-- drag-lint:auto type -->UInt64</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.ExpireTimedOut (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: GetProcessTimes, PInt64</para>
+      /// <para>Reads: FProcessHandle, FLastCpu100ns   Writes: FLastCpu100ns, FLastCpuTick</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure SampleEngineCpu(ANow: UInt64);
+      /// <summary><!-- drag-lint:auto sum -->From the ticker, OUTSIDE FLock (the ask is
+      /// pipe I/O, bounded by BEAT_CONNECT_MS): every BEAT_POLL_MS ask the engine's
+      /// heartbeat pipe for its status. No process id (pipes attached directly) = no ask.</summary>
+      /// <param name="ANow"><!-- drag-lint:auto type -->UInt64</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.ExpireTimedOut (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: DRagLint.Core.ControlChannel.BeatDisplayText, DRagLint.Core.ControlChannel.RequestEngineBeat, DragLint.Plugin.LspClient.TDragLintLspClient.NoteEngineBeat</para>
+      /// <para>Reads: FLock, FProcessId, FNextBeatTick   Writes: FNextBeatTick</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.BeatDisplayText"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.RequestEngineBeat"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.NoteEngineBeat"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure SampleEngineBeat(ANow: UInt64);
     public
+      /// <summary><!-- drag-lint:auto sum -->TDragLintLspClient</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas)</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FLock, FPendingRequests, FResponses, FAsync, FFlags, FOutstanding, FNextId, FProcessHandle (+9 more)</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.DispatchMessage"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.LspClient.TDragLintLspClient.Stop</para>
+      /// <para>Reads: FPendingRequests, FResponses, FAsync, FFlags, FOutstanding, FLock</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Stop"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
+      /// <param name="AExePath"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: Start(AExePath, nil).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.LspClient.TDragLintLspClient.Start/2</para>
+      /// <para>Overload 1 of 2</para>
+      /// <para>Directives: overload</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Start"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Start(const AExePath: string): Boolean; overload;
       { v0.40.3: spawn with explicit --db paths. Each path becomes a
       separate "--db <quoted>" cmd-line flag the LSP server iterates. }
+      /// <summary><!-- drag-lint:auto sum -->v0.40.3: spawn with explicit --db paths.
+      /// Each path becomes a separate "--db &lt;quoted&gt;" cmd-line flag the LSP server
+      /// iterates.</summary>
+      /// <param name="AExePath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.About.StartBackgroundSelfInfoFetch (DragLint.Plugin.About.pas) ?, DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RunCompileDiagnoseAsync (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.Editor.RunFullCompileSweepAsync (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.LspClient.TDragLintLspClient.Start/1 (DragLint.Plugin.LspClient.pas) (+4 more)</para>
+      /// <para>Calls: BoolToStr, CloseHandle, CreatePipe, CreateProcessW, DRagLint.Core.JobObject.AssignToDragLintJob, DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes, FileExists, Format, IntToStr, Move, PChar, SetHandleInformation, ZeroMemory</para>
+      /// <para>Overload 2 of 2</para>
+      /// <para>Reads: FLock, FProcessHandle   Writes: FState, FLastError, FStartedAt, FProcessHandle, FProcessId, FBeatSeen, FBeatSeq, FBeatText (+1 more)</para>
+      /// <para>Directives: overload</para>
+      /// <seealso cref="DRagLint.Core.JobObject.AssignToDragLintJob"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Start(const AExePath: string; const ADbPaths: TArray<string>): Boolean; overload;
 
       /// <summary>Runs the client over two pipe handles instead of a spawned
@@ -138,23 +407,71 @@ type
       /// (closed by Stop).</param>
       /// <param name="AStdOutRead">Read end the client reads frames from; owned
       /// (closed by Stop).</param>
-      /// <remarks>Start uses the same path after CreateProcess. No process
-      /// handle is set, so IsAlive stays False.</remarks>
+      /// <remarks>
+      /// Start uses the same path after CreateProcess. No process
+      /// handle is set, so IsAlive stays False.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.Start/2 (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: DragLint.Plugin.LspClient.TDragLintLspClient.StartWorkers, DragLint.Plugin.LspClient.TLspReaderThread.Create</para>
+      /// <para>Reads: FStdOutRead   Writes: FStdInWrite, FStdOutRead, FReaderThread</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.StartWorkers"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TLspReaderThread.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure AttachPipes(AStdInWrite, AStdOutRead: THandle);
 
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Editor.DLRunMaintenanceJob (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeAutoDocumentProject (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFormatProjectYadf (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeReindexProject (DragLint.Plugin.Editor.pas) (+2 more)</para>
+      /// <para>Calls: BoolToStr, CancelSynchronousIo, Cardinal, CloseHandle, DebugLog, DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync, DragLint.Plugin.LspClient.TDragLintLspClient.Stop.Left, DragLint.Plugin.LspClient.TDragLintLspClient.Stop.Step, DragLint.Plugin.LspClient.TDragLintLspClient.StopWorkers, Format, TerminateProcess, WaitForSingleObject</para>
+      /// <para>Reads: FProcessId, FPipeBroken, FProcessHandle, FLock, FOutstanding, FStdInWrite, FStdOutRead, FReaderThread   Writes: FState, FStdInWrite, FStdOutRead, FReaderThread, FProcessHandle, FProcessId</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Stop.Left"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Stop.Step"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.StopWorkers"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Stop;
 
       /// <summary>Synchronous initialize handshake (45 s budget).</summary>
       /// <returns>True when the engine answered; State is then dlsConnected.</returns>
-      /// <remarks>BLOCKS the calling thread. Kept for console tests; the IDE uses
-      /// InitializeAsync.</remarks>
+      /// <remarks>
+      /// BLOCKS the calling thread. Kept for console tests; the IDE uses
+      /// InitializeAsync.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.LspClient.TDragLintLspClient.Request</para>
+      /// <para>Returns: Resp &lt;&gt; nil</para>
+      /// <para>Writes: FState, FLastError</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Request"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Initialize: Boolean                                                                        ;
 
       /// <summary>Sends initialize without waiting; ADone(True) on the main
       /// thread once the engine answers, ADone(False) on timeout / failure.</summary>
       /// <param name="ADone">Completion callback; may be nil.</param>
-      /// <remarks>State is dlsStarting until the answer, then dlsConnected or
-      /// dlsFailed.</remarks>
+      /// <remarks>
+      /// State is dlsStarting until the answer, then dlsConnected or
+      /// dlsFailed.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas)</para>
+      /// <para>Calls: ADone, DragLint.Plugin.LspClient.DebugLog, DragLint.Plugin.LspClient.TDragLintLspClient.RequestAsync, Format</para>
+      /// <para>Writes: FState, FLastError</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.DebugLog"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.RequestAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure InitializeAsync(const ADone: TProc<Boolean>);
 
       /// <summary>Synchronous request: sends and WAITS up to ATimeoutMs.</summary>
@@ -162,9 +479,22 @@ type
       /// <param name="AParams">Parameters; cloned. nil sends {}.</param>
       /// <param name="ATimeoutMs">How long to wait for the answer.</param>
       /// <returns>The full JSON-RPC envelope (caller frees), or nil on timeout.</returns>
-      /// <remarks>BLOCKS the calling thread -- never call it from the IDE main
+      /// <remarks>
+      /// BLOCKS the calling thread -- never call it from the IDE main
       /// thread (owner rule 2026-10-29); use RequestAsync there. The send itself
-      /// never blocks.</remarks>
+      /// never blocks.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.Initialize (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: DragLint.Plugin.LspClient.OutstandingNow, DragLint.Plugin.LspClient.TDragLintLspClient.SendRequestFrame</para>
+      /// <para>Returns: nil</para>
+      /// <para>Reads: FLock, FNextId, FPendingRequests, FOutstanding, FResponses   Writes: FNextId</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.OutstandingNow"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.SendRequestFrame"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Request(const AMethod: string; AParams: TJSONValue; ATimeoutMs: Integer = 5000): TJSONValue;
 
       /// <summary>Sends a request and returns at once; the answer is delivered
@@ -180,13 +510,38 @@ type
       /// is late; never again after CancelRequest or Stop.</param>
       /// <returns>The request id (&gt; 0), or 0 when nothing was sent (queue full,
       /// pipe failed, not attached) -- AOnReply is then never called.</returns>
-      /// <remarks>Never blocks and never waits on the engine.</remarks>
+      /// <remarks>
+      /// Never blocks and never waits on the engine.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Editor.DoCompletion (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGoToDefinition (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeSignatureHelp (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.LspCallerCounts (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverBundleAsync (DragLint.Plugin.Editor.pas) (+2 more)</para>
+      /// <para>Calls: DragLint.Plugin.LspClient.IDLReplyFlag.GetDone, DragLint.Plugin.LspClient.OutstandingNow, DragLint.Plugin.LspClient.TDragLintLspClient.SendRequestFrame, TDLFlagHolder, UInt64</para>
+      /// <para>Returns: 0; Id</para>
+      /// <para>Reads: FWriter, FLock, FNextId, FFlags, FAsync, FOutstanding   Writes: FNextId</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.IDLReplyFlag.GetDone"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.OutstandingNow"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.SendRequestFrame"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function RequestAsync(const AMethod: string; AParams: TJSONValue; ATimeoutMs: Integer; const AOnReply: TLspReplyProc): Integer;
 
       /// <summary>Drops an asynchronous request: its callback will not run, even
       /// when the answer is already on its way, and $/cancelRequest is sent.</summary>
       /// <param name="AId">An id from RequestAsync; 0 and unknown ids are ignored.</param>
-      /// <remarks>Main thread. Never blocks.</remarks>
+      /// <remarks>
+      /// Main thread. Never blocks.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.CancelInflight (DragLint.Plugin.HoverTracker.pas)</para>
+      /// <para>Calls: DragLint.Plugin.LspClient.IDLReplyFlag.SetCancelled, DragLint.Plugin.LspClient.TDragLintLspClient.Notify, TDLFlagHolder</para>
+      /// <para>Reads: FLock, FFlags, FAsync</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.IDLReplyFlag.SetCancelled"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Notify"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure CancelRequest(AId: Integer);
 
       /// <summary>Queues a notification; never blocks.</summary>
@@ -194,16 +549,39 @@ type
       /// <param name="AParams">Parameters; cloned. nil sends {}.</param>
       /// <param name="ACoalesceKey">When not empty, replaces a not-yet-written
       /// notification with the same key (didChange per document).</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Editor.BroadcastDidSaveForAffectedFiles (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeDiagnostics (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeRunAstChecks (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.SyncLiveBufferToLsp (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.TriggerDiagnosticsOnSave (DragLint.Plugin.Editor.pas) (+1 more)</para>
+      /// <para>Calls: DragLint.Plugin.LspClient.TDragLintLspClient.WriteFramedMessage</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.WriteFramedMessage"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Notify(const AMethod: string; AParams: TJSONValue; const ACoalesceKey: string = '');
 
       /// <summary>True when the engine has kept a request unanswered, or its
       /// stdin unread, for longer than BusyAfterMs.</summary>
-      /// <remarks>Callers use it to stop queueing more work (hover, code lens)
-      /// behind a request the serial engine is still chewing on.</remarks>
       /// <returns>True while the oldest outstanding FOREGROUND request, or the
       /// current stdin write, is older than BusyAfterMs. Background requests
       /// (draglint/callerCounts, textDocument/codeLens) never count; a request whose frame could
       /// not be sent is never outstanding.</returns>
+      /// <remarks>
+      /// Callers use it to stop queueing more work (hover, code lens)
+      /// behind a request the serial engine is still chewing on.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Editor.DoCompletion (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.LspCallerCounts (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
+      /// <para>Calls: DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.WriteStalledMs</para>
+      /// <para>Reads: FLock, FOutstanding, FBusyAfterMs, FWriter</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.WriteStalledMs"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function IsBusy: Boolean;
 
       /// <summary>True when requests are outstanding and the engine has made NO
@@ -215,38 +593,112 @@ type
       /// been blocked that long. The progress mark is the last heartbeat seq change
       /// once a beat was seen (CPU is then ignored: an engine spinning with a frozen
       /// status IS stuck), else the last CPU progress.</returns>
-      /// <remarks>fix/late-results (owner ruling 2026-11-01): a slow engine that is
+      /// <remarks>
+      /// fix/late-results (owner ruling 2026-11-01): a slow engine that is
       /// working must never be restarted -- that loses every late result. The
       /// ticker asks the engine's heartbeat pipe (DRagLint.Core.ControlChannel
       /// RequestEngineBeat) every few seconds and samples CPU from the process
       /// handle; a client attached to bare pipes (tests) has neither unless
-      /// NoteEngineBeat is called, and falls back to silence alone.</remarks>
+      /// NoteEngineBeat is called, and falls back to silence alone.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
+      /// <para>Calls: DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.WriteStalledMs</para>
+      /// <para>Returns: False; GetTickCount64 - Since &gt; FStuckAfterMs; FWriter.WriteStalledMs &gt; FStuckAfterMs</para>
+      /// <para>Reads: FLock, FOutstanding, FLastRxTick, FBeatSeen, FLastBeatTick, FLastCpuTick, FStuckAfterMs, FWriter</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.WriteStalledMs"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function IsStuck: Boolean;
 
       /// <summary>Records one heartbeat answer of the engine (the ticker calls it; tests call it directly).</summary>
       /// <param name="ASeq">The status counter the engine reported; a value different from the last one is progress.</param>
       /// <param name="AText">Display text of the status (BeatDisplayText) -- EngineBeatText.</param>
-      /// <remarks>Thread-safe. The first call switches IsStuck from the CPU rule to the heartbeat rule for the
-      /// rest of this client's life.</remarks>
+      /// <remarks>
+      /// Thread-safe. The first call switches IsStuck from the CPU rule to the heartbeat rule for the
+      /// rest of this client's life.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineBeat (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Reads: FLock, FBeatSeen, FBeatSeq   Writes: FLastBeatTick, FBeatSeen, FBeatSeq, FBeatText</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure NoteEngineBeat(ASeq: Int64; const AText: string);
 
       /// <summary>The engine's last reported status for display (e.g. <c>textDocument/hover</c>,
       /// <c>index: resolve calls 12</c>); '' before the first heartbeat.</summary>
       /// <returns>The text. Thread-safe.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Returns: FBeatText</para>
+      /// <para>Reads: FLock, FBeatText</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function EngineBeatText: string;
 
       /// <summary>Requests sent and not yet answered (timed-out ones included).</summary>
       /// <returns>The count; 0 when idle.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.LspCallerCounts (DragLint.Plugin.Editor.pas)</para>
+      /// <para>Returns: FOutstanding.Count</para>
+      /// <para>Reads: FLock, FOutstanding</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function OutstandingCount: Integer;
 
       /// <summary>True while the spawned server process is still running.</summary>
       /// <returns>False when never started, exited, or the handle is invalid.</returns>
-      /// <remarks>Probes the process handle with a zero timeout -- cheap, and
+      /// <remarks>
+      /// Probes the process handle with a zero timeout -- cheap, and
       /// distinguishes "we think we are connected" from "the child actually
-      /// died", which FState alone cannot.</remarks>
+      /// died", which FState alone cannot.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.UpdateLspStatusIndicator (DragLint.Plugin.Editor.pas), DragLint.Plugin.LspClient.TDragLintLspClient.StateText (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: WaitForSingleObject</para>
+      /// <para>Returns: False; WaitForSingleObject(FProcessHandle, 0) = WAIT_TIMEOUT</para>
+      /// <para>Reads: FPipeBroken, FProcessHandle</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function IsAlive: Boolean;
 
       /// <summary>Human-readable one-word status for the About / status UI.</summary>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: 'starting'; 'connected';
+      /// 'DIED (process exited after a successful handshake)'; 'DOWN'; 'not started'.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.LspClient.TDragLintLspClient.IsAlive</para>
+      /// <para>Reads: FState</para>
+      /// <para>Effect-free (proven)</para>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.IsAlive"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.AttachPipes"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelAllAsync"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.CancelRequest"/>
+      /// <seealso cref="DragLint.Plugin.LspClient.TDragLintLspClient.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function StateText: string;
 
       property OnNotification: TLspNotificationHandler read FOnNotification write FOnNotification;

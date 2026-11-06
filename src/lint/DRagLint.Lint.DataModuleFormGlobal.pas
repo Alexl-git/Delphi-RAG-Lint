@@ -26,13 +26,23 @@ const
 
 /// <summary>Runs the rule over a project index.</summary>
 /// <param name="AStore">The project index; nil yields no findings.</param>
-/// <returns>One 'datamodule-form-global' warning per (data module unit, form variable), anchored at
-/// the first reference; the message counts the references.</returns>
 /// <param name="ALibraryStore">The platform library index, or nil. It answers which library classes
 /// are forms, so a form descending from TdxRibbonForm counts (measured: the only form of Loader2025).
 /// Without it such a form is unknown and stays silent.</param>
-/// <remarks>Not thread-safe. A form variable named only inside an inactive {$IFDEF} branch has no
-/// ref and is not reported.</remarks>
+/// <returns>One 'datamodule-form-global' warning per (data module unit, form variable), anchored at
+/// the first reference; the message counts the references.</returns>
+/// <remarks>
+/// Not thread-safe. A form variable named only inside an inactive {$IFDEF} branch has no
+/// ref and is not reported.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: Default, DRagLint.Lint.DataModuleFormGlobal.CollectDataModuleFormGlobal.LoadFormVars, DRagLint.Lint.DataModuleFormGlobal.CollectDataModuleFormGlobal.LoadModules, DRagLint.Lint.DataModuleFormGlobal.CollectDataModuleFormGlobal.ScanModule, Format, IsFormType, LowerCase, Trim, VarVisibleFrom</para>
+/// <para>Returns: nil; Findings.ToArray</para>
+/// <seealso cref="DRagLint.Lint.DataModuleFormGlobal.CollectDataModuleFormGlobal.LoadFormVars"/>
+/// <seealso cref="DRagLint.Lint.DataModuleFormGlobal.CollectDataModuleFormGlobal.LoadModules"/>
+/// <seealso cref="DRagLint.Lint.DataModuleFormGlobal.CollectDataModuleFormGlobal.ScanModule"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectDataModuleFormGlobal(const AStore: ISymbolStore; const ALibraryStore: ISymbolStore = nil): TArray<TLintFinding>;
 
 implementation

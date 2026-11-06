@@ -28,6 +28,12 @@ uses
 
 type { ---- Completion ---- }
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Providers.pas), DragLint.Plugin.Providers.AggregateCompletion (DragLint.Plugin.Providers.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Providers</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintCompletionItem = record
     InsertText: string ; // what to type into the editor
     Display   : string ; // label in the list
@@ -37,8 +43,19 @@ type { ---- Completion ---- }
     Source    : string ; // provider name -- lets the UI badge AI vs index items
     SortRank  : Integer; // lower sorts first (index=100, ai=50 to surface first, etc.)
   end;
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Providers.pas), DragLint.Plugin.Providers.AggregateCompletion (DragLint.Plugin.Providers.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintCompletionItems = TArray<TDragLintCompletionItem>;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Providers.pas), DragLint.Plugin.Providers.AggregateCompletion (DragLint.Plugin.Providers.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Providers</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintCompletionContext = record
     FilePath: string ;
     Line    : Integer; // 1-based caret line
@@ -48,14 +65,35 @@ type { ---- Completion ---- }
     ExePath : string ; // resolved drag-lint.exe
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Providers.pas), DragLint.Plugin.Providers.AggregateCompletion (DragLint.Plugin.Providers.pas), DragLint.Plugin.Providers.EnsureLists (DragLint.Plugin.Providers.pas), DragLint.Plugin.Providers.RegisterCompletionProvider (DragLint.Plugin.Providers.pas), DragLint.Plugin.Providers.UnregisterCompletionProvider (DragLint.Plugin.Providers.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Providers</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   IDragLintCompletionProvider = interface
     ['{B2D7F1A0-6E5C-4A1B-9C3D-7F0A1B2C3D40}']
     function Name: string                                                              ;
+    /// <param name="ACtx"><!-- drag-lint:auto type -->const TDragLintCompletionContext</param>
+    /// <returns><!-- drag-lint:auto type -->TDragLintCompletionItems</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.Providers.AggregateCompletion (DragLint.Plugin.Providers.pas)</para>
+    /// <seealso cref="DragLint.Plugin.Providers.IDragLintCompletionProvider.Name"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetItems(const ACtx: TDragLintCompletionContext): TDragLintCompletionItems;
   end;
 
   { ---- Diagnostics ---- }
 
+  /// <summary><!-- drag-lint:auto sum -->---- Diagnostics ----</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Providers.pas) ?, DragLint.Plugin.LiveDiagnostics.PublishToCache (DragLint.Plugin.LiveDiagnostics.pas) ?, DragLint.Plugin.LiveDiagnostics.TLintDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas), DragLint.Plugin.LiveDiagnostics.TSemanticDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas), DragLint.Plugin.Providers.AggregateDiagnostics (DragLint.Plugin.Providers.pas) ?</para>
+  /// <para>Used in units: DragLint.Plugin.LiveDiagnostics, DragLint.Plugin.Providers</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintDiagItem = record
     FilePath: string ;
     Line    : Integer; // 1-based
@@ -67,8 +105,19 @@ type { ---- Completion ---- }
     Rule    : string ;
     Source  : string ; // 'lint'|'compiler'|'ai'|...
   end;
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.LiveDiagnostics.pas), DragLint.Plugin.LiveDiagnostics.PublishToCache (DragLint.Plugin.LiveDiagnostics.pas), DragLint.Plugin.LiveDiagnostics.TLintDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas), DragLint.Plugin.LiveDiagnostics.TLiveRunner.OnTick (DragLint.Plugin.LiveDiagnostics.pas), DragLint.Plugin.LiveDiagnostics.TSemanticDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas) (+2 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintDiagItems = TArray<TDragLintDiagItem>;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.LiveDiagnostics.pas) ?, declaration (DragLint.Plugin.Providers.pas) ?, DragLint.Plugin.LiveDiagnostics.TLintDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas) ?, DragLint.Plugin.LiveDiagnostics.TLiveRunner.OnTick (DragLint.Plugin.LiveDiagnostics.pas), DragLint.Plugin.LiveDiagnostics.TSemanticDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas) ? (+1 more)</para>
+  /// <para>Used in units: DragLint.Plugin.LiveDiagnostics, DragLint.Plugin.Providers</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintDiagContext = record
     FilePath  : string; // the real (saved) path the diagnostics belong to
     BufferPath: string; // a temp snapshot of the unsaved buffer to analyze
@@ -78,20 +127,80 @@ type { ---- Completion ---- }
     ActiveProjectDb: string;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.LiveDiagnostics.pas), declaration (DragLint.Plugin.Providers.pas), DragLint.Plugin.Providers.EnsureLists (DragLint.Plugin.Providers.pas), DragLint.Plugin.Providers.RegisterDiagnosticProvider (DragLint.Plugin.Providers.pas), DragLint.Plugin.Providers.UnregisterDiagnosticProvider (DragLint.Plugin.Providers.pas) (+1 more)</para>
+  /// <para>Used in units: DragLint.Plugin.LiveDiagnostics, DragLint.Plugin.Providers</para>
+  /// <para>Implemented by: TLintDiagnosticProvider, TSemanticDiagnosticProvider</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   IDragLintDiagnosticProvider = interface
     ['{C3E8A2B1-7F6D-4B2C-AD4E-8A1B2C3D4E51}']
     function Name: string                                                        ;
+    /// <param name="ACtx"><!-- drag-lint:auto type -->const TDragLintDiagContext</param>
+    /// <returns><!-- drag-lint:auto type -->TDragLintDiagItems</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.Providers.AggregateDiagnostics (DragLint.Plugin.Providers.pas)</para>
+    /// <seealso cref="DragLint.Plugin.Providers.IDragLintDiagnosticProvider.Name"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetDiagnostics(const ACtx: TDragLintDiagContext): TDragLintDiagItems;
   end;
 
   { ---- registries ---- }
 
+/// <summary><!-- drag-lint:auto sum -->---- registries ----</summary>
+/// <param name="AProvider"><!-- drag-lint:auto type -->const IDragLintCompletionProvider</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DragLint.Plugin.Providers.EnsureLists</para>
+/// <seealso cref="DragLint.Plugin.Providers.EnsureLists"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterCompletionProvider  (const AProvider: IDragLintCompletionProvider);
 procedure UnregisterCompletionProvider(const AProvider: IDragLintCompletionProvider);
+/// <param name="ACtx"><!-- drag-lint:auto type -->const TDragLintCompletionContext</param>
+/// <returns><!-- drag-lint:auto type -->TDragLintCompletionItems</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: CompareText, DragLint.Plugin.Providers.IDragLintCompletionProvider.GetItems</para>
+/// <para>Catches: Exception (empty)</para>
+/// <seealso cref="DragLint.Plugin.Providers.IDragLintCompletionProvider.GetItems"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AggregateCompletion(const ACtx: TDragLintCompletionContext): TDragLintCompletionItems;
 
+/// <param name="AProvider"><!-- drag-lint:auto type -->const IDragLintDiagnosticProvider</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.LiveDiagnostics.StartLiveDiagnostics (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Calls: DragLint.Plugin.Providers.EnsureLists</para>
+/// <seealso cref="DragLint.Plugin.Providers.EnsureLists"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterDiagnosticProvider  (const AProvider: IDragLintDiagnosticProvider);
+/// <param name="AProvider"><!-- drag-lint:auto type -->const IDragLintDiagnosticProvider</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.LiveDiagnostics.StopLiveDiagnostics (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UnregisterDiagnosticProvider(const AProvider: IDragLintDiagnosticProvider);
+/// <summary><!-- drag-lint:auto sum -->So the provider list is COPIED under the lock and
+/// the lock is released before any provider is called. A provider added or removed
+/// mid-run is simply not in this pass's snapshot, which is the same guarantee the old
+/// code gave.</summary>
+/// <param name="ACtx"><!-- drag-lint:auto type -->const TDragLintDiagContext</param>
+/// <returns><!-- drag-lint:auto type -->TDragLintDiagItems</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.LiveDiagnostics.TLiveRunner.OnTick (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Calls: DragLint.Plugin.Providers.IDragLintDiagnosticProvider.GetDiagnostics</para>
+/// <para>Catches: Exception (empty)</para>
+/// <seealso cref="DragLint.Plugin.Providers.IDragLintDiagnosticProvider.GetDiagnostics"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AggregateDiagnostics(const ACtx: TDragLintDiagContext): TDragLintDiagItems;
 
 procedure ClearAllProviders; // teardown

@@ -27,9 +27,20 @@ uses
 
 type
   /// <summary>Where a resolved profile's define SET came from.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Project.DefineProfile.pas), DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.IndexDefinesText (DRagLint.CLI.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDefineSource = (dsBuiltins, dsDproj, dsDelphiLsp);
 
   /// <summary>One project's active build as the resolver saw it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexBuild (DRagLint.CLI.pas) ?, DRagLint.Project.DefineProfile.FallbackBuild (DRagLint.Project.DefineProfile.pas), DRagLint.Project.DefineProfile.ResolveActiveBuild (DRagLint.Project.DefineProfile.pas) (+11 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Project.ContextFile, DRagLint.Project.DefineProfile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TActiveBuild = record
     /// <summary>The owning .dproj; '' = no owning project (built-ins).</summary>
     Dproj   : string;
@@ -56,7 +67,17 @@ type
 /// <param name="APlatform">Receives the Platform marker, '' when absent.</param>
 /// <param name="AConfig">Receives the Config marker, '' when absent.</param>
 /// <returns>True when at least one marker was found.</returns>
-/// <remarks>Pure over the file text; never raises (unreadable -> False).</remarks>
+/// <remarks>
+/// Pure over the file text; never raises (unreadable -> False).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas), DRagLint.Project.DefineProfile.ResolveActiveBuild (DRagLint.Project.DefineProfile.pas)</para>
+/// <para>Calls: DRagLint.Project.DefineProfile.FirstGroup, DRagLint.Project.DefineProfile.ReadTextSafe</para>
+/// <para>Returns: (APlatform &lt;&gt; '') or (AConfig &lt;&gt; '')</para>
+/// <para>Mutates: APlatform (out), AConfig (out)</para>
+/// <seealso cref="DRagLint.Project.DefineProfile.FirstGroup"/>
+/// <seealso cref="DRagLint.Project.DefineProfile.ReadTextSafe"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadDprojActiveSelection(const ADproj: string; out APlatform, AConfig: string): Boolean;
 
 /// <summary>Reads &lt;base&gt;.delphilsp.json beside ADproj: the -D tokens of
@@ -72,7 +93,20 @@ function ReadDprojActiveSelection(const ADproj: string; out APlatform, AConfig: 
 /// <param name="ASwitches">Receives lowercased letter / on of each -$ switch option, in order.</param>
 /// <returns>True when the file exists, parses and names a dcc32/dcc64 dllname;
 /// False otherwise (ADefines nil).</returns>
-/// <remarks>Never raises.</remarks>
+/// <remarks>
+/// Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas), DRagLint.Project.DefineProfile.ResolveActiveBuild (DRagLint.Project.DefineProfile.pas)</para>
+/// <para>Calls: ChangeFileExt, CharInSet, Copy, DRagLint.Preprocess.Profile.SplitDefineToken, DRagLint.Project.DefineProfile.ReadTextSafe, DRagLint.Project.DefineProfile.SplitOptions, ExtractFileName, LowerCase, TryStrToInt</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 71 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: APlatform (out), ADefines (out), ANumeric (out), ASwitches (out)</para>
+/// <seealso cref="DRagLint.Preprocess.Profile.SplitDefineToken"/>
+/// <seealso cref="DRagLint.Project.DefineProfile.ReadTextSafe"/>
+/// <seealso cref="DRagLint.Project.DefineProfile.SplitOptions"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadDelphiLspDefines(const ADproj: string; out APlatform: string; out ADefines: TArray<string>;
   out ANumeric: TArray<TPair<string, Integer>>; out ASwitches: TArray<TPair<string, Boolean>>): Boolean;
 
@@ -88,7 +122,20 @@ function ReadDelphiLspDefines(const ADproj: string; out APlatform: string; out A
 /// <param name="AConfigOverride">'' = none.</param>
 /// <param name="AUseDelphiLsp">True = delphilsp.json may serve when the .dproj cannot (D1).</param>
 /// <returns>The resolved build.</returns>
-/// <remarks>Never raises. Pure apart from reading the two files.</remarks>
+/// <remarks>
+/// Never raises. Pure apart from reading the two files.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.InstallFileProfileResolver (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexBuild (DRagLint.CLI.pas), DRagLint.Project.ContextFile.BuildProjectContext (DRagLint.Project.ContextFile.pas), DRagLint.Project.DefineProfile.TProjectProfileCache.BuildForFile (DRagLint.Project.DefineProfile.pas) (+1 more)</para>
+/// <para>Calls: Default, DRagLint.Preprocess.Profile.BuiltinsProfile, DRagLint.Preprocess.Profile.CompilerDefaultSwitches, DRagLint.Preprocess.Profile.CompilerNumerics, DRagLint.Preprocess.Profile.ProfileFromDproj, DRagLint.Project.DefineProfile.DigestOf, DRagLint.Project.DefineProfile.NormPlatform, DRagLint.Project.DefineProfile.ReadDelphiLspDefines, DRagLint.Project.DefineProfile.ReadDprojActiveSelection, DRagLint.Project.DefineProfile.UnionWithBuiltins, SameText</para>
+/// <para>Returns: Default(TActiveBuild)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 68 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Preprocess.Profile.BuiltinsProfile"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.CompilerDefaultSwitches"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.CompilerNumerics"/>
+/// <seealso cref="DRagLint.Preprocess.Profile.ProfileFromDproj"/>
+/// <seealso cref="DRagLint.Project.DefineProfile.DigestOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveActiveBuild(const ADproj, APlatformOverride, AConfigOverride: string;
   AUseDelphiLsp: Boolean): TActiveBuild;
 
@@ -97,11 +144,17 @@ type
   /// invalidated by the last-write time + size of the .dproj AND of its
   /// delphilsp.json (an absent file is a stamp of its own), re-checked on EVERY
   /// build lookup (no timer).</summary>
-  /// <remarks>Thread-safe: one critical section guards both maps (the merge proxy
+  /// <remarks>
+  /// Thread-safe: one critical section guards both maps (the merge proxy
   /// lints on a worker thread). The fallback is the profile installed with
   /// Configure, byte-identical to the pre-C10 behaviour, so a loose file never
   /// changes treatment. The file -> .dproj memo is dropped by Forget / Clear; a
-  /// .dproj created later for an already-looked-up file is seen after Forget.</remarks>
+  /// .dproj created later for an already-looked-up file is seen after Forget.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.InstallFileProfileResolver (DRagLint.CLI.pas), DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidChangeWatchedFiles (DRagLint.LSP.Server.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Server</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProjectProfileCache = class
   public
     /// <summary>Installs the lookup context and drops every memo.</summary>
@@ -111,18 +164,63 @@ type
     /// <param name="AConfigOverride">An explicit config or ''.</param>
     /// <param name="AFallback">Profile for files no .dproj owns.</param>
     /// <param name="AUseDelphiLsp">D1: delphilsp.json is consulted only after the .dproj.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.InstallFileProfileResolver (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Project.DefineProfile.LoadManifestSafe</para>
+    /// <seealso cref="DRagLint.Project.DefineProfile.LoadManifestSafe"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.BuildForFile"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.Clear"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.Forget"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.ProfileForFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure Configure(const ADbPaths: TArray<string>; const AActiveProject, APlatformOverride,
       AConfigOverride: string; const AFallback: TDefineProfile; AUseDelphiLsp: Boolean);
     /// <summary>The active build for AFile; Dproj = '' means the fallback.</summary>
     /// <param name="AFile">Source path.</param>
     /// <returns>The build (never raises).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas), DRagLint.Project.DefineProfile.TProjectProfileCache.ProfileForFile (DRagLint.Project.DefineProfile.pas)</para>
+    /// <para>Calls: ChangeFileExt, DRagLint.Project.DefineProfile.DprojForFileWith, DRagLint.Project.DefineProfile.FallbackBuild, DRagLint.Project.DefineProfile.ResolveActiveBuild, DRagLint.Project.DefineProfile.StampOf, ExpandFileName, LowerCase</para>
+    /// <para>Returns: Entry.Build; FallbackBuild</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.Project.DefineProfile.DprojForFileWith"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.FallbackBuild"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.ResolveActiveBuild"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.StampOf"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.Clear"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function BuildForFile(const AFile: string): TActiveBuild;
     /// <summary>= BuildForFile(AFile).Profile.</summary>
     /// <param name="AFile">Source path.</param>
     /// <returns>The define profile.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.InstallFileProfileResolver (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Project.DefineProfile.TProjectProfileCache.BuildForFile</para>
+    /// <para>Returns: BuildForFile(AFile).Profile</para>
+    /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.BuildForFile"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.Clear"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.Configure"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.Forget"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ProfileForFile(const AFile: string): TDefineProfile;
     /// <summary>Drops the file -> .dproj memo for AFile.</summary>
     /// <param name="AFile">Source path.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleDidChangeWatchedFiles (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidClose (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.RefreshFileFromDisk (DRagLint.LSP.Server.pas)</para>
+    /// <para>Calls: ExpandFileName, LowerCase</para>
+    /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.BuildForFile"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.Clear"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.Configure"/>
+    /// <seealso cref="DRagLint.Project.DefineProfile.TProjectProfileCache.ProfileForFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure Forget(const AFile: string);
     /// <summary>Drops every memo (the context stays).</summary>
     class procedure Clear;

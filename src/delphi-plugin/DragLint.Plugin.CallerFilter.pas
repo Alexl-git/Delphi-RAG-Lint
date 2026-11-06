@@ -44,8 +44,14 @@ uses
 type
   /// <summary>One candidate call site, from either the resolved-edge query or
   /// the name index.</summary>
-  /// <remarks>TargetQName is populated only for resolved rows; name-index rows
-  /// leave it empty, and CodeText is populated only for name-index rows.</remarks>
+  /// <remarks>
+  /// TargetQName is populated only for resolved rows; name-index rows
+  /// leave it empty, and CodeText is populated only for name-index rows.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.CallerFilter.pas), DragLint.Plugin.CallerFilter.AppendUnique (DragLint.Plugin.CallerFilter.pas), DragLint.Plugin.CallerFilter.SameCallSite (DragLint.Plugin.CallerFilter.pas), DragLint.Plugin.CallerFilter.SameSite (DragLint.Plugin.CallerFilter.pas), DragLint.Plugin.Editor.FetchHoverCallers (DragLint.Plugin.Editor.pas) (+1 more)</para>
+  /// <para>Used in units: DragLint.Plugin.CallerFilter, DragLint.Plugin.Editor</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLCallerRow = record
     FilePath   : string ;
     Line       : Integer;
@@ -53,11 +59,21 @@ type
     TargetQName: string ;   { exact callee identity, resolved rows only }
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.CallerFilter.pas), DragLint.Plugin.CallerFilter.AppendUnique (DragLint.Plugin.CallerFilter.pas), DragLint.Plugin.CallerFilter.Capped (DragLint.Plugin.CallerFilter.pas), DragLint.Plugin.CallerFilter.SelectCallers (DragLint.Plugin.CallerFilter.pas), DragLint.Plugin.Editor.FetchHoverCallers (DragLint.Plugin.Editor.pas) (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLCallerRows = TArray<TDLCallerRow>;
 
   /// <summary>Which branch produced the returned rows. Reported so the caller
   /// can log it and a test can assert the POLICY, not merely the row count --
   /// two branches can both legitimately return zero rows.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.CallerFilter.pas), DragLint.Plugin.CallerFilter.SelectCallers (DragLint.Plugin.CallerFilter.pas), DragLint.Plugin.Editor.FetchHoverCallers (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.ParseHoverBundleReply (DragLint.Plugin.Editor.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLCallerSource = (
     csResolved,      { exact target_qname matches }
     csClassQualified,{ source line qualified by the target's own class }
@@ -76,16 +92,35 @@ const
 /// <param name="AClassQual">"Class.Member" form used for the text filter.</param>
 /// <param name="ASource">Which branch decided the result.</param>
 /// <returns>De-duplicated by (file, line), capped at DL_MAX_CALLERS.</returns>
-/// <remarks>Pure: no I/O, no globals. WHEN a resolved edge names ATargetQName
+/// <remarks>
+/// Pure: no I/O, no globals. WHEN a resolved edge names ATargetQName
 /// THE selection SHALL return only those rows. IF the name resolves to other
 /// targets but never to ATargetQName THEN the selection SHALL return no rows
-/// rather than every same-named row.</remarks>
+/// rather than every same-named row.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.FetchHoverCallers (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.ParseHoverBundleReply (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.CallerFilter.AppendUnique, DragLint.Plugin.CallerFilter.Capped, DragLint.Plugin.CallerFilter.SameCallSite, Pos, SameText, Trim</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 68 lines (full implementation)</para>
+/// <para>Mutates: ASource (out)</para>
+/// <seealso cref="DragLint.Plugin.CallerFilter.AppendUnique"/>
+/// <seealso cref="DragLint.Plugin.CallerFilter.Capped"/>
+/// <seealso cref="DragLint.Plugin.CallerFilter.SameCallSite"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SelectCallers(const AResolved, ANameRows: TDLCallerRows;
   const ATargetQName, AClassQual: string; out ASource: TDLCallerSource): TDLCallerRows;
 
 /// <summary>"Class.Member" for a dotted qualified name, else the name itself.</summary>
-/// <remarks>Unit names are themselves dotted (DRagLint.LSP.Server.TLSPServer.HandleHover),
-/// so this takes the LAST TWO segments rather than counting dots.</remarks>
+/// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: AQName; Copy(AQName, Head + 1,
+/// MaxInt).</returns>
+/// <remarks>
+/// Unit names are themselves dotted (DRagLint.LSP.Server.TLSPServer.HandleHover),
+/// so this takes the LAST TWO segments rather than counting dots.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: Copy, LastDelimiter</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ClassQualifierOf(const AQName: string): string;
 
 implementation

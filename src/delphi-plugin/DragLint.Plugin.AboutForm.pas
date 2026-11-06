@@ -36,8 +36,14 @@ type
   /// <summary>Modeless status window: versions, connection health, indexes in
   /// use, configuration warnings, process footprint, and the diagnostic actions
   /// moved off the main menu.</summary>
-  /// <remarks>Singleton -- use ShowAboutDialog. Freed from this unit's
-  /// finalization so nothing survives a package unload.</remarks>
+  /// <remarks>
+  /// Singleton -- use ShowAboutDialog. Freed from this unit's
+  /// finalization so nothing survives a package unload.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.AboutForm.pas) ?, DragLint.Plugin.AboutForm.ShowAboutDialog (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.Create (DragLint.Plugin.AboutForm.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.AboutForm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintAboutForm = class(TForm)
     strict private
       FScroll   : TScrollBox;
@@ -53,34 +59,261 @@ type
         the window refreshes after every applied fix. }
       FRowObjs  : TList     ;
       FInfoRun  : TCliRunSlot; { the engine info request in flight }
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.Create (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.DoAfterFix (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.DoRefresh (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.Rebuild (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.Diagnose.RefreshEngineInfo, DragLint.Plugin.Theme.ThemedColor</para>
+      /// <para>Reads: FStatusBar, FInfoRun</para>
+      /// <seealso cref="DragLint.Plugin.Diagnose.RefreshEngineInfo"/>
+      /// <seealso cref="DragLint.Plugin.Theme.ThemedColor"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure BuildContent;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.AboutForm.TDragLintAboutForm.ClearContent, DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent.RenderGroup, DragLint.Plugin.Diagnose.DiagConfiguration, DragLint.Plugin.Diagnose.DiagConnections, DragLint.Plugin.Diagnose.DiagIndexes, DragLint.Plugin.Diagnose.DiagProcess, DragLint.Plugin.Diagnose.DiagRelatedTools, DragLint.Plugin.Diagnose.DiagVersions, DragLint.Plugin.Diagnose.HasProblem, DragLint.Plugin.Theme.ThemedStatusColor, ThemedColor</para>
+      /// <para>Reads: FScroll, FNextTop, FStatusBar   Writes: FNextTop</para>
+      /// <para>UI thread only -- touches Screen</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.ClearContent"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent.RenderGroup"/>
+      /// <seealso cref="DragLint.Plugin.Diagnose.DiagConfiguration"/>
+      /// <seealso cref="DragLint.Plugin.Diagnose.DiagConnections"/>
+      /// <seealso cref="DragLint.Plugin.Diagnose.DiagIndexes"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure RenderContent;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.Destroy (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Calls: TObject</para>
+      /// <para>Reads: FScroll, FRowObjs   Writes: FNextTop</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ClearContent;
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.ClearContent"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure DoRefresh   (Sender: TObject);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.AboutForm.ShowTextReport, DragLint.Plugin.Diagnose.BuildDiagnoseReport, DragLint.Plugin.Diagnose.RefreshEngineInfo</para>
+      /// <para>Reads: FStatusBar, FInfoRun</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.ShowTextReport"/>
+      /// <seealso cref="DragLint.Plugin.Diagnose.BuildDiagnoseReport"/>
+      /// <seealso cref="DragLint.Plugin.Diagnose.RefreshEngineInfo"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure DoDiagnose  (Sender: TObject);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.Diagnose.BuildDiagnoseReport, DragLint.Plugin.Diagnose.RefreshEngineInfo, DragLint.Plugin.Theme.ThemedColor</para>
+      /// <para>Reads: FStatusBar, FInfoRun</para>
+      /// <seealso cref="DragLint.Plugin.Diagnose.BuildDiagnoseReport"/>
+      /// <seealso cref="DragLint.Plugin.Diagnose.RefreshEngineInfo"/>
+      /// <seealso cref="DragLint.Plugin.Theme.ThemedColor"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure DoCopyReport(Sender: TObject);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons (DragLint.Plugin.AboutForm.pas)</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.ClearContent"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure DoCloseClick(Sender: TObject);
+      /// <summary><!-- drag-lint:auto sum -->UNKNOWN IS REPORTED AS UNKNOWN. Offline,
+      /// rate-limited or renamed repo all render as "unknown", never as "up to date" --
+      /// the latter is the one answer a user will not re-check, and it is the answer they
+      /// would act on.</summary>
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.AboutForm.ShowTextReport, DragLint.Plugin.Updates.FetchLatestReleaseTag, DragLint.Plugin.Updates.FileVersionOf, DragLint.Plugin.Updates.FindKnownPackagePath, DragLint.Plugin.Updates.IsUpdateAvailable, ExtractFilePath, Format, SameText</para>
+      /// <para>UI thread only -- touches Screen</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.ShowTextReport"/>
+      /// <seealso cref="DragLint.Plugin.Updates.FetchLatestReleaseTag"/>
+      /// <seealso cref="DragLint.Plugin.Updates.FileVersionOf"/>
+      /// <seealso cref="DragLint.Plugin.Updates.FindKnownPackagePath"/>
+      /// <seealso cref="DragLint.Plugin.Updates.IsUpdateAvailable"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure DoCheckUpdates(Sender: TObject);
+      /// <summary><!-- drag-lint:auto sum -->Opens the website in the default browser.
+      /// Explicit click only -- like Check for Updates, nothing here reaches the network
+      /// because the window opened.</summary>
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Calls: PChar, ShellExecute</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.ClearContent"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure DoOpenWebsite (Sender: TObject);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent.RenderGroup (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent, DragLint.Plugin.Theme.ThemedStatusColor</para>
+      /// <para>Reads: FStatusBar</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent"/>
+      /// <seealso cref="DragLint.Plugin.Theme.ThemedStatusColor"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure DoAfterFix  (Sender: TObject);
+      /// <param name="ACaption"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AHandler"><!-- drag-lint:auto type -->TNotifyEvent</param>
+      /// <param name="ALeft"><!-- drag-lint:auto type -->var Integer</param>
+      /// <param name="ATop"><!-- drag-lint:auto type -->var Integer</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Reads: FButtons</para>
+      /// <para>Mutates: ALeft (var), ATop (var)</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.ClearContent"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure AddButton(const ACaption: string; AHandler: TNotifyEvent;
                           var ALeft: Integer; var ATop: Integer);
+      /// <param name="ACaption"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AProc"><!-- drag-lint:auto type -->Pointer</param>
+      /// <param name="ALeft"><!-- drag-lint:auto type -->var Integer</param>
+      /// <param name="ATop"><!-- drag-lint:auto type -->var Integer</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.AboutForm.TDLActionWrapper.Click, DragLint.Plugin.AboutForm.TDLActionWrapper.Create, DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton, TDLPlainProc</para>
+      /// <para>Reads: FWrappers</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDLActionWrapper.Click"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDLActionWrapper.Create"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure AddProcButton(const ACaption: string; AProc: Pointer;
                               var ALeft: Integer; var ATop: Integer);
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.Create (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton, DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.ClearContent"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure BuildButtons;
     public
+      /// <summary><!-- drag-lint:auto sum -->---- TDragLintAboutForm ----</summary>
+      /// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.ShowAboutDialog (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Calls: CreateNew, DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons, DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent, DragLint.Plugin.Theme.ApplyIdeTheme, DragLint.Plugin.Theme.ThemedColor</para>
+      /// <para>constructor</para>
+      /// <para>Reads: FButtons, FStatusBar, FScroll   Writes: FWrappers, FRowObjs, FButtons, FStatusBar, FScroll, FInfoRun</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent"/>
+      /// <seealso cref="DragLint.Plugin.Theme.ApplyIdeTheme"/>
+      /// <seealso cref="DragLint.Plugin.Theme.ThemedColor"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(AOwner: TComponent); override;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.AboutForm.TDragLintAboutForm.ClearContent, FreeAndNil, TObject</para>
+      /// <para>Reads: FInfoRun, FRowObjs, FWrappers</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.ClearContent"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
       /// <summary>Re-reads every diagnostic group and repaints.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.AboutForm.ShowAboutDialog (DragLint.Plugin.AboutForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent</para>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.AddProcButton"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildButtons"/>
+      /// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.ClearContent"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Rebuild;
   end;
 
 /// <summary>Shows (creating if needed) the About / status window.</summary>
-/// <remarks>Main thread only. Cheap: no database is opened -- see the
-/// performance contract in DragLint.Plugin.Diagnose.</remarks>
+/// <remarks>
+/// Main thread only. Cheap: no database is opened -- see the
+/// performance contract in DragLint.Plugin.Diagnose.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeAbout (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.AboutForm.TDragLintAboutForm.Create, DragLint.Plugin.AboutForm.TDragLintAboutForm.Rebuild</para>
+/// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.Create"/>
+/// <seealso cref="DragLint.Plugin.AboutForm.TDragLintAboutForm.Rebuild"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowAboutDialog;
 
 /// <summary>Closes and frees the About window if it is open.</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: FreeAndNil</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure CloseAboutDialog;
 
 implementation

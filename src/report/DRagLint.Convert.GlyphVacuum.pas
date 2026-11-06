@@ -21,7 +21,7 @@ type
   /// empty rather than guessed. Append merges into an existing OutDir keyed on
   /// (dfm_path, object_path, property); a re-scan is idempotent.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas), DRagLint.CLI.DoGlyphVacuum (DRagLint.CLI.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas) ?, DRagLint.CLI.DoGlyphVacuum (DRagLint.CLI.pas), DRagLint.Convert.GlyphVacuum.RunGlyphVacuum (DRagLint.Convert.GlyphVacuum.pas) ?</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.GlyphVacuum</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -35,7 +35,7 @@ type
   /// <summary>The counts the CLI prints as its one summary line.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas), DRagLint.CLI.DoGlyphVacuum (DRagLint.CLI.pas), DRagLint.Convert.GlyphVacuum.RunGlyphVacuum (DRagLint.Convert.GlyphVacuum.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas) ?, DRagLint.CLI.DoGlyphVacuum (DRagLint.CLI.pas) ?, DRagLint.Convert.GlyphVacuum.RunGlyphVacuum (DRagLint.Convert.GlyphVacuum.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.GlyphVacuum</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -53,7 +53,7 @@ type
   /// --append. Every value is written verbatim with tabs/newlines replaced by
   /// spaces.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.FillDerived (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.RowLine (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.WriteClassesTsv (DRagLint.Convert.GlyphVacuum.pas) (+5 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas) ?, DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.FillDerived (DRagLint.Convert.GlyphVacuum.pas) ?, DRagLint.Convert.GlyphVacuum.LoadExistingRows (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.RowLine (DRagLint.Convert.GlyphVacuum.pas) ? (+5 more)</para>
   /// <para>Used in units: DRagLint.Convert.GlyphVacuum</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

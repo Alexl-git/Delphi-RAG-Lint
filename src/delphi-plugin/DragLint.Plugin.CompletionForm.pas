@@ -26,13 +26,25 @@ uses
   ;
 
 type
+  /// <param name="AInsertText"><!-- drag-lint:auto type -->const string</param>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.CompletionForm.pas), DragLint.Plugin.CompletionForm.ShowDragLintCompletion (DragLint.Plugin.CompletionForm.pas), DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ShowAt (DragLint.Plugin.CompletionForm.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCompletionInsertCallback = reference to procedure(const AInsertText: string);
 
   /// <summary>One completion row, kept as PARTS rather than a flat string so
   /// each part can be drawn in its own colour.</summary>
-  /// <remarks>The old code concatenated glyph + label + detail into a single
+  /// <remarks>
+  /// The old code concatenated glyph + label + detail into a single
   /// listbox string, which is why the popup could not be themed: by draw time
-  /// there was nothing left to tell a type from a name.</remarks>
+  /// there was nothing left to tell a type from a name.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.CompletionForm.pas), DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ListBoxDrawItem (DragLint.Plugin.CompletionForm.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.CompletionForm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLCompletionRow = record
     KindWord : string;   { 'procedure', 'function', 'property', ... }
     Name     : string;
@@ -41,6 +53,12 @@ type
     Quals    : string;   { '[protected]', '[read-only]' -- already bracketed }
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.CompletionForm.ShowDragLintCompletion (DragLint.Plugin.CompletionForm.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.CompletionForm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintCompletionForm = class(TForm)
     private
       FListBox    : TListBox                 ;
@@ -48,19 +66,145 @@ type
       FRows       : TArray<TDLCompletionRow> ;
       FSynOpts    : INTACodeEditorOptions    ;
       FOnInsert   : TCompletionInsertCallback;
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <param name="Key"><!-- drag-lint:auto type -->var Word</param>
+      /// <param name="Shift"><!-- drag-lint:auto type -->TShiftState</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Create (DragLint.Plugin.CompletionForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.CompletionForm.TDragLintCompletionForm.DoInsertSelected</para>
+      /// <para>Reads: FListBox</para>
+      /// <para>Mutates: Key (var)</para>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.DoInsertSelected"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Deactivate"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ListBoxDblClick"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Create (DragLint.Plugin.CompletionForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.CompletionForm.TDragLintCompletionForm.DoInsertSelected</para>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.DoInsertSelected"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Deactivate"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.FormKeyDown"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ListBoxDblClick(Sender: TObject);
+      /// <param name="AControl"><!-- drag-lint:auto type -->TWinControl</param>
+      /// <param name="AIndex"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="ARect"><!-- drag-lint:auto type -->TRect</param>
+      /// <param name="AState"><!-- drag-lint:auto type -->TOwnerDrawState</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Create (DragLint.Plugin.CompletionForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ListBoxDrawItem.Run, DragLint.Plugin.Theme.ThemedColor, EnsureReadable, SyntaxColorFor</para>
+      /// <para>Reads: FRows</para>
+      /// <para>UI thread only -- touches AControl</para>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ListBoxDrawItem.Run"/>
+      /// <seealso cref="DragLint.Plugin.Theme.ThemedColor"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Deactivate"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.DoClose"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ListBoxDrawItem(AControl: TWinControl; AIndex: Integer;
                                 ARect: TRect; AState: TOwnerDrawState);
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.CompletionForm.TDragLintCompletionForm.FormKeyDown (DragLint.Plugin.CompletionForm.pas), DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ListBoxDblClick (DragLint.Plugin.CompletionForm.pas)</para>
+      /// <para>Calls: FOnInsert</para>
+      /// <para>Reads: FListBox, FInsertTexts, FOnInsert</para>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Deactivate"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.FormKeyDown"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ListBoxDblClick"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure DoInsertSelected;
     protected
+      /// <param name="Action"><!-- drag-lint:auto type -->var TCloseAction</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Mutates: Action (var)</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Deactivate"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.DoInsertSelected"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.FormKeyDown"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ListBoxDblClick"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure DoClose(var Action: TCloseAction); override;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.DoInsertSelected"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.FormKeyDown"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ListBoxDblClick"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Deactivate; override;
     public
+      /// <summary><!-- drag-lint:auto sum -->---- TDragLintCompletionForm ----</summary>
+      /// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.CompletionForm.ShowDragLintCompletion (DragLint.Plugin.CompletionForm.pas)</para>
+      /// <para>Calls: CreateNew, DragLint.Plugin.Theme.ThemedColor</para>
+      /// <para>constructor</para>
+      /// <para>Reads: FListBox   Writes: FListBox</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.Theme.ThemedColor"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Deactivate"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.DoInsertSelected"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.FormKeyDown"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(AOwner: TComponent); override;
+      /// <param name="X"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="Y"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AItems"><!-- drag-lint:auto type -->TJSONArray</param>
+      /// <param name="AOnInsert"><!-- drag-lint:auto type -->const TCompletionInsertCallback</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.CompletionForm.ShowDragLintCompletion (DragLint.Plugin.CompletionForm.pas)</para>
+      /// <para>Calls: Copy, DragLint.Plugin.CompletionForm.KindWord, DragLint.Plugin.CompletionForm.SplitSignature, DragLint.Plugin.CompletionText.CompletionTypeSeparator, DragLint.Plugin.SyntaxColors.AcquireEditorColors, Pos, SameText, SystemParametersInfo, Trim</para>
+      /// <para>Complexity: 22 (cyclomatic, outer body), 131 lines (full implementation)</para>
+      /// <para>Reads: FListBox, FInsertTexts, FRows   Writes: FOnInsert, FSynOpts, FInsertTexts, FRows</para>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.KindWord"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.SplitSignature"/>
+      /// <seealso cref="DragLint.Plugin.CompletionText.CompletionTypeSeparator"/>
+      /// <seealso cref="DragLint.Plugin.SyntaxColors.AcquireEditorColors"/>
+      /// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ShowAt(X, Y: Integer; AItems: TJSONArray; const AOnInsert: TCompletionInsertCallback);
   end;
 
+/// <summary><!-- drag-lint:auto sum -->---- public factory ----</summary>
+/// <param name="AItems"><!-- drag-lint:auto type -->TJSONArray</param>
+/// <param name="AScreenX"><!-- drag-lint:auto type -->Integer</param>
+/// <param name="AScreenY"><!-- drag-lint:auto type -->Integer</param>
+/// <param name="AOnInsert"><!-- drag-lint:auto type -->const TCompletionInsertCallback</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.DoCompletion (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Create, DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ShowAt</para>
+/// <para>UI thread only -- touches Form, Application</para>
+/// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.Create"/>
+/// <seealso cref="DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ShowAt"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowDragLintCompletion(AItems: TJSONArray; AScreenX, AScreenY: Integer; const AOnInsert: TCompletionInsertCallback);
 
 implementation

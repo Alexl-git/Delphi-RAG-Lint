@@ -23,14 +23,32 @@ const
 /// <returns>The folder, no trailing separator: the "reportsDir" key of
 /// &lt;anchor&gt;\_D-RAG\drag-lint-project.json (absolute, or relative to that _D-RAG
 /// folder, like ownRoots), else &lt;anchor&gt;\drag-lint-reports.</returns>
-/// <remarks>A missing, malformed or empty declaration falls back to the default; it
-/// never raises. Does not create the folder. Pure apart from reading the JSON.</remarks>
+/// <remarks>
+/// A missing, malformed or empty declaration falls back to the default; it
+/// never raises. Does not create the folder. Pure apart from reading the JSON.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.SnapshotDirFor (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareIsSnapshotOnly (DRagLint.CLI.pas), DRagLint.CLI.CompareTakeSnapshot (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Charts.Snapshot.ReadReportsDirKey, DRagLint.Project.OwnRoots.AnchorDirForDb, ExcludeTrailingPathDelimiter, ExpandFileName, ExtractFileDir, StringReplace</para>
+/// <para>Returns: TPath.Combine(Anchor, DEFAULT_DIR)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Charts.Snapshot.ReadReportsDirKey"/>
+/// <seealso cref="DRagLint.Project.OwnRoots.AnchorDirForDb"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveSnapshotDir(const pProjectFile, pDbPath: string): string;
 
 /// <summary>Makes a report target safe for a file name.</summary>
 /// <param name="pTarget">The target, e.g. 'OPERAT.NAME' or 'A -> B'.</param>
 /// <returns>pTarget with every character outside [A-Za-z0-9_.-] replaced by '_'
 /// ('A -> B' gives 'A_-__B').</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Snapshot.NamePrefix (DRagLint.Charts.Snapshot.pas), DRagLint.CLI.CompareHtmlPath (DRagLint.CLI.pas), DRagLint.CLI.CompareShowPage (DRagLint.CLI.pas)</para>
+/// <para>Calls: CharInSet</para>
+/// <para>Returns: string.Create(Chars)</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SanitiseTargetForFileName(const pTarget: string): string;
 
 /// <summary>The F2 name of a snapshot.</summary>
@@ -41,6 +59,14 @@ function SanitiseTargetForFileName(const pTarget: string): string;
 /// SNAPSHOT_EXT_FORMS for a forms CSV, SNAPSHOT_EXT_GRAPH for a chart's DOT text.</param>
 /// <returns>'&lt;question&gt;--&lt;target&gt;--&lt;yyyymmdd-hhmm&gt;&lt;pExt&gt;', with a
 /// 24-hour clock whatever the regional settings.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Snapshot.SaveSnapshot (DRagLint.Charts.Snapshot.pas)</para>
+/// <para>Calls: DRagLint.Charts.Snapshot.NamePrefix, FormatDateTime</para>
+/// <para>Returns: NamePrefix(pQuestion, pTarget) + FormatDateTime(STAMP_FORMAT, pWhen) + pExt</para>
+/// <seealso cref="DRagLint.Charts.Snapshot.NamePrefix"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SnapshotFileName(const pQuestion, pTarget: string; pWhen: TDateTime;
   const pExt: string = SNAPSHOT_EXT_REPORT): string;
 
@@ -56,8 +82,19 @@ function SnapshotFileName(const pQuestion, pTarget: string; pWhen: TDateTime;
 /// <param name="pExt">The file extension (SnapshotFileName); retention for pAuto only
 /// counts files with this extension.</param>
 /// <returns>False when the folder or file cannot be written.</returns>
-/// <remarks>Written as UTF-8 without BOM with CRLF line ends. A second snapshot of the
+/// <remarks>
+/// Written as UTF-8 without BOM with CRLF line ends. A second snapshot of the
 /// same question and target in the same minute replaces the first. Creates the folder. For pAuto, returns False (pPath '') when the 20-snapshot retention immediately removed the new file because 20 newer ones exist; the file is then gone.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.ApplySideEffects (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareTakeSnapshot (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Charts.Snapshot.PruneAutoSnapshots, DRagLint.Charts.Snapshot.SnapshotFileName, ForceDirectories, StringReplace</para>
+/// <para>Returns: False; True</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: pPath (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Charts.Snapshot.PruneAutoSnapshots"/>
+/// <seealso cref="DRagLint.Charts.Snapshot.SnapshotFileName"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function SaveSnapshot(const pDir: string; pAuto: Boolean; const pQuestion, pTarget, pPlainText: string;
   pWhen: TDateTime; out pPath: string; const pExt: string = SNAPSHOT_EXT_REPORT): Boolean;
@@ -68,10 +105,17 @@ function SaveSnapshot(const pDir: string; pAuto: Boolean; const pQuestion, pTarg
 /// <param name="pTarget">Target (sanitised here).</param>
 /// <param name="pKeep">How many to keep; default 20. 0 removes every snapshot of the routine; a negative value is treated as 0 and never raises.</param>
 /// <param name="pExt">Only files with this extension count.</param>
-/// <remarks>Only files named exactly '&lt;question&gt;--&lt;target&gt;--&lt;stamp&gt;&lt;pExt&gt;'
+/// <remarks>
+/// Only files named exactly '&lt;question&gt;--&lt;target&gt;--&lt;stamp&gt;&lt;pExt&gt;'
 /// with a digit stamp count, so another target that merely shares the prefix is never
 /// touched. Ordered by the stamp in the name, never by file time; oldest removed first.
-/// A file that cannot be deleted is skipped.</remarks>
+/// A file that cannot be deleted is skipped.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Snapshot.SaveSnapshot (DRagLint.Charts.Snapshot.pas)</para>
+/// <para>Calls: DeleteFile, DRagLint.Charts.Snapshot.StampedFiles, Max</para>
+/// <seealso cref="DRagLint.Charts.Snapshot.StampedFiles"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure PruneAutoSnapshots(const pAutoDir, pQuestion, pTarget: string; pKeep: Integer = 20;
   const pExt: string = SNAPSHOT_EXT_REPORT);
 
@@ -82,8 +126,16 @@ procedure PruneAutoSnapshots(const pAutoDir, pQuestion, pTarget: string; pKeep: 
 /// <returns>Full path of the snapshot with the greatest stamp across SNAPSHOT_EXT_REPORT,
 /// SNAPSHOT_EXT_GRAPH and SNAPSHOT_EXT_FORMS files, or '' when none. On equal stamps the
 /// report wins, then the graph, then the forms CSV.</returns>
-/// <remarks>Compare saves an auto snapshot with the extension its format is detected by
-/// (R18), so the auto lookup must see all three.</remarks>
+/// <remarks>
+/// Compare saves an auto snapshot with the extension its format is detected by
+/// (R18), so the auto lookup must see all three.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.LoadAutoSnapshotSide (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareIsSnapshotOnly (DRagLint.CLI.pas)</para>
+/// <para>Calls: CompareStr, DRagLint.Charts.Snapshot.StampedFiles</para>
+/// <para>Returns: ''; Files[0].Value</para>
+/// <seealso cref="DRagLint.Charts.Snapshot.StampedFiles"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LatestAutoSnapshotAnyFormat(const pAutoDir, pQuestion, pTarget: string): string;
 
 implementation

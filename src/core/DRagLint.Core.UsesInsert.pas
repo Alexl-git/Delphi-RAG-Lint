@@ -15,12 +15,24 @@ interface
 
 type
   /// <summary>Which uses clause of a unit an insertion targets.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: [dclDragLintWizard]declaration (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard]declaration (DragLint.Plugin.MissingUses.pas), [dclDragLintWizard]DRagLint.Core.UsesInsert.SectionTokenIndex (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.BuildInsertion (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.FormatMessage (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.ParseMessage (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.SectionWord (DRagLint.Core.UsesInsert.pas), DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas), [dclDragLintWizard]DragLint.Plugin.Editor.InvokeQuickFixUses (DragLint.Plugin.Editor.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLAddUnitToUsesSection (DragLint.Plugin.MissingUses.pas),
+  /// [dclDragLintWizard]DragLint.Plugin.MissingUses.DLCursorMissingUses (DragLint.Plugin.MissingUses.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesSection = (usInterface, usImplementation);
 
   /// <summary>One text insertion that adds unit names to a uses clause.</summary>
-  /// <remarks>Line and Col are 1-based; Text goes immediately BEFORE column Col
+  /// <remarks>
+  /// Line and Col are 1-based; Text goes immediately BEFORE column Col
   /// of line Line (Col = Length(line) + 1 appends). Text uses CRLF line breaks
-  /// and is 7-bit ASCII whenever the unit names are.</remarks>
+  /// and is 7-bit ASCII whenever the unit names are.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: [dclDragLintWizard]declaration (DRagLint.Core.UsesInsert.pas) ?, [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.ApplyToLine (DRagLint.Core.UsesInsert.pas) ?, [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.BuildInsertion (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLAddUnitToUsesSection (DragLint.Plugin.MissingUses.pas) ?</para>
+  /// <para>Used in units: [dclDragLintWizard]DRagLint.Core.UsesInsert, DRagLint.Lint.MissingUses, [dclDragLintWizard]DragLint.Plugin.MissingUses</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesInsertion = record
     Line: Integer;
     Col : Integer;
@@ -28,29 +40,86 @@ type
   end;
 
   /// <summary>Uses-clause text analysis and editing over a unit's lines.</summary>
-  /// <remarks>Stateless and pure: every routine reads only its arguments.
+  /// <remarks>
+  /// Stateless and pure: every routine reads only its arguments.
   /// Comments, strings and compiler directives are skipped by a small
-  /// tokenizer, so a `uses` or `;` inside a comment never counts. Thread-safe.</remarks>
+  /// tokenizer, so a `uses` or `;` inside a comment never counts. Thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas), DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze (DRagLint.Lint.MissingUses.pas), DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.BuildFinding (DRagLint.Lint.MissingUses.pas), DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.IsUsed (DRagLint.Lint.MissingUses.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas), [dclDragLintWizard]DragLint.Plugin.Editor.InvokeQuickFixUses (DragLint.Plugin.Editor.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLAddUnitToUsesSection (DragLint.Plugin.MissingUses.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLCursorMissingUses (DragLint.Plugin.MissingUses.pas)</para>
+  /// <para>Used in units: DRagLint.Lint.MissingUses, DRagLint.LSP.Completion, [dclDragLintWizard]DragLint.Plugin.Editor, [dclDragLintWizard]DragLint.Plugin.MissingUses</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesText = class
   public
     /// <summary>The Delphi keyword of a section.</summary>
     /// <param name="ASection">The section.</param>
     /// <returns>'interface' or 'implementation'.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.FormatMessage (DRagLint.Core.UsesInsert.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas), [dclDragLintWizard]DragLint.Plugin.Editor.InvokeQuickFixUses (DragLint.Plugin.Editor.pas)</para>
+    /// <para>Returns: if ASection = usInterface then 'interface'</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ApplyToLine"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.BuildInsertion"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.FormatMessage"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ImplementationLine"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.IsUnitText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function SectionWord(ASection: TUsesSection): string; static;
     /// <summary>True when the text is a UNIT (its first token is `unit`), the
     /// only kind of file that has interface and implementation uses clauses.</summary>
     /// <param name="ALines">The file's lines, without line breaks.</param>
     /// <returns>False for a program, library, package or an empty text.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze (DRagLint.Lint.MissingUses.pas)</para>
+    /// <para>Calls: DRagLint.Core.UsesInsert.Tokenize, SameText</para>
+    /// <para>Returns: (Length(Toks) &gt; 0) and SameText(Toks[0].Text, 'unit')</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.UsesInsert.Tokenize"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ApplyToLine"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.BuildInsertion"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.FormatMessage"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ImplementationLine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function IsUnitText(const ALines: TArray<string>): Boolean; static;
     /// <summary>The 1-based line of the `implementation` keyword.</summary>
     /// <param name="ALines">The file's lines.</param>
     /// <returns>0 when the text is not a unit or has no implementation keyword.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze (DRagLint.Lint.MissingUses.pas)</para>
+    /// <para>Calls: DRagLint.Core.UsesInsert.SectionTokenIndex, DRagLint.Core.UsesInsert.Tokenize</para>
+    /// <para>Returns: if K &lt; 0 then 0</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.UsesInsert.SectionTokenIndex"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.Tokenize"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ApplyToLine"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.BuildInsertion"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.FormatMessage"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ImplementationLine(const ALines: TArray<string>): Integer; static;
     /// <summary>Every unit name listed in any uses clause of the text, as written
     /// except that blanks around a dot on one line are dropped
     /// (`System      .Generics.Collections` is `System.Generics.Collections`).</summary>
     /// <param name="ALines">The file's lines.</param>
     /// <returns>The names in source order; empty when there is no uses clause.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Core.UsesInsert.TUsesText.BuildInsertion (DRagLint.Core.UsesInsert.pas), DRagLint.Core.UsesInsert.TUsesText.UnitInUses (DRagLint.Core.UsesInsert.pas), DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze (DRagLint.Lint.MissingUses.pas)</para>
+    /// <para>Calls: DRagLint.Core.UsesInsert.ClauseEntries, DRagLint.Core.UsesInsert.Tokenize, SameText</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.UsesInsert.ClauseEntries"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.Tokenize"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ApplyToLine"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.BuildInsertion"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.FormatMessage"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function UsesEntries(const ALines: TArray<string>): TArray<string>; static;
     /// <summary>True when a uses entry and a unit name denote the same unit,
     /// allowing for unit scope names (`Classes` is `System.Classes`).</summary>
@@ -58,11 +127,35 @@ type
     /// <param name="AUnit">A unit name.</param>
     /// <returns>True on a case-insensitive match of the whole name or of a
     /// dotted suffix in either direction.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Core.UsesInsert.TUsesText.BuildInsertion (DRagLint.Core.UsesInsert.pas), DRagLint.Core.UsesInsert.TUsesText.UnitInUses (DRagLint.Core.UsesInsert.pas), DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.IsUsed (DRagLint.Lint.MissingUses.pas)</para>
+    /// <para>Calls: EndsText, SameText</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ApplyToLine"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.BuildInsertion"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.FormatMessage"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ImplementationLine"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.IsUnitText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function SameUnit(const AEntry, AUnit: string): Boolean; static;
     /// <summary>True when AUnit is already named in any uses clause of the text.</summary>
     /// <param name="ALines">The file's lines.</param>
     /// <param name="AUnit">The unit name.</param>
     /// <returns>True when listed (SameUnit) in the interface or the implementation uses.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Core.UsesInsert.TUsesText.SameUnit, DRagLint.Core.UsesInsert.TUsesText.UsesEntries</para>
+    /// <para>Returns: False</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.SameUnit"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.UsesEntries"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ApplyToLine"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.BuildInsertion"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.FormatMessage"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function UnitInUses(const ALines: TArray<string>; const AUnit: string): Boolean; static;
     /// <summary>Builds the insertion that adds AUnits to the ASection uses clause,
     /// keeping the clause's own layout.</summary>
@@ -73,11 +166,26 @@ type
     /// <param name="AIns">Out: the insertion.</param>
     /// <returns>False when the text is not a unit, has no keyword for ASection,
     /// has an unterminated uses clause, or every name is already listed.</returns>
-    /// <remarks>An existing clause is extended just before its terminating `;`:
+    /// <remarks>
+    /// An existing clause is extended just before its terminating `;`:
     /// `, X` when the clause is written on one line, `,`+CRLF+indent+`X` when
     /// its last entry starts its own line, CRLF+indent+`, X` for the comma-first
     /// style. A missing clause is created right after the section keyword as
-    /// CRLF CRLF `uses` CRLF `  X;`.</remarks>
+    /// CRLF CRLF `uses` CRLF ` X;`.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas), DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.BuildFinding (DRagLint.Lint.MissingUses.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLAddUnitToUsesSection (DragLint.Plugin.MissingUses.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.UsesInsert.ClauseEntries, DRagLint.Core.UsesInsert.IndentBefore, DRagLint.Core.UsesInsert.SectionTokenIndex, DRagLint.Core.UsesInsert.Tokenize, DRagLint.Core.UsesInsert.TUsesText.SameUnit, DRagLint.Core.UsesInsert.TUsesText.UsesEntries, SameText, Trim</para>
+    /// <para>Returns: False; True</para>
+    /// <para>Complexity: 17 (cyclomatic, outer body), 70 lines (full implementation)</para>
+    /// <para>Mutates: AIns (out)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.UsesInsert.ClauseEntries"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.IndentBefore"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.SectionTokenIndex"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.Tokenize"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.SameUnit"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function BuildInsertion(const ALines: TArray<string>; const AUnits: array of string;
       ASection: TUsesSection; out AIns: TUsesInsertion): Boolean; static;
     /// <summary>Applies an insertion to the lines and returns the resulting
@@ -85,6 +193,20 @@ type
     /// <param name="ALines">The file's lines.</param>
     /// <param name="AIns">An insertion BuildInsertion made for these lines.</param>
     /// <returns>The edited line; ALines unchanged when AIns.Line is out of range.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas)</para>
+    /// <para>Calls: Copy</para>
+    /// <para>Returns: ''; Copy(S, 1, AIns.Col - 1) + AIns.Text + Copy(S, AIns.Col, MaxInt)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.BuildInsertion"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.FormatMessage"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ImplementationLine"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.IsUnitText"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ParseMessage"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ApplyToLine(const ALines: TArray<string>; const AIns: TUsesInsertion): string; static;
     /// <summary>The rule message for a name declared in exactly one unit.</summary>
     /// <param name="AName">The unresolved identifier.</param>
@@ -92,6 +214,19 @@ type
     /// <param name="ASection">The clause the fix adds it to.</param>
     /// <param name="ASuffix">'' or a parenthesised note (a cycle), appended after a space.</param>
     /// <returns>'''AName'' is declared in unit AUnit -- add it to the &lt;section&gt; uses clause[ suffix]'.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.BuildFinding (DRagLint.Lint.MissingUses.pas)</para>
+    /// <para>Calls: DRagLint.Core.UsesInsert.TUsesText.SectionWord</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.SectionWord"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ApplyToLine"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.BuildInsertion"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ImplementationLine"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.IsUnitText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function FormatMessage(const AName, AUnit: string; ASection: TUsesSection; const ASuffix: string): string; static;
     /// <summary>Reads the unit and the section back out of a FormatMessage text.</summary>
     /// <param name="AMsg">A diagnostic message.</param>
@@ -99,6 +234,20 @@ type
     /// <param name="ASection">Out: the clause to add it to.</param>
     /// <returns>False for any other message, including the ambiguous form
     /// ("is declared in units A, B").</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLCursorMissingUses (DragLint.Plugin.MissingUses.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Core.UsesInsert.IsIdentChar, Pos, PosEx, StartsText</para>
+    /// <para>Returns: False; True</para>
+    /// <para>Mutates: AUnit (out), ASection (out)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.UsesInsert.IsIdentChar"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ApplyToLine"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.BuildInsertion"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.FormatMessage"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ImplementationLine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ParseMessage(const AMsg: string; out AUnit: string; out ASection: TUsesSection): Boolean; static;
   end;
 

@@ -59,6 +59,26 @@ uses
   owner" as a refusal, never as permission to guess) and pdmAmbiguous when more
   than one does. Only pdmUnique carries a DB, which may not exist yet: a writer
   legitimately targets a section whose DB has never been built. }
+/// <param name="AProjectFile"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ADb"><!-- drag-lint:auto type -->out string</param>
+/// <param name="AClaimants"><!-- drag-lint:auto type -->out TArray&lt;string&gt;</param>
+/// <returns><!-- drag-lint:auto -->TProjectDbMatch -- Observed: pdmNone;
+/// ResolveProjectDb(Manifest, AProjectFile, ADb, AClaimants).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto -->Returns pdmNone when no section names the project (INCLUDING when the
+/// manifest is missing or malformed -- the caller must treat "I could not establish an owner" as a
+/// refusal, never as permission to guess) and pdmAmbiguous when more than one does. Only pdmUnique
+/// carries a DB, which may not exist yet: a writer legitimately targets a section whose DB has
+/// never been built.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.ActiveProjectWriteDb (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.ManifestDbForFile (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Editor.InvokeReindexProject (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.ResolvePrimaryIndexDb (DragLint.Plugin.Editor.pas), DragLint.Plugin.LiveDiagnostics.TLiveRunner.OnTick (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Calls: DRagLint.Index.Manifest.ResolveProjectDb, DragLint.Plugin.DbResolver.TryLoadManifest, DragLint.Plugin.Telemetry.DLT, ExtractFileName, Format</para>
+/// <para>Mutates: ADb (out), AClaimants (out)</para>
+/// <seealso cref="DRagLint.Index.Manifest.ResolveProjectDb"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.TryLoadManifest"/>
+/// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ManifestDbForProject(const AProjectFile: string; out ADb: string;
   out AClaimants: TArray<string>): TProjectDbMatch;
 
@@ -66,6 +86,23 @@ function ManifestDbForProject(const AProjectFile: string; out ADb: string;
   AActiveProjectFile active -- the active project's section DB first, then the
   folder-matched DB (see DRagLint.Index.Manifest.ResolveReadDbs for why BOTH).
   Empty when the manifest is missing/unreadable or nothing matches. }
+/// <param name="AActiveProjectFile"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AEditorFile"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: nil;
+/// ResolveReadDbs(Manifest, AActiveProjectFile, AEditorFile).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto -->v(project-scoped): the ordered DB list a READER should open for
+/// AEditorFile with AActiveProjectFile active -- the active project's section DB first, then the
+/// folder-matched DB (see DRagLint.Index.Manifest.ResolveReadDbs for why BOTH). Empty when the
+/// manifest is missing/unreadable or nothing matches.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.ResolveActiveIndexDbs (DragLint.Plugin.DbResolver.pas)</para>
+/// <para>Calls: DRagLint.Index.Manifest.ResolveReadDbs, DragLint.Plugin.DbResolver.TryLoadManifest, DragLint.Plugin.Telemetry.DLT, ExtractFileName, Format</para>
+/// <seealso cref="DRagLint.Index.Manifest.ResolveReadDbs"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.TryLoadManifest"/>
+/// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ManifestReadDbs(const AActiveProjectFile, AEditorFile: string): TArray<string>;
 
 { The manifest this BPL actually reads. Exposed for DIAGNOSTICS: when a project
@@ -73,6 +110,20 @@ function ManifestReadDbs(const AActiveProjectFile, AEditorFile: string): TArray<
   package GetModuleName(HInstance) is the BPL's OWN directory, so this is the
   win32 copy, not the one beside the engine exe. Naming it in the failure message
   is what makes a manifest desync self-evident instead of mysterious. }
+/// <summary><!-- drag-lint:auto sum -->The manifest this BPL actually reads. Exposed for
+/// DIAGNOSTICS: when a project resolves to no section, the manifest path is half the
+/// answer -- in a design-time package GetModuleName(HInstance) is the BPL's OWN
+/// directory, so this is the win32 copy, not the one beside the engine exe. Naming it in
+/// the failure message is what makes a manifest desync self-evident instead of
+/// mysterious.</summary>
+/// <returns><!-- drag-lint:auto -->string -- Observed:
+/// ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.json'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.ManifestLibraryDbFor (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.TryLoadManifest (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Diagnose.DiagConfiguration (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.InvokeReindexProject (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: ExtractFilePath, GetModuleName</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ManifestPathBesideEngine: string;
 
 { v0.46: returns the manifest section DB whose include folder is an ancestor of
@@ -81,15 +132,56 @@ function ManifestPathBesideEngine: string;
   manifest builds (e.g. ...\ORM3\drag-lint.sqlite for any ORM3 file), so the
   plugin stops reading stale per-.dproj DBs. Used by both the read side
   (ResolveActiveIndexDbs) and the write side (ProjectNotifier auto-index). }
+/// <summary><!-- drag-lint:auto sum -->v0.46: returns the manifest section DB whose
+/// include folder is an ancestor of AFilePath (longest/most-specific match wins), or ''
+/// when there is no manifest beside the engine or no covering section. This is the SAME
+/// clean DB the manifest builds (e.g. ...\ORM3\drag-lint.sqlite for any ORM3 file), so
+/// the plugin stops reading stale per-.dproj DBs. Used by both the read side
+/// (ResolveActiveIndexDbs) and the write side (ProjectNotifier auto-index).</summary>
+/// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: ''; ResolveFolderDb(Manifest,
+/// AFilePath).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeLintAll (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.ResolvePrimaryIndexDb (DragLint.Plugin.Editor.pas), DragLint.Plugin.LiveDiagnostics.TLintDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas), DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.FileNotification (DragLint.Plugin.ProjectNotifier.pas), DragLint.Plugin.SaveNotifier.TDragLintSaveNotifier.AfterSave (DragLint.Plugin.SaveNotifier.pas)</para>
+/// <para>Calls: DRagLint.Index.Manifest.ResolveFolderDb, DragLint.Plugin.DbResolver.ManifestDbForProject, DragLint.Plugin.DbResolver.TryLoadManifest, ExtractFileExt, SameText</para>
+/// <seealso cref="DRagLint.Index.Manifest.ResolveFolderDb"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.ManifestDbForProject"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.TryLoadManifest"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ManifestDbForFile(const AFilePath: string): string;
 
 { Returns the absolute path to the .dproj that owns the file currently
   active in the editor. Walks up the directory tree from the file's
   parent looking for any .dproj; the first one found wins. Empty if
   there's no active editor file or no .dproj anywhere above it. }
+/// <summary><!-- drag-lint:auto sum -->Returns the absolute path to the .dproj that owns
+/// the file currently active in the editor. Walks up the directory tree from the file's
+/// parent looking for any .dproj; the first one found wins. Empty if there's no active
+/// editor file or no .dproj anywhere above it.</summary>
+/// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: ''; Files[0].</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.ResolveActiveIndexDbs (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.ResolverDiagnostic (DragLint.Plugin.DbResolver.pas)</para>
+/// <para>Calls: ExcludeTrailingPathDelimiter, ExtractFileDir, ExtractFilePath, SameText</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindOwningProject(const AFilePath: string): string;
 
 { Returns the absolute path of the active editor's file, or '' if none. }
+/// <summary><!-- drag-lint:auto sum -->Returns the absolute path of the active editor's
+/// file, or '' if none.</summary>
+/// <returns><!-- drag-lint:auto -->string -- Observed: ''; EV.Buffer.FileName.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.ResolveActiveIndexDbs (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.ResolverDiagnostic (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Editor.ResolvePrimaryIndexDb (DragLint.Plugin.Editor.pas), DragLint.Plugin.UsesDepsFrame.ResolveScope (DragLint.Plugin.UsesDepsFrame.pas)</para>
+/// <para>Calls: Supports</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GetActiveEditorFilePath: string;
 
 { The .dproj of the project group's ACTIVE project, or '' if none. Exposed
@@ -97,6 +189,19 @@ function GetActiveEditorFilePath: string;
   outside this unit were otherwise reaching for FindOwningProject -- which
   returns the FIRST .dproj in a directory and is therefore the wrong answer in
   exactly the shared-folder case that matters. }
+/// <summary><!-- drag-lint:auto sum -->The .dproj of the project group's ACTIVE project,
+/// or '' if none. Exposed because it is the tiebreak every project-scoped resolution
+/// needs, and callers outside this unit were otherwise reaching for FindOwningProject --
+/// which returns the FIRST .dproj in a directory and is therefore the wrong answer in
+/// exactly the shared-folder case that matters.</summary>
+/// <returns><!-- drag-lint:auto -->string -- Observed: ''; ActiveProj.FileName.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.ActiveProjectWriteDb (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.ResolveActiveIndexDbs (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.ResolverDiagnostic (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.FanOut.BuildContext (DragLint.Plugin.FanOut.pas) (+3 more)</para>
+/// <para>Calls: Supports</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GetActiveProjectFilePath: string;
 
 /// <summary>The ONE database a WRITE for the active project may target: the
@@ -104,23 +209,81 @@ function GetActiveProjectFilePath: string;
 /// <param name="AProjectFile">Receives the active project's file ('' when none).</param>
 /// <param name="AWhy">Receives why no DB may be written ('' on success).</param>
 /// <returns>The owner DB, or '' -- the caller then writes NOTHING and logs AWhy.</returns>
-/// <remarks>Replaces GLastProjectDb (the last project OPENED), which paired the
+/// <remarks>
+/// Replaces GLastProjectDb (the last project OPENED), which paired the
 /// active project with another project's DB on 2026-10-16. The decision itself
 /// is IndexJob.ReindexTargetDb, which tests\IndexJobTests.dpr covers. Main
-/// thread only (OTAPI).</remarks>
+/// thread only (OTAPI).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SaveNotifier.QueueReindexJob (DragLint.Plugin.SaveNotifier.pas), DragLint.Plugin.StructureForm.TDragLintStructureForm.FixItClick (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.StructureForm.TDragLintStructureForm.NodeIsFixableFinding (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.StructureForm.TDragLintStructureForm.RunCycleFix (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.DbResolver.GetActiveProjectFilePath, DragLint.Plugin.DbResolver.ManifestDbForProject, DragLint.Plugin.IndexJob.ReindexTargetDb</para>
+/// <para>Returns: ReindexTargetDb(AProjectFile, Match, OwnerDb, AWhy)</para>
+/// <para>Mutates: AProjectFile (out)</para>
+/// <seealso cref="DragLint.Plugin.DbResolver.GetActiveProjectFilePath"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.ManifestDbForProject"/>
+/// <seealso cref="DragLint.Plugin.IndexJob.ReindexTargetDb"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ActiveProjectWriteDb(out AProjectFile, AWhy: string): string;
 { Returns the primary DB path for an arbitrary .dproj (or '' for none).
   Uses the template from Settings. Result may point at a file that does
   not yet exist. }
+/// <summary><!-- drag-lint:auto sum -->Returns the primary DB path for an arbitrary
+/// .dproj (or '' for none). Uses the template from Settings. Result may point at a file
+/// that does not yet exist.</summary>
+/// <param name="AProjPath"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ASettings"><!-- drag-lint:auto type -->const TDragLintSettings</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: '';
+/// ResolveDbPath(ASettings.DbPathTemplate, ProjDir, ProjName).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: ChangeFileExt, DragLint.Plugin.Settings.ResolveDbPath, ExtractFileName, ExtractFilePath</para>
+/// <seealso cref="DragLint.Plugin.Settings.ResolveDbPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PrimaryDbForProject(const AProjPath: string; const ASettings: TDragLintSettings): string;
 
 { The headline function: returns ALL DBs the plugin should query for the
   currently-active editor file, in priority order. Empty paths and
   non-existent files are filtered. Duplicates removed. }
+/// <param name="ASettings"><!-- drag-lint:auto type -->const TDragLintSettings</param>
+/// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
+/// <remarks>
+/// <!-- drag-lint:auto -->The headline function: returns ALL DBs the plugin should query for the
+/// currently-active editor file, in priority order. Empty paths and non-existent files are
+/// filtered. Duplicates removed.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Diagnose.DiagConnections (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.RefreshEngineInfo (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFindUsages (DragLint.Plugin.Editor.pas) (+10 more)</para>
+/// <para>Calls: DRagLint.Plugin.DbProbe.PickProjectDb, DragLint.Plugin.DbResolver.AddUnique, DragLint.Plugin.DbResolver.DiscoverSiblings, DragLint.Plugin.DbResolver.FindAncestorDb, DragLint.Plugin.DbResolver.FindOwningProject, DragLint.Plugin.DbResolver.GetActiveEditorFilePath, DragLint.Plugin.DbResolver.GetActiveProjectFilePath, DragLint.Plugin.DbResolver.GetPlatformAwareLibraryDbPath, DragLint.Plugin.DbResolver.ManifestReadDbs, DragLint.Plugin.Telemetry.DLT, ExtractFileName, ExtractFilePath, Format, Pos</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 138 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Plugin.DbProbe.PickProjectDb"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.AddUnique"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.DiscoverSiblings"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.FindAncestorDb"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.FindOwningProject"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveActiveIndexDbs(const ASettings: TDragLintSettings): TArray<string>;
 
 { v0.40.5: exposed for the Find Usages debug panel. Returns a multi-line
   diagnostic string showing exactly what the resolver saw and decided. }
+/// <summary><!-- drag-lint:auto sum -->v0.40.5: exposed for the Find Usages debug panel.
+/// Returns a multi-line diagnostic string showing exactly what the resolver saw and
+/// decided.</summary>
+/// <param name="ASettings"><!-- drag-lint:auto type -->const TDragLintSettings</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: BoolToStr, DRagLint.Plugin.DbProbe.PickProjectDb, DragLint.Plugin.DbResolver.FindAncestorDb, DragLint.Plugin.DbResolver.FindOwningProject, DragLint.Plugin.DbResolver.GetActiveEditorFilePath, DragLint.Plugin.DbResolver.GetActiveProjectFilePath, ExtractFilePath</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Plugin.DbProbe.PickProjectDb"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.FindAncestorDb"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.FindOwningProject"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.GetActiveEditorFilePath"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.GetActiveProjectFilePath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolverDiagnostic(const ASettings: TDragLintSettings): string;
 
 /// <summary>Path to the library index for the ACTIVE project's platform
@@ -128,10 +291,18 @@ function ResolverDiagnostic(const ASettings: TDragLintSettings): string;
 /// BPL-relative Win32/Win64/legacy probe.</summary>
 /// <param name="ASettings">Plugin settings; ExePath locates drag-lint.json.</param>
 /// <returns>Absolute path to the best available library DB; may not exist.</returns>
-/// <remarks>Exposed so menu commands can pass it to lint-all as the SECOND
+/// <remarks>
+/// Exposed so menu commands can pass it to lint-all as the SECOND
 /// --db. Without it used-unit-not-resolvable has no library source and flags
 /// every third-party and RTL unit the project legitimately uses.
-/// Not thread-safe; call from the main thread only.</remarks>
+/// Not thread-safe; call from the main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.ResolveActiveIndexDbs (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Editor.DLLibraryDb (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeLintAll (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.DbResolver.GetPlatformAwareLibraryDbPathEx</para>
+/// <para>Returns: GetPlatformAwareLibraryDbPathEx(ASettings, Ignored)</para>
+/// <seealso cref="DragLint.Plugin.DbResolver.GetPlatformAwareLibraryDbPathEx"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GetPlatformAwareLibraryDbPath(const ASettings: TDragLintSettings): string;
 
 /// <summary>As <c>GetPlatformAwareLibraryDbPath</c>, but also reports WHICH rule
@@ -140,11 +311,22 @@ function GetPlatformAwareLibraryDbPath(const ASettings: TDragLintSettings): stri
 /// <param name="ASettings">Plugin settings; ExePath locates drag-lint.json.</param>
 /// <param name="AReason">Receives a short one-line provenance string. Never empty.</param>
 /// <returns>Absolute path to the best available library DB; may not exist.</returns>
-/// <remarks>Exists because the plain function fell back through four separate
+/// <remarks>
+/// Exists because the plain function fell back through four separate
 /// exits without recording any of them, so an IDE resolving RTL/VCL against a
 /// months-old index looked exactly like one resolving correctly. That cost a day
 /// of misdirected debugging on 2026-08-17. Diagnostics render AReason verbatim.
-/// Not thread-safe; call from the main thread only.</remarks>
+/// Not thread-safe; call from the main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.GetPlatformAwareLibraryDbPath (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.RefreshEngineInfo (DragLint.Plugin.Diagnose.pas)</para>
+/// <para>Calls: DragLint.Plugin.DbResolver.GetLibraryDbPathEx, DragLint.Plugin.DbResolver.ManifestLibraryDbFor, DragLint.Plugin.Telemetry.DLT</para>
+/// <para>Returns: ManifestLibraryDbFor(ASettings, '', AReason, Declined); GetLibraryDbPathEx(AReason)</para>
+/// <para>Mutates: AReason (out)</para>
+/// <seealso cref="DragLint.Plugin.DbResolver.GetLibraryDbPathEx"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.ManifestLibraryDbFor"/>
+/// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GetPlatformAwareLibraryDbPathEx(const ASettings: TDragLintSettings;
   out AReason: string): string;
 
@@ -152,25 +334,54 @@ function GetPlatformAwareLibraryDbPathEx(const ASettings: TDragLintSettings;
 /// then the legacy merged drag-lint-library), reporting which rung answered.</summary>
 /// <param name="AReason">Receives the rung that matched, or a not-found note.</param>
 /// <returns>First existing candidate, else the legacy path even though absent.</returns>
-/// <remarks>Not thread-safe; call from the main thread only.</remarks>
+/// <remarks>
+/// Not thread-safe; call from the main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.GetLibraryDbPath (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.DbResolver.GetPlatformAwareLibraryDbPathEx (DragLint.Plugin.DbResolver.pas)</para>
+/// <para>Calls: ExtractFileName, ExtractFilePath, GetModuleName, SameText</para>
+/// <para>Returns: C; Dir + 'drag-lint-library.sqlite'</para>
+/// <para>Mutates: AReason (out)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GetLibraryDbPathEx(out AReason: string): string;
 
 /// <summary>The active project's target platform via OTAPI (e.g. 'Win32').</summary>
 /// <returns>Platform name, or '' when not determinable (no project, non-IDE host).</returns>
-/// <remarks>Exposed 2026-08-17 for the diagnose report, which must show the
+/// <remarks>
+/// Exposed 2026-08-17 for the diagnose report, which must show the
 /// platform the library index is being selected FOR. Deliberately shared rather
 /// than copied a third time -- Editor.pas already carries its own
-/// GetActiveProjectPlatform. Not thread-safe; call from the main thread only.</remarks>
+/// GetActiveProjectPlatform. Not thread-safe; call from the main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.ManifestLibraryDbFor (DragLint.Plugin.DbResolver.pas), DragLint.Plugin.Diagnose.DiagIndexes (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.InvokeCircularUsesFix (DragLint.Plugin.Editor.pas), DragLint.Plugin.FanOut.BuildContext (DragLint.Plugin.FanOut.pas), DragLint.Plugin.SaveNotifier.QueueReindexJob (DragLint.Plugin.SaveNotifier.pas) (+4 more)</para>
+/// <para>Calls: Supports</para>
+/// <para>Returns: ''; P</para>
+/// <para>Catches: Exception (empty)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GetActivePlatformForLibrary: string;
 
 /// <summary>Records this install's library index per platform (Win32, Win64) in the central
 /// settings file %LOCALAPPDATA%\drag-lint\context-defaults.json (key "libraries.&lt;Platform&gt;.libraryDb"),
 /// where the LSP and other readers fall back to it when a project names no library DB.</summary>
-/// <remarks>Called once at IDE start (Register); loads the plugin settings itself (ExePath locates
+/// <remarks>
+/// Called once at IDE start (Register); loads the plugin settings itself (ExePath locates
 /// the engine's drag-lint.json). Only a library DB that EXISTS under the manifest
 /// outDir is written; other keys and a platform's libraryRoots are preserved; a malformed file is
 /// left alone; an unchanged value is not rewritten. Never raises: every outcome goes to the
-/// plugin log (category ctxdefaults). Main thread only.</remarks>
+/// plugin log (category ctxdefaults). Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.Register (DragLint.Plugin.Wizard.pas)</para>
+/// <para>Calls: DRagLint.Core.ContextDefaults.ContextDefaultsFile, DRagLint.Core.ContextDefaults.MergeLibraryDefault, DragLint.Plugin.DbResolver.ManifestLibraryDbFor, DragLint.Plugin.Settings.LoadSettings, DragLint.Plugin.Telemetry.DLT</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DRagLint.Core.ContextDefaults.ContextDefaultsFile"/>
+/// <seealso cref="DRagLint.Core.ContextDefaults.MergeLibraryDefault"/>
+/// <seealso cref="DragLint.Plugin.DbResolver.ManifestLibraryDbFor"/>
+/// <seealso cref="DragLint.Plugin.Settings.LoadSettings"/>
+/// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure PublishLibraryDefaults;
 
 implementation

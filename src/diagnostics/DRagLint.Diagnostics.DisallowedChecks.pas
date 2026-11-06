@@ -21,6 +21,10 @@ type
   /// Stateless; thread-safe. Called from DoLint and DoLintAll behind
   /// LintRuleWants(rule, LINT_GATE_DISALLOWED). Every rule is silent when its list in
   /// the config is empty, so the checker costs nothing (no file read) unconfigured.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDisallowedChecker = class
   public
@@ -36,6 +40,15 @@ type
     /// disallowed-type: the name outside a routine header and outside its own definition
     /// (NAME = ...). disallowed-name: single identifiers not reached through a dot (a
     /// member of someone else's record is not our binding), outside routine headers.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Diagnostics.DisallowedChecks.ScanKind, DRagLint.Diagnostics.DisallowedChecks.Tokenise</para>
+    /// <para>Returns: nil</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Diagnostics.DisallowedChecks.ScanKind"/>
+    /// <seealso cref="DRagLint.Diagnostics.DisallowedChecks.Tokenise"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
       const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; static;

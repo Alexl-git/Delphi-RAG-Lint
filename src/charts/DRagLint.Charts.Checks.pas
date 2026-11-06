@@ -8,6 +8,12 @@ interface
 
 type
   /// <summary>One uses-edge between two units of a cycle group.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Checks.pas), DRagLint.Charts.Checks.TestInterfaceLoop (DRagLint.Charts.Checks.pas), DRagLint.Charts.Checks.TLoopWalk.Create (DRagLint.Charts.Checks.pas), DRagLint.Charts.Q.Cycles.Emit (DRagLint.Charts.Q.Cycles.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Checks, DRagLint.Charts.Q.Cycles</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnitEdge = record
     /// <summary>The using unit.</summary>
     Src    : string;
@@ -23,9 +29,17 @@ type
 /// <param name="pEffectKinds">The Kind of every decoded effect row.</param>
 /// <returns>True when pName and pWitness are non-empty, pWitness is 'writes &lt;pName&gt;
 /// (non-local)' ignoring case, and some kind is 'g' (ignoring case).</returns>
-/// <remarks>Port of Test-D12OwnNameWrite (Emit-Common.ps1:1259). PS traps closed:
+/// <remarks>
+/// Port of Test-D12OwnNameWrite (Emit-Common.ps1:1259). PS traps closed:
 /// String.Equals(..., OrdinalIgnoreCase) compares upper-invariant chars (not Delphi SameText,
-/// which folds ASCII only); `$_.Kind -eq 'g'` is case-insensitive.</remarks>
+/// which folds ASCII only); `$_.Kind -eq 'g'` is case-insensitive.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.Effects.Emit (DRagLint.Charts.Q.Effects.pas)</para>
+/// <para>Calls: DRagLint.Charts.Checks.SameOrdinalIgnoreCase, SameText</para>
+/// <para>Returns: False; True</para>
+/// <seealso cref="DRagLint.Charts.Checks.SameOrdinalIgnoreCase"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TestD12OwnNameWrite(const pName, pWitness: string; const pEffectKinds: TArray<string>): Boolean;
 
 /// <summary>True when the INTERFACE-section edges alone close a loop among the members.</summary>
@@ -34,13 +48,28 @@ function TestD12OwnNameWrite(const pName, pWitness: string; const pEffectKinds: 
 /// <param name="pMembers">The group's units.</param>
 /// <returns>True when a depth-first walk over interface edges between members meets a unit
 /// already on its path (a self-use counts).</returns>
-/// <remarks>Port of Test-InterfaceLoop (Emit-Common.ps1:2914). PS traps closed: the edge
+/// <remarks>
+/// Port of Test-InterfaceLoop (Emit-Common.ps1:2914). PS traps closed: the edge
 /// map and the visit state are @{} hashtables, so unit names match case-insensitively, and
-/// `-ne 'interface'` is case-insensitive.</remarks>
+/// `-ne 'interface'` is case-insensitive.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.Cycles.Emit (DRagLint.Charts.Q.Cycles.pas)</para>
+/// <para>Calls: DRagLint.Charts.Checks.TLoopWalk.Create, DRagLint.Charts.Checks.TLoopWalk.Run</para>
+/// <para>Returns: Walk.Run</para>
+/// <seealso cref="DRagLint.Charts.Checks.TLoopWalk.Create"/>
+/// <seealso cref="DRagLint.Charts.Checks.TLoopWalk.Run"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TestInterfaceLoop(const pEdges: TArray<TUnitEdge>; const pMembers: TArray<string>): Boolean;
 
 type
   /// <summary>consumers' reader / writer counts. Port of the Measure-ConsumerKeys result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Checks.pas) ?, declaration (DRagLint.Charts.Q.Consumers.pas) ?, DRagLint.Charts.Checks.MeasureConsumerKeys (DRagLint.Charts.Checks.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Checks, DRagLint.Charts.Q.Consumers</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TConsumerKeys = record
     /// <summary>Distinct keys &gt; 0 (routine ids).</summary>
     Routines: Integer;
@@ -52,8 +81,15 @@ type
 /// <param name="pCertKeys">Keys of the certain rows.</param>
 /// <param name="pLitKeys">Keys of the literal rows.</param>
 /// <returns>Distinct positive keys and distinct negative keys over both lists.</returns>
-/// <remarks>Port of Measure-ConsumerKeys (Emit-Common.ps1:1246). A key counts once however
-/// many rows carry it; 0 is neither.</remarks>
+/// <remarks>
+/// Port of Measure-ConsumerKeys (Emit-Common.ps1:1246). A key counts once however
+/// many rows carry it; 0 is neither.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.ReadConsumers (DRagLint.Charts.Q.Consumers.pas)</para>
+/// <para>Calls: Default</para>
+/// <para>Returns: Default(TConsumerKeys)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MeasureConsumerKeys(const pCertKeys, pLitKeys: TArray<Integer>): TConsumerKeys;
 
 implementation

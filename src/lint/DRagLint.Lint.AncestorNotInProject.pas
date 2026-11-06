@@ -34,12 +34,25 @@ const
 /// the message names the class, the ancestor and the unit to add (the
 /// qualifying unit of a dotted ancestor, otherwise the used units that resolve
 /// in neither index).</returns>
-/// <remarks>A class counts as a form / frame / data module when it is the ROOT
+/// <remarks>
+/// A class counts as a form / frame / data module when it is the ROOT
 /// class of the text .dfm / .fmx beside its unit (first line
 /// <c>object|inherited|inline Name: TClass</c>); a binary .dfm is skipped. The
 /// ancestor is the first heritage entry, generic arguments stripped. Exempt:
 /// an ancestor name declared as a type in either index, or a dotted ancestor
-/// whose unit is a unit of either index. Never raises.</remarks>
+/// whose unit is a unit of either index. Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Lint.AncestorNotInProject.CollectAncestorNotInProject.KnownUnit, DRagLint.Lint.AncestorNotInProject.CollectAncestorNotInProject.RootClassOfFile, DRagLint.Lint.AncestorNotInProject.CollectAncestorNotInProject.UnknownUses, DRagLint.Lint.AncestorNotInProject.FirstAncestor (+6 more)</para>
+/// <para>Returns: nil; Findings.ToArray</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 84 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+/// <seealso cref="DRagLint.Lint.AncestorNotInProject.CollectAncestorNotInProject.KnownUnit"/>
+/// <seealso cref="DRagLint.Lint.AncestorNotInProject.CollectAncestorNotInProject.RootClassOfFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectAncestorNotInProject(const AStore, ALibStore: ISymbolStore): TArray<TLintFinding>;
 
 implementation

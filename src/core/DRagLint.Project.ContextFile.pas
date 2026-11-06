@@ -23,8 +23,14 @@ const
 
 type
   /// <summary>One project context as stored in a .dlcontext.json file.</summary>
-  /// <remarks>Plain value record. Defines are lowercased and deduped exactly as
-  /// ResolveActiveBuild(...).Profile.Defines yields them.</remarks>
+  /// <remarks>
+  /// Plain value record. Defines are lowercased and deduped exactly as
+  /// ResolveActiveBuild(...).Profile.Defines yields them.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.LSP.Server.TLSPServer.ApplyClientContext (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas), DRagLint.Project.ContextFile.BuildProjectContext (DRagLint.Project.ContextFile.pas), DRagLint.Project.ContextFile.FindProjectContextForUnit (DRagLint.Project.ContextFile.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Server, DRagLint.Project.ContextFile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProjectContext = record
     Schema: Integer;
     Project, PlatformName, Config: string;
@@ -40,12 +46,24 @@ type
   end;
 
   /// <summary>Per-platform library override from the central defaults file.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Project.ContextFile.pas) ?, DRagLint.LSP.Server.DefaultsLibraryDbFor (DRagLint.LSP.Server.pas) ?, DRagLint.Project.ContextFile.TryLoadContextDefaults (DRagLint.Project.ContextFile.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Server, DRagLint.Project.ContextFile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLibraryDefault = record
     PlatformName, LibraryDb: string;
     LibraryRoots: TArray<string>;
   end;
 
   /// <summary>The central per-user defaults (context-defaults.json).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Server.pas) ?, declaration (DRagLint.Project.ContextFile.pas) ?, DRagLint.LSP.Server.DefaultsLibraryDbFor (DRagLint.LSP.Server.pas) ?, DRagLint.LSP.Server.TLSPServer.Defaults (DRagLint.LSP.Server.pas), DRagLint.Project.ContextFile.TryLoadContextDefaults (DRagLint.Project.ContextFile.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Server, DRagLint.Project.ContextFile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TContextDefaults = record
     Schema: Integer;
     PlatformName, Config, TargetCompiler: string;
@@ -54,31 +72,78 @@ type
 
 /// <summary>The per-user settings folder %LOCALAPPDATA%\drag-lint (no trailing separator).</summary>
 /// <returns>The folder path; '' when LOCALAPPDATA is not set. Does not create it.</returns>
-/// <remarks>Shared helper: ENGINE code may call it instead of inlining the lookup. Forwards to
-/// DRagLint.Core.ContextDefaults.DragLintLocalDataDir (the one definition, linkable by the plugin).</remarks>
+/// <remarks>
+/// Shared helper: ENGINE code may call it instead of inlining the lookup. Forwards to
+/// DRagLint.Core.ContextDefaults.DragLintLocalDataDir (the one definition, linkable by the plugin).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Core.ContextDefaults.DragLintLocalDataDir</para>
+/// <para>Returns: DRagLint.Core.ContextDefaults.DragLintLocalDataDir</para>
+/// <seealso cref="DRagLint.Core.ContextDefaults.DragLintLocalDataDir"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DragLintLocalDataDir: string;
 
 /// <summary>Path of the central defaults file.</summary>
 /// <returns>The env DRAGLINT_CONTEXT_DEFAULTS when set (explicit override, for tests),
 /// else DragLintLocalDataDir\context-defaults.json; '' when neither resolves.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.ContextNotice (DRagLint.LSP.Server.pas), DRagLint.Project.ContextFile.TryLoadContextDefaults (DRagLint.Project.ContextFile.pas)</para>
+/// <para>Calls: DRagLint.Core.ContextDefaults.ContextDefaultsFile</para>
+/// <para>Returns: DRagLint.Core.ContextDefaults.ContextDefaultsFile</para>
+/// <seealso cref="DRagLint.Core.ContextDefaults.ContextDefaultsFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ContextDefaultsFile: string;
 
 /// <summary>Reads the central defaults file; %VAR% references in library paths are expanded.</summary>
 /// <param name="ADefaults">Receives the defaults; empty when False.</param>
 /// <returns>True when the file exists and parses. An absent or malformed file is False, never an error.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.Defaults (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: Default, DRagLint.Project.ContextFile.ContextDefaultsFile, DRagLint.Project.ContextFile.ExpandEnvVars, DRagLint.Project.ContextFile.GetStr, DRagLint.Project.ContextFile.GetStrArray, DRagLint.Project.ContextFile.SafeParseObject, TJSONObject</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: ADefaults (out)</para>
+/// <seealso cref="DRagLint.Project.ContextFile.ContextDefaultsFile"/>
+/// <seealso cref="DRagLint.Project.ContextFile.ExpandEnvVars"/>
+/// <seealso cref="DRagLint.Project.ContextFile.GetStr"/>
+/// <seealso cref="DRagLint.Project.ContextFile.GetStrArray"/>
+/// <seealso cref="DRagLint.Project.ContextFile.SafeParseObject"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TryLoadContextDefaults(out ADefaults: TContextDefaults): Boolean;
 
 /// <summary>The context file that belongs to a project file.</summary>
 /// <param name="AProjectFile">Path of the .dproj or .dpr.</param>
 /// <returns>The same folder and base name with the .dlcontext.json suffix.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoProjectContext (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ContextFileFor(const AProjectFile: string): string;
 
 /// <summary>Loads a context file and fills Stale.</summary>
 /// <param name="AFile">Path of the .dlcontext.json.</param>
 /// <param name="ACtx">Receives the context.</param>
 /// <returns>True when the file exists, parses and has schema 1. Never raises.</returns>
-/// <remarks>Stale = SourceFile is a .dproj that exists and its SHA-1 differs from SourceSha1.
-/// A .dpr source is never stale; a missing source is not stale.</remarks>
+/// <remarks>
+/// Stale = SourceFile is a .dproj that exists and its SHA-1 differs from SourceSha1.
+/// A .dpr source is never stale; a missing source is not stale.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoProjectContext (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ApplyClientContext (DRagLint.LSP.Server.pas), DRagLint.Project.ContextFile.FindProjectContextForUnit (DRagLint.Project.ContextFile.pas)</para>
+/// <para>Calls: Default, DRagLint.Project.ContextFile.FileSha1Hex, DRagLint.Project.ContextFile.GetStr, DRagLint.Project.ContextFile.GetStrArray, DRagLint.Project.ContextFile.SafeParseObject, ExtractFileExt, SameText, TJSONObject</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: ACtx (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Project.ContextFile.FileSha1Hex"/>
+/// <seealso cref="DRagLint.Project.ContextFile.GetStr"/>
+/// <seealso cref="DRagLint.Project.ContextFile.GetStrArray"/>
+/// <seealso cref="DRagLint.Project.ContextFile.SafeParseObject"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TryLoadProjectContext(const AFile: string; out ACtx: TProjectContext): Boolean;
 
 /// <summary>Nearest-wins lookup for a unit.</summary>
@@ -86,6 +151,17 @@ function TryLoadProjectContext(const AFile: string; out ACtx: TProjectContext): 
 /// <param name="ACtx">Receives the context of the first loadable *.dlcontext.json found
 /// walking up from the unit's folder.</param>
 /// <returns>True when one was found and loaded.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: Default, DRagLint.Project.ContextFile.TryLoadProjectContext, ExcludeTrailingPathDelimiter, ExpandFileName, ExtractFilePath, SameText</para>
+/// <para>Returns: False</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: ACtx (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Project.ContextFile.TryLoadProjectContext"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindProjectContextForUnit(const AUnitPath: string; out ACtx: TProjectContext): Boolean;
 
 /// <summary>Builds a context from a project file.</summary>
@@ -93,19 +169,48 @@ function FindProjectContextForUnit(const AUnitPath: string; out ACtx: TProjectCo
 /// <param name="APlatform">Override; '' = the .dproj's active platform.</param>
 /// <param name="AConfig">Override; '' = the .dproj's active config.</param>
 /// <returns>The context with SourceSha1 of the project file, Stale False.</returns>
-/// <remarks>ResolveActiveBuild knows only Win32 and Win64 define sets; any other platform name is
-/// kept in Platform but its defines are the Win64 built-ins (a known limit).</remarks>
+/// <remarks>
+/// ResolveActiveBuild knows only Win32 and Win64 define sets; any other platform name is
+/// kept in Platform but its defines are the Win64 built-ins (a known limit).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoProjectContext (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Project.ContextFile.FileSha1Hex, DRagLint.Project.DefineProfile.ResolveActiveBuild, ExtractFileExt, SameText</para>
+/// <para>Returns: Default(TProjectContext)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Project.ContextFile.FileSha1Hex"/>
+/// <seealso cref="DRagLint.Project.DefineProfile.ResolveActiveBuild"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildProjectContext(const ADproj, APlatform, AConfig: string): TProjectContext;
 
 /// <summary>Writes a context atomically (pretty-printed, UTF-8 without BOM).</summary>
 /// <param name="ACtx">The context.</param>
 /// <param name="AFile">Destination path.</param>
 /// <exception cref="Exception">I/O errors propagate.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoProjectContext (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.FileTime.NowUtc, DRagLint.Core.JsonFile.WriteJsonFileAtomic, DRagLint.Project.ContextFile.IsoUtc, DRagLint.Project.ContextFile.StrArrayToJson</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.FileTime.NowUtc"/>
+/// <seealso cref="DRagLint.Core.JsonFile.WriteJsonFileAtomic"/>
+/// <seealso cref="DRagLint.Project.ContextFile.IsoUtc"/>
+/// <seealso cref="DRagLint.Project.ContextFile.StrArrayToJson"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure SaveProjectContext(const ACtx: TProjectContext; const AFile: string);
 
 /// <summary>SHA-1 of a file as 40 lowercase hex.</summary>
 /// <param name="AFile">Path.</param>
 /// <returns>The hash, '' when the file is unreadable.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Project.ContextFile.BuildProjectContext (DRagLint.Project.ContextFile.pas), DRagLint.Project.ContextFile.TryLoadProjectContext (DRagLint.Project.ContextFile.pas)</para>
+/// <para>Calls: LowerCase</para>
+/// <para>Returns: LowerCase(THashSHA1.GetHashStringFromFile(AFile)); ''</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FileSha1Hex(const AFile: string): string;
 
 implementation

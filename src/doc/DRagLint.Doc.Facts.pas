@@ -65,7 +65,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddDistinct (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build.ToFactRef (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.IsCertain (DRagLint.Doc.Regions.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddDistinct (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.ToFactRef (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.IsCertain (DRagLint.Doc.Regions.pas) ? (+1 more)</para>
   /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Doc.Regions</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -115,7 +115,7 @@ type
   /// terms as TRaiseDetail.Message -- "no message captured", never "no message
   /// exists".
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.Harvest (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.AddRaise (DRagLint.Doc.Facts.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Facts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -138,8 +138,8 @@ type
   /// spells them (`Application.MessageBox`), deduped case-insensitively in
   /// source order; that spelling is what the 'dialog:' witness prints.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.AdvanceOnClause (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.CloseTopHandler (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.OpenHandler (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.PopFrame (DRagLint.Doc.Facts.pas) (+10 more)</para>
-  /// <para>Used in units: DRagLint.Doc.Facts</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) ?, DRagLint.Doc.Facts.CloseTopHandler (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.OpenHandler (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.PopFrame (DRagLint.Doc.Facts.pas) ? (+11 more)</para>
+  /// <para>Used in units: DRagLint.Doc.Drift, DRagLint.Doc.Facts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocHandlerFact = record
@@ -165,7 +165,7 @@ type
   /// fields carry the true count so the renderer can add '(+N more)'.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.DemoteForeignSummary (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas) (+9 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) ?, DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) ?, DRagLint.Doc.Facts.DemoteForeignSummary (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+9 more)</para>
   /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Doc.Regions, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -602,7 +602,7 @@ type
   /// call every real one stale. Construct with Make or Defaults, never with
   /// Default(); Normalized() is the backstop for anything that slips through.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Drift.pas), declaration (DRagLint.Doc.Facts.pas), DRagLint.CLI.DocRenderOptionsFor (DRagLint.CLI.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) (+4 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Drift.pas) ?, declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.CLI.DocRenderOptionsFor (DRagLint.CLI.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) ? (+4 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -679,7 +679,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.CalleeRaisesType (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+  /// <para>Used by: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.CalleeRaisesType (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.LibraryRoutineRaises (DRagLint.Doc.Drift.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -730,8 +730,8 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
-    /// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindUnresolvedNameCallers (+45 more)</para>
-    /// <para>Complexity: 82 (cyclomatic, outer body), 1121 lines (full implementation)</para>
+    /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName (+48 more)</para>
+    /// <para>Complexity: 85 (cyclomatic, outer body), 1134 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
@@ -770,7 +770,7 @@ type
     /// its own handlers at the same level; its statements are attributed to
     /// the INNERMOST open handler only, and the rendering does not nest.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
+    /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Facts.CloseTopHandler, DRagLint.Doc.Facts.CollectHandlers, DRagLint.Doc.Facts.MakeRaiseNameKindResolver, DRagLint.Doc.Facts.SourceLines, Min</para>
     /// <para>Returns: nil; Acc.ToArray</para>
     /// <para>Pure</para>
@@ -858,7 +858,7 @@ type
     /// those rules produce. This routine exists so the message can be mined
     /// without touching them.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.Harvest (DRagLint.Doc.Facts.pas) ?</para>
+    /// <para>Called from: DRagLint.Doc.Drift.LibraryRoutineRaises (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.Harvest (DRagLint.Doc.Facts.pas) ?</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Facts.CollectRaiseDetail, DRagLint.Doc.Facts.MakeRaiseNameKindResolver, DRagLint.Doc.Facts.SourceLines, Min</para>
     /// <para>Returns: nil; Acc.ToArray</para>
     /// <para>Pure</para>
@@ -914,15 +914,15 @@ type
     /// would rewrite the same file forever.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.CalleeRaisesType (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas)</para>
-    /// <para>Calls: CompareText, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.Harvest, MineRaisesDetailed, SameText</para>
+    /// <para>Calls: CatchSpansOf, CaughtAt, CompareText, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.GetUnresolvedCallsFromSymbol, DRagLint.Doc.Facts.KnownOsRaiser, DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.AddRaise, DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.EnsureSites, DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.Harvest, Int64, Integer, MineRaisesDetailed, SameText</para>
     /// <para>Returns: nil; Acc.ToArray</para>
-    /// <para>Complexity: 11 (cyclomatic, outer body), 72 lines (full implementation)</para>
+    /// <para>Complexity: 15 (cyclomatic, outer body), 120 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
-    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.Harvest"/>
-    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.Build"/>
-    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineHandlers"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnresolvedCallsFromSymbol"/>
+    /// <seealso cref="DRagLint.Doc.Facts.KnownOsRaiser"/>
+    /// <seealso cref="DRagLint.Doc.Facts.TDocFactsBuilder.MineCalleeRaises.AddRaise"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function MineCalleeRaises(const AStore: ISymbolStore; const ASym: TSymbol;
@@ -976,9 +976,18 @@ function DocFactsBuildProfile: string;
   /// that same indent, and it is DEEPER than the declaration's; otherwise the
   /// declaration line's own leading whitespace ('' for a blank or missing
   /// line). Owner ruling 2026-09-30.</returns>
-  /// <remarks>Pure. A mixed-indent block is not "kept": the declaration wins,
+  /// <remarks>
+  /// Pure. A mixed-indent block is not "kept": the declaration wins,
   /// which keeps a block with one stray line at a fixed point. Spaces and tabs
-  /// only, each one character.</remarks>
+  /// only, each one character.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.EffectiveIndentWidth (DRagLint.Doc.Drift.pas)</para>
+  /// <para>Calls: CharInSet, Copy, DRagLint.Doc.Facts.EffectiveDocIndent.Lead, Trim</para>
+  /// <para>Returns: ''; Lead(ALines[ADeclLine - 1]); First</para>
+  /// <para>Complexity: 10 (cyclomatic, outer body), 25 lines (full implementation)</para>
+  /// <seealso cref="DRagLint.Doc.Facts.EffectiveDocIndent.Lead"/>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   function EffectiveDocIndent(const ALines: TArray<string>; ADeclLine, ADocStart, ADocEnd: Integer): string;
 
 implementation

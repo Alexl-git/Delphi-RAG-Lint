@@ -49,9 +49,15 @@ type
   /// <summary>The per-run rule gate a target compiler implies: which rule ids
   /// are silenced (their fix needs a newer compiler) and which compat rules are
   /// switched on (the target cannot take the construct they report).</summary>
-  /// <remarks>A value type built once per run by Build; Drops / ForcesOn are
+  /// <remarks>
+  /// A value type built once per run by Build; Drops / ForcesOn are
   /// pure lookups. Empty (Active = False) at the default target, so a default
-  /// run takes no new code path at all.</remarks>
+  /// run takes no new code path at all.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.pas) ?, DRagLint.CLI.ApplyRunTargetCompiler (DRagLint.CLI.pas), DRagLint.Lint.TargetCompiler.TTargetRuleGate.Build (DRagLint.Lint.TargetCompiler.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/3 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildTargetGate (DRagLint.LSP.Completion.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.TargetCompiler, DRagLint.LSP.Completion, DRagLint.LSP.Server</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTargetRuleGate = record
     /// <summary>The CompilerVersion the gate was built for.</summary>
     Target  : Integer;
@@ -66,20 +72,66 @@ type
     /// <param name="pCompatSince">compat_since per row (0 = not a compat rule).</param>
     /// <returns>The gate; Gated and CompatOn empty when no row is affected.</returns>
     /// <exception cref="EArgumentException">Raised when the three arrays differ in length.</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ApplyRunTargetCompiler (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildTargetGate (DRagLint.LSP.Completion.pas)</para>
+    /// <para>Calls: Default, DRagLint.Lint.TargetCompiler.IsCompatOnForTarget, DRagLint.Lint.TargetCompiler.IsGatedByTarget</para>
+    /// <para>Returns: Default(TTargetRuleGate)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.IsCompatOnForTarget"/>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.IsGatedByTarget"/>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.Active"/>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.Drops"/>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.ForcesOn"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Build(pTarget: Integer; const pIds: TArray<string>;
       const pNeeds, pCompatSince: TArray<Integer>): TTargetRuleGate; static;
     /// <summary>True when the gate differs from the default run (Target is not
     /// DEFAULT_TARGET_COMPILER).</summary>
     /// <returns>Target is set (not 0) and is not DEFAULT_TARGET_COMPILER.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+    /// <para>Returns: (Target &lt;&gt; 0) and (Target &lt;&gt; DEFAULT_TARGET_COMPILER)</para>
+    /// <para>Reads: Target</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.Build"/>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.Drops"/>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.ForcesOn"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Active: Boolean;
     /// <summary>True when findings of pRuleId must not be reported under Target.</summary>
     /// <param name="pRuleId">Rule id; compared case-insensitively.</param>
     /// <returns>True for an id in Gated.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.RuleActiveAtRunTarget (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics.KeepRule (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.PublishDiagnostics (DRagLint.LSP.Server.pas)</para>
+    /// <para>Calls: MatchText</para>
+    /// <para>Returns: MatchText(pRuleId, Gated)</para>
+    /// <para>Reads: Gated</para>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.Active"/>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.Build"/>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.ForcesOn"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Drops(const pRuleId: string): Boolean;
     /// <summary>True when pRuleId is a compat rule the target switches on, so its
     /// off-by-default state is lifted for this run.</summary>
     /// <param name="pRuleId">Rule id; compared case-insensitively.</param>
     /// <returns>True for an id in CompatOn.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.RuleActiveAtRunTarget (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics.IsDefaultDisabled (DRagLint.LSP.Completion.pas)</para>
+    /// <para>Calls: MatchText</para>
+    /// <para>Returns: MatchText(pRuleId, CompatOn)</para>
+    /// <para>Reads: CompatOn</para>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.Active"/>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.Build"/>
+    /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.Drops"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ForcesOn(const pRuleId: string): Boolean;
   end;
 
@@ -93,9 +145,19 @@ type
 /// <param name="pError">Out: '' on success, else a one-line message naming the
 /// accepted tokens.</param>
 /// <returns>True when pToken names a known compiler.</returns>
-/// <remarks>Product numbers (6..13) and CompilerVersion numbers (14..37) do not
+/// <remarks>
+/// Product numbers (6..13) and CompilerVersion numbers (14..37) do not
 /// overlap, so a bare number is never ambiguous. Delphi 2007 (CompilerVersion
-/// 18.5) maps to 18. Pure.</remarks>
+/// 18.5) maps to 18. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.TargetCompiler.ResolveTargetCompiler (DRagLint.Lint.TargetCompiler.pas)</para>
+/// <para>Calls: DRagLint.Lint.TargetCompiler.NormaliseToken, DRagLint.Lint.TargetCompiler.TryVerToken, Format, MatchStr, SplitString, TryStrToInt</para>
+/// <para>Returns: True; False</para>
+/// <para>Mutates: pVersion (out), pError (out)</para>
+/// <seealso cref="DRagLint.Lint.TargetCompiler.NormaliseToken"/>
+/// <seealso cref="DRagLint.Lint.TargetCompiler.TryVerToken"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseCompilerToken(const pToken: string; out pVersion: Integer; out pError: string): Boolean;
 
 /// <summary>Maps a .dproj &lt;ProjectVersion&gt; to the CompilerVersion of the
@@ -104,15 +166,30 @@ function ParseCompilerToken(const pToken: string; out pVersion: Integer; out pEr
 /// <param name="pVersion">Out: the CompilerVersion; 0 when unknown.</param>
 /// <returns>True when the value is in the pinned table; an unknown value is
 /// never guessed (the caller refuses).</returns>
-/// <remarks>Only 20.4 -> 37 is measured on this machine (drag-lint.dproj, Studio
+/// <remarks>
+/// Only 20.4 -> 37 is measured on this machine (drag-lint.dproj, Studio
 /// 37); the older rows follow the Embarcadero release history and are pinned by
-/// tests\autotest\run_target_compiler_guard.ps1. Pure.</remarks>
+/// tests\autotest\run_target_compiler_guard.ps1. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.TargetCompiler.ResolveTargetCompiler (DRagLint.Lint.TargetCompiler.pas)</para>
+/// <para>Calls: Trim</para>
+/// <para>Returns: True; False</para>
+/// <para>Mutates: pVersion (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProjectVersionToCompiler(const pProjectVersion: string; out pVersion: Integer): Boolean;
 
 /// <summary>The product name of a CompilerVersion, for messages.</summary>
 /// <param name="pVersion">A CompilerVersion.</param>
 /// <returns>'Delphi 13', 'Delphi 10.4', 'Delphi XE7' ...; 'CompilerVersion N'
 /// for a number outside the table.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ContextNotice (DRagLint.LSP.Server.pas), DRagLint.Project.TargetStudio.ResolveTargetStudio (DRagLint.Project.TargetStudio.pas)</para>
+/// <para>Calls: IntToStr</para>
+/// <para>Returns: 'CompilerVersion ' + IntToStr(pVersion)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CompilerDisplayName(pVersion: Integer): string;
 
 /// <summary>THE resolver of a run's target compiler. First non-empty source
@@ -131,8 +208,20 @@ function CompilerDisplayName(pVersion: Integer): string;
 /// <returns>False when the winning token is unknown, or is "auto" without a
 /// .dproj or with a ProjectVersion outside the pinned table -- the caller
 /// refuses the run rather than guessing.</returns>
-/// <remarks>The config beats the context file because the config is written by
-/// a person and the context file by a tool. Pure apart from reading pDprojPath.</remarks>
+/// <remarks>
+/// The config beats the context file because the config is written by
+/// a person and the context file by a tool. Pure apart from reading pDprojPath.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyPreprocessCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.ApplyRunTargetCompiler (DRagLint.CLI.pas), DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.TargetGateFor (DRagLint.LSP.Server.pas) (+1 more)</para>
+/// <para>Calls: ChangeFileExt, DRagLint.Lint.TargetCompiler.AutoAssumesLegacyCompiler, DRagLint.Lint.TargetCompiler.ParseCompilerToken, DRagLint.Lint.TargetCompiler.ProjectVersionToCompiler, DRagLint.Lint.TargetCompiler.ReadDprojProjectVersion, ExtractFileExt, Format, MatchText, SameText, Trim</para>
+/// <para>Returns: ParseCompilerToken(Tok, pVersion, pError); False; True</para>
+/// <para>Mutates: pVersion (out), pError (out)</para>
+/// <seealso cref="DRagLint.Lint.TargetCompiler.AutoAssumesLegacyCompiler"/>
+/// <seealso cref="DRagLint.Lint.TargetCompiler.ParseCompilerToken"/>
+/// <seealso cref="DRagLint.Lint.TargetCompiler.ProjectVersionToCompiler"/>
+/// <seealso cref="DRagLint.Lint.TargetCompiler.ReadDprojProjectVersion"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveTargetCompiler(const pCmdLine, pConfigValue, pContextValue, pDprojPath: string;
   out pVersion: Integer; out pError: string): Boolean;
 
@@ -141,7 +230,15 @@ function ResolveTargetCompiler(const pCmdLine, pConfigValue, pContextValue, pDpr
 /// ResolveTargetCompiler assumes Delphi 5 and the caller should say so.</summary>
 /// <param name="pProjectFile">The project file; '' answers False.</param>
 /// <returns>True for a .dpr / .dpk whose sibling .dproj does not exist.</returns>
-/// <remarks>Reads the file system only.</remarks>
+/// <remarks>
+/// Reads the file system only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.NoteLegacyCompilerAssumption (DRagLint.CLI.pas), DRagLint.Lint.TargetCompiler.ResolveTargetCompiler (DRagLint.Lint.TargetCompiler.pas)</para>
+/// <para>Calls: ChangeFileExt, ExtractFileExt, MatchText</para>
+/// <para>Returns: (MatchText(ExtractFileExt(pProjectFile), ['.dpr', '.dpk']))</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AutoAssumesLegacyCompiler(const pProjectFile: string): Boolean;
 
 /// <summary>True when a rule (or fix entry) that needs compiler pNeedsCompiler
@@ -149,6 +246,13 @@ function AutoAssumesLegacyCompiler(const pProjectFile: string): Boolean;
 /// <param name="pNeedsCompiler">needs_compiler; 0 = any compiler.</param>
 /// <param name="pTarget">The run's CompilerVersion.</param>
 /// <returns>(pNeedsCompiler &gt; 0) and (pTarget &lt; pNeedsCompiler).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.Autofix.BuildAutofixEdits (DRagLint.Lint.Autofix.pas), DRagLint.Lint.QueryRules.TQueryRule.AttachFix (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.TargetCompiler.TTargetRuleGate.Build (DRagLint.Lint.TargetCompiler.pas)</para>
+/// <para>Returns: (pNeedsCompiler &gt; 0) and (pTarget &lt; pNeedsCompiler)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsGatedByTarget(pNeedsCompiler, pTarget: Integer): Boolean;
 
 /// <summary>True when a compat rule whose construct needs compiler
@@ -156,20 +260,39 @@ function IsGatedByTarget(pNeedsCompiler, pTarget: Integer): Boolean;
 /// <param name="pCompatSince">compat_since; 0 = not a compat rule.</param>
 /// <param name="pTarget">The run's CompilerVersion.</param>
 /// <returns>(pCompatSince &gt; 0) and (pTarget &lt; pCompatSince).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.TargetCompiler.TTargetRuleGate.Build (DRagLint.Lint.TargetCompiler.pas)</para>
+/// <para>Returns: (pCompatSince &gt; 0) and (pTarget &lt; pCompatSince)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsCompatOnForTarget(pCompatSince, pTarget: Integer): Boolean;
 
 /// <summary>The target compiler of the current run.</summary>
 /// <returns>The value SetActiveTargetCompiler stored; DEFAULT_TARGET_COMPILER
 /// until then.</returns>
-/// <remarks>Read by the query-rule engine (per-entry needs_compiler) and the
+/// <remarks>
+/// Read by the query-rule engine (per-entry needs_compiler) and the
 /// autofix registry (RegisterFixer's ANeedsCompiler). Process-wide: one run,
 /// one target. A host that lints several projects in one process (the LSP)
-/// sets it before each run.</remarks>
+/// sets it before each run.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Lint.Autofix.BuildAutofixEdits (DRagLint.Lint.Autofix.pas), DRagLint.Lint.QueryRules.TQueryRule.AttachFix (DRagLint.Lint.QueryRules.pas)</para>
+/// <para>Returns: GActiveTarget</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ActiveTargetCompiler: Integer;
 
 /// <summary>Sets the target compiler of the current run.</summary>
 /// <param name="pVersion">A CompilerVersion; 0 or less restores the default.</param>
-/// <remarks>Call once per run, before linting; not synchronised.</remarks>
+/// <remarks>
+/// Call once per run, before linting; not synchronised.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyRunTargetCompiler (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.TargetGateFor (DRagLint.LSP.Server.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure SetActiveTargetCompiler(pVersion: Integer);
 
 implementation

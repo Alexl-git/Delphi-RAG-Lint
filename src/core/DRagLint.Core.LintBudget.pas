@@ -29,7 +29,14 @@ const
 /// <param name="pDbPath">Path (or bare file name) of a .sqlite index; may be ''.</param>
 /// <returns>True when the file name starts with <c>library-</c>, case-insensitively
 /// -- the same test the engine's lint gates (FlowIsLibrary) use.</returns>
-/// <remarks>Pure; thread-safe.</remarks>
+/// <remarks>
+/// Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.LintBudget.LintChildTimeoutMs (DRagLint.Core.LintBudget.pas)</para>
+/// <para>Calls: ExtractFileName, LowerCase</para>
+/// <para>Returns: LowerCase(ExtractFileName(pDbPath)).StartsWith('library-')</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsLibraryIndexPath(const pDbPath: string): Boolean;
 
 /// <summary>Chooses the lint-child budget for a file from the index that OWNS it.</summary>
@@ -37,7 +44,15 @@ function IsLibraryIndexPath(const pDbPath: string): Boolean;
 /// them, that contains the file; '' when none does.</param>
 /// <returns>LINT_CHILD_LIBRARY_TIMEOUT_MS for a library index, else
 /// LINT_CHILD_TIMEOUT_MS (also for '').</returns>
-/// <remarks>Pure; thread-safe.</remarks>
+/// <remarks>
+/// Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.RunFullRulesLint (DRagLint.LSP.Server.pas), [dclDragLintWizard]DragLint.Plugin.LiveDiagnostics.TLintDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Calls: DRagLint.Core.LintBudget.IsLibraryIndexPath</para>
+/// <para>Returns: if IsLibraryIndexPath(pOwningDbPath) then LINT_CHILD_LIBRARY_TIMEOUT_MS</para>
+/// <seealso cref="DRagLint.Core.LintBudget.IsLibraryIndexPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LintChildTimeoutMs(const pOwningDbPath: string): Cardinal;
 
 implementation

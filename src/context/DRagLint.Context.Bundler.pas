@@ -21,8 +21,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server</para>
+  /// <para>Used by: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.Context.Bundler.CapTypeBodies (DRagLint.Context.Bundler.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TContextBundler = class
@@ -61,15 +61,15 @@ type
       /// <returns><!-- drag-lint:auto type -->TContextBundle</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: Copy, DRagLint.Context.Bundler.CallersOfTarget, DRagLint.Context.Bundler.DistinctCallSites, DRagLint.Context.Bundler.OwnerIsClassKind, DRagLint.Context.Bundler.ResolveUniqueName, DRagLint.Context.Bundler.StripDfmFields, DRagLint.Context.Bundler.TContextBundler.Build.MatchWikiTopics, DRagLint.Context.Bundler.TContextBundler.EstimateTokens, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByNameWithContext, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName (+9 more)</para>
-      /// <para>Complexity: 30 (cyclomatic, outer body), 287 lines (full implementation)</para>
+      /// <para>Called from: DRagLint.CLI.DoBenchContext (DRagLint.CLI.pas), DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: Copy, Default, DRagLint.Context.Bundler.CallersOfTarget, DRagLint.Context.Bundler.CapTypeBodies, DRagLint.Context.Bundler.ChunkHeaderLine, DRagLint.Context.Bundler.CollectLibraryCalls, DRagLint.Context.Bundler.DistinctCallSites, DRagLint.Context.Bundler.DropCappedMemberDocs, DRagLint.Context.Bundler.HeaderLeafName, DRagLint.Context.Bundler.OwnerIsClassKind (+19 more)</para>
+      /// <para>Complexity: 45 (cyclomatic, outer body), 360 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Context.Bundler.CallersOfTarget"/>
+      /// <seealso cref="DRagLint.Context.Bundler.CapTypeBodies"/>
+      /// <seealso cref="DRagLint.Context.Bundler.ChunkHeaderLine"/>
+      /// <seealso cref="DRagLint.Context.Bundler.CollectLibraryCalls"/>
       /// <seealso cref="DRagLint.Context.Bundler.DistinctCallSites"/>
-      /// <seealso cref="DRagLint.Context.Bundler.OwnerIsClassKind"/>
-      /// <seealso cref="DRagLint.Context.Bundler.ResolveUniqueName"/>
-      /// <seealso cref="DRagLint.Context.Bundler.StripDfmFields"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Build(
@@ -80,8 +80,8 @@ type
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: Round(Length(AText) / 3.7).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)</para>
-      /// <para>Pure</para>
+      /// <para>Called from: DRagLint.Context.Bundler.CapTypeBodies (DRagLint.Context.Bundler.pas), DRagLint.Context.Bundler.TContextBundler.Build (DRagLint.Context.Bundler.pas)</para>
+      /// <para>Effect-free (proven)</para>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderJson"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderMarkdown"/>
@@ -94,14 +94,14 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas)</para>
-      /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format, FormatDateTime, IfThen</para>
-      /// <para>Complexity: 22 (cyclomatic, outer body), 131 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Context.Bundler.OmittedMethodCount, DRagLint.Core.Model.CapOmittedNote, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, Format, FormatDateTime, IfThen</para>
+      /// <para>Complexity: 32 (cyclomatic, outer body), 175 lines (full implementation)</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Context.Bundler.OmittedMethodCount"/>
+      /// <seealso cref="DRagLint.Core.Model.CapOmittedNote"/>
       /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.EstimateTokens"/>
-      /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderJson"/>
-      /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderRaw"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function RenderMarkdown(const ABundle: TContextBundle): string ;
@@ -109,14 +109,15 @@ type
       /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Model.JsonEscape, Format, IfThen</para>
+      /// <para>Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Calls: Copy, Default, DRagLint.Context.Bundler.OmittedMethodCount, DRagLint.Core.Model.JsonEscape, DRagLint.Query.Callers.TResolutionTally.Add, Format, IfThen</para>
       /// <para>Pure</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 133 lines (full implementation)</para>
+      /// <seealso cref="DRagLint.Context.Bundler.OmittedMethodCount"/>
       /// <seealso cref="DRagLint.Core.Model.JsonEscape"/>
+      /// <seealso cref="DRagLint.Query.Callers.TResolutionTally.Add"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.EstimateTokens"/>
-      /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderMarkdown"/>
-      /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderRaw"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function RenderJson(const ABundle: TContextBundle)    : string ;
@@ -126,6 +127,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoContext (DRagLint.CLI.pas)</para>
       /// <para>Pure</para>
+      /// <para>Calls: Format</para>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.Build"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.EstimateTokens"/>
       /// <seealso cref="DRagLint.Context.Bundler.TContextBundler.RenderJson"/>

@@ -14,6 +14,12 @@ uses
 
 type
   /// <summary>One '/// &lt;remarks&gt;' ... '/// &lt;/remarks&gt;' block of a unit.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas) ?, declaration (DRagLint.Charts.Remarks.pas) ?, DRagLint.Charts.Remarks.FindRemarksBlockAt (DRagLint.Charts.Remarks.pas), DRagLint.Charts.Remarks.RemarksBlockIsReport (DRagLint.Charts.Remarks.pas) ?, DRagLint.Charts.Remarks.ReplaceRemarksBlockInFile (DRagLint.Charts.Remarks.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.Compare, DRagLint.Charts.Remarks</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRemarksBlock = record
     /// <summary>First line of the block (the '&lt;remarks&gt;' line), 1-based.</summary>
     StartLine: Integer;
@@ -33,10 +39,22 @@ type
 /// result is False, else ''.</param>
 /// <returns>True when pLine lies between a '/// &lt;remarks&gt;' line and its
 /// '/// &lt;/remarks&gt;' line.</returns>
-/// <remarks>Walks up from pLine over '///' lines to '/// &lt;remarks&gt;' and down to
+/// <remarks>
+/// Walks up from pLine over '///' lines to '/// &lt;remarks&gt;' and down to
 /// '/// &lt;/remarks&gt;'; meeting the other tag first, or a line that is not a '///'
 /// line, means pLine is outside every block. Only the caret's block is returned, so a
-/// unit with two blocks never mixes them. Pure; thread-safe.</remarks>
+/// unit with two blocks never mixes them. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.LoadRemarksSide (DRagLint.Charts.Compare.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Charts.Remarks.IsDocLine, DRagLint.Charts.Remarks.IsTag, DRagLint.Charts.Remarks.LeadingWhitespace, Format</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 33 lines (full implementation)</para>
+/// <para>Mutates: pBlock (out), pWhyNot (out)</para>
+/// <seealso cref="DRagLint.Charts.Remarks.IsDocLine"/>
+/// <seealso cref="DRagLint.Charts.Remarks.IsTag"/>
+/// <seealso cref="DRagLint.Charts.Remarks.LeadingWhitespace"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindRemarksBlockAt(const pLines: TArray<string>; pLine: Integer;
   out pBlock: TRemarksBlock; out pWhyNot: string): Boolean;
 
@@ -45,8 +63,16 @@ function FindRemarksBlockAt(const pLines: TArray<string>; pLine: Integer;
 /// <param name="pHeader">The parsed header; Default when the result is False.</param>
 /// <returns>True when ParseReportHeader accepts the block's lines (the header sentence
 /// follows the '&lt;remarks&gt;' line).</returns>
-/// <remarks>A UTF-8 BOM character left on the first line is dropped before parsing
-/// (ParseReportHeader does not strip one). Pure.</remarks>
+/// <remarks>
+/// A UTF-8 BOM character left on the first line is dropped before parsing
+/// (ParseReportHeader does not strip one). Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.LoadRemarksSide (DRagLint.Charts.Compare.pas)</para>
+/// <para>Calls: Copy, DRagLint.Charts.ReportHeader.ParseReportHeader</para>
+/// <para>Returns: ParseReportHeader(Lines, pHeader)</para>
+/// <seealso cref="DRagLint.Charts.ReportHeader.ParseReportHeader"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RemarksBlockIsReport(const pBlock: TRemarksBlock; out pHeader: TReportHeader): Boolean;
 
 /// <summary>Replaces exactly one remarks block in a file with a new block.</summary>
@@ -57,13 +83,29 @@ function RemarksBlockIsReport(const pBlock: TRemarksBlock; out pHeader: TReportH
 /// is ignored.</param>
 /// <param name="pWhyNot">The reason when the result is False, else ''.</param>
 /// <returns>True when the file was rewritten.</returns>
-/// <remarks>Keeps every byte outside the block. Encoding: a UTF-8 BOM is kept; a file
+/// <remarks>
+/// Keeps every byte outside the block. Encoding: a UTF-8 BOM is kept; a file
 /// with no BOM that is valid UTF-8 and has high bytes stays UTF-8 without BOM; anything
 /// else is ANSI. Line ends: the file's own (the first line end found; CRLF when it has
 /// none); the block's last line keeps whatever terminator it had, so a block at the end
 /// of a file with no final newline gets none. The file is written to <path>.tmp and swapped in with MoveFileEx(replace-existing), so a failed write leaves the unit untouched. Every new line gets pBlock.Indent. Refuses
 /// (file untouched) when the file cannot be read, the lines StartLine..EndLine no longer
-/// equal pBlock.Lines, or the write fails. Not thread-safe per file.</remarks>
+/// equal pBlock.Lines, or the write fails. Not thread-safe per file.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.UpdateDoc (DRagLint.Charts.Compare.pas)</para>
+/// <para>Calls: Copy, DeleteFile, DRagLint.Charts.Remarks.BytesAreValidUtf8, DRagLint.Charts.Remarks.FirstLineEnd, DRagLint.Charts.Remarks.HasBom, DRagLint.Charts.Remarks.HasHighByte, DRagLint.Charts.Remarks.SplitSpans, Format, Move, MoveFileEx, PChar, StringReplace</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 88 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: pWhyNot (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Charts.Remarks.BytesAreValidUtf8"/>
+/// <seealso cref="DRagLint.Charts.Remarks.FirstLineEnd"/>
+/// <seealso cref="DRagLint.Charts.Remarks.HasBom"/>
+/// <seealso cref="DRagLint.Charts.Remarks.HasHighByte"/>
+/// <seealso cref="DRagLint.Charts.Remarks.SplitSpans"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReplaceRemarksBlockInFile(const pPath: string; const pBlock: TRemarksBlock;
   const pNewDocInsightBlock: string; out pWhyNot: string): Boolean;
 

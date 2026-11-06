@@ -34,12 +34,25 @@ const
 /// <param name="AOnlyFileId">Only routines of this file when positive (`lint file`), else all.</param>
 /// <returns>One info finding per routine, at its implementation line (its declaration line
 /// when it has no separate body), stating opaque count, the denominator and a sample of names.</returns>
-/// <remarks>Fires at 3 or more opaque calls forming 60 percent or more of
+/// <remarks>
+/// Fires at 3 or more opaque calls forming 60 percent or more of
 /// (opaque + calls with a call_edges row). A call counts as OUTSIDE, in neither figure, when it
 /// is a compiler intrinsic or a type cast, carries a stored external_target, has a receiver
 /// typed by a name the project does not declare, has a project-typed receiver whose chain does
 /// not declare the member, or the oracle binds it. An ambiguous call_edges row counts as
-/// resolved. Read-only; never raises on an unknown name. Not thread-safe.</remarks>
+/// resolved. Read-only; never raises on an unknown name. Not thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind, DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnresolvedCallsFromSymbol, DRagLint.Lint.OpaqueToAnalysis.TOpaqueScan.Create, DRagLint.Lint.OpaqueToAnalysis.TOpaqueScan.Judge, Format, MatchText</para>
+/// <para>Returns: nil; Findings.ToArray</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 50 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetCallEdgesFromSymbol"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnresolvedCallsFromSymbol"/>
+/// <seealso cref="DRagLint.Lint.OpaqueToAnalysis.TOpaqueScan.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectOpaqueToAnalysis(const AStore, ALibStore: ISymbolStore;
   AOnlyFileId: Int64 = 0): TArray<TLintFinding>;
 

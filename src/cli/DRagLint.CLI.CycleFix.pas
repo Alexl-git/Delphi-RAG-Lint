@@ -23,6 +23,12 @@ uses
 
 type
   /// <summary>The `cycles --fix` flags, as DoCycles parsed them.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.BaselineCompile (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.ReindexTargetProblem (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.TamperAllowed (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.DoCycles (DRagLint.CLI.pas) (+32 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleFixOptions = record
     /// <summary>--project: the .dproj (or .dpr) whose own roots bound the edit.</summary>
     Project: string;
@@ -65,12 +71,24 @@ type
 
   /// <summary>Raised inside a `cycles --fix` run once a stand-down request (the maintenance control
   /// channel: `drag-lint shutdown`, or the IDE's Cancel) is taken while the run waits on a child.</summary>
-  /// <remarks>The child's process tree is already gone when it is raised. ApplyGroup turns it into a
+  /// <remarks>
+  /// The child's process tree is already gone when it is raised. ApplyGroup turns it into a
   /// rollback and the refusal `cancelled`; RunCycleFix turns one raised before any file was written into
-  /// "cancelled -- nothing written". Either way the run exits 1.</remarks>
+  /// "cancelled -- nothing written". Either way the run exits 1.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.CycleFix.ApplyGroup (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.RunAll (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.RunBounded (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.VerifyAfter (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.VerifyAfterCore (DRagLint.CLI.CycleFix.pas) ? (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   ECycleFixCancelled = class(Exception);
 
   /// <summary>The outcome of one msbuild run of a whole project (RunMsBuild).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.BaselineCompile (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.RunMsBuild (DRagLint.CLI.CycleFix.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TBuildOutcome = record
     /// <summary>True when msbuild exited 0 and printed no `error E`/`fatal F` line.</summary>
     Ok: Boolean;
@@ -83,6 +101,12 @@ type
   end;
 
   /// <summary>One bounded repair (R4) the compile gate made; an item of `repairs[]` in cycle-fix/1.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TryRepair (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TryRepair.AddRepair (DRagLint.CLI.CycleFix.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRepair = record
     /// <summary>The dcc code repaired: E2003, E2015 or E2010.</summary>
     Code: string;
@@ -95,6 +119,12 @@ type
   end;
 
   /// <summary>The result of the after-gate (CompileAfter).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.CompileAfter (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCompileAfterResult = record
     /// <summary>True when the last build was clean.</summary>
     Ok: Boolean;
@@ -111,8 +141,14 @@ type
   end;
 
   /// <summary>What WriteAll wrote and everything RollBack needs to undo it.</summary>
-  /// <remarks>Owns no object; the original bytes are held in memory, so a rollback never depends on
-  /// the backup files.</remarks>
+  /// <remarks>
+  /// Owns no object; the original bytes are held in memory, so a rollback never depends on
+  /// the backup files.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.BackUpChanged (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.MakeDirs (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.RollBack (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.WriteAll (DRagLint.CLI.CycleFix.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TApplyTransaction = record
     /// <summary>The project paths written, new files first, in write order.</summary>
     Written: TArray<string>;
@@ -145,6 +181,12 @@ type
   end;
 
   /// <summary>The post-apply verification (VerifyAfter): the child re-index and the comparison.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.VerifyAfter (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.VerifyAfterCore (DRagLint.CLI.CycleFix.pas)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TVerifyResult = record
     /// <summary>done | failed | skipped (--no-reindex, or the target guard refused the DB) | dry-run.</summary>
     ReindexStatus: string;
@@ -171,9 +213,13 @@ type
 /// <param name="pPlatform">win32 / win64 (any case); '' = Win64.</param>
 /// <param name="pLogPath">The build log; the `.bat` is written next to it (same name, .bat).
 /// Its folder is created; neither file is in the project.</param>
+/// <param name="pWhat">The step the progress names, e.g. 'baseline build'.</param>
 /// <returns>Ok, the distinct `error E`/`fatal F` lines and the seconds taken. A missing rsvars.bat
 /// gives Ok = False with one line saying so (CompilerAvailable tells beforehand).</returns>
-/// <remarks>The build writes what any build of the project writes (dcu, exe) into the project's
+/// <exception cref="ECycleFixCancelled">A stand-down request arrived on the run's control channel while
+/// the build ran: the build's process tree was killed.</exception>
+/// <remarks>
+/// The build writes what any build of the project writes (dcu, exe) into the project's
 /// own output folders; it writes no source file. The build is UNBOUNDED by default (owner ruling
 /// 2026-10-26); --build-timeout &lt;s&gt; bounds it: a run past the limit is killed with its whole process tree
 /// (a job object) and returns Ok = False, TimedOut = True and one `build-timeout` line. The test seam
@@ -181,21 +227,47 @@ type
 /// the flag for a project under %TEMP% / C:\TEMP only.
 /// While it waits the build reports progress (owner ruling D4, 2026-11-03): `cycles --fix: &lt;pWhat&gt; --
 /// started`, then every 10 s `cycles --fix: &lt;pWhat&gt; -- &lt;n&gt; s ...` on stderr, and the heartbeat step
-/// `&lt;pWhat&gt; &lt;n&gt; s` (the IDE status strip).</remarks>
-/// <param name="pWhat">The step the progress names, e.g. 'baseline build'.</param>
-/// <exception cref="ECycleFixCancelled">A stand-down request arrived on the run's control channel while
-/// the build ran: the build's process tree was killed.</exception>
+/// `&lt;pWhat&gt; &lt;n&gt; s` (the IDE status strip).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.BaselineCompile (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.CompileAfter (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: ChangeFileExt, ContainsStr, Default, DRagLint.CLI.CycleFix.BuildEnvBat, DRagLint.CLI.CycleFix.BuildTimeoutMs, DRagLint.CLI.CycleFix.CiteScratch, DRagLint.CLI.CycleFix.CompilerAvailable, DRagLint.CLI.CycleFix.DccErrorLines, DRagLint.CLI.CycleFix.MsBuildPlatform, DRagLint.CLI.CycleFix.RunBounded (+7 more)</para>
+/// <para>Returns: Default(TBuildOutcome)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.BuildEnvBat"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.BuildTimeoutMs"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.CiteScratch"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.CompilerAvailable"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.DccErrorLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunMsBuild(const pProject, pPlatform, pLogPath: string; const pWhat: string = 'build'): TBuildOutcome;
 
 /// <summary>True when the RAD Studio rsvars.bat RunMsBuild calls exists.</summary>
 /// <returns>False when no Studio root resolves (TStudioEnv: $BDS, the registry, the fallback) or
 /// its rsvars.bat is missing.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.PassBaselineGate (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunMsBuild (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: DRagLint.CLI.CycleFix.BuildEnvBat</para>
+/// <para>Returns: (Bat &lt;&gt; '') and TFile.Exists(Bat)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.BuildEnvBat"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CompilerAvailable: Boolean;
 
 /// <summary>The baseline gate: builds the UNTOUCHED project before anything is staged.</summary>
 /// <param name="pOpts">The flags (Project, Platform).</param>
 /// <param name="pLogDir">Folder for the build's .bat and log (BuildScratchDir).</param>
 /// <returns>The build outcome; not Ok means the refusal `dirty-baseline`.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.PassBaselineGate (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: DRagLint.CLI.CycleFix.RunMsBuild, IncludeTrailingPathDelimiter</para>
+/// <para>Returns: RunMsBuild(pOpts.Project, pOpts.Platform, IncludeTrailingPathDelimiter(pLogDir) + 'baseline.log', 'baseline build')</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.RunMsBuild"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BaselineCompile(const pOpts: TCycleFixOptions; const pLogDir: string): TBuildOutcome;
 
 /// <summary>The bounded repairs R4: one pass over the dcc lines of a failed after-build.</summary>
@@ -205,7 +277,8 @@ function BaselineCompile(const pOpts: TCycleFixOptions; const pLogDir: string): 
 /// <param name="pTreeDir">The folder that was built: pProjectDir itself (apply, in place) or a
 /// copy laid out like it (the files are found by the shadow mapping, ShadowPathOf).</param>
 /// <returns>The repairs made, one per repaired dcc line; empty = nothing repairable (no retry).</returns>
-/// <remarks>Only files the plan edits or creates are changed, in their own encoding (DecodeSource /
+/// <remarks>
+/// Only files the plan edits or creates are changed, in their own encoding (DecodeSource /
 /// EncodeSource). The rules, each on a line the plan wrote: `E2003 Undeclared identifier: 'X'` where X
 /// is a moved symbol (its leaf) or the interface / pointer type / pointer variable (InversionUnit) -&gt;
 /// that unit is added to the uses clause of the section holding the line (first entry; a section
@@ -214,7 +287,19 @@ function BaselineCompile(const pOpts: TCycleFixOptions; const pLogDir: string): 
 /// declaration of PtrType is re-emitted as PtrTypeDecl (the routine's signature verbatim). Any other
 /// code, and an R4 code whose condition does not hold, is left alone. Lines dcc prints as a CASCADE of
 /// a repaired one (E2003 on a member inside a broken `with`, E2066, F2063) do not block the retry:
-/// the second build decides.</remarks>
+/// the second build decides.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.CompileAfter (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunRepairProbe (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: ContainsText, Copy, DRagLint.CLI.CycleFix.AddToUses, DRagLint.CLI.CycleFix.ParseDccLine, DRagLint.CLI.CycleFix.TryRepair.AddRepair, DRagLint.CLI.CycleFix.TryRepair.FileOf, DRagLint.CLI.CycleFix.TryRepair.QueueUses, DRagLint.CLI.CycleFix.TryRepair.RepairCast, DRagLint.CLI.CycleFix.TryRepair.RepairPointer, DRagLint.CLI.CycleFix.TryRepair.Resolve (+12 more)</para>
+/// <para>Returns: Repairs.ToArray</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 146 lines (full implementation)</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.AddToUses"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.ParseDccLine"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.TryRepair.AddRepair"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.TryRepair.FileOf"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.TryRepair.QueueUses"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TryRepair(const pView: TCyclePlanView; const pErrors: TArray<string>;
   const pProjectDir, pTreeDir: string): TArray<TRepair>;
 
@@ -225,8 +310,17 @@ function TryRepair(const pView: TCyclePlanView; const pErrors: TArray<string>;
 /// <param name="pPlatform">As RunMsBuild.</param>
 /// <param name="pLogDir">Folder for the .bat and logs (after-1.log, after-2.log).</param>
 /// <returns>Ok, the last build's errors, the repairs and the build count and time.</returns>
-/// <remarks>Rolls nothing back: on not Ok the caller (Task 11's apply) restores its backups, which
-/// cover every file TryRepair may touch.</remarks>
+/// <remarks>
+/// Rolls nothing back: on not Ok the caller (Task 11's apply) restores its backups, which
+/// cover every file TryRepair may touch.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.ApplyGroup (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunRepairProbe (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: Default, DRagLint.CLI.CycleFix.RunMsBuild, DRagLint.CLI.CycleFix.TryRepair, ExpandFileName, ExtractFilePath, Format, IncludeTrailingPathDelimiter</para>
+/// <para>Returns: Default(TCompileAfterResult)</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.RunMsBuild"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.TryRepair"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CompileAfter(const pView: TCyclePlanView; const pProjectDir, pBuildProject, pPlatform,
   pLogDir: string): TCompileAfterResult;
 
@@ -238,20 +332,48 @@ function CompileAfter(const pView: TCyclePlanView; const pProjectDir, pBuildProj
 /// <param name="pTx">Receives what was written and what a rollback needs.</param>
 /// <returns>True when every file was written; False when anything failed, in which case the
 /// project is already rolled back (pTx.Error says why, pTx.RollbackFailure what could not be restored).</returns>
-/// <remarks>Order: every touched file's original bytes are read into memory; unless pNoBackup each
+/// <exception cref="EInOutError"><!-- drag-lint:auto exc -->the shadow holds no staged copy of %s (%s); the new unit's file already exists: %s</exception>
+/// <remarks>
+/// Order: every touched file's original bytes are read into memory; unless pNoBackup each
 /// changed file is copied to its NextBackupName sibling and a recovery.txt block is appended
 /// (AppendRecoveryBlock) BEFORE any write; then the new files are written, then the changed
 /// files (the .dpr / .dproj among them). A file whose staged bytes equal the original is not
-/// written. Each write passes FailWriteForTests (DRAGLINT_TEST_FAIL_WRITE_AT).</remarks>
+/// written. Each write passes FailWriteForTests (DRAGLINT_TEST_FAIL_WRITE_AT).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.ApplyGroup (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: Default, DRagLint.CLI.CycleFix.BackUpChanged, DRagLint.CLI.CycleFix.DistinctPaths, DRagLint.CLI.CycleFix.MakeDirs, DRagLint.CLI.CycleFix.RollBack, DRagLint.CLI.CycleFix.SameBytes, DRagLint.CLI.CycleFix.WriteAll.StagedBytes, DRagLint.CLI.CycleFix.WriteAll.WriteOne, ExtractFilePath, FailWriteForTests, Format, FormatDateTime, IsUnderTemp, LowerCase, ShadowPathOf</para>
+/// <para>Returns: True; False</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: pTx (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.BackUpChanged"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.DistinctPaths"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.MakeDirs"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.RollBack"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.SameBytes"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function WriteAll(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string; pNoBackup: Boolean;
   out pTx: TApplyTransaction): Boolean;
 
 /// <summary>Undoes WriteAll byte-identically.</summary>
 /// <param name="pTx">The transaction WriteAll returned.</param>
 /// <returns>'' when every file is restored; else the files that could not be, with the reason.</returns>
-/// <remarks>Restores every held original whose bytes changed (a repair's edits included) with its last-write time, deletes
+/// <remarks>
+/// Restores every held original whose bytes changed (a repair's edits included) with its last-write time, deletes
 /// the new files and the folders made for them, the backups made, and restores recovery.txt (or
-/// deletes it when the write created it). Never raises.</remarks>
+/// deletes it when the write created it). Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.ApplyGroup (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.CancelledApply (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.WriteAll (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoImportLog (DRagLint.CLI.pas) ?</para>
+/// <para>Calls: DRagLint.CLI.CycleFix.DeleteIfPresent, DRagLint.CLI.CycleFix.RollBack.Attempt, DRagLint.CLI.CycleFix.SameBytes, pStep</para>
+/// <para>Returns: string.Join('; ', Fails.ToArray)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.DeleteIfPresent"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.RollBack.Attempt"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.SameBytes"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RollBack(const pTx: TApplyTransaction): string;
 
 /// <summary>The post-apply verification: re-index the project DB in a child process, run
@@ -260,11 +382,20 @@ function RollBack(const pTx: TApplyTransaction): string;
 /// <param name="pOpts">The flags (Db, Project, NoReindex).</param>
 /// <param name="pStore">The run's index of pOpts.Db; read for the target guard only.</param>
 /// <returns>The re-index status and the verdict; never raises.</returns>
-/// <remarks>Target guard: the child `index --project &lt;P&gt; --db &lt;D&gt;` runs only when D is a
+/// <remarks>
+/// Target guard: the child `index --project &lt;P&gt; --db &lt;D&gt;` runs only when D is a
 /// PROJECT index (scan_type) holding exactly one project file, that file is pOpts.Project, and D
 /// indexes every unit (.pas) the plan edits -- else skipped with the reason and nothing is written to
 /// any DB. --no-reindex skips it. Without a re-index Verified is False, Reason `not re-indexed`.
-/// A mismatch keeps the files (they compiled; the prediction is the suspect).</remarks>
+/// A mismatch keeps the files (they compiled; the prediction is the suspect).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.ApplyGroup (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: Default, DRagLint.CLI.CycleFix.VerifyAfterCore</para>
+/// <para>Returns: VerifyAfterCore(pView, pOpts, pStore); Default(TVerifyResult)</para>
+/// <para>Catches: ECycleFixCancelled (re-raise); Exception (swallowed)</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.VerifyAfterCore"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function VerifyAfter(const pView: TCyclePlanView; const pOpts: TCycleFixOptions;
   const pStore: ISymbolStore): TVerifyResult;
 
@@ -273,14 +404,30 @@ function VerifyAfter(const pView: TCyclePlanView; const pOpts: TCycleFixOptions;
 /// <param name="pActual">What `cycles` printed.</param>
 /// <returns>True when they are equal after dropping blank and informational lines and sorting the
 /// units inside each group line and the group lines themselves (a SET of groups).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.VerifyAfterCore (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: CyclesLines, DRagLint.CLI.CycleFix.SameCyclesOutput.Normalized</para>
+/// <para>Returns: Normalized(pPredicted) = Normalized(pActual)</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.SameCyclesOutput.Normalized"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SameCyclesOutput(const pPredicted, pActual: string): Boolean;
 
 /// <summary>The DRAGLINT_CYCLEFIX_BREAK test seam: 1 to 4 when set AND the project file lies under
 /// %TEMP% or C:\TEMP, else 0.</summary>
 /// <param name="pOpts">The flags.</param>
 /// <returns>The break mode to apply to the plan before staging (ApplyTestBreak), or 0.</returns>
-/// <remarks>Honoured on the dry run and the apply alike (Task 11 proves the after gate with it); the
-/// caller prints `TEST BREAK active` to stderr when it is not 0.</remarks>
+/// <remarks>
+/// Honoured on the dry run and the apply alike (Task 11 proves the after gate with it); the
+/// caller prints `TEST BREAK active` to stderr when it is not 0.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.AnnounceSeams (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.ApplyGroup (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: DRagLint.CLI.CycleFix.IsUnderTemp, GetEnvironmentVariable, StrToIntDef</para>
+/// <para>Returns: StrToIntDef(GetEnvironmentVariable('DRAGLINT_CYCLEFIX_BREAK'), 0); 0</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.IsUnderTemp"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BreakSeam(const pOpts: TCycleFixOptions): Integer;
 
 /// <summary>Spoils a plan the way a planner bug would, so the after gate has something to repair.</summary>
@@ -291,21 +438,46 @@ function BreakSeam(const pOpts: TCycleFixOptions): Integer;
 /// E2010 '...' and 'Procedure' on the pointer assignment); 3: every new unit gets a stray line after
 /// `interface` that no repair covers (the after gate fails, the apply rolls back). Any other value: unchanged.</param>
 /// <returns>A copy; pView's arrays are not modified.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: Copy, DRagLint.CLI.CycleFix.BrokenLines, Insert, SameText, Trim</para>
+/// <para>Returns: pView</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.BrokenLines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ApplyTestBreak(const pView: TCyclePlanView; pMode: Integer): TCyclePlanView;
 
 /// <summary>The refusals the front end adds to the planner's own: outside-roots.</summary>
 /// <param name="pView">The plan of one group.</param>
 /// <param name="pOwn">The project's own roots (TOwnRoots.Load of the project folder).</param>
 /// <returns>One refusal per touched file that is empty or outside every root.</returns>
-/// <remarks>Pure: reads no file. stale-file needs the index and is added by RunCycleFix.
+/// <remarks>
+/// Pure: reads no file. stale-file needs the index and is added by RunCycleFix.
 /// manual-edit is NOT added here: the planner's own refusals already name every manual
 /// edit (TCyclePlanner.CaptureRefusals walks every touched file and the .dproj), so a gate
 /// copy could never fire. TOwnRoots.IsOurs lets an empty path through, so an empty touched
-/// path is refused explicitly.</remarks>
+/// path is refused explicitly.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: DRagLint.CLI.CycleFix.MakeRefusal, DRagLint.Project.OwnRoots.TOwnRoots.IsOurs</para>
+/// <para>Returns: L.ToArray</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.MakeRefusal"/>
+/// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.IsOurs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MechanisabilityGate(const pView: TCyclePlanView; const pOwn: TOwnRoots): TArray<TRefusal>;
 
 /// <summary>The default shadow directory: C:\TEMP\draglint_cyclefix_&lt;pid&gt;\. RunCycleFix deletes it, and the gate's _build dir, when the run ends unless DRAGLINT_CYCLEFIX_KEEP_SCRATCH=1; a --shadow-out directory is never deleted.</summary>
 /// <returns>The directory name with a trailing path delimiter; nothing is created.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: DRagLint.CLI.CycleFix.FreshScratchName</para>
+/// <para>Returns: GShadowPick</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.FreshScratchName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DefaultShadowDir: string;
 
 /// <summary>Turns the edits of a plan into anchored TTextEdits.</summary>
@@ -316,8 +488,17 @@ function DefaultShadowDir: string;
 /// the anchor line's text) as the applier's stale guard. A line that is blank or starts a comment
 /// cannot be guarded by the applier (it never accepts a comment line as an anchor) and is left
 /// unguarded; StageShadow checks every line exactly instead. Manual edits are skipped.</returns>
-/// <remarks>Pure. Per file the edits are in top-to-bottom order of the playbook's list reversed, so
-/// edits that tie on a line land in the file in the order a follower of the playbook produces.</remarks>
+/// <remarks>
+/// Pure. Per file the edits are in top-to-bottom order of the playbook's list reversed, so
+/// edits that tie on a line land in the file in the order a follower of the playbook produces.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: Default, DRagLint.CLI.CycleFix.GuardText, DRagLint.CLI.CycleFix.ToTextEdits.Make, SameText</para>
+/// <para>Returns: L.ToArray</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.GuardText"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.ToTextEdits.Make"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ToTextEdits(const pView: TCyclePlanView): TArray<TTextEdit>;
 
 /// <summary>Stages the result of a plan in a shadow directory without touching the project.</summary>
@@ -327,21 +508,43 @@ function ToTextEdits(const pView: TCyclePlanView): TArray<TTextEdit>;
 /// <param name="pShadowDir">Receives the staged files; existing files of the same name are overwritten.</param>
 /// <param name="pTamperAllowed">True only on a dry run, to let the DRAGLINT_CYCLEFIX_TEST_TAMPER test seam alter the staged text (see TamperAllowed); every call that feeds a write must pass False.</param>
 /// <returns>The refusals (kind anchor-mismatch) or an empty array when the shadow was written.</returns>
-/// <remarks>Everything is computed in memory first; nothing is written when any refusal arises.
+/// <remarks>
+/// Everything is computed in memory first; nothing is written when any refusal arises.
 /// Refuses when a file is missing or a line of it differs from the plan's "Current text" / anchor
 /// (compared exactly, as the follow-cycle-plan oracle does), when TTextEditApplier.RefusalOf finds
 /// the edit set unappliable, when the applier drops an edit (line count check), or when a new unit's
 /// file already exists. Edited files are written ANSI with the applier's CRLF; new units ASCII,
-/// CRLF, one trailing CRLF.</remarks>
+/// CRLF, one trailing CRLF.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.StageFor (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: DRagLint.CLI.CycleFix.AnchorRefusal, DRagLint.CLI.CycleFix.ApplyTestTamper, DRagLint.CLI.CycleFix.CheckAnchors, DRagLint.CLI.CycleFix.CheckInsertedText, DRagLint.CLI.CycleFix.EscapeInsertedText, DRagLint.CLI.CycleFix.HasNonAscii, DRagLint.CLI.CycleFix.NetLineChange, DRagLint.CLI.CycleFix.ShadowPathOf, DRagLint.CLI.CycleFix.ToTextEdits, DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText (+6 more)</para>
+/// <para>Returns: Refs.ToArray</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.AnchorRefusal"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.ApplyTestTamper"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.CheckAnchors"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.CheckInsertedText"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.EscapeInsertedText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StageShadow(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string;
   pTamperAllowed: Boolean = False): TArray<TRefusal>;
 
 /// <summary>True when the DRAGLINT_CYCLEFIX_TEST_TAMPER test seam may act: on a dry run only.</summary>
 /// <param name="pOpts">The flags.</param>
 /// <returns>False whenever --apply is set, whatever the environment says.</returns>
-/// <remarks>The seam alters staged text without any anchor guard seeing it, so no write path may honour it.
+/// <remarks>
+/// The seam alters staged text without any anchor guard seeing it, so no write path may honour it.
 /// Task 11: the apply writes from the shadow; every StageShadow call that feeds a write must pass
-/// pTamperAllowed = False (the default).</remarks>
+/// pTamperAllowed = False (the default).
+/// <!-- drag-lint:auto -->The text the applier's stale guard can hold: '' for a blank line or one
+/// that starts a comment (AnchorIsValid never accepts a comment line as an anchor).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.AnnounceSeams (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.StageFor (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Returns: not pOpts.Apply</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TamperAllowed(const pOpts: TCycleFixOptions): Boolean;
 
 /// <summary>Runs `cycles --fix` (dry run, or --apply) and prints the result to stdout.</summary>
@@ -353,7 +556,8 @@ function TamperAllowed(const pOpts: TCycleFixOptions): Boolean;
 /// <returns>Dry run: 0 mechanical, 1 refused, 2 error (bad flags, no such group). --apply: 0 applied
 /// (and verified, or --no-reindex), 1 refused / rolled back after a compile error or build timeout /
 /// applied but not verified, 2 error (a write failed part-way: rolled back, project not changed).</returns>
-/// <remarks>The dry run writes no source file of the project; unless --no-compile, the baseline build writes what any build
+/// <remarks>
+/// The dry run writes no source file of the project; unless --no-compile, the baseline build writes what any build
 /// of the project writes (dcu, exe) and refuses the run (dirty-baseline, exit 1) when it fails. The first mechanical group is chosen when neither --cycle nor --unit is given.
 /// --apply: baseline gate, stage the shadow, WriteAll, CompileAfter in place (at most one repair),
 /// then RollBack (compile-error / build-timeout) or VerifyAfter.
@@ -368,7 +572,19 @@ function TamperAllowed(const pOpts: TCycleFixOptions): Boolean;
 /// re-run) is asked to stand down in turn. After WriteAll every written file is rolled back (refusal
 /// `cancelled`, "cancelled -- rolled back"); before it nothing was written ("cancelled -- nothing written").
 /// Both exit 1; a rollback that fails exits 2. A request that arrives when no child is left to wait on is
-/// answered when the run ends, with its own result.</remarks>
+/// answered when the run ends, with its own result.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.CycleFix.DeleteDefaultScratch, DRagLint.CLI.CycleFix.ReportCancelledBeforeWrite, DRagLint.CLI.CycleFix.RerunAfterReindex, DRagLint.CLI.CycleFix.RunAllSelected, DRagLint.CLI.CycleFix.RunCycleFixGroups, DRagLint.CLI.CycleFix.StartStandDownChannel, DRagLint.Core.ControlChannel.TControlChannel.StandDownComplete, ExpandFileName, SameText</para>
+/// <para>Returns: CExitError; RunAllSelected(pOpts, pSccs, pGraph); RunCycleFixGroups(pOpts, pStore, pSccs, pGraph, pLibStore); CExitRefused</para>
+/// <para>Catches: ECycleFixCancelled (swallowed)</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.DeleteDefaultScratch"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.ReportCancelledBeforeWrite"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.RerunAfterReindex"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.RunAllSelected"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.RunCycleFixGroups"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph;
   const pLibStore: ISymbolStore = nil): Integer;
@@ -378,8 +594,15 @@ function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
 /// {schema, error, ok:false, exit_code:2} on stdout, else `ERROR: <message>`.</summary>
 /// <param name="pOpts">The run's options; only Json is read.</param>
 /// <param name="pMessage">The error, one line.</param>
-/// <remarks>The caller exits 2. E18 final review M1: a JSON caller (the IDE) must get a
-/// document it can parse, never plain text.</remarks>
+/// <remarks>
+/// The caller exits 2. E18 final review M1: a JSON caller (the IDE) must get a
+/// document it can parse, never plain text.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.CycleFix.ReportError</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.ReportError"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ReportCycleFixError(const pOpts: TCycleFixOptions; const pMessage: string);
 
 implementation

@@ -64,6 +64,11 @@ const
 type
   /// <summary>Line callback for RunCaptureStreaming. TProc&lt;string&gt; allows
   /// anonymous closures so callers can capture local variables inline.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.ProcRun.pas), DragLint.Plugin.ProcRun.RunCaptureStreaming (DragLint.Plugin.ProcRun.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TOnLineProc = TProc<string>;
 
 /// <summary>Spawns ACmdLine (CREATE_NO_WINDOW) and captures stdout+stderr into
@@ -94,8 +99,16 @@ type
 /// expired; PROCRUN_CANCELLED_EXIT_CODE when ACancel was signalled and the tree
 /// was killed (with a grace: the child did not exit within it); -1 if it could
 /// not start.</returns>
-/// <remarks>Once a stand-down has started, the grace replaces ATimeoutMs as the
-/// deadline: the engine is rolling back, and a timeout must not cut that short.</remarks>
+/// <remarks>
+/// Once a stand-down has started, the grace replaces ATimeoutMs as the
+/// deadline: the engine is rolling back, and a timeout must not cut that short.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.CliAsync.TCliRun.Work (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CodeLensCache.RunCapture (DragLint.Plugin.CodeLensCache.pas), DragLint.Plugin.Editor.RunAndCaptureStdout (DragLint.Plugin.Editor.pas), DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne (DragLint.Plugin.JobQueue.pas)</para>
+/// <para>Calls: DragLint.Plugin.ProcRun.RunCore</para>
+/// <para>Returns: RunCore(ACmdLine, AOutput, ATimeoutMs, CREATE_NO_WINDOW, nil, nil, ACancel, nil, AStandDownGraceMs)</para>
+/// <seealso cref="DragLint.Plugin.ProcRun.RunCore"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer;
   ACancel: THandle = 0; AStandDownGraceMs: Integer = 0): Integer;
 
@@ -119,8 +132,15 @@ function RunCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutM
 /// <returns>The child exit code; PROCRUN_TIMED_OUT_EXIT_CODE when the deadline
 /// expired; -1 if it could not start. A KILLED child still returns here (the pipe closes), so a caller that
 /// superseded the run must discard the result rather than read this.</returns>
-/// <remarks>Safe to call KillProcess(AHandle) from another thread while this
-/// call is in progress; that is what it is for.</remarks>
+/// <remarks>
+/// Safe to call KillProcess(AHandle) from another thread while this
+/// call is in progress; that is what it is for.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas), DragLint.Plugin.LiveDiagnostics.TLintDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Calls: DragLint.Plugin.ProcRun.RunCore</para>
+/// <seealso cref="DragLint.Plugin.ProcRun.RunCore"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunCaptureStdoutCancellable(const ACmdLine: string; out AOutput: string;
   ATimeoutMs: Integer; APriority: DWORD; out AHandle: THandle; out APid: DWORD): Integer;
 
@@ -135,7 +155,8 @@ function RunCaptureStdoutCancellable(const ACmdLine: string; out AOutput: string
 /// on its own. False if any of it is still running when the budget expires --
 /// which is what a caller holding a handle without PROCESS_TERMINATE gets, and
 /// it must not treat that as a kill.</returns>
-/// <remarks>THE TREE (1.31.6): while the run that published AHandle is still in
+/// <remarks>
+/// THE TREE (1.31.6): while the run that published AHandle is still in
 /// progress, the child's job object is registered against the handle, and the
 /// kill terminates the JOB -- a cmd.exe wrapper's grandchild, or the engine's
 /// dcc / graph children, would otherwise keep the pipe open and the run parked.
@@ -144,13 +165,29 @@ function RunCaptureStdoutCancellable(const ACmdLine: string; out AOutput: string
 /// The wait is not politeness. Termination is ASYNCHRONOUS, so a caller that
 /// returns immediately and respawns can leave two engine runs -- and their dcc
 /// grandchildren -- competing for the cores the IDE needs. Does NOT close the
-/// handle; use CloseProcessHandle for that. Thread-safe.</remarks>
+/// handle; use CloseProcessHandle for that. Thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.FanOut.SupersedeChild (DragLint.Plugin.FanOut.pas), DragLint.Plugin.LiveDiagnostics.SupersedeRunningLint (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Calls: CloseHandle, DragLint.Plugin.ProcRun.DuplicateJobFor, DragLint.Plugin.ProcRun.JobIsEmpty, DragLint.Plugin.ProcRun.KillTree, WaitForSingleObject</para>
+/// <para>Returns: False; KillTree(AHandle, Job, AWaitMs)</para>
+/// <seealso cref="DragLint.Plugin.ProcRun.DuplicateJobFor"/>
+/// <seealso cref="DragLint.Plugin.ProcRun.JobIsEmpty"/>
+/// <seealso cref="DragLint.Plugin.ProcRun.KillTree"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function KillProcess(AHandle: THandle; AWaitMs: Integer = PROCRUN_KILL_WAIT_MS): Boolean;
 
 /// <summary>Closes a process handle published by RunCaptureStdoutCancellable
 /// and zeroes the variable.</summary>
 /// <param name="AHandle">The handle to close; zeroed on return. Safe on an
 /// already-zero handle.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas), DragLint.Plugin.FanOut.SupersedeChild (DragLint.Plugin.FanOut.pas), DragLint.Plugin.LiveDiagnostics.TLintDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Calls: CloseHandle</para>
+/// <para>Mutates: AHandle (var)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure CloseProcessHandle(var AHandle: THandle);
 
 /// <summary>Spawns ACmdLine (CREATE_NO_WINDOW), reads stdout+stderr
@@ -171,6 +208,17 @@ procedure CloseProcessHandle(var AHandle: THandle);
 /// <returns>True if the child ran (including a run that timed out or was
 /// cancelled); False if it was not started -- a spawn failure or a cancel that
 /// was already set.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne (DragLint.Plugin.JobQueue.pas)</para>
+/// <para>Calls: AOnLine, Copy, DragLint.Plugin.ProcRun.IsSet, DragLint.Plugin.ProcRun.RunCore, Trim</para>
+/// <para>Returns: False; AExitCode &lt;&gt; -1</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 46 lines (full implementation)</para>
+/// <para>Mutates: AExitCode (out)</para>
+/// <seealso cref="DragLint.Plugin.ProcRun.IsSet"/>
+/// <seealso cref="DragLint.Plugin.ProcRun.RunCore"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunCaptureStreaming(const ACmdLine: string; AOnLine: TOnLineProc; out AExitCode: Integer;
   ATimeoutMs: Integer; ACancel: THandle = 0): Boolean;
 
@@ -178,7 +226,13 @@ function RunCaptureStreaming(const ACmdLine: string; AOnLine: TOnLineProc; out A
 /// e.g. <c>index: resolve calls 120</c>. For the IDE's status strip.</summary>
 /// <returns>The newest heartbeat any running RunCore received, as BeatDisplayText; '' when no run in
 /// progress has answered one (an older engine, a wrapper, a verb that does not report).</returns>
-/// <remarks>Thread-safe; never blocks on a child (it reads what the run loops already fetched).</remarks>
+/// <remarks>
+/// Thread-safe; never blocks on a child (it reads what the run loops already fetched).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleTimer (DragLint.Plugin.StatusBar.pas)</para>
+/// <para>Returns: GBeatText</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProcRunBeatText: string;
 
 implementation

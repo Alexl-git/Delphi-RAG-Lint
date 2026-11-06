@@ -51,6 +51,12 @@ const
 
 type
   /// <summary>One Group-Routines row: a routine and how many access sites find-callers reported in it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.CollectMemberAccess (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.CrossCheckSites (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.GroupRoutines (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.Q.MemberAccess.RoutineRow (DRagLint.Charts.Q.MemberAccess.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Charts.MemberAccess, DRagLint.Charts.Q.MemberAccess</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRoutineHits = record
     /// <summary>The caller's qualified name, in the casing first seen.</summary>
     Routine: string;
@@ -59,6 +65,12 @@ type
   end;
 
   /// <summary>One access site: a file, a line AND a column.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.LoadSites (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.TMemberAccessData.Create (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.TMemberAccessData.SitesOf (DRagLint.Charts.MemberAccess.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.MemberAccess</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSiteAnchor = record
     /// <summary>files.path of the file holding the site.</summary>
     Path: string;
@@ -69,6 +81,12 @@ type
   end;
 
   /// <summary>The refs of one kind that are named like the member but bound to no symbol (the PS Get-UnreportedAccess object).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Charts.MemberAccess.FormatAccessCount (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Charts.MemberAccess.TMemberAccessData.CountLabel (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Charts.MemberAccess.UnreportedOf (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.UnreportedTail (DRagLint.Charts.MemberAccess.pas) ? (+2 more)</para>
+  /// <para>Used in units: DRagLint.Charts.MemberAccess, DRagLint.Charts.Q.MemberAccess</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUnreportedAccess = record
     /// <summary>'write' or 'read'.</summary>
     Kind     : string;
@@ -83,6 +101,12 @@ type
   end;
 
   /// <summary>One accessor that implements a property (the backing query row).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.BackingOf (DRagLint.Charts.MemberAccess.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.MemberAccess</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TBackingAccessor = record
     /// <summary>symbols.qualified_name of the accessor.</summary>
     QName: string;
@@ -93,8 +117,14 @@ type
   end;
 
   /// <summary>The collected facts of one member selection in one mode.</summary>
-  /// <remarks>Built only by CollectMemberAccess, which hands the caller ownership. The site map
-  /// is owned here and freed by the destructor; every other member is a value.</remarks>
+  /// <remarks>
+  /// Built only by CollectMemberAccess, which hands the caller ownership. The site map
+  /// is owned here and freed by the destructor; every other member is a value.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Charts.MemberAccess.CollectMemberAccess (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.CrossCheckSites (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Charts.MemberAccess.LoadSites (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Charts.Q.MemberAccess.RoutineRow (DRagLint.Charts.Q.MemberAccess.pas) ? (+4 more)</para>
+  /// <para>Used in units: DRagLint.Charts.MemberAccess, DRagLint.Charts.Q.MemberAccess</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMemberAccessData = class
   private
     FSel             : TMemberSelection;
@@ -117,7 +147,29 @@ type
     FBacking         : TArray<TBackingAccessor>;
     FSites           : TObjectDictionary<string, TList<TSiteAnchor>>;
   public
+    /// <summary><!-- drag-lint:auto sum -->---- TMemberAccessData ----</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.MemberAccess.CollectMemberAccess (DRagLint.Charts.MemberAccess.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FSites</para>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.CountLabel"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.RoutinesLabel"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.SitesOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FSites</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.CountLabel"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.Create"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.RoutinesLabel"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.SitesOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>The resolved field or property (Kind is 'field' or 'property').</summary>
     property Sel: TMemberSelection read FSel;
@@ -159,13 +211,49 @@ type
     /// <param name="pRoutine">The routine's qualified name; case-blind.</param>
     /// <param name="pMode">MODE_WRITE or MODE_READ.</param>
     /// <returns>The sites in line, column order; empty when the index has none for that key.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.MemberAccess.CrossCheckSites (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.Q.MemberAccess.RoutineRow (DRagLint.Charts.Q.MemberAccess.pas)</para>
+    /// <para>Returns: List.ToArray; nil</para>
+    /// <para>Reads: FSites</para>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.CountLabel"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.Create"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.RoutinesLabel"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SitesOf(const pRoutine, pMode: string): TArray<TSiteAnchor>;
     /// <summary>The bundle header's own wording for one count (the PS $writesLabel / $readsLabel).</summary>
     /// <param name="pU">WU or RU.</param>
     /// <returns>'resolved &lt;kind&gt; sites reported by find-callers' plus the unreported tail; '' (the PS $null) when nothing is unreported.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.MemberAccess.Emit (DRagLint.Charts.Q.MemberAccess.pas)</para>
+    /// <para>Calls: DRagLint.Charts.MemberAccess.UnreportedTail</para>
+    /// <para>Returns: ''; 'resolved ' + pU.Kind + ' sites reported by find-callers' + UnreportedTail(pU, FSel)</para>
+    /// <para>Reads: FSel</para>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.UnreportedTail"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.Create"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.RoutinesLabel"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.SitesOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CountLabel(const pU: TUnreportedAccess): string;
     /// <summary>The routine count's own wording (the PS $routinesLabel).</summary>
     /// <returns>'routines reported by find-callers' when a rendered direction has unreported refs, else '' (the PS $null).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.MemberAccess.Emit (DRagLint.Charts.Q.MemberAccess.pas)</para>
+    /// <para>Returns: ''; 'routines reported by find-callers'</para>
+    /// <para>Reads: FShowWrite, FWU, FShowRead, FRU</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.CountLabel"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.Create"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.MemberAccess.TMemberAccessData.SitesOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RoutinesLabel: string;
   end;
 
@@ -173,6 +261,13 @@ type
 /// <param name="pU">The unreported refs of one kind.</param>
 /// <param name="pSel">The selection, for the member name and its file.</param>
 /// <returns>'' when nothing is unreported.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.MemberAccess.FormatAccessCount (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.TMemberAccessData.CountLabel (DRagLint.Charts.MemberAccess.pas)</para>
+/// <para>Calls: DRagLint.Charts.Text.FileNameOf, Format</para>
+/// <seealso cref="DRagLint.Charts.Text.FileNameOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnreportedTail(const pU: TUnreportedAccess; const pSel: TMemberSelection): string;
 
 /// <summary>A count named for what it is (the PS Format-AccessCount).</summary>
@@ -180,6 +275,13 @@ function UnreportedTail(const pU: TUnreportedAccess; const pSel: TMemberSelectio
 /// <param name="pU">The unreported refs of the same kind.</param>
 /// <param name="pSel">The selection.</param>
 /// <returns>'N resolved kind(s) reported by find-callers + ...' when pU.Total &gt; 0, else 'N kind' with a plural s unless N is 1.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.MemberAccess.ZeroNote (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.Q.MemberAccess.FocusTable (DRagLint.Charts.Q.MemberAccess.pas)</para>
+/// <para>Calls: DRagLint.Charts.MemberAccess.UnreportedTail, Format</para>
+/// <seealso cref="DRagLint.Charts.MemberAccess.UnreportedTail"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormatAccessCount(pN: Integer; const pU: TUnreportedAccess; const pSel: TMemberSelection): string;
 
 /// <summary>The note for a zero in the rendered direction (the PS Get-ZeroNote).</summary>
@@ -189,6 +291,14 @@ function FormatAccessCount(pN: Integer; const pU: TUnreportedAccess; const pSel:
 /// <param name="pOtherU">The other direction's unreported refs.</param>
 /// <param name="pSel">The selection.</param>
 /// <returns>The zero, named, with the other direction's count beside it in brackets.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.MemberAccess.FocusTable (DRagLint.Charts.Q.MemberAccess.pas)</para>
+/// <para>Calls: DRagLint.Charts.MemberAccess.FormatAccessCount</para>
+/// <para>Returns: Head + ' (' + FormatAccessCount(pOtherN, pOtherU, pSel) + ')'</para>
+/// <seealso cref="DRagLint.Charts.MemberAccess.FormatAccessCount"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ZeroNote(const pKind: string; const pU: TUnreportedAccess; pOtherN: Integer;
   const pOtherU: TUnreportedAccess; const pSel: TMemberSelection): string;
 
@@ -201,8 +311,20 @@ function ZeroNote(const pKind: string; const pU: TUnreportedAccess; pOtherN: Int
 /// <returns>The facts; the caller frees it.</returns>
 /// <exception cref="EChartsQuestion">pMode is none of write, read, both.</exception>
 /// <exception cref="EChartsIndex">The name is not in the index, is ambiguous, or is a method (the text is ResolveMemberSelection's).</exception>
-/// <remarks>MODE_BOTH is accepted so the data layer keeps the PS lines verbatim (ruling R5);
-/// the question unit never passes it. Opens no connection of its own.</remarks>
+/// <remarks>
+/// MODE_BOTH is accepted so the data layer keeps the PS lines verbatim (ruling R5);
+/// the question unit never passes it. Opens no connection of its own.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.MemberAccess.Emit (DRagLint.Charts.Q.MemberAccess.pas)</para>
+/// <para>Calls: DRagLint.Charts.Index.TChartsIndex.ResolveMemberSelection, DRagLint.Charts.MemberAccess.BackingOf, DRagLint.Charts.MemberAccess.CanonicalMode, DRagLint.Charts.MemberAccess.CrossCheckSites, DRagLint.Charts.MemberAccess.GroupRoutines, DRagLint.Charts.MemberAccess.HitsOf, DRagLint.Charts.MemberAccess.LoadSites, DRagLint.Charts.MemberAccess.TMemberAccessData.Create, DRagLint.Charts.MemberAccess.UnreportedOf, DRagLint.Charts.Text.UnitNameOf, DRagLint.Query.Callers.ResolvedCallersForName, FreeAndNil</para>
+/// <para>Returns: TMemberAccessData.Create</para>
+/// <seealso cref="DRagLint.Charts.Index.TChartsIndex.ResolveMemberSelection"/>
+/// <seealso cref="DRagLint.Charts.MemberAccess.BackingOf"/>
+/// <seealso cref="DRagLint.Charts.MemberAccess.CanonicalMode"/>
+/// <seealso cref="DRagLint.Charts.MemberAccess.CrossCheckSites"/>
+/// <seealso cref="DRagLint.Charts.MemberAccess.GroupRoutines"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectMemberAccess(pIndex: TChartsIndex; const pStore: ISymbolStore; const pTarget, pMode: string;
   pCap: Integer): TMemberAccessData;
 

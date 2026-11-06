@@ -55,7 +55,7 @@ type
   /// A record rather than TArgs so the engine is testable without the CLI, and
   /// so this unit does not depend on DRagLint.CLI.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CompileDependents (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.Render (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.ValidateAndResolve (DRagLint.Analysis.LintTree.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas) ?, DRagLint.Analysis.LintTree.CompileDependents (DRagLint.Analysis.LintTree.pas) ?, DRagLint.Analysis.LintTree.Render (DRagLint.Analysis.LintTree.pas) ?, DRagLint.Analysis.LintTree.ValidateAndResolve (DRagLint.Analysis.LintTree.pas) ?, DRagLint.CLI.DoLintTree (DRagLint.CLI.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -87,7 +87,7 @@ type
   /// <returns>An open read-only store, or nil when it cannot be opened.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.ValidateAndResolve (DRagLint.Analysis.LintTree.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.ValidateAndResolve (DRagLint.Analysis.LintTree.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TStoreOpener = reference to function(const pDbPath: string): ISymbolStore;
@@ -97,7 +97,7 @@ type
   /// <returns>A parser, or nil when the extension has none.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TParserFactory = reference to function(const pExtension: string): IParser;
@@ -108,7 +108,7 @@ type
   /// <returns>Preprocessed bytes; byte length and line structure are preserved.</returns>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPreprocessor = reference to function(const pUtf8: TBytes;
@@ -125,7 +125,7 @@ type
   /// Injected rather than called directly so this unit stays free of
   /// the CLI, and so a test can drive tier 3 without a compiler.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CompileDependents (DRagLint.Analysis.LintTree.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.CompileDependents (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUnitCompiler = reference to function(const pUnitPath, pProjectPath,

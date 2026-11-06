@@ -12,17 +12,33 @@ interface
 /// <param name="AName">Identifier, dotted name or free text. May be ''.</param>
 /// <returns>The words, lower-cased, single-space separated, no leading or
 /// trailing space; '' for an input with no letter or digit.</returns>
-/// <remarks>Boundaries: lower-to-upper (ApplyDelta -&gt; apply delta); an
+/// <remarks>
+/// Boundaries: lower-to-upper (ApplyDelta -&gt; apply delta); an
 /// upper run followed by upper+lower (HTTPServer -&gt; http server); letter /
 /// digit (Server2 -&gt; server 2); and every non-alphanumeric character
 /// ('_', '.', space, punctuation) -- so FMyField -&gt; f my field and
 /// Get_ID -&gt; get id. Prefix letters (T, F, I, A, p) are kept as words, not
-/// stripped. Pure, thread-safe.</remarks>
+/// stripped. Pure, thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.IdentWords.SelfTestIdentWords (DRagLint.Query.IdentWords.pas), DRagLint.Storage.SQLite.ConceptTerms (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.BuildSymbolSearch (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Returns: SB.ToString</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 48 lines (full implementation)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SplitIdentifierWords(const AName: string): string;
 
 /// <summary>Self-test for SplitIdentifierWords (selftest ident-words).</summary>
 /// <param name="AFailure">Receives the first failing case, '' on success.</param>
 /// <returns>True when every case passes.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoSelfTestIdentWords (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Query.IdentWords.SplitIdentifierWords, Format</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: AFailure (out)</para>
+/// <seealso cref="DRagLint.Query.IdentWords.SplitIdentifierWords"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SelfTestIdentWords(out AFailure: string): Boolean;
 
 implementation

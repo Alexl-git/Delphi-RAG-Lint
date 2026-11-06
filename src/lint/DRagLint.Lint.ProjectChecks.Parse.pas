@@ -28,7 +28,7 @@ type
   /// <summary>Result of ResolveUsedUnit: whether the unit resolves, and via which source.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.ProjectChecks.Parse.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.ProjectChecks.Parse.pas), DRagLint.Lint.ProjectChecks.Parse.ResolveUsedUnit (DRagLint.Lint.ProjectChecks.Parse.pas)</para>
   /// <para>Used in units: DRagLint.Lint.ProjectChecks.Parse</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -87,10 +87,10 @@ function NormUnitQualified(const AName: string): string;
 /// <returns><!-- drag-lint:auto -->string -- Observed: ASrc.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.Facts.ReadDeclLine (DRagLint.Doc.Facts.pas), DRagLint.FormsMap.ReadPasLinesScrubbed (DRagLint.FormsMap.pas), DRagLint.Index.Closure.TClosureResolver.ParseDprUses (DRagLint.Index.Closure.pas), DRagLint.Lint.ProjectChecks.Parse.ParseUsesFromContent (DRagLint.Lint.ProjectChecks.Parse.pas)</para>
+/// <para>Called from: DRagLint.Doc.Drift.ReadDeclLine (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.ReadDeclLine (DRagLint.Doc.Facts.pas), DRagLint.FormsMap.ReadPasLinesScrubbed (DRagLint.FormsMap.pas), DRagLint.Index.Closure.TClosureResolver.ParseDprUses (DRagLint.Index.Closure.pas), DRagLint.Lint.ProjectChecks.Parse.ParseUsesFromContent (DRagLint.Lint.ProjectChecks.Parse.pas)</para>
 /// <para>Calls: DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout.Blank</para>
 /// <para>Complexity: 23 (cyclomatic, outer body), 53 lines (full implementation)</para>
-/// <para>Pure</para>
+/// <para>Effect-free (proven)</para>
 /// <seealso cref="DRagLint.Lint.ProjectChecks.Parse.StripPasCommentsKeepLayout.Blank"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

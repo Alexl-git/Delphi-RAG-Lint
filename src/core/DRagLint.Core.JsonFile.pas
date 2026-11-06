@@ -55,7 +55,7 @@ uses
 /// Not thread-safe against concurrent writers of the same path; the
 /// swap is atomic, so the loser simply overwrites rather than interleaving.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Index.Manifest.TManifestIO.Save (DRagLint.Index.Manifest.pas)</para>
+/// <para>Called from: [dclDragLintWizard]DRagLint.Core.ContextDefaults.MergeLibraryDefault (DRagLint.Core.ContextDefaults.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TManifestIO.Save (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DRagLint.Index.Manifest.TManifestIO.SaveEdits (DRagLint.Index.Manifest.pas), [dclDragLintWizard]DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.DeleteNamingPreset (DragLint.Plugin.LintOptionsFrame.pas), [dclDragLintWizard]DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.WriteNamingPreset (DragLint.Plugin.LintOptionsFrame.pas), [dclDragLintWizard]DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.WriteMaxReturnCases (DragLint.Plugin.OptionsFrames.pas), DRagLint.Project.ContextFile.SaveProjectContext (DRagLint.Project.ContextFile.pas)</para>
 /// <para>Calls: MoveFileEx, PChar</para>
 /// <para>Catches: Exception (re-raise)</para>
 /// <para>Touches: file system</para>

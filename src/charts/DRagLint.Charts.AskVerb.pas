@@ -47,9 +47,15 @@ const
 
 type
   /// <summary>The parsed arguments of `drag-lint ask`.</summary>
-  /// <remarks>A value record. A numeric argument is kept as typed ('' = not given), so the
+  /// <remarks>
+  /// A value record. A numeric argument is kept as typed ('' = not given), so the
   /// COMMAND line names exactly what was asked; ParseAskArgs has already checked it is an
-  /// integer.</remarks>
+  /// integer.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.ApplySwitch (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.ApplyValue (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.AskCommandOf (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.ParseAskArgs (DRagLint.Charts.AskVerb.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAskVerbArgs = record
     /// <summary>The question id as typed (positional, or --question).</summary>
     Question     : string;
@@ -102,6 +108,11 @@ type
 
   /// <summary>Receives one output line (no line end).</summary>
   /// <param name="pLine">The line.</param>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.RunAsk (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.TAskRun.CheckFreshness (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.WriteText (DRagLint.Charts.AskVerb.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAskWriter = reference to procedure(const pLine: string);
 
 /// <summary>Parses the arguments that follow the verb.</summary>
@@ -110,14 +121,35 @@ type
 /// <param name="pError">'' on success; otherwise what is wrong, in one line.</param>
 /// <returns>False for an unknown flag, a flag without its value, a second positional token,
 /// or a --depth / --cap / --surface-cap / --max-rows that is not an integer.</returns>
-/// <remarks>The first token that is not a flag is the question; --question names it too.
-/// Flags are case-sensitive, as every other engine flag. Pure; thread-safe.</remarks>
+/// <remarks>
+/// The first token that is not a flag is the question; --question names it too.
+/// Flags are case-sensitive, as every other engine flag. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine (DRagLint.Charts.AskVerb.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.AskVerb.ApplySwitch, DRagLint.Charts.AskVerb.ApplyValue, DRagLint.Charts.AskVerb.FindFlag, TryStrToInt</para>
+/// <para>Returns: True</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 27 lines (full implementation)</para>
+/// <para>Mutates: pArgs (out), pError (out)</para>
+/// <seealso cref="DRagLint.Charts.AskVerb.ApplySwitch"/>
+/// <seealso cref="DRagLint.Charts.AskVerb.ApplyValue"/>
+/// <seealso cref="DRagLint.Charts.AskVerb.FindFlag"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseAskArgs(const pArgv: TArray<string>; out pArgs: TAskVerbArgs; out pError: string): Boolean;
 
 /// <summary>Matches a typed question id against the 26 the chart pipeline accepts.</summary>
 /// <param name="pTyped">The id as typed, any case.</param>
 /// <param name="pId">The matched id, lower case; '' when there is none.</param>
 /// <returns>True when the id is known.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas)</para>
+/// <para>Calls: DRagLint.Charts.Question.QuestionIds, SameText</para>
+/// <para>Returns: True; False</para>
+/// <para>Mutates: pId (out)</para>
+/// <seealso cref="DRagLint.Charts.Question.QuestionIds"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NormaliseAskQuestion(const pTyped: string; out pId: string): Boolean;
 
 /// <summary>The question and its explicit arguments, as the answer's COMMAND line names them.</summary>
@@ -125,6 +157,14 @@ function NormaliseAskQuestion(const pTyped: string; out pId: string): Boolean;
 /// <returns>Target, To, Project (full path) or else In (full path), Depth, Cap, SurfaceCap,
 /// Control, Mode, MaxRows -- each only when given. Never an index override or a display
 /// switch (Ask-Report's Get-ReportCommandLine, header contract H2).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.AskVerb.AddArg, ExpandFileName</para>
+/// <para>Returns: Default(TReportCommand)</para>
+/// <seealso cref="DRagLint.Charts.AskVerb.AddArg"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AskCommandOf(const pArgs: TAskVerbArgs): TReportCommand;
 
 /// <summary>The text `drag-lint ask` prints for an answer.</summary>
@@ -136,8 +176,18 @@ function AskCommandOf(const pArgs: TAskVerbArgs): TReportCommand;
 /// answer without a header.</param>
 /// <returns>The lines to print, without line ends; a final empty line of the input is
 /// dropped.</returns>
-/// <remarks>The DocInsight form is FormatAnswerAsDocInsight with the question's caption
-/// phrase -- the bytes Ask-Report's default mode and the IDE's Reports menu produce. Pure.</remarks>
+/// <remarks>
+/// The DocInsight form is FormatAnswerAsDocInsight with the question's caption
+/// phrase -- the bytes Ask-Report's default mode and the IDE's Reports menu produce. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas)</para>
+/// <para>Calls: DRagLint.Charts.AskVerb.AnswerLines, DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight, DRagLint.Charts.Question.QuestionPhrase</para>
+/// <para>Returns: AnswerLines(FormatAnswerAsDocInsight(QuestionPhrase(pQuestion), pQuestion, pShownTarget, pAskedOn, pPlainText))</para>
+/// <seealso cref="DRagLint.Charts.AskVerb.AnswerLines"/>
+/// <seealso cref="DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight"/>
+/// <seealso cref="DRagLint.Charts.Question.QuestionPhrase"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormatAskAnswer(const pQuestion, pShownTarget, pPlainText: string; pPlain: Boolean;
   pAskedOn: TDateTime): TArray<string>;
 
@@ -148,20 +198,48 @@ function FormatAskAnswer(const pQuestion, pShownTarget, pPlainText: string; pPla
 /// <param name="pOut">Receives each stdout line.</param>
 /// <param name="pErr">Receives each stderr line.</param>
 /// <returns>0 answered, 1 refused or failed, 2 usage or setup, 3 stale index.</returns>
-/// <remarks>Never raises: an unexpected exception is a refusal (exit 1) with its message.
+/// <remarks>
+/// Never raises: an unexpected exception is a refusal (exit 1) with its message.
 /// On exit 3 the 'ask-report: ' prose is followed by one machine-readable line
 /// error[stale-index]: ask: ... (DRagLint.Core.CliError, A14); run_cli_error_reason.ps1.
 /// The producer is called with every index resolved and AllowStale True (freshness is checked
-/// here first). Not thread-safe: the in-process producer touches the process environment.</remarks>
+/// here first). Not thread-safe: the in-process producer touches the process environment.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine (DRagLint.Charts.AskVerb.pas)</para>
+/// <para>Calls: DRagLint.Charts.AskVerb.RunAskCore, DRagLint.Charts.AskVerb.WriteText, DRagLint.Core.CliError.CliErrorLine, pErr, Pos</para>
+/// <para>Returns: RunAskCore(pArgs, pProducer, pOut, pErr); E.Code; ASK_VERB_EXIT_REFUSED</para>
+/// <para>Catches: EAskStop (swallowed); Exception (swallowed)</para>
+/// <seealso cref="DRagLint.Charts.AskVerb.RunAskCore"/>
+/// <seealso cref="DRagLint.Charts.AskVerb.WriteText"/>
+/// <seealso cref="DRagLint.Core.CliError.CliErrorLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunAsk(const pArgs: TAskVerbArgs; const pProducer: IReportProducer;
   const pOut, pErr: TAskWriter): Integer;
 
 /// <summary>The engine entry point: parses ParamStr(2..) and runs the verb on the console.</summary>
 /// <returns>The exit code RunAsk returns; 2 for a usage error, 0 for --help.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Charts.AskVerb.AskUsage, DRagLint.Charts.AskVerb.ParseAskArgs, DRagLint.Charts.AskVerb.RunAsk, ParamStr, Writeln</para>
+/// <para>Returns: ASK_VERB_EXIT_SETUP</para>
+/// <seealso cref="DRagLint.Charts.AskVerb.AskUsage"/>
+/// <seealso cref="DRagLint.Charts.AskVerb.ParseAskArgs"/>
+/// <seealso cref="DRagLint.Charts.AskVerb.RunAsk"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunAskVerbFromCommandLine: Integer;
 
 /// <summary>The verb's usage text.</summary>
 /// <returns>The lines --help prints for `ask`.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine (DRagLint.Charts.AskVerb.pas)</para>
+/// <para>Calls: DRagLint.Charts.Question.QuestionIds</para>
+/// <seealso cref="DRagLint.Charts.Question.QuestionIds"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AskUsage: TArray<string>;
 
 implementation

@@ -38,7 +38,7 @@ type
   /// All three are False when Indexed is False.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Project.Coherence.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.MissingMembers (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Project.Coherence.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Project.Coherence.ComputeCoherence (DRagLint.Project.Coherence.pas), DRagLint.Project.Coherence.IsIncoherent (DRagLint.Project.Coherence.pas), DRagLint.Refactor.MultiProjectRename.MissingMembers (DRagLint.Refactor.MultiProjectRename.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Project.Coherence, DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -66,9 +66,10 @@ type
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.MissingMembers (DRagLint.Refactor.MultiProjectRename.pas)</para>
-/// <para>Calls: DateTimeToUnix, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetFileCompiledAt, DRagLint.Core.Interfaces.ISymbolStore.GetFileMTime</para>
+/// <para>Calls: DRagLint.Core.FileTime.FileMTimeUnix, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetFileCompiledAt, DRagLint.Core.Interfaces.ISymbolStore.GetFileMTime</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.FileTime.FileMTimeUnix"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFileCompiledAt"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFileMTime"/>
@@ -93,7 +94,14 @@ function IsIncoherent(const AC: TMemberCoherence): Boolean;
 /// `,`, blank, tab -- replaced by '_'.</summary>
 /// <param name="AName">A project name as typed or derived.</param>
 /// <returns>A name safe inside `[A,B]entry`, trimmed.</returns>
-/// <remarks>Pure.</remarks>
+/// <remarks>
+/// Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DocForgetOptions (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.ProjectTagFor (DRagLint.CLI.pas), DRagLint.CLI.ProjectTagOfDb (DRagLint.CLI.pas) (+1 more)</para>
+/// <para>Calls: Pos, Trim</para>
+/// <para>Returns: Trim(AName)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SanitizeProjectTag(const AName: string): string;
 
 /// <summary>True when a stored PROJECT_TAG_KEY value names a DIFFERENT project
@@ -104,9 +112,17 @@ function SanitizeProjectTag(const AName: string): string;
 /// <param name="AProjectFile">The .dpr/.dproj the caller would index or act
 /// for; compared by SanitizeProjectTag of its base name, case-insensitively.</param>
 /// <returns>False for a blank tag or a matching one; True otherwise.</returns>
-/// <remarks>Pure. The ONE comparison behind both the multi-project rename's
+/// <remarks>
+/// Pure. The ONE comparison behind both the multi-project rename's
 /// owner check and the `index --project` refusal, so the two cannot disagree
-/// about what "another project's index" means.</remarks>
+/// about what "another project's index" means.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.TagMismatch (DRagLint.Refactor.MultiProjectRename.pas)</para>
+/// <para>Calls: DRagLint.Project.Coherence.SanitizeProjectTag, SameText, Trim</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Project.Coherence.SanitizeProjectTag"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProjectTagConflicts(const AStoredTag, AProjectFile: string): Boolean;
 
 implementation

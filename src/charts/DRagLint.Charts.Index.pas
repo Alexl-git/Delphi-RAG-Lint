@@ -25,37 +25,106 @@ const
 
 type
   /// <summary>One result row, read by column name the way the PS read a pscustomobject.</summary>
-  /// <remarks>Port of the row objects Invoke-IndexQuery (Emit-Common.ps1:336) zipped from
+  /// <remarks>
+  /// Port of the row objects Invoke-IndexQuery (Emit-Common.ps1:336) zipped from
   /// sql/1 columns and positional rows. PS traps closed: property access is case-insensitive
-  /// (SameText lookup); `[string]$null` is '' and `[int]$null` is 0. Immutable once built.</remarks>
+  /// (SameText lookup); `[string]$null` is '' and `[int]$null` is 0. Immutable once built.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Index.pas) ?, DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Index.TChartsIndex.AllRows (DRagLint.Charts.Index.pas) ?, DRagLint.Charts.Index.TChartsIndex.Query (DRagLint.Charts.Index.pas) (+63 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Index, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.LandsWhere, DRagLint.Charts.Q.Path (+6 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TIndexRow = class
   private
     FNames : TArray<string>;
     FValues: TArray<string>;
     FNulls : TArray<Boolean>;
+    /// <param name="pCol"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: K; -1.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Index.TIndexRow.Has (DRagLint.Charts.Index.pas), DRagLint.Charts.Index.TIndexRow.S (DRagLint.Charts.Index.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas) ?</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: FNames</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.Has"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IndexOf(const pCol: string): Integer;
   public
     /// <summary>Builds a row from parallel column arrays.</summary>
     /// <param name="pNames">Column names, in select order.</param>
     /// <param name="pValues">Text of each value; ignored where pNulls is True.</param>
     /// <param name="pNulls">True where the column is SQL NULL.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Index.TChartsIndex.Query (DRagLint.Charts.Index.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FNames, FValues, FNulls</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.Has"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.IndexOf"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const pNames, pValues: TArray<string>; const pNulls: TArray<Boolean>);
     /// <summary>A column as text.</summary>
     /// <param name="pCol">Column name, any case.</param>
     /// <returns>The value's text; '' for NULL or an absent column.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.MemberRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.OrmLinksState (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.DataSetSites (DRagLint.Charts.Chain.pas) (+103 more)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TIndexRow.IndexOf</para>
+    /// <para>Returns: if (K &lt; 0) or FNulls[K] then ''</para>
+    /// <para>Reads: FNulls, FValues</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.IndexOf"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.Has"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function S(const pCol: string): string;
     /// <summary>A column as an integer.</summary>
     /// <param name="pCol">Column name, any case.</param>
     /// <returns>The value; 0 for NULL, an absent column or non-integer text.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.MemberRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.DataSetSites (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.DataSetTableLiterals (DRagLint.Charts.Chain.pas) (+72 more)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TIndexRow.S, StrToIntDef</para>
+    /// <para>Returns: StrToIntDef(S(pCol), 0)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.Has"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.IndexOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function I(const pCol: string): Integer;
     /// <summary>Whether the row has the column at all (NULL or not).</summary>
     /// <param name="pCol">Column name, any case.</param>
     /// <returns>True when the select list named it.</returns>
-    /// <remarks>The PS `$row.PSObject.Properties.Name -contains $name`, case-insensitive.</remarks>
+    /// <remarks>
+    /// The PS `$row.PSObject.Properties.Name -contains $name`, case-insensitive.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Charts.Index.TIndexRow.IndexOf</para>
+    /// <para>Returns: IndexOf(pCol) &gt;= 0</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.IndexOf"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Has(const pCol: string): Boolean;
   end;
 
   /// <summary>Where a symbol is, preferring its body. Port of the Get-SymbolLocation result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Index.pas) ?, DRagLint.Charts.Index.TChartsIndex.SymbolLocation (DRagLint.Charts.Index.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Index</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSymbolLocation = record
     /// <summary>symbols.id.</summary>
     Id       : Integer;
@@ -74,6 +143,12 @@ type
   end;
 
   /// <summary>One resolved member. Port of the Resolve-MemberSelection result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Index.pas) ?, declaration (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Charts.Index.TChartsIndex.ResolveMemberSelection (DRagLint.Charts.Index.pas), DRagLint.Charts.MemberAccess.FormatAccessCount (DRagLint.Charts.MemberAccess.pas) ?, DRagLint.Charts.MemberAccess.UnreportedTail (DRagLint.Charts.MemberAccess.pas) ? (+7 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Index, DRagLint.Charts.MemberAccess, DRagLint.Charts.Q.ExceptionPaths, DRagLint.Charts.Q.MemberAccess, DRagLint.Charts.Q.Wiring</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMemberSelection = record
     /// <summary>symbols.id.</summary>
     Id        : Integer;
@@ -98,12 +173,24 @@ type
   end;
 
   /// <summary>A refused index question; the message is the PS `throw` text, verbatim.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Chain.StepLocateForm (DRagLint.Charts.Chain.pas), DRagLint.Charts.Columns.SqlColumnState (DRagLint.Charts.Columns.pas), DRagLint.Charts.Index.TChartsIndex.ResolveMemberSelection (DRagLint.Charts.Index.pas), DRagLint.Charts.Index.TChartsIndex.SymbolLocation (DRagLint.Charts.Index.pas), DRagLint.Charts.Source.TSourceReader.ContextOfLines (DRagLint.Charts.Source.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Columns, DRagLint.Charts.Index, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Source, DRagLint.Charts.Sql</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EChartsIndex = class(Exception);
 
   /// <summary>Read-only, in-process access to one drag-lint index for the chart emitters.</summary>
-  /// <remarks>Owns a TSQLiteSymbolStore opened read-only and runs SQL on its FireDAC
+  /// <remarks>
+  /// Owns a TSQLiteSymbolStore opened read-only and runs SQL on its FireDAC
   /// connection (spec P5: no process is started). Not thread-safe; one owning thread.
-  /// Lines the PS wrote with Write-Host '  NOTE: ...' are collected in Notes instead.</remarks>
+  /// Lines the PS wrote with Write-Host ' NOTE: ...' are collected in Notes instead.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.LoadTableLiterals (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.ModuleDangles (DRagLint.Charts.Chain.pas) (+113 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Columns, DRagLint.Charts.Exceptions, DRagLint.Charts.MemberAccess, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary, DRagLint.Charts.Q.Cycles (+22 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TChartsIndex = class
   private
     FStore: TSQLiteSymbolStore;
@@ -111,50 +198,150 @@ type
   public
     /// <summary>Opens the index read-only.</summary>
     /// <param name="pDbPath">Path of an existing .sqlite index.</param>
-    /// <remarks>The store is owned and freed by Destroy. Errors opening it propagate.</remarks>
+    /// <remarks>
+    /// The store is owned and freed by Destroy. Errors opening it propagate.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.Create (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas) (+19 more)</para>
+    /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FNotes, FStore</para>
+    /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessDisclosure"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const pDbPath: string);
     /// <summary>Frees the store and the notes.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FStore, FNotes</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessDisclosure"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessFiles"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EnclosingRoutineJoin"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Runs one SELECT and returns every row.</summary>
     /// <param name="pSql">The statement; it may carry its own ORDER BY / LIMIT.</param>
     /// <returns>A new list the caller frees; it owns its rows. Empty for zero rows.</returns>
-    /// <remarks>Port of Invoke-IndexQuery (Emit-Common.ps1:336). The PS row cap (200),
+    /// <remarks>
+    /// Port of Invoke-IndexQuery (Emit-Common.ps1:336). The PS row cap (200),
     /// -FailOnTruncate and the truncation NOTE have no counterpart: FetchOptions.Mode is fmAll,
     /// so nothing is cut. PS trap closed: the unary-comma contract (a 0- or 1-row result must
-    /// stay an array) does not exist here -- a list is always a list.</remarks>
+    /// stay an array) does not exist here -- a list is always a list.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.LoadTableLiterals (DRagLint.Charts.Chain.pas) (+83 more)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TIndexRow.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection</para>
+    /// <para>Returns: TObjectList&lt;TIndexRow&gt;.Create(True)</para>
+    /// <para>Reads: FStore</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.Create"/>
+    /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Query(const pSql: string): TObjectList<TIndexRow>;
     /// <summary>Every row of a population query in a total order.</summary>
     /// <param name="pSql">The statement WITHOUT its own ORDER BY / LIMIT.</param>
     /// <param name="pOrderKey">ORDER BY expression; end it in a unique column.</param>
     /// <returns>A new owning list the caller frees.</returns>
-    /// <remarks>Port of Get-AllIndexRows (Emit-Common.ps1:384): ' ORDER BY &lt;key&gt;' is
-    /// appended exactly as the PS did; its LIMIT 180 OFFSET paging is dropped (no cap here).</remarks>
+    /// <remarks>
+    /// Port of Get-AllIndexRows (Emit-Common.ps1:384): ' ORDER BY &lt;key&gt;' is
+    /// appended exactly as the PS did; its LIMIT 180 OFFSET paging is dropped (no cap here).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.TChainWalker.FieldBindingChains (DRagLint.Charts.Chain.pas), DRagLint.Charts.Exceptions.TExceptionIndex.FactIndexStats (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.TExceptionIndex.IndexStats (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.TExceptionIndex.IsExceptionTypeName (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Index.TChartsIndex.EdgelessFiles (DRagLint.Charts.Index.pas) (+28 more)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Query</para>
+    /// <para>Returns: Query(pSql + ' ORDER BY ' + pOrderKey)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessDisclosure"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AllRows(const pSql, pOrderKey: string): TObjectList<TIndexRow>;
     /// <summary>Doubles single quotes for an SQL string literal.</summary>
     /// <param name="pS">Raw text.</param>
     /// <returns>pS with every ' doubled.</returns>
-    /// <remarks>Port of ConvertTo-SqlText (Emit-Common.ps1:375).</remarks>
+    /// <remarks>
+    /// Port of ConvertTo-SqlText (Emit-Common.ps1:375).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.ModuleDangles (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.PickRootDecl (DRagLint.Charts.Chain.pas) (+53 more)</para>
+    /// <para>Calls: StringReplace</para>
+    /// <para>Returns: StringReplace(pS, '''', '''''', [rfReplaceAll])</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessDisclosure"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function SqlText(const pS: string): string;
     /// <summary>"'a','b','c'" for an SQL IN-list.</summary>
     /// <param name="pValues">Raw values.</param>
     /// <returns>The quoted, comma-joined list; '' for no values.</returns>
-    /// <remarks>Port of ConvertTo-SqlInList (Emit-Common.ps1:400).</remarks>
+    /// <remarks>
+    /// Port of ConvertTo-SqlInList (Emit-Common.ps1:400).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.LoadTableLiterals (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.DataSetTableLiterals (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.RePointSites (DRagLint.Charts.Chain.pas), DRagLint.Charts.MemberAccess.SiteSql (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.FileRoutines (DRagLint.Charts.Q.Consumers.pas) (+14 more)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.SqlText</para>
+    /// <para>Returns: string.Join(',', Quoted)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessDisclosure"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function SqlInList(const pValues: TArray<string>): string;
     /// <summary>Collapses a type's forward declarations to its one real declaration row.</summary>
     /// <param name="pRows">Symbol rows carrying qualified_name, generic_params, start_line and end_line.</param>
     /// <returns>A new list the caller frees; it BORROWS its rows from pRows (pRows must outlive it).
     /// One row per (qualified_name, generic_params) group, case-insensitively: the widest
     /// end_line - start_line span, then the smallest start_line, then the first seen.</returns>
-    /// <remarks>Port of Select-DeclarationRows (Emit-Common.ps1:448). The groups come out
-    /// SORTED BY KEY, not in first-seen order -- see the implementation note.</remarks>
+    /// <remarks>
+    /// Port of Select-DeclarationRows (Emit-Common.ps1:448). The groups come out
+    /// SORTED BY KEY, not in first-seen order -- see the implementation note.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Index.TChartsIndex.ResolveMemberSelection (DRagLint.Charts.Index.pas), DRagLint.Charts.Q.Hierarchy.Emit (DRagLint.Charts.Q.Hierarchy.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.CompareGroupKeys, DRagLint.Charts.Index.DeclGroupKey, DRagLint.Charts.Index.TIndexRow.I</para>
+    /// <para>Returns: TList&lt;TIndexRow&gt;.Create</para>
+    /// <seealso cref="DRagLint.Charts.Index.CompareGroupKeys"/>
+    /// <seealso cref="DRagLint.Charts.Index.DeclGroupKey"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function SelectDeclarationRows(const pRows: TObjectList<TIndexRow>): TList<TIndexRow>;
     /// <summary>Where a qualified name lives, preferring the body line.</summary>
     /// <param name="pQName">Exact qualified name (SQL '=' -- case-sensitive, as in the PS).</param>
     /// <returns>The first matching symbol's location.</returns>
     /// <exception cref="EChartsIndex">'&lt;name&gt; is not in this index' when nothing matches.</exception>
-    /// <remarks>Port of Get-SymbolLocation (Emit-Common.ps1:405). First row wins; more than
+    /// <remarks>
+    /// Port of Get-SymbolLocation (Emit-Common.ps1:405). First row wins; more than
     /// one adds a NOTE line to Notes. PS trap closed: `[int]$null` is 0, so a NULL
-    /// impl_start_line yields ImplStart 0 and FocusLine = DeclLine (I returns 0).</remarks>
+    /// impl_start_line yields ImplStart 0 and FocusLine = DeclLine (I returns 0).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.TouchesTables.Emit (DRagLint.Charts.Q.TouchesTables.pas), DRagLint.Charts.Q.WhoCalls.EmitTree (DRagLint.Charts.Q.WhoCalls.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, Format</para>
+    /// <para>Returns: Default(TSymbolLocation)</para>
+    /// <para>Reads: FNotes</para>
+    /// <para>SQL: reads FILES, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SymbolLocation(const pQName: string): TSymbolLocation;
     /// <summary>Resolves a member selection, REFUSING an ambiguous name.</summary>
     /// <param name="pQName">A qualified or bare name.</param>
@@ -166,33 +353,83 @@ type
     /// <returns>The one member; Default(TMemberSelection) when pFound is False.</returns>
     /// <exception cref="EChartsIndex">Not in this index; ambiguous (with up to six candidates
     /// and '; +N more'); or the wrong kind (with pHint).</exception>
-    /// <remarks>Port of Resolve-MemberSelection (Emit-Common.ps1:486) and Select-DeclarationRows
+    /// <remarks>
+    /// Port of Resolve-MemberSelection (Emit-Common.ps1:486) and Select-DeclarationRows
     /// (:448). PS traps closed: Group-Object on "qualified_name|generic_params" is
     /// case-insensitive (TIStringComparer.Ordinal dictionary), and Group-Object sorts its groups by key,
     /// case-insensitively (ICU root order, not first-seen -- so the six named candidates match);
     /// `-eq` for the exact qualified hit and `-contains` / `-notcontains` for kinds are
     /// case-insensitive (SameText); the qualified-name grouping behind "they share a
-    /// qualified name" is case-insensitive too.</remarks>
+    /// qualified name" is case-insensitive too.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.MemberAccess.CollectMemberAccess (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas), DRagLint.Charts.Q.Effects.Emit (DRagLint.Charts.Q.Effects.pas) (+7 more)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Index.AmbiguityText, DRagLint.Charts.Index.HasKind, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SelectDeclarationRows, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, SameText</para>
+    /// <para>Returns: Default(TMemberSelection)</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 74 lines (full implementation)</para>
+    /// <para>SQL: reads FILES, SYMBOLS</para>
+    /// <para>Mutates: pFound (out)</para>
+    /// <seealso cref="DRagLint.Charts.Index.AmbiguityText"/>
+    /// <seealso cref="DRagLint.Charts.Index.HasKind"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SelectDeclarationRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveMemberSelection(const pQName: string; const pKinds: TArray<string>; pAllowMissing: Boolean;
       const pHint: string; out pFound: Boolean): TMemberSelection;
     /// <summary>Files that hold at least pMinCallRefs call references and no call edge.</summary>
     /// <param name="pMinCallRefs">Threshold on call references.</param>
     /// <returns>(path, call-ref count) pairs, most references first, then by path.</returns>
-    /// <remarks>Port of Get-EdgelessFiles (Emit-Common.ps1:634); SQL and order key verbatim.
-    /// A heuristic, not a cause -- see Get-EdgelessDisclosure.</remarks>
+    /// <remarks>
+    /// Port of Get-EdgelessFiles (Emit-Common.ps1:634); SQL and order key verbatim.
+    /// A heuristic, not a cause -- see Get-EdgelessDisclosure.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.DrawFocus (DRagLint.Charts.Q.ExceptionPaths.pas), DRagLint.Charts.Q.TestedBy.Emit (DRagLint.Charts.Q.TestedBy.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, IntToStr</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessDisclosure"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EnclosingRoutineJoin"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function EdgelessFiles(pMinCallRefs: Integer = EDGELESS_MIN_CALL_REFS): TArray<TPair<string, Integer>>;
     /// <summary>The one sentence every chart prints for EdgelessFiles.</summary>
     /// <param name="pRows">EdgelessFiles' result.</param>
     /// <returns>The disclosure naming up to three files and '+N more', or '' when empty.</returns>
-    /// <remarks>Port of Get-EdgelessDisclosure (Emit-Common.ps1:658). States the observation,
-    /// not the cause. PS trap closed: `$null` / an empty list read as healthy ('').</remarks>
+    /// <remarks>
+    /// Port of Get-EdgelessDisclosure (Emit-Common.ps1:658). States the observation,
+    /// not the cause. PS trap closed: `$null` / an empty list read as healthy ('').
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.DrawFocus (DRagLint.Charts.Q.ExceptionPaths.pas), DRagLint.Charts.Q.TestedBy.Emit (DRagLint.Charts.Q.TestedBy.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Text.FileNameOf, Format</para>
+    /// <para>Returns: ''</para>
+    /// <seealso cref="DRagLint.Charts.Text.FileNameOf"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function EdgelessDisclosure(const pRows: TArray<TPair<string, Integer>>): string;
     /// <summary>The JOIN that maps a refs row to its enclosing routine.</summary>
     /// <param name="pRefAlias">Alias of the refs (or member_accesses) table in the query.</param>
     /// <param name="pJoinAlias">Alias for the joined symbols row.</param>
     /// <returns>'LEFT JOIN symbols &lt;j&gt; ON &lt;j&gt;.id = &lt;r&gt;.enclosing_symbol_id'.</returns>
-    /// <remarks>Port of the Join half of Get-EnclosingRoutineSql (Emit-Common.ps1:697); its
-    /// Select half is just '&lt;j&gt;.qualified_name'.</remarks>
+    /// <remarks>
+    /// Port of the Join half of Get-EnclosingRoutineSql (Emit-Common.ps1:697); its
+    /// Select half is just '&lt;j&gt;.qualified_name'.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.MemberAccess.SiteSql (DRagLint.Charts.MemberAccess.pas)</para>
+    /// <para>Calls: Format</para>
+    /// <para>Returns: Format('LEFT JOIN symbols %s ON %s.id = %s.enclosing_symbol_id', [pJoinAlias, pJoinAlias, pRefAlias])</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessDisclosure"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessFiles"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function EnclosingRoutineJoin(const pRefAlias: string; const pJoinAlias: string = 'encl'): string;
     /// <summary>The NOTE lines the PS wrote to the host, oldest first.</summary>
     property Notes: TStrings read FNotes;
@@ -203,9 +440,17 @@ type
 /// <param name="pA">First key.</param>
 /// <param name="pB">Second key.</param>
 /// <returns>Negative, zero or positive, as pA sorts before, with or after pB.</returns>
-/// <remarks>Zero only for keys equal ignoring ASCII case. Exact for 7-bit ASCII (measured on
+/// <remarks>
+/// Zero only for keys equal ignoring ASCII case. Exact for 7-bit ASCII (measured on
 /// 160k index keys); an approximation beyond it (see GROUP_KEY_ORDER). Public since step 2:
-/// every `Sort-Object` / `Sort-Object -Unique` over names the SQL helpers port sorts with it.</remarks>
+/// every `Sort-Object` / `Sort-Object -Unique` over names the SQL helpers port sorts with it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Chain.SortNames (DRagLint.Charts.Chain.pas), DRagLint.Charts.Index.TChartsIndex.SelectDeclarationRows (DRagLint.Charts.Index.pas), DRagLint.Charts.MemberAccess.GroupRoutines (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.Butterfly.GroupByKey (DRagLint.Charts.Q.Butterfly.pas) (+21 more)</para>
+/// <para>Calls: DRagLint.Charts.Index.GroupKeyWeight</para>
+/// <para>Returns: GroupKeyWeight(pA[K]) - GroupKeyWeight(pB[K]); Length(pA) - Length(pB)</para>
+/// <seealso cref="DRagLint.Charts.Index.GroupKeyWeight"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CompareGroupKeys(const pA, pB: string): Integer;
 
 implementation

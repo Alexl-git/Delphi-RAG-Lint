@@ -52,11 +52,24 @@ const
 /// that a ref READS and that has no write evidence anywhere in the project (see
 /// the unit comment for the evidence and the exempt shapes), anchored at the
 /// symbol's declaration.</returns>
-/// <remarks>Reads refs file by file (one query per file), and the source text
+/// <remarks>
+/// Reads refs file by file (one query per file), and the source text
 /// only of the files that hold a still-undecided ref or a would-be finding's
 /// declaration. A source file that cannot be read, or whose text no longer
 /// matches the index at a ref, counts as a write: the rule errs towards
-/// silence.</remarks>
+/// silence.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: CompareText, ContainsText, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.AddCandidate, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.GlobalExempt, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.ParentOf, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.Report (+10 more)</para>
+/// <para>Returns: nil; Findings.ToArray</para>
+/// <para>Complexity: 26 (cyclomatic, outer body), 218 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
+/// <seealso cref="DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.AddCandidate"/>
+/// <seealso cref="DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.GlobalExempt"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectReadNeverAssigned(const AStore, ALibStore: ISymbolStore): TArray<TLintFinding>;
 
 implementation

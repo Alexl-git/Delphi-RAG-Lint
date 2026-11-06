@@ -30,6 +30,10 @@ type
   /// <remarks>
   /// Stateless; thread-safe. Called from DoLint and DoLintAll behind
   /// LintRuleWants(rule, LINT_GATE_DECL_PARITY).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDeclParityChecker = class
   public
@@ -39,6 +43,17 @@ type
     /// <param name="AStore">Optional symbol store; nil when the run has no index. Used by hides-ancestor-virtual for ancestors declared in other units.</param>
     /// <param name="AFileId">File id within AStore (ignored when AStore is nil).</param>
     /// <returns>One finding per violation; empty when clean or unparsable. The CLI filters by --rule.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Diagnostics.DeclParityChecks.TParityRun.Create, DRagLint.Diagnostics.DeclParityChecks.TParityRun.Run, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get</para>
+    /// <para>Returns: nil; Run.Run(PF.Tree.RootNode)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Diagnostics.DeclParityChecks.TParityRun.Create"/>
+    /// <seealso cref="DRagLint.Diagnostics.DeclParityChecks.TParityRun.Run"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
       const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; static;
   end;

@@ -47,7 +47,7 @@ type
   /// <summary>Flow-sensitive checks over a single file's routines.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -67,9 +67,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ApplyEntryDefs, ApplyWithRecordEntity, AssignedUnderSameGuard, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectGuardTokens, CollectInterfaceDerefs, CollectReadsAndCallDefs, ConstructedTypeText (+47 more)</para>
-    /// <para>Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); pmUnknown; Seen; Findings.ToArray</para>
-    /// <para>Complexity: 43 (cyclomatic, outer body), 1135 lines (full implementation)</para>
+    /// <para>Calls: ApplyEntryDefs, ApplyWithRecordEntity, AssignedUnderSameGuard, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectGuardTokens, CollectInterfaceDerefs, CollectReadsAndCallDefs, CollectSameUnitClassKinds (+53 more)</para>
+    /// <para>Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); pmUnknown</para>
+    /// <para>Complexity: 62 (cyclomatic, outer body), 1245 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>

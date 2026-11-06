@@ -40,10 +40,20 @@ type
   /// <summary>Resolves the index databases a merge handler queries when no
   /// --db was given.</summary>
   /// <returns>The database paths; empty when none resolves.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.pas), DRagLint.CLI.MakeConsumerDbResolver (DRagLint.CLI.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspDbResolver = reference to function: TArray<string>;
 
   /// <summary>Installs the lint preprocessing the merge's diagnostics need
   /// (C14): the CLI passes the same setup routine plain `lsp` runs at startup.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.pas), DRagLint.CLI.MakeLspLintSetup (DRagLint.CLI.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspLintSetup = reference to procedure;
 
   /// <summary>Everything the relay needs to start. All fields are optional;
@@ -51,7 +61,7 @@ type
   /// stdio.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), declaration (DRagLint.LSP.Proxy.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Create (DRagLint.LSP.Proxy.Merge.pas)</para>
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), declaration (DRagLint.LSP.Proxy.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Create (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Proxy, DRagLint.LSP.Proxy.Merge</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

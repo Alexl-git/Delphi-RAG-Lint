@@ -10,8 +10,16 @@ interface
 /// folder and its ancestors, and every .dpr with no .dproj of the same base.</summary>
 /// <param name="AFile">The unit; need not exist.</param>
 /// <returns>Full paths, nearest folder first.</returns>
-/// <remarks>Top level of each folder only: the search climbs, it never descends.
-/// A folder that cannot be listed is skipped.</remarks>
+/// <remarks>
+/// Top level of each folder only: the search climbs, it never descends.
+/// A folder that cannot be listed is skipped.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.UsagesDbForFile (DRagLint.CLI.pas)</para>
+/// <para>Calls: ChangeFileExt, ExcludeTrailingPathDelimiter, ExpandFileName, ExtractFilePath, SameText, Writeln</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProjectFilesNear(const AFile: string): TArray<string>;
 
 /// <summary>True when a project file names AFile.</summary>
@@ -19,16 +27,32 @@ function ProjectFilesNear(const AFile: string): TArray<string>;
 /// <param name="AFile">The unit, or the project's own main source.</param>
 /// <returns>True for a DCCReference or an `in '...'` path that resolves to AFile, or
 /// when AFile is the project's own main source file.</returns>
-/// <remarks>A unit reached only through a search path is not named here; the
-/// project's index answers for those.</remarks>
+/// <remarks>
+/// A unit reached only through a search path is not named here; the
+/// project's index answers for those.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.UsagesDbForFile (DRagLint.CLI.pas)</para>
+/// <para>Calls: ChangeFileExt, DRagLint.CLI.UnitContext.ReadTextOrEmpty, DRagLint.CLI.UnitContext.TextNamesFile, ExpandFileName, ExtractFileExt, ExtractFilePath, SameText</para>
+/// <para>Returns: TextNamesFile(ReadTextOrEmpty(AProjectFile), Dir, Abs); TextNamesFile(ReadTextOrEmpty(ChangeFileExt(AProjectFile, '.dpr')), Dir, Abs)</para>
+/// <seealso cref="DRagLint.CLI.UnitContext.ReadTextOrEmpty"/>
+/// <seealso cref="DRagLint.CLI.UnitContext.TextNamesFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProjectListsFile(const AProjectFile, AFile: string): Boolean;
 
 /// <summary>The unit names in every uses clause of a source file.</summary>
 /// <param name="AFile">A .pas file.</param>
 /// <returns>The names, dotted as written, without duplicates; empty when the file
 /// cannot be read.</returns>
-/// <remarks>Text scan with comments and strings removed. Both branches of an $IFDEF
-/// count, which is the conservative reading for "does it need a project".</remarks>
+/// <remarks>
+/// Text scan with comments and strings removed. Both branches of an $IFDEF
+/// count, which is the conservative reading for "does it need a project".
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.UsagesLibraryDb (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.UnitContext.ReadTextOrEmpty, LowerCase</para>
+/// <seealso cref="DRagLint.CLI.UnitContext.ReadTextOrEmpty"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnitsUsedBy(const AFile: string): TArray<string>;
 
 implementation

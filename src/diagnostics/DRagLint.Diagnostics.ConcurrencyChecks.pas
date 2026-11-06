@@ -20,6 +20,10 @@ type
   /// <remarks>
   /// Stateless; thread-safe. Called from DoLint and DoLintAll behind
   /// LintRuleWants(rule, LINT_GATE_CONCURRENCY).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TConcurrencyChecker = class
   public
@@ -29,6 +33,16 @@ type
     /// <param name="AStore">Optional symbol store; nil when the run has no index.</param>
     /// <param name="AFileId">File id within AStore (ignored when AStore is nil).</param>
     /// <returns>One finding per violation; empty when clean or unparsable. The CLI filters by --rule.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Canon, Classify, Copy, Default, Delete, DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, EmitAt, Format, Integer (+8 more)</para>
+    /// <para>Returns: nil; Findings.ToArray</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check.Visit"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
       const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; static;
   end;

@@ -129,7 +129,7 @@ type
       /// <param name="AMode">Apply, dry-run or diff. Only fmApply writes.</param>
       /// <returns>The outcome; see TFormatResult.ExitCode for the reason
       /// codes.</returns>
-      /// <exception cref="EYadfFormatError"><!-- drag-lint:auto exc -->File not found: %s; via DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture: CreatePipe failed; via DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture: CreateProcessW failed: %d</exception>
+      /// <exception cref="EYadfFormatError"><!-- drag-lint:auto exc -->File not found: %s</exception>
       /// <remarks>
       /// <para>In fmApply the file is backed up, formatted, then RE-PARSED and
       /// compared against the pre-format parse by symbol fingerprint. On
@@ -138,7 +138,7 @@ type
       /// what the unit DECLARES.</para>
       /// <para>Touches the file system and the registry.</para>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.CheckConvertIgnoredDefaults (DRagLint.CLI.pas) ?, DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferences (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferencesWithContext (DRagLint.CLI.pas) ? (+173 more)</para>
+      /// <para>Called from: DRagLint.CLI.ApplyPositionalProjectPrecedence (DRagLint.CLI.pas) ?, DRagLint.CLI.CheckConvertIgnoredDefaults (DRagLint.CLI.pas) ?, DRagLint.CLI.DoFormat (DRagLint.CLI.pas), DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintReferenceLines (DRagLint.CLI.pas) ? (+207 more)</para>
       /// <para>Calls: DRagLint.Format.Yadf.TYadfFormatter.CompareVersionStr, DRagLint.Format.Yadf.TYadfFormatter.FindYadfPath, DRagLint.Format.Yadf.TYadfFormatter.FirstDivergence, DRagLint.Format.Yadf.TYadfFormatter.ReadFileVersion, DRagLint.Format.Yadf.TYadfFormatter.SimpleDiff, DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture, DRagLint.Format.Yadf.TYadfFormatter.SymbolFingerprint</para>
       /// <para>Complexity: 20 (cyclomatic, outer body), 227 lines (full implementation)</para>
       /// <para>Catches: Exception (empty); Exception (swallowed)</para>

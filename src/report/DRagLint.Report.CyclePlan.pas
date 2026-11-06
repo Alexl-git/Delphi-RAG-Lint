@@ -45,9 +45,15 @@ const
 type
   /// <summary>The unit-uses graph DoCycles already built, handed to the
   /// playbook renderer.</summary>
-  /// <remarks>Every dictionary is keyed by the LOWER-CASE unit stem (file name
+  /// <remarks>
+  /// Every dictionary is keyed by the LOWER-CASE unit stem (file name
   /// without extension) and is owned by the caller; the renderer only reads
-  /// them.</remarks>
+  /// them.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.CycleToJson (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.IntfEdgeCount (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunAll (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas) (+12 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Report.CyclePlan</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleGraph = record
     /// <summary>Unit stem -> stems it uses, from either uses clause.</summary>
     Adj: TDictionary<string, TList<string>>;
@@ -60,7 +66,8 @@ type
   end;
 
   /// <summary>One reason a cycle's plan cannot be applied mechanically.</summary>
-  /// <remarks>Kind is one of the strings of the 2026-10-10 contract 4.4:
+  /// <remarks>
+  /// Kind is one of the strings of the 2026-10-10 contract 4.4:
   /// manual-edit, blocked-symbol, unresolved-edge, directive, leaf-uses-cycle,
   /// qualified-ref, class-ctor, base-class, outside-roots; R1 (E18 T5) adds
   /// signature-in-cycle, signature-unknown, routine-not-called, init-order, finalization-order,
@@ -72,7 +79,12 @@ type
   /// qualified-ref, name-shadowed, duplicate-identifier, edge-still-used, manual-edit); coupling-remains (lane cyc4: mutual leaves that
   /// cannot merge, or a prediction that keeps the interface coupling); ctor-inversion-surface (B8: a class a consumer
   /// constructs, whose constructor inversion is outside its closed whitelist; the reason names the line). Line is 0 when the
-  /// refusal has no single line (an edge, a unit).</remarks>
+  /// refusal has no single line (an edge, a unit).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.AnchorRefusal (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.MakeRefusal (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.MechanisabilityGate (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.StaleRefusals (DRagLint.CLI.CycleFix.pas) (+15 more)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix, DRagLint.Report.CyclePlan</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRefusal = record
     Kind    : string;
     Symbol  : string;
@@ -82,6 +94,12 @@ type
   end;
 
   /// <summary>One symbol a plan moves into a leaf unit.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.BuildView (DRagLint.Report.CyclePlan.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CyclePlan</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPlanMove = record
     /// <summary>Declared name.</summary>
     Symbol: string;
@@ -100,6 +118,12 @@ type
   end;
 
   /// <summary>One decision on a uses entry.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.BuildView (DRagLint.Report.CyclePlan.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CyclePlan</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPlanUse = record
     /// <summary>File whose uses clause is judged.</summary>
     FilePath: string;
@@ -112,6 +136,12 @@ type
   end;
 
   /// <summary>A unit file the plan creates.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.BuildView (DRagLint.Report.CyclePlan.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CyclePlan</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPlanNewUnit = record
     /// <summary>Unit name.</summary>
     UnitName: string;
@@ -122,6 +152,12 @@ type
   end;
 
   /// <summary>One edit of an existing file.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.BuildView (DRagLint.Report.CyclePlan.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.BuildView.AddEdits (DRagLint.Report.CyclePlan.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CyclePlan</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPlanEdit = record
     /// <summary>The edited file.</summary>
     FilePath: string;
@@ -140,7 +176,13 @@ type
   end;
 
   /// <summary>A plan for one circular group as plain data, for the `cycles --fix` front end.</summary>
-  /// <remarks>Built by VisitCyclePlans from the planner's TCycleFixPlan; it owns nothing.</remarks>
+  /// <remarks>
+  /// Built by VisitCyclePlans from the planner's TCycleFixPlan; it owns nothing.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.MechanisabilityGate (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.RerunAfterReindex (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.StaleRefusals (DRagLint.CLI.CycleFix.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.BuildView (DRagLint.Report.CyclePlan.pas) (+25 more)</para>
+  /// <para>Used in units: DRagLint.CLI.CycleFix, DRagLint.Report.CyclePlan</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCyclePlanView = record
     /// <summary>1-based group index (DoCycles order).</summary>
     CycleIndex: Integer;
@@ -193,6 +235,12 @@ type
   end;
 
   /// <summary>One edge a `Fix it` block names, as the planner weighed it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.AddCycleFixHints.EdgeJson (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.FixHintOf (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.FixHintOf.EdgeOf (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.RenderFixIt.EdgeText (DRagLint.Report.CyclePlan.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CyclePlan</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFixEdge = record
     /// <summary>The using unit's stem.</summary>
     FromUnit: string;
@@ -205,7 +253,13 @@ type
   end;
 
   /// <summary>What a `Fix it` block (text) or `fix` object (JSON) says about one circular group.</summary>
-  /// <remarks>Taken only from the planner's plan of the group; nothing is re-derived.</remarks>
+  /// <remarks>
+  /// Taken only from the planner's plan of the group; nothing is re-derived.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.FixHintOf (DRagLint.Report.CyclePlan.pas)</para>
+  /// <para>Used in units: DRagLint.Report.CyclePlan</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleFixHint = record
     /// <summary>1-based group index (DoCycles order).</summary>
     CycleIndex: Integer;
@@ -231,30 +285,64 @@ type
   /// <param name="pView">The group's plan as data; valid during the call only.</param>
   /// <param name="pRender">Returns the playbook of this group, one string per line; call at most once.</param>
   /// <returns>True to continue with the next group, False to stop.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.VisitCyclePlans (DRagLint.Report.CyclePlan.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCyclePlanVisit = reference to function(const pView: TCyclePlanView; const pRender: TFunc<TArray<string>>): Boolean;
 
 /// <summary>The encoding a source file is read and written in: UTF-8 when it starts with the
 /// UTF-8 BOM, else the system ANSI code page (the indexer's basis).</summary>
 /// <param name="pBytes">The file's raw bytes.</param>
 /// <returns>TEncoding.UTF8 or TEncoding.ANSI; not owned by the caller.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Report.CyclePlan.DecodeSource (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Returns: TEncoding.UTF8; TEncoding.ANSI</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SourceEncodingOf(const pBytes: TBytes): TEncoding;
 
 /// <summary>Decodes a source file's bytes in its own encoding.</summary>
 /// <param name="pBytes">The file's raw bytes.</param>
 /// <param name="pEncoding">Receives the encoding used (SourceEncodingOf).</param>
 /// <returns>The text without the BOM.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Create (DRagLint.CLI.CycleFix.pas), DRagLint.Report.CyclePlan.ReadSourceLines (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: DRagLint.Report.CyclePlan.SourceEncodingOf</para>
+/// <para>Returns: TEncoding.UTF8.GetString(pBytes, Length(TEncoding.UTF8.GetPreamble), Length(pBytes) - Length(TEncoding.UTF8.GetPreamble)); TEncoding.ANSI.GetString(pBytes)</para>
+/// <para>Mutates: pEncoding (out)</para>
+/// <seealso cref="DRagLint.Report.CyclePlan.SourceEncodingOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DecodeSource(const pBytes: TBytes; out pEncoding: TEncoding): string;
 
 /// <summary>Encodes text for a source file; the inverse of DecodeSource.</summary>
 /// <param name="pText">The text.</param>
 /// <param name="pEncoding">The file's encoding from DecodeSource.</param>
 /// <returns>The bytes, with the UTF-8 BOM first when the encoding is UTF-8.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Save (DRagLint.CLI.CycleFix.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EncodeSource(const pText: string; pEncoding: TEncoding): TBytes;
 
 /// <summary>Reads a source file as lines in its own encoding (DecodeSource), the one routine both
 /// the planner and the cycle-fix staging use so they agree on every character.</summary>
 /// <param name="pPath">The file.</param>
 /// <returns>The lines without terminators.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.BuildView (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.GetFile (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.RegisterDeclUnit (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.RegisterLeaves (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.RenderEdits (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: DRagLint.Report.CyclePlan.DecodeSource</para>
+/// <para>Returns: Lines.ToStringArray</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Report.CyclePlan.DecodeSource"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadSourceLines(const pPath: string): TArray<string>;
 /// <summary>Plans each circular group (or one) and hands every plan to pVisit as data.</summary>
 /// <param name="pStore">Open index the graph was built from; read only.</param>
@@ -264,7 +352,19 @@ function ReadSourceLines(const pPath: string): TArray<string>;
 /// <param name="pLibStore">Platform library index (read only) or nil.</param>
 /// <param name="pVisit">The consumer.</param>
 /// <param name="pOnly">1-based group to plan, or 0 for every group in order.</param>
-/// <remarks>Writes nothing. Groups after the one that made pVisit return False are not planned.</remarks>
+/// <exception cref="EInvalidOpException"><!-- drag-lint:auto exc -->via DRagLint.Report.CyclePlan.TCyclePlanner.RenderPlan: RenderPlan: plan of cycle %d is not the planner's current cycle</exception>
+/// <remarks>
+/// Writes nothing. Groups after the one that made pVisit return False are not planned.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: DRagLint.Report.CyclePlan.TCycleFixPlan.Release, DRagLint.Report.CyclePlan.TCyclePlanner.BuildPlan, DRagLint.Report.CyclePlan.TCyclePlanner.BuildView, DRagLint.Report.CyclePlan.TCyclePlanner.Create, DRagLint.Report.CyclePlan.TCyclePlanner.RenderPlan, pVisit</para>
+/// <seealso cref="DRagLint.Report.CyclePlan.TCycleFixPlan.Release"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.TCyclePlanner.BuildPlan"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.TCyclePlanner.BuildView"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.TCyclePlanner.Create"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.TCyclePlanner.RenderPlan"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure VisitCyclePlans(const pStore: ISymbolStore; const pDbPath: string;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph;
   const pLibStore: ISymbolStore; const pVisit: TCyclePlanVisit; pOnly: Integer = 0);
@@ -297,6 +397,12 @@ procedure VisitCyclePlans(const pStore: ISymbolStore; const pDbPath: string;
 /// listed bottom-up so they can be applied in order without renumbering.</para>
 /// <para>The expected `cycles` output is predicted by replaying the planned
 /// uses changes on the graph; it assumes the other groups are left alone.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Report.CyclePlan.TCyclePlanner.Create, DRagLint.Report.CyclePlan.TCyclePlanner.Run</para>
+/// <seealso cref="DRagLint.Report.CyclePlan.TCyclePlanner.Create"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.TCyclePlanner.Run"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
@@ -304,7 +410,13 @@ procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
 
 type
 /// <summary>The inputs of AddCycleFixHints bundled in one record (keeps the routine under the parameter limit).</summary>
-/// <remarks>Plain value record; every reference is borrowed, none is owned or freed by the record.</remarks>
+/// <remarks>
+/// Plain value record; every reference is borrowed, none is owned or freed by the record.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.Report.CyclePlan.AddCycleFixHints (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Used in units: DRagLint.CLI, DRagLint.Report.CyclePlan</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 TCycleFixHintInput = record
   /// <summary>Open index the graph was built from; read only.</summary>
   Store: ISymbolStore;
@@ -326,9 +438,20 @@ end;
 /// <param name="pIn">The index, graph, groups and project (see TCycleFixHintInput).</param>
 /// <param name="pGroups">The report's group objects, index-aligned with pIn.Sccs; each must be a
 /// TJSONObject. The new objects become owned by those objects.</param>
-/// <remarks>Runs the planner once per group, so it is only for `--causes`. Writes nothing.
+/// <remarks>
+/// Runs the planner once per group, so it is only for `--causes`. Writes nothing.
 /// Fields: available, part, dry_run, apply, edges[{from,to,recipe,chosen}], reason, and for a
-/// Part A group `followup` {from,to,recipe} when Part B cuts an edge afterwards.</remarks>
+/// Part A group `followup` {from,to,recipe} when Part B cuts an edge afterwards.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Report.CyclePlan.AddCycleFixHints.EdgeJson, DRagLint.Report.CyclePlan.FixCommandText, DRagLint.Report.CyclePlan.TCycleFixPlan.Release, DRagLint.Report.CyclePlan.TCyclePlanner.BuildPlan, DRagLint.Report.CyclePlan.TCyclePlanner.Create, DRagLint.Report.CyclePlan.TCyclePlanner.FixHintOf, LowerCase</para>
+/// <seealso cref="DRagLint.Report.CyclePlan.AddCycleFixHints.EdgeJson"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.FixCommandText"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.TCycleFixPlan.Release"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.TCyclePlanner.BuildPlan"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.TCyclePlanner.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure AddCycleFixHints(const pIn: TCycleFixHintInput; const pGroups: TJSONArray);
 
 /// <summary>Adds an `edges` array to every group object of a `cycles --format json`
@@ -339,8 +462,17 @@ procedure AddCycleFixHints(const pIn: TCycleFixHintInput; const pGroups: TJSONAr
 /// <param name="pGraph">The uses graph the groups were computed from.</param>
 /// <param name="pGroups">The report's group objects, index-aligned with pSccs; each
 /// must be a TJSONObject. The new arrays become owned by those objects.</param>
-/// <remarks>Edges are listed member by member in group order (from, then to), the
-/// order the impl-cycle planner weighs them. Reads every member_accesses row once.</remarks>
+/// <remarks>
+/// Edges are listed member by member in group order (from, then to), the
+/// order the impl-cycle planner weighs them. Reads every member_accesses row once.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Report.CycleEdge.EdgeSurfaceToJson, DRagLint.Report.CyclePlan.TCyclePlanner.Create, DRagLint.Report.CyclePlan.TCyclePlanner.EdgeSurfacesOf</para>
+/// <seealso cref="DRagLint.Report.CycleEdge.EdgeSurfaceToJson"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.TCyclePlanner.Create"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.TCyclePlanner.EdgeSurfacesOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure AddCycleEdgeSurfaces(const pStore: ISymbolStore; const pSccs: TList<TArray<string>>;
   const pGraph: TCycleGraph; const pGroups: TJSONArray);
 
@@ -349,15 +481,34 @@ procedure AddCycleEdgeSurfaces(const pStore: ISymbolStore; const pSccs: TList<TA
 /// <param name="pStore">Open index; read only.</param>
 /// <returns>A graph whose four dictionaries are NEW and owned by the caller: release them with
 /// FreeCycleGraph.</returns>
-/// <remarks>Keys are lower-case file stems; an edge's target is the lower-case unit name as
+/// <remarks>
+/// Keys are lower-case file stems; an edge's target is the lower-case unit name as
 /// written in the uses clause, so a library unit is a node with no outgoing list; a bare name
 /// binds to a project unit only as dcc binds it (BareUsesBinding, A3-b). E18 T15b:
-/// hoisted out of DoCycles so `lint &lt;file&gt;` builds the same graph.</remarks>
+/// hoisted out of DoCycles so `lint &lt;file&gt;` builds the same graph.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.Report.CyclePlan.ComputeSccs/1 (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Report.CycleEdge.BareUsesBinding, DRagLint.Report.CycleEdge.ProjectUnitScopes, DRagLint.Report.CyclePlan.FreeCycleGraph, ExtractFileExt, ExtractFileName, LowerCase, SameText, StringReplace</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 63 lines (full implementation)</para>
+/// <para>Catches: Exception (re-raise)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
+/// <seealso cref="DRagLint.Report.CycleEdge.BareUsesBinding"/>
+/// <seealso cref="DRagLint.Report.CycleEdge.ProjectUnitScopes"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildCycleGraph(const pStore: ISymbolStore): TCycleGraph;
 
 /// <summary>Frees the four dictionaries (and the adjacency lists) of a graph from BuildCycleGraph
 /// and sets them to nil.</summary>
 /// <param name="pGraph">The graph; safe to call twice.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.Report.CyclePlan.BuildCycleGraph (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.ComputeSccs/1 (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: FreeAndNil</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure FreeCycleGraph(var pGraph: TCycleGraph);
 
 /// <summary>The circular unit groups of a graph: Tarjan's strongly-connected components of more
@@ -365,22 +516,51 @@ procedure FreeCycleGraph(var pGraph: TCycleGraph);
 /// <param name="pGraph">A graph from BuildCycleGraph; read only.</param>
 /// <returns>A NEW list owned by the caller, one array of lower-case stems per group, in the order
 /// `cycles` prints them.</returns>
-/// <remarks>The one SCC pass behind `cycles` (DoCycles) and the per-file circular-uses finding of
-/// `lint &lt;file&gt;` (E18 T15b), so the two cannot disagree on which units cycle.</remarks>
+/// <remarks>
+/// The one SCC pass behind `cycles` (DoCycles) and the per-file circular-uses finding of
+/// `lint &lt;file&gt;` (E18 T15b), so the two cannot disagree on which units cycle.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CircularUsesForFile (DRagLint.CLI.pas), DRagLint.CLI.DoCycles (DRagLint.CLI.pas), DRagLint.Report.CyclePlan.ComputeInterfaceSccs (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.ComputeSccs/1 (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: DRagLint.Report.CyclePlan.ComputeSccs.StrongConnect, FreeAndNil</para>
+/// <para>Returns: Sccs</para>
+/// <para>Overload 1 of 2</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Report.CyclePlan.ComputeSccs.StrongConnect"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ComputeSccs(const pGraph: TCycleGraph): TList<TArray<string>>; overload;
 
 /// <summary>The circular unit groups of an index (BuildCycleGraph, then ComputeSccs).</summary>
 /// <param name="pStore">Open index; read only.</param>
 /// <returns>A NEW list owned by the caller, one array of lower-case stems per group.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Report.CyclePlan.BuildCycleGraph, DRagLint.Report.CyclePlan.ComputeSccs/1, DRagLint.Report.CyclePlan.FreeCycleGraph</para>
+/// <para>Returns: ComputeSccs(Graph)</para>
+/// <para>Overload 2 of 2</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Report.CyclePlan.BuildCycleGraph"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.ComputeSccs"/>
+/// <seealso cref="DRagLint.Report.CyclePlan.FreeCycleGraph"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ComputeSccs(const pStore: ISymbolStore): TList<TArray<string>>; overload;
 
 /// <summary>The cycles dcc rejects with F2047: Tarjan's strongly-connected components
 /// (of more than one unit) of the INTERFACE-uses edges alone.</summary>
 /// <param name="pGraph">A graph from BuildCycleGraph; read only.</param>
 /// <returns>A NEW list owned by the caller, one array of lower-case stems per group.</returns>
-/// <remarks>`cycles --f2047` (N-09). Every group here is also inside one group of
+/// <remarks>
+/// `cycles --f2047` (N-09). Every group here is also inside one group of
 /// ComputeSccs(pGraph); a group there with an implementation edge on every loop is not
-/// here, because the compiler accepts it.</remarks>
+/// here, because the compiler accepts it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoCycles.ReportF2047 (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Report.CyclePlan.ComputeSccs/1</para>
+/// <para>Returns: ComputeSccs(IntfOnly)</para>
+/// <seealso cref="DRagLint.Report.CyclePlan.ComputeSccs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ComputeInterfaceSccs(const pGraph: TCycleGraph): TList<TArray<string>>;
 
 implementation

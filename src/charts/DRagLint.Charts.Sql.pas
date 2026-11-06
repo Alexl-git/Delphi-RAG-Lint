@@ -32,6 +32,12 @@ const
 
 type
   /// <summary>Where a SQL body ends. Port of the Find-SqlBodyEnd result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Sql.pas) ?, DRagLint.Charts.Sql.FindSqlBodyEnd (DRagLint.Charts.Sql.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Sql</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSqlBodyEnd = record
     /// <summary>True when the terminator was found.</summary>
     Found  : Boolean;
@@ -43,6 +49,12 @@ type
 
   /// <summary>A trigger or procedure body read from source. Port of the Get-SqlBodyText /
   /// Get-SqlProcBodyText result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Sql.pas) ?, DRagLint.Charts.Sql.TSqlCatalog.FreshLines (DRagLint.Charts.Sql.pas), DRagLint.Charts.Sql.TSqlCatalog.SqlBodyText (DRagLint.Charts.Sql.pas) ?, DRagLint.Charts.Sql.TSqlCatalog.SqlProcBodyText (DRagLint.Charts.Sql.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.Sql</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSqlBody = record
     /// <summary>The script differs from the indexed copy; nothing was read.</summary>
     Stale    : Boolean;
@@ -61,6 +73,12 @@ type
   end;
 
   /// <summary>One table (or procedure) named right after an upper-case SQL verb.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Sql.pas), DRagLint.Charts.Sql.SqlVerbTables (DRagLint.Charts.Sql.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Sql</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSqlVerbHit = record
     /// <summary>The verb, whitespace collapsed ('DELETE FROM').</summary>
     Verb : string;
@@ -73,6 +91,12 @@ type
   end;
 
   /// <summary>One CREATE TABLE of a name (a member of a collapsed table).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Sql.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Sql</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSqlDeclaration = record
     /// <summary>symbols.id of the sql_table.</summary>
     Id     : Integer;
@@ -85,6 +109,12 @@ type
   end;
 
   /// <summary>A column only a LOSING (older) declaration extracts.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Sql.pas) ?, DRagLint.Charts.Columns.ApplyOlder (DRagLint.Charts.Columns.pas) ?, DRagLint.Charts.Sql.TSqlTable.Create (DRagLint.Charts.Sql.pas) ?, DRagLint.Charts.Sql.TSqlTable.TryOlder (DRagLint.Charts.Sql.pas) ?, DRagLint.Charts.Sql.TSqlTableSet.HideExtractedColumns (DRagLint.Charts.Sql.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Columns, DRagLint.Charts.Sql</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TOlderColumn = record
     /// <summary>The column as extracted.</summary>
     Column: string;
@@ -95,7 +125,13 @@ type
   end;
 
   /// <summary>One table name of the SQL index, collapsed onto its newest declaration.</summary>
-  /// <remarks>Port of a Tables entry of Get-SqlTableSet. Owned by its TSqlTableSet.</remarks>
+  /// <remarks>
+  /// Port of a Tables entry of Get-SqlTableSet. Owned by its TSqlTableSet.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Columns.pas) ?, DRagLint.Charts.Columns.ApplyOlder (DRagLint.Charts.Columns.pas) ?, DRagLint.Charts.Columns.FindQuotedColumn (DRagLint.Charts.Columns.pas) ?, DRagLint.Charts.Sql.BuildSqlTableSet (DRagLint.Charts.Sql.pas), DRagLint.Charts.Sql.TSqlTable.CopyWithout (DRagLint.Charts.Sql.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Columns, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.LandsWhere, DRagLint.Charts.Sql</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSqlTable = class
   private
     FName        : string;
@@ -109,33 +145,118 @@ type
     FOlder       : TDictionary<string, TOlderColumn>;
   public
     /// <summary>Constructor: an empty table; the set fills it.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Sql.BuildSqlTableSet (DRagLint.Charts.Sql.pas), DRagLint.Charts.Sql.TSqlTable.CopyWithout (DRagLint.Charts.Sql.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FColumns, FOlderKeys, FOlder</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.CopyWithout"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.HasColumn"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.IsColumn"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.OlderKeys"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees the column sets.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FOlder, FOlderKeys, FColumns</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.CopyWithout"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.HasColumn"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.IsColumn"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.OlderKeys"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Whether the NEWEST declaration extracts pCol (case-insensitive).</summary>
     /// <param name="pCol">A column name.</param>
     /// <returns>True when extracted.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Columns.SqlColumnState (DRagLint.Charts.Columns.pas), DRagLint.Charts.Sql.TSqlTableSet.HideExtractedColumns (DRagLint.Charts.Sql.pas)</para>
+    /// <para>Returns: FColumns.ContainsKey(pCol)</para>
+    /// <para>Reads: FColumns</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.CopyWithout"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.IsColumn"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.OlderKeys"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasColumn(const pCol: string): Boolean;
     /// <summary>The older-only column keyed by upper-case name, if any.</summary>
     /// <param name="pColUpper">The column, upper-case.</param>
     /// <param name="pOlder">The older declaration that extracts it.</param>
     /// <returns>True when only an older declaration extracts it.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Columns.ApplyOlder (DRagLint.Charts.Columns.pas)</para>
+    /// <para>Returns: FOlder.TryGetValue(pColUpper, pOlder)</para>
+    /// <para>Reads: FOlder</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.CopyWithout"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.HasColumn"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.IsColumn"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function TryOlder(const pColUpper: string; out pOlder: TOlderColumn): Boolean;
     /// <summary>The older-only column keys (upper case) in insertion order.</summary>
     /// <returns>A copy.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.FocusLabel (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.RecheckColumn (DRagLint.Charts.Q.Consumers.pas)</para>
+    /// <para>Returns: FOlderKeys.ToArray</para>
+    /// <para>Reads: FOlderKeys</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.CopyWithout"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.HasColumn"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.IsColumn"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function OlderKeys: TArray<string>;
     /// <summary>The cheap column test, no source read: extracted from the newest declaration, or from an older one.</summary>
     /// <param name="pCol">A column name (any case).</param>
     /// <returns>True when either extracts it.</returns>
-    /// <remarks>Port of Test-IsColumn (Emit-Common.ps1:1117).</remarks>
+    /// <remarks>
+    /// Port of Test-IsColumn (Emit-Common.ps1:1117).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.TBindingBuild.Outcome (DRagLint.Charts.Chain.pas), DRagLint.Charts.Columns.ColumnsNotHeld (DRagLint.Charts.Columns.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.MeasureConvention (DRagLint.Charts.Q.LandsWhere.pas) ?, DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.MeasureParamByName (DRagLint.Charts.Q.LandsWhere.pas) ?</para>
+    /// <para>Returns: FColumns.ContainsKey(pCol) or FOlder.ContainsKey(pCol.ToUpperInvariant)</para>
+    /// <para>Reads: FColumns, FOlder</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.CopyWithout"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.HasColumn"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.OlderKeys"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsColumn(const pCol: string): Boolean;
     /// <summary>A copy of this table with pCol taken OUT of the newest declaration's columns.</summary>
     /// <param name="pCol">The column to remove (case-insensitive, as PS -ne).</param>
     /// <param name="pOlder">An older-only extraction to record for pCol.</param>
     /// <param name="pHasOlder">False: record none (the PS ).</param>
     /// <returns>A NEW table the caller owns.</returns>
-    /// <remarks>Port of Copy-SqlTableWithout (Emit-Common.ps1:1077): the test hook that gives a
-    /// column the 1.18 extractor's shape so the quoted state can be driven on a fresh script.</remarks>
+    /// <remarks>
+    /// Port of Copy-SqlTableWithout (Emit-Common.ps1:1077): the test hook that gives a
+    /// column the 1.18 extractor's shape so the quoted state can be driven on a fresh script.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Sql.TSqlTableSet.HideExtractedColumns (DRagLint.Charts.Sql.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Sql.TSqlTable.Create, SameText</para>
+    /// <para>Returns: TSqlTable.Create</para>
+    /// <para>Reads: FName, FId, FPath, FLine, FDeclarations, FColumnNames, FColumns, FOlderKeys (+1 more)</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.HasColumn"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.IsColumn"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.OlderKeys"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CopyWithout(const pCol: string; const pOlder: TOlderColumn; pHasOlder: Boolean): TSqlTable;
     /// <summary>The winning declaration's name.</summary>
     property Name: string read FName;
@@ -152,7 +273,13 @@ type
   end;
 
   /// <summary>Every table name of one SQL index, collapsed. Port of the Get-SqlTableSet result.</summary>
-  /// <remarks>Owns its tables. Built by TSqlCatalog.TableSet.</remarks>
+  /// <remarks>
+  /// Owns its tables. Built by TSqlCatalog.TableSet.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas) ?, declaration (DRagLint.Charts.Columns.pas) ?, DRagLint.Charts.Chain.TChainWalker.Create (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Sql.BuildSqlTableSet (DRagLint.Charts.Sql.pas), DRagLint.Charts.Sql.TSqlTableSet.HideExtractedColumns (DRagLint.Charts.Sql.pas) (+12 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Columns, DRagLint.Charts.Sql, DRagLint.Charts.Trace.Anchor, DRagLint.Charts.Trace.Calc, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSqlTableSet = class
   private
     FDb                : string;
@@ -167,16 +294,59 @@ type
   public
     /// <summary>Constructor: an empty set for the database pDb.</summary>
     /// <param name="pDb">The SQL index path (the PS .Db).</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Sql.BuildSqlTableSet (DRagLint.Charts.Sql.pas), DRagLint.Charts.Sql.TSqlTableSet.HideExtractedColumns (DRagLint.Charts.Sql.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FDb, FTables, FOwned, FProcedures</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.HasProcedure"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.HideExtractedColumns"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Table"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const pDb: string);
     /// <summary>Frees the tables.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FProcedures, FTables, FOwned</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.HasProcedure"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.HideExtractedColumns"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Table"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>The table named pName (case-insensitive), or nil.</summary>
     /// <param name="pName">A table name.</param>
     /// <returns>The table; not owned by the caller.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.TBindingBuild.Outcome (DRagLint.Charts.Chain.pas), DRagLint.Charts.Columns.ColumnsNotHeld (DRagLint.Charts.Columns.pas), DRagLint.Charts.Columns.SqlColumnState (DRagLint.Charts.Columns.pas), DRagLint.Charts.Sql.SqlVerbTables (DRagLint.Charts.Sql.pas), DRagLint.Charts.Sql.TSqlTableSet.HideExtractedColumns (DRagLint.Charts.Sql.pas) (+10 more)</para>
+    /// <para>Returns: nil</para>
+    /// <para>Reads: FTables</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.HasProcedure"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.HideExtractedColumns"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Table(const pName: string): TSqlTable;
     /// <summary>Whether pName is a sql_procedure of the index (case-insensitive).</summary>
     /// <param name="pName">A procedure name.</param>
     /// <returns>True when declared.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Sql.SqlVerbTables (DRagLint.Charts.Sql.pas)</para>
+    /// <para>Returns: FProcedures.ContainsKey(pName)</para>
+    /// <para>Reads: FProcedures</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.HideExtractedColumns"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Table"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasProcedure(const pName: string): Boolean;
     /// <summary>A DOCTORED copy of the set with each 'TABLE.COLUMN' taken out of its table's extracted columns.</summary>
     /// <param name="pTableColumns">'TABLE.COLUMN' names to hide.</param>
@@ -184,8 +354,21 @@ type
     /// must outlive it.</returns>
     /// <exception cref="EChartsIndex">'Hide-ExtractedColumns: &lt;tc&gt; is not an extracted column of
     /// the SQL index' for a name that is not exactly TABLE.COLUMN of an extracted column.</exception>
-    /// <remarks>Port of Hide-ExtractedColumns (Emit-Common.ps1:1096), a test hook for the quoted
-    /// and older column states.</remarks>
+    /// <remarks>
+    /// Port of Hide-ExtractedColumns (Emit-Common.ps1:1096), a test hook for the quoted
+    /// and older column states.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Default, DRagLint.Charts.Sql.TSqlTable.CopyWithout, DRagLint.Charts.Sql.TSqlTable.HasColumn, DRagLint.Charts.Sql.TSqlTableSet.Create, DRagLint.Charts.Sql.TSqlTableSet.Table</para>
+    /// <para>Returns: TSqlTableSet.Create(FDb)</para>
+    /// <para>Reads: FDb, FTables, FProcedures, FNames, FDeclarationCount, FCollapsedNames, FProcedureDeclCount</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.CopyWithout"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTable.HasColumn"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Table"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HideExtractedColumns(const pTableColumns: TArray<string>): TSqlTableSet;
     /// <summary>True for a HideExtractedColumns copy (its answers must never be cached under Db).</summary>
     property Doctored: Boolean read FDoctored;
@@ -202,6 +385,12 @@ type
   end;
 
   /// <summary>One procedure declaration with its scanned body. Port of a Get-SqlProcedureSet row.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.Consumers.pas), declaration (DRagLint.Charts.Sql.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ReadDatabase (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.ReadDatabase (DRagLint.Charts.Q.LandsWhere.pas), DRagLint.Charts.Sql.TSqlCatalog.ProcedureSet (DRagLint.Charts.Sql.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.LandsWhere, DRagLint.Charts.Sql</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSqlProcedure = record
     /// <summary>symbols.id.</summary>
     Id    : Integer;
@@ -218,6 +407,12 @@ type
   end;
 
   /// <summary>One trigger with its table and scanned body. Port of a Get-SqlTriggerSet row.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ReadDatabase (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TriggerAt (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TriggerList (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.ReadDatabase (DRagLint.Charts.Q.LandsWhere.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.LandsWhere, DRagLint.Charts.Sql</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSqlTrigger = record
     /// <summary>symbols.id.</summary>
     Id         : Integer;
@@ -238,11 +433,17 @@ type
   end;
 
   /// <summary>The SQL-index catalogue: table set, script bodies, procedure and trigger sets.</summary>
-  /// <remarks>Holds the per-run caches the PS kept in $script: variables (one catalogue per
+  /// <remarks>
+  /// Holds the per-run caches the PS kept in $script: variables (one catalogue per
   /// SQL index per run). Neither the index nor the reader is owned; the reader must be bound to
   /// the SAME SQL index (freshness is checked against it) and carry any source overrides
   /// BEFORE the first call. PS difference: Get-SqlTableSet ran Get-CloneDb on its path -- the
-  /// caller guards the path before it opens the index. Not thread-safe.</remarks>
+  /// caller guards the path before it opens the index. Not thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Q.Consumers.TConsumersChart.Create (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.Create (DRagLint.Charts.Q.FeedsFrom.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.Create (DRagLint.Charts.Q.LandsWhere.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas) (+17 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Columns, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.FeedsFrom, DRagLint.Charts.Q.LandsWhere, DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Anchor, DRagLint.Charts.Trace.Calc, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSqlCatalog = class
   private
     FIndex    : TChartsIndex;
@@ -253,50 +454,186 @@ type
     FTrigs    : TArray<TSqlTrigger>;
     FTrigsDone: Boolean;
     FStripped : TDictionary<string, TArray<string>>;
+    /// <param name="pPath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pLine"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pBody"><!-- drag-lint:auto type -->out TSqlBody</param>
+    /// <param name="pLines"><!-- drag-lint:auto type -->out TArray&lt;string&gt;</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: FReader.SourceFresh(pPath).</returns>
+    /// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Source.TSourceReader.SourceFresh: Test-SourceFresh:</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Sql.TSqlCatalog.SqlBodyText (DRagLint.Charts.Sql.pas), DRagLint.Charts.Sql.TSqlCatalog.SqlProcBodyText (DRagLint.Charts.Sql.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Source.TSourceReader.ReadPath, DRagLint.Charts.Source.TSourceReader.SourceFresh, DRagLint.Charts.Sql.TSqlCatalog.StrippedSqlLines</para>
+    /// <para>Reads: FReader</para>
+    /// <para>Mutates: pBody (out), pLines (out)</para>
+    /// <seealso cref="DRagLint.Charts.Source.TSourceReader.ReadPath"/>
+    /// <seealso cref="DRagLint.Charts.Source.TSourceReader.SourceFresh"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.StrippedSqlLines"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.BlankSqlMatch"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FreshLines(const pPath: string; pLine: Integer; out pBody: TSqlBody; out pLines: TArray<string>): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->A match without LF becomes that many spaces;
+    /// one with LF keeps every CR and LF.</summary>
+    /// <param name="pMatch"><!-- drag-lint:auto type -->const TMatch</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: pMatch.Value; StringOfChar('
+    /// ', Length(Result)).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: CharInSet, Pos, StringOfChar</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.FreshLines"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.ProcedureSet"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.SqlBodyText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function BlankSqlMatch(const pMatch: TMatch): string;
   public
     /// <summary>Constructor: a catalogue over one SQL index.</summary>
     /// <param name="pIndex">The SQL index; not owned.</param>
     /// <param name="pReader">A source reader over the same index; not owned.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.Create (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.Create (DRagLint.Charts.Q.FeedsFrom.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.Create (DRagLint.Charts.Q.LandsWhere.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FIndex, FReader, FStripped</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.BlankSqlMatch"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.FreshLines"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.ProcedureSet"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.SqlBodyText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(pIndex: TChartsIndex; pReader: TSourceReader);
     /// <summary>Frees the caches.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FStripped, FTableSet</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.BlankSqlMatch"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.FreshLines"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.ProcedureSet"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.SqlBodyText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Every table name collapsed onto its newest declaration, read once.</summary>
     /// <returns>The catalogue's own set; do not free it.</returns>
-    /// <remarks>Port of Get-SqlTableSet (Emit-Common.ps1:955). The winner of a name is the
+    /// <remarks>
+    /// Port of Get-SqlTableSet (Emit-Common.ps1:955). The winner of a name is the
     /// declaration in the newest file (files.mtime_unix), then the latest line; ties keep index
-    /// order. A column only a losing declaration extracts is kept as older-only.</remarks>
+    /// order. A column only a losing declaration extracts is kept as older-only.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.FocusLabel (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ReadBindings (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ReadIndexWide (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.RecheckColumn (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ResolveTable (DRagLint.Charts.Q.Consumers.pas) (+17 more)</para>
+    /// <para>Calls: DRagLint.Charts.Sql.BuildSqlTableSet</para>
+    /// <para>Returns: FTableSet</para>
+    /// <para>Reads: FTableSet, FIndex   Writes: FTableSet</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <seealso cref="DRagLint.Charts.Sql.BuildSqlTableSet"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.BlankSqlMatch"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.FreshLines"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function TableSet: TSqlTableSet;
     /// <summary>SQL text with strings and comments blanked, line-preserving.</summary>
     /// <param name="pReadPath">The file to read.</param>
     /// <returns>The lines (shared, do not modify).</returns>
-    /// <remarks>Port of Get-StrippedSqlLines (Emit-Common.ps1:1293): one regex,
+    /// <remarks>
+    /// Port of Get-StrippedSqlLines (Emit-Common.ps1:1293): one regex,
     /// '[^']*'|/\*[\s\S]*?\*/|--[^\r\n]*, a match without LF becomes spaces, one with LF keeps
-    /// its CR/LF; read as Latin-1 (BOM honoured); cached per read path.</remarks>
+    /// its CR/LF; read as Latin-1 (BOM honoured); cached per read path.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Columns.FindQuotedColumn (DRagLint.Charts.Columns.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.SqlLineText (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Sql.TSqlCatalog.FreshLines (DRagLint.Charts.Sql.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Source.ReadLatin1, DRagLint.Charts.Source.SplitLines</para>
+    /// <para>Returns: SplitLines(Blanked)</para>
+    /// <para>Reads: FStripped</para>
+    /// <seealso cref="DRagLint.Charts.Source.ReadLatin1"/>
+    /// <seealso cref="DRagLint.Charts.Source.SplitLines"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.BlankSqlMatch"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function StrippedSqlLines(const pReadPath: string): TArray<string>;
     /// <summary>A TRIGGER body: from the declaration to the first line ending in '^'.</summary>
     /// <param name="pPath">The indexed script.</param>
     /// <param name="pLine">The declaration line.</param>
     /// <param name="pMaxLines">Scan limit.</param>
     /// <returns>The body (Stale when the script is not the indexed copy).</returns>
-    /// <remarks>Port of Get-SqlBodyText (Emit-Common.ps1:1331).</remarks>
+    /// <remarks>
+    /// Port of Get-SqlBodyText (Emit-Common.ps1:1331).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Sql.TSqlCatalog.TriggerSet (DRagLint.Charts.Sql.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Sql.FindSqlBodyEnd, DRagLint.Charts.Sql.TSqlCatalog.FreshLines</para>
+    /// <seealso cref="DRagLint.Charts.Sql.FindSqlBodyEnd"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.FreshLines"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.BlankSqlMatch"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Create"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SqlBodyText(const pPath: string; pLine: Integer; pMaxLines: Integer = SQL_BODY_MAX_LINES): TSqlBody;
     /// <summary>A PROCEDURE body: to the first line ending in the SET TERM terminator in force.</summary>
     /// <param name="pPath">The indexed script.</param>
     /// <param name="pLine">The declaration line.</param>
     /// <param name="pMaxLines">Scan limit.</param>
     /// <returns>The body, terminator excluded; not found when ';' is still in force.</returns>
-    /// <remarks>Port of Get-SqlProcBodyText (Emit-Common.ps1:1391).</remarks>
+    /// <remarks>
+    /// Port of Get-SqlProcBodyText (Emit-Common.ps1:1391).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Sql.TSqlCatalog.ProcedureSet (DRagLint.Charts.Sql.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Charts.Sql.FindSqlBodyEnd, DRagLint.Charts.Sql.SqlTermAt, DRagLint.Charts.Sql.TSqlCatalog.FreshLines</para>
+    /// <seealso cref="DRagLint.Charts.Sql.FindSqlBodyEnd"/>
+    /// <seealso cref="DRagLint.Charts.Sql.SqlTermAt"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.FreshLines"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.BlankSqlMatch"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SqlProcBodyText(const pPath: string; pLine: Integer; pMaxLines: Integer = SQL_BODY_MAX_LINES): TSqlBody;
     /// <summary>Every procedure declaration with its scanned body, read once.</summary>
     /// <returns>The declarations in symbols.id order.</returns>
-    /// <remarks>Port of Get-SqlProcedureSet (Emit-Common.ps1:1420); its counts are
-    /// computed by the caller from the rows.</remarks>
+    /// <remarks>
+    /// Port of Get-SqlProcedureSet (Emit-Common.ps1:1420); its counts are
+    /// computed by the caller from the rows.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.ReadDatabase (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.ReadDatabase (DRagLint.Charts.Q.LandsWhere.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Sql.SqlVerbTables, DRagLint.Charts.Sql.TSqlCatalog.SqlProcBodyText, DRagLint.Charts.Sql.TSqlCatalog.TableSet</para>
+    /// <para>Returns: FProcs</para>
+    /// <para>Reads: FProcsDone, FProcs, FIndex   Writes: FProcs, FProcsDone</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <para>SQL: reads FILES, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
+    /// <seealso cref="DRagLint.Charts.Sql.SqlVerbTables"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.SqlProcBodyText"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.TableSet"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ProcedureSet: TArray<TSqlProcedure>;
     /// <summary>Every trigger with its table and scanned body, read once.</summary>
     /// <returns>The triggers in symbols.id order.</returns>
-    /// <remarks>Port of Get-SqlTriggerSet (Emit-Common.ps1:1466).</remarks>
+    /// <remarks>
+    /// Port of Get-SqlTriggerSet (Emit-Common.ps1:1466).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.ReadDatabase (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.ReadDatabase (DRagLint.Charts.Q.LandsWhere.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Sql.SqlVerbTables, DRagLint.Charts.Sql.TSqlCatalog.SqlBodyText, DRagLint.Charts.Sql.TSqlCatalog.TableSet, SameText</para>
+    /// <para>Returns: FTrigs</para>
+    /// <para>Reads: FTrigsDone, FTrigs, FIndex   Writes: FTrigs, FTrigsDone</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <para>SQL: reads FILES, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
+    /// <seealso cref="DRagLint.Charts.Sql.SqlVerbTables"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.SqlBodyText"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.TableSet"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function TriggerSet: TArray<TSqlTrigger>;
     /// <summary>The SQL index (not owned).</summary>
     property Index: TChartsIndex read FIndex;
@@ -311,10 +648,18 @@ type
 /// <param name="pBareTerm">True: a line that IS pTerm; False: a line that ENDS in it.</param>
 /// <param name="pMaxLines">Scan limit.</param>
 /// <returns>Found, the 1-based terminator line, and the reason when not found.</returns>
-/// <remarks>Port of Find-SqlBodyEnd (Emit-Common.ps1:1356). A line after the first that starts
+/// <remarks>
+/// Port of Find-SqlBodyEnd (Emit-Common.ps1:1356). A line after the first that starts
 /// CREATE / RECREATE / ALTER or SET TERM (case-insensitive, -match) ends the search not found.
 /// Known approximation: .NET String.EndsWith is culture-sensitive (ICU ignores control
-/// characters and U+00AD after the terminator); this compares ordinally.</remarks>
+/// characters and U+00AD after the terminator); this compares ordinally.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Columns.FindQuotedColumn (DRagLint.Charts.Columns.pas), DRagLint.Charts.Sql.TSqlCatalog.SqlBodyText (DRagLint.Charts.Sql.pas), DRagLint.Charts.Sql.TSqlCatalog.SqlProcBodyText (DRagLint.Charts.Sql.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Source.PsTrim, Format, SameText</para>
+/// <para>Returns: Default(TSqlBodyEnd)</para>
+/// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindSqlBodyEnd(const pLines: TArray<string>; pLine: Integer; const pTerm: string; pBareTerm: Boolean;
   pMaxLines: Integer = SQL_BODY_MAX_LINES): TSqlBodyEnd;
 
@@ -322,7 +667,13 @@ function FindSqlBodyEnd(const pLines: TArray<string>; pLine: Integer; const pTer
 /// <param name="pLines">Stripped lines.</param>
 /// <param name="pLine">1-based line.</param>
 /// <returns>The one-character terminator.</returns>
-/// <remarks>Port of Get-SqlTermAt (Emit-Common.ps1:1374); the regex is case-SENSITIVE as in the PS.</remarks>
+/// <remarks>
+/// Port of Get-SqlTermAt (Emit-Common.ps1:1374); the regex is case-SENSITIVE as in the PS.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Sql.TSqlCatalog.SqlProcBodyText (DRagLint.Charts.Sql.pas)</para>
+/// <para>Returns: DEFAULT_TERM; M.Groups[1].Value</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SqlTermAt(const pLines: TArray<string>; pLine: Integer): string;
 
 /// <summary>Tables (and procedures) named IMMEDIATELY after an upper-case SQL verb.</summary>
@@ -330,28 +681,58 @@ function SqlTermAt(const pLines: TArray<string>; pLine: Integer): string;
 /// <param name="pSet">The collapsed set: a name must be one of its tables (or procedures for
 /// EXECUTE PROCEDURE).</param>
 /// <returns>The hits in text order.</returns>
-/// <remarks>Port of Get-SqlVerbTables (Emit-Common.ps1:1273). Case-SENSITIVE on purpose (the
-/// verb and the name are upper case); a hit is a NAME match, rendered [inferred].</remarks>
+/// <remarks>
+/// Port of Get-SqlVerbTables (Emit-Common.ps1:1273). Case-SENSITIVE on purpose (the
+/// verb and the name are upper case); a hit is a NAME match, rendered [inferred].
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.ReadIndexWide (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.ReadServer (DRagLint.Charts.Q.LandsWhere.pas), DRagLint.Charts.Sql.TSqlCatalog.ProcedureSet (DRagLint.Charts.Sql.pas), DRagLint.Charts.Sql.TSqlCatalog.TriggerSet (DRagLint.Charts.Sql.pas)</para>
+/// <para>Calls: DRagLint.Charts.Sql.TSqlTableSet.HasProcedure, DRagLint.Charts.Sql.TSqlTableSet.Table, SameText</para>
+/// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.HasProcedure"/>
+/// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Table"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SqlVerbTables(const pText: string; pSet: TSqlTableSet): TArray<TSqlVerbHit>;
 
 /// <summary>Sort-Object -Unique over names: CompareGroupKeys order, case-insensitive duplicates dropped.</summary>
 /// <param name="pNames">Names in any order.</param>
 /// <returns>The sorted, unique names (the first of equal names in sorted order is kept).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Chain.RePointDataSet (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.StepControls (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.StepDataSet (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.RePointPick (DRagLint.Charts.Chain.pas), DRagLint.Charts.MemberAccess.LoadSites (DRagLint.Charts.MemberAccess.pas) (+26 more)</para>
+/// <para>Calls: DRagLint.Charts.Index.CompareGroupKeys</para>
+/// <seealso cref="DRagLint.Charts.Index.CompareGroupKeys"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SortUniqueNames(const pNames: TArray<string>): TArray<string>;
 
 /// <summary>A regex for pName as a whole word, `$` counting as a word character.</summary>
 /// <param name="pName">The name; escaped.</param>
 /// <returns>The pattern, to be used case-SENSITIVELY (the SQL in this corpus is upper case).</returns>
-/// <remarks>Port of Get-WordRx, defined identically in Emit-Consumers.ps1 and
-/// Emit-LandsWhere.ps1; both ports share this one.</remarks>
+/// <remarks>
+/// Port of Get-WordRx, defined identically in Emit-Consumers.ps1 and
+/// Emit-LandsWhere.ps1; both ports share this one.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.NewRoutineRow (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ReadColumn (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.RecheckColumn (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.ReadDatabase (DRagLint.Charts.Q.LandsWhere.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.ReadServer (DRagLint.Charts.Q.LandsWhere.pas)</para>
+/// <para>Returns: '(?&lt;![A-Za-z0-9_$])' + TRegEx.Escape(pName) + '(?![A-Za-z0-9_$])'</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function WordRx(const pName: string): string;
 
 /// <summary>How many sql_table symbols an index holds: the role check that tells a SQL-script
 /// index from a Delphi project index.</summary>
 /// <param name="pIndex">The (guarded) index; not owned.</param>
 /// <returns>The count; 0 for a Delphi index.</returns>
-/// <remarks>Port of Get-SqlTableSymbolCount, defined identically in Emit-Consumers.ps1 and
-/// Emit-LandsWhere.ps1; both ports share this one.</remarks>
+/// <remarks>
+/// Port of Get-SqlTableSymbolCount, defined identically in Emit-Consumers.ps1 and
+/// Emit-LandsWhere.ps1; both ports share this one.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.CheckRoles (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.CheckRoles (DRagLint.Charts.Q.LandsWhere.pas)</para>
+/// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Query</para>
+/// <para>Returns: Rows[0].I('n')</para>
+/// <para>SQL: reads SYMBOLS</para>
+/// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SqlTableSymbolCount(pIndex: TChartsIndex): Integer;
 
 implementation

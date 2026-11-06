@@ -25,12 +25,20 @@ uses
 /// <param name="pDb">The project DB (read-only).</param>
 /// <param name="pProject">The .dproj / .dpr; its folder scopes the .dfm files.</param>
 /// <exception cref="EMenuTreeStale">A .dfm changed since it was indexed.</exception>
-/// <remarks>Root caption = the forms-csv location prefix ("Main menu",
+/// <remarks>
+/// Root caption = the forms-csv location prefix ("Main menu",
 /// "Ribbon: Tab > Bar", "Toolbar 'X'", "Right-click menu pop", "File menu");
 /// root Ident = FormClass.component, IdentPath = the .dfm path, Form = the form
 /// class. An item linked N times is N nodes. Grafted nodes found by position or
 /// lookup (Bars[n], MainMenuBar, BarBy*) become derived. Binary and inherited
-/// .dfm files are skipped with a note; a bar item linked nowhere gives a note.</remarks>
+/// .dfm files are skipped with a note; a bar item linked nowhere gives a note.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.MenuTree.Dfm.TDfmRootBuilder.Create, DRagLint.MenuTree.Dfm.TDfmRootBuilder.Run</para>
+/// <seealso cref="DRagLint.MenuTree.Dfm.TDfmRootBuilder.Create"/>
+/// <seealso cref="DRagLint.MenuTree.Dfm.TDfmRootBuilder.Run"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure AddDfmRoots(pTree: TMenuTree; const pDb, pProject: string);
 
 implementation

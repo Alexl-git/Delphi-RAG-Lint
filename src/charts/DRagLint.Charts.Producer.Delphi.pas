@@ -32,14 +32,38 @@ uses
 
 type
   /// <summary>Answers every chart question in-process; refuses what it cannot answer.</summary>
-  /// <remarks>Holds the description of the last call. Not thread-safe: with AllowLiveDb set, an
+  /// <remarks>
+  /// Holds the description of the last call. Not thread-safe: with AllowLiveDb set, an
   /// answer sets and restores a process environment variable around the emitter, exactly as
-  /// Ask-Report did around the bundler.</remarks>
+  /// Ask-Report did around the bundler.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.AskVerb.DefaultAskProducer (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Producer.Delphi.ProducerForCompare (DRagLint.Charts.Producer.Delphi.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Producer.Delphi</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDelphiProducer = class(TInterfacedObject, IReportProducer)
   private
     FAllowLiveDb: Boolean;
     FOutRoot    : string;
     FLast       : string;
+    /// <summary><!-- drag-lint:auto sum -->A command this producer cannot answer: there
+    /// is no other producer to hand it to (2026-10-18), so it is refused with the reason,
+    /// and Describe says so.</summary>
+    /// <param name="pCode"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pWhy"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->TProduceResult -- Observed: Fail(pCode, pWhy).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce (DRagLint.Charts.Producer.Delphi.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Producer.Delphi.Fail</para>
+    /// <para>Writes: FLast</para>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.Fail"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.AnswersInProcess"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.Create"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.Describe"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Refuse(pCode: Integer; const pWhy: string): TProduceResult;
   public
     /// <summary>Whether a non-clone (live) index is let through the clone guard.</summary>
@@ -49,6 +73,18 @@ type
     /// (what Ask-Report does). False keeps the guard: only charts\scratch\db clones are answered.</param>
     /// <param name="pOutRoot">The bundle root; '' means %TEMP%\drag-lint-reports (Ask-Report's -OutRoot default).
     /// TProduceOptions.OutRoot, when set, wins over it for one call.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.AskVerb.DefaultAskProducer (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Producer.Delphi.ProducerForCompare (DRagLint.Charts.Producer.Delphi.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FAllowLiveDb, FOutRoot</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.AnswersInProcess"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.Describe"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.Refuse"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(pAllowLiveDb: Boolean; const pOutRoot: string = '');
     /// <summary>Whether a command can be answered at all.</summary>
     /// <param name="pCommand">The question.</param>
@@ -57,6 +93,18 @@ type
     /// resolved in Produce, which refuses when it cannot be). crosses-boundary's counterpart is
     /// TProduceOptions.CounterpartDbOverride, else paired from report-pairs.json as Ask-Report pairs it;
     /// with no pair it draws one side, as Ask-Report does. False means Produce refuses with exit 2.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce (DRagLint.Charts.Producer.Delphi.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Question.FindChartQuestion, DRagLint.Charts.ReportHeader.TReportCommand.Get</para>
+    /// <para>Returns: ((pOptions.DbOverride &lt;&gt; '') or (pCommand.Get(PROJECT_ARG) &lt;&gt; '')) and FindChartQuestion(pCommand.Question, E)</para>
+    /// <seealso cref="DRagLint.Charts.Question.FindChartQuestion"/>
+    /// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.Get"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.Create"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.Describe"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AnswersInProcess(const pCommand: TReportCommand; const pOptions: TProduceOptions): Boolean;
     /// <summary>Answers one question in-process.</summary>
     /// <param name="pCommand">The question and its explicit arguments.</param>
@@ -68,19 +116,57 @@ type
     /// resolved index has not been built; a SERVER / SQL index the question reads neither given nor
     /// paired by report-pairs.json -- Ask-Report's own message --; an explicit charts folder that does
     /// not exist), 3 stale.</returns>
-    /// <remarks>Never raises.</remarks>
+    /// <remarks>
+    /// Never raises.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Default, DRagLint.Charts.Ask.AskChartQuestion, DRagLint.Charts.Producer.Delphi.Fail, DRagLint.Charts.Producer.Delphi.Freshness, DRagLint.Charts.Producer.Delphi.InIndexList, DRagLint.Charts.Producer.Delphi.NumArg, DRagLint.Charts.Producer.Delphi.PairedIndexes, DRagLint.Charts.Producer.Delphi.ProjectIndex, DRagLint.Charts.Producer.Delphi.TDelphiProducer.AnswersInProcess, DRagLint.Charts.Producer.Delphi.TDelphiProducer.Refuse (+7 more)</para>
+    /// <para>Returns: Refuse(EXIT_SETUP, Format('unknown question ''%s'' -- one of: %s', [pCommand.Question, string.Join(', ', PortedQuestionIds)])); Fail(E.Code, E.Message); Fail(EXIT_SETUP, Setup); Fail(PRODUCER_EXIT_STALE, 'stale index -- the answer would be short or wrong. Reindex incrementally, then ask again:' + StaleLines); Default(TProduceResult); Fail(ASK_EXIT_REFUSED, E.Message)</para>
+    /// <para>Implements: DRagLint.Charts.Producer.IReportProducer.Produce</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 95 lines (full implementation)</para>
+    /// <para>Reads: FOutRoot, FAllowLiveDb   Writes: FLast</para>
+    /// <para>Catches: EChartsIndex (swallowed); EChartsQuestion (swallowed); EChartsTool (swallowed); EReportPairStop (swallowed); Exception (swallowed)</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Charts.Ask.AskChartQuestion"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.Fail"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.Freshness"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.InIndexList"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.NumArg"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
     /// <summary>Says what answered the last call.</summary>
     /// <returns>'Delphi in-process (&lt;id&gt;)', 'Delphi in-process, refused: &lt;why&gt;' or
     /// 'Delphi in-process failed (&lt;class&gt;: &lt;message&gt;)'; before any call, the registered ids.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Charts.Question.PortedQuestionIds</para>
+    /// <para>Returns: if FLast &lt;&gt; '' then FLast</para>
+    /// <para>Implements: DRagLint.Charts.Producer.IReportProducer.Describe</para>
+    /// <para>Reads: FLast</para>
+    /// <seealso cref="DRagLint.Charts.Question.PortedQuestionIds"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.AnswersInProcess"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.Create"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce"/>
+    /// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.Refuse"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Describe: string;
   end;
 
 /// <summary>The producer `drag-lint compare` uses: the ONE place that choice is made.</summary>
 /// <returns>A TDelphiProducer with live indexes allowed (owner ruling 2026-10-14).</returns>
-/// <remarks>Live indexes are protected by the staleness refusal, not by the clone guard; the
+/// <remarks>
+/// Live indexes are protected by the staleness refusal, not by the clone guard; the
 /// clone guard stays on only in the parity harness and the tests. The CLI's compare verb obtains
-/// its producer from this function.</remarks>
+/// its producer from this function.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CompareTakeSnapshot (DRagLint.CLI.pas), DRagLint.CLI.DoCompare (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Charts.Producer.Delphi.TDelphiProducer.Create</para>
+/// <para>Returns: TDelphiProducer.Create(True)</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.Charts.Producer.Delphi.TDelphiProducer.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProducerForCompare: IReportProducer;
 
 implementation

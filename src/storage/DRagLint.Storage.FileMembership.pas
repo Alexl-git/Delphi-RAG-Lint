@@ -133,7 +133,7 @@ procedure ArmBusyTimeout(AConn: TFDConnection; ABusyTimeoutMs: Integer = DEFAULT
 /// asks for it (TSQLiteSymbolStore.IsSchemaCurrent) and refuses a stale one.
 /// Thread-safe: touches only AConn.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DbLooksHealthy (DRagLint.CLI.pas), DRagLint.CLI.DoDiff (DRagLint.CLI.pas), DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas), DRagLint.CLI.DoGraph (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas) (+9 more)</para>
+/// <para>Called from: DRagLint.CLI.DbLooksHealthy (DRagLint.CLI.pas), DRagLint.CLI.DoDiff (DRagLint.CLI.pas), DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas), DRagLint.CLI.DoGraph (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas) (+10 more)</para>
 /// <para>Calls: DRagLint.Storage.FileMembership.ArmBusyTimeout, DRagLint.Storage.FileMembership.HeaderSaysWal</para>
 /// <seealso cref="DRagLint.Storage.FileMembership.ArmBusyTimeout"/>
 /// <seealso cref="DRagLint.Storage.FileMembership.HeaderSaysWal"/>
@@ -189,8 +189,9 @@ procedure ConnectReadOnly(AConn: TFDConnection; const ADbPath: string;
 /// Thread-safe: touches only AConn.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoImportLog (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect (DRagLint.Storage.SQLite.pas)</para>
-/// <para>Calls: DRagLint.Storage.FileMembership.ArmBusyTimeout</para>
+/// <para>Calls: DRagLint.Storage.FileMembership.ArmBusyTimeout, DRagLint.Storage.FileMembership.WriterBusyTimeoutMs</para>
 /// <seealso cref="DRagLint.Storage.FileMembership.ArmBusyTimeout"/>
+/// <seealso cref="DRagLint.Storage.FileMembership.WriterBusyTimeoutMs"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure ConnectWriter(AConn: TFDConnection; const ADbPath: string;
@@ -206,17 +207,34 @@ procedure ConnectWriter(AConn: TFDConnection; const ADbPath: string;
 /// <param name="ADbPath">The database AConn writes.</param>
 /// <returns>The wait's state, to hand to DisarmBeatAwareWait AFTER AConn is closed; nil when the
 /// SQLite library exposes no busy handler (a static link) -- the fixed timeout then stays.</returns>
-/// <remarks>The waiting connection never advances its own beat. The handler survives as long as
+/// <remarks>
+/// The waiting connection never advances its own beat. The handler survives as long as
 /// every statement keeps UpdateOptions.LockWait = True (ArmBusyTimeout): FireDAC re-arms
 /// sqlite3_busy_timeout only when the per-statement value changes, which would put the fixed
 /// timeout back. Spec docs\superpowers\specs\2026-11-03-store-busybeat-halfread-design.md;
-/// guard tests\autotest\run_busy_beat_guard.ps1.</remarks>
+/// guard tests\autotest\run_busy_beat_guard.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Connect (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: Dispose, DRagLint.Core.ControlChannel.BeatWriterOpened, DRagLint.Storage.FileMembership.WriterBusyTimeoutMs, ExpandFileName, Fn, GetProcAddress, New, TObject, TSQLiteDatabase</para>
+/// <para>Returns: nil; W</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.BeatWriterOpened"/>
+/// <seealso cref="DRagLint.Storage.FileMembership.WriterBusyTimeoutMs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ArmBeatAwareWait(AConn: TFDConnection; const ADbPath: string): Pointer;
 
 /// <summary>Frees the state ArmBeatAwareWait returned and withdraws the database from the
 /// heartbeat's writer field.</summary>
 /// <param name="AWait">The state; nil is ignored. Set to nil.</param>
-/// <remarks>Call only after the connection is closed: SQLite holds the pointer until then.</remarks>
+/// <remarks>
+/// Call only after the connection is closed: SQLite holds the pointer until then.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Destroy (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: Dispose, DRagLint.Core.ControlChannel.BeatWriterClosed, PBeatWait</para>
+/// <para>Mutates: AWait (var)</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.BeatWriterClosed"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure DisarmBeatAwareWait(var AWait: Pointer);
 
 type
@@ -227,7 +245,7 @@ type
   /// read" for "not an owner" -- the multi-project rename, spec criterion 8c --
   /// can tell the two apart. DbContainsFile folds dmUnknown into False.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Storage.FileMembership.pas), DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Storage.FileMembership.pas), DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Storage.FileMembership.DbMembership (DRagLint.Storage.FileMembership.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDbMembership = (
@@ -259,13 +277,15 @@ type
 /// remarks). Thread-safe: no shared state; each call owns its connection.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Storage.FileMembership.DbContainsFile (DRagLint.Storage.FileMembership.pas)</para>
-/// <para>Calls: DRagLint.Storage.FileMembership.ConnectReadOnly, DRagLint.Storage.FileMembership.NormalizeForLookup, DRagLint.Storage.FileMembership.RebuildInProgress</para>
+/// <para>Calls: DRagLint.Storage.FileMembership.ConnectReadOnly, DRagLint.Storage.FileMembership.LongPathForLookup, DRagLint.Storage.FileMembership.NormalizeForLookup, DRagLint.Storage.FileMembership.RebuildInProgress, ExtractFileName, SameText, StringReplace</para>
 /// <para>Returns: dmUnknown; if Found then dmMember</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 115 lines (full implementation)</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>SQL: reads FILES</para>
 /// <para>Mutates: AReason (out)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Storage.FileMembership.ConnectReadOnly"/>
+/// <seealso cref="DRagLint.Storage.FileMembership.LongPathForLookup"/>
 /// <seealso cref="DRagLint.Storage.FileMembership.NormalizeForLookup"/>
 /// <seealso cref="DRagLint.Storage.FileMembership.RebuildInProgress"/>
 /// <!-- drag-lint:auto END -->
@@ -304,7 +324,7 @@ function DbMembership(const ADbPath, AFilePath: string; out AReason: string): TD
 /// run_project_db_resolve.ps1 (6d).
 /// Thread-safe: no shared state; each call owns its connection.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoQueryTypeUsage (DRagLint.CLI.pas), DRagLint.CLI.DoQueryUnitUsage (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb.TheOnlyProjectDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoQueryTypeUsage (DRagLint.CLI.pas), DRagLint.CLI.DoQueryUnitUsage (DRagLint.CLI.pas), DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb.TheOnlyProjectDb (DRagLint.CLI.pas) (+3 more)</para>
 /// <para>Calls: DRagLint.Storage.FileMembership.DbMembership</para>
 /// <para>Returns: DbMembership(ADbPath, AFilePath, Reason) = dmMember</para>
 /// <seealso cref="DRagLint.Storage.FileMembership.DbMembership"/>

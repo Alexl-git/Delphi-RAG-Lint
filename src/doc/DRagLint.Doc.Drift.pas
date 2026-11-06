@@ -114,7 +114,7 @@ type
   /// the engine stays silent.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
+  /// <para>Used by: DRagLint.CLI.DocRenderOptionsFor (DRagLint.CLI.pas), DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -152,10 +152,10 @@ type
     /// That is what TDocFactsRenderOptions is for.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/3 (DRagLint.Doc.Drift.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveIndentWidth, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody (+29 more)</para>
+    /// <para>Calls: ContainsText, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Drift.CalleeRaisesType, DRagLint.Doc.Drift.CollapseAllWhitespace, DRagLint.Doc.Drift.DescReadsInputOnly, DRagLint.Doc.Drift.EffectiveIndentWidth, DRagLint.Doc.Drift.EffectiveSignature, DRagLint.Doc.Drift.ExtractCodeIdents, DRagLint.Doc.Drift.ExtractCTokens, DRagLint.Doc.Drift.ExtractManagedBlockBody (+33 more)</para>
     /// <para>Returns: Findings.ToArray</para>
     /// <para>Overload 1 of 2</para>
-    /// <para>Complexity: 59 (cyclomatic, outer body), 576 lines (full implementation)</para>
+    /// <para>Complexity: 66 (cyclomatic, outer body), 611 lines (full implementation)</para>
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
     /// <seealso cref="DRagLint.Doc.Drift.CalleeRaisesType"/>
@@ -185,6 +185,7 @@ type
     /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.Analyze"/>
     /// <seealso cref="DRagLint.Doc.Facts.TDocFactsRenderOptions.Defaults"/>
     /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks"/>
+    /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.SetLibraryLocator"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Analyze(const AStore: ISymbolStore; const ASym: TSymbol;
@@ -199,8 +200,9 @@ type
     /// reads per decl -- and read only when the profiler prints.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Lint.DocRules.TDocLintRules.RunDocDrift (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Pure</para>
+    /// <para>Effect-free (proven)</para>
     /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.Analyze"/>
+    /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.SetLibraryLocator"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FactsBuildTicks: Int64;
@@ -208,9 +210,16 @@ type
     /// documented exception raised inside an RTL callee is not reported as never raised.</summary>
     /// <param name="ALocator">Opens the library store; may return nil (no library, wrong
     /// schema). nil means no library is consulted, which leaves the finding standing.</param>
-    /// <remarks>Called once per cref nothing else satisfied, never per declaration; the
+    /// <remarks>
+    /// Called once per cref nothing else satisfied, never per declaration; the
     /// store it returns is released when that check ends, so no connection outlives the
-    /// run. A process-wide setting: Analyze's callers are single-threaded.</remarks>
+    /// run. A process-wide setting: Analyze's callers are single-threaded.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DocRenderOptionsFor (DRagLint.CLI.pas)</para>
+    /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.Analyze"/>
+    /// <seealso cref="DRagLint.Doc.Drift.TDocDrift.FactsBuildTicks"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure SetLibraryLocator(const ALocator: TFunc<ISymbolStore>);
   end;
 

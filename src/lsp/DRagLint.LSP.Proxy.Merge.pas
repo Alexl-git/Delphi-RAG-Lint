@@ -54,6 +54,11 @@ uses
 
 type
   /// <summary>Which way a frame is travelling through the proxy.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.ForwardIntercepted (DRagLint.LSP.Proxy.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMergeDirection = (mdClientToServer, mdServerToClient);
 
   /// <summary>Called by the relay with every complete LSP frame (headers and
@@ -68,6 +73,11 @@ type
   /// forward the original bytes unchanged. True with an EMPTY AReplacement is
   /// treated as False (the original is forwarded): an interceptor can never drop
   /// a frame by leaving the replacement unset.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFrameInterceptor = reference to function(ADir: TMergeDirection; const AFrame: TBytes;
     ALen: Integer; out AReplacement: TBytes): Boolean;
 
@@ -83,12 +93,22 @@ type
   /// itself (exactly one reply reaches the client) or a $/cancelRequest for
   /// such a request (nothing is written). The frame is NOT forwarded. False
   /// (or any exception): the frame goes on as usual.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFrameAnswerer = reference to function(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
 
   /// <summary>Writes one complete frame to the client, serialised with the
   /// relay's own S&gt;C writes.</summary>
   /// <param name="AFrame">The whole frame, headers included.</param>
   /// <returns>False when the client end is closed.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TClientWriter = reference to function(const AFrame: TBytes): Boolean;
 
   /// <summary>Owns the merge state of one proxy process: the options, the
@@ -117,15 +137,42 @@ type
   /// written ONLY on the merge worker: the C&gt;S pump queues each text under
   /// FDocLock and the next completion job applies the queue before it reads
   /// the buffer.</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas) ?, DRagLint.LSP.Proxy.Merge.TMergeWorker.Create (DRagLint.LSP.Proxy.Merge.pas) ?, DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Proxy, DRagLint.LSP.Proxy.Merge</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TProxyMergeEngine = class  // dl:ok high-response@fad6 -- the one owner of a proxy's merge state by P0 design (worker, index, per-handler state); split per handler when A4/A5 add theirs
   private type
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Create (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.QueueDocUpdate (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Used in units: DRagLint.LSP.Proxy.Merge</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     TDocUpdate = record
       Path  : string;
       Text  : string;
       Remove: Boolean;
     end;
     { One request the proxy answers itself (A5). }
+    /// <summary><!-- drag-lint:auto sum -->One request the proxy answers itself (A5).</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Used in units: DRagLint.LSP.Proxy.Merge</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     TAnswerJob = record
       Id         : string;    { the request id, as JSON }
       Symbols    : Boolean;   { workspace/symbol; else textDocument/references }
@@ -175,41 +222,442 @@ type
     FAnsweredIds     : TDictionary<string, Boolean>;   { C>S pump only: ids Answer took }
     FTestAnswerInline: Boolean;
     FTestFastPath    : Boolean;
+    /// <summary><!-- drag-lint:auto sum -->C&gt;S pump: consumes a $/cancelRequest for an
+    /// id Answer took (group-4 P1). DelphiLSP never saw that request, so the cancel is
+    /// not forwarded; the reply (already written or still on the worker) is unaffected.</summary>
+    /// <param name="AFrame"><!-- drag-lint:auto type -->const TBytes</param>
+    /// <param name="ALen"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="AOnTake"><!-- drag-lint:auto type -->const TProc</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, TJSONObject</para>
+    /// <para>Reads: FAnsweredIds</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameBody"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameContains"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  TakeCancel(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TMergeWorker.Execute (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.TakeJob, Work</para>
+    /// <para>Reads: FJobReady, FStateLock, FJob, FQueue, FJobDone   Writes: FJobFailed, FBusy</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TakeJob"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure WorkerLoop;
+    /// <summary><!-- drag-lint:auto sum -->Merge worker only (no lock: the linter is
+    /// touched on no other thread). The first call runs Options.PrepareLint -- the CLI's
+    /// lint preprocessing setup, the same routine plain `lsp` runs at startup (C14) --
+    /// and then creates the linter, so the first publish is already linted from the
+    /// preprocessed text.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.WarmUp (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Linter.TLinter.Create</para>
+    /// <para>Reads: FLinter, FOptions   Writes: FLinter</para>
+    /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure EnsureLinter;
+    /// <summary><!-- drag-lint:auto sum -->C&gt;S, first didOpen only: builds what the
+    /// enabled merges need on the merge worker, off the relay path (queued, never waited
+    /// on). TLinter.Create loads every rule file, which takes seconds cold and would
+    /// otherwise make the FIRST publishDiagnostics of a session miss any budget; opening
+    /// the index does the same to the first completion. Does not touch FBudgetWarned.
+    /// FWarming tells the S&gt;C side an overrun is the warm-up, not a dead merge; it
+    /// stays set until the job ends (A3: it used to be cleared at once, because the
+    /// budget-0 wait this replaced always reported an overrun). Runs on the C&gt;S pump
+    /// thread.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TrackDocument (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Enqueue, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EnsureLinter, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server</para>
+    /// <para>Reads: FWarmQueued, FWarming, FOptions   Writes: FWarmQueued</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Enqueue"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EnsureLinter"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure WarmUp;
+    /// <summary><!-- drag-lint:auto sum -->Queues AWork on the merge worker and returns
+    /// at once; nobody waits on it, so it must publish its result through its own
+    /// captured state. False (AWork is dropped, never run) when QUEUE_MAX jobs are
+    /// already waiting. A budgeted job that arrives meanwhile runs first.</summary>
+    /// <param name="AWork"><!-- drag-lint:auto type -->const TProc</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: FQueue.Count &lt; QUEUE_MAX.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoUsesReport.WalkBfs (DRagLint.CLI.pas) ?, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.WarmUp (DRagLint.LSP.Proxy.Merge.pas) (+2 more)</para>
+    /// <para>Reads: FStateLock, FQueue, FJobReady</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  Enqueue(const AWork: TProc): Boolean;
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed:
+    /// FDirty.ContainsKey(DocKey(APath)).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.DocKey</para>
+    /// <para>Reads: FDirtyLock, FDirty</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.DocKey"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  IsDirty(const APath: string): Boolean;
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto -->C&gt;S: with MergeDiagnostics, didChange marks the document dirty and
+    /// didSave / didOpen / didClose clear it; with MergeCompletion or MergeHover, the text the
+    /// notification implies is queued for the live-document overlay. A first didOpen also warms the
+    /// worker. Runs on the C&gt;S pump thread, inline (no worker, no FCallLock). C&gt;S, didOpen:
+    /// queues (never waits) the announcement of the file's context on the merge worker: the
+    /// embedded server then sends draglint/context with its notice through the client writer and
+    /// starts the background re-index of a project DB marked needs-re-resolve (once per DB: the
+    /// server keys the run by DB). Needs the server, so only when an index-backed merge is on and a
+    /// writer is set.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TrackDocument (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.BuildFrame, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Enqueue, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server, DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen, DRagLint.LSP.Server.TLSPServer.EnableProxyNotices, FClientWriter</para>
+    /// <para>Reads: FOptions, FClientWriter</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.BuildFrame"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Enqueue"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server"/>
+    /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+    /// <seealso cref="DRagLint.LSP.Server.TLSPServer.EnableProxyNotices"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AnnounceOpen(const APath: string);
+    /// <param name="AFrame"><!-- drag-lint:auto type -->const TBytes</param>
+    /// <param name="ALen"><!-- drag-lint:auto type -->Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.DocKey, DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.HeadStringValue, DRagLint.LSP.Proxy.Merge.LiveUpdateOf, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.QueueDocUpdate, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.WarmUp, DRagLint.LSP.Server.TLSPServer.FileFromUri</para>
+    /// <para>Complexity: 24 (cyclomatic, outer body), 67 lines (full implementation)</para>
+    /// <para>Reads: FOptions, FTestFastPath, FDirtyLock, FDirty</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.DocKey"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameBody"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameContains"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.HeadStringValue"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.LiveUpdateOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure TrackDocument(const AFrame: TBytes; ALen: Integer);
+    /// <summary><!-- drag-lint:auto sum -->LSP-1 CORE (.delphilsp.json pickup): DelphiLSP
+    /// is configured by the IDE through a `settingsFile` naming
+    /// `&lt;Project&gt;.delphilsp.json` (initialize's initializationOptions or
+    /// workspace/didChangeConfiguration's settings). That is the IDE's ACTIVE project, so
+    /// it becomes the merge server's client context. Read only when the frame contains
+    /// the key; never alters the relayed bytes.</summary>
+    /// <param name="AFrame"><!-- drag-lint:auto type -->const TBytes</param>
+    /// <param name="ALen"><!-- drag-lint:auto type -->Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Server.TLSPServer.FileFromUri</para>
+    /// <para>Reads: FServerLock   Writes: FPendingSettingsFile</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameBody"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameContains"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.MergeErrLine"/>
+    /// <seealso cref="DRagLint.LSP.Server.TLSPServer.FileFromUri"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure PickupContext(const AFrame: TBytes; ALen: Integer);
+    /// <summary><!-- drag-lint:auto sum -->C&gt;S: queues one overlay update; the latest
+    /// per file wins. Applied on the worker by FlushDocUpdates, because TLiveDocuments is
+    /// not thread-safe.</summary>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ARemove"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TrackDocument (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.DocKey</para>
+    /// <para>Reads: FDocLock, FDocUpdates</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.DocKey"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure QueueDocUpdate(const APath: string; ARemove: Boolean; const AText: string);
+    /// <summary><!-- drag-lint:auto sum -->Worker thread only: applies the queued overlay
+    /// updates.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeHover (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Remove, DRagLint.Core.LiveDocs.TLiveDocuments.SetText</para>
+    /// <para>Reads: FDocLock, FDocUpdates</para>
+    /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Remove"/>
+    /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.SetText"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure FlushDocUpdates;
+    /// <param name="AFrame"><!-- drag-lint:auto type -->const TBytes</param>
+    /// <param name="ALen"><!-- drag-lint:auto type -->Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto -->C&gt;S: records a textDocument/completion (MergeCompletion) or
+    /// textDocument/hover (MergeHover) request by id and queues drag-lint's answer for it on the
+    /// worker at once, so it is usually ready before DelphiLSP answers. Never delays the frame
+    /// beyond one JSON parse.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.PrefixOf, DRagLint.LSP.Proxy.Merge.TPendingRequest.AddRef, DRagLint.LSP.Proxy.Merge.TPendingRequest.Create, DRagLint.LSP.Proxy.Merge.TPendingRequest.Release, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeHover, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Enqueue, DRagLint.LSP.Server.TLSPServer.FileFromUri, TJSONObject, TPendingRequest</para>
+    /// <para>Complexity: 38 (cyclomatic, outer body), 112 lines (full implementation)</para>
+    /// <para>Reads: FOptions, FCompletionOff, FHoverOff, FDefinitionOff, FPendingLock, FPending</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameBody"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameContains"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.MergeErrLine"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.PrefixOf"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TPendingRequest.AddRef"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure RecordRequest(const AFrame: TBytes; ALen: Integer);
+    /// <summary><!-- drag-lint:auto sum -->Worker thread: drag-lint's items for one
+    /// recorded request. Publishes only through the record (Items / Err / Elapsed, then
+    /// Done) and releases the job's reference. No store at all turns completion merging
+    /// off for the session, with one stderr line (Server reports its own failures).</summary>
+    /// <param name="APending"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4, DRagLint.LSP.Context.ILspServerContext.Stores, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TPendingRequest.Release, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server, DRagLint.LSP.Server.TLSPServer.StoresForFile, TPendingRequest</para>
+    /// <para>Reads: FCompletionOff</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Stores"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.MergeErrLine"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TPendingRequest.Release"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ComputeCompletion(APending: TObject);
+    /// <param name="APending"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto -->Worker thread: drag-lint's hover markdown for one recorded request,
+    /// the same text plain `lsp` answers (TLSPServer.ComputeHoverMarkdown, which reads the
+    /// live-document overlay). Publishes only through the record, like ComputeCompletion. No index
+    /// turns hover merging off for the session (Server reports the failure once).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.TPendingRequest.Release, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server, DRagLint.LSP.Server.TLSPServer.ComputeHoverMarkdown, TPendingRequest</para>
+    /// <para>Reads: FHoverOff</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TPendingRequest.Release"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server"/>
+    /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeHoverMarkdown"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ComputeHover(APending: TObject);
+    /// <param name="APending"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto -->Worker thread: drag-lint's definition locations for one recorded
+    /// request (TLSPServer.ComputeDefinition, the plain server's own F12). Publishes only through
+    /// the record, like ComputeHover. No index turns the definition fallback off for the session
+    /// (Server reports the failure once).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.TPendingRequest.Release, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server, DRagLint.LSP.Server.TLSPServer.ComputeDefinition, TPendingRequest</para>
+    /// <para>Reads: FDefinitionOff</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TPendingRequest.Release"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server"/>
+    /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeDefinition"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ComputeDefinition(APending: TObject);
+    /// <summary><!-- drag-lint:auto sum -->S&gt;C, the reply to the recorded initialize:
+    /// sets referencesProvider and workspaceSymbolProvider to true when absent, false or
+    /// null, and notes which ones DelphiLSP advertised itself (Answer then leaves those
+    /// requests to it). Returns True when AReply was changed.</summary>
+    /// <param name="AReply"><!-- drag-lint:auto type -->const TJSONObject</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeReply (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.Advertises, TJSONObject</para>
+    /// <para>Reads: FTheirReferences, FTheirSymbols</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.Advertises"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  MergeInitialize(const AReply: TJSONObject): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->Worker thread: computes and writes the reply
+    /// to one request Answer took.</summary>
+    /// <param name="AJob"><!-- drag-lint:auto type -->const TAnswerJob</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server, DRagLint.LSP.Server.TLSPServer.ComputeReferences, DRagLint.LSP.Server.TLSPServer.ComputeWorkspaceSymbols</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.MergeErrLine"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AnswerOnWorker(const AJob: TAnswerJob);
+    /// <summary><!-- drag-lint:auto sum -->Writes the JSON-RPC reply (id AId, result
+    /// AResultJson) to the client.</summary>
+    /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AResultJson"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.BuildFrame, DRagLint.LSP.Proxy.Merge.MergeErrLine, FClientWriter</para>
+    /// <para>Reads: FClientWriter</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.BuildFrame"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.MergeErrLine"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SendAnswer(const AId, AResultJson: string);
+    /// <summary><!-- drag-lint:auto sum -->One request Answer took has been replied to.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Reads: FStateLock, FAnswersOut, FAnswersIdle   Writes: FAnswersOut</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure EndAnswer;
+    /// <summary><!-- drag-lint:auto sum -->S&gt;C: a reply to a recorded completion
+    /// request gets drag-lint's items unioned in; a reply to a recorded hover request
+    /// gets drag-lint's markdown merged in (see Intercept). Waits for drag-lint's answer
+    /// at most the part of the budget left since the request. Runs on the S&gt;C pump
+    /// thread.</summary>
+    /// <param name="AFrame"><!-- drag-lint:auto type -->const TBytes</param>
+    /// <param name="ALen"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="AReplacement"><!-- drag-lint:auto type -->out TBytes</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: Cardinal, DRagLint.LSP.Proxy.Merge.BuildFrame, DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.IsEmptyLocations, DRagLint.LSP.Proxy.Merge.KindName, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.MergeHoverResult, DRagLint.LSP.Proxy.Merge.PrefixOf, DRagLint.LSP.Proxy.Merge.TPendingRequest.Release (+9 more)</para>
+    /// <para>Complexity: 30 (cyclomatic, outer body), 111 lines (full implementation)</para>
+    /// <para>Reads: FPendingLock, FPending, FOptions, FHoverWarned, FDefinitionWarned, FCompletionWarned</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Mutates: AReplacement (out)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.BuildFrame"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameBody"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameContains"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.IsEmptyLocations"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.KindName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  MergeReply(const AFrame: TBytes; ALen: Integer; out AReplacement: TBytes): Boolean;
+    /// <param name="AFrame"><!-- drag-lint:auto type -->const TBytes</param>
+    /// <param name="ALen"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="AReplacement"><!-- drag-lint:auto type -->out TBytes</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto -->S&gt;C: rewrites a publishDiagnostics frame with drag-lint's findings
+    /// appended. Runs on the S&gt;C pump thread; the lint itself runs on the merge worker, inside
+    /// the budget.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/3, DRagLint.LSP.Proxy.Merge.BuildFrame, DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EnsureLinter, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.IsDirty, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics.Skip, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RunWithinBudget, DRagLint.LSP.Server.TLSPServer.FileFromUri, IntToStr, TJSONArray, TJSONValue</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 102 lines (full implementation)</para>
+    /// <para>Reads: FLinter, FOptions, FBudgetWarned, FWarming   Writes: FBudgetWarned</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Mutates: AReplacement (out)</para>
+    /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.BuildFrame"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameBody"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameContains"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.MergeErrLine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  MergeDiagnostics(const AFrame: TBytes; ALen: Integer; out AReplacement: TBytes): Boolean;
   public
     /// <summary>Copies the options and starts the merge worker thread.</summary>
-    /// <remarks>Test seam: with the environment variable
+    /// <param name="AOptions">The proxy options; Merge*, MergeBudgetMs and
+    /// DbPaths are the fields this class reads.</param>
+    /// <remarks>
+    /// Test seam: with the environment variable
     /// DRAGLINT_MERGE_TEST_EMPTY_REPLACEMENT=1 Intercept answers True with an
     /// EMPTY replacement for every frame, so a guard can prove the relay
     /// declines it (run_lsp_proxy_stub_modes_guard.ps1 case f). With
     /// DRAGLINT_MERGE_TEST_FASTPATH=1 every didChange taken by the bounded head
     /// scan (no JSON parse) writes one stderr line, so a guard can prove that
-    /// path runs (run_lsp_proxy_merge_diagnostics_guard.ps1 case g2).</remarks>
-    /// <param name="AOptions">The proxy options; Merge*, MergeBudgetMs and
-    /// DbPaths are the fields this class reads.</param>
+    /// path runs (run_lsp_proxy_merge_diagnostics_guard.ps1 case g2).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.TMergeWorker.Create, GetEnvironmentVariable</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FOptions, FServerLock, FCallLock, FStateLock, FJobReady, FJobDone, FWorker, FTestEmptyReplacement (+11 more)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TMergeWorker.Create"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const AOptions: TLspProxyOptions);
     /// <summary>Stops the worker (waiting for a running job) and frees the
     /// server.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.TPendingRequest.Release, TPendingRequest</para>
+    /// <para>Reads: FWorker, FJobReady, FServer, FLinter, FPending, FPendingLock, FDocUpdates, FDocLock (+9 more)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TPendingRequest.Release"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>The relay's interceptor for this engine.</summary>
     /// <param name="ADir">Direction of the frame.</param>
@@ -267,6 +715,19 @@ type
     /// frame that is not a publishDiagnostics is never parsed. The linter is
     /// created on the first merge, never at startup, so the first publish of a
     /// session may overrun the budget and be forwarded unmerged.</para>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeReply, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.PickupContext, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TrackDocument</para>
+    /// <para>Returns: False; FOptions.MergeDiagnostics and MergeDiagnostics(AFrame, ALen, AReplacement)</para>
+    /// <para>Complexity: 19 (cyclomatic, outer body), 17 lines (full implementation)</para>
+    /// <para>Reads: FTestEmptyReplacement, FOptions</para>
+    /// <para>Mutates: AReplacement (out)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeReply"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.PickupContext"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TrackDocument"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     function Intercept(ADir: TMergeDirection; const AFrame: TBytes; ALen: Integer;
       out AReplacement: TBytes): Boolean;
@@ -280,8 +741,21 @@ type
     /// False when it overran (its late result is to be discarded), raised, or
     /// could not start because a previous over-budget job still occupies the
     /// worker.</returns>
-    /// <remarks>Callers are serialised. A job that overruns keeps running to
-    /// completion on the worker; it is never killed.</remarks>
+    /// <remarks>
+    /// Callers are serialised. A job that overruns keeps running to
+    /// completion on the worker; it is never killed.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: Cardinal</para>
+    /// <para>Returns: False; not FJobFailed</para>
+    /// <para>Reads: FCallLock, FStateLock, FBusy, FJobDone, FJobReady, FJobFailed   Writes: FBusy, FJobFailed, FJob</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RunWithinBudget(const AWork: TProc; ABudgetMs: Integer): Boolean;
     /// <summary>The relay's C&gt;S answerer (TFrameAnswerer) for this engine.</summary>
     /// <param name="AFrame">Buffer holding the frame at offset 0.</param>
@@ -297,19 +771,46 @@ type
     /// seen cancelled yet: it is consumed and nothing is written (DelphiLSP
     /// never saw that id; group-4 P1). False otherwise, and for a frame that
     /// does not parse.</returns>
-    /// <remarks>Once True for a request, exactly one reply is written through
+    /// <remarks>
+    /// Once True for a request, exactly one reply is written through
     /// ClientWriter: [] when no index opens, the computation raises (one stderr
     /// line) or the worker queue is full. The C&gt;S pump never waits for the
     /// worker. The taken ids are remembered on the C&gt;S pump thread only (no
     /// lock), at most ANSWERED_IDS_MAX of them; past that the set restarts.
     /// Test seam: DRAGLINT_MERGE_TEST_ANSWER_INLINE=1 replies [] inline on the
-    /// C&gt;S pump, as the queue-full path does (run_lsp_proxy_trace_guard.ps1).</remarks>
+    /// C&gt;S pump, as the queue-full path does (run_lsp_proxy_trace_guard.ps1).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Enqueue, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TakeCancel, DRagLint.LSP.Server.TLSPServer.FileFromUri, TJSONBool, TJSONObject</para>
+    /// <para>Returns: False; True</para>
+    /// <para>Complexity: 25 (cyclomatic, outer body), 81 lines (full implementation)</para>
+    /// <para>Reads: FOptions, FClientWriter, FTheirReferences, FTheirSymbols, FAnsweredIds, FStateLock, FAnswersIdle, FTestAnswerInline   Writes: FAnswersOut</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameBody"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameContains"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.MergeErrLine"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Answer(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc = nil): Boolean;
     /// <summary>Waits until every request Answer took has been replied to.</summary>
     /// <param name="ATimeoutMs">Longest wait, in milliseconds.</param>
     /// <returns>True when none is outstanding (any more).</returns>
-    /// <remarks>RunLspProxy calls it once the S&gt;C stream ended, so a reply
-    /// still being computed is not lost to process exit.</remarks>
+    /// <remarks>
+    /// RunLspProxy calls it once the S&gt;C stream ended, so a reply
+    /// still being computed is not lost to process exit.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
+    /// <para>Returns: FAnswersIdle.WaitFor(ATimeoutMs) = wrSignaled</para>
+    /// <para>Reads: FAnswersIdle</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function WaitForAnswers(ATimeoutMs: Cardinal): Boolean;
     /// <summary>Where Answer's replies go; set by RunLspProxy before any pump
     /// starts. Unset, Answer declines every frame.</summary>
@@ -322,6 +823,21 @@ type
     /// <returns>The server, or nil when no database exists or the server could
     /// not be created; the failure is reported once on stderr and never
     /// retried (fail-open).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeHover (DRagLint.LSP.Proxy.Merge.pas) (+1 more)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile, DRagLint.LSP.Server.TLSPServer.Create/1, FileExists</para>
+    /// <para>Returns: FServer</para>
+    /// <para>Reads: FServerLock, FServerTried, FOptions, FServer, FPendingSettingsFile   Writes: FServerTried, FServer, FPendingSettingsFile</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.MergeErrLine"/>
+    /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
+    /// <seealso cref="DRagLint.LSP.Server.TLSPServer.Create"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Server: TLSPServer;
     /// <summary>The options this engine was created with.</summary>
     property Options: TLspProxyOptions read FOptions;
@@ -332,12 +848,25 @@ type
 /// <param name="ALen">Byte length of the frame in AFrame.</param>
 /// <returns>The text after the blank line that ends the headers; an empty
 /// string when no header terminator lies within ALen.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeReply (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.PickupContext (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest (DRagLint.LSP.Proxy.Merge.pas) (+2 more)</para>
+/// <para>Returns: ''; TEncoding.UTF8.GetString(AFrame, I + Length(HEADER_END), ALen - I - Length(HEADER_END))</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FrameBody(const AFrame: TBytes; ALen: Integer): string;
 
 /// <summary>Frames a UTF-8 body as one LSP message.</summary>
 /// <param name="ABodyUtf8">The body bytes, already UTF-8.</param>
 /// <returns>`Content-Length: N` CR LF CR LF followed by the body, where N is
 /// the BYTE count of the body.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeReply (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer (DRagLint.LSP.Proxy.Merge.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: Hdr + ABodyUtf8</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildFrame(const ABodyUtf8: TBytes): TBytes;
 
 implementation

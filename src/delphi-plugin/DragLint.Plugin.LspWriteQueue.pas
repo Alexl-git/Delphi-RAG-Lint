@@ -35,17 +35,39 @@ uses
 type
   /// <summary>Raised-once notice that a write to the pipe failed.</summary>
   /// <param name="ALastError">GetLastError of the failed WriteFile.</param>
-  /// <remarks>Called on the WRITER thread, never on the caller's.</remarks>
+  /// <remarks>
+  /// Called on the WRITER thread, never on the caller's.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.LspWriteQueue.pas), DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create (DragLint.Plugin.LspWriteQueue.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLPipeErrorProc = reference to procedure(ALastError: DWORD);
 
   /// <summary>Bounded, coalescing, non-blocking queue of frames written to a
   /// pipe handle by one private writer thread.</summary>
-  /// <remarks>Thread-safe: Enqueue / PendingCount / WriteStalledMs may be called
+  /// <remarks>
+  /// Thread-safe: Enqueue / PendingCount / WriteStalledMs may be called
   /// from any thread. Does NOT own AHandle -- the creator closes it, AFTER
   /// freeing this object. Once a write fails the queue is Failed for good and
-  /// refuses every later frame.</remarks>
+  /// refuses every later frame.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.LspClient.pas) ?, DragLint.Plugin.LspClient.TDragLintLspClient.StartWorkers (DragLint.Plugin.LspClient.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.LspClient</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLLspWriteQueue = class
     strict private type
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Used by: declaration (DragLint.Plugin.LspWriteQueue.pas) ?, DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create (DragLint.Plugin.LspWriteQueue.pas) ?, DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue (DragLint.Plugin.LspWriteQueue.pas) ?, DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.TakeNext (DragLint.Plugin.LspWriteQueue.pas), DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.WriterLoop (DragLint.Plugin.LspWriteQueue.pas) ? (+1 more)</para>
+      /// <para>Used in units: DragLint.Plugin.LspWriteQueue, DragLint.Plugin.OptionsFrames</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetDropped"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetFailed"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       TFrame = record
         Bytes: TBytes;
         Key  : string;
@@ -65,11 +87,90 @@ type
       FDropped      : Integer            ;
       FWritten      : Integer            ;
       FJoinBudgetMs : Cardinal           ;
+      /// <param name="AFrame"><!-- drag-lint:auto type -->out TFrame</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.WriterLoop (DragLint.Plugin.LspWriteQueue.pas)</para>
+      /// <para>Calls: Default</para>
+      /// <para>Reads: FLock, FStopping, FFrames, FWake   Writes: FWriting, FWriteStarted</para>
+      /// <para>Mutates: AFrame (out)</para>
+      /// <para>UI thread only -- touches AFrame</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetDropped"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetFailed"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function TakeNext(out AFrame: TFrame): Boolean;
+      /// <param name="ABytes"><!-- drag-lint:auto type -->const TBytes</param>
+      /// <param name="ALastError"><!-- drag-lint:auto type -->out DWORD</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.WriterLoop (DragLint.Plugin.LspWriteQueue.pas)</para>
+      /// <para>Calls: DWORD, Integer, WriteFile</para>
+      /// <para>Reads: FHandle</para>
+      /// <para>Mutates: ALastError (out)</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetDropped"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetFailed"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function WriteAll(const ABytes: TBytes; out ALastError: DWORD): Boolean;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create (DragLint.Plugin.LspWriteQueue.pas)</para>
+      /// <para>Calls: DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.TakeNext, DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.WriteAll, FOnPipeError, OutputDebugString, PChar</para>
+      /// <para>Reads: FWake, FLock, FStopping, FFrames, FOnPipeError   Writes: FWriting, FWritten, FFailed</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <para>UI thread only -- touches F</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.TakeNext"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.WriteAll"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure WriterLoop;
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: FFailed.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FLock, FFailed</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetDropped"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetWritten"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function GetFailed: Boolean;
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: FDropped.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FLock, FDropped</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetFailed"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetWritten"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function GetDropped: Integer;
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: FWritten.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FLock, FWritten</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetDropped"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetFailed"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function GetWritten: Integer;
     public
       /// <summary>Starts the writer thread for AHandle.</summary>
@@ -77,13 +178,38 @@ type
       /// <param name="ACapacity">Maximum frames waiting to be written; values
       /// below 1 are treated as 1.</param>
       /// <param name="AOnPipeError">Optional; told once when a write fails.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.StartWorkers (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Calls: DragLint.Plugin.LspWriteQueue.TDLLspWriterThread.Create</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FHandle, FCapacity, FOnPipeError, FJoinBudgetMs, FFrames, FLock, FWake, FThread</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriterThread.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetDropped"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetFailed"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(AHandle: THandle; ACapacity: Integer; const AOnPipeError: TDLPipeErrorProc);
 
       /// <summary>Stops the writer without waiting on the pipe.</summary>
-      /// <remarks>Cancels a WriteFile blocked on a full pipe (CancelSynchronousIo)
+      /// <remarks>
+      /// Cancels a WriteFile blocked on a full pipe (CancelSynchronousIo)
       /// and joins for at most JoinBudgetMs. A writer that still has not
       /// left is abandoned together with this object's internals (deliberate
-      /// leak) rather than freezing the caller.</remarks>
+      /// leak) rather than freezing the caller.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: CancelSynchronousIo, WaitForSingleObject</para>
+      /// <para>Reads: FLock, FFrames, FWake, FThread, FJoinBudgetMs   Writes: FStopping</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetDropped"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetFailed"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetWritten"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
 
       /// <summary>Queues one complete frame; never blocks on the pipe.</summary>
@@ -92,16 +218,52 @@ type
       /// the same key in place instead of adding a new one.</param>
       /// <returns>False when the frame was NOT queued: the queue is full, has
       /// failed, or is stopping.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.SendRequestFrame (DragLint.Plugin.LspClient.pas), DragLint.Plugin.LspClient.TDragLintLspClient.WriteFramedMessage (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Returns: False; True</para>
+      /// <para>Reads: FLock, FFailed, FStopping, FFrames, FCapacity, FWake   Writes: FFrames, FDropped</para>
+      /// <para>UI thread only -- touches F</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetDropped"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetFailed"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetWritten"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Enqueue(const ABytes: TBytes; const ACoalesceKey: string = ''): Boolean;
 
       /// <summary>Frames waiting to be written (excluding one being written).</summary>
       /// <returns>The count.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Returns: FFrames.Count</para>
+      /// <para>Reads: FLock, FFrames</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetDropped"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetFailed"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function PendingCount: Integer;
 
       /// <summary>Milliseconds the CURRENT WriteFile has been blocked, or 0 when
       /// the writer is idle.</summary>
-      /// <remarks>A large value means the engine has stopped reading stdin.</remarks>
       /// <returns>Elapsed ms of the write in progress, 0 when none.</returns>
+      /// <remarks>
+      /// A large value means the engine has stopped reading stdin.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.LspClient.TDragLintLspClient.IsBusy (DragLint.Plugin.LspClient.pas), DragLint.Plugin.LspClient.TDragLintLspClient.IsStuck (DragLint.Plugin.LspClient.pas)</para>
+      /// <para>Returns: if FWriting then GetTickCount64 - FWriteStarted</para>
+      /// <para>Reads: FLock, FWriting, FWriteStarted</para>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Create"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.Enqueue"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetDropped"/>
+      /// <seealso cref="DragLint.Plugin.LspWriteQueue.TDLLspWriteQueue.GetFailed"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function WriteStalledMs: UInt64;
 
       /// <summary>True once a write has failed; the queue refuses everything after.</summary>

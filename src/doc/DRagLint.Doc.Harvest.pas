@@ -96,7 +96,7 @@ type
   /// <summary>Why a candidate comment block was rejected, or hrAccepted.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Harvest.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Harvest.pas), DRagLint.Doc.Harvest.HarvestReasonToString (DRagLint.Doc.Harvest.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   THarvestReason = (hrAccepted, hrNone, hrBanner, hrCommentedCode, hrTrailer,
@@ -110,7 +110,7 @@ type
   /// still reports its extent so a caller can say WHICH comment it declined,
   /// and so Task 9's strip round-trip has the range to delete.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Harvest.pas), DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas), DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Harvest.pas), DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas), DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas), DRagLint.Doc.Harvest.HarvestScan (DRagLint.Doc.Harvest.pas), DRagLint.Doc.Harvest.HarvestText (DRagLint.Doc.Harvest.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Facts, DRagLint.Doc.Harvest</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -136,14 +136,14 @@ type
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoSelfTestHarvest (DRagLint.CLI.pas), DRagLint.Doc.Facts.HarvestInterfaceComment (DRagLint.Doc.Facts.pas)</para>
-/// <para>Calls: DRagLint.Doc.Harvest.ClassifyLine, DRagLint.Doc.Harvest.ContainsEndSemi, DRagLint.Doc.Harvest.ContainsWord, DRagLint.Doc.Harvest.IsEndStop, DRagLint.Doc.Harvest.IsSeparatorOnly, DRagLint.Doc.Harvest.SeparatorShare, Pos, Trim</para>
-/// <para>Complexity: 43 (cyclomatic, outer body), 135 lines (full implementation)</para>
+/// <para>Calls: DRagLint.Doc.Harvest.ClassifyLine, DRagLint.Doc.Harvest.ContainsEndSemi, DRagLint.Doc.Harvest.ContainsWord, DRagLint.Doc.Harvest.IsDlMarkerLine, DRagLint.Doc.Harvest.IsEndStop, DRagLint.Doc.Harvest.IsSeparatorOnly, DRagLint.Doc.Harvest.SeparatorShare, Pos, Trim</para>
+/// <para>Complexity: 45 (cyclomatic, outer body), 144 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Doc.Harvest.ClassifyLine"/>
 /// <seealso cref="DRagLint.Doc.Harvest.ContainsEndSemi"/>
 /// <seealso cref="DRagLint.Doc.Harvest.ContainsWord"/>
+/// <seealso cref="DRagLint.Doc.Harvest.IsDlMarkerLine"/>
 /// <seealso cref="DRagLint.Doc.Harvest.IsEndStop"/>
-/// <seealso cref="DRagLint.Doc.Harvest.IsSeparatorOnly"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function HarvestScan(const ASrcLines: TArray<string>; ADeclLine: Integer): THarvestResult;
@@ -200,9 +200,15 @@ function HarvestReasonToString(const AReason: THarvestReason): string;
 /// <param name="ALine">One physical source line; indentation is ignored.</param>
 /// <returns>True for `// dl:...` (also `//dl:...`); False for prose, `///` doc
 /// lines and trailing comments.</returns>
-/// <remarks>Pure. Such a line is never documentation text: harvest walks past it
+/// <remarks>
+/// Pure. Such a line is never documentation text: harvest walks past it
 /// and `document --apply` inserts its block above it (owner ruling 2026-09-22,
-/// DECISION-2026-10-28-comment-anchors, defect B).</remarks>
+/// DECISION-2026-10-28-comment-anchors, defect B).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.Document.DlMarkerRunStart (DRagLint.Doc.Document.pas), DRagLint.Doc.Harvest.HarvestScan (DRagLint.Doc.Harvest.pas)</para>
+/// <para>Calls: Copy, Trim</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsDlMarkerLine(const ALine: string): Boolean;
 
 implementation

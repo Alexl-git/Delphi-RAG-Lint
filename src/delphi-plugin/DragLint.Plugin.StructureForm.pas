@@ -18,23 +18,103 @@ uses
   , Vcl.Forms
   ;
 
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeShowStructure (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.StructureForm.TDragLintStructureForm.Create, DragLint.Plugin.StructureForm.TDragLintStructureForm.GetActiveFilePath, DragLint.Plugin.StructureForm.TDragLintStructureForm.RefreshForFile</para>
+/// <seealso cref="DragLint.Plugin.StructureForm.TDragLintStructureForm.Create"/>
+/// <seealso cref="DragLint.Plugin.StructureForm.TDragLintStructureForm.GetActiveFilePath"/>
+/// <seealso cref="DragLint.Plugin.StructureForm.TDragLintStructureForm.RefreshForFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowDragLintStructure;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: FreeAndNil</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure HideDragLintStructure;
 
 { v0.42: build the Structure UI embedded inside a host container (a tab of the
   drag-lint dock panel) rather than as a standalone stay-on-top window. The
   returned form is owned by AOwner; call RefreshEmbeddedStructure when its tab
   is activated to re-read the active editor file. }
+/// <summary><!-- drag-lint:auto sum -->v0.42: build the Structure UI embedded inside a
+/// host container (a tab of the drag-lint dock panel) rather than as a standalone
+/// stay-on-top window. The returned form is owned by AOwner; call
+/// RefreshEmbeddedStructure when its tab is activated to re-read the active editor file.</summary>
+/// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
+/// <param name="AParent"><!-- drag-lint:auto type -->TWinControl</param>
+/// <returns><!-- drag-lint:auto -->TForm -- Observed: F.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.HandleInitTimer (DragLint.Plugin.DockForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.StructureForm.TDragLintStructureForm.Create, DragLint.Plugin.StructureForm.TDragLintStructureForm.RefreshActive</para>
+/// <para>UI thread only -- touches F, AParent, Result</para>
+/// <seealso cref="DragLint.Plugin.StructureForm.TDragLintStructureForm.Create"/>
+/// <seealso cref="DragLint.Plugin.StructureForm.TDragLintStructureForm.RefreshActive"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CreateEmbeddedStructure(AOwner: TComponent; AParent: TWinControl): TForm;
+/// <param name="AForm"><!-- drag-lint:auto type -->TForm</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.HandlePageChange (DragLint.Plugin.DockForm.pas), DragLint.Plugin.DockForm.TDragLintDockFrame.HandleWatchTimer (DragLint.Plugin.DockForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.StructureForm.TDragLintStructureForm.RefreshActive, TDragLintStructureForm</para>
+/// <para>UI thread only -- touches AForm</para>
+/// <seealso cref="DragLint.Plugin.StructureForm.TDragLintStructureForm.RefreshActive"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RefreshEmbeddedStructure(AForm: TForm);
 { v0.46: cheap diagnostics-only refresh (no symbol re-shell). }
+/// <summary><!-- drag-lint:auto sum -->v0.46: cheap diagnostics-only refresh (no symbol
+/// re-shell).</summary>
+/// <param name="AForm"><!-- drag-lint:auto type -->TForm</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.HandleWatchTimer (DragLint.Plugin.DockForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.StructureForm.TDragLintStructureForm.RefreshDiagnosticsOnly, TDragLintStructureForm</para>
+/// <para>UI thread only -- touches AForm</para>
+/// <seealso cref="DragLint.Plugin.StructureForm.TDragLintStructureForm.RefreshDiagnosticsOnly"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RefreshEmbeddedStructureDiagnostics(AForm: TForm);
 { v0.48: scroll an embedded Structure form to its Diagnostics section if it has any. }
+/// <summary><!-- drag-lint:auto sum -->v0.48: scroll an embedded Structure form to its
+/// Diagnostics section if it has any.</summary>
+/// <param name="AForm"><!-- drag-lint:auto type -->TForm</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.HandleWatchTimer (DragLint.Plugin.DockForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.StructureForm.TDragLintStructureForm.HasDiagnostics, DragLint.Plugin.StructureForm.TDragLintStructureForm.ScrollToDiagnostics, TDragLintStructureForm</para>
+/// <para>UI thread only -- touches AForm</para>
+/// <seealso cref="DragLint.Plugin.StructureForm.TDragLintStructureForm.HasDiagnostics"/>
+/// <seealso cref="DragLint.Plugin.StructureForm.TDragLintStructureForm.ScrollToDiagnostics"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ScrollEmbeddedStructureToDiagnostics(AForm: TForm);
 { v(session 73): select the embedded Structure form's Diagnostics row for ALine.
   Same shape as the two helpers above -- the caller holds the embedded form as a
   plain TForm and must not need TDragLintStructureForm in its uses clause.
   False when the form is not a Structure form or the line carries no finding. }
+/// <summary><!-- drag-lint:auto sum -->v(session 73): select the embedded Structure
+/// form's Diagnostics row for ALine. Same shape as the two helpers above -- the caller
+/// holds the embedded form as a plain TForm and must not need TDragLintStructureForm in
+/// its uses clause. False when the form is not a Structure form or the line carries no
+/// finding.</summary>
+/// <param name="AForm"><!-- drag-lint:auto type -->TForm</param>
+/// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: (AForm is
+/// TDragLintStructureForm).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.SelectDockedDiagnosticForLine (DragLint.Plugin.DockForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.StructureForm.TDragLintStructureForm.SelectDiagnosticForLine, TDragLintStructureForm</para>
+/// <para>UI thread only -- touches AForm</para>
+/// <seealso cref="DragLint.Plugin.StructureForm.TDragLintStructureForm.SelectDiagnosticForLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SelectEmbeddedStructureDiagnosticForLine(AForm: TForm; ALine: Integer): Boolean;
 
 var { v0.48: set True by a compile that just pushed findings; the dock watch timer

@@ -26,9 +26,21 @@ const
 
 type
   /// <summary>A tool or database the charts need could not be located, or was refused.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce (DRagLint.Charts.Producer.Delphi.pas) ?, DRagLint.Charts.Tools.CloneDb (DRagLint.Charts.Tools.pas), DRagLint.Charts.Tools.ResolveChartTool (DRagLint.Charts.Tools.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Tools</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EChartsTool = class(Exception);
 
   /// <summary>One candidate of a tool walk (an element of the PS $Steps array).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Tools.pas) ?, DRagLint.Charts.Tools.ResolveChartTool (DRagLint.Charts.Tools.pas) ?, DRagLint.Charts.Tools.ResolveGraphvizDot (DRagLint.Charts.Tools.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Tools</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TToolStep = record
     /// <summary>How the candidate is named in the "Looked, in order" message.</summary>
     Caption : string;
@@ -44,12 +56,27 @@ type
     /// <param name="pWhyEmpty">Why pPath is empty.</param>
     /// <param name="pSetBy">Who set pPath; '' for a plain candidate.</param>
     /// <returns>The step.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Tools.ResolveGraphvizDot (DRagLint.Charts.Tools.pas)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Make(const pCaption, pPath, pWhyEmpty: string; const pSetBy: string = ''): TToolStep; static;
   end;
 
 /// <summary>The settings.json the installer writes: %APPDATA%\drag-lint\settings.json.</summary>
 /// <returns>The path, or '' when APPDATA is not set.</returns>
-/// <remarks>Port of Get-DragLintSettingsPath (Emit-Common.ps1:98).</remarks>
+/// <remarks>
+/// Port of Get-DragLintSettingsPath (Emit-Common.ps1:98).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Question.TQuestionArgs.Dot (DRagLint.Charts.Question.pas)</para>
+/// <para>Calls: DRagLint.Charts.Tools.JoinPath, GetEnvironmentVariable</para>
+/// <para>Returns: if AppData &lt;&gt; '' then JoinPath(AppData, SETTINGS_SUBPATH)</para>
+/// <seealso cref="DRagLint.Charts.Tools.JoinPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DragLintSettingsPath: string;
 
 /// <summary>One key of settings.json, or why it was skipped.</summary>
@@ -58,13 +85,26 @@ function DragLintSettingsPath: string;
 /// <param name="pWhySkipped">'' when a value was found, else 'no %APPDATA%', 'file not found',
 /// 'unreadable' or 'no "key" key'.</param>
 /// <returns>The value as text, or '' when skipped.</returns>
-/// <remarks>Port of Get-DragLintSetting (Emit-Common.ps1:102). PS traps closed:
+/// <remarks>
+/// Port of Get-DragLintSetting (Emit-Common.ps1:102). PS traps closed:
 /// PSObject.Properties[$Key] is case-insensitive, so the key is too; `"$($j.$Key)"` turns a
 /// number or bool into text ('True'/'False' for a bool) and a null into '', and an empty
 /// value is a skip; an empty file parses to $null, which is "no key", not "unreadable"; the file is
 /// decoded like [IO.File]::ReadAllText (BOM, else UTF-8). Known limit: PS 7 ConvertFrom-Json
 /// refuses keys that differ only in case ("unreadable"); this port takes the first match.
-/// Never raises.</remarks>
+/// Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Tools.ResolveGraphvizDot (DRagLint.Charts.Tools.pas)</para>
+/// <para>Calls: DRagLint.Charts.Tools.IsBlank, DRagLint.Charts.Tools.IsLeaf, DRagLint.Charts.Tools.JsonValueText, Format, SameText, TJSONObject</para>
+/// <para>Returns: ''; JsonValueText(Pair.JsonValue)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: pWhySkipped (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Charts.Tools.IsBlank"/>
+/// <seealso cref="DRagLint.Charts.Tools.IsLeaf"/>
+/// <seealso cref="DRagLint.Charts.Tools.JsonValueText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DragLintSetting(const pSettingsPath, pKey: string; out pWhySkipped: string): string;
 
 /// <summary>The shared tool walk: the explicit path, else the first existing candidate.</summary>
@@ -76,9 +116,17 @@ function DragLintSetting(const pSettingsPath, pKey: string; out pWhySkipped: str
 /// <returns>The full path of the first candidate that exists as a file.</returns>
 /// <exception cref="EChartsTool">pExplicit is given and missing; a step with SetBy names a
 /// missing file; or nothing exists (the message lists every place looked at).</exception>
-/// <remarks>Port of Resolve-ChartTool (Emit-Common.ps1:111). A path is made full (against
+/// <remarks>
+/// Port of Resolve-ChartTool (Emit-Common.ps1:111). A path is made full (against
 /// the process's current directory, as the PS makes it full against its location) before it
-/// is tested, and the full path is returned.</remarks>
+/// is tested, and the full path is returned.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Tools.ResolveGraphvizDot (DRagLint.Charts.Tools.pas)</para>
+/// <para>Calls: DRagLint.Charts.Tools.IsLeaf, ExpandFileName, Format</para>
+/// <para>Returns: X</para>
+/// <seealso cref="DRagLint.Charts.Tools.IsLeaf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveChartTool(const pWhat, pParamName, pExplicit: string; const pSteps: TArray<TToolStep>;
   const pHint: string): string;
 
@@ -90,10 +138,21 @@ function ResolveChartTool(const pWhat, pParamName, pExplicit: string; const pSte
 /// <param name="pSharedDefault">The last candidate (usually SHARED_DOT_DEFAULT).</param>
 /// <returns>The full path of dot.exe.</returns>
 /// <exception cref="EChartsTool">As ResolveChartTool.</exception>
-/// <remarks>Port of Resolve-GraphvizDot (Emit-Common.ps1:150). Order: explicit, DRAGLINT_DOT,
+/// <remarks>
+/// Port of Resolve-GraphvizDot (Emit-Common.ps1:150). Order: explicit, DRAGLINT_DOT,
 /// settings "dot", beside the scripts, installed v2, installed, dot.exe on PATH, shared. PS
 /// trap closed: Get-Command searches PATH only (never the current folder), so PATH is walked
-/// entry by entry rather than through FileSearch, which looks in the current folder first.</remarks>
+/// entry by entry rather than through FileSearch, which looks in the current folder first.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Question.TQuestionArgs.Dot (DRagLint.Charts.Question.pas)</para>
+/// <para>Calls: DRagLint.Charts.Tools.DotOnPath, DRagLint.Charts.Tools.DragLintSetting, DRagLint.Charts.Tools.JoinPath, DRagLint.Charts.Tools.ResolveChartTool, DRagLint.Charts.Tools.TToolStep.Make, ExpandFileName, Format, GetEnvironmentVariable</para>
+/// <seealso cref="DRagLint.Charts.Tools.DotOnPath"/>
+/// <seealso cref="DRagLint.Charts.Tools.DragLintSetting"/>
+/// <seealso cref="DRagLint.Charts.Tools.JoinPath"/>
+/// <seealso cref="DRagLint.Charts.Tools.ResolveChartTool"/>
+/// <seealso cref="DRagLint.Charts.Tools.TToolStep.Make"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveGraphvizDot(const pExplicit, pSettingsPath, pChartsRoot, pScriptDir, pSharedDefault: string): string;
 
 /// <summary>Where the charts' files live: the charts folder (report-pairs.json, the clone root)
@@ -108,9 +167,19 @@ function ResolveGraphvizDot(const pExplicit, pSettingsPath, pChartsRoot, pScript
 /// ..\charts from the exe folder (installed v2, {app}\charts beside {app}\bin); ..\..\charts\src
 /// (the repo's third_party\dll-win64); ..\..\..\..\charts\src (the repo's src\cli\Win64\Debug);
 /// the exe folder itself (installed, scripts flat beside the engine) -- which always exists.</returns>
-/// <remarks>Replaces the Ask-Report.ps1 lookup the in-process producer used as its anchor
+/// <remarks>
+/// Replaces the Ask-Report.ps1 lookup the in-process producer used as its anchor
 /// (2026-10-18): the engine ships no PowerShell, so the folder is found by layout, never by a
-/// script in it. Reads the environment; otherwise pure.</remarks>
+/// script in it. Reads the environment; otherwise pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Pairs.ResolveReportPairsFile (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce (DRagLint.Charts.Producer.Delphi.pas)</para>
+/// <para>Calls: DRagLint.Charts.Tools.ScriptFolderOf, ExcludeTrailingPathDelimiter, ExpandFileName, ExtractFileDir, ExtractFilePath, GetEnvironmentVariable, ParamStr</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: pChartsRoot (out), pScriptDir (out), pWhy (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Charts.Tools.ScriptFolderOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveChartsHome(const pExplicit: string; out pChartsRoot, pScriptDir, pWhy: string): Boolean;
 
 /// <summary>A database path made full, refusing anything but a live clone.</summary>
@@ -121,9 +190,18 @@ function ResolveChartsHome(const pExplicit: string; out pChartsRoot, pScriptDir,
 /// <returns>The full path.</returns>
 /// <exception cref="EChartsTool">Blank or missing path; a name not ending in .sqlite (a history
 /// copy); a path outside pCloneRoot without the override.</exception>
-/// <remarks>Port of Get-CloneDb (Emit-Common.ps1:231). The suffix rule is checked BEFORE the
+/// <remarks>
+/// Port of Get-CloneDb (Emit-Common.ps1:231). The suffix rule is checked BEFORE the
 /// override, as in the PS. PS traps closed: Test-Path without -PathType accepts a folder too;
-/// EndsWith/StartsWith are OrdinalIgnoreCase; `-eq '1'` on the variable.</remarks>
+/// EndsWith/StartsWith are OrdinalIgnoreCase; `-eq '1'` on the variable.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.Create (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.CrossesBoundary.FarRows (DRagLint.Charts.Q.CrossesBoundary.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.Create (DRagLint.Charts.Q.FeedsFrom.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.Create (DRagLint.Charts.Q.LandsWhere.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas) (+1 more)</para>
+/// <para>Calls: DirectoryExists, DRagLint.Charts.Tools.IsBlank, ExpandFileName, FileExists, Format, GetEnvironmentVariable</para>
+/// <para>Returns: Full</para>
+/// <para>Mutates: pNote (out)</para>
+/// <seealso cref="DRagLint.Charts.Tools.IsBlank"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CloneDb(const pPath, pCloneRoot: string; out pNote: string): string;
 
 implementation

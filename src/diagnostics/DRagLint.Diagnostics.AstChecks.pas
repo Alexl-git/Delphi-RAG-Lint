@@ -20,8 +20,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.RoutineMetricFindings (DRagLint.CLI.pas) (+5 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.SymbolFacts, DRagLint.LSP.Completion, DRagLint.MCP.Server</para>
+  /// <para>Used by: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.Doc.SymbolFacts.TSymbolFactsAnalyzer.Analyze (DRagLint.Doc.SymbolFacts.pas), DRagLint.Fix.Stmt.FixWriteOnlyLocals (DRagLint.Fix.Stmt.pas), DRagLint.Fix.Stmt.LoopVarDeclEdits (DRagLint.Fix.Stmt.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas) (+7 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.SymbolFacts, DRagLint.Fix.Stmt, DRagLint.Lint.Autofix, DRagLint.LSP.Completion, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TAstChecker = class
@@ -64,7 +64,7 @@ type
       /// All.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUnbalancedBeginEnd, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUndeclared</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors"/>
@@ -119,7 +119,7 @@ type
       /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.Check (DRagLint.Diagnostics.AstChecks.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.Check (DRagLint.Diagnostics.AstChecks.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
       /// <para>Calls: AnsiUpperCase, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.BuildConditionalRanges, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Integer, IsInConditionalRegion, StraddlesConditionalRegion</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors.BuildConditionalRanges"/>
@@ -178,8 +178,8 @@ type
       /// there produces code that will not build. Multi-line name lists are skipped.
       /// Edits never overlap: at most one edit per declVar, one per declVars.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildAutofixEdits (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.PosKey, DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, HandleProc, Integer, IntToStr, NodeKey, NStr, SameText, Trim</para>
+      /// <para>Called from: DRagLint.Fix.Stmt.FixWriteOnlyLocals (DRagLint.Fix.Stmt.pas), DRagLint.Fix.Stmt.LoopVarDeclEdits (DRagLint.Fix.Stmt.pas), DRagLint.Lint.Autofix.BuildAutofixEdits (DRagLint.Lint.Autofix.pas)</para>
+      /// <para>Calls: AddDeleteKeepingDlComment, CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.PosKey, DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, HandleProc, Integer, IntToStr (+6 more)</para>
       /// <para>Returns: nil; Edits.ToArray</para>
       /// <para>Mutates: AFixedCount (out)</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits.PosKey"/>
@@ -240,7 +240,7 @@ type
       /// are skipped. The search ignores 'inherited' inside nested routines. Pure AST; no DB. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: CheckProc, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, HasInherited, Integer</para>
+      /// <para>Calls: CheckProc, Default, DelegatesToOwnCtor, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, HasInherited, Integer, SrcText</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited.Visit"/>
@@ -311,8 +311,8 @@ type
       /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
-      /// <para>Calls: CatOf, CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.CollectDeclTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectEnums, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectGuards, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+24 more)</para>
+      /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
+      /// <para>Calls: CatOf, CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.CollectDeclTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectEnums, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectGuards, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+27 more)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.CollectDeclTypes"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr"/>
@@ -334,14 +334,25 @@ type
       /// entries are examined, every other entry passes through.</param>
       /// <returns>AFindings in their original order, minus the <c>concat-in-loop</c>
       /// findings whose target is proven non-string.</returns>
-      /// <remarks>The target is the assignment's left identifier: a var, param, field or
+      /// <remarks>
+      /// The target is the assignment's left identifier: a var, param, field or
       /// inline <c>var X: T</c> (flat per-file type map, AMBIGUOUS_DECL_TYPE when two declarations disagree),
       /// or <c>Result</c>, typed by the innermost enclosing function's return type. An
       /// UNKNOWN or AMBIGUOUS type KEEPS the finding: recall on real string
       /// accumulation is not traded for precision. A record, class or interface target
       /// is kept too, since an overloaded Add can concatenate. The one filter that
       /// lint, lint-all and the LSP all call, so the three surfaces cannot disagree.
-      /// Never raises; a file that does not parse returns AFindings unchanged.</remarks>
+      /// Never raises; a file that does not parse returns AFindings unchanged.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
+      /// <para>Calls: AliasContainerTarget, DRagLint.Diagnostics.AstChecks.CollectDeclTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat.Walk, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, IsContainerType, LookupType, LowerCase, ProvenNonString, SameText, SrcText, Trim</para>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.CollectDeclTypes"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat.Walk"/>
+      /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function DropNonStringConcat(const AFile: string; const AStore: ISymbolStore; AFileId: Int64; const AFindings: TArray<TLintFinding>): TArray<TLintFinding>;
       /// <summary>FireDAC misuse: 'Open' on a data-modifying statement, or 'ExecSQL' on a SELECT.</summary>
       /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
@@ -549,7 +560,8 @@ type
       /// before E14, bound to the scoped value itself): the bare spelling is
       /// E2003, write TEnum.Value -- only when no other symbol in AStore carries
       /// the name. Empty when there is none.</returns>
-      /// <remarks>Not a finding: a qualified read ('member-access' ref), a
+      /// <remarks>
+      /// Not a finding: a qualified read ('member-access' ref), a
       /// value of a non-scoped enum, a scoped enum in a unit the file does not
       /// use, a const declared as an alias of the scoped value (`X = TEnum.X`,
       /// the Vcl.Dialogs idiom), a site in an inactive branch (no ref), a bound
@@ -563,7 +575,20 @@ type
       /// Reads the extractor fact symbols.directives = 'scopedenums' on the
       /// enum type, so an index built before that fact is silent. Looks only
       /// in AStore: a scoped enum known only to the library index is not seen.
-      /// Does not catch store errors.</remarks>
+      /// Does not catch store errors.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+      /// <para>Calls: ContainsText, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Model.TSymbolKindHelper.ToText, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped.EnumNames, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped.IsAliasOf, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped.MatchEnum (+15 more)</para>
+      /// <para>Returns: nil; Findings.ToArray</para>
+      /// <para>Complexity: 17 (cyclomatic, outer body), 247 lines (full implementation)</para>
+      /// <para>Catches: EEncodingError (swallowed); EInOutError (swallowed)</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
+      /// <seealso cref="DRagLint.Core.Model.TSymbolKindHelper.ToText"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckEnumBareReadScoped.EnumNames"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function CheckEnumBareReadScoped(const AFile: string; const AStore: ISymbolStore;
         AFileId: Int64): TArray<TLintFinding>;
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>

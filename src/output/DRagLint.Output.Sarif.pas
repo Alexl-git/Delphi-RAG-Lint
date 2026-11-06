@@ -8,6 +8,12 @@ uses
 type
   /// <summary>What the SARIF writer needs to know about one rule beyond its id: the catalog
   /// title, category and default severity, and the compliance labels.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Output.Sarif.pas), DRagLint.CLI.SarifMetaLookup (DRagLint.CLI.pas), DRagLint.CLI.TSarifMetaMap.Create (DRagLint.CLI.pas), DRagLint.CLI.TSarifMetaMap.Map (DRagLint.CLI.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Output.Sarif</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSarifRuleMeta = record
     Title   : string;
     Category: string;
@@ -17,7 +23,14 @@ type
   end;
 
   /// <summary>Looks one rule up for the SARIF writer.</summary>
+  /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
+  /// <param name="AMeta"><!-- drag-lint:auto type -->out TSarifRuleMeta</param>
   /// <returns>False when the rule is unknown (it is then emitted as a bare `{id}`).</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Output.Sarif.pas), DRagLint.CLI.SarifMetaLookup (DRagLint.CLI.pas), DRagLint.Output.Sarif.TSarifWriter.ToJson/3 (DRagLint.Output.Sarif.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSarifMetaLookup = reference to function(const ARuleId: string; out AMeta: TSarifRuleMeta): Boolean;
   /// <summary>Serializes drag-lint findings to SARIF 2.1.0 JSON for CI / GitHub
   /// code-scanning ingestion. Pure: no I/O, no global state.</summary>
@@ -35,11 +48,13 @@ type
     /// <returns><!-- drag-lint:auto -->string -- Observed: 'error'; 'warning'; 'note'.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Output.Sarif.TSarifWriter.BuildResult (DRagLint.Output.Sarif.pas)</para>
+    /// <para>Called from: DRagLint.Output.Sarif.TSarifWriter.BuildResult (DRagLint.Output.Sarif.pas), DRagLint.Output.Sarif.TSarifWriter.BuildRuleObject (DRagLint.Output.Sarif.pas)</para>
     /// <para>Calls: SameText</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildResult"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildRuleObject"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildTaxonomies"/>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.ToJson"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -50,12 +65,14 @@ type
     /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: TJSONObject.Create.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Output.Sarif.TSarifWriter.ToJson (DRagLint.Output.Sarif.pas)</para>
+    /// <para>Called from: DRagLint.Output.Sarif.TSarifWriter.ToJson/3 (DRagLint.Output.Sarif.pas)</para>
     /// <para>Calls: DRagLint.Output.Sarif.TSarifWriter.SarifLevel, Max</para>
     /// <para>Owns returned: new (caller owns)</para>
     /// <para>Pure</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.SarifLevel"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildRuleObject"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildTaxonomies"/>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.ToJson"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -65,6 +82,20 @@ type
     /// <param name="AMeta">The rule's catalog metadata and labels.</param>
     /// <param name="ATaxIndex">Per standard (CWE, CERT, MISRA): that taxonomy's index in run.taxonomies.</param>
     /// <returns>The new driver.rules[] object; the caller owns it.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Output.Sarif.TSarifWriter.ToJson/3 (DRagLint.Output.Sarif.pas)</para>
+    /// <para>Calls: DRagLint.Output.Sarif.SecuritySeverity, DRagLint.Output.Sarif.StdIds, DRagLint.Output.Sarif.TaxonId, DRagLint.Output.Sarif.TSarifWriter.SarifLevel, LowerCase</para>
+    /// <para>Returns: TJSONObject.Create</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Output.Sarif.SecuritySeverity"/>
+    /// <seealso cref="DRagLint.Output.Sarif.StdIds"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TaxonId"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.SarifLevel"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildResult"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function BuildRuleObject(const AId: string; const AMeta: TSarifRuleMeta;
       const ATaxIndex: TArray<Integer>): TJSONObject; static;
     /// <summary>Builds run.taxonomies: one toolComponent per standard that has at least one id.
@@ -72,6 +103,19 @@ type
     /// <param name="ATaxa">Per standard: the distinct taxon ids the run's rules carry.</param>
     /// <param name="ATaxIndex">Receives per standard the index its taxonomy got (0 when absent).</param>
     /// <returns>The run.taxonomies array; the caller owns it.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Output.Sarif.TSarifWriter.ToJson/3 (DRagLint.Output.Sarif.pas)</para>
+    /// <para>Returns: TJSONArray.Create</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <para>Mutates: ATaxIndex (out)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildResult"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildRuleObject"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.SarifLevel"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.ToJson"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function BuildTaxonomies(const ATaxa: TArray<TStringList>; out ATaxIndex: TArray<Integer>): TJSONArray; static;  public
     /// <summary>Renders the findings as a SARIF 2.1.0 run.</summary>
     /// <param name="AFindings">The surviving findings; may be empty.</param>
@@ -80,12 +124,15 @@ type
     /// distinct rule ids; runs[0].results carries one entry per finding.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Output.Sarif.TSarifWriter.BuildResult</para>
-    /// <para>Returns: Root.Format(2)</para>
+    /// <para>Calls: DRagLint.Output.Sarif.TSarifWriter.ToJson/3</para>
+    /// <para>Returns: ToJson(AFindings, AToolVersion, nil)</para>
     /// <para>Pure</para>
-    /// <para>Directives: static</para>
+    /// <para>Overload 1 of 2</para>
+    /// <para>Directives: overload; static</para>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.ToJson"/>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildResult"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildRuleObject"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildTaxonomies"/>
     /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.SarifLevel"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
@@ -100,7 +147,22 @@ type
     /// (error 8.0, warning 5.0, else 2.0) and relationships to run.taxonomies (CWE/MITRE, CERT/SEI,
     /// MISRA/MISRA; only standards with at least one id in the run). A rule without labels has no
     /// relationships key.</returns>
-    /// <remarks>Weak labels are emitted like confident ones: SARIF has no per-relationship confidence.</remarks>
+    /// <remarks>
+    /// Weak labels are emitted like confident ones: SARIF has no per-relationship confidence.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Output.Sarif.TSarifWriter.ToJson/2 (DRagLint.Output.Sarif.pas)</para>
+    /// <para>Calls: ALookup, DRagLint.Output.Sarif.StdIds, DRagLint.Output.Sarif.TaxonId, DRagLint.Output.Sarif.TSarifWriter.BuildResult, DRagLint.Output.Sarif.TSarifWriter.BuildRuleObject, DRagLint.Output.Sarif.TSarifWriter.BuildTaxonomies</para>
+    /// <para>Returns: Root.Format(2)</para>
+    /// <para>Overload 2 of 2</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 88 lines (full implementation)</para>
+    /// <para>Directives: overload; static</para>
+    /// <seealso cref="DRagLint.Output.Sarif.StdIds"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TaxonId"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildResult"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildRuleObject"/>
+    /// <seealso cref="DRagLint.Output.Sarif.TSarifWriter.BuildTaxonomies"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ToJson(const AFindings: TArray<TLintFinding>; const AToolVersion: string;
       const ALookup: TSarifMetaLookup): string; overload; static;
   end;

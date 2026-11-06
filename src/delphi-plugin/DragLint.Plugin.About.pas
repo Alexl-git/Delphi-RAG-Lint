@@ -14,7 +14,8 @@ interface
 /// background fetch of the engine's own `info --json` self-info that swaps
 /// the About memo's description to a live block (or a structured error
 /// block on failure) once it completes.</summary>
-/// <remarks>Call once from Wizard.Register, at IDE startup. Startup-safe:
+/// <remarks>
+/// Call once from Wizard.Register, at IDE startup. Startup-safe:
 /// every step here is either a Win32 resource load or an OTA registration
 /// call -- NO drag-lint.exe process is spawned on this (the calling/main)
 /// thread. The exe call happens only inside the background thread started
@@ -23,17 +24,32 @@ interface
 /// guarded here (mirrors the other Register* procs in this plugin, which
 /// rely on Wizard.Register running exactly once); every OTA step is wrapped
 /// in try/except so a missing service (e.g. SplashScreenServices nil under
-/// a headless/older IDE host) never breaks the rest of Register.</remarks>
+/// a headless/older IDE host) never breaks the rest of Register.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.Register (DragLint.Plugin.Wizard.pas)</para>
+/// <para>Calls: DragLint.Plugin.About.StartBackgroundSelfInfoFetch, DragLint.Plugin.About.StaticDescription, ForceDemandLoadState, LoadImage, OutputDebugString, PChar, Supports</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DragLint.Plugin.About.StartBackgroundSelfInfoFetch"/>
+/// <seealso cref="DragLint.Plugin.About.StaticDescription"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterDragLintAbout;
 
 /// <summary>Removes the drag-lint About-box entry and frees the retained
 /// icon bitmap.</summary>
-/// <remarks>Call from Wizard.Destroyed and from this unit's finalization
+/// <remarks>
+/// Call from Wizard.Destroyed and from this unit's finalization
 /// (mirrors UnregisterDragLintOptions/UnregisterProjectMenu elsewhere in
 /// the plugin). Idempotent -- safe to call multiple times or when
 /// RegisterDragLintAbout never ran (guarded on GAboutIndex &gt;= 0). Splash
 /// entries cannot be removed via the OTA API; that is fine, they are
-/// startup-only and vanish with the IDE process.</remarks>
+/// startup-only and vanish with the IDE process.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas), initialization/finalization (DragLint.Plugin.About.pas)</para>
+/// <para>Calls: FreeAndNil, Supports</para>
+/// <para>Catches: Exception (empty)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UnregisterDragLintAbout;
 
 implementation

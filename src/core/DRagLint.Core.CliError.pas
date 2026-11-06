@@ -30,6 +30,12 @@ const
 /// <param name="pKey">Optional extra JSON member name (e.g. 'flag', 'verb'); '' for none.</param>
 /// <param name="pValue">The extra member's value.</param>
 /// <returns>The single line, without a line terminator.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAsk (DRagLint.Charts.AskVerb.pas), DRagLint.Core.CliError.WriteCliError (DRagLint.Core.CliError.pas)</para>
+/// <para>Returns: O.ToJSON</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CliErrorLine(const pReason, pMessage: string; pAsJson: Boolean; const pKey, pValue: string): string;
 
 /// <summary>Writes CliErrorLine to stderr. Never writes stdout.</summary>
@@ -38,10 +44,24 @@ function CliErrorLine(const pReason, pMessage: string; pAsJson: Boolean; const p
 /// <param name="pAsJson">True for the JSON object form.</param>
 /// <param name="pKey">Optional extra JSON member name; '' for none.</param>
 /// <param name="pValue">The extra member's value.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CompareEmit (DRagLint.CLI.pas), DRagLint.CLI.DoMenuDrift (DRagLint.CLI.pas), DRagLint.CLI.DoMenuTree (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Query.SyntaxCountVerb.RunSyntaxCountVerb (DRagLint.Query.SyntaxCountVerb.pas)</para>
+/// <para>Calls: DRagLint.Core.CliError.CliErrorLine, Writeln</para>
+/// <seealso cref="DRagLint.Core.CliError.CliErrorLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure WriteCliError(const pReason, pMessage: string; pAsJson: Boolean; const pKey, pValue: string);
 
 /// <summary>True when --json appears among the raw command-line tokens (ParseArgs may not have finished).</summary>
 /// <returns>True if any ParamStr is exactly --json.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Query.SyntaxCountVerb.RunSyntaxCountVerb (DRagLint.Query.SyntaxCountVerb.pas)</para>
+/// <para>Calls: ParamStr</para>
+/// <para>Returns: False</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CommandLineWantsJson: Boolean;
 
 implementation

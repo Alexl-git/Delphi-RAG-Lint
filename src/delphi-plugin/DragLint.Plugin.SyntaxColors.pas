@@ -29,6 +29,11 @@ uses
 type
   /// <summary>What a token MEANS, which is what decides its colour -- as
   /// opposed to what it looks like.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.HoverForm.pas), declaration (DragLint.Plugin.SyntaxColors.pas), DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ListBoxDrawItem.Run (DragLint.Plugin.CompletionForm.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.GetSyntaxColor (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.SyntaxColors.SyntaxColorFor (DragLint.Plugin.SyntaxColors.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLSynRole = (srKeyword, srType, srName, srParam, srOperator, srLiteralNum,
                 srLiteralStr, srMuted, srSection, srError, srKind);
 
@@ -61,9 +66,17 @@ const
 
 /// <summary>The IDE's editor-colour interface, or nil.</summary>
 /// <returns>The interface, or nil when it cannot be obtained.</returns>
-/// <remarks>Guarded: never raises. Call ONCE per render and pass the result to
+/// <remarks>
+/// Guarded: never raises. Call ONCE per render and pass the result to
 /// SyntaxColorFor; resolving per token is what this signature exists to
-/// prevent.</remarks>
+/// prevent.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ShowAt (DragLint.Plugin.CompletionForm.pas)</para>
+/// <para>Calls: Supports</para>
+/// <para>Returns: nil; Svcs.Options</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AcquireEditorColors: INTACodeEditorOptions;
 
 /// <summary>The colour for one syntax role.</summary>
@@ -71,12 +84,20 @@ function AcquireEditorColors: INTACodeEditorOptions;
 /// fixed fallback.</param>
 /// <param name="ARole">What the token means.</param>
 /// <returns>A concrete TColor, never clNone or clDefault.</returns>
-/// <remarks>srType, srSection and srKind deliberately IGNORE the IDE and return
+/// <remarks>
+/// srType, srSection and srKind deliberately IGNORE the IDE and return
 /// fixed colours. The IDE's atIdentifier is dark or grey on most themes, which
 /// made types indistinguishable from plain names; a fixed green reads as "this
 /// is a type" at a glance. The IDE has no "section header" or "kind label"
 /// syntax kind at all -- they describe a symbol rather than appearing in
-/// source, so there is nothing for the editor's palette to map them to.</remarks>
+/// source, so there is nothing for the editor's palette to map them to.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.CompletionForm.TDragLintCompletionForm.ListBoxDrawItem.Run (DragLint.Plugin.CompletionForm.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.GetSyntaxColor (DragLint.Plugin.HoverForm.pas)</para>
+/// <para>Returns: Fallback; C</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 31 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SyntaxColorFor(const AOpts: INTACodeEditorOptions; ARole: TDLSynRole): TColor;
 
 implementation

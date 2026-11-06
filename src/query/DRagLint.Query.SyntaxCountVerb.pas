@@ -12,9 +12,21 @@ interface
 /// <returns>0 = report printed (zero occurrences included); 2 = no --db and no
 /// --in, an unknown --feature name, or a --db that is missing or has an old
 /// schema; 3 = an unknown flag (error[unknown-flag] on stderr).</returns>
-/// <remarks>--db lists every .pas / .dpr / .dpk / .inc row of files.path in that
+/// <remarks>
+/// --db lists every .pas / .dpr / .dpk / .inc row of files.path in that
 /// index; --in adds paths. Each file is parsed at the call; the count is of
-/// the text as written (no $IFDEF evaluation) and is never capped.</remarks>
+/// the text as written (no $IFDEF evaluation) and is never capped.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.HelpText.WriteVerbHelp, DRagLint.Core.CliError.CommandLineWantsJson, DRagLint.Core.CliError.WriteCliError, DRagLint.Query.SyntaxCount.CountSyntaxFeatures, DRagLint.Query.SyntaxCount.TryParseSyntaxFeatures, DRagLint.Query.SyntaxCountVerb.CollectFiles, DRagLint.Query.SyntaxCountVerb.ParseSyntaxCountArgs, DRagLint.Query.SyntaxCountVerb.Usage, DRagLint.Query.SyntaxCountVerb.WriteReport, Format, ParamStr</para>
+/// <para>Returns: CExitUnknownFlag; Usage(LError, CommandLineWantsJson); CExitOk; Usage('give --db &lt;file.sqlite&gt; and/or --in &lt;path&gt;', LOpts.AsJson); Usage(LError, LOpts.AsJson)</para>
+/// <seealso cref="DRagLint.CLI.HelpText.WriteVerbHelp"/>
+/// <seealso cref="DRagLint.Core.CliError.CommandLineWantsJson"/>
+/// <seealso cref="DRagLint.Core.CliError.WriteCliError"/>
+/// <seealso cref="DRagLint.Query.SyntaxCount.CountSyntaxFeatures"/>
+/// <seealso cref="DRagLint.Query.SyntaxCount.TryParseSyntaxFeatures"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunSyntaxCountVerb: Integer;
 
 implementation

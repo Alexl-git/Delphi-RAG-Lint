@@ -17,23 +17,43 @@ type
   /// <param name="AProjectName">The project / manifest section name; case-insensitive.</param>
   /// <returns>An open store, or nil when the name resolves to no configured index or the
   /// index cannot be opened. nil means "could not check", never "not used there".</returns>
-  /// <remarks>The caller owns the returned store's lifetime for the whole run.</remarks>
+  /// <remarks>
+  /// The caller owns the returned store's lifetime for the whole run.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), DRagLint.CLI.MakeSiblingStoreResolver (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectDependentProjectNotRecompiled (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas) (+2 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSiblingStoreResolver = reference to function(const AProjectName: string): ISymbolStore;
 
   /// <summary>Lists every project section name of the manifest the run reads.</summary>
   /// <returns>Section names; empty when no manifest loads.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Lint.ProjectRules.pas), declaration (DRagLint.Lint.SharedScope.pas), DRagLint.CLI.MakeSiblingProjectLister (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas) (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSiblingProjectLister = reference to function: TArray<string>;
 
   /// <summary>Does ASibling use the symbol under judgement?</summary>
   /// <param name="ASibling">An open store of a project that lists the unit.</param>
   /// <returns>True when the sibling's index shows a use.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSiblingUse = reference to function(const ASibling: ISymbolStore): Boolean;
 
   /// <summary>Verdict of TSharedScope.Judge.</summary>
-  /// <remarks>svNotShared: no other project lists the unit -- judge from the own DB alone.
+  /// <remarks>
+  /// svNotShared: no other project lists the unit -- judge from the own DB alone.
   /// svUsedElsewhere: a listing project uses it -- no finding. svUnusedEverywhere: every
   /// listing project was checked, fresh, and none uses it -- report. svUndecided: a listing
-  /// project's index is missing, will not open or is stale -- do not report.</remarks>
+  /// project's index is missing, will not open or is stale -- do not report.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSharedVerdict = (svNotShared, svUsedElsewhere, svUnusedEverywhere, svUndecided);
 
   /// <summary>Finds the projects that list a unit and asks each whether a symbol of it
@@ -47,6 +67,10 @@ type
   /// P). LAZY: nothing is opened until the first Judge; the listing set, the self test and
   /// the freshness probe are cached per path / per project for the object's life.
   /// Not thread-safe; one per lint run.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.UnusedGlobal.pas) ?, DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas) ?</para>
+  /// <para>Used in units: DRagLint.Lint.ProjectRules, DRagLint.Lint.UnusedGlobal</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSharedScope = class
   private
@@ -58,18 +82,105 @@ type
     FListing : TDictionary<string, TArray<string>>;
     FWhyNot  : TDictionary<string, string>;
     FUsable  : TDictionary<string, Boolean>;
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->ISymbolStore -- Observed: nil;
+    /// FResolve(Trim(AName)).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas) ?, DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas), DRagLint.Lint.SharedScope.TSharedScope.ResolvePath (DRagLint.Lint.SharedScope.pas)</para>
+    /// <para>Calls: FResolve, Trim</para>
+    /// <para>Reads: FResolve</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Create"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.IsSelf"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.IsUsable"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Judge"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Open(const AName: string): ISymbolStore;
+    /// <summary><!-- drag-lint:auto sum -->The run's own DB, reopened through the
+    /// manifest. Cheap meta first; a match is confirmed by every own file path being
+    /// present in the sibling (two DBs built in one second share a stamp).</summary>
+    /// <param name="ASibling"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.SharedScope.TSharedScope.ResolvePath (DRagLint.Lint.SharedScope.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsSelf(const ASibling: ISymbolStore): Boolean;
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ASibling"><!-- drag-lint:auto type -->const ISymbolStore</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: ProbeIndexFreshness(ASibling,
+    /// 1).Verdict = fvFresh.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas)</para>
+    /// <para>Calls: DRagLint.Index.Freshness.ProbeIndexFreshness, LowerCase</para>
+    /// <para>Reads: FUsable</para>
+    /// <seealso cref="DRagLint.Index.Freshness.ProbeIndexFreshness"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Create"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.IsSelf"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Judge"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsUsable(const AName: string; const ASibling: ISymbolStore): Boolean;
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.SharedScope.TSharedScope.Judge (DRagLint.Lint.SharedScope.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Lint.SharedScope.TSharedScope.IsSelf, DRagLint.Lint.SharedScope.TSharedScope.Open, DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf, FLister, Format, LowerCase, Trim</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 49 lines (full implementation)</para>
+    /// <para>Reads: FLister, FNamesOk, FNames, FListing, FWhyNot   Writes: FNamesOk, FNames</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.IsSelf"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Open"/>
+    /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.ProjectsOf"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ResolvePath(const APath: string);
   public
     /// <summary>Binds the scope to the run's own store and the CLI's resolvers.</summary>
     /// <param name="AStore">The run's own project store.</param>
     /// <param name="AResolve">Opens a project's store by name; nil = no sibling can be opened.</param>
     /// <param name="ALister">Lists the manifest's section names; nil = header names only.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FStore, FResolve, FLister, FListing, FWhyNot, FUsable</para>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.IsSelf"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.IsUsable"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Judge"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Open"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const AStore: ISymbolStore; const AResolve: TSiblingStoreResolver;
                        const ALister: TSiblingProjectLister);
     /// <summary>Frees the caches; the stores belong to the resolver's owner.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FUsable, FWhyNot, FListing</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Create"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.IsSelf"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.IsUsable"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Judge"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Open"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Judges one symbol of the unit at AUnitPath across the projects that list it.</summary>
     /// <param name="AUnitPath">The unit's path as the own store records it.</param>
@@ -77,6 +188,20 @@ type
     /// <param name="AProjects">Out: the listing projects (comma-separated) for a message;
     /// for svUndecided, why no verdict was reached.</param>
     /// <returns>The verdict; see TSharedVerdict.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas)</para>
+    /// <para>Calls: AUsed, DRagLint.Lint.SharedScope.TSharedScope.IsUsable, DRagLint.Lint.SharedScope.TSharedScope.Open, DRagLint.Lint.SharedScope.TSharedScope.ResolvePath, Format, LowerCase</para>
+    /// <para>Returns: svUndecided; svUnusedEverywhere</para>
+    /// <para>Reads: FListing, FWhyNot</para>
+    /// <para>Mutates: AProjects (out)</para>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.IsUsable"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Open"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.ResolvePath"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Create"/>
+    /// <seealso cref="DRagLint.Lint.SharedScope.TSharedScope.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Judge(const AUnitPath: string; const AUsed: TSiblingUse; out AProjects: string): TSharedVerdict;
   end;
 
@@ -85,9 +210,16 @@ type
 /// <param name="AFile">The unit path as the own store records it.</param>
 /// <param name="ALine">The line the finding would have been anchored on.</param>
 /// <param name="ARule">The rule id that would have fired.</param>
-/// <remarks>Thread-safe. Process-wide; consulted by the review-marker-unused pass so a marker
+/// <remarks>
+/// Thread-safe. Process-wide; consulted by the review-marker-unused pass so a marker
 /// whose finding was withheld for want of a fresh sibling index reads as "cannot judge", not
-/// "suppresses nothing" (DLOK-UNDECIDED).</remarks>
+/// "suppresses nothing" (DLOK-UNDECIDED).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.UnusedGlobal.CollectUnusedGlobal (DRagLint.Lint.UnusedGlobal.pas)</para>
+/// <para>Calls: DRagLint.Lint.SharedScope.SiteKey</para>
+/// <seealso cref="DRagLint.Lint.SharedScope.SiteKey"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure NoteUndecidedSite(const AFile: string; ALine: Integer; const ARule: string);
 
 /// <summary>Was NoteUndecidedSite called for this site in this process?</summary>
@@ -95,6 +227,14 @@ procedure NoteUndecidedSite(const AFile: string; ALine: Integer; const ARule: st
 /// <param name="ALine">The line.</param>
 /// <param name="ARule">The rule id; case-insensitive.</param>
 /// <returns>True when the site's shared-scope verdict was undecided.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyLineMarkers (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Lint.SharedScope.SiteKey</para>
+/// <para>Returns: GUndecided.ContainsKey(SiteKey(AFile, ALine, ARule))</para>
+/// <seealso cref="DRagLint.Lint.SharedScope.SiteKey"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsUndecidedSite(const AFile: string; ALine: Integer; const ARule: string): Boolean;
 
 implementation

@@ -103,6 +103,12 @@ const
 
 type
   /// <summary>One SOURCE catalogue row (rules\taint-sources.json "sources"[]).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.AppendSources (DRagLint.Lint.TaintRules.pas), DRagLint.Lint.TaintRules.TTaintRules.LoadConfig (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.TTaintWalker.EvalArgOut (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.TTaintWalker.EvalRef (DRagLint.Lint.TaintRules.pas) ?</para>
+  /// <para>Used in units: DRagLint.Lint.TaintRules</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTaintSourceEntry = record
     /// <summary>Unique id ("disable" key).</summary>
     Id        : string ;
@@ -127,6 +133,12 @@ type
   end;
 
   /// <summary>One SINK catalogue row (rules\taint-sinks.json "sinks"[]).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.AppendSinks (DRagLint.Lint.TaintRules.pas), DRagLint.Lint.TaintRules.SinkShapeMatches (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.TTaintRules.LoadConfig (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.TTaintWalker.SinkMatches (DRagLint.Lint.TaintRules.pas) ? (+1 more)</para>
+  /// <para>Used in units: DRagLint.Lint.TaintRules</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTaintSinkEntry = record
     /// <summary>Unique id ("disable" key).</summary>
     Id            : string ;
@@ -148,6 +160,12 @@ type
   end;
 
   /// <summary>One PROPAGATOR row (rules\taint-propagators.json "propagators"[]).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.AppendPropagators (DRagLint.Lint.TaintRules.pas), DRagLint.Lint.TaintRules.TTaintRules.LoadConfig (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.TTaintWalker.EvalArgOut (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.TTaintWalker.EvalRef (DRagLint.Lint.TaintRules.pas) ?</para>
+  /// <para>Used in units: DRagLint.Lint.TaintRules</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTaintPropagatorEntry = record
     /// <summary>Qualified or bare routine name.</summary>
     Name    : string ;
@@ -160,6 +178,12 @@ type
   end;
 
   /// <summary>One SANITIZER row (rules\taint-propagators.json "sanitizers"[]).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.AppendPropagators (DRagLint.Lint.TaintRules.pas), DRagLint.Lint.TaintRules.TTaintRules.LoadConfig (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.TTaintWalker.EvalRef (DRagLint.Lint.TaintRules.pas) ?</para>
+  /// <para>Used in units: DRagLint.Lint.TaintRules</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTaintSanitizerEntry = record
     /// <summary>Qualified or bare routine name.</summary>
     Name     : string ;
@@ -169,6 +193,12 @@ type
 
   /// <summary>The merged taint configuration: built-in catalogues plus the `taint`
   /// object of the lint config (see the unit remarks for the JSON shape).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.AppendSinks (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.AppendSources (DRagLint.Lint.TaintRules.pas) ?, DRagLint.Lint.TaintRules.TTaintConfig.Defaults (DRagLint.Lint.TaintRules.pas), DRagLint.Lint.TaintRules.TTaintRules.LoadConfig (DRagLint.Lint.TaintRules.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.Lint.TaintRules</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTaintConfig = record
     /// <summary>Merged sources (disabled ones removed).</summary>
     Sources         : TArray<TTaintSourceEntry>;
@@ -198,11 +228,26 @@ type
     SecondOrder     : Boolean;
     /// <summary>The defaults above with EMPTY catalogues (LoadConfig fills them from rules\taint-*.json).</summary>
     /// <returns>A config with every scalar at its documented default.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.TaintRules.TTaintRules.LoadConfig (DRagLint.Lint.TaintRules.pas)</para>
+    /// <para>Calls: Default</para>
+    /// <para>Returns: Default(TTaintConfig)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Defaults: TTaintConfig; static;
   end;
 
   /// <summary>Counters for the DRAGLINT_DEBUG / DRAGLINT_PROFILE stderr line
   /// `taint: sinks N, keys N, rows read N, library hops N, hits N, partial keys N, depth caps N, N ms`.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.TaintRules.pas) ?, DRagLint.CLI.RunTaintRules (DRagLint.CLI.pas) ?, DRagLint.Lint.TaintRules.TTaintRules.Check (DRagLint.Lint.TaintRules.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.TaintRules</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTaintStats = record
     /// <summary>Sink sites examined (one per site and rule).</summary>
     Sinks      : Integer;
@@ -227,10 +272,23 @@ type
     StaleIndex : Boolean;
     /// <summary>The stats as the one stderr line the CLI prints under DRAGLINT_DEBUG.</summary>
     /// <returns>`taint: sinks N, keys N, rows read N, library hops N, hits N, partial keys N, depth caps N, N ms`.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.RunTaintRules (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Format</para>
+    /// <para>Reads: Sinks, Keys, RowsRead, LibraryHops, Hits, PartialKeys, DepthCaps, ElapsedMs</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ToLine: string;
   end;
 
   /// <summary>The three taint rules over a store's data_flows facts.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.RunTaintRules (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTaintRules = class
     public
       /// <summary>Builds the merged configuration: the three built-in catalogues of
@@ -244,9 +302,24 @@ type
       /// when second_order is True.</returns>
       /// <exception cref="ELintConfigError">A catalogue or override is not a JSON object, or a
       /// sink names a rule that is not one of the TAINT_RULE_* ids.</exception>
-      /// <remarks>A MISSING catalogue file is not an error (a dev tree without rules\) but prints
+      /// <remarks>
+      /// A MISSING catalogue file is not an error (a dev tree without rules\) but prints
       /// ONE stderr note per process naming it, so an empty catalogue never reads as a clean
-      /// run.</remarks>
+      /// run.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.RunTaintRules (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Lint.TaintRules.AppendEntries, DRagLint.Lint.TaintRules.ApplyScalars, DRagLint.Lint.TaintRules.InStrs, DRagLint.Lint.TaintRules.ParseObject, DRagLint.Lint.TaintRules.TTaintConfig.Defaults, IfThen, ParamStr, Writeln</para>
+      /// <para>Returns: TTaintConfig.Defaults</para>
+      /// <para>Complexity: 10 (cyclomatic, outer body), 67 lines (full implementation)</para>
+      /// <para>Touches: file system</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Lint.TaintRules.AppendEntries"/>
+      /// <seealso cref="DRagLint.Lint.TaintRules.ApplyScalars"/>
+      /// <seealso cref="DRagLint.Lint.TaintRules.InStrs"/>
+      /// <seealso cref="DRagLint.Lint.TaintRules.ParseObject"/>
+      /// <seealso cref="DRagLint.Lint.TaintRules.TTaintConfig.Defaults"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function LoadConfig(const ARulesDir: string; const AOverrides: TArray<string>): TTaintConfig; static;
       /// <summary>Finds every taint path into a catalogued sink inside the scope files.</summary>
       /// <param name="AStore">The project store (must not be nil).</param>
@@ -260,12 +333,25 @@ type
       /// and rule, the last one's message ending in "+N more paths" when more were found --
       /// RuleId one of TAINT_RULE_*, Message starting with TAINT_MSG_PREFIX, Path = source
       /// -> hops -> sink, SymbolName = the sink's routine.</returns>
-      /// <remarks>Read-only on both stores. A store without data_flows (HasDataFlows False)
+      /// <remarks>
+      /// Read-only on both stores. A store without data_flows (HasDataFlows False)
       /// returns nil with AStats.StaleIndex True. Memoised per (rule category, routine, slot)
       /// for the whole call, so a lint-all run is one demand-driven fixpoint; a key met again
       /// while on the stack answers its partial set and the sink is re-queried up to
       /// ACfg.MaxRounds times until nothing grows (AStats.PartialKeys counts sinks still
-      /// growing at the cap). Not thread-safe.</remarks>
+      /// growing at the cap). Not thread-safe.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.RunTaintRules (DRagLint.CLI.pas)</para>
+      /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.HasDataFlows, DRagLint.Lint.TaintRules.TTaintWalker.Create, DRagLint.Lint.TaintRules.TTaintWalker.Run</para>
+      /// <para>Returns: nil; W.Run(AScopeFileIds)</para>
+      /// <para>Mutates: AStats (out)</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.HasDataFlows"/>
+      /// <seealso cref="DRagLint.Lint.TaintRules.TTaintWalker.Create"/>
+      /// <seealso cref="DRagLint.Lint.TaintRules.TTaintWalker.Run"/>
+      /// <seealso cref="DRagLint.Lint.TaintRules.TTaintRules.LoadConfig"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Check(const AStore, ALibStore: ISymbolStore; const AScopeFileIds: TArray<Int64>;
                            const ACfg: TTaintConfig; out AStats: TTaintStats): TArray<TLintFinding>; static;
   end;

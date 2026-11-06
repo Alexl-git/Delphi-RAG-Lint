@@ -36,6 +36,7 @@ type
       /// <para>Called from: DRagLint.CLI.DoGenerateDocs (DRagLint.CLI.pas)</para>
       /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.DocStub.ExtractParamList, DRagLint.Refactor.DocStub.ParseParamNames, DRagLint.Refactor.DocStub.ReadSourceLine, DRagLint.Refactor.DocStub.SignatureDeclaresReturn, DRagLint.Refactor.DocStub.SignatureHasReturn, Trim</para>
       /// <para>Pure</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 89 lines (full implementation)</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Refactor.DocStub.ExtractParamList"/>
@@ -56,7 +57,7 @@ type
 /// ClosePos - OpenPos - 1)).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.TDocStubGenerator.Generate (DRagLint.Refactor.DocStub.pas)</para>
+/// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.SourceParamListWithComments (DRagLint.Doc.Facts.pas) (+1 more)</para>
 /// <para>Calls: Copy, LastDelimiter, Pos, Trim</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
@@ -86,10 +87,20 @@ function ExtractParamList(const ASig: string): string;
 /// ADeclLine does not name the routine, a <c>//</c> comment of ASig is not
 /// found on the heading's source lines (a stale index), or a block comment
 /// is left unclosed.</returns>
-/// <remarks>Shared by the doc-drift CHECKER and the document WRITER, so the
+/// <remarks>
+/// Shared by the doc-drift CHECKER and the document WRITER, so the
 /// two always parse the same parameter list. Comment and string masking is
 /// <c>StripCommentsAndStrings</c> in DRagLint.Analysis.Purity; a column scan
-/// only locates where a <c>//</c> comment starts.</remarks>
+/// only locates where a <c>//</c> comment starts.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
+/// <para>Calls: DRagLint.Analysis.Purity.StripCommentsAndStrings, DRagLint.Refactor.DocStub.CollapseSpaces, DRagLint.Refactor.DocStub.CutLineComments, DRagLint.Refactor.DocStub.LineCommentPos, Pos</para>
+/// <seealso cref="DRagLint.Analysis.Purity.StripCommentsAndStrings"/>
+/// <seealso cref="DRagLint.Refactor.DocStub.CollapseSpaces"/>
+/// <seealso cref="DRagLint.Refactor.DocStub.CutLineComments"/>
+/// <seealso cref="DRagLint.Refactor.DocStub.LineCommentPos"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SignatureWithoutComments(const ASig, AName, AFilePath: string; ADeclLine: Integer): string;
 /// <summary><!-- drag-lint:auto sum -->ParseParamNames: parses a param-list string such
 /// as "const A, B: string; C: Boolean; D: Integer" and returns an array of bare param
@@ -221,7 +232,7 @@ function SignatureIsConstructor(const ASig: string): Boolean;
 /// second copy of this scan is how the name half and the meaning half would end
 /// up disagreeing about where a comment starts.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamDecls (DRagLint.Refactor.DocStub.pas)</para>
+/// <para>Called from: DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.SourceParamListWithComments (DRagLint.Doc.Facts.pas), DRagLint.Refactor.DocStub.ParseParamDecls (DRagLint.Refactor.DocStub.pas)</para>
 /// <para>Calls: Copy, Trim</para>
 /// <para>Complexity: 19 (cyclomatic, outer body), 49 lines (full implementation)</para>
 /// <para>Mutates: ARest (out)</para>

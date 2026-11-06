@@ -38,6 +38,12 @@ const
   CODELENS_MAX_FILES = 32;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.CodeLensCache.pas) ?, DragLint.Plugin.CodeLensCache.CodeLensCache (DragLint.Plugin.CodeLensCache.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.CodeLensCache</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintCodeLensCache = class
     strict private
       { outer key: lowercase filepath; inner key: 0-based line number }
@@ -54,16 +60,82 @@ type
       FInFlight: TDictionary<string, Boolean>                     ;
 
       { Both assume FLock is already held. }
+      /// <summary><!-- drag-lint:auto sum -->Both assume FLock is already held.</summary>
+      /// <param name="AKey"><!-- drag-lint:auto type -->const string</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.GetForLine (DragLint.Plugin.CodeLensCache.pas), DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.PopulateOnce (DragLint.Plugin.CodeLensCache.pas), DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.StoreForFile (DragLint.Plugin.CodeLensCache.pas)</para>
+      /// <para>Reads: FOrder</para>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.EvictLocked"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FileCount"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure TouchLocked(const AKey: string);
+      /// <summary><!-- drag-lint:auto sum -->Drop least-recently-used entries until the
+      /// cap is met, freeing each inner map as it goes -- the cache owns them. FLock must
+      /// already be held.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.StoreForFile (DragLint.Plugin.CodeLensCache.pas)</para>
+      /// <para>Reads: FOrder, FMaxFiles, FByFile</para>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FileCount"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FinishFallback"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure EvictLocked;
     private
       { Main thread: clears AKey's in-flight mark and stores AInner (nil = store nothing). }
+      /// <summary><!-- drag-lint:auto sum -->Main thread: clears AKey's in-flight mark
+      /// and stores AInner (nil = store nothing).</summary>
+      /// <param name="AKey"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AInner"><!-- drag-lint:auto type -->TDictionary&lt;Integer, string&gt;</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.PopulateOnce (DragLint.Plugin.CodeLensCache.pas)</para>
+      /// <para>Calls: DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.StoreForFile</para>
+      /// <para>Reads: FLock, FInFlight</para>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.StoreForFile"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.EvictLocked"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure FinishFallback(const AKey: string; AInner: TDictionary<Integer, string>);
     public
       /// <summary>Creates the cache with a bound on how many files it retains.</summary>
       /// <param name="AMaxFiles">File ceiling; values below 1 are clamped to 1.
       /// Defaults to CODELENS_MAX_FILES.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.CodeLensCache.CodeLensCache (DragLint.Plugin.CodeLensCache.pas)</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FByFile, FOrder, FMaxFiles, FLock, FInFlight</para>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.EvictLocked"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FileCount"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FinishFallback"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(AMaxFiles: Integer = CODELENS_MAX_FILES);
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FLock, FByFile, FOrder, FInFlight</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.EvictLocked"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FileCount"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FinishFallback"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
 
       { Returns "[N callers]" string for the given file + 0-based line,
@@ -72,6 +144,25 @@ type
       A HIT ALSO TOUCHES the entry, which is what makes this an LRU rather than
       a FIFO: the file currently being painted is exactly the one that must not
       be evicted, and it may have been populated long ago. }
+      /// <summary><!-- drag-lint:auto sum -->A HIT ALSO TOUCHES the entry, which is what
+      /// makes this an LRU rather than a FIFO: the file currently being painted is
+      /// exactly the one that must not be evicted, and it may have been populated long
+      /// ago.</summary>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine (DragLint.Plugin.EditViewNotifier.pas)</para>
+      /// <para>Calls: DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.TouchLocked, LowerCase</para>
+      /// <para>Reads: FLock, FByFile</para>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.TouchLocked"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.EvictLocked"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function GetForLine(const AFilePath: string; ALine: Integer): string;
 
       /// <summary>Stores (and takes ownership of) the line->label map for one
@@ -80,17 +171,54 @@ type
       /// <param name="AInner">Line->label map. The cache OWNS it from this call
       /// on and frees it on eviction, invalidation or destruction. Passing nil
       /// is a no-op.</param>
-      /// <remarks>PopulateOnce's own store path; also the seam a console test
-      /// uses to fill the cache without shelling out to the exe.</remarks>
+      /// <remarks>
+      /// PopulateOnce's own store path; also the seam a console test
+      /// uses to fill the cache without shelling out to the exe.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FinishFallback (DragLint.Plugin.CodeLensCache.pas), DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.PopulateOnce (DragLint.Plugin.CodeLensCache.pas)</para>
+      /// <para>Calls: DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.EvictLocked, DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.TouchLocked, LowerCase</para>
+      /// <para>Reads: FLock, FByFile</para>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.EvictLocked"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.TouchLocked"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure StoreForFile(const AFilePath: string; AInner: TDictionary<Integer, string>);
 
       /// <summary>Number of FILES currently retained (never exceeds MaxFiles).</summary>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: FByFile.Count.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FLock, FByFile</para>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.EvictLocked"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FinishFallback"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function FileCount: Integer;
 
       /// <summary>The configured file ceiling.</summary>
       property MaxFiles: Integer read FMaxFiles;
 
       { Drop the cached entry for AFilePath so the next Populate re-runs. }
+      /// <summary><!-- drag-lint:auto sum -->Drop the cached entry for AFilePath so the
+      /// next Populate re-runs.</summary>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: LowerCase</para>
+      /// <para>Reads: FLock, FByFile, FOrder</para>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.EvictLocked"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FileCount"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure InvalidateFile(const AFilePath: string);
 
       /// <summary>Fills the caller-count labels of one file, once: through the
@@ -101,13 +229,37 @@ type
       /// <param name="ADbPath">The project database; empty = no-op.</param>
       /// <param name="AOnStored">Optional; called on the MAIN thread once a
       /// fallback pass has stored its labels (the caller repaints the gutter).</param>
-      /// <remarks>Never waits on the engine (2026-11-01, IDE-HANG): it runs on view
+      /// <remarks>
+      /// Never waits on the engine (2026-11-01, IDE-HANG): it runs on view
       /// activation in the IDE main thread. The spawn fallback runs on a worker
       /// thread -- one per file at a time -- and stores its answer on the main
       /// thread when the last child finishes, however late. Each child is
-      /// bounded by a STALL budget (ProcRun.RunCaptureStdout), not a wall clock.</remarks>
+      /// bounded by a STALL budget (ProcRun.RunCaptureStdout), not a wall clock.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.EditViewNotifier.TDragLintEditServicesNotifier.EditorViewActivated (DragLint.Plugin.EditViewNotifier.pas)</para>
+      /// <para>Calls: AOnStored, DragLint.Plugin.CodeLensCache.SpawnCallerCounts, DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FinishFallback, DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.StoreForFile, DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.TouchLocked, DragLint.Plugin.Telemetry.DLT, Format, GCallerCountsHook, LowerCase</para>
+      /// <para>Complexity: 21 (cyclomatic, outer body), 95 lines (full implementation)</para>
+      /// <para>Reads: FLock, FByFile, FInFlight</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.SpawnCallerCounts"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FinishFallback"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.StoreForFile"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.TouchLocked"/>
+      /// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure PopulateOnce(const AFilePath, AExePath, ADbPath: string; const AOnStored: TProc = nil);
 
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FLock, FByFile, FOrder</para>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.EvictLocked"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FileCount"/>
+      /// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.FinishFallback"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Clear;
   end;
 
@@ -137,22 +289,48 @@ type
   /// <param name="ACounts">Caller count per entry of ALines; -1 = no caller label (an
   /// interface line that only carries implementors).</param>
   /// <param name="AImpls">Implementor count per entry of ALines (1.40): 0 = none.</param>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.CodeLensCache.pas), DragLint.Plugin.Editor.LspCallerCounts (DragLint.Plugin.Editor.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCallerCountsDone = reference to procedure(AOk: Boolean; const ALines, ACounts, AImpls: TArray<Integer>);
 
   /// <summary>Asynchronous caller-count source (2026-10-29).</summary>
+  /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+  /// <param name="ADone"><!-- drag-lint:auto type -->const TCallerCountsDone</param>
   /// <returns>True when the hook TOOK the file -- it sent a request whose answer
   /// arrives through ADone, or it declined for now (busy, one in flight, engine
   /// starting) and the next activation asks again. False only when no LSP can
   /// answer, and the cache falls back to its per-method spawns.</returns>
-  /// <remarks>The hook must never wait on the engine: it runs on view activation
-  /// in the IDE main thread.</remarks>
+  /// <remarks>
+  /// The hook must never wait on the engine: it runs on view activation
+  /// in the IDE main thread.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.CodeLensCache.pas), DragLint.Plugin.CodeLensCache.SetCallerCountsHook (DragLint.Plugin.CodeLensCache.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCallerCountsHook = reference to function(const AFilePath: string;
     const ADone: TCallerCountsDone): Boolean;
 
 /// <summary>Installs the LSP-backed caller-count source. Pass nil to remove it
 /// and force the per-method spawn path.</summary>
+/// <param name="AHook"><!-- drag-lint:auto type -->const TCallerCountsHook</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: initialization/finalization (DragLint.Plugin.Editor.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure SetCallerCountsHook(const AHook: TCallerCountsHook);
 
+/// <returns><!-- drag-lint:auto -->TDragLintCodeLensCache -- Observed: GCodeLensCache.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.EditViewNotifier.TDragLintEditServicesNotifier.EditorViewActivated (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine (DragLint.Plugin.EditViewNotifier.pas)</para>
+/// <para>Calls: DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Create</para>
+/// <seealso cref="DragLint.Plugin.CodeLensCache.TDragLintCodeLensCache.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CodeLensCache: TDragLintCodeLensCache;
 
 implementation

@@ -12,6 +12,12 @@ uses
 type
   /// <summary>One grid row. FilePath/Line drive navigation; Line=0 = not
   /// navigable (e.g. an Impact summary).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.SearchParse.pas), DragLint.Plugin.SearchForm.TSearchHandler.ShowResult (DragLint.Plugin.SearchForm.pas), DragLint.Plugin.SearchParse.MakeRow (DragLint.Plugin.SearchParse.pas), DragLint.Plugin.SearchParse.ParseNameJson (DragLint.Plugin.SearchParse.pas), DragLint.Plugin.SearchParse.ParseTextJson (DragLint.Plugin.SearchParse.pas) (+1 more)</para>
+  /// <para>Used in units: DragLint.Plugin.SearchForm, DragLint.Plugin.SearchParse</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSearchRow = record
     Category: string ;
     ColA    : string ;
@@ -19,16 +25,59 @@ type
     FilePath: string ;
     Line    : Integer;
   end;
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.SearchForm.pas), declaration (DragLint.Plugin.SearchParse.pas), DragLint.Plugin.SearchForm.TSearchHandler.Fill (DragLint.Plugin.SearchForm.pas), DragLint.Plugin.SearchForm.TSearchHandler.ShowResult (DragLint.Plugin.SearchForm.pas), DragLint.Plugin.SearchParse.ParseNameJson (DragLint.Plugin.SearchParse.pas) (+2 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSearchRows = TArray<TSearchRow>;
 
 /// <summary>Rows from `query --name --json` (array of symbol objects).</summary>
+/// <param name="AJson"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto type -->TSearchRows</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SearchForm.TSearchHandler.ShowResult (DragLint.Plugin.SearchForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.SearchParse.MakeRow, TJSONArray, TJSONObject</para>
+/// <seealso cref="DragLint.Plugin.SearchParse.MakeRow"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseNameJson(const AJson: string): TSearchRows;
 /// <summary>Rows from `query --text --json` (array of literal-match objects).</summary>
+/// <param name="AJson"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto type -->TSearchRows</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SearchForm.TSearchHandler.ShowResult (DragLint.Plugin.SearchForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.SearchParse.MakeRow, TJSONArray, TJSONObject</para>
+/// <seealso cref="DragLint.Plugin.SearchParse.MakeRow"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseTextJson(const AJson: string): TSearchRows;
 /// <summary>Rows from `usages --format json` (grouped object), flattened.</summary>
+/// <param name="AJson"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto type -->TSearchRows</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SearchForm.TSearchHandler.ShowResult (DragLint.Plugin.SearchForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.SearchParse.ParseUsagesJson.AddGroup, DragLint.Plugin.SearchParse.ParseUsagesJson.AddImpact, ExtractFileName, Format, MakeRow, TJSONObject</para>
+/// <seealso cref="DragLint.Plugin.SearchParse.ParseUsagesJson.AddGroup"/>
+/// <seealso cref="DragLint.Plugin.SearchParse.ParseUsagesJson.AddImpact"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseUsagesJson(const AJson: string): TSearchRows;
 /// <summary>True if a drag-lint symbol kind belongs to the UI kind filter
 /// (''/'Any' match all).</summary>
+/// <param name="AKind"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AFilter"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: True.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SearchForm.TSearchHandler.ShowResult (DragLint.Plugin.SearchForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.SearchParse.KindMatchesFilter.In_, SameText</para>
+/// <seealso cref="DragLint.Plugin.SearchParse.KindMatchesFilter.In_"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function KindMatchesFilter(const AKind, AFilter: string): Boolean;
 
 implementation

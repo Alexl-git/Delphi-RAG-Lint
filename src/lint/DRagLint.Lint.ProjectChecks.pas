@@ -68,11 +68,12 @@ type
       /// required. Uses with an explicit `in '&lt;path>'` locator are skipped.</summary>
       /// <param name="AStore">Open project symbol store (the project scope).</param>
       /// <param name="ALibDbPath">Platform library SQLite DB; '' skips the library source.</param>
+      /// <param name="AProjectFile"><!-- drag-lint:auto type -->const string = ''</param>
       /// <returns>One warning per unresolvable used unit.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
-      /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Model.TUnitUse.FromInclude, DRagLint.Core.Model.TUnitUse.HostCol, DRagLint.Core.Model.TUnitUse.HostLine, DRagLint.Core.Model.TUnitUse.IncludeSuffix (+8 more)</para>
+      /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Model.TUnitUse.FromInclude, DRagLint.Core.Model.TUnitUse.HostCol, DRagLint.Core.Model.TUnitUse.HostLine, DRagLint.Core.Model.TUnitUse.IncludeSuffix (+9 more)</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Complexity: 10 (cyclomatic, outer body), 162 lines (full implementation)</para>
       /// <para>Catches: Exception (empty)</para>

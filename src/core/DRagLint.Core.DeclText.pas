@@ -36,7 +36,7 @@ type
   /// its cache. Never raises: an unreadable file answers '' for every symbol
   /// in it, and '' means UNKNOWN -- never "the clause is absent".
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.PropTree.pas), DRagLint.CLI.QueryFindByDecl (DRagLint.CLI.pas), DRagLint.Convert.PropTree.TPropMemberResolver.Create (DRagLint.Convert.PropTree.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.PropTree.pas) ?, DRagLint.CLI.QueryFindByDecl (DRagLint.CLI.pas), DRagLint.Convert.PropTree.TPropMemberResolver.Create (DRagLint.Convert.PropTree.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.PropTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

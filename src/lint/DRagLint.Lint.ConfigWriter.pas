@@ -11,43 +11,214 @@ type
   /// <summary>Pure serializer and toggle helpers for TLintConfig. All methods
   /// are class methods (no instance state). Produces / consumes exactly the
   /// JSON shape that TLintConfig.Load reads.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadProfileList (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save (DragLint.Plugin.LintOptionsFrame.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.LintOptionsFrame</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLintConfigWriter = record
   private
+    /// <param name="AArr"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+    /// <returns><!-- drag-lint:auto -->TJSONArray -- Observed: TJSONArray.Create.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject (DRagLint.Lint.ConfigWriter.pas)</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ListProfileNames"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.LoadOrDefault"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.RemoveId"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ArrayToJsonArr(const AArr: TArray<string>): TJSONArray; static;
+    /// <param name="AArr"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+    /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.ConfigWriter.TLintConfigWriter.SetRuleDisabled (DRagLint.Lint.ConfigWriter.pas), DRagLint.Lint.ConfigWriter.TLintConfigWriter.SetRuleEnabled (DRagLint.Lint.ConfigWriter.pas)</para>
+    /// <para>Calls: SameText, Trim</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ArrayToJsonArr"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ListProfileNames"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.LoadOrDefault"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function RemoveId(const AArr: TArray<string>; const AId: string): TArray<string>; static;
+    /// <param name="AArr"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+    /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.ConfigWriter.TLintConfigWriter.SetRuleDisabled (DRagLint.Lint.ConfigWriter.pas), DRagLint.Lint.ConfigWriter.TLintConfigWriter.SetRuleEnabled (DRagLint.Lint.ConfigWriter.pas)</para>
+    /// <para>Calls: SameText, Trim</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ArrayToJsonArr"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ListProfileNames"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.LoadOrDefault"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.RemoveId"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ContainsId(const AArr: TArray<string>; const AId: string): Boolean; static;
     // builds the owned TJSONObject from ACfg (caller frees)
+    /// <summary><!-- drag-lint:auto sum -->builds the owned TJSONObject from ACfg (caller
+    /// frees)</summary>
+    /// <param name="ACfg"><!-- drag-lint:auto type -->const TLintConfig</param>
+    /// <returns><!-- drag-lint:auto -->TJSONObject -- Observed: TJSONObject.Create.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToProfile (DRagLint.Lint.ConfigWriter.pas), DRagLint.Lint.ConfigWriter.TLintConfigWriter.ToJson (DRagLint.Lint.ConfigWriter.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.AutoFixOffIds, DRagLint.Lint.Config.TLintConfig.DisabledIds, DRagLint.Lint.Config.TLintConfig.EnabledIds, DRagLint.Lint.Config.TLintConfig.SeverityPairs, DRagLint.Lint.Config.TLintConfig.ThresholdPairs, DRagLint.Lint.ConfigWriter.TLintConfigWriter.ArrayToJsonArr</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.AutoFixOffIds"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.DisabledIds"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.EnabledIds"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.SeverityPairs"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ThresholdPairs"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function BuildOwnedObject(const ACfg: TLintConfig): TJSONObject; static;
     // normalise CRLF, escape every non-ASCII char as \uXXXX, write ASCII bytes
+    /// <summary><!-- drag-lint:auto sum -->normalise CRLF, escape every non-ASCII char as
+    /// \uXXXX, write ASCII bytes</summary>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AJson"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToFile (DRagLint.Lint.ConfigWriter.pas), DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToProfile (DRagLint.Lint.ConfigWriter.pas)</para>
+    /// <para>Calls: IntToHex, StringReplace</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ArrayToJsonArr"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ListProfileNames"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.LoadOrDefault"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure WriteAnsiCrlf(const APath, AJson: string); static;
   public
     /// <summary>Serialises ACfg to a pretty-printed JSON string matching the
     /// shape TLintConfig.Load reads. short_identifier_check is emitted as a
     /// JSON string "true"/"false".</summary>
+    /// <param name="ACfg"><!-- drag-lint:auto type -->const TLintConfig</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: Root.Format(2).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.ConfigWriter.TLintConfigWriter.SaveToFile (DRagLint.Lint.ConfigWriter.pas)</para>
+    /// <para>Calls: DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ArrayToJsonArr"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ListProfileNames"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.LoadOrDefault"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ToJson(const ACfg: TLintConfig): string; static;
 
     /// <summary>Adds or removes AId from the disabled list. When ADisabled=True
     /// the id is added to disabled and removed from enabled. When False, the id
     /// is removed from disabled only.</summary>
+    /// <param name="ACfg"><!-- drag-lint:auto type -->var TLintConfig</param>
+    /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ADisabled"><!-- drag-lint:auto type -->Boolean</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.DisabledIds, DRagLint.Lint.Config.TLintConfig.EnabledIds, DRagLint.Lint.Config.TLintConfig.SetDisabled, DRagLint.Lint.Config.TLintConfig.SetEnabled, DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId, DRagLint.Lint.ConfigWriter.TLintConfigWriter.RemoveId</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.DisabledIds"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.EnabledIds"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.SetDisabled"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.SetEnabled"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure SetRuleDisabled(var ACfg: TLintConfig;
       const AId: string; ADisabled: Boolean); static;
 
     /// <summary>Adds or removes AId from the enabled list. When AEnabled=True
     /// the id is added to enabled and removed from disabled. When False, the id
     /// is removed from enabled only.</summary>
+    /// <param name="ACfg"><!-- drag-lint:auto type -->var TLintConfig</param>
+    /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AEnabled"><!-- drag-lint:auto type -->Boolean</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.DisabledIds, DRagLint.Lint.Config.TLintConfig.EnabledIds, DRagLint.Lint.Config.TLintConfig.SetDisabled, DRagLint.Lint.Config.TLintConfig.SetEnabled, DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId, DRagLint.Lint.ConfigWriter.TLintConfigWriter.RemoveId</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.DisabledIds"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.EnabledIds"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.SetDisabled"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.SetEnabled"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure SetRuleEnabled(var ACfg: TLintConfig;
       const AId: string; AEnabled: Boolean); static;
 
     /// <summary>Sets the threshold value for AName, overwriting any prior value.</summary>
+    /// <param name="ACfg"><!-- drag-lint:auto type -->var TLintConfig</param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AValue"><!-- drag-lint:auto type -->Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.SetThresholdPair</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.SetThresholdPair"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ArrayToJsonArr"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ListProfileNames"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure SetThreshold(var ACfg: TLintConfig;
       const AName: string; AValue: Integer); static;
 
     /// <summary>Sets the severity override for AId, overwriting any prior value.</summary>
+    /// <param name="ACfg"><!-- drag-lint:auto type -->var TLintConfig</param>
+    /// <param name="AId"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ASeverity"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.SetSeverityPair</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.SetSeverityPair"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ArrayToJsonArr"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ListProfileNames"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure SetSeverity(var ACfg: TLintConfig;
       const AId, ASeverity: string); static;
 
     /// <summary>Returns TLintConfig.Load(APath, ''); yields defaults when the
     /// file is absent or APath is empty.</summary>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->TLintConfig -- Observed: TLintConfig.Load(APath,
+    /// '').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Lint.Config.TLintConfig.Load</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.Load"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ArrayToJsonArr"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ListProfileNames"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function LoadOrDefault(const APath: string): TLintConfig; static;
 
     /// <summary>Writes ToJson to APath as strict 7-bit ASCII bytes, CRLF, no BOM.
@@ -62,18 +233,61 @@ type
     /// file held; every other key (profiles, exclude_paths, ...) is preserved
     /// verbatim. ifdef_allow is written only when ACfg.IfdefAllow is non-empty,
     /// so an empty list removes it. Pinned by LintConfigTests TestIfdefAllow.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DRagLint.Lint.ConfigWriter.TLintConfigWriter.ToJson, DRagLint.Lint.ConfigWriter.TLintConfigWriter.WriteAnsiCrlf, SameText, TJSONPair</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ToJson"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.WriteAnsiCrlf"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ArrayToJsonArr"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     class procedure SaveToFile(const APath: string; const ACfg: TLintConfig); static;
 
     /// <summary>Returns the names of all profiles defined under the "profiles"
     /// key in APath. Returns nil when the file is absent, unparseable, or has
     /// no "profiles" object.</summary>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.ReloadProfileList (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ArrayToJsonArr"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.LoadOrDefault"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.RemoveId"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ListProfileNames(const APath: string): TArray<string>; static;
 
     /// <summary>Writes ACfg as a named profile under the "profiles" key in
     /// APath, preserving the base config and all other profiles. Creates the
     /// file (or the "profiles" object) if absent. Replaces an existing profile
     /// with the same name.</summary>
+    /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ACfg"><!-- drag-lint:auto type -->const TLintConfig</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Save (DragLint.Plugin.LintOptionsFrame.pas)</para>
+    /// <para>Calls: DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject, DRagLint.Lint.ConfigWriter.TLintConfigWriter.WriteAnsiCrlf</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.BuildOwnedObject"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.WriteAnsiCrlf"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ArrayToJsonArr"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ContainsId"/>
+    /// <seealso cref="DRagLint.Lint.ConfigWriter.TLintConfigWriter.ListProfileNames"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure SaveToProfile(const APath, AName: string;
       const ACfg: TLintConfig); static;
   end;

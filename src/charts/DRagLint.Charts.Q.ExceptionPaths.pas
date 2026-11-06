@@ -48,10 +48,17 @@ const
 /// <summary>The order in which a PowerShell @{} hashtable enumerates int keys inserted in the given order.</summary>
 /// <param name="pKeys">Distinct non-negative keys, in insertion order.</param>
 /// <returns>The keys in .Keys order.</returns>
-/// <remarks>A simulation of System.Collections.Hashtable (load factor 0.72, primes table, double
+/// <remarks>
+/// A simulation of System.Collections.Hashtable (load factor 0.72, primes table, double
 /// hashing with HashPrime 101, rehash on expand and on collision-heavy occupancy) and of its
 /// enumerator, which walks the buckets from the last to the first. Int32.GetHashCode is the value,
-/// so the order is deterministic, unlike string keys.</remarks>
+/// so the order is deterministic, unlike string keys.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.DrawCallers (DRagLint.Charts.Q.ExceptionPaths.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.ReadCallers (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Q.ExceptionPaths.HtInsert</para>
+/// <seealso cref="DRagLint.Charts.Q.ExceptionPaths.HtInsert"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PsHashtableOrder(const pKeys: TArray<Integer>): TArray<Integer>;
 
 implementation

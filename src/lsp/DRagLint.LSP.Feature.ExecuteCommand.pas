@@ -18,15 +18,39 @@ uses
 type
   /// <summary>Answers `workspace/executeCommand` and advertises
   /// executeCommandProvider = {commands: ['draglint.showCallers']}.</summary>
-  /// <remarks>Stateless; registered from this unit's initialization. Lines and
-  /// characters are 0-based.</remarks>
+  /// <remarks>
+  /// Stateless; registered from this unit's initialization. Lines and
+  /// characters are 0-based.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Feature.ExecuteCommand.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.ExecuteCommand</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspExecuteCommandFeature = class(TLspFeature)
   public
     /// <summary>The one method: `workspace/executeCommand`.</summary>
     /// <returns>['workspace/executeCommand'].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: [EXEC_METHOD]</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Methods</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Handle"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Methods: TArray<string>; override;
     /// <summary>Adds `executeCommandProvider: {commands: ['draglint.showCallers']}`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.AddCapabilities</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Handle"/>
+    /// <seealso cref="DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
     /// <summary>Runs one command. `draglint.showCallers` with arguments
     /// [uri, line0] replies [{uri, line, character}] -- every distinct
@@ -38,9 +62,22 @@ type
     /// <param name="AMethod">Always `workspace/executeCommand`.</param>
     /// <param name="AId">The request id; a notification gets no reply.</param>
     /// <param name="AParams">{command, arguments}.</param>
-    /// <remarks>Errors are replies, not exceptions: an unknown command answers
+    /// <remarks>
+    /// Errors are replies, not exceptions: an unknown command answers
     /// -32601; a missing command, or arguments that are not [string, number],
-    /// answer -32602.</remarks>
+    /// answer -32602.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.ReplyError, DRagLint.LSP.Feature.ExecuteCommand.ShowCallers, TJSONArray, TJSONNumber</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 24 lines (full implementation)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Reply"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ReplyError"/>
+    /// <seealso cref="DRagLint.LSP.Feature.ExecuteCommand.ShowCallers"/>
+    /// <seealso cref="DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.AddCapabilities"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 

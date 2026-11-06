@@ -19,7 +19,9 @@ uses
 /// used, as the preprocessor's base for {$I} define harvesting. '' is
 /// allowed.</param>
 /// <returns>A new tree the caller frees; nil when the parse failed.</returns>
-/// <remarks>The tree is built from
+/// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
+/// <remarks>
+/// The tree is built from
 /// TAstParseCache.ApplyPreprocess(ASource, AFile) -- the ONE transform the
 /// lint walk uses: lone CRs normalised, and, when the process enabled
 /// preprocessing (TAstParseCache.SetPreprocess, set once at lsp start-up),
@@ -35,7 +37,17 @@ uses
 /// per-file define profile is resolved on every call through TAstParseCache's
 /// resolver, whose cache is thread-safe).
 /// Guards: tests\autotest\run_lsp_c9_preprocess_guard.ps1,
-/// tests\autotest\run_lsp_c10_feature_parse_guard.ps1.</remarks>
+/// tests\autotest\run_lsp_c10_feature_parse_guard.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Feature.InlayHint.THintWalker.WalkSource (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.SemanticTokens.TLspSemanticTokensFeature.Handle (DRagLint.LSP.Feature.SemanticTokens.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Parser.Delphi13.tree_sitter_delphi13, Integer, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
+/// <seealso cref="DRagLint.Parser.Delphi13.tree_sitter_delphi13"/>
+/// <seealso cref="TreeSitter.TTSParser.Create"/>
+/// <seealso cref="TreeSitter.TTSParser.Parse"/>
+/// <seealso cref="TreeSitter.TTSParser.SetLanguage"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseDelphiUtf8(const ASource: TBytes; const AFile: string = ''): TTSTree;
 
 implementation

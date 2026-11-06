@@ -52,7 +52,7 @@ type
   /// {$IFDEF} / {$IFNDEF}, or of a defined() inside {$IF} / {$ELSEIF}.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Lint.IfdefUndefined.AddDirectiveTests (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Lint.IfdefUndefined.ScanSource (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.CheckFiles (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.ScanFileTests (DRagLint.Lint.IfdefUndefined.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Lint.IfdefUndefined.AddDirectiveTests (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Lint.IfdefUndefined.ScanSource (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.CheckFiles (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.ScanFileTests (DRagLint.Lint.IfdefUndefined.pas) ? (+2 more)</para>
   /// <para>Used in units: DRagLint.Lint.IfdefUndefined, DRagLint.Lint.PlatformDivergent</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -109,14 +109,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.CheckFiles (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Lint.PlatformDivergent.CollectDivergences (DRagLint.Lint.PlatformDivergent.pas)</para>
-    /// <para>Calls: DRagLint.Lint.IfdefUndefined.InList, DRagLint.Lint.IfdefUndefined.IsVersionSymbol, DRagLint.Preprocess.Profile.PlatformBuiltins, LowerCase, StartsStr</para>
-    /// <para>Returns: InList(Sym, PREDEFINED) or InList(Sym, PlatformBuiltins('Win32'))</para>
+    /// <para>Calls: DRagLint.Lint.IfdefUndefined.InList, DRagLint.Lint.IfdefUndefined.IsVersionSymbol, DRagLint.Preprocess.Profile.KnownPlatforms, DRagLint.Preprocess.Profile.PlatformBuiltins, LowerCase, StartsStr</para>
+    /// <para>Returns: False</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Lint.IfdefUndefined.InList"/>
     /// <seealso cref="DRagLint.Lint.IfdefUndefined.IsVersionSymbol"/>
+    /// <seealso cref="DRagLint.Preprocess.Profile.KnownPlatforms"/>
     /// <seealso cref="DRagLint.Preprocess.Profile.PlatformBuiltins"/>
     /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.CheckFiles"/>
-    /// <seealso cref="DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.DprojDefineUnion"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsCompilerPredefined(const ASymbol: string): Boolean; static;

@@ -199,8 +199,8 @@ const
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoSelfTestFactWrap (DRagLint.CLI.pas), DRagLint.Hover.Renderer.HasAnyParamDescription (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverJson/2 (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.Hover.Renderer.RenderHoverPlain (DRagLint.Hover.Renderer.pas) (+18 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Context.Bundler, DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.ProjectTags, DRagLint.Doc.Regions, DRagLint.Doc.SharedFacts, DRagLint.Hover.Renderer, DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
+  /// <para>Used by: DRagLint.Context.Bundler.TContextBundler.RenderMarkdown (DRagLint.Context.Bundler.pas), DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.IsManagedDesc (DRagLint.Doc.Regions.pas), DRagLint.Hover.Renderer.HasAnyParamDescription (DRagLint.Hover.Renderer.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.Context.Bundler, DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Regions, DRagLint.Hover.Renderer, DRagLint.LSP.Completion, DRagLint.LSP.Server, DRagLint.MCP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocRegions = class // dl:ok high-response@81ea -- response set 90 is the managed-block parser's helper surface; splitting it into a scanner class is a deferred refactor (1.37 backlog #28)
@@ -217,10 +217,10 @@ type
     /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: Copy, Pos, PosEx</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FactLinePrefix"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StripManagedBlock(const S: string): string;
@@ -245,9 +245,9 @@ type
     /// <para>Calls: DRagLint.Doc.Regions.ContainerLoosePattern</para>
     /// <seealso cref="DRagLint.Doc.Regions.ContainerLoosePattern"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FactLinePrefix"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StripElement(const S, ATagName: string): string;
@@ -283,9 +283,9 @@ type
     /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripElement, DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc, SameText</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripElement"/>
     /// <seealso cref="DRagLint.Parser.DocComments.TDocCommentParser.ParseXmlDoc"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FactLinePrefix"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function BuildStandaloneFor(const ARawBlock, AOwnTagName: string): TParsedDoc;
@@ -583,7 +583,7 @@ type
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.JoinEscP2"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines.MoreSuffixP2"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FactLinePrefix"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;
@@ -672,10 +672,10 @@ type
     /// <para>Called from: DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.IsManagedDesc (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.ClassifyParamAction (DRagLint.Doc.Regions.pas) ?</para>
     /// <para>Calls: StartsStr, TrimLeft</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FactLinePrefix"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsManagedText(const S: string): Boolean;
@@ -703,9 +703,9 @@ type
     /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.IsManagedText, SameText, Trim</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FactLinePrefix"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsEngineOwnedTagText(const S: string): Boolean;
@@ -730,10 +730,10 @@ type
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas)</para>
     /// <para>Calls: StartsStr, TrimLeft</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FactLinePrefix"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsEngineSummaryBody(const S: string): Boolean;
@@ -750,10 +750,10 @@ type
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.EmitEngineParam (DRagLint.Doc.Regions.pas) ?, DRagLint.Doc.Regions.TDocRegions.MergeComment.IsBlankBody (DRagLint.Doc.Regions.pas) ?, DRagLint.Doc.Regions.TDocRegions.StripForDisplay (DRagLint.Doc.Regions.pas) (+1 more)</para>
     /// <para>Calls: Copy, StartsStr, TrimLeft</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FactLinePrefix"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedDesc"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StripMark(const S: string): string;
@@ -778,9 +778,9 @@ type
     /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.IsManagedText, SameText, Trim</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsManagedText"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FactLinePrefix"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsManagedDesc(const S: string): Boolean;
@@ -807,9 +807,9 @@ type
     /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripMark, StringReplace, Trim</para>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripMark"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.BuildStandaloneFor"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FactLinePrefix"/>
-    /// <seealso cref="DRagLint.Doc.Regions.FoldFactLine"/>
     /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.FormatPhase2FactLines"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineOwnedTagText"/>
+    /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.IsEngineSummaryBody"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StripForDisplay(const S: string): string;
@@ -836,6 +836,12 @@ type
 /// so the rest is emitted whole -- over the limit -- and the loop ends. A
 /// single token longer than the budget is therefore never split and never
 /// loops. Inverse: FoldFactLine.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.ProjectTags.AddWrappedFact (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.Regions.SelfTestFactWrap (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.AppendFact (DRagLint.Doc.Regions.pas), DRagLint.Doc.SharedFacts.InsertFactLines (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReplaceFactLines (DRagLint.Doc.SharedFacts.pas) (+1 more)</para>
+/// <para>Calls: Copy, DRagLint.Doc.Regions.LastBreakBlank</para>
+/// <para>Returns: [APrefix + AText]; L.ToArray</para>
+/// <seealso cref="DRagLint.Doc.Regions.LastBreakBlank"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function WrapFactLine(const APrefix, AText: string): TArray<string>;
 /// <summary>The LOGICAL fact line that starts at ALines[AStart]: a
@@ -858,6 +864,12 @@ function WrapFactLine(const APrefix, AText: string): TArray<string>;
 /// ALast := AStart and the result is the first line alone. A hand-broken,
 /// unterminated &lt;para&gt; therefore never swallows the fence END or the
 /// facts after it. A legacy line without &lt;para&gt; is always one line.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.ProjectTags.FenceCarriesTags (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.ProjectTags.ForgetTags (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.ProjectTags.ListTags (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.Regions.SelfTestFactWrap (DRagLint.Doc.Regions.pas), DRagLint.Doc.SharedFacts.AfterUsedInUnits (DRagLint.Doc.SharedFacts.pas) (+2 more)</para>
+/// <para>Calls: Copy, Pos, TrimLeft</para>
+/// <para>Returns: ALines[AStart].TrimRight([#13]); Joined</para>
+/// <para>Mutates: ALast (out)</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function FoldFactLine(const ALines: TArray<string>; AStart: Integer;
   out ALast: Integer): string;
@@ -867,14 +879,22 @@ function FoldFactLine(const ALines: TArray<string>; AStart: Integer;
 /// <returns>Everything before '&lt;para&gt;' when the line holds one; else
 /// everything up to and including the first '/// ' (or '///' when no blank
 /// follows it); else ''.</returns>
-/// <remarks>Used by every rewriter to split a line into (prefix, text)
-/// before handing it to WrapFactLine.</remarks>
+/// <remarks>
+/// Used by every rewriter to split a line into (prefix, text)
+/// before handing it to WrapFactLine.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Doc.ProjectTags.AddWrappedFact (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.Regions.SelfTestFactWrap (DRagLint.Doc.Regions.pas), DRagLint.Doc.SharedFacts.ReplaceFactLines (DRagLint.Doc.SharedFacts.pas)</para>
+/// <para>Calls: Copy, Pos</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FactLinePrefix(const ALine: string): string;
 /// <summary>The executable contract of WrapFactLine, FoldFactLine and
 /// FactLinePrefix, run by `selftest fact-wrap`.</summary>
 /// <param name="AFailure">Receives the first failed case, '' on success.</param>
 /// <returns>True when every case holds.</returns>
-/// <remarks>Cases: a short line stays one line; a 200-entry list wraps at
+/// <remarks>
+/// Cases: a short line stays one line; a 200-entry list wraps at
 /// ', ' with every line within DOC_FACT_MAX_COLS and round-trips through
 /// FoldFactLine; a blank-free 1500-character token is returned whole; a
 /// '; '-separated list breaks after ';'; an unterminated or interrupted
@@ -882,7 +902,20 @@ function FactLinePrefix(const ALine: string): string;
 /// FactLinePrefix with and without &lt;para&gt;; each break is the rightmost
 /// boundary; comma-free text breaks at the rightmost blank; a line of exactly
 /// DOC_FACT_MAX_COLS stays whole and one more character breaks it; a legacy
-/// line without &lt;para&gt; is never broken.</remarks>
+/// line without &lt;para&gt; is never broken.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoSelfTestFactWrap (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, DRagLint.Doc.Regions.FactLinePrefix, DRagLint.Doc.Regions.FoldFactLine, DRagLint.Doc.Regions.SelfTestFactWrap.Expect, DRagLint.Doc.Regions.SelfTestFactWrap.Joined, DRagLint.Doc.Regions.SelfTestFactWrap.Rejoined, DRagLint.Doc.Regions.SelfTestFactWrap.WellWrapped, DRagLint.Doc.Regions.WrapFactLine, Format, Pos, StringOfChar</para>
+/// <para>Returns: AFailure = ''</para>
+/// <para>Complexity: 20 (cyclomatic, outer body), 159 lines (full implementation)</para>
+/// <para>Mutates: AFailure (out)</para>
+/// <seealso cref="DRagLint.Doc.Regions.FactLinePrefix"/>
+/// <seealso cref="DRagLint.Doc.Regions.FoldFactLine"/>
+/// <seealso cref="DRagLint.Doc.Regions.SelfTestFactWrap.Expect"/>
+/// <seealso cref="DRagLint.Doc.Regions.SelfTestFactWrap.Joined"/>
+/// <seealso cref="DRagLint.Doc.Regions.SelfTestFactWrap.Rejoined"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SelfTestFactWrap(out AFailure: string): Boolean;
 
 /// <summary>XML-escapes S for use as ELEMENT TEXT content: ampersand, less-than

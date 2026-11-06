@@ -25,6 +25,12 @@ uses
 type
   /// <summary>The Studio key one project's library paths come from, and how that
   /// choice was made.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas) ?, DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.PlanToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.SectionTargetStudio (DRagLint.CLI.pas) ?, DRagLint.Project.TargetStudio.ResolveTargetStudio (DRagLint.Project.TargetStudio.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Project.TargetStudio</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTargetStudio = record
     /// <summary>The key the target asks for; '' when nothing names a target, or
     /// the target has no BDS key the mapping knows.</summary>
@@ -38,19 +44,56 @@ type
     Note: string;
     /// <summary>True when the key read is not the default Studio's.</summary>
     /// <returns>UsedBds differs from DEFAULT_BDS_KEY.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Project.TargetStudio.TTargetStudio.SummaryLine (DRagLint.Project.TargetStudio.pas), DRagLint.Refactor.MultiProjectRename.LibraryRootsOf (DRagLint.Refactor.MultiProjectRename.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Returns: not SameText(UsedBds, DEFAULT_BDS_KEY)</para>
+    /// <para>Reads: UsedBds</para>
+    /// <seealso cref="DRagLint.Project.TargetStudio.TTargetStudio.OpenResolver"/>
+    /// <seealso cref="DRagLint.Project.TargetStudio.TTargetStudio.SummaryLine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsForeign: Boolean;
     /// <summary>A resolver over the key read.</summary>
     /// <returns>The caller owns it.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas) (+4 more)</para>
+    /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.CreateForStudio</para>
+    /// <para>Returns: TProjectResolver.CreateForStudio(UsedBds)</para>
+    /// <para>Reads: UsedBds</para>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.CreateForStudio"/>
+    /// <seealso cref="DRagLint.Project.TargetStudio.TTargetStudio.IsForeign"/>
+    /// <seealso cref="DRagLint.Project.TargetStudio.TTargetStudio.SummaryLine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function OpenResolver: TProjectResolver;
     /// <summary>The line `index` prints for a foreign key.</summary>
     /// <returns>'Library path: BDS 20.0 (target Delphi 10.3)'; '' on the default.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.WriteIndexStudioSummary (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Project.TargetStudio.TTargetStudio.IsForeign, Format</para>
+    /// <para>Returns: if IsForeign then Format('Library path: BDS %s (target %s)', [UsedBds, TargetName])</para>
+    /// <para>Reads: UsedBds, TargetName</para>
+    /// <seealso cref="DRagLint.Project.TargetStudio.TTargetStudio.IsForeign"/>
+    /// <seealso cref="DRagLint.Project.TargetStudio.TTargetStudio.OpenResolver"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SummaryLine: string;
   end;
 
 /// <summary>Records the run's --target-compiler for ResolveTargetStudio.</summary>
 /// <param name="pTargetArg">The raw value; '' when absent.</param>
-/// <remarks>Set once at start-up, before any verb. A --jobs child receives the same
-/// flag on its command line, so its value matches its parent's.</remarks>
+/// <remarks>
+/// Set once at start-up, before any verb. A --jobs child receives the same
+/// flag on its command line, so its value matches its parent's.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Calls: Trim</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure SetRunTargetCompilerArg(const pTargetArg: string);
 
 /// <summary>Chooses the Studio key for a project, with the precedence of the
@@ -59,9 +102,20 @@ procedure SetRunTargetCompilerArg(const pTargetArg: string);
 /// '' or anything else takes the default unless --target-compiler names a version.</param>
 /// <returns>The choice. Falls back to the default with a Note when the target's key
 /// is not installed.</returns>
-/// <remarks>An absent or unmappable ProjectVersion is SILENT, as the defines are: that
+/// <remarks>
+/// An absent or unmappable ProjectVersion is SILENT, as the defines are: that
 /// project has no target, so nothing was not honoured. Reads the .dproj and the
-/// registry; never raises for a missing file.</remarks>
+/// registry; never raises for a missing file.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas), DRagLint.CLI.SectionTargetStudio (DRagLint.CLI.pas) (+4 more)</para>
+/// <para>Calls: Default, DRagLint.Lint.TargetCompiler.CompilerDisplayName, DRagLint.Lint.TargetCompiler.ResolveTargetCompiler, DRagLint.Project.Resolver.IsBdsStudioInstalled, DRagLint.Project.TargetStudio.BdsKeyOfCompilerVersion, ExtractFileExt, Format, SameText</para>
+/// <para>Returns: Default(TTargetStudio)</para>
+/// <seealso cref="DRagLint.Lint.TargetCompiler.CompilerDisplayName"/>
+/// <seealso cref="DRagLint.Lint.TargetCompiler.ResolveTargetCompiler"/>
+/// <seealso cref="DRagLint.Project.Resolver.IsBdsStudioInstalled"/>
+/// <seealso cref="DRagLint.Project.TargetStudio.BdsKeyOfCompilerVersion"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveTargetStudio(const pProjectFile: string): TTargetStudio;
 
 /// <summary>A project's compile closure with the library tail searched after the
@@ -74,7 +128,16 @@ function ResolveTargetStudio(const pProjectFile: string): TTargetStudio;
 /// where the walk met it, and Result.SearchPaths ends with the tail.</returns>
 /// <exception cref="Exception">As TClosureResolver.Resolve when the project file
 /// does not exist.</exception>
-/// <remarks>Sets pTail on pClosure, replacing any earlier tail. Writes nothing to disk.</remarks>
+/// <remarks>
+/// Sets pTail on pClosure, replacing any earlier tail. Writes nothing to disk.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoSelfTestClosure (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Index.Closure.TClosureResolver.SetLibraryTail</para>
+/// <para>Returns: pClosure.Resolve(pProjectFile, pExclude)</para>
+/// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Resolve"/>
+/// <seealso cref="DRagLint.Index.Closure.TClosureResolver.SetLibraryTail"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveTargetClosure(pClosure: TClosureResolver; const pProjectFile: string;
   const pExclude, pTail: TArray<string>): TClosureResult;
 

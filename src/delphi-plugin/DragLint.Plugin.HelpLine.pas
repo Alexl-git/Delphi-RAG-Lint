@@ -24,9 +24,15 @@ uses
 type
   /// <summary>Help line: type part of a feature name, pick a match, open its
   /// help page; or open the complete feature list.</summary>
-  /// <remarks>Main thread only. The match list is owned by this panel but
+  /// <remarks>
+  /// Main thread only. The match list is owned by this panel but
   /// parented to the panel's parent (it must overlap the tabs below); it is
-  /// created on first use, when Parent is known.</remarks>
+  /// created on first use, when Parent is known.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.DockForm.pas) ?, DragLint.Plugin.DockForm.TDragLintDockFrame.Create (DragLint.Plugin.DockForm.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.DockForm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLHelpLine = class(TPanel)
   private
     FCaptionLbl: TLabel  ;
@@ -34,29 +40,256 @@ type
     FAllBtn    : TButton ;
     FList      : TListBox;
     FHits      : TArray<TDLHelpHit>;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.Resize (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Calls: Max</para>
+    /// <para>Reads: FAllBtn, FCaptionLbl, FEdit, FList</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleAllClick"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditChange"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Relayout;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.ShowList (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Reads: FList   Writes: FList</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleAllClick"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditChange"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditKeyDown"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure EnsureList;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditKeyDown (DragLint.Plugin.HelpLine.pas), DragLint.Plugin.HelpLine.TDLHelpLine.HandleListExit (DragLint.Plugin.HelpLine.pas), DragLint.Plugin.HelpLine.TDLHelpLine.HandleListKeyDown (DragLint.Plugin.HelpLine.pas), DragLint.Plugin.HelpLine.TDLHelpLine.OpenHit (DragLint.Plugin.HelpLine.pas), DragLint.Plugin.HelpLine.TDLHelpLine.UpdateHits (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Reads: FList</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleAllClick"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditChange"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HideList;
+    /// <param name="pRows"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.UpdateHits (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Calls: DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList, Min</para>
+    /// <para>Reads: FList, FEdit, FHits</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleAllClick"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditChange"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ShowList(const pRows: TArray<string>);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditChange (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Calls: DragLint.Plugin.Help.DLSharedHelpIndex, DragLint.Plugin.HelpIndex.DLHelpMatch, DragLint.Plugin.HelpLine.TDLHelpLine.HideList, DragLint.Plugin.HelpLine.TDLHelpLine.ShowList, Trim</para>
+    /// <para>Reads: FEdit, FHits   Writes: FHits</para>
+    /// <seealso cref="DragLint.Plugin.Help.DLSharedHelpIndex"/>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.DLHelpMatch"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HideList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.ShowList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure UpdateHits;
+    /// <param name="pIndex"><!-- drag-lint:auto type -->const Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.HandleListDblClick (DragLint.Plugin.HelpLine.pas), DragLint.Plugin.HelpLine.TDLHelpLine.HandleListKeyDown (DragLint.Plugin.HelpLine.pas), DragLint.Plugin.HelpLine.TDLHelpLine.OpenSelectedOrFirst (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Calls: DragLint.Plugin.Help.DLOpenHelp, DragLint.Plugin.HelpLine.TDLHelpLine.HideList</para>
+    /// <para>Reads: FHits</para>
+    /// <seealso cref="DragLint.Plugin.Help.DLOpenHelp"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HideList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure OpenHit(const pIndex: Integer);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditKeyDown (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Calls: DragLint.Plugin.HelpLine.TDLHelpLine.OpenHit</para>
+    /// <para>Reads: FList</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.OpenHit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleAllClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure OpenSelectedOrFirst;
+    /// <param name="pDelta"><!-- drag-lint:auto type -->const Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditKeyDown (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Calls: EnsureRange</para>
+    /// <para>Reads: FList</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleAllClick"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditChange"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure MoveSelection(const pDelta: Integer);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.Create (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Calls: DragLint.Plugin.HelpLine.TDLHelpLine.UpdateHits</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.UpdateHits"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleAllClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HandleEditChange (Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <param name="Key"><!-- drag-lint:auto type -->var Word</param>
+    /// <param name="Shift"><!-- drag-lint:auto type -->TShiftState</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.Create (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Calls: DragLint.Plugin.HelpLine.TDLHelpLine.HideList, DragLint.Plugin.HelpLine.TDLHelpLine.MoveSelection, DragLint.Plugin.HelpLine.TDLHelpLine.OpenSelectedOrFirst</para>
+    /// <para>Reads: FEdit</para>
+    /// <para>Mutates: Key (var)</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HideList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.MoveSelection"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.OpenSelectedOrFirst"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HandleEditKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <param name="Key"><!-- drag-lint:auto type -->var Char</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.Create (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Calls: CharInSet</para>
+    /// <para>Mutates: Key (var)</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleAllClick"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditChange"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HandleEditKeyPress(Sender: TObject; var Key: Char);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Calls: DragLint.Plugin.HelpLine.TDLHelpLine.OpenHit</para>
+    /// <para>Reads: FList</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.OpenHit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleAllClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HandleListDblClick(Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <param name="Key"><!-- drag-lint:auto type -->var Word</param>
+    /// <param name="Shift"><!-- drag-lint:auto type -->TShiftState</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Calls: DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit, DragLint.Plugin.HelpLine.TDLHelpLine.HideList, DragLint.Plugin.HelpLine.TDLHelpLine.OpenHit</para>
+    /// <para>Reads: FList</para>
+    /// <para>Mutates: Key (var)</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HideList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.OpenHit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HandleListKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Calls: DragLint.Plugin.HelpLine.TDLHelpLine.HideList</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HideList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleAllClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HandleListExit   (Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.Create (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Calls: DragLint.Plugin.Help.DLOpenAllFeatures</para>
+    /// <seealso cref="DragLint.Plugin.Help.DLOpenAllFeatures"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditChange"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HandleAllClick   (Sender: TObject);
   protected
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.HelpLine.TDLHelpLine.Relayout</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Relayout"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleAllClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Resize; override;
   public
     /// <summary>Builds the label, edit and button; aligns the panel alTop.</summary>
     /// <param name="AOwner">Owner; frees the panel and its list.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.Create (DragLint.Plugin.DockForm.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Reads: FCaptionLbl, FEdit, FAllBtn   Writes: FCaptionLbl, FEdit, FAllBtn</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.FocusEdit"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleAllClick"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditChange"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditKeyDown"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(AOwner: TComponent); override;
     /// <summary>Puts the caret in the edit and selects its text, when the edit
     /// can take focus (a hidden dock cannot); otherwise does nothing.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.FocusHelpLine (DragLint.Plugin.DockForm.pas), DragLint.Plugin.HelpLine.TDLHelpLine.HandleListKeyDown (DragLint.Plugin.HelpLine.pas)</para>
+    /// <para>Reads: FEdit</para>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.Create"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.EnsureList"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleAllClick"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditChange"/>
+    /// <seealso cref="DragLint.Plugin.HelpLine.TDLHelpLine.HandleEditKeyDown"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure FocusEdit;
   end; // class
 

@@ -23,6 +23,11 @@ type
   /// <param name="AExitCode">The child's exit code; ProcRun's PROCRUN_TIMED_OUT_EXIT_CODE
   /// when it was killed for making no progress; -1 when it could not start.</param>
   /// <param name="AOutput">stdout and stderr, interleaved (a CLI refusal included).</param>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.RefactorForm.pas), DragLint.Plugin.RefactorForm.RunRefactorCliAsync (DragLint.Plugin.RefactorForm.pas), DragLint.Plugin.RefactorForm.TCliDialogHandler.RunAsync (DragLint.Plugin.RefactorForm.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRefactorRunDone = reference to procedure(AExitCode: Integer; const AOutput: string);
 
 const
@@ -36,8 +41,16 @@ const
 /// <param name="ACmdLine">Full command line, as CreateProcessW takes it.</param>
 /// <param name="ADone">Called exactly once, on the main thread, however late.</param>
 /// <param name="AStallMs">Stall budget; defaults to REFACTOR_STALL_MS.</param>
-/// <remarks>Never waits: returns before the child is spawned. The dialogs keep
-/// pumping messages meanwhile and refuse to close until ADone has run.</remarks>
+/// <remarks>
+/// Never waits: returns before the child is spawned. The dialogs keep
+/// pumping messages meanwhile and refuse to close until ADone has run.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.RefactorForm.TCliDialogHandler.RunAsync (DragLint.Plugin.RefactorForm.pas)</para>
+/// <para>Calls: ADone, DragLint.Plugin.CliAsync.RunCliAsync, DragLint.Plugin.Telemetry.DLT</para>
+/// <seealso cref="DragLint.Plugin.CliAsync.RunCliAsync"/>
+/// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RunRefactorCliAsync(const ACmdLine: string; const ADone: TRefactorRunDone; AStallMs: Integer = REFACTOR_STALL_MS);  // dl:ok unused-public-symbol@f8e3 -- public as the test seam: LspNonBlockingTests R1-R3 drive it (not in the plugin index)
 
 /// <summary>Shows the drag-lint Rename Symbol preview dialog (modal).</summary>
@@ -49,7 +62,19 @@ procedure RunRefactorCliAsync(const ACmdLine: string; const ADone: TRefactorRunD
 /// <param name="ASuggestedNewName">Initial text of the New name field ('' = empty);
 /// the caller passes the bare identifier under the caret so the user edits it.</param>
 /// <param name="AFromFile">File the symbol was picked from ('' = unknown); passed to the rename verb as --in so a not-found answer ranks candidates from that file first.</param>
-/// <remarks>Main thread only. Preview / Apply run the CLI off the main thread.</remarks>
+/// <remarks>
+/// Main thread only. Preview / Apply run the CLI off the main thread.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeRename (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.RefactorForm.TCliDialogHandler.DoCloseQuery, DragLint.Plugin.RefactorForm.TRefactorHandler.Create, DragLint.Plugin.RefactorForm.TRefactorHandler.DoApply, DragLint.Plugin.RefactorForm.TRefactorHandler.DoClose, DragLint.Plugin.RefactorForm.TRefactorHandler.DoPreview</para>
+/// <para>UI thread only -- touches Form</para>
+/// <seealso cref="DragLint.Plugin.RefactorForm.TCliDialogHandler.DoCloseQuery"/>
+/// <seealso cref="DragLint.Plugin.RefactorForm.TRefactorHandler.Create"/>
+/// <seealso cref="DragLint.Plugin.RefactorForm.TRefactorHandler.DoApply"/>
+/// <seealso cref="DragLint.Plugin.RefactorForm.TRefactorHandler.DoClose"/>
+/// <seealso cref="DragLint.Plugin.RefactorForm.TRefactorHandler.DoPreview"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: string; const AExePath: string; const ASuggestedNewName: string = ''; const AFromFile: string = '');
 
 /// <summary>Builds the rename command line the dialog runs.</summary>
@@ -61,7 +86,13 @@ procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: st
 /// <param name="ADryRun">Append --dry-run.</param>
 /// <param name="ABackup">False appends --no-backup.</param>
 /// <returns>The full command line.</returns>
-/// <remarks>Pure.</remarks>
+/// <remarks>
+/// Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.RefactorForm.TRefactorHandler.RenameCmdLine (DragLint.Plugin.RefactorForm.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLRenameCmdLine(const AExePath, AQName, ANewName, ADb, AFromFile: string; ADryRun, ABackup: Boolean): string;  // dl:ok unused-public-symbol@c8e6 -- public as the test seam: LspNonBlockingTests T8/T9 drive it (not in the plugin index)
 
 /// <summary>Reads the symbol the typeat verb resolved from its JSON answer.</summary>
@@ -70,7 +101,15 @@ function DLRenameCmdLine(const AExePath, AQName, ANewName, ADb, AFromFile: strin
 /// <param name="AToken">Receives the bare identifier under the caret ('' when absent).</param>
 /// <returns>The `resolved` qualified name, or '' when the output is not JSON, the
 /// token did not resolve, or `resolved` is missing / empty.</returns>
-/// <remarks>Pure; never raises.</remarks>
+/// <remarks>
+/// Pure; never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeRename (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: Copy, Pos, TJSONObject</para>
+/// <para>Returns: ''; TJSONObject(Obj).GetValue&lt;string&gt;('resolved', '')</para>
+/// <para>Mutates: AToken (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLParseTypeAtResolved(const AOutput: string; out AToken: string): string;
 
 /// <summary>Shows the drag-lint Extract Method preview dialog for a fixed
@@ -87,7 +126,20 @@ function DLParseTypeAtResolved(const AOutput: string; out AToken: string): strin
 /// <returns>True iff Apply completed successfully (exit 0), signalling the
 /// caller should reload the buffer from disk. False if the user cancelled
 /// or Apply did not succeed.</returns>
-/// <remarks>Call from the main IDE thread only (creates/shows a TForm).</remarks>
+/// <remarks>
+/// Call from the main IDE thread only (creates/shows a TForm).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Keyboard.InvokeExtractMethod (DragLint.Plugin.Keyboard.pas)</para>
+/// <para>Calls: DragLint.Plugin.RefactorForm.TCliDialogHandler.DoCloseQuery, DragLint.Plugin.RefactorForm.TExtractMethodHandler.Create, DragLint.Plugin.RefactorForm.TExtractMethodHandler.DoApply, DragLint.Plugin.RefactorForm.TExtractMethodHandler.DoClose, DragLint.Plugin.RefactorForm.TExtractMethodHandler.DoPreview, ExtractFileName, Format</para>
+/// <para>Returns: Handler.Applied</para>
+/// <para>UI thread only -- touches Form</para>
+/// <seealso cref="DragLint.Plugin.RefactorForm.TCliDialogHandler.DoCloseQuery"/>
+/// <seealso cref="DragLint.Plugin.RefactorForm.TExtractMethodHandler.Create"/>
+/// <seealso cref="DragLint.Plugin.RefactorForm.TExtractMethodHandler.DoApply"/>
+/// <seealso cref="DragLint.Plugin.RefactorForm.TExtractMethodHandler.DoClose"/>
+/// <seealso cref="DragLint.Plugin.RefactorForm.TExtractMethodHandler.DoPreview"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ShowExtractMethodDialog(const AFilePath: string; AFromLine, AToLine: Integer; const AExePath: string): Boolean;
 
 implementation

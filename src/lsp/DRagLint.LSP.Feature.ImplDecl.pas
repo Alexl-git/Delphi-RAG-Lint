@@ -27,16 +27,40 @@ type
   /// <summary>Answers `textDocument/implementation` and
   /// `textDocument/declaration` and advertises implementationProvider and
   /// declarationProvider.</summary>
-  /// <remarks>Stateless; registered from this unit's initialization. Lines
-  /// and characters in the replies are 0-based.</remarks>
+  /// <remarks>
+  /// Stateless; registered from this unit's initialization. Lines
+  /// and characters in the replies are 0-based.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Feature.ImplDecl.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.ImplDecl</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspImplDeclFeature = class(TLspFeature)
   public
     /// <summary>The two methods this feature answers.</summary>
     /// <returns>['textDocument/implementation', 'textDocument/declaration'].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: [IMPL_METHOD, DECL_METHOD]</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Methods</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.ImplDecl.TLspImplDeclFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.ImplDecl.TLspImplDeclFeature.Handle"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Methods: TArray<string>; override;
     /// <summary>Adds `implementationProvider: true` and
     /// `declarationProvider: true`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.AddCapabilities</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.ImplDecl.TLspImplDeclFeature.Handle"/>
+    /// <seealso cref="DRagLint.LSP.Feature.ImplDecl.TLspImplDeclFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
     /// <summary>Replies a Location[]. declaration: the resolved symbol's
     /// declaration (ForwardLine when &gt; 0, else StartLine/StartCol).
@@ -48,6 +72,20 @@ type
     /// <param name="AMethod">One of the two methods.</param>
     /// <param name="AId">The request id; a notification gets no reply.</param>
     /// <param name="AParams">{textDocument:{uri}, position:{line, character}}; a missing field answers [].</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.ResolveSymbolAt, DRagLint.LSP.Feature.ImplDecl.AddLoc, DRagLint.LSP.Feature.ImplDecl.CollectImplementations, DRagLint.LSP.Feature.ImplDecl.IntField, DRagLint.LSP.Feature.ImplDecl.LocJson, DRagLint.LSP.Feature.ImplDecl.SortAndDedupe, DRagLint.LSP.Feature.ImplDecl.SymbolUri</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 44 lines (full implementation)</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Reply"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.ResolveSymbolAt"/>
+    /// <seealso cref="DRagLint.LSP.Feature.ImplDecl.AddLoc"/>
+    /// <seealso cref="DRagLint.LSP.Feature.ImplDecl.CollectImplementations"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 

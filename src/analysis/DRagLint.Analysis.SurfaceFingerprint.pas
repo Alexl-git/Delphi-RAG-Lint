@@ -53,7 +53,7 @@ type
   /// bodies are invisible across a unit boundary, and including one would make
   /// every ordinary implementation edit fan out.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.SurfaceAdapters.pas), declaration (DRagLint.Analysis.SurfaceFingerprint.pas), DRagLint.Analysis.SurfaceAdapters.CollectInlineBodies (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.Analysis.SurfaceFingerprint.CollectBodyLines (DRagLint.Analysis.SurfaceFingerprint.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.SurfaceAdapters.pas) ?, declaration (DRagLint.Analysis.SurfaceFingerprint.pas) ?, DRagLint.Analysis.SurfaceAdapters.CollectInlineBodies (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.Analysis.SurfaceFingerprint.CollectBodyLines (DRagLint.Analysis.SurfaceFingerprint.pas) ?, DRagLint.Analysis.SurfaceFingerprint.SurfaceCanonical (DRagLint.Analysis.SurfaceFingerprint.pas) ? (+1 more)</para>
   /// <para>Used in units: DRagLint.Analysis.SurfaceAdapters, DRagLint.Analysis.SurfaceFingerprint</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

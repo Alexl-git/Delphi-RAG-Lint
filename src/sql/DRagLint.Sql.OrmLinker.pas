@@ -37,7 +37,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Sql.OrmLinker.pas), DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas), DRagLint.Sql.OrmLinker.TOrmLinker.Run (DRagLint.Sql.OrmLinker.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Sql.OrmLinker.pas) ?, DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas) ?, DRagLint.Sql.OrmLinker.TOrmLinker.Run (DRagLint.Sql.OrmLinker.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Sql.OrmLinker</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -59,10 +59,11 @@ type
       /// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
       /// <returns><!-- drag-lint:auto -->TOrmLinkerStats -- Observed: Default
       /// (TOrmLinkerStats).</returns>
+      /// <exception cref="EIndexNewerThanEngine"><!-- drag-lint:auto exc -->via DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate: refusing to write: this database is at schema v%d, NEWER than this engine's v%d (drag-lint %s).</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLinkOrm (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) ?</para>
-      /// <para>Calls: DateTimeToUnix, Default, DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink, DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, StripPrefix, UpperCase</para>
+      /// <para>Calls: DateTimeToUnix, Default, DRagLint.Sql.OrmLinker.TOrmLinker.Run.EmitLink, DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate, StripPrefix, UpperCase</para>
       /// <para>Complexity: 13 (cyclomatic, outer body), 244 lines (full implementation)</para>
       /// <para>Catches: Exception (re-raise)</para>
       /// <para>SQL: writes ORM_LINKS</para>
@@ -72,6 +73,7 @@ type
       /// <seealso cref="DRagLint.Sql.OrmLinker.TOrmLinker.Run.LoadFromStore"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Run(const ADbPaths: TArray<string>): TOrmLinkerStats; static;

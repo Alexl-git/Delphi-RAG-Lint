@@ -22,9 +22,20 @@ interface
 
 type
   /// <summary>Who owns the current draglint:// registration.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.ProtocolReg.pas), DRagLint.Core.ProtocolReg.Classify (DRagLint.Core.ProtocolReg.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProtocolClass = (pcNone, pcOurs, pcLegacyPowerShell, pcForeign);
 
   /// <summary>What HKCU\Software\Classes\draglint currently holds.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.ProtocolReg.pas), DRagLint.Core.ProtocolReg.ReadProtocolStatus (DRagLint.Core.ProtocolReg.pas), DRagLint.Core.ProtocolReg.StatusJson (DRagLint.Core.ProtocolReg.pas)</para>
+  /// <para>Used in units: DRagLint.Core.ProtocolReg</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProtocolStatus = record
     /// <summary>shell\open\command\(default), raw (an REG_EXPAND_SZ is not expanded); '' when absent.</summary>
     Command: string;
@@ -37,13 +48,32 @@ type
 /// <summary>The registry root the verb reads and writes.</summary>
 /// <returns>'Software\Classes\draglint' under HKCU, or '&lt;DRAGLINT_PROTOCOL_TEST_ROOT&gt;\Classes\draglint' when that
 /// environment variable is set (tests only; it never changes what a user's command line does).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.ProtocolReg.ReadProtocolStatus (DRagLint.Core.ProtocolReg.pas), DRagLint.Core.ProtocolReg.RegisterProtocol (DRagLint.Core.ProtocolReg.pas), DRagLint.Core.ProtocolReg.UnregisterProtocol (DRagLint.Core.ProtocolReg.pas)</para>
+/// <para>Calls: DRagLint.Core.ProtocolReg.TestRoot</para>
+/// <para>Returns: if Root = '' then REAL_ROOT</para>
+/// <para>Effect-free (proven)</para>
+/// <seealso cref="DRagLint.Core.ProtocolReg.TestRoot"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProtocolRegistryRoot: string;
 
 /// <summary>Reads the current draglint:// registration.</summary>
 /// <returns>Kind pcNone when the key or its command is absent; pcOurs when the handler file name is
 /// drag-lint-open.exe; pcLegacyPowerShell when the command names Open-DragLintUri.ps1; else pcForeign -- including
 /// a command value that is not a string (Command is then '(a non-string value)').</returns>
-/// <remarks>Read-only; never raises on a missing key or a non-string value. Both name matches are case-insensitive.</remarks>
+/// <remarks>
+/// Read-only; never raises on a missing key or a non-string value. Both name matches are case-insensitive.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.ProtocolReg.RegisterProtocol (DRagLint.Core.ProtocolReg.pas), DRagLint.Core.ProtocolReg.RunProtocolVerbFromCommandLine (DRagLint.Core.ProtocolReg.pas), DRagLint.Core.ProtocolReg.UnregisterProtocol (DRagLint.Core.ProtocolReg.pas)</para>
+/// <para>Calls: DRagLint.Core.ProtocolReg.Classify, DRagLint.Core.ProtocolReg.FirstToken, DRagLint.Core.ProtocolReg.ProtocolRegistryRoot</para>
+/// <para>Touches: registry</para>
+/// <seealso cref="DRagLint.Core.ProtocolReg.Classify"/>
+/// <seealso cref="DRagLint.Core.ProtocolReg.FirstToken"/>
+/// <seealso cref="DRagLint.Core.ProtocolReg.ProtocolRegistryRoot"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadProtocolStatus: TProtocolStatus;
 
 /// <summary>Registers pHandler as the draglint:// handler for the current user.</summary>
@@ -53,12 +83,28 @@ function ReadProtocolStatus: TProtocolStatus;
 /// <param name="pReport">The lines the verb prints.</param>
 /// <returns>0 written (or would be); 1 refused (foreign without pForce, worktree without pForce); 2 handler missing,
 /// or DRAGLINT_PROTOCOL_TEST_ROOT resolving to or under the real Software\Classes.</returns>
-/// <remarks>HKCU only, never HKLM (owner D4). Writes (default)=URL:drag-lint protocol, an empty REG_SZ
+/// <exception cref="ERegistryException"><!-- drag-lint:auto exc -->cannot open HKCU\</exception>
+/// <remarks>
+/// HKCU only, never HKLM (owner D4). Writes (default)=URL:drag-lint protocol, an empty REG_SZ
 /// "URL Protocol" and shell\open\command\(default)="&lt;handler&gt;" "%1" (REG_SZ). Replacing a
 /// pcLegacyPowerShell registration also deletes the copy %LOCALAPPDATA%\drag-lint\Open-DragLintUri.ps1 that
 /// Register-DragLintProtocol.ps1 installed -- except under DRAGLINT_PROTOCOL_TEST_ROOT, where it is reported as
 /// left in place. A legacy copy that cannot be deleted (locked, read-only) is reported, not raised: the key is
-/// already written and the exit stays 0.</remarks>
+/// already written and the exit stays 0.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.ProtocolReg.RunProtocolVerbFromCommandLine (DRagLint.Core.ProtocolReg.pas)</para>
+/// <para>Calls: DRagLint.Core.ProtocolReg.ProtocolRegistryRoot, DRagLint.Core.ProtocolReg.ReadProtocolStatus, DRagLint.Core.ProtocolReg.RemoveLegacyCopy, DRagLint.Core.ProtocolReg.ShownCommand, DRagLint.Core.ProtocolReg.UnsafeTestRoot, ExpandFileName</para>
+/// <para>Returns: EXIT_SETUP; EXIT_REFUSED; EXIT_OK</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 52 lines (full implementation)</para>
+/// <para>Mutates: pReport (out)</para>
+/// <para>Touches: file system, registry</para>
+/// <seealso cref="DRagLint.Core.ProtocolReg.ProtocolRegistryRoot"/>
+/// <seealso cref="DRagLint.Core.ProtocolReg.ReadProtocolStatus"/>
+/// <seealso cref="DRagLint.Core.ProtocolReg.RemoveLegacyCopy"/>
+/// <seealso cref="DRagLint.Core.ProtocolReg.ShownCommand"/>
+/// <seealso cref="DRagLint.Core.ProtocolReg.UnsafeTestRoot"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RegisterProtocol(const pHandler: string; pForce, pDryRun: Boolean; out pReport: string): Integer;
 
 /// <summary>Removes the draglint:// registration when it is ours or the legacy PowerShell one.</summary>
@@ -67,17 +113,47 @@ function RegisterProtocol(const pHandler: string; pForce, pDryRun: Boolean; out 
 /// <param name="pReport">The lines the verb prints.</param>
 /// <returns>0 removed, absent, kept (a key with no shell\open\command, without pForce), or would be removed;
 /// 1 refused (pcForeign without pForce); 2 for an unsafe DRAGLINT_PROTOCOL_TEST_ROOT.</returns>
-/// <remarks>The key is deleted recursively. A key that exists but names no command may be another program's and is
+/// <exception cref="ERegistryException"><!-- drag-lint:auto exc -->cannot delete HKCU\</exception>
+/// <remarks>
+/// The key is deleted recursively. A key that exists but names no command may be another program's and is
 /// kept ('nothing to remove') unless pForce. A legacy registration's copy is deleted with it, under the same
-/// test-root exception as RegisterProtocol.</remarks>
+/// test-root exception as RegisterProtocol.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.ProtocolReg.RunProtocolVerbFromCommandLine (DRagLint.Core.ProtocolReg.pas)</para>
+/// <para>Calls: DRagLint.Core.ProtocolReg.ProtocolRegistryRoot, DRagLint.Core.ProtocolReg.ReadProtocolStatus, DRagLint.Core.ProtocolReg.RemoveLegacyCopy, DRagLint.Core.ProtocolReg.UnsafeTestRoot</para>
+/// <para>Returns: EXIT_SETUP; EXIT_OK; EXIT_REFUSED</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 42 lines (full implementation)</para>
+/// <para>Mutates: pReport (out)</para>
+/// <para>Touches: registry</para>
+/// <seealso cref="DRagLint.Core.ProtocolReg.ProtocolRegistryRoot"/>
+/// <seealso cref="DRagLint.Core.ProtocolReg.ReadProtocolStatus"/>
+/// <seealso cref="DRagLint.Core.ProtocolReg.RemoveLegacyCopy"/>
+/// <seealso cref="DRagLint.Core.ProtocolReg.UnsafeTestRoot"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnregisterProtocol(pForce, pDryRun: Boolean; out pReport: string): Integer;
 
 /// <summary>Entry point of `drag-lint protocol`: parses ParamStr(2..) itself (register|unregister|status and flags).</summary>
 /// <returns>The verb's exit code; 2 with usage on stderr for no sub-verb, an unknown sub-verb or an unknown flag.</returns>
-/// <remarks>Also 2, before anything is opened, when DRAGLINT_PROTOCOL_TEST_ROOT -- normalised as TRegistry reads it:
+/// <exception cref="ERegistryException"><!-- drag-lint:auto exc -->via DRagLint.Core.ProtocolReg.RegisterProtocol: cannot open HKCU\; via DRagLint.Core.ProtocolReg.UnregisterProtocol: cannot delete HKCU\</exception>
+/// <remarks>
+/// Also 2, before anything is opened, when DRAGLINT_PROTOCOL_TEST_ROOT -- normalised as TRegistry reads it:
 /// surrounding blanks and backslashes stripped -- is Software, Software\Classes or lies under Software\Classes: the
 /// override must never resolve to the tree it exists to protect. A value that is set but blank after that normalisation is refused too, never read as unset. A trailing --handler with no value is a usage
-/// error ('--handler needs a value').</remarks>
+/// error ('--handler needs a value').
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.ProtocolReg.Emit, DRagLint.Core.ProtocolReg.ReadProtocolStatus, DRagLint.Core.ProtocolReg.RegisterProtocol, DRagLint.Core.ProtocolReg.ShownCommand, DRagLint.Core.ProtocolReg.StatusJson, DRagLint.Core.ProtocolReg.UnregisterProtocol, DRagLint.Core.ProtocolReg.UnsafeTestRoot, DRagLint.Core.ProtocolReg.UsageError, ExtractFileDir, ParamStr, Writeln</para>
+/// <para>Returns: UsageError('unknown sub-verb "' + ParamStr(2) + '"'); RegisterProtocol(Handler, Force, DryRun, Report); UnregisterProtocol(Force, DryRun, Report); if Status.Kind = pcOurs then EXIT_OK</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 49 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.ProtocolReg.Emit"/>
+/// <seealso cref="DRagLint.Core.ProtocolReg.ReadProtocolStatus"/>
+/// <seealso cref="DRagLint.Core.ProtocolReg.RegisterProtocol"/>
+/// <seealso cref="DRagLint.Core.ProtocolReg.ShownCommand"/>
+/// <seealso cref="DRagLint.Core.ProtocolReg.StatusJson"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunProtocolVerbFromCommandLine: Integer;
 
 implementation

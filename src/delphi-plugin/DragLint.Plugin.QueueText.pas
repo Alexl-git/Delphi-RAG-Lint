@@ -17,6 +17,13 @@ uses
 /// when the percent is indeterminate; no Now line while nothing runs), then
 /// "Next: &lt;t1&gt;", "Then: &lt;t2&gt;", "Then: &lt;t3&gt;" for the titles present,
 /// then "+ N more waiting" when QueueDepth exceeds DL_QUEUE_NAMED_PENDING.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyTaskLines (DragLint.Plugin.StatusBar.pas)</para>
+/// <para>Calls: DragLint.Plugin.QueueText.NowLine, Format, Min</para>
+/// <seealso cref="DragLint.Plugin.QueueText.NowLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLQueueLines(const pState: TQueueState): TArray<string>;
 
 implementation

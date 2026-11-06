@@ -19,9 +19,15 @@ const
 
 type
   /// <summary>One row of WWW\help\dl\index.json -- one published feature.</summary>
-  /// <remarks>Menus / Context / Verb are optional in the file (CONVERTER's
+  /// <remarks>
+  /// Menus / Context / Verb are optional in the file (CONVERTER's
   /// featuregen adds them); absent fields read as an empty array / ''.
-  /// Unknown fields are ignored.</remarks>
+  /// Unknown fields are ignored.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.HelpIndex.pas) ?, DragLint.Plugin.HelpIndex.DLHelpDisplayText (DragLint.Plugin.HelpIndex.pas) ?, DragLint.Plugin.HelpIndex.DLHelpMatch (DragLint.Plugin.HelpIndex.pas) ?, DragLint.Plugin.HelpIndex.RankOf (DragLint.Plugin.HelpIndex.pas) ?, DragLint.Plugin.HelpIndex.TDLHelpIndex.LoadFromFile (DragLint.Plugin.HelpIndex.pas) (+2 more)</para>
+  /// <para>Used in units: DragLint.Plugin.HelpIndex</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLHelpEntry = record
     Id      : string;
     Title   : string;
@@ -37,9 +43,15 @@ type
   end; // record
 
   /// <summary>The parsed offline feature list, with a cheap staleness check.</summary>
-  /// <remarks>Not thread-safe; the help line uses it from the main thread only.
+  /// <remarks>
+  /// Not thread-safe; the help line uses it from the main thread only.
   /// A failed load never raises: Loaded is False, Entries is empty and
-  /// LastError says why.</remarks>
+  /// LastError says why.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Help.pas) ?, declaration (DragLint.Plugin.HelpIndex.pas) ?, DragLint.Plugin.Help.DLSharedHelpIndex (DragLint.Plugin.Help.pas), DragLint.Plugin.HelpIndex.DLResolveHelpUrl (DragLint.Plugin.HelpIndex.pas) ?, DragLint.Plugin.HelpLine.TDLHelpLine.UpdateHits (DragLint.Plugin.HelpLine.pas) ?</para>
+  /// <para>Used in units: DragLint.Plugin.Help, DragLint.Plugin.HelpIndex, DragLint.Plugin.HelpLine</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLHelpIndex = class
   private
     FEntries  : TArray<TDLHelpEntry>;
@@ -48,16 +60,54 @@ type
     FFileName : string;
     FFileSize : Int64;
     FFileTime : TDateTime;
+    /// <summary><!-- drag-lint:auto sum -->TDLHelpIndex</summary>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: Length(FEntries).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FEntries</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.TDLHelpIndex.LoadFromFile"/>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.TDLHelpIndex.ReloadIfChanged"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetCount: Integer;
   public
     /// <summary>Parses an index.json file, replacing any previous content.</summary>
     /// <param name="pPath">Full path of the JSON file (UTF-8, a top-level array).</param>
     /// <returns>True when the file was read and parsed; False otherwise
     /// (Loaded = False, no rows, LastError non-empty).</returns>
+    /// <exception cref="EJSONException"><!-- drag-lint:auto exc -->not a JSON array of feature rows</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.Help.DLSharedHelpIndex (DragLint.Plugin.Help.pas), DragLint.Plugin.HelpIndex.TDLHelpIndex.ReloadIfChanged (DragLint.Plugin.HelpIndex.pas)</para>
+    /// <para>Calls: Default, DragLint.Plugin.HelpIndex.StatFile, DragLint.Plugin.HelpIndex.StringArrayOf, DragLint.Plugin.HelpIndex.StringOf, TJSONArray, TJSONObject</para>
+    /// <para>Returns: FLoaded</para>
+    /// <para>Reads: FFileSize, FFileTime, FEntries, FLastError, FLoaded   Writes: FFileName, FEntries, FLoaded, FLastError, FFileSize, FFileTime</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.StatFile"/>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.StringArrayOf"/>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.StringOf"/>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.TDLHelpIndex.GetCount"/>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.TDLHelpIndex.ReloadIfChanged"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LoadFromFile(const pPath: string): Boolean;
     /// <summary>Reloads the last loaded file when its size or mtime changed.</summary>
     /// <returns>True when a reload happened; False when unchanged or nothing
     /// was ever loaded.</returns>
+    /// <exception cref="EJSONException"><!-- drag-lint:auto exc -->via DragLint.Plugin.HelpIndex.TDLHelpIndex.LoadFromFile: not a JSON array of feature rows</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.Help.DLSharedHelpIndex (DragLint.Plugin.Help.pas)</para>
+    /// <para>Calls: DragLint.Plugin.HelpIndex.StatFile, DragLint.Plugin.HelpIndex.TDLHelpIndex.LoadFromFile, FileExists, SameDateTime</para>
+    /// <para>Returns: False; True</para>
+    /// <para>Reads: FFileName, FFileSize, FFileTime</para>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.StatFile"/>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.TDLHelpIndex.LoadFromFile"/>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.TDLHelpIndex.GetCount"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ReloadIfChanged: Boolean;
     /// <summary>The rows, in file order.</summary>
     property Entries  : TArray<TDLHelpEntry> read FEntries;
@@ -72,6 +122,12 @@ type
   end; // class
 
   /// <summary>One match of the help line, ready to show.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.HelpIndex.pas), declaration (DragLint.Plugin.HelpLine.pas), DragLint.Plugin.HelpIndex.DLHelpMatch (DragLint.Plugin.HelpIndex.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.HelpIndex, DragLint.Plugin.HelpLine</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLHelpHit = record
     /// <summary>Registry id -- what DLOpenHelp is called with.</summary>
     Id     : string;
@@ -94,12 +150,30 @@ const
 /// (case-insensitive); empty for an empty query. A row is a hit when the query
 /// is a substring of its title, id, verb, or the LAST segment (caption) of
 /// any menu or context path. The summary is never searched.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HelpLine.TDLHelpLine.UpdateHits (DragLint.Plugin.HelpLine.pas)</para>
+/// <para>Calls: CompareText, DragLint.Plugin.HelpIndex.DLHelpDisplayText, DragLint.Plugin.HelpIndex.RankOf, Trim</para>
+/// <para>Returns: nil; Hits.ToArray</para>
+/// <seealso cref="DragLint.Plugin.HelpIndex.DLHelpDisplayText"/>
+/// <seealso cref="DragLint.Plugin.HelpIndex.RankOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLHelpMatch(const pQuery: string; const pEntries: TArray<TDLHelpEntry>): TArray<TDLHelpHit>;
 
 /// <summary>The text a hit shows in the help line's list.</summary>
 /// <param name="pEntry">One feature row.</param>
 /// <returns>"&lt;title&gt; - &lt;shortest menu path&gt;"; with no menu the shortest
 /// context path; with neither "&lt;title&gt; - CLI: drag-lint &lt;verb&gt;"; else the title.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HelpIndex.DLHelpMatch (DragLint.Plugin.HelpIndex.pas)</para>
+/// <para>Calls: DragLint.Plugin.HelpIndex.ShortestOf</para>
+/// <para>Returns: pEntry.Title</para>
+/// <para>Effect-free (proven)</para>
+/// <seealso cref="DragLint.Plugin.HelpIndex.ShortestOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLHelpDisplayText(const pEntry: TDLHelpEntry): string;
 
 /// <summary>Resolves a menu (or tab) caption to the registry id whose menu or
@@ -109,6 +183,15 @@ function DLHelpDisplayText(const pEntry: TDLHelpEntry): string;
 /// <param name="pEntries">The rows of a loaded TDLHelpIndex.</param>
 /// <returns>The first matching id in file order (menus before context); ''
 /// when no path ends with the caption.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HelpIndex.DLHelpIdForDockTab (DragLint.Plugin.HelpIndex.pas)</para>
+/// <para>Calls: DragLint.Plugin.HelpIndex.CaptionIn, DragLint.Plugin.HelpIndex.StripAccelerators</para>
+/// <para>Returns: ''</para>
+/// <seealso cref="DragLint.Plugin.HelpIndex.CaptionIn"/>
+/// <seealso cref="DragLint.Plugin.HelpIndex.StripAccelerators"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLHelpIdForMenuCaption(const pCaption: string; const pEntries: TArray<TDLHelpEntry>): string;
 
 /// <summary>The registry id F1 opens for a drag-lint dock tab (spec 3.5).</summary>
@@ -119,6 +202,15 @@ function DLHelpIdForMenuCaption(const pCaption: string; const pEntries: TArray<T
 /// show-structure, Search (no grep): symbol-search, Find Usages: find-usages,
 /// Lint Options: drag-lint-project-rules, Uses &amp; Deps: uses-deps-tab, Call
 /// Graph: call-graph-butterfly; else 'drag-lint' (the tool-window entry).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.OpenHelpForActiveTab (DragLint.Plugin.DockForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.HelpIndex.DLHelpIdForMenuCaption, DragLint.Plugin.HelpIndex.StripAccelerators, SameText</para>
+/// <para>Returns: DLHelpIdForMenuCaption(pTabCaption, pEntries); DOCK_FALLBACK_ID</para>
+/// <seealso cref="DragLint.Plugin.HelpIndex.DLHelpIdForMenuCaption"/>
+/// <seealso cref="DragLint.Plugin.HelpIndex.StripAccelerators"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLHelpIdForDockTab(const pTabCaption: string; const pEntries: TArray<TDLHelpEntry>): string;
 
 /// <summary>The URL DLOpenHelp opens for a registry id (spec 3.5).</summary>
@@ -128,6 +220,15 @@ function DLHelpIdForDockTab(const pTabCaption: string; const pEntries: TArray<TD
 /// <returns>The feature page; the all-features page instead when a LOADED list
 /// does not carry the id (a feature without a page is never a soft 404). With no
 /// list (nil, or not loaded) the feature page, unchecked.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Help.DLOpenHelp (DragLint.Plugin.Help.pas)</para>
+/// <para>Calls: DragLint.Plugin.HelpIndex.DLHelpAllUrl, DragLint.Plugin.HelpIndex.DLHelpUrl, SameText, Trim</para>
+/// <para>Returns: DLHelpAllUrl(pRoot); DLHelpUrl(pRoot, pFeatureId)</para>
+/// <seealso cref="DragLint.Plugin.HelpIndex.DLHelpAllUrl"/>
+/// <seealso cref="DragLint.Plugin.HelpIndex.DLHelpUrl"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLResolveHelpUrl(const pRoot, pFeatureId: string; const pIndex: TDLHelpIndex): string;
 
 /// <summary>Finds the offline feature list (spec 3.2), first hit wins.</summary>
@@ -137,6 +238,15 @@ function DLResolveHelpUrl(const pRoot, pFeatureId: string; const pIndex: TDLHelp
 /// at &lt;pBplDir&gt;\..\..\WWW\help\dl\index.json.</param>
 /// <returns>&lt;engine dir&gt;\help\dl\index.json, else &lt;file root&gt;\help\dl\index.json,
 /// else the dev-tree path -- whichever exists first; '' when none exists.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Help.DLSharedHelpIndex (DragLint.Plugin.Help.pas)</para>
+/// <para>Calls: DragLint.Plugin.HelpIndex.DLHelpRootFolder, ExpandFileName, FileExists, IncludeTrailingPathDelimiter</para>
+/// <para>Returns: TPath.Combine(pEngineDir, DL_HELP_INDEX_REL); TPath.Combine(Folder, DL_HELP_INDEX_REL); ExpandFileName(TPath.Combine(IncludeTrailingPathDelimiter(pBplDir) + '..\..\WWW', DL_HELP_INDEX_REL)); ''</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DragLint.Plugin.HelpIndex.DLHelpRootFolder"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLLocateHelpIndex(const pEngineDir, pHelpRoot, pBplDir: string): string;
 
 /// <summary>Normalises a help root as typed by the user into the stored form.</summary>
@@ -144,6 +254,13 @@ function DLLocateHelpIndex(const pEngineDir, pHelpRoot, pBplDir: string): string
 /// may carry trailing slashes or surrounding blanks.</param>
 /// <returns>DL_DEFAULT_HELP_ROOT for an empty value; a folder becomes
 /// file:///C:/dir (forward slashes); trailing slashes are removed.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HelpIndex.DLHelpRootFolder (DragLint.Plugin.HelpIndex.pas), DragLint.Plugin.HelpIndex.HelpPageUrl (DragLint.Plugin.HelpIndex.pas), DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BtnHelpTestClick (DragLint.Plugin.OptionsFrames.pas), DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.LoadControls (DragLint.Plugin.OptionsFrames.pas), DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.SaveControls (DragLint.Plugin.OptionsFrames.pas) (+2 more)</para>
+/// <para>Calls: DragLint.Plugin.HelpIndex.StripTrailingSlashes, Trim</para>
+/// <seealso cref="DragLint.Plugin.HelpIndex.StripTrailingSlashes"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLNormaliseHelpRoot(const pRoot: string): string;
 
 /// <summary>Builds the help page URL of one registry feature.</summary>
@@ -152,23 +269,55 @@ function DLNormaliseHelpRoot(const pRoot: string): string;
 /// gives the all-features URL.</param>
 /// <returns>&lt;root&gt;/help/dl/features/&lt;id&gt;/ for a web root;
 /// the same plus index.html for a file: root (the rendered site tree).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HelpIndex.DLResolveHelpUrl (DragLint.Plugin.HelpIndex.pas)</para>
+/// <para>Calls: DragLint.Plugin.HelpIndex.DLHelpAllUrl, DragLint.Plugin.HelpIndex.HelpPageUrl, Trim</para>
+/// <para>Returns: HelpPageUrl(pRoot, 'features/' + Trim(pFeatureId) + '/')</para>
+/// <seealso cref="DragLint.Plugin.HelpIndex.DLHelpAllUrl"/>
+/// <seealso cref="DragLint.Plugin.HelpIndex.HelpPageUrl"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLHelpUrl(const pRoot, pFeatureId: string): string;
 
 /// <summary>URL of the complete feature list: &lt;root&gt;/help/dl/ (plus
 /// index.html for a file: root).</summary>
 /// <param name="pRoot">Help root in any form DLNormaliseHelpRoot accepts.</param>
 /// <returns>The all-features URL.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Help.DLOpenAllFeatures (DragLint.Plugin.Help.pas), DragLint.Plugin.HelpIndex.DLHelpUrl (DragLint.Plugin.HelpIndex.pas), DragLint.Plugin.HelpIndex.DLResolveHelpUrl (DragLint.Plugin.HelpIndex.pas), DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BtnHelpTestClick (DragLint.Plugin.OptionsFrames.pas)</para>
+/// <para>Calls: DragLint.Plugin.HelpIndex.HelpPageUrl</para>
+/// <para>Returns: HelpPageUrl(pRoot, '')</para>
+/// <seealso cref="DragLint.Plugin.HelpIndex.HelpPageUrl"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLHelpAllUrl(const pRoot: string): string;
 
 /// <summary>URL of the IDE menu tree page: &lt;root&gt;/help/dl/ide/ (plus
 /// index.html for a file: root).</summary>
 /// <param name="pRoot">Help root in any form DLNormaliseHelpRoot accepts.</param>
 /// <returns>The menu-tree URL.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DragLint.Plugin.HelpIndex.HelpPageUrl</para>
+/// <para>Returns: HelpPageUrl(pRoot, 'ide/')</para>
+/// <seealso cref="DragLint.Plugin.HelpIndex.HelpPageUrl"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLHelpIdeUrl(const pRoot: string): string; // dl:ok unused-public-symbol@abbd -- spec 3.1 URL rule for the menu-tree page, pinned by the harness (U14/U15); no menu item opens it yet
 
 /// <summary>The local folder behind a file: root (file:///C:/dl-help -> C:\dl-help).</summary>
 /// <param name="pRoot">Help root in any form DLNormaliseHelpRoot accepts.</param>
 /// <returns>The Windows folder without a trailing backslash; '' for a web root.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HelpIndex.DLLocateHelpIndex (DragLint.Plugin.HelpIndex.pas)</para>
+/// <para>Calls: DragLint.Plugin.HelpIndex.DLNormaliseHelpRoot</para>
+/// <para>Returns: Root.Substring(Length(FILE_SCHEME)).Replace('/', '\')</para>
+/// <seealso cref="DragLint.Plugin.HelpIndex.DLNormaliseHelpRoot"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLHelpRootFolder(const pRoot: string): string;
 
 implementation

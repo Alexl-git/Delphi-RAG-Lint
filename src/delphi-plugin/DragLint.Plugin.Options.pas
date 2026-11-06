@@ -11,7 +11,21 @@ unit DragLint.Plugin.Options;
 
 interface
 
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.Register (DragLint.Plugin.Wizard.pas)</para>
+/// <para>Calls: DragLint.Plugin.Options.RegisterDragLintOptions.Add, Supports</para>
+/// <seealso cref="DragLint.Plugin.Options.RegisterDragLintOptions.Add"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterDragLintOptions;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas), initialization/finalization (DragLint.Plugin.Options.pas)</para>
+/// <para>Calls: Supports</para>
+/// <para>Catches: Exception (empty)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UnregisterDragLintOptions;
 
 implementation

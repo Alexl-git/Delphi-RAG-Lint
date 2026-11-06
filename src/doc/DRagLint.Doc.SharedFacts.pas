@@ -109,7 +109,7 @@ type
   /// is cached in class state, keyed on the store it was built from.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: [drag-lint]DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocument (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLint (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [drag-lint]DRagLint.Doc.Document.SameButForLegacyPure (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas),
-  /// [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.WithoutLegacyPure (DRagLint.Doc.SharedFacts.pas)</para>
+  /// [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.StripOwnTag (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.WithoutLegacyPure (DRagLint.Doc.SharedFacts.pas)</para>
   /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Doc.Document, [drag-lint]DRagLint.Doc.Drift, [drag-lint]DRagLint.Doc.Regions, [drag-lint]DRagLint.Doc.SharedFacts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -140,9 +140,9 @@ type
     /// it; on an unmarked unit it is a stale entry and still drift.</para>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas)</para>
-    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParaLabelCount, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconciledDrift, DRagLint.Doc.SharedFacts.StripPara, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Doc.SharedFacts.WithoutLegacyPure, LowerCase</para>
+    /// <para>Calls: DRagLint.Doc.ProjectTags.SplitEntries, DRagLint.Doc.SharedFacts.CollapseWs, DRagLint.Doc.SharedFacts.IsTruncated, DRagLint.Doc.SharedFacts.IsUncertainEntry, DRagLint.Doc.SharedFacts.ParaLabelCount, DRagLint.Doc.SharedFacts.ParseBlock, DRagLint.Doc.SharedFacts.Participates, DRagLint.Doc.SharedFacts.ReconciledDrift, DRagLint.Doc.SharedFacts.StripPara, DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries, DRagLint.Doc.SharedFacts.UnitVouchable, DRagLint.Doc.SharedFacts.WithoutStoredOnlyFacts, LowerCase</para>
     /// <para>Returns: CollapseWs(StoredCmp) &lt;&gt; CollapseWs(FreshCmp); False</para>
-    /// <para>Complexity: 29 (cyclomatic, outer body), 185 lines (full implementation)</para>
+    /// <para>Complexity: 29 (cyclomatic, outer body), 186 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Doc.ProjectTags.SplitEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.CollapseWs"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.IsTruncated"/>
@@ -215,6 +215,16 @@ type
     /// DISPROVE the claim and keeps it. A render that DOES prove effect-freedom
     /// carries `Effect-free (proven)` and the line is not re-inserted: the v2
     /// fact replaces it, which the checker reads as the same claim.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Doc.SharedFacts.FenceBounds, DRagLint.Doc.SharedFacts.InsertFactLines, DRagLint.Doc.SharedFacts.ReinsertAt, DRagLint.Doc.SharedFacts.TSharedFacts.StoredBlockBody, Pos</para>
+    /// <para>Returns: ADocText; Lines.Text</para>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.FenceBounds"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.InsertFactLines"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.ReinsertAt"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.StoredBlockBody"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function KeepLegacyPure(const ADocText, AStoredRemarks: string): string;
 
@@ -241,6 +251,16 @@ type
     /// stored line out before comparing, so checker and fixer agree. A class
     /// name is decided by IsClassEntry, on evidence from AStore only; a name the
     /// index cannot see stays where it is.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
+    /// <para>Calls: DRagLint.Doc.SharedFacts.KeepUsedInClassesText</para>
+    /// <para>Returns: KeepUsedInClassesText(ADocText, AStoredRemarks, AStore)</para>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.KeepUsedInClassesText"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.IsLegacyPureOnlyBody"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function KeepUsedInClasses(const ADocText, AStoredRemarks: string;
       const AStore: ISymbolStore): string;

@@ -18,7 +18,18 @@ uses
 /// <param name="AUnit">Out: the unit to add.</param>
 /// <param name="ASection">Out: the uses clause the engine chose.</param>
 /// <returns>False when no cached diagnostic on the caret line carries the rule's message.</returns>
-/// <remarks>Reads the diagnostic cache only (LSP publishDiagnostics / live lint); never runs the engine.</remarks>
+/// <remarks>
+/// Reads the diagnostic cache only (LSP publishDiagnostics / live lint); never runs the engine.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeQuickFixUses (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DRagLint.Core.UsesInsert.TUsesText.ParseMessage, DragLint.Plugin.DiagnosticCache.Cache, DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForLine, Supports</para>
+/// <para>Returns: False</para>
+/// <para>Mutates: AUnit (out), ASection (out)</para>
+/// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ParseMessage"/>
+/// <seealso cref="DragLint.Plugin.DiagnosticCache.Cache"/>
+/// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLCursorMissingUses(out AUnit: string; out ASection: TUsesSection): Boolean;
 
 /// <summary>Adds AUnit to the ASection uses clause of the active editor buffer
@@ -28,6 +39,16 @@ function DLCursorMissingUses(out AUnit: string; out ASection: TUsesSection): Boo
 /// <param name="AInserted">Out: AUnit when inserted, else ''.</param>
 /// <returns>False when there is no active buffer, the unit is already listed,
 /// or the buffer has no such section keyword.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeQuickFixUses (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: AnsiString, DRagLint.Core.UsesInsert.TUsesText.BuildInsertion, DragLint.Plugin.MissingUses.ActiveBuffer, PAnsiChar</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: AInserted (out)</para>
+/// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.BuildInsertion"/>
+/// <seealso cref="DragLint.Plugin.MissingUses.ActiveBuffer"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLAddUnitToUsesSection(const AUnit: string; ASection: TUsesSection; out AInserted: string): Boolean;
 
 implementation

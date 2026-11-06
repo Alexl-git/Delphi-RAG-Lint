@@ -39,7 +39,7 @@ type
   /// doc-source tasks and are inert here.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Batch.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+4 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Batch.pas) ?, DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) ? (+4 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -153,7 +153,7 @@ type
   /// DocCount is how many of them contributed at least one edit.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Batch.pas), DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas) (+4 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas) ?, DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas) ?, DRagLint.CLI.ReportDocBatch (DRagLint.CLI.pas) ?, DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas) (+4 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -234,14 +234,14 @@ type
     /// Not thread-safe; call from the owning thread only.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas)</para>
-    /// <para>Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Doc.Batch.FilterToOwnRoots, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths</para>
+    /// <para>Calls: DRagLint.Doc.Batch.AggregateOverFiles, DRagLint.Doc.Batch.FilterToOwnRoots, DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Project.Resolver.TProjectResolver.MembershipLibraryRoots, DRagLint.Project.TargetStudio.ResolveTargetStudio, DRagLint.Project.TargetStudio.TTargetStudio.OpenResolver</para>
     /// <para>Returns: AggregateOverFiles(AStore, FilterToOwnRoots(CR.Files, AProjectFile, AOptions), AOptions)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Doc.Batch.AggregateOverFiles"/>
     /// <seealso cref="DRagLint.Doc.Batch.FilterToOwnRoots"/>
     /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
     /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Resolve"/>
-    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.MembershipLibraryRoots"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function DocumentProject(const AStore: ISymbolStore; const AProjectFile: string;

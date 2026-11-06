@@ -29,34 +29,67 @@ uses
 /// <param name="AForm">The form to recolor.</param>
 /// <param name="AFormClass">The form's class, registered once with the theme
 /// engine so it recognises the class.</param>
-/// <remarks>Best-effort and fully guarded: a missing service or a theming-
+/// <remarks>
+/// Best-effort and fully guarded: a missing service or a theming-
 /// disabled IDE leaves the form on its default colours rather than failing.
-/// Main thread only.</remarks>
+/// Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.ShowTextReport (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.Create (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.HoverForm.ApplyIdeTheme (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.Reports.TDragLintReportTextForm.CreateReport (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: DragLint.Plugin.Theme.AlreadyRegistered, Supports</para>
+/// <para>Catches: Exception (empty)</para>
+/// <para>UI thread only -- touches AForm</para>
+/// <seealso cref="DragLint.Plugin.Theme.AlreadyRegistered"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ApplyIdeTheme(AForm: TCustomForm; AFormClass: TCustomFormClass);
 
 /// <summary>Maps a system colour (clWindow, clWindowText, ...) through the IDE's
 /// ACTIVE theme.</summary>
 /// <param name="ASystemColor">A system colour constant.</param>
 /// <returns>The themed colour, or ASystemColor when theming is unavailable.</returns>
-/// <remarks>Needed for any control that opts out of style hooking
+/// <remarks>
+/// Needed for any control that opts out of style hooking
 /// (StyleElements := []) to keep custom foreground colours: such a control also
 /// loses the themed BACKGROUND and would otherwise paint white under a dark
-/// theme. Main thread only.</remarks>
+/// theme. Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.ShowTextReport (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.BuildContent (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.Create (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.DoCopyReport (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent.RenderGroup (DragLint.Plugin.AboutForm.pas) (+5 more)</para>
+/// <para>Calls: Supports</para>
+/// <para>Returns: ASystemColor; SS.GetSystemColor(ASystemColor)</para>
+/// <para>Catches: Exception (empty)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ThemedColor(ASystemColor: TColor): TColor;
 
 /// <summary>True when the IDE is currently running a dark theme.</summary>
 /// <returns>True if the themed window background is dark.</returns>
-/// <remarks>Decided from the themed clWindow's luminance rather than a theme
-/// NAME: names are not a stable contract and a user can install their own.</remarks>
+/// <remarks>
+/// Decided from the themed clWindow's luminance rather than a theme
+/// NAME: names are not a stable contract and a user can install their own.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: ColorToRGB, DragLint.Plugin.Theme.ThemedColor, GetBValue, GetGValue, GetRValue</para>
+/// <para>Returns: ((GetRValue(Rgb) * 299) + (GetGValue(Rgb) * 587) + (GetBValue(Rgb) * 114)) div 1000 &lt; 128</para>
+/// <seealso cref="DragLint.Plugin.Theme.ThemedColor"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsDarkTheme: Boolean;
 
 /// <summary>A status colour guaranteed readable against the themed background.</summary>
 /// <param name="ABase">The intended colour, e.g. clRed for a failure.</param>
 /// <returns>ABase, or a lightened/darkened variant meeting WCAG 4.5:1.</returns>
-/// <remarks>clRed and clGreen on a dark background fall well below readable
+/// <remarks>
+/// clRed and clGreen on a dark background fall well below readable
 /// contrast, so a status screen that colour-codes severity MUST adjust or the
 /// colour that carries the meaning becomes the colour you cannot read.
-/// Main thread only.</remarks>
+/// Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.DoAfterFix (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.RenderContent.RenderGroup (DragLint.Plugin.AboutForm.pas)</para>
+/// <para>Calls: DRagLint.Hover.Contrast.EnsureReadable, DragLint.Plugin.Theme.ThemedColor</para>
+/// <para>Returns: EnsureReadable(ABase, ThemedColor(clWindow), 4.5)</para>
+/// <seealso cref="DRagLint.Hover.Contrast.EnsureReadable"/>
+/// <seealso cref="DragLint.Plugin.Theme.ThemedColor"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ThemedStatusColor(ABase: TColor): TColor;
 
 implementation

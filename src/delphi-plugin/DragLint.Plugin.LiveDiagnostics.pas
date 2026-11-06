@@ -22,36 +22,88 @@ uses
   System.SysUtils
   ;
 
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.LiveDiagnostics.LiveLog, DragLint.Plugin.LiveDiagnostics.RequestRelint, DragLint.Plugin.LiveDiagnostics.TLiveRunner.Create, DragLint.Plugin.Providers.RegisterDiagnosticProvider</para>
+/// <seealso cref="DragLint.Plugin.LiveDiagnostics.LiveLog"/>
+/// <seealso cref="DragLint.Plugin.LiveDiagnostics.RequestRelint"/>
+/// <seealso cref="DragLint.Plugin.LiveDiagnostics.TLiveRunner.Create"/>
+/// <seealso cref="DragLint.Plugin.Providers.RegisterDiagnosticProvider"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure StartLiveDiagnostics;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), initialization/finalization (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Calls: DragLint.Plugin.LiveDiagnostics.LiveLog, DragLint.Plugin.Providers.UnregisterDiagnosticProvider, FreeAndNil</para>
+/// <seealso cref="DragLint.Plugin.LiveDiagnostics.LiveLog"/>
+/// <seealso cref="DragLint.Plugin.Providers.UnregisterDiagnosticProvider"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure StopLiveDiagnostics;
 { Called from the edit-view notifier's Modified hook. }
+/// <summary><!-- drag-lint:auto sum -->Called from the edit-view notifier's Modified
+/// hook.</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.EditViewNotifier.TDragLintEditServicesNotifier.EditorViewModified (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.Modified (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.FileNotification (DragLint.Plugin.ProjectNotifier.pas)</para>
+/// <para>Calls: DragLint.Plugin.LiveDiagnostics.LiveLog, DragLint.Plugin.LiveDiagnostics.SupersedeRunningLint</para>
+/// <seealso cref="DragLint.Plugin.LiveDiagnostics.LiveLog"/>
+/// <seealso cref="DragLint.Plugin.LiveDiagnostics.SupersedeRunningLint"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure NotifyEditDirty;
 
 /// <summary>Re-lints the active buffer on the next runner tick, even though
 /// its text has not changed.</summary>
-/// <remarks>MAIN THREAD ONLY. The runner only re-lints on an EDIT, and a save
+/// <remarks>
+/// MAIN THREAD ONLY. The runner only re-lints on an EDIT, and a save
 /// is not an edit: the buffer hash is unchanged, so after a save the panel kept
 /// the findings of a lint that ran against the PRE-save index (owner report
 /// 2026-10-13: two unused-unit-in-uses findings outlived the save that fixed
 /// them). Called when a reindex finishes, by 'Rescan this unit', and after an
 /// autofix. Does not arm the idle compile -- nothing was edited. A no-op when
-/// the runner is not started or live diagnostics are switched off.</remarks>
+/// the runner is not started or live diagnostics are switched off.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.LiveDiagnostics.StartLiveDiagnostics (DragLint.Plugin.LiveDiagnostics.pas), DragLint.Plugin.SaveNotifier.EnqueueReindexThenRelint (DragLint.Plugin.SaveNotifier.pas)</para>
+/// <para>Calls: DragLint.Plugin.LiveDiagnostics.LiveLog, DragLint.Plugin.LiveDiagnostics.SupersedeRunningLint</para>
+/// <seealso cref="DragLint.Plugin.LiveDiagnostics.LiveLog"/>
+/// <seealso cref="DragLint.Plugin.LiveDiagnostics.SupersedeRunningLint"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RequestRelint;
 
 /// <summary>Reports the surface fingerprint the engine returned for a fan-out
 /// run, so a repeated answer can stop the same shape being asked twice.</summary>
 /// <param name="AFingerprint">The engine's fingerprint for the last launch.</param>
-/// <remarks>Safe to call from the fan-out worker thread -- it marshals to the
+/// <remarks>
+/// Safe to call from the fan-out worker thread -- it marshals to the
 /// main thread itself, because the gate is driven from the runner's timer and
-/// is deliberately not thread-safe.</remarks>
+/// is deliberately not thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas)</para>
+/// <para>Calls: Copy, DragLint.Plugin.LiveDiagnostics.LiveLog, DragLint.Plugin.SurfaceSplit.TFanOutGate.NoteFingerprint</para>
+/// <seealso cref="DragLint.Plugin.LiveDiagnostics.LiveLog"/>
+/// <seealso cref="DragLint.Plugin.SurfaceSplit.TFanOutGate.NoteFingerprint"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure NotifyFanOutFingerprint(const AFingerprint: string);
 
 /// <summary>The active .pas editor buffer, unsaved text included.</summary>
 /// <param name="AFilePath">Receives the buffer's path; '' if there is none.</param>
 /// <returns>The buffer text, or '' when no .pas view is active.</returns>
-/// <remarks>MAIN THREAD ONLY -- it goes through IOTAEditReader. Exposed because
+/// <remarks>
+/// MAIN THREAD ONLY -- it goes through IOTAEditReader. Exposed because
 /// tier 3 must re-read the CURRENT buffer rather than compile the snapshot tier
-/// 2 staged minutes earlier.</remarks>
+/// 2 staged minutes earlier.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.FanOut.RunTreeCompile (DragLint.Plugin.FanOut.pas)</para>
+/// <para>Calls: DragLint.Plugin.LiveDiagnostics.ActiveBufferText</para>
+/// <para>Returns: ActiveBufferText(AFilePath)</para>
+/// <seealso cref="DragLint.Plugin.LiveDiagnostics.ActiveBufferText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ActiveBufferSnapshot(out AFilePath: string): string;
 
 var

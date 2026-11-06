@@ -17,15 +17,39 @@ uses
 type
   /// <summary>Answers `textDocument/codeLens` with one lens per routine and
   /// advertises codeLensProvider = {resolveProvider: false}.</summary>
-  /// <remarks>Stateless; registered from this unit's initialization. Lenses
-  /// are complete as sent (no codeLens/resolve). Lines are 0-based.</remarks>
+  /// <remarks>
+  /// Stateless; registered from this unit's initialization. Lenses
+  /// are complete as sent (no codeLens/resolve). Lines are 0-based.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Feature.CodeLens.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.CodeLens</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspCodeLensFeature = class(TLspFeature)
   public
     /// <summary>The one method: `textDocument/codeLens`.</summary>
     /// <returns>['textDocument/codeLens'].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: [CODELENS_METHOD]</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Methods</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Methods: TArray<string>; override;
     /// <summary>Adds `codeLensProvider: {resolveProvider: false}`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.AddCapabilities</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle"/>
+    /// <seealso cref="DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
     /// <summary>Replies a CodeLens[]: for each {line, count} of the file's
     /// caller counts, a zero-width range at (line, 0) and the command
@@ -37,6 +61,19 @@ type
     /// <param name="AMethod">Always `textDocument/codeLens`.</param>
     /// <param name="AId">The request id; a notification gets no reply.</param>
     /// <param name="AParams">{textDocument:{uri}}; a missing uri answers [].</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.LSP.Context.ILspServerContext.CallerCounts, DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.Stores, DRagLint.LSP.Feature.CodeLens.BuildLens, DRagLint.Query.Implementors.ImplementorCountsForFile</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Reply"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Stores"/>
+    /// <seealso cref="DRagLint.LSP.Feature.CodeLens.BuildLens"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 

@@ -20,6 +20,12 @@ interface
 
 type
   /// <summary>What a captured child process produced.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Process.pas), DRagLint.Charts.Dot.DotMessages (DRagLint.Charts.Dot.pas), DRagLint.Charts.Dot.DotRun (DRagLint.Charts.Dot.pas), DRagLint.Charts.Pairs.AskEngine (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Process.RunCapture (DRagLint.Charts.Process.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Dot, DRagLint.Charts.Pairs, DRagLint.Charts.Process, DRagLint.MCP.ClientConfig</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProcessResult = record
     /// <summary>The child's exit code; -1 when it was killed on timeout.</summary>
     ExitCode: Integer;
@@ -39,9 +45,20 @@ type
 /// <param name="pResult">The exit code and the captured streams; reset on entry.</param>
 /// <returns>False only when the process could not be started (CreateProcess failed); a child that
 /// ran and failed returns True with its exit code.</returns>
-/// <remarks>The child's stdin is the NUL device, so it can never block waiting for input.
+/// <remarks>
+/// The child's stdin is the NUL device, so it can never block waiting for input.
 /// Only the child itself is terminated on timeout, not grandchildren it started. Safe to call
-/// from any thread; holds no shared state.</remarks>
+/// from any thread; holds no shared state.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Dot.DotRun (DRagLint.Charts.Dot.pas), DRagLint.Charts.Pairs.AskEngine (DRagLint.Charts.Pairs.pas), DRagLint.MCP.ClientConfig.RunStep (DRagLint.MCP.ClientConfig.pas)</para>
+/// <para>Calls: CreateFile, CreatePipe, CreateProcessW, DRagLint.Charts.Process.CloseIfOpen, DRagLint.Charts.Process.Decode, DRagLint.Charts.Process.DrainPipe, FillChar, GetExitCodeProcess, Integer, PChar, PWideChar, SetHandleInformation, TerminateProcess, UniqueString, WaitForSingleObject</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 96 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Process.CloseIfOpen"/>
+/// <seealso cref="DRagLint.Charts.Process.Decode"/>
+/// <seealso cref="DRagLint.Charts.Process.DrainPipe"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunCapture(const pCommandLine, pWorkDir: string; pTimeoutMs: Cardinal;
   out pResult: TProcessResult): Boolean;
 
@@ -49,7 +66,13 @@ function RunCapture(const pCommandLine, pWorkDir: string; pTimeoutMs: Cardinal;
 /// <param name="pValue">The argument, any text.</param>
 /// <returns>pValue in double quotes, escaped the way CommandLineToArgvW splits it: n backslashes
 /// before an embedded quote become 2n+1, n before the closing quote become 2n, others stay.</returns>
-/// <remarks>Pure; thread-safe. Lives beside RunCapture, whose command line it builds.</remarks>
+/// <remarks>
+/// Pure; thread-safe. Lives beside RunCapture, whose command line it builds.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Pairs.AskEngine (DRagLint.Charts.Pairs.pas), DRagLint.MCP.ClientConfig.EngineCommand (DRagLint.MCP.ClientConfig.pas), DRagLint.MCP.ClientConfig.RunInitVerbFromCommandLine (DRagLint.MCP.ClientConfig.pas)</para>
+/// <para>Returns: SB.ToString</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function QuoteArg(const pValue: string): string;
 
 implementation

@@ -61,7 +61,7 @@ type
   /// <summary>One index whose files table holds the file being renamed.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.StaleEvidence (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.TagMismatch (DRagLint.Refactor.MultiProjectRename.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.StaleEvidence (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.TagMismatch (DRagLint.Refactor.MultiProjectRename.pas) ? (+2 more)</para>
   /// <para>Used in units: DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -81,7 +81,7 @@ type
   /// <summary>The result of probing every configured index for one file.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.CLI.PlanMultiOwnerNaming (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.BlockReason (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.OpenOwners (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.CLI.PlanMultiOwnerNaming (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.BlockReason (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.OpenOwners (DRagLint.Refactor.MultiProjectRename.pas) ? (+1 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -102,7 +102,12 @@ type
   end; // record
 
   /// <summary>Whether an owning DB may be used for a rename, after RefreshOwner.</summary>
-  /// <remarks>Spec criteria 3-5.</remarks>
+  /// <remarks>
+  /// Spec criteria 3-5.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.OwnerFreshnessText (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.RefreshOwner (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TOwnerFreshness = (
     /// <summary>Nothing changed on disk since the DB was indexed; used as is.</summary>
     ofFresh,
@@ -117,8 +122,14 @@ type
     ofStale);
 
   /// <summary>One owning index's part in a rename plan.</summary>
-  /// <remarks>Value type. In TMultiRenamePlan.Owners it describes the owner
-  /// (RefCount 0); in TTargetPlan.Owners it also counts that owner's edits.</remarks>
+  /// <remarks>
+  /// Value type. In TMultiRenamePlan.Owners it describes the owner
+  /// (RefCount 0); in TTargetPlan.Owners it also counts that owner's edits.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.CLI.AddRenameJson (DRagLint.CLI.pas), DRagLint.CLI.EmitRenamePlan (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.RenameIndexText (DRagLint.CLI.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.MultiProjectRename</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TOwnerReport = record
     /// <summary>The owner, as FindRenameOwners returned it.</summary>
     Owner: TRenameOwner;
@@ -133,6 +144,11 @@ type
   end; // record
 
   /// <summary>Whether a planned rename is written.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRenameDecision = (
     /// <summary>Free in every owner, edits built and merged: apply it.</summary>
     rdApply,
@@ -141,7 +157,13 @@ type
     rdDropped);
 
   /// <summary>The plan for ONE naming target across every owning index.</summary>
-  /// <remarks>Value type; owns nothing.</remarks>
+  /// <remarks>
+  /// Value type; owns nothing.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.pas) ?, DRagLint.CLI.EmitRenamePlan (DRagLint.CLI.pas) ?, DRagLint.Refactor.MultiProjectRename.PlanGlobal (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.PlanLocal (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.UnplannedTarget (DRagLint.Refactor.MultiProjectRename.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.MultiProjectRename</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTargetPlan = record
     /// <summary>The target as the first owner that resolved it built it.</summary>
     Target: TNamingTarget;
@@ -161,6 +183,12 @@ type
   end; // record
 
   /// <summary>A rename plan for the naming findings of ONE file.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.CLI.EmitRenamePlan (DRagLint.CLI.pas) ?, DRagLint.CLI.PlanMultiOwnerNaming (DRagLint.CLI.pas) ?, DRagLint.Refactor.MultiProjectRename.PlanMultiProjectRename (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.MultiProjectRename</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMultiRenamePlan = record
     /// <summary>The discovery the plan was built from, unchanged.</summary>
     Discovery: TOwnerDiscovery;
@@ -256,6 +284,17 @@ function FindRenameOwners(const AManifest: TIndexManifest; const APlatform, AFil
 /// --db` is the call that widens a project DB, so it is not made here.</para>
 /// <para>Raises nothing: every exception becomes ofUnverified with its message.
 /// The store is opened read-only and released before AReindex runs.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.MultiProjectRename.OpenOwners (DRagLint.Refactor.MultiProjectRename.pas)</para>
+/// <para>Calls: AReindex, DRagLint.Refactor.MultiProjectRename.PreviewStaleText, DRagLint.Refactor.MultiProjectRename.StaleEvidence, DRagLint.Refactor.MultiProjectRename.TagMismatch, Format</para>
+/// <para>Returns: ofUnverified; ofStale; if Evidence = '' then ofReindexed</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 46 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AReason (out)</para>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.PreviewStaleText"/>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.StaleEvidence"/>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.TagMismatch"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function RefreshOwner(const AOwner: TRenameOwner; const AReindex: TFunc<string, string, Boolean>;
   out AReason: string): TOwnerFreshness;
@@ -297,6 +336,16 @@ function RefreshOwner(const AOwner: TRenameOwner; const AReindex: TFunc<string, 
 /// returning. Raises nothing of its own; an owner whose store cannot be opened
 /// is unverified.</para>
 /// Pinned by tests\autotest\run_multi_project_rename.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.PlanMultiOwnerNaming (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Refactor.MultiProjectRename.BlockReason, DRagLint.Refactor.MultiProjectRename.FindingKey, DRagLint.Refactor.MultiProjectRename.OpenOwners, DRagLint.Refactor.MultiProjectRename.PlanGlobal, DRagLint.Refactor.MultiProjectRename.PlanLocal, DRagLint.Refactor.MultiProjectRename.UnplannedTarget</para>
+/// <para>Returns: Default(TMultiRenamePlan)</para>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.BlockReason"/>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.FindingKey"/>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.OpenOwners"/>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.PlanGlobal"/>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.PlanLocal"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function PlanMultiProjectRename(const ADiscovery: TOwnerDiscovery;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
@@ -305,7 +354,14 @@ function PlanMultiProjectRename(const ADiscovery: TOwnerDiscovery;
 /// <summary>The text a `rename-project:` line prints for AFreshness.</summary>
 /// <param name="AFreshness">The owner's freshness.</param>
 /// <returns>'fresh', 'reindexed', 'stale' or 'unverified'.</returns>
-/// <remarks>Pure. The IDE plugin parses these words.</remarks>
+/// <remarks>
+/// Pure. The IDE plugin parses these words.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RenameIndexText (DRagLint.CLI.pas)</para>
+/// <para>Returns: 'fresh'; 'reindexed'; 'stale'; 'unverified'</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OwnerFreshnessText(AFreshness: TOwnerFreshness): string;
 
 /// <summary>Unions every owner's edits for one target into one set, written
@@ -316,12 +372,20 @@ function OwnerFreshnessText(AFreshness: TOwnerFreshness): string;
 /// first spelling any owner used.</param>
 /// <param name="AMerged">Out: the merged edits; nil when the result is a conflict.</param>
 /// <returns>'' on success; otherwise why the edits conflict.</returns>
-/// <remarks>An exact duplicate (same file case-insensitively, line, col, end
+/// <remarks>
+/// An exact duplicate (same file case-insensitively, line, col, end
 /// col and text) is kept once; two DIFFERENT edits at one file/line/col are a
 /// conflict (criterion 8). Every surviving edit's FilePath is rewritten to the
 /// file's one canonical spelling (Ruling 13): two owners store BASICS.PAS and
 /// Basics.pas, and the applier must see one file, back it up once and check
-/// its edits together. Pure; pinned by run_rename_owners_harness.ps1 P1-P2.</remarks>
+/// its edits together. Pure; pinned by run_rename_owners_harness.ps1 P1-P2.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.MultiProjectRename.PlanGlobal (DRagLint.Refactor.MultiProjectRename.pas)</para>
+/// <para>Calls: Format, IntToStr, LowerCase</para>
+/// <para>Returns: ''; Format('two projects edit %s line %d col %d differently', [E.FilePath, E.Line, E.Col])</para>
+/// <para>Mutates: AMerged (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MergeEdits(const AParts: TArray<TArray<TTextEdit>>; const APreferredPath: string;
   out AMerged: TArray<TTextEdit>): string;
 
@@ -339,8 +403,16 @@ function MergeEdits(const AParts: TArray<TArray<TTextEdit>>; const APreferredPat
 /// dropped because its own edit went stale (what `rename-dropped-at-write:`
 /// prints).</param>
 /// <returns>How many plans were turned from rdApply to rdDropped.</returns>
-/// <remarks>Reads the files the edits name (via FindStaleEdit); writes
-/// nothing. Pinned by run_rename_owners_harness.ps1 checks AW1-AW4.</remarks>
+/// <remarks>
+/// Reads the files the edits name (via FindStaleEdit); writes
+/// nothing. Pinned by run_rename_owners_harness.ps1 checks AW1-AW4.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.GuardRenameWrites (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Refactor.MultiProjectRename.FindStaleEdit, Format</para>
+/// <para>Mutates: AEdits (out), ANotes (out)</para>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.FindStaleEdit"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GuardPlansAtWrite(var APlans: TArray<TTargetPlan>; AAllOrNothing: Boolean;
   out AEdits: TArray<TTextEdit>; out ANotes: TArray<string>): Integer;
 
@@ -353,11 +425,21 @@ function GuardPlansAtWrite(var APlans: TArray<TTargetPlan>; AAllOrNothing: Boole
 /// it at [Col, EndCol) of Line (case-insensitive -- the same rule
 /// TTextEditApplier applies per edit), or its file is gone. Edits of other
 /// kinds, and unguarded ones, are not checked.</returns>
-/// <remarks>The applier drops a stale edit and writes the rest; for a rename
+/// <remarks>
+/// The applier drops a stale edit and writes the rest; for a rename
 /// that crosses projects that is a half-rename, so the caller checks the
 /// WHOLE set first and writes none of it when this returns True (fix round 1,
 /// ruling 8). Reads each file once (ANSI); writes nothing. Pinned by
-/// run_rename_owners_harness.ps1 checks G1-G4.</remarks>
+/// run_rename_owners_harness.ps1 checks G1-G4.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.MultiProjectRename.GuardPlansAtWrite (DRagLint.Refactor.MultiProjectRename.pas)</para>
+/// <para>Calls: Default, DRagLint.Refactor.MultiProjectRename.SpanHolds, LowerCase</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: AStale (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.SpanHolds"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindStaleEdit(const AEdits: TArray<TTextEdit>; out AStale: TTextEdit): Boolean;
 
 /// <summary>The members of ADeclared a project index is expected to hold: every
@@ -366,13 +448,20 @@ function FindStaleEdit(const AEdits: TArray<TTextEdit>; out AStale: TTextEdit): 
 /// <param name="ALibraryRoots">Library folders (TProjectResolver.ResolveLibraryPaths);
 /// nil keeps every member.</param>
 /// <returns>ADeclared, in order, without the library members.</returns>
-/// <remarks>`index --project` leaves a unit under a library root to the
+/// <remarks>
+/// `index --project` leaves a unit under a library root to the
 /// platform library index (TClosureResolver), so no reindex of the project DB
 /// can add it. Counting one as missing made an owner stale forever, and every
 /// Fix all apply then dropped all its renames as "still missing after reindex"
 /// (ORM3 Micronite2027 and C:\Projects\ArrayHelper\ArrayHelper.pas, 2026-10-16).
 /// Root matching is case-insensitive, accepts '/' and stops at a folder
-/// boundary. Pure.</remarks>
+/// boundary. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.MultiProjectRename.MissingMembers (DRagLint.Refactor.MultiProjectRename.pas)</para>
+/// <para>Calls: DRagLint.Refactor.MultiProjectRename.ProjectOwnedMembers.Norm, IncludeTrailingPathDelimiter, LowerCase, StringReplace, Trim</para>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.ProjectOwnedMembers.Norm"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ProjectOwnedMembers(const ADeclared, ALibraryRoots: TArray<string>): TArray<string>;
 implementation
 

@@ -125,7 +125,7 @@ type
   /// old identifier after the last such prefix. This preserves the receiver
   /// intent without over-modelling it in Batch 1 (validation ignores Scope).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildBlockClasses (DRagLint.CLI.pas), DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate.RuleSummary (DRagLint.CLI.pas), DRagLint.CLI.QualifyConvertArg (DRagLint.CLI.pas) (+61 more)</para>
+  /// <para>Used by: DRagLint.Convert.Apply.PlanMigrateSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.EvaluateMapping (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.ParseConversionRules (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseCheckRefDirective (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseMappingDirective (DRagLint.Convert.Rules.pas) (+66 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -183,7 +183,7 @@ type
   /// ASCII-only description (e.g. 'unknown directive: #frobnicate' or
   /// 'link ToPath not found in --to tree: Bogus.Path').
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.CLI.ResolveTreeDepth (DRagLint.CLI.pas) (+13 more)</para>
+  /// <para>Used by: DRagLint.CLI.BuildBlockClasses.RequireResolved (DRagLint.CLI.pas), DRagLint.Convert.Rules.BookChainWarnings (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ConversionRuleWarnings (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.AddError (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.UnrealisedGlyphLinks (DRagLint.Convert.Rules.pas) (+17 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -215,7 +215,7 @@ type
   /// resolve paths lazily and never read it. At most one '#depth' per book: a
   /// second one is a parse error on its own line and the first one stands.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.QualifyConvertArg (DRagLint.CLI.pas), DRagLint.CLI.ResolveTreeDepth (DRagLint.CLI.pas) (+34 more)</para>
+  /// <para>Used by: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) ?, DRagLint.CLI.QualifyConvertArg (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveTreeDepth (DRagLint.CLI.pas) (+57 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -240,6 +240,10 @@ type
   /// block, normally both sides unset), [N] the Nth #convert in source order.
   /// 1.20.6 (T2b): replaced TBlockTrees -- no property tree is built; each path
   /// is resolved segment by segment (TPropMemberCache.ResolvePath, psDfm).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Rules.pas) ?, DRagLint.CLI.BuildBlockClasses (DRagLint.CLI.pas) ?, DRagLint.CLI.ValidateConvertBook (DRagLint.CLI.pas) ?, DRagLint.Convert.Rules.ValidateBlocks (DRagLint.Convert.Rules.pas) ?, DRagLint.Convert.Rules.ValidateBlocks.ClassesOf (DRagLint.Convert.Rules.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Rules</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TBlockClasses = record
     FromClass: TClassRef;
@@ -266,6 +270,10 @@ type
   /// never emitted. A #mapping line checked in several blocks has one record
   /// per block it is unreachable in, so one message can appear more than once
   /// -- print through DistinctUnreachable.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.UnreachableJson (DRagLint.CLI.pas), DRagLint.CLI.ValidateConvertBook (DRagLint.CLI.pas) (+15 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUnreachablePath = record
     LineNo        : Integer;
@@ -284,9 +292,16 @@ type
 /// <returns>False for '', a sign ('+3', '-1'), a '$' hex prefix ('$A'), a
 /// blank, a decimal point -- every form StrToInt / TryStrToInt alone would
 /// accept or half-accept.</returns>
-/// <remarks>The one strict integer check shared by '#depth N', the CLI's
+/// <remarks>
+/// The one strict integer check shared by '#depth N', the CLI's
 /// --depth (proptree / convert-scaffold) and --progress-interval, so the
-/// three can never disagree about what a number is.</remarks>
+/// three can never disagree about what a number is.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ResolveProgressInterval (DRagLint.CLI.pas), DRagLint.CLI.ResolveTreeDepth (DRagLint.CLI.pas), DRagLint.Convert.Rules.ParseConversionRules (DRagLint.Convert.Rules.pas)</para>
+/// <para>Calls: CharInSet</para>
+/// <para>Returns: S &lt;&gt; ''</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsDecimalDigits(const S: string): Boolean;
 
 /// <summary>Parses the reFind-superset conversion-rules DSL text into a rule set.
@@ -410,6 +425,12 @@ function ValidateConversionRules(const ARules: TConversionRuleSet;
 /// #default before the first #convert is checked against ABlockClasses[0].
 /// Paths resolve as in ValidateConversionRules (psDfm, ruling R8).
 /// Deterministic; reads the index through the classes' caches; writes nothing.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ValidateConvertBook (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Convert.Rules.ValidateBlocks</para>
+/// <para>Returns: ValidateBlocks(ARules, ABlockClasses, True, AUnreachable)</para>
+/// <seealso cref="DRagLint.Convert.Rules.ValidateBlocks"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function ValidateConversionRulesPerBlock(const ARules: TConversionRuleSet;
   const ABlockClasses: TArray<TBlockClasses>; out AUnreachable: TArray<TUnreachablePath>): TArray<TRuleError>;
@@ -440,6 +461,13 @@ function ValidateConversionRulesPerBlock(const ARules: TConversionRuleSet;
 /// conservative reading (controller fix round 1). Its #apply stays and finds
 /// nothing to evaluate. The #convert headers, #apply and the unit rules are
 /// never touched, so block numbering is unchanged. Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.CollectPasUses (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: DRagLint.Convert.Rules.WithoutUnreachableRules.TargetDead, SameText, UpperCase</para>
+/// <para>Returns: ARules</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 63 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Convert.Rules.WithoutUnreachableRules.TargetDead"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function WithoutUnreachableRules(const ARules: TConversionRuleSet;
   const AUnreachable: TArray<TUnreachablePath>; ABlock: Integer): TConversionRuleSet;
@@ -451,8 +479,14 @@ function WithoutUnreachableRules(const ARules: TConversionRuleSet;
 /// valid (dotted) identifier, in text order, duplicates kept; empty when
 /// none. The literal placeholders &lt;value&gt; and &lt;name&gt; are not brace
 /// forms and never appear here.</returns>
-/// <remarks>Pure. convert-validate checks every name against the block's From
-/// type; the re-emit reads each from the source block.</remarks>
+/// <remarks>
+/// Pure. convert-validate checks every name against the block's From
+/// type; the re-emit reads each from the source block.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.ReportBookChecks (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.ValidateBlocks (DRagLint.Convert.Rules.pas)</para>
+/// <para>Calls: Copy, IsValidIdent, Pos</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function WarnPlaceholders(const AText: string): TArray<string>;
 
 /// <summary>AUnreachable with each message once, in first-seen order -- what
@@ -460,6 +494,11 @@ function WarnPlaceholders(const AText: string): TArray<string>;
 /// <param name="AUnreachable">Validation's records (several per message
 /// when a #mapping line is unreachable in several blocks).</param>
 /// <returns>The first record of each distinct Message. Pure.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoConvertApply.MergeUnreachable (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DistinctUnreachable(const AUnreachable: TArray<TUnreachablePath>): TArray<TUnreachablePath>;
 
 /// <summary>Non-fatal findings on a parsed rule set: things that validate but
@@ -479,8 +518,9 @@ function DistinctUnreachable(const AUnreachable: TArray<TUnreachablePath>): TArr
 /// duplicate From' and the ConvRulesEditor can recognise it.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas)</para>
-/// <para>Calls: Default, DRagLint.Convert.GlyphExpr.IsGlyphCountPropName, DRagLint.Convert.Rules.ConvertBlocks, DRagLint.Convert.Rules.IsGlyphImageLink, Format</para>
+/// <para>Calls: Default, DRagLint.Convert.GlyphExpr.IsGlyphCountPropName, DRagLint.Convert.Rules.BookChainWarnings, DRagLint.Convert.Rules.ConvertBlocks, DRagLint.Convert.Rules.IsGlyphImageLink, Format</para>
 /// <seealso cref="DRagLint.Convert.GlyphExpr.IsGlyphCountPropName"/>
+/// <seealso cref="DRagLint.Convert.Rules.BookChainWarnings"/>
 /// <seealso cref="DRagLint.Convert.Rules.ConvertBlocks"/>
 /// <seealso cref="DRagLint.Convert.Rules.IsGlyphImageLink"/>
 /// <!-- drag-lint:auto END -->
@@ -501,6 +541,12 @@ function ConversionRuleWarnings(const ARules: TConversionRuleSet): TArray<TRuleE
 /// convert-apply applies the FIRST #convert per From type once; it does not
 /// feed one conversion's result into the next (INBOX-REPLY-chain1 E1). A
 /// warning never changes an exit code. Pure; deterministic; no I/O.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoConvertApply.MergeBookChain (DRagLint.CLI.pas), DRagLint.Convert.Rules.ConversionRuleWarnings (DRagLint.Convert.Rules.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.Rules.BookChainWarnings.Tail, Format, SameText</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 49 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Convert.Rules.BookChainWarnings.Tail"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function BookChainWarnings(const ARules: TConversionRuleSet): TArray<TRuleError>;
 

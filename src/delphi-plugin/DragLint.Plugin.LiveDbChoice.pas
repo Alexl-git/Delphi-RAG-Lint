@@ -27,10 +27,18 @@ interface
 /// project's DB when it is a candidate; the declared owner when it is a candidate;
 /// otherwise ALL candidates. With no candidates, the declared owner alone, or an
 /// empty array only when nothing at all is known.</returns>
-/// <remarks>Never narrows several candidates to none: a shared unit with no
+/// <remarks>
+/// Never narrows several candidates to none: a shared unit with no
 /// tiebreak gets every candidate (--db is repeatable), because an index that
 /// contains the file beats no index. Paths compare case-insensitively.
-/// Pure; safe to call from any thread.</remarks>
+/// Pure; safe to call from any thread.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.LiveDiagnostics.TLintDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Calls: Copy, DragLint.Plugin.LiveDbChoice.ContainsPath</para>
+/// <para>Returns: nil; [AOwnerDb]; [AActiveProjectDb]; Copy(ACandidates)</para>
+/// <seealso cref="DragLint.Plugin.LiveDbChoice.ContainsPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ChooseLiveLintDbs(const ACandidates: TArray<string>;
   const AActiveProjectDb, AOwnerDb: string): TArray<string>;
 
@@ -39,10 +47,16 @@ function ChooseLiveLintDbs(const ACandidates: TArray<string>;
 /// <param name="AOutput">Captured process output (stdout and stderr interleaved).</param>
 /// <returns>The paths of the first JSON string array in AOutput; empty when
 /// there is none, it is empty, or it does not parse.</returns>
-/// <remarks>The engine writes notes such as "(loaded defaults from ...)" and
+/// <remarks>
+/// The engine writes notes such as "(loaded defaults from ...)" and
 /// "NOTE: no index covers ..." to stderr, and a merged capture can splice them
 /// into the same line as the JSON, so the array is located by its opening
-/// bracket rather than by line. Pure; never raises.</remarks>
+/// bracket rather than by line. Pure; never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.LiveDiagnostics.LiveLintCandidates (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Calls: Copy, Pos, TJSONArray</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseResolveDbsJson(const AOutput: string): TArray<string>;
 
 implementation

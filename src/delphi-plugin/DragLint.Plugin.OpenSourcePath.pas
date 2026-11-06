@@ -24,7 +24,8 @@ interface
 /// <param name="AReason">On False, a short reason for the refusal; '' on True.</param>
 /// <returns>True only for an X:\ path with an allow-listed extension (.pas
 /// .dfm .dpr .inc .sql .fmx) and none of the refused shapes.</returns>
-/// <remarks>Pure and thread-safe; it never touches the file system, so it can
+/// <remarks>
+/// Pure and thread-safe; it never touches the file system, so it can
 /// run BEFORE FileExists -- which is the point: FileExists on a UNC path is
 /// already the network access this gate exists to prevent. Refused: control
 /// characters, UNC and device namespaces (\\server, \\?\, \\.\), relative and
@@ -33,7 +34,18 @@ interface
 /// or a space, and reserved device names (CON, NUL, COM1-9, LPT1-9, the
 /// superscript COM/LPT digits, CONIN$, CONOUT$) as a segment's base name. A
 /// mapped drive letter can still be a network share the user has mapped; a
-/// path cannot name a NEW server.</remarks>
+/// path cannot name a NEW server.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.DragLintUri.CheckTarget (DRagLint.Core.DragLintUri.pas), [dclDragLintWizard]DragLint.Plugin.OpenSourceServer.DoOpenInIDE (DragLint.Plugin.OpenSourceServer.pas)</para>
+/// <para>Calls: DragLint.Plugin.OpenSourcePath.CheckDrive, DragLint.Plugin.OpenSourcePath.CheckExtension, DragLint.Plugin.OpenSourcePath.CheckLengthAndChars, DragLint.Plugin.OpenSourcePath.CheckSegments</para>
+/// <para>Returns: AReason = ''</para>
+/// <para>Mutates: AReason (out)</para>
+/// <seealso cref="DragLint.Plugin.OpenSourcePath.CheckDrive"/>
+/// <seealso cref="DragLint.Plugin.OpenSourcePath.CheckExtension"/>
+/// <seealso cref="DragLint.Plugin.OpenSourcePath.CheckLengthAndChars"/>
+/// <seealso cref="DragLint.Plugin.OpenSourcePath.CheckSegments"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsOpenableSourcePath(const APath: string; out AReason: string): Boolean;
 
 implementation

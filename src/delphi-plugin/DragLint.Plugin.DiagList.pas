@@ -17,10 +17,16 @@ uses
 type
   /// <summary>What a `lint --fix` PREVIEW (no --apply) says about a naming
   /// rename in a unit that several project indexes own (spec criteria 16-19).</summary>
-  /// <remarks>Read from the engine's rename-owners / rename-project /
+  /// <remarks>
+  /// Read from the engine's rename-owners / rename-project /
   /// rename-target / rename-unknown / rename-dropped-at-write lines and its
   /// 'autofix: rename refused -- ' summary. A unit with one owner prints none of
-  /// them, so every field stays empty and OwnerCount is 0.</remarks>
+  /// them, so every field stays empty and OwnerCount is 0.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.DiagList.pas) ?, DragLint.Plugin.DiagList.ParseRenamePreview (DragLint.Plugin.DiagList.pas), DragLint.Plugin.DiagList.ParseRenamePreview.AddTarget (DragLint.Plugin.DiagList.pas) ?, DragLint.Plugin.DiagList.RenameApplyTimeoutMs (DragLint.Plugin.DiagList.pas) ?, DragLint.Plugin.DiagList.RenamePreviewAction (DragLint.Plugin.DiagList.pas) ? (+3 more)</para>
+  /// <para>Used in units: DragLint.Plugin.DiagList, DragLint.Plugin.StructureForm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRenamePreview = record
     /// <summary>Owning project indexes, from 'rename-owners: N of M indexes'.</summary>
     OwnerCount: Integer;
@@ -53,18 +59,34 @@ type
 
   /// <summary>What the plugin does after a rename preview: apply at once (one
   /// owner, as before), ask first, or stop and show the refusal.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.DiagList.pas), DragLint.Plugin.DiagList.RenamePreviewAction (DragLint.Plugin.DiagList.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRenamePreviewAction = (rpaApply, rpaConfirm, rpaRefuse, rpaConfirmLocal);
 
 /// <summary>Parses the multi-project rename lines of a `lint --fix` preview.</summary>
 /// <param name="AOutput">Full stdout+stderr of the run.</param>
 /// <returns>The preview; all-empty with OwnerCount 0 when the output has no rename- lines.</returns>
-/// <remarks>Tags are found anywhere in a line, not only at its start: stdout and
+/// <remarks>
+/// Tags are found anywhere in a line, not only at its start: stdout and
 /// stderr share one pipe. A rename-project line may carry a ' (reason)' suffix,
 /// and a rename-unknown line is free text (e.g. 'manifest did not load completely: ...').
 /// Reference counts are summed per project over every applied rename-target.
 /// A project reported 'index=stale' counts once in StaleCount however many files
 /// name it; rename-unindexed lines are kept once each. Pinned by
-/// run_diaglist_harness.ps1 R50-R56.</remarks>
+/// run_diaglist_harness.ps1 R50-R56.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueRenamePreviewJob (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: Default, DragLint.Plugin.DiagList.ParseRenamePreview.AddTarget, DragLint.Plugin.DiagList.ParseRenamePreview.ProjectIndex, DragLint.Plugin.DiagList.TagRest, Format, IndexText, SameText, StartsText, StrToIntDef</para>
+/// <para>Returns: Default(TRenamePreview)</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 96 lines (full implementation)</para>
+/// <seealso cref="DragLint.Plugin.DiagList.ParseRenamePreview.AddTarget"/>
+/// <seealso cref="DragLint.Plugin.DiagList.ParseRenamePreview.ProjectIndex"/>
+/// <seealso cref="DragLint.Plugin.DiagList.TagRest"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseRenamePreview(const AOutput: string): TRenamePreview;
 
 /// <summary>Decides what follows a rename preview.</summary>
@@ -76,6 +98,13 @@ function ParseRenamePreview(const AOutput: string): TRenamePreview;
 /// project with no index may still compile the unit (owner decision
 /// 2026-10-14); otherwise rpaConfirmLocal when 'rename-local: N' (N above 0)
 /// was printed, else rpaApply. Pinned by run_diaglist_harness.ps1 R56-R61.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueRenamePreviewJob (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Returns: rpaConfirm; if APreview.LocalRenames &gt; 0 then rpaConfirmLocal</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenamePreviewAction(const APreview: TRenamePreview): TRenamePreviewAction;
 
 const
@@ -92,6 +121,13 @@ const
 /// index=stale, since the apply reindexes those before it writes (Ruling 12);
 /// ABaseMs unchanged when there is no stale owner or no deadline. Pinned by
 /// run_diaglist_harness.ps1 R67-R69.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueRenamePreviewJob (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Returns: if ABaseMs &lt;= 0 then ABaseMs</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenameApplyTimeoutMs(const APreview: TRenamePreview; ABaseMs: Integer): Integer;
 
 /// <summary>The confirmation shown before a multi-project rename, or a naming
@@ -108,30 +144,58 @@ function RenameApplyTimeoutMs(const APreview: TRenamePreview; ABaseMs: Integer):
 /// (criterion 19, Ruling 14). With fewer than 2 owners and no unknown index
 /// (the single-owner case) it states that one project index owns the unit
 /// instead of an owner count.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueRenamePreviewJob (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: Copy, DragLint.Plugin.DiagList.RenameConfirmText.AppendCapped, Pos</para>
+/// <para>Returns: SB.ToString</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 91 lines (full implementation)</para>
+/// <seealso cref="DragLint.Plugin.DiagList.RenameConfirmText.AppendCapped"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenameConfirmText(const AUnit, AOld, ANew: string; const APreview: TRenamePreview): string;
 
 /// <summary>The confirmation shown before a Fix all writes single-project naming renames.</summary>
 /// <param name="AProject">The project the unit belongs to (its index's base name).</param>
 /// <param name="APreview">The parsed preview; LocalRenames is the count.</param>
 /// <returns>'Rename N identifier(s) in AProject?' as the first line, then what Yes and No do.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueRenamePreviewJob (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: Format('Rename %d identifier(s) in %s?', [APreview.LocalRenames, AProject]) + sLineBreak + sLineBreak</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenameLocalConfirmText(const AProject: string; const APreview: TRenamePreview): string;
 
 /// <summary>Tells whether ANY 'autofix: applied N edit(s)' line with N above zero
 /// is in a run's output -- not only the last autofix: line.</summary>
 /// <param name="AOutput">Full stdout+stderr of a `lint --fix --apply` run.</param>
 /// <returns>True when edits were written.</returns>
-/// <remarks>A rename refused after other fixes on the line went ahead prints the
+/// <remarks>
+/// A rename refused after other fixes on the line went ahead prints the
 /// refusal LAST, so AutofixSummary is the refusal while the file on disk has
-/// changed; the editor buffer must still be reloaded.</remarks>
+/// changed; the editor buffer must still be reloaded.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueFixJob (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: StrToIntDef</para>
+/// <para>Returns: False</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AutofixAppliedInOutput(const AOutput: string): Boolean;
 
 /// <summary>Returns the display order of ADiags: indices into ADiags sorted by
 /// (Line, StartCol, original index).</summary>
 /// <param name="ADiags">The findings as read from the cache; not modified.</param>
 /// <returns>A permutation of 0..High(ADiags).</returns>
-/// <remarks>The original-index tie-break makes the order total, so it does not
+/// <remarks>
+/// The original-index tie-break makes the order total, so it does not
 /// depend on the stability of the sort algorithm. The panel rows and every
-/// clipboard copy use this one order.</remarks>
+/// clipboard copy use this one order.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.BuildTree (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.StructureForm.TDragLintStructureForm.CopyDiagnosticsClick (DragLint.Plugin.StructureForm.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DiagDisplayOrder(const ADiags: TArray<TDragLintDiagnostic>): TArray<Integer>;
 
 /// <summary>Picks the row nearest to ALine among rows whose 1-based lines are
@@ -139,16 +203,29 @@ function DiagDisplayOrder(const ADiags: TArray<TDragLintDiagnostic>): TArray<Int
 /// <param name="ALines">1-based line of each row, in display order.</param>
 /// <param name="ALine">1-based editor line the caret is on.</param>
 /// <returns>The row index, or -1 when ALines is empty or ALine is not positive.</returns>
-/// <remarks>An exact match returns the FIRST row on that line. Otherwise the row
+/// <remarks>
+/// An exact match returns the FIRST row on that line. Otherwise the row
 /// with the smallest distance wins; on a tie the row ABOVE the caret wins, so
 /// moving down through a gap keeps the finding you just passed lit until the
-/// next one is closer.</remarks>
+/// next one is closer.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.SelectDiagnosticForLine (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Returns: -1; I</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NearestDiagRow(const ALines: TArray<Integer>; ALine: Integer): Integer;
 
 /// <summary>Formats one finding as a clipboard line:
 /// '[W] (10:5) message  [rule-id]'.</summary>
 /// <param name="ADiag">The finding; Line and StartCol are 0-based.</param>
 /// <returns>The line without a trailing line break.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DiagList.DiagClipboardText (DragLint.Plugin.DiagList.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DiagClipboardLine(const ADiag: TDragLintDiagnostic): string;
 
 /// <summary>Builds clipboard text for the rows AIndices of ADiags, in the order
@@ -158,6 +235,14 @@ function DiagClipboardLine(const ADiag: TDragLintDiagnostic): string;
 /// <param name="AIndices">Indices into ADiags to emit, already in display order.
 /// An index out of range is skipped.</param>
 /// <returns>CRLF-separated text, ending in CRLF; '' when nothing is emitted.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.CopyDiagnosticsClick (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.StructureForm.TDragLintStructureForm.CopySelectedDiagnosticsClick (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.DiagList.DiagClipboardLine</para>
+/// <para>Returns: if Count = 0 then ''</para>
+/// <seealso cref="DragLint.Plugin.DiagList.DiagClipboardLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DiagClipboardText(const AFilePath: string; const ADiags: TArray<TDragLintDiagnostic>;
   const AIndices: TArray<Integer>): string;
 
@@ -165,15 +250,27 @@ function DiagClipboardText(const AFilePath: string; const ADiags: TArray<TDragLi
 /// <param name="ADiags">The findings of the file.</param>
 /// <param name="AFixable">Rule-ids that have a registered fix; compared case-insensitively.</param>
 /// <returns>How many findings 'Fix all in unit' could act on; 0 disables it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.PopupPopup (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: SameText</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CountFixableDiags(const ADiags: TArray<TDragLintDiagnostic>; const AFixable: TArray<string>): Integer;
 
 /// <summary>A content signature of a finding set: line, column, severity, rule-id
 /// and message of every row, in the order given.</summary>
 /// <param name="ADiags">The findings as read from the cache.</param>
 /// <returns>A 32-bit FNV-1a hash; equal sets give equal values.</returns>
-/// <remarks>The dock refreshed the Diagnostics node only when the COUNT changed,
+/// <remarks>
+/// The dock refreshed the Diagnostics node only when the COUNT changed,
 /// so a re-lint that replaced two findings with two others never reached the
-/// panel. Comparing this signature catches that.</remarks>
+/// panel. Comparing this signature catches that.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.HandleWatchTimer (DragLint.Plugin.DockForm.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DiagSetSignature(const ADiags: TArray<TDragLintDiagnostic>): Cardinal;
 
 /// <summary>Extracts the engine's autofix summary from `lint --fix` output.</summary>
@@ -181,18 +278,34 @@ function DiagSetSignature(const ADiags: TArray<TDragLintDiagnostic>): Cardinal;
 /// <returns>The text after the LAST 'autofix: ', up to the end of its line --
 /// e.g. 'applied 2 edit(s) across 1 file(s) (.bak written)' or
 /// 'no fixable findings (of 14 finding(s))' -- or '' when there is none.</returns>
-/// <remarks>The tag is found anywhere in a line, not only at its start: stdout
-/// and stderr share one pipe, so an unbuffered stderr note can be split by it.</remarks>
+/// <remarks>
+/// The tag is found anywhere in a line, not only at its start: stdout
+/// and stderr share one pipe, so an unbuffered stderr note can be split by it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueFixJob (DragLint.Plugin.StructureForm.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AutofixSummary(const AOutput: string): string;
 
 /// <summary>The naming rules the engine reports as fixable but not opted in.</summary>
 /// <param name="AOutput">Full stdout+stderr of a `lint --fix` run.</param>
 /// <returns>The engine's list, e.g. 'const-casing, type-name-prefix', or ''.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueFixJob (DragLint.Plugin.StructureForm.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AutofixOptOutRules(const AOutput: string): string;
 
 /// <summary>The unit an unused-unit-in-uses finding names.</summary>
 /// <param name="AMessage">The finding's message: "Unit 'X' is listed in the uses clause ...".</param>
 /// <returns>'X', or '' when the message does not have that shape.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.UnusedUnitOfNode (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Returns: if M.Success then M.Groups[1].Value</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnusedUnitFromMessage(const AMessage: string): string;
 
 /// <summary>Summarises a `uses-fix --format json` document for one unit, in the
@@ -203,11 +316,25 @@ function UnusedUnitFromMessage(const AMessage: string): string;
 /// <returns>'applied 1 edit(s): X removed (.bak written)', 'applied 1 edit(s): X
 /// moved to the implementation section (.bak written)', 'no change: X -- reason',
 /// or '' when there is no parseable document.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueFixJob (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: Copy, Format, Pos, SameText, TJSONObject</para>
+/// <para>Returns: ''; Format('applied 1 edit(s): %s %s (.bak written)', [AUnitName, Done]); Format('no change: %s -- %s', [AUnitName, It.GetValue&lt;string&gt;('reason', It.GetValue&lt;string&gt;('status', ''))]); Format('no change: %s -- not in this unit''s uses clause', [AUnitName])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UsesFixSummary(const AOutput, AUnitName: string): string;
 
 /// <summary>Tells whether an autofix summary reports at least one applied edit.</summary>
 /// <param name="ASummary">A value returned by AutofixSummary.</param>
 /// <returns>True for 'applied N edit(s)' with N above zero.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueFixJob (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: StrToIntDef</para>
+/// <para>Returns: M.Success and (StrToIntDef(M.Groups[1].Value, 0) &gt; 0)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AutofixApplied(const ASummary: string): Boolean;
 
 /// <summary>Summarises a `cycles --fix --format json` document (schema cycle-fix/1) in one line,
@@ -224,15 +351,39 @@ function AutofixApplied(const ASummary: string): Boolean;
 /// <para>'failed: &lt;error&gt;' for any other engine error; 'cycle fix: no circular group to fix' for an
 /// empty run; 'cycle fix: unreadable output' when there is no cycle-fix/1 object.</para>
 /// </returns>
-/// <remarks>Pure. Units are joined with ', ' in the engine's order; the group reported is the LAST
+/// <remarks>
+/// Pure. Units are joined with ', ' in the engine's order; the group reported is the LAST
 /// one (a default scan lists the groups it skipped first). ' cut &lt;edge&gt;' is left out when the recipe
-/// has no single edge (a Part A move). Seconds have one decimal, '.' separator.</remarks>
+/// has no single edge (a Part A move). Seconds have one decimal, '.' separator.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.CycleFixNote (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.DiagList.AppliedText, DragLint.Plugin.DiagList.DryRunText, DragLint.Plugin.DiagList.FirstRefusal, DragLint.Plugin.DiagList.GroupRolledBackText, DragLint.Plugin.DiagList.LastCycle, DragLint.Plugin.DiagList.ParseCycleFix, DragLint.Plugin.DiagList.RefusalText, DragLint.Plugin.DiagList.RolledBackText, SameText, StartsText</para>
+/// <para>Returns: RolledBackText(Err); 'failed: ' + Err; RefusalText(Root, Ref); 'cycle fix: no circular group to fix'; GroupRolledBackText(Cyc); AppliedText(Cyc)</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 25 lines (full implementation)</para>
+/// <seealso cref="DragLint.Plugin.DiagList.AppliedText"/>
+/// <seealso cref="DragLint.Plugin.DiagList.DryRunText"/>
+/// <seealso cref="DragLint.Plugin.DiagList.FirstRefusal"/>
+/// <seealso cref="DragLint.Plugin.DiagList.GroupRolledBackText"/>
+/// <seealso cref="DragLint.Plugin.DiagList.LastCycle"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleFixSummary(const AJson: string): string;
 
 /// <summary>Tells whether a `cycles --fix` DRY RUN may be offered for --apply.</summary>
 /// <param name="AJson">The dry run's output (as CycleFixSummary reads it).</param>
 /// <returns>True only for mode dry-run, no error, no refusal at either level, baseline status ok
 /// and a mechanical verdict on the group.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueCycleFixJob (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.DiagList.FirstRefusal, DragLint.Plugin.DiagList.LastCycle, DragLint.Plugin.DiagList.ParseCycleFix, DragLint.Plugin.DiagList.StatusOf, SameText</para>
+/// <para>Returns: RunClean and BaselineOk and GroupOk</para>
+/// <seealso cref="DragLint.Plugin.DiagList.FirstRefusal"/>
+/// <seealso cref="DragLint.Plugin.DiagList.LastCycle"/>
+/// <seealso cref="DragLint.Plugin.DiagList.ParseCycleFix"/>
+/// <seealso cref="DragLint.Plugin.DiagList.StatusOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleFixCanApply(const AJson: string): Boolean;
 
 /// <summary>The "Apply cycle fix" confirmation, built from a dry run's document.</summary>
@@ -240,18 +391,50 @@ function CycleFixCanApply(const AJson: string): Boolean;
 /// <returns>Lines joined by CRLF: the question naming the cycle's units, the recipe and the edge it
 /// cuts, the number of files edited, the new unit names (or 'none'), the baseline build status and
 /// time, and what happens on a failed build; '' when AJson is unreadable.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueCycleFixJob (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.DiagList.EditedFilesOf, DragLint.Plugin.DiagList.LastCycle, DragLint.Plugin.DiagList.ParseCycleFix, DragLint.Plugin.DiagList.SecondsOf, DragLint.Plugin.DiagList.StatusOf, DragLint.Plugin.DiagList.StringsOf, Format, TJSONObject</para>
+/// <para>Returns: ''</para>
+/// <seealso cref="DragLint.Plugin.DiagList.EditedFilesOf"/>
+/// <seealso cref="DragLint.Plugin.DiagList.LastCycle"/>
+/// <seealso cref="DragLint.Plugin.DiagList.ParseCycleFix"/>
+/// <seealso cref="DragLint.Plugin.DiagList.SecondsOf"/>
+/// <seealso cref="DragLint.Plugin.DiagList.StatusOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleFixConfirmText(const AJson: string): string;
 
 /// <summary>The files an applied `cycles --fix` wrote: the group's written[] array.</summary>
 /// <param name="AJson">The apply run's output.</param>
 /// <returns>Absolute paths in the engine's order; empty when nothing was written or AJson is unreadable.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueCycleFixApply (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.DiagList.LastCycle, DragLint.Plugin.DiagList.ParseCycleFix, DragLint.Plugin.DiagList.StringsOf</para>
+/// <para>Returns: StringsOf(LastCycle(Root), 'written')</para>
+/// <seealso cref="DragLint.Plugin.DiagList.LastCycle"/>
+/// <seealso cref="DragLint.Plugin.DiagList.ParseCycleFix"/>
+/// <seealso cref="DragLint.Plugin.DiagList.StringsOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleFixWrittenFiles(const AJson: string): TArray<string>;
 
 /// <summary>The files a `cycles --fix` plan edits: the distinct edits[].file of the group.</summary>
 /// <param name="AJson">A dry run's output.</param>
 /// <returns>Distinct paths (compared case-insensitively), sorted; empty when AJson is unreadable.</returns>
-/// <remarks>The IDE refuses --apply while any of them has unsaved edits: the apply rewrites them on
-/// disk and reloads the buffers, which would drop those edits.</remarks>
+/// <remarks>
+/// The IDE refuses --apply while any of them has unsaved edits: the apply rewrites them on
+/// disk and reloads the buffers, which would drop those edits.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.EnqueueCycleFixJob (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.DiagList.EditedFilesOf, DragLint.Plugin.DiagList.LastCycle, DragLint.Plugin.DiagList.ParseCycleFix</para>
+/// <para>Returns: EditedFilesOf(LastCycle(Root))</para>
+/// <seealso cref="DragLint.Plugin.DiagList.EditedFilesOf"/>
+/// <seealso cref="DragLint.Plugin.DiagList.LastCycle"/>
+/// <seealso cref="DragLint.Plugin.DiagList.ParseCycleFix"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleFixEditedFiles(const AJson: string): TArray<string>;
 
 implementation

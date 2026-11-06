@@ -29,8 +29,14 @@ const
 /// <summary>The compiled-in sink list -- the same names as the shipped
 /// rules\enum-persist-sinks.txt.</summary>
 /// <returns>Stream / pipe, dataset / SQL and registry / ini routine names.</returns>
-/// <remarks>Used only when the table file is missing, so a lost file never turns
-/// the rule into a silent no-op.</remarks>
+/// <remarks>
+/// Used only when the table file is missing, so a lost file never turns
+/// the rule into a silent no-op.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.EnumOrdinalPersisted.LoadEnumPersistSinks (DRagLint.Lint.EnumOrdinalPersisted.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DefaultEnumPersistSinks: TArray<string>;
 
 /// <summary>Reads a sink table: one name per line, '#' comment lines and blank
@@ -38,8 +44,17 @@ function DefaultEnumPersistSinks: TArray<string>;
 /// <param name="pPath">The table file. '' or a missing file selects
 /// DefaultEnumPersistSinks.</param>
 /// <returns>The sink names, trimmed, in file order.</returns>
-/// <remarks>An existing file is authoritative, even when it lists nothing. A file that
-/// exists but cannot be read propagates TFile.ReadAllLines' exception.</remarks>
+/// <remarks>
+/// An existing file is authoritative, even when it lists nothing. A file that
+/// exists but cannot be read propagates TFile.ReadAllLines' exception.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted (DRagLint.Lint.EnumOrdinalPersisted.pas)</para>
+/// <para>Calls: DRagLint.Lint.EnumOrdinalPersisted.DefaultEnumPersistSinks, Trim</para>
+/// <para>Returns: Acc.ToArray</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Lint.EnumOrdinalPersisted.DefaultEnumPersistSinks"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadEnumPersistSinks(const pPath: string): TArray<string>;
 
 /// <summary>Counts the values of an enum declaration and how many of them carry
@@ -48,9 +63,20 @@ function LoadEnumPersistSinks(const pPath: string): TArray<string>;
 /// `TKind = (kA = 0, kB { kB = 1 }, kC);` -- it may run past the declaration.</param>
 /// <param name="pTotal">Out: the number of values; 0 when no value list is found.</param>
 /// <returns>The number of values with an IMPLICIT ordinal.</returns>
-/// <remarks>Comments ({ }, (* *), //) and string literals are ignored, so a
+/// <remarks>
+/// Comments ({ }, (* *), //) and string literals are ignored, so a
 /// commented-out `= N` is not a pin. Parentheses nest, so `kA = Ord('a')` is one
-/// value. The scan stops at the value list's closing parenthesis.</remarks>
+/// value. The scan stops at the value list's closing parenthesis.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Diagnostics.EnumOrdinalCast.TEnumOrdinalCastChecker.Check.StoreEnumState (DRagLint.Diagnostics.EnumOrdinalCast.pas), DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted.Report (DRagLint.Lint.EnumOrdinalPersisted.pas)</para>
+/// <para>Calls: CharInSet, Copy, DRagLint.Lint.EnumOrdinalPersisted.CountImplicitOrdinals.CloseItem, DRagLint.Lint.EnumOrdinalPersisted.StripCommentsAndStrings, Pos, Trim</para>
+/// <para>Returns: 0</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 59 lines (full implementation)</para>
+/// <para>Mutates: pTotal (out)</para>
+/// <seealso cref="DRagLint.Lint.EnumOrdinalPersisted.CountImplicitOrdinals.CloseItem"/>
+/// <seealso cref="DRagLint.Lint.EnumOrdinalPersisted.StripCommentsAndStrings"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CountImplicitOrdinals(const pDeclText: string; out pTotal: Integer): Integer;
 
 /// <summary>Runs the rule over a project index.</summary>
@@ -62,10 +88,24 @@ function CountImplicitOrdinals(const pDeclText: string; out pTotal: Integer): In
 /// line with exactly one enum-bound ref -- (2) in a routine that also names a
 /// sink, and (3) has at least one value with an implicit ordinal. Anchored at the
 /// enum's declaration; the message names one boundary site and its sink.</returns>
-/// <remarks>Reads the source of each candidate enum's declaration from disk; an
+/// <remarks>
+/// Reads the source of each candidate enum's declaration from disk; an
 /// unreadable file costs that enum's finding only. Cast-in relies on the G1
 /// binding (resolver stream ResolveEnumCastRefs), so an index built before it
-/// sees cast-out sites only.</remarks>
+/// sees cast-out sites only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.CollectWholeGraphRule (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: Copy, CountImplicitOrdinals, DeclTextOf, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted.Report, DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted.ScanFile, DRagLint.Lint.EnumOrdinalPersisted.LoadEnumPersistSinks, DRagLint.Lint.UnusedEnumValue.DeclaredTypeName, Format, LowerCase, Offer, ParamStr, SameText</para>
+/// <para>Returns: Findings.ToArray</para>
+/// <para>Catches: EEncodingError (swallowed); EInOutError (swallowed); EStreamError (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted.Report"/>
+/// <seealso cref="DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted.ScanFile"/>
+/// <seealso cref="DRagLint.Lint.EnumOrdinalPersisted.LoadEnumPersistSinks"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectEnumOrdinalPersisted(const AStore: ISymbolStore;
   const ASinksPath: string = ''): TArray<TLintFinding>;
 

@@ -45,7 +45,8 @@ const
 /// file are returned.</param>
 /// <returns>One info finding per (call line, callee), anchored at the call line;
 /// the message names the callee, its effect summary and its witness.</returns>
-/// <remarks>A proven effect is <c>effect_free = 0</c> with a stored summary
+/// <remarks>
+/// A proven effect is <c>effect_free = 0</c> with a stored summary
 /// carrying <c>g</c>, <c>h</c>, <c>s</c> or <c>p&lt;k&gt;</c>; '?' alone never
 /// fires, nor does an unbound or non-certain edge. The call line is parsed and
 /// the call fires only when EVERY occurrence of the callee's name on that line is
@@ -64,7 +65,19 @@ const
 /// SQL read; and a <c>Rcv.F</c> whose left operands include
 /// <c>Assigned(Rcv)</c> or <c>Rcv &lt;&gt; nil</c>. NONE of these exempts an
 /// ACCUMULATOR, <c>X:= X or F(..)</c>: there the call is lost once X is decided,
-/// which is the bug this rule exists for. Never raises.</remarks>
+/// which is the bug this rule exists for. Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: Default, DRagLint.Analysis.Purity.TEffectSummary.Decode, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetAllSymbolFacts, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.EffectRules.AcceptCallSite, DRagLint.Lint.EffectRules.AndOrNear (+10 more)</para>
+/// <para>Returns: Findings.ToArray</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 82 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Decode"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllSymbolFacts"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectSideEffectInShortCircuit(const AStore: ISymbolStore;
   AOnlyFileId: Int64): TArray<TLintFinding>;
 
@@ -75,12 +88,25 @@ function CollectSideEffectInShortCircuit(const AStore: ISymbolStore;
 /// file are returned.</param>
 /// <returns>One info finding per property, anchored at its declaration; the
 /// message names the getter, its effect summary and its witness.</returns>
-/// <remarks>The getter is matched by name inside the property's own class in
+/// <remarks>
+/// The getter is matched by name inside the property's own class in
 /// the same file (<c>Unit.TClass.Getter</c>); an inherited getter, a field
 /// accessor and an indexed or dotted accessor expression are not judged.
 /// LAZY-INIT / MEMO EXEMPTION: a getter whose body has an if / while condition
 /// that tests <c>nil</c>, calls <c>Assigned</c>, or names a variable the getter
-/// itself assigns (other than Result) is exempt. Never raises.</remarks>
+/// itself assigns (other than Result) is exempt. Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: Default, DRagLint.Analysis.Purity.TEffectSummary.Decode, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts, DRagLint.Core.Interfaces.ISymbolStore.GetAllSymbolFacts, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.EffectRules.CollectNodesOfType, DRagLint.Lint.EffectRules.IsLazyInitGetter, DRagLint.Lint.EffectRules.NodeText, DRagLint.Lint.EffectRules.OwningTypeName (+7 more)</para>
+/// <para>Returns: Findings.ToArray</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 76 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Analysis.Purity.TEffectSummary.Decode"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllSymbolFacts"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectPropertyGetterWithEffect(const AStore: ISymbolStore;
   AOnlyFileId: Int64): TArray<TLintFinding>;
 
@@ -92,14 +118,27 @@ function CollectPropertyGetterWithEffect(const AStore: ISymbolStore;
 /// file are returned.</param>
 /// <returns>One warning per Execute call line, anchored there; the message
 /// prints the shortest call path and the UI names the last routine touches.</returns>
-/// <remarks>Only certain call_edges rows are walked (backwards, from each
+/// <remarks>
+/// Only certain call_edges rows are walked (backwards, from each
 /// UI-touching routine). An edge whose callee name sits inside the arguments of
 /// a <c>Synchronize</c>, <c>Queue</c> or <c>ForceQueue</c> call is not walked,
 /// and a UI routine whose own body mentions Synchronize, Queue, MainThreadID or
 /// CurrentThread is taken to marshal itself. The thread class is recognised by
 /// the store's descendant closure of the name <c>TThread</c>. Direct UI access
 /// in Execute's own body stays the job of the AST rule
-/// <c>ui-access-in-thread</c>; this rule reports hops >= 1 only. Never raises.</remarks>
+/// <c>ui-access-in-thread</c>; this rule reports hops >= 1 only. Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetAllSymbolFacts, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Lint.EffectRules.CollectUiAccessInThreadTransitive.CallersOf, DRagLint.Lint.EffectRules.CollectUiAccessInThreadTransitive.IsThreadExecute, DRagLint.Lint.EffectRules.CollectUiAccessInThreadTransitive.SymOf, DRagLint.Lint.EffectRules.EdgeMarshalled, DRagLint.Lint.EffectRules.MarshalsItself, DRagLint.Lint.EffectRules.ShortName, Format, LowerCase, SameText</para>
+/// <para>Returns: Findings.ToArray</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 137 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllSymbolFacts"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Lint.EffectRules.CollectUiAccessInThreadTransitive.CallersOf"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectUiAccessInThreadTransitive(const AStore: ISymbolStore;
   AOnlyFileId: Int64): TArray<TLintFinding>;
 
@@ -111,7 +150,8 @@ function CollectUiAccessInThreadTransitive(const AStore: ISymbolStore;
 /// file are returned.</param>
 /// <returns>One info finding per (call line, callee), anchored at the call line;
 /// the message names the callee, the loop's line and which proof holds.</returns>
-/// <remarks>ABSENCE OVER A WRONG FINDING. Inside a loop means its body or a
+/// <remarks>
+/// ABSENCE OVER A WRONG FINDING. Inside a loop means its body or a
 /// while / until condition; a for bound and a for-in enumerable run once and do
 /// not count. Every overload and override of the name must be proven effect-free.
 /// ARGUMENTS and RECEIVER are invariant when each name is a by-value local or
@@ -127,7 +167,19 @@ function CollectUiAccessInThreadTransitive(const AStore: ISymbolStore;
 /// is no local; a with or asm around or inside the loop silences it. A one-line accessor is
 /// not worth hoisting and never fires. Assumes no other thread writes what the
 /// callee reads, and that a property getter has no effect (see
-/// property-getter-with-effect). Never raises.</remarks>
+/// property-getter-with-effect). Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.EffectRules.AcceptCallSite, DRagLint.Lint.EffectRules.CallNodeOf, DRagLint.Lint.EffectRules.CollectIdentsOnRow, DRagLint.Lint.EffectRules.EnclosingIteratedLoop (+15 more)</para>
+/// <para>Returns: Findings.ToArray</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 87 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsWithFacts"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CollectEffectFreeInLoopInvariant(const AStore: ISymbolStore;
   AOnlyFileId: Int64): TArray<TLintFinding>;
 

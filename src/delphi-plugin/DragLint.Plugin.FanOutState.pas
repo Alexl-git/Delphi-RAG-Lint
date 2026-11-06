@@ -70,9 +70,15 @@ const
 type
   /// <summary>Where an engine run is pointed: the executable, the unit under
   /// edit, and the index and project context to resolve it in.</summary>
-  /// <remarks>A record rather than five more parameters because BOTH builders
+  /// <remarks>
+  /// A record rather than five more parameters because BOTH builders
   /// need exactly this set, and the caller (FanOut) was independently keeping
-  /// its own copy of the same five fields. One shape, defined once.</remarks>
+  /// its own copy of the same five fields. One shape, defined once.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.FanOut.pas), declaration (DragLint.Plugin.FanOutState.pas), DragLint.Plugin.FanOutState.BuildBaselineCmdLine (DragLint.Plugin.FanOutState.pas), DragLint.Plugin.FanOutState.BuildFanOutCmdLine (DragLint.Plugin.FanOutState.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.FanOut, DragLint.Plugin.FanOutState</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEngineTarget = record
     /// <summary>Full path to drag-lint.exe.</summary>
     Exe     : string;
@@ -88,6 +94,12 @@ type
 
   /// <summary>One reportable place a dependent still refers to something the
   /// edit removed or changed.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.FanOutState.pas), DragLint.Plugin.FanOut.PaintRows (DragLint.Plugin.FanOut.pas), DragLint.Plugin.FanOutState.FindingRowText (DragLint.Plugin.FanOutState.pas), DragLint.Plugin.FanOutState.ParseFanOutJson (DragLint.Plugin.FanOutState.pas), DragLint.Plugin.FanOutState.TFanOutResult.UnitPaths (DragLint.Plugin.FanOutState.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.FanOut, DragLint.Plugin.FanOutState</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFanOutFinding = record
     FilePath : string ;
     Line     : Integer;
@@ -103,6 +115,12 @@ type
   end;
 
   /// <summary>A parsed `lint-tree --format json` result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.FanOutState.pas) ?, DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas), DragLint.Plugin.FanOut.PaintRows (DragLint.Plugin.FanOut.pas) ?, DragLint.Plugin.FanOutState.FanOutTitleText (DragLint.Plugin.FanOutState.pas) ?, DragLint.Plugin.FanOutState.ParseFanOutJson (DragLint.Plugin.FanOutState.pas) (+2 more)</para>
+  /// <para>Used in units: DragLint.Plugin.FanOut, DragLint.Plugin.FanOutState</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFanOutResult = record
     Ok         : Boolean;   { the JSON parsed at all }
     Changed    : Boolean;
@@ -126,18 +144,36 @@ type
     /// <returns>Each affected file once, in first-seen order and compared
     /// case-insensitively -- the same file reached through two findings is one
     /// entry, or the "in N units" count would exaggerate the blast radius.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas), DragLint.Plugin.FanOut.PaintRows (DragLint.Plugin.FanOut.pas), DragLint.Plugin.FanOutState.FanOutTitleText (DragLint.Plugin.FanOutState.pas), DragLint.Plugin.FanOutState.TFanOutEpisode.Accept (DragLint.Plugin.FanOutState.pas)</para>
+    /// <para>Returns: Seen.ToStringArray</para>
+    /// <para>Reads: Findings</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function UnitPaths: TArray<string>;
   end;
 
   /// <summary>How a result was disposed of, for the telemetry line and for the
   /// tests -- "it did not appear" is true of far too many different bugs to be
   /// a useful observation on its own.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.FanOutState.pas), DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas), DragLint.Plugin.FanOutState.TFanOutEpisode.Dispose (DragLint.Plugin.FanOutState.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFanOutDisposition = (fdAccepted, fdStaleGeneration, fdSubjectChanged, fdParseError);
 
   /// <summary>The edit episode: the baseline, the worklist, the discard
   /// back-off and the generation bookkeeping.</summary>
-  /// <remarks>Main thread only. The worker hands results back through the
-  /// owning unit's TThread.Queue, not by touching this.</remarks>
+  /// <remarks>
+  /// Main thread only. The worker hands results back through the
+  /// owning unit's TThread.Queue, not by touching this.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.FanOut.pas) ?, DragLint.Plugin.FanOut.StartFanOut (DragLint.Plugin.FanOut.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.FanOut</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFanOutEpisode = class
     private
       FSubject       : string ;
@@ -149,7 +185,30 @@ type
       FWorklist      : TList<string>;
       FBaselineFp    : string ;
     public
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOut.StartFanOut (DragLint.Plugin.FanOut.pas)</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FWorklist</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Accept"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.BeginEpisode"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.CurrentDebounceMs"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Dispose"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FWorklist</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Accept"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.BeginEpisode"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Create"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.CurrentDebounceMs"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Dispose"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
 
       /// <summary>Begins an episode for AUnitPath, or does nothing if one is
@@ -157,17 +216,52 @@ type
       /// <param name="AUnitPath">The unit being edited.</param>
       /// <param name="ABaselineFile">Where the engine will write the baseline.</param>
       /// <returns>True if a baseline still has to be captured.</returns>
-      /// <remarks>The baseline is the OLD side for every diff in the episode;
-      /// capturing it per run would compare the buffer against itself.</remarks>
+      /// <remarks>
+      /// The baseline is the OLD side for every diff in the episode;
+      /// capturing it per run would compare the buffer against itself.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOut.LaunchRun (DragLint.Plugin.FanOut.pas)</para>
+      /// <para>Calls: SameText</para>
+      /// <para>Returns: True</para>
+      /// <para>Reads: FActive, FSubject, FWorklist   Writes: FSubject, FBaselineFile, FActive, FDiscards, FLaunchedGen, FAcceptedGen, FBaselineFp</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Accept"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Create"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.CurrentDebounceMs"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Dispose"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function BeginEpisode(const AUnitPath, ABaselineFile: string): Boolean;
 
       /// <summary>Records the fingerprint the baseline capture reported, so a
       /// later return to that exact shape can end the episode.</summary>
       /// <param name="AFingerprint">The baseline's own fingerprint.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas)</para>
+      /// <para>Writes: FBaselineFp</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Accept"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.BeginEpisode"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Create"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.CurrentDebounceMs"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure NoteBaselineFingerprint(const AFingerprint: string);
 
       /// <summary>Records that generation AGeneration has been launched.</summary>
       /// <param name="AGeneration">The launch token from TFanOutGate.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOut.LaunchRun (DragLint.Plugin.FanOut.pas)</para>
+      /// <para>Reads: FLaunchedGen   Writes: FLaunchedGen</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Accept"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.BeginEpisode"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Create"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.CurrentDebounceMs"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure NoteLaunch(AGeneration: Integer);
 
       /// <summary>Decides what to do with a result that has come back.</summary>
@@ -175,39 +269,121 @@ type
       /// <param name="AResult">The parsed result.</param>
       /// <returns>fdAccepted only when this is the newest generation and the
       /// buffer parsed; every other value means the rows are not shown.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas)</para>
+      /// <para>Returns: fdStaleGeneration; fdSubjectChanged; fdParseError; fdAccepted</para>
+      /// <para>Reads: FLaunchedGen, FActive   Writes: FDiscards</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Accept"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.BeginEpisode"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Create"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.CurrentDebounceMs"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Dispose(AGeneration: Integer; const AResult: TFanOutResult): TFanOutDisposition;
 
       /// <summary>Accepts a result: replaces the worklist and clears the
       /// back-off.</summary>
       /// <param name="AResult">The result whose rows are being shown.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas)</para>
+      /// <para>Calls: DragLint.Plugin.FanOutState.TFanOutResult.UnitPaths</para>
+      /// <para>Reads: FWorklist, FLaunchedGen   Writes: FAcceptedGen, FDiscards</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutResult.UnitPaths"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.BeginEpisode"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Create"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.CurrentDebounceMs"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Accept(const AResult: TFanOutResult);
 
       /// <summary>Drops one dependent's rows because that dependent was edited.</summary>
       /// <param name="AFile">The dependent that changed.</param>
       /// <returns>True if it had rows to drop.</returns>
-      /// <remarks>Only that file's rows go. Discarding the whole result for an
+      /// <remarks>
+      /// Only that file's rows go. Discarding the whole result for an
       /// edit to one dependent would make the tab flicker empty every time you
-      /// touched any file it named.</remarks>
+      /// touched any file it named.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.FanOutState.TFanOutEpisode.EndEpisode, SameText</para>
+      /// <para>Returns: False; True</para>
+      /// <para>Reads: FWorklist</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.EndEpisode"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Accept"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.BeginEpisode"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Create"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.CurrentDebounceMs"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function DropDependent(const AFile: string): Boolean;
 
       /// <summary>Ends the episode and forgets the baseline.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOutState.TFanOutEpisode.DropDependent (DragLint.Plugin.FanOutState.pas)</para>
+      /// <para>Reads: FWorklist   Writes: FActive, FSubject, FBaselineFile, FBaselineFp, FDiscards</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Accept"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.BeginEpisode"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Create"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.CurrentDebounceMs"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure EndEpisode;
 
       /// <summary>Whether the episode should end because the interface came
       /// back to where it started.</summary>
       /// <param name="AFingerprint">The buffer's current fingerprint.</param>
       /// <returns>True when it equals the baseline's.</returns>
-      /// <remarks>An undo back to the starting shape means there is nothing
-      /// left to answer; ending here is what stops an empty tab lingering.</remarks>
+      /// <remarks>
+      /// An undo back to the starting shape means there is nothing
+      /// left to answer; ending here is what stops an empty tab lingering.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Returns: FActive and (FBaselineFp &lt;&gt; '') and (AFingerprint = FBaselineFp)</para>
+      /// <para>Reads: FActive, FBaselineFp</para>
+      /// <para>Effect-free (proven)</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Accept"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.BeginEpisode"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Create"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.CurrentDebounceMs"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ShouldEndOnFingerprint(const AFingerprint: string): Boolean;
 
       /// <summary>The wait before the next launch, doubled per consecutive
       /// discard and capped.</summary>
       /// <returns>Milliseconds, between the base and the cap.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas)</para>
+      /// <para>Reads: FDiscards</para>
+      /// <para>Effect-free (proven)</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Accept"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.BeginEpisode"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Create"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Dispose"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function CurrentDebounceMs: Integer;
 
       /// <summary>A save resets the back-off: the user has stopped and said
       /// what they mean.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOut.NotifyFanOutSave (DragLint.Plugin.FanOut.pas)</para>
+      /// <para>Writes: FDiscards</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Accept"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.BeginEpisode"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Create"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.CurrentDebounceMs"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure NoteSave;
 
       property Active      : Boolean read FActive;
@@ -222,8 +398,14 @@ type
   end;
 
   /// <summary>When tier 3 (compile the dependents) may run.</summary>
-  /// <remarks>Main thread only; ticks are passed in so the quiet period is
-  /// testable without waiting fifteen seconds.</remarks>
+  /// <remarks>
+  /// Main thread only; ticks are passed in so the quiet period is
+  /// testable without waiting fifteen seconds.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.FanOut.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.FanOut</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTreeCompileTrigger = record
     private
       FArmed     : Boolean;
@@ -233,29 +415,82 @@ type
       FForced    : Boolean;
     public
       /// <summary>Forgets any armed trigger and resets the back-off.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOut.StartFanOut (DragLint.Plugin.FanOut.pas)</para>
+      /// <para>Writes: FArmed, FArmedAt, FQuietMs, FGeneration, FForced</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.ArmAfterTier2"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.NoteEdit"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.NoteSave"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.ShouldFire"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Reset;
 
       /// <summary>Arms the trigger because tier 2 finished for AGeneration.</summary>
       /// <param name="AGeneration">The generation tier 2 answered.</param>
       /// <param name="ANowTick">GetTickCount64.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas)</para>
+      /// <para>Reads: FQuietMs   Writes: FQuietMs, FArmed, FArmedAt, FGeneration</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.NoteEdit"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.NoteSave"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.Reset"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.ShouldFire"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ArmAfterTier2(AGeneration: Integer; ANowTick: UInt64);
 
       /// <summary>An edit landed, so the quiet period restarts and lengthens.</summary>
       /// <param name="ANowTick">GetTickCount64.</param>
-      /// <remarks>Backs off 15/30/60 s capped, because a compile interrupted
-      /// twice is a session where compiling on every pause is the wrong idea.</remarks>
+      /// <remarks>
+      /// Backs off 15/30/60 s capped, because a compile interrupted
+      /// twice is a session where compiling on every pause is the wrong idea.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOut.StartFanOutRun (DragLint.Plugin.FanOut.pas)</para>
+      /// <para>Reads: FArmed, FQuietMs   Writes: FArmedAt, FQuietMs</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.ArmAfterTier2"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.NoteSave"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.Reset"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.ShouldFire"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure NoteEdit(ANowTick: UInt64);
 
       /// <summary>A save: force the compile at the next check and reset the
       /// back-off.</summary>
-      /// <remarks>The one moment the user has declared the state final, so it
-      /// overrides the quiet period rather than restarting it.</remarks>
+      /// <remarks>
+      /// The one moment the user has declared the state final, so it
+      /// overrides the quiet period rather than restarting it.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOut.NotifyFanOutSave (DragLint.Plugin.FanOut.pas)</para>
+      /// <para>Reads: FArmed   Writes: FQuietMs, FForced</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.ArmAfterTier2"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.NoteEdit"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.Reset"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.ShouldFire"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure NoteSave;
 
       /// <summary>Whether tier 3 should start now.</summary>
       /// <param name="ANowTick">GetTickCount64.</param>
       /// <param name="AGeneration">Receives the generation to compile.</param>
       /// <returns>True at most once per arming.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.FanOut.TFanOutTicker.OnTick (DragLint.Plugin.FanOut.pas)</para>
+      /// <para>Calls: UInt64</para>
+      /// <para>Returns: False; True</para>
+      /// <para>Reads: FArmed, FForced, FArmedAt, FQuietMs, FGeneration   Writes: FArmed, FForced</para>
+      /// <para>Mutates: AGeneration (out)</para>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.ArmAfterTier2"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.NoteEdit"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.NoteSave"/>
+      /// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.Reset"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ShouldFire(ANowTick: UInt64; out AGeneration: Integer): Boolean;
 
       /// <summary>Current quiet period, after any back-off.</summary>
@@ -267,6 +502,13 @@ type
 /// <param name="ABaselineFile">Where to write the baseline JSON.</param>
 /// <returns>A quoted command line. NO --buffer: the baseline is the state on
 /// DISK at the start of the episode.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas)</para>
+/// <para>Calls: DragLint.Plugin.FanOutState.OptionalArgs, Format</para>
+/// <seealso cref="DragLint.Plugin.FanOutState.OptionalArgs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildBaselineCmdLine(const ATarget: TEngineTarget;
                               const ABaselineFile: string): string;
 
@@ -278,6 +520,13 @@ function BuildBaselineCmdLine(const ATarget: TEngineTarget;
 /// <param name="ABufferFile">The unsaved buffer, snapshotted to a temp file.</param>
 /// <param name="ACompile">True for tier 3 (shadow-compile the dependents).</param>
 /// <returns>A quoted command line ending in --format json.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas)</para>
+/// <para>Calls: DragLint.Plugin.FanOutState.OptionalArgs, Format</para>
+/// <seealso cref="DragLint.Plugin.FanOutState.OptionalArgs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildFanOutCmdLine(const ATarget: TEngineTarget;
                             const ABaselineFile, ABufferFile: string;
                             ACompile: Boolean): string;
@@ -287,15 +536,31 @@ function BuildFanOutCmdLine(const ATarget: TEngineTarget;
 /// <param name="AResult">Receives the parsed result; Ok is False if the text
 /// was not JSON at all.</param>
 /// <returns>AResult.Ok.</returns>
-/// <remarks>Never raises: the engine's stdout can be a usage banner, a stack
+/// <remarks>
+/// Never raises: the engine's stdout can be a usage banner, a stack
 /// trace or nothing, and a background feature that raises on that is a
-/// background feature that takes the IDE with it.</remarks>
+/// background feature that takes the IDE with it.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.FanOut.FanOutWorker (DragLint.Plugin.FanOut.pas)</para>
+/// <para>Calls: Copy, Default, Format, TJSONObject, Trim</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 95 lines (full implementation)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AResult (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseFanOutJson(const AJson: string; out AResult: TFanOutResult): Boolean;
 
 /// <summary>The message-group row text for one finding.</summary>
 /// <param name="AFinding">The finding.</param>
 /// <returns>Rule, message, and an explicit UNCHECKED marker when the line may
 /// have moved.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.FanOut.PaintRows (DragLint.Plugin.FanOut.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindingRowText(const AFinding: TFanOutFinding): string;
 
 /// <summary>The title row: what was found, in how many units, for which
@@ -305,6 +570,13 @@ function FindingRowText(const AFinding: TFanOutFinding): string;
 /// <returns>A single line, including the count of suppressed ambiguous joins
 /// when there were any -- an uncounted suppression is the all-clear this
 /// feature exists to prevent.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.FanOut.PaintRows (DragLint.Plugin.FanOut.pas)</para>
+/// <para>Calls: DragLint.Plugin.FanOutState.TFanOutResult.UnitPaths, Format</para>
+/// <seealso cref="DragLint.Plugin.FanOutState.TFanOutResult.UnitPaths"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FanOutTitleText(const AResult: TFanOutResult; AGeneration: Integer): string;
 
 implementation

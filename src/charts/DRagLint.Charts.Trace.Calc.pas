@@ -53,6 +53,12 @@ const
 
 type
   /// <summary>One ref of a handler (the PS $H.Refs row): a read, write, call or member access with its binding.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.CalcFieldByNameRow (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.InAnyRhs (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.RefsOfKind (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.ResolveCalcRead (DRagLint.Charts.Trace.Calc.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCalcRef = record
     /// <summary>read, write, call or member-access.</summary>
     Kind : string;
@@ -77,7 +83,13 @@ type
   end;
 
   /// <summary>One handler's facts: its refs, its locals and parameters and its FRESH source.</summary>
-  /// <remarks>Owns Locals. Nested routines' refs are left out, as the PS Get-RoutineFacts does.</remarks>
+  /// <remarks>
+  /// Owns Locals. Nested routines' refs are left out, as the PS Get-RoutineFacts does.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.CalcConditions (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.FindCalcWrites (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.RefsOfKind (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadHandler (DRagLint.Charts.Trace.Calc.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCalcHandler = class
   private
     FName: string;
@@ -106,13 +118,32 @@ type
     /// <summary>The comment/string-stripped lines with the same columns.</summary>
     property Stripped: TArray<string> read FStripped write FStripped;
     /// <summary>Constructor.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadHandler (DRagLint.Charts.Trace.Calc.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcHandler.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees Locals.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcHandler.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
   /// <summary>One event wired on the dataset, with its handler's facts.</summary>
-  /// <remarks>Owns H.</remarks>
+  /// <remarks>
+  /// Owns H.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.NewCalcInfo (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.TCalcFacts.Create (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadWirings (DRagLint.Charts.Trace.Calc.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCalcWiring = class
   private
     FEvent: string;
@@ -132,10 +163,21 @@ type
     /// <summary>The handler's facts.</summary>
     property H: TCalcHandler read FH write FH;
     /// <summary>Destructor.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
   /// <summary>One TField variable's binding from its write rows.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.CalcFieldByNameRow (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.CalcSourceRow (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.NewCalcInfo.Take (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadBindings (DRagLint.Charts.Trace.Calc.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCalcBinding = record
     /// <summary>The variable's name.</summary>
     VarName: string;
@@ -162,6 +204,12 @@ type
   end;
 
   /// <summary>The line that CREATES the field: its name as a literal beside the dataset, its first call and the FieldKind that call sets.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadCreating (DRagLint.Charts.Trace.Calc.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCalcCreating = record
     /// <summary>False for the PS $null.</summary>
     Present : Boolean;
@@ -180,7 +228,13 @@ type
   end;
 
   /// <summary>The facts ResolveCalcField decides on (read from the index and the fresh source, or synthetic).</summary>
-  /// <remarks>Owns Bindings, ClassFields and Wirings. IsColumn is the SQL catalogue's column test for the anchor table.</remarks>
+  /// <remarks>
+  /// Owns Bindings, ClassFields and Wirings. IsColumn is the SQL catalogue's column test for the anchor table.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.CalcColumnLabel (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.CalcFieldByNameRow (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.ResolveCalcRead (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.TCalcFactsReader.Facts (DRagLint.Charts.Trace.Calc.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCalcFacts = class
   private
     FField: string;
@@ -218,12 +272,31 @@ type
     /// <summary>Whether a literal is a column of Table.</summary>
     property IsColumn: TFunc<string, Boolean> read FIsColumn write FIsColumn;
     /// <summary>Constructor.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Calc.TCalcFactsReader.Facts (DRagLint.Charts.Trace.Calc.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFacts.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees what it owns.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFacts.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
   /// <summary>One guard or enclosing condition of the computation, VERBATIM.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.CalcConditions (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.CalcConditions.AddCond (DRagLint.Charts.Trace.Calc.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCalcCond = record
     /// <summary>WHEN or UNLESS.</summary>
     Keyword  : string;
@@ -236,6 +309,12 @@ type
   end;
 
   /// <summary>The call that computes the value.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.CalcHeadCall (DRagLint.Charts.Trace.Calc.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCalcHeadCall = record
     /// <summary>False when no write's right-hand side starts with a call.</summary>
     Present: Boolean;
@@ -248,6 +327,12 @@ type
   end;
 
   /// <summary>One offered source as row data.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.CalcFieldByNameRow (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.CalcSourceRow (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.NewCalcInfo (DRagLint.Charts.Trace.Calc.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCalcSource = record
     /// <summary>The row text (`FROM T.C VIA V`).</summary>
     Text    : string;
@@ -272,6 +357,12 @@ type
   end;
 
   /// <summary>What ResolveCalcField decided: self-contained, so the facts may be freed.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Trace.Calc.NewCalcFieldItems (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Calc.NewCalcInfo (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Calc.ResolveCalcField (DRagLint.Charts.Trace.Calc.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCalcInfo = class
   private
     FKind: string;
@@ -317,7 +408,13 @@ type
   end;
 
   /// <summary>The Form A items of a calculated anchor.</summary>
-  /// <remarks>The caller owns Stop and Rows.</remarks>
+  /// <remarks>
+  /// The caller owns Stop and Rows.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Calc.NewCalcFieldItems (DRagLint.Charts.Trace.Calc.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCalcFieldItems = record
     /// <summary>The STOPS step with its conditions and the VIA facet.</summary>
     Stop: TTraceItem;
@@ -328,7 +425,13 @@ type
   end;
 
   /// <summary>Reads the calc-field facts of an anchor dataset over one Delphi index and decides on them.</summary>
-  /// <remarks>Nothing passed in is owned; all must outlive the reader and any TCalcFacts it made. Not thread-safe.</remarks>
+  /// <remarks>
+  /// Nothing passed in is owned; all must outlive the reader and any TCalcFacts it made. Not thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCalcFactsReader = class  // dl:ok high-response@b28b -- REVIEWED 2026-10-17: the reader IS the PS Get-CalcFieldFacts / Get-CalcHandler family; its response set is the index queries and the Part 1 resolver calls each fact needs, already split into per-fact private methods
   private
     FIndex   : TChartsIndex;
@@ -336,9 +439,84 @@ type
     FResolver: TTraceAnchorResolver;
     FCatalog : TSqlCatalog;
     FSet     : TSqlTableSet;
+    /// <summary><!-- drag-lint:auto sum -->One handler's facts: its refs (nested
+    /// routines' left out), its locals and parameters, and its FRESH source (a stale file
+    /// refuses). Port of Get-CalcHandler + Get-TraceSource (Trace.Walk.ps1:794, 2418).</summary>
+    /// <param name="pW"><!-- drag-lint:auto type -->const TEventWiring</param>
+    /// <returns><!-- drag-lint:auto -->TCalcHandler -- Observed: TCalcHandler.Create.</returns>
+    /// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Source.TSourceReader.SourceFresh: Test-SourceFresh:</exception>
+    /// <exception cref="EChartsTrace"><!-- drag-lint:auto exc -->round-trip:</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadWirings (DRagLint.Charts.Trace.Calc.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Source.ReadLatin1, DRagLint.Charts.Source.SplitLines, DRagLint.Charts.Source.TSourceReader.ReadPath, DRagLint.Charts.Source.TSourceReader.SourceFresh, DRagLint.Charts.Source.TSourceReader.StrippedSourceLines, DRagLint.Charts.Trace.Calc.TCalcHandler.Create, ExtractFileName, FreeAndNil, IntToStr</para>
+    /// <para>Reads: FIndex, FReader</para>
+    /// <para>SQL: reads FILES, REFS, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Source.ReadLatin1"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ReadHandler(const pW: TEventWiring): TCalcHandler;
+    /// <summary><!-- drag-lint:auto sum -->Every TField variable of the class bound by
+    /// exactly one (dataset field, column literal) pair. Port of Get-CalcBinding
+    /// (Trace.Walk.ps1:2400).</summary>
+    /// <param name="pDs"><!-- drag-lint:auto type -->const TTraceDataSet</param>
+    /// <param name="pCol"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pFacts"><!-- drag-lint:auto type -->TCalcFacts</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Calc.TCalcFactsReader.Facts (DRagLint.Charts.Trace.Calc.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Trace.Anchor.FieldVarPairs, DRagLint.Charts.Trace.Anchor.FieldVarSiteGrade, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FieldVarWriteRows, Format, SameText</para>
+    /// <para>Reads: FResolver</para>
+    /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.FieldVarPairs"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.FieldVarSiteGrade"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FieldVarWriteRows"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Apply"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ReadBindings(const pDs: TTraceDataSet; const pCol: string; pFacts: TCalcFacts);
+    /// <summary><!-- drag-lint:auto sum -->Every event wired on the dataset: OnCalcFields
+    /// decides; any other On* / After* / Before* names a field set there.</summary>
+    /// <param name="pDs"><!-- drag-lint:auto type -->const TTraceDataSet</param>
+    /// <param name="pFacts"><!-- drag-lint:auto type -->TCalcFacts</param>
+    /// <exception cref="EChartsTrace"><!-- drag-lint:auto exc -->via DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadHandler: round-trip:</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Calc.TCalcFactsReader.Facts (DRagLint.Charts.Trace.Calc.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.EventWiring, DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadHandler, DRagLint.Charts.Trace.Calc.TStable.Sort, IntToStr, SameText</para>
+    /// <para>Reads: FIndex, FResolver</para>
+    /// <para>SQL: reads REFS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.EventWiring"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadHandler"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ReadWirings(const pDs: TTraceDataSet; pFacts: TCalcFacts);
+    /// <summary><!-- drag-lint:auto sum -->The line that CREATES the field: its name as a
+    /// literal beside the dataset on a line that writes no variable; its first call, and
+    /// the FieldKind that call's body sets.</summary>
+    /// <param name="pDs"><!-- drag-lint:auto type -->const TTraceDataSet</param>
+    /// <param name="pCol"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pFacts"><!-- drag-lint:auto type -->TCalcFacts</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Calc.TCalcFactsReader.Facts (DRagLint.Charts.Trace.Calc.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlInList, DRagLint.Charts.Index.TChartsIndex.SqlText, IntToStr</para>
+    /// <para>Reads: FIndex</para>
+    /// <para>SQL: reads FILES, REFS, STRING_LITERALS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlInList"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Apply"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ReadCreating(const pDs: TTraceDataSet; const pCol: string; pFacts: TCalcFacts);
   public
     /// <summary>Constructor.</summary>
@@ -347,6 +525,18 @@ type
     /// <param name="pResolver">The anchor resolver (event wirings, write rows, table datasets).</param>
     /// <param name="pCatalog">The SQL catalogue (column states).</param>
     /// <param name="pSet">The SQL table set.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FIndex, FReader, FResolver, FCatalog, FSet</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Apply"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Facts"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Info"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadBindings"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadCreating"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(pIndex: TChartsIndex; pReader: TSourceReader; pResolver: TTraceAnchorResolver; pCatalog: TSqlCatalog;
       pSet: TSqlTableSet);
     /// <summary>The facts ResolveCalcField decides on.</summary>
@@ -354,21 +544,59 @@ type
     /// <param name="pCol">The field as the selection names it.</param>
     /// <param name="pTable">The anchor table.</param>
     /// <returns>The facts; the caller frees them.</returns>
-    /// <remarks>Port of Get-CalcFieldFacts / Get-CalcHandler (Trace.Walk.ps1:2418-2496). A handler file that differs from the indexed
-    /// copy is REFUSED by name: the handler read raises EChartsTrace with the PS text (AC-14), and so does Info / Apply.</remarks>
+    /// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Columns.SqlColumnState: Get-SqlColumnState: no table %s in the SQL index -- the caller checks the table first</exception>
+    /// <remarks>
+    /// Port of Get-CalcFieldFacts / Get-CalcHandler (Trace.Walk.ps1:2418-2496). A handler file that differs from the indexed
+    /// copy is REFUSED by name: the handler read raises EChartsTrace with the PS text (AC-14), and so does Info / Apply.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Calc.TCalcFactsReader.Info (DRagLint.Charts.Trace.Calc.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Columns.SqlColumnState, DRagLint.Charts.Columns.TServerSqlHit.None, DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.TableDataSetRows, DRagLint.Charts.Trace.Calc.TCalcFacts.Create, DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadBindings, DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadCreating, DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadWirings, FreeAndNil, IntToStr, Trim</para>
+    /// <para>Returns: TCalcFacts.Create</para>
+    /// <para>Reads: FIndex, FResolver, FCatalog, FSet</para>
+    /// <para>SQL: reads SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Columns.SqlColumnState"/>
+    /// <seealso cref="DRagLint.Charts.Columns.TServerSqlHit.None"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Facts(const pDs: TTraceDataSet; const pCol, pTable: string): TCalcFacts;
     /// <summary>Is the field calculated (or an event / lookup field)?</summary>
     /// <param name="pDs">The anchor dataset field.</param>
     /// <param name="pCol">The field as the selection names it.</param>
     /// <param name="pTable">The anchor table.</param>
     /// <returns>nil when not calculated; else the decision, which the caller owns.</returns>
-    /// <remarks>Port of Get-CalcFieldInfo (Trace.Walk.ps1:2494).</remarks>
+    /// <remarks>
+    /// Port of Get-CalcFieldInfo (Trace.Walk.ps1:2494).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Calc.TCalcFactsReader.Apply (DRagLint.Charts.Trace.Calc.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Trace.Calc.ResolveCalcField, DRagLint.Charts.Trace.Calc.TCalcFactsReader.Facts</para>
+    /// <para>Returns: ResolveCalcField(F)</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.ResolveCalcField"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Facts"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Apply"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Create"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadBindings"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Info(const pDs: TTraceDataSet; const pCol, pTable: string): TCalcInfo;
     /// <summary>When the anchor stopped at a column the SQL index does not hold and the field is calculated, replace the stop.</summary>
     /// <param name="pResult">The anchor; Calc becomes the TCalcInfo, Stop its StopText and StopAnchor its Anchor.</param>
     /// <param name="pCol">The field as the selection names it.</param>
-    /// <remarks>Port of Trace.Walk.ps1:106-108. Does nothing for an anchor without a dataset, without a column, without a stop,
-    /// or with a reached column.</remarks>
+    /// <remarks>
+    /// Port of Trace.Walk.ps1:106-108. Does nothing for an anchor without a dataset, without a column, without a stop,
+    /// or with a reached column.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Trace.Calc.TCalcFactsReader.Info</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Info"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Create"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Facts"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadBindings"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadCreating"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Apply(pResult: TAnchorResult; const pCol: string);
   end;
 
@@ -376,14 +604,37 @@ type
 /// <param name="pFacts">The facts (index-read or synthetic); not owned.</param>
 /// <returns>nil (not calculated: the caller keeps its stop) or the decision, which the caller owns. A calculated one carries the
 /// handler, conditions, sources and head call.</returns>
-/// <remarks>Port of Resolve-CalcField / New-CalcInfo and the helpers they call (Trace.Walk.ps1:2075-2341).</remarks>
+/// <remarks>
+/// Port of Resolve-CalcField / New-CalcInfo and the helpers they call (Trace.Walk.ps1:2075-2341).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Calc.TCalcFactsReader.Info (DRagLint.Charts.Trace.Calc.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.Calc.FindCalcWrites, DRagLint.Charts.Trace.Calc.NewCalcInfo, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceNoteLocator, Format, SameText</para>
+/// <para>Returns: nil; NewCalcInfo(pFacts, W, Ws); TCalcInfo.Create</para>
+/// <seealso cref="DRagLint.Charts.Trace.Calc.FindCalcWrites"/>
+/// <seealso cref="DRagLint.Charts.Trace.Calc.NewCalcInfo"/>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.TraceNoteLocator"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveCalcField(pFacts: TCalcFacts): TCalcInfo;
 
 /// <summary>The Form A items of a calculated anchor: the STOPS and the DERIVED rows.</summary>
 /// <param name="pInfo">A decision of Kind calculated.</param>
 /// <param name="pCmdFor">Target -> the command that traces it instead.</param>
 /// <returns>The stop, the DERIVED lead-in note and the rows; the caller owns Stop and Rows.</returns>
-/// <remarks>Port of New-CalcFieldItems (Trace.Walk.ps1:2497-2530). Pure. A binding reason every row shares is stated ONCE, in the note.</remarks>
+/// <remarks>
+/// Port of New-CalcFieldItems (Trace.Walk.ps1:2497-2530). Pure. A binding reason every row shares is stated ONCE, in the note.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.FormA.NewTraceCond, DRagLint.Charts.Trace.FormA.NewTraceFacet, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceNoteText, DRagLint.Charts.Trace.Shim.TraceStopText, Format, IntToStr, pCmdFor, SameText</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 74 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceCond"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceFacet"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceStep"/>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
+/// <seealso cref="DRagLint.Charts.Trace.Shim.TraceNoteText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NewCalcFieldItems(pInfo: TCalcInfo; const pCmdFor: TFunc<string, string>): TCalcFieldItems;
 
 implementation

@@ -23,6 +23,12 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.DockForm.pas) ?, declaration (DragLint.Plugin.StatusBar.pas) ?, DragLint.Plugin.DockForm.TDragLintDockFrame.Create (DragLint.Plugin.DockForm.pas), DragLint.Plugin.StatusBar.SetDragLintNote (DragLint.Plugin.StatusBar.pas) ?</para>
+  /// <para>Used in units: DragLint.Plugin.DockForm, DragLint.Plugin.StatusBar</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintStatusBar = class(TPanel)
   private
     FStateLbl: TLabel      ;
@@ -43,17 +49,141 @@ type
     { 1.40 heartbeat: the running engine job's own status (ProcRunBeatText) as last shown -- a change of it
       alone repaints the strip, so a slow job visibly progresses instead of looking hung. }
     FBeat    : string      ;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleTimer (DragLint.Plugin.StatusBar.pas)</para>
+    /// <para>Calls: DRagLint.Core.EngineHold.EngineIsHeld, DragLint.Plugin.StatusBar.SetDragLintNote, Format</para>
+    /// <para>Reads: FHoldTick, FHoldText   Writes: FHoldTick, FHoldText</para>
+    /// <para>Catches: Exception (empty)</para>
+    /// <seealso cref="DRagLint.Core.EngineHold.EngineIsHeld"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.SetDragLintNote"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyTaskLines"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure PollEngineHold;
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.StatusBar.TDragLintStatusBar.Create (DragLint.Plugin.StatusBar.pas), DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleCancel (DragLint.Plugin.StatusBar.pas)</para>
+    /// <para>Calls: DragLint.Plugin.JobQueue.JobQueue, DragLint.Plugin.JobQueue.TDragLintJobQueue.GetState, DragLint.Plugin.ProcRun.ProcRunBeatText, DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState, DragLint.Plugin.StatusBar.TDragLintStatusBar.PollEngineHold, DragLint.Plugin.StatusBar.TDragLintStatusBar.StatesEqual</para>
+    /// <para>Reads: FHasLast, FLast, FBeat   Writes: FBeat, FLast, FHasLast</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.JobQueue"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.GetState"/>
+    /// <seealso cref="DragLint.Plugin.ProcRun.ProcRunBeatText"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.PollEngineHold"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HandleTimer (Sender: TObject);
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.StatusBar.TDragLintStatusBar.Create (DragLint.Plugin.StatusBar.pas)</para>
+    /// <para>Calls: DragLint.Plugin.JobQueue.JobQueue, DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning, DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending, DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleTimer</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.JobQueue"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleTimer"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HandleCancel(Sender: TObject);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.StatusBar.TDragLintStatusBar.Resize (DragLint.Plugin.StatusBar.pas)</para>
+    /// <para>Reads: FCancel, FLinesLbl, FBar, FDepthLbl, FStateLbl</para>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyTaskLines"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Create"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleCancel"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Relayout;
+    /// <param name="AState"><!-- drag-lint:auto type -->const TQueueState</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.StatusBar.SetDragLintNote (DragLint.Plugin.StatusBar.pas), DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleTimer (DragLint.Plugin.StatusBar.pas)</para>
+    /// <para>Calls: DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyTaskLines, IntToStr</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 59 lines (full implementation)</para>
+    /// <para>Reads: FStateLbl, FBeat, FBar, FDepthLbl, FCancel</para>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyTaskLines"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Create"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleCancel"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleTimer"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ApplyState(const AState: TQueueState);
+    /// <param name="AState"><!-- drag-lint:auto type -->const TQueueState</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState (DragLint.Plugin.StatusBar.pas)</para>
+    /// <para>Calls: DragLint.Plugin.QueueText.DLQueueLines</para>
+    /// <para>Reads: FLinesLbl</para>
+    /// <seealso cref="DragLint.Plugin.QueueText.DLQueueLines"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Create"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleCancel"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ApplyTaskLines(const AState: TQueueState);
+    /// <param name="A"><!-- drag-lint:auto type -->const TQueueState</param>
+    /// <param name="B"><!-- drag-lint:auto type -->const TQueueState</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (A.Running = B.Running).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleTimer (DragLint.Plugin.StatusBar.pas)</para>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyTaskLines"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Create"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleCancel"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  StatesEqual(const A, B: TQueueState): Boolean;
   protected
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.StatusBar.TDragLintStatusBar.Relayout</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Relayout"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyTaskLines"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Create"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Resize; override; { lays out once parented/sized (handle-safe) }
   public
+    /// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.Create (DragLint.Plugin.DockForm.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Reads: FStateLbl, FDepthLbl, FBar, FCancel, FLinesLbl, FTimer   Writes: FHasLast, FStateLbl, FDepthLbl, FBar, FCancel, FLinesLbl, FTimer</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyTaskLines"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleCancel"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleTimer"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(AOwner: TComponent); override;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyTaskLines"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.Create"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleCancel"/>
+    /// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleTimer"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor  Destroy; override;
   end;
 
@@ -80,6 +210,14 @@ const
 /// reappears when the queue goes idle, until cleared.</para>
 /// <para>STATED PLAINLY: the strip is docked in the drag-lint dock window, so
 /// the note is visible when that window is. Main thread only; guarded.</para>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.AnnounceHoverStart (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.DoCompletion (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGoToDefinition (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeHover (DragLint.Plugin.Editor.pas) (+20 more)</para>
+/// <para>Calls: DragLint.Plugin.JobQueue.JobQueue, DragLint.Plugin.JobQueue.TDragLintJobQueue.GetState, DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState</para>
+/// <para>Catches: Exception (empty)</para>
+/// <seealso cref="DragLint.Plugin.JobQueue.JobQueue"/>
+/// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.GetState"/>
+/// <seealso cref="DragLint.Plugin.StatusBar.TDragLintStatusBar.ApplyState"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure SetDragLintNote(const AText: string);
 

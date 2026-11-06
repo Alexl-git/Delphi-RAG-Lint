@@ -13,7 +13,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Workspace.Config.pas), DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile (DRagLint.Workspace.Config.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Workspace.Config.pas) ?, DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile (DRagLint.Workspace.Config.pas), DRagLint.Workspace.Config.TWorkspaceConfigIO.SaveToFile (DRagLint.Workspace.Config.pas) ?</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Workspace.Config</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -50,7 +50,7 @@ type
       /// <exception cref="Exception"><!-- drag-lint:auto exc -->Invalid JSON in workspace config: %s</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas) ?, DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), [dclDragLintWizard]DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.SpawnIndexer (DragLint.Plugin.ProjectNotifier.pas)</para>
       /// <para>Calls: Default, TJSONArray, TJSONObject</para>
       /// <para>Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)</para>
       /// <para>Touches: file system</para>
@@ -76,7 +76,7 @@ type
       /// <returns><!-- drag-lint:auto -->string -- Observed: ''; Dir.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoWorkspace (DRagLint.CLI.pas), [dclDragLintWizard]DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.SpawnIndexer (DragLint.Plugin.ProjectNotifier.pas)</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile"/>

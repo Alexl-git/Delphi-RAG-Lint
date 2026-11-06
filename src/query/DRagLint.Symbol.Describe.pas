@@ -60,8 +60,14 @@ function DescribeTypeKind(const ASym: TSymbol; const AStore: ISymbolStore): stri
 type
   /// <summary>The declared type of a value-kind symbol, as every hover
   /// surface shows it.</summary>
-  /// <remarks>Produced by DescribeDeclaredType; rendered by
-  /// FormatDeclaredType.</remarks>
+  /// <remarks>
+  /// Produced by DescribeDeclaredType; rendered by
+  /// FormatDeclaredType.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Symbol.Describe.pas) ?, DRagLint.LSP.Server.DeclLineFor (DRagLint.LSP.Server.pas) ?, DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas) ?, DRagLint.Symbol.Describe.DescribeDeclaredType (DRagLint.Symbol.Describe.pas), DRagLint.Symbol.Describe.FormatDeclaredType (DRagLint.Symbol.Describe.pas) ?</para>
+  /// <para>Used in units: DRagLint.LSP.Server, DRagLint.Query.HoverModel, DRagLint.Symbol.Describe</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDeclaredType = record
     /// <summary>The type as written, e.g. 'string'; '' when the index has
     /// none.</summary>
@@ -84,6 +90,12 @@ type
 /// session cache otherwise. Every other kind reads its own Signature: a
 /// leading ':' is dropped, and a const's '= value' tail is cut. NOTHING IS
 /// INVENTED: an untyped const or a type nobody declares stays ''.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.DeclLineFor (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Convert.PropTree.ResolvePropertyDeclaredType, Pos, Trim</para>
+/// <para>Returns: Default(TDeclaredType)</para>
+/// <seealso cref="DRagLint.Convert.PropTree.ResolvePropertyDeclaredType"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function DescribeDeclaredType(const ASym: TSymbol; const AStore: ISymbolStore): TDeclaredType;
 
@@ -91,6 +103,12 @@ function DescribeDeclaredType(const ASym: TSymbol; const AStore: ISymbolStore): 
 /// <param name="AType">From DescribeDeclaredType.</param>
 /// <returns>'string', 'string (declared in Unit.TBase)', or '' when
 /// TypeName is empty.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormatDeclaredType(const AType: TDeclaredType): string;
 implementation
 

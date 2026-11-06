@@ -194,14 +194,14 @@ type
     /// the checker itself has no shared mutable state.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: AnsiChar, ArgsHaveNoEncoding, Byte, CallReceiverField, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassIsFormLike, CollectClasses (+72 more)</para>
+    /// <para>Calls: AnsiChar, ArgsHaveNoEncoding, Byte, CallReceiverField, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassImplementsInterface, ClassIsFormLike (+75 more)</para>
     /// <para>Returns: nil; Deduped.ToArray</para>
-    /// <para>Complexity: 18 (cyclomatic, outer body), 2680 lines (full implementation)</para>
+    /// <para>Complexity: 18 (cyclomatic, outer body), 2758 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.AddLongLineFindings"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckPublicWritableFields"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckReferencedNeverSet"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CollectAddrTaken"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CollectAddrTakenFromDeadBranches"/>
-    /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CollectContractDecls"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; AMinCaseBranches: Integer = 2;

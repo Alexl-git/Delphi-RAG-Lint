@@ -57,6 +57,12 @@ const
 
 type
   /// <summary>The anchor dataset field (the PS $Ds).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.ChainOfDataSet (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.DataSetOfChain (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.DataSetOfRow (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet (DRagLint.Charts.Trace.Anchor.pas) (+10 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Anchor, DRagLint.Charts.Trace.Calc, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTraceDataSet = record
     /// <summary>The field's name.</summary>
     Name    : string;
@@ -75,6 +81,12 @@ type
   end;
 
   /// <summary>What FieldVarLineGrade decided for one write line.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.FieldVarLineGrade (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.FieldVarSiteGrade (DRagLint.Charts.Trace.Anchor.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Anchor</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFieldVarGrade = record
     /// <summary>'' (certain), 'by name' or 'inferred'.</summary>
     Grade : string;
@@ -85,6 +97,12 @@ type
   end;
 
   /// <summary>One write line of a TField variable, with what the line names. Port of a Get-FieldVarWriteRows row.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.FieldVarPairs (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.FieldVarSiteGrade (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FieldVarWriteRows (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadBindings (DRagLint.Charts.Trace.Calc.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Anchor, DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFieldVarWrite = record
     /// <summary>The variable's name.</summary>
     VarName : string;
@@ -107,6 +125,12 @@ type
   end;
 
   /// <summary>The (dataset field, column literal) pairs of a variable's write rows.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.FieldVarPairs (DRagLint.Charts.Trace.Anchor.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Anchor</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFieldVarPairs = record
     /// <summary>The rows naming exactly ONE dataset field and ONE literal.</summary>
     Ok   : TArray<TFieldVarWrite>;
@@ -115,6 +139,12 @@ type
   end;
 
   /// <summary>One event of the anchor dataset wired to a handler. Port of a Get-EventWiring row.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas), declaration (DRagLint.Charts.Trace.Anchor.pas), declaration (DRagLint.Charts.Trace.Calc.pas), DRagLint.Charts.Trace.Anchor.SortWirings (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.EventWiring (DRagLint.Charts.Trace.Anchor.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Anchor, DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEventWiring = record
     /// <summary>The wiring line.</summary>
     Line        : Integer;
@@ -137,7 +167,13 @@ type
   end;
 
   /// <summary>The anchor of one target: graded steps, the dataset, the column or the reason it stops.</summary>
-  /// <remarks>Port of the New-AnchorResult object. Owns Items and Calc. Not thread-safe.</remarks>
+  /// <remarks>
+  /// Port of the New-AnchorResult object. Owns Items and Calc. Not thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas) ?, declaration (DRagLint.Charts.Trace.Anchor.pas) ?, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet (DRagLint.Charts.Trace.Anchor.pas) ?, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FollowDirectChain (DRagLint.Charts.Trace.Anchor.pas) ?, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ResolveTraceAnchor (DRagLint.Charts.Trace.Anchor.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Anchor, DRagLint.Charts.Trace.Calc</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAnchorResult = class
   private
     FItems: TObjectList<TTraceItem>;
@@ -179,17 +215,48 @@ type
     /// <summary>The column exactly as the selection names it (the PS $Col, before the upper-casing of Column): ''
     /// until the anchor reached a dataset. The question unit hands it to TCalcFactsReader.Apply.</summary>
     property FieldName: string read FFieldName write FFieldName;
+    /// <summary><!-- drag-lint:auto sum -->---- TAnchorResult ----</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ResolveTraceAnchor (DRagLint.Charts.Trace.Anchor.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TAnchorResult.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TAnchorResult.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
   /// <summary>Resolves a -Target to its anchor over one Delphi index and one SQL catalogue.</summary>
-  /// <remarks>Nothing passed in is owned: the index, reader, walker, catalogue and table set must outlive
-  /// the resolver. Source overrides (a stale-file test) live on the reader. Not thread-safe.</remarks>
+  /// <remarks>
+  /// Nothing passed in is owned: the index, reader, walker, catalogue and table set must outlive
+  /// the resolver. Source overrides (a stale-file test) live on the reader. Not thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas) ?, declaration (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Calc.TCalcFactsReader.Create (DRagLint.Charts.Trace.Calc.pas) ?, DRagLint.Charts.Trace.Walk.TTraceWalker.Create (DRagLint.Charts.Trace.Walk.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Calc, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTraceAnchorResolver = class  // dl:ok high-response@b9dc -- REVIEWED 2026-10-17: the resolver IS the PS Part 1 family (Resolve-TraceAnchor .. Get-EventWiring); its response set is the SQL and formatting calls each form makes, already split into per-form private procedures
   private
     type
       /// <summary>The field a dataset property reads (Resolve-PropertyReadField's result).</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Used by: declaration (DRagLint.Charts.Trace.Anchor.pas) ?, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.PropertyReadField (DRagLint.Charts.Trace.Anchor.pas)</para>
+      /// <para>Used in units: DRagLint.Charts.Trace.Anchor</para>
+      /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromColumn"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromFieldVar"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ColumnFactNote"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       TPropField = record
         Found    : Boolean;
         Field    : TTraceDataSet;
@@ -204,13 +271,132 @@ type
     FWalker : TChainWalker;
     FCatalog: TSqlCatalog;
     FSet    : TSqlTableSet;
+    /// <param name="pProp"><!-- drag-lint:auto type -->const TTraceDataSet</param>
+    /// <param name="pAssignFile"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pAssignLine"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->TPropField -- Observed: Default(TPropField).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FollowDirectChain (DRagLint.Charts.Trace.Anchor.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Trace.Anchor.DataSetOfRow, DRagLint.Charts.Trace.Shim.TraceNoteLocator, ExtractFileName, Format, IntToStr</para>
+    /// <para>SQL: reads FILES, MEMBER_ACCESSES, REFS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.DataSetOfRow"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceNoteLocator"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromColumn"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function PropertyReadField(const pProp: TTraceDataSet; const pAssignFile: string; pAssignLine: Integer): TPropField;
+    /// <param name="pR"><!-- drag-lint:auto type -->TAnchorResult</param>
+    /// <param name="pDs"><!-- drag-lint:auto type -->const TTraceDataSet</param>
+    /// <param name="pCol"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pBindGrade"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pBindNote"><!-- drag-lint:auto type -->const string</param>
+    /// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Columns.SqlColumnState: Get-SqlColumnState: no table %s in the SQL index -- the caller checks the table first</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromColumn (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromFieldVar (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FollowDirectChain (DRagLint.Charts.Trace.Anchor.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Columns.SqlColumnState, DRagLint.Charts.Columns.TServerSqlHit.None, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Text.UnitNameOf, DRagLint.Charts.Trace.Anchor.ChainOfDataSet, DRagLint.Charts.Trace.Anchor.LastSegment, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ColumnFactNote, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, Format, UpperCase</para>
+    /// <para>SQL: reads REFS, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Columns.SqlColumnState"/>
+    /// <seealso cref="DRagLint.Charts.Columns.TServerSqlHit.None"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Text.UnitNameOf"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.ChainOfDataSet"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CompleteAnchorFromDataSet(pR: TAnchorResult; const pDs: TTraceDataSet; const pCol, pBindGrade, pBindNote: string);
+    /// <param name="pForm"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pCtl"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pR"><!-- drag-lint:auto type -->TAnchorResult</param>
+    /// <exception cref="EChartsTrace"><!-- drag-lint:auto exc -->round-trip: no form or data module named; round-trip: no component named; round-trip: %s.%s names %d components (%s)</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ResolveInto (DRagLint.Charts.Trace.Anchor.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Chain.ControlDataSourceSql, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Trace.Anchor.DataSetOfChain, DRagLint.Charts.Trace.Anchor.HopGrade, DRagLint.Charts.Trace.Anchor.RePointVerb, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FollowDirectChain, DRagLint.Charts.Trace.FormA.NewTraceFacet, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceNoteText, DRagLint.Charts.Trace.Shim.TraceWord, Format, IntToStr</para>
+    /// <para>Complexity: 16 (cyclomatic, outer body), 134 lines (full implementation)</para>
+    /// <para>SQL: reads FILES, STRING_LITERALS, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Chain.ControlDataSourceSql"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.DataSetOfChain"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.HopGrade"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.RePointVerb"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AnchorFromControl(const pForm, pCtl: string; pR: TAnchorResult);
+    /// <param name="pMemId"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pMemPath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pMemLine"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pTarget"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pR"><!-- drag-lint:auto type -->TAnchorResult</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ResolveInto (DRagLint.Charts.Trace.Anchor.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Trace.Anchor.DataSetOfRow, DRagLint.Charts.Trace.Anchor.FieldVarPairs, DRagLint.Charts.Trace.Anchor.FieldVarSiteGrade, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FieldVarWriteRows, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, Format, IntToStr, Pos, StringReplace</para>
+    /// <para>SQL: reads SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.DataSetOfRow"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.FieldVarPairs"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.FieldVarSiteGrade"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AnchorFromFieldVar(pMemId: Integer; const pMemPath: string; pMemLine: Integer; const pTarget, pName: string;
       pR: TAnchorResult);
+    /// <param name="pTable"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pCol"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pR"><!-- drag-lint:auto type -->TAnchorResult</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ResolveInto (DRagLint.Charts.Trace.Anchor.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.Anchor.DataSetOfRow, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.TableDataSetRows, DRagLint.Charts.Trace.Shim.TraceAnchorText, Format</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.DataSetOfRow"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.TableDataSetRows"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AnchorFromColumn(const pTable, pCol: string; pR: TAnchorResult);
+    /// <param name="pTarget"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pR"><!-- drag-lint:auto type -->TAnchorResult</param>
+    /// <exception cref="EChartsTrace"><!-- drag-lint:auto exc -->round-trip: -Target takes &lt;Form&gt;.&lt;Control&gt;, &lt;Unit&gt;.&lt;TForm&gt;.&lt;Control&gt;, &lt;Unit&gt;.&lt;TClass&gt;.&lt;TField variable&gt;; round-trip: %s: %s.%s is not a class of this index (%d matches); round-trip:; via DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl: round-trip: %s.%s names %d components (%s); via DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl: round-trip: no component named; via DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl: round-trip: no form or data module named</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ResolveTraceAnchor (DRagLint.Charts.Trace.Anchor.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromColumn, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromFieldVar, DRagLint.Charts.Trace.Shim.TraceAnchorText, Format, IntToStr, Trim, UpperCase</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 52 lines (full implementation)</para>
+    /// <para>SQL: reads FILES, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromColumn"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromFieldVar"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ResolveInto(const pTarget: string; pR: TAnchorResult);
+    /// <summary><!-- drag-lint:auto sum -->the datasource chain that did not dangle: its
+    /// hops, then the dataset field named by the assignment's right-hand side</summary>
+    /// <param name="pCh"><!-- drag-lint:auto type -->const TDataSourceChain</param>
+    /// <param name="pDsText"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pS1"><!-- drag-lint:auto type -->TTraceItem</param>
+    /// <param name="pR"><!-- drag-lint:auto type -->TAnchorResult</param>
+    /// <param name="pCol"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Trace.Anchor.ChainVerb, DRagLint.Charts.Trace.Anchor.DataSetOfRow, DRagLint.Charts.Trace.Anchor.HopGrade, DRagLint.Charts.Trace.Anchor.LastSegment, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.PropertyReadField, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceNoteText, DRagLint.Charts.Trace.Shim.TraceWord, Format, IntToStr, SameText</para>
+    /// <para>Complexity: 17 (cyclomatic, outer body), 85 lines (full implementation)</para>
+    /// <para>SQL: reads FILES, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.ChainVerb"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.DataSetOfRow"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.HopGrade"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.LastSegment"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure FollowDirectChain(const pCh: TDataSourceChain; const pDsText: string; pS1: TTraceItem; pR: TAnchorResult;
       const pCol: string);
   public
@@ -220,6 +406,17 @@ type
     /// <param name="pWalker">A chain walker over the same index and catalogue; not owned.</param>
     /// <param name="pCatalog">The SQL catalogue (column states); not owned.</param>
     /// <param name="pSet">The SQL table set (the PS $SqlSet); not owned.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.Create (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromColumn"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromFieldVar"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ColumnFactNote"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(pIndex: TChartsIndex; pReader: TSourceReader; pWalker: TChainWalker; pCatalog: TSqlCatalog;
       pSet: TSqlTableSet);
     /// <summary>From a -Target to the data anchor.</summary>
@@ -227,47 +424,122 @@ type
     /// <returns>The anchor; the caller frees it. Stop / StaleFile say why it stops.</returns>
     /// <exception cref="EChartsTrace">The target is not one of the four shapes, is not a class of the index, names
     /// no form, no component or several components (RT16). The texts are the PS throw texts.</exception>
-    /// <remarks>Port of Resolve-TraceAnchor (Trace.Walk.ps1:364).</remarks>
+    /// <remarks>
+    /// Port of Resolve-TraceAnchor (Trace.Walk.ps1:364).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Trace.Anchor.TAnchorResult.Create, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ResolveInto, FreeAndNil</para>
+    /// <para>Returns: TAnchorResult.Create</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TAnchorResult.Create"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ResolveInto"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromColumn"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromFieldVar"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveTraceAnchor(const pTarget: string): TAnchorResult;
     /// <summary>The event handlers of the anchor dataset, in write preference order.</summary>
     /// <param name="pDs">The anchor dataset.</param>
     /// <param name="pEvents">The events to read; nil = RT_EVENTS.</param>
     /// <returns>AfterPost first, then BeforePost, AfterInsert, OnUpdateRecord, OnUpdateError, OnReconcileError,
     /// AfterDelete last; each event's by line (the WRITE direction starts at [0]).</returns>
-    /// <remarks>Port of Get-EventWiring + Sort-RtWiring (Trace.Walk.ps1:881, 1899). A wiring whose handler is
-    /// not exactly one method with an implementation in the dataset's class is skipped.</remarks>
+    /// <remarks>
+    /// Port of Get-EventWiring + Sort-RtWiring (Trace.Walk.ps1:881, 1899). A wiring whose handler is
+    /// not exactly one method with an implementation in the dataset's class is skipped.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkWrite (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadWirings (DRagLint.Charts.Trace.Calc.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.SqlInList, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Text.ShortName, DRagLint.Charts.Text.UnitNameOf, DRagLint.Charts.Trace.Anchor.LastSegment, DRagLint.Charts.Trace.Anchor.SortWirings, IntToStr</para>
+    /// <para>Returns: Out_.ToArray</para>
+    /// <para>SQL: reads FILES, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlInList"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Text.ShortName"/>
+    /// <seealso cref="DRagLint.Charts.Text.UnitNameOf"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.LastSegment"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function EventWiring(const pDs: TTraceDataSet; const pEvents: TArray<string> = nil): TArray<TEventWiring>;
     /// <summary>The dataset fields whose unit names the table beside them.</summary>
     /// <param name="pTable">The table, upper case.</param>
     /// <returns>Rows id, name, q, sig, line, path, fid, pid by qualified name; the caller frees the list.</returns>
-    /// <remarks>Port of Get-TableDataSetRows (Trace.Walk.ps1:349).</remarks>
+    /// <remarks>
+    /// Port of Get-TableDataSetRows (Trace.Walk.ps1:349).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromColumn (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Calc.TCalcFactsReader.Facts (DRagLint.Charts.Trace.Calc.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Trace.Anchor.DataSetTypeSql</para>
+    /// <para>SQL: reads FILES, REFS, STRING_LITERALS, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.DataSetTypeSql"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromColumn"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromFieldVar"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function TableDataSetRows(const pTable: string): TObjectList<TIndexRow>;
     /// <summary>The write lines of the TField variables of a class that a condition on the write ref selects.</summary>
     /// <param name="pClassId">The class's symbols.id.</param>
     /// <param name="pWhere">A condition on the write ref r (for example r.symbol_id = 5).</param>
     /// <returns>One row per write line, by line then ref id.</returns>
-    /// <remarks>Port of Get-FieldVarWriteRows (Trace.Walk.ps1:293); the MATERIALIZED CTE verbatim. Shared by
-    /// the TField-variable anchor and the calc-field check (Part 6).</remarks>
+    /// <remarks>
+    /// Port of Get-FieldVarWriteRows (Trace.Walk.ps1:293); the MATERIALIZED CTE verbatim. Shared by
+    /// the TField-variable anchor and the calc-field check (Part 6).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromFieldVar (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadBindings (DRagLint.Charts.Trace.Calc.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.SqlInList, DRagLint.Charts.Trace.Anchor.DataSetTypeSql, IntToStr</para>
+    /// <para>Returns: Out_.ToArray</para>
+    /// <para>SQL: reads SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlInList"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.DataSetTypeSql"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromColumn"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromFieldVar"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FieldVarWriteRows(pClassId: Integer; const pWhere: string): TArray<TFieldVarWrite>;
     /// <summary>The column fact note of a column step.</summary>
     /// <param name="pCs">The column state.</param>
     /// <param name="pSet">The SQL table set.</param>
     /// <returns>For an extracted column '&lt;COL&gt; is a column of the newest of N &lt;TABLE&gt; declarations (SQL
     /// index, FILE:LINE)'; any other state keeps the state's label, made safe for a note.</returns>
-    /// <remarks>Port of Get-ColumnFactNote (Trace.Walk.ps1:54). Never truncated (T3-M2).</remarks>
+    /// <remarks>
+    /// Port of Get-ColumnFactNote (Trace.Walk.ps1:54). Never truncated (T3-M2).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps (DRagLint.Charts.Trace.Walk.pas) ?</para>
+    /// <para>Calls: DRagLint.Charts.Sql.TSqlTableSet.Table, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceStopText, Format, SameText</para>
+    /// <para>Returns: Format('%s is a column of %s (SQL index, %s)', [pCs.Column, Of_, At])</para>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Table"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceStopText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromColumn"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ColumnFactNote(const pCs: TSqlColumnState; pSet: TSqlTableSet): string;
   end;
 
 /// <summary>SQL: the symbol alias is declared with a dataset class type.</summary>
 /// <param name="pAlias">The symbols alias.</param>
 /// <returns>A SUFFIX match on the signature (LIKE 'T%Table' also took TcxGridDBTableView).</returns>
-/// <remarks>Port of Get-DataSetTypeSql (Trace.Walk.ps1:40).</remarks>
+/// <remarks>
+/// Port of Get-DataSetTypeSql (Trace.Walk.ps1:40).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FieldVarWriteRows (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.TableDataSetRows (DRagLint.Charts.Trace.Anchor.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DataSetTypeSql(const pAlias: string = 's'): string;
 
 /// <summary>The (dataset field, column literal) pairs of a variable's write rows.</summary>
 /// <param name="pRows">FieldVarWriteRows output.</param>
 /// <returns>Ok: rows naming exactly ONE dataset field and ONE literal; Pairs: the distinct 'DS|COL' strings.</returns>
-/// <remarks>Port of Get-FieldVarPairs (Trace.Walk.ps1:322). Pure.</remarks>
+/// <remarks>
+/// Port of Get-FieldVarPairs (Trace.Walk.ps1:322). Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromFieldVar (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadBindings (DRagLint.Charts.Trace.Calc.pas)</para>
+/// <para>Calls: DRagLint.Charts.Sql.SortUniqueNames, Pos</para>
+/// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FieldVarPairs(const pRows: TArray<TFieldVarWrite>): TFieldVarPairs;
 
 /// <summary>The grade of a TField-variable assignment line.</summary>
@@ -277,14 +549,29 @@ function FieldVarPairs(const pRows: TArray<TFieldVarWrite>): TFieldVarPairs;
 /// <param name="pDsName">The dataset field's name.</param>
 /// <returns>certain ('') only for FieldByName + bound; [by name] for FieldByName unbound; every other shape
 /// [inferred], its reason naming the call(s); an unbound read asks in-class-field-reads.</returns>
-/// <remarks>Port of Get-FieldVarLineGrade (Trace.Walk.ps1:247). Pure.</remarks>
+/// <remarks>
+/// Port of Get-FieldVarLineGrade (Trace.Walk.ps1:247). Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Anchor.FieldVarSiteGrade (DRagLint.Charts.Trace.Anchor.pas)</para>
+/// <para>Calls: DRagLint.Charts.Sql.SortUniqueNames</para>
+/// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FieldVarLineGrade(pFieldByName, pBound: Boolean; const pCalls: TArray<string>; const pDsName: string): TFieldVarGrade;
 
 /// <summary>FieldVarLineGrade over one write row.</summary>
 /// <param name="pSite">A FieldVarWriteRows row.</param>
 /// <param name="pDsName">The dataset field's name.</param>
 /// <returns>The grade; FieldByName calls are not counted among the calls.</returns>
-/// <remarks>Port of Get-FieldVarSiteGrade (Trace.Walk.ps1:328). Pure.</remarks>
+/// <remarks>
+/// Port of Get-FieldVarSiteGrade (Trace.Walk.ps1:328). Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromFieldVar (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadBindings (DRagLint.Charts.Trace.Calc.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.Anchor.FieldVarLineGrade, SameText</para>
+/// <para>Returns: FieldVarLineGrade(pSite.Fbn &gt; 0, pSite.Bound &gt; 0, Calls, pDsName)</para>
+/// <seealso cref="DRagLint.Charts.Trace.Anchor.FieldVarLineGrade"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FieldVarSiteGrade(const pSite: TFieldVarWrite; const pDsName: string): TFieldVarGrade;
 
 implementation

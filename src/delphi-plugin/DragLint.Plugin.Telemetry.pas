@@ -11,8 +11,38 @@ unit DragLint.Plugin.Telemetry;
 
 interface
 
+/// <param name="ATag"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AMsg"><!-- drag-lint:auto type -->const string</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: initialization/finalization (DragLint.Plugin.AboutForm.pas), initialization/finalization (DragLint.Plugin.CliAsync.pas), initialization/finalization (DragLint.Plugin.DockForm.pas), initialization/finalization (DragLint.Plugin.EditViewNotifier.pas), initialization/finalization (DragLint.Plugin.LiveDiagnostics.pas) (+96 more)</para>
+/// <para>Calls: DragLint.Plugin.Telemetry.EnsureLock, DragLint.Plugin.Telemetry.TelemetryLogPath, FormatDateTime</para>
+/// <para>Catches: Exception (empty)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DragLint.Plugin.Telemetry.EnsureLock"/>
+/// <seealso cref="DragLint.Plugin.Telemetry.TelemetryLogPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure DLT(const ATag, AMsg: string);
+/// <returns><!-- drag-lint:auto -->string -- Observed: PluginLogPath(TELEMETRY_LOG_NAME).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Telemetry.DLT (DragLint.Plugin.Telemetry.pas), DragLint.Plugin.Telemetry.DLTReset (DragLint.Plugin.Telemetry.pas)</para>
+/// <para>Calls: DragLint.Plugin.LogPaths.PluginLogPath</para>
+/// <seealso cref="DragLint.Plugin.LogPaths.PluginLogPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TelemetryLogPath: string;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.Telemetry.EnsureLock, DragLint.Plugin.Telemetry.TelemetryLogPath, FormatDateTime</para>
+/// <para>Catches: Exception (empty)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DragLint.Plugin.Telemetry.EnsureLock"/>
+/// <seealso cref="DragLint.Plugin.Telemetry.TelemetryLogPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure DLTReset; { truncate the log (called once at plugin startup) }
 
 implementation

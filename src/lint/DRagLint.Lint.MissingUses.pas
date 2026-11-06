@@ -39,6 +39,12 @@ const
 
 type
   /// <summary>One offered edit for a unit-missing-from-uses finding.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.MissingUses.pas) ?, DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.BuildFinding (DRagLint.Lint.MissingUses.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas) ?</para>
+  /// <para>Used in units: DRagLint.Lint.MissingUses, DRagLint.LSP.Completion</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMissingUsesFix = record
     /// <summary>The clause the edit extends or creates.</summary>
     Section  : TUsesSection;
@@ -51,6 +57,12 @@ type
   end;
 
   /// <summary>A finding plus what is needed to fix it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.MissingUses.pas) ?, DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze (DRagLint.Lint.MissingUses.pas) ?, DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.BuildFinding (DRagLint.Lint.MissingUses.pas), DRagLint.Lint.MissingUses.TMissingUsesChecker.Check (DRagLint.Lint.MissingUses.pas) ?, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas) ?</para>
+  /// <para>Used in units: DRagLint.Lint.MissingUses, DRagLint.LSP.Completion</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMissingUsesFinding = record
     /// <summary>The lint finding (rule, position, severity, message).</summary>
     Finding : TLintFinding;
@@ -64,11 +76,17 @@ type
   end;
 
   /// <summary>The unit-missing-from-uses checker.</summary>
-  /// <remarks>Store-backed: reads the file's refs, symbols and uses from the
+  /// <remarks>
+  /// Store-backed: reads the file's refs, symbols and uses from the
   /// store that indexes it, and looks the unresolved names up in every lookup
   /// store (the project index and the platform library). Read-only; never
   /// writes a store. Not thread-safe across calls sharing a store only in the
-  /// sense ISymbolStore itself is not.</remarks>
+  /// sense ISymbolStore itself is not.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Completion</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMissingUsesChecker = class
   public
     /// <summary>The findings of AFile, each with its fixes.</summary>
@@ -78,6 +96,19 @@ type
     /// <param name="ALookup">Stores to look names up in; AFileStore is used
     /// when it is not among them. nil entries are ignored.</param>
     /// <returns>One finding per unresolved use, in ref order.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.MissingUses.TMissingUsesChecker.Check (DRagLint.Lint.MissingUses.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas)</para>
+    /// <para>Calls: ContainsText, Copy, CyclePath, DeclaringUnit, Default, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Core.UsesInsert.TUsesText.ImplementationLine, DRagLint.Core.UsesInsert.TUsesText.IsUnitText, DRagLint.Core.UsesInsert.TUsesText.UsesEntries (+24 more)</para>
+    /// <para>Complexity: 35 (cyclomatic, outer body), 336 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
+    /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.ImplementationLine"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.IsUnitText"/>
+    /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.UsesEntries"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Analyze(const AFile: string; const AFileStore: ISymbolStore; AFileId: Int64;
       const ALookup: TArray<ISymbolStore>): TArray<TMissingUsesFinding>; static;
     /// <summary>The plain findings of Analyze, for the lint verbs.</summary>
@@ -86,6 +117,15 @@ type
     /// <param name="AFileId">As Analyze.</param>
     /// <param name="ALookup">As Analyze.</param>
     /// <returns>The findings.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze"/>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesChecker.CyclePath"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Check(const AFile: string; const AFileStore: ISymbolStore; AFileId: Int64;
       const ALookup: TArray<ISymbolStore>): TArray<TLintFinding>; static;
     /// <summary>The uses cycle a new edge AFromUnit -> AToUnit would close.</summary>
@@ -97,6 +137,19 @@ type
     /// cycles the compiler rejects with E2047).</param>
     /// <returns>'From -> To -> ... -> From', or '' when no path leads back
     /// (including when AToUnit is not indexed in AStore, e.g. a library unit).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.BuildFinding (DRagLint.Lint.MissingUses.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.MissingUses.TMissingUsesChecker.CyclePath.UnitFid, LowerCase, SameText</para>
+    /// <para>Returns: ''; AFromUnit + ' -&gt; ' + string.Join(' -&gt; ', Chain)</para>
+    /// <para>Complexity: 15 (cyclomatic, outer body), 68 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesChecker.CyclePath.UnitFid"/>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze"/>
+    /// <seealso cref="DRagLint.Lint.MissingUses.TMissingUsesChecker.Check"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CyclePath(const AStore: ISymbolStore; AFromFid: Int64; const AFromUnit, AToUnit: string;
       AInterfaceOnly: Boolean): string; static;
   end;

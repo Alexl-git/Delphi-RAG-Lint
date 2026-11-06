@@ -44,8 +44,14 @@ const
 type
   /// <summary>One strongly connected component of the project's uses graph, as
   /// listed by `cycles --format json --causes`.</summary>
-  /// <remarks>A record held in a list parallel to the tab's checklist, so a
-  /// row's identity never depends on parsing its caption back out.</remarks>
+  /// <remarks>
+  /// A record held in a list parallel to the tab's checklist, so a
+  /// row's identity never depends on parsing its caption back out.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.CycleFix.pas) ?, declaration (DragLint.Plugin.UsesDepsFrame.pas) ?, DragLint.Plugin.CycleFix.CycleFixApplyConfirmText (DragLint.Plugin.CycleFix.pas) ?, DragLint.Plugin.CycleFix.CycleRowCaption (DragLint.Plugin.CycleFix.pas) ?, DragLint.Plugin.CycleFix.ParseCycleRows (DragLint.Plugin.CycleFix.pas) (+1 more)</para>
+  /// <para>Used in units: DragLint.Plugin.CycleFix, DragLint.Plugin.UsesDepsFrame</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleRow = record
     /// <summary>1-based position in the engine's list; what --cycle is given.</summary>
     Cycle  : Integer;
@@ -61,6 +67,12 @@ type
 
   /// <summary>What one `cycles --fix ... --format json` run reported, read out
   /// of its `cycle-fix/1` document.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.CycleFix.pas) ?, DragLint.Plugin.CycleFix.AddRefusals (DragLint.Plugin.CycleFix.pas) ?, DragLint.Plugin.CycleFix.CycleFixWroteFiles (DragLint.Plugin.CycleFix.pas) ?, DragLint.Plugin.CycleFix.ParseCycleFixOutcome (DragLint.Plugin.CycleFix.pas), DragLint.Plugin.CycleFix.ReadCycles (DragLint.Plugin.CycleFix.pas) ? (+2 more)</para>
+  /// <para>Used in units: DragLint.Plugin.CycleFix, DragLint.Plugin.UsesDepsFrame</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCycleFixOutcome = record
     /// <summary>False when no cycle-fix/1 document could be parsed. NOT the
     /// same as "nothing was written" -- the caller must say so.</summary>
@@ -101,6 +113,14 @@ type
 /// `--platform p`, so the engine's build gate and platform library match the IDE;
 /// '' omits the flag (the engine's win64 default).</param>
 /// <returns>`cycles --fix --project "P" --db "D" [--platform p] --format text` -- never --apply.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeCircularUsesFix (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.CycleFix.PlatformArg, Format</para>
+/// <para>Returns: Format('cycles --fix --project "%s" --db "%s"%s --format text', [AProj, ADb, PlatformArg(APlatform)])</para>
+/// <seealso cref="DragLint.Plugin.CycleFix.PlatformArg"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleFixMenuArgs(const AProj, ADb, APlatform: string): string;
 
 /// <summary>The tab's list query: every SCC with its causes and fix object.</summary>
@@ -108,6 +128,14 @@ function CycleFixMenuArgs(const AProj, ADb, APlatform: string): string;
 /// <param name="ADb">The project index, unquoted.</param>
 /// <param name="APlatform">As CycleFixMenuArgs.</param>
 /// <returns>`cycles --project "P" --db "D" [--platform p] --format json --causes`.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.StartRefresh (DragLint.Plugin.UsesDepsFrame.pas)</para>
+/// <para>Calls: DragLint.Plugin.CycleFix.PlatformArg, Format</para>
+/// <para>Returns: Format('cycles --project "%s" --db "%s"%s --format json --causes', [AProj, ADb, PlatformArg(APlatform)])</para>
+/// <seealso cref="DragLint.Plugin.CycleFix.PlatformArg"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleListArgs(const AProj, ADb, APlatform: string): string;
 
 /// <summary>The tab's Dry run button for one SCC.</summary>
@@ -116,6 +144,13 @@ function CycleListArgs(const AProj, ADb, APlatform: string): string;
 /// <param name="APlatform">As CycleFixMenuArgs.</param>
 /// <param name="ACycle">The row's 1-based TCycleRow.Cycle.</param>
 /// <returns>`cycles --fix --project "P" --db "D" [--platform p] --cycle n --format json`.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.CycleFix.CycleFixApplyArgs (DragLint.Plugin.CycleFix.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix (DragLint.Plugin.UsesDepsFrame.pas)</para>
+/// <para>Calls: DragLint.Plugin.CycleFix.PlatformArg, Format</para>
+/// <seealso cref="DragLint.Plugin.CycleFix.PlatformArg"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleFixDryRunArgs(const AProj, ADb, APlatform: string; ACycle: Integer): string;
 
 /// <summary>The tab's Apply button: CycleFixDryRunArgs plus ` --apply`.</summary>
@@ -124,18 +159,40 @@ function CycleFixDryRunArgs(const AProj, ADb, APlatform: string; ACycle: Integer
 /// <param name="APlatform">As CycleFixMenuArgs.</param>
 /// <param name="ACycle">The row's 1-based TCycleRow.Cycle.</param>
 /// <returns>The dry-run command line with ` --apply` appended.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix (DragLint.Plugin.UsesDepsFrame.pas)</para>
+/// <para>Calls: DragLint.Plugin.CycleFix.CycleFixDryRunArgs</para>
+/// <para>Returns: CycleFixDryRunArgs(AProj, ADb, APlatform, ACycle) + ' --apply'</para>
+/// <seealso cref="DragLint.Plugin.CycleFix.CycleFixDryRunArgs"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleFixApplyArgs(const AProj, ADb, APlatform: string; ACycle: Integer): string;
 
 /// <summary>Reads the SCC rows out of `cycles --format json --causes` output.</summary>
 /// <param name="AText">Raw engine output; a banner before the JSON array and
 /// notes after it are tolerated.</param>
 /// <returns>One row per SCC, in engine order; empty when no array was found.</returns>
-/// <remarks>Never raises: a malformed document yields no rows.</remarks>
+/// <remarks>
+/// Never raises: a malformed document yields no rows.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.ShowCycles (DragLint.Plugin.UsesDepsFrame.pas)</para>
+/// <para>Calls: Default, DragLint.Plugin.CycleFix.ParseFrom, DragLint.Plugin.CycleFix.StrArr, TJSONArray, TJSONObject</para>
+/// <seealso cref="DragLint.Plugin.CycleFix.ParseFrom"/>
+/// <seealso cref="DragLint.Plugin.CycleFix.StrArr"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseCycleRows(const AText: string): TArray<TCycleRow>;
 
 /// <summary>A row's checklist caption: the units, then the fix state.</summary>
 /// <param name="ARow">The row to caption.</param>
 /// <returns>`n. a &lt;-&gt; b   -- fixable (part a)` or `... -- not fixable: reason`.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.Render (DragLint.Plugin.UsesDepsFrame.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleRowCaption(const ARow: TCycleRow): string;
 
 /// <summary>The question the tab's Apply button asks before it runs
@@ -145,13 +202,32 @@ function CycleRowCaption(const ARow: TCycleRow): string;
 /// <returns>Several lines: the group number and units, what --apply does to
 /// the project (writes with .BCK backups, builds, re-indexes, rolls back a failed
 /// build) and that Dry run shows the plan first.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix (DragLint.Plugin.UsesDepsFrame.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: Format('Apply the mechanical fix to circular group %d?', [ARow.Cycle]) + sLineBreak + sLineBreak</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleFixApplyConfirmText(const ARow: TCycleRow): string;
 
 /// <summary>Reads a `cycle-fix/1` document out of raw engine output.</summary>
 /// <param name="AText">Raw engine output; a banner before the JSON object is
 /// tolerated.</param>
 /// <returns>The outcome; Readable=False when no cycle-fix/1 object was found.</returns>
-/// <remarks>Never raises.</remarks>
+/// <remarks>
+/// Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix (DragLint.Plugin.UsesDepsFrame.pas)</para>
+/// <para>Calls: Default, DragLint.Plugin.CycleFix.AddRefusals, DragLint.Plugin.CycleFix.ParseFrom, DragLint.Plugin.CycleFix.ReadCycles, DragLint.Plugin.CycleFix.StrArr, DragLint.Plugin.CycleFix.StripProjectSuffix, TJSONObject</para>
+/// <para>Returns: Default(TCycleFixOutcome)</para>
+/// <seealso cref="DragLint.Plugin.CycleFix.AddRefusals"/>
+/// <seealso cref="DragLint.Plugin.CycleFix.ParseFrom"/>
+/// <seealso cref="DragLint.Plugin.CycleFix.ReadCycles"/>
+/// <seealso cref="DragLint.Plugin.CycleFix.StrArr"/>
+/// <seealso cref="DragLint.Plugin.CycleFix.StripProjectSuffix"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseCycleFixOutcome(const AText: string): TCycleFixOutcome;
 
 /// <summary>One status line saying what a `cycles --fix` run did: verdict,
@@ -159,11 +235,25 @@ function ParseCycleFixOutcome(const AText: string): TCycleFixOutcome;
 /// <param name="AOutcome">From ParseCycleFixOutcome.</param>
 /// <returns>A single line. A refused baseline reads
 /// `refused: dirty-baseline -- first dcc line`.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix (DragLint.Plugin.UsesDepsFrame.pas)</para>
+/// <para>Calls: Format, SameText</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 31 lines (full implementation)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DescribeCycleFixOutcome(const AOutcome: TCycleFixOutcome): string;
 
 /// <summary>Whether the run changed files on disk that the IDE must reload.</summary>
 /// <param name="AOutcome">From ParseCycleFixOutcome.</param>
 /// <returns>True when Written is non-empty and nothing was rolled back.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.FinishFix (DragLint.Plugin.UsesDepsFrame.pas)</para>
+/// <para>Returns: (Length(AOutcome.Written) &gt; 0) and not AOutcome.RolledBack</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleFixWroteFiles(const AOutcome: TCycleFixOutcome): Boolean;
 
 implementation

@@ -19,9 +19,15 @@ uses
 
 type
   /// <summary>Sort-Object's order for an array, ties included.</summary>
-  /// <remarks>Use as <c>TPsSort&lt;TRow&gt;.Sort(Rows, Compare)</c>. The fields and private
+  /// <remarks>
+  /// Use as <c>TPsSort&lt;TRow&gt;.Sort(Rows, Compare)</c>. The fields and private
   /// routines are the working state of one sort (the array and the comparison); every routine
-  /// works on the 0-based slice [pLo, pLo + pCount) of FItems.</remarks>
+  /// works on the 0-based slice [pLo, pLo + pCount) of FItems.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.MemberAccess.GroupRoutines (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.Consumers.SortedText (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ReadByName (DRagLint.Charts.Q.Consumers.pas) (+25 more)</para>
+  /// <para>Used in units: DRagLint.Charts.MemberAccess, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.EventWiring, DRagLint.Charts.Q.ExceptionPaths, DRagLint.Charts.Q.FeedsFrom, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.LandsWhere (+7 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPsSort<T> = record
   private const
     { ArraySortHelper.IntrosortSizeThreshold }
@@ -31,21 +37,148 @@ type
   private
     FItems  : TArray<T>;
     FCompare: TComparison<T>;
+    /// <param name="pI"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pJ"><!-- drag-lint:auto type -->Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.PsSort.TPsSort.HeapSort (DRagLint.Charts.PsSort.pas), DRagLint.Charts.PsSort.TPsSort.PickPivotAndPartition (DRagLint.Charts.PsSort.pas), DRagLint.Charts.PsSort.TPsSort.SwapIfGreater (DRagLint.Charts.PsSort.pas)</para>
+    /// <para>Reads: FItems   Writes: FItems</para>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.DownHeap"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.HeapSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.InsertionSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.IntroSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.Log2Floor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Swap(pI, pJ: Integer);
+    /// <param name="pI"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pJ"><!-- drag-lint:auto type -->Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.PsSort.TPsSort.IntroSort (DRagLint.Charts.PsSort.pas), DRagLint.Charts.PsSort.TPsSort.PickPivotAndPartition (DRagLint.Charts.PsSort.pas)</para>
+    /// <para>Calls: DRagLint.Charts.PsSort.TPsSort.Swap, FCompare</para>
+    /// <para>Reads: FItems, FCompare</para>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.Swap"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.DownHeap"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.HeapSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.InsertionSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.IntroSort"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SwapIfGreater(pI, pJ: Integer);
+    /// <param name="pLo"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pCount"><!-- drag-lint:auto type -->Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.PsSort.TPsSort.IntroSort (DRagLint.Charts.PsSort.pas)</para>
+    /// <para>Calls: FCompare</para>
+    /// <para>Reads: FItems, FCompare   Writes: FItems</para>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.DownHeap"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.HeapSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.IntroSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.Log2Floor"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.PickPivotAndPartition"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure InsertionSort(pLo, pCount: Integer);
+    /// <param name="pLo"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pCount"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: Left.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.PsSort.TPsSort.IntroSort (DRagLint.Charts.PsSort.pas)</para>
+    /// <para>Calls: DRagLint.Charts.PsSort.TPsSort.Swap, DRagLint.Charts.PsSort.TPsSort.SwapIfGreater, FCompare</para>
+    /// <para>Reads: FItems, FCompare</para>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.Swap"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.SwapIfGreater"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.DownHeap"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.HeapSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.InsertionSort"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function PickPivotAndPartition(pLo, pCount: Integer): Integer;
+    /// <param name="pLo"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pI"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pN"><!-- drag-lint:auto type -->Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.PsSort.TPsSort.HeapSort (DRagLint.Charts.PsSort.pas)</para>
+    /// <para>Calls: FCompare</para>
+    /// <para>Reads: FItems, FCompare   Writes: FItems</para>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.HeapSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.InsertionSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.IntroSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.Log2Floor"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.PickPivotAndPartition"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure DownHeap(pLo, pI, pN: Integer);
+    /// <param name="pLo"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pCount"><!-- drag-lint:auto type -->Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.PsSort.TPsSort.IntroSort (DRagLint.Charts.PsSort.pas)</para>
+    /// <para>Calls: DRagLint.Charts.PsSort.TPsSort.DownHeap, DRagLint.Charts.PsSort.TPsSort.Swap</para>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.DownHeap"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.Swap"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.InsertionSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.IntroSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.Log2Floor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure HeapSort(pLo, pCount: Integer);
+    /// <param name="pLo"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pCount"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pDepthLimit"><!-- drag-lint:auto type -->Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.PsSort.TPsSort.IntroSort (DRagLint.Charts.PsSort.pas), DRagLint.Charts.PsSort.TPsSort.Sort (DRagLint.Charts.PsSort.pas)</para>
+    /// <para>Calls: DRagLint.Charts.PsSort.TPsSort.HeapSort, DRagLint.Charts.PsSort.TPsSort.InsertionSort, DRagLint.Charts.PsSort.TPsSort.IntroSort, DRagLint.Charts.PsSort.TPsSort.PickPivotAndPartition, DRagLint.Charts.PsSort.TPsSort.SwapIfGreater</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.HeapSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.InsertionSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.PickPivotAndPartition"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.SwapIfGreater"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.DownHeap"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure IntroSort(pLo, pCount, pDepthLimit: Integer);
+    /// <summary><!-- drag-lint:auto sum -->floor(log2(n)) for n &gt;= 1, as
+    /// BitOperations.Log2</summary>
+    /// <param name="pN"><!-- drag-lint:auto type -->Cardinal</param>
+    /// <returns><!-- drag-lint:auto type -->Integer</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.PsSort.TPsSort.Sort (DRagLint.Charts.PsSort.pas)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.DownHeap"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.HeapSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.InsertionSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.IntroSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.PickPivotAndPartition"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Log2Floor(pN: Cardinal): Integer; static;
   public
     /// <summary>Sorts in place exactly as PowerShell 7 Sort-Object (without -Stable) does.</summary>
     /// <param name="pItems">The rows, in input order; sorted in place.</param>
     /// <param name="pCompare">The key comparison Sort-Object applies: negative, zero or positive.
     /// For -Descending pass the reversed comparison (Sort-Object negates its comparer).</param>
-    /// <remarks>Equal keys are NOT kept in input order (see the unit header): that is the
-    /// point. Pure; allocates nothing beyond the call stack.</remarks>
+    /// <remarks>
+    /// Equal keys are NOT kept in input order (see the unit header): that is the
+    /// point. Pure; allocates nothing beyond the call stack.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Charts.PsSort.TPsSort.IntroSort, DRagLint.Charts.PsSort.TPsSort.Log2Floor</para>
+    /// <para>Mutates: pItems (var)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.IntroSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.Log2Floor"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.DownHeap"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.HeapSort"/>
+    /// <seealso cref="DRagLint.Charts.PsSort.TPsSort.InsertionSort"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure Sort(var pItems: TArray<T>; const pCompare: TComparison<T>); static;
   end;
 

@@ -33,6 +33,12 @@ uses
 
 type
   /// <summary>One product the About dialog reports on and can check.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Updates.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.DoCheckUpdates (DragLint.Plugin.AboutForm.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.AboutForm, DragLint.Plugin.Updates</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLComponentInfo = record
     /// <summary>Shown in the dialog, e.g. 'YADF'.</summary>
     DisplayName : string;
@@ -61,40 +67,100 @@ const
 /// <summary>Reduce a release tag or file version to a bare 'AA.BB.CC.DD'.
 /// Strips a leading 'v'/'V', drops any '-prerelease' or '+build' tail, and
 /// pads missing fields with 0.</summary>
+/// <param name="AText"><!-- drag-lint:auto type -->const string</param>
 /// <returns>'' when the text contains no leading number at all -- an EMPTY
 /// result means UNKNOWN and must never be treated as 0.0.0.0.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Updates.CompareVersions (DragLint.Plugin.Updates.pas), DragLint.Plugin.Updates.IsUpdateAvailable (DragLint.Plugin.Updates.pas)</para>
+/// <para>Calls: CharInSet, Copy, Delete, Format, Min, StrToIntDef, Trim</para>
+/// <para>Returns: ''; Format('%d.%d.%d.%d', [Nums[0], Nums[1], Nums[2], Nums[3]])</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 36 lines (full implementation)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NormalizeVersionText(const AText: string): string;
 
 /// <summary>Compare two versions field by field, numerically.</summary>
+/// <param name="A"><!-- drag-lint:auto type -->const string</param>
+/// <param name="B"><!-- drag-lint:auto type -->const string</param>
 /// <returns>&gt;0 if A is newer, 0 if equal, &lt;0 if A is older. Unparseable
 /// input on either side yields 0; callers must test parseability separately
 /// rather than reading 0 as "same".</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Updates.IsUpdateAvailable (DragLint.Plugin.Updates.pas)</para>
+/// <para>Calls: DragLint.Plugin.Updates.NormalizeVersionText, DragLint.Plugin.Updates.SplitNums</para>
+/// <para>Returns: 0; VA[I] - VB[I]</para>
+/// <seealso cref="DragLint.Plugin.Updates.NormalizeVersionText"/>
+/// <seealso cref="DragLint.Plugin.Updates.SplitNums"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CompareVersions(const A, B: string): Integer;
 
 /// <summary>Should the user be told about ARemoteTag?</summary>
+/// <param name="ARemoteTag"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ALocalVersion"><!-- drag-lint:auto type -->const string</param>
 /// <param name="AReason">Always set: 'update available', 'up to date',
 /// 'local build is ahead of the latest release', or 'unknown'.</param>
 /// <returns>True ONLY when both versions parse and the remote is strictly
 /// newer. Anything unknown is False with an 'unknown' reason -- never a
 /// silent "up to date".</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.DoCheckUpdates (DragLint.Plugin.AboutForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.Updates.CompareVersions, DragLint.Plugin.Updates.NormalizeVersionText, Format</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: AReason (out)</para>
+/// <seealso cref="DragLint.Plugin.Updates.CompareVersions"/>
+/// <seealso cref="DragLint.Plugin.Updates.NormalizeVersionText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsUpdateAvailable(const ARemoteTag, ALocalVersion: string;
   out AReason: string): Boolean;
 
 /// <summary>The Windows file-version resource of APath as 'AA.BB.CC.DD'.</summary>
+/// <param name="APath"><!-- drag-lint:auto type -->const string</param>
 /// <returns>'' if the file is missing or carries no version resource.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.DoCheckUpdates (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Diagnose.DiagRelatedTools (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Diagnose.DiagRelatedTools.AddTool (DragLint.Plugin.Diagnose.pas)</para>
+/// <para>Calls: FileExists, Format, GetFileVersionInfo, GetFileVersionInfoSize, HiWord, LoWord, PChar, Pointer, VerQueryValue</para>
+/// <para>Returns: ''</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FileVersionOf(const APath: string): string;
 
 /// <summary>Full path of a registered design-time package whose file name
 /// contains ANameFragment, read from the IDE's Known Packages.</summary>
+/// <param name="ANameFragment"><!-- drag-lint:auto type -->const string</param>
 /// <returns>'' when no registered package matches.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.DoCheckUpdates (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.Diagnose.DiagRelatedTools (DragLint.Plugin.Diagnose.pas)</para>
+/// <para>Calls: ContainsText, ExtractFileName</para>
+/// <para>Returns: ''; S</para>
+/// <para>Touches: registry</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindKnownPackagePath(const ANameFragment: string): string;
 
 /// <summary>Latest release tag of ARepo from the GitHub API.</summary>
+/// <param name="ARepo"><!-- drag-lint:auto type -->const string</param>
 /// <param name="ATimeoutMs">Applied to both connect and response. The caller
 /// is a modal dialog, so this must never be unbounded.</param>
 /// <param name="AError">'' on success; otherwise why it failed.</param>
 /// <returns>The tag, or '' -- and '' with AError set is UNKNOWN, not
 /// up to date.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.AboutForm.TDragLintAboutForm.DoCheckUpdates (DragLint.Plugin.AboutForm.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: ''; Obj.GetValue&lt;string&gt;('tag_name', '')</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AError (out)</para>
+/// <para>Touches: network</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FetchLatestReleaseTag(const ARepo: string; ATimeoutMs: Integer;
   out AError: string): string;
 

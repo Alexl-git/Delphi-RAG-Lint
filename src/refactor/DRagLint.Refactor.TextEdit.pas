@@ -17,7 +17,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.TextEdit.pas), DRagLint.CLI.CycleFix.ToTextEdits.Make (DRagLint.CLI.CycleFix.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.TextEdit.pas), DRagLint.CLI.CycleFix.ToTextEdits.Make (DRagLint.CLI.CycleFix.pas), DRagLint.Fix.Decl.DcNewEdit (DRagLint.Fix.Decl.pas), DRagLint.Fix.Hygiene.NewEdit (DRagLint.Fix.Hygiene.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTextEditKind = (tekInsertInLine, tekInsertLines, tekDeleteLines, tekReplaceInLine, tekReplaceLines);
@@ -47,8 +47,8 @@ type
   /// is dropped and counted skipped; the overlap check treats Line..EndLine as a
   /// delete range, so it can never interleave with a delete or another replace.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.NetLineChange (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.ToTextEdits (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.ToTextEdits.Make (DRagLint.CLI.CycleFix.pas) (+81 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Convert.Apply, DRagLint.Convert.UnitRules, DRagLint.Diagnostics.AstChecks, DRagLint.Doc.Batch, DRagLint.Doc.Document, DRagLint.Doc.Strip, DRagLint.Lint.DocRules, DRagLint.Refactor.EnumHelper, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.NamingFix, DRagLint.Refactor.TextEdit</para>
+  /// <para>Used by: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.ToTextEdits.Make (DRagLint.CLI.CycleFix.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas) (+194 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Convert.Apply, DRagLint.Convert.UnitRules, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.BoundsNilChecks, DRagLint.Diagnostics.OwnershipChecks, DRagLint.Diagnostics.ParityExtChecks, DRagLint.Doc.Batch, DRagLint.Doc.Document (+20 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTextEdit = record
@@ -78,6 +78,10 @@ type
   /// LF only when the text holds an LF and no CRLF; otherwise (CRLF, mixed, or
   /// no line break at all) it is CRLF, the historical output. Encoding is an
   /// RTL standard singleton -- never owned, never freed.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas), DRagLint.Convert.Apply.DecodeUnitBytes (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ReadUnitText (DRagLint.Convert.Apply.pas), DRagLint.Convert.Backup.PrependConvertComment (DRagLint.Convert.Backup.pas) (+15 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.Backup, DRagLint.Convert.GlyphVacuum, DRagLint.Fix.ProjectWide, DRagLint.Fix.Store, DRagLint.LSP.Feature.Rename, DRagLint.Refactor.Rename, DRagLint.Refactor.TextEdit</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTextFileFormat = record
     Encoding : TEncoding;  { ANSI, UTF8, Unicode or BigEndianUnicode singleton }
@@ -87,6 +91,19 @@ type
     /// <param name="ABytes">The file's raw bytes (may be empty).</param>
     /// <param name="AText">Out: the text, without the BOM.</param>
     /// <returns>The format to hand to Encode when the text is written back.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas), DRagLint.Convert.Apply.DecodeUnitBytes (DRagLint.Convert.Apply.pas), DRagLint.Convert.Backup.PrependConvertComment (DRagLint.Convert.Backup.pas), DRagLint.Convert.GlyphVacuum.HarvestFile (DRagLint.Convert.GlyphVacuum.pas) (+4 more)</para>
+    /// <para>Calls: Copy, DRagLint.Core.Encoding.IsValidUtf8, DRagLint.Refactor.TextEdit.HasHighByte, DRagLint.Refactor.TextEdit.TTextFileFormat.LineBreakOf</para>
+    /// <para>Mutates: AText (out)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.Encoding.IsValidUtf8"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.HasHighByte"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.LineBreakOf"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Encode"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.ReadFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Decode(const ABytes: TBytes; out AText: string): TTextFileFormat; static;
     /// <summary>Reads a file and decodes it as Decode does -- the one reader
     /// every tool that edits a file in place uses, so a column it computes
@@ -94,28 +111,107 @@ type
     /// <param name="APath">The file to read.</param>
     /// <param name="AText">Out: the text, without the BOM; '' when the file is missing.</param>
     /// <returns>The file's format; ANSI + CRLF when the file is missing.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.Apply.ReadUnitText (DRagLint.Convert.Apply.pas), DRagLint.Fix.ProjectWide.FixUsesMovable (DRagLint.Fix.ProjectWide.pas), DRagLint.Fix.Store.FixClassNameCompare (DRagLint.Fix.Store.pas), DRagLint.Fix.Store.FixUnusedUnits (DRagLint.Fix.Store.pas), DRagLint.LSP.Feature.Rename.DiskLine (DRagLint.LSP.Feature.Rename.pas) (+6 more)</para>
+    /// <para>Calls: DRagLint.Refactor.TextEdit.TTextFileFormat.Decode</para>
+    /// <para>Returns: Decode(Bytes, AText)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Decode"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Encode"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.LineBreakOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ReadFile(const APath: string; out AText: string): TTextFileFormat; static;
     /// <summary>The line break a rewrite of AText should use: #10 when AText
     /// holds an LF and no CRLF, else #13#10.</summary>
     /// <param name="AText">Text as read from a file.</param>
     /// <returns>#10 or #13#10.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Fix.ProjectWide.FixUsesMovable (DRagLint.Fix.ProjectWide.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup (DRagLint.Refactor.TextEdit.pas), DRagLint.Refactor.TextEdit.TTextFileFormat.Decode (DRagLint.Refactor.TextEdit.pas)</para>
+    /// <para>Calls: Pos</para>
+    /// <para>Returns: if (Pos(#10, AText) &gt; 0) and (Pos(#13#10, AText) = 0) then #10</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Decode"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Encode"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.ReadFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function LineBreakOf(const AText: string): string; static;
     /// <summary>The bytes to write for AText: the original BOM followed by
     /// AText in the original encoding.</summary>
     /// <param name="AText">The text to write; its line breaks are written as given.</param>
     /// <returns>Preamble + Encoding.GetBytes(AText).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoAllow (DRagLint.CLI.pas), DRagLint.Convert.Backup.PrependConvertComment (DRagLint.Convert.Backup.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/3 (DRagLint.Refactor.TextEdit.pas)</para>
+    /// <para>Returns: Preamble + Encoding.GetBytes(AText)</para>
+    /// <para>Reads: Preamble, Encoding</para>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Decode"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.LineBreakOf"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.ReadFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Encode(const AText: string): TBytes;
   end;
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.CLI.ReportStrip (DRagLint.CLI.pas) (+12 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Convert.Apply, DRagLint.Refactor.ExtractMethod</para>
+  /// <para>Used by: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas) (+15 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Convert.Apply, DRagLint.LSP.UsesOnSave, DRagLint.Refactor.ExtractMethod, DRagLint.Refactor.Rename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTextEditApplier = class
   private
+    /// <summary><!-- drag-lint:auto sum -->One kept edit applied to ALines (the per-kind
+    /// half of ApplyGroup).</summary>
+    /// <param name="ALines"><!-- drag-lint:auto type -->TStringList</param>
+    /// <param name="AEdit"><!-- drag-lint:auto type -->const TTextEdit</param>
+    /// <param name="AApplied"><!-- drag-lint:auto type -->var Integer</param>
+    /// <param name="ASkippedEdits"><!-- drag-lint:auto type -->var Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup (DRagLint.Refactor.TextEdit.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Refactor.TextEdit.ApplyReplaceLines, DRagLint.Refactor.TextEdit.ReplaceEditIsValid</para>
+    /// <para>Complexity: 24 (cyclomatic, outer body), 64 lines (full implementation)</para>
+    /// <para>Mutates: AApplied (var), ASkippedEdits (var)</para>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.ApplyReplaceLines"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.ReplaceEditIsValid"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure ApplyOneEdit(ALines: TStringList; const AEdit: TTextEdit; var AApplied, ASkippedEdits: Integer);
+    /// <summary><!-- drag-lint:auto sum -->1.27.0 (C9): ONE file's edits applied to its
+    /// text -- the shared core of Apply and ApplyToText, so the in-memory preview
+    /// convert-apply re-indexes is, by construction, the text Apply writes. AApplied is
+    /// the number of edits that changed the lines (0 = Apply leaves the file alone).
+    /// AQuiet suppresses the overlapping-delete note on stderr (a preview is not a
+    /// refusal).</summary>
+    /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AContent"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AGroup"><!-- drag-lint:auto type -->TList&lt;TTextEdit&gt;</param>
+    /// <param name="AQuiet"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="ASkippedEdits"><!-- drag-lint:auto type -->var Integer</param>
+    /// <param name="AApplied"><!-- drag-lint:auto type -->out Integer</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: AContent; SB.ToString.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/3 (DRagLint.Refactor.TextEdit.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText (DRagLint.Refactor.TextEdit.pas)</para>
+    /// <para>Calls: DRagLint.Refactor.TextEdit.AnchorIsValid, DRagLint.Refactor.TextEdit.CollectBrokenAtoms, DRagLint.Refactor.TextEdit.DeletesOverlap, DRagLint.Refactor.TextEdit.EditAtomKey, DRagLint.Refactor.TextEdit.EditTopLine, DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyOneEdit, DRagLint.Refactor.TextEdit.TTextFileFormat.LineBreakOf, Format, Writeln</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 122 lines (full implementation)</para>
+    /// <para>Mutates: AApplied (out), ASkippedEdits (var)</para>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.AnchorIsValid"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.CollectBrokenAtoms"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.DeletesOverlap"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.EditAtomKey"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.EditTopLine"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ApplyGroup(const AFilePath, AContent: string; AGroup: TList<TTextEdit>;
       AQuiet: Boolean; var ASkippedEdits: Integer; out AApplied: Integer): string;
   public
@@ -129,8 +225,20 @@ type
     /// <param name="AEdits">The edit set; edits for other files are ignored.</param>
     /// <returns>The edited text, or AContent unchanged when no edit applies
     /// (Apply would then leave the file alone).</returns>
-    /// <remarks>Pure. convert-apply re-indexes this text to reconcile the
-    /// converted unit's uses clauses before anything is written.</remarks>
+    /// <remarks>
+    /// Pure. convert-apply re-indexes this text to reconcile the
+    /// converted unit's uses clauses before anything is written.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas), DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas), DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries (DRagLint.LSP.UsesOnSave.pas)</para>
+    /// <para>Calls: DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup, SameText</para>
+    /// <para>Returns: ApplyGroup(AFilePath, AContent, Group, True, Skipped, Applied)</para>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyOneEdit"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.RefusalOf"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.RenderDryRun"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ApplyToText(const AFilePath, AContent: string; const AEdits: TArray<TTextEdit>): string;
     /// <summary>Applies edits per file, back-to-front by line, preserving the
     /// file's encoding, BOM and line-break style (TTextFileFormat) + (optional)
@@ -151,7 +259,7 @@ type
     /// write path re-serializes through a TStringList (one line-break style for the whole file),
     /// so an unconditional rewrite would modify a file that no edit had changed.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas) (+3 more)</para>
+    /// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas) (+4 more)</para>
     /// <para>Calls: DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/3</para>
     /// <para>Overload 1 of 2</para>
     /// <para>Directives: overload</para>
@@ -183,7 +291,7 @@ type
     /// Pinned by run_rename_owners_harness.ps1 P3-P5.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/2 (DRagLint.Refactor.TextEdit.pas)</para>
-    /// <para>Calls: DRagLint.Refactor.TextEdit.FailWriteForTests, DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup</para>
+    /// <para>Calls: DRagLint.Refactor.TextEdit.FailWriteForTests, DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup, DRagLint.Refactor.TextEdit.TTextFileFormat.Decode, DRagLint.Refactor.TextEdit.TTextFileFormat.Encode</para>
     /// <para>Returns: Touched</para>
     /// <para>Overload 2 of 2</para>
     /// <para>Mutates: ASkippedEdits (out)</para>
@@ -191,9 +299,9 @@ type
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Refactor.TextEdit.FailWriteForTests"/>
     /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Decode"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Encode"/>
     /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
-    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyOneEdit"/>
-    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean;
@@ -220,12 +328,24 @@ type
     /// <returns>'' or, for the first file whose edits Apply would refuse
     /// whole, 'refused N edit(s) to &lt;file&gt; -- overlapping delete ranges
     /// (an engine defect)'.</returns>
-    /// <remarks>The same overlap test Apply makes per file, without reading
+    /// <remarks>
+    /// The same overlap test Apply makes per file, without reading
     /// or writing anything, so a caller can refuse a multi-file plan BEFORE
     /// any file is written -- Apply works file by file and cannot undo a file
     /// it already wrote. Stale-anchor edits are not considered: they are
     /// skipped one by one by design. Files are grouped case-insensitively,
-    /// as Apply groups them (Ruling 13; run_rename_owners_harness.ps1 P6). Pure.</remarks>
+    /// as Apply groups them (Ruling 13; run_rename_owners_harness.ps1 P6). Pure.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.RefuseUnapplicablePlan (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Refactor.TextEdit.DeletesOverlap, Format</para>
+    /// <para>Returns: ''; Format('refused %d edit(s) to %s -- overlapping delete ranges (an engine defect)', [FileMap[P].Count, P])</para>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.DeletesOverlap"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyOneEdit"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function RefusalOf(const AEdits: TArray<TTextEdit>): string;
     /// <summary>Withdraws, WHOLE, every fix one of whose edits would not apply
     /// to its file as it is on disk now (lane IATOM, 2026-10-27).</summary>
@@ -234,12 +354,24 @@ type
     /// withdrawn edit, in plan order -- the findings to report as declined.</param>
     /// <returns>AEdits minus the withdrawn fixes' edits, order kept. Edits with
     /// no atom key (unattributed builders) always pass through.</returns>
-    /// <remarks>The check is the applier's own (EditWouldApply: the stale-anchor
+    /// <remarks>
+    /// The check is the applier's own (EditWouldApply: the stale-anchor
     /// guard, the in-line span guard, the replace-lines whole-line guard, range
     /// checks), made against each file read once, before any edit -- so a fix
     /// whose interface removal no longer matches never lands its implementation
     /// insert alone (E2004, engine dogfood 2026-10-27). A fix spanning several
-    /// files is withdrawn from all of them. Reads files; writes nothing.</remarks>
+    /// files is withdrawn from all of them. Reads files; writes nothing.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Refactor.TextEdit.CollectBrokenAtoms, DRagLint.Refactor.TextEdit.EditAtomKey, DRagLint.Refactor.TextEdit.TTextFileFormat.ReadFile, IndexText</para>
+    /// <para>Mutates: AWithdrawnOwners (out)</para>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.CollectBrokenAtoms"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.EditAtomKey"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.ReadFile"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function WithdrawBrokenFixes(const AEdits: TArray<TTextEdit>;
       out AWithdrawnOwners: TArray<string>): TArray<TTextEdit>;
   end;
@@ -294,21 +426,16 @@ type
     /// apply passes True when the retyped field is declared in the interface
     /// section, where an implementation-only uses would not compile (E2003). A
     /// unit already used in EITHER section is still AAlreadyUsed.</param>
-    /// <returns><!-- drag-lint:auto -->TArray&lt;TTextEdit&gt; -- Observed: nil; [Edit].</returns>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;TTextEdit&gt; -- Observed:
+    /// Build(ANameStore, AUnitStore, AName, AInFile, AResolvedUnit, AAlreadyUsed, Reason,
+    /// APreferInterface).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.BuildToTypeAdd (DRagLint.Convert.Apply.pas) ?, DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build/5 (DRagLint.Refactor.TextEdit.pas)</para>
-    /// <para>Calls: ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Model.IncludeUsesRefusal, DRagLint.Core.Model.TUnitUse.FromInclude, DRagLint.Refactor.TextEdit.PickUsesAnchor, ExtractFileName, LowerCase, SameText, Trim</para>
+    /// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.BuildToTypeAdd (DRagLint.Convert.Apply.pas) ?, DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build/5 (DRagLint.Refactor.TextEdit.pas)</para>
+    /// <para>Calls: DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build/8</para>
     /// <para>Overload 2 of 3</para>
-    /// <para>Complexity: 26 (cyclomatic, outer body), 146 lines (full implementation)</para>
-    /// <para>Mutates: AResolvedUnit (out), AAlreadyUsed (out), AReason (out)</para>
-    /// <para>Touches: file system</para>
     /// <para>Directives: overload</para>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
-    /// <seealso cref="DRagLint.Core.Model.IncludeUsesRefusal"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Build(const ANameStore, AUnitStore: ISymbolStore; const AName, AInFile: string;
@@ -328,8 +455,25 @@ type
     /// there would be a second uses clause).</param>
     /// <param name="APreferInterface">As the two-store overload.</param>
     /// <returns>The edits; empty with AReason set on the include refusal.</returns>
-    /// <remarks>Include rows are never the insertion anchor: the edit goes after
-    /// the last INLINE entry of the section.</remarks>
+    /// <remarks>
+    /// Include rows are never the insertion anchor: the edit goes after
+    /// the last INLINE entry of the section.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoFindUnit (DRagLint.CLI.pas), DRagLint.Refactor.TextEdit.TFindUnitRefactoring.Build/7 (DRagLint.Refactor.TextEdit.pas)</para>
+    /// <para>Calls: ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Core.Model.IncludeUsesRefusal, DRagLint.Core.Model.TUnitUse.FromInclude, DRagLint.Refactor.TextEdit.PickUsesAnchor, ExtractFileName, LowerCase, SameText, Trim</para>
+    /// <para>Returns: nil; [Edit]</para>
+    /// <para>Overload 3 of 3</para>
+    /// <para>Complexity: 26 (cyclomatic, outer body), 146 lines (full implementation)</para>
+    /// <para>Mutates: AResolvedUnit (out), AAlreadyUsed (out), AReason (out)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: overload</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
+    /// <seealso cref="DRagLint.Core.Model.IncludeUsesRefusal"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Build(const ANameStore, AUnitStore: ISymbolStore; const AName, AInFile: string;
       out AResolvedUnit: string; out AAlreadyUsed: Boolean; out AReason: string;
       APreferInterface: Boolean = False): TArray<TTextEdit>; overload;
@@ -371,8 +515,14 @@ type
 
 type
   /// <summary>One character a write would lose in an ANSI file (convert-apply encoding guard).</summary>
-  /// <remarks>Code is the Unicode code point, Text its string form, Line the 1-based line of its
-  /// first occurrence in the text as it would be written.</remarks>
+  /// <remarks>
+  /// Code is the Unicode code point, Text its string form, Line the 1-based line of its
+  /// first occurrence in the text as it would be written.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.pas), DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEncodingMisfit = record
     Code: Integer;
     Text: string;
@@ -382,6 +532,12 @@ type
 /// <summary>The engine's name for how a text file is stored: ansi, utf8, utf8-bom or utf16-bom.</summary>
 /// <param name="AFmt">A format from TTextFileFormat.Decode.</param>
 /// <returns>One of ansi | utf8 | utf8-bom | utf16-bom.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas)</para>
+/// <para>Returns: 'ansi'; if Length(AFmt.Preamble) &gt; 0 then 'utf8-bom'; 'utf16-bom'</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TextFileEncodingName(const AFmt: TTextFileFormat): string;
 
 /// <summary>The distinct code points in AValues that an ANSI file cannot hold.</summary>
@@ -389,12 +545,27 @@ function TextFileEncodingName(const AFmt: TTextFileFormat): string;
 /// <param name="AValues">The strings a write would put into the file.</param>
 /// <returns>Code points in first-seen order; empty unless AFmt is ansi. "Fits" is a lossless
 /// round trip through TEncoding.ANSI (the active code page).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, DRagLint.Refactor.TextEdit.CodePointAt, DRagLint.Refactor.TextEdit.EncodingHolds</para>
+/// <para>Returns: nil; Seen.ToArray</para>
+/// <seealso cref="DRagLint.Refactor.TextEdit.CodePointAt"/>
+/// <seealso cref="DRagLint.Refactor.TextEdit.EncodingHolds"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnfitCodePoints(const AFmt: TTextFileFormat; const AValues: TArray<string>): TArray<Integer>;
 
 /// <summary>The 1-based line of the first occurrence of a code point in a text.</summary>
 /// <param name="AText">The text as it would be written.</param>
 /// <param name="ACode">The code point to find.</param>
 /// <returns>The line, or 0 when the text does not hold it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas)</para>
+/// <para>Calls: Pos</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FirstLineOfCodePoint(const AText: string; ACode: Integer): Integer;
 
 /// <summary>Rewrites the string literals of AText so characters AEnc cannot hold become
@@ -403,6 +574,18 @@ function FirstLineOfCodePoint(const AText: string; ACode: Integer): Integer;
 /// <param name="AEnc">The target file's encoding; a character that round-trips is left alone.</param>
 /// <returns>AText with unfit characters inside quoted literals replaced by #codes (one per UTF-16
 /// unit); AText unchanged when nothing needs it. Characters outside literals are never touched.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas), DRagLint.Refactor.TextEdit.EscapeUnfitForPascal.FlushCode (DRagLint.Refactor.TextEdit.pas)</para>
+/// <para>Calls: Copy, DRagLint.Refactor.TextEdit.CodePointAt, DRagLint.Refactor.TextEdit.EncodingHolds, DRagLint.Refactor.TextEdit.EscapeUnfitForDfm.CloseOut, DRagLint.Refactor.TextEdit.EscapeUnfitForDfm.OpenOut</para>
+/// <para>Returns: SB.ToString</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 86 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Refactor.TextEdit.CodePointAt"/>
+/// <seealso cref="DRagLint.Refactor.TextEdit.EncodingHolds"/>
+/// <seealso cref="DRagLint.Refactor.TextEdit.EscapeUnfitForDfm.CloseOut"/>
+/// <seealso cref="DRagLint.Refactor.TextEdit.EscapeUnfitForDfm.OpenOut"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EscapeUnfitForDfm(const AText: string; AEnc: TEncoding): string;
 
 /// <summary>The Pascal-source form of EscapeUnfitForDfm: rewrites the string literals of AText so
@@ -413,19 +596,41 @@ function EscapeUnfitForDfm(const AText: string; AEnc: TEncoding): string;
 /// <returns>AText with unfit characters inside literals replaced; AText UNCHANGED when it holds a
 /// multi-line string (<c>'''</c>), which this does not rewrite. A character outside a literal (in a
 /// comment or an identifier) is never touched, so the caller can still find and refuse it.</returns>
-/// <remarks>Lane 142-cyc (CYC-C residue): what lets `cycles --fix` insert a line whose literal holds
+/// <remarks>
+/// Lane 142-cyc (CYC-C residue): what lets `cycles --fix` insert a line whose literal holds
 /// such a character into an ANSI file instead of refusing non-ascii-text. A quote inside a comment
-/// never opens a literal. Pure; thread-safe.</remarks>
+/// never opens a literal. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.CheckInsertedText (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.EscapeInsertedText (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Calls: CharInSet, Copy, DRagLint.Refactor.TextEdit.EscapeUnfitForPascal.FlushCode, EscapeUnfitForDfm, PosEx</para>
+/// <para>Returns: SB.ToString</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 66 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Refactor.TextEdit.EscapeUnfitForPascal.FlushCode"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EscapeUnfitForPascal(const AText: string; AEnc: TEncoding): string;
 
 /// <summary>True when bytes are a compiled (binary, TPF0 or resource-header) .dfm.</summary>
 /// <param name="ABytes">The file's raw bytes.</param>
 /// <returns>True for a binary form file; such a file has no text encoding.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsBinaryDfmFile(const ABytes: TBytes): Boolean;
 
 /// <summary>The bytes of a text file re-stored as UTF-8 with a BOM.</summary>
 /// <param name="ABytes">The file's raw bytes, decoded as TTextFileFormat.Decode does.</param>
 /// <returns>BOM + the decoded text as UTF-8; the line breaks are kept as read.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Refactor.TextEdit.TTextFileFormat.Decode</para>
+/// <para>Returns: TEncoding.UTF8.GetPreamble + TEncoding.UTF8.GetBytes(Text)</para>
+/// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Decode"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RaiseBytesToUtf8Bom(const ABytes: TBytes): TBytes;
 
 /// <summary>TEST SEAM for an atomic multi-file write: raises before the AWriteNo-th write of one
@@ -433,14 +638,27 @@ function RaiseBytesToUtf8Bom(const ABytes: TBytes): TBytes;
 /// <param name="AWriteNo">1-based number of the write about to happen in this transaction.</param>
 /// <param name="APath">The file about to be written (named in the message).</param>
 /// <exception cref="EInOutError">Raised when DRAGLINT_TEST_FAIL_WRITE_AT equals AWriteNo.</exception>
-/// <remarks>Called by TTextEditApplier.Apply (convert-apply) and by `cycles --fix --apply`
-/// (DRagLint.CLI.CycleFix.WriteAll), so their rollback can be proven by a test.</remarks>
+/// <remarks>
+/// Called by TTextEditApplier.Apply (convert-apply) and by `cycles --fix --apply`
+/// (DRagLint.CLI.CycleFix.WriteAll), so their rollback can be proven by a test.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.WriteAll.WriteOne (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/3 (DRagLint.Refactor.TextEdit.pas)</para>
+/// <para>Calls: GetEnvironmentVariable, IntToStr</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure FailWriteForTests(AWriteNo: Integer; const APath: string);
 
 /// <summary>The key that ties edits into one all-or-nothing fix.</summary>
 /// <param name="AEdit">An edit.</param>
 /// <returns>AEdit.AtomGroup when set, else AEdit.Owner; '' = not tied to any
 /// fix (applied, or skipped, edit by edit as before).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.Autofix.DeferConflictingFixes (DRagLint.Lint.Autofix.pas), DRagLint.Refactor.TextEdit.CollectBrokenAtoms (DRagLint.Refactor.TextEdit.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup (DRagLint.Refactor.TextEdit.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.WithdrawBrokenFixes (DRagLint.Refactor.TextEdit.pas)</para>
+/// <para>Returns: if AEdit.AtomGroup &lt;&gt; '' then AEdit.AtomGroup</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EditAtomKey(const AEdit: TTextEdit): string;
 
 implementation

@@ -14,11 +14,38 @@ uses
   , Vcl.Controls
   ;
 
+/// <summary><!-- drag-lint:auto sum -->---- ShowSymbolSearch ----</summary>
+/// <param name="AExePath"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
+/// <returns><!-- drag-lint:auto -->string -- Observed: ''; Handler.GetResult.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeSymbolSearch (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.SymbolSearchForm.TSymbolSearchHandler.Create, DragLint.Plugin.SymbolSearchForm.TSymbolSearchHandler.GetResult</para>
+/// <para>UI thread only -- touches Form</para>
+/// <seealso cref="DragLint.Plugin.SymbolSearchForm.TSymbolSearchHandler.Create"/>
+/// <seealso cref="DragLint.Plugin.SymbolSearchForm.TSymbolSearchHandler.GetResult"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ShowSymbolSearch(const AExePath, ADbPath: string): string;
 
 { v0.42: build the symbol-search UI embedded in a dock-panel tab (non-modal).
   Double-click / Enter opens the symbol's source instead of returning a result.
   ADbArgs is a pre-built ' --db "x" --db "y"' string (multi-DB). }
+/// <summary><!-- drag-lint:auto sum -->v0.42: build the symbol-search UI embedded in a
+/// dock-panel tab (non-modal). Double-click / Enter opens the symbol's source instead of
+/// returning a result. ADbArgs is a pre-built ' --db "x" --db "y"' string (multi-DB).</summary>
+/// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
+/// <param name="AParent"><!-- drag-lint:auto type -->TWinControl</param>
+/// <param name="AExePath"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ADbArgs"><!-- drag-lint:auto type -->const string</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DragLint.Plugin.SymbolSearchForm.TSymbolSearchHandler.Create</para>
+/// <para>UI thread only -- touches AParent</para>
+/// <seealso cref="DragLint.Plugin.SymbolSearchForm.TSymbolSearchHandler.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure CreateEmbeddedSymbolSearch(AOwner: TComponent; AParent: TWinControl; const AExePath, ADbArgs: string);
 
 implementation

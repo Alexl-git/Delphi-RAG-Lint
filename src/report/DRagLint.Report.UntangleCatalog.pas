@@ -28,6 +28,11 @@ const
 
 type
   /// <summary>What the plan does with the leaf unit it names.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas) ?, declaration (DRagLint.Report.UntangleCatalog.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.LeafStems (DRagLint.Report.CyclePlan.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.RenderLeafUnits (DRagLint.Report.CyclePlan.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUntangleDecision = (
     /// <summary>Create a new unit at TUntangleLeaf.Path.</summary>
     udCreate,
@@ -36,6 +41,12 @@ type
 
   /// <summary>The leaf unit that receives the declarations moved out of one
   /// source unit of a circular group, as ResolveUntangleLeaf found it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Report.CyclePlan.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.Create (DRagLint.Report.CyclePlan.pas) ?, DRagLint.Report.CyclePlan.TCyclePlanner.InversionLeaf (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.SettleIfaceName (DRagLint.Report.CyclePlan.pas) ?, DRagLint.Report.UntangleCatalog.ResolveUntangleLeaf (DRagLint.Report.UntangleCatalog.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Report.CyclePlan, DRagLint.Report.UntangleCatalog</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUntangleLeaf = record
     /// <summary>Unit name, e.g. 'DemoConfig.Untangle' (or '...Untangle2').</summary>
     UnitName: string;
@@ -77,9 +88,23 @@ type
 /// clause; otherwise udCreate with the path
 /// `&lt;dir of source&gt;\&lt;Source&gt;.Untangle&lt;N&gt;.pas` of the first number
 /// that is neither indexed nor an existing file.</returns>
-/// <remarks>A candidate that uses a member, lies outside the roots, or exists
+/// <remarks>
+/// A candidate that uses a member, lies outside the roots, or exists
 /// on disk but is not indexed is skipped, and Reason says so. Reads every file
-/// path of the index once per call; holds no state.</remarks>
+/// path of the index once per call; holds no state.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.AssignLeafNames (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.InversionLeaf (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.TCyclePlanner.PlanMemberHandOver (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Report.UntangleCatalog.InterfaceUses, DRagLint.Report.UntangleCatalog.IsUnder, DRagLint.Report.UntangleCatalog.LastInterfaceLine, DRagLint.Report.UntangleCatalog.NormPath, DRagLint.Report.UntangleCatalog.StemOf (+9 more)</para>
+/// <para>Returns: Default(TUntangleLeaf)</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 71 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
+/// <seealso cref="DRagLint.Report.UntangleCatalog.InterfaceUses"/>
+/// <seealso cref="DRagLint.Report.UntangleCatalog.IsUnder"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveUntangleLeaf(const pStore: ISymbolStore; const pSourceStem: string;
   const pScc: TArray<string>; const pProjectDir: string): TUntangleLeaf;
 

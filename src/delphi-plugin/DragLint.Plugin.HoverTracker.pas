@@ -34,7 +34,20 @@ unit DragLint.Plugin.HoverTracker;
 
 interface
 
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.Create</para>
+/// <seealso cref="DragLint.Plugin.HoverTracker.TDragLintHoverHelper.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure StartHoverTracker;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), initialization/finalization (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Calls: FreeAndNil</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure StopHoverTracker;
 
 implementation

@@ -38,12 +38,23 @@ type
   /// <summary>One parsed parameter: the leading const/var/out modifier (if
   /// any), the name, and the type text. Mirrors the hover model's parameter
   /// shape without depending on the VCL unit that declares it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.HoverSignature.pas), DragLint.Plugin.HoverSignature.ComposeHoverSignature (DragLint.Plugin.HoverSignature.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.HoverSignature</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLSigParam = record
     Modifier: string;
     Name    : string;
     TypeText: string;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.HoverSignature.pas), DragLint.Plugin.Editor.BuildHoverSignature (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverSignature.ComposeHoverSignature (DragLint.Plugin.HoverSignature.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLSigParams = TArray<TDLSigParam>;
 
 /// <summary>Builds the popup header's one-line signature.</summary>
@@ -58,8 +69,16 @@ type
 /// routine this is the parenthesised parameter list; for a property or field it
 /// is the DECLARED TYPE; for an enum value it is the ordinal.</param>
 /// <returns>The composed line. Never raises.</returns>
-/// <remarks>Pure: no I/O, no globals, no VCL. Deliberately testable from a
-/// console harness -- see the unit header.</remarks>
+/// <remarks>
+/// Pure: no I/O, no globals, no VCL. Deliberately testable from a
+/// console harness -- see the unit header.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.BuildHoverSignature (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: Pos, Trim</para>
+/// <para>Returns: SB.ToString</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 48 lines (full implementation)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ComposeHoverSignature(const AKind, AQualifiedName: string;
   const AParams: TDLSigParams; const AReturnType, ARawSignature: string): string;
 

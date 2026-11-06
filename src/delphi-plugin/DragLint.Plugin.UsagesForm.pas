@@ -14,15 +14,65 @@ uses
   , Vcl.Controls
   ;
 
+/// <summary><!-- drag-lint:auto sum -->---- public API ----</summary>
+/// <param name="ASymbolName"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AExePath"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeFindUsages (DragLint.Plugin.Editor.pas), DragLint.Plugin.StructureForm.TDragLintStructureForm.FindUsagesClick (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages/3</para>
+/// <para>Overload 1 of 2</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowFindUsages(const ASymbolName, AExePath, ADbPath: string); overload;
 { v0.40.3: pass every --db path the resolver picked so callers from
   SERVER + COMMON + library DBs show up alongside the active project's. }
+/// <summary><!-- drag-lint:auto sum -->v0.40.3: pass every --db path the resolver picked
+/// so callers from SERVER + COMMON + library DBs show up alongside the active project's.</summary>
+/// <param name="ASymbolName"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AExePath"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ADbPaths"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.FindUsagesClick (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages/3</para>
+/// <para>Overload 2 of 2</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.LoadUsages"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowFindUsages(const ASymbolName, AExePath: string; const ADbPaths: TArray<string>); overload;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: FreeAndNil</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure HideFindUsages;
 
 { v0.42: build the Find-Usages UI in a dock-panel tab: a symbol search box on
   top of the (reparented, non-modal) usages tree. Enter runs find-callers for
   the typed symbol against the resolved project DBs. }
+/// <summary><!-- drag-lint:auto sum -->v0.42: build the Find-Usages UI in a dock-panel
+/// tab: a symbol search box on top of the (reparented, non-modal) usages tree. Enter runs
+/// find-callers for the typed symbol against the resolved project DBs.</summary>
+/// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
+/// <param name="AParent"><!-- drag-lint:auto type -->TWinControl</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.HandleInitTimer (DragLint.Plugin.DockForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create, DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.ComboChange, DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.EditKeyDown</para>
+/// <para>UI thread only -- touches AParent, Frm</para>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TDragLintUsagesForm.Create"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.ComboChange"/>
+/// <seealso cref="DragLint.Plugin.UsagesForm.TUsagesEmbedCtl.EditKeyDown"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure CreateEmbeddedUsages(AOwner: TComponent; AParent: TWinControl);
 
 implementation

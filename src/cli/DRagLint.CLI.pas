@@ -69,22 +69,19 @@ const
   VERSION = DRAGLINT_VERSION;
 
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: 0; 2; DoIndexAll(Args);
-/// DoIndex(Args); DoQuery (Args); DoRules (Args); DoLint (Args); DoAllow (Args); DoExport
-/// (Args); DoTop (Args); DoImportLog (Args); DoGraph (Args); DoTodos (Args); DoHover
-/// (Args); DoContrastSelfTest; DoImpact (Args); DoWiring (Args); DoSurface (Args);
-/// DoOutline (Args); DoCompare (Args).</returns>
+/// DoIndex(Args); DoWarmRuleCache(Args); DoQuery (Args).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, main block (drag-lint.dpr)</para>
-/// <para>Calls: Default, DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine, DRagLint.CLI.ConfigureLspLint, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst (+123 more)</para>
-/// <para>Complexity: 135 (cyclomatic, outer body), 393 lines (full implementation)</para>
+/// <para>Calls: AssignFile, Default, DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine, DRagLint.CLI.ApplyPreprocessCompilerVersion, DRagLint.CLI.ConfigureLspLint, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph (+146 more)</para>
+/// <para>Complexity: 151 (cyclomatic, outer body), 477 lines (full implementation)</para>
 /// <para>Catches: Exception (empty); Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine"/>
+/// <seealso cref="DRagLint.CLI.ApplyPreprocessCompilerVersion"/>
 /// <seealso cref="DRagLint.CLI.ConfigureLspLint"/>
 /// <seealso cref="DRagLint.CLI.DoAllow"/>
 /// <seealso cref="DRagLint.CLI.DoAmbiguousCalls"/>
-/// <seealso cref="DRagLint.CLI.DoBenchContext"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Run: Integer;

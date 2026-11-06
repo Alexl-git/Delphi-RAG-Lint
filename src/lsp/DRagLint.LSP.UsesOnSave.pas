@@ -40,8 +40,14 @@ const
 type
   /// <summary>The three facts that decide whether a removal may be applied
   /// silently on save (plan D2/D3).</summary>
-  /// <remarks>All three False by default (Default(TDropGate)): an unset gate
-  /// never opens.</remarks>
+  /// <remarks>
+  /// All three False by default (Default(TDropGate)): an unset gate
+  /// never opens.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.UsesOnSave.pas) ?, DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction (DRagLint.LSP.Server.pas) ?, DRagLint.LSP.UsesOnSave.TUsesOnSave.ComputeDropGate (DRagLint.LSP.UsesOnSave.pas), DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedImportAction (DRagLint.LSP.UsesOnSave.pas) ?</para>
+  /// <para>Used in units: DRagLint.LSP.Server, DRagLint.LSP.UsesOnSave</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDropGate = record
     /// <summary>The buffer's sha256 equals the indexed file's content hash:
     /// the index has seen THIS text, including any reference just typed.</summary>
@@ -56,8 +62,14 @@ type
 
   /// <summary>Builds the on-save (source.*) code actions for the uses clause,
   /// and the removal quickfix.</summary>
-  /// <remarks>Stateless; every function is thread-safe. Each returned JSON
-  /// object is new and the caller owns it.</remarks>
+  /// <remarks>
+  /// Stateless; every function is thread-safe. Each returned JSON
+  /// object is new and the caller owns it.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Completion, DRagLint.LSP.Server</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesOnSave = class
   public
     /// <summary>The source.addMissingImports twin of a unit-missing-from-uses
@@ -72,6 +84,19 @@ type
     /// <returns>A new action {title, kind: 'source.addMissingImports',
     /// diagnostics: [ADiag], edit}; nil when AFixes.Count &lt;&gt; 1 or an argument
     /// is nil. The caller owns the result.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions (DRagLint.LSP.Completion.pas)</para>
+    /// <para>Calls: TJSONObject</para>
+    /// <para>Returns: nil; TJSONObject.Create</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.ComputeDropGate"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.DiagnosticOfFinding"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.FindingOfDiagnostic"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedImportAction"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function AddMissingImportAction(const ADiag: TJSONObject; const AFixes: TJSONArray;
       const AQuickfixEdit: TJSONObject): TJSONObject; static;
 
@@ -84,8 +109,22 @@ type
     /// decides UsesClauseHasDirective; 0 leaves that field False.</param>
     /// <returns>The gate; open only when BufferMatchesIndex and IndexFresh and
     /// not UsesClauseHasDirective.</returns>
-    /// <remarks>Reads the store (one hash lookup plus one stat per indexed file);
-    /// never raises.</remarks>
+    /// <remarks>
+    /// Reads the store (one hash lookup plus one stat per indexed file);
+    /// never raises.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction (DRagLint.LSP.Server.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FileShaMatches, DRagLint.Index.Freshness.ProbeIndexFreshness, DRagLint.LSP.UsesOnSave.TUsesOnSave.UsesClauseHasDirectiveAt</para>
+    /// <para>Returns: Default(TDropGate)</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FileShaMatches"/>
+    /// <seealso cref="DRagLint.Index.Freshness.ProbeIndexFreshness"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.UsesClauseHasDirectiveAt"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.DiagnosticOfFinding"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function ComputeDropGate(const AStore: ISymbolStore; const APath, ABufferText: string;
       AFindingLine: Integer = 0): TDropGate; static;
 
@@ -94,8 +133,22 @@ type
     /// <param name="AText">The unit's source text.</param>
     /// <param name="ALine">1-based line; a line in no uses clause yields False.</param>
     /// <returns>Whether that clause carries a directive.</returns>
-    /// <remarks>Pure. `uses` and ';' inside // { } (* *) comments and '...'
-    /// strings are skipped, so a comment never opens or closes a clause.</remarks>
+    /// <remarks>
+    /// Pure. `uses` and ';' inside // { } (* *) comments and '...'
+    /// strings are skipped, so a comment never opens or closes a clause.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction (DRagLint.LSP.Server.pas), DRagLint.LSP.UsesOnSave.TUsesOnSave.ComputeDropGate (DRagLint.LSP.UsesOnSave.pas)</para>
+    /// <para>Calls: CharInSet, Copy, DRagLint.LSP.UsesOnSave.SkipTrivia, InRange, SameText</para>
+    /// <para>Returns: False</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 35 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.SkipTrivia"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.ComputeDropGate"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.DiagnosticOfFinding"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.FindingOfDiagnostic"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function UsesClauseHasDirectiveAt(const AText: string; ALine: Integer): Boolean; static;
 
     /// <summary>The source.removeUnusedImports action for one file, or nil.</summary>
@@ -107,6 +160,19 @@ type
     /// diagnostics, edit} only when AGate.BufferMatchesIndex and AGate.IndexFresh
     /// and not AGate.UsesClauseHasDirective, and AEdit and ADiags are non-empty;
     /// otherwise nil. The caller owns the result.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction (DRagLint.LSP.Server.pas)</para>
+    /// <para>Calls: Format</para>
+    /// <para>Returns: nil; TJSONObject.Create</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.ComputeDropGate"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.DiagnosticOfFinding"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.FindingOfDiagnostic"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function RemoveUnusedImportAction(const ADiags: TJSONArray; const AEdit: TJSONObject;
       const AGate: TDropGate): TJSONObject; static;
 
@@ -116,8 +182,22 @@ type
     /// <param name="AOldText">The text the client holds.</param>
     /// <param name="ANewText">The text it must end up with.</param>
     /// <returns>A new WorkspaceEdit, or nil when the two texts are equal.</returns>
-    /// <remarks>Pure. Line/character are counted in UTF-16 units over AOldText,
-    /// LSP's default position encoding.</remarks>
+    /// <remarks>
+    /// Pure. Line/character are counted in UTF-16 units over AOldText,
+    /// LSP's default position encoding.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction (DRagLint.LSP.Server.pas), DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedQuickfixes (DRagLint.LSP.UsesOnSave.pas)</para>
+    /// <para>Calls: Copy, DRagLint.LSP.UsesOnSave.TUsesOnSave.TextChangeEdit.PosOf</para>
+    /// <para>Returns: nil; TJSONObject.Create</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 41 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.TextChangeEdit.PosOf"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.ComputeDropGate"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.DiagnosticOfFinding"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.FindingOfDiagnostic"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function TextChangeEdit(const AFileUri, AOldText, ANewText: string): TJSONObject; static;
 
     /// <summary>The text after removing every unused-unit-in-uses entry of
@@ -127,14 +207,40 @@ type
     /// <param name="AFindings">The findings; other rules are ignored.</param>
     /// <returns>The edited text; AText when nothing could be removed (an
     /// initialization-section tier, a layout the fixer declines, a stale line).</returns>
-    /// <remarks>Uses the uses-clause core the CLI fixer uses (RemoveUsesEntry,
-    /// with its overlap check), on AText instead of the disk copy.</remarks>
+    /// <remarks>
+    /// Uses the uses-clause core the CLI fixer uses (RemoveUsesEntry,
+    /// with its overlap check), on AText instead of the disk copy.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction (DRagLint.LSP.Server.pas), DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedQuickfixes (DRagLint.LSP.UsesOnSave.pas)</para>
+    /// <para>Calls: ContainsText, Copy, DRagLint.Fix.ProjectWide.RemoveUsesEntry, DRagLint.Fix.ProjectWide.WithCharColumns, DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText, Max, SameText, StringReplace</para>
+    /// <para>Returns: AText; TTextEditApplier.ApplyToText(APath, AText, All.ToArray)</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 40 lines (full implementation)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Fix.ProjectWide.RemoveUsesEntry"/>
+    /// <seealso cref="DRagLint.Fix.ProjectWide.WithCharColumns"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.ComputeDropGate"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function RemoveUnusedEntries(const APath, AText: string; const AFindings: TArray<TLintFinding>): string; static;
 
     /// <summary>The unused-unit-in-uses findings of a `lint --json` answer.</summary>
     /// <param name="AJson">The child lint's stdout (a JSON array).</param>
     /// <param name="APath">The linted file; findings on another file are dropped.</param>
     /// <returns>Findings with index (1-based) positions; empty on bad JSON.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction (DRagLint.LSP.Server.pas)</para>
+    /// <para>Calls: Default, ExpandFileName, SameText, TJSONArray, TJSONObject</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.ComputeDropGate"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.DiagnosticOfFinding"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.FindingOfDiagnostic"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function UnusedFindingsFromLintJson(const AJson, APath: string): TArray<TLintFinding>; static;
 
     /// <summary>The finding an LSP diagnostic was made from
@@ -142,12 +248,39 @@ type
     /// <param name="ADiag">A drag-lint diagnostic; nil yields a finding with an empty RuleId.</param>
     /// <param name="APath">The file the diagnostic belongs to.</param>
     /// <returns>RuleId, FilePath, 1-based positions and Message.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedQuickfixes (DRagLint.LSP.UsesOnSave.pas)</para>
+    /// <para>Calls: Default</para>
+    /// <para>Returns: Default(TLintFinding)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.ComputeDropGate"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.DiagnosticOfFinding"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedImportAction"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function FindingOfDiagnostic(const ADiag: TJSONObject; const APath: string): TLintFinding; static;
 
     /// <summary>A drag-lint diagnostic for AFinding, as the full-rules path
     /// publishes it.</summary>
     /// <param name="AFinding">The finding (1-based positions).</param>
     /// <returns>A new diagnostic object; the caller owns it.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction (DRagLint.LSP.Server.pas)</para>
+    /// <para>Calls: DRagLint.LSP.UsesOnSave.TUsesOnSave.DiagnosticOfFinding.Pos0</para>
+    /// <para>Returns: TJSONObject.Create</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.DiagnosticOfFinding.Pos0"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.ComputeDropGate"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.FindingOfDiagnostic"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function DiagnosticOfFinding(const AFinding: TLintFinding): TJSONObject; static;
 
     /// <summary>"Remove unused unit" quickfixes for the unused-unit-in-uses
@@ -159,6 +292,20 @@ type
     /// <param name="AStartLine">First requested line, 1-based.</param>
     /// <param name="AEndLine">Last requested line, 1-based.</param>
     /// <returns>A new array, one quickfix per removable finding.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas)</para>
+    /// <para>Calls: DRagLint.LSP.UsesOnSave.TUsesOnSave.FindingOfDiagnostic, DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries, DRagLint.LSP.UsesOnSave.TUsesOnSave.TextChangeEdit, Format, SameText, TJSONObject</para>
+    /// <para>Returns: TJSONArray.Create</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.FindingOfDiagnostic"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedEntries"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.TextChangeEdit"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction"/>
+    /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.ComputeDropGate"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function RemoveUnusedQuickfixes(const APath, AFileUri, ABufferText: string;
       const ADiagnostics: TJSONArray; AStartLine, AEndLine: Integer): TJSONArray; static;
   end;

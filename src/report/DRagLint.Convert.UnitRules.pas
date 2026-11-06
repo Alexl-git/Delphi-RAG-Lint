@@ -50,14 +50,25 @@ uses
 
 type
   /// <summary>The kind of one significant token TUsesLexer returns.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTokKind = (tkIdent, tkString, tkSym, tkEof);
 
   /// <summary>One significant token of TUsesLexer: an identifier, a string
   /// literal or one symbol character (a number lexes as tkSym).</summary>
-  /// <remarks>Start / Stop are 1-based offsets into the lexer's text; Stop is
+  /// <remarks>
+  /// Start / Stop are 1-based offsets into the lexer's text; Stop is
   /// exclusive. Depth counts the $IF / $IFDEF / $IFNDEF / $IFOPT regions open
   /// at the token. Escaped marks an '&amp;ident' (an identifier, never a
-  /// keyword); Start then points past the ampersand.</remarks>
+  /// keyword); Start then points past the ampersand.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.IsSym (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.IsWord (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUsesLexer.Next (DRagLint.Convert.UnitRules.pas) (+7 more)</para>
+  /// <para>Used in units: DRagLint.Convert.UnitRules, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.DisallowedChecks, DRagLint.Report.CyclePlan</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTok = record
     Kind : TTokKind;
     Start: Integer;
@@ -68,9 +79,15 @@ type
   end;
 
   /// <summary>One entry of a uses clause: 'Name[.Name...] [in 'path']'.</summary>
-  /// <remarks>Start / Stop span the whole entry (the path literal included),
+  /// <remarks>
+  /// Start / Stop span the whole entry (the path literal included),
   /// 1-based, Stop exclusive; Depth is the conditional-region depth at its
-  /// first token (see TTok).</remarks>
+  /// first token (see TTok).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.IsPresent (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.RecordKeeps (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.SectionOf (DRagLint.Convert.UnitRules.pas) ? (+6 more)</para>
+  /// <para>Used in units: DRagLint.Convert.UnitRules, DRagLint.Report.CyclePlan</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesEntry = record
     Name : string;
     Start: Integer;
@@ -80,12 +97,18 @@ type
   end;
 
   /// <summary>One section's uses clause as ParseClause reads it.</summary>
-  /// <remarks>Commas[i] sits between Entries[i] and Entries[i + 1]. Start is
+  /// <remarks>
+  /// Commas[i] sits between Entries[i] and Entries[i + 1]. Start is
   /// the `uses` token's start, Stop the `;` token's stop (exclusive); UsesTok
   /// and Semi are those two tokens (Semi.Depth tells whether the `;` sits in a
   /// conditional region). Section / Present / KwLine are filled by the caller
   /// (KwLine: the section keyword's line, kept for a clause that has to be
-  /// created).</remarks>
+  /// created).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.Create (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RemovalSpans (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Report.CyclePlan.ScanClause (DRagLint.Report.CyclePlan.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.Convert.UnitRules, DRagLint.Report.CyclePlan</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesClause = record
     Section: string;
     Present: Boolean;
@@ -109,6 +132,10 @@ type
   /// It lexes only as far as the caller asks; DirectiveIn knows only the
   /// directives lexed so far. Not thread-safe; one instance per text. Shared
   /// with DRagLint.Report.CyclePlan (E18 T3a: minimal uses-clause edits).</para>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.ImplementationKeywordLine (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.Create (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.ClauseEdit (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.EntryHasTrivia (DRagLint.Report.CyclePlan.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.Convert.UnitRules, DRagLint.Report.CyclePlan</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUsesLexer = class
   private
@@ -116,38 +143,166 @@ type
     FPos       : Integer;
     FDepth     : Integer;
     FDirectives: TList<Integer>;
+    /// <param name="AStart"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="ABodyStart"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="ACloser"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UnitRules.TUsesLexer.SkipTrivia (DRagLint.Convert.UnitRules.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Convert.UnitRules.IsIdentChar, DRagLint.Convert.UnitRules.TUsesLexer.SkipTo, Pos, UpperCase</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 16 lines (full implementation)</para>
+    /// <para>Reads: FText, FDirectives, FDepth   Writes: FDepth, FPos</para>
+    /// <seealso cref="DRagLint.Convert.UnitRules.IsIdentChar"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.SkipTo"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Create"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Destroy"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.DirectiveIn"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Directive(AStart, ABodyStart: Integer; const ACloser: string);
+    /// <param name="ACloser"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UnitRules.TUsesLexer.Directive (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUsesLexer.ReadString (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUsesLexer.SkipTrivia (DRagLint.Convert.UnitRules.pas)</para>
+    /// <para>Calls: Pos</para>
+    /// <para>Reads: FText, FPos   Writes: FPos</para>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Create"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Destroy"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Directive"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.DirectiveIn"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.IsMultiLineOpener"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SkipTo(const ACloser: string);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UnitRules.TUsesLexer.Next (DRagLint.Convert.UnitRules.pas)</para>
+    /// <para>Calls: Copy, DRagLint.Convert.UnitRules.TUsesLexer.Directive, DRagLint.Convert.UnitRules.TUsesLexer.SkipTo</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 26 lines (full implementation)</para>
+    /// <para>Reads: FPos, FText   Writes: FPos</para>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Directive"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.SkipTo"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Create"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Destroy"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.DirectiveIn"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SkipTrivia;
+    /// <summary><!-- drag-lint:auto sum -->A Delphi 12+ multi-line string opens with
+    /// three quotes and NOTHING but blanks after them on the line. Four quotes ('''') is
+    /// the ordinary literal holding one quote, and '''abc' a literal starting with one --
+    /// neither opens a multi-line string.</summary>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (P &gt; Length(FText)) or
+    /// (FText[P] = LF).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UnitRules.TUsesLexer.ReadString (DRagLint.Convert.UnitRules.pas)</para>
+    /// <para>Calls: CharInSet, Copy</para>
+    /// <para>Reads: FText, FPos</para>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Create"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Destroy"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Directive"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.DirectiveIn"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Next"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsMultiLineOpener: Boolean;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UnitRules.TUsesLexer.Next (DRagLint.Convert.UnitRules.pas)</para>
+    /// <para>Calls: DRagLint.Convert.UnitRules.TUsesLexer.IsMultiLineOpener, DRagLint.Convert.UnitRules.TUsesLexer.SkipTo</para>
+    /// <para>Reads: FPos, FText   Writes: FPos</para>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.IsMultiLineOpener"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.SkipTo"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Create"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Destroy"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Directive"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ReadString;
   public
     /// <summary>Starts lexing AText at its first character.</summary>
     /// <param name="AText">The text to lex; the lexer keeps its own copy.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UnitRules.ImplementationKeywordLine (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.Create (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.ClauseEdit (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.EntryHasTrivia (DRagLint.Report.CyclePlan.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FText, FPos, FDirectives</para>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Destroy"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Directive"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.DirectiveIn"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.IsMultiLineOpener"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Next"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const AText: string);
     /// <summary>Frees the directive list.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FDirectives</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Create"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Directive"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.DirectiveIn"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.IsMultiLineOpener"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Next"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>The next significant token after any whitespace, comment or
     /// directive.</summary>
     /// <returns>The token; Kind = tkEof (Start = Stop = Length + 1) at the
     /// end of the text, and on every call after it.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UnitRules.ImplementationKeywordLine (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.ReadUnit (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.EntryHasTrivia (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.ScanClause (DRagLint.Report.CyclePlan.pas)</para>
+    /// <para>Calls: CharInSet, Copy, Default, DRagLint.Convert.UnitRules.IsIdentChar, DRagLint.Convert.UnitRules.IsIdentStart, DRagLint.Convert.UnitRules.TUsesLexer.ReadString, DRagLint.Convert.UnitRules.TUsesLexer.SkipTrivia</para>
+    /// <para>Returns: Default(TTok)</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 43 lines (full implementation)</para>
+    /// <para>Reads: FPos, FDepth, FText   Writes: FPos</para>
+    /// <seealso cref="DRagLint.Convert.UnitRules.IsIdentChar"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.IsIdentStart"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.ReadString"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.SkipTrivia"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Next: TTok;
     /// <summary>True when a compiler directive lexed so far STARTS at an
     /// offset in [AFrom, ATo).</summary>
     /// <param name="AFrom">First offset, 1-based, inclusive.</param>
     /// <param name="ATo">Last offset, exclusive.</param>
     /// <returns>Whether such a directive exists.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UnitRules.TUnitRulePlanner.PlanClause (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RemovalSpans.TryFollow (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RemovalSpans.TryPrecede (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.AddClauseEntry (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.PrevAdjacent (DRagLint.Report.CyclePlan.pas) (+1 more)</para>
+    /// <para>Returns: False</para>
+    /// <para>Reads: FDirectives</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Create"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Destroy"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Directive"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.IsMultiLineOpener"/>
+    /// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Next"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DirectiveIn(AFrom, ATo: Integer): Boolean;
   end;
 
   /// <summary>One reason a uses entry is still needed, or still referenced:
   /// a name and where it sits (C9, apply/1 uses[].needed_by).</summary>
-  /// <remarks>For a `kept` row Name is a .dfm component, 'Name: Class', and
+  /// <remarks>
+  /// For a `kept` row Name is a .dfm component, 'Name: Class', and
   /// Line its object header line in the .dfm; for a reconcile `add` it is the
   /// introduced name and its line in the converted .pas; for a `remove` row it
   /// is a .pas reference the removal leaves dangling (owner ruling 1: the
   /// compile error is the intended signal). Section is the .pas section of the
-  /// reference ('interface' / 'implementation'), or 'dfm'.</remarks>
+  /// reference ('interface' / 'implementation'), or 'dfm'.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas), DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas), DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.NeedInstance (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.NeedNames (DRagLint.Convert.Apply.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesNeed = record
     Name   : string;
     Line   : Integer;
@@ -181,6 +336,10 @@ type
   /// row: 'rule' (a book line), 'reconcile' (a name the conversion introduced)
   /// or 'convert' (the #convert surface's own To-type add, reported only when
   /// it MOVES a unit). NeededBy (C9) is why the row exists -- see TUsesNeed.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RecordChanges (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RecordKeeps (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.RequestAdd (DRagLint.Convert.UnitRules.pas) (+12 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.UnitRules</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUsesChange = record
     Action  : string;
@@ -200,13 +359,27 @@ type
 
   /// <summary>True when two uses-entry spellings name ONE unit (C9 R9: scope
   /// aliases, 'DB' and 'Data.DB').</summary>
+  /// <param name="A"><!-- drag-lint:auto type -->const string</param>
+  /// <param name="B"><!-- drag-lint:auto type -->const string</param>
+  /// <returns><!-- drag-lint:auto type -->Boolean</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.Apply.BookChosenUnits (DRagLint.Convert.Apply.pas), DRagLint.Convert.UnitRules.UnitRuleWatchList (DRagLint.Convert.UnitRules.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSameUnitFunc = reference to function(const A, B: string): Boolean;
 
   /// <summary>A watched entry the reconciler decided to KEEP (C9).</summary>
-  /// <remarks>UnitName is the entry as written in the unit. Action is 'kept'
+  /// <remarks>
+  /// UnitName is the entry as written in the unit. Action is 'kept'
   /// or 'skipped' (the C13 N4 --only shape, kept byte-compatible). NeededBy is
   /// the DISPLAY list (capped at NEEDED_BY_MAX); Keepers is every keeping .dfm
-  /// component, uncapped -- a decision about the row reads Keepers (C9 A7-6).</remarks>
+  /// component, uncapped -- a decision about the row reads Keepers (C9 A7-6).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.IsKept (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UsesReconcile.TReconciler.DecideWatch (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanDangling (DRagLint.Convert.UsesReconcile.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesKeep = record
     UnitName: string;
     Action  : string;
@@ -219,6 +392,12 @@ type
 
   /// <summary>A unit the reconciler adds because a name the conversion
   /// introduced resolves to it (C9 R7).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.PlanMoves (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.RecordChanges (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.RequestAdds (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UsesReconcile.TReconciler.PlanNewNames (DRagLint.Convert.UsesReconcile.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesReconAdd = record
     UnitName : string;
     ToInterface: Boolean;
@@ -226,13 +405,19 @@ type
   end;
 
   /// <summary>The reconciler's verdicts, handed to PlanUnitRules (C9).</summary>
-  /// <remarks>Enabled=False (Default) is the 1.26 planner exactly. With
+  /// <remarks>
+  /// Enabled=False (Default) is the 1.26 planner exactly. With
   /// Enabled: a watched entry named in Keeps is not removed and gets a row of
   /// its own; Adds are requested like #use (into their section, a move when
   /// present in the implementation only); Dangling carries the needed_by of
   /// remove rows (UnitName = entry); SameUnit makes presence, removal and the
   /// ADD-wins normalisation scope-alias aware (nil = case-insensitive equality).
-  /// A C13 move is reported as a 'moved' row.</remarks>
+  /// A C13 move is reported as a 'moved' row.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.UnitRules.PlanUnitRules/5 (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.ReadUsesEntries (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.UnitRuleWatchList (DRagLint.Convert.UnitRules.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesNeeds = record
     Enabled : Boolean;
     SameUnit: TSameUnitFunc;
@@ -242,6 +427,12 @@ type
   end;
 
   /// <summary>One entry of a unit's uses clauses as the planner reads it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.CLI.ReconcileUnusedUnitsWithBuffer (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.UnitRules.TUnitRulePlanner.Entries (DRagLint.Convert.UnitRules.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesEntryInfo = record
     Name       : string;
     Section    : string;
@@ -251,6 +442,12 @@ type
 
   /// <summary>One unit the book removes (the WATCH LIST, C9) and the rule
   /// text that removes it, after the ADD-wins normalisation.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.Apply.BookChosenUnits (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.WatchList (DRagLint.Convert.UnitRules.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TWatchUnit = record
     UnitName: string;
     Rule    : string;
@@ -267,6 +464,10 @@ type
   /// Edits target the unit only, in the whole-line shape TTextEditApplier
   /// applies (a tekDeleteLines of each changed clause's lines plus a
   /// tekInsertLines of its new text, or a tekInsertLines for a created clause).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildUnitRulesOnlyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.Run (DRagLint.Convert.UnitRules.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.UnitRules</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUsesPlan = record
     Ok     : Boolean;
@@ -281,7 +482,14 @@ type
 /// <param name="ARules">The parsed rule book.</param>
 /// <returns>True when convert-apply has uses clauses to change for any unit
 /// it is run on; False for a book of #convert blocks alone.</returns>
-/// <remarks>Pure.</remarks>
+/// <remarks>
+/// Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (DRagLint.Convert.Apply.pas)</para>
+/// <para>Returns: False</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BookHasUnitRules(const ARules: TConversionRuleSet): Boolean;
 
 /// <summary>Plans the uses-clause edits ARules' unit rules make to one unit,
@@ -314,9 +522,19 @@ function BookHasUnitRules(const ARules: TConversionRuleSet): Boolean;
 /// cannot be read, when an entry to remove sits in a conditional region, when
 /// a removal would cross a conditional directive, or when an add has no
 /// unconditional entry to follow.</returns>
-/// <remarks>Pure: reads nothing but its arguments and writes nothing. The
+/// <remarks>
+/// Pure: reads nothing but its arguments and writes nothing. The
 /// contract (remove Old, add each New once in any case, keep Old's section) is
-/// pinned by tests\autotest\run_convert_apply_unit_rules.ps1.</remarks>
+/// pinned by tests\autotest\run_convert_apply_unit_rules.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildUnitRulesOnlyPlan (DRagLint.Convert.Apply.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.UnitRules.PlanUnitRules/6</para>
+/// <para>Returns: PlanUnitRules(AUnitPas, AText, ARules, AExtraAdds, AInterfaceAdds, Default(TUsesNeeds))</para>
+/// <para>Overload 1 of 2</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Convert.UnitRules.PlanUnitRules"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PlanUnitRules(const AUnitPas, AText: string; const ARules: TConversionRuleSet;
   const AExtraAdds: TArray<string>; const AInterfaceAdds: TArray<string> = nil): TUsesPlan; overload;
 
@@ -329,7 +547,18 @@ function PlanUnitRules(const AUnitPas, AText: string; const ARules: TConversionR
 /// <param name="ANeeds">The verdicts; Default(TUsesNeeds) is the other overload.</param>
 /// <returns>The plan. Rows gain Source / NeededBy; a kept entry plans no edit
 /// and never refuses (a {$IF} entry included).</returns>
-/// <remarks>Pure. Pinned by tests\autotest\run_convert_apply_uses_reconcile.ps1.</remarks>
+/// <remarks>
+/// Pure. Pinned by tests\autotest\run_convert_apply_uses_reconcile.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas), DRagLint.Convert.UnitRules.PlanUnitRules/5 (DRagLint.Convert.UnitRules.pas)</para>
+/// <para>Calls: DRagLint.Convert.UnitRules.TUnitRulePlanner.Create, DRagLint.Convert.UnitRules.TUnitRulePlanner.Run</para>
+/// <para>Returns: Planner.Run(ARules, AExtraAdds, AInterfaceAdds)</para>
+/// <para>Overload 2 of 2</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Convert.UnitRules.TUnitRulePlanner.Create"/>
+/// <seealso cref="DRagLint.Convert.UnitRules.TUnitRulePlanner.Run"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PlanUnitRules(const AUnitPas, AText: string; const ARules: TConversionRuleSet;
   const AExtraAdds, AInterfaceAdds: TArray<string>; const ANeeds: TUsesNeeds): TUsesPlan; overload;
 
@@ -339,7 +568,16 @@ function PlanUnitRules(const AUnitPas, AText: string; const ARules: TConversionR
 /// <param name="AText">The unit's text.</param>
 /// <param name="AEntries">Out: every entry, interface first, in order.</param>
 /// <returns>False when the text cannot be read as a unit (AEntries empty).</returns>
-/// <remarks>Pure.</remarks>
+/// <remarks>
+/// Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ReconcileUnusedUnitsWithBuffer (DRagLint.CLI.pas), DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.TReconciler.Reconcile (DRagLint.Convert.UsesReconcile.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.UnitRules.TUnitRulePlanner.Create, DRagLint.Convert.UnitRules.TUnitRulePlanner.Entries</para>
+/// <para>Returns: Planner.Entries(AEntries)</para>
+/// <seealso cref="DRagLint.Convert.UnitRules.TUnitRulePlanner.Create"/>
+/// <seealso cref="DRagLint.Convert.UnitRules.TUnitRulePlanner.Entries"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadUsesEntries(const AUnitPas, AText: string; out AEntries: TArray<TUsesEntryInfo>): Boolean;
 
 /// <summary>The units ARules removes -- every #unuse and #useswap Old -- after
@@ -348,7 +586,16 @@ function ReadUsesEntries(const AUnitPas, AText: string; out AEntries: TArray<TUs
 /// <param name="AExtraAdds">Units the #convert surface adds (never watched).</param>
 /// <param name="ASameUnit">Alias predicate for ADD wins; nil = equality.</param>
 /// <returns>One entry per watched unit, book spelling, in book order.</returns>
-/// <remarks>Pure.</remarks>
+/// <remarks>
+/// Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.Apply.BookChosenUnits (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.TReconciler.Degrade (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.Reconcile (DRagLint.Convert.UsesReconcile.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.UnitRules.TUnitRulePlanner.Create, DRagLint.Convert.UnitRules.TUnitRulePlanner.WatchList</para>
+/// <para>Returns: Planner.WatchList(ARules, AExtraAdds)</para>
+/// <seealso cref="DRagLint.Convert.UnitRules.TUnitRulePlanner.Create"/>
+/// <seealso cref="DRagLint.Convert.UnitRules.TUnitRulePlanner.WatchList"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnitRuleWatchList(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>;
   const ASameUnit: TSameUnitFunc): TArray<TWatchUnit>;
 
@@ -358,7 +605,19 @@ function UnitRuleWatchList(const ARules: TConversionRuleSet; const AExtraAdds: T
 /// a comment or string elsewhere does not mislead it.</summary>
 /// <param name="AText">The unit's text (any mix of CRLF / LF / CR).</param>
 /// <returns>The keyword's line, or 0 when the text has none.</returns>
-/// <remarks>Pure.</remarks>
+/// <remarks>
+/// Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.UsesReconcile.ImplementationLine (DRagLint.Convert.UsesReconcile.pas)</para>
+/// <para>Calls: DRagLint.Convert.UnitRules.IsWord, DRagLint.Convert.UnitRules.TUnitText.Create, DRagLint.Convert.UnitRules.TUnitText.LineOf, DRagLint.Convert.UnitRules.TUsesLexer.Create, DRagLint.Convert.UnitRules.TUsesLexer.Next</para>
+/// <para>Returns: 0; Txt.LineOf(T.Start)</para>
+/// <seealso cref="DRagLint.Convert.UnitRules.IsWord"/>
+/// <seealso cref="DRagLint.Convert.UnitRules.TUnitText.Create"/>
+/// <seealso cref="DRagLint.Convert.UnitRules.TUnitText.LineOf"/>
+/// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Create"/>
+/// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Next"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ImplementationKeywordLine(const AText: string): Integer;
 
 /// <summary>Reads one uses clause, 'Name[.Name...] [in 'path']' (, ...) ';',
@@ -370,8 +629,18 @@ function ImplementationKeywordLine(const AText: string): Integer;
 /// <param name="AClause">Receives Start, Stop, Entries, Commas, UsesTok,
 /// Semi and Present = True on success; Section and KwLine are untouched.</param>
 /// <returns>False on any other shape (AClause then partly filled; ignore it).</returns>
-/// <remarks>Shared by the unit-rule planner and DRagLint.Report.CyclePlan
-/// (E18 T3a), so the uses grammar lives in one place.</remarks>
+/// <remarks>
+/// Shared by the unit-rule planner and DRagLint.Report.CyclePlan
+/// (E18 T3a), so the uses grammar lives in one place.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.UnitRules.TUnitRulePlanner.ReadUnit (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.ScanClause (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.UnitRules.IsSym, DRagLint.Convert.UnitRules.IsWord, DRagLint.Convert.UnitRules.TUsesLexer.Next</para>
+/// <para>Returns: False; True</para>
+/// <seealso cref="DRagLint.Convert.UnitRules.IsSym"/>
+/// <seealso cref="DRagLint.Convert.UnitRules.IsWord"/>
+/// <seealso cref="DRagLint.Convert.UnitRules.TUsesLexer.Next"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseClause(ALex: TUsesLexer; const AUsesTok: TTok; var AClause: TUsesClause): Boolean;
 
 implementation

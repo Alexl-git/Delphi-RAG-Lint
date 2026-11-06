@@ -20,6 +20,10 @@ type
   /// <remarks>
   /// Stateless; thread-safe. Called from DoLint and DoLintAll behind
   /// LintRuleWants(rule, LINT_GATE_SIZE).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSizeChecker = class
   public
@@ -29,6 +33,18 @@ type
     /// <param name="AStore">Optional symbol store; nil when the run has no index.</param>
     /// <param name="AFileId">File id within AStore (ignored when AStore is nil).</param>
     /// <returns>One finding per violation; empty when clean or unparsable. The CLI filters by --rule.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: BareName, BoolNames, CharInSet, CheckBoolClass, CheckInlineProc, CheckVar, CompactType, Copy, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+14 more)</para>
+    /// <para>Returns: nil; Findings.ToArray</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <seealso cref="DRagLint.Diagnostics.SizeChecks.TSizeChecker.Check.CollectInline"/>
+    /// <seealso cref="DRagLint.Diagnostics.SizeChecks.TSizeChecker.Check.Visit"/>
+    /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ThresholdFor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
       const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; static;
   end;

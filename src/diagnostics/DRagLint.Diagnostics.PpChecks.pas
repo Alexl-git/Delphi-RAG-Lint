@@ -20,8 +20,14 @@ uses
 
 type
   /// <summary>Checker for pp-unresolved-if (see the unit header).</summary>
-  /// <remarks>Stateless; thread-safe as TAstParseCache.UnresolvedIfs is.
-  /// Called from DoLint and DoLintAll behind LintRuleWants(rule, LINT_GATE_PP).</remarks>
+  /// <remarks>
+  /// Stateless; thread-safe as TAstParseCache.UnresolvedIfs is.
+  /// Called from DoLint and DoLintAll behind LintRuleWants(rule, LINT_GATE_PP).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPpChecker = class
   public
     /// <summary>Runs pp-unresolved-if against one source file.</summary>
@@ -31,6 +37,14 @@ type
     /// <param name="AFileId">File id within AStore (unused).</param>
     /// <returns>One hint per directive with an unresolved name; empty when
     /// preprocessing is off or every name resolved.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs, Format</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
       const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; static;
   end;

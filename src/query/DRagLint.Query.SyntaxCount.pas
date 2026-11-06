@@ -19,19 +19,40 @@ uses
 
 type
   /// <summary>One syntax feature the count recognises in the parse.</summary>
-  /// <remarks>Grammar shapes (tree-sitter-delphi13): sfIfExpr = exprIf;
+  /// <remarks>
+  /// Grammar shapes (tree-sitter-delphi13): sfIfExpr = exprIf;
   /// sfIsNot = exprBinary(kIs) whose rhs is exprUnary(kNot); sfNotIn = exprBinary
   /// carrying kNot then kIn; sfInlineVar = varDef / varAssignDef (block-level
   /// `var`, `for var`); sfInlineConst = constInline; sfAnonMethod = lambda;
-  /// sfMultilineString = a literalString opening with ''' and a line break.</remarks>
+  /// sfMultilineString = a literalString opening with ''' and a line break.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Query.SyntaxCount.ClassifyNode (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.CountsToJson (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.CountSyntaxFeatures (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.SyntaxCountToJson (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.TryParseSyntaxFeatures (DRagLint.Query.SyntaxCount.pas) (+5 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSyntaxFeature = (sfIfExpr, sfIsNot, sfNotIn, sfInlineVar, sfInlineConst,
     sfAnonMethod, sfMultilineString);
   /// <summary>A set of syntax features to count.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.CountsToJson (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.CountSyntaxFeatures (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.CountTreeFeatures (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.TryParseSyntaxFeatures (DRagLint.Query.SyntaxCount.pas) (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSyntaxFeatures = set of TSyntaxFeature;
   /// <summary>One count per feature.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.SyntaxCount.pas) ?, DRagLint.Query.SyntaxCount.CountsToJson (DRagLint.Query.SyntaxCount.pas) ?, DRagLint.Query.SyntaxCount.CountSyntaxFeatures (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.CountTreeFeatures (DRagLint.Query.SyntaxCount.pas) ?</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSyntaxCounts = array[TSyntaxFeature] of Integer;
 
   /// <summary>One occurrence: the feature and where its node starts (1-based).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.CountTreeFeatures (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.SyntaxCountToJson (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCountVerb.WriteText (DRagLint.Query.SyntaxCountVerb.pas)</para>
+  /// <para>Used in units: DRagLint.Query.SyntaxCount, DRagLint.Query.SyntaxCountVerb</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSyntaxHit = record
     Feature : TSyntaxFeature;
     FilePath: string;
@@ -40,16 +61,28 @@ type
   end;
 
   /// <summary>The counts of one file that holds at least one occurrence.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.CountSyntaxFeatures (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.SyntaxCountToJson (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCountVerb.WriteText (DRagLint.Query.SyntaxCountVerb.pas)</para>
+  /// <para>Used in units: DRagLint.Query.SyntaxCount, DRagLint.Query.SyntaxCountVerb</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSyntaxFileCount = record
     FilePath: string;
     Counts  : TSyntaxCounts;
   end;
 
   /// <summary>The result of one count run over a file list.</summary>
-  /// <remarks>Files lists only files with at least one occurrence, in input
+  /// <remarks>
+  /// Files lists only files with at least one occurrence, in input
   /// order; Hits is filled only when the caller asked for it. A file that
   /// parses with ERROR nodes is still counted (the shapes outside the error
-  /// survive) and is tallied in FilesWithParseErrors.</remarks>
+  /// survive) and is tallied in FilesWithParseErrors.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.SyntaxCount.pas) ?, DRagLint.Query.SyntaxCount.CountSyntaxFeatures (DRagLint.Query.SyntaxCount.pas), DRagLint.Query.SyntaxCount.SyntaxCountToJson (DRagLint.Query.SyntaxCount.pas) ?, DRagLint.Query.SyntaxCountVerb.WriteReport (DRagLint.Query.SyntaxCountVerb.pas) ?, DRagLint.Query.SyntaxCountVerb.WriteText (DRagLint.Query.SyntaxCountVerb.pas) ?</para>
+  /// <para>Used in units: DRagLint.Query.SyntaxCount, DRagLint.Query.SyntaxCountVerb</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSyntaxCountReport = record
     Features            : TSyntaxFeatures;
     Totals              : TSyntaxCounts;
@@ -64,11 +97,25 @@ type
 /// inline-const, anon-method, multiline-string).</summary>
 /// <param name="pFeature">The feature.</param>
 /// <returns>Its lower-case hyphenated name.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.SyntaxCountVerb.WriteText (DRagLint.Query.SyntaxCountVerb.pas)</para>
+/// <para>Returns: CFeatureNames[pFeature]</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SyntaxFeatureName(pFeature: TSyntaxFeature): string;
 
 /// <summary>The first Delphi version that accepts a feature.</summary>
 /// <param name="pFeature">The feature.</param>
 /// <returns>A label such as 'Delphi 13'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.SyntaxCountVerb.WriteText (DRagLint.Query.SyntaxCountVerb.pas)</para>
+/// <para>Returns: CFeatureSince[pFeature]</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SyntaxFeatureSince(pFeature: TSyntaxFeature): string;
 
 /// <summary>Parses a comma-separated --feature list.</summary>
@@ -77,6 +124,14 @@ function SyntaxFeatureSince(pFeature: TSyntaxFeature): string;
 /// <param name="pFeatures">The selected set; empty on failure.</param>
 /// <param name="pBad">The first name that is not a feature; '' on success.</param>
 /// <returns>True when every name is known.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.SyntaxCountVerb.RunSyntaxCountVerb (DRagLint.Query.SyntaxCountVerb.pas)</para>
+/// <para>Calls: Include, SameText, Trim</para>
+/// <para>Returns: True; False; pFeatures &lt;&gt; []</para>
+/// <para>Mutates: pFeatures (out), pBad (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TryParseSyntaxFeatures(const pList: string; out pFeatures: TSyntaxFeatures;
   out pBad: string): Boolean;
 
@@ -86,9 +141,19 @@ function TryParseSyntaxFeatures(const pList: string; out pFeatures: TSyntaxFeatu
 /// <param name="pFeatures">The features to count.</param>
 /// <param name="pWantHits">Fill Hits with every occurrence.</param>
 /// <returns>The report. Uncapped.</returns>
-/// <remarks>Parses through TAstParseCache and clears it after each file, so
+/// <remarks>
+/// Parses through TAstParseCache and clears it after each file, so
 /// memory stays one tree; any entries the caller had cached are dropped too.
-/// Not thread-safe (TAstParseCache is not).</remarks>
+/// Not thread-safe (TAstParseCache is not).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.SyntaxCountVerb.RunSyntaxCountVerb (DRagLint.Query.SyntaxCountVerb.pas)</para>
+/// <para>Calls: Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Query.SyntaxCount.CountTreeFeatures</para>
+/// <para>Returns: Default(TSyntaxCountReport)</para>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear"/>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+/// <seealso cref="DRagLint.Query.SyntaxCount.CountTreeFeatures"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CountSyntaxFeatures(const pFiles: TArray<string>; const pFeatures: TSyntaxFeatures;
   pWantHits: Boolean): TSyntaxCountReport;
 
@@ -99,6 +164,15 @@ function CountSyntaxFeatures(const pFiles: TArray<string>; const pFeatures: TSyn
 /// <param name="pWithFiles">Include files[].</param>
 /// <param name="pWithHits">Include hits[].</param>
 /// <returns>A new object; the caller frees it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Query.SyntaxCountVerb.WriteReport (DRagLint.Query.SyntaxCountVerb.pas)</para>
+/// <para>Calls: DRagLint.Query.SyntaxCount.CountsToJson</para>
+/// <para>Returns: TJSONObject.Create</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.Query.SyntaxCount.CountsToJson"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SyntaxCountToJson(const pReport: TSyntaxCountReport; pWithFiles, pWithHits: Boolean): TJSONObject;
 
 implementation

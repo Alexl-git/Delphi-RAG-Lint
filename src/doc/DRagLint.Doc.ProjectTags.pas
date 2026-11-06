@@ -76,7 +76,7 @@ type
   /// already carries tags -- the legacy lines no project claims. Tag names
   /// match case-insensitively, the same leniency the writer uses.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.ProjectTags.pas), DRagLint.CLI.DocForgetOptions (DRagLint.CLI.pas), DRagLint.CLI.DoDocForget (DRagLint.CLI.pas), DRagLint.Doc.ProjectTags.ForgetEntry (DRagLint.Doc.ProjectTags.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.ProjectTags.pas) ?, DRagLint.CLI.DocForgetOptions (DRagLint.CLI.pas), DRagLint.CLI.DoDocForget (DRagLint.CLI.pas) ?, DRagLint.Doc.ProjectTags.ForgetEntry (DRagLint.Doc.ProjectTags.pas) ?, DRagLint.Doc.ProjectTags.ForgetTags (DRagLint.Doc.ProjectTags.pas) ?</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.ProjectTags</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -92,7 +92,7 @@ type
   /// <summary>Counts reported by one `doc-forget` pass over one text.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.ProjectTags.pas), DRagLint.CLI.DoDocForget (DRagLint.CLI.pas), DRagLint.Doc.ProjectTags.ForgetEntry (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.ProjectTags.ForgetTags (DRagLint.Doc.ProjectTags.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.ProjectTags.pas) ?, DRagLint.CLI.DoDocForget (DRagLint.CLI.pas), DRagLint.Doc.ProjectTags.ForgetEntry (DRagLint.Doc.ProjectTags.pas) ?, DRagLint.Doc.ProjectTags.ForgetTags (DRagLint.Doc.ProjectTags.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.ProjectTags</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -119,7 +119,7 @@ type
 /// tag set. A tag set is the one place a comma is not a separator: `[A,B]X.Y
 /// (X.pas)` is ONE entry.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.ProjectTags.ParseFactLine (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.BlockCarriesTags (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable (DRagLint.Doc.SharedFacts.pas) (+4 more)</para>
+/// <para>Called from: DRagLint.Doc.ProjectTags.ParseFactLine (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.BlockCarriesTags (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.KeepUsedInClassesText (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas) (+6 more)</para>
 /// <para>Calls: Copy, DRagLint.Doc.ProjectTags.CollapseBlanks, DRagLint.Doc.ProjectTags.SplitEntries.AddTok, Trim</para>
 /// <para>Returns: L.ToArray</para>
 /// <seealso cref="DRagLint.Doc.ProjectTags.CollapseBlanks"/>
@@ -136,7 +136,7 @@ function SplitEntries(const AContent: string): TArray<string>;
 /// An untagged entry -- every entry written before tags existed --
 /// yields no tags and itself.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.ProjectTags.AnyTagged (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.ProjectTags.BareEntry (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.ProjectTags.ForgetEntry (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.ProjectTags.ListTags (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.EntryNorm (DRagLint.Doc.SharedFacts.pas) (+3 more)</para>
+/// <para>Called from: DRagLint.Doc.ProjectTags.AnyTagged (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.ProjectTags.BareEntry (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.ProjectTags.ForgetEntry (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.ProjectTags.ListTags (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.EntryNorm (DRagLint.Doc.SharedFacts.pas) (+5 more)</para>
 /// <para>Calls: Copy, Pos, Trim</para>
 /// <para>Mutates: ATags (out), ABare (out)</para>
 /// <!-- drag-lint:auto END -->
@@ -148,7 +148,7 @@ procedure SplitTagged(const AEntry: string; out ATags: TArray<string>; out ABare
 /// <returns>The bare entry, trimmed.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.SharedFacts.EntryKey (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.EntryUnitKey (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.PlausibleEntry (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries (DRagLint.Doc.SharedFacts.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.Doc.SharedFacts.EntryKey (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.EntryUnitKey (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.KeepUsedInClassesText (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.PlausibleEntry (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas) (+2 more)</para>
 /// <para>Calls: DRagLint.Doc.ProjectTags.SplitTagged</para>
 /// <seealso cref="DRagLint.Doc.ProjectTags.SplitTagged"/>
 /// <!-- drag-lint:auto END -->
@@ -174,7 +174,7 @@ function HasTag(const ATags: TArray<string>; const AName: string): Boolean;
 /// <returns>The remaining tags, in order.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.ProjectTags.ForgetEntry (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries (DRagLint.Doc.SharedFacts.pas)</para>
+/// <para>Called from: DRagLint.Doc.ProjectTags.ForgetEntry (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.StripOwnTag (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries (DRagLint.Doc.SharedFacts.pas)</para>
 /// <para>Calls: SameText</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -188,7 +188,7 @@ function WithoutTag(const ATags: TArray<string>; const AName: string): TArray<st
 /// ABare unchanged when there is no tag.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.ProjectTags.ForgetEntry (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.EntryNorm (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas)</para>
+/// <para>Called from: DRagLint.Doc.ProjectTags.ForgetEntry (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.EntryNorm (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.StripOwnTag (DRagLint.Doc.SharedFacts.pas)</para>
 /// <para>Calls: CompareText, DRagLint.Doc.ProjectTags.HasTag</para>
 /// <para>Returns: TAG_OPEN + string.Join(',', L.ToArray) + TAG_CLOSE + ABare</para>
 /// <seealso cref="DRagLint.Doc.ProjectTags.HasTag"/>
@@ -216,7 +216,7 @@ function AnyTagged(const AEntries: TArray<string>): Boolean;
 /// The marker is not an entry. Split in as one, `X (+3 more)` read as
 /// naming a unit called `+3 more` that no index holds.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Doc.ProjectTags.ParseFactLine (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.ProjectTags.TryWindowHiddenCount (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileDropsUnvouchable (DRagLint.Doc.SharedFacts.pas) (+1 more)</para>
+/// <para>Called from: DRagLint.Doc.ProjectTags.ParseFactLine (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.ProjectTags.TryWindowHiddenCount (DRagLint.Doc.ProjectTags.pas), DRagLint.Doc.SharedFacts.BlockHoldsUnvouchable (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.KeepUsedInClassesText (DRagLint.Doc.SharedFacts.pas), DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas) (+2 more)</para>
 /// <para>Calls: Copy, EndsText, TrimRight</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

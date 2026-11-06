@@ -40,7 +40,13 @@ const
 type
   /// <summary>What an entry is valid for: the engine build, the project index and
   /// the library index (or none), each as a path plus file-stat signature.</summary>
-  /// <remarks>Two keys are the same only when all three parts are identical.</remarks>
+  /// <remarks>
+  /// Two keys are the same only when all three parts are identical.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.RuleCache.pas) ?, DRagLint.CLI.ResolveRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WarmRuleCache (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.RuleCache</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleCacheKey = record
     /// <summary>DRAGLINT_VERSION plus the running exe's size and last-write time,
     /// so a rebuilt engine with changed rule code never reads an old entry.</summary>
@@ -54,15 +60,40 @@ type
     /// <param name="ALibraryDbUsed">The library index actually OPENED for the run, or ''
     /// when none was (missing, stale or not wanted) -- the answer differs, so the key must.</param>
     /// <returns>The key. Never raises; an unreadable file contributes '-'.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ResolveRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WarmRuleCache (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Lint.RuleCache.IndexSig, DRagLint.Lint.RuleCache.StatSig, ParamStr</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.RuleCache.IndexSig"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.StatSig"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCacheKey.SameAs"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Take(const AProjectDb, ALibraryDbUsed: string): TRuleCacheKey; static;
     /// <summary>True when every part of the two keys is identical.</summary>
     /// <param name="AOther">The key to compare with.</param>
     /// <returns>True on an exact match.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ResolveRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WarmRuleCache (DRagLint.CLI.pas)</para>
+    /// <para>Returns: (Engine = AOther.Engine) and (Project = AOther.Project) and (LibraryDb = AOther.LibraryDb)</para>
+    /// <para>Reads: Engine, Project, LibraryDb</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCacheKey.Take"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SameAs(const AOther: TRuleCacheKey): Boolean;
   end;
 
   /// <summary>One cached answer: its key, the rule ids it holds, and their findings
   /// over the WHOLE project index.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.ComputeRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.ResolveRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WarmRuleCache (DRagLint.CLI.pas) ?, DRagLint.CLI.WholeGraphProvider (DRagLint.CLI.pas), DRagLint.Lint.RuleCache.TRuleCache.TryLoad (DRagLint.Lint.RuleCache.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.RuleCache</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleCacheEntry = record
     /// <summary>What the entry is valid for.</summary>
     Key     : TRuleCacheKey;
@@ -73,45 +104,138 @@ type
     /// <summary>True when the entry was computed with ARuleId (case-insensitive).</summary>
     /// <param name="ARuleId">A rule id.</param>
     /// <returns>True when held.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ResolveRuleCacheEntry (DRagLint.CLI.pas)</para>
+    /// <para>Calls: MatchText</para>
+    /// <para>Returns: MatchText(ARuleId, RuleIds)</para>
+    /// <para>Reads: RuleIds</para>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCacheEntry.FindingsFor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Holds(const ARuleId: string): Boolean;
     /// <summary>The entry's findings of one rule, in their stored order.</summary>
     /// <param name="ARuleId">A rule id.</param>
     /// <returns>The findings; empty when none or not held.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ResolveRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WholeGraphProvider (DRagLint.CLI.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Reads: Findings</para>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCacheEntry.Holds"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FindingsFor(const ARuleId: string): TArray<TLintFinding>;
   end;
 
   /// <summary>Location, load and atomic save of rule-cache entries.</summary>
-  /// <remarks>Stateless. The directory is DRAGLINT_RULE_CACHE_DIR when set, else
+  /// <remarks>
+  /// Stateless. The directory is DRAGLINT_RULE_CACHE_DIR when set, else
   /// %LOCALAPPDATA%\drag-lint\cache. DRAGLINT_RULE_CACHE=0 turns the cache off for
-  /// readers and writers alike.</remarks>
+  /// readers and writers alike.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.AcquireIndexLock (DRagLint.CLI.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.ResolveRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.WarmRuleCacheAfterIndex (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRuleCache = class
   public
     /// <summary>False when DRAGLINT_RULE_CACHE is '0'.</summary>
     /// <returns>Whether the cache may be read or written.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ResolveRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.WarmRuleCacheAfterIndex (DRagLint.CLI.pas)</para>
+    /// <para>Calls: GetEnvironmentVariable</para>
+    /// <para>Returns: GetEnvironmentVariable('DRAGLINT_RULE_CACHE') &lt;&gt; '0'</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.PathFor"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.Save"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.SweepStaleTmp"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.TryLoad"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Enabled: Boolean; static;
     /// <summary>The entry file for a project index (one entry per index path).</summary>
     /// <param name="AProjectDb">The project index path.</param>
     /// <returns>The full path of its cache file; '' when no directory can be determined.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.RuleCache.TRuleCache.Save (DRagLint.Lint.RuleCache.pas), DRagLint.Lint.RuleCache.TRuleCache.SweepStaleTmp (DRagLint.Lint.RuleCache.pas), DRagLint.Lint.RuleCache.TRuleCache.TryLoad (DRagLint.Lint.RuleCache.pas)</para>
+    /// <para>Calls: Copy, ExpandFileName, GetEnvironmentVariable, LowerCase</para>
+    /// <para>Returns: TPath.Combine(Dir, 'rules-' + Copy(H, 1, HASH_HEX_CHARS) + '.json')</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.Enabled"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.Save"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.SweepStaleTmp"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.TryLoad"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function PathFor(const AProjectDb: string): string; static;
     /// <summary>Loads the entry for AProjectDb.</summary>
     /// <param name="AProjectDb">The project index path.</param>
     /// <param name="AEntry">The entry, when the result is True.</param>
     /// <param name="AWhy">Why there is no entry, when the result is False.</param>
     /// <returns>True when a well-formed entry was read. The caller still compares keys.</returns>
-    /// <remarks>Never raises: a missing, truncated or malformed file is a miss.</remarks>
+    /// <remarks>
+    /// Never raises: a missing, truncated or malformed file is a miss.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ResolveRuleCacheEntry (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Default, DRagLint.Lint.RuleCache.FindingFromJson, DRagLint.Lint.RuleCache.TRuleCache.PathFor</para>
+    /// <para>Returns: False; True</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Mutates: AEntry (out), AWhy (out)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.RuleCache.FindingFromJson"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.PathFor"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.Enabled"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.Save"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.SweepStaleTmp"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function TryLoad(const AProjectDb: string; out AEntry: TRuleCacheEntry; out AWhy: string): Boolean; static;
     /// <summary>Writes AEntry for AProjectDb atomically (temp file, then rename over).</summary>
     /// <param name="AProjectDb">The project index path.</param>
     /// <param name="AEntry">The entry to store.</param>
     /// <param name="AWhy">Why nothing was written, when the result is False.</param>
     /// <returns>True when the entry is on disk. Never raises.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ResolveRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WarmRuleCache (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DeleteFile, DRagLint.Lint.RuleCache.FindingToJson, DRagLint.Lint.RuleCache.TRuleCache.PathFor, ExtractFileDir, IntToStr, MoveFileEx, PChar, SysErrorMessage</para>
+    /// <para>Returns: False; True</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Mutates: AWhy (out)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.RuleCache.FindingToJson"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.PathFor"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.Enabled"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.SweepStaleTmp"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.TryLoad"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Save(const AProjectDb: string; const AEntry: TRuleCacheEntry; out AWhy: string): Boolean; static;
     /// <summary>Deletes the .tmp-&lt;pid&gt; files Save left for AProjectDb when its writer was stopped mid-write.</summary>
     /// <param name="AProjectDb">The project index path.</param>
     /// <returns>How many leftover files were deleted.</returns>
-    /// <remarks>A background warm that is stopped (shutdown, a newer index, TerminateProcess) can die between
+    /// <remarks>
+    /// A background warm that is stopped (shutdown, a newer index, TerminateProcess) can die between
     /// WriteAllText and the rename, leaving rules-&lt;hash&gt;.json.tmp-&lt;pid&gt;. A file whose pid is still a live process
-    /// is left alone (a running writer owns it); so is this process's own. Never raises.</remarks>
+    /// is left alone (a running writer owns it); so is this process's own. Never raises.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.AcquireIndexLock (DRagLint.CLI.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas)</para>
+    /// <para>Calls: Cardinal, CloseHandle, Copy, DeleteFile, DRagLint.Lint.RuleCache.TRuleCache.PathFor, ExtractFileDir, ExtractFileName, OpenProcess, PChar, StrToIntDef</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Touches: file system</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.PathFor"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.Enabled"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.Save"/>
+    /// <seealso cref="DRagLint.Lint.RuleCache.TRuleCache.TryLoad"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function SweepStaleTmp(const AProjectDb: string): Integer; static;
   end;
 

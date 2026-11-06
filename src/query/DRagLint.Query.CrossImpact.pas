@@ -24,10 +24,21 @@ uses
 
 type
   /// <summary>How one manifest section answered.</summary>
-  /// <remarks>Every value but cisAnswered makes the report incomplete.</remarks>
+  /// <remarks>
+  /// Every value but cisAnswered makes the report incomplete.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.CrossImpact.pas), DRagLint.Query.CrossImpact.StateText (DRagLint.Query.CrossImpact.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCrossImpactState = (cisAnswered, cisNotIndexed, cisOldSchema, cisUnreadable);
 
   /// <summary>One place the target is declared, and which section said so.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.CrossImpact.pas) ?, DRagLint.Query.CrossImpact.AddDeclarations (DRagLint.Query.CrossImpact.pas)</para>
+  /// <para>Used in units: DRagLint.Query.CrossImpact</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCrossDeclaration = record
     Section : string ;
     Kind    : string ; // project | folder | library: the kind of the section that answered
@@ -37,6 +48,12 @@ type
   end;
 
   /// <summary>One implementor a project database reports.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.CrossImpact.pas) ?, DRagLint.Query.CrossImpact.AddImplementor (DRagLint.Query.CrossImpact.pas)</para>
+  /// <para>Used in units: DRagLint.Query.CrossImpact</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCrossImplementor = record
     QName: string;
     /// <summary>certain or ambiguous: a resolved edge in this database. by-name: the
@@ -46,6 +63,12 @@ type
   end;
 
   /// <summary>Interface sites that reach the target, as the single-database verb reports them.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.CrossImpact.pas) ?, DRagLint.Query.CrossImpact.AnswerLocalDispatch (DRagLint.Query.CrossImpact.pas)</para>
+  /// <para>Used in units: DRagLint.Query.CrossImpact</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCrossVia = record
     Via  : string ;
     Kind : string ;
@@ -54,6 +77,12 @@ type
   end;
 
   /// <summary>What one manifest section answered, or why it could not.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.CrossImpact.pas) ?, DRagLint.Query.CrossImpact.AddDeclarations (DRagLint.Query.CrossImpact.pas) ?, DRagLint.Query.CrossImpact.AddImplementor (DRagLint.Query.CrossImpact.pas) ?, DRagLint.Query.CrossImpact.AnswerLocalDispatch (DRagLint.Query.CrossImpact.pas) ?, DRagLint.Query.CrossImpact.BuildCrossImpact (DRagLint.Query.CrossImpact.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.Query.CrossImpact</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCrossSection = record
     Name          : string ; // section name; sections sharing one database are joined
     Kind          : string ; // project | folder | library
@@ -78,6 +107,12 @@ type
   end;
 
   /// <summary>The whole cross-project answer.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.CrossImpact.pas) ?, DRagLint.Query.CrossImpact.AddDeclarations (DRagLint.Query.CrossImpact.pas) ?, DRagLint.Query.CrossImpact.AnswerSection (DRagLint.Query.CrossImpact.pas) ?, DRagLint.Query.CrossImpact.BuildCrossImpact (DRagLint.Query.CrossImpact.pas), DRagLint.Query.CrossImpact.CrossImpactToJson (DRagLint.Query.CrossImpact.pas) ? (+1 more)</para>
+  /// <para>Used in units: DRagLint.Query.CrossImpact</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCrossImpactReport = record
     QName       : string ;
     Depth       : Integer;
@@ -87,13 +122,38 @@ type
     /// <summary>Every section answered, from an index with no changed files.</summary>
     /// <returns>False when any row is not cisAnswered or has StaleFiles above zero.
     /// True says nothing about a project the manifest does not name.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Query.CrossImpact.CrossImpactToJson (DRagLint.Query.CrossImpact.pas), DRagLint.Query.CrossImpact.CrossImpactToText (DRagLint.Query.CrossImpact.pas)</para>
+    /// <para>Returns: True</para>
+    /// <para>Reads: Sections</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Query.CrossImpact.TCrossImpactReport.Found"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Complete: Boolean;
     /// <summary>The target was declared somewhere or has a counted caller.</summary>
     /// <returns>True when the verb should exit 0.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas), DRagLint.Query.CrossImpact.CrossImpactToJson (DRagLint.Query.CrossImpact.pas)</para>
+    /// <para>Returns: Length(Declarations) &gt; 0</para>
+    /// <para>Reads: Declarations, Sections</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Query.CrossImpact.TCrossImpactReport.Complete"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Found: Boolean;
   end;
 
   /// <summary>Supplies the command that would index a section that could not answer.</summary>
+  /// <param name="pItem"><!-- drag-lint:auto type -->const TPlanSection</param>
+  /// <returns><!-- drag-lint:auto type -->string</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Query.CrossImpact.pas), DRagLint.Query.CrossImpact.BuildCrossImpact (DRagLint.Query.CrossImpact.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCrossRepairFunc = reference to function(const pItem: TPlanSection): string;
 
 /// <summary>Asks every database of a resolved plan about one symbol.</summary>
@@ -103,9 +163,19 @@ type
 /// <param name="pPlatform">Echoed into the report; the plan was already filtered by it.</param>
 /// <param name="pRepair">Names the repair for a section that could not answer; may be nil.</param>
 /// <returns>One row per distinct database, in plan order.</returns>
-/// <remarks>Opens every database read-only and writes nothing. Never raises for a
+/// <remarks>
+/// Opens every database read-only and writes nothing. Never raises for a
 /// database it cannot read: that is a row. Caller levels are the same name-based walk
-/// as the single-database verb, so they may include same-named other routines.</remarks>
+/// as the single-database verb, so they may include same-named other routines.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Query.CrossImpact.AnswerSection, DRagLint.Query.CrossImpact.SectionKind, ExpandFileName, LowerCase, pRepair</para>
+/// <para>Returns: Default(TCrossImpactReport)</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 51 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Query.CrossImpact.AnswerSection"/>
+/// <seealso cref="DRagLint.Query.CrossImpact.SectionKind"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildCrossImpact(const pPlan: TIndexPlan; const pQName: string; pDepth: Integer;
   const pPlatform: string; const pRepair: TCrossRepairFunc): TCrossImpactReport;
 
@@ -114,12 +184,33 @@ function BuildCrossImpact(const pPlan: TIndexPlan; const pQName: string; pDepth:
 /// <returns>An owned object: {qname,depth,platform,complete,found,declarations[],sections[],summary}.
 /// Each section has name,kind,db,state; levels and target_declared on a project or folder only.
 /// The caller frees it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Query.CrossImpact.StateText, DRagLint.Query.CrossImpact.TCrossImpactReport.Complete, DRagLint.Query.CrossImpact.TCrossImpactReport.Found</para>
+/// <para>Returns: TJSONObject.Create</para>
+/// <para>Owns returned: new (caller owns)</para>
+/// <seealso cref="DRagLint.Query.CrossImpact.StateText"/>
+/// <seealso cref="DRagLint.Query.CrossImpact.TCrossImpactReport.Complete"/>
+/// <seealso cref="DRagLint.Query.CrossImpact.TCrossImpactReport.Found"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CrossImpactToJson(const pReport: TCrossImpactReport): TJSONObject;
 
 /// <summary>Renders the report as text, one block per section and a coverage line.</summary>
 /// <param name="pReport">The report.</param>
 /// <returns>Text that ends in the coverage line; INCOMPLETE appears there when not Complete.
 /// Sections that answered with no declaration and no reference share one line.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Query.CrossImpact.HasNothing, DRagLint.Query.CrossImpact.TCrossImpactReport.Complete, DRagLint.Query.CrossImpact.WriteSectionText, Format</para>
+/// <para>Returns: Sb.ToString</para>
+/// <seealso cref="DRagLint.Query.CrossImpact.HasNothing"/>
+/// <seealso cref="DRagLint.Query.CrossImpact.TCrossImpactReport.Complete"/>
+/// <seealso cref="DRagLint.Query.CrossImpact.WriteSectionText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CrossImpactToText(const pReport: TCrossImpactReport): string;
 
 implementation

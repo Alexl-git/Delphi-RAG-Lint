@@ -36,9 +36,15 @@ const
 
 type
   /// <summary>Checker for the three lifetime / spelling shape rules of lane ruleset.</summary>
-  /// <remarks>Stateless; thread-safe. Called from DoLint and DoLintAll behind
+  /// <remarks>
+  /// Stateless; thread-safe. Called from DoLint and DoLintAll behind
   /// LintRuleWants(rule, LINT_GATE_LIFETIME_SHAPE); every rule is OFF by default, so the post-filter
-  /// drops the findings unless the rule was asked for.</remarks>
+  /// drops the findings unless the rule was asked for.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLifetimeShapeChecker = class
   public
     /// <summary>Runs the rules against one source file.</summary>
@@ -49,6 +55,19 @@ type
     /// <param name="AIncludeRefs">Read the file's bound refs for identifier-case-mismatch. The caller
     /// passes True only when that rule is enabled: the read costs one query per file.</param>
     /// <returns>One finding per violation; empty when clean or unparsable.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.CheckBoundRefs, DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.Create, DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.Findings, DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.Run, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get</para>
+    /// <para>Returns: nil; Run.Findings</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.CheckBoundRefs"/>
+    /// <seealso cref="DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.Create"/>
+    /// <seealso cref="DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.Findings"/>
+    /// <seealso cref="DRagLint.Diagnostics.LifetimeShapeChecks.TShapeRun.Run"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Check(const AFile: string; const AStore: ISymbolStore; AFileId: Int64;
       AIncludeRefs: Boolean): TArray<TLintFinding>; static;
   end;

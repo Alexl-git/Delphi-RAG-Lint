@@ -90,7 +90,7 @@ type
   /// recovered from the nearest visibility-bearing sibling instead of being
   /// fabricated.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold.SortedPaths (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold.TypeOfPath (DRagLint.CLI.pas), DRagLint.CLI.DoPropTree.KindLabel (DRagLint.CLI.pas), DRagLint.CLI.DoPropTree.PassesMinVisibility (DRagLint.CLI.pas) (+21 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), DRagLint.CLI.DoPropTree.KindLabel (DRagLint.CLI.pas) ?, DRagLint.CLI.DoPropTree.PassesMinVisibility (DRagLint.CLI.pas) ?, DRagLint.Convert.PropCache.TClassRef.ResolvePath (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas) (+21 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.GlyphVacuum, DRagLint.Convert.PropCache, DRagLint.Convert.PropTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -140,6 +140,10 @@ type
   /// two trees built from one cache). ClassesQueued is how many classes wait to
   /// be resolved at this or a deeper level (0 while emitting). Nodes is how many
   /// nodes have been emitted so far (0 while expanding).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.PropCache.pas), declaration (DRagLint.Convert.PropTree.pas), DRagLint.CLI.MakeProgressWriter (DRagLint.CLI.pas), DRagLint.Convert.PropCache.TPropMemberCache.BuildTree.Tick (DRagLint.Convert.PropCache.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.PropCache, DRagLint.Convert.PropTree</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPropTreeProgress = record
     RootQName    : string;
@@ -166,7 +170,7 @@ type
   /// future field is added) is deterministically False/0/'' rather than
   /// whatever garbage happened to be on the stack.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ConvertClassIn (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoPropTree (DRagLint.CLI.pas) (+7 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), DRagLint.Convert.Apply.TConvertTreeCache.Create (DRagLint.Convert.Apply.pas) (+10 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.GlyphVacuum, DRagLint.Convert.PropCache, DRagLint.Convert.PropTree</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -200,7 +204,7 @@ type
   /// True when the Depth cap stopped a class-typed expansion that would otherwise
   /// have recursed further.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]declaration (DRagLint.Convert.DfmReemit.pas), [drag-lint]declaration (DRagLint.Convert.GlyphVacuum.pas), [drag-lint]declaration (DRagLint.Convert.PropCache.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold.SortedPaths (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold.TypeOfPath (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), [drag-lint]DRagLint.Convert.GlyphVacuum.CountRuntimeRefs (DRagLint.Convert.GlyphVacuum.pas), [drag-lint]DRagLint.Convert.PropCache.TPropMemberCache.BuildTree (DRagLint.Convert.PropCache.pas)</para>
+  /// <para>Used by: [drag-lint]declaration (DRagLint.Convert.DfmReemit.pas), [drag-lint]declaration (DRagLint.Convert.GlyphVacuum.pas), [drag-lint]declaration (DRagLint.Convert.PropCache.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold.NodeOfPath (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold.SortedPaths (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoConvertScaffold.TypeOfPath (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoPropTree (DRagLint.CLI.pas), [drag-lint]DRagLint.Convert.DfmReemit.LeafDefaultOf (DRagLint.Convert.DfmReemit.pas) ?, [drag-lint]DRagLint.Convert.GlyphVacuum.CountRuntimeRefs (DRagLint.Convert.GlyphVacuum.pas), [drag-lint]DRagLint.Convert.PropCache.BuildPropTree (DRagLint.Convert.PropCache.pas) ?, [drag-lint]DRagLint.Convert.PropCache.TPropMemberCache.BuildTree (DRagLint.Convert.PropCache.pas)</para>
   /// <para>Used in units: ConvRules.Engine, ConvRules.MainForm, ConvRules.MappingForm, ConvRules.Mappings, ConvRulesModelTests, [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Convert.DfmReemit, [drag-lint]DRagLint.Convert.GlyphVacuum, [drag-lint]DRagLint.Convert.PropCache</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -219,6 +223,10 @@ type
   /// through it stops there. When a class redeclares an ancestor's member in a
   /// private section (ruling R11) the record names the REDECLARATION -- the
   /// descendant and its private visibility -- not the ancestor's member.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.PropCache.pas), declaration (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.HiddenOf (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.TPropMemberResolver.CollectFields (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.TPropMemberResolver.CollectMembers (DRagLint.Convert.PropTree.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Convert.PropCache, DRagLint.Convert.PropTree</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPropHiddenMember = record
     /// <summary>The member's bare name, as declared.</summary>
@@ -254,6 +262,10 @@ type
   /// plus a declaring-line reader that caches each source file once. All three
   /// are pure derivations of the index and live as long as the object.
   /// Borrows the store (not owned). Not thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.PropCache.pas) ?, DRagLint.Convert.PropCache.TPropMemberCache.Create (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropTree.FillBarePropertyTypes (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.ResolvePropertyDeclaredType (DRagLint.Convert.PropTree.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.PropCache, DRagLint.Convert.PropTree</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPropMemberResolver = class  // dl:ok high-response@e41c -- BuildPropTree's per-member resolution moved out of its nested walk unchanged (T2b); the helpers were nested routines of one function before, the response set is the same code's
   private
@@ -266,25 +278,388 @@ type
     // extractor-version bump, which re-parses every database), so it is read
     // from the declaring source line -- the same trick GetClassSurface uses.
     FDeclText  : TDeclTextReader;
+    /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: FDeclText.TextOf(ASym).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto -->The declaring source text of ASym, StartLine..EndLine joined with a
+    /// space. Empty when the file is unreadable or the range is nonsense -- an empty result means
+    /// "unknown", never "no default".
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ResolveDefaultFor (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: DRagLint.Core.DeclText.TDeclTextReader.TextOf</para>
+    /// <para>Reads: FDeclText</para>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.TextOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.CollectFields"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DeclTextOf(const ASym: TSymbol): string;
+    /// <summary><!-- drag-lint:auto sum -->If ASym is a forward-declaration stub,
+    /// re-resolve to the defining body by qname (the body carries the property children);
+    /// otherwise return ASym as-is. type_ancestors / GetSymbolById can hand back the stub
+    /// for a forward-declared ancestor, so every place that reads an ancestor's children
+    /// must go via this.</summary>
+    /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->TSymbol -- Observed: ASym; Body.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.TPropMemberResolver.ResolveDefaultFor (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.TPropMemberResolver.ResolveInheritedPropAccess (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.TPropMemberResolver.ResolveInheritedType (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.TPropMemberResolver.ResolveInheritedVisibility (DRagLint.Convert.PropTree.pas) (+3 more)</para>
+    /// <para>Calls: DRagLint.Convert.PropTree.IsForwardDeclClass, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveClassByQName</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.IsForwardDeclClass"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ResolveClassByQName"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.CollectFields"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function BodyOf(const ASym: TSymbol): TSymbol;
+    /// <summary><!-- drag-lint:auto sum -->The default that actually governs streaming
+    /// for APropName on AClass.</summary>
+    /// <param name="AClass"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <param name="AProp"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <param name="APropName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AValue"><!-- drag-lint:auto type -->out string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto -->Starts at the most-derived declaration and walks the ancestor chain
+    /// while each declaration is a bare redeclaration -- MIRRORS ResolveInheritedType /
+    /// ResolveInheritedVisibility / the prop_access resolution, which resolve the same way for the
+    /// same reason. `nodefault` anywhere on the way down stops the walk with "no default", because
+    /// that is exactly what it means.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: DRagLint.Convert.PropTree.ClassifyDefaultClause, DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf, DRagLint.Convert.PropTree.TPropMemberResolver.DeclTextOf, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 29 lines (full implementation)</para>
+    /// <para>Reads: FStore</para>
+    /// <para>Mutates: AValue (out)</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.ClassifyDefaultClause"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.DeclTextOf"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveDefaultFor(const AClass, AProp: TSymbol; const APropName: string;
       out AValue: string): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->THE scope-aware name -&gt; class step. One
+    /// definition, three callers: the ancestor climb bridging an unresolved heritage
+    /// entry (ClassChain), the bare-property-type bridge (ResolveViaBridgedAncestry), and
+    /// Walk's property-type classification.</summary>
+    /// <param name="AName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AScopeFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto -->TSymbol -- Observed:
+    /// BodyOf(FStore.ResolveTypeNameToClass(AName, AScopeFileId)).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto -->Delegates to ISymbolStore.ResolveTypeNameToClass, which applies the
+    /// SHARED scope rule (PickAncestorCandidateByScope: same unit -&gt; unique uses hit -&gt;
+    /// unique leading dotted-namespace segment -&gt; decline) and chases type ALIASES; the result
+    /// is then reduced to the defining body via BodyOf, so a forward-declaration stub never reaches
+    /// a caller (a stub has no property children -- the DevExpress forward-decl case).
+    ///
+    /// AScopeFileId must be the FileId of the class doing the referencing AT THIS HOP -- the class
+    /// that inherits the name, or the class that DECLARES the property whose type this is -- never
+    /// the FileId of the class the query was rooted at (design criterion 7).
+    ///
+    /// Memoized per (name, scope) for the lifetime of ONE query. The cache is a pure derivation of
+    /// the index and performs no writes, so a --no-write-back (read-only) store is unaffected.
+    ///
+    /// Id = 0 means the scope rule DECLINED, which is a correct outcome and never a reason to retry
+    /// the name with a scope-unaware lookup.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain.ClimbFrom (DRagLint.Convert.PropTree.pas) ?, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.TPropMemberResolver.ResolveViaBridgedAncestry.Climb (DRagLint.Convert.PropTree.pas) ?</para>
+    /// <para>Calls: DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf, DRagLint.Core.Interfaces.ISymbolStore.ResolveTypeNameToClass, IntToStr, LowerCase</para>
+    /// <para>Reads: FTypeCache, FStore</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.ResolveTypeNameToClass"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.CollectFields"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveTypeInScope(const AName: string; AScopeFileId: Int64): TSymbol;
+    /// <summary><!-- drag-lint:auto sum -->Resolve an empty-signature (redeclared)
+    /// property's type by finding the same-named property that DOES carry a signature in
+    /// an ancestor class. CLASS-ONLY (R3, Task 3): the ancestor closure returned by
+    /// GetTransitiveAncestors is unfiltered -- it also contains any INTERFACE ancestors a
+    /// class implements, in BFS (nearest-first) order alongside the real class ancestors.
+    /// An implemented interface can independently declare a same-named property (Delphi
+    /// interfaces support `property X: T read GetX;`) with a COMPLETELY UNRELATED type.
+    /// Without the (A.Kind = 'class') guard, such an interface property can be found and
+    /// returned BEFORE the walk reaches the queried class's real base -- a wrong-CLASS
+    /// type leaking in from outside the class hierarchy entirely (worse than the
+    /// covariance "collapse to base" case: this is collapse to an unrelated type).
+    /// Mirrors ClassChain's own (A.Kind = 'class') filter, which is why CollectMembers'
+    /// shadowing/DeclaredIn never suffers this -- only this ancestor-only-typed fallback
+    /// walk did.</summary>
+    /// <param name="AClass"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <param name="APropName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ADecl"><!-- drag-lint:auto type -->out TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ''; Tok.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ResolveDeclaredPropertyType.Step (DRagLint.Convert.PropTree.pas) ?, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: Default, DRagLint.Convert.PropTree.ParseTypeToken, DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors</para>
+    /// <para>Reads: FStore</para>
+    /// <para>Mutates: ADecl (out)</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.ParseTypeToken"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveInheritedType(const AClass: TSymbol; const APropName: string;
       out ADecl: TSymbol): string;
+    /// <summary><!-- drag-lint:auto sum -->Resolve an empty-modifiers property's
+    /// EFFECTIVE visibility by finding the same-named property that DOES carry a
+    /// non-empty Modifiers in an ancestor class. Mirrors ResolveInheritedType exactly,
+    /// but over Modifiers instead of Signature. Defensive: the current parser always
+    /// stamps a non-empty Modifiers (VisibilityOfSection defaults to 'public'), so this
+    /// path is not reachable via today's indexer output -- kept so a future/foreign
+    /// producer of blank Modifiers rows still resolves a visibility instead of the row
+    /// being dropped from a --min-visibility filter.</summary>
+    /// <param name="AClass"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <param name="APropName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors, Trim</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveInheritedVisibility(const AClass: TSymbol; const APropName: string): string;
+    /// <summary><!-- drag-lint:auto sum -->R1 (Task 6): resolve a property's EFFECTIVE
+    /// read/write accessor shape (prop_access) for the case where its OWN declaration
+    /// carries NO accessor clause -- a bare 'property Color;' redeclaration whose stored
+    /// prop_access is '' (NULL). Finds the same-named property that DOES carry a
+    /// non-empty prop_access in the nearest ancestor. Mirrors ResolveInheritedType
+    /// EXACTLY (same class-only ancestor walk, nearest-first) but over PropAccess instead
+    /// of Signature -- so a bare redeclaration inherits the ancestor's ro/rw/wo.
+    /// CLASS-ONLY (R3, Task 3): the (A.Kind = 'class') guard excludes any implemented
+    /// INTERFACE that independently redeclares a same-named property (Delphi interfaces
+    /// support `property X: T read GetX;`) with an UNRELATED accessor shape from
+    /// interposing before the real class base -- identical to the interface-filter
+    /// rationale documented on ResolveInheritedType. Returns '' when nothing up-tree
+    /// carries an accessor clause either (the caller then treats '' as writable -- the
+    /// back-compat default).</summary>
+    /// <param name="AClass"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <param name="APropName"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors, Trim</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveInheritedPropAccess(const AClass: TSymbol; const APropName: string): string;
+    /// <param name="AClass"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <param name="AConst"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: Trim(Best.Modifiers);
+    /// 'public'.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto -->R4 (Task 4): a class CONST's (skConstDecl) effective visibility, for
+    /// the (common) case where its OWN Modifiers is blank. INVESTIGATED empirically (indexed a
+    /// throwaway fixture, inspected the `symbols` rows directly): the parser's 'declConst' branch
+    /// (DRagLint.Parser.Delphi13.pas, inside the recursive Walk dispatcher, ~line 1238) calls Emit
+    /// WITHOUT the ASignature/AModifiers arguments at all -- unlike the 'declField'/ 'declProp'
+    /// branches, which both pass AState.CurrentVisibility -- so a class const's Modifiers column is
+    /// '' UNCONDITIONALLY, regardless of which visibility section it was actually declared under.
+    /// Fixing the parser is out of scope here (Task 4 is PropTree.pas-only, no re-index), so the
+    /// effective visibility is instead recovered from data already IN the index: Delphi visibility
+    /// sections are purely textual/linear -- every member between one visibility keyword and the
+    /// next shares that keyword's Modifiers -- so the nearest PRECEDING sibling (by StartLine,
+    /// among ALL child kinds; fields/properties/methods all DO carry accurate Modifiers) shares the
+    /// const's real section. Falls back to 'public' -- Delphi's own default for an
+    /// unspecified/first class section -- only when no earlier sibling carries any visibility info
+    /// at all (the const is the class's very first member). This is a best-effort reconstruction
+    /// from real sibling data, not a blind guess; it is NOT expected to be 100% correct on every
+    /// real corpus (e.g. a const that is the sole member of its own section, preceded only by an
+    /// EARLIER section's members, could inherit the wrong section) -- documented as a known
+    /// limitation.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, Trim</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.CollectFields"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveConstVisibilityByProximity(const AClass: TSymbol; const AConst: TSymbol): string;
+    /// <summary><!-- drag-lint:auto sum -->RESIDUAL resolver -- the lazy ancestry BRIDGE.
+    /// Runs only when ParseTypeToken AND ResolveInheritedType both failed, i.e. proptree
+    /// is about to emit 'unknown' for a bare-redeclared (empty-signature) property whose
+    /// ancestry is broken by an UNRESOLVED edge. The classic case: a TYPE-ALIAS ancestor
+    /// ('cxButtons.TcxBaseButton = Vcl.StdCtrls.TCustomButton') -- ResolveAncestry's
+    /// candidate set is class/interface only, so it never links an alias ancestor and the
+    /// whole VCL-inherited property surface (Align, Caption, Anchors, ...) loses its
+    /// type. This walks UP the chain BRIDGING each unresolved ancestor NAME to its
+    /// defining class via the scope-aware, alias-following FStore.ResolveTypeNameToClass
+    /// (scope = the unit of the class that actually INHERITS that name at that hop, whose
+    /// uses-clause / namespace prefix disambiguates e.g. Vcl from FMX -- see Climb's rule
+    /// below), and returns the first KNOWN type declared for APropName above the break.
+    /// '' when the walk still finds nothing (never fabricates a type).</summary>
+    /// <param name="AClass"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <param name="APropName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ADecl"><!-- drag-lint:auto type -->out TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: Climb(AClass, 0).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ResolveDeclaredPropertyType.Step (DRagLint.Convert.PropTree.pas) ?, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: BodyOf, CrossesGuiFramework, Default, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveViaBridgedAncestry.Climb, LowerCase, ParseTypeToken, PropTypeOn, ResolveTypeInScope, ScopeSymbolFor</para>
+    /// <para>Mutates: ADecl (out)</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ResolveViaBridgedAncestry.Climb"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.CollectFields"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveViaBridgedAncestry(const AClass: TSymbol; const APropName: string;
       out ADecl: TSymbol): string;
+    /// <param name="AClass"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;Int64&gt; -- Observed: Ids.ToArray.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto -->Known limitation: descendants are enumerated by NAME
+    /// (FindDescendantNames -&gt; FindSymbolByExactNameAnywhere returns one homonym) and the
+    /// recovered type is derived from the querying class's file scope. A shared bare property
+    /// reachable from two differently-scoped subtrees (e.g. VCL TAlign vs FMX TAlignLayout) can
+    /// receive a scope-ambiguous type, last-writer-wins. Bounded by the bare-only safety rule: the
+    /// worst case is unknown -&gt; maybe-wrong, NEVER correct -&gt; wrong. Follow-up: scope-aware
+    /// descendant resolution.
+    ///
+    /// Class ids of AClass + its transitive (resolved) ancestors + transitive descendants -- the
+    /// connected tree reachable via RESOLVED edges. Used to propagate a recovered property type
+    /// onto every bare same-named occurrence. Computed once per walked class (cached by the
+    /// caller).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf, DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds.AddId, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolByExactNameAnywhere, DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds.AddId"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolByExactNameAnywhere"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ClosureClassIds(const AClass: TSymbol): TArray<Int64>;
+    /// <summary><!-- drag-lint:auto sum -->Stamp ATypeTok onto every class in AClassIds
+    /// whose child property APropName exists AND is bare (empty signature). Best-effort;
+    /// never overwrites an explicit type (the safety rule). Returns the number of rows
+    /// updated.</summary>
+    /// <param name="AClassIds"><!-- drag-lint:auto type -->const TArray&lt;Int64&gt;</param>
+    /// <param name="APropName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ATypeTok"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto type -->Integer</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: DRagLint.Convert.PropTree.ParseTypeToken, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.MemoizePropertyType</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.ParseTypeToken"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.MemoizePropertyType"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function PropagateBareType(const AClassIds: TArray<Int64>;
       const APropName, ATypeTok: string): Integer;
+    /// <summary><!-- drag-lint:auto sum -->The distinct property leaves (AFields False)
+    /// or field / class-const leaves (AFields True, R4 -- see CollectFields) visible on
+    /// AClass (own + inherited), each paired with the most-derived class that declares
+    /// it. Dedupe by leaf name, one Seen set per call, so the two kinds never shadow each
+    /// other.</summary>
+    /// <param name="AClass"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <param name="AFields"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="AHidden"><!-- drag-lint:auto type -->TList&lt;TPropHiddenMember&gt;</param>
+    /// <param name="AOrder"><!-- drag-lint:auto type -->out TArray&lt;TSymbol&gt;</param>
+    /// <param name="ADeclaredBy"><!-- drag-lint:auto type -->out TArray&lt;TSymbol&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto -->ADeclaredBy hands back that class as a SYMBOL, not merely its
+    /// qualified name: the caller needs its FileId to resolve the property's TYPE in the right unit
+    /// scope (criterion 7, one layer below the ancestor climb -- a property inherited from
+    /// Vcl.Controls.TControl must have its type resolved in Vcl.Controls, not in whatever unit the
+    /// queried root happens to live in), and its QualifiedName for the cross-namespace refusal.
+    /// Both come from the one symbol, so the two can never disagree about which class is meant.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.CollectFields (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: DRagLint.Convert.PropTree.HiddenOf, DRagLint.Convert.PropTree.IsPrivateModifiers, DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, LowerCase</para>
+    /// <para>Reads: FStore</para>
+    /// <para>Mutates: AOrder (out), ADeclaredBy (out)</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.HiddenOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.IsPrivateModifiers"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CollectMembers(const AClass: TSymbol; AFields: Boolean; AHidden: TList<TPropHiddenMember>;
       out AOrder: TArray<TSymbol>; out ADeclaredBy: TArray<TSymbol>);
+    /// <summary><!-- drag-lint:auto sum -->R4 (Task 4): the distinct FIELD/CONST leaves
+    /// visible on AClass (own + inherited), each paired with the most-derived class that
+    /// declares it. Dedupe by leaf name. Mirrors CollectMembers exactly (same ClassChain,
+    /// most-derived-first shadowing) but filters skField/skConstDecl instead of
+    /// skProperty, and is kept as a SEPARATE walk with its OWN Seen set -- deliberately
+    /// NOT folded into the property walk (T2h: the one CollectMembers routine, called
+    /// with AFields = True) -- so the property engine's already class-accurate (Task 3)
+    /// behavior is never disturbed by this addition. skConstDecl (a class-scoped `const
+    /// X: T = v;`) is included alongside skField because a typed class const is a
+    /// required PAS-surface leaf too (read-only; see Walk's field loop).</summary>
+    /// <param name="AClass"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <param name="AHidden"><!-- drag-lint:auto type -->TList&lt;TPropHiddenMember&gt;</param>
+    /// <param name="AOrder"><!-- drag-lint:auto type -->out TArray&lt;TSymbol&gt;</param>
+    /// <param name="ADeclaredIn"><!-- drag-lint:auto type -->out TArray&lt;string&gt;</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: DRagLint.Convert.PropTree.TPropMemberResolver.CollectMembers</para>
+    /// <para>Mutates: ADeclaredIn (out)</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.CollectMembers"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CollectFields(const AClass: TSymbol; AHidden: TList<TPropHiddenMember>;
       out AOrder: TArray<TSymbol>; out ADeclaredIn: TArray<string>);
+    /// <summary><!-- drag-lint:auto sum -->True when ASym is (or descends from)
+    /// TComponent -- a REFERENCE type, not an owned sub-object. Name-based over the
+    /// ancestor closure (no RTTI), same pragmatic style as IsStopClass. Used to leave
+    /// referenced components unexpanded.</summary>
+    /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: SameText(ASym.Name,
+    /// 'TComponent').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.TPropMemberResolver.ResolveMembers (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors, DRagLint.Core.Model.TTypeAncestor.MatchesName, SameText</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors"/>
+    /// <seealso cref="DRagLint.Core.Model.TTypeAncestor.MatchesName"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsComponentType(const ASym: TSymbol): Boolean;
   public
     /// <summary>Creates a resolver over one index.</summary>
@@ -294,21 +669,71 @@ type
     /// <param name="AOpts">ToPersistent (stop the ancestor climb at
     /// TPersistent/TObject) and TreatRefsAsLeaves apply; Depth is ignored --
     /// the resolver never recurses.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropCache.TPropMemberCache.Create (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropTree.FillBarePropertyTypes (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.ResolvePropertyDeclaredType (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: DRagLint.Core.DeclText.TDeclTextReader.Create</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FStore, FOpts, FChainCache, FTypeCache, FDeclText</para>
+    /// <seealso cref="DRagLint.Core.DeclText.TDeclTextReader.Create"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.CollectFields"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const AStore: ISymbolStore; const AOpts: TPropTreeOptions);
     /// <summary>Frees the memo tables and the declaring-line reader.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FDeclText, FTypeCache, FChainCache</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.CollectFields"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.CollectMembers"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>The class-kind symbol a qualified class name names.</summary>
     /// <param name="AQName">Fully-qualified class name, e.g. 'Unit.TOuter'.</param>
     /// <returns>The defining body (a forward-declaration stub only when no
     /// body is indexed); Id = 0 when no class of that qualified name
     /// exists.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropCache.TPropMemberCache.DescendsFrom (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropCache.TPropMemberCache.MembersOf (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: Default, DRagLint.Convert.PropTree.IsForwardDeclClass, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName</para>
+    /// <para>Returns: Default(TSymbol); FirstAny</para>
+    /// <para>Reads: FStore</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.IsForwardDeclClass"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveClassByQName(const AQName: string): TSymbol;
     /// <summary>A class and its resolved ancestors, most-derived first.</summary>
     /// <param name="ARoot">A class-kind symbol of this resolver's store.</param>
     /// <returns>ARoot, then every ancestor class the index resolves or the
     /// scope rule bridges; memoized per class id.</returns>
-    /// <remarks>Public since 1.26.1 for TPropMemberCache.DescendsFrom.
-    /// ToPersistent stops the climb as for a property tree.</remarks>
+    /// <remarks>
+    /// Public since 1.26.1 for TPropMemberCache.DescendsFrom.
+    /// ToPersistent stops the climb as for a property tree.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropCache.TPropMemberCache.DescendsFrom (DRagLint.Convert.PropCache.pas), DRagLint.Convert.PropTree.TPropMemberResolver.CollectMembers (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: BodyOf, CrossesGuiFramework, DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain.ClimbFrom, IsIndistinguishableFromClassRef, IsStopClass, ResolveTypeInScope, ScopeSymbolFor, TryAdd</para>
+    /// <para>Returns: List.ToArray</para>
+    /// <para>Reads: FChainCache</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain.ClimbFrom"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.CollectFields"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.CollectMembers"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ClassChain(const ARoot: TSymbol): TArray<TSymbol>;
     /// <summary>The members of AClass, one level deep.</summary>
     /// <param name="AClass">A class-kind symbol of this resolver's store.</param>
@@ -329,9 +754,28 @@ type
     /// the order met (properties, then fields) -- including a private
     /// redeclaration that hides an ancestor's member (R11). Never expanded;
     /// see TPropHiddenMember.</param>
-    /// <remarks>A member is descended into only when MemberKind='property'
+    /// <remarks>
+    /// A member is descended into only when MemberKind='property'
     /// and IsClassTyped is True. May memoize a recovered property type into
-    /// the store (see BuildPropTree).</remarks>
+    /// the store (see BuildPropTree).
+    /// <!-- drag-lint:auto -->One level of what used to be BuildPropTree's recursive Walk: the
+    /// members of AClass with their type, default, accessor, visibility and component-ness decided
+    /// exactly as the walk decided them, but with Path = the BARE member name and no recursion. The
+    /// recursion (and its depth budget, cycle guard and Truncated flag) stays with the caller --
+    /// BuildPropTree's Walk, or TPropMemberCache, which descends one path segment at a time.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropCache.TPropMemberCache.MembersOfSym (DRagLint.Convert.PropCache.pas)</para>
+    /// <para>Calls: Default, DRagLint.Convert.PropTree.HiddenOf, DRagLint.Convert.PropTree.ParseTypeToken, DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds, DRagLint.Convert.PropTree.TPropMemberResolver.CollectFields, DRagLint.Convert.PropTree.TPropMemberResolver.CollectMembers, DRagLint.Convert.PropTree.TPropMemberResolver.IsComponentType, DRagLint.Convert.PropTree.TPropMemberResolver.PropagateBareType, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveConstVisibilityByProximity, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveDefaultFor (+10 more)</para>
+    /// <para>Complexity: 28 (cyclomatic, outer body), 274 lines (full implementation)</para>
+    /// <para>Reads: FStore, FOpts</para>
+    /// <para>Mutates: AMembers (out), ATypes (out), AIsCompRef (out), AHidden (out)</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.HiddenOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.ParseTypeToken"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.CollectFields"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.CollectMembers"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ResolveMembers(const AClass: TSymbol; out AMembers: TArray<TPropNode>;
       out ATypes: TArray<TSymbol>; out AIsCompRef: TArray<Boolean>;
       out AHidden: TArray<TPropHiddenMember>);
@@ -345,15 +789,34 @@ type
     /// same-named property carries the type; Id = 0 when none was found.</param>
     /// <returns>The type token (e.g. 'string'), or '' when no ancestor declares
     /// one.</returns>
-    /// <remarks>Resolved ancestors first (GetTransitiveAncestors), then the
+    /// <remarks>
+    /// Resolved ancestors first (GetTransitiveAncestors), then the
     /// scope-aware bridge across an unresolved ancestor edge (bounded by a
-    /// visited set and MAX_BRIDGE_DEPTH). Performs NO writes.</remarks>
+    /// visited set and MAX_BRIDGE_DEPTH). Performs NO writes.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.PropTree.FillBarePropertyTypes (DRagLint.Convert.PropTree.pas), DRagLint.Convert.PropTree.ResolvePropertyDeclaredType (DRagLint.Convert.PropTree.pas)</para>
+    /// <para>Calls: DRagLint.Convert.PropTree.TPropMemberResolver.ResolveDeclaredPropertyType.IsRepublication, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveDeclaredPropertyType.Step, ResolveInheritedType, ResolveViaBridgedAncestry, Trim</para>
+    /// <para>Returns: Step(AClass, ADeclaringClass)</para>
+    /// <para>Mutates: ADeclaringClass (out)</para>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ResolveDeclaredPropertyType.IsRepublication"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ResolveDeclaredPropertyType.Step"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.BodyOf"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClassChain"/>
+    /// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ClosureClassIds"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveDeclaredPropertyType(const AClass: TSymbol; const APropName: string;
       out ADeclaringClass: TSymbol): string;
   end;
 
   /// <summary>What hover needs to say about a property's type.</summary>
-  /// <remarks>Produced by ResolvePropertyDeclaredType.</remarks>
+  /// <remarks>
+  /// Produced by ResolvePropertyDeclaredType.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.PropTree.pas) ?, DRagLint.Convert.PropTree.ResolvePropertyDeclaredType (DRagLint.Convert.PropTree.pas), DRagLint.Symbol.Describe.DescribeDeclaredType (DRagLint.Symbol.Describe.pas) ?</para>
+  /// <para>Used in units: DRagLint.Convert.PropTree, DRagLint.Symbol.Describe</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDeclaredPropType = record
     /// <summary>The declared type token, e.g. 'string'; '' when unresolved.</summary>
     TypeName  : string ;
@@ -390,20 +853,42 @@ type
 /// index parameter list ('[I: Integer]: TFoo' gives 'TFoo') never truncate it.
 /// Thread-safe (the cache is locked); the store itself must not be mutated
 /// concurrently.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Symbol.Describe.DescribeDeclaredType (DRagLint.Symbol.Describe.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.PropTree.DeclTypeCacheKey, DRagLint.Convert.PropTree.MemoizeChainBetween, DRagLint.Convert.PropTree.ParseTypeToken, DRagLint.Convert.PropTree.TPropMemberResolver.Create, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveDeclaredPropertyType, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, DRagLint.Core.Interfaces.ISymbolStore.MemoizePropertyType, Trim</para>
+/// <para>Returns: Default(TDeclaredPropType)</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 61 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Convert.PropTree.DeclTypeCacheKey"/>
+/// <seealso cref="DRagLint.Convert.PropTree.MemoizeChainBetween"/>
+/// <seealso cref="DRagLint.Convert.PropTree.ParseTypeToken"/>
+/// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.Create"/>
+/// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.ResolveDeclaredPropertyType"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function ResolvePropertyDeclaredType(const AStore: ISymbolStore;
   const AProp: TSymbol): TDeclaredPropType;
 
 /// <summary>Drops every answer held in the session cache of
 /// ResolvePropertyDeclaredType.</summary>
-/// <remarks>Call when a store is reopened or an index run over it completed
+/// <remarks>
+/// Call when a store is reopened or an index run over it completed
 /// (the LSP does so in ReindexFinished): the cache key carries the store
 /// INSTANCE, and a reopened store can reuse a freed instance's address over
-/// changed rows. Thread-safe.</remarks>
+/// changed rows. Thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Server.TLSPServer.ReindexFinished (DRagLint.LSP.Server.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ClearPropertyDeclaredTypeCache;
 
 type
   /// <summary>What one FillBarePropertyTypes pass did.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.PropTree.pas) ?, DRagLint.CLI.RunLinkStages (DRagLint.CLI.pas) ?, DRagLint.Convert.PropTree.FillBarePropertyTypes (DRagLint.Convert.PropTree.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.PropTree</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPropTypeFillStats = record
     /// <summary>Bare re-publication rows the pass examined.</summary>
     Candidates: Integer;
@@ -441,6 +926,17 @@ type
 /// and only when the stored type differs. Not an extraction change: no
 /// DRAGLINT_EXTRACTOR_VERSION bump. Not thread-safe; call from the indexing
 /// thread.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RunLinkStages (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Convert.PropTree.FillBarePropertyTypes.CanBridge, DRagLint.Convert.PropTree.FillBarePropertyTypes.RowOn, DRagLint.Convert.PropTree.FullPropTypeOf, DRagLint.Convert.PropTree.SignatureDeclaresType, DRagLint.Convert.PropTree.TPropMemberResolver.Create, DRagLint.Convert.PropTree.TPropMemberResolver.ResolveDeclaredPropertyType, DRagLint.Core.Interfaces.ISymbolStore.FindPropertyFillCandidates, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById (+7 more)</para>
+/// <para>Returns: Default(TPropTypeFillStats)</para>
+/// <para>Complexity: 20 (cyclomatic, outer body), 129 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Convert.PropTree.FillBarePropertyTypes.CanBridge"/>
+/// <seealso cref="DRagLint.Convert.PropTree.FillBarePropertyTypes.RowOn"/>
+/// <seealso cref="DRagLint.Convert.PropTree.FullPropTypeOf"/>
+/// <seealso cref="DRagLint.Convert.PropTree.SignatureDeclaresType"/>
+/// <seealso cref="DRagLint.Convert.PropTree.TPropMemberResolver.Create"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function FillBarePropertyTypes(const AStore: ISymbolStore;
   ASinceUnix: Int64): TPropTypeFillStats;

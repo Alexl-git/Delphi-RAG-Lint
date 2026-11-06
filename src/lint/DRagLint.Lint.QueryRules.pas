@@ -18,7 +18,8 @@ uses
 type
   /// <summary>One entry of a rule sidecar's "fix" key (autofix wave A0,
   /// 2026-10-27): what the autofix does with the finding's span.</summary>
-  /// <remarks>Grammar (rules\&lt;id&gt;.json): "fix" is ONE object or an ARRAY of
+  /// <remarks>
+  /// Grammar (rules\&lt;id&gt;.json): "fix" is ONE object or an ARRAY of
   /// objects; each is { "when_capture": "&lt;name&gt;" (optional), then exactly one
   /// of "replace": "&lt;template&gt;" | "delete": "span" | "statement", plus
   /// optional "uses": "&lt;Unit&gt;" and "risky": true }. The FIRST entry whose
@@ -26,7 +27,12 @@ type
   /// expands completely wins; no winner = the finding carries no fix. Templates
   /// substitute {capture} with the capture's RAW source text (not
   /// regex-escaped, unlike exclude_if_preceded_by) and may span lines ("\n").
-  /// An object with neither replace nor a known delete value is ignored.</remarks>
+  /// An object with neither replace nor a known delete value is ignored.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.QueryRules.pas) ?, DRagLint.Lint.QueryRules.ParseSidecarFix (DRagLint.Lint.QueryRules.pas) ?, DRagLint.Lint.QueryRules.ParseSidecarFix.AddOne (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.QueryRules.TQueryRule.AttachFix (DRagLint.Lint.QueryRules.pas) ?, DRagLint.Lint.QueryRules.TQueryRule.CreateCompiled (DRagLint.Lint.QueryRules.pas) ?</para>
+  /// <para>Used in units: DRagLint.Lint.QueryRules</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSidecarFix = record
     WhenCapture: string      ;  { '' = always; else applies only when this capture is bound }
     Kind       : TLintFixKind;  { lfkReplace / lfkDeleteSpan / lfkDeleteStatement }
@@ -43,7 +49,7 @@ type
   /// id, severity, message.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.Linter.pas), declaration (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.Destroy (DRagLint.Lint.Linter.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.Linter.pas) ?, DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas) ?, DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds (DRagLint.Lint.Linter.pas) ?, DRagLint.Lint.Linter.TLinter.Destroy (DRagLint.Lint.Linter.pas) ?, DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll (DRagLint.Lint.QueryRules.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.Lint.Linter, DRagLint.Lint.QueryRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -135,8 +141,8 @@ type
       /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Parent"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.AttachFix"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function InExcludedAncestor(const ANode: TTSNode): Boolean;
@@ -155,8 +161,8 @@ type
       /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.Parent"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.AttachFix"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function HasRequiredAncestor(const ANode: TTSNode): Boolean;
@@ -186,29 +192,65 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsArgumentOfExcludedCallee(const ANode: TTSNode; const ASource: TBytes): Boolean;
+      /// <summary><!-- drag-lint:auto sum -->N-14. See FExcludePrecededBy. The window is
+      /// the enclosing routine (defProc) up to the picked node, or the file start when
+      /// the match is outside a routine. Each brace-wrapped capture name becomes the
+      /// regex-escaped text of capture @name, so the pattern can insist on the SAME array
+      /// the match named.</summary>
+      /// <param name="APicked"><!-- drag-lint:auto type -->const TTSNode</param>
+      /// <param name="ACaptures"><!-- drag-lint:auto type -->const TTSQueryCaptureArray</param>
+      /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRule.Run (DRagLint.Lint.QueryRules.pas)</para>
+      /// <para>Calls: DRagLint.Lint.QueryRules.NodeText, Integer, StringReplace, TreeSitter.Query.TTSQuery.CaptureNameForID, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.Parent, TreeSitter.TTSNodeHelper.StartByte, Trim</para>
+      /// <para>Reads: FExcludePrecededBy, FQuery</para>
+      /// <seealso cref="DRagLint.Lint.QueryRules.NodeText"/>
+      /// <seealso cref="TreeSitter.Query.TTSQuery.CaptureNameForID"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.NodeType"/>
+      /// <seealso cref="TreeSitter.TTSNodeHelper.Parent"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function IsPrecededByExcludedText(const APicked: TTSNode; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes): Boolean;
       { Expands the first applicable fix entry onto AFinding. False = that entry's
         needs_compiler is newer than ActiveTargetCompiler: the caller drops the match. }
+      /// <summary><!-- drag-lint:auto sum -->Expands the first applicable fix entry onto
+      /// AFinding. False = that entry's needs_compiler is newer than
+      /// ActiveTargetCompiler: the caller drops the match.</summary>
+      /// <param name="AFinding"><!-- drag-lint:auto type -->var TLintFinding</param>
+      /// <param name="ACaptures"><!-- drag-lint:auto type -->const TTSQueryCaptureArray</param>
+      /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRule.Run (DRagLint.Lint.QueryRules.pas)</para>
+      /// <para>Calls: DRagLint.Lint.QueryRules.ExpandFixTemplate, DRagLint.Lint.QueryRules.NodeText, DRagLint.Lint.TargetCompiler.ActiveTargetCompiler, DRagLint.Lint.TargetCompiler.IsGatedByTarget, IndexText, TreeSitter.Query.TTSQuery.CaptureNameForID</para>
+      /// <para>Reads: FQuery, FFixes</para>
+      /// <seealso cref="DRagLint.Lint.QueryRules.ExpandFixTemplate"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.NodeText"/>
+      /// <seealso cref="DRagLint.Lint.TargetCompiler.ActiveTargetCompiler"/>
+      /// <seealso cref="DRagLint.Lint.TargetCompiler.IsGatedByTarget"/>
+      /// <seealso cref="TreeSitter.Query.TTSQuery.CaptureNameForID"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function AttachFix(var AFinding: TLintFinding; const ACaptures: TTSQueryCaptureArray; const ASource: TBytes): Boolean;
     public
       /// <param name="ALanguage"><!-- drag-lint:auto type -->const PTSLanguage</param>
       /// <param name="AQuerySource"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AScmPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AJsonPath"><!-- drag-lint:auto type -->const string</param>
-      /// <exception cref="Exception"><!-- drag-lint:auto exc -->tree-sitter query compile failed: rule "%s" (offset %d, errType %d,</exception>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Lint.QueryRules.TQueryRule.CreateCompiled: tree-sitter query compile failed: rule "%s" (offset %d, errType %d,</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll (DRagLint.Lint.QueryRules.pas)</para>
-      /// <para>Calls: DRagLint.Lint.QueryRules.ExtractRequiredLiteral, Format, LowerCase, SameText, TreeSitter.Query.TTSQuery.Create, Trim, TSQueryError</para>
+      /// <para>Calls: DRagLint.Lint.QueryRules.TQueryRule.CreateCompiled, TreeSitter.Query.TTSQuery.Create, TSQueryError</para>
       /// <para>constructor</para>
-      /// <para>Complexity: 16 (cyclomatic, outer body), 81 lines (full implementation)</para>
-      /// <para>Reads: FId, FExcludeAncestors, FExcludeArgOf, FExcludePrecededBy, FRequireAncestors, FRequireFileText, FQuery   Writes: FSourcePath, FId, FSeverity, FMessage, FWarnCapture, FEnabled, FRequiredText, FRuleId (+6 more)</para>
-      /// <para>Touches: file system</para>
-      /// <seealso cref="DRagLint.Lint.QueryRules.ExtractRequiredLiteral"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.CreateCompiled"/>
       /// <seealso cref="TreeSitter.Query.TTSQuery.Create"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.AttachFix"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Destroy"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ALanguage: PTSLanguage; const AQuerySource, AScmPath, AJsonPath: string);
@@ -222,18 +264,33 @@ type
       /// <param name="AErrOff">ts_query_new error offset, reported on failure.</param>
       /// <param name="AErrType">ts_query_new error type, reported on failure.</param>
       /// <exception cref="Exception">AQuery is nil or did not compile.</exception>
-      /// <remarks>Same observable effects, in the same order, as Create.</remarks>
+      /// <remarks>
+      /// Same observable effects, in the same order, as Create.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Lint.QueryRules.TQueryRule.Create (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll (DRagLint.Lint.QueryRules.pas)</para>
+      /// <para>Calls: DRagLint.Lint.QueryRules.ExtractRequiredLiteral, DRagLint.Lint.QueryRules.ParseSidecarFix, DRagLint.Lint.RuleCatalog.RegisterSidecarFixRule, Format, LowerCase, SameText, Trim</para>
+      /// <para>constructor</para>
+      /// <para>Complexity: 19 (cyclomatic, outer body), 85 lines (full implementation)</para>
+      /// <para>Reads: FId, FExcludeAncestors, FExcludeArgOf, FExcludePrecededBy, FRequireAncestors, FRequireFileText, FFixes, FQuery   Writes: FQuery, FSourcePath, FId, FSeverity, FMessage, FWarnCapture, FEnabled, FRequiredText (+7 more)</para>
+      /// <para>Touches: file system</para>
+      /// <seealso cref="DRagLint.Lint.QueryRules.ExtractRequiredLiteral"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.ParseSidecarFix"/>
+      /// <seealso cref="DRagLint.Lint.RuleCatalog.RegisterSidecarFixRule"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.AttachFix"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor CreateCompiled(const AQuerySource, AScmPath, AJsonPath: string; const AQuery: TTSQuery; const AErrOff: UInt32; const AErrType: TTSQueryError);
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Reads: FQuery</para>
       /// <para>Pure</para>
       /// <para>Directives: override</para>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.AttachFix"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.CreateCompiled"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.IsPrecededByExcludedText"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       destructor Destroy; override;
@@ -245,15 +302,15 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.RuleProfileArmed, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee, DRagLint.Lint.QueryRules.TQueryRule.IsPrecededByExcludedText, Integer, SameText (+7 more)</para>
-      /// <para>Complexity: 14 (cyclomatic, outer body), 86 lines (full implementation)</para>
-      /// <para>Reads: FQuery, FWarnCapture, FId, FSeverity, FMessage, FRuleId</para>
+      /// <para>Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.RuleProfileArmed, DRagLint.Lint.QueryRules.TDeclScopeCache.Create, DRagLint.Lint.QueryRules.TQueryRule.AttachFix, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee, DRagLint.Lint.QueryRules.TQueryRule.IsPrecededByExcludedText (+9 more)</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 90 lines (full implementation)</para>
+      /// <para>Reads: FQuery, FWarnCapture, FId, FSeverity, FMessage, FFixes, FRuleId</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.AllPredicatesPass"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.NoteRuleTicks"/>
       /// <seealso cref="DRagLint.Lint.QueryRules.RuleProfileArmed"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TDeclScopeCache.Create"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.AttachFix"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string): TArray<TLintFinding>;
@@ -313,15 +370,16 @@ type
       /// <param name="ALanguage"><!-- drag-lint:auto type -->const PTSLanguage</param>
       /// <param name="ARulesDir"><!-- drag-lint:auto type -->const string</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;TQueryRule&gt;</returns>
-      /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Lint.QueryRules.TQueryRule.Create: tree-sitter query compile failed: rule "%s" (offset %d, errType %d,</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: ChangeFileExt, DRagLint.Lint.QueryRules.IsUnderNestedRulesDir, DRagLint.Lint.QueryRules.TQueryRule.Create, ExtractFileName, Format, FreeAndNil, LowerCase, Writeln</para>
+      /// <para>Calls: ChangeFileExt, DRagLint.Lint.QueryRules.IsUnderNestedRulesDir, DRagLint.Lint.QueryRules.RuleProfileArmed, DRagLint.Lint.QueryRules.TQueryRule.CreateCompiled, ExtractFileName, Format, FreeAndNil, LowerCase, TreeSitter.Query.TTSQuery.Create, Writeln</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.IsUnderNestedRulesDir"/>
-      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.Create"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.RuleProfileArmed"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.CreateCompiled"/>
+      /// <seealso cref="TreeSitter.Query.TTSQuery.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function LoadAll(const ALanguage: PTSLanguage; const ARulesDir: string): TArray<TQueryRule>;
@@ -378,6 +436,19 @@ function QueryRuleTimings: TArray<TQueryRuleTiming>;
 /// <returns>True when a same-routine local, parameter, inline var or unit-level
 /// var declares AName with an explicit type; False for a field, a with-member,
 /// an untyped inline var or anything else the source does not show.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.Autofix.DeclTypeOf (DRagLint.Lint.Autofix.pas)</para>
+/// <para>Calls: DRagLint.Lint.QueryRules.NamedChildrenOf, DRagLint.Lint.QueryRules.TDeclScopeCache.Create, DRagLint.Lint.QueryRules.TDeclScopeCache.Find, TreeSitter.TTSNodeHelper.EndByte, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.Parent, TreeSitter.TTSNodeHelper.StartByte</para>
+/// <para>Returns: False</para>
+/// <para>Mutates: AType (out)</para>
+/// <seealso cref="DRagLint.Lint.QueryRules.NamedChildrenOf"/>
+/// <seealso cref="DRagLint.Lint.QueryRules.TDeclScopeCache.Create"/>
+/// <seealso cref="DRagLint.Lint.QueryRules.TDeclScopeCache.Find"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.EndByte"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DeclaredTypeAt(const ARoot: TTSNode; const ASource: TBytes; AByte: UInt32;
   const AName: string; out AType: string): Boolean;
 

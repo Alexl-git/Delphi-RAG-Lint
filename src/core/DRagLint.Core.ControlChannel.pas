@@ -122,10 +122,10 @@ const
 /// <para>WIDENED 2026-10-28 (DEC-13 reopened, owner): <c>index</c> (single root, `--project`, `--all`) and `lint-all` listen too, started by the Do* verb through BatchChannelOpen. A stand-down is taken BETWEEN FILES (index: the storage layer's file-transaction gate, so no file row is ever half written) or between files of the lint scan (lint-all stops and prints the findings so far). Exit code CONTROL_EXIT_STOOD_DOWN.</para>
 /// <para>WIDENED 2026-10-30 (1.39.1, known issue of 1.39.0): <c>warm-rule-cache</c> listens, started by DRagLint.CLI.DoWarmRuleCache. A warm only reads and its result is disposable, so a stand-down is taken AT ONCE by a watcher thread (no safe point to wait for) and the process exits CONTROL_EXIT_STOOD_DOWN; shutdown and an index of the same database stop it, and the engine image is free again.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
-/// <para>Calls: SameText</para>
-/// <para>Returns: SameText(ACommand, 'lsp') or SameText(ACommand, 'cycles')</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas)</para>
 /// <para>Pure</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: SameText(ACommand, 'lsp') or SameText(ACommand, 'cycles') or SameText(ACommand, 'index')</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ControlChannelEnabledFor(const ACommand: string): Boolean;
@@ -134,10 +134,10 @@ function ControlChannelEnabledFor(const ACommand: string): Boolean;
 /// <returns>The SID string, or '' when the token cannot be read.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.ControlPipeLeafFor (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.ListControlPipesForThisUser (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.TControlChannel.Create (DRagLint.Core.ControlChannel.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.BeatPipeNameFor (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.ControlPipeLeafFor (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.ListControlPipesForThisUser (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.SnapshotWritingBeats (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.TControlChannel.Create (DRagLint.Core.ControlChannel.pas)</para>
 /// <para>Calls: CloseHandle, ConvertSidToStringSidW, GetTokenInformation, HLOCAL, LocalFree, OpenProcessToken, PTokenUser</para>
-/// <para>Returns: ''; SidStr</para>
 /// <para>Pure</para>
+/// <para>Returns: ''; SidStr</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function CurrentUserSidString: string;
@@ -146,7 +146,7 @@ function CurrentUserSidString: string;
 /// <returns>The session id (0 when it cannot be read).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.ControlPipeLeafFor (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.ListControlPipesForThisUser (DRagLint.Core.ControlChannel.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.BeatPipeNameFor (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.ControlPipeLeafFor (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.ListControlPipesForThisUser (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.SnapshotWritingBeats (DRagLint.Core.ControlChannel.pas)</para>
 /// <para>Calls: ProcessIdToSessionId</para>
 /// <para>Returns: S</para>
 /// <para>Pure</para>
@@ -160,10 +160,10 @@ function CurrentSessionId: Cardinal;
 /// <returns><c>\\.\pipe\drag-lint-ctl-&lt;sid&gt;-s&lt;session&gt;-p&lt;pid&gt;</c>.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Core.ControlChannel.TControlChannel.Create (DRagLint.Core.ControlChannel.pas)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.StandDownChild (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.ForwardStandDownToChildren (DRagLint.CLI.pas), DRagLint.CLI.StopStaleWarm (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.TControlChannel.Create (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DragLint.Plugin.ProcRun.StartStandDown (DragLint.Plugin.ProcRun.pas)</para>
 /// <para>Calls: DRagLint.Core.ControlChannel.ControlPipeLeafFor</para>
-/// <para>Returns: PIPE_PREFIX_FULL + ControlPipeLeafFor(APid)</para>
 /// <para>Pure</para>
+/// <para>Returns: PIPE_PREFIX_FULL + ControlPipeLeafFor(APid)</para>
 /// <seealso cref="DRagLint.Core.ControlChannel.ControlPipeLeafFor"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -176,8 +176,8 @@ function ControlPipeNameFor(APid: Cardinal): string;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Core.ControlChannel.ListControlPipesForThisUser (DRagLint.Core.ControlChannel.pas)</para>
 /// <para>Calls: StrToIntDef</para>
-/// <para>Returns: 0; StrToIntDef(APipeLeaf.Substring(P + 2), 0)</para>
 /// <para>Pure</para>
+/// <para>Returns: 0; StrToIntDef(APipeLeaf.Substring(P + 2), 0)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function PidFromControlPipeLeaf(const APipeLeaf: string): Cardinal;
@@ -209,7 +209,7 @@ function ListControlPipesForThisUser: TArray<string>;
 /// The read blocks until the engine replies; for <c>shutdown</c>
 /// that is bounded by the wait-ms the message itself carries.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoShutdown (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.StandDownChild (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), DRagLint.CLI.ForwardStandDownToChildren (DRagLint.CLI.pas), DRagLint.CLI.StopStaleWarm (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.RequestEngineBeat (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.SnapshotWritingBeats (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DragLint.Plugin.ProcRun.StartStandDown (DragLint.Plugin.ProcRun.pas)</para>
 /// <para>Calls: Cardinal, CloseHandle, CreateFileW, DRagLint.Core.ControlChannel.ReadLineFromPipe, IntToStr, PChar, SysErrorMessage, WaitNamedPipeW, WriteFile</para>
 /// <para>Returns: False; True</para>
 /// <para>Mutates: AReply (out), AError (out)</para>
@@ -257,8 +257,14 @@ const
 
 type
   /// <summary>One snapshot of the engine's status record.</summary>
-  /// <remarks>Seq is the ONLY change test a client may use: it grows by one on every report, so two snapshots
-  /// with the same Seq mean no progress in between, whatever the other fields say.</remarks>
+  /// <remarks>
+  /// Seq is the ONLY change test a client may use: it grows by one on every report, so two snapshots
+  /// with the same Seq mean no progress in between, whatever the other fields say.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: [dclDragLintWizard]declaration (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard]DRagLint.Core.ControlChannel.BeatDisplayText (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard]DRagLint.Core.ControlChannel.BeatFieldText (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard]DRagLint.Core.ControlChannel.BeatSnapshot (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard]DRagLint.Core.ControlChannel.ParseBeatReply (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.RequestEngineBeat (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineBeat (DragLint.Plugin.LspClient.pas) ?, [dclDragLintWizard]DragLint.Plugin.ProcRun.RunCore.CheckBeat (DragLint.Plugin.ProcRun.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI, [dclDragLintWizard]DRagLint.Core.ControlChannel, [dclDragLintWizard]DragLint.Plugin.LspClient, [dclDragLintWizard]DragLint.Plugin.ProcRun</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEngineBeat = record
     /// <summary>Report counter; 0 = nothing reported yet.</summary>
     Seq   : Int64 ;
@@ -276,35 +282,76 @@ type
 
 /// <summary>Starts a new action in the status record: action AAction, no step, n = total = 0.</summary>
 /// <param name="AAction">The verb or LSP method ('' = idle).</param>
-/// <remarks>Thread-safe; cheap (one critical section). Every Beat* call advances Seq.</remarks>
+/// <remarks>
+/// Thread-safe; cheap (one critical section). Every Beat* call advances Seq.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas), DRagLint.LSP.Server.TLSPServer.Run (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.BeatMarkLocked</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.BeatMarkLocked"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure BeatBegin(const AAction: string);
 
 /// <summary>Starts a new step inside the current action: n = 0, total = ATotal.</summary>
 /// <param name="AStep">The phase name.</param>
 /// <param name="ATotal">Denominator of the step's counter; 0 = unknown.</param>
-/// <remarks>Thread-safe.</remarks>
+/// <remarks>
+/// Thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.Execute (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.CycleFix.ReportWaitProgress (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.Stage (DRagLint.CLI.pas), DRagLint.CLI.TLintPhaseProfiler.Phase (DRagLint.CLI.pas), DRagLint.Storage.SQLite.BeatStreamOpen (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.BeatMarkLocked</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.BeatMarkLocked"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure BeatStep(const AStep: string; ATotal: Int64 = 0);
 
 /// <summary>Reports progress inside the current step.</summary>
 /// <param name="AN">The new counter; negative = one more than before.</param>
 /// <param name="ATotal">New denominator; negative = unchanged.</param>
-/// <remarks>Thread-safe; safe to call from hot loops (one critical section, no allocation).</remarks>
+/// <remarks>
+/// Thread-safe; safe to call from hot loops (one critical section, no allocation).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.BeatTestHold (DRagLint.Core.ControlChannel.pas), DRagLint.Core.Indexer.TIndexer.ReportProgress (DRagLint.Core.Indexer.pas), DRagLint.Storage.SQLite.ResolveLog (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.BeatMarkLocked</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.BeatMarkLocked"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure BeatProgress(AN: Int64 = -1; ATotal: Int64 = -1);
 
 /// <summary>A copy of the status record, with AgeMs computed now.</summary>
 /// <returns>The snapshot; Seq = 0 when nothing was reported yet.</returns>
-/// <remarks>Thread-safe; one critical section.</remarks>
+/// <remarks>
+/// Thread-safe; one critical section.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.TStageHeartbeat.CheckStall (DRagLint.CLI.pas), DRagLint.CLI.TStageHeartbeat.ProgressSuffix (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.TControlListener.Serve (DRagLint.Core.ControlChannel.pas)</para>
+/// <para>Calls: Int64</para>
+/// <para>Returns: GBeat</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BeatSnapshot: TEngineBeat;
 
 /// <summary>TEST SEAM: holds the caller for DRAGLINT_TEST_RESOLVE_DELAY_MS, as a stalled stage would.</summary>
-/// <remarks>Unset / 0 = returns at once. With DRAGLINT_TEST_BEAT_MOVES set the hold reports progress as it
+/// <remarks>
+/// Unset / 0 = returns at once. With DRAGLINT_TEST_BEAT_MOVES set the hold reports progress as it
 /// waits, which is a genuinely slow stage with a moving counter. Lives here, not in the resolve pass, so the
-/// guards that use it can change without touching resolver surface.</remarks>
+/// guards that use it can change without touching resolver surface.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.BeatProgress, GetEnvironmentVariable, Sleep, StrToIntDef, UInt64</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.BeatProgress"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure BeatTestHold;
 
 /// <summary>One-line human text for a snapshot, e.g. <c>index: resolve 120/400</c>.</summary>
 /// <param name="ABeat">The snapshot.</param>
 /// <returns>The text; 'idle' for an empty action.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), [dclDragLintWizard]DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineBeat (DragLint.Plugin.LspClient.pas), [dclDragLintWizard]DragLint.Plugin.ProcRun.RunCore.CheckBeat (DragLint.Plugin.ProcRun.pas), DRagLint.Storage.FileMembership.BeatAwareBusy (DRagLint.Storage.FileMembership.pas)</para>
+/// <para>Calls: IntToStr</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BeatDisplayText(const ABeat: TEngineBeat): string;
 
 /// <summary>Asks the engine with process id APid for its heartbeat.</summary>
@@ -313,8 +360,19 @@ function BeatDisplayText(const ABeat: TEngineBeat): string;
 /// <param name="ABeat">The snapshot on success.</param>
 /// <returns>True when the engine answered with a beat field. False = no heartbeat (no pipe -- an older engine,
 /// a wrapper process, a verb that does not report -- or no answer).</returns>
-/// <remarks>Blocks at most about AConnectTimeoutMs plus the listener's reply (immediate: a status-only
-/// listener does no work). Any thread.</remarks>
+/// <remarks>
+/// Blocks at most about AConnectTimeoutMs plus the listener's reply (immediate: a status-only
+/// listener does no work). Any thread.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoShutdown (DRagLint.CLI.pas), [dclDragLintWizard]DragLint.Plugin.LspClient.TDragLintLspClient.SampleEngineBeat (DragLint.Plugin.LspClient.pas), [dclDragLintWizard]DragLint.Plugin.ProcRun.RunCore.CheckBeat (DragLint.Plugin.ProcRun.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.ControlChannel.BeatPipeNameFor, DRagLint.Core.ControlChannel.ControlRequest, DRagLint.Core.ControlChannel.ParseBeatReply</para>
+/// <para>Returns: ControlRequest(BeatPipeNameFor(APid), CONTROL_MSG_STATUS + #9 + CONTROL_STATUS_ARG_BEAT, AConnectTimeoutMs, Reply, Err)</para>
+/// <para>Mutates: ABeat (out)</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.BeatPipeNameFor"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.ControlRequest"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.ParseBeatReply"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RequestEngineBeat(APid: Cardinal; AConnectTimeoutMs: Integer; out ABeat: TEngineBeat): Boolean;
 
 /// <summary>Opens the process-wide heartbeat pipe for verb ACommand and starts the status record's action as
@@ -325,7 +383,19 @@ function RequestEngineBeat(APid: Cardinal; AConnectTimeoutMs: Integer; out ABeat
 /// <param name="AExtractor">DRAGLINT_EXTRACTOR_VERSION.</param>
 /// <returns>True when listening. False when the verb does not report, a beat pipe is already open, or the pipe
 /// could not be created (the run proceeds without one; nothing is printed -- the heartbeat is advisory).</returns>
-/// <remarks>Main thread only. The pipe closes at unit finalization. Its name: <c>\\.\pipe\drag-lint-beat-&lt;sid&gt;-s&lt;session&gt;-p&lt;pid&gt;</c>.</remarks>
+/// <exception cref="EInvalidOperation"><!-- drag-lint:auto exc -->via DRagLint.Core.ControlChannel.TControlChannel.Create: TControlChannel must be created on the main thread -- the one the listener has to wake</exception>
+/// <remarks>
+/// Main thread only. The pipe closes at unit finalization. Its name: <c>\\.\pipe\drag-lint-beat-&lt;sid&gt;-s&lt;session&gt;-p&lt;pid&gt;</c>.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.BeatBegin, DRagLint.Core.ControlChannel.BeatChannelEnabledFor, DRagLint.Core.ControlChannel.TControlChannel.Create, DRagLint.Core.ControlChannel.TControlChannel.Start, FreeAndNil</para>
+/// <para>Returns: False</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.BeatBegin"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.BeatChannelEnabledFor"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Start"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BeatChannelOpen(const ACommand, AVersion, AExtractor: string): Boolean;
 
 { ---- WRITER PUBLICATION (1.41 SQLITE-BUSY-BEAT, owner ruling 2026-11-01) ----
@@ -344,6 +414,12 @@ const
 
 type
   /// <summary>One other engine that has a writer store open on a database, and its heartbeat.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: [dclDragLintWizard]declaration (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard]DRagLint.Core.ControlChannel.SnapshotWritingBeats (DRagLint.Core.ControlChannel.pas), DRagLint.Storage.FileMembership.BeatAwareBusy (DRagLint.Storage.FileMembership.pas)</para>
+  /// <para>Used in units: DRagLint.Core.ControlChannel, DRagLint.Storage.FileMembership</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TWritingBeat = record
     /// <summary>The engine's process id.</summary>
     Pid : Cardinal   ;
@@ -353,12 +429,26 @@ type
 
 /// <summary>Records that this process opened a writer store on ADbPath (refcounted).</summary>
 /// <param name="ADbPath">The database path; compared as a lower-cased full path.</param>
-/// <remarks>Thread-safe. Pair every call with BeatWriterClosed.</remarks>
+/// <remarks>
+/// Thread-safe. Pair every call with BeatWriterClosed.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.FileMembership.ArmBeatAwareWait (DRagLint.Storage.FileMembership.pas)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.WriterKey</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.WriterKey"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure BeatWriterOpened(const ADbPath: string);
 
 /// <summary>Undoes one BeatWriterOpened for ADbPath; the path leaves the writer field at refcount 0.</summary>
 /// <param name="ADbPath">The database path given to BeatWriterOpened.</param>
-/// <remarks>Thread-safe; a path that was never opened is ignored.</remarks>
+/// <remarks>
+/// Thread-safe; a path that was never opened is ignored.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.FileMembership.DisarmBeatAwareWait (DRagLint.Storage.FileMembership.pas)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.WriterKey</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.WriterKey"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure BeatWriterClosed(const ADbPath: string);
 
 /// <summary>Asks every OTHER engine of this user and session, on its heartbeat pipe, which databases it
@@ -367,7 +457,19 @@ procedure BeatWriterClosed(const ADbPath: string);
 /// <param name="AConnectTimeoutMs">Per-pipe wait for a free instance.</param>
 /// <returns>One entry per engine whose writer field names ADbPath; empty when none answers so -- an engine
 /// older than 1.41, a verb without a heartbeat pipe, or a writer that is not drag-lint.</returns>
-/// <remarks>Any thread. Blocks at most about AConnectTimeoutMs per listed pipe. Never raises.</remarks>
+/// <remarks>
+/// Any thread. Blocks at most about AConnectTimeoutMs per listed pipe. Never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Storage.FileMembership.BeatAwareBusy (DRagLint.Storage.FileMembership.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.ControlChannel.ControlRequest, DRagLint.Core.ControlChannel.CurrentSessionId, DRagLint.Core.ControlChannel.CurrentUserSidString, DRagLint.Core.ControlChannel.ParseBeatReply, DRagLint.Core.ControlChannel.ReplyWrites, DRagLint.Core.ControlChannel.WriterKey, FindFirstFileW, FindNextFileW, IntToStr, SameText, StrToIntDef</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.ControlRequest"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.CurrentSessionId"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.CurrentUserSidString"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.ParseBeatReply"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.ReplyWrites"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SnapshotWritingBeats(const ADbPath: string; AConnectTimeoutMs: Integer): TArray<TWritingBeat>;
 
 type
@@ -384,8 +486,8 @@ type
   /// <para>Thread-safety: the host hooks are interlocked; the listener owns
   /// the pipe handles exclusively.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Core.ControlChannel.pas), declaration (DRagLint.LSP.Server.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.TControlListener.Create (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.TControlListener.ServeStandDown (DRagLint.Core.ControlChannel.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.ControlChannel, DRagLint.LSP.Server</para>
+  /// <para>Used by: [dclDragLintWizard]declaration (DRagLint.Core.ControlChannel.pas) ?, DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.TControlListener.Create (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard]DRagLint.Core.ControlChannel.TControlListener.ServeStandDown (DRagLint.Core.ControlChannel.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Core.ControlChannel, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TControlChannel = class
@@ -457,15 +559,15 @@ type
       /// <exception cref="EInvalidOperation">Not called on the main thread.</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Copy, DRagLint.Core.ControlChannel.ControlPipeNameFor, DRagLint.Core.ControlChannel.CurrentUserSidString</para>
+      /// <para>Called from: DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas)</para>
+      /// <para>Calls: Copy, DRagLint.Core.ControlChannel.BeatPipeNameFor, DRagLint.Core.ControlChannel.ControlPipeNameFor, DRagLint.Core.ControlChannel.CurrentUserSidString</para>
       /// <para>Pure</para>
       /// <para>constructor</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.BeatPipeNameFor"/>
       /// <seealso cref="DRagLint.Core.ControlChannel.ControlPipeNameFor"/>
       /// <seealso cref="DRagLint.Core.ControlChannel.CurrentUserSidString"/>
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
-      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ADbs: TArray<string>; const AVersion, AExtractor: string; const ARole: string = '';
@@ -474,7 +576,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: CloseHandle, CreateFileW, FreeAndNil, HLOCAL, InterlockedCompareExchange, LocalFree, PChar, WaitForSingleObject, WaitNamedPipeW</para>
-      /// <para>Complexity: 13 (cyclomatic, outer body), 41 lines (full implementation)</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 42 lines (full implementation)</para>
       /// <para>Pure</para>
       /// <para>Directives: override</para>
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
@@ -491,6 +593,8 @@ type
       /// <returns>True when listening.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DragLint.Plugin.About.StartBackgroundSelfInfoFetch (DragLint.Plugin.About.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.InvokeReverseCallTreeMessages (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.RunCompileDiagnoseAsync (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.RunFullCompileSweepAsync (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.RunGhostCheckAsync (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.RunGhostRecoverFor (DragLint.Plugin.Editor.pas) ?,
+      /// [dclDragLintWizard]DragLint.Plugin.LiveDiagnostics.TLiveRunner.OnTick (DragLint.Plugin.LiveDiagnostics.pas) ?</para>
       /// <para>Calls: DRagLint.Core.ControlChannel.ConvertStringSecurityDescriptorToSecurityDescriptorW, DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance, DRagLint.Core.ControlChannel.TControlListener.Create, DuplicateHandle, PChar, SysErrorMessage</para>
       /// <para>Returns: False; True</para>
       /// <para>Mutates: AError (out)</para>
@@ -509,17 +613,28 @@ type
       /// <summary>A manual-reset event, signalled the instant a stand-down
       /// request arrives and reset if the listener withdraws it.</summary>
       /// <returns>The event's handle; owned by the channel, valid until Free.</returns>
-      /// <remarks>For a host that blocks in something other than the stdin read
+      /// <remarks>
+      /// For a host that blocks in something other than the stdin read
       /// (`cycles --fix` waiting on a build): it waits on this beside its child,
       /// then takes the request with StandDownRequested. Taking it commits the
-      /// host to exiting; the event stays set from then on.</remarks>
+      /// host to exiting; the event stays set from then on.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.CycleFix.RunBounded (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas)</para>
+      /// <para>Returns: FRequested.Handle</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
+      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function RequestEvent: THandle;
       /// <summary>Host hook: True exactly once, when a stand-down request is
       /// pending; taking it commits the host to exiting.</summary>
       /// <returns>True when the host must leave its loop.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.StandDownTaken (DRagLint.LSP.Server.pas)</para>
+      /// <para>Called from: DRagLint.CLI.CycleFix.TakeStandDown (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.BatchStandDownTaken (DRagLint.Core.ControlChannel.pas), DRagLint.LSP.Server.TLSPServer.StandDownTaken (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: InterlockedCompareExchange</para>
       /// <para>Returns: InterlockedCompareExchange(FState, ST_TAKEN, ST_REQUESTED) = ST_REQUESTED</para>
       /// <para>Pure</para>
@@ -590,14 +705,14 @@ type
       /// <summary>Host hook: every store is closed; the `exiting` reply may go.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
-      /// <para>Calls: InterlockedCompareExchange</para>
+      /// <para>Called from: DRagLint.CLI.CycleFix.RunCycleFix (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Core.ControlChannel.BatchChannelClose (DRagLint.Core.ControlChannel.pas)</para>
+      /// <para>Calls: DRagLint.Core.ControlChannel.HangStoreCloseForTests, InterlockedCompareExchange</para>
       /// <para>Pure</para>
+      /// <seealso cref="DRagLint.Core.ControlChannel.HangStoreCloseForTests"/>
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.BeginWork"/>
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance"/>
       /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.CurrentWork"/>
-      /// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Destroy"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure StandDownComplete;
@@ -615,18 +730,45 @@ const
 /// <param name="AExtractor">DRAGLINT_EXTRACTOR_VERSION.</param>
 /// <param name="ASilent">True under a machine-readable output format: the 'listening' line is not written (stderr stays empty on the success path); the channel still opens. A failure to open is still said.</param>
 /// <returns>True when listening. False when the verb does not listen, a channel is already open, or the pipe could not be created (said on stderr; the run proceeds without it).</returns>
-/// <remarks>Main thread only. Pair with BatchChannelClose in a finally.</remarks>
+/// <exception cref="EInvalidOperation"><!-- drag-lint:auto exc -->via DRagLint.Core.ControlChannel.TControlChannel.Create: TControlChannel must be created on the main thread -- the one the listener has to wake</exception>
+/// <remarks>
+/// Main thread only. Pair with BatchChannelClose in a finally.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.ControlChannelEnabledFor, DRagLint.Core.ControlChannel.TControlChannel.Create, DRagLint.Core.ControlChannel.TControlChannel.Start, FreeAndNil, Writeln</para>
+/// <para>Returns: False; True</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.ControlChannelEnabledFor"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Create"/>
+/// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.Start"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BatchChannelOpen(const ACommand: string; const ADbs: TArray<string>; const AVersion, AExtractor: string; ASilent: Boolean = False): Boolean;
 
 /// <summary>True once a maintenance stand-down request has been taken by this batch run.</summary>
 /// <returns>True when the run must stop at its next safe point; sticky once true.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.InstallIndexStandDownGate (DRagLint.CLI.pas), DRagLint.CLI.WatchIdle (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.TControlChannel.StandDownRequested</para>
+/// <para>Returns: GBatchTaken</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.StandDownRequested"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BatchStandDownTaken: Boolean;
 
 /// <summary>Releases the batch channel; when a request was taken, answers `exiting` first.</summary>
-/// <remarks>Call AFTER every store is closed. Safe when no channel is open.</remarks>
+/// <remarks>
+/// Call AFTER every store is closed. Safe when no channel is open.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.InstallIndexStandDownGate (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.ControlChannel.TControlChannel.StandDownComplete, FreeAndNil</para>
+/// <seealso cref="DRagLint.Core.ControlChannel.TControlChannel.StandDownComplete"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure BatchChannelClose;
 
 /// <summary>Pipe name of the open batch channel, '' when none.</summary>
+/// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
 function BatchChannelPipeName: string;
 implementation
 

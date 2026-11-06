@@ -10,12 +10,21 @@ interface
 /// <param name="AName">Receives the font family name on success.</param>
 /// <param name="ASize">Receives the point size on success.</param>
 /// <returns>True if read from the IDE; False if unavailable (caller defaults).</returns>
-/// <remarks>Uses the typed ToolsAPI.Editor surface: BorlandIDEServices is queried
+/// <remarks>
+/// Uses the typed ToolsAPI.Editor surface: BorlandIDEServices is queried
 /// (via Supports) for INTACodeEditorServices; its Options property (typed
 /// INTACodeEditorOptions) exposes GetEditorFont(var Font: TFont), which fills a
 /// TFont with the IDE's configured editor font. No string option keys are used.
 /// Every step is guarded -- absent service, nil Options, or any exception all
-/// degrade to Result:=False so the caller can fall back to its own default.</remarks>
+/// degrade to Result:=False so the caller can fall back to its own default.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.Create (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.Reports.TDragLintReportTextForm.CreateReport (DragLint.Plugin.Reports.pas)</para>
+/// <para>Calls: Supports</para>
+/// <para>Returns: False; (AName &lt;&gt; '') and (ASize &gt; 0)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Mutates: AName (out), ASize (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GetIdeEditorFont(out AName: string; out ASize: Integer): Boolean;
 
 implementation

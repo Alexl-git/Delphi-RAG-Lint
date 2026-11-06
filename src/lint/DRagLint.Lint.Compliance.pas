@@ -17,51 +17,174 @@ uses
 type
   /// <summary>Raised by <see cref="TComplianceTable.Load"/> when compliance.json is not valid
   /// JSON, has a non-object entry, an unknown key, or an id that fails its format.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Lint.Compliance.ReadIds (DRagLint.Lint.Compliance.pas), DRagLint.Lint.Compliance.TComplianceTable.Load (DRagLint.Lint.Compliance.pas), DRagLint.Lint.Compliance.TComplianceTable.Shared (DRagLint.Lint.Compliance.pas) ?</para>
+  /// <para>Used in units: DRagLint.Lint.Compliance</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EComplianceError = class(Exception);
 
   /// <summary>The labels of one rule. All four lists may be empty.</summary>
-  /// <remarks>`Weak` holds the ids (a subset of Cwe + Cert + Misra) whose fit is only plausible;
-  /// every id not listed there is confident (the rule's title IS the weakness).</remarks>
+  /// <remarks>
+  /// `Weak` holds the ids (a subset of Cwe + Cert + Misra) whose fit is only plausible;
+  /// every id not listed there is confident (the rule's title IS the weakness).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.Compliance.pas) ?, DRagLint.CLI.ComplianceToJson (DRagLint.CLI.pas) ?, DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas) ?, DRagLint.Lint.Compliance.ComplianceProfileSelects (DRagLint.Lint.Compliance.pas) ?, DRagLint.Lint.Compliance.TComplianceTable.TryGet (DRagLint.Lint.Compliance.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.Compliance, DRagLint.Lint.RuleCatalog, DRagLint.Output.Sarif</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TComplianceLabels = record
     Cwe  : TArray<string>;
     Cert : TArray<string>;
     Misra: TArray<string>;
     Weak : TArray<string>;
     /// <returns>True when the rule carries no CWE, CERT or MISRA id.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ComplianceToJson (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Lint.Compliance.TComplianceLabels.Suffix (DRagLint.Lint.Compliance.pas)</para>
+    /// <para>Returns: (Length(Cwe) + Length(Cert) + Length(Misra)) = 0</para>
+    /// <para>Reads: Cwe, Cert, Misra</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceLabels.AllIds"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceLabels.Suffix"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsEmpty: Boolean;
     /// <returns>All ids, CWE first, then CERT, then MISRA.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.Compliance.TComplianceLabels.Suffix (DRagLint.Lint.Compliance.pas), DRagLint.Lint.Compliance.TComplianceTable.Load (DRagLint.Lint.Compliance.pas)</para>
+    /// <para>Returns: Cwe + Cert + Misra</para>
+    /// <para>Reads: Cwe, Cert, Misra</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceLabels.IsEmpty"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceLabels.Suffix"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AllIds: TArray<string>;
     /// <returns>The text suffix ` [CWE-476 EXP34-C]` (leading space), or '' when empty.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Compliance.TComplianceLabels.AllIds, DRagLint.Lint.Compliance.TComplianceLabels.IsEmpty</para>
+    /// <para>Returns: ' [' + string.Join(' ', AllIds) + ']'</para>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceLabels.AllIds"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceLabels.IsEmpty"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Suffix: string;
   end;
 
   /// <summary>The parsed compliance.json: rule id to labels.</summary>
-  /// <remarks>Not thread-safe while loading; <see cref="Shared"/> is meant for the single
-  /// CLI thread. The caller of <see cref="Load"/> owns the returned table.</remarks>
+  /// <remarks>
+  /// Not thread-safe while loading; <see cref="Shared"/> is meant for the single
+  /// CLI thread. The caller of <see cref="Load"/> owns the returned table.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Lint.Compliance.TComplianceTable.Load (DRagLint.Lint.Compliance.pas), DRagLint.Lint.Compliance.TComplianceTable.Shared (DRagLint.Lint.Compliance.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.Compliance, DRagLint.Lint.RuleCatalog</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TComplianceTable = class
   strict private
     FMap: TDictionary<string, TComplianceLabels>;
     FMissing: Boolean;
   public
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.Compliance.TComplianceTable.Load (DRagLint.Lint.Compliance.pas), DRagLint.Lint.Compliance.TComplianceTable.Shared (DRagLint.Lint.Compliance.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FMap</para>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Count"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Load"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Shared"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.TryGet"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FMap</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Count"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Create"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Load"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Shared"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.TryGet"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Reads and validates `compliance.json` in ARulesDir.</summary>
     /// <param name="ARulesDir">The rules directory; '' = `rules` beside the exe.</param>
     /// <returns>A new table the caller owns. A MISSING file gives an empty table (and sets
     /// <see cref="Missing"/>); the file is optional so an old rules dir still works.</returns>
     /// <exception cref="EComplianceError">The file exists but is malformed.</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.Compliance.TComplianceTable.Shared (DRagLint.Lint.Compliance.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Compliance.IsCertId, DRagLint.Lint.Compliance.IsCweId, DRagLint.Lint.Compliance.IsMisraId, DRagLint.Lint.Compliance.ReadIds, DRagLint.Lint.Compliance.TComplianceLabels.AllIds, DRagLint.Lint.Compliance.TComplianceTable.Create, IndexStr, IndexText, ParamStr, TJSONObject</para>
+    /// <para>Returns: TComplianceTable.Create</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Lint.Compliance.IsCertId"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.IsCweId"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.IsMisraId"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.ReadIds"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceLabels.AllIds"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Load(const ARulesDir: string): TComplianceTable;
     /// <summary>Process-wide cached table for ARulesDir; loads on first use. Owned by this unit.</summary>
     /// <param name="ARulesDir">As for <see cref="Load"/>.</param>
     /// <param name="AError">Receives the EComplianceError text, '' when the file is fine.</param>
     /// <returns>The table (empty when the file is missing or malformed).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas)</para>
+    /// <para>Calls: DRagLint.Lint.Compliance.TComplianceTable.Create, DRagLint.Lint.Compliance.TComplianceTable.Load</para>
+    /// <para>Returns: T</para>
+    /// <para>Catches: EComplianceError (swallowed)</para>
+    /// <para>Mutates: AError (out)</para>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Create"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Load"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Count"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.TryGet"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Shared(const ARulesDir: string; out AError: string): TComplianceTable;
     /// <summary>Looks one rule up.</summary>
     /// <param name="AId">Rule id.</param>
     /// <param name="ALabels">Receives the labels; empty record when the rule has no entry.</param>
     /// <returns>True when the rule has an entry (even an empty `{}`).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas)</para>
+    /// <para>Calls: Default</para>
+    /// <para>Returns: FMap.TryGetValue(AId, ALabels)</para>
+    /// <para>Reads: FMap</para>
+    /// <para>Mutates: ALabels (out)</para>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Count"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Create"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Load"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Shared"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function TryGet(const AId: string; out ALabels: TComplianceLabels): Boolean;
     /// <returns>Number of rule entries.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: FMap.Count</para>
+    /// <para>Reads: FMap</para>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Create"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Destroy"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Load"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.Shared"/>
+    /// <seealso cref="DRagLint.Lint.Compliance.TComplianceTable.TryGet"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Count: Integer;
     /// <returns>True when Load found no compliance.json.</returns>
     property Missing: Boolean read FMissing;
@@ -84,20 +207,52 @@ const
 
 /// <param name="AName">A --profile value; compared case-insensitively.</param>
 /// <returns>True when AName is one of COMPLIANCE_PROFILE_NAMES.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.LoadLintConfig (DRagLint.CLI.pas)</para>
+/// <para>Calls: MatchText</para>
+/// <para>Returns: MatchText(AName, COMPLIANCE_PROFILE_NAMES)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsComplianceProfile(const AName: string): Boolean;
 /// <param name="AName">A built-in profile name (see <see cref="IsComplianceProfile"/>).</param>
 /// <param name="ALabels">The labels of one rule.</param>
 /// <returns>True when the rule belongs to the profile: it carries >= 1 id under the standard
 /// (cwe-top25: >= 1 CWE id that is in CWE_TOP25_2025). False for an unknown profile name.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ApplyComplianceProfile (DRagLint.CLI.pas)</para>
+/// <para>Calls: MatchStr, SameText</para>
+/// <para>Returns: False; Length(ALabels.Cwe) &gt; 0; Length(ALabels.Cert) &gt; 0; Length(ALabels.Misra) &gt; 0</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ComplianceProfileSelects(const AName: string; const ALabels: TComplianceLabels): Boolean;
 /// <param name="AId">Identifier text to test.</param>
 /// <returns>True when AId is a well formed CWE id (CWE-476).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.Compliance.TComplianceTable.Load (DRagLint.Lint.Compliance.pas)</para>
+/// <para>Returns: TRegEx.IsMatch(AId, RE_CWE)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsCweId(const AId: string): Boolean;
 /// <param name="AId">Identifier text to test.</param>
 /// <returns>True when AId is a well formed CERT id (EXP34-C, DCL57-CPP, LCK09-J).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.Compliance.TComplianceTable.Load (DRagLint.Lint.Compliance.pas)</para>
+/// <para>Returns: TRegEx.IsMatch(AId, RE_CERT)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsCertId(const AId: string): Boolean;
 /// <param name="AId">Identifier text to test.</param>
 /// <returns>True when AId is a well formed MISRA id (MISRA-C-2012-R18.6, MISRA-CPP-2008-15-5-1).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.Compliance.TComplianceTable.Load (DRagLint.Lint.Compliance.pas)</para>
+/// <para>Returns: TRegEx.IsMatch(AId, RE_MISRA)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsMisraId(const AId: string): Boolean;
 
 implementation

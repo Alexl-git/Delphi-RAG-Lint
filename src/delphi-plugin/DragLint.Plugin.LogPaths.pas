@@ -12,7 +12,14 @@ interface
 /// <param name="pLocalAppData">The %LOCALAPPDATA% folder, with or without a trailing backslash.</param>
 /// <param name="pFileName">Bare log file name, e.g. drag-lint-plugin.log.</param>
 /// <returns>pLocalAppData\drag-lint\logs\pFileName.</returns>
-/// <remarks>Pure: touches no file and reads no environment.</remarks>
+/// <remarks>
+/// Pure: touches no file and reads no environment.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.LogPaths.PluginLogPath (DragLint.Plugin.LogPaths.pas)</para>
+/// <para>Calls: IncludeTrailingPathDelimiter</para>
+/// <para>Returns: IncludeTrailingPathDelimiter(pLocalAppData) + LOGS_REL + pFileName</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PluginLogPathIn(const pLocalAppData, pFileName: string): string;
 
 /// <summary>The full path of a plugin log file, its folder created on demand.</summary>
@@ -20,9 +27,17 @@ function PluginLogPathIn(const pLocalAppData, pFileName: string): string;
 /// <returns>%LOCALAPPDATA%\drag-lint\logs\pFileName, or '' when no local-app-data
 /// folder can be found at all -- callers skip the write then, rather than log to
 /// '\drag-lint\logs' on the current drive root.</returns>
-/// <remarks>Creates the logs folder when missing; a failure to create it is
+/// <remarks>
+/// Creates the logs folder when missing; a failure to create it is
 /// not raised -- the caller's own write then fails, and every log writer in
-/// the plugin is already best-effort.</remarks>
+/// the plugin is already best-effort.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.LspClient.GetPluginLogPath (DragLint.Plugin.LspClient.pas), DragLint.Plugin.Telemetry.TelemetryLogPath (DragLint.Plugin.Telemetry.pas)</para>
+/// <para>Calls: DragLint.Plugin.LogPaths.PluginLogPathIn, ExtractFilePath, ForceDirectories</para>
+/// <para>Returns: PluginLogPathIn(GLocalAppData, pFileName)</para>
+/// <seealso cref="DragLint.Plugin.LogPaths.PluginLogPathIn"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function PluginLogPath(const pFileName: string): string;
 
 implementation

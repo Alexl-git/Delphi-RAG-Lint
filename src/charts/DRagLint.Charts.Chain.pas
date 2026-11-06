@@ -31,6 +31,12 @@ uses
 
 type
   /// <summary>The control a re-pointing assignment names. Port of the Get-RePointControl result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Chain.RePointControl (DRagLint.Charts.Chain.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRePointControl = record
     /// <summary>The control; '' when none.</summary>
     Control: string;
@@ -39,6 +45,12 @@ type
   end;
 
   /// <summary>The identifier whose declared type a chain follows. Port of the Get-RhsRoot result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Chain.RhsRoot (DRagLint.Charts.Chain.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRhsRoot = record
     /// <summary>The root; '' when the RHS has none to follow.</summary>
     Root  : string;
@@ -47,6 +59,12 @@ type
   end;
 
   /// <summary>One code assignment re-pointing a control's property. Port of a Get-RePointSites row.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.RePointMember (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.RePointChain (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.RePointPick (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.RePointSites (DRagLint.Charts.Chain.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Q.FeedsFrom</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRePointSite = record
     /// <summary>The control.</summary>
     Control    : string;
@@ -69,6 +87,12 @@ type
   end;
 
   /// <summary>Where a datasource gets its dataset. Port of a Get-DataSetSites row.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Chain.RePointDataSet (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Chain.StepDataSet (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Chain.TChainWalker.DataSetSites (DRagLint.Charts.Chain.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.FollowDirectChain (DRagLint.Charts.Trace.Anchor.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Trace.Anchor</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDataSetSite = record
     /// <summary>'dfm' | 'assign' | 'read' | 'stale'.</summary>
     Kind   : string;
@@ -85,6 +109,12 @@ type
   end;
 
   /// <summary>One hop of a chain (Get-DataSourceChain and Get-RePointChain share the shape).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas) ?, declaration (DRagLint.Charts.Q.FeedsFrom.pas) ?, DRagLint.Charts.Chain.MakeHop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TRePointBuild.Hop (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.DrawDataSourceHop (DRagLint.Charts.Q.FeedsFrom.pas) ? (+2 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Q.FeedsFrom</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TChainHop = record
     /// <summary>datasource | dataset | rhs-type | table | re-point | member | accessor | field.</summary>
     Hop    : string;
@@ -105,6 +135,12 @@ type
   end;
 
   /// <summary>A control that names the datasource in the DFM.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Chain.StepControls (DRagLint.Charts.Chain.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TChainControl = record
     /// <summary>The control's name.</summary>
     Control    : string;
@@ -123,6 +159,12 @@ type
   end;
 
   /// <summary>The datasource component a chain resolved.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.StepDataSource (DRagLint.Charts.Chain.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TChainDataSource = record
     /// <summary>False for the PS $null.</summary>
     Present : Boolean;
@@ -143,6 +185,12 @@ type
   end;
 
   /// <summary>The declared type of the dataset assignment's RHS root.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Chain.StepRhsType (DRagLint.Charts.Chain.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRhsType = record
     /// <summary>False for the PS $null.</summary>
     Present : Boolean;
@@ -163,6 +211,12 @@ type
   end;
 
   /// <summary>A datasource chain. Port of the Get-DataSourceChain result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.OwnerOf (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.DataSourceChain (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.RePointPick (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.ResolveRePointTable (DRagLint.Charts.Chain.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.FeedsFrom, DRagLint.Charts.Q.LandsWhere, DRagLint.Charts.Trace.Anchor</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDataSourceChain = record
     /// <summary>The form as asked (DFM path or form name).</summary>
     Form            : string;
@@ -208,6 +262,12 @@ type
   end;
 
   /// <summary>The dataset field a re-point walk reached.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.DataSetTableLiterals (DRagLint.Charts.Chain.pas), DRagLint.Charts.Trace.Anchor.ChainOfDataSet (DRagLint.Charts.Trace.Anchor.pas), DRagLint.Charts.Trace.Anchor.DataSetOfChain (DRagLint.Charts.Trace.Anchor.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Trace.Anchor</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TChainDataSet = record
     /// <summary>False for the PS $null.</summary>
     Present : Boolean;
@@ -228,6 +288,12 @@ type
   end;
 
   /// <summary>A re-point walk. Port of the Get-RePointChain result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Chain.TChainWalker.RePointChain (DRagLint.Charts.Chain.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRePointChain = record
     /// <summary>The hops, in order.</summary>
     Hops      : TArray<TChainHop>;
@@ -242,6 +308,12 @@ type
   end;
 
   /// <summary>Which re-point a dangling chain follows. Port of the Get-RePointPick result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Chain.TChainWalker.RePointPick (DRagLint.Charts.Chain.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Trace.Anchor</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRePointPick = record
     /// <summary>follow | no-site | stale | multi-rhs.</summary>
     Status   : string;
@@ -256,6 +328,12 @@ type
   end;
 
   /// <summary>A table literal beside a dataset field. Port of a Get-DataSetTableLiterals row.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.DataSetTableLiterals (DRagLint.Charts.Chain.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTableLiteral = record
     /// <summary>The table name.</summary>
     Table: string;
@@ -266,6 +344,12 @@ type
   end;
 
   /// <summary>The table past a dangling datasource. Port of the Resolve-RePointTable result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas) ?, declaration (DRagLint.Charts.Q.FeedsFrom.pas) ?, declaration (DRagLint.Charts.Q.LandsWhere.pas) ?, DRagLint.Charts.Chain.TChainWalker.ResolveRePointTable (DRagLint.Charts.Chain.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.AddRePointHops (DRagLint.Charts.Q.FeedsFrom.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Q.FeedsFrom, DRagLint.Charts.Q.LandsWhere</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRePointTable = record
     /// <summary>table | no-table | stops | walk-limit | stale | multi-rhs | no-site.</summary>
     Status    : string;
@@ -293,6 +377,12 @@ type
 
   /// <summary>One DFM field binding classified by where its chain ends. Port of a
   /// Get-FieldBindingChains Bindings row.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas) ?, declaration (DRagLint.Charts.Q.LandsWhere.pas) ?, DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TBindingBuild.AddBinding (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Chain.TBindingBuild.Outcome (DRagLint.Charts.Chain.pas) ? (+2 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Q.LandsWhere</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFieldBinding = record
     /// <summary>string_literals.id.</summary>
     Id        : Integer;
@@ -323,6 +413,12 @@ type
   end;
 
   /// <summary>Every datasource chain and every field binding. Port of the Get-FieldBindingChains result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas), declaration (DRagLint.Charts.Q.LandsWhere.pas), DRagLint.Charts.Chain.TChainWalker.FieldBindingChains (DRagLint.Charts.Chain.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Q.LandsWhere</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFieldBindingChains = record
     /// <summary>ChainKey -> chain, in the order the chains were first built.</summary>
     ChainKeys  : TArray<string>;
@@ -339,6 +435,12 @@ type
   end;
 
   /// <summary>The engine's own ORM links. Port of the Get-OrmLinksState result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Chain.pas) ?, declaration (DRagLint.Charts.Q.LandsWhere.pas) ?, DRagLint.Charts.Chain.OrmLinksState (DRagLint.Charts.Chain.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Q.LandsWhere</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TOrmLinksState = record
     /// <summary>The index file.</summary>
     Db        : string;
@@ -349,9 +451,15 @@ type
   end;
 
   /// <summary>Walks datasource chains over one Delphi index against one SQL catalogue.</summary>
-  /// <remarks>Nothing is owned: the Delphi index, its reader, the SQL catalogue and the table
+  /// <remarks>
+  /// Nothing is owned: the Delphi index, its reader, the SQL catalogue and the table
   /// set must outlive the walker. pSet may be a doctored copy (HideExtractedColumns). Not
-  /// thread-safe.</remarks>
+  /// thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Chain.StepLocateForm (DRagLint.Charts.Chain.pas) ?, DRagLint.Charts.Q.Consumers.TConsumersChart.ReadBindings (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.Create (DRagLint.Charts.Q.FeedsFrom.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.Create (DRagLint.Charts.Q.LandsWhere.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas) (+22 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.FeedsFrom, DRagLint.Charts.Q.LandsWhere, DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Anchor</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TChainWalker = class  // dl:ok high-response@e8f9 -- REVIEWED 2026-10-13: the walker IS the PS chain family (Get-RePointSites .. Get-FieldBindingChains, 8 public calls); its response set is the SQL and formatting calls each hop makes, already split into per-hop free functions
   private
     FIndex  : TChartsIndex;
@@ -364,13 +472,38 @@ type
     /// <param name="pReader">A source reader over pIndex.</param>
     /// <param name="pCatalog">The SQL catalogue (column states).</param>
     /// <param name="pSet">The SQL table set (the PS $SqlSet).</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.ReadBindings (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.Create (DRagLint.Charts.Q.FeedsFrom.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.Create (DRagLint.Charts.Q.LandsWhere.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FIndex, FReader, FCatalog, FSet</para>
+    /// <seealso cref="DRagLint.Charts.Chain.TChainWalker.DataSetSites"/>
+    /// <seealso cref="DRagLint.Charts.Chain.TChainWalker.DataSetTableLiterals"/>
+    /// <seealso cref="DRagLint.Charts.Chain.TChainWalker.DataSourceChain"/>
+    /// <seealso cref="DRagLint.Charts.Chain.TChainWalker.FieldBindingChains"/>
+    /// <seealso cref="DRagLint.Charts.Chain.TChainWalker.RePointChain"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(pIndex: TChartsIndex; pReader: TSourceReader; pCatalog: TSqlCatalog; pSet: TSqlTableSet);
     /// <summary>Code ASSIGNMENTS to &lt;control&gt;[.DataBinding|...].&lt;prop&gt; in one unit.</summary>
     /// <param name="pPasPath">The unit as indexed.</param>
     /// <param name="pNames">The controls (matched case-insensitively).</param>
     /// <param name="pProps">The properties.</param>
     /// <returns>The sites in line, column order; a stale file keeps its rows with Stale True.</returns>
-    /// <remarks>Port of Get-RePointSites (Emit-Common.ps1:1593). A READ is not a re-pointing.</remarks>
+    /// <remarks>
+    /// Port of Get-RePointSites (Emit-Common.ps1:1593). A READ is not a re-pointing.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.StepControls (DRagLint.Charts.Chain.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.FollowChain (DRagLint.Charts.Q.FeedsFrom.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Chain.InList, DRagLint.Charts.Chain.RePointControl, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlInList, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Source.PsTrim, DRagLint.Charts.Source.TSourceReader.FileId, DRagLint.Charts.Source.TSourceReader.SourceContext, Format</para>
+    /// <para>Reads: FReader, FIndex</para>
+    /// <para>SQL: reads REFS, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Chain.InList"/>
+    /// <seealso cref="DRagLint.Charts.Chain.RePointControl"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlInList"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RePointSites(const pPasPath: string; const pNames, pProps: TArray<string>): TArray<TRePointSite>;
     /// <summary>Where a datasource gets its dataset: DFM rows and `&lt;Local&gt;.DataSet` sites in code.</summary>
     /// <param name="pDsId">The component (0 = a FIELD datasource, no DFM rows).</param>
@@ -378,41 +511,133 @@ type
     /// <param name="pDsPas">The unit to scan; '' for none.</param>
     /// <param name="pLocal">The datasource's own name.</param>
     /// <returns>The sites.</returns>
-    /// <remarks>Port of Get-DataSetSites (Emit-Common.ps1:1631); the RHS is read with 5 following lines.</remarks>
+    /// <remarks>
+    /// Port of Get-DataSetSites (Emit-Common.ps1:1631); the RHS is read with 5 following lines.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.RePointDataSet (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.StepDataSet (DRagLint.Charts.Chain.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Chain.ReceiverMatchSql, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Source.PsTrim, DRagLint.Charts.Source.TSourceReader.FileId, DRagLint.Charts.Source.TSourceReader.SourceContext, Format</para>
+    /// <para>Reads: FIndex, FReader</para>
+    /// <para>SQL: reads REFS, STRING_LITERALS, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Chain.ReceiverMatchSql"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DataSetSites(pDsId: Integer; const pDsFile, pDsPas, pLocal: string): TArray<TDataSetSite>;
     /// <summary>The chain from a datasource text to a table.</summary>
     /// <param name="pForm">The DFM path as indexed (any case), or the form's name.</param>
     /// <param name="pDsName">The datasource text a binding carries (possibly Module.Name).</param>
     /// <returns>The chain, every hop graded.</returns>
     /// <exception cref="EChartsIndex">pForm is not a DFM / form of the index, or names several forms.</exception>
-    /// <remarks>Port of Get-DataSourceChain (Emit-Common.ps1:1724).</remarks>
+    /// <remarks>
+    /// Port of Get-DataSourceChain (Emit-Common.ps1:1724).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.TBindingBuild.Chain (DRagLint.Charts.Chain.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ReadBindings (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.FollowChain (DRagLint.Charts.Q.FeedsFrom.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas) ?</para>
+    /// <para>Calls: Default, DRagLint.Charts.Chain.StepBoundColumns, DRagLint.Charts.Chain.StepControls, DRagLint.Charts.Chain.StepDataSet, DRagLint.Charts.Chain.StepDataSource, DRagLint.Charts.Chain.StepLocateForm, DRagLint.Charts.Chain.StepRhsType, DRagLint.Charts.Chain.StepTable</para>
+    /// <para>Returns: B.Chain</para>
+    /// <seealso cref="DRagLint.Charts.Chain.StepBoundColumns"/>
+    /// <seealso cref="DRagLint.Charts.Chain.StepControls"/>
+    /// <seealso cref="DRagLint.Charts.Chain.StepDataSet"/>
+    /// <seealso cref="DRagLint.Charts.Chain.StepDataSource"/>
+    /// <seealso cref="DRagLint.Charts.Chain.StepLocateForm"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DataSourceChain(const pForm, pDsName: string): TDataSourceChain;
     /// <summary>Follows ONE re-point site's RHS to the dataset field.</summary>
     /// <param name="pRePoint">A RePointSites row.</param>
     /// <returns>The walk.</returns>
-    /// <remarks>Port of Get-RePointChain (Emit-Common.ps1:2018).</remarks>
+    /// <remarks>
+    /// Port of Get-RePointChain (Emit-Common.ps1:2018).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.TChainWalker.ResolveRePointTable (DRagLint.Charts.Chain.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas) ?</para>
+    /// <para>Calls: Default, DRagLint.Charts.Chain.BareRhsStop, DRagLint.Charts.Chain.DotSegment, DRagLint.Charts.Chain.MakeHop, DRagLint.Charts.Chain.MemberIsDataSourceField, DRagLint.Charts.Chain.PropertyField, DRagLint.Charts.Chain.RePointDataSet, DRagLint.Charts.Chain.RePointMember, DRagLint.Charts.Chain.RhsRoot, DRagLint.Charts.Chain.TRePointBuild.Done (+6 more)</para>
+    /// <para>Returns: B.Walk</para>
+    /// <para>Reads: FReader, FIndex</para>
+    /// <seealso cref="DRagLint.Charts.Chain.BareRhsStop"/>
+    /// <seealso cref="DRagLint.Charts.Chain.DotSegment"/>
+    /// <seealso cref="DRagLint.Charts.Chain.MakeHop"/>
+    /// <seealso cref="DRagLint.Charts.Chain.MemberIsDataSourceField"/>
+    /// <seealso cref="DRagLint.Charts.Chain.PropertyField"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RePointChain(const pRePoint: TRePointSite): TRePointChain;
     /// <summary>Which re-point a dangling chain follows.</summary>
     /// <param name="pChain">A chain graded dangling.</param>
     /// <param name="pOwner">The component carrying the DFM DataSource.</param>
     /// <returns>The pick.</returns>
-    /// <remarks>Port of Get-RePointPick (Emit-Common.ps1:2175).</remarks>
+    /// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Source.TSourceReader.SourceFresh: Test-SourceFresh:</exception>
+    /// <remarks>
+    /// Port of Get-RePointPick (Emit-Common.ps1:2175).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.TChainWalker.ResolveRePointTable (DRagLint.Charts.Chain.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas) ?</para>
+    /// <para>Calls: Default, DRagLint.Charts.Source.TSourceReader.SourceFresh, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Text.FileNameOf, Format, SameText</para>
+    /// <para>Returns: Default(TRePointPick)</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 42 lines (full implementation)</para>
+    /// <para>Reads: FReader</para>
+    /// <seealso cref="DRagLint.Charts.Source.TSourceReader.SourceFresh"/>
+    /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
+    /// <seealso cref="DRagLint.Charts.Text.FileNameOf"/>
+    /// <seealso cref="DRagLint.Charts.Chain.TChainWalker.Create"/>
+    /// <seealso cref="DRagLint.Charts.Chain.TChainWalker.DataSetSites"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RePointPick(const pChain: TDataSourceChain; const pOwner: string): TRePointPick;
     /// <summary>Table-name literals sharing a line with a read of the dataset field.</summary>
     /// <param name="pDataSet">The dataset field.</param>
     /// <returns>Rows in first-line order.</returns>
-    /// <remarks>Port of Get-DataSetTableLiterals (Emit-Common.ps1:2201).</remarks>
+    /// <remarks>
+    /// Port of Get-DataSetTableLiterals (Emit-Common.ps1:2201).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.TChainWalker.ResolveRePointTable (DRagLint.Charts.Chain.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet (DRagLint.Charts.Trace.Anchor.pas) ?</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlInList, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, Format</para>
+    /// <para>Reads: FSet, FIndex</para>
+    /// <para>SQL: reads STRING_LITERALS</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlInList"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DataSetTableLiterals(const pDataSet: TChainDataSet): TArray<TTableLiteral>;
     /// <summary>The table past a dangling datasource: pick, walk, literal.</summary>
     /// <param name="pChain">A chain graded dangling.</param>
     /// <param name="pOwner">The owner control.</param>
     /// <returns>The outcome.</returns>
-    /// <remarks>Port of Resolve-RePointTable (Emit-Common.ps1:2225).</remarks>
+    /// <remarks>
+    /// Port of Resolve-RePointTable (Emit-Common.ps1:2225).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Chain.TBindingBuild.RePoint (DRagLint.Charts.Chain.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.FollowChain (DRagLint.Charts.Q.FeedsFrom.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Chain.TChainWalker.DataSetTableLiterals, DRagLint.Charts.Chain.TChainWalker.RePointChain, DRagLint.Charts.Chain.TChainWalker.RePointPick, DRagLint.Charts.Text.UnitNameOf, Format</para>
+    /// <para>Returns: Default(TRePointTable)</para>
+    /// <seealso cref="DRagLint.Charts.Chain.TChainWalker.DataSetTableLiterals"/>
+    /// <seealso cref="DRagLint.Charts.Chain.TChainWalker.RePointChain"/>
+    /// <seealso cref="DRagLint.Charts.Chain.TChainWalker.RePointPick"/>
+    /// <seealso cref="DRagLint.Charts.Text.UnitNameOf"/>
+    /// <seealso cref="DRagLint.Charts.Chain.TChainWalker.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveRePointTable(const pChain: TDataSourceChain; const pOwner: string): TRePointTable;
     /// <summary>Every datasource chain and every DFM field binding of the index.</summary>
     /// <returns>The population.</returns>
-    /// <remarks>Port of Get-FieldBindingChains (Emit-Common.ps1:2291). The PS process-wide
-    /// cache is not ported: a caller keeps the result.</remarks>
+    /// <remarks>
+    /// Port of Get-FieldBindingChains (Emit-Common.ps1:2291). The PS process-wide
+    /// cache is not ported: a caller keeps the result.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.CountCoverage (DRagLint.Charts.Q.FeedsFrom.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.Emit (DRagLint.Charts.Q.LandsWhere.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Chain.BindingRow, DRagLint.Charts.Chain.ControlDataSourceSql, DRagLint.Charts.Chain.TBindingBuild.AddBinding, DRagLint.Charts.Chain.TBindingBuild.AddDataSource, DRagLint.Charts.Chain.TBindingBuild.Chain, DRagLint.Charts.Chain.TBindingBuild.Create, DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Index.TIndexRow.S</para>
+    /// <para>Returns: Build.Population</para>
+    /// <para>Reads: FIndex</para>
+    /// <para>SQL: reads FILES, SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Chain.BindingRow"/>
+    /// <seealso cref="DRagLint.Charts.Chain.ControlDataSourceSql"/>
+    /// <seealso cref="DRagLint.Charts.Chain.TBindingBuild.AddBinding"/>
+    /// <seealso cref="DRagLint.Charts.Chain.TBindingBuild.AddDataSource"/>
+    /// <seealso cref="DRagLint.Charts.Chain.TBindingBuild.Chain"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FieldBindingChains: TFieldBindingChains;
   end;
 
@@ -420,7 +645,14 @@ type
 /// <param name="pReceiverSql">A column or a quoted literal.</param>
 /// <param name="pName">The name.</param>
 /// <returns>The predicate (an exact suffix compare, never LIKE: '_' is a LIKE wildcard).</returns>
-/// <remarks>Port of Get-ReceiverMatchSql (Emit-Common.ps1:1522).</remarks>
+/// <remarks>
+/// Port of Get-ReceiverMatchSql (Emit-Common.ps1:1522).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Chain.TChainWalker.DataSetSites (DRagLint.Charts.Chain.pas)</para>
+/// <para>Calls: DRagLint.Charts.Index.TChartsIndex.SqlText, Format</para>
+/// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReceiverMatchSql(const pReceiverSql, pName: string): string;
 
 /// <summary>The control a `&lt;ctl&gt;[.DataBinding|.DataController|.Properties].&lt;Prop&gt; :=` names.</summary>
@@ -428,34 +660,73 @@ function ReceiverMatchSql(const pReceiverSql, pName: string): string;
 /// <param name="pBefore">The stripped text before the ref.</param>
 /// <param name="pHasBefore">False for the PS $null (a stale file).</param>
 /// <returns>The control and where it was read.</returns>
-/// <remarks>Port of Get-RePointControl (Emit-Common.ps1:1534).</remarks>
+/// <remarks>
+/// Port of Get-RePointControl (Emit-Common.ps1:1534).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Chain.TChainWalker.RePointSites (DRagLint.Charts.Chain.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Source.PsTrim, SameText</para>
+/// <para>Returns: Default(TRePointControl)</para>
+/// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RePointControl(const pReceiverText, pBefore: string; pHasBefore: Boolean): TRePointControl;
 
 /// <summary>The identifier whose declared type a chain follows from an RHS.</summary>
 /// <param name="pRhs">The right-hand side.</param>
 /// <returns>The root, or '' and a reason the chart prints after "chain stops here:".</returns>
-/// <remarks>Port of Get-RhsRoot (Emit-Common.ps1:1555).</remarks>
+/// <remarks>
+/// Port of Get-RhsRoot (Emit-Common.ps1:1555).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Chain.StepRhsType (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.RePointChain (DRagLint.Charts.Chain.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Source.PsTrim, Format</para>
+/// <para>Returns: Default(TRhsRoot)</para>
+/// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RhsRoot(const pRhs: string): TRhsRoot;
 
 /// <summary>SQL scalar subquery: the datasource text feeding a component -- own, parent's, grandparent's.</summary>
 /// <param name="pSlAlias">The string_literals alias of the binding row.</param>
 /// <param name="pCtlAlias">The symbols alias of the component.</param>
 /// <returns>A COALESCE of three lookups.</returns>
-/// <remarks>Port of Get-ControlDataSourceSql (Emit-Common.ps1:1577).</remarks>
+/// <remarks>
+/// Port of Get-ControlDataSourceSql (Emit-Common.ps1:1577).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Chain.TChainWalker.FieldBindingChains (DRagLint.Charts.Chain.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ReadBindings (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.ReadBinding (DRagLint.Charts.Q.FeedsFrom.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas)</para>
+/// <para>Calls: DRagLint.Charts.Chain.ControlDataSourceSql.One, Format</para>
+/// <seealso cref="DRagLint.Charts.Chain.ControlDataSourceSql.One"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ControlDataSourceSql(const pSlAlias: string = 'sl'; const pCtlAlias: string = 'c'): string;
 
 /// <summary>The cache key of one chain: DFM path and datasource text, upper-cased.</summary>
 /// <param name="pDfm">The DFM.</param>
 /// <param name="pDs">The datasource text.</param>
 /// <returns>'&lt;DFM&gt;|&lt;DS&gt;' upper case.</returns>
-/// <remarks>Port of Get-ChainKey (Emit-Common.ps1:2252).</remarks>
+/// <remarks>
+/// Port of Get-ChainKey (Emit-Common.ps1:2252).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Chain.TBindingBuild.Chain (DRagLint.Charts.Chain.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.ResolveDfm (DRagLint.Charts.Q.LandsWhere.pas)</para>
+/// <para>Returns: (pDfm + '|' + pDs).ToUpperInvariant</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ChainKey(const pDfm, pDs: string): string;
 
 /// <summary>The engine's own ORM links: row count and newest computed_at.</summary>
 /// <param name="pIndex">The (guarded) index.</param>
 /// <returns>The state; Db is the file SQLite reports for the main database.</returns>
-/// <remarks>Port of Get-OrmLinksState (Emit-Common.ps1:2387). PS difference: the PS ran
-/// Get-CloneDb on its path; the caller guards the path before it opens the index.</remarks>
+/// <remarks>
+/// Port of Get-OrmLinksState (Emit-Common.ps1:2387). PS difference: the PS ran
+/// Get-CloneDb on its path; the caller guards the path before it opens the index.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.CheckRoles (DRagLint.Charts.Q.LandsWhere.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TIndexRow.S, SameText</para>
+/// <para>Returns: Default(TOrmLinksState)</para>
+/// <para>SQL: reads ORM_LINKS</para>
+/// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+/// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OrmLinksState(pIndex: TChartsIndex): TOrmLinksState;
 
 implementation

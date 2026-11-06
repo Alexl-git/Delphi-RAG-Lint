@@ -22,29 +22,63 @@ const
 
 type
   /// <summary>A per-FINDING fixer: the edits that fix AFinding.</summary>
-  /// <remarks>ALines is the finding's file as the builder read it (shared,
+  /// <param name="AFinding"><!-- drag-lint:auto type -->const TLintFinding</param>
+  /// <param name="ALines"><!-- drag-lint:auto type -->TStringList</param>
+  /// <returns><!-- drag-lint:auto type -->TArray&lt;TTextEdit&gt;</returns>
+  /// <remarks>
+  /// ALines is the finding's file as the builder read it (shared,
   /// cached per file -- never free or modify it). Return no edits to decline
   /// (the finding then counts as not fixed). Set ExpectText on every edit so a
-  /// file that changed under the finding is skipped, not corrupted.</remarks>
+  /// file that changed under the finding is skipped, not corrupted.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.Autofix.pas), DRagLint.Lint.Autofix.RegisterFixer (DRagLint.Lint.Autofix.pas), DRagLint.Lint.Autofix.RegisterSidecarFixer (DRagLint.Lint.Autofix.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFindingFixer = reference to function(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
 
   /// <summary>A per-FILE fixer: the edits for every finding of its rule in APath
   /// (the unused-local shape -- several findings share one edit).</summary>
-  /// <remarks>AFindings is the whole batch; the fixer picks its own rule's rows
-  /// in APath. AFixed returns how many findings the edits fix.</remarks>
+  /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
+  /// <param name="AFindings"><!-- drag-lint:auto type -->const TArray&lt;TLintFinding&gt;</param>
+  /// <param name="AFixed"><!-- drag-lint:auto type -->out Integer</param>
+  /// <returns><!-- drag-lint:auto type -->TArray&lt;TTextEdit&gt;</returns>
+  /// <remarks>
+  /// AFindings is the whole batch; the fixer picks its own rule's rows
+  /// in APath. AFixed returns how many findings the edits fix.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.Autofix.pas), DRagLint.Lint.Autofix.RegisterFileFixer (DRagLint.Lint.Autofix.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFileFixer = reference to function(const APath: string; const AFindings: TArray<TLintFinding>; out AFixed: Integer): TArray<TTextEdit>;
 
 /// <summary>Is ARuleId a rule with a registered autofix?</summary>
 /// <param name="ARuleId">A lint rule id; compared case-insensitively.</param>
 /// <returns>True for every id in FIXABLE_RULE_IDS.</returns>
-/// <remarks>The single source of truth for `rules --json`.fixable, the
-/// `--fix --json` row's `fixable` and what the fix verbs attempt.</remarks>
+/// <remarks>
+/// The single source of truth for `rules --json`.fixable, the
+/// `--fix --json` row's `fixable` and what the fix verbs attempt.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Lint.Autofix.Fixers, DRagLint.Lint.Autofix.IsLegacyFixRule, DRagLint.Lint.RuleCatalog.IsSidecarFixRule</para>
+/// <para>Returns: IsLegacyFixRule(ARuleId) or Fixers.ContainsKey(ARuleId) or IsSidecarFixRule(ARuleId, Risky)</para>
+/// <seealso cref="DRagLint.Lint.Autofix.Fixers"/>
+/// <seealso cref="DRagLint.Lint.Autofix.IsLegacyFixRule"/>
+/// <seealso cref="DRagLint.Lint.RuleCatalog.IsSidecarFixRule"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsFixableRule(const ARuleId: string): Boolean;
 
 /// <summary>Is ARuleId one of the store-backed NAMING fixes (a rename of the
 /// declaration and every use the index knows about)?</summary>
 /// <param name="ARuleId">A lint rule id; compared case-insensitively.</param>
 /// <returns>True for the ids in NAMING_FIX_RULE_IDS.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: False</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsNamingFixRule(const ARuleId: string): Boolean;
 
 
@@ -52,14 +86,30 @@ function IsNamingFixRule(const ARuleId: string): Boolean;
 /// a redundant-code cleanup).</summary>
 /// <param name="ARuleId">A lint rule id; compared case-insensitively.</param>
 /// <returns>True for the ids in RISKY_FIX_RULE_IDS.</returns>
-/// <remarks>Such fixes are still applied, but callers surface a 'risky' flag so
-/// a human/AI reviews before trusting a batch apply.</remarks>
+/// <remarks>
+/// Such fixes are still applied, but callers surface a 'risky' flag so
+/// a human/AI reviews before trusting a batch apply.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Lint.Autofix.Fixers, DRagLint.Lint.RuleCatalog.IsSidecarFixRule, SameText</para>
+/// <para>Returns: IsSidecarFixRule(ARuleId, B) and B</para>
+/// <seealso cref="DRagLint.Lint.Autofix.Fixers"/>
+/// <seealso cref="DRagLint.Lint.RuleCatalog.IsSidecarFixRule"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsRiskyFixRule(const ARuleId: string): Boolean;
 
 /// <summary>True iff the rule's registered fix is SINGLE-FIX-ONLY: applied for a
 /// single targeted finding but excluded from the blanket batch.</summary>
 /// <param name="ARuleId">A lint rule id; compared case-insensitively.</param>
 /// <returns>True for the ids in SINGLE_FIX_ONLY_RULE_IDS (today missing-doc).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <para>Calls: SameText</para>
+/// <para>Returns: False</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsSingleFixOnlyRule(const ARuleId: string): Boolean;
 
 /// <summary>Builds the pure-text quick-fix edits for the subset of AFindings whose
@@ -67,8 +117,21 @@ function IsSingleFixOnlyRule(const ARuleId: string): Boolean;
 /// <param name="AFindings">The findings to fix; rules without a fix are skipped.</param>
 /// <param name="AFixableCount">Out: how many findings produced a fix.</param>
 /// <returns>The edits, unordered; TTextEditApplier orders and applies them.</returns>
-/// <remarks>Store-backed fixes (doc-drift, missing-doc, the naming renames,
-/// raise-bare-exception) are NOT built here -- see the implementation comment.</remarks>
+/// <remarks>
+/// Store-backed fixes (doc-drift, missing-doc, the naming renames,
+/// raise-bare-exception) are NOT built here -- see the implementation comment.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <para>Calls: ContainsText, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits, DRagLint.Lint.Autofix.BuildAutofixEdits.AddReplaceEdit, DRagLint.Lint.Autofix.BuildAutofixEdits.LinesFor, DRagLint.Lint.Autofix.DeclTypeOf, DRagLint.Lint.Autofix.EnsureImplUses, DRagLint.Lint.Autofix.Fixers, DRagLint.Lint.Autofix.FixOwnerKey (+13 more)</para>
+/// <para>Complexity: 171 (cyclomatic, outer body), 526 lines (full implementation)</para>
+/// <para>Mutates: AFixableCount (out)</para>
+/// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
+/// <seealso cref="DRagLint.Lint.Autofix.BuildAutofixEdits.AddReplaceEdit"/>
+/// <seealso cref="DRagLint.Lint.Autofix.BuildAutofixEdits.LinesFor"/>
+/// <seealso cref="DRagLint.Lint.Autofix.DeclTypeOf"/>
+/// <seealso cref="DRagLint.Lint.Autofix.EnsureImplUses"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCount: Integer): TArray<TTextEdit>;
 
 /// <summary>Drops every finding's edits that overlap an edit of an EARLIER
@@ -78,20 +141,38 @@ function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCo
 /// <param name="ADeferredOwners">Out: the FixOwnerKey of each finding whose edits
 /// were withheld -- the next --fix pass, which re-lints, applies them.</param>
 /// <returns>AEdits minus the deferred findings' edits, order kept.</returns>
-/// <remarks>A finding is kept or deferred WHOLE -- with every finding a
+/// <remarks>
+/// A finding is kept or deferred WHOLE -- with every finding a
 /// TTextEdit.AtomGroup ties it to (EditAtomKey). Unowned, ungrouped edits (the store-backed
 /// builders) are always kept and win any conflict. Overlap: two line ranges
 /// (delete / replace-lines) sharing a line; an in-line replace on a line a range
 /// covers; two in-line replaces on one line whose column spans intersect; an
 /// insert strictly inside a range. Edits of the SAME finding never conflict here.
-/// Pure; never raises.</remarks>
+/// Pure; never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Lint.Autofix.DeferConflictingFixes.KeptFor, DRagLint.Lint.Autofix.EditsConflict, DRagLint.Refactor.TextEdit.EditAtomKey, IndexText</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 58 lines (full implementation)</para>
+/// <para>Mutates: ADeferredOwners (out)</para>
+/// <seealso cref="DRagLint.Lint.Autofix.DeferConflictingFixes.KeptFor"/>
+/// <seealso cref="DRagLint.Lint.Autofix.EditsConflict"/>
+/// <seealso cref="DRagLint.Refactor.TextEdit.EditAtomKey"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DeferConflictingFixes(const AEdits: TArray<TTextEdit>; out ADeferredOwners: TArray<string>): TArray<TTextEdit>;
 /// <summary>The key that ties an edit to the finding that produced it.</summary>
 /// <param name="AFinding">The finding.</param>
 /// <returns>Lower-cased `file|StartLine|rule`; BuildAutofixEdits stores it in
 /// TTextEdit.Owner of every edit the finding's fixer returned.</returns>
-/// <remarks>The `--fix --json` row of a finding is applied/preview when ANY edit
-/// carries its key, wherever that edit sits in the file.</remarks>
+/// <remarks>
+/// The `--fix --json` row of a finding is applied/preview when ANY edit
+/// carries its key, wherever that edit sits in the file.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Fix.ProjectWide.FixUsesMovable (DRagLint.Fix.ProjectWide.pas), DRagLint.Fix.Store.FixUnusedUnits (DRagLint.Fix.Store.pas), DRagLint.Lint.Autofix.BuildAutofixEdits (DRagLint.Lint.Autofix.pas)</para>
+/// <para>Calls: IntToStr, LowerCase</para>
+/// <para>Returns: LowerCase(AFinding.FilePath + '|' + IntToStr(AFinding.StartLine) + '|' + AFinding.RuleId)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FixOwnerKey(const AFinding: TLintFinding): string;
 
 /// <summary>Registers a per-finding fixer for ARuleId (autofix wave A0).</summary>
@@ -102,10 +183,17 @@ function FixOwnerKey(const AFinding: TLintFinding): string;
 /// (1.38; e.g. 33 for an inline var); 0 = any. Under an older --target-compiler
 /// the finding is still reported but no edit is built -- counted by
 /// AutofixTargetSkipped.</param>
-/// <remarks>Makes IsFixableRule (and so `rules --json`.fixable) true for the id.
+/// <remarks>
+/// Makes IsFixableRule (and so `rules --json`.fixable) true for the id.
 /// An id the legacy FIXABLE_RULE_IDS chain already fixes is never handed to a
 /// registered fixer. Call it from a fixer unit's RegisterFixers, which this
-/// unit's initialization runs; not thread-safe after start-up.</remarks>
+/// unit's initialization runs; not thread-safe after start-up.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: initialization/finalization (DRagLint.Fix.Decl.pas), initialization/finalization (DRagLint.Fix.Expr.pas), initialization/finalization (DRagLint.Fix.Hygiene.pas), initialization/finalization (DRagLint.Fix.Stmt.pas), initialization/finalization (DRagLint.Fix.Store.pas) (+6 more)</para>
+/// <para>Calls: Default, DRagLint.Lint.Autofix.Fixers</para>
+/// <seealso cref="DRagLint.Lint.Autofix.Fixers"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARisky: Boolean = False; ANeedsCompiler: Integer = 0);
 
 /// <summary>Registers a per-file fixer for ARuleId (autofix wave A0).</summary>
@@ -113,33 +201,64 @@ procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARis
 /// <param name="AFixer">Builds the edits for every finding of the rule in one file.</param>
 /// <param name="ARisky">True for a behaviour-CHANGING fix.</param>
 /// <param name="ANeedsCompiler">As RegisterFixer's.</param>
-/// <remarks>Same contract as RegisterFixer; called once per file that has a
-/// finding of the rule.</remarks>
+/// <remarks>
+/// Same contract as RegisterFixer; called once per file that has a
+/// finding of the rule.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: initialization/finalization (DRagLint.Fix.Expr.pas), initialization/finalization (DRagLint.Fix.ProjectWide.pas), initialization/finalization (DRagLint.Fix.Stmt.pas), initialization/finalization (DRagLint.Fix.Store.pas), initialization/finalization (DRagLint.Lint.MissingUses.pas)</para>
+/// <para>Calls: Default, DRagLint.Lint.Autofix.Fixers</para>
+/// <seealso cref="DRagLint.Lint.Autofix.Fixers"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterFileFixer(const ARuleId: string; const AFixer: TFileFixer; ARisky: Boolean = False; ANeedsCompiler: Integer = 0);
 
 /// <summary>How many findings the LAST BuildAutofixEdits left unfixed because
 /// their fixer's ANeedsCompiler is newer than ActiveTargetCompiler.</summary>
 /// <returns>0 at the default target, and whenever no registered fixer is gated.</returns>
-/// <remarks>Process-wide, like the registry; read right after BuildAutofixEdits.</remarks>
+/// <remarks>
+/// Process-wide, like the registry; read right after BuildAutofixEdits.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <para>Returns: GTargetSkipped</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AutofixTargetSkipped: Integer;
 
 /// <summary>Installs THE generic sidecar fixer: the builder for every finding
 /// whose rule's .json carries a "fix" key (TLintFinding.FixKind).</summary>
 /// <param name="AFixer">The builder; DRagLint.Fix.Templates installs its own
 /// from its initialization.</param>
-/// <remarks>A hook rather than a uses: the fixer units use this unit, never
-/// the reverse, so no unit cycle forms (circular-uses).</remarks>
+/// <remarks>
+/// A hook rather than a uses: the fixer units use this unit, never
+/// the reverse, so no unit cycle forms (circular-uses).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: initialization/finalization (DRagLint.Fix.Templates.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterSidecarFixer(const AFixer: TFindingFixer);
 
 /// <summary>Hands the store this --fix run's findings came from to the registered fixers.</summary>
 /// <param name="AStore">The open store, or nil to clear it (a run without --db).</param>
-/// <remarks>The CLI sets it around BuildAutofixEdits. A store-backed fixer reads it through
+/// <remarks>
+/// The CLI sets it around BuildAutofixEdits. A store-backed fixer reads it through
 /// AutofixStore and declines when it is nil. The unit holds the reference only between the
-/// two calls; not thread-safe -- one fix run at a time.</remarks>
+/// two calls; not thread-safe -- one fix run at a time.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure SetAutofixStore(const AStore: ISymbolStore);
 
 /// <summary>The store SetAutofixStore handed over, or nil when none is open.</summary>
 /// <returns>The current fix run's store; nil outside a --db run.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Fix.Store.FixClassNameCompare (DRagLint.Fix.Store.pas), DRagLint.Fix.Store.FixEmptyProcedureBody (DRagLint.Fix.Store.pas)</para>
+/// <para>Returns: GFixStore</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AutofixStore: ISymbolStore;
 /// <summary>Builds the ONE edit that wraps lines AFirstLine..ALastLine in
 /// try / finally / end.</summary>
@@ -151,8 +270,16 @@ function AutofixStore: ISymbolStore;
 /// <param name="AIndent">The indent of the try/finally/end keywords.</param>
 /// <param name="AEdit">Out: a tekReplaceLines edit, guarded on line AFirstLine.</param>
 /// <returns>False when the range is outside the file.</returns>
-/// <remarks>The protected lines are re-indented by two spaces; the finally
-/// body is written at AIndent + two spaces, one line per input line.</remarks>
+/// <remarks>
+/// The protected lines are re-indented by two spaces; the finally
+/// body is written at AIndent + two spaces, one line per input line.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Diagnostics.OwnershipChecks.FixBeginEndPair (DRagLint.Diagnostics.OwnershipChecks.pas), DRagLint.Fix.Stmt.WrapBetween (DRagLint.Fix.Stmt.pas)</para>
+/// <para>Calls: Default, Trim</para>
+/// <para>Returns: (AFirstLine &gt;= 1) and (ALastLine &gt;= AFirstLine) and (ALastLine &lt;= ALines.Count)</para>
+/// <para>Mutates: AEdit (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function WrapInTryFinally(const APath: string; ALines: TStrings; AFirstLine, ALastLine: Integer;
   const AFinallyText, AIndent: string; out AEdit: TTextEdit): Boolean;
 
@@ -163,6 +290,15 @@ function WrapInTryFinally(const APath: string; ALines: TStrings; AFirstLine, ALa
 /// <param name="AEdit">Out: a tekDeleteLines or guarded tekReplaceInLine edit.</param>
 /// <returns>False when the span is not a whole statement this helper can
 /// remove safely (a multi-line span that shares a line with other code).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Fix.DeclParity.FixNeedlessExit (DRagLint.Fix.DeclParity.pas), DRagLint.Fix.Templates.BuildSidecarFixEdits (DRagLint.Fix.Templates.pas)</para>
+/// <para>Calls: CharInSet, Copy, Default, Trim</para>
+/// <para>Returns: False; True; AEdit.ExpectText &lt;&gt; ''</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 43 lines (full implementation)</para>
+/// <para>Mutates: AEdit (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DeleteStatement(const AFinding: TLintFinding; ALines: TStrings; out AEdit: TTextEdit): Boolean;
 
 /// <summary>Builds the edit that inserts AUnit into the implementation uses
@@ -173,8 +309,21 @@ function DeleteStatement(const AFinding: TLintFinding; ALines: TStrings; out AEd
 /// <param name="AEdit">Out: the insert edit.</param>
 /// <returns>False when no uses clause exists. Does NOT check whether AUnit is
 /// already listed -- EnsureImplUses does.</returns>
-/// <remarks>Lifted verbatim from DRagLint.CLI's raise-bare-exception rewrite
-/// (BuildUsesEdit), which still calls it.</remarks>
+/// <remarks>
+/// Lifted verbatim from DRagLint.CLI's raise-bare-exception rewrite
+/// (BuildUsesEdit), which still calls it.
+/// <!-- drag-lint:auto -->Lifted VERBATIM from
+/// DRagLint.CLI.BuildExceptionRewriteEdits.BuildUsesEdit (autofix wave A0). Insert AUnit into the
+/// implementation uses clause, as ONE edit. Returns False when no uses clause can be found.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.Lint.Autofix.EnsureImplUses (DRagLint.Lint.Autofix.pas)</para>
+/// <para>Calls: Default, DRagLint.Lint.Autofix.CommaFirstLayout, LowerCase, Max, Pos, SameText, Trim</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 64 lines (full implementation)</para>
+/// <para>Mutates: AEdit (out)</para>
+/// <seealso cref="DRagLint.Lint.Autofix.CommaFirstLayout"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildImplUsesEdit(const APath, AUnit: string; ALines: TStrings; out AEdit: TTextEdit): Boolean;
 
 /// <summary>Like BuildImplUsesEdit, but returns False (no edit) when AUnit is
@@ -184,6 +333,15 @@ function BuildImplUsesEdit(const APath, AUnit: string; ALines: TStrings; out AEd
 /// <param name="AUnit">The unit name to add (RTL units only without a --db).</param>
 /// <param name="AEdit">Out: the insert edit.</param>
 /// <returns>True when an edit was built.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Diagnostics.OwnershipChecks.FixFieldDestructor (DRagLint.Diagnostics.OwnershipChecks.pas), DRagLint.Fix.Expr.FixFloatEqualityFile (DRagLint.Fix.Expr.pas), DRagLint.Fix.Store.FixClassNameCompare (DRagLint.Fix.Store.pas), DRagLint.Lint.Autofix.BuildAutofixEdits (DRagLint.Lint.Autofix.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Lint.Autofix.BuildImplUsesEdit, LowerCase, Trim</para>
+/// <para>Returns: False; BuildImplUsesEdit(APath, AUnit, ALines, AEdit)</para>
+/// <para>Mutates: AEdit (out)</para>
+/// <seealso cref="DRagLint.Lint.Autofix.BuildImplUsesEdit"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EnsureImplUses(const APath: string; ALines: TStrings; const AUnit: string; out AEdit: TTextEdit): Boolean;
 
 /// <summary>The declared type of AName as seen from line ALine of APath: a
@@ -193,8 +351,19 @@ function EnsureImplUses(const APath: string; ALines: TStrings; const AUnit: stri
 /// <param name="AName">The identifier; case-insensitive.</param>
 /// <returns>The type text with whitespace removed, or '' when the source does
 /// not show one (a field, a with-member, an untyped inline var, a missing file).</returns>
-/// <remarks>The same scope walk as the .scm predicate #declared-type?, so a code
-/// fixer and a rule agree on what a local is.</remarks>
+/// <remarks>
+/// The same scope walk as the .scm predicate #declared-type?, so a code
+/// fixer and a rule agree on what a local is.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Fix.Expr.FixGetTickCount (DRagLint.Fix.Expr.pas), DRagLint.Fix.Expr.FixUselessFormat (DRagLint.Fix.Expr.pas), DRagLint.Fix.Expr.IsArrayOperand (DRagLint.Fix.Expr.pas), DRagLint.Fix.Shape.FixConstructorCallOnInstance (DRagLint.Fix.Shape.pas), DRagLint.Fix.Stmt.FixIndexLoopToForIn (DRagLint.Fix.Stmt.pas) (+2 more)</para>
+/// <para>Calls: DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.QueryRules.DeclaredTypeAt, UInt32</para>
+/// <para>Returns: ''</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 36 lines (full implementation)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+/// <seealso cref="DRagLint.Lint.QueryRules.DeclaredTypeAt"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DeclTypeOf(const APath: string; ALine: Integer; const AName: string): string;
 
 implementation

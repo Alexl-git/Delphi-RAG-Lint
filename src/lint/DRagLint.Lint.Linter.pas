@@ -34,7 +34,7 @@ type
     AST during the parse the linter already does. }
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.ExceptionUnitWriter.pas), declaration (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.ExceptionUnitWriter.pas), declaration (DRagLint.Lint.Linter.pas), DRagLint.Lint.ExceptionUnitWriter.PlanExceptionEntries (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
   /// <para>Used in units: DRagLint.Lint.ExceptionUnitWriter, DRagLint.Lint.Linter</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -45,7 +45,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Lint.ExceptionUnitWriter.pas), declaration (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Lint.ExceptionUnitWriter.pas), declaration (DRagLint.Lint.Linter.pas), DRagLint.Lint.ExceptionUnitWriter.PlanExceptionEntries (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.Lint.Linter.TLinter.HarvestExceptions (DRagLint.Lint.Linter.pas)</para>
   /// <para>Used in units: DRagLint.Lint.ExceptionUnitWriter, DRagLint.Lint.Linter</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -69,7 +69,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Completion.pas), DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) (+10 more)</para>
+  /// <para>Used by: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EnsureLinter (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.EnsureLinter (DRagLint.LSP.Server.pas), DRagLint.MCP.Server.TMCPServer.Create (DRagLint.MCP.Server.pas) (+10 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Completion, DRagLint.LSP.Context, DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server, DRagLint.MCP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -93,6 +93,23 @@ type
         does not set it). }
       FOnlyRuleId: string                                                  ;
       { True when a run narrowed to FOnlyRuleId wants ARuleId computed. }
+      /// <summary><!-- drag-lint:auto sum -->True when a run narrowed to FOnlyRuleId
+      /// wants ARuleId computed.</summary>
+      /// <param name="ARuleId"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: (FOnlyRuleId = '') or
+      /// SameText(FOnlyRuleId, ARuleId).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)</para>
+      /// <para>Calls: SameText</para>
+      /// <para>Reads: FOnlyRuleId</para>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.Destroy"/>
+      /// <seealso cref="DRagLint.Lint.Linter.TLinter.EnrichExceptionFindings"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function Wants(const ARuleId: string): Boolean;
       /// <summary>The first literalString inside the argument list
       /// is taken deliberately: for `Create('Disk quota exceeded on ' + S)` that is the
@@ -123,14 +140,15 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Lint.Linter.TLinter.LintFile (DRagLint.Lint.Linter.pas), DRagLint.Lint.Linter.TLinter.LintFolder (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.Wants, DRagLint.Lint.Linter.tree_sitter_dfm, DRagLint.Lint.Linter.WalkForFieldByNameInLoop (+9 more)</para>
-      /// <para>Complexity: 28 (cyclomatic, outer body), 138 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Lint.Linter.CheckDfmCredentials, DRagLint.Lint.Linter.CollectDfmParseErrors, DRagLint.Lint.Linter.EmptyBranchIsCommented, DRagLint.Lint.Linter.TLinter.HarvestExceptions, DRagLint.Lint.Linter.TLinter.Wants, DRagLint.Lint.Linter.tree_sitter_dfm, DRagLint.Lint.Linter.WalkForFieldByNameInLoop, DRagLint.Lint.QueryRules.TQueryRule.Run (+8 more)</para>
+      /// <para>Complexity: 26 (cyclomatic, outer body), 137 lines (full implementation)</para>
       /// <para>Reads: FOnlyRuleId, FExcUnit, FQueryRules, FLanguage</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess"/>
       /// <seealso cref="DRagLint.Lint.Linter.CheckDfmCredentials"/>
       /// <seealso cref="DRagLint.Lint.Linter.CollectDfmParseErrors"/>
+      /// <seealso cref="DRagLint.Lint.Linter.EmptyBranchIsCommented"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function CheckFileImpl(const AFilePath: string): TArray<TLintFinding>;
@@ -139,7 +157,7 @@ type
       /// <param name="ARulesDir"><!-- drag-lint:auto type -->const string = ''</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas) (+3 more)</para>
+      /// <para>Called from: DRagLint.CLI.BuildExceptionRewriteEdits (DRagLint.CLI.pas), DRagLint.CLI.DoExceptionsSync (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EnsureLinter (DRagLint.LSP.Proxy.Merge.pas) (+2 more)</para>
       /// <para>Calls: DRagLint.Lint.QueryRules.TQueryRuleLoader.LoadAll, DRagLint.Parser.Delphi13.tree_sitter_delphi13, ParamStr</para>
       /// <para>constructor</para>
       /// <para>Reads: FLanguage   Writes: FLanguage, FQueryRules</para>
@@ -173,7 +191,7 @@ type
       /// <returns>All findings for the file; empty array if clean.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: DRagLint.Lint.Linter.TLinter.CheckFileImpl</para>
       /// <para>Returns: CheckFileImpl(AFilePath)</para>
       /// <para>Pure</para>
@@ -218,7 +236,7 @@ type
       /// All.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
       /// <para>Calls: DRagLint.Lint.Linter.TLinter.CheckFileImpl, Format, FWalkFilter, Writeln</para>
       /// <para>Reads: FWalkFilter</para>
       /// <para>Catches: Exception (swallowed)</para>
@@ -279,9 +297,9 @@ type
       /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
       /// <para>Reads: FQueryRules</para>
-      /// <para>Pure</para>
+      /// <para>Effect-free (proven)</para>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.CheckFileImpl"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Create"/>
       /// <seealso cref="DRagLint.Lint.Linter.TLinter.Destroy"/>
@@ -293,7 +311,6 @@ type
       /// <summary>Parses AFilePath and harvests its raise sites and exception
       /// candidates, running NO rules.</summary>
       /// <param name="AFilePath">A .pas or .dpr on disk.</param>
-      /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <para>This is what `exceptions-sync` walks a project with. LintFile
       /// would give the same harvest, but it also executes 114 tree-sitter

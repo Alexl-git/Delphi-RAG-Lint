@@ -47,7 +47,8 @@ type
   /// the target's filer framing (graphic | bitmap | metafile | picture), '' when
   /// the engine is to take it from the yields class.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]declaration (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), [drag-lint]DRagLint.Convert.Apply.LinkPasStatus (DRagLint.Convert.Apply.pas), [drag-lint]DRagLint.Convert.Apply.PlanValueCastSites (DRagLint.Convert.Apply.pas), [drag-lint]DRagLint.Convert.CastLib.ClassCastFor (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.CastLib.FindClassCast (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.ClassCastUnderPath (DRagLint.Convert.DfmReemit.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.RemapLeaf (DRagLint.Convert.DfmReemit.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used by: [drag-lint]declaration (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), [drag-lint]DRagLint.Convert.Apply.LinkPasStatus (DRagLint.Convert.Apply.pas), [drag-lint]DRagLint.Convert.Apply.PlanValueCastSites (DRagLint.Convert.Apply.pas), [drag-lint]DRagLint.Convert.CastLib.ApplyValueCast (DRagLint.Convert.CastLib.pas) ?, [drag-lint]DRagLint.Convert.CastLib.ClassCastFor (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.CastLib.FindClassCast (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.CastLib.LoadCastLib (DRagLint.Convert.CastLib.pas) ?, [drag-lint]DRagLint.Convert.CastLib.LoadCastLibText (DRagLint.Convert.CastLib.pas) ?, [drag-lint]DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas),
+  /// [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.ClassCastUnderPath (DRagLint.Convert.DfmReemit.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.RemapLeaf (DRagLint.Convert.DfmReemit.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas)</para>
   /// <para>Used in units: ConvRules.CastLib, ConvRules.MainForm, ConvRulesModelTests, DRagLint.Convert.Apply, DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -71,7 +72,7 @@ type
   /// target member name it becomes.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.EnumCastValue (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas) ?, DRagLint.Convert.CastLib.EnumCastValue (DRagLint.Convert.CastLib.pas) ?, DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas)</para>
   /// <para>Used in units: DRagLint.Convert.CastLib</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -108,7 +109,7 @@ type
   /// Fallback is '' when the block declares no `else`, and an unmatched value
   /// is then reported rather than guessed at.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.FindEnumCast (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas) ?, DRagLint.Convert.CastLib.EnumCastValue (DRagLint.Convert.CastLib.pas) ?, DRagLint.Convert.CastLib.FindEnumCast (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas) ?</para>
   /// <para>Used in units: DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -124,7 +125,7 @@ type
   /// <summary>Everything one .castlib file declares.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), declaration (DRagLint.Convert.CastLib.pas), DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.LinkPasStatus (DRagLint.Convert.Apply.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas) (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas) ?, DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.LinkPasStatus (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.CastLib.ParseCastLib (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas) (+7 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -137,6 +138,11 @@ type
   end;
 
   /// <summary>What ApplyValueCast did with one value (1.27.0).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ApplyValueCast (DRagLint.Convert.CastLib.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TValueCastOutcome = (
     vcoChanged,     { the transform changed the value }
     vcoUnchanged,   { a single literal the transform leaves as it is }
@@ -196,7 +202,7 @@ function LoadCastLib(const APath: string): TArray<TCastDef>;
 /// ParseCastLibText(TFile.ReadAllText(APath)).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.CastLib.LoadCastLib (DRagLint.Convert.CastLib.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.CastLib.LoadCastLib (DRagLint.Convert.CastLib.pas)</para>
 /// <para>Calls: Default, DRagLint.Convert.CastLib.ParseCastLibText</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.CastLib.ParseCastLibText"/>
@@ -296,6 +302,15 @@ const
 /// <returns>vcoChanged, vcoUnchanged, or vcoNotLiteral when ALiteral is not one
 /// plain literal (a concatenation, #nn codes, an identifier) or ADef is not a
 /// value cast.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.Apply.PlanValueCastSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: Copy, DRagLint.Convert.CastLib.TryLiteralValue, EndsText, StringReplace</para>
+/// <para>Returns: vcoChanged</para>
+/// <para>Mutates: ANewLiteral (out)</para>
+/// <seealso cref="DRagLint.Convert.CastLib.TryLiteralValue"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ApplyValueCast(const ADef: TCastDef; const ALiteral: string; out ANewLiteral: string): TValueCastOutcome;
 
 implementation

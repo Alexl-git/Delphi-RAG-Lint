@@ -20,7 +20,19 @@ unit DragLint.Plugin.Keyboard;
 
 interface
 
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: Supports</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterDragLintKeystrokes;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: Supports</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UnregisterDragLintKeystrokes;
 
 implementation

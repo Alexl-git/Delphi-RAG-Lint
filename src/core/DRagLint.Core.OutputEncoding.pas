@@ -33,6 +33,11 @@ uses
 
 type
   /// <summary>The byte encoding the engine writes to stdout and stderr.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: [dclDragLintWizard]declaration (DRagLint.Core.OutputEncoding.pas), DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas), DRagLint.CLI.ParseArgs (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Core.OutputEncoding.CurrentOutputEncoding (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard]DRagLint.Core.OutputEncoding.InstallOutputEncoding (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard]DRagLint.Core.OutputEncoding.OutputEncodingName (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard]DRagLint.Core.OutputEncoding.OutputEncodingOnCommandLine (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard]DRagLint.Core.OutputEncoding.TryParseOutputEncoding (DRagLint.Core.OutputEncoding.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TOutputEncoding = (oeAscii, oeUtf8, oeUtf16);
 
 const
@@ -49,39 +54,85 @@ const
 /// <param name="pEncoding">The parsed mode; oeAscii when the text is not one of
 /// them.</param>
 /// <returns>True when pText names a mode.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas), DRagLint.CLI.ParseArgs (DRagLint.CLI.pas), DRagLint.Core.OutputEncoding.OutputEncodingOnCommandLine (DRagLint.Core.OutputEncoding.pas)</para>
+/// <para>Calls: LowerCase, Trim</para>
+/// <para>Returns: True; False</para>
+/// <para>Mutates: pEncoding (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TryParseOutputEncoding(const pText: string; out pEncoding: TOutputEncoding): Boolean;
 
 /// <summary>The canonical name of a mode (ascii, utf8, utf16).</summary>
 /// <param name="pEncoding">The mode.</param>
 /// <returns>The name --output-encoding accepts for it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas)</para>
+/// <para>Returns: 'utf8'; 'utf16'; 'ascii'</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OutputEncodingName(pEncoding: TOutputEncoding): string;
 
 /// <summary>Escapes every non-ASCII UTF-16 code unit of pText as \uXXXX
 /// (lower-case hex); ASCII is returned unchanged.</summary>
 /// <param name="pText">Any text.</param>
 /// <returns>Pure 7-bit ASCII text; equal to pText when pText is ASCII.</returns>
-/// <remarks>Deterministic. Exactly reversible inside JSON (a literal backslash
+/// <remarks>
+/// Deterministic. Exactly reversible inside JSON (a literal backslash
 /// there is already `\\`); in plain text it is reversible unless the original
-/// itself held a backslash, `u` and four hex digits.</remarks>
+/// itself held a backslash, `u` and four hex digits.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.OutputEncoding.EncodeForOutput (DRagLint.Core.OutputEncoding.pas)</para>
+/// <para>Calls: IntToHex, LowerCase</para>
+/// <para>Returns: SB.ToString</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EscapeNonAscii(const pText: string): string;
 
 /// <summary>pText as the bytes the current output mode writes.</summary>
 /// <param name="pText">The text to write.</param>
 /// <returns>Escaped ASCII, UTF-8 or UTF-16LE bytes; never a BOM.</returns>
-/// <remarks>For writers that bypass Output / ErrOutput and write the std
-/// handles directly. Thread-safe: it only reads the current mode.</remarks>
+/// <remarks>
+/// For writers that bypass Output / ErrOutput and write the std
+/// handles directly. Thread-safe: it only reads the current mode.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.ControlChannel.StderrLine (DRagLint.Core.ControlChannel.pas), DRagLint.Core.OutputEncoding.ReencodingTextOut (DRagLint.Core.OutputEncoding.pas), DRagLint.Core.OutputEncoding.WriteOutputFile (DRagLint.Core.OutputEncoding.pas)</para>
+/// <para>Calls: DRagLint.Core.OutputEncoding.CountLost, DRagLint.Core.OutputEncoding.EscapeNonAscii</para>
+/// <para>Returns: TEncoding.UTF8.GetBytes(pText); TEncoding.Unicode.GetBytes(pText); TEncoding.ASCII.GetBytes(EscapeNonAscii(pText))</para>
+/// <seealso cref="DRagLint.Core.OutputEncoding.CountLost"/>
+/// <seealso cref="DRagLint.Core.OutputEncoding.EscapeNonAscii"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function EncodeForOutput(const pText: string): TBytes;
 
 /// <summary>Selects the encoding of Output and ErrOutput from now on.</summary>
 /// <param name="pEncoding">The mode to use.</param>
-/// <remarks>Flushes both files first, so bytes already buffered are written in
+/// <remarks>
+/// Flushes both files first, so bytes already buffered are written in
 /// the mode they were written under. Call from the main thread, before any
-/// worker thread writes to Output or ErrOutput. Idempotent.</remarks>
+/// worker thread writes to Output or ErrOutput. Idempotent.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.OutputEncoding.EnsureOpen, DRagLint.Core.OutputEncoding.InstallOn, Flush, TTextRec</para>
+/// <seealso cref="DRagLint.Core.OutputEncoding.EnsureOpen"/>
+/// <seealso cref="DRagLint.Core.OutputEncoding.InstallOn"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure InstallOutputEncoding(pEncoding: TOutputEncoding);
 
 /// <summary>The mode InstallOutputEncoding last selected (oeAscii before any
 /// call).</summary>
 /// <returns>The current mode.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas)</para>
+/// <para>Returns: GEncoding</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CurrentOutputEncoding: TOutputEncoding;
 
 /// <summary>Reads --output-encoding from the raw command line (ParamStr), for
@@ -91,27 +142,57 @@ function CurrentOutputEncoding: TOutputEncoding;
 /// <param name="pValue">The text after the switch ('' when it is the last
 /// argument).</param>
 /// <returns>True when the switch is present (valid or not).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Core.OutputEncoding.TryParseOutputEncoding, ParamStr, SameText</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: pEncoding (out), pValue (out)</para>
+/// <seealso cref="DRagLint.Core.OutputEncoding.TryParseOutputEncoding"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function OutputEncodingOnCommandLine(out pEncoding: TOutputEncoding; out pValue: string): Boolean;
 
 /// <summary>Writes a file a verb produces (--output, a report) in the current
 /// output mode, so the file obeys --output-encoding exactly as stdout does.</summary>
 /// <param name="pPath">Target file; created or truncated.</param>
 /// <param name="pText">The text to write.</param>
-/// <remarks>ascii: non-ASCII becomes \uXXXX and is counted as lost output; utf8:
+/// <remarks>
+/// ascii: non-ASCII becomes \uXXXX and is counted as lost output; utf8:
 /// UTF-8 without BOM; utf16: UTF-16LE without BOM. When the text is a JSON object
 /// and characters were lost so far in this run, a "lossy_output":N member is added
-/// as its first member.</remarks>
+/// as its first member.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), DRagLint.CLI.DoExportEnums (DRagLint.CLI.pas), DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, DRagLint.Core.OutputEncoding.EncodeForOutput, IntToStr</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.OutputEncoding.EncodeForOutput"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure WriteOutputFile(const pPath, pText: string);
 
 /// <summary>How many non-ASCII characters this run wrote as \uXXXX escapes
 /// (ascii mode only).</summary>
 /// <returns>The count; 0 when nothing was lost or the mode is not ascii.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.OutputEncoding.WarnLossyOnce (DRagLint.Core.OutputEncoding.pas)</para>
+/// <para>Returns: GLossy</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LossyOutputCount: Integer;
 
 /// <summary>The one-line warning text for pCount lost characters.</summary>
 /// <param name="pCount">Characters escaped in this run, greater than 0.</param>
 /// <returns>Pure ASCII text naming the count, the --output-encoding switch and
 /// the outputEncoding key of .drag-lint.json.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.OutputEncoding.WarnLossyOnce (DRagLint.Core.OutputEncoding.pas)</para>
+/// <para>Calls: Format</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LossyOutputWarning(pCount: Integer): string;
 
 implementation

@@ -41,21 +41,51 @@ type
   /// it was killed for making no progress; -1 when it could not start or the worker
   /// raised (AOutput then names the exception).</param>
   /// <param name="AOutput">stdout and stderr, interleaved.</param>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.StartRun (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.TCliRun.Create (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.TCliRun.Deliver (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.TCliRunSlot.Start (DragLint.Plugin.CliAsync.pas) (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCliRunDone = reference to procedure(AExitCode: Integer; const AOutput: string);
 
   /// <summary>One consumer's "latest run wins" slot: starting a run abandons the one
   /// before it, so a slow old answer can never overwrite a newer one.</summary>
-  /// <remarks>Main thread only. The owner frees the slot in its destructor; that
+  /// <remarks>
+  /// Main thread only. The owner frees the slot in its destructor; that
   /// abandons the run in flight, so ADone (which usually captures the owner) is never
   /// called on a dead owner. An abandoned run's child tree is killed and its ADone is
   /// never called, even when its answer was already on its way to the main
-  /// thread.</remarks>
+  /// thread.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Editor.pas), DragLint.Plugin.AboutForm.TDragLintAboutForm.Create (DragLint.Plugin.AboutForm.pas), DragLint.Plugin.LintOptionsFrame.TLintOptionsFrame.Create (DragLint.Plugin.LintOptionsFrame.pas), DragLint.Plugin.Reports.CaretTargetThen (DragLint.Plugin.Reports.pas), DragLint.Plugin.SearchForm.TSearchHandler.Create (DragLint.Plugin.SearchForm.pas) (+19 more)</para>
+  /// <para>Used in units: DragLint.Plugin.AboutForm, DragLint.Plugin.CliAsync, DragLint.Plugin.Diagnose, DragLint.Plugin.Editor, DragLint.Plugin.LintOptionsFrame, DragLint.Plugin.Reports, DragLint.Plugin.SearchForm, DragLint.Plugin.StructureForm, DragLint.Plugin.SymbolSearchForm, DragLint.Plugin.UsagesForm, DragLint.Plugin.UsesDepsFrame</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCliRunSlot = class
   private
     FCurrent: TObject;
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: FCurrent &lt;&gt; nil.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FCurrent</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Cancel"/>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Start"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetRunning: Boolean;
   public
     /// <summary>Abandons the current run, if any.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.CliAsync.TCliRunSlot.Cancel</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Cancel"/>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.GetRunning"/>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Start"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Abandons the current run and starts ACmdLine off the main
     /// thread.</summary>
@@ -63,9 +93,31 @@ type
     /// <param name="AStallMs">Stall budget; see ProcRun.RunCaptureStdout.</param>
     /// <param name="ADone">Called at most once, on the main thread; not called when
     /// the run was abandoned or after StopAllCliRuns.</param>
-    /// <remarks>Never waits: returns before the child is spawned.</remarks>
+    /// <remarks>
+    /// Never waits: returns before the child is spawned.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.Diagnose.FetchEngineInfoStep (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.Editor.DLCursorUndeclaredUnitThen (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.DLResolveQnameFileThen (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeRename (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeSuggestUses (DragLint.Plugin.Editor.pas) (+16 more)</para>
+    /// <para>Calls: DragLint.Plugin.CliAsync.StartRun, DragLint.Plugin.CliAsync.TCliRunSlot.Cancel</para>
+    /// <para>Writes: FCurrent</para>
+    /// <seealso cref="DragLint.Plugin.CliAsync.StartRun"/>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Cancel"/>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.GetRunning"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Start(const ACmdLine: string; AStallMs: Integer; const ADone: TCliRunDone);
     /// <summary>Abandons the current run, if any; a no-op otherwise.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.CliAsync.TCliRunSlot.Destroy (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.CliAsync.TCliRunSlot.Start (DragLint.Plugin.CliAsync.pas), DragLint.Plugin.Diagnose.RefreshEngineInfo (DragLint.Plugin.Diagnose.pas), DragLint.Plugin.SearchForm.TSearchHandler.KindChange (DragLint.Plugin.SearchForm.pas), DragLint.Plugin.SearchForm.TSearchHandler.RunSearch (DragLint.Plugin.SearchForm.pas) (+7 more)</para>
+    /// <para>Calls: DragLint.Plugin.CliAsync.TCliRun.Abandon, TCliRun</para>
+    /// <para>Reads: FCurrent</para>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRun.Abandon"/>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.GetRunning"/>
+    /// <seealso cref="DragLint.Plugin.CliAsync.TCliRunSlot.Start"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Cancel;
     /// <summary>True from Start until the run's ADone is about to run or the run was
     /// abandoned.</summary>
@@ -79,7 +131,14 @@ type
 /// <param name="ADone">Called once on the main thread, unless StopAllCliRuns comes
 /// first; it must check for itself that what it touches is still alive.</param>
 /// <param name="AStallMs">Stall budget; see ProcRun.RunCaptureStdout.</param>
-/// <remarks>Main thread only. Never waits.</remarks>
+/// <remarks>
+/// Main thread only. Never waits.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeCopyDiagnostics (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeExportObsidian (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFormatYadf (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeImportLog (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeRunAstChecks (DragLint.Plugin.Editor.pas) (+2 more)</para>
+/// <para>Calls: DragLint.Plugin.CliAsync.StartRun</para>
+/// <seealso cref="DragLint.Plugin.CliAsync.StartRun"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RunCliAsync(const ACmdLine: string; const ADone: TCliRunDone; AStallMs: Integer = CLI_ASYNC_STALL_MS);
 
 /// <summary>Stops every run for good: kills the children, waits for the workers,
@@ -87,9 +146,19 @@ procedure RunCliAsync(const ACmdLine: string; const ADone: TCliRunDone; AStallMs
 /// gone after the package unloads. Later Start and RunCliAsync calls do nothing.</summary>
 /// <param name="AWaitMs">How long to wait for the workers.</param>
 /// <returns>True when every worker came back within AWaitMs.</returns>
-/// <remarks>Main thread only. This unit's finalization calls it; call it directly
+/// <remarks>
+/// Main thread only. This unit's finalization calls it; call it directly
 /// only from a test. A worker that misses the budget leaks its run rather than risk
-/// freeing what it still uses.</remarks>
+/// freeing what it still uses.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: initialization/finalization (DragLint.Plugin.CliAsync.pas)</para>
+/// <para>Calls: DragLint.Plugin.CliAsync.TCliRun.Abandon, DragLint.Plugin.CliAsync.TCliRun.Deliver, DragLint.Plugin.Telemetry.DLT, Format, Sleep</para>
+/// <para>Returns: GCliWorkers = 0</para>
+/// <seealso cref="DragLint.Plugin.CliAsync.TCliRun.Abandon"/>
+/// <seealso cref="DragLint.Plugin.CliAsync.TCliRun.Deliver"/>
+/// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StopAllCliRuns(AWaitMs: Cardinal = CLI_ASYNC_STOP_MS): Boolean;  // dl:ok unused-public-symbol@066c -- public as the test seam: CliAsyncTests E drives it (not in the plugin index)
 
 implementation

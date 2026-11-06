@@ -11,6 +11,20 @@ uses
 
 /// <summary>Build the Search UI into AParent (a dock tab). Controls are owned
 /// by AOwner so they live/die with the dock frame.</summary>
+/// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
+/// <param name="AParent"><!-- drag-lint:auto type -->TWinControl</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.HandleInitTimer (DragLint.Plugin.DockForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.SearchForm.TSearchHandler.AdvChange, DragLint.Plugin.SearchForm.TSearchHandler.AdvControlChange, DragLint.Plugin.SearchForm.TSearchHandler.BtnClick, DragLint.Plugin.SearchForm.TSearchHandler.Create, DragLint.Plugin.SearchForm.TSearchHandler.DebounceFired, DragLint.Plugin.SearchForm.TSearchHandler.KindChange, DragLint.Plugin.SearchForm.TSearchHandler.ListActivate, DragLint.Plugin.SearchForm.TSearchHandler.QueryChange, DragLint.Plugin.SearchForm.TSearchHandler.QueryKeyDown, DragLint.Plugin.SearchForm.TSearchHandler.RebuildColumns, DragLint.Plugin.SearchForm.TSearchHandler.Reconfigure</para>
+/// <para>UI thread only -- touches AParent</para>
+/// <seealso cref="DragLint.Plugin.SearchForm.TSearchHandler.AdvChange"/>
+/// <seealso cref="DragLint.Plugin.SearchForm.TSearchHandler.AdvControlChange"/>
+/// <seealso cref="DragLint.Plugin.SearchForm.TSearchHandler.BtnClick"/>
+/// <seealso cref="DragLint.Plugin.SearchForm.TSearchHandler.Create"/>
+/// <seealso cref="DragLint.Plugin.SearchForm.TSearchHandler.DebounceFired"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure CreateEmbeddedSearch(AOwner: TComponent; AParent: TWinControl);
 
 implementation

@@ -39,15 +39,30 @@ type
   /// <param name="pParent">The submenu to add to.</param>
   /// <param name="pCaption">The item caption.</param>
   /// <returns>The new item; BuildReportsMenu stores the question index in its Tag.</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Reports.pas), DragLint.Plugin.Reports.BuildReportsMenu (DragLint.Plugin.Reports.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReportsAddItem = reference to function(pParent: TMenuItem; const pCaption: string): TMenuItem;
 
   /// <summary>Adds a separator line to a submenu.</summary>
   /// <param name="pParent">The submenu to add to.</param>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Reports.pas), DragLint.Plugin.Reports.BuildReportsMenu (DragLint.Plugin.Reports.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReportsAddSeparator = reference to procedure(pParent: TMenuItem);
 
   /// <summary>Adds a disabled section header to a submenu.</summary>
   /// <param name="pParent">The submenu to add to.</param>
   /// <param name="pCaption">The header text.</param>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Reports.pas), DragLint.Plugin.Reports.BuildReportsMenu (DragLint.Plugin.Reports.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReportsAddHeader = reference to procedure(pParent: TMenuItem; const pCaption: string);
 
 /// <summary>Fills the Reports submenu: one section header per selection kind,
@@ -58,17 +73,35 @@ type
 /// with the host's existing menu teardown.</param>
 /// <param name="pAddSeparator">The host's separator factory.</param>
 /// <param name="pAddHeader">The host's section-header factory.</param>
-/// <remarks>Main thread only. The host passes factories rather than this unit
+/// <remarks>
+/// Main thread only. The host passes factories rather than this unit
 /// creating items itself so every drag-lint menu item keeps ONE owner and ONE
-/// teardown path (Editor's GMenuItems / GWrappers).</remarks>
+/// teardown path (Editor's GMenuItems / GWrappers).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.ReportText.ReportGroupCaption, pAddHeader, pAddItem, pAddSeparator</para>
+/// <seealso cref="DragLint.Plugin.ReportText.ReportGroupCaption"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure BuildReportsMenu(pParent: TMenuItem; const pAddItem: TReportsAddItem;
   const pAddSeparator: TReportsAddSeparator; const pAddHeader: TReportsAddHeader);
 
 /// <summary>Click handler for every Reports item: asks the question whose
 /// index is the item's Tag.</summary>
 /// <param name="Sender">The clicked TMenuItem.</param>
-/// <remarks>Main thread only. Returns as soon as the run is queued; the
-/// answer arrives later on the main thread.</remarks>
+/// <remarks>
+/// Main thread only. Returns as soon as the run is queued; the
+/// answer arrives later on the main thread.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.Reports.ChooseTargetThen, DragLint.Plugin.Reports.EnqueueReport, DragLint.Plugin.Reports.PromptSecondRoutine, DragLint.Plugin.Reports.ResolveRunTools, DragLint.Plugin.ReportText.BuildAskCmdLine, DragLint.Plugin.ReportText.QuestionTakesSecondRoutine, TMenuItem</para>
+/// <seealso cref="DragLint.Plugin.Reports.ChooseTargetThen"/>
+/// <seealso cref="DragLint.Plugin.Reports.EnqueueReport"/>
+/// <seealso cref="DragLint.Plugin.Reports.PromptSecondRoutine"/>
+/// <seealso cref="DragLint.Plugin.Reports.ResolveRunTools"/>
+/// <seealso cref="DragLint.Plugin.ReportText.BuildAskCmdLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure InvokeReportQuestion(Sender: TObject);
 
 implementation

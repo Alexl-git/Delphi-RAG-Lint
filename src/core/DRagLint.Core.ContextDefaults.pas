@@ -13,12 +13,27 @@ const
 
 /// <summary>The per-user settings folder %LOCALAPPDATA%\drag-lint (no trailing separator).</summary>
 /// <returns>The folder path; '' when LOCALAPPDATA is not set. Does not create it.</returns>
-/// <remarks>The ONE definition; DRagLint.Project.ContextFile.DragLintLocalDataDir forwards here.</remarks>
+/// <remarks>
+/// The ONE definition; DRagLint.Project.ContextFile.DragLintLocalDataDir forwards here.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.ContextDefaults.ContextDefaultsFile (DRagLint.Core.ContextDefaults.pas), DRagLint.Project.ContextFile.DragLintLocalDataDir (DRagLint.Project.ContextFile.pas)</para>
+/// <para>Calls: ExcludeTrailingPathDelimiter, GetEnvironmentVariable</para>
+/// <para>Returns: ExcludeTrailingPathDelimiter(Base) + PathDelim + 'drag-lint'</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DragLintLocalDataDir: string;
 
 /// <summary>Path of the central defaults file.</summary>
 /// <returns>The env DRAGLINT_CONTEXT_DEFAULTS when set (explicit override, for tests),
 /// else DragLintLocalDataDir\context-defaults.json; '' when neither resolves.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: [dclDragLintWizard]DragLint.Plugin.DbResolver.PublishLibraryDefaults (DragLint.Plugin.DbResolver.pas), DRagLint.Project.ContextFile.ContextDefaultsFile (DRagLint.Project.ContextFile.pas)</para>
+/// <para>Calls: DRagLint.Core.ContextDefaults.DragLintLocalDataDir, GetEnvironmentVariable</para>
+/// <para>Returns: GetEnvironmentVariable(CORE_CONTEXT_DEFAULTS_ENV); Dir + PathDelim + DEFAULTS_FILE_NAME</para>
+/// <seealso cref="DRagLint.Core.ContextDefaults.DragLintLocalDataDir"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ContextDefaultsFile: string;
 
 /// <summary>Records one platform's library DB in the central defaults file, keeping every
@@ -30,9 +45,20 @@ function ContextDefaultsFile: string;
 /// <returns>True when the file was written; False when the value was already there, when an
 /// argument is empty, or when an existing file is not a JSON object (it is never overwritten:
 /// a user's hand edit beats a regenerated default).</returns>
-/// <remarks>I/O errors from the atomic write (WriteJsonFileAtomic) propagate to the caller.
+/// <remarks>
+/// I/O errors from the atomic write (WriteJsonFileAtomic) propagate to the caller.
 /// A new file gets "schema": 1. Writes atomically (temp + rename), UTF-8 without BOM.
-/// Not thread-safe across processes beyond the atomic rename; last writer wins.</remarks>
+/// Not thread-safe across processes beyond the atomic rename; last writer wins.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DbResolver.PublishLibraryDefaults (DragLint.Plugin.DbResolver.pas)</para>
+/// <para>Calls: DRagLint.Core.ContextDefaults.ChildObject, DRagLint.Core.ContextDefaults.LoadOrNewRoot, DRagLint.Core.JsonFile.WriteJsonFileAtomic, ExtractFileDir, SameText</para>
+/// <para>Returns: False; True</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Core.ContextDefaults.ChildObject"/>
+/// <seealso cref="DRagLint.Core.ContextDefaults.LoadOrNewRoot"/>
+/// <seealso cref="DRagLint.Core.JsonFile.WriteJsonFileAtomic"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MergeLibraryDefault(const AFile, APlatform, ALibraryDb: string): Boolean;
 
 implementation

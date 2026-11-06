@@ -12,8 +12,19 @@ uses
   ; { TEMP debug telemetry }
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.DiagnosticCache.pas), DragLint.Plugin.DiagList.DiagClipboardLine (DragLint.Plugin.DiagList.pas), DragLint.Plugin.EditViewNotifier.SeverityColor (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine.SevEnabled (DragLint.Plugin.EditViewNotifier.pas) (+7 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintSeverity = (dlsError, dlsWarning, dlsHint, dlsInfo);
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.DiagList.pas) ?, DragLint.Plugin.DiagList.DiagClipboardLine (DragLint.Plugin.DiagList.pas) ?, DragLint.Plugin.DiagList.DiagClipboardText (DragLint.Plugin.DiagList.pas) ?, DragLint.Plugin.DiagList.DiagDisplayOrder (DragLint.Plugin.DiagList.pas) ?, DragLint.Plugin.Editor.ParseAndPushCompileOutput (DragLint.Plugin.Editor.pas) (+22 more)</para>
+  /// <para>Used in units: DragLint.Plugin.DiagList, DragLint.Plugin.DiagnosticCache, DragLint.Plugin.DockForm, DragLint.Plugin.Editor, DragLint.Plugin.EditViewNotifier, DragLint.Plugin.HoverTracker, DragLint.Plugin.MissingUses, DragLint.Plugin.StructureForm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintDiagnostic = record
     Line    : Integer          ;
     StartCol: Integer          ;
@@ -29,8 +40,24 @@ type
     .scm rules plus exactly three built-ins, while the out-of-process live
     runner runs the whole scan list. Measured on DataCopy's uFileUtils.pas --
     LSP 11, live runner 45. }
+  /// <summary><!-- drag-lint:auto sum -->WHICH PRODUCER a diagnostic set came from. Two
+  /// of them publish lint findings and they do NOT agree: the LSP's BuildDiagnostics
+  /// composes the .scm rules plus exactly three built-ins, while the out-of-process live
+  /// runner runs the whole scan list. Measured on DataCopy's uFileUtils.pas -- LSP 11,
+  /// live runner 45.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.DiagnosticCache.pas), DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Update (DragLint.Plugin.DiagnosticCache.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintDiagProducer = (dlpLive, dlpLsp);
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.DiagnosticCache.pas) ?, DragLint.Plugin.DiagnosticCache.Cache (DragLint.Plugin.DiagnosticCache.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.DiagnosticCache</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintDiagnosticCache = class
     strict private
       { The LIVE runner's set. }
@@ -53,21 +80,84 @@ type
       FLspByFile: TDictionary<string, TArray<TDragLintDiagnostic>>;
       FLock     : TCriticalSection                                ;
     public
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.DiagnosticCache.Cache (DragLint.Plugin.DiagnosticCache.pas)</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FByFile, FCompilerByFile, FLspByFile, FLock</para>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.ClearAllCompilerFindings"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.DropCompilerErrors"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FLock, FLspByFile, FCompilerByFile, FByFile</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.ClearAllCompilerFindings"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.DropCompilerErrors"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
       /// <summary>Replaces ONE PRODUCER'S lint diagnostics for AFilePath from a
       /// publishDiagnostics-shaped params object. Thread-safe.</summary>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AParams"><!-- drag-lint:auto type -->TJSONValue</param>
       /// <param name="AProducer">Which set to replace. The two producers keep
       /// separate overlays, so an LSP publish can no longer discard the live
       /// runner's richer set (or the reverse).</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Editor.HandleNotification (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeCopyDiagnostics (DragLint.Plugin.Editor.pas), DragLint.Plugin.LiveDiagnostics.PublishToCache (DragLint.Plugin.LiveDiagnostics.pas)</para>
+      /// <para>Calls: DragLint.Plugin.DiagnosticCache.BoolLabel, DragLint.Plugin.DiagnosticCache.SevHistogram, DragLint.Plugin.Telemetry.DLT, ExtractFileName, Format, LowerCase</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 90 lines (full implementation)</para>
+      /// <para>Reads: FLock, FLspByFile, FByFile</para>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.BoolLabel"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.SevHistogram"/>
+      /// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.ClearAllCompilerFindings"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Update(const AFilePath: string; AParams: TJSONValue;
         AProducer: TDragLintDiagProducer = dlpLive);
       /// <summary>Replaces the compiler-findings overlay for AFilePath (from
       /// "Compile &amp;&amp; Diagnose"). These persist across live-lint ticks until the
       /// next compile. Thread-safe.</summary>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ADiags"><!-- drag-lint:auto type -->const TArray&lt;TDragLintDiagnostic&gt;</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Editor.ParseAndPushCompileOutput (DragLint.Plugin.Editor.pas)</para>
+      /// <para>Calls: DragLint.Plugin.DiagnosticCache.SevHistogram, DragLint.Plugin.Telemetry.DLT, ExtractFileName, Format, LowerCase</para>
+      /// <para>Reads: FLock, FCompilerByFile</para>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.SevHistogram"/>
+      /// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.ClearAllCompilerFindings"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure SetCompilerFindings(const AFilePath: string; const ADiags: TArray<TDragLintDiagnostic>);
       /// <summary>Clears the entire compiler-findings overlay (every file). Call
       /// before pushing a fresh compile so resolved errors disappear. Thread-safe.</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.Telemetry.DLT, Format</para>
+      /// <para>Reads: FLock, FCompilerByFile</para>
+      /// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.DropCompilerErrors"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ClearAllCompilerFindings;
       /// <summary>Drops every ERROR-severity compiler finding, for every file,
       /// keeping warnings and hints.</summary>
@@ -86,15 +176,73 @@ type
       /// skips units that are up to date and says nothing about them, so
       /// clearing those would erase real findings that nothing has disproved.
       /// A zero-error build disproves errors and nothing else.</para>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Editor.ParseAndPushCompileOutput (DragLint.Plugin.Editor.pas)</para>
+      /// <para>Calls: DragLint.Plugin.Telemetry.DLT, Format</para>
+      /// <para>Reads: FLock, FCompilerByFile</para>
+      /// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.ClearAllCompilerFindings"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Destroy"/>
+      /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DropCompilerErrors: Integer;
       /// <summary>All diagnostics for AFilePath: live-lint findings UNION the
       /// compiler-findings overlay. Thread-safe.</summary>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TDragLintDiagnostic&gt; -- Observed:
+      /// LintArr; CompArr; LintArr + CompArr.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForLine (DragLint.Plugin.DiagnosticCache.pas), DragLint.Plugin.DockForm.TDragLintDockFrame.HandleWatchTimer (DragLint.Plugin.DockForm.pas), DragLint.Plugin.StructureForm.TDragLintStructureForm.RefreshDiagnosticsOnly (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.StructureForm.TDragLintStructureForm.RefreshForFile (DragLint.Plugin.StructureForm.pas)</para>
+      /// <para>Calls: LowerCase</para>
+      /// <para>Reads: FLock, FCompilerByFile, FByFile, FLspByFile</para>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.ClearAllCompilerFindings"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.DropCompilerErrors"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function GetForFile(const AFilePath: string): TArray<TDragLintDiagnostic>                ;
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+      /// <returns><!-- drag-lint:auto -->TArray&lt;TDragLintDiagnostic&gt; -- Observed:
+      /// List.ToArray.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.Editor.DLCursorUndeclaredUnitThen (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeQuickFixInlineHintUses (DragLint.Plugin.Editor.pas), DragLint.Plugin.EditViewNotifier.InvokeInlineInfo (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas) (+1 more)</para>
+      /// <para>Calls: DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForFile</para>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForFile"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.ClearAllCompilerFindings"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function GetForLine(const AFilePath: string; ALine: Integer): TArray<TDragLintDiagnostic>;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FLock, FByFile, FLspByFile, FCompilerByFile</para>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.ClearAllCompilerFindings"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.DropCompilerErrors"/>
+      /// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Clear;
   end;
 
+/// <returns><!-- drag-lint:auto -->TDragLintDiagnosticCache -- Observed: GCache.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.HandleWatchTimer (DragLint.Plugin.DockForm.pas), DragLint.Plugin.Editor.DLCursorUndeclaredUnitThen (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.HandleNotification (DragLint.Plugin.Editor.pas), DragLint.Plugin.EditViewNotifier.InvokeInlineInfo (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine (DragLint.Plugin.EditViewNotifier.pas) (+8 more)</para>
+/// <para>Calls: DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Create</para>
+/// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function Cache: TDragLintDiagnosticCache;
 
 implementation

@@ -27,7 +27,20 @@ unit DragLint.Plugin.OpenSourceServer;
 
 interface
 
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.Register (DragLint.Plugin.Wizard.pas)</para>
+/// <para>Calls: DragLint.Plugin.OpenSourceServer.TOpenSourceListener.Create</para>
+/// <seealso cref="DragLint.Plugin.OpenSourceServer.TOpenSourceListener.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure StartOpenSourceServer;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas), initialization/finalization (DragLint.Plugin.OpenSourceServer.pas)</para>
+/// <para>Calls: CloseHandle, CreateFile, FreeAndNil, WaitForSingleObject, WaitNamedPipe</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure StopOpenSourceServer; { idempotent }
 
 implementation

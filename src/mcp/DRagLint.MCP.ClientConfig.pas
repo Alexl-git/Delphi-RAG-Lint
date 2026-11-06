@@ -17,9 +17,20 @@ interface
 
 type
   /// <summary>The MCP clients whose user-level config this verb edits.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.MCP.ClientConfig.pas), DRagLint.MCP.ClientConfig.BuildEntry (DRagLint.MCP.ClientConfig.pas), DRagLint.MCP.ClientConfig.McpEntryText (DRagLint.MCP.ClientConfig.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMcpClient = (mcClaudeCode, mcVSCode, mcCursor);
 
   /// <summary>One run of mcp-config against one client file.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.MCP.ClientConfig.pas) ?, DRagLint.MCP.ClientConfig.ApplyCore (DRagLint.MCP.ClientConfig.pas) ?, DRagLint.MCP.ClientConfig.ClientInstalled (DRagLint.MCP.ClientConfig.pas) ?, DRagLint.MCP.ClientConfig.DefaultPath (DRagLint.MCP.ClientConfig.pas) ?, DRagLint.MCP.ClientConfig.RunMcpConfigVerbFromCommandLine (DRagLint.MCP.ClientConfig.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.MCP.ClientConfig</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMcpConfigRequest = record
     /// <summary>Which client's file and container ("mcpServers" or "servers").</summary>
     Client    : TMcpClient;
@@ -44,6 +55,12 @@ type
   end;
 
   /// <summary>What happened to one client file: the script's Target/Path/Action/Backup/Before/After.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.MCP.ClientConfig.pas) ?, DRagLint.MCP.ClientConfig.ApplyCore (DRagLint.MCP.ClientConfig.pas) ?, DRagLint.MCP.ClientConfig.ApplyMcpConfig (DRagLint.MCP.ClientConfig.pas), DRagLint.MCP.ClientConfig.ResultJson (DRagLint.MCP.ClientConfig.pas) ?, DRagLint.MCP.ClientConfig.WriteConfig (DRagLint.MCP.ClientConfig.pas) ? (+1 more)</para>
+  /// <para>Used in units: DRagLint.MCP.ClientConfig</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMcpConfigResult = record
     /// <summary>ClaudeCode, VSCode or Cursor.</summary>
     Target  : string;
@@ -71,7 +88,8 @@ type
 /// any of those, 1 refused (Error set: not ours, not valid JSON, holds comments or trailing commas, the top level
 /// or the container not an object, changed / deleted / appeared while running), 2 setup (the named client is not
 /// installed, --db or the engine missing, an invalid name).</returns>
-/// <remarks>Merges: only the entry named pRequest.Name changes; every other key and server is carried through
+/// <remarks>
+/// Merges: only the entry named pRequest.Name changes; every other key and server is carried through
 /// System.JSON unchanged (member order and number text kept). An update keeps keys the user added to OUR entry
 /// (env, ...); "same" means type (absent = stdio), command (case-insensitive) and args (exact) all match, and then
 /// nothing is written. An entry by that name whose command is neither drag-lint.exe nor the engine is not ours and
@@ -81,7 +99,15 @@ type
 /// did not exist gets no backup, its folder is created, and CRLF. Before/After/paste-hint text masks env VALUES as
 /// ***, and so do `headers` values (an HTTP entry's token); an entry refused as not ours prints only (not ours) as
 /// Before, never its body. Never runs a child process (the claude CLI mode of Set-DragLintMcpConfig.ps1 is not ported; owner
-/// decision 4).</remarks>
+/// decision 4).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.MCP.ClientConfig.RunMcpConfigVerbFromCommandLine (DRagLint.MCP.ClientConfig.pas)</para>
+/// <para>Calls: Default, DRagLint.MCP.ClientConfig.ApplyCore</para>
+/// <para>Returns: Default(TMcpConfigResult)</para>
+/// <para>Catches: EMcpConfigStop (swallowed); Exception (swallowed)</para>
+/// <seealso cref="DRagLint.MCP.ClientConfig.ApplyCore"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ApplyMcpConfig(const pRequest: TMcpConfigRequest): TMcpConfigResult;
 
 /// <summary>The entry this verb writes, as compact JSON text (the paste hint).</summary>
@@ -89,26 +115,59 @@ function ApplyMcpConfig(const pRequest: TMcpConfigRequest): TMcpConfigResult;
 /// <param name="pEngine">The command, written as given.</param>
 /// <param name="pDbPath">'' gives args ["serve"], else ["serve","--db",pDbPath].</param>
 /// <returns>{"type":"stdio","command":...,"args":[...]} (+ "env":{} for Claude Code).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.MCP.ClientConfig.ApplyCore (DRagLint.MCP.ClientConfig.pas)</para>
+/// <para>Calls: DRagLint.MCP.ClientConfig.BuildEntry</para>
+/// <para>Returns: Entry.ToJSON</para>
+/// <seealso cref="DRagLint.MCP.ClientConfig.BuildEntry"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function McpEntryText(pClient: TMcpClient; const pEngine, pDbPath: string): string;
 
 /// <summary>Entry point of `drag-lint mcp-config`; parses ParamStr(2..) itself.</summary>
 /// <returns>The worst exit code over the targets; 2 with usage on stderr when no target is named, for an unknown
 /// flag, a flag missing its value, --config-path with other than exactly one target, or an invalid --name. A --db
 /// that does not exist is 2 from ApplyMcpConfig, per target.</returns>
-/// <remarks>Prints one block per target (Target, Path, Action, Backup, Before, After) or, with --json, one JSON
-/// array of those objects (plus Error and ExitCode). A refusal's reason also goes to stderr.</remarks>
+/// <remarks>
+/// Prints one block per target (Target, Path, Action, Backup, Before, After) or, with --json, one JSON
+/// array of those objects (plus Error and ExitCode). A refusal's reason also goes to stderr.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.MCP.ClientConfig.ApplyMcpConfig, DRagLint.MCP.ClientConfig.ParseFlags, DRagLint.MCP.ClientConfig.ResultJson, DRagLint.MCP.ClientConfig.UsageError, DRagLint.MCP.ClientConfig.WriteResultText, Writeln</para>
+/// <para>Returns: EXIT_OK; Res.ExitCode</para>
+/// <seealso cref="DRagLint.MCP.ClientConfig.ApplyMcpConfig"/>
+/// <seealso cref="DRagLint.MCP.ClientConfig.ParseFlags"/>
+/// <seealso cref="DRagLint.MCP.ClientConfig.ResultJson"/>
+/// <seealso cref="DRagLint.MCP.ClientConfig.UsageError"/>
+/// <seealso cref="DRagLint.MCP.ClientConfig.WriteResultText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunMcpConfigVerbFromCommandLine: Integer;
 
 /// <summary>Entry point of `drag-lint init`; parses ParamStr(2..) itself.</summary>
 /// <returns>0 when every step succeeded (or on --dry-run); 2 with usage on stderr when --project is missing, a flag
 /// is unknown or lacks its value, or the project file does not exist; otherwise the exit code of the step that
 /// failed (the run stops there).</returns>
-/// <remarks>Composed of existing verbs, each run as a child of this exe: (1) `register-project &lt;proj&gt; --apply`
+/// <remarks>
+/// Composed of existing verbs, each run as a child of this exe: (1) `register-project &lt;proj&gt; --apply`
 /// (the manifest section, a no-op when already registered), (2) `index --project &lt;proj&gt;`, (3) `resolve-dbs
 /// --project &lt;proj&gt;` to learn the project's index, (4) `mcp-config --all --db &lt;that index&gt;` (Claude Code,
 /// VS Code and Cursor; a client that is not installed is skipped). --dry-run prints those four command lines and runs
 /// NOTHING, so nothing is written. --home-dir / --appdata-dir are passed on to mcp-config (they move where the client
-/// files are looked for). Each step's output is echoed under a "step n/4" heading.</remarks>
+/// files are looked for). Each step's output is echoed under a "step n/4" heading.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Process.QuoteArg, DRagLint.MCP.ClientConfig.EngineCommand, DRagLint.MCP.ClientConfig.IndexPathFrom, DRagLint.MCP.ClientConfig.InitUsage, DRagLint.MCP.ClientConfig.ParseInitFlags, DRagLint.MCP.ClientConfig.RunStep, ExpandFileName, Format, Writeln</para>
+/// <para>Returns: EXIT_SETUP; EXIT_OK; RunStep(STEP_REGISTER, 'register the project in the manifest', RegArgs, Out1); RunStep(STEP_INDEX, 'index the project', IdxArgs, Out1); RunStep(STEP_RESOLVE, 'find the project''s index', ResArgs, Out1); EXIT_REFUSED</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 43 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Process.QuoteArg"/>
+/// <seealso cref="DRagLint.MCP.ClientConfig.EngineCommand"/>
+/// <seealso cref="DRagLint.MCP.ClientConfig.IndexPathFrom"/>
+/// <seealso cref="DRagLint.MCP.ClientConfig.InitUsage"/>
+/// <seealso cref="DRagLint.MCP.ClientConfig.ParseInitFlags"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunInitVerbFromCommandLine: Integer;
 
 implementation

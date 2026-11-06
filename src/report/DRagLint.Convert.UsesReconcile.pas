@@ -59,6 +59,12 @@ const
 
 type
   /// <summary>One unit that declares a name, and the --db it was found in.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.PickTieCandidate (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.UsesReconcile.TUsesUnitIndex.DeclaringUnits (DRagLint.Convert.UsesReconcile.pas) (+10 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.UsesReconcile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesCandidate = record
     UnitName: string;
     Db      : string;
@@ -66,6 +72,12 @@ type
 
   /// <summary>A name the conversion introduced whose unit was NOT added
   /// (apply/1 uses_unresolved[]).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas) ?, DRagLint.CLI.EmitApplyJson (DRagLint.CLI.pas) ?, DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.BuildApplyPlan.ReportTie (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanNewNames (DRagLint.Convert.UsesReconcile.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.UsesReconcile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesUnresolved = record
     Name      : string;
     Line      : Integer;
@@ -77,9 +89,15 @@ type
   /// <summary>The indexed unit set of a run's --db stores, with the
   /// declaring-unit lookups the reconciler makes. One per convert-apply run,
   /// shared by every unit of a batch.</summary>
-  /// <remarks>Not thread-safe. Unit names are the indexed .pas files' base
+  /// <remarks>
+  /// Not thread-safe. Unit names are the indexed .pas files' base
   /// names ('Bde.DBTables'). Built lazily on first use: one files-table read
-  /// per store.</remarks>
+  /// per store.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas) ?, declaration (DRagLint.Convert.UsesReconcile.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.UnitIndex (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.ReconcileUses (DRagLint.Convert.UsesReconcile.pas) ?, DRagLint.Convert.UsesReconcile.TReconciler.Create (DRagLint.Convert.UsesReconcile.pas) ?</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.UsesReconcile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesUnitIndex = class
   private
     FStores   : TArray<ISymbolStore>;
@@ -90,30 +108,143 @@ type
     FDeclMemo : TDictionary<string, TArray<TUsesCandidate>>;
     FPathMemo : TDictionary<string, string>;
     FLevelMemo: TDictionary<string, Boolean>;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UsesReconcile.TUsesUnitIndex.IsKnown (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Resolve (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TUsesUnitIndex.SameUnit (DRagLint.Convert.UsesReconcile.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps, ExtractFileExt, LowerCase, SameText</para>
+    /// <para>Reads: FBuilt, FStores, FStems, FByTail   Writes: FBuilt</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Create"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.DeclaringUnits"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Build;
+    /// <param name="AStore"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed:
+    /// TPath.GetFileNameWithoutExtension(FStores[AStore].GetFilePath(AFileId)).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UsesReconcile.TUsesUnitIndex.DeclaringUnits (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TUsesUnitIndex.ExportSymbol (DRagLint.Convert.UsesReconcile.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, IntToStr</para>
+    /// <para>Reads: FPathMemo, FStores</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Create"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.DeclaringUnits"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function StemOf(AStore: Integer; AFileId: Int64): string;
+    /// <summary><!-- drag-lint:auto sum -->A7-7: ASym is declared AT UNIT LEVEL -- its
+    /// parent is the unit, or (an unscoped enum value) a unit-level enum. A class-level
+    /// const / var / nested type is a MEMBER, not a declarer a uses entry can bring into
+    /// scope. A symbol with no readable parent counts as unit level (the 1.27.0 answer).</summary>
+    /// <param name="AStore"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True; AtUnitLevel(AStore,
+    /// Parent); False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TUsesUnitIndex.DeclaringUnits (DRagLint.Convert.UsesReconcile.pas)</para>
+    /// <para>Calls: DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, Format</para>
+    /// <para>Reads: FLevelMemo, FStores</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Create"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.DeclaringUnits"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AtUnitLevel(AStore: Integer; const ASym: TSymbol): Boolean;
   public
     /// <summary>Wraps the run's stores.</summary>
     /// <param name="AStores">The --db stores, in --db order. Not owned.</param>
     /// <param name="ADbs">Their paths, index-aligned (may be shorter: '' then).</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.Apply.TConvertTreeCache.UnitIndex (DRagLint.Convert.Apply.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FStores, FDbs, FStems, FByTail, FDeclMemo, FPathMemo, FLevelMemo</para>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.DeclaringUnits"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Destroy"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.ExportNames"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(const AStores: TArray<ISymbolStore>; const ADbs: TArray<string>);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FLevelMemo, FPathMemo, FDeclMemo, FByTail, FStems</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Create"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.DeclaringUnits"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.ExportNames"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>The indexed unit a uses spelling names, or '' when none or
     /// more than one alias matches.</summary>
     /// <param name="AName">A uses entry or rule spelling ('DBTables').</param>
     /// <returns>The indexed stem ('Bde.DBTables'), or ''.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UsesReconcile.TReconciler.HelperProvided (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanDangling (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TUsesUnitIndex.IsKnown (DRagLint.Convert.UsesReconcile.pas)</para>
+    /// <para>Calls: DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build, LowerCase, Trim</para>
+    /// <para>Returns: ''; L[0]</para>
+    /// <para>Reads: FStems, FByTail</para>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Create"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.DeclaringUnits"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Resolve(const AName: string): string;
     /// <summary>True when some --db indexes the unit AName names (exactly or
     /// as a scope alias).</summary>
     /// <param name="AName">A uses entry spelling.</param>
     /// <returns>True when known.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UsesReconcile.TReconciler.DecideWatch (DRagLint.Convert.UsesReconcile.pas)</para>
+    /// <para>Calls: DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build, DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Resolve, LowerCase, Trim</para>
+    /// <para>Returns: Resolve(AName) &lt;&gt; ''; FByTail.TryGetValue(LowerCase(Trim(AName)), L) and (L.Count &gt; 0)</para>
+    /// <para>Reads: FByTail</para>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Resolve"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Create"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.DeclaringUnits"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsKnown(const AName: string): Boolean;
     /// <summary>C9 R9: two spellings name one unit -- equal, or one is
     /// '&lt;scope&gt;.&lt;other&gt;' and they are not two distinct indexed units.</summary>
     /// <param name="A">One spelling.</param>
     /// <param name="B">The other.</param>
     /// <returns>True when they are the same unit.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.Apply.TConvertTreeCache.ScopedClass (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.TConvertTreeCache.SetScope (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.TReconciler.BuildPostPlan (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.ComponentUnits (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.DecideWatch (DRagLint.Convert.UsesReconcile.pas) (+5 more)</para>
+    /// <para>Calls: DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build, EndsStr, LowerCase, Trim</para>
+    /// <para>Returns: not (FStems.ContainsKey(Short) and FStems.ContainsKey(Long))</para>
+    /// <para>Reads: FStems</para>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Create"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.DeclaringUnits"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SameUnit(const A, B: string): Boolean;
     /// <summary>The distinct units that declare AName at unit level (its
     /// parent is the unit, or a unit-level enum for an enum value -- never a
@@ -122,6 +253,19 @@ type
     /// <param name="AName">A bare identifier.</param>
     /// <param name="AClassesOnly">True: class/interface/record declarations only.</param>
     /// <returns>Candidates in store order; memoised.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UsesReconcile.TReconciler.ComponentUnits (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanDangling (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanNewNames (DRagLint.Convert.UsesReconcile.pas)</para>
+    /// <para>Calls: BoolToStr, Default, DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel, DRagLint.Convert.UsesReconcile.TUsesUnitIndex.StemOf, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, ExtractFileExt, LowerCase, SameText</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 33 lines (full implementation)</para>
+    /// <para>Reads: FDeclMemo, FStores, FDbs</para>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.StemOf"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DeclaringUnits(const AName: string; AClassesOnly: Boolean): TArray<TUsesCandidate>;
     /// <summary>The lowercase names unit AUnit exports: its interface-level
     /// declarations, unscoped enum values, and (AHelpers) its type-helper
@@ -129,6 +273,18 @@ type
     /// <param name="AUnit">An indexed stem.</param>
     /// <param name="AHelpers">True for the helper-member half only.</param>
     /// <returns>The names (a new array per call).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UsesReconcile.TReconciler.HelperProvided (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanDangling (DRagLint.Convert.UsesReconcile.pas)</para>
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindHelperMemberNamesInUnit, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, LowerCase, SameText</para>
+    /// <para>Reads: FStores</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindHelperMemberNamesInUnit"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ExportNames(const AUnit: string; AHelpers: Boolean): TArray<string>;
     /// <summary>The symbol named AName that unit AUnit declares, and the type
     /// it is a member of when it is one (a type-helper member).</summary>
@@ -137,10 +293,30 @@ type
     /// <param name="ASym">The first such symbol in store order.</param>
     /// <param name="AParent">Its class / record parent's name, else ''.</param>
     /// <returns>False when no store holds such a symbol.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Convert.UsesReconcile.TReconciler.PlanDangling (DRagLint.Convert.UsesReconcile.pas)</para>
+    /// <para>Calls: Default, DRagLint.Convert.UsesReconcile.TUsesUnitIndex.StemOf, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, SameText</para>
+    /// <para>Returns: True; False</para>
+    /// <para>Reads: FStores</para>
+    /// <para>Mutates: ASym (out), AParent (out)</para>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.StemOf"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel"/>
+    /// <seealso cref="DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ExportSymbol(const AUnit, AName: string; out ASym: TSymbol; out AParent: string): Boolean;
   end;
 
   /// <summary>What ReconcileUses needs to know about one unit.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.UsesReconcile.pas) ?, DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.ReconcileUses (DRagLint.Convert.UsesReconcile.pas) ?, DRagLint.Convert.UsesReconcile.TReconciler.Create (DRagLint.Convert.UsesReconcile.pas) ?</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.UsesReconcile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesReconcileInput = record
     UnitPas     : string;              { the unit's path }
     OrigPas     : string;              { its text as read from disk }
@@ -158,11 +334,17 @@ type
   /// <summary>One name a REMOVED unit exports that the converted .pas still
   /// references -- the same verdict as a remove row's needed_by, uncapped and
   /// with every line (apply/1 pas_uses[] status global-dangling, 1.27.0).</summary>
-  /// <remarks>Lines are 1-based lines of the converted text, which differs
+  /// <remarks>
+  /// Lines are 1-based lines of the converted text, which differs
   /// from the unit as read by in-line edits only, so they are the unit's own
   /// lines; sorted, distinct. Kind is the declaring symbol's kind when the
   /// index holds it (KindKnown). DeclaredIn is the helper type of a
-  /// type-helper member, '' for a unit-level name.</remarks>
+  /// type-helper member, '' for a unit-level name.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas) ?, declaration (DRagLint.Convert.UsesReconcile.pas) ?, DRagLint.Convert.Apply.DanglingPasUses (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.UsesReconcile.TReconciler.PlanDangling (DRagLint.Convert.UsesReconcile.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.UsesReconcile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesDangling = record
     UnitName  : string;           { the removed uses entry, as spelled }
     DeclUnit  : string;           { the indexed unit that declares Name }
@@ -174,9 +356,15 @@ type
   end;
 
   /// <summary>ReconcileUses' answer.</summary>
-  /// <remarks>Status is 'on' or 'degraded' (Detail says why). Needs goes to
+  /// <remarks>
+  /// Status is 'on' or 'degraded' (Detail says why). Needs goes to
   /// PlanUnitRules; Unresolved to apply/1 uses_unresolved[]. Dangling is the
-  /// uncapped form of Needs.Dangling (empty when degraded).</remarks>
+  /// uncapped form of Needs.Dangling (empty when degraded).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.UsesReconcile.pas) ?, DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas) ?, DRagLint.Convert.UsesReconcile.ReconcileUses (DRagLint.Convert.UsesReconcile.pas) ?, DRagLint.Convert.UsesReconcile.TReconciler.Run (DRagLint.Convert.UsesReconcile.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.UsesReconcile</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TUsesReconcileResult = record
     Status    : string;
     Detail    : string;
@@ -190,8 +378,17 @@ type
 /// <param name="AIndex">The run's unit index. Not owned.</param>
 /// <param name="AIn">The unit, its original and converted text, the book.</param>
 /// <returns>The verdicts; never raises (a failure is Status 'degraded').</returns>
-/// <remarks>Reads the stores only; writes nothing. Pinned by
-/// tests\autotest\run_convert_apply_uses_reconcile.ps1.</remarks>
+/// <remarks>
+/// Reads the stores only; writes nothing. Pinned by
+/// tests\autotest\run_convert_apply_uses_reconcile.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas)</para>
+/// <para>Calls: DRagLint.Convert.UsesReconcile.TReconciler.Create, DRagLint.Convert.UsesReconcile.TReconciler.Run</para>
+/// <para>Returns: R.Run</para>
+/// <seealso cref="DRagLint.Convert.UsesReconcile.TReconciler.Create"/>
+/// <seealso cref="DRagLint.Convert.UsesReconcile.TReconciler.Run"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReconcileUses(AIndex: TUsesUnitIndex; const AIn: TUsesReconcileInput): TUsesReconcileResult;
 
 /// <summary>Runs the indexer's extractor over text in memory -- the rows
@@ -200,7 +397,17 @@ function ReconcileUses(AIndex: TUsesUnitIndex; const AIn: TUsesReconcileInput): 
 /// (.dfm -> TDFMParser, else TDelphi13Parser with usage refs).</param>
 /// <param name="AText">The text to parse.</param>
 /// <returns>The parse result.</returns>
-/// <remarks>A parser failure propagates; ReconcileUses turns it into 'degraded'.</remarks>
+/// <remarks>
+/// A parser failure propagates; ReconcileUses turns it into 'degraded'.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.UsesReconcile.TReconciler.Reconcile (DRagLint.Convert.UsesReconcile.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.IParser.Parse, DRagLint.Parser.Delphi13.TDelphi13Parser.Create, DRagLint.Parser.DFM.TDFMParser.Create, ExtractFileExt, SameText</para>
+/// <para>Returns: Parser.Parse(TEncoding.UTF8.GetBytes(AText), APath)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.IParser.Parse"/>
+/// <seealso cref="DRagLint.Parser.Delphi13.TDelphi13Parser.Create"/>
+/// <seealso cref="DRagLint.Parser.DFM.TDFMParser.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReindexText(const APath, AText: string): TParseResult;
 
 /// <summary>The 1-based character column of an index (tree-sitter) column in
@@ -210,9 +417,16 @@ function ReindexText(const APath, AText: string): TParseResult;
 /// BYTES, so each non-ASCII character before it adds one or more.</param>
 /// <returns>The 1-based character column in ALine; a column past the line's
 /// end maps to Length(ALine) + 1.</returns>
-/// <remarks>Pure. Shared by the uses reconciliation and convert-apply's
+/// <remarks>
+/// Pure. Shared by the uses reconciliation and convert-apply's
 /// access-site rewrites (C9 lesson: a CP1252 character in a string before a
-/// reference shifted every splice on its line).</remarks>
+/// reference shifted every splice on its line).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ClassifyValueCastSite (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.FindMemberAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.PlanMigrateSites.PlanSite (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.TReconciler.CollectNames (DRagLint.Convert.UsesReconcile.pas) (+1 more)</para>
+/// <para>Calls: EnsureRange</para>
+/// <para>Returns: TEncoding.UTF8.GetCharCount(Bytes, 0, EnsureRange(AByteCol - 1, 0, Length(Bytes))) + 1</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CharColumn(const ALine: string; AByteCol: Integer): Integer;
 
 implementation

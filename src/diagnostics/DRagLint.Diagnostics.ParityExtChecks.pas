@@ -32,6 +32,10 @@ type
   /// <remarks>
   /// Stateless; thread-safe. Called from DoLint and DoLintAll behind
   /// LintRuleWants(rule, LINT_GATE_PARITY_EXT).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TParityExtChecker = class
   public
@@ -41,6 +45,18 @@ type
     /// <param name="AStore">Optional symbol store; unused (same-file signatures only).</param>
     /// <param name="AFileId">File id within AStore (ignored).</param>
     /// <returns>One finding per violation; empty when clean or unparsable. The CLI filters by --rule.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Diagnostics.ParityExtChecks.TParityRun.Create, DRagLint.Diagnostics.ParityExtChecks.TParityRun.Findings, DRagLint.Diagnostics.ParityExtChecks.TParityRun.Run, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get</para>
+    /// <para>Returns: nil; Run.Findings</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Diagnostics.ParityExtChecks.TParityRun.Create"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParityExtChecks.TParityRun.Findings"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParityExtChecks.TParityRun.Run"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
       const AStore: ISymbolStore; AFileId: Integer): TArray<TLintFinding>; static;
   end;

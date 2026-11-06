@@ -47,14 +47,36 @@ uses
 
 /// <summary>Creates the message group, installs the notifier that keeps the
 /// reference safe, and starts the tier-3 timer.</summary>
-/// <remarks>Called once from the wizard's menu registration; safe to call
-/// again.</remarks>
+/// <remarks>
+/// Called once from the wizard's menu registration; safe to call
+/// again.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.FanOut.Log, DragLint.Plugin.FanOut.MessageServices, DragLint.Plugin.FanOut.StartFanOutRun, DragLint.Plugin.FanOut.TFanOutTicker.OnTick, DragLint.Plugin.FanOutState.TFanOutEpisode.Create, DragLint.Plugin.FanOutState.TTreeCompileTrigger.Reset</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DragLint.Plugin.FanOut.Log"/>
+/// <seealso cref="DragLint.Plugin.FanOut.MessageServices"/>
+/// <seealso cref="DragLint.Plugin.FanOut.StartFanOutRun"/>
+/// <seealso cref="DragLint.Plugin.FanOut.TFanOutTicker.OnTick"/>
+/// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure StartFanOut;
 
 /// <summary>Tears everything down: kills any running child, drops the message
 /// group and removes the notifier.</summary>
-/// <remarks>Must run before the BPL unloads, or the IDE is left holding
-/// interface pointers whose vtable has gone.</remarks>
+/// <remarks>
+/// Must run before the BPL unloads, or the IDE is left holding
+/// interface pointers whose vtable has gone.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas)</para>
+/// <para>Calls: DragLint.Plugin.FanOut.Log, DragLint.Plugin.FanOut.MessageServices, DragLint.Plugin.FanOut.SupersedeChild, FreeAndNil</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DragLint.Plugin.FanOut.Log"/>
+/// <seealso cref="DragLint.Plugin.FanOut.MessageServices"/>
+/// <seealso cref="DragLint.Plugin.FanOut.SupersedeChild"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShutdownFanOut;
 
 /// <summary>Launches a fan-out for AUnitPath at AGeneration.</summary>
@@ -65,21 +87,50 @@ procedure ShutdownFanOut;
 /// run and decides whether its result is still wanted.</param>
 /// <returns>True if a run started (or was deliberately skipped); False only if
 /// the caller should retry on a later tick.</returns>
-/// <remarks>Main thread. Supersedes a run already in flight -- at the measured
+/// <remarks>
+/// Main thread. Supersedes a run already in flight -- at the measured
 /// ~26 s/MB that is the NORMAL path for the largest ~1% of units, not an edge
-/// case.</remarks>
+/// case.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.FanOut.StartFanOut (DragLint.Plugin.FanOut.pas)</para>
+/// <para>Calls: DragLint.Plugin.FanOut.LaunchRun, DragLint.Plugin.FanOut.Log, DragLint.Plugin.FanOutState.TTreeCompileTrigger.NoteEdit, DragLint.Plugin.Settings.LoadSettings</para>
+/// <para>Returns: True; LaunchRun(AUnitPath, ABufferText, AGeneration, False)</para>
+/// <seealso cref="DragLint.Plugin.FanOut.LaunchRun"/>
+/// <seealso cref="DragLint.Plugin.FanOut.Log"/>
+/// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.NoteEdit"/>
+/// <seealso cref="DragLint.Plugin.Settings.LoadSettings"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StartFanOutRun(const AUnitPath, ABufferText: string; AGeneration: Integer): Boolean;
 
 /// <summary>A save happened: reset the discard back-off and let the pending
 /// tier-3 compile go ahead.</summary>
 /// <param name="AFile">The saved file.</param>
-/// <remarks>A save does NOT end the edit episode. The question being asked
-/// spans saves.</remarks>
+/// <remarks>
+/// A save does NOT end the edit episode. The question being asked
+/// spans saves.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.FanOut.Log, DragLint.Plugin.FanOutState.TFanOutEpisode.NoteSave, DragLint.Plugin.FanOutState.TTreeCompileTrigger.NoteSave, ExtractFileName</para>
+/// <seealso cref="DragLint.Plugin.FanOut.Log"/>
+/// <seealso cref="DragLint.Plugin.FanOutState.TFanOutEpisode.NoteSave"/>
+/// <seealso cref="DragLint.Plugin.FanOutState.TTreeCompileTrigger.NoteSave"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure NotifyFanOutSave(const AFile: string);
 
 /// <summary>Menu action: compile the dependents now, without waiting for the
 /// quiet period.</summary>
 /// <param name="Sender">Unused; the TNotifyEvent signature.</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.FanOut.Log, DragLint.Plugin.FanOut.RunTreeCompile, DragLint.Plugin.StatusBar.SetDragLintNote</para>
+/// <seealso cref="DragLint.Plugin.FanOut.Log"/>
+/// <seealso cref="DragLint.Plugin.FanOut.RunTreeCompile"/>
+/// <seealso cref="DragLint.Plugin.StatusBar.SetDragLintNote"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure InvokeCompileDependents(Sender: TObject);
 
 implementation

@@ -16,7 +16,13 @@ uses
 
 type
   /// <summary>One entry of report-pairs.json.</summary>
-  /// <remarks>A value record; every path is as written in the file.</remarks>
+  /// <remarks>
+  /// A value record; every path is as written in the file.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Pairs.pas) ?, DRagLint.Charts.AskVerb.TAskRun.ResolveProject (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.Pairs.FindReportPair (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Pairs.LoadReportPairs (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Pairs.PairOtherIndexes (DRagLint.Charts.Pairs.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Pairs</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReportPair = record
     /// <summary>The pair's name, for messages.</summary>
     Name      : string;
@@ -31,7 +37,13 @@ type
   end;
 
   /// <summary>A loaded pairing file.</summary>
-  /// <remarks>A value record. Found False means FileName does not exist and Pairs is empty.</remarks>
+  /// <remarks>
+  /// A value record. Found False means FileName does not exist and Pairs is empty.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.AskVerb.pas) ?, declaration (DRagLint.Charts.Pairs.pas) ?, DRagLint.Charts.Pairs.CheckConfigured (DRagLint.Charts.Pairs.pas) ?, DRagLint.Charts.Pairs.LoadReportPairs (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Pairs.RefuseUnpaired (DRagLint.Charts.Pairs.pas) ? (+1 more)</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Pairs</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReportPairs = record
     /// <summary>The report-pairs.json looked at (named in every message).</summary>
     FileName: string;
@@ -42,6 +54,12 @@ type
   end;
 
   /// <summary>A refusal of Ask-Report's: the exit code travels with the message (Stop-Ask).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Pairs.CheckConfigured (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Pairs.LoadReportPairs (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Pairs.PairOtherIndexes (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Pairs.RefuseUnpaired (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Producer.Delphi.ProjectIndex (DRagLint.Charts.Producer.Delphi.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Pairs, DRagLint.Charts.Producer.Delphi</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EReportPairStop = class(Exception)
   private
     FCode: Integer;
@@ -49,6 +67,14 @@ type
     /// <summary>Creates the refusal.</summary>
     /// <param name="pCode">Ask-Report's exit code: 1 refused, 2 setup, 3 stale.</param>
     /// <param name="pMessage">The message, without the 'ask-report: ' prefix.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.TAskRun.Stop (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Pairs.CheckConfigured (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Pairs.LoadReportPairs (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Pairs.PairOtherIndexes (DRagLint.Charts.Pairs.pas) (+2 more)</para>
+    /// <para>Calls: Create</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FCode</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor CreateCode(pCode: Integer; const pMessage: string);
     /// <summary>Ask-Report's exit code.</summary>
     property Code: Integer read FCode;
@@ -58,6 +84,13 @@ type
 /// <param name="pA">A path, relative or full.</param>
 /// <param name="pB">A path, relative or full.</param>
 /// <returns>False when either is ''. Pure.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.TAskRun.ReindexCommand (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Pairs.CheckConfigured (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Pairs.FindReportPair (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Pairs.PairOtherIndexes (DRagLint.Charts.Pairs.pas)</para>
+/// <para>Calls: ExpandFileName, SameText</para>
+/// <para>Returns: (pA &lt;&gt; '') and (pB &lt;&gt; '') and SameText(ExpandFileName(pA), ExpandFileName(pB))</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SameIndexPath(const pA, pB: string): Boolean;
 
 /// <summary>The default report-pairs.json (Emit-Common's Resolve-ReportPairsFile).</summary>
@@ -65,6 +98,15 @@ function SameIndexPath(const pA, pB: string): Boolean;
 /// (DRagLint.Charts.Tools.ResolveChartsHome).</param>
 /// <returns>%APPDATA%\drag-lint\report-pairs.json when it exists, else charts\report-pairs.json
 /// when that exists (or APPDATA is unset), else the APPDATA path.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Pairs.LoadReportPairs (DRagLint.Charts.Pairs.pas)</para>
+/// <para>Calls: DRagLint.Charts.Tools.ResolveChartsHome, GetEnvironmentVariable</para>
+/// <para>Returns: User</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Charts.Tools.ResolveChartsHome"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveReportPairsFile(const pScriptPath: string = ''): string;
 
 /// <summary>Loads a pairing file.</summary>
@@ -72,6 +114,16 @@ function ResolveReportPairsFile(const pScriptPath: string = ''): string;
 /// <param name="pScriptPath">Passed to ResolveReportPairsFile when pFile is ''.</param>
 /// <returns>The file name looked at, whether it exists, and its 'pairs' entries.</returns>
 /// <exception cref="EReportPairStop">Code 1 when the file exists and is not valid JSON.</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Producer.Delphi.PairedIndexes (DRagLint.Charts.Producer.Delphi.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Pairs.EReportPairStop.CreateCode, DRagLint.Charts.Pairs.ResolveReportPairsFile, TJSONObject</para>
+/// <para>Returns: Default(TReportPairs)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Charts.Pairs.EReportPairStop.CreateCode"/>
+/// <seealso cref="DRagLint.Charts.Pairs.ResolveReportPairsFile"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadReportPairs(const pFile: string; const pScriptPath: string = ''): TReportPairs;
 
 /// <summary>The first pair that names an index as its client or its server.</summary>
@@ -79,6 +131,15 @@ function LoadReportPairs(const pFile: string; const pScriptPath: string = ''): T
 /// <param name="pDb">The index.</param>
 /// <param name="pPair">The pair found; Default(TReportPair) when none.</param>
 /// <returns>True when one names it. Pure.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.TAskRun.ResolveProject (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Pairs.PairOtherIndexes (DRagLint.Charts.Pairs.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Pairs.SameIndexPath</para>
+/// <para>Returns: True; False</para>
+/// <para>Mutates: pPair (out)</para>
+/// <seealso cref="DRagLint.Charts.Pairs.SameIndexPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindReportPair(const pPairs: TArray<TReportPair>; const pDb: string; out pPair: TReportPair): Boolean;
 
 /// <summary>Runs the engine as a child process and returns its JSON document.</summary>
@@ -86,11 +147,28 @@ function FindReportPair(const pPairs: TArray<TReportPair>; const pDb: string; ou
 /// <param name="pArgs">Its arguments, each quoted as needed.</param>
 /// <param name="pExit">Its exit code; -1 when it could not be started.</param>
 /// <returns>nil on a non-zero exit, a timeout or no JSON; otherwise a document the caller frees.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.TAskRun.ReindexCommand (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.TAskRun.ResolveProject (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Pairs.CheckConfigured (DRagLint.Charts.Pairs.pas), DRagLint.Charts.Pairs.ResolveProjectIndex (DRagLint.Charts.Pairs.pas)</para>
+/// <para>Calls: DRagLint.Charts.Pairs.EngineJson, DRagLint.Charts.Process.QuoteArg, DRagLint.Charts.Process.RunCapture</para>
+/// <para>Returns: nil; EngineJson(Run.StdOut)</para>
+/// <para>Mutates: pExit (out)</para>
+/// <seealso cref="DRagLint.Charts.Pairs.EngineJson"/>
+/// <seealso cref="DRagLint.Charts.Process.QuoteArg"/>
+/// <seealso cref="DRagLint.Charts.Process.RunCapture"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AskEngine(const pEngine: string; const pArgs: array of string; out pExit: Integer): TJSONValue;
 
 /// <summary>The non-empty strings of a JSON array.</summary>
 /// <param name="pValue">Any JSON value, or nil.</param>
 /// <returns>Empty for anything but an array. Pure.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.TAskRun.ResolveProject (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Pairs.CheckConfigured (DRagLint.Charts.Pairs.pas)</para>
+/// <para>Calls: TJSONArray</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function JsonStrings(const pValue: TJSONValue): TArray<string>;
 
 /// <summary>The index that owns a project, as the engine's own `resolve-dbs --project` names it
@@ -104,10 +182,26 @@ function JsonStrings(const pValue: TJSONValue): TArray<string>;
 /// found: ...', or 'resolve-dbs --project ... found no index (exit n) -- ...'); '' otherwise.</param>
 /// <returns>True when the engine names an index. Whether that file exists is NOT tested: an index
 /// the manifest names may not have been built yet, and the caller words that refusal.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.TAskRun.ResolveProject (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Producer.Delphi.ProjectIndex (DRagLint.Charts.Producer.Delphi.pas)</para>
+/// <para>Calls: DRagLint.Charts.Pairs.AskEngine, ExpandFileName, Format, TJSONObject</para>
+/// <para>Returns: False; pDb &lt;&gt; ''</para>
+/// <para>Mutates: pDb (out), pWhy (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Charts.Pairs.AskEngine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ResolveProjectIndex(const pEngine, pProject: string; out pDb, pWhy: string): Boolean;
 type
   /// <summary>What one question needs paired, and how its caller names its own flags.</summary>
-  /// <remarks>A value record.</remarks>
+  /// <remarks>
+  /// A value record.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Pairs.pas) ?, DRagLint.Charts.AskVerb.TAskRun.ResolveOthers (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Pairs.PairOtherIndexes (DRagLint.Charts.Pairs.pas) ?, DRagLint.Charts.Pairs.RefuseUnpaired (DRagLint.Charts.Pairs.pas) ?, DRagLint.Charts.Producer.Delphi.PairedIndexes (DRagLint.Charts.Producer.Delphi.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Pairs, DRagLint.Charts.Producer.Delphi</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPairRequest = record
     /// <summary>The normalised question id (named in messages).</summary>
     Question  : string;
@@ -130,7 +224,13 @@ type
   end;
 
   /// <summary>The other indexes of one question: as given, then as paired.</summary>
-  /// <remarks>A value record; '' = not given.</remarks>
+  /// <remarks>
+  /// A value record; '' = not given.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Pairs.pas) ?, DRagLint.Charts.AskVerb.TAskRun.ResolveOthers (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Pairs.PairOtherIndexes (DRagLint.Charts.Pairs.pas) ?, DRagLint.Charts.Producer.Delphi.PairedIndexes (DRagLint.Charts.Producer.Delphi.pas), DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce (DRagLint.Charts.Producer.Delphi.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Pairs, DRagLint.Charts.Producer.Delphi</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPairedIndexes = record
     /// <summary>The SERVER index.</summary>
     Server: string;
@@ -149,8 +249,20 @@ type
 /// <exception cref="EReportPairStop">Code 2 -- a server or SQL index is needed and no pair names
 /// the project index (the file is missing, or has no entry); a server is needed and the project
 /// index is the pair's SERVER; or a path taken from the file is not one resolve-dbs lists.</exception>
-/// <remarks>A crosses-boundary question with no pair keeps Other '' and does not refuse (the
-/// bundler draws one side and says so). Asks the engine only when a path came from the file.</remarks>
+/// <remarks>
+/// A crosses-boundary question with no pair keeps Other '' and does not refuse (the
+/// bundler draws one side and says so). Asks the engine only when a path came from the file.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.TAskRun.ResolveOthers (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Producer.Delphi.PairedIndexes (DRagLint.Charts.Producer.Delphi.pas)</para>
+/// <para>Calls: DRagLint.Charts.Pairs.CheckConfigured, DRagLint.Charts.Pairs.EReportPairStop.CreateCode, DRagLint.Charts.Pairs.FindReportPair, DRagLint.Charts.Pairs.RefuseUnpaired, DRagLint.Charts.Pairs.SameIndexPath, Format</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 35 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Pairs.CheckConfigured"/>
+/// <seealso cref="DRagLint.Charts.Pairs.EReportPairStop.CreateCode"/>
+/// <seealso cref="DRagLint.Charts.Pairs.FindReportPair"/>
+/// <seealso cref="DRagLint.Charts.Pairs.RefuseUnpaired"/>
+/// <seealso cref="DRagLint.Charts.Pairs.SameIndexPath"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure PairOtherIndexes(const pPairs: TReportPairs; const pRequest: TPairRequest; var pIndexes: TPairedIndexes);
 
 implementation

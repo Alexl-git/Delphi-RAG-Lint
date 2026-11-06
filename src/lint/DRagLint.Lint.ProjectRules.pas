@@ -43,8 +43,10 @@ type
   /// <summary>Index-wide lint rules (oversized classes; unused exported routines).</summary>
   /// <remarks>
   /// Stateless; reads the supplied open store. Never raises.
+  /// <!-- drag-lint:auto -->TSiblingStoreResolver / TSiblingProjectLister moved to
+  /// DRagLint.Lint.SharedScope (1.41).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ComputeRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.WholeGraphProvider (DRagLint.CLI.pas)</para>
+  /// <para>Used by: DRagLint.CLI.ComputeRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DRagLint.CLI.DoLintProject (DRagLint.CLI.pas) ?, DRagLint.CLI.WholeGraphProvider (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -84,15 +86,15 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) ?</para>
-    /// <para>Calls: ASiblingStore, AWholeGraph, ChangeFileExt, CollectFrom, CollectWholeGraphRule, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile (+44 more)</para>
-    /// <para>Returns: TDictionary&lt;string, Boolean&gt;.Create; Found; nil; Findings.ToArray</para>
-    /// <para>Complexity: 72 (cyclomatic, outer body), 822 lines (full implementation)</para>
+    /// <para>Calls: AWholeGraph, ChangeFileExt, CollectFrom, CollectWholeGraphRule, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath (+61 more)</para>
+    /// <para>Returns: TDictionary&lt;string, Boolean&gt;.Create; Flags &lt;&gt; 0; nil; Findings.ToArray</para>
+    /// <para>Complexity: 108 (cyclomatic, outer body), 937 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
-    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencedNamesLower"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Run(const AStore: ISymbolStore; const ARuleId: string = '';
@@ -110,8 +112,20 @@ type
     /// <param name="ALibraryStore">The library index or nil (read by duplicate-global-decl and
     /// dfm-event-handler-missing only).</param>
     /// <returns>That rule's findings over the whole index.</returns>
-    /// <remarks>Exists so the `lint &lt;file&gt;` rule cache can compute live on a miss and
-    /// the indexer can warm it. Never raises.</remarks>
+    /// <remarks>
+    /// Exists so the `lint &lt;file&gt;` rule cache can compute live on a miss and
+    /// the indexer can warm it. Never raises.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.ComputeRuleCacheEntry (DRagLint.CLI.pas), DRagLint.CLI.WholeGraphProvider (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.TProjectLintRules.Run.WholeGraph (DRagLint.Lint.ProjectRules.pas) ?</para>
+    /// <para>Calls: DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted, DRagLint.Lint.ProjectRules.CollectCircularUses, DRagLint.Lint.ProjectRules.CollectDfmEventHandlerMissing, DRagLint.Lint.ProjectRules.CollectDuplicateGlobalDecls, DRagLint.Lint.ProjectRules.CollectEnumHelperSeparateUnits, DRagLint.Lint.ProjectRules.CollectRepeatedTypeSwitch, SameText</para>
+    /// <para>Returns: nil; CollectCircularUses(AStore); CollectDuplicateGlobalDecls(AStore, ALibraryStore); CollectEnumHelperSeparateUnits(AStore); CollectRepeatedTypeSwitch(AStore); CollectEnumOrdinalPersisted(AStore)</para>
+    /// <seealso cref="DRagLint.Lint.EnumOrdinalPersisted.CollectEnumOrdinalPersisted"/>
+    /// <seealso cref="DRagLint.Lint.ProjectRules.CollectCircularUses"/>
+    /// <seealso cref="DRagLint.Lint.ProjectRules.CollectDfmEventHandlerMissing"/>
+    /// <seealso cref="DRagLint.Lint.ProjectRules.CollectDuplicateGlobalDecls"/>
+    /// <seealso cref="DRagLint.Lint.ProjectRules.CollectEnumHelperSeparateUnits"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function CollectWholeGraphRule(const ARuleId: string; const AStore: ISymbolStore;
                        const ALibraryStore: ISymbolStore = nil): TArray<TLintFinding>;
     /// <summary>Flags forbidden cross-layer 'uses' edges per a layer-config JSON file.</summary>
@@ -176,15 +190,15 @@ type
 /// implementation; the finding-only view is a projection of this. Never raises.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.ProjectRules.CollectCircularUses (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.CollectCycleParticipants (DRagLint.Lint.ProjectRules.pas)</para>
-/// <para>Calls: ChangeFileExt, Copy, CouplingLines, CycleFixPointer, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile, DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed.StrongConnect (+9 more)</para>
+/// <para>Calls: BareUsesBinding, ChangeFileExt, Copy, CouplingLines, CycleFixPointer, CycleUsesLine, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath (+13 more)</para>
 /// <para>Returns: nil; Findings.ToArray</para>
-/// <para>Complexity: 18 (cyclomatic, outer body), 362 lines (full implementation)</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 425 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetUnitUsesForFile"/>
-/// <seealso cref="DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed.StrongConnect"/>
+/// <seealso cref="DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed.MapBareNames"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function CollectCircularUsesDetailed(const AStore: ISymbolStore): TArray<TCycleCoupling>;
@@ -196,6 +210,14 @@ function CollectCircularUsesDetailed(const AStore: ISymbolStore): TArray<TCycleC
 /// holding a space is double-quoted.</param>
 /// <param name="pStem">The unit stem for --unit, as given (lower-case by convention).</param>
 /// <returns>The pointer, starting with a space.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Lint.ProjectRules.CollectCircularUsesDetailed.StrongConnect (DRagLint.Lint.ProjectRules.pas), DRagLint.Lint.ProjectRules.WithCycleFixPointer (DRagLint.Lint.ProjectRules.pas)</para>
+/// <para>Calls: Pos</para>
+/// <para>Returns: CCycleFixPointerHead + Proj + ' --unit ' + pStem</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleFixPointer(const pProject, pStem: string): string;
 
 /// <summary>pMessage with its cycle-fix pointer (see CycleFixPointer), if it has one, replaced by
@@ -204,6 +226,15 @@ function CycleFixPointer(const pProject, pStem: string): string;
 /// <param name="pProject">As for CycleFixPointer.</param>
 /// <param name="pStem">As for CycleFixPointer.</param>
 /// <returns>The message ending in exactly one pointer.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CircularUsesForFile (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+/// <para>Calls: Copy, DRagLint.Lint.ProjectRules.CycleFixPointer, Pos</para>
+/// <para>Returns: (if At &gt; 0 then Copy(pMessage, 1, At - 1) else pMessage) + CycleFixPointer(pProject, pStem)</para>
+/// <para>Effect-free (proven)</para>
+/// <seealso cref="DRagLint.Lint.ProjectRules.CycleFixPointer"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function WithCycleFixPointer(const pMessage, pProject, pStem: string): string;
 
 implementation

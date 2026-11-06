@@ -20,20 +20,120 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.SignatureForm.ShowDragLintSignature (DragLint.Plugin.SignatureForm.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.SignatureForm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintSignatureForm = class(TForm)
     private
       FLabel     : TLabel;
       FCloseTimer: TTimer;
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <param name="Key"><!-- drag-lint:auto type -->var Word</param>
+      /// <param name="Shift"><!-- drag-lint:auto type -->TShiftState</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Create (DragLint.Plugin.SignatureForm.pas)</para>
+      /// <para>Mutates: Key (var)</para>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Deactivate"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.HandleTimerTick"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.ShowSignature"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Create (DragLint.Plugin.SignatureForm.pas)</para>
+      /// <para>Reads: FCloseTimer</para>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Deactivate"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.FormKeyDown"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.ShowSignature"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleTimerTick(Sender: TObject);
     protected
+      /// <param name="Action"><!-- drag-lint:auto type -->var TCloseAction</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Mutates: Action (var)</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Deactivate"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.FormKeyDown"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.HandleTimerTick"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.ShowSignature"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure DoClose(var Action: TCloseAction); override;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.FormKeyDown"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.HandleTimerTick"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.ShowSignature"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Deactivate; override;
     public
+      /// <summary><!-- drag-lint:auto sum -->---- TDragLintSignatureForm ----</summary>
+      /// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.SignatureForm.ShowDragLintSignature (DragLint.Plugin.SignatureForm.pas)</para>
+      /// <para>Calls: CreateNew</para>
+      /// <para>constructor</para>
+      /// <para>Reads: FLabel, FCloseTimer   Writes: FLabel, FCloseTimer</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Deactivate"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.FormKeyDown"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.HandleTimerTick"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.ShowSignature"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(AOwner: TComponent); override;
+      /// <param name="X"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="Y"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="ASigLabel"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AActiveParam"><!-- drag-lint:auto type -->Integer</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.SignatureForm.ShowDragLintSignature (DragLint.Plugin.SignatureForm.pas)</para>
+      /// <para>Calls: IntToStr, SystemParametersInfo</para>
+      /// <para>Reads: FLabel, FCloseTimer</para>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Deactivate"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.FormKeyDown"/>
+      /// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.HandleTimerTick"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ShowSignature(X, Y: Integer; const ASigLabel: string; AActiveParam: Integer);
   end;
 
+/// <summary><!-- drag-lint:auto sum -->---- public factory ----</summary>
+/// <param name="ASigLabel"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AActiveParam"><!-- drag-lint:auto type -->Integer</param>
+/// <param name="AScreenX"><!-- drag-lint:auto type -->Integer</param>
+/// <param name="AScreenY"><!-- drag-lint:auto type -->Integer</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeSignatureHelp (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Create, DragLint.Plugin.SignatureForm.TDragLintSignatureForm.ShowSignature</para>
+/// <para>UI thread only -- touches Form, Application</para>
+/// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.Create"/>
+/// <seealso cref="DragLint.Plugin.SignatureForm.TDragLintSignatureForm.ShowSignature"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowDragLintSignature(const ASigLabel: string; AActiveParam: Integer; AScreenX, AScreenY: Integer);
 
 implementation

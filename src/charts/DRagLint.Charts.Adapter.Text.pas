@@ -32,7 +32,8 @@ uses
 /// <returns>One string per logical line, trimmed, in order. Never included: the header
 /// sentence and COMMAND line ParseReportHeader consumes, the '&lt;remarks&gt;' and
 /// '&lt;/remarks&gt;' lines, blank lines, and the plain lines the formatter drops.</returns>
-/// <remarks>DocInsight: the '///' prefix is removed and a wrapped line is joined back. A
+/// <remarks>
+/// DocInsight: the '///' prefix is removed and a wrapped line is joined back. A
 /// physical line indented exactly two spaces past the logical line's first physical line
 /// continues it: ALWAYS when that first line is itself indented (a row: the formatter's
 /// rows sit at two spaces and a continuation's indent never accumulates, so nothing else
@@ -47,7 +48,14 @@ uses
 /// Known limits (each pinned by a test): a token of exactly the room that fitted whole,
 /// followed by a wrapped word, is rejoined without a space; an UNINDENTED line re-wrapped
 /// at a NARROWER column than the formatter's is not joined (the first word of the
-/// continuation would have fitted), so it diffs. Pure; thread-safe.</remarks>
+/// continuation would have fitted), so it diffs. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Render.ReportPreHtml (DRagLint.Charts.Render.pas)</para>
+/// <para>Calls: DRagLint.Charts.Adapter.Text.BuildLogical, DRagLint.Charts.Adapter.Text.SplitPhysical</para>
+/// <seealso cref="DRagLint.Charts.Adapter.Text.BuildLogical"/>
+/// <seealso cref="DRagLint.Charts.Adapter.Text.SplitPhysical"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReportLogicalLines(const pText: string; out pForm: TReportForm): TArray<string>;
 
 /// <summary>The adapter: a report as diff items.</summary>
@@ -55,20 +63,40 @@ function ReportLogicalLines(const pText: string; out pForm: TReportForm): TArray
 /// <returns>One item per logical line whose key is not '': Text is the original physical
 /// line(s) exactly as read (a wrapped DocInsight line's physical lines joined with CRLF,
 /// line ends normalised, BOM removed), Key is NormaliseKey of the logical line.</returns>
-/// <remarks>A 'The report returned no findings.' line is an item like any other, so an
-/// empty answer against a full one is one delete and N inserts. Pure; thread-safe.</remarks>
+/// <remarks>
+/// A 'The report returned no findings.' line is an item like any other, so an
+/// empty answer against a full one is one delete and N inserts. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapters.ItemsFor (DRagLint.Charts.Adapters.pas)</para>
+/// <para>Calls: DRagLint.Charts.Adapter.Text.BuildLogical, DRagLint.Charts.Adapter.Text.NormaliseKey, DRagLint.Charts.Adapter.Text.SplitPhysical, DRagLint.Charts.Diff.TDiffItem.Make</para>
+/// <para>Returns: List.ToArray</para>
+/// <seealso cref="DRagLint.Charts.Adapter.Text.BuildLogical"/>
+/// <seealso cref="DRagLint.Charts.Adapter.Text.NormaliseKey"/>
+/// <seealso cref="DRagLint.Charts.Adapter.Text.SplitPhysical"/>
+/// <seealso cref="DRagLint.Charts.Diff.TDiffItem.Make"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReportItems(const pText: string): TArray<TDiffItem>;
 
 /// <summary>Reduces ONE logical line to its comparison key (spec N1 + N4).</summary>
 /// <param name="pLogicalLine">A logical line, plain or already in the DocInsight
 /// rendering.</param>
 /// <returns>The key; '' means the line is dropped.</returns>
-/// <remarks>In order: (1) ASCII scrub (the formatter's dash / arrow / quote table, other
+/// <remarks>
+/// In order: (1) ASCII scrub (the formatter's dash / arrow / quote table, other
 /// non-ASCII -> '?', controls -> space) and TrimRight; (2) the plain-line mapping of
 /// ReportLogicalLines, which drops BUNDLE / INDEX / REGENERATE / 'ask-report:' /
 /// 'WARNING:' lines, plus any line holding ' AS OF '; (3) '(File.ext:123)' -> '(File.ext)';
 /// (4) step numbers: a leading '[12]' or '12. ', a FIRST table cell '| 12 |' -> '|' (a number
-/// in a later cell is data and stays), 'step 12' -> 'step N'; (5) whitespace runs collapsed to one space, trimmed. Pure; thread-safe.</remarks>
+/// in a later cell is data and stays), 'step 12' -> 'step N'; (5) whitespace runs collapsed to one space, trimmed. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapter.Text.ReportItems (DRagLint.Charts.Adapter.Text.pas)</para>
+/// <para>Calls: ContainsStr, DRagLint.Charts.Adapter.Text.MapPlainLine, DRagLint.Charts.DocInsight.ScrubLine</para>
+/// <para>Returns: ''; RxSpaces.Replace(S, ' ').Trim</para>
+/// <seealso cref="DRagLint.Charts.Adapter.Text.MapPlainLine"/>
+/// <seealso cref="DRagLint.Charts.DocInsight.ScrubLine"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NormaliseKey(const pLogicalLine: string): string;
 
 implementation

@@ -49,7 +49,7 @@ type
   /// version and schema. Platform and preprocess are carried so the buffer can
   /// be parsed the way the index was, not merely checked.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), declaration (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.Analysis.LintTree.ReadBaselineFile (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.ParseIndexerFingerprint (DRagLint.Analysis.SurfaceAdapters.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas) ?, DRagLint.Analysis.LintTree.ReadBaselineFile (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas) ?, DRagLint.Analysis.SurfaceAdapters.IndexProfileOf (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.Analysis.SurfaceAdapters.ParseIndexerFingerprint (DRagLint.Analysis.SurfaceAdapters.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.SurfaceAdapters</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

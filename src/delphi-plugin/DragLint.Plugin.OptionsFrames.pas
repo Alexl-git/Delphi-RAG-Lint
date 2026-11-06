@@ -37,20 +37,111 @@ type
   /// <summary>Base for the four drag-lint Tools->Options page frames. Each page
   /// shows a SUBSET of TDragLintSettings; Load/Save re-read the whole record so a
   /// page only writes its own fields and never clobbers another page's.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Options.pas), declaration (DragLint.Plugin.OptionsFrames.pas), DragLint.Plugin.Options.TDragLintOptionsPage.FrameCreated (DragLint.Plugin.Options.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Options, DragLint.Plugin.OptionsFrames</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLPageFrame = class(TFrame)
   protected
     FSettings: TDragLintSettings;
     /// <summary>Create this page's controls (code-built, no .dfm). Called once.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.OptionsFrames.TDLPageFrame.Create (DragLint.Plugin.OptionsFrames.pas)</para>
+    /// <para>Overridden by: DragLint.Plugin.OptionsFrames.TDLEditorOptionsFrame.BuildControls, DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BuildControls, DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.BuildControls, DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BuildControls</para>
+    /// <para>abstract</para>
+    /// <para>virtual</para>
+    /// <para>Directives: virtual; abstract</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Create"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Load"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.LoadControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Save"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.SaveControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure BuildControls; virtual; abstract;
     /// <summary>Copy FSettings -> this page's controls.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.OptionsFrames.TDLPageFrame.Load (DragLint.Plugin.OptionsFrames.pas)</para>
+    /// <para>Overridden by: DragLint.Plugin.OptionsFrames.TDLEditorOptionsFrame.LoadControls, DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.LoadControls, DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.LoadControls, DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.LoadControls</para>
+    /// <para>abstract</para>
+    /// <para>virtual</para>
+    /// <para>Directives: virtual; abstract</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Create"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Load"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Save"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.SaveControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadControls; virtual; abstract;
     /// <summary>Copy this page's controls -> ASettings (only this page's fields).</summary>
+    /// <param name="ASettings"><!-- drag-lint:auto type -->var TDragLintSettings</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.OptionsFrames.TDLPageFrame.Save (DragLint.Plugin.OptionsFrames.pas)</para>
+    /// <para>Overridden by: DragLint.Plugin.OptionsFrames.TDLEditorOptionsFrame.SaveControls, DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.SaveControls, DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.SaveControls, DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.SaveControls</para>
+    /// <para>abstract</para>
+    /// <para>virtual</para>
+    /// <para>Directives: virtual; abstract</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Create"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Load"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.LoadControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Save"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SaveControls(var ASettings: TDragLintSettings); virtual; abstract;
   public
+    /// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLPageFrame.BuildControls</para>
+    /// <para>constructor</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Load"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.LoadControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Save"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.SaveControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(AOwner: TComponent); override;
     /// <summary>Read the registry into FSettings and populate this page.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.Options.TDragLintOptionsPage.FrameCreated (DragLint.Plugin.Options.pas)</para>
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLPageFrame.LoadControls, DragLint.Plugin.Settings.LoadSettings</para>
+    /// <para>Overridden by: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load</para>
+    /// <para>virtual</para>
+    /// <para>Writes: FSettings</para>
+    /// <para>Directives: virtual</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.LoadControls"/>
+    /// <seealso cref="DragLint.Plugin.Settings.LoadSettings"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Create"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Save"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Load; virtual;
     /// <summary>Re-read the registry, apply this page's controls, write back.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.Options.TDragLintOptionsPage.DialogClosed (DragLint.Plugin.Options.pas)</para>
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLPageFrame.SaveControls, DragLint.Plugin.Settings.LoadSettings, DragLint.Plugin.Settings.SaveSettings</para>
+    /// <para>Overridden by: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Save</para>
+    /// <para>virtual</para>
+    /// <para>Directives: virtual</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.SaveControls"/>
+    /// <seealso cref="DragLint.Plugin.Settings.LoadSettings"/>
+    /// <seealso cref="DragLint.Plugin.Settings.SaveSettings"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLPageFrame.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Save; virtual;
   end;
 
@@ -58,6 +149,12 @@ type
   /// auto-compile family of toggles, and the help root (9 fields: ExePath,
   /// DbPathTemplate, EnableWorkspaceMode, AutoCompileOnSave, AutoCompileBuffer,
   /// AutoCompileOnStartup, AutoCompileOnSwitch, AutoJumpToDiagnostics, HelpRoot).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.Options.RegisterDragLintOptions (DragLint.Plugin.Options.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Options</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLGeneralOptionsFrame = class(TDLPageFrame)
   private
     FGrpPaths    : TGroupBox;
@@ -76,17 +173,89 @@ type
     FGrpHelp     : TGroupBox;
     FEdHelpRoot  : TEdit    ;
     FBtnHelpTest : TButton  ;
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BuildControls (DragLint.Plugin.OptionsFrames.pas)</para>
+    /// <para>Reads: FOpenDlg, FEdExe</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BtnHelpTestClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.LoadControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.SaveControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure BtnBrowseClick(Sender: TObject);
+    /// <summary><!-- drag-lint:auto sum -->Opens the all-features page of the root AS
+    /// TYPED (not yet saved), so the user can check a folder before pressing OK.</summary>
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BuildControls (DragLint.Plugin.OptionsFrames.pas)</para>
+    /// <para>Calls: DragLint.Plugin.Help.DLOpenHelpUrl, DragLint.Plugin.HelpIndex.DLHelpAllUrl, DragLint.Plugin.HelpIndex.DLNormaliseHelpRoot</para>
+    /// <para>Reads: FEdHelpRoot</para>
+    /// <seealso cref="DragLint.Plugin.Help.DLOpenHelpUrl"/>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.DLHelpAllUrl"/>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.DLNormaliseHelpRoot"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BtnBrowseClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BuildControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure BtnHelpTestClick(Sender: TObject);
   protected
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.DLNewCheck, DragLint.Plugin.OptionsFrames.DLNewEdit, DragLint.Plugin.OptionsFrames.DLNewGroup, DragLint.Plugin.OptionsFrames.DLNewLabel</para>
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.BuildControls</para>
+    /// <para>Reads: FGrpPaths, FBtnBrowse, FEdExe, FOpenDlg, FGrpWorkspace, FGrpCompile, FGrpHelp, FBtnHelpTest (+1 more)   Writes: FGrpPaths, FEdExe, FBtnBrowse, FEdDb, FOpenDlg, FGrpWorkspace, FCbWorkspace, FGrpCompile (+8 more)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.DLNewCheck"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.DLNewEdit"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.DLNewGroup"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.DLNewLabel"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BtnBrowseClick"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure BuildControls; override;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.HelpIndex.DLNormaliseHelpRoot</para>
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.LoadControls</para>
+    /// <para>Reads: FEdExe, FEdDb, FCbWorkspace, FCbCompileOnSave, FCbCompileBuffer, FCbCompileOnStartup, FCbCompileOnSwitch, FCbJumpToDiagnostics (+2 more)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.DLNormaliseHelpRoot"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BtnBrowseClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BtnHelpTestClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.SaveControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadControls; override;
+    /// <param name="ASettings"><!-- drag-lint:auto type -->var TDragLintSettings</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.HelpIndex.DLNormaliseHelpRoot</para>
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.SaveControls</para>
+    /// <para>Reads: FEdExe, FEdDb, FCbWorkspace, FCbCompileOnSave, FCbCompileBuffer, FCbCompileOnStartup, FCbCompileOnSwitch, FCbJumpToDiagnostics (+1 more)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.HelpIndex.DLNormaliseHelpRoot"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BtnBrowseClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BtnHelpTestClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLGeneralOptionsFrame.LoadControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SaveControls(var ASettings: TDragLintSettings); override;
   end;
 
   /// <summary>Tools->Options "Indexer" page: what/when/where to index (6 fields:
   /// AutoIndex, AutoReindexOnSave, ScanLibraries, IndexDbs, AutoDiscoverDbs,
   /// IncludeLibraryDb).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.Options.RegisterDragLintOptions (DragLint.Plugin.Options.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Options</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLIndexerOptionsFrame = class(TDLPageFrame)
   private
     FGrpAutoIndex   : TGroupBox;
@@ -101,6 +270,18 @@ type
     FCbLibScope     : TComboBox;
     FMemoLibPaths   : TMemo;
     FLblLibWarning  : TLabel;
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.BuildControls (DragLint.Plugin.OptionsFrames.pas)</para>
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.PopulateLibPaths</para>
+    /// <para>Reads: FCbLibScope</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.PopulateLibPaths"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.LoadControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.SaveControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure CbLibScopeChange(Sender: TObject);
     /// <summary>Resolves and displays the Library + Browsing folders for the
     /// selected scope (Win32+Win64 vs all platforms), reusing
@@ -112,10 +293,61 @@ type
     /// line instead of an empty memo.</summary>
     /// <param name="AAllPlatforms">False = Win32+Win64 only (the IDE's native
     /// targets); True = every platform subkey under BDS\37.0\Library.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.CbLibScopeChange (DragLint.Plugin.OptionsFrames.pas), DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.LoadControls (DragLint.Plugin.OptionsFrames.pas)</para>
+    /// <para>Calls: DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths</para>
+    /// <para>Reads: FMemoLibPaths</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
+    /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.ResolveLibraryPaths"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.CbLibScopeChange"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.LoadControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure PopulateLibPaths(AAllPlatforms: Boolean);
   protected
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.DLNewCheck, DragLint.Plugin.OptionsFrames.DLNewGroup, DragLint.Plugin.OptionsFrames.DLNewLabel</para>
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.BuildControls</para>
+    /// <para>Reads: FGrpAutoIndex, FGrpDbs, FMemoIndexDbs, FGrpLibIndex, FCbLibScope, FMemoLibPaths, FLblLibWarning   Writes: FGrpAutoIndex, FCbAutoIndex, FCbAutoReindex, FCbScanLibraries, FGrpDbs, FCbAutoDiscover, FCbIncludeLib, FMemoIndexDbs (+4 more)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.DLNewCheck"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.DLNewGroup"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.DLNewLabel"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.CbLibScopeChange"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.LoadControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure BuildControls; override;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.PopulateLibPaths</para>
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.LoadControls</para>
+    /// <para>Reads: FCbAutoIndex, FCbAutoReindex, FCbScanLibraries, FCbAutoDiscover, FCbIncludeLib, FMemoIndexDbs, FCbLibScope, FSettings</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.PopulateLibPaths"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.CbLibScopeChange"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.SaveControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadControls; override;
+    /// <param name="ASettings"><!-- drag-lint:auto type -->var TDragLintSettings</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Trim</para>
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.SaveControls</para>
+    /// <para>Reads: FCbAutoIndex, FCbAutoReindex, FCbScanLibraries, FCbAutoDiscover, FCbIncludeLib, FMemoIndexDbs</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.CbLibScopeChange"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.LoadControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLIndexerOptionsFrame.PopulateLibPaths"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SaveControls(var ASettings: TDragLintSettings); override;
   end;
 
@@ -124,6 +356,12 @@ type
   /// ShowErrorsInline, ShowWarningsInline, ShowHintsInline, ShowInfoInline),
   /// plus one manifest-backed field: max_return_cases (docs.max_return_cases in
   /// drag-lint.json -- NOT a registry setting; see ManifestPathForWrite).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.Options.RegisterDragLintOptions (DragLint.Plugin.Options.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Options</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLLinterOptionsFrame = class(TDLPageFrame)
   private
     FGrpDiag     : TGroupBox;
@@ -144,6 +382,18 @@ type
     /// per project. The catalog is too large/dynamic for the Options dialog, so
     /// this button routes users to the dock surface (same target as the Project
     /// Manager "drag-lint: Project Rules..." right-click).</summary>
+    /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BuildControls (DragLint.Plugin.OptionsFrames.pas)</para>
+    /// <para>Calls: DragLint.Plugin.DockForm.ShowDragLintDockLintOptions</para>
+    /// <seealso cref="DragLint.Plugin.DockForm.ShowDragLintDockLintOptions"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.LoadControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ManifestPathForWrite"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure BtnEditRulesClick(Sender: TObject);
     /// <summary>Resolves the manifest file to read/write for max_return_cases.
     /// The field is PROJECT-scoped: if a project is open, targets that
@@ -153,29 +403,142 @@ type
     /// + "drag-lint.json" (UNDOTTED -- the global/exe-dir manifest). This is
     /// deliberately NOT the merged-effective-manifest path used by
     /// TManifestIO.Load -- writes here only ever touch ONE file in place.</summary>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: ExeDir + 'drag-lint.json'.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ReadMaxReturnCases (DragLint.Plugin.OptionsFrames.pas), DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.WriteMaxReturnCases (DragLint.Plugin.OptionsFrames.pas)</para>
+    /// <para>Calls: DragLint.Plugin.ExeResolver.ResolveEngine, ExtractFilePath, Supports</para>
+    /// <para>Reads: FSettings</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DragLint.Plugin.ExeResolver.ResolveEngine"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BtnEditRulesClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.LoadControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ManifestPathForWrite: string;
     /// <summary>Reads docs.max_return_cases from ManifestPathForWrite via a
     /// direct System.JSON parse (not TManifestIO, to avoid a merge-then-emit
     /// round-trip clobbering unrelated keys). Returns 20 (the documented
     /// default) if the file or key is absent.</summary>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: DEFAULT_MAX_RETURN_CASES;
+    /// TJSONNumber(Num).AsInt.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load (DragLint.Plugin.OptionsFrames.pas)</para>
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ManifestPathForWrite, TJSONNumber, TJSONObject</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ManifestPathForWrite"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BtnEditRulesClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.LoadControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ReadMaxReturnCases: Integer;
     /// <summary>Read-modify-writes ONLY docs.max_return_cases into
     /// ManifestPathForWrite, preserving every other key already in the file
     /// (including an existing "docs" object's other fields, and top-level
     /// keys like "settings"). Never emits a fresh minimal manifest.</summary>
+    /// <param name="AValue"><!-- drag-lint:auto type -->Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Save (DragLint.Plugin.OptionsFrames.pas)</para>
+    /// <para>Calls: DRagLint.Core.JsonFile.WriteJsonFileAtomic, DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ManifestPathForWrite, TJSONObject</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.Core.JsonFile.WriteJsonFileAtomic"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ManifestPathForWrite"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BtnEditRulesClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure WriteMaxReturnCases(AValue: Integer);
   protected
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.DLNewCheck, DragLint.Plugin.OptionsFrames.DLNewGroup, DragLint.Plugin.OptionsFrames.DLNewLabel</para>
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.BuildControls</para>
+    /// <para>Reads: FGrpDiag, FGrpMarkers, FGrpDocs, FEdMaxReturnCases, FGrpRules, FBtnEditRules   Writes: FGrpDiag, FCbDiag, FCbAutoDiag, FGrpMarkers, FCbInline, FCbErrInline, FCbWarnInline, FCbHintInline (+5 more)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.DLNewCheck"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.DLNewGroup"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.DLNewLabel"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BtnEditRulesClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure BuildControls; override;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.LoadControls</para>
+    /// <para>Reads: FCbDiag, FCbAutoDiag, FCbInline, FCbErrInline, FCbWarnInline, FCbHintInline, FCbInfoInline, FSettings</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BtnEditRulesClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ManifestPathForWrite"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ReadMaxReturnCases"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadControls; override;
+    /// <param name="ASettings"><!-- drag-lint:auto type -->var TDragLintSettings</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.SaveControls</para>
+    /// <para>Reads: FCbDiag, FCbAutoDiag, FCbInline, FCbErrInline, FCbWarnInline, FCbHintInline, FCbInfoInline</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BtnEditRulesClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.LoadControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ManifestPathForWrite"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SaveControls(var ASettings: TDragLintSettings); override;
   public
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ReadMaxReturnCases</para>
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.Load</para>
+    /// <para>Reads: FEdMaxReturnCases</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ReadMaxReturnCases"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BtnEditRulesClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.LoadControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.ManifestPathForWrite"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Load; override;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.WriteMaxReturnCases</para>
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.Save</para>
+    /// <para>Reads: FEdMaxReturnCases</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.WriteMaxReturnCases"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BtnEditRulesClick"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.Load"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLLinterOptionsFrame.LoadControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Save; override;
   end;
 
   /// <summary>Tools->Options "Editor" page: hover/completion/signature/code-lens
   /// feature toggles (5 fields: EnableHover, EnableHoverTooltip, EnableCompletion,
   /// EnableSignature, EnableCodeLens).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.Options.RegisterDragLintOptions (DragLint.Plugin.Options.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Options</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLEditorOptionsFrame = class(TDLPageFrame)
   private
     FGrpFeatures   : TGroupBox;
@@ -185,8 +548,39 @@ type
     FCbSignature   : TCheckBox;
     FCbCodeLens    : TCheckBox;
   protected
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DragLint.Plugin.OptionsFrames.DLNewCheck, DragLint.Plugin.OptionsFrames.DLNewGroup</para>
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.BuildControls</para>
+    /// <para>Reads: FGrpFeatures   Writes: FGrpFeatures, FCbHover, FCbHoverTooltip, FCbCompletion, FCbSignature, FCbCodeLens</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.DLNewCheck"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.DLNewGroup"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLEditorOptionsFrame.LoadControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLEditorOptionsFrame.SaveControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure BuildControls; override;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.LoadControls</para>
+    /// <para>Reads: FCbHover, FCbHoverTooltip, FCbCompletion, FCbSignature, FCbCodeLens, FSettings</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLEditorOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLEditorOptionsFrame.SaveControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadControls; override;
+    /// <param name="ASettings"><!-- drag-lint:auto type -->var TDragLintSettings</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DragLint.Plugin.OptionsFrames.TDLPageFrame.SaveControls</para>
+    /// <para>Reads: FCbHover, FCbHoverTooltip, FCbCompletion, FCbSignature, FCbCodeLens</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLEditorOptionsFrame.BuildControls"/>
+    /// <seealso cref="DragLint.Plugin.OptionsFrames.TDLEditorOptionsFrame.LoadControls"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SaveControls(var ASettings: TDragLintSettings); override;
   end;
 

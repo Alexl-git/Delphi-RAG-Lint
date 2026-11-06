@@ -42,8 +42,14 @@ type
   /// <summary>Checker for the enum-ordinal-cast rule: a hard-coded enum ordinal
   /// (a literal cast to an enum, or an enum's ordinal compared with or cased on
   /// a literal).</summary>
-  /// <remarks>Stateless; thread-safe as far as TAstParseCache is. Called from
-  /// DoLint and DoLintAll behind LintRuleWants(rule, ['enum-ordinal-cast']).</remarks>
+  /// <remarks>
+  /// Stateless; thread-safe as far as TAstParseCache is. Called from
+  /// DoLint and DoLintAll behind LintRuleWants(rule, ['enum-ordinal-cast']).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used in units: DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEnumOrdinalCastChecker = class
   public
     /// <summary>Runs enum-ordinal-cast over one source file.</summary>
@@ -56,7 +62,20 @@ type
     /// <returns>One 'enum-ordinal-cast' warning per offending cast, comparison
     /// or case statement, anchored at that node; empty when clean or
     /// unparsable.</returns>
-    /// <remarks>Never raises on an unparsable file (empty result).</remarks>
+    /// <remarks>
+    /// Never raises on an unparsable file (empty result).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+    /// <para>Calls: BareLower, CaseHasLiteralLabel, CaseSelector, Copy, CountImplicitOrdinals, DeclTextOf, Default, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Diagnostics.EnumOrdinalCast.TEnumOrdinalCastChecker.Check.CollectDecls, DRagLint.Diagnostics.EnumOrdinalCast.TEnumOrdinalCastChecker.Check.Visit (+24 more)</para>
+    /// <para>Returns: nil; Findings.ToArray</para>
+    /// <para>Catches: EEncodingError (swallowed); EInOutError (swallowed); EStreamError (swallowed)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
+    /// <seealso cref="DRagLint.Diagnostics.EnumOrdinalCast.TEnumOrdinalCastChecker.Check.CollectDecls"/>
+    /// <seealso cref="DRagLint.Diagnostics.EnumOrdinalCast.TEnumOrdinalCastChecker.Check.Visit"/>
+    /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Check(const AFile: string; const AStore: ISymbolStore;
       AFileId: Int64): TArray<TLintFinding>; static;
   end;

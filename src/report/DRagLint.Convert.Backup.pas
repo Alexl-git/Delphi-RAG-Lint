@@ -111,8 +111,14 @@ procedure WriteRecoveryRecord(const AUnitFolder, ATimestamp, ARulesFile: string;
 /// <param name="AHeader">The block's first line, without a line break (e.g.
 /// "[&lt;timestamp&gt;] cycles --fix --apply --project &lt;p&gt;").</param>
 /// <param name="AMappings">The "orig -&gt; backup" lines, one per backed-up file.</param>
-/// <remarks>The format of WriteRecoveryRecord (which calls it): the header, then each
-/// mapping indented by two spaces, ANSI, CRLF. Used by `cycles --fix --apply`.</remarks>
+/// <remarks>
+/// The format of WriteRecoveryRecord (which calls it): the header, then each
+/// mapping indented by two spaces, ANSI, CRLF. Used by `cycles --fix --apply`.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.BackUpChanged (DRagLint.CLI.CycleFix.pas), DRagLint.Convert.Backup.WriteRecoveryRecord (DRagLint.Convert.Backup.pas)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure AppendRecoveryBlock(const AFolder, AHeader: string; const AMappings: TArray<string>);
 
 /// <summary>Prepends a short provenance comment block atop the converted
@@ -137,8 +143,10 @@ procedure AppendRecoveryBlock(const AFolder, AHeader: string; const AMappings: T
 /// must run AFTER the conversion write (it stamps the already-converted file).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas)</para>
-/// <para>Calls: ExtractFileExt, Format, SameText</para>
+/// <para>Calls: DRagLint.Refactor.TextEdit.TTextFileFormat.Decode, DRagLint.Refactor.TextEdit.TTextFileFormat.Encode, ExtractFileExt, Format, SameText</para>
 /// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Decode"/>
+/// <seealso cref="DRagLint.Refactor.TextEdit.TTextFileFormat.Encode"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure PrependConvertComment(const APasPath, ATimestamp, ARulesFile: string;

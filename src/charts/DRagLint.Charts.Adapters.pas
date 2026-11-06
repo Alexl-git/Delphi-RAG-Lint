@@ -18,6 +18,11 @@ uses
 
 type
   /// <summary>The comparable formats.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Adapters.pas), DRagLint.Charts.Adapters.DetectByPath (DRagLint.Charts.Adapters.pas), DRagLint.Charts.Adapters.DetectFormat (DRagLint.Charts.Adapters.pas), DRagLint.Charts.Adapters.FormatName (DRagLint.Charts.Adapters.pas), DRagLint.Charts.Adapters.ItemsFor (DRagLint.Charts.Adapters.pas) (+7 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TChartsFormat = (cfUnknown, cfReportText, cfFormsCsv, cfGraph);
 
 /// <summary>Which adapter a path or a text belongs to.</summary>
@@ -29,6 +34,16 @@ type
 /// 'digraph' or 'graph' (any case) AND carries a '{' on that line is cfGraph, everything else -- an empty text too, an
 /// empty report being a legitimate answer -- is cfReportText.</param>
 /// <returns>The format; cfUnknown only for a path.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.LoadOldIndexSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.LoadSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareShowPage (DRagLint.CLI.pas), DRagLint.CLI.CompareTakeSnapshot (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Charts.Adapter.FormsCsv.IsFormsCsv, DRagLint.Charts.Adapters.DetectByPath, DRagLint.Charts.Adapters.FirstWordIsGraph</para>
+/// <para>Returns: cfReportText</para>
+/// <seealso cref="DRagLint.Charts.Adapter.FormsCsv.IsFormsCsv"/>
+/// <seealso cref="DRagLint.Charts.Adapters.DetectByPath"/>
+/// <seealso cref="DRagLint.Charts.Adapters.FirstWordIsGraph"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DetectFormat(const pPathOrText: string; pIsPath: Boolean): TChartsFormat;
 
 /// <summary>The diff items of a text in a given format.</summary>
@@ -36,11 +51,29 @@ function DetectFormat(const pPathOrText: string; pIsPath: Boolean): TChartsForma
 /// <param name="pText">The file's text (for cfGraph the DOT text).</param>
 /// <returns>cfReportText: ReportItems; cfFormsCsv: FormsCsvItems; cfGraph:
 /// GraphItems(ParseDot); cfUnknown: an empty array.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.DiffSides (DRagLint.Charts.Compare.pas)</para>
+/// <para>Calls: DRagLint.Charts.Adapter.FormsCsv.FormsCsvItems, DRagLint.Charts.Adapter.Graph.GraphItems, DRagLint.Charts.Adapter.Graph.ParseDot, DRagLint.Charts.Adapter.Text.ReportItems</para>
+/// <para>Returns: ReportItems(pText); FormsCsvItems(pText); GraphItems(ParseDot(pText)); nil</para>
+/// <seealso cref="DRagLint.Charts.Adapter.FormsCsv.FormsCsvItems"/>
+/// <seealso cref="DRagLint.Charts.Adapter.Graph.GraphItems"/>
+/// <seealso cref="DRagLint.Charts.Adapter.Graph.ParseDot"/>
+/// <seealso cref="DRagLint.Charts.Adapter.Text.ReportItems"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ItemsFor(pFormat: TChartsFormat; const pText: string): TArray<TDiffItem>;
 
 /// <summary>The name a refusal or a header prints for a format.</summary>
 /// <param name="pFormat">A format.</param>
 /// <returns>'report', 'forms-csv', 'chart-graph'; 'unknown' for cfUnknown.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.LoadNewSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Render.LabelOf (DRagLint.Charts.Render.pas), DRagLint.Charts.Render.RenderCompareJson (DRagLint.Charts.Render.pas)</para>
+/// <para>Returns: NAME_REPORT; NAME_FORMS; NAME_GRAPH; NAME_UNKNOWN</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormatName(pFormat: TChartsFormat): string;
 
 implementation

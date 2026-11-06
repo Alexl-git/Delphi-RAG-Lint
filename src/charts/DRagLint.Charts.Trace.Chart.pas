@@ -79,6 +79,12 @@ const
 
 type
   /// <summary>The size caps of a chart (the PS -Caps hashtable, every key present).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Chart.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.Create (DRagLint.Charts.Trace.Chart.pas) ?, DRagLint.Charts.Trace.Chart.TraceChart (DRagLint.Charts.Trace.Chart.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Chart</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TChartCaps = record
     /// <summary>ALSO rows drawn before the rest fold.</summary>
     Also : Integer;
@@ -90,10 +96,23 @@ type
     Folds: Integer;
     /// <summary>The defaults: 15 / 14 / 45 / 5.</summary>
     /// <returns>The default caps.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.AskVerb.AskCommandOf (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.ParseAskArgs (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.AskVerb.TAskRun.ResolveOthers (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas) (+74 more)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Default: TChartCaps; static;
   end;
 
   /// <summary>One styled run of a cell: the PS segment @(text, ink, point size, bold).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Trace.Chart.TChartBuilder.BuildCondCell (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.BuildFacetCell (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.BuildStepCells (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.EmitLanes (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.HeaderHtml (DRagLint.Charts.Trace.Chart.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Chart</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TChartSeg = record
     /// <summary>The run's text (escaped when the cell is built); '' is skipped.</summary>
     Text: string;
@@ -109,14 +128,27 @@ type
     /// <param name="pSize">The point size or 0.</param>
     /// <param name="pBold">True for bold.</param>
     /// <returns>The segment.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.BuildCondCell (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.BuildFacetCell (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.BuildStepCells (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.EmitLanes (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.HeaderHtml (DRagLint.Charts.Trace.Chart.pas) (+1 more)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Make(const pText, pInk: string; pSize: Integer; pBold: Boolean): TChartSeg; static;
   end;
 
   /// <summary>Where every step, condition and facet of the trace went, and the chart's totals.</summary>
-  /// <remarks>Steps maps a step number (unpadded, '1') to 'drawn:&lt;node&gt;:&lt;port&gt;' or
+  /// <remarks>
+  /// Steps maps a step number (unpadded, '1') to 'drawn:&lt;node&gt;:&lt;port&gt;' or
   /// 'disclosed:&lt;legend row&gt;'. Conds and Facets are keyed '&lt;step&gt;|&lt;keyword or
   /// head&gt;|&lt;anchor or text&gt;' with the same values (a REGENERATE facet goes
-  /// 'tooltip:&lt;node&gt;:&lt;port&gt;'). Owned by the caller of TraceChart.</remarks>
+  /// 'tooltip:&lt;node&gt;:&lt;port&gt;'). Owned by the caller of TraceChart.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Chart.pas) ?, DRagLint.Charts.Trace.Chart.TChartBuilder.Create (DRagLint.Charts.Trace.Chart.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Chart</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TChartManifest = class
   private
     FSteps: TDictionary<string, string>;
@@ -151,13 +183,32 @@ type
     /// <summary>The ladder rungs used, 'also,cards' (in order, no repeats).</summary>
     property Ladder: string read FLadder write FLadder;
     /// <summary>Constructor: creates an empty manifest.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.Create (DRagLint.Charts.Trace.Chart.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Chart.TChartManifest.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees the maps.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Chart.TChartManifest.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
   /// <summary>The chart: the dot text and its manifest.</summary>
-  /// <remarks>The caller frees Manifest.</remarks>
+  /// <remarks>
+  /// The caller frees Manifest.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.Build (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TraceChart (DRagLint.Charts.Trace.Chart.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Chart</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTraceChart = record
     /// <summary>The dot text, CRLF line ends, 7-bit ASCII.</summary>
     Dot     : string;
@@ -169,20 +220,45 @@ type
 /// <param name="pText">The text to break.</param>
 /// <param name="pWidth">The line width.</param>
 /// <returns>The 0-based positions of the breaking spaces, ascending.</returns>
-/// <remarks>A breakable space is ONE space between two non-spaces, so rejoining the pieces with one space returns the text exactly (a condition holding two spaces keeps them). Port of Get-ChartBreaks.</remarks>
+/// <remarks>
+/// A breakable space is ONE space between two non-spaces, so rejoining the pieces with one space returns the text exactly (a condition holding two spaces keeps them). Port of Get-ChartBreaks.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.ChartCellHtml (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.BuildStepCells (DRagLint.Charts.Trace.Chart.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.Chart.ChartBreakable</para>
+/// <para>Returns: Cuts.ToArray</para>
+/// <seealso cref="DRagLint.Charts.Trace.Chart.ChartBreakable"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ChartBreaks(const pText: string; pWidth: Integer): TArray<Integer>;
 
 /// <summary>The HTML of one cell from styled runs; each break space becomes a left-aligned line break.</summary>
 /// <param name="pSegs">The runs; the breaks are computed over their concatenation.</param>
 /// <param name="pWidth">The line width.</param>
 /// <returns>FONT elements, text escaped; an empty run is skipped (an empty FONT is a dot syntax error).</returns>
-/// <remarks>Port of ConvertTo-ChartCellHtml.</remarks>
+/// <remarks>
+/// Port of ConvertTo-ChartCellHtml.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.BuildCondCell (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.BuildFacetCell (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.BuildStepCells (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.EmitLanes (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.HeaderHtml (DRagLint.Charts.Trace.Chart.pas) (+1 more)</para>
+/// <para>Calls: DRagLint.Charts.Text.XmlText, DRagLint.Charts.Trace.Chart.ChartBreaks, IntToStr</para>
+/// <para>Returns: Sb.ToString</para>
+/// <seealso cref="DRagLint.Charts.Text.XmlText"/>
+/// <seealso cref="DRagLint.Charts.Trace.Chart.ChartBreaks"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ChartCellHtml(const pSegs: TArray<TChartSeg>; pWidth: Integer = CHART_WIDTH): string;
 
 /// <summary>Step numbers as the disclosure rows print them: two digits, runs folded.</summary>
 /// <param name="pNums">The numbers, any order, duplicates allowed.</param>
 /// <returns>'[74]-[76], [80]'.</returns>
-/// <remarks>Port of Format-ChartNumbers.</remarks>
+/// <remarks>
+/// Port of Format-ChartNumbers.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.Fold (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.FoldSummary (DRagLint.Charts.Trace.Chart.pas)</para>
+/// <para>Calls: Copy, DRagLint.Charts.Trace.Chart.Two</para>
+/// <para>Returns: string.Join(', ', Parts.ToArray)</para>
+/// <seealso cref="DRagLint.Charts.Trace.Chart.Two"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormatChartNumbers(const pNums: TArray<Integer>): string;
 
 /// <summary>The lane of one step, from the text (section and actor word).</summary>
@@ -191,27 +267,64 @@ function FormatChartNumbers(const pNums: TArray<Integer>): string;
 /// <param name="pLanes">The upper-case tier words of the TIERS header.</param>
 /// <returns>CLIENT, PIPE, SERVER or DATABASE.</returns>
 /// <exception cref="EChartsTrace">The section has no lane rule, or the lane is not in the TIERS header (R19).</exception>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.WalkSteps (DRagLint.Charts.Trace.Chart.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.Chart.ChartSqlAnchor, DRagLint.Charts.Trace.Chart.Two</para>
+/// <para>Returns: if X then LANE_PIPE; LANE_CLIENT</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 27 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Trace.Chart.ChartSqlAnchor"/>
+/// <seealso cref="DRagLint.Charts.Trace.Chart.Two"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceChartLane(const pSection: string; pItem: TTraceItem; const pLanes: TArray<string>): string;
 
 /// <summary>What a step text names as its callee: `CALLS X`.</summary>
 /// <param name="pText">The step text.</param>
 /// <returns>X, or '' when none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.AddStepEdge (DRagLint.Charts.Trace.Chart.pas), DRagLint.Charts.Trace.Chart.TChartBuilder.ClassifyStep (DRagLint.Charts.Trace.Chart.pas)</para>
+/// <para>Returns: if M.Success then M.Groups[1].Value</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceChartCallee(const pText: string): string;
 
 /// <summary>What a step text names as its target: `CALLS X`, `... VIA X`, `FIRES d.E -> X`.</summary>
 /// <param name="pText">The step text.</param>
 /// <returns>X, or '' when none.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.AlsoTarget (DRagLint.Charts.Trace.Chart.pas)</para>
+/// <para>Returns: if M.Success then M.Groups[1].Value</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceChartTarget(const pText: string): string;
 
 /// <summary>The label words of a crossing edge, from its WITH facet.</summary>
 /// <param name="pWith">The facet text.</param>
 /// <returns>The whole alternative set when the facet is one (`rspError or rspOK`), the command when a payload follows it, else ''.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.AddStepEdge (DRagLint.Charts.Trace.Chart.pas)</para>
+/// <para>Returns: pWith; if M.Success then M.Groups[1].Value</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceChartWithLabel(const pWith: string): string;
 
 /// <summary>One Form A line of an item, for a tooltip (the text's own words, never re-phrased).</summary>
 /// <param name="pItem">The step.</param>
 /// <param name="pNums">The number text, e.g. '[09]'.</param>
 /// <returns>'[09] SERVER CALLS X @file:1 -- note'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Chart.TChartBuilder.BuildStepCells (DRagLint.Charts.Trace.Chart.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.Chart.ItemHead, DRagLint.Charts.Trace.FormA.FormatTraceNote</para>
+/// <para>Returns: pNums + ' ' + (if pItem.Actor &lt;&gt; '' then pItem.Actor + ' ' else '') + ItemHead(pItem) + ' @' + pItem.Anchor</para>
+/// <seealso cref="DRagLint.Charts.Trace.Chart.ItemHead"/>
+/// <seealso cref="DRagLint.Charts.Trace.FormA.FormatTraceNote"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormatTraceChartTip(pItem: TTraceItem; const pNums: string): string;
 
 /// <summary>The chart of a numbered trace.</summary>
@@ -219,9 +332,18 @@ function FormatTraceChartTip(pItem: TTraceItem; const pNums: string): string;
 /// <param name="pAnchorPaths">Leaf -> the one full path the indexes hold (case-insensitive); rows on any other leaf stay unlinked. May be nil.</param>
 /// <param name="pCaps">The size caps (TChartCaps.Default).</param>
 /// <returns>The dot text and its manifest; the caller frees the manifest.</returns>
-/// <remarks>Not thread-safe. Port of ConvertTo-TraceChart. RT9: the chart is a pure function of the text. Raises
+/// <remarks>
+/// Not thread-safe. Port of ConvertTo-TraceChart. RT9: the chart is a pure function of the text. Raises
 /// EChartsTrace (R19, raised by the builder this calls) for: no TIERS header, a tier with no lane style, an unknown
-/// section, an actor outside the TIERS, an unnumbered item, a trace with no steps, or a dot that is not 7-bit ASCII.</remarks>
+/// section, an actor outside the TIERS, an unnumbered item, a trace with no steps, or a dot that is not 7-bit ASCII.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas)</para>
+/// <para>Calls: DRagLint.Charts.Trace.Chart.TChartBuilder.Build, DRagLint.Charts.Trace.Chart.TChartBuilder.Create</para>
+/// <para>Returns: Builder.Build</para>
+/// <seealso cref="DRagLint.Charts.Trace.Chart.TChartBuilder.Build"/>
+/// <seealso cref="DRagLint.Charts.Trace.Chart.TChartBuilder.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TraceChart(pTrace: TTrace; pAnchorPaths: TDictionary<string, string>; const pCaps: TChartCaps): TTraceChart;
 
 implementation

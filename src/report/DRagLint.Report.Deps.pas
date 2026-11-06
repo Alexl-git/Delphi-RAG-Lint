@@ -13,7 +13,7 @@ type
   /// group.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.ClassifyByName (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.GroupOrd (DRagLint.Report.Deps.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Report.Deps.pas) ?, DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas), DRagLint.Report.Deps.ClassifyByName (DRagLint.Report.Deps.pas) ?, DRagLint.Report.Deps.ClassifyDepsGroup (DRagLint.Report.Deps.pas) ? (+2 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDepsGroup = (dgRTL, dgDevExpress, dgSpring4D, dgFireDAC, dgOther, dgUnknown);
@@ -112,7 +112,7 @@ type
   /// per-external rollup, and the flat edge list.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Charts.Q.Architecture.ClassifierGaps (DRagLint.Charts.Q.Architecture.pas), DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderCsv (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderJson (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas) (+1 more)</para>
+  /// <para>Used by: DRagLint.Charts.Q.Architecture.ClassifierGaps (DRagLint.Charts.Q.Architecture.pas), DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderCsv (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderJson (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport.RenderText (DRagLint.CLI.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.Charts.Q.Architecture, DRagLint.CLI, DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -128,7 +128,7 @@ type
   /// <summary>Tuning knobs for BuildDepsReport.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Report.Deps.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), DRagLint.Report.Deps.BuildDepsReport (DRagLint.Report.Deps.pas)</para>
   /// <para>Used in units: DRagLint.Charts.Q.Architecture, DRagLint.CLI, DRagLint.Report.Deps</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -34,8 +34,19 @@ const
 /// `total`, `cap`, `omitted` and `rows`; False prints text.</param>
 /// <returns>0 on success, 2 when ADbPath is empty or does not exist. A capped
 /// section never changes the exit code.</returns>
-/// <remarks>Never writes to the DB. Output is bounded: at most 6 sections x
-/// AMaxRows rows, plus the first CNamesPerLayer unit names of each layer row.</remarks>
+/// <remarks>
+/// Never writes to the DB. Output is bounded: at most 6 sections x
+/// AMaxRows rows, plus the first CNamesPerLayer unit names of each layer row.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.Report.Overview.EmitText, DRagLint.Report.Overview.SectionToJson, DRagLint.Storage.FileMembership.ConnectReadOnly, Writeln</para>
+/// <para>Returns: 2; 0</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Report.Overview.EmitText"/>
+/// <seealso cref="DRagLint.Report.Overview.SectionToJson"/>
+/// <seealso cref="DRagLint.Storage.FileMembership.ConnectReadOnly"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RunOverview(const ADbPath: string; AMaxRows: Integer; AJson: Boolean): Integer;
 
 implementation

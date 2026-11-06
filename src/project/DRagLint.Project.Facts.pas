@@ -22,6 +22,12 @@ interface
 type
   /// <summary>One define that is ON for the platform + config, with every
   /// place that turns it on.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Project.Facts.pas), DRagLint.CLI.DoProjectFacts (DRagLint.CLI.pas), DRagLint.Project.Facts.ActivePostProcessors (DRagLint.Project.Facts.pas), DRagLint.Project.Facts.AddDefines (DRagLint.Project.Facts.pas), DRagLint.Project.Facts.PostProcessorNotices (DRagLint.Project.Facts.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Project.Facts</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProjectDefine = record
     /// <summary>The define as the .dproj spells it (case kept).</summary>
     Name   : string;
@@ -31,6 +37,12 @@ type
   end;
 
   /// <summary>One `&lt;Import&gt;` of the .dproj.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Project.Facts.pas), DRagLint.CLI.DoProjectFacts (DRagLint.CLI.pas), DRagLint.Project.Facts.PostProcessorNotices (DRagLint.Project.Facts.pas), DRagLint.Project.Facts.ReadProjectFacts (DRagLint.Project.Facts.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Project.Facts</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProjectImport = record
     /// <summary>The Project attribute, verbatim (macros unexpanded).</summary>
     Project  : string;
@@ -43,6 +55,12 @@ type
 
   /// <summary>Everything `project-facts` reports for one .dproj, platform and
   /// config.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Project.Facts.pas) ?, DRagLint.CLI.DoProjectFacts (DRagLint.CLI.pas) ?, DRagLint.Project.Facts.ActivePostProcessors (DRagLint.Project.Facts.pas) ?, DRagLint.Project.Facts.PostProcessorNotices (DRagLint.Project.Facts.pas) ?, DRagLint.Project.Facts.ReadProjectFacts (DRagLint.Project.Facts.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Project.Facts</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProjectFacts = record
     DprojPath  : string;
     Platform   : string;
@@ -69,6 +87,12 @@ type
   end;
 
   /// <summary>A build-time post-processor the report knows how to recognise.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Project.Facts.pas), DRagLint.CLI.DoProjectFacts (DRagLint.CLI.pas), DRagLint.Project.Facts.ActivePostProcessors (DRagLint.Project.Facts.pas), DRagLint.Project.Facts.KnownPostProcessors (DRagLint.Project.Facts.pas), DRagLint.Project.Facts.PostProcessorNotices (DRagLint.Project.Facts.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Project.Facts</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPostProcessor = record
     /// <summary>Display name, e.g. 'EurekaLog'.</summary>
     Tool        : string;
@@ -117,12 +141,24 @@ function ReadProjectFacts(const ADprojPath, APlatform, AConfig: string): TProjec
 
 /// <summary>The post-processors ReadProjectFacts checks for.</summary>
 /// <returns>EurekaLog and madExcept.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Project.Facts.ActivePostProcessors (DRagLint.Project.Facts.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function KnownPostProcessors: TArray<TPostProcessor>;
 
 /// <summary>The post-processors whose define is ON in AFacts (whether or not
 /// their build step is imported).</summary>
 /// <param name="AFacts">A report from ReadProjectFacts.</param>
 /// <returns>The matching entries of KnownPostProcessors, in table order.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoProjectFacts (DRagLint.CLI.pas), DRagLint.Project.Facts.PostProcessorNotices (DRagLint.Project.Facts.pas)</para>
+/// <para>Calls: DRagLint.Project.Facts.KnownPostProcessors, IndexText, StartsText</para>
+/// <seealso cref="DRagLint.Project.Facts.KnownPostProcessors"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ActivePostProcessors(const AFacts: TProjectFacts): TArray<TPostProcessor>;
 
 implementation

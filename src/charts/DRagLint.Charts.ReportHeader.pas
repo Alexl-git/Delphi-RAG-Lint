@@ -12,9 +12,20 @@ interface
 
 type
   /// <summary>Which shape an answer's lines are in.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.BuildLogical (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.DetectFormOf (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.ReportItems (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.ReportLogicalLines (DRagLint.Charts.Adapter.Text.pas) (+4 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReportForm = (rfUnknown, rfPlain, rfDocInsight);
 
   /// <summary>One argument of a COMMAND line.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.ReportHeader.pas), DRagLint.Charts.AskVerb.AddArg (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.SetArg (DRagLint.Charts.Compare.pas), DRagLint.Charts.ReportHeader.ArgIndex (DRagLint.Charts.ReportHeader.pas), DRagLint.Charts.ReportHeader.ParseCommandLine (DRagLint.Charts.ReportHeader.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.ReportHeader</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCommandArg = record
     /// <summary>Argument name WITHOUT the leading '-', as written.</summary>
     Name : string;
@@ -23,9 +34,15 @@ type
   end;
 
   /// <summary>A parsed COMMAND line: the question id and its explicit arguments.</summary>
-  /// <remarks>Names compare case-insensitively (SameText). PS trap handled: PowerShell
+  /// <remarks>
+  /// Names compare case-insensitively (SameText). PS trap handled: PowerShell
   /// parameter names and -eq are case-insensitive, so '-target' and '-Target' are one
-  /// argument here too. Args never holds two entries with the same name.</remarks>
+  /// argument here too. Args never holds two entries with the same name.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.AskVerb.AskCommandOf (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.ChooseCommand (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.ReportHeader.ParseCommandLine (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.CompareBuildCommand (DRagLint.CLI.pas) (+26 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Ask, DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Producer, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Question, DRagLint.Charts.Render, DRagLint.Charts.ReportHeader, DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReportCommand = record
     /// <summary>The question id (first token), e.g. 'who-writes'.</summary>
     Question: string;
@@ -34,19 +51,57 @@ type
     /// <summary>Whether an argument of this name is present.</summary>
     /// <param name="pName">Name without '-'; compared with SameText.</param>
     /// <returns>True when present (even with an empty value).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Ask.ReportCommandText (DRagLint.Charts.Ask.pas), DRagLint.Charts.Compare.TargetWithTo (DRagLint.Charts.Compare.pas), DRagLint.Charts.Producer.Delphi.NumArg (DRagLint.Charts.Producer.Delphi.pas), DRagLint.Charts.ReportHeader.BuildCommandLine (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.CompareTargetOf (DRagLint.CLI.pas)</para>
+    /// <para>Calls: DRagLint.Charts.ReportHeader.ArgIndex</para>
+    /// <para>Returns: ArgIndex(Args, pName) &lt;&gt; NOT_FOUND</para>
+    /// <para>Reads: Args</para>
+    /// <seealso cref="DRagLint.Charts.ReportHeader.ArgIndex"/>
+    /// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.Get"/>
+    /// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.IsEmpty"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Has(const pName: string): Boolean;
     /// <summary>The value of the named argument.</summary>
     /// <param name="pName">Name without '-'; compared with SameText.</param>
     /// <returns>The value, or '' when the argument is absent.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.MetaJson (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.RegenerateText (DRagLint.Charts.Ask.pas), DRagLint.CLI.CompareIsSnapshotOnly (DRagLint.CLI.pas), DRagLint.CLI.CompareTargetOf (DRagLint.CLI.pas) (+14 more)</para>
+    /// <para>Calls: DRagLint.Charts.ReportHeader.ArgIndex</para>
+    /// <para>Returns: if I = NOT_FOUND then ''</para>
+    /// <para>Reads: Args</para>
+    /// <seealso cref="DRagLint.Charts.ReportHeader.ArgIndex"/>
+    /// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.Has"/>
+    /// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.IsEmpty"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Get(const pName: string): string;
     /// <summary>Whether this is the empty command (no question).</summary>
     /// <returns>True when Question is ''.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Compare.ChooseCommand (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.LoadAutoSnapshotSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.TakeGivenCommand (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareIsSnapshotOnly (DRagLint.CLI.pas), DRagLint.CLI.CompareUsageProblem (DRagLint.CLI.pas) (+2 more)</para>
+    /// <para>Returns: Question = ''</para>
+    /// <para>Reads: Question</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.Get"/>
+    /// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.Has"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsEmpty: Boolean;
   end;
 
   /// <summary>The parsed header of an answer.</summary>
-  /// <remarks>A legacy header (no time, engine or COMMAND) parses with AskedOn as a date
-  /// only, EngineVersion '' and an empty Command.</remarks>
+  /// <remarks>
+  /// A legacy header (no time, engine or COMMAND) parses with AskedOn as a date
+  /// only, EngineVersion '' and an empty Command.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas) ?, declaration (DRagLint.Charts.Remarks.pas) ?, DRagLint.Charts.Adapter.Text.HeaderRange (DRagLint.Charts.Adapter.Text.pas) ?, DRagLint.Charts.Compare.HeaderOf (DRagLint.Charts.Compare.pas), DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas) (+3 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Adapter.Text, DRagLint.Charts.Compare, DRagLint.Charts.Remarks, DRagLint.Charts.Render, DRagLint.Charts.ReportHeader</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TReportHeader = record
     /// <summary>Plain or DocInsight.</summary>
     Form         : TReportForm;
@@ -68,6 +123,15 @@ type
     HeaderLines  : Integer;
     /// <summary>Whether a COMMAND line was parsed.</summary>
     /// <returns>True when Command is not empty.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Charts.ReportHeader.TReportCommand.IsEmpty</para>
+    /// <para>Returns: not Command.IsEmpty</para>
+    /// <para>Reads: Command</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.IsEmpty"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasCommand: Boolean;
   end;
 
@@ -77,22 +141,48 @@ type
 /// <param name="pHeader">The header; Default(TReportHeader) when the result is False.</param>
 /// <returns>False when the first non-blank line (after a DocInsight '&lt;remarks&gt;')
 /// is not a header sentence.</returns>
-/// <remarks>DocInsight continuation lines (body indented two spaces more than the line
+/// <remarks>
+/// DocInsight continuation lines (body indented two spaces more than the line
 /// they continue) are joined with a single space, for the sentence and for the COMMAND
 /// line alike (a wiki or mail client may re-wrap the COMMAND line). The DocInsight
 /// COMMAND line is XML-unescaped before parsing. A COMMAND line that does not parse
-/// leaves Command empty and is not counted in HeaderLines. Pure; thread-safe.</remarks>
+/// leaves Command empty and is not counted in HeaderLines. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapter.Text.HeaderRange (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Compare.HeaderOf (DRagLint.Charts.Compare.pas), DRagLint.Charts.Remarks.RemarksBlockIsReport (DRagLint.Charts.Remarks.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.ReportHeader.BodyAt, DRagLint.Charts.ReportHeader.IsContinuation, DRagLint.Charts.ReportHeader.LeadingSpaces, DRagLint.Charts.ReportHeader.ParseCommandLine, DRagLint.Charts.ReportHeader.StripDocPrefix, DRagLint.Charts.ReportHeader.XmlUnescape</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 55 lines (full implementation)</para>
+/// <para>Mutates: pHeader (out)</para>
+/// <seealso cref="DRagLint.Charts.ReportHeader.BodyAt"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.IsContinuation"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.LeadingSpaces"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.ParseCommandLine"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.StripDocPrefix"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseReportHeader(const pLines: TArray<string>; out pHeader: TReportHeader): Boolean;
 
 /// <summary>Parses a COMMAND line.</summary>
 /// <param name="pText">The line, with or without the 'COMMAND ' prefix (ordinal).</param>
 /// <param name="pCmd">The command; empty when the result is False.</param>
 /// <returns>False when there is no question token.</returns>
-/// <remarks>Tokens split on spaces outside double quotes; quotes are removed and have no
+/// <remarks>
+/// Tokens split on spaces outside double quotes; quotes are removed and have no
 /// escape. An unquoted token of '-' followed by a letter is a name; its value is the next
 /// token unless that is itself a name (value ''). A quoted token is always a value, and
 /// '-3' is a value. A repeated name keeps its first position and takes the last value; a
-/// value with no name before it is ignored.</remarks>
+/// value with no name before it is ignored.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas), DRagLint.CLI.CompareBuildCommand (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.ReportHeader.ArgIndex, DRagLint.Charts.ReportHeader.IsName, DRagLint.Charts.ReportHeader.Tokenise</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 43 lines (full implementation)</para>
+/// <para>Mutates: pCmd (out)</para>
+/// <seealso cref="DRagLint.Charts.ReportHeader.ArgIndex"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.IsName"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.Tokenise"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseCommandLine(const pText: string; out pCmd: TReportCommand): Boolean;
 
 /// <summary>Builds the canonical COMMAND line, WITHOUT the 'COMMAND ' prefix.</summary>
@@ -100,10 +190,21 @@ function ParseCommandLine(const pText: string; out pCmd: TReportCommand): Boolea
 /// <returns>The question id, then the known arguments in the order Target, To, Project,
 /// In, Depth, Cap, SurfaceCap, Control, Mode, MaxRows with their canonical spelling, then
 /// unknown arguments in input order with their own spelling.</returns>
-/// <remarks>Target, To, Project, In and Control are always double-quoted; the other known
+/// <remarks>
+/// Target, To, Project, In and Control are always double-quoted; the other known
 /// values are bare. An unknown value is quoted when it holds a space or starts with '-'
 /// (so it re-parses as a value); an unknown name with an empty value is written alone.
-/// Values never contain '"' (IsValidReportTarget), so no escaping is done.</remarks>
+/// Values never contain '"' (IsValidReportTarget), so no escaping is done.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Render.CommandText (DRagLint.Charts.Render.pas)</para>
+/// <para>Calls: DRagLint.Charts.ReportHeader.IndexOfName, DRagLint.Charts.ReportHeader.NeedsQuotes, DRagLint.Charts.ReportHeader.TReportCommand.Get, DRagLint.Charts.ReportHeader.TReportCommand.Has</para>
+/// <para>Returns: SB.ToString</para>
+/// <seealso cref="DRagLint.Charts.ReportHeader.IndexOfName"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.NeedsQuotes"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.Get"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.Has"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildCommandLine(const pCmd: TReportCommand): string;
 
 /// <summary>Whether two commands ask the same question (H4).</summary>
@@ -113,11 +214,21 @@ function BuildCommandLine(const pCmd: TReportCommand): string;
 /// missing side, sorted by name (case-insensitive); known names in canonical spelling.
 /// Question ids are compared but never listed here.</param>
 /// <returns>True when the ids are equal (SameText) and every argument matches.</returns>
-/// <remarks>Order and quoting never matter. Names compare case-insensitively; two values
+/// <remarks>
+/// Order and quoting never matter. Names compare case-insensitively; two values
 /// that both parse as integers compare numerically ('03' = '3'), any other pair with
 /// SameText (targets are Delphi identifiers, projects are Windows paths). An explicit
 /// argument against an absent one IS a difference. PS trap handled: PowerShell -eq is
-/// case-insensitive and coerces '03' -eq 3; both behaviours are kept.</remarks>
+/// case-insensitive and coerces '03' -eq 3; both behaviours are kept.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.ChooseCommand (DRagLint.Charts.Compare.pas)</para>
+/// <para>Calls: DRagLint.Charts.ReportHeader.DisplayName, DRagLint.Charts.ReportHeader.ValuesMatch, SameText</para>
+/// <para>Returns: SameText(pA.Question, pB.Question) and (Diff.Count = 0)</para>
+/// <para>Mutates: pDiffering (out)</para>
+/// <seealso cref="DRagLint.Charts.ReportHeader.DisplayName"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.ValuesMatch"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SameQuestion(const pA, pB: TReportCommand; out pDiffering: TArray<string>): Boolean;
 
 /// <summary>Strips a DocInsight '///' prefix.</summary>
@@ -125,12 +236,26 @@ function SameQuestion(const pA, pB: TReportCommand; out pDiffering: TArray<strin
 /// <param name="pBody">The text after '///' and ONE following space, trailing whitespace
 /// removed; continuation indentation is kept ('///   x' gives '  x').</param>
 /// <returns>False (pBody '') for a line that is not a '///' comment ('////' is not).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapter.Text.CollectDocInsight (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.DetectFormOf (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.Adapter.Text.HeaderRange (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.ReportHeader.BodyAt (DRagLint.Charts.ReportHeader.pas), DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas)</para>
+/// <para>Returns: S.StartsWith(DOC_PREFIX) and not S.StartsWith(DOC_PREFIX + '/')</para>
+/// <para>Mutates: pBody (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StripDocPrefix(const pLine: string; out pBody: string): Boolean;
 
 /// <summary>Reverses the XML escaping of a DocInsight line.</summary>
 /// <param name="pText">Escaped text.</param>
 /// <returns>pText with &amp;lt; &amp;gt; &amp;amp; &amp;quot; decoded in one left-to-right
 /// pass ('&amp;amp;lt;' gives '&amp;lt;'); any other '&amp;' is kept as is.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapter.Text.CollectDocInsight (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.ReportHeader.ParseReportHeader (DRagLint.Charts.ReportHeader.pas)</para>
+/// <para>Calls: Copy</para>
+/// <para>Returns: SB.ToString</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function XmlUnescape(const pText: string): string;
 
 implementation

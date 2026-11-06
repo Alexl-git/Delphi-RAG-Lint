@@ -28,15 +28,14 @@ type
   /// signatureHelp, diagnostics.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleSignatureHelp (DRagLint.LSP.Server.pas) (+1 more)</para>
+  /// <para>Used by: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleCompletion (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleSignatureHelp (DRagLint.LSP.Server.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLspCompletion = class
     public
       /// <param name="AKind"><!-- drag-lint:auto type -->TSymbolKind</param>
-      /// <returns><!-- drag-lint:auto -->Integer -- Observed: 7; 22; 8; 13; 20; 2; 4; 10;
-      /// 5; 9; 21; 6; 1.</returns>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: 7; 22; 8; 13; 20; 2.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem (DRagLint.LSP.Completion.pas)</para>
@@ -45,8 +44,8 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function MapSymbolKindToLspKind(AKind: TSymbolKind): Integer;
@@ -58,14 +57,14 @@ type
       /// <!-- drag-lint:auto -->ASevText is the string severity stored in TLintFinding.Severity
       /// ('error', 'warning', 'info', 'hint').
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson (DRagLint.LSP.Completion.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson (DRagLint.LSP.Completion.pas)</para>
       /// <para>Calls: SameText</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function MapLintSeverityToLspSeverity(const ASevText: string): Integer;
@@ -79,14 +78,14 @@ type
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: 1; 2; 3; 4.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics (DRagLint.LSP.Completion.pas)</para>
+      /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
       /// <para>Calls: SameText</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function MapCompilerSeverityToLspSeverity(const ASev: string)                                       : Integer    ;
@@ -108,8 +107,8 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildCompletionItems(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer): TJSONArray ; overload;
@@ -126,17 +125,17 @@ type
       /// <remarks>
       /// Prefer this overload. The single-store one delegates here.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: CharInSet, Copy, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.LSP.Completion.EnclosingTypeDescendsFrom, DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem, DRagLint.Resolver.TypeAt.TTypeAtResolver.CollectMembers, DRagLint.Resolver.TypeAt.TTypeAtResolver.ResolveMemberScope, LowerCase, Pos, SameText, StartsText</para>
+      /// <para>Calls: CharInSet, Copy, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByPrefix, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.LiveDocs.TLiveDocuments.Readable, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.LSP.Completion.EnclosingTypeDescendsFrom, DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem, DRagLint.Resolver.TypeAt.TTypeAtResolver.CollectMembers, DRagLint.Resolver.TypeAt.TTypeAtResolver.ResolveMemberScope, LowerCase, Pos, SameText, StartsText</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Complexity: 31 (cyclomatic, outer body), 156 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Pure</para>
       /// <para>Directives: overload</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByPrefix"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.Readable"/>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
       /// <seealso cref="DRagLint.LSP.Completion.EnclosingTypeDescendsFrom"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.MakeCompletionItem"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildCompletionItems(const AStores: TArray<ISymbolStore>; const AFile: string; ALine, ACol: Integer): TJSONArray ; overload;
@@ -168,19 +167,19 @@ type
       /// <param name="ALinter"><!-- drag-lint:auto type -->const TLinter</param>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
-      /// <returns><!-- drag-lint:auto -->TJSONArray -- Observed: TJSONArray.Create.</returns>
+      /// <returns><!-- drag-lint:auto -->TJSONArray -- Observed:
+      /// BuildDiagnostics(ALinter, AFile, AStore, Default(TTargetRuleGate)).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.HandleDidOpenOrSave (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware, DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat, DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Config.TLintConfig.ShouldKeep (+15 more)</para>
-      /// <para>Complexity: 30 (cyclomatic, outer body), 273 lines (full implementation)</para>
-      /// <para>Owns returned: new (caller owns)</para>
-      /// <para>Touches: file system</para>
-      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile"/>
-      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
-      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware"/>
+      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: Default, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4</para>
+      /// <para>Overload 1 of 2</para>
+      /// <para>Directives: overload</para>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray; overload;
@@ -193,20 +192,64 @@ type
       /// <param name="AGate">The gate of the file's target compiler (BuildTargetGate).
       /// Default(TTargetRuleGate) drops nothing and forces nothing on.</param>
       /// <returns>A new array; the caller owns it.</returns>
-      /// <remarks>The 3-argument overload is this one with an inactive gate, so a
-      /// run at the default target (37) publishes exactly what it did before.</remarks>
+      /// <remarks>
+      /// The 3-argument overload is this one with an inactive gate, so a
+      /// run at the default target (37) publishes exactly what it did before.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/3 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.PublishDiagnostics (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware, DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat, DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds (+18 more)</para>
+      /// <para>Returns: TJSONArray.Create</para>
+      /// <para>Overload 2 of 2</para>
+      /// <para>Complexity: 30 (cyclomatic, outer body), 283 lines (full implementation)</para>
+      /// <para>Owns returned: new (caller owns)</para>
+      /// <para>Touches: file system</para>
+      /// <para>Directives: overload</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile"/>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors"/>
+      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore;
         const AGate: TTargetRuleGate): TJSONArray; overload;
       /// <summary>The target_compiler of the lint config that governs AFile (the
       /// up-tree drag-lint-lint.json / drag-lint.json BuildDiagnostics loads).</summary>
       /// <param name="AFile">A source file.</param>
       /// <returns>The config's target_compiler token, or '' when no config names one.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.TargetGateFor (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Lint.Config.TLintConfig.Load, DRagLint.LSP.Completion.DiscoverLintConfig</para>
+      /// <para>Returns: TLintConfig.Load(DiscoverLintConfig(AFile), '').TargetCompiler</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Lint.Config.TLintConfig.Load"/>
+      /// <seealso cref="DRagLint.LSP.Completion.DiscoverLintConfig"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function LintConfigTargetCompiler(const AFile: string): string; static;
       /// <summary>Builds the rule gate of target compiler pTarget from the rule catalog.</summary>
       /// <param name="pTarget">A CompilerVersion.</param>
       /// <returns>The gate; at DEFAULT_TARGET_COMPILER an inactive gate with Target
       /// set and no catalog read.</returns>
-      /// <remarks>Reads the rules folder; callers cache the result per target.</remarks>
+      /// <exception cref="EArgumentException"><!-- drag-lint:auto exc -->via DRagLint.Lint.TargetCompiler.TTargetRuleGate.Build: TTargetRuleGate.Build: the id / needs / compat_since arrays differ in length</exception>
+      /// <remarks>
+      /// Reads the rules folder; callers cache the result per target.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.TargetGateFor (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: Default, DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog, DRagLint.Lint.TargetCompiler.TTargetRuleGate.Build</para>
+      /// <para>Returns: Default(TTargetRuleGate); TTargetRuleGate.Build(pTarget, Ids, Needs, Since)</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog"/>
+      /// <seealso cref="DRagLint.Lint.TargetCompiler.TTargetRuleGate.Build"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function BuildTargetGate(pTarget: Integer): TTargetRuleGate; static;
       /// <summary>Maps the bare ARRAY that lint <file> --json prints to LSP diagnostics
       /// (C1, lsp --full-rules). Same severity map as BuildDiagnostics, source is
@@ -215,7 +258,19 @@ type
       /// rule (or rule_id), severity, start_line, start_col, end_line, end_col, message (1-based).</param>
       /// <returns>A new array (caller owns), empty for []; nil when AJson is not a JSON array,
       /// so the caller can fall back to BuildDiagnostics.</returns>
-      /// <remarks>Pure. Findings without a rule id are skipped.</remarks>
+      /// <remarks>
+      /// Pure. Findings without a rule id are skipped.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.PublishDiagnostics (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Lint.RuleCatalog.IsRoutineMetricRule, DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson.IntField, DRagLint.LSP.Completion.TLspCompletion.MapLintSeverityToLspSeverity, TJSONArray, TJSONObject</para>
+      /// <para>Returns: nil; TJSONArray.Create</para>
+      /// <seealso cref="DRagLint.Lint.RuleCatalog.IsRoutineMetricRule"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson.IntField"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.MapLintSeverityToLspSeverity"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function DiagnosticsFromLintJson(const AJson: string): TJSONArray;
       /// <summary>Code actions for diagnostics on AFile in the given range. Returns
       /// a JSON array of CodeAction objects with edits to insert reviewed-markers.</summary>
@@ -230,16 +285,16 @@ type
       /// Pure function. Insertion must use TReviewMarkers.InsertInto().
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow, DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.RuleCatalog.IsRoutineMetricRule, DRagLint.Lint.RuleCatalog.MetricHash, SameText, StringReplace, StrToIntDef</para>
+      /// <para>Calls: DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow, DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.RuleCatalog.DocCommentMarkerLine, DRagLint.Lint.RuleCatalog.IsRoutineMetricRule, DRagLint.Lint.RuleCatalog.MetricHash, SameText, StringReplace, StrToIntDef</para>
       /// <para>Returns: TJSONArray.Create</para>
-      /// <para>Complexity: 21 (cyclomatic, outer body), 130 lines (full implementation)</para>
+      /// <para>Complexity: 22 (cyclomatic, outer body), 136 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow"/>
       /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto"/>
       /// <seealso cref="DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse"/>
+      /// <seealso cref="DRagLint.Lint.RuleCatalog.DocCommentMarkerLine"/>
       /// <seealso cref="DRagLint.Lint.RuleCatalog.IsRoutineMetricRule"/>
-      /// <seealso cref="DRagLint.Lint.RuleCatalog.MetricHash"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildCodeActions(const AFile: string; AStartLine, AStartCol, AEndLine, AEndCol: Integer;
@@ -251,9 +306,22 @@ type
       /// the platform library); the first that indexes AFile is the file store.</param>
       /// <returns>A new array (caller owns); empty when no store indexes the file,
       /// the rule is disabled by the lint config, or nothing is missing.</returns>
-      /// <remarks>Honours the drag-lint-lint.json config and dl:ok markers like
+      /// <remarks>
+      /// Honours the drag-lint-lint.json config and dl:ok markers like
       /// BuildDiagnostics. data = {"unit", "section", "fixes": [{"title",
-      /// "line", "character" (0-based), "newText", "isPreferred"}]}.</remarks>
+      /// "line", "character" (0-based), "newText", "isPreferred"}]}.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.PublishDiagnostics (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Core.UsesInsert.TUsesText.SectionWord, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Config.TLintConfig.ShouldKeep, DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze, DRagLint.LSP.Completion.DiscoverLintConfig, DRagLint.LSP.Completion.MarkerReviews, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics.Pos0, DRagLint.LSP.Completion.TLspCompletion.MapLintSeverityToLspSeverity</para>
+      /// <para>Returns: TJSONArray.Create</para>
+      /// <para>Owns returned: new (caller owns)</para>
+      /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath"/>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
+      /// <seealso cref="DRagLint.Core.UsesInsert.TUsesText.SectionWord"/>
+      /// <seealso cref="DRagLint.Lint.Config.TLintConfig.ApplySeverity"/>
+      /// <seealso cref="DRagLint.Lint.Config.TLintConfig.Load"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function BuildMissingUsesDiagnostics(const AFile: string; const AStores: TArray<ISymbolStore>): TJSONArray;
       /// <summary>Quick-fix code actions (kind quickfix) for the
       /// unit-missing-from-uses diagnostics on lines AStartLine..AEndLine.</summary>
@@ -263,8 +331,22 @@ type
       /// <param name="ADiagnostics">Diagnostics as BuildMissingUsesDiagnostics makes them.</param>
       /// <returns>A new array (caller owns): one action per offered edit, the
       /// recommended one first and marked isPreferred.</returns>
-      /// <remarks>Pure. Each action inserts text at one position (a zero-width
-      /// TextEdit), so the editor keeps the rest of the buffer untouched.</remarks>
+      /// <remarks>
+      /// Pure. Each action inserts text at one position (a zero-width
+      /// TextEdit), so the editor keeps the rest of the buffer untouched.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction, SameText, StringReplace</para>
+      /// <para>Returns: TJSONArray.Create</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 50 lines (full implementation)</para>
+      /// <para>Owns returned: new (caller owns)</para>
+      /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function BuildMissingUsesActions(const AFile: string; AStartLine, AEndLine: Integer;
         const ADiagnostics: TJSONArray): TJSONArray;
     private
@@ -296,8 +378,8 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function EmptySigHelp                                                       : TJSONObject;
@@ -311,8 +393,8 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.DiagnosticsFromLintJson"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function StripParamModifier(const AName: string)                            : string     ;

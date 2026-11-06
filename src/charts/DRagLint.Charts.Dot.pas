@@ -22,11 +22,23 @@ const
 
 type
   /// <summary>dot.exe failed, could not be given a usable path, or a cluster row is empty.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Dot.AddRowCluster (DRagLint.Charts.Dot.pas), DRagLint.Charts.Dot.DotRun (DRagLint.Charts.Dot.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Dot</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   EChartsDot = class(Exception);
 
   /// <summary>One row of a row cluster (the PS row object: Label, Line, Href, Tip, Note).</summary>
-  /// <remarks>A row with a blank Href is a NOTE row: no HREF, no TITLE, no line, but it keeps
-  /// its port. Line is TEXT because the PS prints `:$($r.Line)` -- a $null line prints ':'.</remarks>
+  /// <remarks>
+  /// A row with a blank Href is a NOTE row: no HREF, no TITLE, no line, but it keeps
+  /// its port. Line is TEXT because the PS prints `:$($r.Line)` -- a $null line prints ':'.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Dot.NoteRow (DRagLint.Charts.Dot.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.NewRow (DRagLint.Charts.Q.Consumers.pas) (+44 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Dot, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Effects, DRagLint.Charts.Q.EventWiring, DRagLint.Charts.Q.ExceptionPaths (+11 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDotRow = record
     /// <summary>The row text (plain text; escaped by the builder).</summary>
     Caption: string;
@@ -45,11 +57,24 @@ type
     /// <param name="pTip">The tooltip.</param>
     /// <param name="pNote">Dimmed suffix or ''.</param>
     /// <returns>The row.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.NewRow (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas) (+15 more)</para>
+    /// <para>Calls: IntToStr</para>
+    /// <para>Directives: static</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Anchored(const pCaption: string; pLine: Integer; const pHref, pTip: string;
       const pNote: string = ''): TDotRow; static;
   end;
 
   /// <summary>The look of a row cluster (the PS Add-RowCluster style parameters).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Q.Architecture.MakeStyle (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.DepthStyle (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.DrawDot (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas) (+21 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Dot, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Effects, DRagLint.Charts.Q.EventWiring, DRagLint.Charts.Q.ExceptionPaths (+11 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TClusterStyle = record
     /// <summary>Cluster border colour.</summary>
     Border  : string;
@@ -72,10 +97,23 @@ type
     /// <param name="pFill">Fill colour.</param>
     /// <param name="pHdr">Header background.</param>
     /// <returns>The style.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.Architecture.MakeStyle (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.DepthStyle (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.DrawDot (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas) (+18 more)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Make(const pBorder, pFill, pHdr: string): TClusterStyle; static;
   end;
 
   /// <summary>The files one dot layout run wrote, and the anchor count of its SVG.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Dot.pas) ?, declaration (DRagLint.Charts.Question.pas) ?, DRagLint.Charts.Dot.DotLayout (DRagLint.Charts.Dot.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Dot, DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Question</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDotLayout = record
     /// <summary>The .dot written.</summary>
     Dot    : string;
@@ -94,7 +132,15 @@ type
 /// <summary>A note row (no Href) for AddRowCluster.</summary>
 /// <param name="pText">The note text (plain).</param>
 /// <returns>The row.</returns>
-/// <remarks>Port of New-NoteRow (Emit-Common.ps1:780).</remarks>
+/// <remarks>
+/// Port of New-NoteRow (Emit-Common.ps1:780).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.AddCluster (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas) (+21 more)</para>
+/// <para>Calls: Default</para>
+/// <para>Returns: Default(TDotRow)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NoteRow(const pText: string): TDotRow;
 
 /// <summary>Appends a non-anchored disclosure row to an HTML-label table being built.</summary>
@@ -103,8 +149,16 @@ function NoteRow(const pText: string): TDotRow;
 /// the escape.</param>
 /// <param name="pInk">Font colour.</param>
 /// <param name="pPointSize">Font size.</param>
-/// <remarks>Port of Add-DisclosureRow (Emit-Common.ps1:771). PS trap closed: blank is
-/// IsNullOrWhiteSpace (Char.IsWhiteSpace), not Delphi Trim.</remarks>
+/// <remarks>
+/// Port of Add-DisclosureRow (Emit-Common.ps1:771). PS trap closed: blank is
+/// IsNullOrWhiteSpace (Char.IsWhiteSpace), not Delphi Trim.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.Architecture.FocusTable (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.FocusLabel (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas) (+17 more)</para>
+/// <para>Calls: DRagLint.Charts.Dot.IsBlank, DRagLint.Charts.Text.XmlText, Format</para>
+/// <seealso cref="DRagLint.Charts.Dot.IsBlank"/>
+/// <seealso cref="DRagLint.Charts.Text.XmlText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure AddDisclosureRow(pTable: TStringBuilder; const pText: string; const pInk: string = NOTE_INK;
   pPointSize: Integer = NOTE_POINT_SIZE);
 
@@ -119,8 +173,16 @@ procedure AddDisclosureRow(pTable: TStringBuilder; const pText: string; const pI
 /// <returns>The port of every row, IN ROW ORDER (callers key their port map by ordinal).</returns>
 /// <exception cref="EChartsDot">A row with a blank Caption AND a blank Href -- an empty FONT
 /// is a dot syntax error, and skipping it would shift every later port.</exception>
-/// <remarks>Port of Add-RowCluster (Emit-Common.ps1:2849). Colours are inserted raw, as in
-/// the PS; text is escaped with XmlText.</remarks>
+/// <remarks>
+/// Port of Add-RowCluster (Emit-Common.ps1:2849). Colours are inserted raw, as in
+/// the PS; text is escaped with XmlText.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.DrawDot (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas) (+18 more)</para>
+/// <para>Calls: DRagLint.Charts.Dot.IsBlank, DRagLint.Charts.Text.XmlText, Format</para>
+/// <seealso cref="DRagLint.Charts.Dot.IsBlank"/>
+/// <seealso cref="DRagLint.Charts.Text.XmlText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AddRowCluster(pSb: TStringBuilder; const pCid, pNid, pTitle, pSubtitle: string;
   const pRows: TArray<TDotRow>; const pStyle: TClusterStyle): TArray<string>;
 
@@ -135,9 +197,19 @@ function AddRowCluster(pSb: TStringBuilder; const pCid, pNid, pTitle, pSubtitle:
 /// what the PS prints as '  dot: ...'.</returns>
 /// <exception cref="EChartsDot">A full path over DOT_MAX_PATH; dot could not start; no SVG;
 /// a non-zero exit (an SVG can be half a run).</exception>
-/// <remarks>Port of Invoke-DotRun (Emit-Common.ps1:2789). Stale outputs are deleted first, so
+/// <remarks>
+/// Port of Invoke-DotRun (Emit-Common.ps1:2789). Stale outputs are deleted first, so
 /// a failed re-run cannot find the previous picture. PS difference by design: the PS resolves
-/// dot itself from the caller's $Dot; here the caller resolves it and passes the path.</remarks>
+/// dot itself from the caller's $Dot; here the caller resolves it and passes the path.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Dot.DotLayout (DRagLint.Charts.Dot.pas)</para>
+/// <para>Calls: DRagLint.Charts.Dot.DotMessages, DRagLint.Charts.Dot.Quoted, DRagLint.Charts.Process.RunCapture, ExpandFileName, FileExists, SysErrorMessage</para>
+/// <para>Returns: DotMessages(Run)</para>
+/// <seealso cref="DRagLint.Charts.Dot.DotMessages"/>
+/// <seealso cref="DRagLint.Charts.Dot.Quoted"/>
+/// <seealso cref="DRagLint.Charts.Process.RunCapture"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DotRun(const pDotExe, pDotFile, pSvg, pPlain, pPng, pPdf: string): TArray<string>;
 
 /// <summary>Writes the DOT text and lays it out once into four sibling files.</summary>
@@ -148,7 +220,16 @@ function DotRun(const pDotExe, pDotFile, pSvg, pPlain, pPng, pPdf: string): TArr
 /// <param name="pMessages">dot's messages (see DotRun).</param>
 /// <returns>The five paths and the SVG anchor count.</returns>
 /// <exception cref="EChartsDot">As DotRun.</exception>
-/// <remarks>Port of Invoke-DotLayout (Emit-Common.ps1:2814).</remarks>
+/// <remarks>
+/// Port of Invoke-DotLayout (Emit-Common.ps1:2814).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.Butterfly.Emit (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.Emit (DRagLint.Charts.Q.Consumers.pas) (+20 more)</para>
+/// <para>Calls: DRagLint.Charts.Dot.DotRun, ForceDirectories</para>
+/// <para>Mutates: pMessages (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Charts.Dot.DotRun"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DotLayout(const pDotExe, pDotText, pOutDir, pBase: string; out pMessages: TArray<string>): TDotLayout;
 
 implementation

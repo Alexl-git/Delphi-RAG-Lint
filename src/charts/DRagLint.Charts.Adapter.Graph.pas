@@ -33,6 +33,12 @@ uses
 
 type
   /// <summary>One node of the chart: a routine, a field, a table...</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Adapter.Graph.pas), DRagLint.Charts.Adapter.Graph.ParseDot (DRagLint.Charts.Adapter.Graph.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Adapter.Graph</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGraphNode = record
     /// <summary>The identity key (see the unit header); equal Ids are one node.</summary>
     Id   : string;
@@ -43,6 +49,12 @@ type
   end;
 
   /// <summary>One edge, as the identities of its ends.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Adapter.Graph.pas), declaration (DRagLint.Charts.Render.pas), DRagLint.Charts.Adapter.Graph.ParseDot (DRagLint.Charts.Adapter.Graph.pas), DRagLint.Charts.Render.EdgeText (DRagLint.Charts.Render.pas), DRagLint.Charts.Render.EdgeTexts (DRagLint.Charts.Render.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Adapter.Graph, DRagLint.Charts.Render</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGraphEdge = record
     /// <summary>Identity of the edge's source.</summary>
     FromId: string;
@@ -51,6 +63,12 @@ type
   end;
 
   /// <summary>A parsed chart.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Adapter.Graph.pas), declaration (DRagLint.Charts.Compare.pas), DRagLint.Charts.Adapter.Graph.GraphItems (DRagLint.Charts.Adapter.Graph.pas), DRagLint.Charts.Adapter.Graph.ParseDot (DRagLint.Charts.Adapter.Graph.pas), DRagLint.Charts.Compare.ChartReadable (DRagLint.Charts.Compare.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Adapter.Graph, DRagLint.Charts.Compare, DRagLint.Charts.Render</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TGraphModel = record
     /// <summary>Distinct nodes, in order of first appearance.</summary>
     Nodes   : TArray<TGraphNode>;
@@ -66,14 +84,34 @@ type
 /// <returns>The model. Text that is not such a DOT gives an empty model, never an
 /// exception; an entity that is not a character (a lone surrogate, past U+10FFFF) is kept
 /// as written.</returns>
-/// <remarks>Duplicate nodes and edges (same identity) collapse into one: a chart is a
-/// set. Pure; thread-safe.</remarks>
+/// <remarks>
+/// Duplicate nodes and edges (same identity) collapse into one: a chart is a
+/// set. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapters.ItemsFor (DRagLint.Charts.Adapters.pas), DRagLint.Charts.Compare.LoadNewSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.LoadOldSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Render.GraphRowsHtml (DRagLint.Charts.Render.pas)</para>
+/// <para>Calls: AddNode, DRagLint.Charts.Adapter.Graph.AttrOf, DRagLint.Charts.Adapter.Graph.DecodeEntities, DRagLint.Charts.Adapter.Graph.GroupOf, DRagLint.Charts.Adapter.Graph.IdentityOf, DRagLint.Charts.Adapter.Graph.Unquote, Resolve</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 93 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Adapter.Graph.AttrOf"/>
+/// <seealso cref="DRagLint.Charts.Adapter.Graph.DecodeEntities"/>
+/// <seealso cref="DRagLint.Charts.Adapter.Graph.GroupOf"/>
+/// <seealso cref="DRagLint.Charts.Adapter.Graph.IdentityOf"/>
+/// <seealso cref="DRagLint.Charts.Adapter.Graph.Unquote"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ParseDot(const pDotText: string): TGraphModel;
 
 /// <summary>A chart as diff items.</summary>
 /// <param name="pModel">A parsed chart.</param>
 /// <returns>'N &lt;id&gt;' for every node and 'E &lt;from&gt; -&gt; &lt;to&gt;' for every
 /// edge; Key = Text; sorted by Key ordinally, so the drawing order never matters.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapters.ItemsFor (DRagLint.Charts.Adapters.pas), DRagLint.Charts.Render.GraphRowsHtml (DRagLint.Charts.Render.pas)</para>
+/// <para>Calls: DRagLint.Charts.Diff.TDiffItem.Make</para>
+/// <para>Returns: Items.ToArray</para>
+/// <seealso cref="DRagLint.Charts.Diff.TDiffItem.Make"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function GraphItems(const pModel: TGraphModel): TArray<TDiffItem>;
 
 /// <summary>Finds a chart's DOT text and its SVG.</summary>
@@ -82,6 +120,15 @@ function GraphItems(const pModel: TGraphModel): TArray<TDiffItem>;
 /// <param name="pSvgPath">Receives the SVG that goes with the DOT (the folder's graph.svg,
 /// or the .dot's sibling with the extension .svg); '' when there is none.</param>
 /// <returns>True when the DOT text was read.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Compare.LoadSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas)</para>
+/// <para>Calls: ChangeFileExt, ExtractFileExt, SameText</para>
+/// <para>Returns: (DotPath &lt;&gt; '') and TFile.Exists(DotPath)</para>
+/// <para>Mutates: pDotText (out), pSvgPath (out)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LoadGraphSource(const pPath: string; out pDotText, pSvgPath: string): Boolean;
 
 implementation

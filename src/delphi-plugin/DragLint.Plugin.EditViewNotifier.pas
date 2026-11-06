@@ -15,12 +15,48 @@ uses
   , ToolsAPI
   ;
 
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: Supports</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterDragLintEditViewNotifier;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas)</para>
+/// <para>Calls: DragLint.Plugin.EditViewNotifier.UnregisterAllViewNotifiers, Supports</para>
+/// <seealso cref="DragLint.Plugin.EditViewNotifier.UnregisterAllViewNotifiers"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UnregisterDragLintEditViewNotifier;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Keyboard.TDragLintKeyboardBinding.InlineInfoKey (DragLint.Plugin.Keyboard.pas)</para>
+/// <para>Calls: DragLint.Plugin.DiagnosticCache.Cache, DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForLine, DragLint.Plugin.EditViewNotifier.TInlineHintHelper.OnHintTimer, FreeAndNil, GetCursorPos, OffsetRect, Supports</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 76 lines (full implementation)</para>
+/// <seealso cref="DragLint.Plugin.DiagnosticCache.Cache"/>
+/// <seealso cref="DragLint.Plugin.DiagnosticCache.TDragLintDiagnosticCache.GetForLine"/>
+/// <seealso cref="DragLint.Plugin.EditViewNotifier.TInlineHintHelper.OnHintTimer"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure InvokeInlineInfo;
 { v0.47: force the editor gutter (our PaintLine glyphs) to redraw NOW, even while
   the user is idle. Robust against double-buffered paints (where the per-paint DC
   has no window): repaints via the edit window's FORM handle + RDW_ALLCHILDREN. }
+/// <summary><!-- drag-lint:auto sum -->v0.47: force the editor gutter (our PaintLine
+/// glyphs) to redraw NOW, even while the user is idle. Robust against double-buffered
+/// paints (where the per-paint DC has no window): repaints via the edit window's FORM
+/// handle + RDW_ALLCHILDREN.</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.DockForm.TDragLintDockFrame.HandleWatchTimer (DragLint.Plugin.DockForm.pas), DragLint.Plugin.Editor.HandleNotification (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.LspCallerCounts (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RepaintActiveView (DragLint.Plugin.Editor.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditServicesNotifier.EditorViewActivated (DragLint.Plugin.EditViewNotifier.pas) (+1 more)</para>
+/// <para>Calls: DragLint.Plugin.Telemetry.DLT, Format, IsWindow, RedrawWindow, Supports</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 37 lines (full implementation)</para>
+/// <para>Catches: Exception (empty)</para>
+/// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ForceGutterRepaint;
 
 var
@@ -42,23 +78,26 @@ var
 
 /// <summary>Forgets which files have already been asked for diagnostics, so the
 /// next activation of each asks again.</summary>
-/// <remarks>MUST be called whenever a NEW LSP server process is started. The
+/// <remarks>
+/// MUST be called whenever a NEW LSP server process is started. The
 /// "already asked" set records a conversation with ONE server: diagnostics live
 /// in that process and are gone when it dies, so a file marked asked against a
 /// dead server would keep its stale gutter -- or, far more visibly, keep NO
 /// gutter -- for the rest of the IDE session, because the set is consulted
 /// before any request is made and never expires on its own.
-///
 /// Found 2026-09-01 from a live report: several engine rebuilds killed the
 /// server, and afterwards a reopened unit showed no drag-lint marks at all
 /// while the IDE's own W1002 hint sat in the same gutter. The plugin log named
 /// the cause -- it published diagnostics for one unit, the server was replaced,
 /// and no request was ever issued for the unit actually on screen.
-///
 /// This is the THIRD defect in this family. The first marked a file asked even
 /// when the request never went out; the second did the same at IDE startup
 /// before the server was up. Both were about recording an ask that did not
-/// happen; this one is about not forgetting one that did. Main thread only.</remarks>
+/// happen; this one is about not forgetting one that did. Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure DragLintForgetDiagnosticsAsked;
 
 var { v0.46: published by PaintLine so the hover tracker can map a screen point to

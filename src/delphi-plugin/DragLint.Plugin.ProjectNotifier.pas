@@ -13,9 +13,48 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.ProjectNotifier.pas) ?, DragLint.Plugin.ProjectNotifier.RegisterProjectNotifier (DragLint.Plugin.ProjectNotifier.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.ProjectNotifier</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintProjectNotifier = class(TInterfacedObject, IOTAIDENotifier)
     private
+      /// <summary><!-- drag-lint:auto sum -->---- async indexer spawn ----</summary>
+      /// <param name="AExePath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AProjFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.FileNotification (DragLint.Plugin.ProjectNotifier.pas)</para>
+      /// <para>Calls: CloseHandle, CreateProcessW, DragLint.Plugin.IndexJob.BuildProjectIndexCmdLine, DragLint.Plugin.Settings.LoadSettings, DRagLint.Workspace.Config.TWorkspaceConfigIO.FindWorkspaceRoot, DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile, ExtractFilePath, FillChar, Format, StrPCopy</para>
+      /// <para>Catches: Exception (empty)</para>
+      /// <para>Touches: file system</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DragLint.Plugin.IndexJob.BuildProjectIndexCmdLine"/>
+      /// <seealso cref="DragLint.Plugin.Settings.LoadSettings"/>
+      /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.FindWorkspaceRoot"/>
+      /// <seealso cref="DRagLint.Workspace.Config.TWorkspaceConfigIO.LoadFromFile"/>
+      /// <seealso cref="DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.AfterCompile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class procedure SpawnIndexer(const AExePath, AProjFile, ADbPath: string); static;
+      /// <param name="ACfgExePath"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: EngineExeOrEmpty.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.FileNotification (DragLint.Plugin.ProjectNotifier.pas)</para>
+      /// <para>Calls: DragLint.Plugin.ExeResolver.EngineExeOrEmpty</para>
+      /// <para>Effect-free (proven)</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DragLint.Plugin.ExeResolver.EngineExeOrEmpty"/>
+      /// <seealso cref="DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.AfterCompile"/>
+      /// <seealso cref="DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.AfterSave"/>
+      /// <seealso cref="DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.BeforeCompile"/>
+      /// <seealso cref="DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.BeforeSave"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ResolveExePath(const ACfgExePath: string): string; static;
     public
       { IOTANotifier }
@@ -24,12 +63,40 @@ type
       procedure Destroyed;
       procedure Modified;
       { IOTAIDENotifier }
+      /// <summary><!-- drag-lint:auto sum -->IOTAIDENotifier</summary>
+      /// <param name="NotifyCode"><!-- drag-lint:auto type -->TOTAFileNotification</param>
+      /// <param name="FileName"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="Cancel"><!-- drag-lint:auto type -->var Boolean</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: ChangeFileExt, DragLint.Plugin.DbResolver.ManifestDbForFile, DragLint.Plugin.Editor.RunGhostRecoverForProject, DragLint.Plugin.Editor.TriggerProjectCompile, DragLint.Plugin.LiveDiagnostics.NotifyEditDirty, DragLint.Plugin.ProjectNotifier.IsDelphiSourceExt, DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.ResolveExePath, DragLint.Plugin.ProjectNotifier.TDragLintProjectNotifier.SpawnIndexer, DragLint.Plugin.SaveNotifier.RegisterSaveNotifierForModule, DragLint.Plugin.SaveNotifier.UnregisterSaveNotifierForModule (+8 more)</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 83 lines (full implementation)</para>
+      /// <para>Catches: Exception (empty)</para>
+      /// <seealso cref="DragLint.Plugin.DbResolver.ManifestDbForFile"/>
+      /// <seealso cref="DragLint.Plugin.Editor.RunGhostRecoverForProject"/>
+      /// <seealso cref="DragLint.Plugin.Editor.TriggerProjectCompile"/>
+      /// <seealso cref="DragLint.Plugin.LiveDiagnostics.NotifyEditDirty"/>
+      /// <seealso cref="DragLint.Plugin.ProjectNotifier.IsDelphiSourceExt"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure FileNotification(NotifyCode: TOTAFileNotification; const FileName: string; var Cancel: Boolean);
       procedure BeforeCompile(const Project: IOTAProject; var Cancel: Boolean);
       procedure AfterCompile(Succeeded: Boolean);
   end;
 
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.RegisterDragLintMenu (DragLint.Plugin.Editor.pas)</para>
+/// <para>Calls: Supports</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterProjectNotifier;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas)</para>
+/// <para>Calls: Supports</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UnregisterProjectNotifier;
 
 implementation

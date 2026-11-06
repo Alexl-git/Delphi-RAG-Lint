@@ -21,10 +21,21 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.StructureCache.pas), declaration (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.StructureCache.ParseKind (DragLint.Plugin.StructureCache.pas), DragLint.Plugin.StructureForm.GlyphClassFor (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.StructureForm.KindPrefix (DragLint.Plugin.StructureForm.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSymbolKind = (
     skUnknown, skUnit, skClass, skInterface, skRecord, skEnum, skEnumValue, skProcedure, skFunction, skMethod, skConstructor, skDestructor, skProperty, skField, skConstant, skType,
     skVariable);
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.StructureCache.pas) ?, DragLint.Plugin.StructureCache.ParseOutlineJson (DragLint.Plugin.StructureCache.pas), DragLint.Plugin.StructureCache.TDragLintStructureCache.Create (DragLint.Plugin.StructureCache.pas) ?, DragLint.Plugin.StructureCache.TDragLintStructureCache.RefreshSymbolsAsync (DragLint.Plugin.StructureCache.pas) ?, DragLint.Plugin.StructureCache.TDragLintStructureCache.TryGetSymbols (DragLint.Plugin.StructureCache.pas) ? (+6 more)</para>
+  /// <para>Used in units: DragLint.Plugin.StructureCache, DragLint.Plugin.StructureForm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TSymbolInfo = record
     Name     : string     ;
     Kind     : TSymbolKind;
@@ -37,8 +48,19 @@ type
   /// <summary>Receives one file's freshly fetched symbols on the MAIN thread.</summary>
   /// <param name="AFilePath">The file the fetch was started for, as passed in.</param>
   /// <param name="ASymbols">The symbols; empty when the engine answered nothing usable.</param>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.StructureCache.pas), DragLint.Plugin.StructureCache.TDragLintStructureCache.Create (DragLint.Plugin.StructureCache.pas), DragLint.Plugin.StructureCache.TDragLintStructureCache.Deliver (DragLint.Plugin.StructureCache.pas), DragLint.Plugin.StructureCache.TDragLintStructureCache.RefreshSymbolsAsync (DragLint.Plugin.StructureCache.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TStructureSymbolsDone = reference to procedure(const AFilePath: string; const ASymbols: TArray<TSymbolInfo>);
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.StructureCache.pas) ?, DragLint.Plugin.StructureCache.StructureCache (DragLint.Plugin.StructureCache.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.StructureCache</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintStructureCache = class
     strict private
       FByFile  : TDictionary<string, TArray<TSymbolInfo>>;
@@ -46,9 +68,49 @@ type
       FInFlight: TDictionary<string, TStructureSymbolsDone>;
       FLock    : TCriticalSection                        ;
     private
+      /// <param name="AKey"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ASymbols"><!-- drag-lint:auto type -->const TArray&lt;TSymbolInfo&gt;</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.StructureCache.TDragLintStructureCache.RefreshSymbolsAsync (DragLint.Plugin.StructureCache.pas)</para>
+      /// <para>Calls: Done, DragLint.Plugin.Telemetry.DLT</para>
+      /// <para>Reads: FLock, FByFile, FInFlight</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.GetSymbolsForFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Deliver(const AKey, AFilePath: string; const ASymbols: TArray<TSymbolInfo>);
     public
+      /// <summary><!-- drag-lint:auto sum -->---- TDragLintStructureCache ----</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.StructureCache.StructureCache (DragLint.Plugin.StructureCache.pas)</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FByFile, FInFlight, FLock</para>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Deliver"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.GetSymbolsForFile"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.InvalidateForFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create;
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FLock, FInFlight, FByFile</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Deliver"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.GetSymbolsForFile"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.InvalidateForFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
 
       /// <summary>Returns cached symbols for AFilePath, shelling out if not cached.</summary>
@@ -56,15 +118,40 @@ type
       /// <param name="AExePath">Path to drag-lint.exe.</param>
       /// <param name="ADbPath">The resolved project database (empty = the exe's default resolution).</param>
       /// <returns>The file's symbols (cached, or fetched now).</returns>
-      /// <remarks>BLOCKS until the engine answers -- never call it on the IDE main
+      /// <remarks>
+      /// BLOCKS until the engine answers -- never call it on the IDE main
       /// thread (docs\INBOX-ide-hang-on-slow-engine.md); the IDE uses
-      /// RefreshSymbolsAsync.</remarks>
+      /// RefreshSymbolsAsync.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.StructureCache.OutlineCmdLine, DragLint.Plugin.StructureCache.ParseOutlineJson, DragLint.Plugin.StructureCache.RunAndCaptureSurface, LowerCase</para>
+      /// <para>Returns: Cached; Symbols</para>
+      /// <para>Reads: FLock, FByFile</para>
+      /// <seealso cref="DragLint.Plugin.StructureCache.OutlineCmdLine"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.ParseOutlineJson"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.RunAndCaptureSurface"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function GetSymbolsForFile(const AFilePath, AExePath, ADbPath: string): TArray<TSymbolInfo>;
 
       /// <summary>Cached symbols for AFilePath, without spawning anything.</summary>
       /// <param name="AFilePath">The source file.</param>
       /// <param name="ASymbols">Receives the cached symbols (empty on a miss).</param>
       /// <returns>True when the file is cached.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.RefreshForFile (DragLint.Plugin.StructureForm.pas)</para>
+      /// <para>Calls: LowerCase</para>
+      /// <para>Returns: FByFile.TryGetValue(LowerCase(AFilePath), ASymbols)</para>
+      /// <para>Reads: FLock, FByFile</para>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Deliver"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.GetSymbolsForFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function TryGetSymbols(const AFilePath: string; out ASymbols: TArray<TSymbolInfo>): Boolean;
 
       /// <summary>Fetches AFilePath's symbols on a worker thread and hands them to
@@ -78,16 +165,62 @@ type
       /// <returns>True when a fetch was started; False when one for the same file
       /// is still running -- ADone then REPLACES that fetch's callback, so the
       /// latest caller gets the answer and no second engine run is stacked.</returns>
-      /// <remarks>Never waits: returns before the engine is spawned. Call on the
-      /// main thread (the in-flight table is not locked).</remarks>
+      /// <remarks>
+      /// Never waits: returns before the engine is spawned. Call on the
+      /// main thread (the in-flight table is not locked).
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.RefreshForFile (DragLint.Plugin.StructureForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.StructureCache.OutlineCmdLine, DragLint.Plugin.StructureCache.ParseOutlineJson, DragLint.Plugin.StructureCache.RunAndCaptureSurface, DragLint.Plugin.StructureCache.TDragLintStructureCache.Deliver, DragLint.Plugin.Telemetry.DLT, LowerCase</para>
+      /// <para>Returns: not FInFlight.ContainsKey(Key)</para>
+      /// <para>Reads: FInFlight</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <seealso cref="DragLint.Plugin.StructureCache.OutlineCmdLine"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.ParseOutlineJson"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.RunAndCaptureSurface"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Deliver"/>
+      /// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function RefreshSymbolsAsync(const AFilePath, AExePath, ADbPath: string; const ADone: TStructureSymbolsDone): Boolean;
 
       { Drop the cached entry for AFilePath so the next call re-shells. }
+      /// <summary><!-- drag-lint:auto sum -->Drop the cached entry for AFilePath so the
+      /// next call re-shells.</summary>
+      /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: LowerCase</para>
+      /// <para>Reads: FLock, FByFile</para>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Clear"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Deliver"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.GetSymbolsForFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure InvalidateForFile(const AFilePath: string);
 
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FLock, FByFile</para>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Create"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Deliver"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Destroy"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.GetSymbolsForFile"/>
+      /// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.InvalidateForFile"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Clear;
   end;
 
+/// <returns><!-- drag-lint:auto -->TDragLintStructureCache -- Observed: GStructureCache.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.RefreshForFile (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.StructureCache.TDragLintStructureCache.Create</para>
+/// <seealso cref="DragLint.Plugin.StructureCache.TDragLintStructureCache.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StructureCache: TDragLintStructureCache;
 
 implementation

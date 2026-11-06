@@ -18,6 +18,12 @@ const
 
 type
   /// <summary>How a producer should run one question.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Compare.pas) ?, declaration (DRagLint.Charts.Producer.Delphi.pas) ?, DRagLint.Charts.Producer.DefaultProduceOptions (DRagLint.Charts.Producer.pas), DRagLint.Charts.Producer.Delphi.PairedIndexes (DRagLint.Charts.Producer.Delphi.pas) ?, DRagLint.Charts.Producer.Delphi.TDelphiProducer.AnswersInProcess (DRagLint.Charts.Producer.Delphi.pas) ? (+5 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Compare, DRagLint.Charts.Producer, DRagLint.Charts.Producer.Delphi, DRagLint.CLI</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProduceOptions = record
     /// <summary>S4: the index to answer from for the OLD side (-DbPath); '' resolves it through
     /// the command's -Project / -In as usual.</summary>
@@ -43,6 +49,12 @@ type
   end;
 
   /// <summary>What a producer made of one question.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Producer.Delphi.pas) ?, declaration (DRagLint.Charts.Producer.pas) ?, DRagLint.Charts.Producer.Delphi.Fail (DRagLint.Charts.Producer.Delphi.pas), DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce (DRagLint.Charts.Producer.Delphi.pas), DRagLint.Charts.Producer.Delphi.TDelphiProducer.Refuse (DRagLint.Charts.Producer.Delphi.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.Producer, DRagLint.Charts.Producer.Delphi</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TProduceResult = record
     /// <summary>True when the question was answered (exit 0).</summary>
     Ok        : Boolean;
@@ -60,8 +72,15 @@ type
   end;
 
   /// <summary>Produces the plain-form report for one question.</summary>
-  /// <remarks>Implementations must be callable from the owning thread only unless they say
-  /// otherwise; the result is a value, nothing in it points back at the producer.</remarks>
+  /// <remarks>
+  /// Implementations must be callable from the owning thread only unless they say
+  /// otherwise; the result is a value, nothing in it points back at the producer.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.AskVerb.pas), declaration (DRagLint.Charts.Compare.pas), DRagLint.Charts.AskVerb.DefaultAskProducer (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.RunAsk (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Producer.Delphi</para>
+  /// <para>Implemented by: TDelphiProducer</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   IReportProducer = interface
     ['{5D0B7A44-3C1E-4F6A-9B72-A8E4C5130F9D}']
     /// <summary>Answers one question.</summary>
@@ -69,6 +88,12 @@ type
     /// <param name="pOptions">Index override, staleness policy, engine and charts folder.</param>
     /// <returns>Ok with the plain text on success; otherwise Ok False with the exit code and the
     /// reason. Never raises for a refusal or a missing tool.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas) ?, DRagLint.Charts.Compare.LoadOldIndexSide (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.ProduceNewSide (DRagLint.Charts.Compare.pas), DRagLint.CLI.CompareTakeSnapshot (DRagLint.CLI.pas) ?</para>
+    /// <seealso cref="DRagLint.Charts.Producer.IReportProducer.Describe"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
     /// <summary>Says what this producer is, for diagnostics.</summary>
     /// <returns>For example 'Delphi in-process (who-writes)'.</returns>
@@ -77,6 +102,13 @@ type
 
 /// <summary>The options a caller starts from.</summary>
 /// <returns>No override, AllowStale False, EnginePath = the running executable, ScriptPath ''.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.AskVerb.RunAskCore (DRagLint.Charts.AskVerb.pas), DRagLint.CLI.CompareProduceOptions (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, ParamStr</para>
+/// <para>Returns: Default(TProduceOptions)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DefaultProduceOptions: TProduceOptions;
 
 implementation

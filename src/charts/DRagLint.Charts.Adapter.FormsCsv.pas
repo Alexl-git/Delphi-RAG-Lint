@@ -37,6 +37,14 @@ const
 /// <param name="pText">The whole text; a leading UTF-8 BOM (U+FEFF) is ignored.</param>
 /// <returns>True when the first line, trimmed, equals FORMS_CSV_HEADER ordinally
 /// (case-sensitive); False otherwise, an empty text included.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapters.DetectFormat (DRagLint.Charts.Adapters.pas)</para>
+/// <para>Calls: Copy, DRagLint.Charts.Adapter.FormsCsv.StripBom, Trim</para>
+/// <para>Returns: (string.CompareOrdinal(Trim(Copy(Text, 1, EndPos - 1)), FORMS_CSV_HEADER) = 0)</para>
+/// <seealso cref="DRagLint.Charts.Adapter.FormsCsv.StripBom"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsFormsCsv(const pText: string): Boolean;
 
 /// <summary>A forms CSV as diff items.</summary>
@@ -47,10 +55,20 @@ function IsFormsCsv(const pText: string): Boolean;
 /// start, Other ways in, Confidence), trimmed, '|'-joined; '#', Tester result and Notes are
 /// not in the Key. Sorted by the identity columns ordinally (then Key, then Text), so row
 /// order never matters. A row with fewer cells reads the missing ones as empty.</returns>
-/// <remarks>The parser is a small state machine: a quote toggles quoted mode, a doubled
+/// <remarks>
+/// The parser is a small state machine: a quote toggles quoted mode, a doubled
 /// quote inside quotes is one quote, commas and line ends split only outside quotes, so
 /// a quoted cell holding a comma, a doubled quote or a line break stays one cell of one
-/// row. Pure; thread-safe.</remarks>
+/// row. Pure; thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Adapters.ItemsFor (DRagLint.Charts.Adapters.pas)</para>
+/// <para>Calls: DRagLint.Charts.Adapter.FormsCsv.CellAt, DRagLint.Charts.Adapter.FormsCsv.IsFooter, DRagLint.Charts.Adapter.FormsCsv.ParseRecords, DRagLint.Charts.Diff.TDiffItem.Make, Trim</para>
+/// <seealso cref="DRagLint.Charts.Adapter.FormsCsv.CellAt"/>
+/// <seealso cref="DRagLint.Charts.Adapter.FormsCsv.IsFooter"/>
+/// <seealso cref="DRagLint.Charts.Adapter.FormsCsv.ParseRecords"/>
+/// <seealso cref="DRagLint.Charts.Diff.TDiffItem.Make"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FormsCsvItems(const pText: string): TArray<TDiffItem>;
 
 implementation

@@ -36,6 +36,12 @@ uses
 
 type
   /// <summary>The answer to one chart question.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Ask.pas), DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Ask</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TAskAnswer = record
     /// <summary>The plain answer, one line per element, no line ends.</summary>
     Lines    : TArray<string>;
@@ -47,14 +53,34 @@ type
 /// <param name="pArgs">The question, resolved: full index path, effective caps, dot.exe.</param>
 /// <returns>The plain answer and the bundle folder.</returns>
 /// <exception cref="EChartsQuestion">The question is not ported.</exception>
-/// <remarks>Any exception the emitter raises is a refusal and propagates unchanged; a bundle
+/// <remarks>
+/// Any exception the emitter raises is a refusal and propagates unchanged; a bundle
 /// folder this call created is removed again when it is still empty. Not thread-safe while
-/// pArgs.AllowLiveDb is set: the clone-guard override is a process environment variable.</remarks>
+/// pArgs.AllowLiveDb is set: the clone-guard override is a process environment variable.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Producer.Delphi.TDelphiProducer.Produce (DRagLint.Charts.Producer.Delphi.pas)</para>
+/// <para>Calls: DRagLint.Charts.Ask.AnswerIndexLines, DRagLint.Charts.Ask.BundleSlug, DRagLint.Charts.Ask.DotAnswerRows, DRagLint.Charts.Ask.IsEmptyDir, DRagLint.Charts.Ask.LastSegments, DRagLint.Charts.Ask.MetaJson, DRagLint.Charts.Ask.MoveOver, DRagLint.Charts.Ask.RegenerateText, DRagLint.Charts.Ask.ReportCommandText, DRagLint.Charts.Ask.RunEmitter (+12 more)</para>
+/// <para>Complexity: 13 (cyclomatic, outer body), 71 lines (full implementation)</para>
+/// <para>Catches: Exception (re-raise)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Charts.Ask.AnswerIndexLines"/>
+/// <seealso cref="DRagLint.Charts.Ask.BundleSlug"/>
+/// <seealso cref="DRagLint.Charts.Ask.DotAnswerRows"/>
+/// <seealso cref="DRagLint.Charts.Ask.IsEmptyDir"/>
+/// <seealso cref="DRagLint.Charts.Ask.LastSegments"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AskChartQuestion(const pArgs: TQuestionArgs): TAskAnswer;
 
 /// <summary>The bundle folder name's target part.</summary>
 /// <param name="pTarget">The selection.</param>
 /// <returns>pTarget with every character outside A-Z a-z 0-9 replaced by '_'.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas)</para>
+/// <para>Returns: TRegEx.Replace(pTarget, RE_SLUG, '_')</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BundleSlug(const pTarget: string): string;
 
 /// <summary>The COMMAND line of the answer header (Ask-Report's Get-ReportCommandLine).</summary>
@@ -62,6 +88,15 @@ function BundleSlug(const pTarget: string): string;
 /// <returns>'COMMAND &lt;id&gt; -Target "t"' then -To, -Project (full path) or -In (full path),
 /// -Depth, -Cap, -SurfaceCap, -Control, -Mode, -MaxRows -- each only when given (-To,
 /// -Project, -In, -Control and -Mode only when not empty).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas)</para>
+/// <para>Calls: DRagLint.Charts.ReportHeader.TReportCommand.Get, DRagLint.Charts.ReportHeader.TReportCommand.Has, ExpandFileName</para>
+/// <para>Returns: SB.ToString</para>
+/// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.Get"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.Has"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReportCommandText(const pCmd: TReportCommand): string;
 
 /// <summary>meta.json's regenerate command (New-DiagramArtifact.ps1's $meta.regenerate).</summary>
@@ -69,12 +104,31 @@ function ReportCommandText(const pCmd: TReportCommand): string;
 /// <returns>'drag-lint ask q --target t --db "db"', then --depth, --cap,
 /// --sql-db "s" and --server-db "s" for a question that reads them (even when ''), the
 /// counterpart (only when given), --surface-cap, --control and --to, each per the script's lists.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas)</para>
+/// <para>Calls: DRagLint.Charts.Ask.InList, DRagLint.Charts.Question.QuestionReadsServerIndex, DRagLint.Charts.Question.QuestionReadsSqlIndex, DRagLint.Charts.ReportHeader.TReportCommand.Get, Format, IntToStr, SameText</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 19 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Ask.InList"/>
+/// <seealso cref="DRagLint.Charts.Question.QuestionReadsServerIndex"/>
+/// <seealso cref="DRagLint.Charts.Question.QuestionReadsSqlIndex"/>
+/// <seealso cref="DRagLint.Charts.ReportHeader.TReportCommand.Get"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RegenerateText(const pArgs: TQuestionArgs): string;
 
 /// <summary>The INDEX lines of the answer (Ask-Report's "which index(es) answered").</summary>
 /// <param name="pArgs">The question, resolved.</param>
 /// <returns>'INDEX &lt;db&gt;', then 'INDEX &lt;server&gt; (server)' and 'INDEX &lt;sql&gt; (sql)' for a
 /// question that reads them, then 'INDEX &lt;counterpart&gt; (counterpart)' when given.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas)</para>
+/// <para>Calls: DRagLint.Charts.Question.QuestionReadsServerIndex, DRagLint.Charts.Question.QuestionReadsSqlIndex, SameText</para>
+/// <seealso cref="DRagLint.Charts.Question.QuestionReadsServerIndex"/>
+/// <seealso cref="DRagLint.Charts.Question.QuestionReadsSqlIndex"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function AnswerIndexLines(const pArgs: TQuestionArgs): TArray<string>;
 
 /// <summary>The result lines Ask-Report reads back from a chart's graph.dot.</summary>
@@ -84,6 +138,18 @@ function AnswerIndexLines(const pArgs: TQuestionArgs): TArray<string>;
 /// <param name="pDotPath">graph.dot's path, for the 'more rows' line.</param>
 /// <param name="pShellPath">index.html's path, for the 'no anchored rows' line.</param>
 /// <returns>'  TARGET ...' lines, then the result rows, then '  ... &lt;not shown&gt;' lines.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas)</para>
+/// <para>Calls: Copy, DRagLint.Charts.Ask.CapHow, DRagLint.Charts.Ask.HtmlDecode, DRagLint.Charts.Ask.Scrub, DRagLint.Charts.Ask.TrimWs, DRagLint.Charts.Ask.UnescapeDataString, DRagLint.Charts.Text.FileNameOf, Format, StrToIntDef</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 71 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Ask.CapHow"/>
+/// <seealso cref="DRagLint.Charts.Ask.HtmlDecode"/>
+/// <seealso cref="DRagLint.Charts.Ask.Scrub"/>
+/// <seealso cref="DRagLint.Charts.Ask.TrimWs"/>
+/// <seealso cref="DRagLint.Charts.Ask.UnescapeDataString"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DotAnswerRows(const pDotLines: TArray<string>; const pRegenerate: string; pMaxRows: Integer;
   const pDotPath, pShellPath: string): TArray<string>;
 
@@ -92,13 +158,29 @@ function DotAnswerRows(const pDotLines: TArray<string>; const pRegenerate: strin
 /// <param name="pText">Text with &amp;amp; &amp;lt; &amp;gt; &amp;quot; &amp;apos; and
 /// numeric (&amp;#NNN; / &amp;#xHH;) references.</param>
 /// <returns>The decoded text, one pass; any other '&amp;' is kept.</returns>
-/// <remarks>Approximation: the other HTML named entities are not decoded. A chart label never
-/// holds one -- XmlText escapes every '&amp;' and the emitters add only &amp;#183;.</remarks>
+/// <remarks>
+/// Approximation: the other HTML named entities are not decoded. A chart label never
+/// holds one -- XmlText escapes every '&amp;' and the emitters add only &amp;#183;.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.DotAnswerRows (DRagLint.Charts.Ask.pas)</para>
+/// <para>Calls: CharInSet, Copy, PosEx, StrToIntDef</para>
+/// <para>Returns: pText; SB.ToString</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 41 lines (full implementation)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HtmlDecode(const pText: string): string;
 
 /// <summary>Decodes %XX escapes as [uri]::UnescapeDataString: bytes as UTF-8, '+' kept.</summary>
 /// <param name="pText">Escaped text.</param>
 /// <returns>The decoded text; a '%' not followed by two hex digits is kept.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.DotAnswerRows (DRagLint.Charts.Ask.pas)</para>
+/// <para>Calls: Byte, DRagLint.Charts.Ask.HexVal</para>
+/// <para>Returns: pText; SB.ToString</para>
+/// <seealso cref="DRagLint.Charts.Ask.HexVal"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function UnescapeDataString(const pText: string): string;
 
 implementation

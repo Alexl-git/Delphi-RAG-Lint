@@ -17,6 +17,12 @@ const
 
 type
   /// <summary>Parsed marker. State = '' means no marker.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.LibraryMarker.pas) ?, DRagLint.CLI.FinishLibraryResolve (DRagLint.CLI.pas), DRagLint.CLI.LibraryMarker.LibraryMarkerFromJson (DRagLint.CLI.LibraryMarker.pas), DRagLint.CLI.LibraryMarker.LibraryMarkerToJson (DRagLint.CLI.LibraryMarker.pas) ?, DRagLint.CLI.LibraryMarker.LibraryPendingNote (DRagLint.CLI.LibraryMarker.pas) ? (+3 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.LibraryMarker</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLibraryMarker = record
     State        : string;
     Platform     : string;
@@ -29,6 +35,12 @@ type
   end;
 
   /// <summary>What a writer must do about the library this run.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.CLI.LibraryMarker.pas) ?, declaration (DRagLint.CLI.pas) ?, DRagLint.CLI.LibraryMarker.DecideLibraryResolve (DRagLint.CLI.LibraryMarker.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.LibraryMarker</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLibraryDecision = record
     /// <summary>True: re-run the whole resolve pass (the --resolve-only path) with the library.</summary>
     RunPass : Boolean;
@@ -39,11 +51,25 @@ type
 /// <summary>Serialises a marker to its schema_meta JSON text.</summary>
 /// <param name="AMarker">The marker.</param>
 /// <returns>JSON object text: state, platform, library, reason, library_fingerprint_seen, engine, since_unix, last_check_unix.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoInfo (DRagLint.CLI.pas), DRagLint.CLI.FinishLibraryResolve (DRagLint.CLI.pas)</para>
+/// <para>Returns: J.ToJSON</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LibraryMarkerToJson(const AMarker: TLibraryMarker): string;
 
 /// <summary>Parses the schema_meta text.</summary>
 /// <param name="AText">Stored value; '' or malformed reads as no marker.</param>
 /// <returns>The marker; State = '' when absent or unparseable.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.ComputeInfoIndexVerdict (DRagLint.CLI.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas), DRagLint.CLI.PlanLibraryResolve (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, TJSONObject</para>
+/// <para>Returns: Default(TLibraryMarker)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LibraryMarkerFromJson(const AText: string): TLibraryMarker;
 
 /// <summary>The decision table: opt-in x marker x readiness -> run the pass?</summary>
@@ -52,6 +78,14 @@ function LibraryMarkerFromJson(const AText: string): TLibraryMarker;
 /// <param name="AHasBound">schema_meta external_stores is present (an earlier pass bound a library).</param>
 /// <param name="AReady">The probe says the library is ready.</param>
 /// <returns>RunPass is the extra RanCalls term; NewState is the state the marker takes if the pass then gets a library.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.PlanLibraryResolve (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default</para>
+/// <para>Returns: Default(TLibraryDecision)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DecideLibraryResolve(AWanted: Boolean; const AOldState: string; AHasBound, AReady: Boolean): TLibraryDecision;
 
 /// <summary>The user notice for a pending marker.</summary>
@@ -59,6 +93,12 @@ function DecideLibraryResolve(AWanted: Boolean; const AOldState: string; AHasBou
 /// <param name="ADb">The project DB path.</param>
 /// <param name="ARemedy">The exact command that re-resolves it.</param>
 /// <returns>A NOTE line saying the result is incomplete and how to repair it.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas)</para>
+/// <para>Calls: Format, FormatDateTime, UnixToDateTime</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function LibraryPendingNote(const AMarker: TLibraryMarker; const ADb, ARemedy: string): string;
 
 implementation

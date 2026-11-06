@@ -24,10 +24,23 @@ const
   DL_QUEUE_NAMED_PENDING = 3;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.JobQueue.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TJobKind = (jkGeneric, jkReindex, jkLintAll, jkFormsCsv);
 
   { Snapshot of queue state for the status bar. Percent = -1 means indeterminate
     (no % yet, or a non-streaming job -> marquee). }
+  /// <summary><!-- drag-lint:auto sum -->Snapshot of queue state for the status bar.
+  /// Percent = -1 means indeterminate (no % yet, or a non-streaming job -&gt; marquee).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.JobQueue.pas), declaration (DragLint.Plugin.QueueText.pas), DragLint.Plugin.JobQueue.TDragLintJobQueue.GetState (DragLint.Plugin.JobQueue.pas), DragLint.Plugin.QueueText.DLQueueLines (DragLint.Plugin.QueueText.pas), DragLint.Plugin.QueueText.NowLine (DragLint.Plugin.QueueText.pas) (+5 more)</para>
+  /// <para>Used in units: DragLint.Plugin.JobQueue, DragLint.Plugin.QueueText, DragLint.Plugin.StatusBar</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TQueueState = record
     Running     : Boolean;
     CurrentTitle: string ;
@@ -47,11 +60,32 @@ type
     CanCancelRunning: Boolean;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.JobQueue.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TJobPreRun = TProc;                  { UI thread, before the process starts }
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.JobQueue.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TJobLine   = TProc<string>;          { worker thread, per output line }
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.JobQueue.pas), DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne (DragLint.Plugin.JobQueue.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TJobDone   = TProc<Integer, string>; { UI thread: (exit code, full output) }
 
   /// <summary>One queued heavy job. Owned by the queue once enqueued.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.Editor.DLRunMaintenanceJob (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnqueueRefreshFindings (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeAutoDocumentProject (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFormatProjectYadf (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGenerateFormsCsv (DragLint.Plugin.Editor.pas) (+22 more)</para>
+  /// <para>Used in units: DragLint.Plugin.Editor, DragLint.Plugin.IndexJob, DragLint.Plugin.JobQueue, DragLint.Plugin.Reports, DragLint.Plugin.SaveNotifier, DragLint.Plugin.StructureForm, DragLint.Plugin.UsesDepsFrame</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintJob = class
   public
     Kind       : TJobKind  ;
@@ -74,9 +108,23 @@ type
       0 (the default) -> a running job is not cancellable, as before.
       Non-streaming jobs only: a Streaming job ignores it. }
     CancelGraceMs: Integer ;  // dl:ok public-field@60f2 -- the job record's fields are its public contract, set by the enqueuer like every field above
+    /// <summary><!-- drag-lint:auto sum -->---- TDragLintJob ----</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.Editor.DLRunMaintenanceJob (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnqueueRefreshFindings (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeAutoDocumentProject (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFormatProjectYadf (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGenerateFormsCsv (DragLint.Plugin.Editor.pas) (+11 more)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: Kind, TimeoutMs, Streaming</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.JobQueue.pas) ?, DragLint.Plugin.JobQueue.JobQueue (DragLint.Plugin.JobQueue.pas), DragLint.Plugin.JobQueue.TQueueWorker.Create (DragLint.Plugin.JobQueue.pas) ?</para>
+  /// <para>Used in units: DragLint.Plugin.JobQueue</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintJobQueue = class
   private
     FLock    : TCriticalSection;
@@ -94,34 +142,214 @@ type
     { Worker thread only: whether THIS deferral episode has been logged.
       Cleared when the hold lifts, so a later hold is reported again. }
     FDeferredLogged: Boolean;
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.JobQueue.TQueueWorker.Execute (DragLint.Plugin.JobQueue.pas)</para>
+    /// <para>Calls: DragLint.Plugin.JobQueue.AdjustBusy, DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne, DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked, DragLint.Plugin.JobQueue.TDragLintJobQueue.WaitWhileEngineHeld</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 74 lines (full implementation)</para>
+    /// <para>Reads: FShutdown, FWake, FLock, FPending, FState</para>
+    /// <para>Catches: Exception (empty)</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.AdjustBusy"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.WaitWhileEngineHeld"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure WorkerLoop;
+    /// <summary><!-- drag-lint:auto sum -->NOT GATED, deliberately: a job ALREADY RUNNING
+    /// when the hold appears keeps running. The hold's contract is "will not START
+    /// anything" -- the same shape as EnsureLspClient's "will not RESPAWN" -- and the
+    /// build kills a running holder exactly as it does today.</summary>
+    /// <param name="ATitle"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AKey"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.JobQueue.TDragLintJobQueue.WorkerLoop (DragLint.Plugin.JobQueue.pas)</para>
+    /// <para>Calls: DRagLint.Core.EngineHold.EngineIsHeld, Format, GJobQueueDeferredHook</para>
+    /// <para>Reads: FShutdown, FDeferredLogged, FWake   Writes: FDeferredLogged</para>
+    /// <para>Catches: Exception (swallowed)</para>
+    /// <seealso cref="DRagLint.Core.EngineHold.EngineIsHeld"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  WaitWhileEngineHeld(const ATitle, AKey: string): Boolean;
+    /// <param name="AJob"><!-- drag-lint:auto type -->TDragLintJob</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.JobQueue.TDragLintJobQueue.WorkerLoop (DragLint.Plugin.JobQueue.pas)</para>
+    /// <para>Calls: CharInSet, Copy, DoneCb, DragLint.Plugin.JobQueue.AdjustBusy, DragLint.Plugin.JobQueue.LogJobLine, DragLint.Plugin.JobQueue.ReindexResultText, DragLint.Plugin.JobQueue.TDragLintJobQueue.SetLastResult, DragLint.Plugin.JobQueue.TDragLintJobQueue.SetPercent/1, DragLint.Plugin.JobQueue.TDragLintJobQueue.SetPercent/2, DragLint.Plugin.ProcRun.RunCaptureStdout (+8 more)</para>
+    /// <para>Complexity: 31 (cyclomatic, outer body), 160 lines (full implementation)</para>
+    /// <para>Reads: FCancel, FLock, FRunCancel, FShutdown, FState</para>
+    /// <para>Catches: Exception (empty); Exception (swallowed)</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.AdjustBusy"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.LogJobLine"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.ReindexResultText"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.SetLastResult"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.SetPercent"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure RunOne(AJob: TDragLintJob);
+    /// <param name="APct"><!-- drag-lint:auto type -->Integer</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne (DragLint.Plugin.JobQueue.pas)</para>
+    /// <para>Calls: DragLint.Plugin.JobQueue.TDragLintJobQueue.SetPercent/2</para>
+    /// <para>Overload 1 of 2</para>
+    /// <para>Directives: overload</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.SetPercent"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SetPercent(APct: Integer); overload;
+    /// <param name="APct"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="APhase"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne (DragLint.Plugin.JobQueue.pas), DragLint.Plugin.JobQueue.TDragLintJobQueue.SetPercent/1 (DragLint.Plugin.JobQueue.pas)</para>
+    /// <para>Overload 2 of 2</para>
+    /// <para>Reads: FLock, FState</para>
+    /// <para>Directives: overload</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Enqueue"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SetPercent(APct: Integer; const APhase: string); overload;
+    /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne (DragLint.Plugin.JobQueue.pas)</para>
+    /// <para>Reads: FLock, FState</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Enqueue"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SetLastResult(const AText: string);
     { Caller holds FLock. The ONE place QueueDepth and PendingTitles are set. }
+    /// <summary><!-- drag-lint:auto sum -->Caller holds FLock. The ONE place QueueDepth
+    /// and PendingTitles are set.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending (DragLint.Plugin.JobQueue.pas), DragLint.Plugin.JobQueue.TDragLintJobQueue.Create (DragLint.Plugin.JobQueue.pas), DragLint.Plugin.JobQueue.TDragLintJobQueue.Enqueue (DragLint.Plugin.JobQueue.pas), DragLint.Plugin.JobQueue.TDragLintJobQueue.WorkerLoop (DragLint.Plugin.JobQueue.pas)</para>
+    /// <para>Calls: Min</para>
+    /// <para>Reads: FState, FPending</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Enqueue"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure SyncPendingLocked;
   public
+    /// <summary><!-- drag-lint:auto sum -->---- TDragLintJobQueue ----</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.JobQueue.JobQueue (DragLint.Plugin.JobQueue.pas)</para>
+    /// <para>Calls: DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked, DragLint.Plugin.JobQueue.TQueueWorker.Create</para>
+    /// <para>constructor</para>
+    /// <para>Reads: FState   Writes: FLock, FPending, FWake, FCancel, FRunCancel, FShutdown, FDeferredLogged, FWorker</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TQueueWorker.Create"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Stops the worker: signals the cancel event, so a running job's
     /// child process tree is killed rather than waited out, then joins the
     /// worker. Pending jobs are dropped without their OnDone.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: Format, OutputDebugString, PChar, WaitForSingleObject</para>
+    /// <para>Reads: FCancel, FRunCancel, FWake, FWorker, FPending, FLock   Writes: FShutdown</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Enqueue"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.GetState"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Enqueue AJob (queue takes ownership). A pending job with the
     /// same non-empty CoalesceKey is dropped first. Call from the main thread.</summary>
+    /// <param name="AJob"><!-- drag-lint:auto type -->TDragLintJob</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.Editor.DLRunMaintenanceJob (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnqueueRefreshFindings (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeAutoDocumentProject (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFormatProjectYadf (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGenerateFormsCsv (DragLint.Plugin.Editor.pas) (+12 more)</para>
+    /// <para>Calls: DragLint.Plugin.JobQueue.AdjustBusy, DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked, SameText</para>
+    /// <para>Reads: FLock, FPending, FWake</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.AdjustBusy"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Enqueue(AJob: TDragLintJob);
     /// <summary>Cancel all pending (not-yet-running) jobs; the running one finishes.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleCancel (DragLint.Plugin.StatusBar.pas)</para>
+    /// <para>Calls: DragLint.Plugin.JobQueue.AdjustBusy, DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked</para>
+    /// <para>Reads: FLock, FPending</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.AdjustBusy"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.SyncPendingLocked"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure ClearPending;
     /// <summary>Cancels the RUNNING job when it takes a cancel (its CancelGraceMs
     /// &gt; 0): its engine is asked to stand down -- roll back and exit -- and its
     /// process tree is killed only if it has not exited after CancelGraceMs.</summary>
     /// <returns>True when a cancel was sent; False when nothing runs, the running
     /// job takes no cancel, or one was already sent.</returns>
-    /// <remarks>Any thread. The job's OnDone still runs, with the engine's own exit
-    /// code and output (or PROCRUN_CANCELLED_EXIT_CODE after the kill).</remarks>
+    /// <remarks>
+    /// Any thread. The job's OnDone still runs, with the engine's own exit
+    /// code and output (or PROCRUN_CANCELLED_EXIT_CODE after the kill).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleCancel (DragLint.Plugin.StatusBar.pas)</para>
+    /// <para>Calls: DragLint.Plugin.JobQueue.LogJobLine</para>
+    /// <para>Returns: FState.Running and FState.CanCancelRunning</para>
+    /// <para>Reads: FLock, FState, FRunCancel</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.LogJobLine"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Enqueue"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CancelRunning: Boolean;
     /// <summary>Thread-safe snapshot of the current state.</summary>
+    /// <returns><!-- drag-lint:auto -->TQueueState -- Observed: FState.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DragLint.Plugin.StatusBar.SetDragLintNote (DragLint.Plugin.StatusBar.pas), DragLint.Plugin.StatusBar.TDragLintStatusBar.HandleTimer (DragLint.Plugin.StatusBar.pas)</para>
+    /// <para>Reads: FLock, FState</para>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.CancelRunning"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.ClearPending"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Destroy"/>
+    /// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Enqueue"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GetState: TQueueState;
   end;
 
@@ -163,7 +391,14 @@ var
 /// <summary>Is a Busy job (a user-started fix) queued or running?</summary>
 /// <returns>True from the Enqueue of a Busy job until the last one is
 /// superseded, cancelled by ClearPending, or released before its OnDone.</returns>
-/// <remarks>Main thread only.</remarks>
+/// <remarks>
+/// Main thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.RefusedWhileFixRuns (DragLint.Plugin.StructureForm.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.RunFix (DragLint.Plugin.UsesDepsFrame.pas), DragLint.Plugin.UsesDepsFrame.TCircularUsesSection.StartRefresh (DragLint.Plugin.UsesDepsFrame.pas), initialization/finalization (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Returns: GBusyJobs &gt; 0</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function JobQueueBusy: Boolean;
 
 /// <summary>The bar text a finished reindex job leaves behind.</summary>
@@ -173,12 +408,35 @@ function JobQueueBusy: Boolean;
 /// output is the index-lock refusal (another run owns the database -- not an error; the
 /// next save or reindex retries); 'reindex: failed' for any other exit 2; otherwise
 /// 'reindex: failed (exit N)'.</returns>
-/// <remarks>Pure. The lock refusal is recognised by the phrase 'another index run',
-/// which both AcquireIndexLock refusals (sharing violation, delete pending) carry.</remarks>
+/// <remarks>
+/// Pure. The lock refusal is recognised by the phrase 'another index run',
+/// which both AcquireIndexLock refusals (sharing violation, delete pending) carry.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.JobQueue.TDragLintJobQueue.RunOne (DragLint.Plugin.JobQueue.pas)</para>
+/// <para>Calls: ContainsText, Format</para>
+/// <para>Returns: 'reindex: index busy, will retry'; Format('reindex: failed (exit %d)', [AExitCode])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReindexResultText(AExitCode: Integer; const AOutput: string): string;  // dl:ok unused-public-symbol@a063 -- public on purpose: tests\IndexJobTests.dpr (outside the plugin project) pins its wording
 
 { Lazy singleton (create/access on the main thread) + finalization teardown. }
+/// <summary><!-- drag-lint:auto sum -->Lazy singleton (create/access on the main thread)
+/// + finalization teardown.</summary>
+/// <returns><!-- drag-lint:auto -->TDragLintJobQueue -- Observed: GQueue.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.DLRunMaintenanceJob (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.EnqueueRefreshFindings (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeAutoDocumentProject (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeFormatProjectYadf (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeGenerateFormsCsv (DragLint.Plugin.Editor.pas) (+15 more)</para>
+/// <para>Calls: DragLint.Plugin.JobQueue.TDragLintJobQueue.Create</para>
+/// <seealso cref="DragLint.Plugin.JobQueue.TDragLintJobQueue.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function JobQueue: TDragLintJobQueue;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: initialization/finalization (DragLint.Plugin.JobQueue.pas)</para>
+/// <para>Calls: FreeAndNil</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShutdownJobQueue;
 
 implementation

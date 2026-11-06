@@ -50,7 +50,7 @@ interface
 /// Truncates sub-second precision downwards, which is what
 /// `SecondsBetween` does on the writer's side and what the stored stamps show.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.Index.Freshness.StampState (DRagLint.Index.Freshness.pas)</para>
+/// <para>Called from: DRagLint.Analysis.LintTree.CollectUnchecked (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.PurityStage.TPurityRun.ScanFiles (DRagLint.Analysis.PurityStage.pas), DRagLint.Core.FileTime.FileMTimeUnix (DRagLint.Core.FileTime.pas), DRagLint.Index.Freshness.StampState (DRagLint.Index.Freshness.pas)</para>
 /// <para>Calls: DRagLint.Core.FileTime.FileTimeToUnix, FindFirstFile, GetFileAttributesEx, PChar</para>
 /// <para>Returns: False; True</para>
 /// <para>Mutates: AMTimeUnix (out)</para>
@@ -66,20 +66,40 @@ function TryGetFileMTimeUnix(const APath: string; out AMTimeUnix: Int64): Boolea
 /// (2026-11-01 here) the RTL converted a plain afternoon `Now` one hour off for the WHOLE day, so
 /// every stamp written by the indexer and every `Z` log line was +1 h (lane 140-cli DST;
 /// pinned by tests\autotest\run_index_utc_stamps.ps1). Thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Ask.AskChartQuestion (DRagLint.Charts.Ask.pas), DRagLint.Core.UsageLog.RecordUsage (DRagLint.Core.UsageLog.pas), DRagLint.Project.ContextFile.SaveProjectContext (DRagLint.Project.ContextFile.pas)</para>
+/// <para>Calls: GetSystemTime, SystemTimeToDateTime</para>
+/// <para>Returns: SystemTimeToDateTime(ST)</para>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function NowUtc: TDateTime;
 
 /// <summary>The wall clock in the machine's local time zone, for log lines a person reads.</summary>
 /// <returns>Local date and time, derived from the real UTC instant converted with the zone offset in force
 /// AT THAT INSTANT (SystemTimeToTzSpecificLocalTime).</returns>
-/// <remarks>Replaces the RTL's Now for stamps: on a daylight-saving transition day (2026-11-01 here) the
+/// <remarks>
+/// Replaces the RTL's Now for stamps: on a daylight-saving transition day (2026-11-01 here) the
 /// RTL's Now printed started HH:MM one hour ahead of the real clock for the whole day (1.41 DST-LOGSTAMP;
-/// pinned by tests\autotest\run_cli141_followups.ps1). Thread-safe.</remarks>
+/// pinned by tests\autotest\run_cli141_followups.ps1). Thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) (+1 more)</para>
+/// <para>Calls: GetSystemTime, SystemTimeToDateTime, SystemTimeToTzSpecificLocalTime</para>
+/// <para>Returns: if SystemTimeToTzSpecificLocalTime(nil, UtcST, LocalST) then SystemTimeToDateTime(LocalST)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NowLocal: TDateTime;
 
 /// <summary>The real UTC clock as unix epoch seconds (what files.parsed_at stores).</summary>
 /// <returns>Whole seconds since 1970-01-01 UTC. Same source as NowUtc.</returns>
-/// <remarks>Thread-safe.</remarks>
+/// <remarks>
+/// Thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CommitIndexerFingerprint (DRagLint.CLI.pas), DRagLint.CLI.DoImportLog (DRagLint.CLI.pas), DRagLint.CLI.FinishLibraryResolve (DRagLint.CLI.pas), DRagLint.CLI.OpenInObsidian (DRagLint.CLI.pas), DRagLint.CLI.RefreshProjectFindingsCore (DRagLint.CLI.pas) (+3 more)</para>
+/// <para>Calls: DRagLint.Core.FileTime.FileTimeToUnix, GetSystemTimeAsFileTime</para>
+/// <para>Returns: FileTimeToUnix(Stamp)</para>
+/// <seealso cref="DRagLint.Core.FileTime.FileTimeToUnix"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function NowUnixUtc: Int64;
 
 /// <summary>A file's last-write time as unix epoch seconds, UTC, raising like TFile.</summary>
@@ -90,6 +110,11 @@ function NowUnixUtc: Int64;
 /// Replaces `DateTimeToUnix(TFile.GetLastWriteTime(P), False)`: that round-trips through a LOCAL
 /// TDateTime, which is ambiguous for the repeated hour at DST end (stored +3600 s). This reads the
 /// UTC FILETIME and never touches a time zone.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.FileStampIsCurrent (DRagLint.CLI.CycleFix.pas), DRagLint.Convert.Apply.FileStampIsCurrent (DRagLint.Convert.Apply.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Index.CallResolver.TCallResolver.LinesOf (DRagLint.Index.CallResolver.pas), DRagLint.Index.DispatchResolver.TDispatchResolver.LinesOf (DRagLint.Index.DispatchResolver.pas) (+4 more)</para>
+/// <para>Calls: DRagLint.Core.FileTime.TryGetFileMTimeUnix</para>
+/// <seealso cref="DRagLint.Core.FileTime.TryGetFileMTimeUnix"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function FileMTimeUnix(const APath: string): Int64;
 implementation

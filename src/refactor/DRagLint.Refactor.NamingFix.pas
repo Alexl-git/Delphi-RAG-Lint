@@ -12,7 +12,7 @@ type
   /// <summary>Target casing styles, matching TNamingConfig's textual vocabulary.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.NamingFix.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.NamingFix.pas), DRagLint.Refactor.NamingFix.StyleFromConfigText (DRagLint.Refactor.NamingFix.pas), DRagLint.Refactor.NamingFix.SynthesizeCasedName (DRagLint.Refactor.NamingFix.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TNameStyle = (nsPascalCase, nsCamelCase, nsUpperCase);
@@ -77,26 +77,40 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 /// <param name="AOldName">The offending constant name verbatim.</param>
 /// <param name="AConstCase">The configured const_case styles; empty means UPPER_CASE.</param>
 /// <returns>Candidates, best first; empty when no style changes the name.</returns>
-/// <remarks>WORD-AWARE, unlike SynthesizeCasedName (owner report 2026-10-13: most
+/// <remarks>
+/// WORD-AWARE, unlike SynthesizeCasedName (owner report 2026-10-13: most
 /// of ORM3's const-casing findings looked like StationType_Operator, which a
 /// first-letter re-casing leaves unchanged, so nothing was ever fixable). Words
 /// split at '_' and at a lower-to-upper step:
-///   PascalCase  StationType_Operator -> StationTypeOperator, wr_str -> WrStr,
-///               MAX_COUNT -> MaxCount, wrStr -> WrStr
-///   UPPER_CASE  StationType_Operator -> STATION_TYPE_OPERATOR, wrStr -> WR_STR
-///   camelCase   StationType_Operator -> stationTypeOperator
+/// PascalCase StationType_Operator -> StationTypeOperator, wr_str -> WrStr,
+/// MAX_COUNT -> MaxCount, wrStr -> WrStr
+/// UPPER_CASE StationType_Operator -> STATION_TYPE_OPERATOR, wrStr -> WR_STR
+/// camelCase StationType_Operator -> stationTypeOperator
 /// A candidate CHANGES the identifier, so the caller must ask the index whether
 /// it is free (FreeCandidates keeps those ConflictReason clears; BuildNamingFixEdits takes the first).
-/// Pure. Pinned by tests\autotest\run_const_casing_word_fix.ps1.</remarks>
+/// Pure. Pinned by tests\autotest\run_const_casing_word_fix.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.NamingFix.NamingCandidates (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: Copy, DRagLint.Refactor.NamingFix.IdentWords, DRagLint.Refactor.NamingFix.PascalWord, DRagLint.Refactor.NamingFix.StyleFromConfigText, IndexStr, LowerCase, UpperCase</para>
+/// <seealso cref="DRagLint.Refactor.NamingFix.IdentWords"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.PascalWord"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.StyleFromConfigText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ConstCaseCandidates(const AOldName: string; const AConstCase: TArray<string>): TArray<string>;
 
 type
   /// <summary>Which rename engine a naming target goes through.</summary>
-  /// <remarks>nsGlobal: the store-backed TRenameRefactoring.Build on the resolved
+  /// <remarks>
+  /// nsGlobal: the store-backed TRenameRefactoring.Build on the resolved
   /// symbol's qualified name (method-pascalcase, const-casing, field-name-prefix,
   /// type-name-prefix). nsLocal: the routine-local TRenameRefactoring.BuildLocal at
   /// the finding's own position (local-var-casing, param-name-prefix,
-  /// local-field-prefix); no store symbol is resolved for it.</remarks>
+  /// local-field-prefix); no store symbol is resolved for it.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.NamingFix.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TNamingScope = (nsGlobal, nsLocal);
 
   /// <summary>Outcome of the TARGET phase (BuildNamingTargets) for one naming finding.</summary>
@@ -112,14 +126,23 @@ type
   /// (pinned by tests\autotest\run_naming_fix_stale_position.ps1).
   /// tsAllCandidatesTaken: never produced by BuildNamingTargets; for a caller that finds
   /// FreeCandidates empty (for instance across several stores) to record that.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.NamingFix.pas), DRagLint.Refactor.MultiProjectRename.StaleTolerated (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.StatusText (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTargetStatus = (tsReady, tsNoChange, tsUnresolved, tsStalePosition, tsAllCandidatesTaken);
 
   /// <summary>One naming finding resolved against ONE symbol store, before a new name
   /// is chosen: the identifier, its candidate names and how it is renamed.</summary>
-  /// <remarks>Value type; owns nothing. Store-dependent fields are QName, SymLine,
+  /// <remarks>
+  /// Value type; owns nothing. Store-dependent fields are QName, SymLine,
   /// Status and, for type-name-prefix only (its prefix follows the resolved symbol's
-  /// kind), Candidates.</remarks>
+  /// kind), Candidates.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.CandidateWhy (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.FindTarget (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.ShadowReason (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.NamingFix.BuildNamingTargets (DRagLint.Refactor.NamingFix.pas) (+8 more)</para>
+  /// <para>Used in units: DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.NamingFix</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TNamingTarget = record
     Key       : string;          // lower(file)|line|col|rule -- one target per key
     Finding   : TLintFinding;
@@ -142,12 +165,25 @@ type
 /// <param name="ANaming">Naming config supplying the casing styles and prefixes.</param>
 /// <returns>Targets in finding order, one per Key (the first finding wins). Every
 /// status is included; a finding whose processing raises is omitted.</returns>
-/// <remarks>Rules handled: method-pascalcase, local-var-casing, const-casing,
+/// <remarks>
+/// Rules handled: method-pascalcase, local-var-casing, const-casing,
 /// field-name-prefix, param-name-prefix, type-name-prefix, local-field-prefix.
 /// const-casing candidates come from ConstCaseCandidates; every other rule has
 /// exactly one candidate. Exercised through BuildNamingFixEdits by
 /// run_naming_autofix.ps1, run_naming_prefix_autofix.ps1, run_const_casing_word_fix.ps1
-/// and run_naming_fix_stale_position.ps1.</remarks>
+/// and run_naming_fix_stale_position.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.MultiProjectRename.OpenOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: Default, DRagLint.Refactor.NamingFix.DeclaredInFile, DRagLint.Refactor.NamingFix.NamingCandidates, DRagLint.Refactor.NamingFix.ReadIdentifierAt, DRagLint.Refactor.NamingFix.ResolveAccessor, DRagLint.Refactor.NamingFix.ResolveSymbolAt, IntToStr, LowerCase, SameText</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 70 lines (full implementation)</para>
+/// <para>Catches: Exception (empty)</para>
+/// <seealso cref="DRagLint.Refactor.NamingFix.DeclaredInFile"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.NamingCandidates"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.ReadIdentifierAt"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.ResolveAccessor"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.ResolveSymbolAt"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildNamingTargets(const AStore: ISymbolStore; const AFindings: TArray<TLintFinding>;
   const ANaming: TNamingConfig): TArray<TNamingTarget>;
 
@@ -158,12 +194,20 @@ function BuildNamingTargets(const AStore: ISymbolStore; const AFindings: TArray<
 /// <param name="ATarget">A target from BuildNamingTargets built against AStore.</param>
 /// <returns>The free candidates, best first; nil when ATarget.Status is not tsReady
 /// or none is free.</returns>
-/// <remarks>nsGlobal: a candidate is free when TRenameRefactoring.ConflictReason
+/// <remarks>
+/// nsGlobal: a candidate is free when TRenameRefactoring.ConflictReason
 /// reports no conflict for ATarget.QName. nsLocal: param-name-prefix and
 /// local-field-prefix drop a candidate LocalNameCollides finds in the enclosing
 /// routine; local-var-casing keeps its candidate (a pure re-casing cannot collide).
 /// Pinned by run_const_casing_word_fix.ps1 (Station_Name -> STATION_NAME because
-/// StationName already exists).</remarks>
+/// StationName already exists).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.MultiProjectRename.CandidateWhy (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.PlanLocal (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: DRagLint.Refactor.NamingFix.LocalNameCollides, DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason, SameText</para>
+/// <seealso cref="DRagLint.Refactor.NamingFix.LocalNameCollides"/>
+/// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.ConflictReason"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FreeCandidates(const AStore: ISymbolStore; const ATarget: TNamingTarget): TArray<string>;
 
 /// <summary>EDIT phase: the text edits that rename ATarget to ANewName, each one
@@ -177,10 +221,23 @@ function FreeCandidates(const AStore: ISymbolStore; const ATarget: TNamingTarget
 /// holds the identifier (the stale-position guard); those sites are not written.</param>
 /// <returns>The surviving edits; empty when ATarget is not tsReady, ANewName is empty
 /// or nothing survived.</returns>
-/// <remarks>An edit on the finding's own line takes the finding's verified
+/// <remarks>
+/// An edit on the finding's own line takes the finding's verified
 /// [StartCol, EndCol) span; every other edit uses the rename engine's coordinates.
 /// Each edit carries ExpectText for the applier to re-verify at write time. Pinned
-/// by run_autofix_apply_accounting.ps1 and the naming autofix suites.</remarks>
+/// by run_autofix_apply_accounting.ps1 and the naming autofix suites.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.MultiProjectRename.CandidateWhy (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.PlanLocal (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: Copy, Default, DRagLint.Refactor.NamingFix.BuildTargetEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.BuildTargetEdits.LinesFor, DRagLint.Refactor.Rename.TRenameRefactoring.Build, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal, SameText, SpanHoldsIdent</para>
+/// <para>Returns: nil; Edits.ToArray</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 170 lines (full implementation)</para>
+/// <para>Mutates: ASkipped (out)</para>
+/// <seealso cref="DRagLint.Refactor.NamingFix.BuildTargetEdits.EmitRenameEdits"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.BuildTargetEdits.LinesFor"/>
+/// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Build"/>
+/// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildTargetEdits(const AStore: ISymbolStore; const ATarget: TNamingTarget;
   const ANewName: string; out ASkipped: Integer): TArray<TTextEdit>;
 
@@ -267,6 +324,18 @@ function BuildNamingFixEdits(const AStore: ISymbolStore;
 /// <param name="AStartCol">1-based first column.</param>
 /// <param name="AEndCol">Exclusive end column.</param>
 /// <returns>The text of the span, or '' when the file or span is not there.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto -->Reads AFile's ALine (1-based) and returns the substring at 1-based
+/// columns [AStartCol, AEndCol) (exclusive end), matching TLintFinding.StartCol/EndCol's convention
+/// (see DRagLint.Diagnostics.NamingChecks.EmitAt). Empty string on any out-of-range condition.
+/// ANSI-decoded like the rest of the refactor engines.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.NamingFixIdentifier (DRagLint.CLI.pas), DRagLint.Refactor.NamingFix.BuildNamingTargets (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Calls: Copy</para>
+/// <para>Returns: ''; Copy(LnText, AStartCol, Len)</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReadIdentifierAt(const AFile: string; ALine, AStartCol, AEndCol: Integer): string;
 
 implementation

@@ -39,9 +39,15 @@ const
 type
   /// <summary>Where a dwell asked its hover question, in the editor control's
   /// CLIENT coordinates.</summary>
-  /// <remarks>Captured on the main thread when the request goes out and
+  /// <remarks>
+  /// Captured on the main thread when the request goes out and
   /// compared with the pointer when the answer arrives. Hwnd = 0 means "no
-  /// anchor": the gate then refuses everything.</remarks>
+  /// anchor": the gate then refuses everything.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.HoverGate.pas), declaration (DragLint.Plugin.HoverTracker.pas), DragLint.Plugin.HoverGate.DLHoverAnchorFor (DragLint.Plugin.HoverGate.pas), DragLint.Plugin.HoverGate.DLHoverGate (DragLint.Plugin.HoverGate.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.HoverGate, DragLint.Plugin.HoverTracker</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLHoverAnchor = record
     Hwnd       : HWND   ; { the editor control the dwell started in }
     TokenLeftX : Integer; { first client X of the identifier (inclusive) }
@@ -55,6 +61,11 @@ type
 
   /// <summary>Outcome of the show-gate. Only hgvShow shows the popup; the
   /// others name WHY it was discarded, for telemetry.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.HoverGate.pas), DragLint.Plugin.HoverGate.DLHoverGate (DragLint.Plugin.HoverGate.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.GateAndShowInflight (DragLint.Plugin.HoverTracker.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLHoverGateVerdict = (
     hgvShow       , { pointer still on the same token of the same control }
     hgvNoAnchor   , { the anchor was never captured (Hwnd = 0 / height <= 0) }
@@ -76,8 +87,15 @@ type
 /// when AAnchor.Row0 &gt;= 0, ANowRow0 = Row0 with StartCol0 &lt;= ANowCol0 &lt;
 /// EndCol0; otherwise the first failing rule, checked in the order window, X,
 /// Y, cell.</returns>
-/// <remarks>Pure; never raises. A fallback anchor (Row0 = -1) skips the cell
-/// rule: there was no grid to map the question to.</remarks>
+/// <remarks>
+/// Pure; never raises. A fallback anchor (Row0 = -1) skips the cell
+/// rule: there was no grid to map the question to.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.GateAndShowInflight (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Returns: hgvOtherCell; hgvShow</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 10 lines (full implementation)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLHoverGate(const AAnchor: TDLHoverAnchor; ANowHwnd: HWND; const AClientPt: TPoint;
   ANowRow0, ANowCol0: Integer): TDLHoverGateVerdict;
 
@@ -88,7 +106,16 @@ function DLHoverGate(const AAnchor: TDLHoverAnchor; ANowHwnd: HWND; const AClien
 /// <param name="AEnd0">Receives the 0-based column just AFTER the identifier.</param>
 /// <returns>False when ACol0 is outside the line or not on an identifier
 /// character ([A-Za-z0-9_]).</returns>
-/// <remarks>Pure; never raises.</remarks>
+/// <remarks>
+/// Pure; never raises.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Calls: DragLint.Plugin.HoverGate.IsIdentChar</para>
+/// <para>Returns: True</para>
+/// <para>Mutates: AStart0 (out), AEnd0 (out)</para>
+/// <seealso cref="DragLint.Plugin.HoverGate.IsIdentChar"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLIdentSpanAt(const ALine: string; ACol0: Integer; out AStart0, AEnd0: Integer): Boolean;
 
 /// <summary>Builds the anchor for a token from the editor grid the gutter
@@ -102,8 +129,14 @@ function DLIdentSpanAt(const ALine: string; ACol0: Integer; out AStart0, AEnd0: 
 /// <param name="AEnd0">0-based column just after the token.</param>
 /// <returns>The anchor; X span = ATextLeft + column * ACharWidth, the exact
 /// inverse of the mapping that turned the pointer into a column.</returns>
-/// <remarks>Row0 is -1 (unknown: the gate skips its cell rule); a caller that
-/// mapped the token to a buffer row sets Row0 on the result.</remarks>
+/// <remarks>
+/// Row0 is -1 (unknown: the gate skips its cell rule); a caller that
+/// mapped the token to a buffer row sets Row0 on the result.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DLHoverAnchorFor(AHwnd: HWND; ATextLeft, ACharWidth, ALineTopY, ALineHeight, AStart0, AEnd0: Integer): TDLHoverAnchor;
 
 implementation

@@ -23,6 +23,12 @@ uses
 
 type
   /// <summary>A 1-based inclusive line span (the PS $Skip pair).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Exceptions.ExceptionSourceRowsIn (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Exceptions.Skipped (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Exceptions.TExceptionIndex.SourceRows (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.NestedSkip (DRagLint.Charts.Q.ExceptionPaths.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Exceptions, DRagLint.Charts.Q.ExceptionPaths, DRagLint.Charts.Remarks</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLineSpan = record
     /// <summary>First line.</summary>
     FromLine: Integer;
@@ -32,10 +38,23 @@ type
     /// <param name="pFrom">First line.</param>
     /// <param name="pTo">Last line.</param>
     /// <returns>The span.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.NestedSkip (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: static</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Make(pFrom, pTo: Integer): TLineSpan; static;
   end;
 
   /// <summary>One source-only exception statement. Port of a Get-ExceptionSourceRowsIn row.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas) ?, declaration (DRagLint.Charts.Q.ExceptionPaths.pas) ?, DRagLint.Charts.Exceptions.ClassifyRaise (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Exceptions.ExceptionSourceRowsIn (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.DrawBody (DRagLint.Charts.Q.ExceptionPaths.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.Exceptions, DRagLint.Charts.Q.ExceptionPaths</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExceptionSourceRow = record
     /// <summary>bare-except | on-except | reraise | raise-var | raise-create | raise-other.</summary>
     Kind: string;
@@ -48,6 +67,12 @@ type
   end;
 
   /// <summary>The source-only rows of one range of one file. Port of the Get-ExceptionSourceRows result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Exceptions.TExceptionIndex.SourceRows (DRagLint.Charts.Exceptions.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Exceptions</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExceptionSourceScan = record
     /// <summary>The indexed path.</summary>
     Path : string;
@@ -59,6 +84,12 @@ type
 
   /// <summary>One try-block. Positions are line * 100000 + column, as Int64: the PS arithmetic widens,
   /// and a line past 21474 would overflow an Integer.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Exceptions.FindHandlerBlock (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.HandlerReraises (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Exceptions.TTryScan.CloseEnd (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.CallerVerdict (DRagLint.Charts.Q.ExceptionPaths.pas) ?</para>
+  /// <para>Used in units: DRagLint.Charts.Exceptions, DRagLint.Charts.Q.ExceptionPaths</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTryBlock = record
     /// <summary>The `try`.</summary>
     TryPos    : Int64;
@@ -73,6 +104,12 @@ type
   end;
 
   /// <summary>The try-blocks of one span. Port of the Get-TryBlocks result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas), declaration (DRagLint.Charts.Q.ExceptionPaths.pas), DRagLint.Charts.Exceptions.FindHandlerBlock (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.TryBlocks (DRagLint.Charts.Exceptions.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Exceptions, DRagLint.Charts.Q.ExceptionPaths</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTryBlocks = record
     /// <summary>False: the nesting could not be decided (Blocks empty).</summary>
     Decided: Boolean;
@@ -83,7 +120,13 @@ type
   end;
 
   /// <summary>What the caller's edge evaluation decided (the PS $Evaluate result).</summary>
-  /// <remarks>The walk reads only Stopped; Tag is the caller's own handle on its richer result.</remarks>
+  /// <remarks>
+  /// The walk reads only Stopped; Tag is the caller's own handle on its richer result.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas), declaration (DRagLint.Charts.Q.ExceptionPaths.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.EvaluateEdge (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Exceptions, DRagLint.Charts.Q.ExceptionPaths</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEdgeVerdict = record
     /// <summary>The caller stops the type on this edge.</summary>
     Stopped: Boolean;
@@ -92,11 +135,34 @@ type
   end;
 
   /// <summary>Evaluates ONE edge: does caller pCaller stop pType on its calls to pCallee at pSites?</summary>
+  /// <param name="pCaller"><!-- drag-lint:auto type -->Integer</param>
+  /// <param name="pCallee"><!-- drag-lint:auto type -->Integer</param>
+  /// <param name="pSites"><!-- drag-lint:auto type -->const TArray&lt;Int64&gt;</param>
+  /// <param name="pType"><!-- drag-lint:auto type -->const string</param>
+  /// <returns><!-- drag-lint:auto type -->TEdgeVerdict</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.InvokeExceptionWalk (DRagLint.Charts.Exceptions.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TEvaluateEdge = reference to function(pCaller, pCallee: Integer; const pSites: TArray<Int64>; const pType: string): TEdgeVerdict;
   /// <summary>Which of pIds have a caller at all (asked only at the depth bound).</summary>
+  /// <param name="pIds"><!-- drag-lint:auto type -->const TArray&lt;Integer&gt;</param>
+  /// <returns><!-- drag-lint:auto type -->TArray&lt;Integer&gt;</returns>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.ClassifyBound (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.InvokeExceptionWalk (DRagLint.Charts.Exceptions.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   THasCallers = reference to function(const pIds: TArray<Integer>): TArray<Integer>;
 
   /// <summary>One evaluated edge of the walk.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.InvokeExceptionWalk (DRagLint.Charts.Exceptions.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Exceptions</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TWalkEdge = record
     /// <summary>The caller.</summary>
     Caller : Integer;
@@ -109,6 +175,12 @@ type
   end;
 
   /// <summary>The upward walk of one raised type. Port of the Invoke-ExceptionWalk result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas) ?, declaration (DRagLint.Charts.Q.ExceptionPaths.pas) ?, DRagLint.Charts.Exceptions.InvokeExceptionWalk (DRagLint.Charts.Exceptions.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Exceptions, DRagLint.Charts.Q.ExceptionPaths</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExceptionWalk = record
     /// <summary>The type walked.</summary>
     TypeName     : string;
@@ -131,6 +203,12 @@ type
   end;
 
   /// <summary>One incoming call edge of a callee.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.TExceptionGraph.AddCaller (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.TExceptionGraph.CallersOf (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.TExceptionGraph.Create (DRagLint.Charts.Exceptions.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Exceptions</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TCallerEdge = record
     /// <summary>The caller.</summary>
     Caller: Integer;
@@ -139,6 +217,12 @@ type
   end;
 
   /// <summary>The caller graph the walk runs over (the PS $CallersOf / $Fetched / $CappedOf).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas) ?, declaration (DRagLint.Charts.Q.ExceptionPaths.pas) ?, DRagLint.Charts.Exceptions.ClassifyBound (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Exceptions.InvokeExceptionWalk (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.Create (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Exceptions, DRagLint.Charts.Q.ExceptionPaths</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExceptionGraph = class
   private
     FCallersOf: TObjectDictionary<Integer, TList<TCallerEdge>>;
@@ -146,39 +230,147 @@ type
     FCappedOf : TObjectDictionary<Integer, TList<Integer>>;
   public
     /// <summary>Constructor: an empty graph.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.Create (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FCallersOf, FFetched, FCappedOf</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCaller"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCapped"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CallersOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CappedOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees the graph.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FCappedOf, FFetched, FCallersOf</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCaller"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCapped"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CallersOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CappedOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Records that pCaller calls pCallee at pSites (a walked edge).</summary>
     /// <param name="pCallee">The callee.</param>
     /// <param name="pCaller">The caller.</param>
     /// <param name="pSites">Its call sites.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.WalkCallers (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+    /// <para>Reads: FCallersOf</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCapped"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CallersOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CappedOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Create"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddCaller(pCallee, pCaller: Integer; const pSites: TArray<Int64>);
     /// <summary>Records a caller of pCallee kept out by the caller cap (once).</summary>
     /// <param name="pCallee">The callee.</param>
     /// <param name="pCaller">The capped caller.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.WalkCallers (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+    /// <para>Reads: FCappedOf</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCaller"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CallersOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CappedOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Create"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddCapped(pCallee, pCaller: Integer);
     /// <summary>Marks pNode as one whose callers were queried.</summary>
     /// <param name="pNode">The node.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.WalkCallers (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+    /// <para>Reads: FFetched</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCaller"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCapped"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CallersOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CappedOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure MarkFetched(pNode: Integer);
     /// <summary>Unmarks pNode (a test hook: the PS removes a key).</summary>
     /// <param name="pNode">The node.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FFetched</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCaller"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCapped"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CallersOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CappedOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure UnmarkFetched(pNode: Integer);
     /// <summary>Whether pNode's callers were queried.</summary>
     /// <param name="pNode">The node.</param>
     /// <returns>True when fetched.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Exceptions.ClassifyBound (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.InvokeExceptionWalk (DRagLint.Charts.Exceptions.pas)</para>
+    /// <para>Returns: FFetched.ContainsKey(pNode)</para>
+    /// <para>Reads: FFetched</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCaller"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCapped"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CallersOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CappedOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Fetched(pNode: Integer): Boolean;
     /// <summary>pCallee's walked incoming edges, in insertion order.</summary>
     /// <param name="pCallee">The callee.</param>
     /// <returns>A copy; empty when none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Exceptions.ClassifyBound (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.InvokeExceptionWalk (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.DrawCallers (DRagLint.Charts.Q.ExceptionPaths.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.WalkCallers (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+    /// <para>Returns: []; L.ToArray</para>
+    /// <para>Reads: FCallersOf</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCaller"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCapped"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CappedOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Create"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CallersOf(pCallee: Integer): TArray<TCallerEdge>;
     /// <summary>pCallee's capped callers, in insertion order.</summary>
     /// <param name="pCallee">The callee.</param>
     /// <returns>A copy; empty when none.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Exceptions.ClassifyBound (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.InvokeExceptionWalk (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.EndNotes (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+    /// <para>Returns: []; L.ToArray</para>
+    /// <para>Reads: FCappedOf</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCaller"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.AddCapped"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CallersOf"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Create"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CappedOf(pCallee: Integer): TArray<Integer>;
   end;
 
   /// <summary>The index-wide exception candidates, classified. Port of the Get-ExceptionIndexStats result.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas) ?, declaration (DRagLint.Charts.Q.ExceptionPaths.pas) ?, DRagLint.Charts.Exceptions.TExceptionIndex.FactIndexStats (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.TExceptionIndex.IndexStats (DRagLint.Charts.Exceptions.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Exceptions, DRagLint.Charts.Q.ExceptionPaths</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExceptionStats = record
     /// <summary>Name-filtered refs.</summary>
     Candidates    : Integer;
@@ -201,8 +393,14 @@ type
   end;
 
   /// <summary>The index-backed exception helpers over one Delphi index.</summary>
-  /// <remarks>Caches the non-class name set (per index) like the PS $script: cache. Neither
-  /// the index nor the reader is owned. Not thread-safe.</remarks>
+  /// <remarks>
+  /// Caches the non-class name set (per index) like the PS $script: cache. Neither
+  /// the index nor the reader is owned. Not thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.ExceptionPaths.pas) ?, DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.Create (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.ExceptionPaths</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TExceptionIndex = class
   private
     FIndex   : TChartsIndex;
@@ -210,20 +408,80 @@ type
     FNonClass: TDictionary<string, Boolean>;
     FFactsProbed: Boolean;
     FHasFacts   : Boolean;
+    /// <summary><!-- drag-lint:auto sum -->IndexStats over the facts: a name-filtered
+    /// candidate is a raise / handle when a raise / handle fact sits on its identifier
+    /// (same file, line, column), else it is dropped. Raise and handle sites are the
+    /// exception-named FACT rows, so a qualified `raise U.EFoo.Create` (whose only
+    /// candidate is the member-access on EFoo) is a raise site. Nothing reads source:
+    /// Stale stays 0.</summary>
+    /// <returns><!-- drag-lint:auto -->TExceptionStats -- Observed:
+    /// Default(TExceptionStats).</returns>
+    /// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Source.TSourceReader.SourceFresh: Test-SourceFresh:</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Exceptions.TExceptionIndex.IndexStats (DRagLint.Charts.Exceptions.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Exceptions.ExceptionNameSql, DRagLint.Charts.Exceptions.TExceptionIndex.IsExceptionTypeName, DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Source.TSourceReader.SourceFresh, Format, QuotedStr</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 53 lines (full implementation)</para>
+    /// <para>Reads: FIndex, FReader</para>
+    /// <para>SQL: reads FILES, REFS</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.ExceptionNameSql"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.IsExceptionTypeName"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FactIndexStats: TExceptionStats;
   public
     /// <summary>Constructor: the helpers over one index.</summary>
     /// <param name="pIndex">The Delphi index; not owned.</param>
     /// <param name="pReader">A source reader over it; not owned.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.Create (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FIndex, FReader</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.FactIndexStats"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.HasRaiseHandleFacts"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.IndexStats"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.IsExceptionTypeName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(pIndex: TChartsIndex; pReader: TSourceReader);
     /// <summary>Frees the cache.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FNonClass</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.Create"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.FactIndexStats"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.HasRaiseHandleFacts"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.IndexStats"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.IsExceptionTypeName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Whether a name counts as a reference to an exception TYPE.</summary>
     /// <param name="pName">A name.</param>
     /// <returns>True for `E&lt;Capital&gt;...` with a lower-case letter, or `Exception`, unless the
     /// index declares it ONLY as something other than a class.</returns>
-    /// <remarks>Port of Test-ExceptionTypeName (Emit-Common.ps1:2517); the pattern is
-    /// case-SENSITIVE (-cnotmatch) and so is the set (a default HashSet).</remarks>
+    /// <remarks>
+    /// Port of Test-ExceptionTypeName (Emit-Common.ps1:2517); the pattern is
+    /// case-SENSITIVE (-cnotmatch) and so is the set (a default HashSet).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Exceptions.TExceptionIndex.FactIndexStats (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.TExceptionIndex.IndexStats (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.BodyExceptions (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Exceptions.ExceptionNameSql, DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Index.TIndexRow.S</para>
+    /// <para>Returns: False; not FNonClass.ContainsKey(pName)</para>
+    /// <para>Reads: FNonClass, FIndex   Writes: FNonClass</para>
+    /// <para>SQL: reads SYMBOLS</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.ExceptionNameSql"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.Create"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsExceptionTypeName(const pName: string): Boolean;
     /// <summary>The source-only rows of one range of one file, gated on freshness.</summary>
     /// <param name="pPath">The indexed file.</param>
@@ -231,21 +489,64 @@ type
     /// <param name="pTo">Last line.</param>
     /// <param name="pSkip">Spans to leave out (nested routines).</param>
     /// <returns>The scan; Stale with no rows when the file is not the indexed copy.</returns>
-    /// <remarks>Port of Get-ExceptionSourceRows (Emit-Common.ps1:2451).</remarks>
+    /// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Source.TSourceReader.SourceFresh: Test-SourceFresh:</exception>
+    /// <remarks>
+    /// Port of Get-ExceptionSourceRows (Emit-Common.ps1:2451).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.BodyExceptions (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Exceptions.ExceptionSourceRowsIn, DRagLint.Charts.Source.TSourceReader.ReadPath, DRagLint.Charts.Source.TSourceReader.SourceFresh, DRagLint.Charts.Source.TSourceReader.StrippedSourceLines</para>
+    /// <para>Returns: Default(TExceptionSourceScan)</para>
+    /// <para>Reads: FReader</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.ExceptionSourceRowsIn"/>
+    /// <seealso cref="DRagLint.Charts.Source.TSourceReader.ReadPath"/>
+    /// <seealso cref="DRagLint.Charts.Source.TSourceReader.SourceFresh"/>
+    /// <seealso cref="DRagLint.Charts.Source.TSourceReader.StrippedSourceLines"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SourceRows(const pPath: string; pFrom, pTo: Integer; const pSkip: TArray<TLineSpan>): TExceptionSourceScan;
     /// <summary>The index-wide exception candidates, classified by their source token.</summary>
     /// <returns>The counts.</returns>
-    /// <remarks>Port of Get-ExceptionIndexStats (Emit-Common.ps1:2740). The PS per-run cache
-    /// is not ported: a caller keeps the result.</remarks>
+    /// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Source.TSourceReader.SourceFresh: Test-SourceFresh:</exception>
+    /// <remarks>
+    /// Port of Get-ExceptionIndexStats (Emit-Common.ps1:2740). The PS per-run cache
+    /// is not ported: a caller keeps the result.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.SelectFocus (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Exceptions.ExceptionFactKindsSql, DRagLint.Charts.Exceptions.ExceptionNameSql, DRagLint.Charts.Exceptions.ExceptionRefClass, DRagLint.Charts.Exceptions.TExceptionIndex.FactIndexStats, DRagLint.Charts.Exceptions.TExceptionIndex.HasRaiseHandleFacts, DRagLint.Charts.Exceptions.TExceptionIndex.IsExceptionTypeName, DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Source.TSourceReader.SourceContext, DRagLint.Charts.Source.TSourceReader.SourceFresh</para>
+    /// <para>Returns: FactIndexStats; Default(TExceptionStats)</para>
+    /// <para>Reads: FIndex, FReader</para>
+    /// <para>SQL: reads FILES, REFS</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.ExceptionFactKindsSql"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.ExceptionNameSql"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.ExceptionRefClass"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.FactIndexStats"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.HasRaiseHandleFacts"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IndexStats: TExceptionStats;
     /// <summary>Whether this index carries the raise / handle facts (refs.kind raise, raise-expr,
     /// reraise, handle, handle-all), so a raise or handler site is joined by kind instead of being
     /// classified from the source text around a read / type_use.</summary>
     /// <returns>True when refs holds at least one row of the five kinds. Probed once, then cached.</returns>
-    /// <remarks>Keyed on the rows, not on the extractor version: the version that adds them is
+    /// <remarks>
+    /// Keyed on the rows, not on the extractor version: the version that adds them is
     /// bumped once by the 1.36.0 merge, and a version bump re-parses EVERY file, so a DB is either
     /// all-facts or none. A post-bump DB with no raise and no handler anywhere reads False and takes
-    /// the source path, which finds nothing either. Spec 2026-10-26-extract-raise-handle-facts 5.1.</remarks>
+    /// the source path, which finds nothing either. Spec 2026-10-26-extract-raise-handle-facts 5.1.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Exceptions.TExceptionIndex.IndexStats (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.BodyExceptions (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Exceptions.ExceptionFactKindsSql, DRagLint.Charts.Index.TChartsIndex.Query</para>
+    /// <para>Returns: FHasFacts</para>
+    /// <para>Reads: FFactsProbed, FIndex, FHasFacts   Writes: FHasFacts, FFactsProbed</para>
+    /// <para>SQL: reads REFS</para>
+    /// <seealso cref="DRagLint.Charts.Exceptions.ExceptionFactKindsSql"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.Create"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.Destroy"/>
+    /// <seealso cref="DRagLint.Charts.Exceptions.TExceptionIndex.FactIndexStats"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function HasRaiseHandleFacts: Boolean;
   end;
 
@@ -254,8 +555,18 @@ type
 /// <param name="pKind">refs.kind.</param>
 /// <returns>stale | raise (a read after `raise`, before `.Create...`) | handle (a type_use after
 /// `on` or `on &lt;id&gt;:`) | other.</returns>
-/// <remarks>Port of Get-ExceptionRefClass (Emit-Common.ps1:2418). A qualifier before the name is
-/// skipped; when nothing (or only `E:`) precedes it, the previous line's tail is read in front.</remarks>
+/// <remarks>
+/// Port of Get-ExceptionRefClass (Emit-Common.ps1:2418). A qualifier before the name is
+/// skipped; when nothing (or only `E:`) precedes it, the previous line's tail is read in front.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Exceptions.TExceptionIndex.IndexStats (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.BodyExceptions (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+/// <para>Calls: DRagLint.Charts.Exceptions.IsBlank, DRagLint.Charts.Source.PsTrim, SameText</para>
+/// <para>Returns: CLASS_STALE; CLASS_OTHER; CLASS_RAISE; CLASS_HANDLE</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 15 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Exceptions.IsBlank"/>
+/// <seealso cref="DRagLint.Charts.Source.PsTrim"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExceptionRefClass(const pCtx: TSourceContext; const pKind: string): string;
 
 /// <summary>The source-only exception statements of a line range, over STRIPPED lines.</summary>
@@ -264,21 +575,43 @@ function ExceptionRefClass(const pCtx: TSourceContext; const pKind: string): str
 /// <param name="pTo">Last line (clamped to the count).</param>
 /// <param name="pSkip">Spans to leave out.</param>
 /// <returns>The rows, in line then column order.</returns>
-/// <remarks>Port of Get-ExceptionSourceRowsIn (Emit-Common.ps1:2462).</remarks>
+/// <remarks>
+/// Port of Get-ExceptionSourceRowsIn (Emit-Common.ps1:2462).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Exceptions.HandlerReraises (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.TExceptionIndex.SourceRows (DRagLint.Charts.Exceptions.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Exceptions.ClassifyRaise, DRagLint.Charts.Exceptions.RestAfter, DRagLint.Charts.Exceptions.Skipped, Max, Min, SameText</para>
+/// <seealso cref="DRagLint.Charts.Exceptions.ClassifyRaise"/>
+/// <seealso cref="DRagLint.Charts.Exceptions.RestAfter"/>
+/// <seealso cref="DRagLint.Charts.Exceptions.Skipped"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExceptionSourceRowsIn(const pLines: TArray<string>; pFrom, pTo: Integer; const pSkip: TArray<TLineSpan>): TArray<TExceptionSourceRow>;
 
 /// <summary>The SQL pre-filter of exception-type names.</summary>
 /// <param name="pColumn">The column.</param>
 /// <returns>'(&lt;col&gt; GLOB ''E[A-Z]*[a-z]*'' OR &lt;col&gt; = ''Exception'')'.</returns>
-/// <remarks>Port of Get-ExceptionNameSql (Emit-Common.ps1:2514).</remarks>
+/// <remarks>
+/// Port of Get-ExceptionNameSql (Emit-Common.ps1:2514).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Exceptions.TExceptionIndex.FactIndexStats (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.TExceptionIndex.IndexStats (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.TExceptionIndex.IsExceptionTypeName (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.BodyExceptions (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: Format('(%0:s GLOB ''E[A-Z]*[a-z]*'' OR %0:s = ''Exception'')', [pColumn])</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExceptionNameSql(const pColumn: string): string;
 
 /// <summary>The five raise / handle fact kinds as a SQL IN-list body.</summary>
 /// <returns>'''raise'',''raise-expr'',''reraise'',''handle'',''handle-all''' -- from the REF_KIND_*
 /// constants of DRagLint.Core.Model, so the extractor and the chart read one declaration.</returns>
-/// <remarks>Every name-filtered candidate query excludes these kinds: a fact row sits on the same
+/// <remarks>
+/// Every name-filtered candidate query excludes these kinds: a fact row sits on the same
 /// identifier as the read / type_use it describes and must never be counted as a second,
-/// dropped candidate.</remarks>
+/// dropped candidate.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Exceptions.TExceptionIndex.HasRaiseHandleFacts (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Exceptions.TExceptionIndex.IndexStats (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.BodyExceptions (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+/// <para>Calls: QuotedStr</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ExceptionFactKindsSql: string;
 
 /// <summary>The try-blocks of one span, from a nesting scan of stripped lines.</summary>
@@ -286,8 +619,15 @@ function ExceptionFactKindsSql: string;
 /// <param name="pFrom">First line.</param>
 /// <param name="pTo">Last line.</param>
 /// <returns>Decided with the blocks, or not decided with the reason.</returns>
-/// <remarks>Port of Get-TryBlocks (Emit-Common.ps1:2555). Tokens after '.', '&amp;' or a word
-/// character are identifiers; inside `asm` only `end` counts; a `case` inside a `record` opens nothing.</remarks>
+/// <remarks>
+/// Port of Get-TryBlocks (Emit-Common.ps1:2555). Tokens after '.', '&amp;' or a word
+/// character are identifiers; inside `asm` only `end` counts; a `case` inside a `record` opens nothing.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.ReadCallers (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Exceptions.TTryScan.Token, Format, Int64, Max, Min</para>
+/// <seealso cref="DRagLint.Charts.Exceptions.TTryScan.Token"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function TryBlocks(const pLines: TArray<string>; pFrom, pTo: Integer): TTryBlocks;
 
 /// <summary>The innermost try-block whose EXCEPT part holds a position.</summary>
@@ -295,7 +635,15 @@ function TryBlocks(const pLines: TArray<string>; pFrom, pTo: Integer): TTryBlock
 /// <param name="pPos">A position (line * 100000 + column).</param>
 /// <param name="pBlock">The block.</param>
 /// <returns>False when none holds it.</returns>
-/// <remarks>Port of Find-HandlerBlock (Emit-Common.ps1:2603).</remarks>
+/// <remarks>
+/// Port of Find-HandlerBlock (Emit-Common.ps1:2603).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.CallerVerdict (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+/// <para>Calls: Default</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: pBlock (out)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function FindHandlerBlock(const pBlocks: TTryBlocks; pPos: Int64; out pBlock: TTryBlock): Boolean;
 
 /// <summary>Whether the handler at a position re-raises what it caught.</summary>
@@ -304,7 +652,16 @@ function FindHandlerBlock(const pBlocks: TTryBlocks; pPos: Int64; out pBlock: TT
 /// <param name="pPos">The handler's position.</param>
 /// <param name="pBare">pPos is the block's bare `except`.</param>
 /// <returns>True for `raise;` (or `raise` before else/end) or `raise V` of the handler's own variable.</returns>
-/// <remarks>Port of Test-HandlerReraises (Emit-Common.ps1:2621). Line-granular.</remarks>
+/// <remarks>
+/// Port of Test-HandlerReraises (Emit-Common.ps1:2621). Line-granular.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.CallerVerdict (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+/// <para>Calls: Copy, DRagLint.Charts.Exceptions.ExceptionSourceRowsIn, Integer, Max, SameText</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 31 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Exceptions.ExceptionSourceRowsIn"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function HandlerReraises(const pLines: TArray<string>; const pBlock: TTryBlock; pPos: Int64; pBare: Boolean): Boolean;
 
 /// <summary>The upward walk of ONE raised type over the call EDGES of a caller graph.</summary>
@@ -315,15 +672,35 @@ function HandlerReraises(const pLines: TArray<string>; const pBlock: TTryBlock; 
 /// <param name="pEvaluate">Edge evaluation.</param>
 /// <param name="pHasCallers">Caller existence at the bound.</param>
 /// <returns>The walk.</returns>
-/// <remarks>Port of Invoke-ExceptionWalk (Emit-Common.ps1:2671): every incoming edge is
+/// <remarks>
+/// Port of Invoke-ExceptionWalk (Emit-Common.ps1:2671): every incoming edge is
 /// evaluated on its own; a node passes when ANY incoming edge is not stopped, and a passing node
-/// is expanded once (which also ends a cycle).</remarks>
+/// is expanded once (which also ends a cycle).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.HandledWhere (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+/// <para>Calls: Default, DRagLint.Charts.Exceptions.ClassifyBound, DRagLint.Charts.Exceptions.SortedInts, DRagLint.Charts.Exceptions.TExceptionGraph.CallersOf, DRagLint.Charts.Exceptions.TExceptionGraph.CappedOf, DRagLint.Charts.Exceptions.TExceptionGraph.Fetched, DRagLint.Charts.Exceptions.TWalkState.Create, DRagLint.Charts.Exceptions.TWalkState.NoteCapped, pEvaluate</para>
+/// <para>Returns: Default(TExceptionWalk)</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 60 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Charts.Exceptions.ClassifyBound"/>
+/// <seealso cref="DRagLint.Charts.Exceptions.SortedInts"/>
+/// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CallersOf"/>
+/// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.CappedOf"/>
+/// <seealso cref="DRagLint.Charts.Exceptions.TExceptionGraph.Fetched"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function InvokeExceptionWalk(pFocusId: Integer; pGraph: TExceptionGraph; pDepth: Integer; const pType: string;
   const pEvaluate: TEvaluateEdge; const pHasCallers: THasCallers): TExceptionWalk;
 
 /// <summary>Integers joined with ',' (the PS "$($a -join ',')").</summary>
 /// <param name="pValues">The integers.</param>
 /// <returns>The text.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.ExceptionPaths.SortedIntsText (DRagLint.Charts.Q.ExceptionPaths.pas)</para>
+/// <para>Calls: IntToStr</para>
+/// <para>Returns: string.Join(',', Parts)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IntsText(const pValues: TArray<Integer>): string;
 
 implementation

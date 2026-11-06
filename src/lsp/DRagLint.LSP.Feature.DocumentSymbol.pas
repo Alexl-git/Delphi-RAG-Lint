@@ -15,15 +15,39 @@ uses
 type
   /// <summary>Answers `textDocument/documentSymbol` with a DocumentSymbol[]
   /// tree and advertises documentSymbolProvider = true.</summary>
-  /// <remarks>Stateless; registered from this unit's initialization. Lines and
-  /// columns on the wire are 0-based; the store's are 1-based.</remarks>
+  /// <remarks>
+  /// Stateless; registered from this unit's initialization. Lines and
+  /// columns on the wire are 0-based; the store's are 1-based.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.LSP.Feature.DocumentSymbol.pas)</para>
+  /// <para>Used in units: DRagLint.LSP.Feature.DocumentSymbol</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TLspDocumentSymbolFeature = class(TLspFeature)
   public
     /// <summary>The one method: `textDocument/documentSymbol`.</summary>
     /// <returns>['textDocument/documentSymbol'].</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Returns: [DOCSYM_METHOD]</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Methods</para>
+    /// <para>Effect-free (proven)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.AddCapabilities"/>
+    /// <seealso cref="DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function Methods: TArray<string>; override;
     /// <summary>Adds `documentSymbolProvider: true`.</summary>
     /// <param name="ACaps">initialize.result.capabilities under construction.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.AddCapabilities</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle"/>
+    /// <seealso cref="DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Methods"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class procedure AddCapabilities(ACaps: TJSONObject); override;
     /// <summary>Replies the document's symbols as a tree: the unit's members
     /// at the top level (the unit symbol itself is not a root), members under
@@ -34,6 +58,20 @@ type
     /// <param name="AMethod">Always `textDocument/documentSymbol`.</param>
     /// <param name="AId">The request id; a notification gets no reply.</param>
     /// <param name="AParams">{textDocument:{uri}}; a missing uri answers [].</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.LSP.Context.ILspServerContext.FileFromUri, DRagLint.LSP.Context.ILspServerContext.Reply, DRagLint.LSP.Context.ILspServerContext.StoresForFile, DRagLint.LSP.Feature.DocumentSymbol.BuildNode, DRagLint.LSP.Feature.DocumentSymbol.Wanted</para>
+    /// <para>Overrides: DRagLint.LSP.Context.TLspFeature.Handle</para>
+    /// <para>Complexity: 15 (cyclomatic, outer body), 63 lines (full implementation)</para>
+    /// <para>Catches: Exception (re-raise); Exception (swallowed)</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+    /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Reply"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.StoresForFile"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure Handle(const ACtx: ILspServerContext; const AMethod: string; const AId: TJSONValue; const AParams: TJSONObject); override;
   end;
 

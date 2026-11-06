@@ -22,11 +22,17 @@ uses
 type
   /// <summary>One way a tester can fire a handler: where the control is, what
   /// it says, and what kind of control it is.</summary>
-  /// <remarks>Rank orders ways for display: 0 main menu / ribbon, 1 toolbar /
+  /// <remarks>
+  /// Rank orders ways for display: 0 main menu / ribbon, 1 toolbar /
   /// backstage, 2 plain control, 3 popup menu, 4 bare action (no control
   /// shows it), 5 automatic (a timer or dataset event). Lower is shown first;
   /// equal ranks keep .dfm order. IsControl is False for ranks 4 and 5: there
-  /// is nothing for a tester to press.</remarks>
+  /// is nothing for a tester to press.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LinkedWays (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.WaysForCaption (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.WaysForHandler (DRagLint.FormsMap.Dfm.pas) ? (+5 more)</para>
+  /// <para>Used in units: DRagLint.FormsMap, DRagLint.FormsMap.Dfm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TNavWay = record
     Location : string ; // e.g. "Main menu: Setup > Groups > Assign Groups"
     Click    : string ; // caption pressed (accelerators stripped), or [Name]
@@ -37,7 +43,13 @@ type
   end;
 
   /// <summary>One .dfm object or collection item.</summary>
-  /// <remarks>Owned by the TFormDfmTree that created it; never free one directly.</remarks>
+  /// <remarks>
+  /// Owned by the TFormDfmTree that created it; never free one directly.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.Create (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines (DRagLint.FormsMap.Dfm.pas) ?, DRagLint.FormsMap.Dfm.TFormDfmTree.NewNode (DRagLint.FormsMap.Dfm.pas) (+30 more)</para>
+  /// <para>Used in units: DRagLint.FormsMap, DRagLint.FormsMap.Dfm, DRagLint.MenuTree.Dfm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFormDfmNode = class
   private
     FName     : string;
@@ -50,12 +62,38 @@ type
   public
     /// <summary>Creates an empty node under AParent (nil for the form root).</summary>
     /// <param name="AParent">Enclosing object or item; nil for the root.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.NewNode (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FParent, FProps</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Destroy"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Prop"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(AParent: TFormDfmNode);
     /// <summary>Frees the property list.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FProps</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Create"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Prop"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Value of property AName (case-insensitive), '' when absent.</summary>
     /// <param name="AName">Property name exactly as written in the .dfm.</param>
     /// <returns>The decoded value, or ''.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.BuildIndexes (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.CaptionOf (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.FindBarLinkOwner (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LinksOf (DRagLint.FormsMap.Dfm.pas) (+3 more)</para>
+    /// <para>Returns: FProps.ValueFromIndex[I]; ''</para>
+    /// <para>Reads: FProps</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Create"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Prop(const AName: string): string;
     /// <summary>Component name ('' for a collection item).</summary>
     property Name: string read FName write FName;
@@ -77,7 +115,13 @@ type
   /// <summary>One .dfm-declared menu surface: where a tester finds a menu
   /// (a DevExpress bar, bar popup, backstage / application menu, or a VCL
   /// TMainMenu / TPopupMenu).</summary>
-  /// <remarks>A bar shown in two ribbon tabs is two surfaces (one per prefix).</remarks>
+  /// <remarks>
+  /// A bar shown in two ribbon tabs is two surfaces (one per prefix).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.BarSurfaces (DRagLint.FormsMap.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.DoForm (DRagLint.MenuTree.Dfm.pas)</para>
+  /// <para>Used in units: DRagLint.FormsMap.Dfm, DRagLint.MenuTree.Dfm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TBarSurface = record
     /// <summary>The bar / popup / backstage / menu node; owned by the tree.</summary>
     Node  : TFormDfmNode;
@@ -87,6 +131,12 @@ type
   end;
 
   /// <summary>One entry of a surface or sub-item, in display order.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LinksOf (DRagLint.FormsMap.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.AddLinks (DRagLint.MenuTree.Dfm.pas)</para>
+  /// <para>Used in units: DRagLint.FormsMap.Dfm, DRagLint.MenuTree.Dfm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TBarLink = record
     /// <summary>The ItemLinks / Buttons collection item, or the TMenuItem itself
     /// for a VCL menu.</summary>
@@ -102,7 +152,13 @@ type
 
   /// <summary>Parsed tree of one text .dfm plus the DevExpress link indexes
   /// needed to turn a handler into tester-facing locations.</summary>
-  /// <remarks>Owns every node. Not thread-safe.</remarks>
+  /// <remarks>
+  /// Owns every node. Not thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.FormsMap.pas) ?, DRagLint.FormsMap.GraftCodeMenu (DRagLint.FormsMap.pas) ?, DRagLint.FormsMap.TNavBuilder.Create (DRagLint.FormsMap.pas) ?, DRagLint.FormsMap.TNavBuilder.TreeFor (DRagLint.FormsMap.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.DoForm (DRagLint.MenuTree.Dfm.pas) (+2 more)</para>
+  /// <para>Used in units: DRagLint.FormsMap, DRagLint.MenuTree.Dfm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFormDfmTree = class  // dl:ok high-response@05c0 -- RFC is the .dfm walk's string and collection calls; the parser, the link indexes and the way builder share one node list and splitting them only moves the same calls around
   private
     FNodes     : TObjectList<TFormDfmNode>;
@@ -112,27 +168,228 @@ type
     FBackstage : TDictionary<string, Boolean>;
     FLinkLists : TObjectDictionary<TFormDfmNode, TList<TFormDfmNode>>;
     FCodeCount : Integer;
+    /// <param name="AParent"><!-- drag-lint:auto type -->TFormDfmNode</param>
+    /// <returns><!-- drag-lint:auto -->TFormDfmNode -- Observed:
+    /// TFormDfmNode.Create(AParent).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Calls: DRagLint.FormsMap.Dfm.TFormDfmNode.Create</para>
+    /// <para>Reads: FNodes, FRoot   Writes: FRoot</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Create"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function NewNode(AParent: TFormDfmNode): TFormDfmNode;
+    /// <param name="AOwner"><!-- drag-lint:auto type -->TFormDfmNode</param>
+    /// <returns><!-- drag-lint:auto -->TList&lt;TFormDfmNode&gt; -- Observed:
+    /// TList&lt;TFormDfmNode&gt;.Create.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.BuildIndexes (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Reads: FLinkLists</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LinkListOf(AOwner: TFormDfmNode): TList<TFormDfmNode>;
+    /// <param name="ANode"><!-- drag-lint:auto type -->TFormDfmNode</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: SameText(ANode.CompClass,
+    /// 'TdxBar') or (ANode.IsItem and SameText(ANode.CollProp, 'Bars')).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.BarSurfaces (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.FindBarLinkOwner (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsBar(ANode: TFormDfmNode): Boolean;
+    /// <param name="ADict"><!-- drag-lint:auto type -->TObjectDictionary&lt;string, TList&lt;TFormDfmNode&gt;&gt;</param>
+    /// <param name="AKey"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="ANode"><!-- drag-lint:auto type -->TFormDfmNode</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.BuildIndexes (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BarSurfaces"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddMulti(ADict: TObjectDictionary<string, TList<TFormDfmNode>>; const AKey: string; ANode: TFormDfmNode);
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Calls: ContainsText, DRagLint.FormsMap.Dfm.TFormDfmNode.Prop, DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti, DRagLint.FormsMap.Dfm.TFormDfmTree.LinkListOf, SameText</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 31 lines (full implementation)</para>
+    /// <para>Reads: FNodes, FLinkOwners, FBarTabs, FBackstage</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Prop"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.LinkListOf"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure BuildIndexes;
+    /// <param name="ALines"><!-- drag-lint:auto type -->const TArray&lt;string&gt;</param>
+    /// <param name="AIndex"><!-- drag-lint:auto type -->var Integer</param>
+    /// <param name="ARaw"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="AValue"><!-- drag-lint:auto type -->out string</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Calls: CharInSet, DRagLint.FormsMap.Dfm.DecodeDfmString, Trim</para>
+    /// <para>Complexity: 14 (cyclomatic, outer body), 35 lines (full implementation)</para>
+    /// <para>Mutates: AValue (out), AIndex (var)</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.DecodeDfmString"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ReadValue(const ALines: TArray<string>; var AIndex: Integer; const ARaw: string; out AValue: string): Boolean;
+    /// <param name="ANode"><!-- drag-lint:auto type -->TFormDfmNode</param>
+    /// <param name="AAction"><!-- drag-lint:auto type -->TFormDfmNode</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed:
+    /// StripAccel(ANode.Prop('Caption')); StripAccel(AAction.Prop('Caption')).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Calls: DRagLint.FormsMap.Dfm.StripAccel, DRagLint.FormsMap.Dfm.TFormDfmNode.Prop</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.StripAccel"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Prop"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CaptionOf(ANode, AAction: TFormDfmNode): string;
+    /// <param name="AOwner"><!-- drag-lint:auto type -->TFormDfmNode</param>
+    /// <param name="ADepth"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: []; Acc.ToArray.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LinkedWays (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.SurfacePrefixes (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Calls: ContainsText, DRagLint.FormsMap.Dfm.StripAccel, DRagLint.FormsMap.Dfm.TFormDfmNode.Prop, DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes, SameText</para>
+    /// <para>Complexity: 16 (cyclomatic, outer body), 48 lines (full implementation)</para>
+    /// <para>Reads: FBarTabs, FLinkOwners, FBackstage</para>
+    /// <para>Recursive</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.StripAccel"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Prop"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function BarPrefixes(AOwner: TFormDfmNode; ADepth: Integer): TArray<string>;
+    /// <param name="ABase"><!-- drag-lint:auto type -->const TNavWay</param>
+    /// <param name="ACtrl"><!-- drag-lint:auto type -->TFormDfmNode</param>
+    /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;TNavWay&gt;</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Calls: Copy, DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes, StartsText</para>
+    /// <para>Reads: FLinkOwners, FBackstage</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LinkedWays(const ABase: TNavWay; ACtrl: TFormDfmNode; AList: TList<TNavWay>): Boolean;
+    /// <param name="AList"><!-- drag-lint:auto type -->TList&lt;TNavWay&gt;</param>
+    /// <param name="ACtrl"><!-- drag-lint:auto type -->TFormDfmNode</param>
+    /// <param name="AAction"><!-- drag-lint:auto type -->TFormDfmNode</param>
+    /// <param name="AEvent"><!-- drag-lint:auto type -->const string</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.WaysForCaption (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.WaysForHandler (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Calls: ContainsText, Default, DRagLint.FormsMap.Dfm.GestureOf, DRagLint.FormsMap.Dfm.IsAutomaticEvent, DRagLint.FormsMap.Dfm.TFormDfmTree.CaptionOf, DRagLint.FormsMap.Dfm.TFormDfmTree.LinkedWays, SameText</para>
+    /// <para>Complexity: 18 (cyclomatic, outer body), 73 lines (full implementation)</para>
+    /// <para>Reads: FRoot</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.GestureOf"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.IsAutomaticEvent"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.CaptionOf"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.LinkedWays"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddWaysFor(AList: TList<TNavWay>; ACtrl, AAction: TFormDfmNode; const AEvent: string);
   public
     /// <summary>Constructor: creates an empty tree with no nodes.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.TNavBuilder.TreeFor (DRagLint.FormsMap.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.DoForm (DRagLint.MenuTree.Dfm.pas)</para>
+    /// <para>constructor</para>
+    /// <para>Writes: FNodes, FLinkOwners, FBarTabs, FBackstage, FLinkLists</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees every node.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Reads: FLinkLists, FBackstage, FBarTabs, FLinkOwners, FNodes</para>
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>Parses a text .dfm file; a missing or binary file leaves the
     /// tree empty.</summary>
     /// <param name="APath">Full path to the .dfm.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.CLI.DoCycles.IntfEdgeSymbols (DRagLint.CLI.pas) ?, DRagLint.FormsMap.TNavBuilder.TreeFor (DRagLint.FormsMap.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.DoForm (DRagLint.MenuTree.Dfm.pas)</para>
+    /// <para>Calls: DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines</para>
+    /// <para>Touches: file system</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromLines"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadFromFile(const APath: string);
     /// <summary>Parses .dfm text already split into lines.</summary>
     /// <param name="ALines">The .dfm lines, in order.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.LoadFromFile (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Calls: Copy, DRagLint.FormsMap.Dfm.TFormDfmTree.BuildIndexes, DRagLint.FormsMap.Dfm.TFormDfmTree.NewNode, DRagLint.FormsMap.Dfm.TFormDfmTree.ReadValue, Pos, SameText, StartsText, Trim</para>
+    /// <para>Complexity: 19 (cyclomatic, outer body), 69 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BuildIndexes"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.NewNode"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.ReadValue"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure LoadFromLines(const ALines: TArray<string>);
     /// <summary>Every control a tester can press to run AHandler on this form,
     /// best location first, followed by non-control bindings (an action no
@@ -141,17 +398,57 @@ type
     /// <returns>The ways, sorted by Rank (stable); empty when the handler is not
     /// bound to anything in this .dfm (the form root's own events do not count
     /// -- OnShow is not a control a tester presses).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.TNavBuilder.AddTextEdge (DRagLint.FormsMap.pas), DRagLint.FormsMap.TNavBuilder.TraceLaunch (DRagLint.FormsMap.pas)</para>
+    /// <para>Calls: ContainsText, Copy, DRagLint.FormsMap.Dfm.TFormDfmNode.Prop, DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor, LastDelimiter, SameText, StartsStr</para>
+    /// <para>Returns: Sorted.ToArray</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 50 lines (full implementation)</para>
+    /// <para>Reads: FNodes, FRoot</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Prop"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function WaysForHandler(const AHandler: string): TArray<TNavWay>;
     /// <summary>Ways for the first non-root control whose caption equals
     /// ACaption (accelerators ignored); empty when none.</summary>
     /// <param name="ACaption">Caption text with accelerators already removed.</param>
     /// <returns>The ways for that one control.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.TNavBuilder.AddTextEdge (DRagLint.FormsMap.pas)</para>
+    /// <para>Calls: DRagLint.FormsMap.Dfm.StripAccel, DRagLint.FormsMap.Dfm.TFormDfmNode.Prop, DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor, SameText</para>
+    /// <para>Returns: []; L.ToArray</para>
+    /// <para>Reads: FNodes, FRoot</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.StripAccel"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Prop"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function WaysForCaption(const ACaption: string): TArray<TNavWay>;
     /// <summary>The non-root TMenuItem component named AName; nil when this
     /// .dfm has none (a TMainMenu / TPopupMenu of that name does not count).</summary>
     /// <param name="AName">Component name, case-insensitive; a leading
     /// TFormClass. (this form's class, as menu-tree keys a field root) is accepted.</param>
     /// <returns>The node, owned by the tree, or nil.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.TNavBuilder.TreeFor (DRagLint.FormsMap.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Returns: nil</para>
+    /// <para>Reads: FRoot, FNodes</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FindMenuItem(const AName: string): TFormDfmNode;
     /// <summary>forms-csv v8: adds a menu item built in CODE (a menu-tree
     /// external-root child) under a .dfm menu item, so WaysForHandler finds
@@ -162,9 +459,35 @@ type
     /// stripped where paths are built, as for a .dfm caption.</param>
     /// <param name="AHandler">Bare OnClick method name; '' for a submenu.</param>
     /// <returns>The new node (class TMenuItem, no component name), owned by the tree.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.GraftCodeMenu (DRagLint.FormsMap.pas)</para>
+    /// <para>Calls: DRagLint.FormsMap.Dfm.TFormDfmTree.NewNode</para>
+    /// <para>Returns: NewNode(AParent)</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.NewNode"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AddCodeMenuItem(AParent: TFormDfmNode; const ACaption, AHandler: string): TFormDfmNode;
     /// <summary>The form root (object Name: TClass); nil for an empty tree.</summary>
     /// <returns>The root node, owned by the tree.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuTree.Dfm.TDfmRootBuilder.DoForm (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.NoteUnlinked (DRagLint.MenuTree.Dfm.pas)</para>
+    /// <para>Returns: FRoot</para>
+    /// <para>Reads: FRoot</para>
+    /// <para>Owns returned: borrowed</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Root: TFormDfmNode;
     /// <summary>Every node (objects and collection items, code-added ones too)
     /// in .dfm order; owned by the tree -- never free or add to it.</summary>
@@ -173,6 +496,19 @@ type
     /// entry per prefix -- a bar in two ribbon tabs gives two), bar popups,
     /// backstage views / application menus, VCL TMainMenu and TPopupMenu.</summary>
     /// <returns>The surfaces; empty for a form without menus.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuTree.Dfm.TDfmRootBuilder.DoForm (DRagLint.MenuTree.Dfm.pas)</para>
+    /// <para>Calls: ContainsText, DRagLint.FormsMap.Dfm.TFormDfmTree.IsBar, DRagLint.FormsMap.Dfm.TFormDfmTree.SurfacePrefixes, EndsText, SameText</para>
+    /// <para>Returns: Acc.ToArray</para>
+    /// <para>Reads: FNodes, FRoot</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.IsBar"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.SurfacePrefixes"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function BarSurfaces: TArray<TBarSurface>;
     /// <summary>The entries shown under AOwner, in display order: ItemLinks
     /// of a bar / sub-item / popup / application menu, Buttons of a backstage
@@ -180,10 +516,36 @@ type
     /// AddCodeBarItem are included at their index.</summary>
     /// <param name="AOwner">A node of this tree; nil gives an empty result.</param>
     /// <returns>The links (Item nil when ItemName names nothing here).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.MenuTree.Dfm.TDfmRootBuilder.AddLinks (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.NodeForItem (DRagLint.MenuTree.Dfm.pas)</para>
+    /// <para>Calls: DRagLint.FormsMap.Dfm.TFormDfmNode.Prop, DRagLint.FormsMap.Dfm.TFormDfmTree.ItemByName, SameText</para>
+    /// <para>Returns: []; Acc.ToArray</para>
+    /// <para>Reads: FLinkLists, FNodes</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Prop"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.ItemByName"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LinksOf(AOwner: TFormDfmNode): TArray<TBarLink>;
     /// <summary>The non-root, non-item component named AName; nil when absent.</summary>
     /// <param name="AName">Component name, case-insensitive.</param>
     /// <returns>The node, owned by the tree, or nil.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.FindBarLinkOwner (DRagLint.FormsMap.Dfm.pas), DRagLint.FormsMap.Dfm.TFormDfmTree.LinksOf (DRagLint.FormsMap.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.NodeForItem (DRagLint.MenuTree.Dfm.pas)</para>
+    /// <para>Calls: SameText</para>
+    /// <para>Returns: nil</para>
+    /// <para>Reads: FNodes, FRoot</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ItemByName(const AName: string): TFormDfmNode;
     /// <summary>The forms-csv location prefixes of a surface or sub-item --
     /// the strings WaysForHandler puts before an item's caption (without the
@@ -191,6 +553,18 @@ type
     /// <param name="AOwner">A bar, popup, sub-item, backstage view, application
     /// menu, TMainMenu or TPopupMenu node.</param>
     /// <returns>One prefix per place AOwner is shown; empty when it is shown nowhere.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.Dfm.TFormDfmTree.BarSurfaces (DRagLint.FormsMap.Dfm.pas)</para>
+    /// <para>Calls: ContainsText, DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes, SameText</para>
+    /// <para>Returns: []; BarPrefixes(AOwner, 0)</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.BarPrefixes"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SurfacePrefixes(AOwner: TFormDfmNode): TArray<string>;
     /// <summary>Resolves the identifier a menu-tree external root carries to
     /// the .dfm node that owns the links: a component name (bar, popup,
@@ -202,6 +576,21 @@ type
     /// <param name="ADerived">Set True when the owner was found by position or
     /// lookup (Bars[n], MainMenuBar, BarBy*) rather than by name.</param>
     /// <returns>The owner node, or nil when nothing here matches.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.TNavBuilder.TreeFor (DRagLint.FormsMap.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.Graft (DRagLint.MenuTree.Dfm.pas)</para>
+    /// <para>Calls: DRagLint.FormsMap.Dfm.TFormDfmNode.Prop, DRagLint.FormsMap.Dfm.TFormDfmTree.IsBar, DRagLint.FormsMap.Dfm.TFormDfmTree.ItemByName, SameText, StrToInt</para>
+    /// <para>Returns: nil; N; ItemByName(Key)</para>
+    /// <para>Complexity: 21 (cyclomatic, outer body), 50 lines (full implementation)</para>
+    /// <para>Reads: FNodes, FRoot</para>
+    /// <para>Mutates: ADerived (out)</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmNode.Prop"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.IsBar"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.ItemByName"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeBarItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FindBarLinkOwner(const AIdent: string; out ADerived: Boolean): TFormDfmNode;
     /// <summary>forms-csv v9: adds a bar item built in CODE and links it under
     /// AOwner at AIndex, so WaysForHandler / LinksOf / SurfacePrefixes see it
@@ -213,6 +602,19 @@ type
     /// <param name="AClass">Component class, e.g. TdxBarButton or TdxBarSubItem.</param>
     /// <param name="AIndex">Link position; -1 (or past the end) appends.</param>
     /// <returns>The new item node (a synthetic component name), owned by the tree.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.FormsMap.GraftCodeBar (DRagLint.FormsMap.pas)</para>
+    /// <para>Calls: DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti, DRagLint.FormsMap.Dfm.TFormDfmTree.LinkListOf, DRagLint.FormsMap.Dfm.TFormDfmTree.NewNode, IntToStr</para>
+    /// <para>Returns: NewNode(FRoot)</para>
+    /// <para>Reads: FRoot, FCodeCount, FLinkOwners   Writes: FCodeCount</para>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddMulti"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.LinkListOf"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.NewNode"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddCodeMenuItem"/>
+    /// <seealso cref="DRagLint.FormsMap.Dfm.TFormDfmTree.AddWaysFor"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AddCodeBarItem(AOwner: TFormDfmNode; const ACaption, AHandler, AClass: string; AIndex: Integer): TFormDfmNode;
   end;
 

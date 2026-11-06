@@ -22,11 +22,31 @@ uses
 type
   /// <summary>The right-click menu item: activates the clicked project then opens
   /// the Lint Options dock tab scoped to it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.ProjectMenu.TDLProjectMenuCreator.AddMenu (DragLint.Plugin.ProjectMenu.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.ProjectMenu</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLProjectRulesMenu = class(TInterfacedObject, IOTANotifier, IOTALocalMenu, IOTAProjectManagerMenu)
     private
       FProject         : IOTAProject;
       FIsMultiSelectable: Boolean;
     public
+      /// <summary><!-- drag-lint:auto sum -->---- TDLProjectRulesMenu ----</summary>
+      /// <param name="AProject"><!-- drag-lint:auto type -->const IOTAProject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.ProjectMenu.TDLProjectMenuCreator.AddMenu (DragLint.Plugin.ProjectMenu.pas)</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FProject, FIsMultiSelectable</para>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.AfterSave"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.BeforeSave"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.Destroyed"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.Execute"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.GetCaption"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(const AProject: IOTAProject);
       { IOTANotifier }
       procedure AfterSave;
@@ -34,13 +54,22 @@ type
       procedure Destroyed;
       procedure Modified;
       { IOTALocalMenu }
+      /// <summary><!-- drag-lint:auto sum -->IOTALocalMenu</summary>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: MENU_CAPTION.</returns>
       function GetCaption: string;
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       function GetChecked: Boolean;
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True.</returns>
       function GetEnabled: Boolean;
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: 0.</returns>
       function GetHelpContext: Integer;
+      /// <returns><!-- drag-lint:auto -->string -- Observed: MENU_NAME.</returns>
       function GetName: string;
+      /// <returns><!-- drag-lint:auto -->string -- Observed: ''.</returns>
       function GetParent: string;
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1.</returns>
       function GetPosition: Integer;
+      /// <returns><!-- drag-lint:auto -->string -- Observed: MENU_VERB.</returns>
       function GetVerb: string;
       procedure SetCaption(const Value: string);
       procedure SetChecked(Value: Boolean);
@@ -51,15 +80,62 @@ type
       procedure SetPosition(Value: Integer);
       procedure SetVerb(const Value: string);
       { IOTAProjectManagerMenu }
+      /// <summary><!-- drag-lint:auto sum -->IOTAProjectManagerMenu</summary>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: FIsMultiSelectable.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FIsMultiSelectable</para>
+      /// <para>Effect-free (proven)</para>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.AfterSave"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.BeforeSave"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.Create"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.Destroyed"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.Execute"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function GetIsMultiSelectable: Boolean;
+      /// <param name="Value"><!-- drag-lint:auto type -->Boolean</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Writes: FIsMultiSelectable</para>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.AfterSave"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.BeforeSave"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.Create"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.Destroyed"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.Execute"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure SetIsMultiSelectable(Value: Boolean);
+      /// <param name="MenuContextList"><!-- drag-lint:auto type -->const IInterfaceList</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.DockForm.ShowDragLintDockLintOptions, Supports</para>
+      /// <para>Reads: FProject</para>
+      /// <para>Directives: overload</para>
+      /// <seealso cref="DragLint.Plugin.DockForm.ShowDragLintDockLintOptions"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.AfterSave"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.BeforeSave"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.Create"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.Destroyed"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Execute(const MenuContextList: IInterfaceList); overload;
+      /// <param name="MenuContextList"><!-- drag-lint:auto type -->const IInterfaceList</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       function PreExecute(const MenuContextList: IInterfaceList): Boolean;
+      /// <param name="MenuContextList"><!-- drag-lint:auto type -->const IInterfaceList</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
       function PostExecute(const MenuContextList: IInterfaceList): Boolean;
   end;
 
   /// <summary>Creator notifier: adds TDLProjectRulesMenu to a single project
   /// node's context menu (not files, not multi-select).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.ProjectMenu.RegisterProjectMenu (DragLint.Plugin.ProjectMenu.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.ProjectMenu</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLProjectMenuCreator = class(TInterfacedObject, IOTANotifier, IOTAProjectMenuItemCreatorNotifier)
     public
       { IOTANotifier }
@@ -68,6 +144,21 @@ type
       procedure Destroyed;
       procedure Modified;
       { IOTAProjectMenuItemCreatorNotifier }
+      /// <summary><!-- drag-lint:auto sum -->IOTAProjectMenuItemCreatorNotifier</summary>
+      /// <param name="Project"><!-- drag-lint:auto type -->const IOTAProject</param>
+      /// <param name="IdentList"><!-- drag-lint:auto type -->const TStrings</param>
+      /// <param name="ProjectManagerMenuList"><!-- drag-lint:auto type -->const IInterfaceList</param>
+      /// <param name="IsMultiSelect"><!-- drag-lint:auto type -->Boolean</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.Create, SameText</para>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectRulesMenu.Create"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectMenuCreator.AfterSave"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectMenuCreator.BeforeSave"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectMenuCreator.Destroyed"/>
+      /// <seealso cref="DragLint.Plugin.ProjectMenu.TDLProjectMenuCreator.Modified"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure AddMenu(const Project: IOTAProject; const IdentList: TStrings;
         const ProjectManagerMenuList: IInterfaceList; IsMultiSelect: Boolean);
   end;
@@ -75,10 +166,23 @@ type
 /// <summary>Registers the project-menu creator notifier with the IDE's Project
 /// Manager so the "Project Rules..." item appears on project nodes. Idempotent
 /// -- a second call is a no-op while already registered.</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.Register (DragLint.Plugin.Wizard.pas)</para>
+/// <para>Calls: Supports</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure RegisterProjectMenu;
 
 /// <summary>Unregisters the project-menu creator notifier. Idempotent; safe to
 /// call even if RegisterProjectMenu was never called.</summary>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Wizard.TDragLintWizard.Destroyed (DragLint.Plugin.Wizard.pas), initialization/finalization (DragLint.Plugin.ProjectMenu.pas)</para>
+/// <para>Calls: Supports</para>
+/// <para>Catches: Exception (empty)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure UnregisterProjectMenu;
 
 implementation

@@ -77,6 +77,12 @@ uses
 
 type
   /// <summary>One entry of the RT_OPS verb table: a dataset op / transaction / SQL call and the verb its step gets.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Walk.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRtOp = record
     /// <summary>The call name (matched case-insensitively).</summary>
     Name: string;
@@ -85,6 +91,12 @@ type
   end;
 
   /// <summary>One entry of RT_FB_SNAPSHOT: a FIB$ table and the engine table that snapshots it.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Walk.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRtFbSnapshot = record
     /// <summary>The FIB$ table, upper case.</summary>
     Table   : string;
@@ -113,10 +125,21 @@ const
 
 type
   /// <summary>Which index a call reads: the CLIENT (near) or the SERVER (far) one (RT3).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.Create (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.IndexOf (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.ReaderOf (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.RoutineFacts (DRagLint.Charts.Trace.Walk.pas) (+16 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTraceSide = (tsClient, tsServer);
 
   /// <summary>One routine's body facts. Port of the Get-RoutineFacts object.</summary>
-  /// <remarks>Owns Refs and Lits. Cached by the walker per side and id; never free one the walker returned.</remarks>
+  /// <remarks>
+  /// Owns Refs and Lits. Cached by the walker per side and id; never free one the walker returned.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Walk.pas) ?, DRagLint.Charts.Trace.Walk.TTraceWalker.Create (DRagLint.Charts.Trace.Walk.pas) ?, DRagLint.Charts.Trace.Walk.TTraceWalker.ResolveHandlerByName (DRagLint.Charts.Trace.Walk.pas) ?, DRagLint.Charts.Trace.Walk.TTraceWalker.ResolveImplByName (DRagLint.Charts.Trace.Walk.pas) ?, DRagLint.Charts.Trace.Walk.TTraceWalker.RoutineFacts (DRagLint.Charts.Trace.Walk.pas) (+11 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRoutineFacts = class
   private
     FIdent: Integer;
@@ -163,12 +186,31 @@ type
     /// <summary>Every literal / format literal of the body (kind text line col ecol), by line, column, id.</summary>
     property Lits: TObjectList<TIndexRow> read FLits write FLits;
     /// <summary>Constructor: empty lists.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.RoutineFacts (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TRoutineFacts.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees the lists.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TRoutineFacts.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
   /// <summary>A fresh file's raw and stripped line arrays (the PS Get-TraceSource object).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.Create (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.TraceSource (DRagLint.Charts.Trace.Walk.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTraceSource = record
     /// <summary>The lines as written (Latin-1).</summary>
     Raw     : TArray<string>;
@@ -177,8 +219,14 @@ type
   end;
 
   /// <summary>What the walk is parametrised by: the anchor, the boundary convention and the two index names (the PS $Ctx hashtable).</summary>
-  /// <remarks>Owns Seen. The PS copies the hashtable per fill route with Seen cleared (Clone) and per dry walk with Seen copied
-  /// (Clone(True)). Not thread-safe.</remarks>
+  /// <remarks>
+  /// Owns Seen. The PS copies the hashtable per fill route with Seen cleared (Clone) and per dry walk with Seen copied
+  /// (Clone(True)). Not thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas) ?, declaration (DRagLint.Charts.Trace.Walk.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.Create (DRagLint.Charts.Trace.Walk.pas) ?, DRagLint.Charts.Trace.Walk.TTraceContext.Clone (DRagLint.Charts.Trace.Walk.pas) (+11 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTraceContext = class
   private
     FTable: string;
@@ -210,17 +258,48 @@ type
     /// <summary>`<path>|<line>` of every FIB$ literal already shown; case-insensitive keys.</summary>
     property Seen: TDictionary<string, Byte> read FSeen write FSeen;
     /// <summary>Constructor: an empty context.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Walk.TTraceContext.Clone (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceContext.Clone"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceContext.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees Seen.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceContext.Clone"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceContext.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>A copy of this context.</summary>
     /// <param name="pWithSeen">True: Seen is copied (a dry walk); False: Seen starts empty (a fill route).</param>
     /// <returns>A new context the caller frees.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.FillRoutes (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.LineYield (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Trace.Walk.TTraceContext.Create</para>
+    /// <para>Returns: TTraceContext.Create</para>
+    /// <para>Owns returned: new (caller owns)</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceContext.Create"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceContext.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function Clone(pWithSeen: Boolean = False): TTraceContext;
   end;
 
   /// <summary>What one Walk-Routine returned: the items and the conditions no step of the body could host.</summary>
-  /// <remarks>Owns both lists and what is in them. The caller frees it.</remarks>
+  /// <remarks>
+  /// Owns both lists and what is in them. The caller frees it.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Walk.pas) ?, DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.Create (DRagLint.Charts.Trace.Walk.pas) ?, DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep (DRagLint.Charts.Trace.Walk.pas) ?, DRagLint.Charts.Trace.Walk.TTraceWalker.WalkRoutine (DRagLint.Charts.Trace.Walk.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TWalkResult = class
   private
     FItems: TObjectList<TTraceItem>;
@@ -231,13 +310,32 @@ type
     /// <summary>The pending conditions for the caller's CALLS step; owned.</summary>
     property Conds: TObjectList<TTraceChild> read FConds write FConds;
     /// <summary>Constructor: empty lists.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.WalkRoutine (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TWalkResult.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees the lists and their contents.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TWalkResult.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
   /// <summary>The server side of one command. Port of the Get-ServerHandling object.</summary>
-  /// <remarks>Owns Items. Stop is BORROWED from Items (nil when the server side was walked).</remarks>
+  /// <remarks>
+  /// Owns Items. Stop is BORROWED from Items (nil when the server side was walked).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BackStep (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.PlaceServerItems (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WithText (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Trace.Walk.TTraceWalker.ServerHandling (DRagLint.Charts.Trace.Walk.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TServerHandling = class
   private
     FItems: TObjectList<TTraceItem>;
@@ -263,13 +361,32 @@ type
     /// <summary>The STOPS that ended the server side; nil when Walked. Borrowed from Items.</summary>
     property Stop: TTraceItem read FStop write FStop;
     /// <summary>Constructor: an empty list.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.ServerHandling (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TServerHandling.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees Items.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TServerHandling.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
   /// <summary>The DATABASE steps of one direction. Port of Get-DatabaseSteps' array plus the select stop's After.</summary>
-  /// <remarks>Owns Items. After is BORROWED from the server items the steps were built from.</remarks>
+  /// <remarks>
+  /// Owns Items. After is BORROWED from the server items the steps were built from.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Walk.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ReadThroughRoute (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps (DRagLint.Charts.Trace.Walk.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDatabaseSteps = class
   private
     FItems: TObjectList<TTraceItem>;
@@ -280,13 +397,32 @@ type
     /// <summary>A read: the server step that RUNS the query (the DATABASE steps stand right after it); nil when none.</summary>
     property After: TTraceItem read FAfter write FAfter;
     /// <summary>Constructor: an empty list.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TDatabaseSteps.Destroy"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create;
     /// <summary>Frees Items.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TDatabaseSteps.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
   /// <summary>One fill route of the anchor dataset. Port of a Get-FillRoutes row.</summary>
-  /// <remarks>Owns Walk and Ctx.</remarks>
+  /// <remarks>
+  /// Owns Walk and Ctx.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ReadThroughRoute (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkAlso (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkRead (DRagLint.Charts.Q.RoundTrip.pas) ?, DRagLint.Charts.Trace.Walk.TTraceWalker.FillRoutes (DRagLint.Charts.Trace.Walk.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TFillRoute = class
   private
     FLine: Integer;
@@ -318,10 +454,21 @@ type
     /// <summary>The route's own context (Seen of its own); owned.</summary>
     property Ctx: TTraceContext read FCtx write FCtx;
     /// <summary>Frees Walk and Ctx.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
   end;
 
   /// <summary>What the traced paths already show. Port of the Get-TracedRouteIds object.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.TracedRouteIds (DRagLint.Charts.Trace.Walk.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTracedRoutes = record
     /// <summary>Each direction's first CLIENT crossing (borrowed).</summary>
     Senders: TArray<TTraceItem>;
@@ -330,13 +477,32 @@ type
   end;
 
   /// <summary>The round-trip walker over the CLIENT and SERVER indexes (Trace.Walk.ps1 Parts 3-5).</summary>
-  /// <remarks>Nothing passed to the constructor is owned: the indexes, readers, catalogue and table set must
+  /// <remarks>
+  /// Nothing passed to the constructor is owned: the indexes, readers, catalogue and table set must
   /// outlive the walker. Source overrides (a stale-file test) live on the readers. Holds the per-run caches
-  /// the PS kept in $script: variables, keyed by side. Not thread-safe.</remarks>
+  /// the PS kept in $script: variables, keyed by side. Not thread-safe.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.AsOf (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkAlso (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Walk.BlockScope (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas) (+4 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Q.RoundTrip, DRagLint.Charts.Trace.Walk</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TTraceWalker = class  // dl:ok high-response@8975 -- REVIEWED 2026-10-18: the walker IS the PS Part 3-5 family (Get-RoutineFacts .. Get-AlsoRoutes); its response set is the SQL, shim and model calls each part makes, split into one private method per PS helper
   private
     type
       { the $Tgt / Resolve-HandlerByName object: what a CALLS step names }
+      /// <summary><!-- drag-lint:auto sum -->the $Tgt / Resolve-HandlerByName object:
+      /// what a CALLS step names</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Used by: declaration (DRagLint.Charts.Trace.Walk.pas) ?, DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas) ?, DRagLint.Charts.Trace.Walk.TTraceWalker.LineYield (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.ResolveHandlerByName (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.ServerHandling (DRagLint.Charts.Trace.Walk.pas) (+1 more)</para>
+      /// <para>Used in units: DRagLint.Charts.Trace.Walk</para>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       TCallTarget = record
         Found: Boolean;
         Id   : Integer;
@@ -347,6 +513,19 @@ type
         Ask  : string;
       end;
       { one New-OmitStep record: Count, Keyword, Condition, Anchor, Routine }
+      /// <summary><!-- drag-lint:auto sum -->one New-OmitStep record: Count, Keyword,
+      /// Condition, Anchor, Routine</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Used by: declaration (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.Create (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadOmits (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.Create (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.NewOmitStep (DRagLint.Charts.Trace.Walk.pas) (+1 more)</para>
+      /// <para>Used in units: DRagLint.Charts.Trace.Walk</para>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       TOmitRec = record
         Count    : Integer;
         Keyword  : string;
@@ -355,6 +534,19 @@ type
         Routine  : string;
       end;
       { the $G Get-ElseNote reads: a shim result's block (with its fail span) or a synthetic block }
+      /// <summary><!-- drag-lint:auto sum -->the $G Get-ElseNote reads: a shim result's
+      /// block (with its fail span) or a synthetic block</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Used by: declaration (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.BlockScope (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.ElseNote (DRagLint.Charts.Trace.Walk.pas)</para>
+      /// <para>Used in units: DRagLint.Charts.Trace.Walk</para>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       TElseScope = record
         BlockStart: Integer;
         BlockEnd  : Integer;
@@ -365,12 +557,36 @@ type
         SpanTo    : Integer;
       end;
       { one step line's facts (the PS $info[$ln]) }
+      /// <summary><!-- drag-lint:auto sum -->one step line's facts (the PS $info[$ln])</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Used by: declaration (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.Create (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadBranches (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadLineInfo (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.LineYield (DRagLint.Charts.Trace.Walk.pas)</para>
+      /// <para>Used in units: DRagLint.Charts.Trace.Walk, DRagLint.Doc.Harvest</para>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       TLineInfo = class
         Rs   : TArray<TIndexRow>;
         Lits : TArray<TIndexRow>;
         Chain: TArray<TShimResult>;
       end;
       { the Get-PayloadText object }
+      /// <summary><!-- drag-lint:auto sum -->the Get-PayloadText object</summary>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Used by: declaration (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.PayloadText (DRagLint.Charts.Trace.Walk.pas)</para>
+      /// <para>Used in units: DRagLint.Charts.Trace.Walk</para>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+      /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       TPayload = record
         Text: string;
         Note: string;
@@ -387,28 +603,365 @@ type
     FImpls     : TObjectDictionary<string, TObjectList<TIndexRow>>;
     FSources   : TDictionary<string, TTraceSource>;
     FOmits     : TDictionary<TTraceItem, TArray<TOmitRec>>;
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <returns><!-- drag-lint:auto -->TChartsIndex -- Observed: if pSide = tsClient then
+    /// FNear.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.FibLiterals (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.ResolveHandlerByName (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.ResolveImplByName (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.RoutineFacts (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IndexOf(pSide: TTraceSide): TChartsIndex;
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <returns><!-- drag-lint:auto -->TSourceReader -- Observed: if pSide = tsClient
+    /// then FNearReader.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.GuardCondition (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.TraceSource (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ReaderOf(pSide: TTraceSide): TSourceReader;
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <param name="pId"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pCtx"><!-- drag-lint:auto type -->TTraceContext</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: True; False.</returns>
+    /// <exception cref="EChartsTrace"><!-- drag-lint:auto exc -->via DRagLint.Charts.Trace.Walk.TTraceWalker.RoutineFacts: Get-RoutineFacts: symbol %d is not in the %s index</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.LineYield (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.Walk.InNames, DRagLint.Charts.Trace.Walk.IsCall, DRagLint.Charts.Trace.Walk.TTraceWalker.RoutineFacts, SameText</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.InNames"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.IsCall"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.RoutineFacts"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function OutwardIoCallee(pSide: TTraceSide; pId: Integer; pCtx: TTraceContext): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->Format-TraceLiteral: the token as written, or
+    /// `(a literal at :N)` when a text cannot carry it (T5-R5)</summary>
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <param name="pLit"><!-- drag-lint:auto type -->TIndexRow</param>
+    /// <param name="pPath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pFid"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: if TRegEx.IsMatch(Lt,
+    /// RE_TRACE_UNSAFE) then Format('(a literal at :%d)', [Ln]).</returns>
+    /// <exception cref="EChartsTrace"><!-- drag-lint:auto exc -->via DRagLint.Charts.Trace.Walk.TTraceWalker.TraceSource: round-trip:</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.LineLits (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.PayloadText (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.Shim.LiteralSourceText, DRagLint.Charts.Trace.Walk.TTraceWalker.TraceSource, Format</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.LiteralSourceText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.TraceSource"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FormatTraceLiteral(pSide: TTraceSide; pLit: TIndexRow; const pPath: string; pFid: Integer): string;
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <param name="pLits"><!-- drag-lint:auto type -->const TArray&lt;TIndexRow&gt;</param>
+    /// <param name="pPath"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pFid"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: if L.Count &gt; 0 then ' ' +
+    /// string.Join(' ', L.ToArray).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyOps (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.FillRoutes (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Trace.Walk.IsKind, DRagLint.Charts.Trace.Walk.TTraceWalker.FormatTraceLiteral</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.IsKind"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.FormatTraceLiteral"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LineLits(pSide: TTraceSide; const pLits: TArray<TIndexRow>; const pPath: string; pFid: Integer): string;
+    /// <summary><!-- drag-lint:auto sum -->Resolve-ImplByName: the receiver's declared
+    /// type in the NEAREST scope that declares it, then the one method of that name</summary>
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <param name="pRecv"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pName"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pF"><!-- drag-lint:auto type -->TRoutineFacts</param>
+    /// <returns><!-- drag-lint:auto -->TObjectList&lt;TIndexRow&gt; -- Observed:
+    /// TObjectList&lt;TIndexRow&gt;.Create.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.LineCandidateCols (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.LineYield (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlInList, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Trace.Walk.TTraceWalker.IndexOf, Format, UpperCase</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlInList"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveImplByName(pSide: TTraceSide; const pRecv, pName: string; pF: TRoutineFacts): TObjectList<TIndexRow>;
+    /// <summary><!-- drag-lint:auto sum -->Resolve-HandlerByName: the handler a wiring
+    /// line names, bound (certain) or a method of the same class by name (E3)</summary>
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <param name="pRef"><!-- drag-lint:auto type -->TIndexRow</param>
+    /// <param name="pF"><!-- drag-lint:auto type -->TRoutineFacts</param>
+    /// <returns><!-- drag-lint:auto -->TCallTarget -- Observed: Default(TCallTarget).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyEvent (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.LineYield (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Text.ShortName, DRagLint.Charts.Text.UnitNameOf, DRagLint.Charts.Trace.Walk.TTraceWalker.IndexOf, Format</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Text.ShortName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ResolveHandlerByName(pSide: TTraceSide; pRef: TIndexRow; pF: TRoutineFacts): TCallTarget;
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <param name="pFid"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->TObjectList&lt;TIndexRow&gt; -- Observed:
+    /// IndexOf(pSide).AllRows(Format(SQL_FIB_LITS, [pFid]), 'sl.start_line, sl.id').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.LineYield (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Trace.Walk.TTraceWalker.IndexOf, Format</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.IndexOf"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FibLiterals(pSide: TTraceSide; pFid: Integer): TObjectList<TIndexRow>;
+    /// <summary><!-- drag-lint:auto sum -->Get-ElseNote: what the other branch does --
+    /// dataset ops, protocol constants, the literal that goes out with it</summary>
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <param name="pF"><!-- drag-lint:auto type -->TRoutineFacts</param>
+    /// <param name="pG"><!-- drag-lint:auto type -->const TElseScope</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: Format('else arm at :%d',
+    /// [G.BlockStart]) + (if Parts.Count &gt; 0 then ': ' + string.Join(', ',
+    /// Parts.ToArray) else ''); if Parts.Count &gt; 0 then 'else ' + string.Join(', ',
+    /// Parts.ToArray).</returns>
+    /// <exception cref="EChartsTrace"><!-- drag-lint:auto exc -->via DRagLint.Charts.Trace.Walk.TTraceWalker.TraceSource: round-trip:</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.AddBranchConds (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.AddExceptConds (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadGuards (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Trace.Shim.LiteralSourceText, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Walk.Filter, DRagLint.Charts.Trace.Walk.IsCall, DRagLint.Charts.Trace.Walk.IsEnum, DRagLint.Charts.Trace.Walk.IsKind, DRagLint.Charts.Trace.Walk.IsOp (+7 more)</para>
+    /// <para>Complexity: 29 (cyclomatic, outer body), 72 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.LiteralSourceText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ElseNote(pSide: TTraceSide; pF: TRoutineFacts; const pG: TElseScope): string;
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <param name="pF"><!-- drag-lint:auto type -->TRoutineFacts</param>
+    /// <param name="pLine"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pCtx"><!-- drag-lint:auto type -->TTraceContext</param>
+    /// <returns><!-- drag-lint:auto type -->TPayload</returns>
+    /// <exception cref="EChartsTrace"><!-- drag-lint:auto exc -->via DRagLint.Charts.Trace.Walk.TTraceWalker.TraceSource: round-trip:</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCrossing (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.Shim.ConcatAssignExpr, DRagLint.Charts.Trace.Walk.IsCall, DRagLint.Charts.Trace.Walk.PayloadLits, DRagLint.Charts.Trace.Walk.SortedUniqueInts, DRagLint.Charts.Trace.Walk.StreamFormat, DRagLint.Charts.Trace.Walk.TTraceWalker.FormatTraceLiteral, DRagLint.Charts.Trace.Walk.TTraceWalker.TraceSource, Format, SameText</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.ConcatAssignExpr"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.IsCall"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.PayloadLits"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function PayloadText(pSide: TTraceSide; pF: TRoutineFacts; pLine: Integer; pCtx: TTraceContext): TPayload;
+    /// <param name="pList"><!-- drag-lint:auto type -->TObjectList&lt;TTraceItem&gt;</param>
+    /// <param name="pTgt"><!-- drag-lint:auto type -->const TCallTarget</param>
+    /// <param name="pSub"><!-- drag-lint:auto type -->TWalkResult</param>
+    /// <param name="pCaller"><!-- drag-lint:auto type -->TRoutineFacts</param>
+    /// <param name="pSiteLine"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pLits"><!-- drag-lint:auto type -->const string</param>
+    /// <param name="pAlways"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="pNote"><!-- drag-lint:auto type -->const string = ''</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.Classify (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyEvent (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyOps (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Walk.AddRtItem, DRagLint.Charts.Trace.Walk.MoveConds, DRagLint.Charts.Trace.Walk.MoveItems, Format</para>
+    /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.AddRtItem"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.MoveConds"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.MoveItems"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure AddCallsStep(pList: TObjectList<TTraceItem>; const pTgt: TCallTarget; pSub: TWalkResult; pCaller: TRoutineFacts;
       pSiteLine: Integer; const pLits: string; pAlways: Boolean; const pNote: string = '');
+    /// <summary><!-- drag-lint:auto sum -->Get-LineCandidates: the columns of the refs /
+    /// literals of one line that could make a step</summary>
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <param name="pRs"><!-- drag-lint:auto type -->const TArray&lt;TIndexRow&gt;</param>
+    /// <param name="pLits"><!-- drag-lint:auto type -->const TArray&lt;TIndexRow&gt;</param>
+    /// <param name="pF"><!-- drag-lint:auto type -->TRoutineFacts</param>
+    /// <returns><!-- drag-lint:auto -->TArray&lt;Integer&gt; -- Observed: L.ToArray.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadLineInfo (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.Walk.IsBoundCall, DRagLint.Charts.Trace.Walk.IsCall, DRagLint.Charts.Trace.Walk.IsEnum, DRagLint.Charts.Trace.Walk.IsOp, DRagLint.Charts.Trace.Walk.TTraceWalker.ResolveImplByName, StartsText</para>
+    /// <para>Complexity: 12 (cyclomatic, outer body), 22 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.IsBoundCall"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.IsCall"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.IsEnum"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LineCandidateCols(pSide: TTraceSide; const pRs, pLits: TArray<TIndexRow>; pF: TRoutineFacts): TArray<Integer>;
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <param name="pI"><!-- drag-lint:auto type -->TLineInfo</param>
+    /// <param name="pF"><!-- drag-lint:auto type -->TRoutineFacts</param>
+    /// <param name="pDepth"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pVisited"><!-- drag-lint:auto type -->TDictionary&lt;Integer, Byte&gt;</param>
+    /// <param name="pCtx"><!-- drag-lint:auto type -->TTraceContext</param>
+    /// <returns><!-- drag-lint:auto type -->Integer</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.AddExceptConds (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadOmits (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.Walk.Filter, DRagLint.Charts.Trace.Walk.HandlerRefs, DRagLint.Charts.Trace.Walk.IsCall, DRagLint.Charts.Trace.Walk.IsEnum, DRagLint.Charts.Trace.Walk.IsOp, DRagLint.Charts.Trace.Walk.IsPipe, DRagLint.Charts.Trace.Walk.TTraceContext.Clone (+7 more)</para>
+    /// <para>Complexity: 23 (cyclomatic, outer body), 68 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.Filter"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.HandlerRefs"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.IsCall"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function LineYield(pSide: TTraceSide; pI: TLineInfo; pF: TRoutineFacts; pDepth: Integer; pVisited: TDictionary<Integer, Byte>;
       pCtx: TTraceContext): Integer;
+    /// <summary><!-- drag-lint:auto sum -->Get-LineYield: how many STEPS one line would
+    /// have yielded (T5-R6), the subtrees from a DRY walk over copies of Visited and Seen</summary>
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <param name="pId"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pDepth"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pVisited"><!-- drag-lint:auto type -->TDictionary&lt;Integer, Byte&gt;</param>
+    /// <param name="pDry"><!-- drag-lint:auto type -->TTraceContext</param>
+    /// <param name="pAny"><!-- drag-lint:auto type -->out Boolean</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: Sub.Items.Count.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.LineYield (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Trace.Walk.TTraceWalker.WalkRoutine</para>
+    /// <para>Mutates: pAny (out)</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.WalkRoutine"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DryYield(pSide: TTraceSide; pId, pDepth: Integer; pVisited: TDictionary<Integer, Byte>; pDry: TTraceContext;
       out pAny: Boolean): Integer;
+    /// <summary><!-- drag-lint:auto sum -->New-OmitStep: the OMITS disclosure (T5-R1)</summary>
+    /// <param name="pRecs"><!-- drag-lint:auto type -->const TArray&lt;TOmitRec&gt;</param>
+    /// <returns><!-- drag-lint:auto type -->TTraceItem</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.Classify (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.MergeTraceOmits (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.FormA.TraceCondProblem, Format</para>
+    /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
+    /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.FormA.TraceCondProblem"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function NewOmitStep(const pRecs: TArray<TOmitRec>): TTraceItem;
+    /// <summary><!-- drag-lint:auto sum -->Get-WalkedCaseSelector: the `case &lt;X&gt;
+    /// of` condition the walk already quoted in routine pF above pLine</summary>
+    /// <param name="pItems"><!-- drag-lint:auto type -->const TArray&lt;TTraceItem&gt;</param>
+    /// <param name="pF"><!-- drag-lint:auto type -->TRoutineFacts</param>
+    /// <param name="pLine"><!-- drag-lint:auto type -->Integer</param>
+    /// <param name="pSelector"><!-- drag-lint:auto type -->out string</param>
+    /// <param name="pSelLine"><!-- drag-lint:auto type -->out Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.WriteStatementStop (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Text.FileNameOf, DRagLint.Charts.Trace.Walk.SplitAnchor, SameText</para>
+    /// <para>Mutates: pSelector (out), pSelLine (out)</para>
+    /// <seealso cref="DRagLint.Charts.Text.FileNameOf"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.SplitAnchor"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function WalkedCaseSelector(const pItems: TArray<TTraceItem>; pF: TRoutineFacts; pLine: Integer; out pSelector: string;
       out pSelLine: Integer): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->Get-SelectStop: DATABASE for a READ -- where
+    /// the SELECT is assembled, with After (M4)</summary>
+    /// <param name="pServerItems"><!-- drag-lint:auto type -->const TArray&lt;TTraceItem&gt;</param>
+    /// <param name="pCtx"><!-- drag-lint:auto type -->TTraceContext</param>
+    /// <param name="pAfter"><!-- drag-lint:auto type -->out TTraceItem</param>
+    /// <returns><!-- drag-lint:auto -->TTraceItem -- Observed: NewTraceStep(KIND_STOPS,
+    /// TraceStopText(Why), At, '', if Last &lt;&gt; nil then Last.Routine else '', '',
+    /// ASK_E4).</returns>
+    /// <exception cref="EChartsTrace"><!-- drag-lint:auto exc -->via DRagLint.Charts.Trace.Walk.TTraceWalker.TraceSource: round-trip:</exception>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.AssignExprAt, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceStopText, DRagLint.Charts.Trace.Walk.IsKind, DRagLint.Charts.Trace.Walk.JoinLast, DRagLint.Charts.Trace.Walk.OwnersOf, DRagLint.Charts.Trace.Walk.StepsMatching (+6 more)</para>
+    /// <para>Complexity: 24 (cyclomatic, outer body), 108 lines (full implementation)</para>
+    /// <para>Mutates: pAfter (out)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.AssignExprAt"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function SelectStop(const pServerItems: TArray<TTraceItem>; pCtx: TTraceContext; out pAfter: TTraceItem): TTraceItem;
+    /// <summary><!-- drag-lint:auto sum -->the write direction's statement STOPS
+    /// (final-review M7, FW-R1, P15)</summary>
+    /// <param name="pServerItems"><!-- drag-lint:auto type -->const TArray&lt;TTraceItem&gt;</param>
+    /// <param name="pCtx"><!-- drag-lint:auto type -->TTraceContext</param>
+    /// <returns><!-- drag-lint:auto -->TTraceItem -- Observed: NewTraceStep(KIND_STOPS,
+    /// TraceStopText(Why), At, '', Rn, Nt, ASK_E4).</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: CompareValue, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceStopText, DRagLint.Charts.Trace.Walk.Filter, DRagLint.Charts.Trace.Walk.FindLoader, DRagLint.Charts.Trace.Walk.InNames, DRagLint.Charts.Trace.Walk.IsKind (+8 more)</para>
+    /// <para>Complexity: 23 (cyclomatic, outer body), 139 lines (full implementation)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceStopText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function WriteStatementStop(const pServerItems: TArray<TTraceItem>; pCtx: TTraceContext): TTraceItem;
+    /// <param name="pSide"><!-- drag-lint:auto type -->TTraceSide</param>
+    /// <param name="pTable"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: Q[0].I('n').</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.FilesCount (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.SelectStop (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.WriteStatementStop (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Trace.Walk.TTraceWalker.IndexOf, Format</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.IndexOf"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function CountRows(pSide: TTraceSide; const pTable: string): Integer;
   public
     /// <summary>Constructor.</summary>
@@ -418,9 +971,31 @@ type
     /// <param name="pFarReader">A source reader over pFar; not owned.</param>
     /// <param name="pCatalog">The SQL catalogue (the column state of the DATABASE steps); not owned.</param>
     /// <param name="pSet">The SQL table set (the PS $SqlSet); not owned.</param>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Create (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.Create</para>
+    /// <para>constructor</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.Create"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     constructor Create(pNear, pFar: TChartsIndex; pNearReader, pFarReader: TSourceReader; pCatalog: TSqlCatalog;
       pSet: TSqlTableSet);
     /// <summary>Frees the caches.</summary>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Directives: override</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     destructor Destroy; override;
     /// <summary>One routine's body facts, cached per side and id for the run.</summary>
     /// <param name="pSide">The index the id belongs to.</param>
@@ -428,14 +1003,39 @@ type
     /// <param name="pLikes">The transport-unit condition (BoundaryLikes) the tpipe column tests.</param>
     /// <returns>The walker's own facts; do not free them.</returns>
     /// <exception cref="EChartsTrace">'Get-RoutineFacts: symbol &lt;id&gt; is not in the &lt;client|server&gt; index'.</exception>
-    /// <remarks>Port of Get-RoutineFacts (Trace.Walk.ps1:906). The SQL is verbatim.</remarks>
+    /// <remarks>
+    /// Port of Get-RoutineFacts (Trace.Walk.ps1:906). The SQL is verbatim.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.Create (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.OutwardIoCallee (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.WalkRoutine (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Text.ShortName, DRagLint.Charts.Text.UnitNameOf, DRagLint.Charts.Trace.Walk.TRoutineFacts.Create, DRagLint.Charts.Trace.Walk.TTraceWalker.IndexOf, Format, IntToStr</para>
+    /// <para>Returns: TRoutineFacts.Create</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Text.ShortName"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function RoutineFacts(pSide: TTraceSide; pId: Integer; const pLikes: string): TRoutineFacts;
     /// <summary>A FRESH file's raw and stripped lines, read once per side and path.</summary>
     /// <param name="pSide">The index the path belongs to.</param>
     /// <param name="pPath">A path of that index.</param>
     /// <returns>The lines (shared; do not modify).</returns>
     /// <exception cref="EChartsTrace">'round-trip: &lt;leaf&gt; differs from the indexed copy (sha256) -- refusing to read it. Reindex the project, then re-run.' (AC-14, RT16).</exception>
-    /// <remarks>Port of Get-TraceSource (Trace.Walk.ps1:794).</remarks>
+    /// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Source.TSourceReader.SourceFresh: Test-SourceFresh:</exception>
+    /// <remarks>
+    /// Port of Get-TraceSource (Trace.Walk.ps1:794).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadGuards (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.ElseNote (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.FormatTraceLiteral (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.GuardCondition (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.PayloadText (DRagLint.Charts.Trace.Walk.pas) (+1 more)</para>
+    /// <para>Calls: DRagLint.Charts.Source.ReadLatin1, DRagLint.Charts.Source.SplitLines, DRagLint.Charts.Source.TSourceReader.ReadPath, DRagLint.Charts.Source.TSourceReader.SourceFresh, DRagLint.Charts.Source.TSourceReader.StrippedSourceLines, DRagLint.Charts.Text.FileNameOf, DRagLint.Charts.Trace.Walk.TTraceWalker.ReaderOf</para>
+    /// <seealso cref="DRagLint.Charts.Source.ReadLatin1"/>
+    /// <seealso cref="DRagLint.Charts.Source.SplitLines"/>
+    /// <seealso cref="DRagLint.Charts.Source.TSourceReader.ReadPath"/>
+    /// <seealso cref="DRagLint.Charts.Source.TSourceReader.SourceFresh"/>
+    /// <seealso cref="DRagLint.Charts.Source.TSourceReader.StrippedSourceLines"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function TraceSource(pSide: TTraceSide; const pPath: string): TTraceSource;
     /// <summary>The guard condition around the Exit on one line, read from FRESH source.</summary>
     /// <param name="pSide">The index the path belongs to.</param>
@@ -444,7 +1044,20 @@ type
     /// <param name="pRoutineStart">The routine's impl start line.</param>
     /// <returns>The shim's result (Form 'unknown' with a Reason for anything it cannot read).</returns>
     /// <exception cref="EChartsTrace">'round-trip: &lt;leaf&gt; differs from the indexed copy (sha256) -- refusing to quote a condition from it. Reindex the project, then re-run.'</exception>
-    /// <remarks>Port of Get-GuardCondition (Trace.Walk.ps1:748).</remarks>
+    /// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Source.TSourceReader.SourceFresh: Test-SourceFresh:</exception>
+    /// <remarks>
+    /// Port of Get-GuardCondition (Trace.Walk.ps1:748).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ReadGuards (DRagLint.Charts.Trace.Walk.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Source.TSourceReader.SourceFresh, DRagLint.Charts.Text.FileNameOf, DRagLint.Charts.Trace.Shim.GuardConditionFromLines, DRagLint.Charts.Trace.Walk.TTraceWalker.ReaderOf, DRagLint.Charts.Trace.Walk.TTraceWalker.TraceSource</para>
+    /// <para>Returns: GuardConditionFromLines(S.Raw, S.Stripped, pExitLine, pRoutineStart)</para>
+    /// <seealso cref="DRagLint.Charts.Source.TSourceReader.SourceFresh"/>
+    /// <seealso cref="DRagLint.Charts.Text.FileNameOf"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.GuardConditionFromLines"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.ReaderOf"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.TraceSource"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function GuardCondition(pSide: TTraceSide; const pPath: string; pExitLine, pRoutineStart: Integer): TShimResult;
     /// <summary>One routine BODY, line by line, as trace items (spec section 4's classifier).</summary>
     /// <param name="pSide">The index pId belongs to.</param>
@@ -454,7 +1067,20 @@ type
     /// <param name="pCtx">The context; its Seen grows with every FIB$ literal shown.</param>
     /// <returns>A new result the caller frees: the items and the conditions no step of this body hosts.</returns>
     /// <exception cref="EChartsTrace">A walked file is stale (TraceSource / GuardCondition), or the model refuses a text.</exception>
-    /// <remarks>Port of Walk-Routine (Trace.Walk.ps1:1290).</remarks>
+    /// <remarks>
+    /// Port of Walk-Routine (Trace.Walk.ps1:1290).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkWrite (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.Classify (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyEvent (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyOps (DRagLint.Charts.Trace.Walk.pas) (+3 more)</para>
+    /// <para>Calls: DRagLint.Charts.Trace.Walk.TRoutineWalk.Create, DRagLint.Charts.Trace.Walk.TRoutineWalk.Run, DRagLint.Charts.Trace.Walk.TTraceWalker.RoutineFacts, DRagLint.Charts.Trace.Walk.TWalkResult.Create</para>
+    /// <para>Returns: TWalkResult.Create</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TRoutineWalk.Create"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TRoutineWalk.Run"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.RoutineFacts"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TWalkResult.Create"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function WalkRoutine(pSide: TTraceSide; pId, pDepth: Integer; pVisited: TDictionary<Integer, Byte>;
       pCtx: TTraceContext): TWalkResult;
     /// <summary>The server side of one command, on the SERVER index: the dispatch arm, the handler, its walk.</summary>
@@ -462,7 +1088,20 @@ type
     /// <param name="pCtx">The context (the walk adds to its Seen).</param>
     /// <param name="pDepth">Call levels for the handler's walk.</param>
     /// <returns>A new result the caller frees. Walked False with Stop set when no arm or no one implementation was found.</returns>
-    /// <remarks>Port of Get-ServerHandling (Trace.Walk.ps1:1647) with Find-DispatchArm and Resolve-InterfaceImpl.</remarks>
+    /// <remarks>
+    /// Port of Get-ServerHandling (Trace.Walk.ps1:1647) with Find-DispatchArm and Resolve-InterfaceImpl.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ReadThroughRoute (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WriteThroughCrossing (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Text.ShortName, DRagLint.Charts.Text.UnitNameOf, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceStopText, DRagLint.Charts.Trace.Walk.AddRtItem (+9 more)</para>
+    /// <para>Returns: TServerHandling.Create</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
+    /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
+    /// <seealso cref="DRagLint.Charts.Text.ShortName"/>
+    /// <seealso cref="DRagLint.Charts.Text.UnitNameOf"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ServerHandling(const pCmdName: string; pCtx: TTraceContext; pDepth: Integer): TServerHandling;
     /// <summary>The DATABASE steps below a walked server side, on the SERVER index (ruling P15).</summary>
     /// <param name="pServerItems">The server items (TServerHandling.Items, in order).</param>
@@ -470,52 +1109,155 @@ type
     /// <param name="pMode">'write' or 'read' (case-insensitive).</param>
     /// <returns>A new result the caller frees: a STOPS naming the statement (unless a SQL fact names the table), then the column step
     /// or its STOPS. A read's select stop sets After.</returns>
-    /// <remarks>Port of Get-DatabaseSteps (Trace.Walk.ps1:1726), Get-WalkedCaseSelector and Get-SelectStop.</remarks>
+    /// <exception cref="EChartsIndex"><!-- drag-lint:auto exc -->via DRagLint.Charts.Columns.SqlColumnState: Get-SqlColumnState: no table %s in the SQL index -- the caller checks the table first</exception>
+    /// <remarks>
+    /// Port of Get-DatabaseSteps (Trace.Walk.ps1:1726), Get-WalkedCaseSelector and Get-SelectStop.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ReadThroughRoute (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WriteThroughCrossing (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Columns.SqlColumnState, DRagLint.Charts.Columns.TServerSqlHit.None, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceStopText, DRagLint.Charts.Trace.Walk.AddRtItem, DRagLint.Charts.Trace.Walk.StepsMatching, DRagLint.Charts.Trace.Walk.TDatabaseSteps.Create, DRagLint.Charts.Trace.Walk.TTraceWalker.SelectStop, DRagLint.Charts.Trace.Walk.TTraceWalker.WriteStatementStop, SameText</para>
+    /// <para>Returns: TDatabaseSteps.Create</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <seealso cref="DRagLint.Charts.Columns.SqlColumnState"/>
+    /// <seealso cref="DRagLint.Charts.Columns.TServerSqlHit.None"/>
+    /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceStopText"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function DatabaseSteps(const pServerItems: TArray<TTraceItem>; pCtx: TTraceContext; const pMode: string): TDatabaseSteps;
     /// <summary>The routines that FILL the anchor dataset and reach a crossing, on the CLIENT index, by line.</summary>
     /// <param name="pDs">The anchor dataset.</param>
     /// <param name="pCtx">The context; each route gets its own copy with an empty Seen.</param>
     /// <param name="pDepth">Call levels for each candidate's walk.</param>
     /// <returns>A new owning list the caller frees; the first is traced, the rest are ALSO.</returns>
-    /// <remarks>Port of Get-FillRoutes (Trace.Walk.ps1:1925).</remarks>
+    /// <remarks>
+    /// Port of Get-FillRoutes (Trace.Walk.ps1:1925).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Text.ShortName, DRagLint.Charts.Text.UnitNameOf, DRagLint.Charts.Trace.Walk.TTraceContext.Clone, DRagLint.Charts.Trace.Walk.TTraceWalker.LineLits, DRagLint.Charts.Trace.Walk.TTraceWalker.WalkRoutine, Format, IntToStr, UpperCase</para>
+    /// <para>Returns: TObjectList&lt;TFillRoute&gt;.Create</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+    /// <seealso cref="DRagLint.Charts.Text.ShortName"/>
+    /// <seealso cref="DRagLint.Charts.Text.UnitNameOf"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceContext.Clone"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.LineLits"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FillRoutes(const pDs: TTraceDataSet; pCtx: TTraceContext; pDepth: Integer): TObjectList<TFillRoute>;
     /// <summary>What the traced paths already show: each direction's first CLIENT crossing and the owners before it.</summary>
     /// <param name="pPaths">One item list per direction, in text order.</param>
     /// <returns>Senders (borrowed) and Callers (first-seen).</returns>
-    /// <remarks>Port of Get-TracedRouteIds (Trace.Walk.ps1:1959). Pure. SERVER / DATABASE actors are skipped (M1).</remarks>
+    /// <remarks>
+    /// Port of Get-TracedRouteIds (Trace.Walk.ps1:1959). Pure. SERVER / DATABASE actors are skipped (M1).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkAlso (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Trace.Walk.InNames</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.InNames"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function TracedRouteIds(const pPaths: TArray<TArray<TTraceItem>>): TTracedRoutes; static;
     /// <summary>ALSO: the other callers of each traced sender whose payload names the anchor table, on the CLIENT index.</summary>
     /// <param name="pSenders">TracedRouteIds' Senders.</param>
     /// <param name="pSkipIds">Callers already on the page.</param>
     /// <param name="pCtx">The context (Table, Likes).</param>
     /// <returns>A new owning list of 'CALLS &lt;sender&gt;' steps by call line, anchored at the call site.</returns>
-    /// <remarks>Port of Get-AlsoRoutes (Trace.Walk.ps1:1979) with Test-TableSpecificSender.</remarks>
+    /// <exception cref="EChartsTrace"><!-- drag-lint:auto exc -->via DRagLint.Charts.Trace.Walk.TTraceWalker.RoutineFacts: Get-RoutineFacts: symbol %d is not in the %s index</exception>
+    /// <remarks>
+    /// Port of Get-AlsoRoutes (Trace.Walk.ps1:1979) with Test-TableSpecificSender.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkAlso (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Text.ShortName, DRagLint.Charts.Text.UnitNameOf, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Walk.TableSpecificSender, DRagLint.Charts.Trace.Walk.TTraceWalker.RoutineFacts, Format</para>
+    /// <para>Returns: TObjectList&lt;TTraceItem&gt;.Create</para>
+    /// <para>Catches: Exception (re-raise)</para>
+    /// <seealso cref="DRagLint.Charts.Text.ShortName"/>
+    /// <seealso cref="DRagLint.Charts.Text.UnitNameOf"/>
+    /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TableSpecificSender"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function AlsoRoutes(const pSenders: TArray<TTraceItem>; const pSkipIds: TArray<Integer>; pCtx: TTraceContext): TObjectList<TTraceItem>;
     /// <summary>ONE OMITS disclosure per section (T5-R1): the OMITS steps the walk left in pSection become one, at the place of the first.</summary>
     /// <param name="pSection">The section; its items are replaced in place (the merged ones are freed).</param>
-    /// <remarks>Port of Merge-TraceOmits (Trace.Walk.ps1:1267). Fewer than two OMITS: nothing changes.</remarks>
+    /// <remarks>
+    /// Port of Merge-TraceOmits (Trace.Walk.ps1:1267). Fewer than two OMITS: nothing changes.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ReadThroughRoute (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkWrite (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Trace.Walk.TTraceWalker.NewOmitStep</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.NewOmitStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     procedure MergeTraceOmits(pSection: TTraceSection);
     /// <summary>The number of files of one index (the A-RT5-ONDB proof).</summary>
     /// <param name="pSide">The index.</param>
     /// <returns>SELECT COUNT(*) FROM files.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ResultFields (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows</para>
+    /// <para>Returns: CountRows(pSide, 'files')</para>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.DatabaseSteps"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function FilesCount(pSide: TTraceSide): Integer;
     /// <summary>An index's own last-indexed stamp, UTC to the minute (final-review M3).</summary>
     /// <param name="pIndex">Any index (the SQL one too); not owned.</param>
     /// <returns>'yyyy-MM-ddTHH:mmZ' from schema_meta indexed_at_unix, or 'unstamped' when it is missing or not all digits.</returns>
-    /// <remarks>Port of Get-IndexStamp (Emit-RoundTrip.ps1:95).</remarks>
+    /// <remarks>
+    /// Port of Get-IndexStamp (Emit-RoundTrip.ps1:95).
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.AsOf (DRagLint.Charts.Q.RoundTrip.pas)</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Query, FormatDateTime, StrToInt64, UnixToDateTime</para>
+    /// <para>Returns: STAMP_NONE; FormatDateTime(STAMP_FORMAT, UnixToDateTime(StrToInt64(Q[0].S('v')), True), TFormatSettings.Invariant)</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     class function IndexStamp(pIndex: TChartsIndex): string; static;
   end;
 
 /// <summary>The SQL condition on symbols u that matches the transport-unit naming convention.</summary>
 /// <param name="pPattern">LIKE patterns joined by '|'.</param>
 /// <returns>`u.qualified_name LIKE '&lt;p&gt;'` per part, joined ' OR '.</returns>
-/// <remarks>Port of Get-BoundaryLikes (Trace.Walk.ps1:894).</remarks>
+/// <remarks>
+/// Port of Get-BoundaryLikes (Trace.Walk.ps1:894).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas)</para>
+/// <para>Calls: DRagLint.Charts.Index.TChartsIndex.SqlText</para>
+/// <para>Returns: string.Join(' OR ', Parts)</para>
+/// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BoundaryLikes(const pPattern: string): string;
 
 /// <summary>The stream format a `SaveToStream(&lt;stream&gt;, &lt;format&gt;)` call names.</summary>
 /// <param name="pRawLine">One raw source line.</param>
 /// <returns>The last argument when it is one plain identifier, as written; '' otherwise.</returns>
-/// <remarks>Port of Get-StreamFormat (Trace.Walk.ps1:973). Pure.</remarks>
+/// <remarks>
+/// Port of Get-StreamFormat (Trace.Walk.ps1:973). Pure.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Charts.Trace.Walk.TTraceWalker.PayloadText (DRagLint.Charts.Trace.Walk.pas)</para>
+/// <para>Returns: ''; if (Length(A) &gt;= 2) and TRegEx.IsMatch(Last_, RE_IDENT, [roIgnoreCase]) then Last_</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StreamFormat(const pRawLine: string): string;
 
 implementation

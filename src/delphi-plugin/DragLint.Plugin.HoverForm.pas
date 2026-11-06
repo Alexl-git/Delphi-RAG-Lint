@@ -39,6 +39,12 @@ uses
   ;
 
 type
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.FetchHoverCallers (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.FetchHoverCallers.AlreadyHave (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.ParseHoverBundleReply (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverBundleAsync (DragLint.Plugin.Editor.pas) (+12 more)</para>
+  /// <para>Used in units: DragLint.Plugin.Editor, DragLint.Plugin.HoverForm, DragLint.Plugin.HoverTracker</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintCallerInfo = record
     FilePath: string ;
     Line    : Integer;
@@ -48,6 +54,12 @@ type
   /// <summary>One parsed parameter for the structured hover model: the leading
   /// const/var/out modifier (if any), the parameter name, and its type text.
   /// Populated by the Editor from the `hover --json` payload (Task 8).</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.Editor.ParseHoverModelJson (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.RenderModel (DragLint.Plugin.HoverForm.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.Editor, DragLint.Plugin.HoverForm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintHoverParam = record
     Modifier: string;
     Name    : string;
@@ -60,6 +72,12 @@ type
   /// return type, and the mined `Result:=`/`Exit()` return expressions plus an
   /// overflow count. The Editor builds this from `hover --qname X --json`
   /// (Task 8); the form never re-parses a flat string.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DragLint.Plugin.Editor.FetchHoverModel (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.ParseHoverBundleReply (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.ParseHoverModelJson (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.RequestHoverBundleAsync (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnHoverTextAnswer (DragLint.Plugin.HoverTracker.pas) (+12 more)</para>
+  /// <para>Used in units: DragLint.Plugin.Editor, DragLint.Plugin.HoverForm, DragLint.Plugin.HoverTracker</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintHoverModel = record
     QualifiedName: string                    ;
     Kind         : string                    ;   // FB #3: friendly qualifier (function/local var/property/...) shown before the name
@@ -91,8 +109,19 @@ type
   /// WCAG contrast guard against the actual popup background.</summary>
   { MOVED to DragLint.Plugin.SyntaxColors so the completion popup can render in
     the same palette. Aliased here so existing references keep compiling. }
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.GetSyntaxColor (DragLint.Plugin.HoverForm.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDLSynRole = DragLint.Plugin.SyntaxColors.TDLSynRole;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.HoverForm.pas) ?, DragLint.Plugin.HoverForm.ApplyIdeTheme (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.ShowDragLintHover/7 (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.ShowDragLintHover/8 (DragLint.Plugin.HoverForm.pas)</para>
+  /// <para>Used in units: DragLint.Plugin.HoverForm</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TDragLintHoverForm = class(TForm)
     private
       FBody       : TRichEdit  ;
@@ -146,38 +175,293 @@ type
         FBody for everything after. Never nil in practice -- Emit falls back to
         FBody defensively. }
       FEmitTarget: TRichEdit;
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.Create (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: GOnNavigateToQname</para>
+      /// <para>Reads: FStructured, FModelQName, FModelDefLine</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleTitleClick(Sender: TObject);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <param name="Key"><!-- drag-lint:auto type -->var Word</param>
+      /// <param name="Shift"><!-- drag-lint:auto type -->TShiftState</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.Create (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Mutates: Key (var)</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
       procedure HandleDeactivate    (Sender: TObject);
       procedure HandleTimerTick     (Sender: TObject);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.Create (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: GetCursorPos, InflateRect, PtInRect, Rect, SetWindowPos</para>
+      /// <para>Complexity: 13 (cyclomatic, outer body), 62 lines (full implementation)</para>
+      /// <para>Reads: FSizing, FAnchorDismiss, FShowTickMs, FDwellAnchor   Writes: FAnchorDismiss</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleWatchTick     (Sender: TObject);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.Create (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.HandleCallerKey (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.HoverForm.OpenSourceAt, StrToIntDef</para>
+      /// <para>Reads: FCallers, FCallerPaths</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.OpenSourceAt"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleCallerDblClick(Sender: TObject);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <param name="Key"><!-- drag-lint:auto type -->var Word</param>
+      /// <param name="Shift"><!-- drag-lint:auto type -->TShiftState</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.Create (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.HoverForm.TDragLintHoverForm.HandleCallerDblClick</para>
+      /// <para>Mutates: Key (var)</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.HandleCallerDblClick"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleCallerKey(Sender: TObject; var Key: Word; Shift: TShiftState);
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.Create (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: CharInSet, Copy, DragLint.Plugin.HoverForm.OpenSourceAt, DragLint.Plugin.HoverForm.StripWikiIndicatorPrefix, DragLint.Plugin.HoverForm.TDragLintHoverForm.ReturnLineForBodyLine, DragLint.Plugin.HoverForm.UnitNameFromQname, GOnAddUnit, GOnNavigateToQname, LowerCase, Pos, StrToIntDef, Trim</para>
+      /// <para>Complexity: 21 (cyclomatic, outer body), 118 lines (full implementation)</para>
+      /// <para>Reads: FBody, FStructured, FModelQName</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.OpenSourceAt"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.StripWikiIndicatorPrefix"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.ReturnLineForBodyLine"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.UnitNameFromQname"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleMemoClick(Sender: TObject);
+      /// <summary><!-- drag-lint:auto sum -->v0.46.x: show a hand cursor over clickable
+      /// lines so users see they are links. v0.94.1: FBody is a TRichEdit (MSFTEDIT), NOT
+      /// a TMemo. Its EM_CHARFROMPOS contract differs from the plain EDIT control: lParam
+      /// is a POINTL* (pointer to the client point) and the message RETURNS the
+      /// zero-based CHARACTER index -- it does NOT pack (char,line) into the result like
+      /// a multiline EDIT does. The old TMemo idiom `Perform(EM_CHARFROMPOS, 0,
+      /// MakeLParam(X,Y))` passed the packed coordinate where a POINTER was expected, so
+      /// the rich edit dereferenced a bogus address -&gt; AV inside MSFTEDIT.DLL
+      /// (IID_ITextHost). Fixed: pass @Pt and derive the line via EM_EXLINEFROMCHAR on
+      /// the returned char index.</summary>
+      /// <param name="Sender"><!-- drag-lint:auto type -->TObject</param>
+      /// <param name="Shift"><!-- drag-lint:auto type -->TShiftState</param>
+      /// <param name="X"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="Y"><!-- drag-lint:auto type -->Integer</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.Create (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.HoverForm.TDragLintHoverForm.LineIsClickable, LPARAM, SendMessage</para>
+      /// <para>Reads: FBody, FStructured, FModelQName</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.LineIsClickable"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure HandleMemoMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+      /// <summary><!-- drag-lint:auto sum -->Is a memo line clickable? -- an "add unit X"
+      /// lightbulb line, or a definition row "- &lt;qname&gt; - line N". Used to show the
+      /// hand cursor over it.</summary>
+      /// <param name="ALineText"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False;
+      /// StrToIntDef(Trim(Copy(Body, DashAt + Length(' - line '), MaxInt)), 0) &gt; 0.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.HandleMemoMouseMove (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: Copy, DragLint.Plugin.HoverForm.StripWikiIndicatorPrefix, DragLint.Plugin.HoverForm.TDragLintHoverForm.ReturnLineForBodyLine, LowerCase, Pos, StrToIntDef, Trim</para>
+      /// <para>Reads: FStructured</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.StripWikiIndicatorPrefix"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.ReturnLineForBodyLine"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function LineIsClickable(const ALineText: string): Boolean;
       { FB3: if ALineText is a rendered "Result := <expr>" return line whose expr
         matches a mined return, its absolute source line; 0 otherwise. }
+      /// <param name="ALineText"><!-- drag-lint:auto type -->const string</param>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: 0; FReturnLines[I].</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.HandleMemoClick (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.LineIsClickable (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: Copy, Pos, Trim</para>
+      /// <para>Reads: FReturnExprs, FReturnLines</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ReturnLineForBodyLine(const ALineText: string): Integer;
       { v0.94: colored + selectable Help-Insight body (TRichEdit). }
+      /// <summary><!-- drag-lint:auto sum -->v0.94: colored + selectable Help-Insight
+      /// body (TRichEdit).</summary>
+      /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AColor"><!-- drag-lint:auto type -->TColor</param>
+      /// <param name="ABold"><!-- drag-lint:auto type -->Boolean</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.RenderModel (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.RenderModel.SectionBreak (DragLint.Plugin.HoverForm.pas) ?</para>
+      /// <para>Calls: DRagLint.Hover.Contrast.EnsureReadable</para>
+      /// <para>Reads: FEmitTarget, FBody</para>
+      /// <seealso cref="DRagLint.Hover.Contrast.EnsureReadable"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure Emit(const AText: string; AColor: TColor; ABold: Boolean);
+      /// <param name="ARole"><!-- drag-lint:auto type -->TDLSynRole</param>
+      /// <returns><!-- drag-lint:auto -->TColor -- Observed: SyntaxColorFor(FSynOpts,
+      /// ARole).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.RenderModel (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.RenderModel.SectionBreak (DragLint.Plugin.HoverForm.pas) ?</para>
+      /// <para>Calls: DragLint.Plugin.SyntaxColors.SyntaxColorFor</para>
+      /// <para>Reads: FSynOpts</para>
+      /// <seealso cref="DragLint.Plugin.SyntaxColors.SyntaxColorFor"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function  GetSyntaxColor(ARole: TDLSynRole): TColor;
+      /// <param name="ASignature"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AUnitFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ADefLine"><!-- drag-lint:auto type -->Integer</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.RenderModel (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: CharInSet, DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit, DragLint.Plugin.HoverForm.TDragLintHoverForm.GetSyntaxColor, IntToStr, MatchText</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 69 lines (full implementation)</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.GetSyntaxColor"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure EmitSignatureHeader(const ASignature, AUnitFile: string; ADefLine: Integer);
+      /// <param name="AModel"><!-- drag-lint:auto type -->const TDragLintHoverModel</param>
+      /// <param name="ACallerCount"><!-- drag-lint:auto type -->Integer</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.ShowAt/7 (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit, DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader, DragLint.Plugin.HoverForm.TDragLintHoverForm.GetSyntaxColor, DragLint.Plugin.HoverForm.TDragLintHoverForm.RenderModel.SectionBreak, IntToStr, Max, Supports</para>
+      /// <para>Complexity: 20 (cyclomatic, outer body), 176 lines (full implementation)</para>
+      /// <para>Reads: FTitle, FTitleSep, FBody   Writes: FStructured, FModelQName, FModelDefLine, FReturnExprs, FReturnLines, FSynOpts, FEmitTarget</para>
+      /// <para>Catches: Exception (swallowed)</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.GetSyntaxColor"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.RenderModel.SectionBreak"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure RenderModel(const AModel: TDragLintHoverModel; ACallerCount: Integer);
       { v0.94: shared final placement + no-steal-focus show, used by BOTH ShowAt
       overloads so the focus/dwell mechanics can never drift between them. }
+      /// <summary><!-- drag-lint:auto sum -->v0.94: shared final placement +
+      /// no-steal-focus show, used by BOTH ShowAt overloads so the focus/dwell mechanics
+      /// can never drift between them.</summary>
+      /// <param name="X"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="Y"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="W"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="H"><!-- drag-lint:auto type -->Integer</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.ShowAt/7 (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.ShowAt/8 (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: GetSystemMetrics, Point, SetForegroundWindow, SetWindowPos</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 83 lines (full implementation)</para>
+      /// <para>Reads: FAnchor, FWatchTimer   Writes: FShowTickMs</para>
+      /// <para>Catches: Exception (empty)</para>
+      /// <para>UI thread only -- touches Screen</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure PlaceAndShow(X, Y, W, H: Integer);
       /// <summary>Widest of ALines rendered in the body font, in pixels.</summary>
       /// <param name="ALines">Logical (unwrapped) lines the body will show.</param>
+      /// <param name="ABold"><!-- drag-lint:auto type -->Boolean</param>
       /// <returns>Pixel width of the widest line; 0 when ALines is empty.</returns>
-      /// <remarks>Replaces a fixed ~7.6 px-per-character estimate, which is only
+      /// <remarks>
+      /// Replaces a fixed ~7.6 px-per-character estimate, which is only
       /// right for a monospaced font at one size: it over-measured narrow text
       /// (needless whitespace) and under-measured wide text (the message wrapped
       /// when it did not need to). Bold is measured explicitly because the
-      /// signature header -- usually the widest line -- is drawn bold.</remarks>
+      /// signature header -- usually the widest line -- is drawn bold.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.ShowAt/7 (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.ShowAt/8 (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Returns: 0; Wd</para>
+      /// <para>Reads: FBody</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function MeasureTextWidth(const ALines: array of string; ABold: Boolean): Integer;
       /// <summary>Usable width for a popup shown at screen point (AX, AY): the
       /// work area of the monitor it lands on, less a small margin.</summary>
+      /// <param name="AX"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AY"><!-- drag-lint:auto type -->Integer</param>
+      /// <returns><!-- drag-lint:auto -->Integer -- Observed: (R.Right - R.Left) -
+      /// EDGE_MARGIN; 480.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.ShowAt/7 (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.ShowAt/8 (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: Point</para>
+      /// <para>UI thread only -- touches Screen</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function MaxPopupWidthAt(AX, AY: Integer): Integer;
     protected
       { v(hover-resize): the popup is BorderStyle=bsNone by design (a bare info
@@ -186,39 +470,247 @@ type
         CreateParams (gives DefWindowProc a sizing loop to run) and a hit-test
         that reports the edges as sizing zones. The frame stays invisible
         because there is still no caption and no border style to paint. }
+      /// <summary><!-- drag-lint:auto sum -->v(hover-resize): the popup is
+      /// BorderStyle=bsNone by design (a bare info panel, no caption). A borderless
+      /// window gets no sizing border from Windows, so resizing needs two things:
+      /// WS_THICKFRAME added in CreateParams (gives DefWindowProc a sizing loop to run)
+      /// and a hit-test that reports the edges as sizing zones. The frame stays invisible
+      /// because there is still no caption and no border style to paint.</summary>
+      /// <param name="Msg"><!-- drag-lint:auto type -->var TWMNCHitTest</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: Point, ScreenToClient</para>
+      /// <para>Directives: message</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure WMNCHitTest    (var Msg: TWMNCHitTest); message WM_NCHITTEST;
+      /// <param name="Msg"><!-- drag-lint:auto type -->var TMessage</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Writes: FSizing</para>
+      /// <para>Directives: message</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure WMEnterSizeMove(var Msg: TMessage    ); message WM_ENTERSIZEMOVE;
+      /// <param name="Msg"><!-- drag-lint:auto type -->var TMessage</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FAnchor   Writes: FSizing, FAnchorDismiss, FShowTickMs</para>
+      /// <para>Directives: message</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure WMExitSizeMove (var Msg: TMessage    ); message WM_EXITSIZEMOVE;
+      /// <param name="Action"><!-- drag-lint:auto type -->var TCloseAction</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Calls: FreeAndNil</para>
+      /// <para>Reads: FWatchTimer, FCallerPaths</para>
+      /// <para>Mutates: Action (var)</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.GetSyntaxColor"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure DoClose(var Action: TCloseAction); override;
       { v0.47: WS_EX_NOACTIVATE -- show as an info popup that NEVER steals keyboard
       focus, so the user can keep typing in the editor. Mouse clicks on the
       clickable rows still work (mouse activation is independent). }
+      /// <summary><!-- drag-lint:auto sum -->v0.47: WS_EX_NOACTIVATE -- show as an info
+      /// popup that NEVER steals keyboard focus, so the user can keep typing in the
+      /// editor. Mouse clicks on the clickable rows still work (mouse activation is
+      /// independent).</summary>
+      /// <param name="Params"><!-- drag-lint:auto type -->var TCreateParams</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Emit"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.EmitSignatureHeader"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.GetSyntaxColor"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure CreateParams(var Params: TCreateParams); override;
     public
+      /// <summary><!-- drag-lint:auto sum -->---- TDragLintHoverForm ----</summary>
+      /// <param name="AOwner"><!-- drag-lint:auto type -->TComponent</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.ShowDragLintHover/7 (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.ShowDragLintHover/8 (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: CreateNew, DragLint.Plugin.Fonts.GetIdeEditorFont, DragLint.Plugin.HoverForm.ApplyIdeTheme, DragLint.Plugin.HoverForm.ThemedColor</para>
+      /// <para>constructor</para>
+      /// <para>Reads: FTitle, FTitleSep, FCallers, FBody, FWatchTimer   Writes: FTitle, FTitleSep, FCallers, FBody, FCallerPaths, FWatchTimer, FEmitTarget</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DragLint.Plugin.Fonts.GetIdeEditorFont"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.ApplyIdeTheme"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.ThemedColor"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.CreateParams"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.DoClose"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(AOwner: TComponent); override;
+      /// <param name="X"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="Y"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AHeader"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ASummary"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="ACallers"><!-- drag-lint:auto type -->const TArray&lt;TDragLintCallerInfo&gt;</param>
+      /// <param name="AAnchorDismiss"><!-- drag-lint:auto type -->Boolean</param>
+      /// <param name="AAnchorX"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AAnchorY"><!-- drag-lint:auto type -->Integer</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.ShowDragLintHover/8 (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: Copy, DRagLint.Hover.Contrast.EnsureReadable, DragLint.Plugin.HoverForm.CleanHoverMarkdown, DragLint.Plugin.HoverForm.DisplayedCallerCount, DragLint.Plugin.HoverForm.TDragLintHoverForm.MaxPopupWidthAt, DragLint.Plugin.HoverForm.TDragLintHoverForm.MeasureTextWidth, DragLint.Plugin.HoverForm.TDragLintHoverForm.PlaceAndShow, ExtractFileName, GetSystemMetrics, IfThen, IntToStr, Point, Pos, Trim</para>
+      /// <para>Overload 1 of 2</para>
+      /// <para>Complexity: 19 (cyclomatic, outer body), 147 lines (full implementation)</para>
+      /// <para>Reads: FTitle, FTitleSep, FBody, FCallers, FCallerPaths   Writes: FStructured, FAnchorDismiss, FDwellAnchor</para>
+      /// <para>Directives: overload</para>
+      /// <seealso cref="DRagLint.Hover.Contrast.EnsureReadable"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.CleanHoverMarkdown"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.DisplayedCallerCount"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.MaxPopupWidthAt"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.MeasureTextWidth"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ShowAt(X, Y: Integer; const AHeader, ASummary: string; const ACallers: TArray<TDragLintCallerInfo>; AAnchorDismiss: Boolean; AAnchorX, AAnchorY: Integer); overload;
       /// <summary>Structured (Help-Insight) show: renders the colored, selectable
       /// signature header + Parameters + Returns from AModel into the TRichEdit
       /// body, and the callers into the ListView. The header line click-navigates
       /// to AModel.DefLine. Reuses the exact same no-steal-focus placement and
       /// dwell/menu dismissal as the string overload.</summary>
+      /// <param name="X"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="Y"><!-- drag-lint:auto type -->Integer</param>
       /// <param name="AModel">The structured hover payload (Task 8 builds it).</param>
+      /// <param name="ACallers"><!-- drag-lint:auto type -->const TArray&lt;TDragLintCallerInfo&gt;</param>
+      /// <param name="AAnchorDismiss"><!-- drag-lint:auto type -->Boolean</param>
+      /// <param name="AAnchorX"><!-- drag-lint:auto type -->Integer</param>
+      /// <param name="AAnchorY"><!-- drag-lint:auto type -->Integer</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DragLint.Plugin.HoverForm.ShowDragLintHover/7 (DragLint.Plugin.HoverForm.pas)</para>
+      /// <para>Calls: DragLint.Plugin.HoverForm.DisplayedCallerCount, DragLint.Plugin.HoverForm.TDragLintHoverForm.MaxPopupWidthAt, DragLint.Plugin.HoverForm.TDragLintHoverForm.MeasureTextWidth, DragLint.Plugin.HoverForm.TDragLintHoverForm.PlaceAndShow, DragLint.Plugin.HoverForm.TDragLintHoverForm.RenderModel, ExtractFileName, GetSystemMetrics, IfThen, IntToStr, Point, Trim</para>
+      /// <para>Overload 2 of 2</para>
+      /// <para>Complexity: 23 (cyclomatic, outer body), 203 lines (full implementation)</para>
+      /// <para>Reads: FCallerPaths, FCallers, FBody, FTitle, FTitleSep   Writes: FAnchorDismiss, FDwellAnchor</para>
+      /// <para>Directives: overload</para>
+      /// <seealso cref="DragLint.Plugin.HoverForm.DisplayedCallerCount"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.MaxPopupWidthAt"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.MeasureTextWidth"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.PlaceAndShow"/>
+      /// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.RenderModel"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       procedure ShowAt(X, Y: Integer; const AModel: TDragLintHoverModel; const ACallers: TArray<TDragLintCallerInfo>; AAnchorDismiss: Boolean; AAnchorX, AAnchorY: Integer); overload;
   end;
 
+/// <summary><!-- drag-lint:auto sum -->---- public factory ----</summary>
+/// <param name="AHeader"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ASummary"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ACallers"><!-- drag-lint:auto type -->const TArray&lt;TDragLintCallerInfo&gt;</param>
+/// <param name="AScreenX"><!-- drag-lint:auto type -->Integer</param>
+/// <param name="AScreenY"><!-- drag-lint:auto type -->Integer</param>
+/// <param name="AAnchorDismiss"><!-- drag-lint:auto type -->Boolean = False</param>
+/// <param name="AAnchorX"><!-- drag-lint:auto type -->Integer = -1</param>
+/// <param name="AAnchorY"><!-- drag-lint:auto type -->Integer = -1</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeHover (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.Editor.InvokeHoverPlain (DragLint.Plugin.Editor.pas) ?, DragLint.Plugin.HoverForm.ShowDragLintHover/3 (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.ShowHoverPopup (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Calls: DragLint.Plugin.HoverForm.TDragLintHoverForm.Create, DragLint.Plugin.HoverForm.TDragLintHoverForm.ShowAt/8</para>
+/// <para>Overload 1 of 3</para>
+/// <para>UI thread only -- touches Form, Application</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+/// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.ShowAt"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowDragLintHover(
   const AHeader, ASummary: string; const ACallers: TArray<TDragLintCallerInfo>; AScreenX,
   AScreenY: Integer; AAnchorDismiss: Boolean = False; AAnchorX: Integer = -1; AAnchorY: Integer = -1); overload;
+/// <param name="AContent"><!-- drag-lint:auto type -->const string</param>
+/// <param name="AScreenX"><!-- drag-lint:auto type -->Integer</param>
+/// <param name="AScreenY"><!-- drag-lint:auto type -->Integer</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DragLint.Plugin.HoverForm.ShowDragLintHover/8</para>
+/// <para>Overload 2 of 3</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DragLint.Plugin.HoverForm.ShowDragLintHover"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowDragLintHover(const AContent: string; AScreenX, AScreenY: Integer); overload;
 /// <summary>Structured factory: shows a Help-Insight hover for AModel (colored
 /// signature + params + returns) with ACallers in the grid. No-ops while a
 /// hover is already visible (singleton), like the string overloads.</summary>
+/// <param name="AModel"><!-- drag-lint:auto type -->const TDragLintHoverModel</param>
+/// <param name="ACallers"><!-- drag-lint:auto type -->const TArray&lt;TDragLintCallerInfo&gt;</param>
+/// <param name="AScreenX"><!-- drag-lint:auto type -->Integer</param>
+/// <param name="AScreenY"><!-- drag-lint:auto type -->Integer</param>
+/// <param name="AAnchorDismiss"><!-- drag-lint:auto type -->Boolean = False</param>
+/// <param name="AAnchorX"><!-- drag-lint:auto type -->Integer = -1</param>
+/// <param name="AAnchorY"><!-- drag-lint:auto type -->Integer = -1</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeHover (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeHoverPlain (DragLint.Plugin.Editor.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.ShowHoverPopup (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Calls: DragLint.Plugin.HoverForm.TDragLintHoverForm.Create, DragLint.Plugin.HoverForm.TDragLintHoverForm.ShowAt/7</para>
+/// <para>Overload 3 of 3</para>
+/// <para>UI thread only -- touches Form, Application</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.Create"/>
+/// <seealso cref="DragLint.Plugin.HoverForm.TDragLintHoverForm.ShowAt"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure ShowDragLintHover(
   const AModel: TDragLintHoverModel; const ACallers: TArray<TDragLintCallerInfo>; AScreenX,
   AScreenY: Integer; AAnchorDismiss: Boolean = False; AAnchorX: Integer = -1; AAnchorY: Integer = -1); overload;
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.Editor.InvokeHover (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.InvokeHoverPlain (DragLint.Plugin.Editor.pas), DragLint.Plugin.Editor.UnregisterDragLintMenu (DragLint.Plugin.Editor.pas), DragLint.Plugin.EditViewNotifier.TDragLintEditServicesNotifier.EditorViewModified (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas) (+1 more)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure CloseDragLintHover;
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: (GCurrentHover &lt;&gt; nil) and
+/// GCurrentHover.Visible.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsDragLintHoverVisible  : Boolean;
+/// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; PtInRect(R, Pt).</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HoverTracker.TDragLintHoverHelper.OnTick (DragLint.Plugin.HoverTracker.pas)</para>
+/// <para>Calls: GetCursorPos, InflateRect, PtInRect</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsMouseOverDragLintHover: Boolean;
+/// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+/// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.HoverForm.TDragLintHoverForm.HandleCallerDblClick (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.HoverForm.TDragLintHoverForm.HandleMemoClick (DragLint.Plugin.HoverForm.pas), DragLint.Plugin.SearchForm.TSearchHandler.ListActivate (DragLint.Plugin.SearchForm.pas), DragLint.Plugin.SymbolSearchForm.TSymbolSearchHandler.Accept (DragLint.Plugin.SymbolSearchForm.pas)</para>
+/// <para>Calls: ExtractFileDrive, Supports</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 51 lines (full implementation)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure OpenSourceAt(const AFile: string; ALine: Integer);
 
 var { v0.46: set by the Editor at startup. When the user clicks a popup line that

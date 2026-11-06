@@ -79,6 +79,13 @@ const
 /// <summary>The icon-palette fill colour for a severity.</summary>
 /// <param name="ASeverity">Severity to colour.</param>
 /// <returns>A solid TColor; never clNone.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.SeverityGlyph.SeverityGlyphImages (DragLint.Plugin.SeverityGlyph.pas), DragLint.Plugin.SeverityGlyph.StructureGlyphImages (DragLint.Plugin.SeverityGlyph.pas)</para>
+/// <para>Returns: GLYPH_ERROR_FILL; GLYPH_WARNING_FILL; GLYPH_HINT_FILL; GLYPH_INFO_FILL</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SeverityGlyphColor(ASeverity: TDragLintSeverity): TColor;
 
 /// <summary>Draws the severity glyph into ARect on ACanvas.</summary>
@@ -89,8 +96,15 @@ function SeverityGlyphColor(ASeverity: TDragLintSeverity): TColor;
 /// an unreadable smudge.</param>
 /// <param name="ASeverity">Which glyph.</param>
 /// <param name="AFill">Fill colour, normally SeverityGlyphColor(ASeverity).</param>
-/// <remarks>Pure GDI: no image list, no resource, no external package. Safe to
-/// call from a paint handler. Call from the VCL thread only.</remarks>
+/// <remarks>
+/// Pure GDI: no image list, no resource, no external package. Safe to
+/// call from a paint handler. Call from the VCL thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.EditViewNotifier.TDragLintEditViewNotifier.PaintLine (DragLint.Plugin.EditViewNotifier.pas), DragLint.Plugin.SeverityGlyph.SeverityGlyphImages (DragLint.Plugin.SeverityGlyph.pas), DragLint.Plugin.SeverityGlyph.StructureGlyphImages (DragLint.Plugin.SeverityGlyph.pas)</para>
+/// <para>Calls: DragLint.Plugin.SeverityGlyph.Darken, Max, Min, Point</para>
+/// <seealso cref="DragLint.Plugin.SeverityGlyph.Darken"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure PaintSeverityGlyph(ACanvas: TCanvas; const ARect: TRect;
   ASeverity: TDragLintSeverity; AFill: TColor);
 
@@ -100,18 +114,35 @@ procedure PaintSeverityGlyph(ACanvas: TCanvas; const ARect: TRect;
 /// <returns>A cached list owned by this unit -- do NOT free it, and do not
 /// assign it an Owner that will. Rebuilt only when ASize changes, since a tree
 /// asks for one size and keeps it.</returns>
-/// <remarks>Indices are SeverityGlyphIndex order, NOT Ord(TDragLintSeverity).
+/// <remarks>
+/// Indices are SeverityGlyphIndex order, NOT Ord(TDragLintSeverity).
 /// Returns nil if the list cannot be built, so callers must handle nil and
-/// simply show no icon -- which is what they did before this existed.</remarks>
+/// simply show no icon -- which is what they did before this existed.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DragLint.Plugin.SeverityGlyph.PaintSeverityGlyph, DragLint.Plugin.SeverityGlyph.SeverityGlyphColor, DragLint.Plugin.Telemetry.DLT, Format, FreeAndNil, Max, Min, Rect</para>
+/// <para>Returns: nil; GImages</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DragLint.Plugin.SeverityGlyph.PaintSeverityGlyph"/>
+/// <seealso cref="DragLint.Plugin.SeverityGlyph.SeverityGlyphColor"/>
+/// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SeverityGlyphImages(ASize: Integer): TCustomImageList;
 
 /// <summary>Image-list index for a severity.</summary>
 /// <param name="ASeverity">Severity to map.</param>
 /// <returns>0 error, 1 warning, 2 info, 3 hint.</returns>
-/// <remarks>Deliberately NOT Ord(ASeverity): TDragLintSeverity is declared
+/// <remarks>
+/// Deliberately NOT Ord(ASeverity): TDragLintSeverity is declared
 /// (dlsError, dlsWarning, dlsHint, dlsInfo), so Ord puts hint before info. An
 /// index that silently disagrees with reading order is the kind of thing that
-/// mislabels every icon and looks like an artwork problem.</remarks>
+/// mislabels every icon and looks like an artwork problem.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.BuildTree (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Returns: 0; 1; 3; 2</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function SeverityGlyphIndex(ASeverity: TDragLintSeverity): Integer;
 
 type
@@ -129,6 +160,11 @@ type
     drawing unit pick a side in someone else's model, and it picked wrong the
     first time -- the compiler caught it, which is the only reason it is
     written down rather than shipped. }
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DragLint.Plugin.SeverityGlyph.pas) ?, DragLint.Plugin.SeverityGlyph.KindGlyphColor (DragLint.Plugin.SeverityGlyph.pas) ?, DragLint.Plugin.SeverityGlyph.KindGlyphIndex (DragLint.Plugin.SeverityGlyph.pas) ?, DragLint.Plugin.SeverityGlyph.PaintKindGlyph (DragLint.Plugin.SeverityGlyph.pas) ?, DragLint.Plugin.SeverityGlyph.StructureGlyphImages (DragLint.Plugin.SeverityGlyph.pas) (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TKindGlyph = (
     kgFolder,      { a tree ROOT: Diagnostics, Code Elements }
     kgUnit,        { unit / program / package / form / init / final }
@@ -147,6 +183,14 @@ type
 /// <summary>The fill colour for a glyph class.</summary>
 /// <param name="AGlyph">The class to colour.</param>
 /// <returns>A solid TColor; never clNone.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SeverityGlyph.StructureGlyphImages (DragLint.Plugin.SeverityGlyph.pas)</para>
+/// <para>Returns: KG_FOLDER_FILL; KG_UNIT_FILL; KG_CLASS_FILL; KG_INTERFACE_FILL; KG_RECORD_FILL; KG_ENUM_FILL</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 16 lines (full implementation)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function KindGlyphColor(AGlyph: TKindGlyph): TColor;
 
 /// <summary>Draws a code-element glyph into ARect on ACanvas.</summary>
@@ -154,7 +198,17 @@ function KindGlyphColor(AGlyph: TKindGlyph): TColor;
 /// <param name="ARect">Bounding box; the glyph is inscribed and centred.</param>
 /// <param name="AGlyph">Which shape.</param>
 /// <param name="AFill">Fill colour, normally KindGlyphColor(AGlyph).</param>
-/// <remarks>Pure GDI, same as PaintSeverityGlyph. VCL thread only.</remarks>
+/// <remarks>
+/// Pure GDI, same as PaintSeverityGlyph. VCL thread only.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.SeverityGlyph.StructureGlyphImages (DragLint.Plugin.SeverityGlyph.pas)</para>
+/// <para>Calls: DragLint.Plugin.SeverityGlyph.Darken, DragLint.Plugin.SeverityGlyph.PaintKindGlyph.PX, DragLint.Plugin.SeverityGlyph.PaintKindGlyph.PY, Min, MulDiv, Point</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 111 lines (full implementation)</para>
+/// <seealso cref="DragLint.Plugin.SeverityGlyph.Darken"/>
+/// <seealso cref="DragLint.Plugin.SeverityGlyph.PaintKindGlyph.PX"/>
+/// <seealso cref="DragLint.Plugin.SeverityGlyph.PaintKindGlyph.PY"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure PaintKindGlyph(ACanvas: TCanvas; const ARect: TRect;
   AGlyph: TKindGlyph; AFill: TColor);
 
@@ -164,16 +218,36 @@ procedure PaintKindGlyph(ACanvas: TCanvas; const ARect: TRect;
 /// <param name="ASize">Square glyph size in pixels; clamped to 8..64.</param>
 /// <returns>A cached list owned by this unit -- do NOT free it. nil if it
 /// cannot be built, in which case the caller must show no icons at all.</returns>
-/// <remarks>ONE list, because a TTreeView has ONE Images property and every
+/// <remarks>
+/// ONE list, because a TTreeView has ONE Images property and every
 /// node indexes into it. Severity keeps indices 0..3 so SeverityGlyphIndex
 /// stays valid against this list as well as against SeverityGlyphImages --
 /// two lists whose shared prefix disagreed would mislabel rows in a way that
-/// looks like bad artwork rather than a bad index.</remarks>
+/// looks like bad artwork rather than a bad index.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.BuildTree (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Calls: DragLint.Plugin.SeverityGlyph.KindGlyphColor, DragLint.Plugin.SeverityGlyph.PaintKindGlyph, DragLint.Plugin.SeverityGlyph.PaintSeverityGlyph, DragLint.Plugin.SeverityGlyph.SeverityGlyphColor, DragLint.Plugin.Telemetry.DLT, FreeAndNil, Max, Min, Rect</para>
+/// <para>Returns: nil; GStructImages</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DragLint.Plugin.SeverityGlyph.KindGlyphColor"/>
+/// <seealso cref="DragLint.Plugin.SeverityGlyph.PaintKindGlyph"/>
+/// <seealso cref="DragLint.Plugin.SeverityGlyph.PaintSeverityGlyph"/>
+/// <seealso cref="DragLint.Plugin.SeverityGlyph.SeverityGlyphColor"/>
+/// <seealso cref="DragLint.Plugin.Telemetry.DLT"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function StructureGlyphImages(ASize: Integer): TCustomImageList;
 
 /// <summary>Index into StructureGlyphImages for a glyph class.</summary>
 /// <param name="AGlyph">The class.</param>
 /// <returns>4 + Ord(AGlyph) -- past the four severity entries.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DragLint.Plugin.StructureForm.TDragLintStructureForm.BuildTree (DragLint.Plugin.StructureForm.pas)</para>
+/// <para>Returns: 4 + Ord(AGlyph)</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function KindGlyphIndex(AGlyph: TKindGlyph): Integer;
 
 implementation
