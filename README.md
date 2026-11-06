@@ -854,9 +854,9 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 |---|---:|---|
 | [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 11 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
 | [Search and navigation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#search-and-navigation) | 35 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#search-and-navigation) |
-| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 37 (+ 298 rules, 110 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
+| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 42 (+ 307 rules, 110 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
-| [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
+| [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 18 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 22 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
 | [Graphs and reports](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#graphs-and-reports) | 23 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#graphs-and-reports) |
 | [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 6 (+ 27 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
@@ -1022,7 +1022,7 @@ Win64 build.
 
 #### Lint
 
-**298 rules across 18 categories -- 205 built-in + 93 external `.scm`, 251
+**307 rules across 18 categories -- 214 built-in + 93 external `.scm`, 260
 enabled by default, 110 with an auto-fix.**
 
 | Command | What it does | Notable flags |
@@ -1098,6 +1098,7 @@ false`); text output ends `, N declined (...)`.
 | [`safe-delete`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/safe-delete) `--name <q> --db <db>` | Delete a symbol iff it has zero references | `--apply`, `--json` |
 | [`extract-method`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/extract-method) `--in <f> --from-line --to-line --name <n>` | Pull a statement run into a new method | `--apply` |
 | [`unwith`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/unwith) `--db <db> [--in <f> [--line <n>]] --plan` | Remove `with` blocks, proved binding by binding; every refusal named | `--apply --project` |
+| [`narrow-param`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/narrow-param) `--routine <QName> [--param <name>] --plan --db <db>` | Retype a class-typed parameter to the deepest ancestor its uses need; every refusal named | `--all`, `--apply --project` |
 | [`create-enum-helper`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/create-enum-helper) `--qname <TEnum>` | Generate a Byte-family record helper for an enum | `--methods <csv>`, `--tostring rtti\|case` |
 | `uses-audit <unit.pas> --db <db>` | Propose interface->implementation moves + unused units | `--format text\|json` |
 | `uses-fix <unit.pas> --project <dproj> --db <db>` | Compiler-verified `uses` cleanup; `--only <Unit>` also decides a library (RTL/VCL) unit: remove, else move to implementation | `--apply`, `--remove-unused`, `--format json\|text`, `--only <unit,...>` |
@@ -1273,11 +1274,11 @@ CLI-only verbs).
 | `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
 | `run_compile_check` | Spawn dcc/msbuild against a file or project; return H/W/E/F diagnostics as JSON |
 
-### Lint rule pack (298 rules)
+### Lint rule pack (307 rules)
 
 Run `drag-lint rules` for the authoritative, always-current catalog (built-in +
-external `.scm`). As of v1.44.0-alpha: **298 rules across 18 categories -- 205
-built-in and 93 external `.scm`, 251 enabled by default, and 110 with an
+external `.scm`). As of v1.44.1-alpha: **307 rules across 18 categories -- 214
+built-in and 93 external `.scm`, 260 enabled by default, and 110 with an
 auto-fix.** The table below is a small sample of the built-in rules:
 
 | Rule id | Severity | Description |

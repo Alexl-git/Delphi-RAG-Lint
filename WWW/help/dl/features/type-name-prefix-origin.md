@@ -4,10 +4,10 @@ title: "type-name-prefix: expected letter from the ancestor chain"
 summary: type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter
 product: DL
 group: linting
-order: 30035
+order: 30040
 since: 1.31.4-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.44.1-alpha
 ---
 
 # type-name-prefix: expected letter from the ancestor chain

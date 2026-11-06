@@ -3,6 +3,35 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.44.1-alpha -- 2026-11-06
+
+1.44 wave 2, integrated on lane/144-int2. ONE bump: DRAGLINT_RESOLVER_VERSION 1.20.0-alpha (`index --all --resolve-only`, no re-parse). No extractor bump: the extractor baseline is re-pinned because CallResolver.pas lives under src\index; no parser, grammar or preprocessor unit changed. New tables are additive, so no SCHEMA_VERSION move.
+
+### Breaking
+- `rename --apply` needs `--project`, or a DB at `<project folder>\_D-RAG\<base>.sqlite`; without one of them it refuses. Partial renames are gone: an unbound candidate, or a binary descendant `.dfm` or an unindexed text `.dfm` that would not be rewritten, now refuses (`dfm-not-rewritten`, exit 2) where it used to be noted and the rest applied.
+
+### Added
+- index: `ref_types`, the static type of a reference, written by the resolve pass with via = decl, result, member, cast, ctor or inline. `typeat` shows it as `StaticType:` / `static_type` + `static_type_via`; an older index gets the old answer.
+- index: `ref_receivers`, the receiver reference of a reference, written by the resolve pass.
+- `unwith` (new verb): removes `with` blocks. `--plan` names a verdict for every `with`; `--apply` goes through the compile gate, then re-indexes a copy of the DB and rolls back if any reference binds elsewhere (a rebind compiles, so the build cannot catch it). Refuses on an untyped target, an unresolved ancestor, an unstable or side-effecting target, conditionals, and more, each by name.
+- `narrow-param` (new verb): retypes a class-typed parameter to the deepest ancestor its uses need; proof first, then the compile gate; hidden non-virtuals respected.
+- `lint --fix --fix-rule redundant-cast` removes hard casts whose operand already has exactly the target type, proved from `ref_types`; every unproved cast is a named refusal; `--apply --project` builds before and after and rolls back. A plain `lint --fix` no longer rewrites this rule. A cast whose operand has a bare-text type of another name than a distinct target type is counted as a conversion, not refused.
+- Rules, all ON, on the static type: `is-always-true`, `upcast-then-downcast`, `with-on-temporary`, `interface-holder-of-non-refcounted`, `argument-narrows`. An older index answers nothing.
+- Rules, all ON, on the section facts: `init-order-hazard`, `finalization-after-dependency`, `heavy-initialization`, `global-set-in-initialization-never-freed`. The order is computed from the .dpr and uses clauses and was checked against the Win64 compiler. An index needs the 1.44.1 resolve pass for sections to be attributed.
+- `DRagLint.Refactor.CompileGate`: the compile gate of `cycles --fix` lifted out; `ApplyGated` is the one way a new rewrite reaches the disk.
+- MCP `rename_symbol` with dry_run=false: the same proof and gate as `rename --apply`; arguments `project`, `library_db`.
+
+### Changed
+- `rename`: every occurrence is proved. `--apply` refuses, by name, what it cannot decide, checks the new name for capture and shadowing, renames a method with its overloads, overrides and implementers, and writes only through the compile gate. `--plan [--json]` reports it.
+- References inside initialization / finalization now belong to the section symbol, so `call-path --from <Unit>.initialization` works and a dotted receiver in a section types.
+- `redundant-cast` also reports `T(a.b)`, `T(F(x))` and `x as T`. `unsafe-typecast-without-is` (OFF) also reports `T(a.b)` and `T(F(x))`, and no longer reports record casts or upcasts when the operand has a `ref_types` row.
+- `lint-all` with no platform library says so on one stderr line (not with `--quiet`, `--json` or an explicit `--library-db none`): a run with no `drag-lint.json` beside the engine silently lost findings (Loader2025: 3410 against 4210).
+
+### Fixed
+- IDE 'Fix it' on `redundant-cast` passes the active project; it exited 2 under the "no gate, no write" rule.
+- `unwith --apply`: a failed apply leaves no log folder under C:\TEMP unless a message names a file in it.
+- drag-lint's own checkers take the file id as Int64, as the rest of the engine holds it (26 `argument-narrows`).
+
 ## v1.44.0-alpha -- 2026-11-05
 
 1.44 wave 1, integrated on lane/144-int. NO extractor or resolver bump: no re-parse, no re-resolve. Lane facts (ref_types, section attribution) follows as 1.44.1-alpha with the resolver bump.

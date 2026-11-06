@@ -4,10 +4,10 @@ title: Rename across every project that compiles a shared unit
 summary: A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects
 product: DL
 group: linting
-order: 30024
+order: 30028
 since: 1.29.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.44.1-alpha
 ---
 
 # Rename across every project that compiles a shared unit

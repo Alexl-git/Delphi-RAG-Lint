@@ -4,10 +4,10 @@ title: "Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)"
 summary: Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause
 product: DL
 group: refactoring
-order: 50007
+order: 50008
 since: 0.47.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.44.1-alpha
 ---
 
 # Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)

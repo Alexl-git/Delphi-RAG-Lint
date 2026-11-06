@@ -132,7 +132,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**298 rules. 110 have an auto-fix. 251 are on by default.** 205 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**307 rules. 110 have an auto-fix. 260 are on by default.** 214 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -148,13 +148,13 @@ Rules, autofix, suppression markers and project-wide checks.
 | other | 11 | 3 |
 | platform | 10 | 4 |
 | policy | 3 | - |
-| project-wide | 36 | 6 |
+| project-wide | 45 | 6 |
 | refactoring | 20 | 8 |
 | resource-lifetime | 16 | 7 |
 | review-markers | 5 | 2 |
 | security | 22 | 2 |
 | structure | 12 | 6 |
-| **Total** | **298** | **110** |
+| **Total** | **307** | **110** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -169,6 +169,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
 | [Effect-free call in a loop that could move out (lint rule)](effect-free-in-loop-invariant) | `lint-all` |  |
 | [exceptions-sync](Features) | `exceptions-sync` |  |
+| [Finalization reaching a unit already finalized (lint rule)](finalization-after-dependency) | `lint-all` |  |
 | [Fix all in project](Fix-all-in-project) | Structure form: Fix all in project; `lint-all` |  |
 | [Fix all in unit](Fix-all-in-unit) | Structure form: Fix all in unit; `lint` |  |
 | [Fix all reliability (1.31.3)](Fix-all-reliability) | Structure form: Fix all in unit; `lint` |  |
@@ -176,10 +177,14 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Format Whole Project with YADF](Format-Whole-Project-with-YADF) | drag-lint > Format Whole Project with YADF...; `format`; `index` |  |
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
 | [Gap-wave lint rules](gap-wave-rules) | `rules` |  |
+| [Global set in initialization and never freed (lint rule)](global-set-in-initialization-never-freed) | `lint-all` |  |
+| [Heavy work in an initialization section (lint rule)](heavy-initialization) | `lint-all` |  |
 | [Identifier case mismatch (lint rule)](identifier-case-mismatch) | `lint-all` |  |
+| [Initialization reaching a unit that initializes later (lint rule)](init-order-hazard) | `lint-all` |  |
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
-| [Lint rules](rules) | 298 rules, 110 fixable; `rules` |  |
+| [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
+| [Lint rules](rules) | 307 rules, 110 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Opaque to analysis (lint rule)](opaque-to-analysis) | `lint-all` |  |
@@ -224,13 +229,16 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Create helper class](Create-helper-class) | Structure form: Create helper class; `create-enum-helper` |  |
 | [create-enum-helper](create-enum-helper) | `create-enum-helper`; drag-lint > Generate & Export > Enum Record Helper (symbol)... |  |
 | [extract-method](extract-method) | `extract-method`; drag-lint > Extract Method (selection)... (Ctrl+Alt+M) |  |
+| [Narrow parameter types (compile-gated)](narrow-param) | `narrow-param` |  |
 | [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](Quick-Fix-Add-Unit-for-Inline-Hint-H2443-at-Cursor) | drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor |  |
 | [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](Quick-Fix-Add-Unit-for-Undeclared-at-Cursor-Ctrl-Alt-U) | drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U) |  |
 | [Quick-Fix: Convert Public Field to Property at Cursor](Quick-Fix-Convert-Public-Field-to-Property-at-Cursor) | drag-lint > Convert Public Field to Property at Cursor |  |
 | [Reconcile Project Members (.dpr/.dproj)](Reconcile-Project-Members-dpr-dproj) | drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...; `reconcile-project` |  |
+| [Remove redundant casts (compile-gated)](redundant-cast-fix) | `lint` |  |
 | [Rename Symbol](Rename-Symbol) | drag-lint > Rename Symbol...; `rename` |  |
 | [safe-delete](safe-delete) | `safe-delete`; drag-lint > Safe Delete Symbol... |  |
 | [Unit Test Stub (symbol)](Unit-Test-Stub-symbol) | drag-lint > Generate & Export > Unit Test Stub (symbol)...; `generate-test` |  |
+| [unwith](unwith) | `unwith` |  |
 | [Uses & Deps Tab](Features) | drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes... |  |
 | [Uses Audit -- interface->impl moves + unused (this unit)](Uses-Audit-interface-impl-moves-unused-this-unit) | drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused...; `uses-audit` |  |
 | [Uses Cleanup Preview (compiler-verified, this unit)](Uses-Cleanup-Preview-compiler-verified-this-unit) | drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified)...; `uses-fix` |  |

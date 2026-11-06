@@ -72,9 +72,9 @@
     }
   ],
   "verified": {
-    "date": "2026-11-02",
+    "date": "2026-11-06",
     "by": "ENGINE",
-    "build": "1.39.2-alpha",
-    "surfaceHash": "f36b008314ed5269e15f3c910780e1b41900eeb692ea3736fb1523a76049a92f"
+    "build": "1.44.1-alpha",
+    "surfaceHash": "64d395f9f1d44b18f6caffd6e5aeb630efee8028f9deda042f920060434e1319"
   }
 }

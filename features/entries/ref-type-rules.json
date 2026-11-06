@@ -4,7 +4,7 @@
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.44.0-alpha",
+  "since": "1.44.1-alpha",
   "summary": "Project lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows and three more; sharper redundant-cast and unsafe casts",
   "intro": "Read this to see which rules stand on ref_types, what each reports and what keeps it silent. They run in lint-all and lint-project over a 1.44 index.",
   "wikiPage": "ref-type-rules",
@@ -15,5 +15,11 @@
       "example": "drag-lint lint-all --db <project.sqlite> --rule argument-narrows"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-06",
+    "by": "ENGINE",
+    "build": "1.44.1-alpha",
+    "surfaceHash": "5372b9900e3a52313e7772981f1d9acbd3eb9c5dd9083b10a47dcce1f117dcf0"
+  }
 }

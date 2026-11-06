@@ -318,8 +318,8 @@ begin
   Writeln('                               library-resolve-owed: the DB was resolved without its platform library (marker schema_meta library_resolve_state = pending); --json adds library_resolve {state, reason, since_unix, library_state}, the text form a library_resolve line.');
   Writeln('  drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=FB" --db <sql.sqlite>');
   Writeln('  drag-lint link-orm    --db <projDb.sqlite> --db <sqlDb.sqlite>');
-  Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');
-  Writeln('  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)');
+  Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] --db <db>   - cross-unit rename, every occurrence proved; --apply refuses what it cannot prove (exit 2) and passes the compile gate');
+  Writeln('  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--db <db>] [--json|--plan|--apply|--no-backup] [--project <X.dproj>]  - routine-local rename (param/var autofix)');
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--in <F>] [--db PATH] [--dry-run] [--no-backup]   (--in: file the name was asked from; ranks the not-found candidates)');
   Writeln('      (--qname and --kind symbol refuse, exit 2, and name the file(s) when the old name is used as an identifier in an .inc file: the index records no identifier references inside {$I} included text)');
   Writeln('      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2, naming the file; other binary or unindexed .dfm files are reported as not rewritten, never skipped silently)');
@@ -351,8 +351,8 @@ begin
   Writeln('  drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --db <db>  - add the declaring unit to uses');
   Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
   Writeln('  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method');
-  Writeln('  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json]  - remove with blocks, proved binding by binding');
   Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
+  Writeln('  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json]  - remove with blocks, proved binding by binding');
   Writeln('  drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text]   (no --db: caches only into the project''s unique manifest owner, else reports uncached; no index is required, the compile and report still run; exit 1 iff an Error finding)');
   Writeln('  drag-lint refresh-findings --project <X.dproj> [--db <db>] [--full] [--json]   (recompile stale units + refresh compiler_findings; >=2 stale -> full build; no --db = the project''s own DB)');
   Writeln('  drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf> | --overlays <manifest> ) [--platform win32|win64] [--in-place] [--format json|text]');
@@ -510,6 +510,8 @@ begin
   Writeln('       see wiki page: Rescan-this-unit');
   Writeln('  drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]');
   Writeln('       see wiki page: Copy-Diagnostics-Current-File');
+  Writeln('  drag-lint lint --fix --fix-rule redundant-cast --db <db> [--project <X.dproj> --apply] [--in <f.pas>] [--fix-line <L>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]');
+  Writeln('       see wiki page: redundant-cast-fix');
   Writeln('  drag-lint lint-all [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]');
   Writeln('       ^ A second --db is the library slot, not another project: to judge a dl:ok on a dl:shared unit use --shared-db.');
   Writeln('       ^ lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.');
@@ -519,6 +521,8 @@ begin
   Writeln('       see wiki page: lsp-proxy-merge');
   Writeln('  drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits 32|64] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]');
   Writeln('       see wiki page: lsp-proxy-merge');
+  Writeln('  drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]');
+  Writeln('       see wiki page: narrow-param');
   Writeln('  drag-lint project-context --project <x.dproj|x.dpr> [--platform P] [--config C] [--output <file>] [--json] [--check] (writes <base>.dlcontext.json beside the project: platform, config and the complete effective define set, plus the .dproj SHA-1 for staleness; --check writes nothing and exits 1 saying why when the file is missing or stale; a .dpr with no .dproj exits 2 unless --platform and --config are both given)');
   Writeln('       see wiki page: project-context');
   Writeln('  drag-lint query --concept "<words>" [--limit N] [--kind k,...] [--json] --db <db>');
@@ -1038,8 +1042,8 @@ begin
   end;
   if pVerb = 'rename' then
   begin
-    Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');
-    Writeln('  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)');
+    Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] --db <db>   - cross-unit rename, every occurrence proved; --apply refuses what it cannot prove (exit 2) and passes the compile gate');
+    Writeln('  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--db <db>] [--json|--plan|--apply|--no-backup] [--project <X.dproj>]  - routine-local rename (param/var autofix)');
     Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--in <F>] [--db PATH] [--dry-run] [--no-backup]   (--in: file the name was asked from; ranks the not-found candidates)');
     Writeln('      (--qname and --kind symbol refuse, exit 2, and name the file(s) when the old name is used as an identifier in an .inc file: the index records no identifier references inside {$I} included text)');
     Writeln('      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2, naming the file; other binary or unindexed .dfm files are reported as not rewritten, never skipped silently)');
@@ -1104,11 +1108,6 @@ begin
     Writeln('  drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db>   - delete a symbol iff it has zero references');
     Exit;
   end;
-  if pVerb = 'unwith' then
-  begin
-    Writeln('  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json]  - remove with blocks, proved binding by binding');
-    Exit;
-  end;
   if pVerb = 'extract-method' then
   begin
     Writeln('  drag-lint extract-method --in <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup]  - pull a statement run into a new method');
@@ -1116,8 +1115,12 @@ begin
   end;
   if pVerb = 'find-deadcode' then
   begin
+    Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
+    Exit;
+  end;
+  if pVerb = 'unwith' then
+  begin
     Writeln('  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json]  - remove with blocks, proved binding by binding');
-  Writeln('  drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]');
     Exit;
   end;
   if pVerb = 'compile-check' then

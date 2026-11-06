@@ -4,10 +4,10 @@ title: safe-delete
 summary: Deletes a symbol if and only if it has zero references in the index
 product: DL
 group: refactoring
-order: 50011
+order: 50013
 since: 0.69.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.44.1-alpha
 ---
 
 # safe-delete

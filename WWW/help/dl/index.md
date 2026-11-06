@@ -85,6 +85,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [drag-lint: Project Rules](features/drag-lint-project-rules.md) | Right-click a project in the Project Manager to make it the active project and open its Lint Options tab in the drag-lint dock | 0.95.0-alpha |
 | [Effect-free call in a loop that could move out (lint rule)](features/effect-free-in-loop-invariant.md) | Project-wide lint rule, ON by default since 1.43: a proven effect-free call inside a loop whose arguments, and the state it reads, cannot change in that loop | 1.42.0-alpha |
 | [exceptions-sync](features/exceptions-sync.md) | Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites | 1.8.0-alpha |
+| [Finalization reaching a unit already finalized (lint rule)](features/finalization-after-dependency.md) | Project lint rule: a finalization section reaches a global that a unit finalized earlier in the computed order tears down | 1.44.1-alpha |
 | [Fix all in project](features/fix-all-in-project.md) | Applies autofixes for every fixable finding across the whole project, starting from the Structure form | 0.61.0-alpha |
 | [Fix all in unit](features/fix-all-in-unit.md) | Applies autofixes for every fixable finding in the current unit, starting from the Structure form | 0.1.0-alpha |
 | [Fix all reliability (1.31.3)](features/fix-all-reliability.md) | Fix all no longer drops every rename for library-root members, shows a wait cursor and refuses a second fix, and keeps E-prefixed exception classes | 1.31.3-alpha |
@@ -92,7 +93,10 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Format Whole Project with YADF](features/format-whole-project-with-yadf.md) | Runs YADF formatting across a project's files, with indexing involved as part of the same action | 0.1.0-alpha |
 | [Format with YADF](features/format-with-yadf.md) | Reformats one Pascal unit by driving the external YADF formatter | 0.16.0-alpha |
 | [Gap-wave lint rules](features/gap-wave-rules.md) | About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave | 1.37.0-alpha |
+| [Global set in initialization and never freed (lint rule)](features/global-set-in-initialization-never-freed.md) | Project lint rule: a unit's initialization sets its own global to a new object and no source that names the variable frees it | 1.44.1-alpha |
+| [Heavy work in an initialization section (lint rule)](features/heavy-initialization.md) | Project lint rule: an initialization section reaches the file system, the registry, the network, a database or a dialog | 1.44.1-alpha |
 | [Identifier case mismatch (lint rule)](features/identifier-case-mismatch.md) | Lint rule, OFF by default: a name spelled in a different case from its declaration | 1.42.0-alpha |
+| [Initialization reaching a unit that initializes later (lint rule)](features/init-order-hazard.md) | Project lint rule: an initialization section reaches a global that a unit initializing later in the computed order sets in its own initialization | 1.44.1-alpha |
 | [Interfaced object set to nil (lint rule)](features/interfaced-object-nil-leak.md) | Lint rule, OFF by default: an object reference to a TInterfacedObject descendant is set to nil while it holds a fresh instance, which leaks it | 1.42.0-alpha |
 | [Lint Buffer (Unsaved)](features/lint-buffer-unsaved.md) | Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first | 0.1.0-alpha |
 | [lint-project](features/lint-project.md) | Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol | 0.48.0-alpha |
@@ -101,6 +105,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Rename across every project that compiles a shared unit](features/multi-project-rename.md) | A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects | 1.29.0-alpha |
 | [Opaque to analysis (lint rule)](features/opaque-to-analysis.md) | Project-wide lint rule (info, off by default): a routine whose non-library calls are mostly unresolvable, so impact and call trees are blind inside it | 1.42.0-alpha |
 | [Read but never assigned (lint rule)](features/read-never-assigned.md) | Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates | 1.40.0-alpha |
+| [Lint rules on the static type of a reference](features/ref-type-rules.md) | Project lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows and three more; sharper redundant-cast and unsafe casts | 1.44.1-alpha |
 | [Rescan this unit](features/rescan-this-unit.md) | Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed | 1.28.3-alpha |
 | [Run AST Checks](features/run-ast-checks.md) | Runs drag-lint's AST-level checks against a file | 0.31.0-alpha |
 | [Run Diagnostics (didSave)](features/run-diagnostics-didsave.md) | Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification | 0.22.0-alpha |
@@ -140,13 +145,16 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [create-enum-helper](features/create-enum-helper.md) | Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type | 0.94.0-alpha |
 | [Create helper class](features/create-helper-class.md) | Generates a Byte-family record helper for an enum type represented by a Structure-tree node | 0.94.0-alpha |
 | [extract-method](features/extract-method.md) | Pulls a run of statements out of a routine into a new method | 0.85.0-alpha |
+| [Narrow parameter types (compile-gated)](features/narrow-param.md) | Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate | 1.44.1-alpha |
 | [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md) | The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope | 1.2.0-alpha |
 | [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](features/quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md) | Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause | 0.47.0-alpha |
 | [Quick-Fix: Convert Public Field to Property at Cursor](features/quick-fix-convert-public-field-to-property-at-cursor.md) | Rewrites a public field under the caret as a property | 1.2.0-alpha |
 | [Reconcile Project Members (.dpr/.dproj)](features/reconcile-project-members-dpr-dproj.md) | Lists every unit a project uses that is neither a project member nor in the library, judges each one (project unit or third-party) and fixes it either way | 1.18.0-alpha |
+| [Remove redundant casts (compile-gated)](features/redundant-cast-fix.md) | Removes hard casts whose operand already has exactly the target type, proved from the index's static types and written through the compile gate | 1.44.1-alpha |
 | [Rename Symbol](features/rename-symbol.md) | Renames a symbol across the whole indexed project | 0.24.0-alpha |
 | [safe-delete](features/safe-delete.md) | Deletes a symbol if and only if it has zero references in the index | 0.69.0-alpha |
 | [Unit Test Stub (symbol)](features/unit-test-stub-symbol.md) | Uses generate-test to produce a unit-test skeleton for one qualified symbol | 0.27.0-alpha |
+| [unwith](features/unwith.md) | Removes with blocks, proving every name binds to what it bound before | 1.44.1-alpha |
 | [Uses Audit -- interface->impl moves + unused (this unit)](features/uses-audit-interface-impl-moves-unused-this-unit.md) | For one unit, reports which uses entries could move from the interface section to implementation, and which are unused entirely | 0.43.0-alpha |
 | [Uses Cleanup Preview (compiler-verified, this unit)](features/uses-cleanup-preview-compiler-verified-this-unit.md) | The removals a Uses Audit suggests, but verified by actually compiling | 0.43.0-alpha |
 | [Uses & Deps Tab](features/uses-deps-tab.md) | Open the Uses & Deps tab to review uses-clause fixes and apply them | 1.12.0-alpha |

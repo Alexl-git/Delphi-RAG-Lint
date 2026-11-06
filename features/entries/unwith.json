@@ -4,7 +4,7 @@
   "group": "refactoring",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.44.0-alpha",
+  "since": "1.44.1-alpha",
   "summary": "Removes with blocks, proving every name binds to what it bound before",
   "intro": "Read this when you want a with statement gone without a name silently changing meaning. --plan names, for every with in a file or a project, whether it can be removed and exactly why not; --apply rewrites through the compile gate, then re-indexes a copy of the DB and rolls back if any reference binds elsewhere.",
   "wikiPage": "unwith",
@@ -74,5 +74,11 @@
       "command": "drag-lint unwith --db <db> --in <F> --line <N> --apply --project <X.dproj>"
     }
   ],
-  "notes": "lane 144 unwith; guard tests\\autotest\\run_unwith.ps1"
+  "notes": "lane 144 unwith; guard tests\\autotest\\run_unwith.ps1",
+  "verified": {
+    "date": "2026-11-06",
+    "by": "ENGINE",
+    "build": "1.44.1-alpha",
+    "surfaceHash": "98d5f22687a6e8f41827b525898c426ccdbbd804c1638d3976ea78ace8e2eba8"
+  }
 }

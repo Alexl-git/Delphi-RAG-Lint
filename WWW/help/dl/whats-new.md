@@ -9,6 +9,17 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.44.1-alpha
+
+* [Finalization reaching a unit already finalized (lint rule)](features/finalization-after-dependency.md) -- Project lint rule: a finalization section reaches a global that a unit finalized earlier in the computed order tears down.
+* [Global set in initialization and never freed (lint rule)](features/global-set-in-initialization-never-freed.md) -- Project lint rule: a unit's initialization sets its own global to a new object and no source that names the variable frees it.
+* [Heavy work in an initialization section (lint rule)](features/heavy-initialization.md) -- Project lint rule: an initialization section reaches the file system, the registry, the network, a database or a dialog.
+* [Initialization reaching a unit that initializes later (lint rule)](features/init-order-hazard.md) -- Project lint rule: an initialization section reaches a global that a unit initializing later in the computed order sets in its own initialization.
+* [Narrow parameter types (compile-gated)](features/narrow-param.md) -- Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate.
+* [Remove redundant casts (compile-gated)](features/redundant-cast-fix.md) -- Removes hard casts whose operand already has exactly the target type, proved from the index's static types and written through the compile gate.
+* [Lint rules on the static type of a reference](features/ref-type-rules.md) -- Project lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows and three more; sharper redundant-cast and unsafe casts.
+* [unwith](features/unwith.md) -- Removes with blocks, proving every name binds to what it bound before.
+
 ## 1.42.0-alpha
 
 * [Ancestor not in project (lint rule)](features/ancestor-not-in-project.md) -- Project-wide lint rule (error): a form, frame or data module whose ancestor class is declared in no project unit and not in the platform library.

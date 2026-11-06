@@ -1033,6 +1033,15 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 | `--project-rules` |  |  |  |
 | `--build-config` | `<name>` |  |  |
 | `--stand-in-for` | `<realpath>` |  |  |
+| `--fix` |  |  |  |
+| `--fix-rule` | `redundant-cast` |  |  |
+| `--project` | `<X.dproj>` |  |  |
+| `--apply` |  |  |  |
+| `--fix-line` | `<L>` |  |  |
+| `--no-backup` |  |  |  |
+| `--rsvars` | `<bat>` |  |  |
+| `--build-timeout` | `<s>` |  |  |
+| `--no-compile` |  |  |  |
 
 Described in:
 
@@ -1044,6 +1053,7 @@ Described in:
 * [Fix it](features/fix-it.md)
 * [Lint Buffer (Unsaved)](features/lint-buffer-unsaved.md)
 * [Rename across every project that compiles a shared unit](features/multi-project-rename.md)
+* [Remove redundant casts (compile-gated)](features/redundant-cast-fix.md)
 * [Target compiler (--target-compiler)](features/target-compiler.md)
 * [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md)
 * [Missing unit in uses (unit-missing-from-uses)](features/unit-missing-from-uses.md)
@@ -1080,11 +1090,16 @@ Described in:
 * [Compliance labels (CWE, CERT, MISRA)](features/compliance-labels.md)
 * [Data module reaching a global form (lint rule)](features/datamodule-form-global.md)
 * [Effect-free call in a loop that could move out (lint rule)](features/effect-free-in-loop-invariant.md)
+* [Finalization reaching a unit already finalized (lint rule)](features/finalization-after-dependency.md)
 * [Fix all in project](features/fix-all-in-project.md)
+* [Global set in initialization and never freed (lint rule)](features/global-set-in-initialization-never-freed.md)
+* [Heavy work in an initialization section (lint rule)](features/heavy-initialization.md)
 * [Identifier case mismatch (lint rule)](features/identifier-case-mismatch.md)
+* [Initialization reaching a unit that initializes later (lint rule)](features/init-order-hazard.md)
 * [Interfaced object set to nil (lint rule)](features/interfaced-object-nil-leak.md)
 * [Opaque to analysis (lint rule)](features/opaque-to-analysis.md)
 * [Read but never assigned (lint rule)](features/read-never-assigned.md)
+* [Lint rules on the static type of a reference](features/ref-type-rules.md)
 * [Run Lint All (Full Report)](features/run-lint-all-full-report.md)
 * [Stream buffer used after free (lint rule)](features/stream-buffer-after-free.md)
 * [Taint analysis (SQL, command, path)](features/taint-analysis.md)
@@ -1240,6 +1255,33 @@ drag-lint migrate-dbs [--config <drag-lint.json>] [--apply] move project indexes
 | `--apply` |  |  |  |
 
 Described in [migrate-dbs](features/migrate-dbs.md).
+
+### narrow-param
+
+Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate.
+
+```text
+drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--routine` | `<QName>` |  |  |
+| `--param` | `<name>` |  |  |
+| `--all` |  |  |  |
+| `--plan` |  |  |  |
+| `--apply` |  |  |  |
+| `--project` | `<X.dproj>` |  |  |
+| `--db` | `<db>` |  |  |
+| `--no-backup` |  |  |  |
+| `--platform` | `<p>` |  |  |
+| `--rsvars` | `<bat>` |  |  |
+| `--build-timeout` | `<s>` |  |  |
+| `--no-compile` |  |  |  |
+| `--library-db` | `<db>` |  |  |
+| `--format` | `json` |  |  |
+
+Described in [Narrow parameter types (compile-gated)](features/narrow-param.md).
 
 ### outline
 
@@ -1511,7 +1553,7 @@ Described in [register-project](features/register-project.md).
 Renames a symbol across the whole indexed project.
 
 ```text
-drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db> - cross-unit rename
+drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] --db <db> - cross-unit rename, proved per occurrence; --apply passes the compile gate
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1521,6 +1563,9 @@ drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-ba
 | `--to` | `<New>` |  |  |
 | `--json` |  |  |  |
 | `--apply` |  |  |  |
+| `--plan` |  |  |  |
+| `--project` | `<X.dproj>` |  |  |
+| `--library-db` | `<lib>` |  |  |
 | `--no-backup` |  |  |  |
 | `--db` | `<db>` |  |  |
 
@@ -1795,6 +1840,31 @@ drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]
 | `--format` |  |  |  |
 
 Described in [Type at Cursor](features/type-at-cursor.md).
+
+### unwith
+
+Removes with blocks, proving every name binds to what it bound before.
+
+```text
+drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json] - remove with blocks, proved binding by binding
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<db>` |  |  |
+| `--in` | `<F>` |  |  |
+| `--line` | `<N>` |  |  |
+| `--plan` |  |  |  |
+| `--apply` |  |  |  |
+| `--project` | `<X.dproj>` |  |  |
+| `--platform` | `<p>` |  |  |
+| `--rsvars` | `<bat>` |  |  |
+| `--build-timeout` | `<s>` |  |  |
+| `--library-db` | `<L>\|none` |  |  |
+| `--no-backup` |  |  |  |
+| `--json` |  |  |  |
+
+Described in [unwith](features/unwith.md).
 
 ### usages
 

@@ -236,7 +236,9 @@ $builtins = @($json.rules | Where-Object { $_.source -eq 'builtin' })
 # 198 -> 199 (2026-11-03, 1.42 enum): ancestor-not-in-project.
 # 199 -> 205 (2026-11-04, 1.42 wave 3, all OFF): opaque-to-analysis, effect-free-in-loop-invariant, stream-buffer-after-free,
 #   interfaced-object-nil-leak, identifier-case-mismatch, datamodule-form-global.
-$ExpectedBuiltins = 205
+# 205 -> 214 (2026-11-06, 1.44.1, all ON): is-always-true, upcast-then-downcast, with-on-temporary, interface-holder-of-non-refcounted,
+#   argument-narrows, init-order-hazard, finalization-after-dependency, heavy-initialization, global-set-in-initialization-never-freed.
+$ExpectedBuiltins = 214
 Assert ("built-in rule count = {0} (118 + doc-orphan-block + stat-gated-destructive + global-only-uses-edge + duplicate-global-decl + uses-global-census + with-hides-outer-symbol + review-marker-malformed + hardcoded-absolute-path + dfm-property-not-declared + dependent-project-not-recompiled + discarded-effect-free-result + query-name-with-effect + enum-read-inside-with + assert-with-side-effect + ifdef-undefined-symbol + review-marker-placeholder-hash + review-marker-reason-unreviewed + cycle-participant-unit + confusable-identifier + line-too-long + enum-bare-read-scoped + platform-divergent-define + enum-ordinal-persisted + 49 gaps-wave built-ins + ancestor-not-in-project + 6 wave-3 rules); got {1}" -f $ExpectedBuiltins, $builtins.Count) ($builtins.Count -eq $ExpectedBuiltins)
 
 $docBuiltins = @($builtins | Where-Object { $_.category -eq 'documentation' })

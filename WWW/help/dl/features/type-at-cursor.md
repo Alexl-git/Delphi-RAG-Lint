@@ -7,7 +7,7 @@ group: search-navigation
 order: 20033
 since: 0.19.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.44.1-alpha
 ---
 
 # Type at Cursor
@@ -46,6 +46,14 @@ drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]
 ```
 The position is given as `<file>:<line>:<col>`; `--format` selects text or
 JSON.
+
+When the index holds a stored type for the reference at that position (the
+`ref_types` table, from 1.44), the answer adds it: a `StaticType:` line in
+text, `static_type` and `static_type_via` in JSON. `Resolved:` names the symbol,
+`StaticType:` the type the reference has: on `TThing.Create` the resolved symbol
+may be an inherited `TBase.Create` while the static type is `TThing`. An older
+index has no such table and gets the rest of the answer unchanged. See
+[schema](schema.md).
 
 ### What it needs
 The `--db` flag is optional -- drag-lint auto-resolves the index when

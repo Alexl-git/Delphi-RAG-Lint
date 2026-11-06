@@ -4,10 +4,10 @@ title: Reconcile Project Members (.dpr/.dproj)
 summary: Lists every unit a project uses that is neither a project member nor in the library, judges each one (project unit or third-party) and fixes it either way
 product: DL
 group: refactoring
-order: 50009
+order: 50010
 since: 1.18.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.44.1-alpha
 ---
 
 # Reconcile Project Members (.dpr/.dproj)

@@ -4,7 +4,7 @@
   "group": "linting",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.44.0-alpha",
+  "since": "1.44.1-alpha",
   "summary": "Project lint rule: a finalization section reaches a global that a unit finalized earlier in the computed order tears down",
   "intro": "Read this to see when finalization-after-dependency fires and why it can only fire inside a uses cycle. It runs in lint-all and lint-project over a project index.",
   "wikiPage": "finalization-after-dependency",
@@ -15,5 +15,11 @@
       "example": "drag-lint lint-all --db <project.sqlite> --rule finalization-after-dependency"
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-06",
+    "by": "ENGINE",
+    "build": "1.44.1-alpha",
+    "surfaceHash": "5372b9900e3a52313e7772981f1d9acbd3eb9c5dd9083b10a47dcce1f117dcf0"
+  }
 }

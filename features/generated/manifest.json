@@ -1,7 +1,7 @@
 {
-  "product": "1.44.0-alpha",
+  "product": "1.44.1-alpha",
   "extractor": "1.31.0-alpha",
-  "resolver": "1.19.0-alpha",
+  "resolver": "1.20.0-alpha",
   "schema": 23,
   "groups": [
     {
@@ -3188,6 +3188,31 @@
       }
     },
     {
+      "id": "finalization-after-dependency",
+      "title": "Finalization reaching a unit already finalized (lint rule)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.44.1-alpha",
+      "summary": "Project lint rule: a finalization section reaches a global that a unit finalized earlier in the computed order tears down",
+      "intro": "Read this to see when finalization-after-dependency fires and why it can only fire inside a uses cycle. It runs in lint-all and lint-project over a project index.",
+      "wikiPage": "finalization-after-dependency",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule finalization-after-dependency"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-06",
+        "by": "ENGINE",
+        "build": "1.44.1-alpha",
+        "surfaceHash": "5372b9900e3a52313e7772981f1d9acbd3eb9c5dd9083b10a47dcce1f117dcf0"
+      }
+    },
+    {
       "id": "fix-all-in-project",
       "title": "Fix all in project",
       "group": "linting",
@@ -3726,6 +3751,56 @@
       }
     },
     {
+      "id": "global-set-in-initialization-never-freed",
+      "title": "Global set in initialization and never freed (lint rule)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.44.1-alpha",
+      "summary": "Project lint rule: a unit's initialization sets its own global to a new object and no source that names the variable frees it",
+      "intro": "Read this to see when global-set-in-initialization-never-freed fires and what silences it. It runs in lint-all and lint-project over a project index.",
+      "wikiPage": "global-set-in-initialization-never-freed",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule global-set-in-initialization-never-freed"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-06",
+        "by": "ENGINE",
+        "build": "1.44.1-alpha",
+        "surfaceHash": "5372b9900e3a52313e7772981f1d9acbd3eb9c5dd9083b10a47dcce1f117dcf0"
+      }
+    },
+    {
+      "id": "heavy-initialization",
+      "title": "Heavy work in an initialization section (lint rule)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.44.1-alpha",
+      "summary": "Project lint rule: an initialization section reaches the file system, the registry, the network, a database or a dialog",
+      "intro": "Read this to see what heavy-initialization counts as heavy and what it cannot see. It runs in lint-all and lint-project over a project index.",
+      "wikiPage": "heavy-initialization",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule heavy-initialization"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-06",
+        "by": "ENGINE",
+        "build": "1.44.1-alpha",
+        "surfaceHash": "5372b9900e3a52313e7772981f1d9acbd3eb9c5dd9083b10a47dcce1f117dcf0"
+      }
+    },
+    {
       "id": "identifier-case-mismatch",
       "title": "Identifier case mismatch (lint rule)",
       "group": "linting",
@@ -3748,6 +3823,31 @@
         "by": "ENGINE",
         "build": "1.42.0-alpha",
         "surfaceHash": "360982a878a600caf0f2ca7a214d6b7f0220a387e74cda05b94c066a804901d1"
+      }
+    },
+    {
+      "id": "init-order-hazard",
+      "title": "Initialization reaching a unit that initializes later (lint rule)",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.44.1-alpha",
+      "summary": "Project lint rule: an initialization section reaches a global that a unit initializing later in the computed order sets in its own initialization",
+      "intro": "Read this to see how drag-lint computes the order units initialize in and when init-order-hazard fires. It runs in lint-all and lint-project over a project index.",
+      "wikiPage": "init-order-hazard",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule init-order-hazard"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-06",
+        "by": "ENGINE",
+        "build": "1.44.1-alpha",
+        "surfaceHash": "5372b9900e3a52313e7772981f1d9acbd3eb9c5dd9083b10a47dcce1f117dcf0"
       }
     },
     {
@@ -3850,6 +3950,31 @@
         "by": "ENGINE",
         "build": "1.36.0-alpha",
         "surfaceHash": "ff29775a55c4c30feab8dde90acdf1729e78a17b91380a8c3c2fb73986179f27"
+      }
+    },
+    {
+      "id": "ref-type-rules",
+      "title": "Lint rules on the static type of a reference",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.44.1-alpha",
+      "summary": "Project lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows and three more; sharper redundant-cast and unsafe casts",
+      "intro": "Read this to see which rules stand on ref_types, what each reports and what keeps it silent. They run in lint-all and lint-project over a 1.44 index.",
+      "wikiPage": "ref-type-rules",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-all",
+          "example": "drag-lint lint-all --db <project.sqlite> --rule argument-narrows"
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-06",
+        "by": "ENGINE",
+        "build": "1.44.1-alpha",
+        "surfaceHash": "5372b9900e3a52313e7772981f1d9acbd3eb9c5dd9083b10a47dcce1f117dcf0"
       }
     },
     {
@@ -5735,6 +5860,86 @@
       }
     },
     {
+      "id": "narrow-param",
+      "title": "Narrow parameter types (compile-gated)",
+      "group": "refactoring",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.44.1-alpha",
+      "summary": "Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate",
+      "intro": "Read this when a routine asks for a wider dependency than it needs: a parameter typed TLeaf whose body only uses what TBase declares. The verb narrows it only when it can prove every use still binds to the same member, names every refusal, and with --apply builds the project before and after and rolls back on any error.",
+      "wikiPage": "narrow-param",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "narrow-param",
+          "example": "drag-lint narrow-param --routine <QName> --plan --db <db>",
+          "usage": "drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]",
+          "flags": [
+            {
+              "name": "--routine",
+              "arg": "<QName>"
+            },
+            {
+              "name": "--param",
+              "arg": "<name>"
+            },
+            {
+              "name": "--all"
+            },
+            {
+              "name": "--plan"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--no-backup"
+            },
+            {
+              "name": "--platform",
+              "arg": "<p>"
+            },
+            {
+              "name": "--rsvars",
+              "arg": "<bat>"
+            },
+            {
+              "name": "--build-timeout",
+              "arg": "<s>"
+            },
+            {
+              "name": "--no-compile"
+            },
+            {
+              "name": "--library-db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--format",
+              "arg": "json"
+            }
+          ],
+          "help": ["  drag-lint narrow-param (--routine <QName> [--param <name>] | --all) (--plan | --apply --project <X.dproj>) --db <db> [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]   - retype a class parameter to the deepest ancestor its uses need: static proof, every refusal named, --apply through the compile gate"]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-06",
+        "by": "ENGINE",
+        "build": "1.44.1-alpha",
+        "surfaceHash": "715d68829ac54d76c933572e8ac230ad28f12709c53947b5b5d153e44e53f040"
+      }
+    },
+    {
       "id": "quick-fix-add-unit-for-inline-hint-h2443-at-cursor",
       "title": "Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor",
       "group": "refactoring",
@@ -5924,6 +6129,75 @@
       }
     },
     {
+      "id": "redundant-cast-fix",
+      "title": "Remove redundant casts (compile-gated)",
+      "group": "refactoring",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.44.1-alpha",
+      "summary": "Removes hard casts whose operand already has exactly the target type, proved from the index's static types and written through the compile gate",
+      "intro": "Read this when lint reports redundant-cast. The fix removes a cast only when the index proves the operand has the very type it is cast to; everything it cannot prove stays in the source and is listed with a named refusal. With --apply it builds the project first and after, and rolls back on any error.",
+      "wikiPage": "redundant-cast-fix",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "drag-lint lint --fix --fix-rule redundant-cast --db <db> --project <X.dproj> --apply",
+          "usage": "drag-lint lint --fix --fix-rule redundant-cast --db <db> [--project <X.dproj> --apply] [--in <f.pas>] [--fix-line <L>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]",
+          "flags": [
+            {
+              "name": "--fix"
+            },
+            {
+              "name": "--fix-rule",
+              "arg": "redundant-cast"
+            },
+            {
+              "name": "--db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--fix-line",
+              "arg": "<L>"
+            },
+            {
+              "name": "--no-backup"
+            },
+            {
+              "name": "--rsvars",
+              "arg": "<bat>"
+            },
+            {
+              "name": "--build-timeout",
+              "arg": "<s>"
+            },
+            {
+              "name": "--no-compile"
+            },
+            {
+              "name": "--library-db",
+              "arg": "<db>"
+            }
+          ],
+          "help": ["  drag-lint lint --fix --fix-rule redundant-cast --db <db> [--project <X.dproj> --apply] [--in <f.pas>] [--fix-line <L>] [--no-backup] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]   - remove identity casts: proved from ref_types, every refusal named, --apply builds before and after and rolls back"]
+        }
+      ],
+      "audience": "both",
+      "verified": {
+        "date": "2026-11-06",
+        "by": "ENGINE",
+        "build": "1.44.1-alpha",
+        "surfaceHash": "a7696ea7437b3dc50d702f75453bbfed58aa90e201dd7e5c57816fe8b15e42a6"
+      }
+    },
+    {
       "id": "rename-symbol",
       "title": "Rename Symbol",
       "group": "refactoring",
@@ -5942,7 +6216,7 @@
         {
           "type": "cli",
           "verb": "rename",
-          "usage": "drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db> - cross-unit rename",
+          "usage": "drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] --db <db> - cross-unit rename, proved per occurrence; --apply passes the compile gate",
           "flags": [
             {
               "name": "--kind"
@@ -5962,6 +6236,17 @@
               "name": "--apply"
             },
             {
+              "name": "--plan"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--library-db",
+              "arg": "<lib>"
+            },
+            {
               "name": "--no-backup"
             },
             {
@@ -5970,7 +6255,7 @@
             }
           ],
           "helpOrder": 52,
-          "help": ["  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename", "  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)", "  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--in <F>] [--db PATH] [--dry-run] [--no-backup]   (--in: file the name was asked from; ranks the not-found candidates)", "      (--qname and --kind symbol refuse, exit 2, and name the file(s) when the old name is used as an identifier in an .inc file: the index records no identifier references inside {$I} included text)", "      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2, naming the file; other binary or unindexed .dfm files are reported as not rewritten, never skipped silently)"]
+          "help": ["  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--plan|--apply|--no-backup] [--project <X.dproj>] [--library-db <lib>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] --db <db>   - cross-unit rename, every occurrence proved; --apply refuses what it cannot prove (exit 2) and passes the compile gate", "  drag-lint rename --kind param  --in <F> --line <L> --col <C> --to <New> [--db <db>] [--json|--plan|--apply|--no-backup] [--project <X.dproj>]  - routine-local rename (param/var autofix)", "  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--in <F>] [--db PATH] [--dry-run] [--no-backup]   (--in: file the name was asked from; ranks the not-found candidates)", "      (--qname and --kind symbol refuse, exit 2, and name the file(s) when the old name is used as an identifier in an .inc file: the index records no identifier references inside {$I} included text)", "      (an event handler rename also rewrites its text .dfm binding, OnClick = Name; a binary .dfm that holds the name refuses, exit 2, naming the file; other binary or unindexed .dfm files are reported as not rewritten, never skipped silently)"]
         }
       ],
       "audience": "both",
@@ -5978,18 +6263,18 @@
       "questions": [
         {
           "ask": "How do I rename a symbol in every unit that uses it?",
-          "command": "drag-lint rename --kind symbol --name <QName> --to <New> --db <db> --apply"
+          "command": "drag-lint rename --kind symbol --name <QName> --to <New> --db <db> --project <X.dproj> --apply"
         },
         {
           "ask": "Can I preview a rename before it writes anything?",
-          "command": "drag-lint rename --kind symbol --name <QName> --to <New> --db <db>"
+          "command": "drag-lint rename --kind symbol --name <QName> --to <New> --db <db> --plan"
         }
       ],
       "verified": {
-        "date": "2026-11-02",
+        "date": "2026-11-06",
         "by": "ENGINE",
-        "build": "1.39.2-alpha",
-        "surfaceHash": "f36b008314ed5269e15f3c910780e1b41900eeb692ea3736fb1523a76049a92f"
+        "build": "1.44.1-alpha",
+        "surfaceHash": "64d395f9f1d44b18f6caffd6e5aeb630efee8028f9deda042f920060434e1319"
       }
     },
     {
@@ -6103,6 +6388,90 @@
         "by": "ENGINE",
         "build": "1.33.0-alpha",
         "surfaceHash": "0711c74e54f178093f9b8ba98f3277dba3b92f3fcd79c609ee75f967463f3a86"
+      }
+    },
+    {
+      "id": "unwith",
+      "title": "unwith",
+      "group": "refactoring",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.44.1-alpha",
+      "summary": "Removes with blocks, proving every name binds to what it bound before",
+      "intro": "Read this when you want a with statement gone without a name silently changing meaning. --plan names, for every with in a file or a project, whether it can be removed and exactly why not; --apply rewrites through the compile gate, then re-indexes a copy of the DB and rolls back if any reference binds elsewhere.",
+      "wikiPage": "unwith",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "unwith",
+          "usage": "drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json] - remove with blocks, proved binding by binding",
+          "flags": [
+            {
+              "name": "--db",
+              "arg": "<db>"
+            },
+            {
+              "name": "--in",
+              "arg": "<F>"
+            },
+            {
+              "name": "--line",
+              "arg": "<N>"
+            },
+            {
+              "name": "--plan"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--platform",
+              "arg": "<p>"
+            },
+            {
+              "name": "--rsvars",
+              "arg": "<bat>"
+            },
+            {
+              "name": "--build-timeout",
+              "arg": "<s>"
+            },
+            {
+              "name": "--library-db",
+              "arg": "<L>|none"
+            },
+            {
+              "name": "--no-backup"
+            },
+            {
+              "name": "--json"
+            }
+          ],
+          "helpOrder": 62,
+          "help": ["  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--json]  - remove with blocks, proved binding by binding"]
+        }
+      ],
+      "audience": "both",
+      "questions": [
+        {
+          "ask": "Which with statements in this project can be removed safely, and why not the others?",
+          "command": "drag-lint unwith --db <db> --plan"
+        },
+        {
+          "ask": "How do I remove one with statement?",
+          "command": "drag-lint unwith --db <db> --in <F> --line <N> --apply --project <X.dproj>"
+        }
+      ],
+      "notes": "lane 144 unwith; guard tests\\autotest\\run_unwith.ps1",
+      "verified": {
+        "date": "2026-11-06",
+        "by": "ENGINE",
+        "build": "1.44.1-alpha",
+        "surfaceHash": "98d5f22687a6e8f41827b525898c426ccdbbd804c1638d3976ea78ace8e2eba8"
       }
     },
     {
@@ -12752,6 +13121,26 @@
         "wikiAnchor": "approx-constant"
       },
       {
+        "id": "rule.argument-narrows",
+        "title": "argument-narrows",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A call passes a variable, field or function result of a wider numeric type than the by-value parameter (Int64 to Integer): the compil... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule argument-narrows"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "argument-narrows"
+      },
+      {
         "id": "rule.assert-call",
         "title": "assert-call",
         "group": "linting",
@@ -14512,6 +14901,26 @@
         "wikiAnchor": "field-name-prefix"
       },
       {
+        "id": "rule.finalization-after-dependency",
+        "title": "finalization-after-dependency",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A finalization section reaches a global that a unit finalized earlier in the computed order tears down in its own finalization -- the... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule finalization-after-dependency"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "finalization-after-dependency"
+      },
+      {
         "id": "rule.firedac-open-execsql-mismatch",
         "title": "firedac-open-execsql-mismatch",
         "group": "linting",
@@ -14852,6 +15261,26 @@
         "wikiAnchor": "global-only-uses-edge"
       },
       {
+        "id": "rule.global-set-in-initialization-never-freed",
+        "title": "global-set-in-initialization-never-freed",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "A unit's initialization sets its own global to a new object and no source that names the variable frees it -- it lives to process exit a... (project-wide, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule global-set-in-initialization-never-freed"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "global-set-in-initialization-never-freed"
+      },
+      {
         "id": "rule.god-class",
         "title": "god-class",
         "group": "linting",
@@ -15010,6 +15439,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "hardcoded-ip-address"
+      },
+      {
+        "id": "rule.heavy-initialization",
+        "title": "heavy-initialization",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "An initialization section reaches the file system, the registry, the network, a database or a dialog -- it can fail or block before the... (project-wide, hint)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule heavy-initialization"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "heavy-initialization"
       },
       {
         "id": "rule.hides-ancestor-virtual",
@@ -15312,6 +15761,26 @@
         "wikiAnchor": "inherited-bare"
       },
       {
+        "id": "rule.init-order-hazard",
+        "title": "init-order-hazard",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "An initialization section reaches a global that a unit initializing later in the computed order sets in its own initialization -- wor... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule init-order-hazard"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "init-order-hazard"
+      },
+      {
         "id": "rule.inline-assembly",
         "title": "inline-assembly",
         "group": "linting",
@@ -15412,6 +15881,26 @@
         "wikiAnchor": "integer-division-to-float"
       },
       {
+        "id": "rule.interface-holder-of-non-refcounted",
+        "title": "interface-holder-of-non-refcounted",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "An interface variable is assigned a TComponent-like object: _AddRef does nothing, so the holder keeps nothing alive and dangles once... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule interface-holder-of-non-refcounted"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "interface-holder-of-non-refcounted"
+      },
+      {
         "id": "rule.interface-object-mixing",
         "title": "interface-object-mixing",
         "group": "linting",
@@ -15510,6 +15999,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "invalid-regex-literal"
+      },
+      {
+        "id": "rule.is-always-true",
+        "title": "is-always-true",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "x is T where the static type of x already descends from T: the test only asks whether x is nil; needs a 1.44 index (ref_types) (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule is-always-true"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "is-always-true"
       },
       {
         "id": "rule.is-not-operator",
@@ -16938,7 +17447,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Cast of a value to the type it already has (no-op) (dead-code, hint, fixable)",
+        "summary": "Cast of a value to the type it already has (no-op); with a 1.44 index (ref_types) also T(a.b), T(F(x)) and x as T, and the index o... (dead-code, hint, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -17998,7 +18507,7 @@
         "owner": "ENGINE",
         "status": "shipped",
         "since": "0.2.0-alpha",
-        "summary": "Hard cast TFoo(x) of an object reference with no guarding 'x is TFoo' (bug-patterns, warning, fixable)",
+        "summary": "Hard cast TFoo(x) of an object reference with no guarding 'x is TFoo'; with a 1.44 index (ref_types) also T(a.b) and T(F(x))... (bug-patterns, warning, fixable)",
         "wikiPage": "rules",
         "surfaces": [
           {
@@ -18190,6 +18699,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "unused-unit-in-uses"
+      },
+      {
+        "id": "rule.upcast-then-downcast",
+        "title": "upcast-then-downcast",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "TLeaf(TBase(x)) or (x as TBase) as TLeaf where x already is a TBase: the inner cast adds nothing and the outer one is unchecked narro... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule upcast-then-downcast"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "upcast-then-downcast"
       },
       {
         "id": "rule.uppercase-compare",
@@ -18510,6 +19039,26 @@
         "audience": "both",
         "parent": "lint-rules",
         "wikiAnchor": "with-multiple-items"
+      },
+      {
+        "id": "rule.with-on-temporary",
+        "title": "with-on-temporary",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "with TFoo.Create do where the body never frees the object and no owner takes it: the only name it had is gone, so it leaks; needs a 1... (project-wide, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule with-on-temporary"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "with-on-temporary"
       },
       {
         "id": "rule.with-statement",
