@@ -2817,7 +2817,7 @@ var
 begin
   Result:= '';
   try
-    Text:= TFile.ReadAllText(ADproj); // dl:ok taint-path-traversal -- REVIEWED 2026-11-05: read only, for a project file the user's own context file or manifest names; a regex takes one platform name from it
+    Text:= TFile.ReadAllText(ADproj); // dl:ok taint-path-traversal@59be -- REVIEWED 2026-11-05: read only, for a project file the user's own context file or manifest names; a regex takes one platform name from it
     First:= '';
     for var M: TMatch in TRegEx.Matches(Text, '<Platform\s+value="([^"]+)"\s*>\s*True\s*</Platform>', [roIgnoreCase]) do
     begin
