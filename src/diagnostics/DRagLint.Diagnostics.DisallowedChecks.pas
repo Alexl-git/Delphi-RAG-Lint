@@ -5,7 +5,10 @@ unit DRagLint.Diagnostics.DisallowedChecks;
   (the "disallowed" block of the lint config), category policy, silent without
   config. Matching is TEXTUAL (v1): the source is tokenised with comments, strings
   and compiler directives skipped, and identifier sequences are compared
-  case-insensitively. No symbol resolution: a bare "Sleep" also matches Obj.Sleep. }
+  case-insensitively. With a project index two facts refine it (lane 145 li): a dotted "Obj.Sleep"
+  whose ref the index binds to a MEMBER no longer matches a bare "Sleep" entry, and a "Type.Method"
+  entry also matches "Recv.Method" when ref_types types Recv as Type. No store, no ref_types table
+  or no row = the textual answer. }
 
 interface
 
@@ -31,8 +34,8 @@ type
     /// <summary>Runs the three disallowed-* rules against one source file.</summary>
     /// <param name="AFile">Absolute path to the .pas/.inc source file.</param>
     /// <param name="ACfg">Effective lint configuration (DisallowedMethods/Types/Names, severity).</param>
-    /// <param name="AStore">Unused; textual rules need no index.</param>
-    /// <param name="AFileId">Unused.</param>
+    /// <param name="AStore">Optional project index; nil or an index without the facts keeps the textual match.</param>
+    /// <param name="AFileId">The file id in AStore; 0 means no index facts.</param>
     /// <returns>One finding per matched occurrence, message "NAME is disallowed by project
     /// policy -- REASON"; empty when unconfigured, excepted or clean.</returns>
     /// <remarks>
@@ -60,6 +63,10 @@ uses
   System.SysUtils
   , System.IOUtils
   , System.Generics.Collections
+  , FireDAC.Comp.Client
+  , FireDAC.Stan.Param
+  , DRagLint.Storage.SQLite
+  , DRagLint.Lint.RefTypeRules
   ;
 
 type
@@ -71,6 +78,12 @@ type
   end;
 
   TRuleKind = (rkMethod, rkType, rkName);
+
+  { The index facts for the file being checked; Store = nil means none. }
+  TIndexFacts = record
+    Store : ISymbolStore;
+    FileId: Int64;
+  end;
 
 const
   DECL_KEYWORDS: array[0..6] of string = (
@@ -272,9 +285,52 @@ begin
   if AEntry.Reason <> '' then Result.Message:= Result.Message + ' -- ' + AEntry.Reason;
 end;
 
+{ True when the index binds the reference written at ATok to a MEMBER symbol (method,
+  constructor, destructor, property, field): `Obj.Sleep` bound to TWorker.Sleep is not the
+  global Sleep a bare policy entry names. False with no store, no row or an unbound ref:
+  today's textual answer stands. }
+function BoundToMember(const AStore: ISymbolStore; AFileId: Int64; const ATok: TTok): Boolean;
+var
+  Q: TFDQuery;
+begin
+  Result:= False;
+  if (AStore = nil) or (AFileId <= 0) or (AStore is not TSQLiteSymbolStore) then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= (AStore as TSQLiteSymbolStore).GetConnection;
+    Q.SQL.Text:= 'SELECT 1 FROM refs r JOIN symbols s ON s.id = r.symbol_id ' +
+                 'WHERE r.file_id = :f AND r.start_line = :l AND r.start_col = :c ' +
+                 'AND r.name_text = :n COLLATE NOCASE ' +
+                 'AND s.kind IN (''method'', ''constructor'', ''destructor'', ''property'', ''field'') LIMIT 1';
+    Q.ParamByName('f').AsLargeInt  := AFileId;
+    Q.ParamByName('l').AsInteger   := ATok.Line;
+    Q.ParamByName('c').AsInteger   := ATok.Col;
+    Q.ParamByName('n').AsWideString:= ATok.Text;
+    Q.Open;
+    Result:= not Q.Eof;
+  finally
+    Q.Free;
+  end;
+end;
+
+{ True when ATok[AAt] is the method of `Recv.Method` and Recv is an identifier the index
+  types as the policy's type (Segs[0]) although the source never spells that type. }
+function TypedReceiverHit(const AFacts: TIndexFacts; const ATok: TArray<TTok>;
+  AAt: Integer; const ASegs: TArray<string>): Boolean;
+var
+  Leaf: string;
+begin
+  Result:= False;
+  if (Length(ASegs) <> 2) or (AAt < 2) or (not ATok[AAt].IsIdent) or (not SameText(ATok[AAt].Text, ASegs[1])) then Exit;
+  if (ATok[AAt - 1].Text <> '.') or (not ATok[AAt - 2].IsIdent) or SameText(ATok[AAt - 2].Text, ASegs[0]) then Exit;
+  if InRoutineHeader(ATok, AAt) then Exit;
+  Result:= RefStaticTypeAt(AFacts.Store, AFacts.FileId, ATok[AAt - 2].Line, ATok[AAt - 2].Col, ATok[AAt - 2].Text, Leaf)
+    and SameText(Leaf, ASegs[0]);
+end;
+
 procedure ScanKind(AKind: TRuleKind; const AFile: string; const ACfg: TLintConfig;
   const AEntries: TArray<TDisallowedEntry>; const ATok: TArray<TTok>;
-  var AFindings: TArray<TLintFinding>);
+  const AFacts: TIndexFacts; var AFindings: TArray<TLintFinding>);
 var
   E   : TDisallowedEntry;
   Segs: TArray<string>;
@@ -286,22 +342,31 @@ begin
     Segs:= E.Name.Split(['.']);
     for I:= 0 to High(ATok) do
       if EntryHit(AKind, ATok, I, Segs) then
+      begin
+        if (AKind = rkMethod) and (Length(Segs) = 1) and (I > 0) and (ATok[I - 1].Text = '.')
+          and BoundToMember(AFacts.Store, AFacts.FileId, ATok[I]) then Continue;
         AFindings:= AFindings + [MakeFinding(RuleIdFor(AKind), AFile, ACfg, E, ATok[I], ATok[I + 2 * High(Segs)])];
+      end
+      else if (AKind = rkMethod) and TypedReceiverHit(AFacts, ATok, I, Segs) then
+        AFindings:= AFindings + [MakeFinding(RuleIdFor(AKind), AFile, ACfg, E, ATok[I - 2], ATok[I])];
   end;
 end;
 
 class function TDisallowedChecker.Check(const AFile: string; const ACfg: TLintConfig;
-  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; // dl:ok unused-parameter@255c -- signature fixed by the checker contract shared with DoLint/DoLintAll; textual rules need no index
+  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 var
-  Tok: TArray<TTok>;
+  Tok  : TArray<TTok>;
+  Facts: TIndexFacts;
 begin
   Result:= nil;
   if (Length(ACfg.DisallowedMethods) + Length(ACfg.DisallowedTypes) + Length(ACfg.DisallowedNames) = 0)
     or (not TFile.Exists(AFile)) then Exit;
   Tok:= Tokenise(TFile.ReadAllText(AFile));
-  ScanKind(rkMethod, AFile, ACfg, ACfg.DisallowedMethods, Tok, Result);
-  ScanKind(rkType, AFile, ACfg, ACfg.DisallowedTypes, Tok, Result);
-  ScanKind(rkName, AFile, ACfg, ACfg.DisallowedNames, Tok, Result);
+  Facts.Store := AStore;
+  Facts.FileId:= AFileId;
+  ScanKind(rkMethod, AFile, ACfg, ACfg.DisallowedMethods, Tok, Facts, Result);
+  ScanKind(rkType, AFile, ACfg, ACfg.DisallowedTypes, Tok, Facts, Result);
+  ScanKind(rkName, AFile, ACfg, ACfg.DisallowedNames, Tok, Facts, Result);
 end;
 
 end.
