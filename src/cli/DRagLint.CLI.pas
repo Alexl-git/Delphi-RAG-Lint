@@ -1723,7 +1723,7 @@ begin
     else if A = '--coverage'       then Result.WiringCoverage:= True
     else if (A = '--context') and (i < ParamCount) then begin Inc(i); Result.ContextLines:= StrToIntDef(ParamStr(i), 0); end
     else if A = '--resolved' then Result.Resolved:= True // v14 (D5 T8): find-callers --resolved
-    else if A = '--rw' then Result.UsagesRw:= True  // dl:ok duplicate-code@115a -- ParseArgs is a flat else-if flag chain; the repeated tokens are its shape, not copied logic
+    else if A = '--rw' then Result.UsagesRw:= True
     // v14 (D5 T11): call-path / callgraph traversal flags.
     else if (A = '--from') and (i < ParamCount) then begin Inc(i); Result.CallFrom:= ParamStr(i); end
     else if (A = '--max-depth') and (i < ParamCount) then begin Inc(i); Result.MaxDepth:= StrToIntDef(ParamStr(i), 20); end
@@ -34242,8 +34242,8 @@ var
   Lock: TFileStream;
   LockPath: string;
 begin
-  if AArgs.NoCreate or (AProjDb = '') or (AArgs.ProjectPath = '') then Exit;
-  if (AArgs.Command = 'lsp') or (AArgs.Command = 'serve') then Exit; { the servers are read-only: opening a file never builds an index }
+  { the servers are read-only: opening a file never builds an index }
+  if AArgs.NoCreate or (AProjDb = '') or (AArgs.ProjectPath = '') or (AArgs.Command = 'lsp') or (AArgs.Command = 'serve') then Exit;
   if TFile.Exists(AProjDb) or (not TFile.Exists(AArgs.ProjectPath)) then Exit;
   if not EngineIsDeployedForCreate then Exit;
   if not NoteOnce('autocreate|' + ExpandFileName(AProjDb)) then Exit;

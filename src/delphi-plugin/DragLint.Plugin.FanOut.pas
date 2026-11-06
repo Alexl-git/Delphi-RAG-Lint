@@ -214,7 +214,7 @@ procedure TFanOutMessageNotifier.BeforeSave; begin end;  // dl:ok empty-procedur
 procedure TFanOutMessageNotifier.Destroyed;  begin end;  // dl:ok empty-procedure-body@f061
 procedure TFanOutMessageNotifier.Modified;   begin end;  // dl:ok empty-procedure-body@2df4
 
-procedure TFanOutMessageNotifier.MessageGroupAdded(const Group: IOTAMessageGroup);  // dl:ok empty-procedure-body@7430, unused-parameter@7430
+procedure TFanOutMessageNotifier.MessageGroupAdded(const Group: IOTAMessageGroup);  // dl:ok empty-procedure-body@7430
 begin
 end;
 
