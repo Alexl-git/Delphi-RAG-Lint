@@ -61,6 +61,9 @@ try {
   CheckRule $db $src 'is-never-true' 'NEVER'
   $offNever = @((Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)) | Where-Object { $_.rule -eq 'is-never-true' })
   Check 'a plain lint-all: is-never-true stays OFF' ($offNever.Count -eq 0) "$($offNever.Count) finding(s)"
+  $catalog = & $exePath rules --json 2>$null | Out-String | ConvertFrom-Json
+  $never = @($(if ($catalog.rules) { $catalog.rules } else { $catalog }) | Where-Object { $_.id -eq 'is-never-true' })
+  Check 'rules --json: is-never-true is default_enabled false' ($never.Count -eq 1 -and $never[0].default_enabled -eq $false) "count=$($never.Count)"
   # The fact itself, raw: sql --json rows are positional, column 0 of the only row.
   $sealedRow = (& $exePath sql --db $db --query "SELECT directives FROM symbols WHERE name = 'TRtSealed'" --json 2>$null | Out-String | ConvertFrom-Json).rows
   Check 'the parser records sealed on the class symbol' (@($sealedRow).Count -eq 1 -and $sealedRow[0][0] -eq 'sealed') "rows: $($sealedRow | ConvertTo-Json -Compress)"
