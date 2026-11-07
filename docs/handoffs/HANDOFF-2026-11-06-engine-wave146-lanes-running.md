@@ -24,3 +24,5 @@ Installer staged Sat 16:00-18:00, unpublished. Expect A 48-53 of 56 merged; B 24
 - E-MISSINGUSES INBOX cause was wrong (corrected): stale index only. E-COMPILEGATE-ADOPT partial stays open.
 - Owed: 1.44.1 intro + feature article for www-1c; push of main (owner); old cleanup list in the previous handoff.
 - CONVERTER's HOLD: no conversions during re-parse, re-pin after. ORM3 will ping before an ALEX9 benchmark.
+## Update Sat 11-07 00:35
+All lanes reported or running (b8, finishers k1, l1). 1.45 int finished, report lanes\145\int\REPORT.md. Integrator started early per lanes\146\INT-BRIEF.md on lane/146-int. mode.json armed run 20261106-2120, phase handoff without reason while idle (see OWNER-QUESTIONS.md). On integrator green: HOLD, deploy, re-parse, all-clear, installer, owner report.

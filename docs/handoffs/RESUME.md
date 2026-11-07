@@ -8,7 +8,8 @@ handoff it resumes; several `open` lines are normal. New handoffs are written he
 The legacy `..\RESUME-*.md` files below are gitignored (`docs/RESUME-*`) and exist only in
 the main working tree; their links do not resolve in a fresh clone or worktree.
 
-- 2026-11-06 | engine | wave 146 lanes running on 1.45 int; owner away to Sat evening; re-parse Sat 08:30; installer staged Sat afternoon | open | [HANDOFF-2026-11-06-engine-wave146-lanes-running.md](HANDOFF-2026-11-06-engine-wave146-lanes-running.md)
+- 2026-11-07 | engine | 1.46.0-alpha local main 5d7aa080 deployed + re-parsed, installer staged; owner IDE test, push/publish, 12 rulings | open | [HANDOFF-2026-11-07-engine-146-deployed-reparsed-owner-next.md](HANDOFF-2026-11-07-engine-146-deployed-reparsed-owner-next.md)
+- 2026-11-06 | engine | wave 146 lanes running on 1.45 int; owner away to Sat evening; re-parse Sat 08:30; installer staged Sat afternoon | closed | [HANDOFF-2026-11-06-engine-wave146-lanes-running.md](HANDOFF-2026-11-06-engine-wave146-lanes-running.md)
 - 2026-11-06 | converter | re-pinned 1.44.1 (model 3353/0/0, GUI 440/0); 3 uncommitted edits to review; wait ENGINE wave 146 HOLD + all-clear (Sat 2026-11-07), then re-pin | open | [HANDOFF-2026-11-06-converter-repin-144-battery-green](HANDOFF-2026-11-06-converter-repin-144-battery-green.md)
 - 2026-11-06 | engine | 1.44.1 PUBLISHED b1716abc; IDE test + backlog plan pages by subagents; backlog wave waits for owner answers; 1.45 int battery on lane/145-int | open | [HANDOFF-2026-11-06-engine-1441-published-backlog-wave-plan.md](HANDOFF-2026-11-06-engine-1441-published-backlog-wave-plan.md)
 - 2026-11-06 | engine | 1.44.1 checks done, publish waits for owner go; 1.45: 14 lanes on branches, int running on lane/145-int | resumed | [HANDOFF-2026-11-06-engine-1441-checks-done-145-int-running.md](HANDOFF-2026-11-06-engine-1441-checks-done-145-int-running.md)
