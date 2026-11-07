@@ -36536,6 +36536,7 @@ end; // function
 const
   RECONCILE_FIX_PROJECT = 'project';
   RECONCILE_FIX_LIBRARY = 'library';
+  RECONCILE_FIX_NONE    = 'none';    // a {$I} include: reported, never a fix target
   { The Source value that makes a manifest section the platform library. }
   LIBRARY_SECTION_SOURCE = 'registry-libraries';
 
@@ -36568,10 +36569,11 @@ end;
 /// set) recommends the default for every item rather than guessing.</param>
 /// <param name="AItem">A MISSING item from TProjectReconciler.Analyze.</param>
 /// <returns>RECONCILE_FIX_PROJECT for a unit under the own roots,
-/// RECONCILE_FIX_LIBRARY for one outside them.</returns>
+/// RECONCILE_FIX_LIBRARY for one outside them, RECONCILE_FIX_NONE for a $I include.</returns>
 function ReconcileSuggestedFix(const AOwn: TOwnRoots; const AItem: TReconcileItem): string;
 begin
-  if (AOwn.Error = '') and (not AOwn.IsOurs(AItem.FilePath)) then Result:= RECONCILE_FIX_LIBRARY
+  if SameText(ExtractFileExt(AItem.FilePath), '.inc') then Result:= RECONCILE_FIX_NONE
+  else if (AOwn.Error = '') and (not AOwn.IsOurs(AItem.FilePath)) then Result:= RECONCILE_FIX_LIBRARY
   else Result:= RECONCILE_FIX_PROJECT;
 end;
 
@@ -36580,7 +36582,7 @@ end;
 /// <returns>'third-party' for the library fix, 'project' otherwise.</returns>
 function ReconcileOwnerLabel(const AFix: string): string;
 begin
-  Result:= if AFix = RECONCILE_FIX_LIBRARY then 'third-party' else 'project';
+  Result:= if AFix = RECONCILE_FIX_LIBRARY then 'third-party' else if AFix = RECONCILE_FIX_NONE then 'include' else 'project';
 end;
 
 /// <summary>Prints the two fix commands, each narrowed with --only to the units
