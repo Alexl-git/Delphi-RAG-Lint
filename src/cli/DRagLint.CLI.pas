@@ -12071,6 +12071,7 @@ begin
     unknown. Returning holders alone would trade one silent miss for another. }
   var MemberDbs: TArray<string>:= nil;
   var ProbePlatform: string:= AArgs.CheckPlatform;
+  if (ProbePlatform = '') and (AArgs.ProjectPath <> '') then ProbePlatform:= PlatformOfDproj(AArgs.ProjectPath); // the project's OWN dproj before the CWD guess (L-C20)
   if ProbePlatform = '' then ProbePlatform:= DetectPlatformFromDproj(AManifest, GetCurrentDir);
   if ProbePlatform = '' then ProbePlatform:= AManifest.Settings.DefaultPlatform;
   try
