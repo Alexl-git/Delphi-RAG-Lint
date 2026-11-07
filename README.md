@@ -1169,7 +1169,7 @@ reason with no stamp, an invalid or future date, or a stamp older than
 | `top --db <db>` | Top symbols by fan-in | `--by fanin`, `--limit N` |
 | `gain` | Counted savings: sums the per-user usage log (`%LOCALAPPDATA%\drag-lint\usage.log`, one line per `context` / `query` / `find-callers` run; `DRAGLINT_USAGE_LOG=0` turns it off) per verb and day | `--since yyyy-mm-dd`, `--json` |
 | `overview --db <db>` | One bounded first-turn call: freshness, symbols per kind, units by dependency layer, top fan-in, entry points, forms -- every section capped, each cap reported as `N omitted by cap M; rerun with --max-rows K` | `--max-rows N`, `--json` |
-| `graph --db <db>` | Export the symbol graph | `--format dot\|mermaid`, `--name <substr>`, `--output <f>` |
+| `graph --db <db>` | Export the symbol graph | `--format dot\|mermaid\|json\|html` (json = `drag-lint.graph/1` edges; html = a self-contained page), `--name <substr>`, `--output <f>` |
 | [`callgraph`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/callgraph) `--qname <X> --db <db>` | N-deep resolved call tree | `--direction callers\|callees`, `--depth N`, `--json` / `--format text\|json` (dot/mermaid: `reverse-calltree`) |
 | `reverse-calltree --qname <X> --db <db>` | N-deep call tree, cycle-guarded | `--direction`, `--depth N`, `--format text\|json\|dot\|mermaid`, `--output F` |
 | [`butterfly`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/butterfly) `--qname <X> --db <db>` | Callers (upward wing) + callees (downward wing) composed into one chart | `--depth N`, `--format dot\|mermaid\|text\|json` |
@@ -1264,6 +1264,7 @@ CLI-only verbs).
 | `find_by_doc_tag` | Symbols tagged `deprecated`, or carrying a `since` annotation |
 | `find_undocumented` | Symbols with no doc comment; filter by `kind` / `public_only` |
 | `get_impact` | Transitive blast radius of a symbol: callers/units affected, per depth level |
+| `get_neighbors` | Call-graph neighbourhood of a symbol within 1..3 hops (callers and callees), capped at 200 rows with the omitted count stated |
 | `get_implementors` | Interface report (`implementors/1`): who implements an interface, which method answers each interface method per class, and the member's call/use sites |
 | `get_wiring` | Spring4D DI edges (interface -> impl class + lifetime + resolve-sites) plus DFM event handlers for a form |
 | `get_surface` | Public interface (declaration lines) of a class/record; `include_impl` / `all_visibility` widen it |

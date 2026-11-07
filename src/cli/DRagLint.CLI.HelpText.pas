@@ -269,7 +269,7 @@ begin
   Writeln('                               --detached: the form index uses -- every line of output goes to NUL)');
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
-  Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]');
+  Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]');
   Writeln('  drag-lint todos              [<path>]                (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])');
   Writeln('  drag-lint diff               --db <old.sqlite> --db <new.sqlite>  [--json]');
   Writeln('  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)');
@@ -903,7 +903,7 @@ begin
   end;
   if pVerb = 'graph' then
   begin
-    Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]');
+    Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]');
     Exit;
   end;
   if pVerb = 'todos' then

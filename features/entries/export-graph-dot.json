@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "graph",
-      "usage": "drag-lint graph --db <file.sqlite> [--format dot|mermaid] [--name <root-substr>] [--output <file>]",
+      "usage": "drag-lint graph --db <file.sqlite> [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]",
       "flags": [
         {
           "name": "--db",
@@ -36,7 +36,7 @@
         }
       ],
       "helpOrder": 29,
-      "help": ["  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]"]
+      "help": ["  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]"]
     }
   ],
   "audience": "both",
