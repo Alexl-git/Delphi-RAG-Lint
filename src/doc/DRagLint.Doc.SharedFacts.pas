@@ -410,6 +410,24 @@ type
     /// </remarks>
     class function StoredBlockBody(const AText: string): string; static;
 
+    /// <summary>The `Calls:` entries the STORED block names that the regenerated
+    /// block no longer names, and that this index cannot vouch for (E-DOC-REFUSE).</summary>
+    /// <param name="AStore">The index the regeneration was made from. Not owned.
+    /// Nil answers ''.</param>
+    /// <param name="AStoredBody">The stored managed block body (StoredBlockBody).</param>
+    /// <param name="AMergedBody">The managed block body about to be written.</param>
+    /// <returns>The lost entries, comma separated; '' when nothing unseen is lost.</returns>
+    /// <remarks>
+    /// Only a DOTTED entry (`uB.Q`) is judged: a bare name (an RTL routine, a
+    /// local) carries no unit to look up. An entry whose unit the index holds is
+    /// ordinary drift and is reaped. An entry whose unit the index does not hold
+    /// is a fact the chosen DB cannot see, so the writer must not delete it: the
+    /// caller refuses the declaration and says so. Inbound labels are kept by
+    /// ReconcileContent instead; this is the outbound half.
+    /// </remarks>
+    class function CallsLostUnseen(const AStore: ISymbolStore; const AStoredBody,
+      AMergedBody: string): string; static;
+
     /// <summary>True when a declaration's inbound lists (`Called from:`,
     /// `Used by:`, `Used in units:`) must be rendered WHOLE -- no
     /// `docs.max_callers` cap, no `(+N more)` window -- because its stored block
@@ -519,6 +537,7 @@ uses
   , System.IOUtils
   , System.Generics.Collections
   , System.Generics.Defaults
+  , System.RegularExpressions
   , DRagLint.Doc.Regions // dl:unit DRagLint.Doc.Regions accepted -- AUTO_BEGIN/AUTO_END/AUTO_MARK are the managed-block fence TDocRegions writes and parses; every reader and writer of a block must share them (B-33 item 1)
   , DRagLint.Doc.ProjectTags { SplitEntries, the [A,B]entry tag grammar, INBOUND_LABELS }
   , DRagLint.Lint.SharedUnit
@@ -2171,6 +2190,38 @@ end;
 class function TSharedFacts.StoredBlockBody(const AText: string): string;
 begin
   Result:= DRagLint.Doc.SharedFacts.StoredBlockBody(AText);
+end;
+
+class function TSharedFacts.CallsLostUnseen(const AStore: ISymbolStore; const AStoredBody,
+  AMergedBody: string): string;
+const
+  CALLS_PATTERN = 'Calls:\s*([^<\r\n]*)</para>';
+  UNSEEN_MORE   = '(+';
+var
+  Kept: TDictionary<string, Byte>;
+  M   : TMatch;
+  E   : string;
+begin
+  Result:= '';
+  if AStore = nil then Exit;
+  M:= TRegEx.Match(AStoredBody, CALLS_PATTERN);
+  if not M.Success then Exit;
+  Kept:= TDictionary<string, Byte>.Create;
+  try
+    var MM: TMatch:= TRegEx.Match(AMergedBody, CALLS_PATTERN);
+    if MM.Success then
+      for E in MM.Groups[1].Value.Split([',']) do Kept.AddOrSetValue(LowerCase(Trim(E)), 0);
+    for E in M.Groups[1].Value.Split([',']) do
+    begin
+      var T: string:= Trim(E);
+      if (T = '') or (not T.Contains('.')) or StartsStr(UNSEEN_MORE, T) then Continue;
+      if Kept.ContainsKey(LowerCase(T)) then Continue;
+      if UnitVouchable(AStore, T) then Continue;
+      Result:= Result + IfThen(Result = '', '', ', ') + T;
+    end;
+  finally
+    Kept.Free;
+  end;
 end;
 
 class function TSharedFacts.WantsWholeInboundLists(const AStoredBody: string;

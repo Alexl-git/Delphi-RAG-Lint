@@ -38,3 +38,7 @@ drag-lint document --unit C:\Projects\MyApp\Unit1.pas --apply --db C:\Projects\M
 
 This would write managed DocInsight comments onto every public declaration
 in `Unit1.pas`.
+
+## Refusals
+
+A declaration whose stored block names `Calls:` entries of a unit the chosen `--db` cannot see is left untouched: `document --apply` prints `doc: REFUSED <qname> ...` on stderr, a summary line, and the JSON `refused` count (`--qname`: `refused` text). Index that unit, or edit the block by hand. Exit code stays 0.

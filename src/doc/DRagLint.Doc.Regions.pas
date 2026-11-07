@@ -3197,6 +3197,23 @@ var
   begin
     Result:= IsEngineOwnedTagText(S);
   end;
+  // E-DOC-ORPHAN-PARAM: a hand tag whose name is not ONE bare parameter name --
+  // a list (`S, WordDelims`) or a modifier-prefixed one (`var Pos`). ParamTagCovers
+  // says whether such a tag names the signature parameter AParam.
+  function IsCompoundParamTag(const AName: string): Boolean;
+  begin
+    Result:= AName.Contains(',') or Trim(AName).Contains(' ');
+  end;
+  function ParamTagCovers(const AName, AParam: string): Boolean;
+  var Part: string; Words: TArray<string>;
+  begin
+    Result:= False;
+    for Part in AName.Split([',']) do
+    begin
+      Words:= Trim(Part).Split([' ']);
+      if (Length(Words) > 0) and SameText(Words[High(Words)], AParam) then Exit(True);
+    end;
+  end;
   // v(PHASE A3, ruling D-3): the MEANING mined for parameter AName, or '' when
   // the source states none. '' is not a failure -- it is the ordinary case, and
   // it produces a <param> tag with an empty body: structure without meaning.
@@ -4006,11 +4023,34 @@ begin
     // is no risk of reading the wrong occurrence's text the way an unkeyed,
     // single-match field would have.
     // existing params first, in signature order where possible
+    var CompoundDone: string:= '|';
     for P in ASigParams do
     begin
       // v(PHASE A3): tracks whether the HAND-WRITTEN arm already emitted this
       // param, so the structural arm below does not write a second tag for it.
       var ParamEmitted: Boolean:= False;
+      // E-DOC-ORPHAN-PARAM: a standalone hand tag naming several real params or
+      // a `var`/`const`/`out`-prefixed one is not stale and not duplicated: it
+      // is kept, once, with its own bytes, and covers every name it lists.
+      for var CP in Eff.Params do
+      begin
+        if not (IsCompoundParamTag(CP.Name) and ParamTagCovers(CP.Name, P)) then Continue;
+        var CompoundStandalone: Boolean:= False;
+        for var SP in StandaloneParam.Params do
+          if SameText(SP.Name, CP.Name) then
+          begin
+            CompoundStandalone:= True;
+            Break;
+          end;
+        if not CompoundStandalone then Continue;
+        ParamEmitted:= True;
+        if not CompoundDone.Contains('|' + LowerCase(CP.Name) + '|') then
+        begin
+          CompoundDone:= CompoundDone + LowerCase(CP.Name) + '|';
+          Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'param', '<param name="' + CP.Name + '">', CP.Desc, '</param>'));
+        end;
+      end;
+      if not ParamEmitted then
       for var EP in Eff.Params do
         if SameText(EP.Name, P) then
         begin
@@ -4085,12 +4125,21 @@ begin
     for var EP in Eff.Params do
     begin
       var StillThere: Boolean:= False;
-      for P in ASigParams do if SameText(EP.Name, P) then begin StillThere:= True; Break; end;
+      for P in ASigParams do
+        if SameText(EP.Name, P) or (IsCompoundParamTag(EP.Name) and ParamTagCovers(EP.Name, P)) then
+        begin
+          StillThere:= True;
+          Break;
+        end;
       var IsStandaloneParam: Boolean:= False;
       for var SP in StandaloneParam.Params do
         if SameText(SP.Name, EP.Name) then begin IsStandaloneParam:= True; Break; end;
+      // E-DOC-ORPHAN-PARAM: the orphan keeps its own bytes (blanks inside the
+      // tag); only the trailing marker is appended to its last line.
       if (not StillThere) and (not IsManagedDesc(EP.Desc)) and IsStandaloneParam then
-        Sb.AppendLine(EmitTagged('<param name="' + EP.Name + '">', EP.Desc, '</param> <!-- drag-lint: param no longer exists -->'));
+        Sb.AppendLine(EmitPreserved(StringReplace(Eff.RawBlock, ' <!-- drag-lint: param no longer exists -->', '', [rfReplaceAll]),
+            LinePrefix, 'param', '<param name="' + EP.Name + '">', EP.Desc, '</param>')
+          + ' <!-- drag-lint: param no longer exists -->');
     end;
 
     if AHasReturn then

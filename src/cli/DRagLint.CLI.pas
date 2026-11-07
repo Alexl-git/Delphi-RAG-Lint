@@ -21675,6 +21675,7 @@ begin
       O.AddPair('edits'    , TJSONNumber.Create(Length(Res.Edits)));
       O.AddPair('applied'  , TJSONBool.Create(Applied));
       O.AddPair('accessorsSkipped', TJSONNumber.Create(Res.AccessorsSkipped)); // ADP1 T2
+      O.AddPair('refused', TJSONNumber.Create(Res.Refused)); // E-DOC-REFUSE
       Writeln(O.ToJson);
     finally
       O.Free;
@@ -21688,6 +21689,7 @@ begin
   // ADP1 T2: report the trivial-accessor skip count (0 = filter found nothing to
   // skip, or --include-accessors disabled it -- either way, nothing to print).
   if Res.AccessorsSkipped > 0 then Writeln(Format('doc: %d trivial accessor(s) skipped (pass --include-accessors to include)', [Res.AccessorsSkipped]));
+  if Res.Refused > 0 then Writeln(Format('doc: %d declaration(s) REFUSED -- left untouched, their blocks name facts this --db cannot see (see stderr)', [Res.Refused]));
   Result:= 0;
 end; // function
 
@@ -21737,6 +21739,7 @@ begin
       O.AddPair('edits'    , TJSONNumber.Create(Length(ARes.Edits)));
       O.AddPair('applied'  , TJSONBool.Create(Applied));
       O.AddPair('accessorsSkipped', TJSONNumber.Create(ARes.AccessorsSkipped)); // ADP1 T2
+      O.AddPair('refused', TJSONNumber.Create(ARes.Refused)); // E-DOC-REFUSE
       // v(PHASE A2): ADDITIVE key. A --json consumer must be able to learn that
       // some sites were refused -- without it the text path reports a refusal
       // and the machine path silently claims success. 0 on every healthy run.
@@ -21754,6 +21757,7 @@ begin
   else Writeln(Format('doc: %d/%d decl(s) documented, %d edit(s) applied%s', [ARes.DocCount, ARes.DeclCount, Length(ARes.Edits), IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
   // ADP1 T2: report the trivial-accessor skip count (shared by document --project / document-all).
   if ARes.AccessorsSkipped > 0 then Writeln(Format('doc: %d trivial accessor(s) skipped (pass --include-accessors to include)', [ARes.AccessorsSkipped]));
+  if ARes.Refused > 0 then Writeln(Format('doc: %d declaration(s) REFUSED -- left untouched, their blocks name facts this --db cannot see (see stderr)', [ARes.Refused]));
   Result:= 0;
   // v(PHASE A2): reported LAST so the counts above still print -- a refusal is
   // partial, not total: the sites whose anchors verified were written.
@@ -22428,6 +22432,7 @@ begin
         DRagLint.Doc.Document.daUnchanged: O.AddPair('action', 'unchanged');
         else O.AddPair('action', 'unknown' );
       end;
+      if Res.Refused <> '' then O.AddPair('refused', Res.Refused); // E-DOC-REFUSE
       O.AddPair('edits', TJSONNumber.Create(Length(Res.Edits)));
       O.AddPair('applied', TJSONBool.Create(Applied));
       Writeln(O.ToJson);
@@ -22437,7 +22442,8 @@ begin
     Exit(0);
   end; // if
 
-  if Res.Action = DRagLint.Doc.Document.daUnchanged then Writeln('doc: up to date (no change)')
+  if Res.Refused <> '' then Writeln('doc: ' + Res.Refused) // E-DOC-REFUSE: unchanged on purpose, not "up to date"
+  else if Res.Action = DRagLint.Doc.Document.daUnchanged then Writeln('doc: up to date (no change)')
   else if not AArgs.Apply then begin Writeln(TTextEditApplier.RenderDryRun(Res.Edits)); Writeln(Format('doc: %d edit(s) -- pass --apply to write', [Length(Res.Edits)])); end
   else Writeln(Format(
       'doc: %s -- %d edit(s) applied%s',
