@@ -1948,6 +1948,18 @@ begin
   Check('convertrun.order.book2.alone', BookOrderNote(['c\DataDB-to-FireDAC.rules']) = '');
   Check('convertrun.order.nocase', BookOrderNote(['x\datadb-to-firedac.RULES', 'x\bde-to-firedac.rules', 'x\Other.rules']) <> '');
   Check('convertrun.order.other.books', BookOrderNote(['x\Other.rules', 'x\BDE-to-FireDAC.rules']) = '');
+  // --- UnappliedClassNotes (C-PRECHECK-UNAPPLIED): a ruled class this run does not apply ---
+  begin
+    var LDfm: string:= 'object F: TF' + #13#10 + '  object T1: TTable' + #13#10 + '  end' + #13#10 + '  object T2: TTable' + #13#10 + '  end' + #13#10
+      + '  inherited T3: Data.DB.TTable' + #13#10 + '  object B: TButton' + #13#10 + '  end' + #13#10 + 'end' + #13#10;
+    var LBde: string:= '#convert TTable -> TFDTable' + #13#10;
+    var LNotes: TArray<string>:= UnappliedClassNotes(['#convert TButton -> TcxButton'], [LBde], ['A.dfm', 'B.dfm'], [LDfm, LDfm]);
+    Check('convertrun.unapplied.reported', (Length(LNotes) = 1) and (Pos('TTable: 6 component(s) in 2 .dfm', LNotes[0]) = 1), string.Join(' | ', LNotes));
+    Check('convertrun.unapplied.applied.silent', Length(UnappliedClassNotes([LBde], [], ['A.dfm'], [LDfm])) = 0);
+    Check('convertrun.unapplied.noRule.silent', Length(UnappliedClassNotes([], [], ['A.dfm'], [LDfm])) = 0);
+    Check('convertrun.unapplied.otherClass.silent', Length(UnappliedClassNotes([], ['#convert TQuery -> TFDQuery'], ['A.dfm'], [LDfm])) = 0);
+    Check('convertrun.unapplied.noDfm', Length(UnappliedClassNotes([], [LBde], [], [])) = 0);
+  end;
   Books:= [Default(TBookEntry), Default(TBookEntry)];
   Books[0].Path:= 'c\DataDB-to-FireDAC.rules';
   Books[0].Checked:= True;
