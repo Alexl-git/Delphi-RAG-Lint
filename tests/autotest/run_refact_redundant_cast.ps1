@@ -91,6 +91,10 @@ try {
   $dropped.Remove($firstFix)
   Check 'P1 control: the comparer sees a dropped fix' (@(Compare-Map $want $dropped).Count -gt 0)
   Check 'D4 the real conversions are counted, not listed' ([int]$plan.not_identity -ge 2) "$($plan.not_identity)"
+  $byClass = @($plan.not_identity_by)
+  $bySum = 0; foreach ($c in $byClass) { $bySum += [int]$c.count }
+  Check 'D4b not_identity_by adds up to not_identity, one example each' (($byClass.Count -ge 1) -and ($bySum -eq [int]$plan.not_identity) -and (@($byClass | Where-Object { -not $_.example }).Count -eq 0)) "sum $bySum of $($plan.not_identity)"
+  Check 'D4c an upcast and a downcast are named' ((@($byClass | Where-Object class -eq 'upcast').Count -eq 1) -and (@($byClass | Where-Object class -eq 'downcast').Count -eq 1)) (($byClass | ForEach-Object { "$($_.class)=$($_.count)" }) -join ' ')
   $reasonless = @($plan.refused | Where-Object { [string]::IsNullOrWhiteSpace($_.reason) -or [string]::IsNullOrWhiteSpace($_.kind) })
   Check 'D5 every refusal has a name and a reason' ($reasonless.Count -eq 0)
   Check 'D6 the dry run wrote nothing' ((Tree-Hash $A.Dir) -ceq $before)
