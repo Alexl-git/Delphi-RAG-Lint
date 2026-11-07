@@ -141,6 +141,7 @@ uses
   , DRagLint.Refactor.RedundantCast { lane 144 item 1: the gated redundant-cast fix }
   , DRagLint.Refactor.NarrowParam   { lane 144 item 2: narrow-param }
   , DRagLint.Refactor.ExtractInterface   { lane 146 g3: extract-interface }
+  , DRagLint.Refactor.LazyInit   { lane 146 g3: lazy-init }
   , DRagLint.Lint.TargetCompiler { --target-compiler: ResolveTargetCompiler, TTargetRuleGate (1.38) }
   , DRagLint.Project.TargetStudio { GH #13: the library path of the project's Delphi }
   { DRagLint.Core.Model moved to the INTERFACE uses (for DRAGLINT_VERSION); it
@@ -16997,6 +16998,28 @@ begin
   Result:= RunExtractInterface(Store, RefactorLibraries(AArgs), Opts);
 end;
 
+{ lane 146 g3: lazy-init }
+function DoLazyInit(const AArgs: TArgs): Integer;
+begin
+  var Opts:= Default(TLazyInitOptions);
+  Opts.UnitName    := AArgs.GhostUnit;
+  Opts.All         := AArgs.IndexAll;
+  Opts.RoutineName := AArgs.Name;
+  Opts.Project     := AArgs.ProjectPath;
+  Opts.Platform    := AArgs.CheckPlatform;
+  Opts.RsVars      := AArgs.CycleRsVars;
+  Opts.BuildTimeout:= AArgs.CycleBuildTimeout;
+  Opts.Apply       := AArgs.Apply;
+  Opts.NoBackup    := AArgs.NoBackup;
+  Opts.NoCompile   := AArgs.NoCompile;
+  Opts.Json        := AArgs.AsJson or SameText(AArgs.Format, 'json');
+  if not ExplicitDbsExist(AArgs, 'lazy-init') then Exit(2);
+  if NoDbResolved(AArgs.DbPath, 'lazy-init') then Exit(2);
+  var Ok: Boolean;
+  var Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+  if not Ok then Exit(2);
+  Result:= RunLazyInit(Store, Opts);
+end;
 { O2 (1.45): the type oracle for the .scm rules of `lint <file>`, which run BEFORE the flow store below
   is opened. Same membership rule as that block (the --db first, then ResolveConsumerDbs, the
   index must CONTAIN the file), a second read-only open. nil when no index owns the file: the
@@ -38621,6 +38644,7 @@ begin
     else if Args.Command = 'cycles'            then Result:= DoCycles          (Args)
     else if Args.Command = 'narrow-param'      then Result:= DoNarrowParam     (Args)
     else if Args.Command = 'extract-interface' then Result:= DoExtractInterface(Args)
+    else if Args.Command = 'lazy-init'         then Result:= DoLazyInit        (Args)
     else if Args.Command = 'uses-audit'        then Result:= DoUsesAudit       (Args)
     else if Args.Command = 'uses-fix'          then Result:= DoUsesFix         (Args)
     else if Args.Command = 'forms-csv'         then Result:= DoFormsCsv        (Args)

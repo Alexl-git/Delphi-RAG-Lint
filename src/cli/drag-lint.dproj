@@ -235,6 +235,7 @@
         <DCCReference Include="..\refactor\DRagLint.Refactor.NarrowParam.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.ScratchGate.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.ExtractInterface.pas"/>
+        <DCCReference Include="..\refactor\DRagLint.Refactor.LazyInit.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.DocStub.pas"/>
         <DCCReference Include="..\doc\DRagLint.Doc.GitSince.pas"/>
         <DCCReference Include="..\doc\DRagLint.Doc.Facts.pas"/>
