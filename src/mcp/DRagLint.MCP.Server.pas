@@ -500,6 +500,7 @@ implementation
 
 uses
   DRagLint.Refactor.RenameProof, // dl:ok uses-global-census@7543 -- its consts and routines are the public surface
+  DRagLint.Refactor.MultiProjectRename,
   Winapi.Windows
   , DRagLint.Doc.Regions
   , DRagLint.Query.Implementors { get_implementors (interface report, 1.40) }
@@ -1614,7 +1615,17 @@ begin
           var RenLibs: TArray<ISymbolStore>:= nil;
           if Args.GetValue('library_db') <> nil then
             RenLibs:= [TSQLiteSymbolStore.Create(Args.GetValue('library_db').Value, True) as ISymbolStore];
-          var RenProof:= ProveRename(RenStore, RenLibs, RenQName, RenTo);
+          var RenOwners:= Default(TRenameOwnersRequest);
+          RenOwners.ExeDir:= ExtractFilePath(ParamStr(0));
+          if Args.GetValue('db') <> nil then RenOwners.PrimaryDb:= Args.GetValue('db').Value
+          else if Length(FDbPaths) > 0 then RenOwners.PrimaryDb:= FDbPaths[0];
+          if Args.GetValue('project') <> nil then RenOwners.PrimaryProject:= Args.GetValue('project').Value;
+          RenOwners.QName:= RenQName;
+          RenOwners.NewName:= RenTo;
+          RenOwners.Libraries:= RenLibs;
+          RenOwners.Writing:= True;
+          var RenReach:= RenameAcrossOwners(RenOwners, ProveRename(RenStore, RenLibs, RenQName, RenTo));
+          var RenProof:= RenReach.Proof;
           RenEdits:= RenProof.Edits;
           RenEditsJson:= FormatRenameEditsAsJson(RenEdits);
           if Length(RenProof.Refusals) > 0 then
@@ -1630,6 +1641,7 @@ begin
           begin
             var RenOpts:= Default(TRenameGateOptions);
             RenOpts.Project:= Args.GetValue('project').Value;
+            RenOpts.AlsoProjects:= RenReach.AlsoProjects;
             var RenGate:= ApplyRenameGated(RenEdits, RenOpts);
             RenApplied:= RenGate.Applied;
             if RenApplied then RenFilesTouched:= Length(RenGate.Tx.Written)

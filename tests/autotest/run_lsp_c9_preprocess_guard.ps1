@@ -27,7 +27,9 @@
                      answered from the index, which already preprocesses (one
                      symbol per routine, the interface declaration's range) --
                      pinned so a regression on either side shows here.
-    rename           renaming Twice edits lines 7, 11, 19, 31 and NEVER line 24.
+    rename           E-RENAME-OTHER-PATHS supersedes the C9 decision below for a new name: the LSP runs the proof, so a
+                     token in an inactive branch REFUSES Twice -> Double ([no-ref-occurrence], line 24). A re-casing
+                     (TWICE), which cannot change a binding, still edits lines 7, 11, 19, 31 and NEVER line 24.
                      DECISION (C9): text inside an inactive branch is not
                      renamed. The edit list comes from the index store, which
                      is built from preprocessed text, so the inactive call is
@@ -47,6 +49,8 @@ param(
 . (Join-Path $PSScriptRoot 'exe-hint.ps1')   # Get-ExeStartFailureHint (GUARD-0XC07B)
 try {
 $ErrorActionPreference = 'Stop'
+# E-RENAME-OTHER-PATHS: a naming fix or LSP rename now runs the rename proof, and these fixtures have no library: the proof's own test seam.
+$env:DRAGLINT_RENAME_TEST_UNGATED = '1'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }
@@ -119,6 +123,7 @@ function LspSession([string[]]$Extra) {
   $m += Frame @{ jsonrpc='2.0'; id=12; method='textDocument/inlayHint'; params=@{ textDocument=$td; range=@{ start=@{ line=0; character=0 }; end=@{ line=40; character=0 } } } }
   $m += Frame @{ jsonrpc='2.0'; id=13; method='textDocument/documentSymbol'; params=@{ textDocument=$td } }
   $m += Frame @{ jsonrpc='2.0'; id=14; method='textDocument/rename'; params=@{ textDocument=$td; position=@{ line=10; character=9 }; newName='Double' } }
+  $m += Frame @{ jsonrpc='2.0'; id=15; method='textDocument/rename'; params=@{ textDocument=$td; position=@{ line=10; character=9 }; newName='TWICE' } }
   $m += Frame @{ jsonrpc='2.0'; id=2; method='shutdown'; params=@{} }
   $m += Frame @{ jsonrpc='2.0'; method='exit'; params=@{} }
   $inF = Join-Path $WorkDir 'in.txt'; $outF = Join-Path $WorkDir 'out.txt'
@@ -135,7 +140,7 @@ function LspSession([string[]]$Extra) {
     $start = $i + $mm.Index + $mm.Length; $len = [int]$mm.Groups[1].Value
     if ($start + $len -gt $out.Length) { break }
     $o = $out.Substring($start, $len) | ConvertFrom-Json
-    if ($null -ne $o.id -and [int]$o.id -gt 10) { $res[[int]$o.id] = $o.result }
+    if ($null -ne $o.id -and [int]$o.id -gt 10) { $res[[int]$o.id] = $o.result; if ($null -ne $o.error) { $res[[int]$o.id + 100] = $o.error.message } }
     $i = $start + $len
   }
   return $res
@@ -178,7 +183,7 @@ $cd = "CurDir at=[" + (($cur | ForEach-Object { '{0}:{1}-{2}' -f ([int]$_.range.
 Check 'documentSymbol: CurDir listed once, range line 5 col 0-24' ($cur.Count -eq 1 -and [int]$cur[0].range.start.line -eq 4 -and [int]$cur[0].range.start.character -eq 0 -and [int]$cur[0].range.end.character -eq 24) $cd
 
 $edits = @()
-$ren = $pp[14]
+$ren = $pp[15]  # a re-casing: the proof of id 14 refuses, see below
 if ($null -ne $ren -and $null -ne $ren.changes) {
   foreach ($p in $ren.changes.PSObject.Properties) { $edits += @($p.Value | ForEach-Object { [int]$_.range.start.line + 1 }) }
 }
@@ -186,8 +191,9 @@ if ($null -ne $ren -and $null -ne $ren.documentChanges) {
   foreach ($dc in @($ren.documentChanges)) { $edits += @($dc.edits | ForEach-Object { [int]$_.range.start.line + 1 }) }
 }
 $ed = "edits=[" + (($edits | Sort-Object) -join ',') + "]"
-Check 'rename Twice: edits 7, 11, 19, 31 (POSITIVE CONTROL: it renames)' ((($edits | Sort-Object -Unique) -join ',') -eq '7,11,19,31') $ed
-Check 'rename Twice: never edits the inactive branch (24)' ($edits -notcontains 24) $ed
+Check 're-casing Twice: edits 7, 11, 19, 31 (POSITIVE CONTROL: it renames)' ((($edits | Sort-Object -Unique) -join ',') -eq '7,11,19,31') $ed
+Check 're-casing Twice: never edits the inactive branch (24)' ($edits -notcontains 24) $ed
+Check 'rename Twice -> Double: refused, the token in the inactive branch (24) is undecided' ($null -eq $pp[14] -and $pp[114] -match ':24:\d+: refused \[no-ref-occurrence\]') "err=$($pp[114])"
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

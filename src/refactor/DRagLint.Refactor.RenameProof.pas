@@ -86,6 +86,12 @@ const
   CRefuseNoProject = 'no-project';
   /// <summary>--apply with --no-compile: the gate is not optional.</summary>
   CRefuseNoCompile = 'no-compile';
+  /// <summary>A registry library's index holds an edited file: a library unit is not project code.</summary>
+  CRefuseOwnerLibrary = 'owner-library';
+  /// <summary>An index that may own an edited file could not be asked, so some project may be missed.</summary>
+  CRefuseOwnerUnknown = 'owner-unknown';
+  /// <summary>A project that owns an edited file has an index nothing can trust, or does not hold the target.</summary>
+  CRefuseOwnerUnverified = 'owner-unverified';
 
 type
   /// <summary>One occurrence, or one fact about the target, that stops the rewrite.</summary>
@@ -132,6 +138,8 @@ type
     BuildTimeoutSecs: Integer;
     /// <summary>--no-backup.</summary>
     NoBackup: Boolean;
+    /// <summary>The other projects that compile the edited units: built before and after, as Project is.</summary>
+    AlsoProjects: TArray<string>;
   end;
 
 /// <summary>Proves a store-backed rename: every token of the old name becomes an edit, another symbol's, or a refusal;
@@ -2329,6 +2337,7 @@ begin
   Req.Verb    := 'rename';
   Req.RsVars  := if pOpts.RsVars <> '' then ExpandFileName(pOpts.RsVars) else '';
   Req.NoBackup:= pOpts.NoBackup;
+  Req.AlsoProjects:= pOpts.AlsoProjects;
   Req.Header  := Format('[%s] rename --apply: %d edit(s)', [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), Length(pEdits)]);
   Req.LogDir  := FreshScratchName('_build');
   Result:= ApplyGated(Req);

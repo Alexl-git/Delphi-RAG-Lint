@@ -1059,6 +1059,7 @@ function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string; f
   wraps RefreshProjectIndex, which sits beside convert-apply far below. }
 function ReindexOwnerProject(const AProjectFile, ADbPath: string): Boolean; forward;
 function ResolveLibraryDb(const AArgs: TArgs): string        ; forward;
+function RefactorLibraries(const AArgs: TArgs): TArray<ISymbolStore>; forward;
 function OpenLibraryStores(const AArgs: TArgs): TArray<ISymbolStore>; forward;
 function FindCalleesLibraryDb(const AArgs: TArgs; var AProjectDb: string): string; forward;
 function LintLibraryDb     (const AArgs: TArgs): string        ; forward;
@@ -14780,7 +14781,7 @@ begin
           begin
             Result:= ReindexOwnerProject(AProjectFile, ADbPath);
           end;
-      Plan:= PlanMultiProjectRename(Disc, FindingsInFile(ATargets, Path), ANaming, Reindex);
+      Plan:= PlanMultiProjectRename(Disc, FindingsInFile(ATargets, Path), ANaming, Reindex, RefactorLibraries(AArgs));
       EmitRenamePlan(Plan, AArgs.AsJson or SameText(AArgs.Format, 'json'));
       Result.Plans:= Result.Plans + Plan.Targets;
     end; // for
@@ -15272,11 +15273,19 @@ begin
         var NFCount: Integer;
         var NFSkipped: Integer;
         var NFStale: Integer;
-        var NFEdits: TArray<TTextEdit>:= DRagLint.Refactor.NamingFix.BuildNamingFixEdits(AStore, NamingTargets, Cfg.Naming, NFCount, NFSkipped, NFStale);
+        var NFRefused: TArray<string>;
+        var NFEdits: TArray<TTextEdit>:= DRagLint.Refactor.NamingFix.BuildNamingFixEdits(AStore, RefactorLibraries(AArgs), NamingTargets, Cfg.Naming, NFCount, NFSkipped, NFStale, NFRefused);
         if Length(NFEdits) > 0 then
         begin
           Edits:= Edits + NFEdits;
           Inc(FixCount, NFCount);
+        end;
+        { E-RENAME-OTHER-PATHS: the proof `rename --apply` runs refused these; a preview says the same as the apply. }
+        if Length(NFRefused) > 0 then
+        begin
+          Writeln(ErrOutput, Format('skipped (not-proved): %d -- every occurrence must be decided before a naming fix writes; nothing was written for it.', [Length(NFRefused)]));
+          for var NR in NFRefused do Writeln(ErrOutput, 'drag-lint: note: ' + NR);
+          if (AArgs.FixLine > 0) and (Rename.Refusal = '') then Rename.Refusal:= string.Join('; ', NFRefused);
         end;
         Inc(NFSkippedTotal, NFSkipped);
         Inc(NFStaleTotal, NFStale);
@@ -25068,12 +25077,47 @@ begin
   Result:= RefactorLibraries(AArgs);
 end;
 
+{ --project, or the project a DB at its proper place belongs to: <folder>\_D-RAG\<base>.sqlite is <folder>\<base>.dproj's
+  (the IDE's Rename Symbol passes --db only). '' when neither. }
+function RenameGateProject(const AArgs: TArgs): string;
+begin
+  Result:= if AArgs.ProjectFromConfig then '' else AArgs.ProjectPath;
+  if (Result = '') and SameText(ExtractFileName(ExcludeTrailingPathDelimiter(ExtractFilePath(AArgs.DbPath))), '_D-RAG') then
+  begin
+    var Sibling:= TPath.Combine(ExtractFilePath(ExcludeTrailingPathDelimiter(ExtractFilePath(AArgs.DbPath))),
+      ChangeFileExt(ExtractFileName(AArgs.DbPath), '.dproj'));
+    if TFile.Exists(Sibling) then Result:= Sibling;
+  end;
+end;
+
+{ E-RENAME-MULTIPROJECT: a rename in a unit other projects compile. pQName = '' is routine-local. Only a real write
+  reindexes a stale owner (the naming fix's Ruling 12). }
+function RenameReach(const AArgs: TArgs; const pProof: TRenameProof; const pQName: string; pWriting: Boolean): TRenameReach;
+begin
+  var Req:= Default(TRenameOwnersRequest);
+  Req.ExeDir        := ExtractFilePath(ParamStr(0));
+  Req.Platform      := AArgs.CheckPlatform;
+  Req.PrimaryDb     := AArgs.DbPath;
+  Req.PrimaryProject:= RenameGateProject(AArgs);
+  Req.QName         := pQName;
+  Req.NewName       := AArgs.RenameTo;
+  Req.Libraries     := if pQName <> '' then RenameLibraries(AArgs) else nil;
+  Req.Writing       := pWriting;
+  if pWriting then
+    Req.Reindex:= function(pProject, pDb: string): Boolean
+      begin
+        Result:= ReindexOwnerProject(pProject, pDb);
+      end;
+  Result:= RenameAcrossOwners(Req, pProof);
+end;
+
 { Lane 144 item 3: the tail every rename path shares. --plan reports and exits 0; a dry run lists the proved edits and
   notes the rest; --apply refuses whatever is not proved, exit 2, and writes only through the compile gate. }
-function FinishRename(const AArgs: TArgs; const pProof: TRenameProof; const pQName: string; pApply: Boolean): Integer; // dl:ok too-many-exit-points@4223 -- one Exit per outcome of the verb, each with its own exit code
+function FinishRename(const AArgs: TArgs; const pProof: TRenameProof; const pQName: string; pApply: Boolean; const pReach: TRenameReach): Integer; // dl:ok too-many-exit-points@b3f2 -- one Exit per outcome of the verb, each with its own exit code
 const
   CRefused = 'ERROR: cannot rename -- ';
 begin
+  for var N in pReach.Notes do Writeln(ErrOutput, 'drag-lint: note: ' + N);
   if AArgs.Plan then
   begin
     if AArgs.AsJson then Writeln(RenamePlanJson(pProof, pQName, AArgs.RenameTo))
@@ -25081,6 +25125,12 @@ begin
     begin
       Writeln(TRenameRefactoring.RenderDryRun(pProof.Edits));
       Writeln(RenderRenamePlan(pProof, pQName, AArgs.RenameTo));
+    end;
+    if Length(pReach.AlsoProjects) > 0 then
+    begin
+      var AlsoLine:= 'also: the gate builds ' + string.Join(', ', pReach.AlsoProjects);
+      if AArgs.AsJson then Writeln(ErrOutput, AlsoLine) { stdout stays one JSON document }
+      else Writeln(AlsoLine);
     end;
     Exit(0);
   end;
@@ -25136,15 +25186,7 @@ begin
     Writeln(Format('Applied: %d edit(s), %d file(s).', [Length(pProof.Edits), Touched]));
     Exit(0);
   end;
-  { --project, or the project a DB at its proper place belongs to: <folder>\_D-RAG\<base>.sqlite is <folder>\<base>.dproj's
-    (the IDE's Rename Symbol passes --db only). }
-  var GateProject:= if AArgs.ProjectFromConfig then '' else AArgs.ProjectPath;
-  if (GateProject = '') and SameText(ExtractFileName(ExcludeTrailingPathDelimiter(ExtractFilePath(AArgs.DbPath))), '_D-RAG') then
-  begin
-    var Sibling:= TPath.Combine(ExtractFilePath(ExcludeTrailingPathDelimiter(ExtractFilePath(AArgs.DbPath))),
-      ChangeFileExt(ExtractFileName(AArgs.DbPath), '.dproj'));
-    if TFile.Exists(Sibling) then GateProject:= Sibling;
-  end;
+  var GateProject:= RenameGateProject(AArgs);
   if GateProject = '' then
   begin
     Writeln(CRefused + 'refused [' + CRefuseNoProject + ']: rename --apply writes through the compile gate: pass --project <X.dproj>');
@@ -25156,14 +25198,19 @@ begin
   Opts.RsVars          := AArgs.CycleRsVars;
   Opts.BuildTimeoutSecs:= StrToIntDef(AArgs.CycleBuildTimeout, 0);
   Opts.NoBackup        := AArgs.NoBackup;
+  Opts.AlsoProjects    := pReach.AlsoProjects;
   var Gate:= ApplyRenameGated(pProof.Edits, Opts);
   if not Gate.Applied then
   begin
     Writeln(CRefused + 'refused [' + Gate.Refusal + ']: ' + Gate.Detail);
     Exit(if Gate.RollbackFailed then 2 else 1);
   end;
-  Writeln(Format('Applied: %d edit(s), %d file(s); the compile gate built the project before and after (%d after-build(s)).',
-    [Length(pProof.Edits), CountDistinctFiles(pProof.Edits), Gate.After.Builds]));
+  if Length(pReach.AlsoProjects) > 0 then
+    Writeln(Format('Applied: %d edit(s), %d file(s); the compile gate built %d project(s) before and after (%d after-build(s)): %s, %s.',
+      [Length(pProof.Edits), CountDistinctFiles(pProof.Edits), Length(pReach.AlsoProjects) + 1, Gate.After.Builds, GateProject, string.Join(', ', pReach.AlsoProjects)]))
+  else
+    Writeln(Format('Applied: %d edit(s), %d file(s); the compile gate built the project before and after (%d after-build(s)).',
+      [Length(pProof.Edits), CountDistinctFiles(pProof.Edits), Gate.After.Builds]));
   for var B in Gate.Tx.Backups do Writeln('  ' + B);
   Result:= 0;
 end;
@@ -25202,7 +25249,8 @@ begin
         Writeln('No edits computed.');
         Exit(1);
       end;
-      Exit(FinishRename(AArgs, Proof, AArgs.InFile, AArgs.Apply));
+      var LReach:= RenameReach(AArgs, Proof, '', AArgs.Apply and not AArgs.Plan);
+      Exit(FinishRename(AArgs, LReach.Proof, AArgs.InFile, AArgs.Apply, LReach));
     end
     else if SameText(AArgs.Kind, 'symbol') then
     begin
@@ -25262,7 +25310,8 @@ begin
         Writeln('No edits computed.');
         Exit(1);
       end;
-      Exit(FinishRename(AArgs, Proof, QN, AArgs.Apply));
+      var KReach:= RenameReach(AArgs, Proof, QN, AArgs.Apply and not AArgs.Plan);
+      Exit(FinishRename(AArgs, KReach.Proof, QN, AArgs.Apply, KReach));
     end // if
     else
     begin
@@ -25316,7 +25365,8 @@ begin
     if Hint <> '' then Writeln(Hint);
     Exit(1);
   end;
-  Result:= FinishRename(AArgs, Proof, AArgs.QName, not AArgs.DryRun);
+  var Reach:= RenameReach(AArgs, Proof, AArgs.QName, not AArgs.DryRun and not AArgs.Plan);
+  Result:= FinishRename(AArgs, Reach.Proof, AArgs.QName, not AArgs.DryRun, Reach);
 end; // function
 
 // v0.26: drag-lint compile-check <target.dproj|.pas> [--db PATH] [--format json|text]
