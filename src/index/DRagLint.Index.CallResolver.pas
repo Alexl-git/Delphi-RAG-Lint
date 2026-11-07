@@ -7578,7 +7578,27 @@ begin
         CurText:= NormalizeTypeLeaf(SegMember.Signature);
         StopIx := SegIx + 1;
       end;
-      ChainType:= if SegMember.Id > 0 then DerefPointerAlias(ResolveTypeNameToSymbol(SegMember.Signature, ACallRef.FileId)) else 0;
+      { 146 b8: no field or property of the name: the single certain method callable
+        with no arguments stands for its result, `H.Get.Next` as `H.Get().Next`. A
+        procedure, a required argument or an override pair ends the walk as before.
+        Pinned by tests\autotest\run_parenless_chain_bind.ps1. }
+      var SegRetType: string:= '';
+      var SegRetFile: Int64:= 0;
+      if SegMember.Id <= 0 then
+      begin
+        var SegConf: string;
+        var SegFn: Int64:= LookupMethodOnType(ChainType, Segs[SegIx], 0, True, SegConf);
+        if (SegFn > 0) and (SegConf = 'certain') and IsParenlessCallable(SymbolById(SegFn)) then
+        begin
+          SegRetType:= SignatureReturnType(SymbolById(SegFn).Signature);
+          SegRetFile:= SymbolById(SegFn).FileId;
+          CurText   := NormalizeTypeLeaf(SegRetType);
+          StopIx    := SegIx + 1;
+        end;
+      end;
+      ChainType:= if SegMember.Id > 0 then DerefPointerAlias(ResolveTypeNameToSymbol(SegMember.Signature, ACallRef.FileId))
+                  else if SegRetType <> '' then DerefPointerAlias(ResolveTypeNameToSymbol(SegRetType, SegRetFile))
+                  else 0;
       Inc(SegIx);
     end;
     if ChainType > 0 then
