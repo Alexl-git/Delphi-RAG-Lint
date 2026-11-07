@@ -17,7 +17,7 @@ drag-lint lsp --db <file.sqlite>
 ### Proxy mode: merging drag-lint into DelphiLSP
 
 ```
-drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits <32|64>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]
+drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits <32|64>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-navigation] [--merge-budget-ms <n>]
 ```
 
 `--delphi-lsp-bits 32` forwards to `bin\DelphiLSP.exe` (the 32-bit server the IDE launches
@@ -45,6 +45,12 @@ drag-lint add to those answers:
   `textDocument/references` and `workspace/symbol` itself from the index;
   those requests are never forwarded (one reply each, `[]` when no index
   opens). OFF by default.
+- `--merge-navigation` -- answer the type and call hierarchy,
+  `textDocument/typeDefinition`, `textDocument/documentHighlight` and
+  `textDocument/foldingRange` in the proxy, with exactly what plain `lsp` answers.
+  Decided per provider from DelphiLSP's `initialize` reply: one it lacks (absent,
+  `false` or `null`) is added and answered here, never forwarded (one reply, `[]`
+  when no index opens); one it advertises stays DelphiLSP's. OFF by default.
 - `--merge-budget-ms <n>` -- the per-frame time budget of a merge handler
   (default 300). A handler that overruns it, raises, or cannot open the index
   makes the proxy forward DelphiLSP's original bytes untouched; merging fails

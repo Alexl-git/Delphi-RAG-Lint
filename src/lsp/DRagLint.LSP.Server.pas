@@ -2092,6 +2092,17 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ComputeReferences(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
+      /// <summary>What a registered LSP feature answers for a request, without
+      /// writing it anywhere: the merge proxy's way to serve a feature (stdout is
+      /// the relay's, never this server's, in that mode).</summary>
+      /// <param name="AMethod">The LSP method name.</param>
+      /// <param name="AParams">The request's params; may be nil. Stays the caller's.</param>
+      /// <returns>A NEW value the caller owns (JSON null included); nil when no
+      /// feature owns AMethod or the feature answered with an error (one stderr
+      /// line).</returns>
+      /// <remarks>Takes the same work lock a request takes in plain mode. A raising
+      /// feature raises through to the caller, which fails open.</remarks>
+      function ComputeFeatureResult(const AMethod: string; const AParams: TJSONObject): TJSONValue;
       /// <summary>The body `workspace/symbol` answers for a query.</summary>
       /// <param name="AQuery">The client's query; '' answers an empty array.</param>
       /// <returns>A NEW SymbolInformation[] array, possibly empty; the caller owns it.</returns>
@@ -2274,9 +2285,21 @@ type
     function CallerCounts(const APath: string): TJSONArray;
     function HoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
     function Linter: TLinter;
-    procedure Reply(const AId: TJSONValue; AResult: TJSONValue);
-    procedure ReplyError(const AId: TJSONValue; ACode: Integer; const AMessage: string);
+    procedure Reply(const AId: TJSONValue; AResult: TJSONValue); virtual;
+    procedure ReplyError(const AId: TJSONValue; ACode: Integer; const AMessage: string); virtual;
     procedure Notify(const AMethod: string; AParams: TJSONObject);
+  end;
+
+  { The context TLSPServer.ComputeFeatureResult hands a feature: keeps the reply
+    instead of writing it to stdout. One instance per call. }
+  TLspCaptureContext = class(TLspServerContextAdapter)
+  strict private
+    FResult: TJSONValue;
+  public
+    destructor Destroy; override;
+    procedure Reply(const AId: TJSONValue; AResult: TJSONValue); override;
+    procedure ReplyError(const AId: TJSONValue; ACode: Integer; const AMessage: string); override;
+    function TakeResult: TJSONValue;
   end;
 
 constructor TLspServerContextAdapter.Create(AServer: TLSPServer);
@@ -3131,6 +3154,51 @@ begin
   end;
   SendResult(AId, ComputeReferences(Path, Line, Col, IncludeDecl));
 end; // procedure
+
+destructor TLspCaptureContext.Destroy;
+begin
+  FResult.Free;
+  inherited Destroy;
+end;
+
+procedure TLspCaptureContext.Reply(const AId: TJSONValue; AResult: TJSONValue);
+begin
+  FResult.Free;
+  FResult:= if AResult = nil then TJSONNull.Create else AResult;
+end;
+
+procedure TLspCaptureContext.ReplyError(const AId: TJSONValue; ACode: Integer; const AMessage: string);
+begin
+  Writeln(ErrOutput, 'drag-lint LSP: a feature answered an error (', ACode, '): ', AMessage);   { stderr only: stdout is the relay's }
+end;
+
+function TLspCaptureContext.TakeResult: TJSONValue;
+begin
+  Result := FResult;
+  FResult:= nil;
+end;
+
+function TLSPServer.ComputeFeatureResult(const AMethod: string; const AParams: TJSONObject): TJSONValue;
+var
+  Feature: TLspFeature;
+begin
+  Result:= nil;
+  if not FFeatureByMethod.TryGetValue(AMethod, Feature) then Exit;
+  var Capture: TLspCaptureContext:= TLspCaptureContext.Create(Self);
+  var Ctx: ILspServerContext:= Capture;   { the interface reference owns the instance }
+  var Id: TJSONValue:= TJSONNumber.Create(0);   { a feature replies only to a request; the id goes nowhere }
+  try
+    FWorkLock.Enter;
+    try
+      Feature.Handle(Ctx, AMethod, Id, AParams);
+    finally
+      FWorkLock.Leave;
+    end;
+    Result:= Capture.TakeResult;
+  finally
+    Id.Free;
+  end;
+end;
 
 function TLSPServer.ComputeReferences(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
 var
