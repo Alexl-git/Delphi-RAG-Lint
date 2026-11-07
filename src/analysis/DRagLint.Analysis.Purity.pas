@@ -246,6 +246,15 @@ procedure TranslateCallee(const ACallee: TEffectSummary; const ACalleeName: stri
 /// modifier stripped; empty for <c>''</c>.</returns>
 function ParseMutatedParamNames(const AMutatesParams: string; out ACapped: Boolean): TArray<string>;
 
+/// <summary>True when a routine's parameter is passed BY VALUE with a scalar or string type, so a
+/// write to it changes the routine's own copy and the caller never sees it.</summary>
+/// <param name="ASignature">The routine's stored signature, e.g. '(const S: string; AIdx: Integer): Boolean'.</param>
+/// <param name="AOrdinal">0-based parameter ordinal, counting every name of a shared group.</param>
+/// <returns>False for var, out, const, an attributed parameter, an untyped one, an ordinal past
+/// the list, and any type not on the built-in list: an alias, class, pointer or array is not
+/// judged, so its writes stay reported.</returns>
+function IsByValueScalarParam(const ASignature: string; AOrdinal: Integer): Boolean;
+
 implementation
 
 const
@@ -827,6 +836,64 @@ begin
 end;
 
 { ----------------------------------------------------------- mutates_params }
+
+{ The top-level parameter groups of a stored signature; '' list for no parameter list. }
+function SignatureGroups(const ASignature: string): TArray<string>;
+var
+  Depth : Integer;
+  Quoted: Boolean;
+begin
+  Result:= [];
+  Depth := 0;
+  Quoted:= False;
+  var Open: Integer:= Pos('(', ASignature);
+  if Open = 0 then Exit;
+  var Start: Integer:= Open + 1;
+  for var I:= Open + 1 to Length(ASignature) do
+  begin
+    var C: Char:= ASignature[I];
+    if C = '''' then Quoted:= not Quoted;
+    if not Quoted then
+    begin
+      if CharInSet(C, ['(', '<', '[']) then Inc(Depth)
+      else if CharInSet(C, [')', '>', ']']) and (Depth > 0) then Dec(Depth)
+      else if C = ')' then Exit(Result + [Copy(ASignature, Start, I - Start)])
+      else if (C = ';') and (Depth = 0) then
+      begin
+        Result:= Result + [Copy(ASignature, Start, I - Start)];
+        Start := I + 1;
+      end;
+    end;
+  end;
+  Result:= [];
+end;
+
+function IsByValueScalarParam(const ASignature: string; AOrdinal: Integer): Boolean;
+const
+  SCALAR_TYPES: array[0..24] of string = ('Integer', 'Cardinal', 'Int64', 'UInt64', 'NativeInt', 'NativeUInt',
+    'SmallInt', 'ShortInt', 'Byte', 'Word', 'LongInt', 'LongWord', 'Boolean', 'Char', 'string', 'Double',
+    'Single', 'Extended', 'Real', 'Currency', 'AnsiChar', 'WideChar', 'AnsiString', 'UnicodeString', 'WideString');
+begin
+  var First: Integer:= 0;
+  for var G: string in SignatureGroups(ASignature) do
+  begin
+    var Colon: Integer:= Pos(':', G);
+    if Colon = 0 then Exit(False);
+    var Names: TArray<string>:= Trim(Copy(G, 1, Colon - 1)).Split([',']);
+    if AOrdinal < First + Length(Names) then
+    begin
+      var Head: string:= Trim(Names[0]);
+      if StartsText('var ', Head) or StartsText('out ', Head) or StartsText('const ', Head) or Head.StartsWith('[') then
+        Exit(False);
+      var TypeName: string:= Trim(Copy(G, Colon + 1, MaxInt));
+      var Eq: Integer:= Pos('=', TypeName);
+      if Eq > 0 then TypeName:= Trim(Copy(TypeName, 1, Eq - 1));
+      Exit(MatchText(TypeName, SCALAR_TYPES));
+    end;
+    Inc(First, Length(Names));
+  end;
+  Result:= False;
+end;
 
 function ParseMutatedParamNames(const AMutatesParams: string; out ACapped: Boolean): TArray<string>;
 var
