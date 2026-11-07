@@ -7844,7 +7844,8 @@ begin
   //     Members are children of the enclosing class.
   if ClassId > 0 then
   begin
-    Member:= FindChildOfKind(ClassId, AReceiverExpr, [skField, skProperty]);
+    { skVarDecl: a class-level `var` section is emitted as var with the class as parent. }
+    Member:= FindChildOfKind(ClassId, AReceiverExpr, [skField, skProperty, skVarDecl]);
     if Member.Id > 0 then
     begin
       AText.Text:= NormalizeTypeLeaf(Member.Signature);
@@ -10384,6 +10385,8 @@ begin
   begin
     var First: string:= if AText.Pending <> '' then AText.Pending.Split(['.'])[0] else ACallRef.NameText;
     var Anc: string:= FirstUnresolvedAncestorName(ProjId);
+    { A class whose chain is complete ends at the root no ancestor row records. }
+    if (Anc = '') and (SymbolById(ProjId).Kind = skClass) then Anc:= IMPLICIT_ROOT_CLASS;
     if (Anc = '') or ChainDeclaresName(ProjId, First) then Exit;
     Exit(FOracle.Bind(Anc, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
   end;
