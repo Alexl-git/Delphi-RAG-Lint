@@ -53,7 +53,10 @@ The rule is built to be quiet rather than wrong. It reports nothing when:
   available -- either could declare the name;
 * the code sits in an inactive `{$IFDEF}` branch;
 * the index is older than the text at that position (save, let the IDE
-  reindex, and it comes back).
+  reindex, and it comes back). A unit taken out of `uses` is still reported
+  before the reindex wherever the names below it kept their lines (it was on a
+  shared `uses` line, or the line was blanked): the rule trusts the text you
+  have, not the uses list the index remembers.
 
 When **several** units declare the name, they are listed and no fix is offered:
 `'TBitmap' is declared in units Vcl.Graphics, FMX.Graphics -- add one of them to the uses clause`.
