@@ -202,6 +202,7 @@
   "overflow-before-widening": {"cwe": ["CWE-190"], "cert": ["INT30-C", "INT32-C"]},
   "overwrite-before-read": {"cwe": ["CWE-563"]},
   "param-name-prefix": {},
+  "parameter-type-too-wide": {},
   "parser-error": {},
   "path-traversal": {"cwe": ["CWE-22"]},
   "pchar-arithmetic": {"cwe": ["CWE-468"]},
