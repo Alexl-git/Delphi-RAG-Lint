@@ -25564,7 +25564,7 @@ end;
 // v0.24: drag-lint rename --qname Foo.TBar.Baz --to NewName
 //   [--db PATH] [--dry-run] [--no-backup]
 // Resolves the symbol, proves every occurrence (RenameProof), then reports, or applies through the compile gate.
-function DoRename(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@65a5, cyclomatic-complexity@b51e, cognitive-complexity@7f07 -- the rename verb, one Exit per refusal, read top to bottom; splitting it is not for a release branch
+function DoRename(const AArgs: TArgs): Integer;  // dl:ok too-many-exit-points@65a5, cyclomatic-complexity@d2f6, cognitive-complexity@1e69 -- the rename verb, one Exit per refusal, read top to bottom; splitting it is not for a release branch
 var
   Store: ISymbolStore;
   Proof: TRenameProof;
@@ -32840,7 +32840,7 @@ var
   // (and its freshness checked) the FIRST time a unit reaches that step, then
   // reused: a single --unit run keeps its old order, a batch pays for both and
   // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
-  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@c229, cyclomatic-complexity@b09f, method-too-long@e410 -- REVIEWED 2026-11-04 (lint sweep b0bad3cf..HEAD): the branch count and length are that same early-outcome chain; splitting it is a convert-apply refactor, not a sweep fix. Each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@ab98, cyclomatic-complexity@5774, method-too-long@501e -- REVIEWED 2026-11-04 (lint sweep b0bad3cf..HEAD): the branch count and length are that same early-outcome chain; splitting it is a convert-apply refactor, not a sweep fix. Each Exit is a distinct per-unit outcome (refusal incl. an unindexed unit (1.33.0), rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
   var
     UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
     ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }

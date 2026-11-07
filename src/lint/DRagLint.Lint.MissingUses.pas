@@ -361,7 +361,7 @@ begin
   end;
 end;
 
-class function TMissingUsesChecker.Analyze(const AFile: string;  // dl:ok cyclomatic-complexity@162c -- REVIEWED 2026-10-29: the body is the rule's ordered list of precision guards, one Continue each; splitting it scatters the contract the unit header states
+class function TMissingUsesChecker.Analyze(const AFile: string;  // dl:ok cyclomatic-complexity@1b9d -- REVIEWED 2026-10-29: the body is the rule's ordered list of precision guards, one Continue each; splitting it scatters the contract the unit header states
   const AFileStore: ISymbolStore; AFileId: Int64;
   const ALookup: TArray<ISymbolStore>): TArray<TMissingUsesFinding>;
 var

@@ -961,7 +961,7 @@ begin
   Result.TimedOut:= B.TimedOut;
 end;
 
-function ApplyGated(const pReq: TGateRequest): TGateOutcome;  // dl:ok too-many-exit-points@75a4 -- one guard per named refusal, in the documented order: the exits are the contract
+function ApplyGated(const pReq: TGateRequest): TGateOutcome;  // dl:ok too-many-exit-points@277f -- one guard per named refusal, in the documented order: the exits are the contract
 const
   CTestBreakVar  = 'DRAGLINT_GATE_TEST_BREAK';
   CTestBreakLine = #13#10'this line does not compile (DRAGLINT_GATE_TEST_BREAK)'#13#10;

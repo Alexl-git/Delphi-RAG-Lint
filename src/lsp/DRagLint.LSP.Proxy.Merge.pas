@@ -1843,7 +1843,7 @@ end;
   textDocument/hover (MergeHover) request by id and queues drag-lint's answer
   for it on the worker at once, so it is usually ready before DelphiLSP
   answers. Never delays the frame beyond one JSON parse. }
-procedure TProxyMergeEngine.RecordRequest(const AFrame: TBytes; ALen: Integer);  // dl:ok too-many-exit-points@3bc9, cyclomatic-complexity@13e4 -- each Exit is a decline (nothing recorded, relay unchanged); one flat guard sequence reads better than nesting (re-reviewed A5: 8 exits; the four request kinds share one parse, so the kind selection adds branches, not state)
+procedure TProxyMergeEngine.RecordRequest(const AFrame: TBytes; ALen: Integer);  // dl:ok too-many-exit-points@3bc9, cyclomatic-complexity@6112 -- each Exit is a decline (nothing recorded, relay unchanged); one flat guard sequence reads better than nesting (re-reviewed A5: 8 exits; the four request kinds share one parse, so the kind selection adds branches, not state)
 var
   Json  : TJSONValue;
   Method: string;
