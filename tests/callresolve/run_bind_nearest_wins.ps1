@@ -49,6 +49,8 @@ type
     procedure Ren(AV: Integer); overload; virtual;
     procedure Ren(const S: string); overload; virtual;
     procedure Hid(AV, BV: Integer); virtual;
+    procedure Sib(AV: Integer); overload; virtual;
+    procedure Sib(const S: string); overload; virtual;
   end;
 
   TMid = class(TBase)
@@ -59,6 +61,7 @@ type
     procedure Ov(AV: Integer); overload; override;
     procedure Ren(BV: Integer); overload; override;
     procedure Hid(AV: Integer); reintroduce;
+    procedure Sib(AV: Integer); override;
     procedure BareCaller;
   end;
 
@@ -100,12 +103,15 @@ procedure TBase.Ov(const S: string); begin end;
 procedure TBase.Ren(AV: Integer); begin end;
 procedure TBase.Ren(const S: string); begin end;
 procedure TBase.Hid(AV, BV: Integer); begin end;
+procedure TBase.Sib(AV: Integer); begin end;
+procedure TBase.Sib(const S: string); begin end;
 procedure TMid.M; begin end;
 function TMid.FnP: Integer; begin Result:= 1; end;
 procedure TMid.R(AV: Integer); begin end;
 procedure TMid.Ov(AV: Integer); begin end;
 procedure TMid.Ren(BV: Integer); begin end;
 procedure TMid.Hid(AV: Integer); begin end;
+procedure TMid.Sib(AV: Integer); begin end;
 procedure TMid.BareCaller;
 begin
   M;
@@ -143,6 +149,8 @@ type
     procedure OvStr;
     procedure RenInt;
     procedure HidTwo;
+    procedure SibStr;
+    procedure SibInt;
     procedure TieCall;
     procedure IfaceChain;
     procedure IfaceSiblings;
@@ -160,6 +168,8 @@ procedure TSite.OvInt; begin FL.Ov(1); end;
 procedure TSite.OvStr; begin FL.Ov('x'); end;
 procedure TSite.RenInt; begin FL.Ren(1); end;
 procedure TSite.HidTwo; begin FM.Hid(1, 2); end;
+procedure TSite.SibStr; begin FM.Sib('x'); end;
+procedure TSite.SibInt; begin FM.Sib(1); end;
 procedure TSite.TieCall; begin FT.Tie(nil); end;
 procedure TSite.IfaceChain; begin FD.Q; end;
 procedure TSite.IfaceSiblings; begin FU.Z; end;
@@ -202,6 +212,9 @@ try {
   Edge 'INTERFACE-CHAIN: redeclared on the descendant'   'IfaceChain' 'certain' 'uChain.IDerI.Q'
   Edge 'PARENLESS: a dotted function read'               'Parenless'  'certain' 'uChain.TMid.FnP'
   Edge 'PARENLESS: a bare call inside the class'         'BareCaller' 'certain' 'uChain.TMid.M'
+  # dcc (run_bind_nearest_dcc.ps1, case D): an override with NO overload directive does not hide the sibling overload.
+  Edge 'OVERRIDE-NO-OVERLOAD: the sibling stays reachable'  'SibStr' 'certain' 'uChain.TBase.Sib'
+  Edge 'OVERRIDE-NO-OVERLOAD: the int call takes the override' 'SibInt' 'certain' 'uChain.TMid.Sib'
   # Controls: must not move.
   Edge 'CONTROL: a base receiver binds the base'         'CtlBase'    'certain' 'uChain.TBase.M'
   Edge 'CONTROL: the sibling overload stays reachable'   'OvStr'      'certain' 'uChain.TBase.Ov'

@@ -11046,11 +11046,6 @@ var
   Output     : string        ;
   JsonEdges  : TStringList   ;
 
-  function JsonEsc(const AText: string): string;
-  begin
-    Result:= AText.Replace('\','\').Replace('"','\"');
-  end;
-
   function GraphJsonOrHtml(AEdges: TStringList; AHtml: Boolean): string;
   var
     Doc: string;
@@ -11139,7 +11134,7 @@ begin
       FromUnit:= UnitName(FromPath);
       ToUnit  := UnitName(ToPath  );
 
-      if JsonEdges <> nil then JsonEdges.Add(System.SysUtils.Format('{"from":"%s","to":"%s","weight":%d}', [JsonEsc(FromUnit), JsonEsc(ToUnit), Weight]))
+      if JsonEdges <> nil then JsonEdges.Add(System.SysUtils.Format('{"from":"%s","to":"%s","weight":%d}', [JsonEscape(FromUnit), JsonEscape(ToUnit), Weight]))
       else if Format = 'dot' then Buf.AppendLine(System.SysUtils.Format( '  "%s" -> "%s" [label="%d", weight=%d];', [FromUnit, ToUnit, Weight, Weight]))
       else Buf.AppendLine(System.SysUtils.Format('  %s --|%d|--> %s', [SanitizeId(FromUnit), Weight, SanitizeId(ToUnit)]));
 

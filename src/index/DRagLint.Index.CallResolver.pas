@@ -1446,7 +1446,9 @@ type
     /// arity check below is then skipped.</param>
     /// <returns>True when a candidate was removed.</returns>
     /// <remarks>
-    /// A level with no `overload` directive hides every deeper level. A deeper
+    /// A level with neither `overload` nor `override` hides every deeper level (dcc: an
+    /// override without `overload` leaves the sibling overloads reachable; proved by
+    /// tests\callresolve\run_bind_nearest_dcc.ps1, which asks the compiler). A deeper
     /// candidate with the parameter list of a nearer one is its overridden twin
     /// and goes too (compared as text, so an override that renames a parameter
     /// stays ambiguous). Candidates of ONE level are never chosen between: an
@@ -3625,6 +3627,8 @@ const
   METHOD_KINDS: TSymbolKindSet = [skMethod, skProcedure, skFunction, skConstructor, skDestructor];
   // The `overload` token inside a space-padded symbols.directives value.
   DIRECTIVE_OVERLOAD_TOKEN = ' overload ';
+  // The `override` token: an override hides nothing but its overridden twin.
+  DIRECTIVE_OVERRIDE_TOKEN = ' override ';
 
 // True when C can start / continue a Pascal identifier.
 function IsIdentStart(C: Char): Boolean; inline;
@@ -4783,7 +4787,7 @@ var
   Kept       : TList<TSymbol>;
   I          : Integer       ;
   Level      : Int64         ;
-  HasOverload: Boolean       ;
+  LetsThrough: Boolean       ;
 begin
   Result:= False;
   Kept:= TList<TSymbol>.Create;
@@ -4794,14 +4798,15 @@ begin
       { One level is the run of candidates declared by one parent: both callers
         add them type by type, own type first, then the ancestors nearest first. }
       Level      := AMatches[I].ParentId;
-      HasOverload:= False;
+      LetsThrough:= False;
       while (I < AMatches.Count) and (AMatches[I].ParentId = Level) do
       begin
-        if ContainsText(' ' + AMatches[I].Directives + ' ', DIRECTIVE_OVERLOAD_TOKEN) then HasOverload:= True;
+        if ContainsText(' ' + AMatches[I].Directives + ' ', DIRECTIVE_OVERLOAD_TOKEN)
+           or ContainsText(' ' + AMatches[I].Directives + ' ', DIRECTIVE_OVERRIDE_TOKEN) then LetsThrough:= True;
         if not Shadowed(Kept, AMatches[I]) then Kept.Add(AMatches[I]);
         Inc(I);
       end;
-      if not HasOverload then Break; { no `overload`: this level hides all that is deeper }
+      if not LetsThrough then Break; { no `overload`, no `override`: this level hides all that is deeper }
     end;
     if (Kept.Count = AMatches.Count - AFrom) or not FitsSite(Kept) then Exit;
     AMatches.DeleteRange(AFrom, AMatches.Count - AFrom);

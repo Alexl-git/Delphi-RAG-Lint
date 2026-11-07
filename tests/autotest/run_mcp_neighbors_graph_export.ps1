@@ -69,6 +69,11 @@ try {
   & $Exe graph --db $Db --format svg 2>&1 | Out-Null
   Check '3d unknown format still exits 2' ($LASTEXITCODE -eq 2) "exit=$LASTEXITCODE"
   $d = (& $Exe graph --db $Db 2>$null | Out-String)
+  # 3e MUST-FIX (x3 finding): the json edge writer used a local escaper whose backslash replace was a no-op. A unit name
+  # cannot hold a backslash on Windows, so no fixture can reach it: this reads the source. RED on the old code.
+  $cli = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\..\src\cli\DRagLint.CLI.pas'))
+  $edgeLine = [regex]::Match($cli, '(?m)^.*"from":"%s","to":"%s","weight":%d.*$').Value
+  Check '3e json edges go through JsonEscape' (($edgeLine -match 'JsonEscape\(FromUnit\), JsonEscape\(ToUnit\)') -and ($cli -notmatch 'function JsonEsc\(')) "line=$edgeLine"
   Check 'CONTROL dot default starts with the generated comment and digraph' ($d -match 'digraph DragLintDeps')
 } finally {
   [IO.Directory]::Delete($Work, $true)
