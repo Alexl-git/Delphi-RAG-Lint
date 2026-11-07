@@ -1469,7 +1469,7 @@ begin
       if Args.GetValue('qname') <> nil then NbQName:= Args.GetValue('qname').Value;
       if NbQName = '' then
       begin
-        SendError(AId, -32602, 'get_neighbors requires qname');
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'get_neighbors requires qname');
         Exit;
       end;
       var NbHops:= 1;
