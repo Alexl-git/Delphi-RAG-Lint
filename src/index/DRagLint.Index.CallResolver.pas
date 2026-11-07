@@ -1596,6 +1596,14 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LookupMemberOnType(ATypeSymbolId: Int64; const AMemberName: string): TSymbol;
+    /// <summary>146 b8: what one segment of a plain dotted receiver names on ATypeId: the
+    /// field or property, else the single certain method callable with no arguments, so
+    /// `H.Get.Next` walks as `H.Get().Next`. A procedure, a required argument or an override
+    /// pair answers Id = 0. Pinned by tests\autotest\run_parenless_chain_bind.ps1.</summary>
+    /// <param name="AResolveFile">Left alone for a field or property; for a method, its
+    /// declaring file, the scope its return type is written in.</param>
+    /// <returns>The member; for a method, its symbol with Signature = the return type.</returns>
+    function ChainSegmentValue(ATypeId: Int64; const AName: string; var AResolveFile: Int64): TSymbol;
     /// <summary>E5 review (resolver 1.12.0-alpha): the declaration a bare name
     /// inside AClassId's methods meets FIRST on the class chain -- the type
     /// itself, then its CLASS parent (the ordinal-0 heritage edge), then that
@@ -6412,6 +6420,20 @@ begin
   if IsParenlessCallable(R) then Result:= ResolveTypeNameToSymbol(SignatureReturnType(R.Signature), R.FileId);
 end;
 
+function TCallResolver.ChainSegmentValue(ATypeId: Int64; const AName: string; var AResolveFile: Int64): TSymbol;
+begin
+  Result:= LookupMemberOnType(ATypeId, AName);
+  if Result.Id > 0 then Exit;
+  var Conf: string;
+  var Target: Int64:= LookupMethodOnType(ATypeId, AName, 0, True, Conf);
+  if (Target <= 0) or (Conf <> 'certain') then Exit;
+  var Fn: TSymbol:= SymbolById(Target);
+  if not IsParenlessCallable(Fn) then Exit;
+  Result          := Fn;
+  Result.Signature:= SignatureReturnType(Fn.Signature);
+  AResolveFile    := Fn.FileId;
+end;
+
 function TCallResolver.TypeOfBareName(const ARef: TReference; ALine, ACol: Integer;
   const AName: string): Int64;
 var
@@ -7784,14 +7806,15 @@ begin
     var SegIx: Integer:= 1;
     while (ChainType > 0) and (SegIx <= High(Segs)) do
     begin
-      var SegMember: TSymbol:= LookupMemberOnType(ChainType, Segs[SegIx]);
+      var SegFile: Int64:= ACallRef.FileId;
+      var SegMember: TSymbol:= ChainSegmentValue(ChainType, Segs[SegIx], SegFile);
       if CurText = '' then CurText:= SymbolById(ChainType).Name;
       if SegMember.Id > 0 then
       begin
         CurText:= NormalizeTypeLeaf(SegMember.Signature);
         StopIx := SegIx + 1;
       end;
-      ChainType:= if SegMember.Id > 0 then DerefPointerAlias(ResolveTypeNameToSymbol(SegMember.Signature, ACallRef.FileId)) else 0;
+      ChainType:= if SegMember.Id > 0 then DerefPointerAlias(ResolveTypeNameToSymbol(SegMember.Signature, SegFile)) else 0;
       Inc(SegIx);
     end;
     if ChainType > 0 then
