@@ -1418,7 +1418,7 @@ begin
 
   // Optional subcommand: ParamStr(2) if it doesn't start with '--'.
   i:= 2;
-  if ((Result.Command = 'query') or (Result.Command = 'export') or (Result.Command = 'workspace') or (Result.Command = 'selftest')) and (ParamCount >= 2) then
+  if MatchText(Result.Command, ['query', 'export', 'workspace', 'selftest', 'manifest']) and (ParamCount >= 2) then
   begin
     A:= ParamStr(2);
     { `not StartsWith('--')` is what made `drag-lint query -h` take '-h' as the
@@ -1595,6 +1595,8 @@ begin
         raise Exception.CreateFmt('%s: expected %s', [OUTPUT_ENCODING_SWITCH, OUTPUT_ENCODING_VALUES]);  // dl:ok raise-bare-exception@755b -- ParseArgs' contract: every bad argument raises Exception, DoRun maps it to exit 3 (cf. --delphi-lsp-bits)
       Inc(i); { the value was applied by Run, before ParseArgs }
     end
+    else if (A = '--manifest') and (i < ParamCount) then
+      Inc(i) { every verb: applied by Run, before ParseArgs (ApplyManifestSwitch) }
     else if A = '--no-locals' then Result.NoLocals:= True
     else if A = '--lint-third-party' then Result.LintThirdParty:= True
     else if (A = '--shared-db') and (i < ParamCount) then
@@ -36643,7 +36645,7 @@ begin
   AAdded:= nil;
   ARes:= Default(TReconcileApplyResult);
   CfgPath:= AArgs.WorkspaceConfig;
-  if CfgPath = '' then CfgPath:= TPath.Combine(ExtractFilePath(ParamStr(0)), 'drag-lint.json');
+  if CfgPath = '' then CfgPath:= TInstalledLayout.ManifestLocation(ExtractFilePath(ParamStr(0))).Path;
   CfgPath:= TPath.GetFullPath(CfgPath);
   if not TFile.Exists(CfgPath) then Exit('manifest not found: ' + CfgPath + ' (pass --config <drag-lint.json>)');
 
@@ -37648,7 +37650,7 @@ begin
     rewrite exactly that file. --config wins; else the drag-lint.json beside the
     exe, which is where the real one lives (third_party\dll-win64). }
   CfgPath:= AArgs.WorkspaceConfig;
-  if CfgPath = '' then CfgPath:= TPath.Combine(ExtractFilePath(ParamStr(0)), 'drag-lint.json');
+  if CfgPath = '' then CfgPath:= TInstalledLayout.ManifestLocation(ExtractFilePath(ParamStr(0))).Path;
   if not TFile.Exists(CfgPath) then
   begin
     Writeln('ERROR: manifest not found: ', CfgPath);
@@ -38341,6 +38343,104 @@ begin
     end;
 end;
 
+/// <summary>`--manifest <path>`: publishes the path as DRAGLINT_MANIFEST for this process and
+/// the engine children it spawns. Every verb and child therefore reads one source, the
+/// environment; a flag alone would not reach a spawned index child, which would then load
+/// the real manifest.</summary>
+procedure ApplyManifestSwitch;
+begin
+  for var I:= 1 to ParamCount - 1 do
+    if ParamStr(I) = '--manifest' then
+      SetEnvironmentVariable(TInstalledLayout.MANIFEST_ENV, PChar(TPath.GetFullPath(ParamStr(I + 1))));
+end;
+
+/// <summary>`manifest where [--json]`: which manifest, log folder and library folder this
+/// process resolves, and why. Read-only: it creates, moves and renames nothing.</summary>
+/// <param name="AArgs">SubCommand must be `where`; AsJson selects the JSON shape.</param>
+/// <returns>0, also when the resolved file does not exist; 3 for any other subcommand.</returns>
+function DoManifest(const AArgs: TArgs): Integer;
+const
+  YES_NO: array[Boolean] of string = ('no', 'yes');
+  EXIT_BAD_USAGE = 3;
+var
+  EngineDir: string;
+  Loc      : TManifestLocation;
+  Layout   : string;
+  Rungs    : array[TManifestOrigin] of TManifestLocation;
+  Active   : array[TManifestOrigin] of Boolean;
+  Root     : TJSONObject;
+  Item     : TJSONObject;
+  List     : TJSONArray;
+begin
+  if AArgs.SubCommand <> 'where' then
+  begin
+    Writeln(ErrOutput, 'usage: drag-lint manifest where [--manifest <path>] [--json]');
+    Exit(EXIT_BAD_USAGE);
+  end;
+  EngineDir:= ExtractFilePath(ParamStr(0));
+  Loc      := TInstalledLayout.ManifestLocation(EngineDir);
+  Layout   := if TInstalledLayout.Enabled then TInstalledLayout.LAYOUT_V2 else 'v1';
+  { Each rung asked on its own, so the output shows what the chosen one beat. }
+  var Explicit:= GetEnvironmentVariable(TInstalledLayout.MANIFEST_ENV);
+  var AppData := GetEnvironmentVariable('APPDATA');
+  Rungs[moExplicit]:= Default(TManifestLocation);
+  Rungs[moExplicit].Origin:= moExplicit;
+  if Explicit <> '' then Rungs[moExplicit]:= TInstalledLayout.ResolveManifest(Explicit, '', EngineDir, False);
+  Active[moExplicit]:= Explicit <> '';
+  Rungs[moAppData]:= Default(TManifestLocation);
+  Rungs[moAppData].Origin:= moAppData;
+  if AppData <> '' then
+  begin
+    Rungs[moAppData].Path  := TPath.Combine(AppData, 'drag-lint\drag-lint.json');
+    Rungs[moAppData].Exists:= TFile.Exists(Rungs[moAppData].Path);
+  end;
+  Active[moAppData]:= TInstalledLayout.Enabled and (AppData <> '');
+  Rungs[moExeDir]:= TInstalledLayout.ResolveManifest('', '', EngineDir, False);
+  Active[moExeDir]:= True;
+  Result:= 0;
+  if AArgs.AsJson then
+  begin
+    Root:= TJSONObject.Create;
+    try
+      Root.AddPair('layout', Layout);
+      Item:= TJSONObject.Create;
+      Item.AddPair('path', Loc.Path);
+      Item.AddPair('rootDir', Loc.RootDir);
+      Item.AddPair('origin', TInstalledLayout.OriginName(Loc.Origin));
+      Item.AddPair('exists', TJSONBool.Create(Loc.Exists));
+      Root.AddPair('manifest', Item);
+      List:= TJSONArray.Create;
+      for var I:= Low(Rungs) to High(Rungs) do
+      begin
+        Item:= TJSONObject.Create;
+        Item.AddPair('origin', TInstalledLayout.OriginName(Rungs[I].Origin));
+        Item.AddPair('path', Rungs[I].Path);
+        Item.AddPair('exists', TJSONBool.Create(Rungs[I].Exists));
+        Item.AddPair('active', TJSONBool.Create(Active[I]));
+        List.AddElement(Item);
+      end;
+      Root.AddPair('candidates', List);
+      Root.AddPair('logDir', TInstalledLayout.LogDir(EngineDir));
+      Root.AddPair('libraryDir', TInstalledLayout.LibraryDir);
+      Writeln(Root.ToJSON);
+    finally
+      Root.Free;
+    end;
+    Exit;
+  end;
+  Writeln('layout:   ', Layout, ' (', TInstalledLayout.LAYOUT_ENV, '=', GetEnvironmentVariable(TInstalledLayout.LAYOUT_ENV), ')');
+  Writeln('manifest: ', Loc.Path, ' (origin ', TInstalledLayout.OriginName(Loc.Origin), ', exists: ', YES_NO[Loc.Exists], ')');
+  for var I:= Low(Rungs) to High(Rungs) do
+  begin
+    var Shown:= if Rungs[I].Path = '' then '(unset)' else Rungs[I].Path;
+    Writeln('  ', TInstalledLayout.OriginName(Rungs[I].Origin), ': ', Shown,
+      ' (exists: ', YES_NO[Rungs[I].Exists], ', active: ', YES_NO[Active[I]], ')');
+  end;
+  var LibDir:= TInstalledLayout.LibraryDir;
+  Writeln('logs:     ', TInstalledLayout.LogDir(EngineDir));
+  Writeln('library:  ', if LibDir = '' then '(the manifest''s outDir decides)' else LibDir);
+end;
+
 function Run: Integer;
 const
   SELFTEST_SCHEMA_DB_ARG = 3; // ParamStr index of the DB path after --selftest-schema <sub>
@@ -38349,6 +38449,8 @@ var
   OutEnc: TOutputEncoding;
   OutEncText: string;
 begin
+  Args:= Default(TArgs); { the fatal handler reads Args.Command when ParseArgs itself raised }
+  ApplyManifestSwitch;
   { A background warm (WarmRuleCacheAfterIndex) has no console: writing to its
     invalid std handles would raise. NUL, before anything -- ParseArgs itself
     can print (the defaults-file note) -- and before InstallOutputEncoding, which
@@ -38544,6 +38646,7 @@ begin
     else if Args.Command = 'sql'               then Result:= DoSql             (Args)
     else if Args.Command = 'wiki'              then Result:= DoWiki            (Args)
     else if Args.Command = 'ide-release'       then Result:= DoIdeRelease      (Args)
+    else if Args.Command = 'manifest'          then Result:= DoManifest        (Args)
     else if Args.Command = 'project-context'   then Result:= DoProjectContext  (Args)
     else if Args.Command = 'shutdown'          then Result:= DoShutdown        (Args)
     else if Args.Command = 'shared-unit'       then Result:= DoSharedUnit      (Args)
@@ -38811,9 +38914,13 @@ begin
         Best-effort and swallowed -- a diagnostic that throws is worse than none,
         and this runs while an exception is already in flight. }
       try
-        TFile.AppendAllText(ExtractFilePath(ParamStr(0)) + 'drag-lint-fatal.log',
-          Format('%s  cmd=%s  %s: %s'#13#10,
-            [FormatDateTime('yyyy-mm-dd hh:nn:ss', NowLocal), Args.Command, E.ClassName, E.Message]));
+        var FatalDir:= TInstalledLayout.LogDir(ExtractFilePath(ParamStr(0)));
+        if (FatalDir <> '') and ForceDirectories(FatalDir) then
+        begin
+          TFile.AppendAllText(TPath.Combine(FatalDir, 'drag-lint-fatal.log'),
+            Format('%s  cmd=%s  %s: %s'#13#10,
+              [FormatDateTime('yyyy-mm-dd hh:nn:ss', NowLocal), Args.Command, E.ClassName, E.Message]));
+        end;
       except
         { deliberately empty }
       end;

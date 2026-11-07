@@ -1185,4 +1185,6 @@
 #   Superseded: 1.31.0-alpha|75bffa73acde4bd4aafe9dda8e83a2486a0b4b7b33f3838955f0a7b59e0e73de
 # 2026-11-06 1.45 int: ONE bump -- ref-gap G6: the parser emits a member-access for a member read off a call receiver.
 #   Superseded: 1.31.0-alpha|db702e16bd866ac25a7b6c6a2228c9a0090985b665983f1881dbcd273145367d
-1.32.0-alpha|98344205d1fe4e8398019b41613a5183c3bd54c2cea24f0aaaa4879d79630266
+# 2026-11-06 lane 146-x5 (E-INSTALLER-R2): hash updated WITHOUT a version bump -- src\index\Manifest + ManifestWrite gain TInstalledLayout (which manifest FILE is read and rewritten; off by default, the same path and root dir as before); no parse, symbol, ref or call edge changes.
+#   Superseded: 1.32.0-alpha|98344205d1fe4e8398019b41613a5183c3bd54c2cea24f0aaaa4879d79630266
+1.32.0-alpha|aa9349c17273f53522d4b16068110070ab7c001e8eb88e8f58050c64a9ed8da4

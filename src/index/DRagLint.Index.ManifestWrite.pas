@@ -156,6 +156,15 @@ var
   end;
 
 begin
+  { Explicit or APPDATA (layout v2): the one file the read answered, no sibling walk. }
+  var Located:= TInstalledLayout.ManifestLocation(AEngineDir);
+  if Located.Origin <> moExeDir then
+  begin
+    Result:= [];
+    if Located.Exists then Result:= [Located.Path];
+    Exit;
+  end;
+
   Acc:= TStringList.Create;
   try
     Consider(AEngineDir);
