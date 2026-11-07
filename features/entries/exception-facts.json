@@ -1,7 +1,7 @@
 {
   "id": "exception-facts",
   "title": "exception-facts",
-  "group": "code-search",
+  "group": "search-navigation",
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.46.0-alpha",
