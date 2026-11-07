@@ -1753,7 +1753,7 @@ begin
     else if (A = '--surface') and (i < ParamCount) then begin Inc(i); Result.Surface:= ParamStr(i); end // convert-scaffold (Task 5): --surface dfm|pas
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
     else if (A = '--append') then Result.AppendOut:= True // glyph-vacuum: merge into --output
-    else if A = '--glyph-stitch' then Result.GlyphStitch:= True // convert-apply, convert-validate: realise G-links
+    else if A = '--glyph-stitch' then Result.GlyphStitch:= True // convert-apply, convert-validate: realise G-links  // dl:ok duplicate-code@50c1 -- the flag chain repeats its shape per verb; a shared helper would hide nothing (146 int)
     else if (A = '--castlib') and (i < ParamCount) then // convert-*: .castlib (class + enum casts)
     begin
       Inc(i);
@@ -24472,7 +24472,7 @@ begin
         if LintRuleWants(Nr, ['dataset-open-without-close']) then
           ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore));  // dl:ok magic-literal@7ba0, large-magic-number@7ba0 -- REVIEWED 2026-11-06: the scan-slot number and threshold default every sibling call on this list spells inline; this wave only added an argument
         if LintRuleWants(Nr, ['criticalsection-not-released']) then
-          ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore));
+          ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore));  // dl:ok magic-literal@5e91 -- the scan-slot number every sibling call on this list spells inline (146 int)
         if LintRuleWants(Nr, ['too-many-exit-points']) then
           ScanAdd(25, RoutineMetricFindings(PasPath, 'too-many-exit-points', Cfg));  // dl:ok magic-literal@0d24, large-magic-number@0d24 -- REVIEWED 2026-10-18 profiler scan-slot id of the ScanAdd table, not a quantity
         if LintRuleWants(Nr, ['stat-gated-destructive']) then

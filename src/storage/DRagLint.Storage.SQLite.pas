@@ -16157,8 +16157,8 @@ begin
   if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
   if Suffix = '' then FConn.ExecSQL('DELETE FROM ref_types')  // dl:ok sql-update-delete-without-where@556b -- a whole-database pass rewrites every row of this derived table
   else FConn.ExecSQL('DELETE FROM ref_types WHERE ref_id IN (SELECT refs.id FROM refs WHERE ' + RT_UNIVERSE + Suffix + ')');  // dl:ok sql-injection-concat@472b -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text
-  if Suffix = '' then FConn.ExecSQL('DELETE FROM ref_element_types')
-  else FConn.ExecSQL('DELETE FROM ref_element_types WHERE ref_id IN (SELECT refs.id FROM refs WHERE ' + RT_UNIVERSE + Suffix + ')');
+  if Suffix = '' then FConn.ExecSQL('DELETE FROM ref_element_types')  // dl:ok sql-update-delete-without-where@38e7 -- a whole-database pass rewrites every row of this derived table, as ref_types above (146 int)
+  else FConn.ExecSQL('DELETE FROM ref_element_types WHERE ref_id IN (SELECT refs.id FROM refs WHERE ' + RT_UNIVERSE + Suffix + ')');  // dl:ok sql-injection-concat@b7c1 -- Suffix is built from the engine's own scope predicates, as ref_types above; no user text (146 int)
   Q  := TFDQuery.Create(nil);
   Ins:= TFDQuery.Create(nil);
   var InsElem: TFDQuery:= TFDQuery.Create(nil);

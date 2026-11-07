@@ -47,7 +47,7 @@ uses
   System.JSON,
   System.Generics.Collections,
   System.Generics.Defaults,
-  DRagLint.Core.Model,
+  DRagLint.Core.Model,  // dl:ok uses-global-census@744f -- the one spelling of a ref kind the parser writes (146 int)
   DRagLint.Charts.Index;
 
 const
@@ -167,7 +167,7 @@ begin
         { qualified `raise Unit.EFoo.Create`: the rows' receiver_text is the qualifier, never a
           stamp, so only a reraise / raise-expr reads it as the type. }
         FillType(Index, R.S('kind'), R.S('nm'), R.S('rt'), R.S('bound'), R.S('eid'), Fact);
-        if (pTypeName = '') or MatchesType(Fact, pTypeName) then Found.Add(Fact);
+        if (pTypeName = '') or MatchesType(Fact, pTypeName) then Found.Add(Fact);  // dl:ok duplicate-code@7e37 -- the sort comparer shape two unrelated report units share; 95 tokens, no shared owner (146 int)
       end;
     finally
       Rows.Free;

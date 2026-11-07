@@ -1437,35 +1437,6 @@ type
     /// </remarks>
     function FindChildOfKind(AParentId: Int64; const AName: string; const AKinds: TSymbolKindSet;
       ADeclineOnConflict: Boolean = False): TSymbol;
-    /// <summary>Choose one target from a set of same-named candidates, narrowing
-    /// by argument count when the set is an overload set. Sets AConfidence
-    /// ('certain' | 'ambiguous') and returns the chosen symbol id, or 0 when
-    /// AMatches is empty.</summary>
-    /// <param name="AMatches">Candidates already filtered by name and scope.
-    /// Not modified. Nil is treated as empty.</param>
-    /// <param name="AArgCount"><!-- drag-lint:auto type -->Integer</param>
-    /// <param name="AArgsKnown">False when the call site could not be read, in
-    /// which case arity is not consulted and the first candidate answers.</param>
-    /// <param name="AConfidence"><!-- drag-lint:auto type -->out string</param>
-    /// <returns><!-- drag-lint:auto -->Int64 -- Observed: 0; AMatches[0].Id; Fit[0].Id.</returns>
-    /// <remarks>
-    /// Arity NARROWS an existing name match and never widens one: when
-    /// it cannot decide -- several candidates of one arity, or none that fits --
-    /// the answer is the pre-arity one, still marked uncertain. Shared by the
-    /// method-chain and unit-level rungs so the two cannot drift apart on how a
-    /// tie is broken.
-    /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupUnitLevelRoutine (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupUnitQualifiedRoutine (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveParenlessRead (DRagLint.Index.CallResolver.pas)</para>
-    /// <para>Calls: DRagLint.Index.CallResolver.SignatureArityRange, DRagLint.Index.CallResolver.TCallResolver.NarrowByArgShapes</para>
-    /// <para>Complexity: 12 (cyclomatic, outer body), 56 lines (full implementation)</para>
-    /// <para>Mutates: AConfidence (out)</para>
-    /// <seealso cref="DRagLint.Index.CallResolver.SignatureArityRange"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.NarrowByArgShapes"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddMethodsOnTypeChain"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AddVisibleUnitRoutines"/>
-    /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
-    /// <!-- drag-lint:auto END -->
-    /// </remarks>
     /// <summary>E-BIND-NEAREST-WINS: removes from an inheritance-chain candidate
     /// list what the compiler's own lookup could not reach, so the nearest
     /// override binds 'certain' instead of 'ambiguous'.</summary>
@@ -1502,12 +1473,23 @@ type
     /// </remarks>
     function NarrowToNearest(AMatches: TList<TSymbol>; AFrom, AArgCount: Integer;
       AArgsKnown: Boolean): Boolean;
-    /// <param name="AMatches"><!-- drag-lint:auto type -->TList&lt;TSymbol&gt;</param>
+    /// <summary>Choose one target from a set of same-named candidates, narrowing
+    /// by argument count when the set is an overload set. Sets AConfidence
+    /// ('certain' | 'ambiguous') and returns the chosen symbol id, or 0 when
+    /// AMatches is empty.</summary>
+    /// <param name="AMatches">Candidates already filtered by name and scope.
+    /// Not modified. Nil is treated as empty.</param>
     /// <param name="AArgCount"><!-- drag-lint:auto type -->Integer</param>
-    /// <param name="AArgsKnown"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="AArgsKnown">False when the call site could not be read, in
+    /// which case arity is not consulted and the first candidate answers.</param>
     /// <param name="AConfidence"><!-- drag-lint:auto type -->out string</param>
     /// <returns><!-- drag-lint:auto -->Int64 -- Observed: 0; AMatches[0].Id; Fit[0].Id.</returns>
     /// <remarks>
+    /// Arity NARROWS an existing name match and never widens one: when
+    /// it cannot decide -- several candidates of one arity, or none that fits --
+    /// the answer is the pre-arity one, still marked uncertain. Shared by the
+    /// method-chain and unit-level rungs so the two cannot drift apart on how a
+    /// tie is broken.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.LookupMethodOnType (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupUnitLevelRoutine (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.LookupUnitQualifiedRoutine (DRagLint.Index.CallResolver.pas), DRagLint.Index.CallResolver.TCallResolver.ResolveParenlessRead (DRagLint.Index.CallResolver.pas)</para>
     /// <para>Calls: DRagLint.Index.CallResolver.SignatureArityRange, DRagLint.Index.CallResolver.TCallResolver.NarrowByArgShapes</para>

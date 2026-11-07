@@ -366,7 +366,7 @@ implementation
 uses
   System.IOUtils, System.StrUtils, System.RegularExpressions, System.Diagnostics, System.Math,
   System.Generics.Collections,
-  DRagLint.Convert.Backup, DRagLint.Core.StudioEnv, DRagLint.Core.Model, DRagLint.Refactor.TextEdit;
+  DRagLint.Convert.Backup, DRagLint.Core.StudioEnv, DRagLint.Core.Model, DRagLint.Refactor.TextEdit;  // dl:ok uses-global-census@6535 -- version and ref-kind constants of the model; a small unit of its own would add nothing (146 int)
 
 const
   CDefaultPlatform = 'win64';
