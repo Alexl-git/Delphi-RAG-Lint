@@ -17817,7 +17817,7 @@ begin
       { v0.63: dataset opened without a matching Close in a finally block }
       if (NarrowRule = '') or (NarrowRule = 'dataset-open-without-close') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen(EffPath, FlowStore, FlowFid, FlowLibStore);
       { v0.63: critical section acquired without a matching Leave/Release in finally }
-      if (NarrowRule = '') or (NarrowRule = 'criticalsection-not-released') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(EffPath);
+      if (NarrowRule = '') or (NarrowRule = 'criticalsection-not-released') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(EffPath, FlowStore, FlowFid, FlowLibStore);
       { v0.63: routine with more than 5 Exit statements }
       if (NarrowRule = '') or (NarrowRule = 'too-many-exit-points') then Findings:= Findings + RoutineMetricFindings(EffPath, 'too-many-exit-points', Cfg);
       if (NarrowRule = '') or (NarrowRule = 'stat-gated-destructive') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckStatGatedDestructive(EffPath);
@@ -24268,7 +24268,7 @@ begin
         if LintRuleWants(Nr, ['dataset-open-without-close']) then
           ScanAdd(23, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen    (PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore));  // dl:ok magic-literal@7ba0, large-magic-number@7ba0 -- REVIEWED 2026-11-06: the scan-slot number and threshold default every sibling call on this list spells inline; this wave only added an argument
         if LintRuleWants(Nr, ['criticalsection-not-released']) then
-          ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath));
+          ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore));
         if LintRuleWants(Nr, ['too-many-exit-points']) then
           ScanAdd(25, RoutineMetricFindings(PasPath, 'too-many-exit-points', Cfg));  // dl:ok magic-literal@0d24, large-magic-number@0d24 -- REVIEWED 2026-10-18 profiler scan-slot id of the ScanAdd table, not a quantity
         if LintRuleWants(Nr, ['stat-gated-destructive']) then

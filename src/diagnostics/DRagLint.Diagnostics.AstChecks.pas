@@ -821,10 +821,14 @@ type
       /// no matching X.Leave / X.Release in a finally block -- a lock leaked on an exception
       /// path deadlocks.</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <param name="AStore">Optional symbol store; nil = no type facts.</param>
+      /// <param name="AFileId">File id within AStore (ignored when AStore is nil).</param>
+      /// <param name="ALibStore">Optional platform-library store for the ancestry walk.</param>
       /// <returns>One finding per acquired-but-not-finally-released lock variable.</returns>
       /// <remarks>
       /// Severity error. Per-routine flow analysis (mirrors CheckDatasetOpen).
-      /// Pure AST; no DB. Never raises.
+      /// With a store, an Enter/Acquire whose receiver F1 type is provably not a lock (no lock class in its ancestry, no lock-like word in its name) is not a lock acquire and is not reported.
+      /// Without one it is pure AST and every Enter/Acquire receiver is a lock. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
       /// <para>Calls: Copy, Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, MonitorArgKey, NodeStr, SameText, StringReplace, WalkBody</para>
@@ -837,7 +841,7 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckCriticalSection(const AFile: string): TArray<TLintFinding>;
+      class function CheckCriticalSection(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;
       /// <summary>Flags a routine with more than 5 Exit statements -- hard to reason about
       /// control flow; consolidate exits or use guard clauses consistently.</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
@@ -9009,7 +9013,7 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckCriticalSection(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckCriticalSection(const AFile: string; const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 const
   { Namespaces the TMonitor keys so a lock named 'lock' passed to
     TMonitor.Enter can never be discharged by an instance Lock.Leave. }
@@ -9020,6 +9024,7 @@ var
   Findings        : TList<TLintFinding>          ;
   Acquired        : TDictionary<string, TTSPoint>;
   ReleasedInFinally: TDictionary<string, Boolean>;
+  Reader          : TExprTypeReader              ;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -9084,6 +9089,37 @@ var
     Result:= True;
   end;
 
+  { 1.46 t2 (row 16): True only when index fact F1 types the receiver of the X.Enter / X.Acquire node N and
+    that type is provably not a lock: not a known lock class, no lock class among its ancestors, and no
+    lock-like word in its name (a user wrapper such as TMyLock stays a lock). A TSemaphore or a
+    TEvent-like type with an Acquire is such a receiver. No store, no ref_types row or an unknown
+    ancestry: False, and the finding stands as it always did. }
+  function ReceiverKnownNotLock(const N: TTSNode): Boolean;
+  const
+    LOCK_TYPES: array[0..6] of string = (
+      'tcriticalsection', 'tmonitor', 'tmutex', 'tspinlock', 'tlightweightmrew',
+      'tmultireadexclusivewritesynchronizer', 'trtlcriticalsection');
+    LOCK_WORDS: array[0..4] of string = ('lock', 'mutex', 'critical', 'monitor', 'sync');
+  var
+    Dot, L: TTSNode;
+    Leaf  : string ;
+    I     : Integer;
+  begin
+    Result:= False;
+    if Reader = nil then Exit;
+    Dot:= N;
+    if N.NodeType = 'exprCall' then Dot:= N.ChildByField('entity');
+    if Dot.IsNull then Exit;
+    L:= Dot.ChildByField('lhs');
+    if L.IsNull or not (Reader.Ready and Reader.TypeLeafOf(L, Leaf)) then Exit;
+    Leaf:= LowerCase(Leaf);
+    for I:= Low(LOCK_TYPES) to High(LOCK_TYPES) do
+      if (Leaf = LOCK_TYPES[I]) or (Reader.Descends(Leaf, LOCK_TYPES[I]) <> tdNo) then Exit;
+    for I:= Low(LOCK_WORDS) to High(LOCK_WORDS) do
+      if ContainsStr(Leaf, LOCK_WORDS[I]) then Exit;
+    Result:= True;
+  end;
+
   procedure WalkBody(const N: TTSNode; AInFinally: Boolean);
   var
     I   : Integer;
@@ -9111,7 +9147,7 @@ var
         end;
       end
       else if SameText(M, 'Enter') or SameText(M, 'Acquire') then
-      begin if not Acquired.ContainsKey(V) then Acquired.Add(V, N.StartPoint); end
+      begin if not Acquired.ContainsKey(V) and not ReceiverKnownNotLock(N) then Acquired.Add(V, N.StartPoint); end
       else if (SameText(M, 'Leave') or SameText(M, 'Release')) and AInFinally then ReleasedInFinally.AddOrSetValue(V, True);
     end;
     if N.NodeType = 'try' then
@@ -9180,12 +9216,14 @@ begin
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
+  Reader:= nil;
   Findings:= TList<TLintFinding>.Create;
   try
-
+    if (AStore <> nil) and (AFileId > 0) then Reader:= TExprTypeReader.Create(AStore, ALibStore, AFileId, Src);
     VisitProcs(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
+    Reader.Free;
     Findings.Free;
   end;
 end; // function
