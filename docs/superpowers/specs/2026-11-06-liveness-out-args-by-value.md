@@ -105,7 +105,7 @@ kept and skipped.
    `dead-store-before-out-arg` into overwrite-before-read; the by-value rule into used-before-assignment.
    Folding is a one-line id change in Emit plus catalog removal. Decide from the counts below.
 3. **A dummy `out` local is reported, not exempted.** `Dict.TryGetValue(K, Dummy)` genuinely has a local
-   nobody reads, but the signature may force it. It is why local-only-out-arg is info and OFF. A later
+   nobody reads, but the signature may force it. It is why local-only-out-arg is info and OFF (section 6: 140 findings, mostly these). A later
    phase could skip it when the callee has an overload without the parameter.
 4. **Severity of the by-value rule** follows the used-before-assignment ruling of 2026-08-26 (definite
    error, possible warning).
@@ -121,4 +121,21 @@ kept and skipped.
 
 ## 6. Measurement
 
-Real-DB counts are in section 7 of this file once measured, and in the lane report.
+`lint-all --rule <id> --json`, one rule per run, on a copy of `Delphi-RAG-lint\src\cli\_D-RAG\drag-lint.sqlite`
+(244 MB, re-resolved 2026-11-06 10:47, has ref_types), 2026-11-06:
+
+| rule | findings | read in source |
+|---|---|---|
+| `local-only-out-arg` | 140 | Names are mostly `dummy`, `ignored`, `discard`, `err`, `reason`: signature-forced. One read: `SplitGenericName(.., Bare, Params)` with `Params` unused. Noise-heavy, hence info |
+| `dead-store-before-out-arg` | 47 | 7 of 7 sampled are true dead stores; most are defensive inits (`FormRout := ''`, 17 zero-inits in Storage.SQLite.pas:15629-15645) |
+| `by-value-arg-before-assignment` | 0 | **Not proved on real code.** It fires on the fixture through `lint` and `lint-all`. Zero on one modern codebase says little: a legacy DB is the useful test (Micronite is over the lane's 1 GB copy limit; owed) |
+| `write-only-local` (parent) | 7 | Same 7 from the 1.44.1 engine, so the parent did not move |
+
+Cost: wall clock 435-577 s per run against 444 s for the 1.44.1 engine, on a saturated shared machine and
+across a version gap. That does NOT measure the post-pass; the overhead is unmeasured. The rules have
+no enable check in the checker, so the scan runs even when all three are OFF. If an A/B on a quiet
+machine shows a cost, gate it on the enabled set.
+
+Recommendation: keep all three OFF. `dead-store-before-out-arg` looks ready to fold into its parent if the
+owner accepts defensive inits as findings; `local-only-out-arg` needs an exemption for signature-forced
+dummies first.
