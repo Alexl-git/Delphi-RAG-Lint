@@ -23691,6 +23691,45 @@ begin
   end;
 end; // function
 
+/// <summary>Counts the indexed files that lost their call edges to a stale index: the source
+/// changed since the index, the file makes a call the resolver could bind in this DB, and
+/// it holds no call edge. That is what the calls pass leaves when it clears every edge and
+/// withholds the re-write for a stale file.</summary>
+/// <param name="AStore">The open project store; supplies the changed files.</param>
+/// <param name="ADbPath">The same DB, read over a read-only connection.</param>
+/// <returns>The file count; 0 on a fresh index, without running the query.</returns>
+/// <remarks>A touched file whose edges survive is not counted: the claim would be false.
+/// A call already bound to the library (refs.external_target) never has an edge row here,
+/// so it does not make a file count. Pinned by tests\autotest\run_lint_stale_note.ps1.</remarks>
+function CountStaleFilesWithoutCallEdges(const AStore: ISymbolStore; const ADbPath: string): Integer;
+const
+  EDGELESS_FILES_SQL =
+    'SELECT f.path FROM files f ' +
+    'WHERE EXISTS (SELECT 1 FROM refs r WHERE r.file_id = f.id AND r.kind = ''call'' AND r.external_target IS NULL) ' +
+    'AND NOT EXISTS (SELECT 1 FROM refs r JOIN call_edges e ON e.ref_id = r.id WHERE r.file_id = f.id)';
+begin
+  Result:= 0;
+  var ChangedPaths: TArray<string>:= ChangedFilePaths(AStore);
+  if Length(ChangedPaths) = 0 then Exit;
+  var Conn: TFDConnection:= TFDConnection.Create(nil);
+  var Query: TFDQuery:= TFDQuery.Create(nil);
+  try
+    ConnectReadOnly(Conn, ADbPath);
+    Query.Connection:= Conn;
+    Query.Sql.Text:= EDGELESS_FILES_SQL;
+    Query.Open;
+    while not Query.Eof do
+    begin
+      for var ChangedPath: string in ChangedPaths do
+        if SameText(ChangedPath, Query.Fields[0].AsString) then Inc(Result);
+      Query.Next;
+    end;
+  finally
+    Query.Free;
+    Conn.Free;
+  end;
+end;
+
 function DoLintAll(const AArgs: TArgs): Integer;
 var
   Dbs      : TArray<string>              ;
@@ -23954,6 +23993,10 @@ begin
   { The banner is prose: on --json / --format sarif it belongs on stderr, or the
     document it precedes will not parse (docs\INBOX-lint-all-json-stdout-banner.md). }
   EmitNoteLine(AArgs, Format('lint-all: scanning %d .pas file(s)', [Length(FilePaths)]));
+  { E-BIND-STALE-NOTE: the effect and caller rules read call_edges; say when a stale file has none. Stderr, like the freshness note: a --json / sarif stdout stays one document. }
+  var EdgelessStale: Integer:= CountStaleFilesWithoutCallEdges(Store, ProjectDb);
+  if EdgelessStale > 0 then
+    Writeln(ErrOutput, Format('lint-all: %d file(s) have no call edges (stale index): reindex before trusting effect / caller rules', [EdgelessStale]));
   { Say what was skipped. A scope filter that reports nothing is indistinguishable
     from a clean codebase -- the same failure this session hit when a silent
     no-op reindex made a stale-DB run look like a successful one. }
