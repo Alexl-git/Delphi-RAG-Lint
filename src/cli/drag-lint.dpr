@@ -291,6 +291,7 @@ uses
   DRagLint.Convert.GlyphStrip in '..\report\DRagLint.Convert.GlyphStrip.pas',
   DRagLint.Convert.GlyphVacuum in '..\report\DRagLint.Convert.GlyphVacuum.pas',
   DRagLint.Lint.SharedUnit in '..\lint\DRagLint.Lint.SharedUnit.pas',
+  DRagLint.Lint.Bookmarks in '..\lint\DRagLint.Lint.Bookmarks.pas',
   DRagLint.Lint.ReviewMarker in '..\lint\DRagLint.Lint.ReviewMarker.pas',
   DRagLint.Analysis.LintTree in '..\analysis\DRagLint.Analysis.LintTree.pas',
   DRagLint.Project.Members in '..\core\DRagLint.Project.Members.pas',

@@ -174,6 +174,7 @@ uses
   , DRagLint.Lint   .TaintRules
   , DRagLint.Lint   .DocRules
   , DRagLint.Lint   .SharedUnit
+  , DRagLint.Lint.Bookmarks { bookmarks verb: dl:bk comment anchors (E-BOOKMARKS) }
   , DRagLint.Lint   .ExceptionUnitWriter { exceptions-sync: the managed block in the exceptions unit }
   , DRagLint.Project.Resolver
   , DRagLint.Project.ContextFile
@@ -20761,6 +20762,73 @@ begin
   end;
 end;
 
+{ `drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--json]`
+
+  Lists the `// dl:bk<N>` / `// dl:bk:<CODE>` comment anchors of one unit, or of every
+  .pas under a directory; --name keeps only the anchors with that code (goto-by-code:
+  the answer is file:line). READ-ONLY: it never writes, so there is no dry-run switch.
+  Exit 0 with hits, 3 with none (like a query miss), 1 usage, 2 path not found. }
+const
+  BOOKMARKS_EXIT_NONE = 3; // no anchor found, like a query miss
+
+function DoBookmarks(const AArgs: TArgs): Integer;
+var
+  Files: TArray<string>;
+  F, Txt: string;
+  Hits: TArray<TBookmark>;
+  B: TBookmark;
+  UseJson: Boolean;
+  JArr: TJSONArray;
+  JObj: TJSONObject;
+  Total: Integer;
+begin
+  UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+  if AArgs.InFile = '' then
+  begin
+    ReportNotFoundFor(UseJson, 'Usage: drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--json]');
+    Exit(1);
+  end;
+  if TDirectory.Exists(AArgs.InFile) then
+    Files:= TDirectory.GetFiles(AArgs.InFile, '*.pas', TSearchOption.soAllDirectories)
+  else if FileExists(AArgs.InFile) then
+    Files:= [AArgs.InFile]
+  else
+  begin
+    ReportNotFoundFor(UseJson, 'error: path not found: ' + AArgs.InFile);
+    Exit(2);
+  end;
+  Total:= 0;
+  JArr := TJSONArray.Create;
+  try
+    for F in Files do
+    begin
+      Txt:= TFile.ReadAllText(F, TEncoding.ANSI);
+      Hits:= if AArgs.Name <> '' then TBookmarks.Find(Txt, AArgs.Name) else TBookmarks.Scan(Txt);
+      for B in Hits do
+      begin
+        Inc(Total);
+        if UseJson then
+        begin
+          JObj:= TJSONObject.Create;
+          JObj.AddPair('file', F);
+          JObj.AddPair('line', TJSONNumber.Create(B.Line));
+          JObj.AddPair('kind', B.Kind);
+          JObj.AddPair('code', B.Code);
+          JObj.AddPair('hash', B.Hash);
+          JObj.AddPair('reason', B.Reason);
+          JArr.AddElement(JObj);
+        end
+        else
+          Writeln(Format('%s:%d  %s  %s%s%s', [F, B.Line, B.Kind, B.Code,
+            if B.Hash <> '' then '  @' + B.Hash else '', if B.Reason <> '' then '  -- ' + B.Reason else '']));
+      end;
+    end;
+    if UseJson then Writeln(JArr.ToJSON);
+  finally
+    JArr.Free;
+  end;
+  Result:= if Total > 0 then 0 else BOOKMARKS_EXIT_NONE;
+end;
 type
   /// <summary>One `info --db` answer: the staleness verdict for one index and
   /// the facts it was computed from. Filled by ComputeInfoIndexVerdict and read
@@ -38547,6 +38615,7 @@ begin
     else if Args.Command = 'project-context'   then Result:= DoProjectContext  (Args)
     else if Args.Command = 'shutdown'          then Result:= DoShutdown        (Args)
     else if Args.Command = 'shared-unit'       then Result:= DoSharedUnit      (Args)
+    else if Args.Command = 'bookmarks'         then Result:= DoBookmarks       (Args)
     else if Args.Command = 'info'              then Result:= DoInfo            (Args)
     else if Args.Command = 'resolve-uses'      then Result:= DoResolveUses     (Args)
     else if Args.Command = 'fb-snapshot'       then Result:= DoFbSnapshot      (Args)

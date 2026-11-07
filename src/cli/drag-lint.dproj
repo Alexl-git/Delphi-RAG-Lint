@@ -347,6 +347,7 @@
         </BuildConfiguration>
     
     <DCCReference Include="..\lint\DRagLint.Lint.SharedUnit.pas"/>
+    <DCCReference Include="..\lint\DRagLint.Lint.Bookmarks.pas"/>
     <DCCReference Include="..\lint\DRagLint.Lint.ReviewMarker.pas"/>
   
     <DCCReference Include="..\analysis\DRagLint.Analysis.LintTree.pas"/>
