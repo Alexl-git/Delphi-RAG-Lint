@@ -1028,7 +1028,9 @@ declaring ancestor ALREADY has the block's To type is converted, not skipped:
 * code access sites on X are rewritten exactly as for an own instance, and the
   To type's unit is added to the uses (the usual section rule; the descendant
   declares no field, so there is nothing to retype in its type section and no
-  creator site).
+  creator site). A descendant class that DOES redeclare the field (legal, the
+  designer never writes it) gets that line retyped too and the To unit in that
+  section's uses (1.46); a same-named field of another class in the unit is left alone.
 
 Every code rewrite -- own instances' and inherited ones' -- is scoped to the
 instance's FIELD (1.26.0): a member access is rewritten only when its receiver
