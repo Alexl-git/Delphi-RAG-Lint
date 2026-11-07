@@ -147,9 +147,9 @@ function FingerprintLimbValue(const AFingerprint, APrefix: string): string;
 function ChooseLibraryPlatform(const APlatformArg, AProjectFingerprint, ADproj, ADefaultPlatform: string;
   out ASource: string): string;
 
-/// <summary>The first Win32/Win64 token of a .dproj's `Platform Condition=` element.</summary>
+/// <summary>The first recognised platform token of a .dproj's `Platform Condition=` element.</summary>
 /// <param name="ADproj">Path of the .dproj (a .dpr is mapped to its sibling .dproj).</param>
-/// <returns>'Win32', 'Win64' or '' (no file, no element).</returns>
+/// <returns>The canonical spelling of a KnownPlatforms token (Win32, Win64, Linux64, OSX64, OSXARM64, Android, ...), or '' (no file, no element, unknown token). A non-Windows token is returned as is, so such a project no longer falls to the Win32 manifest default (L-C20).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.LibraryReady.ChooseLibraryPlatform (DRagLint.CLI.LibraryReady.pas)</para>
@@ -172,6 +172,7 @@ uses
   , DRagLint.Core.Versions
   , DRagLint.Index.Freshness
   , DRagLint.Storage.SQLite
+  , DRagLint.Preprocess.Profile
   ;
 
 function LibraryReadinessToken(AState: TLibraryReadiness): string;
@@ -266,6 +267,14 @@ begin
   end;
 end;
 
+{ The KnownPlatforms spelling of AToken (case-insensitive), or '' when it is not one. }
+function CanonicalPlatform(const AToken: string): string;
+begin
+  Result:= '';
+  for var Known: string in KnownPlatforms do
+    if SameText(Known, AToken) then Exit(Known);
+end;
+
 function PlatformOfDproj(const ADproj: string): string;
 begin
   Result:= '';
@@ -286,7 +295,8 @@ begin
     var P2: Integer:= Pos('<', Xml, P1 + 1);
     if P2 = 0 then Break;
     var Tok: string:= Trim(Copy(Xml, P1 + 1, P2 - P1 - 1));
-    if (Tok = 'Win32') or (Tok = 'Win64') then Exit(Tok);
+    var Canon: string:= CanonicalPlatform(Tok);
+    if Canon <> '' then Exit(Canon);
     P1:= Pos('<Platform Condition=', Xml, P2);
   end;
 end;
@@ -300,15 +310,11 @@ begin
     Exit(APlatformArg);
   end;
   var Plat: string:= FingerprintLimbValue(AProjectFingerprint, 'plat=');
-  if SameText(Plat, 'win64') then
+  var Stamped: string:= CanonicalPlatform(Plat);
+  if Stamped <> '' then
   begin
     ASource:= 'db-fingerprint';
-    Exit('Win64');
-  end;
-  if SameText(Plat, 'win32') then
-  begin
-    ASource:= 'db-fingerprint';
-    Exit('Win32');
+    Exit(Stamped);
   end;
   Plat:= PlatformOfDproj(ADproj);
   if Plat <> '' then
