@@ -43,6 +43,15 @@ uses
 const
   /// <summary>Rule id: `x is T` where the static type of x already descends from T.</summary>
   IS_ALWAYS_TRUE_RULE = 'is-always-true';
+  /// <summary>Rule id: `x is T` that no object can answer yes to.</summary>
+  /// <remarks>Fires on proof only, both ancestries followed to the end and no homonym: two classes
+  /// where neither descends from the other (one parent chain cannot hold both); a sealed class
+  /// against an interface it does not implement, either way round, because no descendant can add
+  /// it. A class that is not sealed against an interface is silent: a descendant may implement it.
+  /// An interface against an interface is silent: QueryInterface decides at run time. Silent
+  /// without a library index when the ancestry leaves the project, and silent on a sealed library
+  /// class in a library index older than the fact.</remarks>
+  IS_NEVER_TRUE_RULE = 'is-never-true';
   /// <summary>Rule id, shared with the lexical check in AstChecks: this unit answers every
   /// hard cast whose operand has a ref_types row, and that check only the others.</summary>
   UNSAFE_TYPECAST_RULE = 'unsafe-typecast-without-is';
@@ -74,9 +83,9 @@ const
   /// Synchronize or Queue is taken to marshal itself, as ui-access-in-thread-transitive does.
   /// </remarks>
   UI_ACCESS_IN_THREAD_TYPED_RULE = 'ui-access-in-thread-typed';
-  REF_TYPE_RULES: array[0..7] of string = (IS_ALWAYS_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE, INTERFACE_HOLDER_RULE, ARGUMENT_NARROWS_RULE, REDUNDANT_CAST_RULE, UNSAFE_TYPECAST_RULE, UI_ACCESS_IN_THREAD_TYPED_RULE);
+  REF_TYPE_RULES: array[0..8] of string = (IS_ALWAYS_TRUE_RULE, IS_NEVER_TRUE_RULE, UPCAST_THEN_DOWNCAST_RULE, WITH_ON_TEMPORARY_RULE, INTERFACE_HOLDER_RULE, ARGUMENT_NARROWS_RULE, REDUNDANT_CAST_RULE, UNSAFE_TYPECAST_RULE, UI_ACCESS_IN_THREAD_TYPED_RULE);
   /// <summary>The ones that ship OFF; each names why in the catalog.</summary>
-  REF_TYPE_RULES_OFF: array of string = [UNSAFE_TYPECAST_RULE, UI_ACCESS_IN_THREAD_TYPED_RULE];
+  REF_TYPE_RULES_OFF: array of string = [UNSAFE_TYPECAST_RULE, UI_ACCESS_IN_THREAD_TYPED_RULE, IS_NEVER_TRUE_RULE];
 
 /// <summary>True when the rule ships OFF by default (see the catalog).</summary>
 /// <param name="ARuleId">One of REF_TYPE_RULES.</param>
@@ -334,6 +343,8 @@ type
     SymbolId  : Int64;
     /// <summary>The name stands for several types, so it identifies none of them.</summary>
     Homonym   : Boolean;
+    /// <summary>Declared `class sealed`; of a homonym, every one of them.</summary>
+    Sealed    : Boolean;
     function HasAncestor(const ALeaf: string): Boolean;
   end;
 
@@ -703,6 +714,8 @@ begin
         Continue;
       end;
       if not Names.Contains(Leaf) then Names.Add(Leaf);
+      { An alias in a heritage list: the class it landed on counts too, or is-never-true calls it unrelated. }
+      if (A.ResolvedName <> '') and not Names.Contains(LeafOf(A.ResolvedName).ToLower) then Names.Add(LeafOf(A.ResolvedName).ToLower);
       if A.Resolved then Continue;
       if not AOutermost then
       begin
@@ -734,6 +747,7 @@ begin
   if AOutermost then Result.SymbolId:= ASym.Id;
   Result.IsClass:= ASym.Kind = skClass;
   Result.IsIntf := ASym.Kind = skInterface;
+  Result.Sealed := Result.IsClass and SameText(ASym.Directives, CLASS_DIRECTIVE_SEALED);
   if not (Result.IsClass or Result.IsIntf) then Exit;
   Result.Complete:= ClosureFromStore(AStore, ASym, AOutermost, Result);
 end;
@@ -760,6 +774,7 @@ begin
     Result.SymbolId:= 0;
     Result.IsClass := Result.IsClass and One.IsClass;
     Result.IsIntf  := Result.IsIntf and One.IsIntf;
+    Result.Sealed  := Result.Sealed and One.Sealed;
     Result.Complete:= Result.Complete and One.Complete;
     var Keep: TArray<string>:= nil;
     for var N: string in Result.Closure do
@@ -871,15 +886,32 @@ begin
   Result.Known:= Result.Facts.Known;
 end;
 
+{ The proof IS_NEVER_TRUE_RULE's contract states: see the constant. }
+function IsNeverTrue(const ALhs, ATarget: TTypeFacts): Boolean;
+begin
+  Result:= False;
+  if ALhs.Homonym or ATarget.Homonym or not (ALhs.Complete and ATarget.Complete) then Exit;
+  if ALhs.IsClass and ATarget.IsClass then
+    Result:= not ALhs.HasAncestor(ATarget.Name.ToLower) and not ATarget.HasAncestor(ALhs.Name.ToLower)
+  else if ALhs.IsClass and ATarget.IsIntf then
+    Result:= ALhs.Sealed and not ALhs.HasAncestor(ATarget.Name.ToLower)
+  else if ALhs.IsIntf and ATarget.IsClass then
+    Result:= ATarget.Sealed and not ATarget.HasAncestor(ALhs.Name.ToLower);
+end;
+
 procedure TRefTypeScan.CheckIs(const ANode: TTSNode);
 begin
   var Op: TTSNode:= ANode.ChildByField(FIELD_OP);
   if Op.IsNull or not SameText(Text(Op).Trim, OP_IS) then Exit;
   var LhsN: TTSNode:= ANode.ChildByField(FIELD_LHS);
   var Lhs: TExprType:= StaticType(LhsN);
-  if (not Lhs.Known) or not Lhs.Facts.IsClass then Exit;
+  if not Lhs.Known then Exit;
   var Target: TTypeFacts:= WrittenType(ANode.ChildByField(FIELD_RHS));
-  if (not Target.IsClass) or Target.Homonym then Exit;
+  if Wants(IS_NEVER_TRUE_RULE) and IsNeverTrue(Lhs.Facts, Target) then
+    Emit(IS_NEVER_TRUE_RULE, ANode,
+      Format('''%s'' is declared %s, and no %s can be a %s: this test is always False, so the branch it guards is dead.',
+        [Text(LhsN), Lhs.Facts.Name, Lhs.Facts.Name, Target.Name]));
+  if (not Lhs.Facts.IsClass) or (not Target.IsClass) or Target.Homonym then Exit;
   if Wants(IS_ALWAYS_TRUE_RULE) and Lhs.Facts.HasAncestor(Target.Name.ToLower) then
     Emit(IS_ALWAYS_TRUE_RULE, ANode,
       Format('''%s'' is declared %s, which is already a %s: this test only asks whether it is nil. Write Assigned(%s), or the declared type is wrong.',

@@ -2569,6 +2569,21 @@ const
   REF_KIND_HANDLE     = 'handle';
   /// <summary>See REF_KIND_RAISE.</summary>
   REF_KIND_HANDLE_ALL = 'handle-all';
+  /// <summary>E-IS-NEVER-TRUE: symbols.directives of a class declared `class sealed`; '' on any
+  /// other class. A sealed class has no descendants, so what it does not implement nobody below it
+  /// can, the fact is-never-true stands on.</summary>
+  CLASS_DIRECTIVE_SEALED = 'sealed';
+  /// <summary>E-PARSER-NOREFS: a name a property's `read` / `write` / `stored` specifier gives,
+  /// receiver_text = the owning type's qualified name.</summary>
+  /// <remarks>Binds refs.symbol_id only: no call edge and no member_accesses row, because a declaration
+  /// reads and writes nothing. Emitted only by a deep (usage-ref) parse. Pinned by
+  /// tests\autotest\run_parser_norefs.ps1.</remarks>
+  REF_KIND_PROP_SPEC = 'property-spec';
+  /// <summary>E-PARSER-NOREFS: a field name in a record constant, `(Alpha: 1)`. receiver_text = the record's
+  /// path from the constant's declared type: `TBox.Corner`, with `[]` per array level, `TPairs[]`.</summary>
+  /// <remarks>Binds refs.symbol_id or refs.external_target only, like REF_KIND_PROP_SPEC.
+  /// Emitted only by a deep (usage-ref) parse.</remarks>
+  REF_KIND_REC_FIELD = 'record-field';
 
   /// <summary>The four values of the derived resolution key on caller / callee rows
   /// (XERJ item 3); see TReference.Resolution.</summary>

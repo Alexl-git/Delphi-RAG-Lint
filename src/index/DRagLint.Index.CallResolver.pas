@@ -2986,6 +2986,34 @@ type
     /// </remarks>
     function ResolveOne(const ACallRef: TReference): TCallEdge;
 
+    /// <summary>E-PARSER-NOREFS: the type an `inherited` receiver starts at: the parent of the
+    /// class around the enclosing routine, never that class, whatever a nearer scope declares.
+    /// `inherited X` / `inherited X(..)` type as X on that parent.</summary>
+    /// <param name="ACallRef">The ref; EnclosingSymbolId is the routine it sits in.</param>
+    /// <param name="AReceiverExpr">The receiver text, `inherited` first.</param>
+    /// <param name="AText">Out: the parent's name when the index does not hold it, for the library
+    /// oracle: an unresolved heritage name, or TObject for a class with no class parent.</param>
+    /// <returns>The type's symbol id; 0 when it is not in this index or nothing types it.</returns>
+    function TypeOfInheritedReceiver(const ACallRef: TReference; const AReceiverExpr: string;
+      var AText: TRcvTypeText): Int64;
+
+    /// <summary>E-PARSER-NOREFS: walks a record constant's field path, as RecordFieldReceiver wrote
+    /// it (`TBox.Pts[]`), to the record the field belongs to. An array level is taken off an inline
+    /// `array[..] of T` or a named array type's text.</summary>
+    /// <param name="ARef">The record-field ref; ReceiverText holds the path.</param>
+    /// <param name="AText">Out: when the walk leaves this index, the leaf type and any segments left,
+    /// for the library oracle.</param>
+    /// <returns>The record's symbol id; 0 when it is not in this index.</returns>
+    function TypeOfRecordFieldPath(const ARef: TReference; var AText: TRcvTypeText): Int64;
+
+    /// <summary>E-PARSER-NOREFS: binds a name a declaration gives (REF_KIND_PROP_SPEC,
+    /// REF_KIND_REC_FIELD) to the member of its owner, nearest declarer first.</summary>
+    /// <param name="ARef">The ref.</param>
+    /// <param name="AEdge">Receives ValueOnly + the target, or the external target. ValueOnly because a
+    /// declaration calls nothing and reads nothing: refs.symbol_id only.</param>
+    /// <remarks>Neither kind has an enclosing routine, so neither can take the ladder in ResolveOne.</remarks>
+    procedure ResolveDeclaredMember(const ARef: TReference; var AEdge: TCallEdge);
+
     /// <summary>Shape A (2026-09-23, enum-value-ref-binding): resolve a bare
     /// `read` ref that names an enum value, by NAME and SCOPE only -- rules
     /// R1-R4 of the spec. Answers `certain` or nothing; there is no ambiguous
@@ -6271,6 +6299,21 @@ begin
   end;
 end;
 
+{ The written type in a const's signature, `TPoint2 = (Alpha: 1)`; '' when none leads it (ConstSignatureOf). }
+function ConstTypeText(const ASignature: string): string;
+const
+  CEq = ' = ';
+begin
+  var P:= Pos(CEq, ASignature);
+  Result:= if P > 1 then Trim(Copy(ASignature, 1, P - 1)) else '';
+end;
+
+{ A unit-level value a type can be read off: a var, or a const with a written type. }
+function TypedUnitValue(const ASym: TSymbol): Boolean;
+begin
+  Result:= (ASym.Kind = skVarDecl) or ((ASym.Kind = skConstDecl) and (ConstTypeText(ASym.Signature) <> ''));
+end;
+
 function TCallResolver.TypeOfOrdinaryName(const ARef: TReference; const AName: string): Int64;
 var
   Ignored: string;
@@ -6298,11 +6341,13 @@ begin
   M:= LookupMemberOnType(ClassId, AName);
   ATypeText:= Trim(M.Signature);
   if M.Id > 0 then Exit(ResolveTypeNameToSymbol(M.Signature, M.FileId));
-  { A unit-level var visible from here: exactly one, or nothing. }
+  { A unit-level var or typed const visible from here: exactly one, or nothing.
+    E-PARSER-NOREFS: `COne.Alpha` on `COne: TPoint2 = (Alpha: 1)` had no receiver type, so the rename
+    that the field name in the initializer now allows still refused on the read. }
   Hits:= 0;
   if FNameToUnitValues.TryGetValue(LowerCase(AName), L) then
     for S in L do
-      if (S.Kind = skVarDecl) and ((S.FileId = ARef.FileId)
+      if TypedUnitValue(S) and ((S.FileId = ARef.FileId)
          or (SameText(S.Section, 'interface') and CandInScope(ARef.FileId, S.FileId))) then
       begin
         Inc(Hits);
@@ -6316,8 +6361,8 @@ begin
   end
   else if Hits = 1 then
   begin
-    ATypeText:= Trim(M.Signature);
-    Result:= ResolveTypeNameToSymbol(M.Signature, M.FileId);
+    ATypeText:= if M.Kind = skConstDecl then ConstTypeText(M.Signature) else Trim(M.Signature);
+    Result:= ResolveTypeNameToSymbol(ATypeText, M.FileId);
   end
   else Result:= 0;
 end;
@@ -7465,16 +7510,15 @@ begin
   if ACallRef.EnclosingSymbolId <= 0 then Exit; // no enclosing routine -> give up
   Encl:= SymbolById(ACallRef.EnclosingSymbolId);
 
+  // --- Kind 13 (E-PARSER-NOREFS): `inherited M`, whose parse fact is the receiver
+  //     `inherited`. Ahead of every other rung, and the receiver being non-empty
+  //     keeps it out of ResolveOne's lexical walk: a nested routine named M is
+  //     nearer than the ancestor's M, and binding to it would be flatly wrong.
+  //     Pinned by tests\autotest\run_nested_call_resolution.ps1 + run_parser_norefs.ps1.
+  if SameText(AReceiverExpr, 'inherited') or AReceiverExpr.StartsWith('inherited ', True) then
+    Exit(TypeOfInheritedReceiver(ACallRef, AReceiverExpr, AText));
+
   // --- Kind 1: bare M / Self.M -> the enclosing routine's owning class.
-  // NOTE on `inherited M`: it never arrives here at all. MEASURED, because the
-  // lexical scope walk added above would otherwise have a real hazard -- a
-  // nested routine named M is lexically nearer than the ancestor's M, and
-  // binding `inherited M` to it would be flatly wrong. The parser emits NO call
-  // ref for either `inherited M;` or `inherited M(Args);` (verified on the
-  // run_nested_call_resolution fixture: zero refs named Ping/Pong, which are
-  // reached only through `inherited`), so no guard is needed on either path.
-  // An earlier version of this comment claimed `inherited M` reached here as a
-  // bare kind-1 call and resolved on the ancestor chain. It does not.
   //
   // --- Kind 0 (1.8.0, D14): a receiver whose LEADING identifier a `with` target
   //     supplies -- `with AObj do Inner.Ping` -- is typed through that target,
@@ -9499,6 +9543,169 @@ begin
   else Inc(FValueReadStats.Unreadable);
 end;
 
+{ The element text of an inline array type, Marks reduced by its dimensions; False when AText is not one. }
+function TakeInlineArray(var AText: string; var AMarks: Integer): Boolean;
+const
+  COf = ' of ';
+begin
+  var P:= AText.ToLower.LastIndexOf(COf);
+  Result:= AText.StartsWith('array', True) and (P > 0);
+  if not Result then Exit;
+  Dec(AMarks, 1 + AText.CountChar(','));
+  if AMarks < 0 then AMarks:= 0;
+  AText:= Trim(Copy(AText, P + 1 + Length(COf), MaxInt));
+end;
+
+function TCallResolver.TypeOfInheritedReceiver(const ACallRef: TReference; const AReceiverExpr: string;
+  var AText: TRcvTypeText): Int64;
+const
+  CImplicitRoot = 'TObject';
+  CHeadLen = Length('inherited');
+var
+  Cls: TSymbol;
+begin
+  Result:= 0;
+  Cls   := SymbolById(ACallRef.EnclosingSymbolId);
+  var Depth:= 0;
+  while (Cls.Id > 0) and (Cls.Kind <> skClass) and (Depth < MAX_LEXICAL_DEPTH) do
+  begin
+    Inc(Depth);
+    Cls:= SymbolById(Cls.ParentId);
+  end;
+  if (Cls.Id <= 0) or (Cls.Kind <> skClass) then Exit;
+  var Anc:= AncestorsOf(Cls.Id);
+  if (Length(Anc) = 0) or (Anc[0].Ordinal <> 0) then AText.Text:= CImplicitRoot
+  else if not Anc[0].Resolved or (Anc[0].SymbolId <= 0) then AText.Text:= NormalizeTypeLeaf(Anc[0].Name)
+  else if SymbolById(Anc[0].SymbolId).Kind = skInterface then AText.Text:= CImplicitRoot
+  else Result:= Anc[0].SymbolId;
+  var Rest:= Trim(Copy(AReceiverExpr, CHeadLen + 1, MaxInt));
+  if Rest = '' then Exit;
+  { `inherited X` / `inherited X(a)`: X on the parent. A longer chain stays untyped. }
+  var Stop:= Rest.IndexOf('(');
+  if Stop >= 0 then
+    Rest:= if Rest.EndsWith(')') and (Rest.IndexOf(')') = Length(Rest) - 1) then Copy(Rest, 1, Stop) else '';
+  var Parent:= Result;
+  Result:= 0;
+  AText := Default(TRcvTypeText);
+  if (Rest = '') or (Parent <= 0) or not IsIdentChain([Rest]) then Exit;
+  Result:= TypeOfMember(Parent, Rest);
+  if Result > 0 then Exit;
+  var Conf: string;
+  var Target:= LookupMethodOnType(Parent, Rest, 0, False, Conf);
+  if (Target > 0) and (Conf = 'certain') then
+    Result:= ResolveTypeNameToSymbol(SignatureReturnType(SymbolById(Target).Signature), SymbolById(Target).FileId);
+end;
+
+function TCallResolver.TypeOfRecordFieldPath(const ARef: TReference; var AText: TRcvTypeText): Int64;
+const
+  CMark = '[]';
+var
+  FileId: Int64;
+
+  { Takes AMarks array levels off ATypeText, through named array types; the leaf's id. }
+  function Step(const ATypeText: string; AMarks: Integer; out ALeaf: string): Int64;
+  begin
+    Result:= 0;
+    ALeaf := Trim(ATypeText);
+    var Depth:= 0;
+    while (AMarks > 0) or ALeaf.StartsWith('array', True) do
+    begin
+      Inc(Depth);
+      if Depth > MAX_LEXICAL_DEPTH then
+      begin
+        ALeaf:= '';
+        Exit;
+      end;
+      if TakeInlineArray(ALeaf, AMarks) then Continue;
+      var Named:= ResolveTypeNameToSymbol(ALeaf, FileId);
+      if (Named <= 0) or (AMarks <= 0) then
+      begin
+        ALeaf:= '';
+        Exit;
+      end;
+      var Sym:= SymbolById(Named);
+      if Sym.Kind <> skTypeAlias then
+      begin
+        ALeaf:= '';
+        Exit;
+      end;
+      ALeaf := Trim(Sym.Signature);
+      FileId:= Sym.FileId;
+    end;
+    Result:= ResolveTypeNameToSymbol(ALeaf, FileId);
+  end;
+
+  function Marks(const ASeg: string; out AName: string): Integer;
+  begin
+    AName := ASeg;
+    Result:= 0;
+    while AName.EndsWith(CMark) do
+    begin
+      Inc(Result);
+      AName:= Copy(AName, 1, Length(AName) - Length(CMark));
+    end;
+  end;
+
+begin
+  Result:= 0;
+  if ARef.ReceiverText = '' then Exit;
+  FileId:= ARef.FileId;
+  var Segs:= ARef.ReceiverText.Split(['.']);
+  var Name, Leaf: string;
+  var Mk:= Marks(Segs[0], Name);
+  Result:= Step(Name, Mk, Leaf);
+  for var i:= 1 to High(Segs) do
+  begin
+    if Result <= 0 then
+    begin
+      { Off this index: the library walks what is left, unless an array level is in it. }
+      if (Leaf = '') or Segs[i].Contains(CMark) then
+      begin
+        Leaf:= '';
+        Break;
+      end;
+      AText.Pending:= if AText.Pending = '' then Segs[i] else AText.Pending + '.' + Segs[i];
+      Continue;
+    end;
+    Mk:= Marks(Segs[i], Name);
+    var M:= NearestClassMember(Result, Name);
+    if M.Id <= 0 then Exit(0);
+    FileId:= M.FileId;
+    Result:= Step(M.Signature, Mk, Leaf);
+  end;
+  if Result <= 0 then AText.Text:= Leaf;
+end;
+
+procedure TCallResolver.ResolveDeclaredMember(const ARef: TReference; var AEdge: TCallEdge);
+var
+  Text: TRcvTypeText;
+begin
+  Text := Default(TRcvTypeText);
+  AEdge.ReceiverText:= ARef.ReceiverText;
+  var Owner: Int64:= 0;
+  if SameText(ARef.Kind, REF_KIND_REC_FIELD) then Owner:= TypeOfRecordFieldPath(ARef, Text)
+  else
+    for var S in FileTypesOf(ARef.FileId) do
+      if SameText(S.QualifiedName, ARef.ReceiverText) then
+      begin
+        Owner:= S.Id;
+        Break;
+      end;
+  AEdge.ReceiverTypeSymbolId:= Owner;
+  if Owner > 0 then
+  begin
+    var M:= NearestClassMember(Owner, ARef.NameText);
+    if M.Id > 0 then
+    begin
+      AEdge.TargetSymbolId:= M.Id;
+      AEdge.Confidence    := 'certain';
+      AEdge.ValueOnly     := True;
+      Exit;
+    end;
+  end;
+  if ARef.ReceiverText <> '' then AEdge.ExternalTarget:= BindExternally(ARef, ARef.ReceiverText, Owner, Text);
+end;
+
 function TCallResolver.ResolveOne(const ACallRef: TReference): TCallEdge;
 var
   Lines   : TStringList;
@@ -9521,6 +9728,12 @@ begin
   FSiteShapesState:= 0;
 
   if ACallRef.NameText = '' then Exit;
+
+  if SameText(ACallRef.Kind, REF_KIND_PROP_SPEC) or SameText(ACallRef.Kind, REF_KIND_REC_FIELD) then
+  begin
+    ResolveDeclaredMember(ACallRef, Result);
+    Exit;
+  end;
 
   // 1. the receiver expression left of '.M'. T-11 (extractor 1.25.0): the
   // parser records it from the CST in refs.receiver_text, which is the FACT --
@@ -9928,7 +10141,8 @@ begin
        or EnclosingClassChainDeclares(ACallRef.EnclosingSymbolId, ACallRef.NameText, ClassId) then Exit;
     Exit(FOracle.BindBare(ACallRef.NameText, FileUsesUnits(ACallRef.FileId), ScopeType, Reason));
   end;
-  Kind:= if SameText(ACallRef.Kind, 'member-access') then ekMemberAccess else ekCall;
+  Kind:= if SameText(ACallRef.Kind, 'member-access') or SameText(ACallRef.Kind, REF_KIND_PROP_SPEC)
+           or SameText(ACallRef.Kind, REF_KIND_REC_FIELD) then ekMemberAccess else ekCall;
   ProjId:= 0;
   if AText.Text <> '' then
     ProjId:= if (ATypeId > 0) and (AText.Pending = '') then ATypeId else ResolveTypeNameToSymbol(AText.Text, ACallRef.FileId)

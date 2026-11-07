@@ -690,6 +690,146 @@ begin
   if Length(Result) > RECEIVER_TEXT_MAX then Result:= '';
 end;
 
+{ E-PARSER-NOREFS: is this node inherited X, or a dotted chain of identifier
+  members rooted in one, inherited X.Y? inherited X(a).Y is IsCallRootedReceiver's. }
+function IsInheritedRootedReceiver(const ANode: TTSNode): Boolean;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'inherited' then Exit(True);
+  if ANode.NodeType <> 'exprDot' then Exit;
+  var R:= ANode.ChildByField('rhs');
+  if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+  Result:= IsInheritedRootedReceiver(ANode.ChildByField('lhs'));
+end;
+
+const
+  { E-PARSER-NOREFS: the receiver of inherited X. The resolver starts X's lookup at the
+    PARENT of the enclosing class, so a nearer X (a nested routine, the class's own) never
+    answers. A bare inherited; writes no name and gets no row. }
+  RECEIVER_INHERITED = 'inherited';
+
+{ E-PARSER-NOREFS: the ref of inherited X. A call in statement position or with
+  arguments; in an expression the tree cannot tell a method from a property, so a
+  member-access, the kind Obj.X gets there. Parent is asked only on this node. }
+procedure EmitInheritedReference(const ANode: TTSNode; const AState: TWalkState);
+begin
+  var NameNode:= FindNamedChildOfType(ANode, 'identifier');
+  if NameNode.IsNull then Exit;
+  var Up:= ANode.Parent;
+  var IsCall:= (not Up.IsNull) and ((Up.NodeType = 'statement') or ((Up.NodeType = 'exprCall') and (Up.ChildByField('entity').StartByte = ANode.StartByte)));
+  if IsCall then AState.EmitRef(REF_KIND_CALL, NodeText(NameNode, AState.Source), NameNode, RECEIVER_INHERITED)
+  else if AState.EmitUsageRefs then AState.EmitRef('member-access', NodeText(NameNode, AState.Source), NameNode, RECEIVER_INHERITED);
+end;
+
+{ E-PARSER-NOREFS: the names a property declaration gives, each on what it is. The
+  shapes (tools\dumpnode): read/write/stored name a member of the owner, index /
+  default / dispid a value, implements a type. A dotted or indexed specifier
+  (read FRec.X, read FArr[0]) already emits through Walk: only a bare identifier was
+  lost. True / False are not members. }
+procedure EmitPropertySpecRefs(const ANode: TTSNode; const AState: TWalkState; const AOwnerQName: string);
+
+  procedure Named(const AField, AKind, AReceiver: string);
+  begin
+    var N:= ANode.ChildByField(AField);
+    if N.IsNull or (N.NodeType <> 'identifier') then Exit;
+    var S:= NodeText(N, AState.Source);
+    if not (SameText(S, 'True') or SameText(S, 'False')) then AState.EmitRef(AKind, S, N, AReceiver);
+  end;
+
+begin
+  if not AState.EmitUsageRefs then Exit;
+  Named('getter', REF_KIND_PROP_SPEC, AOwnerQName);
+  Named('setter', REF_KIND_PROP_SPEC, AOwnerQName);
+  Named('stored', REF_KIND_PROP_SPEC, AOwnerQName);
+  Named('index', 'read', '');
+  Named('dispid', 'read', '');
+  Named('defaultValue', 'read', '');
+  var Seen:= False;
+  for var i:= 0 to ANode.ChildCount - 1 do
+  begin
+    var C:= ANode.Child(i);
+    if not Seen then Seen:= C.NodeType = 'kImplements'
+    else if C.NodeType = 'identifier' then AState.EmitRef('type_use', NodeText(C, AState.Source), C)
+    else if C.NodeType = 'exprDot' then
+    begin
+      var R:= C.ChildByField('rhs');
+      if not R.IsNull then AState.EmitRef('type_use', NodeText(R, AState.Source), R);
+    end
+    else if C.NodeType <> ',' then Break;
+  end;
+end;
+
+{ E-PARSER-NOREFS: the record a field of a record constant belongs to, as text the
+  resolver reads: the declared type's leaf, then one .Field per enclosing named field,
+  with [] per array level. CBox: TBox = (Pts: ((Alpha: 1), ...)) -> TBox.Pts[];
+  C: array[0..1] of TP = ((A: 1), ...) -> TP (the array is written here, so it needs no
+  marker); C: TPairs = ((A: 1), ...) -> TPairs[].
+  '' when the climb meets anything else. The shapes (tools\dumpnode): the fields sit in a
+  recInitializer; an array level is an arrInitializer, or a recInitializerField with no name
+  (the grammar cannot tell ((A: 1), (A: 2)) from a record until the second paren). }
+function RecordFieldReceiver(const AField: TTSNode; const ASource: TBytes): string;
+const
+  COf = ' of ';
+var
+  Path: string;
+  Arr : Integer;
+
+  function Marks: string;
+  begin
+    Result:= '';
+    for var i:= 1 to Arr do Result:= Result + '[]'; // dl:ok concat-in-loop@0831 -- one per array level of one initializer: single digits
+  end;
+
+begin
+  Result:= '';
+  Path  := '';
+  Arr   := 0;
+  var N:= AField.Parent; { recInitializer }
+  while not N.IsNull do
+  begin
+    var Up:= N.Parent;
+    if Up.IsNull then Exit;
+    var UpType:= Up.NodeType;
+    if UpType = 'arrInitializer' then
+    begin
+      Inc(Arr);
+      N:= Up;
+    end
+    else if UpType = 'recInitializerField' then
+    begin
+      var Nm:= Up.ChildByField('name');
+      if Nm.IsNull then Inc(Arr)
+      else
+      begin
+        Path:= '.' + NodeText(Nm, ASource) + Marks + Path;
+        Arr := 0;
+      end;
+      N:= Up.Parent;
+    end
+    else if UpType = 'recInitializer' then N:= Up
+    else if UpType = 'defaultValue' then
+    begin
+      var TypeNode:= Up.Parent.ChildByField('type');
+      if TypeNode.IsNull then Exit;
+      var T:= NormaliseReceiverText(NodeText(TypeNode, ASource));
+      var OfPos:= T.ToLower.LastIndexOf(COf);
+      if T.StartsWith('array', True) and (OfPos > 0) then
+      begin
+        var Dims:= 1 + T.CountChar(',');
+        Arr:= if Arr > Dims then Arr - Dims else 0;
+        T := Copy(T, OfPos + 1 + Length(COf), MaxInt);
+      end;
+      var Dot:= T.LastDelimiter('.');
+      if (Dot >= 0) and not T.Contains('<') then T:= T.Substring(Dot + 1);
+      Result:= T + Marks + Path;
+      if Length(Result) > RECEIVER_TEXT_MAX then Result:= '';
+      Exit;
+    end
+    else Exit;
+  end;
+end;
+
 procedure Walk(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string); forward;
 
 // v0.8: every `typeref` node that appears in a parameter type, field type,
@@ -1057,8 +1197,14 @@ begin
     ReadField('else');
   end
   else if NT = 'with'    then ReadWithEntities            // ALL entity slots, not just the first
-  else if NT = 'foreach' then ReadField('iterable')        // `for X in Coll` -- Coll only;
-                                                           // the iterator is written, not read
+  else if NT = 'foreach' then
+  begin
+    ReadField('iterable');
+    { E-PARSER-NOREFS: the iterator is WRITTEN each pass, the twin of for X:= ...'s
+      assignment. for var X in is a varAssignDef: a declaration, no row. }
+    Op:= ANode.ChildByField('iterator');
+    if (not Op.IsNull) and (Op.NodeType = 'identifier') then AState.EmitRef('write', NodeText(Op, AState.Source), Op);
+  end
   else if NT = 'raise'   then ReadField('exception')
   else if NT = 'for'     then ReadField('end')             // the bound; `start` is an assignment
   { `procExternal` is the `external <libexpr> [name <expr>]` directive, and its
@@ -1104,6 +1250,9 @@ begin
   begin
     Op:= ANode.NamedChild(ANode.NamedChildCount - 1);
     if Op.NodeType = 'identifier' then AState.EmitRef('read', NodeText(Op, AState.Source), Op);
+    { E-PARSER-NOREFS: the field NAME is a use of the field, on the constant's own type. }
+    Op:= ANode.ChildByField('name');
+    if not Op.IsNull then AState.EmitRef(REF_KIND_REC_FIELD, NodeText(Op, AState.Source), Op, RecordFieldReceiver(ANode, AState.Source));
   end;
 end; // procedure
 
@@ -1538,7 +1687,8 @@ begin
   else QName:= TypeName;
   if ClassNodeIsRecord(ClassNode) then Kind:= skRecord
   else Kind:= skClass;
-  TypeIdx:= AState.Emit(Kind, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, '', '', HeritageTextOf(ClassNode, AState.Source), False, False, '', '', True, GenParams);
+  TypeIdx:= AState.Emit(Kind, TypeName, QName, AParentSymbolIdx, ADeclTypeNode, '', '', HeritageTextOf(ClassNode, AState.Source), False, False, '',
+    if FindNamedChildOfType(ClassNode, 'kSealed').IsNull then '' else CLASS_DIRECTIVE_SEALED, True, GenParams); { E-IS-NEVER-TRUE: a class has directives too }
   { Members before any visibility keyword default to 'public'; declSection
     handlers update it as they are walked.  Save/restore so a nested type does
     not leak its sections to the enclosing one. }
@@ -2770,6 +2920,15 @@ const
   // deep at most; this only stops a pathological or malformed tree.
   MaxInlineDeclWalkDepth = 64;
 
+{ E-IS-NEVER-TRUE: the bare name after a declVar's `absolute`, at named child AIndex: a read of
+  that variable, never a declaration. A dotted target already emits through Walk. }
+procedure EmitAbsoluteTarget(const ADeclVar: TTSNode; AIndex: Integer; const AState: TWalkState);
+begin
+  if (not AState.EmitUsageRefs) or (AIndex + 1 >= ADeclVar.NamedChildCount) then Exit;
+  var T:= ADeclVar.NamedChild(AIndex + 1);
+  if T.NodeType = 'identifier' then AState.EmitRef('read', NodeText(T, AState.Source), T);
+end;
+
 { v14 (D5, Task 3) / v23: emit a routine's locals as skLocalVar symbols parented
   to the routine (ARoutineIdx), Signature = declared type text, so the call
   resolver (Task 5) can type a receiver that is a local. Two sources:
@@ -2807,6 +2966,13 @@ procedure EmitRoutineLocals(const ADefProcNode: TTSNode; const AState: TWalkStat
     for k:= 0 to ADeclVar.NamedChildCount - 1 do
     begin
       Child:= ADeclVar.NamedChild(k);
+      { E-IS-NEVER-TRUE: `L: TList absolute O` -- O is a USE. It was emitted as a second local
+        named O of type TList, which then answered every static-type question about O. }
+      if Child.NodeType = 'kAbsolute' then
+      begin
+        EmitAbsoluteTarget(ADeclVar, k, AState);
+        Break;
+      end;
       if Child.NodeType <> 'identifier' then Continue;
       VarName:= NodeText(Child, AState.Source);
       if VarName = '' then Continue;
@@ -3028,7 +3194,8 @@ begin
   // of an `assignment` or as a `statement`. Extract+classify the chain here;
   // normal recursion below still emits type_use refs for the type arguments.
   if (NodeType = 'statement') and (ANode.NamedChildCount >= 1) then TryEmitSpringDI(ANode.NamedChild(0), AState)
-  else if NodeType = 'assignment' then TryEmitSpringDI(ANode.ChildByField('rhs'), AState);
+  else if NodeType = 'assignment' then TryEmitSpringDI(ANode.ChildByField('rhs'), AState)
+  else if NodeType = 'inherited' then EmitInheritedReference(ANode, AState); { E-PARSER-NOREFS; recursion below finds nothing more in it }
 
   if NodeType = 'unit' then
   begin
@@ -3201,6 +3368,7 @@ begin
                     PropImplementsDirective(ANode, AState.Source), AState.CurrentVisExplicit); { v22: same reasoning as the field emit above }
       end;
     end;
+    EmitPropertySpecRefs(ANode, AState, AParentQualifiedName); { E-PARSER-NOREFS }
     // Walk children so the property's type emits a type_use ref.
     for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;
@@ -3283,6 +3451,11 @@ begin
     for i:= 0 to ANode.NamedChildCount - 1 do
     begin
       var VChild:= ANode.NamedChild(i);
+      if VChild.NodeType = 'kAbsolute' then { E-IS-NEVER-TRUE: see EmitAbsoluteTarget }
+      begin
+        EmitAbsoluteTarget(ANode, i, AState);
+        Break;
+      end;
       if VChild.NodeType <> 'identifier' then Continue; // the type lives under 'type'
       var VName:= NodeText(VChild, AState.Source);
       if VName = '' then Continue;
@@ -3715,6 +3888,13 @@ begin
         var RG5:= ANode.ChildByField('rhs');
         if (not RG5.IsNull) and (RG5.NodeType = 'identifier') then
           AState.EmitRef('member-access', NodeText(RG5, AState.Source), RG5, ReceiverTextOf(ANode, AState.Source));
+      end;
+      // E-PARSER-NOREFS: the same capture when the receiver is inherited X.
+      if IsInheritedRootedReceiver(L) then
+      begin
+        var RInh:= ANode.ChildByField('rhs');
+        if (not RInh.IsNull) and (RInh.NodeType = 'identifier') then
+          AState.EmitRef('member-access', NodeText(RInh, AState.Source), RInh, ReceiverTextOf(ANode, AState.Source));
       end;
       // Ref-gap G6 (lane 145): the same capture when the receiver is any other
       // CALL -- `H.Names().FLeaf`, `F().L`, `O.Mk(x).A.B`. See

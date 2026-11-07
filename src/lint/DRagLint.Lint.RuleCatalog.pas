@@ -57,6 +57,7 @@ const
                                   ordinary.
       interface-object-mixing     first-cut same-routine dual-handle heuristic.
       ui-access-in-thread-typed   1.45: OFF until measured on re-resolved real DBs.
+      is-never-true               1.46: OFF per its row; its sealed half needs re-parsed DBs.
       multiple-statements-per-line pure style.
       magic-literal               medium-FP; floods legacy code.
       boolean-flag-parameter      a common, deliberate idiom here.
@@ -111,7 +112,8 @@ const
     { 1.42 lane opaque }
     'opaque-to-analysis',
     { 1.42 lane ruleset: the old ROADMAP candidates }
-    'stream-buffer-after-free', 'interfaced-object-nil-leak', 'identifier-case-mismatch', 'datamodule-form-global', 'ui-access-in-thread-typed'];
+    'stream-buffer-after-free', 'interfaced-object-nil-leak', 'identifier-case-mismatch', 'datamodule-form-global', 'ui-access-in-thread-typed',
+    'is-never-true'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -920,6 +922,7 @@ begin
     B('interface-holder-of-non-refcounted', 'project-wide', 'warning', 'An interface variable is assigned a TComponent-like object: _AddRef does nothing, so the holder keeps nothing alive and dangles once the owner frees the object; needs a 1.44 index (ref_types)');
     B('argument-narrows', 'project-wide', 'warning', 'A call passes a variable, field or function result of a wider numeric type than the by-value parameter (Int64 to Integer): the compiler truncates silently; needs a 1.44 index (ref_types)');
     B('is-always-true', 'project-wide', 'warning', 'x is T where the static type of x already descends from T: the test only asks whether x is nil; needs a 1.44 index (ref_types)'); { ON (1.44 lane rulesf1): YADF 0, Loader2025 0, Micronite2027 1, a true positive read in the source }
+    B('is-never-true', 'project-wide', 'warning', 'x is T that no object can answer yes to: two classes where neither descends from the other, or a sealed class against an interface it does not implement; the branch is dead. Proof only: both ancestries followed to the end; needs a 1.44 index (ref_types), and a 1.46 parse for sealed', False);
     B('ui-access-in-thread-typed', 'project-wide', 'warning', 'Thread code (Execute of any TThread descendant, a lambda or routine passed to TThread.CreateAnonymousThread, TTask.Run/Create/Future, TParallel.For) reads, writes or calls a member of a receiver whose static type descends from TControl, TCustomForm, TFmxObject, or is TApplication/TScreen, directly or over resolved calls, outside Synchronize/Queue; needs a 1.44 index (ref_types) and the library index', False); { OFF (1.45 lane uithread) until measured on re-resolved DBs. }
     { taint wave T2: store-backed interprocedural taint (DRagLint.Lint.TaintRules; catalogues rules\taint-*.json) }
     B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');

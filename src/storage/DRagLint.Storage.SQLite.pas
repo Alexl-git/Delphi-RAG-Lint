@@ -15730,7 +15730,7 @@ begin
     Q.SQL.Text:=
       'SELECT id, symbol_id, file_id, kind, name_text, start_line, start_col, ' +
       '  end_line, end_col, enclosing_symbol_id, receiver_text FROM refs WHERE ' +
-      '(' + CallSiteRefKindSql('refs') + ' OR refs.kind = ''member-access'')';
+      '(' + CallSiteRefKindSql('refs') + ' OR refs.kind IN (''member-access'', ''' + REF_KIND_PROP_SPEC + ''', ''' + REF_KIND_REC_FIELD + '''))';
     { The scoped pass narrows the SAME universe rather than defining its own:
       widen the kind test above and the scoped path follows automatically. }
     if Scoped then Q.SQL.Text:= Q.SQL.Text + ' AND (' + ScopeWhere + ')';
@@ -15758,7 +15758,7 @@ begin
     try
       QStale.Connection:= FConn;
       QStale.SQL.Text  := 'SELECT DISTINCT file_id FROM refs WHERE ' +
-        '(' + CallSiteRefKindSql('refs') + ' OR refs.kind = ''member-access'')';
+        '(' + CallSiteRefKindSql('refs') + ' OR refs.kind IN (''member-access'', ''' + REF_KIND_PROP_SPEC + ''', ''' + REF_KIND_REC_FIELD + '''))';
       if Scoped then QStale.SQL.Text:= QStale.SQL.Text + ' AND (' + ScopeWhere + ')';
       QStale.Open;
       while not QStale.Eof do

@@ -40,7 +40,8 @@ A rename that compiles can still bind differently, and dcc cannot see it. So `--
 old name in the project's sources, not only the refs the index holds, and decides each one:
 
 - the target's: a declaration, an implementation header, a ref bound to it, an unbound ref whose receiver's static type
-  reaches the target first, a property's `read`/`write`/`stored`, an `inherited` call;
+  reaches the target first, a property's `read`/`write`/`stored`, an `inherited` call, the iterator of `for X in`, a field
+  name in a record constant (decided by the constant's declared type: `(Alpha: 1)` on a `TOtherPt` is not `TPoint2.Alpha`);
 - another symbol's: bound elsewhere, or the receiver's chain reaches another declarer or the library first;
 - otherwise a refusal, by name, with `file:line:col`. Nothing is written.
 
@@ -52,7 +53,7 @@ compiles. So would a call renamed to a name a local of that routine already has.
 |---|---|
 | `receiver-untyped` | an unbound ref whose receiver has no typed ref: `A[i].X`, a chain over lines, a library-only cast |
 | `bare-unbound` | an unbound ref with no receiver |
-| `no-ref-occurrence` | a token the index holds no ref for: an inactive `{$IFDEF}` branch, a record-constant field name, `F().X`, `for X in` |
+| `no-ref-occurrence` | a token the index holds no ref for: an inactive `{$IFDEF}` branch, or a chain the parse dropped |
 | `unresolved-ancestor`, `no-library`, `ambiguous-type` | the receiver's chain cannot be walked to its end |
 | `helper-member`, `overload-set`, `invisible-member` | the first declarer is not certainly what the compiler picks |
 | `low-confidence`, `conflicting-binding` | the resolver's binding of the token is not certain |

@@ -102,6 +102,7 @@ $OwnRunner = @{
     'interface-holder-of-non-refcounted'= 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
     'argument-narrows'          = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
     'is-always-true'            = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
+    'is-never-true'             = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
 }
 function HasOwnRunner([string]$Id, [hashtable]$Map = $OwnRunner) {
   if (-not $Map.ContainsKey($Id)) { return $false }

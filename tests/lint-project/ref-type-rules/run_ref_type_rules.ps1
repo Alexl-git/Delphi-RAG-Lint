@@ -56,6 +56,22 @@ try {
   # positive-control: is-always-true
   CheckRule $db $src 'is-always-true' 'ALWAYS'
 
+  # positive-control: is-never-true
+  # (OFF by default; two unrelated classes, and the sealed cases on the new fact)
+  CheckRule $db $src 'is-never-true' 'NEVER'
+  $offNever = @((Parse-Findings (& $exePath lint-all --db $db --format json 2>$null)) | Where-Object { $_.rule -eq 'is-never-true' })
+  Check 'a plain lint-all: is-never-true stays OFF' ($offNever.Count -eq 0) "$($offNever.Count) finding(s)"
+  $catalog = & $exePath rules --json 2>$null | Out-String | ConvertFrom-Json
+  $never = @($(if ($catalog.rules) { $catalog.rules } else { $catalog }) | Where-Object { $_.id -eq 'is-never-true' })
+  Check 'rules --json: is-never-true is default_enabled false' ($never.Count -eq 1 -and $never[0].default_enabled -eq $false) "count=$($never.Count)"
+  # The fact itself, raw: sql --json rows are positional, column 0 of the only row.
+  $sealedRow = (& $exePath sql --db $db --query "SELECT directives FROM symbols WHERE name = 'TRtSealed'" --json 2>$null | Out-String | ConvertFrom-Json).rows
+  Check 'the parser records sealed on the class symbol' (@($sealedRow).Count -eq 1 -and $sealedRow[0][0] -eq 'sealed') "rows: $($sealedRow | ConvertTo-Json -Compress)"
+  $openRow = (& $exePath sql --db $db --query "SELECT directives FROM symbols WHERE name = 'TRtOpen'" --json 2>$null | Out-String | ConvertFrom-Json).rows
+  $absRow = (& $exePath sql --db $db --query "SELECT count(*) FROM symbols WHERE qualified_name LIKE '%.NeverAbsolute.B'" --json 2>$null | Out-String | ConvertFrom-Json).rows
+  Check 'absolute: its target is one local, not a second one of the alias type' ([int]$absRow[0][0] -eq 1) "count=$($absRow[0][0])"
+  Check 'and nothing on an open class' (@($openRow).Count -eq 1 -and "$($openRow[0][0])" -eq '') "rows: $($openRow | ConvertTo-Json -Compress)"
+
   # positive-control: upcast-then-downcast
   CheckRule $db $src 'upcast-then-downcast' 'UPDOWN'
 
@@ -94,6 +110,7 @@ try {
   $tableGone = @(& $exePath sql --db $old --query "SELECT name FROM sqlite_master WHERE name = 'ref_types'" 2>&1) -join ' '
   Check 'the control DB really has no ref_types' ($tableGone -match '\b0 row') $tableGone
   Check 'no ref_types table (an index older than 1.44): is-always-true answers nothing' (@(RuleLines $old 'is-always-true').Count -eq 0) ''
+  Check 'no ref_types table: is-never-true answers nothing' (@(RuleLines $old 'is-never-true').Count -eq 0) ''
 } finally {
   if (Test-Path $scratch) { [System.IO.Directory]::Delete($scratch, $true) }
 }

@@ -12,6 +12,7 @@ drag-lint lint-all --db <project.sqlite> --rule argument-narrows
 | Rule | Default | Reports |
 |---|---|---|
 | `is-always-true` | ON | `x is T` where the static type of `x` already descends from `T`: the test only asks whether `x` is nil |
+| `is-never-true` | OFF | `x is T` that no object can answer yes to: two classes where neither descends from the other, or a sealed class against an interface it does not implement, either way round. Proof only: both ancestries followed to the end and no homonym; a class that is not sealed against an interface stays silent, a descendant may implement it. The sealed half needs a 1.46 parse (`symbols.directives`) |
 | `upcast-then-downcast` | ON | `TLeaf(TBase(x))` or `(x as TBase) as TLeaf` where `x` already is a `TBase` |
 | `with-on-temporary` | ON | `with TFoo.Create do` with no free in the body and no owner taking the object |
 | `interface-holder-of-non-refcounted` | ON | An interface variable assigned a `TComponent` / `TNoRefCountObject` / `TSingletonImplementation` descendant (a variable, `as`, a constructor, `Self`) |

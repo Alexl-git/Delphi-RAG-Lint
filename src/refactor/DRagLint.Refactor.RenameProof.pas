@@ -42,6 +42,8 @@ const
   CRefuseConflictingBinding = 'conflicting-binding';
   /// <summary>A token no ref and no declaration accounts for: an inactive {$IFDEF} branch, a chain the parse dropped.</summary>
   CRefuseNoRefOccurrence = 'no-ref-occurrence';
+  /// <summary>refs.receiver_text of `inherited X` (the parser's RECEIVER_INHERITED).</summary>
+  CReceiverInherited = 'inherited';
   /// <summary>An override or implementer in the method's group has another name.</summary>
   CRefuseGroupNameDiffers = 'group-name-differs';
   /// <summary>A dispatch edge of the method's group is not `certain`.</summary>
@@ -197,6 +199,7 @@ uses
   System.Math,
   System.JSON,
   System.Generics.Collections,
+  DRagLint.Core.Model, // dl:unit DRagLint.Core.Model accepted -- the one spelling of a ref kind the parser writes
   System.Generics.Defaults,
   Data.DB,
   FireDAC.Comp.Client,
@@ -1368,7 +1371,7 @@ begin
     Exit;
   end;
   Refuse(CRefuseNoRefOccurrence, pTok.Path, pTok.Line, pTok.Col,
-    Format('"%s" sits here and the index holds no ref for it: an inactive {$IFDEF} branch, a chain the parse dropped, a field name in a record constant', [FOld]));
+    Format('"%s" sits here and the index holds no ref for it: an inactive {$IFDEF} branch, or a chain the parse dropped', [FOld]));
 end;
 
 { Only unbound rows on the token: the receiver's static type decides, or nothing does. }
@@ -1457,9 +1460,12 @@ begin
   begin
     AddEdit(pTok.Path, pTok.Line, pTok.Col);
     Inc(FBound);
-    if not pTok.Qualified then CheckBareSite(pTok, BoundRow);
+    if not pTok.Qualified and (BoundRow.ReceiverText = '') then CheckBareSite(pTok, BoundRow); { a receiver of any spelling is no bare site }
   end
   else if ToOther then Inc(FOther)
+  { `inherited X` over a parent this index does not hold, a specifier naming an ancestor's: the
+    text decides these as it did when they had no ref, and bare-unbound would refuse them. }
+  else if SameText(UnboundRow.ReceiverText, CReceiverInherited) or SameText(UnboundRow.Kind, REF_KIND_PROP_SPEC) then ClassifyNoRef(pTok)
   else ClassifyUnbound(pTok, UnboundRow);
 end;
 
@@ -1476,7 +1482,10 @@ begin
       Refuse(CRefuseCaptureNoRef, pTok.Path, pTok.Line, pTok.Col, Format('the new name "%s" sits here and the index holds no ref for it', [FNew]));
     Exit;
   end;
-  if pTok.Qualified then
+  var HasReceiver:= pTok.Qualified;
+  for var R in Rows do
+    if R.ReceiverText <> '' then HasReceiver:= True;
+  if HasReceiver then
   begin
     for var R in Rows do
       if (R.SymbolId > 0) or (R.ExternalTarget <> '') then Exit;

@@ -21,6 +21,25 @@ type
   TRtOther = class
   end;
 
+  IRtFace = interface
+  end;
+
+  IRtOther = interface
+  end;
+
+  TRtSealed = class sealed(TRtBase)
+  end;
+
+  TRtFaced = class sealed(TRtBase, IRtFace)
+  end;
+
+  TRtOpen = class(TRtBase)
+  end;
+
+  { An ancestor no index holds: the closure is incomplete, so nothing is proved about it. }
+  TRtUnfollowed = class(TNotIndexedAnywhere)
+  end;
+
   { Stand-ins for the library classes the rules climb to: the fixture runs without a library index. }
   TComponent = class
   public
