@@ -426,7 +426,7 @@ edge (unlike `refs`, which includes every reference kind, not just calls).
 |---|---|---|
 | `ref_id` | INTEGER PK, FK -> `refs.id` (ON DELETE CASCADE) | The call-site reference this edge resolves |
 | `target_symbol_id` | INTEGER FK -> `symbols.id` (ON DELETE CASCADE) | The resolved call target |
-| `confidence` | TEXT | `'certain'` (exactly one matching candidate) or `'ambiguous'` (more than one candidate on the type chain) |
+| `confidence` | TEXT | `'certain'` (exactly one candidate left once the nearest declaration has hidden what it shadows) or `'ambiguous'` (a real tie: same-level overloads, IFDEF twins, sibling interfaces) |
 | `receiver_type_symbol_id` | INTEGER FK -> `symbols.id` (ON DELETE SET NULL) | Statically known type of the call receiver, when available; used to disambiguate overloads/virtual dispatch |
 
 Join: `call_edges.ref_id -> refs.id`; `call_edges.target_symbol_id ->
@@ -516,7 +516,7 @@ read/write use of that field.
 | `ref_id` | INTEGER PK FK -> `refs.id` (ON DELETE CASCADE) | The access site |
 | `member_symbol_id` | INTEGER FK -> `symbols.id` (ON DELETE CASCADE) | The property or field the source named |
 | `mode` | TEXT | `read` or `write` (`:=` after the name, past any `[...]` indexer, is a write) |
-| `accessor_symbol_id` | INTEGER FK -> `symbols.id` (ON DELETE SET NULL) | The getter/setter the mode resolves to; NULL when the declaration names none this resolver could find (absent clause, a dotted path, an unresolved name) |
+| `accessor_symbol_id` | INTEGER FK -> `symbols.id` (ON DELETE SET NULL) | The getter/setter the mode resolves to; a dotted path (`read FRec.X`) answers its leftmost field; a redeclaration (`property Val;`) answers the nearest ancestor's clause; NULL when the declaration names none this resolver could find (absent clause, an unresolved name) |
 | `accessor_kind` | TEXT | `method` (the ref ALSO owns a `call_edges` row targeting it -- `call_edges` stays routine-only) or `field` (no edge; the readers UNION this table in) |
 | `receiver_type_symbol_id` | INTEGER FK -> `symbols.id` (ON DELETE SET NULL) | The type the receiver was typed to |
 

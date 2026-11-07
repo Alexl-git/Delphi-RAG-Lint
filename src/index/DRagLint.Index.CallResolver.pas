@@ -1435,6 +1435,29 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.AncestorsOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
+    /// <summary>E-BIND-NEAREST-WINS: removes from an inheritance-chain candidate
+    /// list what the compiler's own lookup could not reach, so the nearest
+    /// override binds 'certain' instead of 'ambiguous'.</summary>
+    /// <param name="AMatches">Candidates in chain order: own type first, then the
+    /// ancestors nearest first. Only the part from AFrom on is considered.</param>
+    /// <param name="AFrom">First entry that belongs to this chain.</param>
+    /// <param name="AArgCount">Arguments at the site. Ignored unless AArgsKnown.</param>
+    /// <param name="AArgsKnown">False when the site's arguments are not known; the
+    /// arity check below is then skipped.</param>
+    /// <returns>True when a candidate was removed.</returns>
+    /// <remarks>
+    /// A level with no `overload` directive hides every deeper level. A deeper
+    /// candidate with the parameter list of a nearer one is its overridden twin
+    /// and goes too (compared as text, so an override that renames a parameter
+    /// stays ambiguous). Candidates of ONE level are never chosen between: an
+    /// overload tie or an IFDEF twin stays ambiguous. When every survivor refuses
+    /// the site's arity the list stands untouched: a narrowing may improve an
+    /// answer, never remove one. Sibling interfaces are not a chain, so the
+    /// callers run this BEFORE the implemented-interface fallback. Pinned by
+    /// tests\callresolve\run_bind_nearest_wins.ps1.
+    /// </remarks>
+    function NarrowToNearest(AMatches: TList<TSymbol>; AFrom, AArgCount: Integer;
+      AArgsKnown: Boolean): Boolean;
     function PickFromMatches(AMatches: TList<TSymbol>; AArgCount: Integer;
       AArgsKnown: Boolean; out AConfidence: string): Int64;
     /// <summary>rb5-ovl: drops from AFit every candidate that some argument at
@@ -1654,8 +1677,8 @@ type
       const AKinds: TSymbolKindSet; out AFound: Boolean): TSymbol;
     /// <summary>The accessor a property's AMode resolves to: the identifier
     /// after `read` / `write` on the declaring lines, looked up as a METHOD or
-    /// FIELD on the declaring class or its ancestors. Id = 0 when the clause is
-    /// absent, names a path (`FRec.X`), resolves to nothing, or names an
+    /// FIELD on the declaring class or its ancestors; a path (`FRec.X`) answers
+    /// its leftmost field. Id = 0 when the clause is absent, resolves to nothing, or names an
     /// OVERLOAD SET that the property's own arity cannot narrow to one
     /// (see PickAccessor) -- no edge over a wrong one.</summary>
     /// <param name="AProp"><!-- drag-lint:auto type -->const TSymbol</param>
@@ -1676,7 +1699,12 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.LinesOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function ResolveAccessor(const AProp: TSymbol; const AMode: string): TSymbol;
+    /// <para>A REDECLARATION with no clause for AMode (`property Val;`,
+    /// `property Part write SetIt;` read) inherits it: the nearest ancestor
+    /// declaring the property answers. Pinned by
+    /// tests\callresolve\run_property_redeclare_accessor.ps1. ADepth bounds that
+    /// climb against a corrupt heritage cycle; callers leave it 0.</para>
+    function ResolveAccessor(const AProp: TSymbol; const AMode: string; ADepth: Integer = 0): TSymbol;
     /// <summary>Delphi's INNERMOST-FIRST lexical scope walk for a BARE call.
     /// Starts at the call site's own enclosing routine, looks for a nested
     /// routine named AName among its direct children, and climbs one lexical
@@ -3106,7 +3134,7 @@ type
     /// reason -- 'unreadable' | 'qualified' | 'with-scope' | 'shadowed' |
     /// 'not-found' | 'not-callable' | 'proc-value'.</param>
     /// <returns>An edge whose TargetSymbolId is the called routine and whose
-    /// Confidence is 'certain' or 'ambiguous' (an override or duplicate set, the
+    /// Confidence is 'certain' or 'ambiguous' (a duplicate set, the
     /// same policy as a `call` ref), or TargetSymbolId = 0 for every decline --
     /// EXCEPT 'proc-value' (1.42): when the name is a procedure VALUE and the
     /// nearest scope answers with one routine (certain), TargetSymbolId names it
@@ -3586,6 +3614,8 @@ const
   TYPE_KINDS: TSymbolKindSet = [skClass, skInterface, skRecord];
   // Method-shaped children we accept as a call target on a resolved type.
   METHOD_KINDS: TSymbolKindSet = [skMethod, skProcedure, skFunction, skConstructor, skDestructor];
+  // The `overload` token inside a space-padded symbols.directives value.
+  DIRECTIVE_OVERLOAD_TOKEN = ' overload ';
 
 // True when C can start / continue a Pascal identifier.
 function IsIdentStart(C: Char): Boolean; inline;
@@ -4704,6 +4734,75 @@ begin
   end;
 end;
 
+// A signature with its white space removed: what two declarations of one method
+// have in common, however they were laid out.
+function ParamListKey(const ASignature: string): string;
+begin
+  Result:= string.Join('', ASignature.Split([' ', #9, #13, #10]));
+end;
+
+function TCallResolver.NarrowToNearest(AMatches: TList<TSymbol>; AFrom, AArgCount: Integer;
+  AArgsKnown: Boolean): Boolean;
+
+  // True when a NEARER declaration in AKept has S's parameter list: S is then
+  // the overridden (or hidden) twin, and the nearer one answers every site S could.
+  function Shadowed(AKept: TList<TSymbol>; const S: TSymbol): Boolean;
+  var
+    K  : TSymbol;
+    Key: string ;
+  begin
+    Result:= False;
+    Key   := ParamListKey(S.Signature);
+    for K in AKept do
+      if (K.ParentId <> S.ParentId) and SameText(ParamListKey(K.Signature), Key) then Exit(True);
+  end;
+
+  // False only when every kept candidate provably refuses the site's arity. A
+  // signature that cannot be read refuses nothing.
+  function FitsSite(AKept: TList<TSymbol>): Boolean;
+  var
+    K     : TSymbol;
+    Lo, Hi: Integer;
+  begin
+    Result:= not AArgsKnown;
+    if not Result then
+      for K in AKept do
+        if not SignatureArityRange(K.Signature, Lo, Hi) or InRange(AArgCount, Lo, Hi) then Exit(True);
+  end;
+
+var
+  Kept       : TList<TSymbol>;
+  I          : Integer       ;
+  Level      : Int64         ;
+  HasOverload: Boolean       ;
+begin
+  Result:= False;
+  Kept:= TList<TSymbol>.Create;
+  try
+    I:= AFrom;
+    while I < AMatches.Count do
+    begin
+      { One level is the run of candidates declared by one parent: both callers
+        add them type by type, own type first, then the ancestors nearest first. }
+      Level      := AMatches[I].ParentId;
+      HasOverload:= False;
+      while (I < AMatches.Count) and (AMatches[I].ParentId = Level) do
+      begin
+        if ContainsText(' ' + AMatches[I].Directives + ' ', DIRECTIVE_OVERLOAD_TOKEN) then HasOverload:= True;
+        if not Shadowed(Kept, AMatches[I]) then Kept.Add(AMatches[I]);
+        Inc(I);
+      end;
+      if not HasOverload then Break; { no `overload`: this level hides all that is deeper }
+    end;
+    if (Kept.Count = AMatches.Count - AFrom) or not FitsSite(Kept) then Exit;
+    AMatches.DeleteRange(AFrom, AMatches.Count - AFrom);
+    AMatches.AddRange(Kept);
+    Result:= True;
+  finally
+    Kept.Free;
+  end;
+end;
+
 function TCallResolver.PickFromMatches(AMatches: TList<TSymbol>; AArgCount: Integer;
   AArgsKnown: Boolean; out AConfidence: string): Int64;
 var
@@ -4812,8 +4911,7 @@ begin
         if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then Matches.Add(S);
     // 2. inherited methods along the transitive ancestor chain. A method defined
     // on an ancestor counts too; overrides on the type itself already counted in
-    // step 1 (so a class + its base each declaring M yields 2 matches ->
-    // ambiguous, correctly flagging that the concrete target is uncertain).
+    // step 1; NarrowToNearest below removes what the nearer one shadows.
     // X2: a class's IMPLEMENTED interfaces are not on its member chain; they
     // answer only below, when the chain declared nothing.
     for A in AncestorsOf(ATypeSymbolId) do
@@ -4824,6 +4922,7 @@ begin
       for S in Kids do
         if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then Matches.Add(S);
     end;
+    NarrowToNearest(Matches, 0, AArgCount, AArgsKnown);
     // 2b. X2: the implemented interfaces, as a fallback only -- the method is
     // then implemented in an ancestor the index does not hold, and the
     // interface method is the nearest declaration it has (the pre-X2 answer).
@@ -5931,6 +6030,7 @@ begin
     declares nothing -- the LookupMethodOnType rule. }
   for A in AncestorsOf(ATypeId) do
     if A.Resolved and (A.SymbolId > 0) and not IsImplementedInterface(ATypeId, A) then AddFrom(A.SymbolId);
+  NarrowToNearest(AMatches, Before, 0, False);
   if AMatches.Count = Before then
     for A in AncestorsOf(ATypeId) do
       if A.Resolved and (A.SymbolId > 0) and IsImplementedInterface(ATypeId, A) then AddFrom(A.SymbolId);
@@ -7917,8 +8017,8 @@ begin
 end;
 
 // The identifier after the standalone keyword AKey (`read` / `write`) on a
-// property's declaring text, or '' when absent or a dotted path (`FRec.X` is a
-// record field access, not an accessor this resolver can name).
+// property's declaring text, or '' when absent. Of a dotted path (`read FRec.X`)
+// the leftmost identifier: the field the property reads or writes through.
 function AccessorIdentAfter(const ADecl, AKey: string): string;
 var
   I, J: Integer;
@@ -7930,7 +8030,6 @@ begin
   I:= J;
   while (J <= Length(ADecl)) and IsIdentPart(ADecl[J]) do Inc(J);
   Result:= Copy(ADecl, I, J - I);
-  if (J <= Length(ADecl)) and (ADecl[J] = '.') then Result:= '';
 end;
 
 // The number of INDEX parameters the property APropName declares on its
@@ -7939,12 +8038,13 @@ end;
 // signature holds only the type), so it is read off ADecl like the accessor
 // names are. -1 when the declaration cannot be read (`property` + name not
 // found, an unbalanced bracket) -- an unknown, not a zero.
-function PropertyIndexArity(const ADecl, APropName: string): Integer;
+// The position of the first non-blank past the property's name in its declaring
+// text, or 0 when the text does not read `property APropName`.
+function PosPastPropertyName(const ADecl, APropName: string): Integer;
 var
-  I, J, Depth: Integer;
-  Lo, Hi     : Integer;
+  I, J: Integer;
 begin
-  Result:= -1;
+  Result:= 0;
   J:= PosAfterKeyword(ADecl, 'property');
   if J = 0 then Exit;
   while (J <= Length(ADecl)) and (ADecl[J] = ' ') do Inc(J);
@@ -7952,6 +8052,17 @@ begin
   while (J <= Length(ADecl)) and IsIdentPart(ADecl[J]) do Inc(J);
   if not SameText(Copy(ADecl, I, J - I), APropName) then Exit;
   while (J <= Length(ADecl)) and (ADecl[J] = ' ') do Inc(J);
+  Result:= J;
+end;
+
+function PropertyIndexArity(const ADecl, APropName: string): Integer;
+var
+  I, J, Depth: Integer;
+  Lo, Hi     : Integer;
+begin
+  Result:= -1;
+  J:= PosPastPropertyName(ADecl, APropName);
+  if J = 0 then Exit;
   if (J > Length(ADecl)) or (ADecl[J] <> '[') then Exit(0);
   { Balanced extract of `[...]`, then count it the way a parameter list is
     counted -- SignatureArityRange already splits groups at top-level ';' and
@@ -8019,7 +8130,18 @@ begin
   if FitN <> 1 then Result:= Default(TSymbol);
 end;
 
-function TCallResolver.ResolveAccessor(const AProp: TSymbol; const AMode: string): TSymbol;
+// False when the declaration is a redeclaration: no type, no index list after the
+// name (`property Val;`, `property Val default 3;`, `property Val write SetV;`).
+// An unreadable declaration answers True, which climbs nothing.
+function PropertyHasOwnType(const ADecl, APropName: string): Boolean;
+var
+  J: Integer;
+begin
+  J:= PosPastPropertyName(ADecl, APropName);
+  Result:= (J = 0) or (J > Length(ADecl)) or (ADecl[J] = ':') or (ADecl[J] = '[');
+end;
+
+function TCallResolver.ResolveAccessor(const AProp: TSymbol; const AMode: string; ADepth: Integer): TSymbol;
 const
   ACCESSOR_KINDS: TSymbolKindSet = [skMethod, skProcedure, skFunction, skField];
 var
@@ -8044,7 +8166,17 @@ begin
   for I:= AProp.StartLine + 1 to Min(AProp.EndLine, Lines.Count) do
     Decl:= Decl + ' ' + Lines[I - 1];
   Ident:= AccessorIdentAfter(Decl, AMode);
-  if Ident = '' then Exit;
+  if Ident = '' then
+  begin
+    if (AProp.Kind = skProperty) and (ADepth < MAX_LEXICAL_DEPTH) and not PropertyHasOwnType(Decl, AProp.Name) then
+      for A in AncestorsOf(AProp.ParentId) do
+        if A.Resolved and (A.SymbolId > 0) then
+        begin
+          Result:= FindChildOfKind(A.SymbolId, AProp.Name, [skProperty]);
+          if Result.Id > 0 then Exit(ResolveAccessor(Result, AMode, ADepth + 1));
+        end;
+    Exit;
+  end;
   { The count an overloaded accessor must accept (PickAccessor): a getter takes
     the index parameters, a setter takes them plus the value. -1 propagates an
     unreadable declaration so an overload set declines instead of guessing. }
