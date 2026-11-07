@@ -36615,9 +36615,9 @@ end;
 /// RECONCILE_FIX_LIBRARY for one outside them, RECONCILE_FIX_NONE for a $I include.</returns>
 function ReconcileSuggestedFix(const AOwn: TOwnRoots; const AItem: TReconcileItem): string;
 begin
-  if SameText(ExtractFileExt(AItem.FilePath), '.inc') then Result:= RECONCILE_FIX_NONE
-  else if (AOwn.Error = '') and (not AOwn.IsOurs(AItem.FilePath)) then Result:= RECONCILE_FIX_LIBRARY
-  else Result:= RECONCILE_FIX_PROJECT;
+  Result:= if SameText(ExtractFileExt(AItem.FilePath), '.inc') then RECONCILE_FIX_NONE
+    else if (AOwn.Error = '') and (not AOwn.IsOurs(AItem.FilePath)) then RECONCILE_FIX_LIBRARY
+    else RECONCILE_FIX_PROJECT;
 end;
 
 /// <summary>The owner label the report shows for a recommended fix.</summary>
