@@ -502,6 +502,8 @@ uses
   DRagLint.Refactor.RenameProof, // dl:ok uses-global-census@7543 -- its consts and routines are the public surface
   DRagLint.Refactor.MultiProjectRename,
   Winapi.Windows
+  , System.Math
+  , System.Generics.Defaults
   , DRagLint.Doc.Regions
   , DRagLint.Query.Implementors { get_implementors (interface report, 1.40) }
   , DRagLint.Query.Callers   { Gitea #31: the CLI's resolved callers and name filters }
@@ -513,6 +515,82 @@ const
     (no store, store refused). }
   JSONRPC_SERVER_ERROR = -32000;
   JSONRPC_INVALID_PARAMS = -32602; { get_implementors: a missing or unknown qname }
+
+  { get_neighbors bounds: the hop radius a client may ask for and the row cap. }
+  NEIGHBOR_MAX_HOPS = 3;
+  NEIGHBOR_MAX_ROWS = 200;
+
+  { The MCP initialize `instructions`: shown to the client's model. Same rule as
+    the CLI's own "index first" guidance. ASCII only. }
+  MCP_INSTRUCTIONS =
+    'drag-lint first: for any question about Delphi/Pascal code in this project (where a symbol is declared, '
+    + 'who calls it, what a change would break, which unit to add to uses, what a message says), ask this server '
+    + '(find_symbol, find_callers, get_neighbors, get_impact, get_context_bundle) BEFORE grepping or reading '
+    + 'whole files. If an answer looks short or empty, the index may be stale: say so and reindex rather than '
+    + 'falling back to grep silently.';
+
+/// <summary>The get_neighbors answer: the call-graph neighbourhood of AQName as JSON.</summary>
+/// <param name="AStore">The store to read; must not be nil.</param>
+/// <param name="AQName">Qualified symbol name; an unknown name yields an empty list.</param>
+/// <param name="AHops">Hop radius, already clamped to 1..NEIGHBOR_MAX_HOPS.</param>
+/// <returns>{"qname":..,"hops":N,"neighbors":[{"qname":..,"hop":N}],"omitted":N}; sorted by hop then name,
+/// capped at NEIGHBOR_MAX_ROWS with "omitted" the count dropped by the cap.</returns>
+/// <remarks>Read-only. Wraps ISymbolStore.FindSymbolsWithinHops (callers and callees alike).</remarks>
+function NeighborsText(const AStore: ISymbolStore; const AQName: string; AHops: Integer): string;
+var
+  Seeds: TArray<TSymbol>;
+  Rows : TList<TSymbolHop>;
+  Seen : TDictionary<string, Integer>;
+  S    : TSymbol;
+  H    : TSymbolHop;
+  Cur  : Integer;
+  Arr  : TJSONArray;
+  Obj  : TJSONObject;
+  Item : TJSONObject;
+  I    : Integer;
+begin
+  Seen:= TDictionary<string, Integer>.Create;
+  Rows:= TList<TSymbolHop>.Create;
+  try
+    Seeds:= AStore.FindSymbolsByQualifiedName(AQName);
+    for S in Seeds do
+      for H in AStore.FindSymbolsWithinHops(S.Id, AHops, False) do
+        if (not Seen.TryGetValue(H.QualifiedName, Cur)) or (H.Hop < Cur) then Seen.AddOrSetValue(H.QualifiedName, H.Hop);
+    for var P in Seen do
+    begin
+      H.QualifiedName:= P.Key;
+      H.Hop          := P.Value;
+      Rows.Add(H);
+    end;
+    Rows.Sort(TComparer<TSymbolHop>.Construct(
+      function(const L, R: TSymbolHop): Integer
+      begin
+        Result:= L.Hop - R.Hop;
+        if Result = 0 then Result:= CompareText(L.QualifiedName, R.QualifiedName);
+      end));
+    Obj:= TJSONObject.Create;
+    try
+      Arr:= TJSONArray.Create;
+      Obj.AddPair('qname', AQName);
+      Obj.AddPair('hops', TJSONNumber.Create(AHops));
+      Obj.AddPair('neighbors', Arr);
+      for I:= 0 to Min(Rows.Count, NEIGHBOR_MAX_ROWS) - 1 do
+      begin
+        Item:= TJSONObject.Create;
+        Item.AddPair('qname', Rows[I].QualifiedName);
+        Item.AddPair('hop', TJSONNumber.Create(Rows[I].Hop));
+        Arr.AddElement(Item);
+      end;
+      Obj.AddPair('omitted', TJSONNumber.Create(Max(Rows.Count - NEIGHBOR_MAX_ROWS, 0)));
+      Result:= Obj.ToJSON;
+    finally
+      Obj.Free;
+    end;
+  finally
+    Rows.Free;
+    Seen.Free;
+  end;
+end; // function
 
 constructor TMCPServer.Create(const ADbPaths: TArray<string>);
 var
@@ -648,6 +726,8 @@ begin
   Info.AddPair('name'      , 'drag-lint'      );
   Info.AddPair('version'   , DRAGLINT_VERSION );
   Res .AddPair('serverInfo', Info             );
+  { Guidance a client shows its model (MCP 'instructions'): ask the index first. }
+  Res .AddPair('instructions', MCP_INSTRUCTIONS);
   SendResult(AId, Res);
 end;
 
@@ -713,6 +793,14 @@ begin
         + 'refs table. Input: qualified name (last segment used for lookup) and ' + 'optional depth (default 3).',
       '{"type":"object","properties":{' + '"qname":{"type":"string","description":"Qualified symbol name (e.g. Unit.TClass.Method)"},'
         + '"depth":{"type":"integer","description":"Maximum recursion depth (optional, default 3)"},'
+        + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '},"required":["qname"]}'));
+
+  Tools.AddElement(ToolDescriptor(
+      'get_neighbors', 'The call-graph neighbourhood of one symbol: every symbol reachable within hops (1..3, default 1) '
+        + 'over resolved call edges, callers and callees alike, each with its fewest hops. Bounded: at most 200 rows, '
+        + 'with the number omitted by that cap stated.',
+      '{"type":"object","properties":{' + '"qname":{"type":"string","description":"Qualified symbol name (e.g. Unit.TClass.Method)"},'
+        + '"hops":{"type":"integer","description":"Hop radius 1..3 (optional, default 1)"},'
         + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '},"required":["qname"]}'));
 
   Tools.AddElement(ToolDescriptor(
@@ -1369,6 +1457,25 @@ begin
       var ImpName:= ImpSegments[High(ImpSegments)];
       var ImpLevels:= ImpStore.FindTransitiveCallers(ImpName, ImpDepth);
       ResultText:= FormatImpactAsJson(ImpQName, ImpLevels);
+    end // if
+    else if ToolName = 'get_neighbors' then
+    begin
+      var NbStore:= ResolveStore(Args);
+      if NbStore = nil then
+      begin
+        SendError(AId, JSONRPC_SERVER_ERROR, NoStoreMessage);
+        Exit;
+      end;
+      var NbQName:= '';
+      if Args.GetValue('qname') <> nil then NbQName:= Args.GetValue('qname').Value;
+      if NbQName = '' then
+      begin
+        SendError(AId, JSONRPC_INVALID_PARAMS, 'get_neighbors requires qname');
+        Exit;
+      end;
+      var NbHops:= 1;
+      if Args.GetValue('hops') <> nil then NbHops:= StrToIntDef(Args.GetValue('hops').Value, 1);
+      ResultText:= NeighborsText(NbStore, NbQName, Min(Max(NbHops, 1), NEIGHBOR_MAX_HOPS));
     end // if
     else if ToolName = 'get_implementors' then
     begin
