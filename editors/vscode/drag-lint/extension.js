@@ -18,6 +18,7 @@ const path = require('path');
 const radcolors = require('./lib/radcolors');
 const dlctx = require('./lib/context');
 const serverargs = require('./lib/serverargs');
+const enginestale = require('./lib/enginestale');
 
 // Set once in activate(). restartServer() and updateEngineNow() both need the
 // extension context to locate the private engine copy, and neither is called
@@ -607,6 +608,31 @@ async function selectProject() {
   await applyContext({ project: value });
 }
 
+// DEC-14: opt-in staleness notice (dragLint.engineStaleNoticeMinutes, 0 = off).
+// Says a newer deployed engine exists; the user decides. Never restarts.
+let staleTimer;
+let staleLastNotified = '';
+function startStaleNotice(context) {
+  const minutes = Number(cfg().get('engineStaleNoticeMinutes')) || 0;
+  const source = (cfg().get('engineSource') || '').trim();
+  if (minutes <= 0 || !source) return;
+  if ((cfg().get('serverPath') || '').trim() || cfg().get('engineUpdate') === 'off') return;
+  let running = '';
+  try { running = stampOf(source); } catch (e) { return; }
+  staleTimer = setInterval(() => {
+    let now = '';
+    try { now = stampOf(source); } catch (e) { return; }
+    if (!enginestale.shouldNotify(running, now, staleLastNotified)) return;
+    staleLastNotified = now;
+    window.showInformationMessage(
+      'drag-lint: a newer engine is deployed than the one this window runs.',
+      'Update engine copy now'
+    ).then((pick) => {
+      if (pick) commands.executeCommand('dragLint.updateEngine');
+    });
+  }, Math.max(1, minutes) * 60 * 1000);
+  context.subscriptions.push({ dispose: () => clearInterval(staleTimer) });
+}
 function activate(context) {
   extContext = context;
   // Its own channel, not the client's: this logs BEFORE the client exists, and
@@ -655,6 +681,7 @@ function activate(context) {
 
   client = makeClient(exe);
   client.start();
+  startStaleNotice(context);
   context.subscriptions.push({
     dispose: () => {
       if (manifestWatcher) manifestWatcher.dispose();

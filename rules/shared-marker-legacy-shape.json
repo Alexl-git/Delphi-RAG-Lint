@@ -1,0 +1,7 @@
+{
+  "id": "shared-marker-legacy-shape",
+  "category": "other",
+  "severity": "warning",
+  "message": "Legacy two-slash dl:shared marker: the reader only honours the tag as the FIRST token of its own comment, so this unit reads as UNSHARED and adding a project silently drops the listed ones -- move the tag to the front: // dl:shared A, B // note",
+  "warn_capture": "warn"
+}

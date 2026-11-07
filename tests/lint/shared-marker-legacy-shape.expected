@@ -1,0 +1,6 @@
+# 6 legacy shape and 7 prose twin (R12: indistinguishable) fire. Line 1 (tag first), 8, 9 (string) and 10 must not.
+shared-marker-legacy-shape 6
+shared-marker-legacy-shape 7
+!shared-marker-legacy-shape 1
+!shared-marker-legacy-shape 8
+!shared-marker-legacy-shape 9

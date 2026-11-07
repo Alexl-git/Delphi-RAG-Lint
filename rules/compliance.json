@@ -238,6 +238,7 @@
   "review-marker-unused": {},
   "self-assignment": {"cwe": ["CWE-1164"], "weak": ["CWE-1164"]},
   "separate-query-from-modifier": {},
+  "shared-marker-legacy-shape": {},
   "side-effect-in-short-circuit": {"cert": ["EXP02-C"], "misra": ["MISRA-C-2012-R13.5"]},
   "sizeof-pointer-assumption": {"cwe": ["CWE-467"], "weak": ["CWE-467"]},
   "sleep-in-vcl": {},

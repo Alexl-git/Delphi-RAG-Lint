@@ -128,6 +128,12 @@
           "default": "",
           "markdownDescription": "Explicit override: an absolute path to a `drag-lint.exe` to run AS-IS. When set, no copy is made and `#dragLint.engineSource#` / `#dragLint.engineUpdate#` are ignored. Leave EMPTY (the default) to use the managed private copy. **If you point this at the deployed path, a live VS Code session will lock that binary and engine rebuilds will fail to stage.**"
         },
+        "dragLint.engineStaleNoticeMinutes": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "DEC-14: every N minutes, compare the deployed engine (`#dragLint.engineSource#`) with the build this window's private copy was made from, and when a newer one exists show ONE notice per build with an **Update engine copy now** button. Never restarts anything on its own. `0` (the default) = off. Ignored with `#dragLint.serverPath#` set or `#dragLint.engineUpdate#` = `off`."
+        },
         "dragLint.fullRules": {
           "type": "boolean",
           "default": true,
