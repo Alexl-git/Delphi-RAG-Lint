@@ -18126,10 +18126,61 @@ end; // function
 //   [--format md|json|raw] [--max-callers N] [--context N] [--no-docs] [--max-body-tokens N]
 //   [--library-db LIBRARY]
 // Builds a TContextBundle and renders it in the requested format.
-// RSV-R2: with --library-db (or a second --db), the "Library calls" count also
-// includes calls whose receiver type the library oracle binds now (read-only,
-// degrades to the stored-only count when the library cannot be opened).
+// RSV-R2: the "Library calls" count also includes calls whose receiver type the
+// library oracle binds now (read-only, degrades to the stored-only count when the
+// library cannot be opened). The library is --library-db or a second --db, else
+// (E-CONTEXT-LIBCALLS) the manifest's for the project DB's platform; --library-db
+// none is the opt-out.
 // Exit 2 on usage error or a missing/stale db, 1 if symbol not found, 0 on success.
+
+/// <summary>The DB of the first LIBRARY section of AManifest that targets APlatform.</summary>
+/// <param name="AManifest">The loaded manifest.</param>
+/// <param name="APlatform">The platform name, e.g. Win64; '' answers ''.</param>
+/// <returns>The expanded absolute DB path (existence not checked), or ''.</returns>
+/// <remarks>Reads only the manifest record: no registry, no project file, no disk. That is
+/// the point: ResolvePlan costs a fixed 0.5-0.7 s here, too much for a read verb that wants
+/// one path on every call. A section declaring platforms "*" takes any platform.</remarks>
+function LibraryDbForPlatform(const AManifest: TIndexManifest; const APlatform: string): string;
+begin
+  Result:= '';
+  if APlatform = '' then Exit;
+  for var Sec: TIndexSection in AManifest.Sections do
+    if SameText(Sec.Source, 'registry-libraries') then
+      for var Plat: string in Sec.Platforms do
+        if (Plat = '*') or SameText(Plat, APlatform) then
+        begin
+          var Lib: TIndexSection:= Sec;
+          if Lib.Db = '' then Lib.Db:= Sec.Name + '-{platform}.sqlite';
+          Exit(StringReplace(ExpandSectionDb(AManifest, Lib), '{platform}', APlatform, [rfReplaceAll, rfIgnoreCase]));
+        end;
+end;
+
+/// <summary>The library `context` opens when nobody named one: the manifest's library
+/// section for the platform (--platform, else the project DB's plat= stamp, else the
+/// manifest default).</summary>
+/// <param name="AStore">The open project store.</param>
+/// <param name="AArgs">Parsed args; only CheckPlatform is read.</param>
+/// <param name="AProjectDb">The project DB; never answered as its own library.</param>
+/// <returns>An existing DB path, or '' (no manifest, no such section, no file).</returns>
+/// <remarks>The owner's 2026-10-25 no-attach ruling governs what an index run WRITES;
+/// this opens a store for one read-only count (E-CONTEXT-LIBCALLS, owner plan 2026-11-06).
+/// Skips ResolvePlan on purpose (LibraryDbForPlatform says why). An unreadable manifest
+/// degrades to ''; Load has already warned on stderr. Never raises.</remarks>
+function ContextDefaultLibraryDb(const AStore: ISymbolStore; const AArgs: TArgs; const AProjectDb: string): string;
+begin
+  Result:= '';
+  try
+    var Manifest: TIndexManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    var Source: string;
+    var Plat: string:= ChooseLibraryPlatform(AArgs.CheckPlatform, AStore.GetMetaValue(INDEXER_FINGERPRINT_META_KEY), '',
+      Manifest.Settings.DefaultPlatform, Source);
+    Result:= LibraryDbForPlatform(Manifest, Plat);
+    if (Result <> '') and (SameText(Result, ExpandFileName(AProjectDb)) or not TFile.Exists(Result)) then Result:= '';
+  except
+    on E: Exception do Result:= '';
+  end;
+end;
+
 function DoContext(const AArgs: TArgs): Integer;
 var
   Store     : ISymbolStore  ;
@@ -18147,6 +18198,7 @@ begin
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(ProjectDb, RoOk);
   if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
+  if (LibraryDb = '') and (Length(AArgs.LibraryDbs) = 0) then LibraryDb:= ContextDefaultLibraryDb(Store, AArgs, ProjectDb);
   { The library is opened read-only and never written; one that cannot be opened is
     a stderr NOTE and the stored-only count, never an error (as find-callees). }
   Oracle:= nil;
