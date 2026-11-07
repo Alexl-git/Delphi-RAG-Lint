@@ -127,6 +127,7 @@ type
       FNextId         : Integer                         ;
       FOnNotification : TLspNotificationHandler         ;
       FState          : TDragLintLspState               ;
+      FDbPaths        : TArray<string>                  ;
       FLastError      : string                          ;
       FStartedAt      : TDateTime                       ;
       { Set when a write to the server's stdin fails with a pipe error. The
@@ -704,6 +705,9 @@ type
       property OnNotification: TLspNotificationHandler read FOnNotification write FOnNotification;
       /// <summary>Current lifecycle state; never raises.</summary>
       property State    : TDragLintLspState read FState    ;
+      /// <summary>The --db list the running server was started with; empty before Start.
+      /// Set once by Start, so main-thread readers need no lock.</summary>
+      property DbPaths  : TArray<string>    read FDbPaths  ;
       /// <summary>Last spawn/initialize failure detail, or '' when healthy.</summary>
       property LastError: string            read FLastError;
       /// <summary>When the current server process was spawned (0 if never).</summary>
@@ -1318,6 +1322,7 @@ begin
   CmdLine:= '"' + AExePath + '" lsp';
   { v0.40.3: append every --db path the caller specified. Empty paths are
     skipped; paths get quoted so spaces survive. }
+  FDbPaths:= Copy(ADbPaths);
   for var DbI:= 0 to High(ADbPaths) do
     if ADbPaths[DbI] <> '' then CmdLine:= CmdLine + Format(' --db "%s"', [ADbPaths[DbI]]);
   { v0.47: tell the engine to self-exit if THIS process (the IDE) dies --

@@ -21,6 +21,9 @@ This is a different feature-map row from the right-click "Find Usages"
 action on a Structure-tree node, which does have an underlying verb -- see
 [Find Usages (context)](Find-Usages-context).
 
+## Where the answer comes from
+When the language server is running and its databases cover the query, the form asks it (`draglint/usages`) and starts no process. Otherwise, and when the server has not answered within 10 s or answers an error (an older engine), it runs `drag-lint usages`. Both give the same rows.
+
 ## What it needs
 The feature map marks this row's Index column "n/a" and its Mechanism
 "in-process". It needs an open editor with the caret on the target symbol.

@@ -7731,6 +7731,7 @@ begin
     begin
       DebugLog(AText);
     end;
+  GUsagesLspClient:= CurrentLspClient;
   { O-PLUGIN-EMPTY-EXE: any spawn refused for want of an engine says so on the status
     bar; a note, not a dialog, because background spawns (outline, live lint) refuse too. }
   DragLint.Plugin.ProcRun.GEngineMissingHook:=
