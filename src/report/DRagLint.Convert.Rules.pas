@@ -568,6 +568,23 @@ function BookChainWarnings(const ARules: TConversionRuleSet): TArray<TRuleError>
 /// </remarks>
 function UnrealisedGlyphLinks(const ARules: TConversionRuleSet): TArray<TRuleError>;
 
+/// <summary>The row of GlyphCountReaders that covers a class.</summary>
+/// <param name="AClass">The class; its own name and its ancestors are compared.</param>
+/// <returns>The row's index, -1 when no row covers it.</returns>
+/// <remarks>Reads the class graph through AClass's cache; no write.</remarks>
+function GlyphReaderIndexFor(const AClass: TClassRef): Integer;
+
+/// <summary>A G-link on a class with no N reader, under convert-*'s --glyph-stitch
+/// (grammar 3.2: a validate error, the investigation rule made mechanical).</summary>
+/// <param name="ARules">The parsed rule set.</param>
+/// <param name="AClasses">Index-aligned as for ValidateConversionRulesPerBlock:
+/// [0] is the region before the first #convert. A block whose From class does not
+/// resolve is skipped, since nothing can be said about it.</param>
+/// <returns>One error per image G-link with no reader, in source order.</returns>
+/// <remarks>A G[count] link is not listed: its image link already is.</remarks>
+function MissingGlyphCountReaders(const ARules: TConversionRuleSet;
+  const AClasses: TArray<TBlockClasses>): TArray<TRuleError>;
+
 implementation
 
 uses
@@ -1794,6 +1811,40 @@ begin
     E.Message:= Format('link %s <- %s %s: glyph-expression links are validated but not yet realised ' +
       'by convert-apply (CV-2) -- refusing rather than carrying the source image whole',
       [R.ToPath, R.FromPath, R.GlyphExpr]);
+    Result:= Result + [E];
+  end;
+end;
+
+function GlyphReaderIndexFor(const AClass: TClassRef): Integer;
+var
+  Readers: TArray<TGlyphCountReader>;
+  I      : Integer;
+begin
+  Readers:= GlyphCountReaders;
+  for I:= 0 to High(Readers) do
+    if SameText(AClass.QName, Readers[I].ClassQName) or AClass.DescendsFrom(Readers[I].ClassQName) then Exit(I);
+  Result:= -1;
+end;
+
+function MissingGlyphCountReaders(const ARules: TConversionRuleSet;
+  const AClasses: TArray<TBlockClasses>): TArray<TRuleError>;
+var
+  R    : TConversionRule;
+  E    : TRuleError;
+  Block: Integer;
+begin
+  Result:= nil;
+  Block := 0;
+  for R in ARules.Rules do
+  begin
+    if R.Kind = rkConvert then Inc(Block);
+    if not IsGlyphImageLink(R) or (Block > High(AClasses)) then Continue;
+    if (AClasses[Block].FromClass.RootType = '') or (GlyphReaderIndexFor(AClasses[Block].FromClass) >= 0) then Continue;
+    E        := Default(TRuleError);
+    E.LineNo := R.LineNo;
+    E.Message:= Format('link %s <- %s: no glyph-count reader for %s -- investigate the class and add it to ' +
+      'docs\GLYPH-CLASSES.md and the engine''s class table before writing a G-rule',
+      [R.ToPath, R.FromPath, AClasses[Block].FromClass.QName]);
     Result:= Result + [E];
   end;
 end;
