@@ -216,6 +216,7 @@ uses
   , DRagLint.Refactor   .TestStub
   , DRagLint.Refactor   .ExtractMethod
   , DRagLint.CLI.Unwith
+  , DRagLint.Charts.ArchDiagram
   , DRagLint.Refactor.CompileGate
   , DRagLint.Refactor   .EnumHelper
   , DRagLint.Format     .Yadf
@@ -11101,6 +11102,42 @@ begin
   end; // try
   Result:= 0;
 end; // begin
+
+/// <summary>drag-lint arch-diagram --db D [--output F] [--json]: one self-contained HTML layer diagram of
+/// the project's units by folder, or its model as JSON. Spec 2026-11-06-archify-layer-diagrams.</summary>
+/// <param name="AArgs">Parsed CLI args.</param>
+/// <returns>0 when written; 2 on a missing or stale DB, or an index with no units.</returns>
+/// <remarks>Read-only. Same DB, same bytes: nothing in the output depends on the clock.</remarks>
+function DoArchDiagram(const AArgs: TArgs): Integer;
+begin
+  if not ExplicitDbsExist(AArgs, 'arch-diagram') then Exit(2);
+  if NoDbResolved(AArgs.DbPath, 'arch-diagram') then Exit(2);
+  var RoOk: Boolean;
+  OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then
+  begin
+    StaleDbRefusesRun(AArgs, 'arch-diagram', AArgs.DbPath);
+    Exit(2);
+  end;
+  var Model: TArchModel;
+  try
+    Model:= BuildArchModel(AArgs.DbPath);
+  except
+    on E: EArchDiagram do
+    begin
+      Writeln(ErrOutput, 'ERROR: ', E.Message);
+      Exit(2);
+    end;
+  end;
+  var Text:= if AArgs.AsJson then ArchModelJson(Model) else ArchDiagramHtml(Model);
+  if AArgs.Output <> '' then
+  begin
+    WriteOutputFile(AArgs.Output, Text);
+    Writeln('Wrote ', AArgs.Output);
+  end
+  else Writeln(Text);
+  Result:= 0;
+end;
 
 // --- diff -------------------------------------------------------------------
 
@@ -38519,6 +38556,7 @@ begin
     else if Args.Command = 'overview'          then Result:= RunOverview       (Args.DbPath, Args.MaxRows, Args.AsJson)
     else if Args.Command = 'import-log'        then Result:= DoImportLog       (Args)
     else if Args.Command = 'graph'             then Result:= DoGraph           (Args)
+    else if Args.Command = 'arch-diagram'      then Result:= DoArchDiagram     (Args)
     else if Args.Command = 'todos'             then Result:= DoTodos           (Args)
     else if Args.Command = 'hover'             then Result:= DoHover           (Args)
     else if Args.Command = 'contrast-selftest' then Result:= DoContrastSelfTest

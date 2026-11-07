@@ -497,6 +497,7 @@ define further codes.
 | `uses-report --output f.csv` | full uses-graph rollup to CSV (`--depth N`, `--include-external`, `--all-sources`, `--name <pattern>`). A `--name` that matches NO source unit exits 2 with `ERROR: uses-report: no index passed contains a source unit named <pattern>` on stderr and writes NO file -- it does not answer `0 source units, 0 rows` with exit 0 (converter gap 2026-09-16) |
 | `deps-report` | third-party dependency rollup (`--edges`, `--format text\|json\|csv`) |
 | `graph --format dot\|mermaid` | export the symbol/uses graph for a viewer (`--name <root-substr>`) |
+| `arch-diagram --db <db> --output F.html` | one self-contained HTML layer diagram of the units by folder: which folder sits on which, back-edges, the `uses` lines behind each arrow; `--json` for the model (`ask architecture` needs Graphviz and adds the third-party groups) |
 | `schema` | live index schema: version + tables + columns + row counts (read-only) |
 | `query --name-like <substr>` | SUBSTRING search over symbol NAMES -- the DISCOVERY query, when you do not know the identifier yet (`--kind class,interface,...`, `--limit N` default 50, `--json`). Distinct from `--name`, which is exact with an edit-distance fallback and CANNOT match mid-name; distinct from `--text`, which searches string literals. JSON rows carry `match_kind: substring` |
 | `sql --query "SELECT ..."` | guarded READ-ONLY SQL over the index -- one statement; `--in <q.sql>`, `--limit N` (default 200), `--timeout-ms N` (default 10000), `--json` |

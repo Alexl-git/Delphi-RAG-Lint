@@ -62,6 +62,9 @@ disagree about a zone or a count.
 4. **Layer** = longest forward path down to a zone that uses nothing. Layer 0 is the foundation, drawn at
    the BOTTOM; arrows run downwards except back-edges.
 5. **Order in a row**: two barycentre sweeps, ties by name. Deterministic.
+6. **Implied arrows**: a forward arrow that a longer forward path also gives adds no layer information.
+   On this repo the first picture was a hairball of 160 arrows. They stay in the model (`implied: true`),
+   faint and unlabelled until their folder is picked. Measured, not hidden: the panel still lists them.
 
 **Output.** One HTML file: inline CSS, inline SVG, a few lines of inline JS for the click panel, the model
 in `<script type="application/json" id="graph">`. No timestamp: the same DB gives the same bytes.
