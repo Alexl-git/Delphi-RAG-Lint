@@ -1163,6 +1163,13 @@ begin
           Break;
         end;
     end
+    else if TypeNode.IsNull and (N.NodeType = 'declArg') then
+    begin
+      { 1.46 E-CAST: an untyped `var X` has no type; left out, X would inherit the file-wide type of a namesake. }
+      for J:= 0 to N.NamedChildCount - 1 do
+        if N.NamedChild(J).NodeType = 'identifier' then
+          ATypeMap.AddOrSetValue(LowerCase(SrcText(N.NamedChild(J), ASrc)), AMBIGUOUS_DECL_TYPE);
+    end
     else if not TypeNode.IsNull then
     begin
       TTxt:= Trim(SrcText(TypeNode, ASrc));
@@ -3472,12 +3479,14 @@ var
         the per-file TypeMap) is a no-op cast. T-prefixed class-like entity only
         (avoids scalar-cast noise), single identifier argument only. Pure-AST via
         the type map -> near-zero FP (an exact declared-type match to the cast
-        target is not a protected-member hack, which needs a base-typed operand). }
+        target is not a protected-member hack, which needs a base-typed operand).
+        1.46 E-CAST: the second letter may be lower case (TcxEdit, TdlgFoo): the
+        match on the operand's declared type already rules out a routine like Trim. }
       if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then
       begin
         var En: string:= NodeStr(Entity);
         var FactLeaf: string;
-        if (Length(En) >= 2) and (En[1] = 'T') and (En[2] >= 'A') and (En[2] <= 'Z') then
+        if (Length(En) >= 2) and (En[1] = 'T') and CharInSet(En[2], ['A'..'Z', 'a'..'z']) then
         begin
           Args:= N.ChildByField('args');
           if (not Args.IsNull) and (Args.NamedChildCount = 1) then

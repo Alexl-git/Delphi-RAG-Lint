@@ -12,6 +12,8 @@ procedure HolderTests(AComp: TRtCompThing; ACounted: TRtCountedThing; ARef: TRtR
 procedure NarrowTests(AWide: Int64; AKey: TRtKey2; ASmall: Integer; ADouble: Double);
 procedure RedundantTests(ALeaf: TRtLeaf; ABase: TRtBase);
 procedure RedundantShadow;
+procedure RedundantVarParam(Sender: TObject; var ALibProps: TcxLibProps; var ALeaf2: TdlgLocal);
+procedure RedundantUntypedVar(var ALeaf);
 procedure UnsafeTests(ALeaf: TRtLeaf; ABase: TRtBase);
 
 implementation
@@ -51,6 +53,22 @@ var
 begin
   Sink:= TRtLeaf(GShadow).Tag;  // CONTROL-REDUNDANT-SHADOW // TRIGGER-UNSAFE-SHADOW
   Sink:= Sink + 1;
+end;
+
+{ E-CAST (OperatorList.pas:380): the miss was never the var parameter; the callee's second letter is lower case, the
+  shape of every DevExpress type and of this project's dialogs. TcxLibProps is declared nowhere, as a library type is
+  not in a project index. }
+procedure RedundantVarParam(Sender: TObject; var ALibProps: TcxLibProps; var ALeaf2: TdlgLocal);
+begin
+  if ALibProps is TcxLibProps then TcxLibProps(ALibProps).Tag:= 1;  // TRIGGER-REDUNDANT-LOWERLIB
+  TdlgLocal(ALeaf2).Tag:= 1;  // TRIGGER-REDUNDANT-LOWERLOCAL
+  Trim(ALeaf2);  // CONTROL-REDUNDANT-LOWERCALL
+end;
+
+{ An untyped parameter has no type: the name in another routine's parameter list says nothing about this one. }
+procedure RedundantUntypedVar(var ALeaf);
+begin
+  TRtLeaf(ALeaf).Tag:= 1;  // CONTROL-REDUNDANT-UNTYPEDVAR
 end;
 
 procedure NarrowTests(AWide: Int64; AKey: TRtKey2; ASmall: Integer; ADouble: Double);
