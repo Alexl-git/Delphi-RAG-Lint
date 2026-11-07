@@ -617,7 +617,7 @@ begin
   if not Assigned(GEngineMissingHook) then Exit;
   try
     GEngineMissingHook();
-  except
+  except  // dl:ok try-except-swallowed@01cd -- the hook is dropped, which is the handling: a status note must not fail the refusal
     on Exception do GEngineMissingHook:= nil; { a hook that failed once is not asked again }
   end;
 end;
