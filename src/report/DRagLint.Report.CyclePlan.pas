@@ -310,7 +310,7 @@ function SourceEncodingOf(const pBytes: TBytes): TEncoding;
 /// <returns>The text without the BOM.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Create (DRagLint.CLI.CycleFix.pas), DRagLint.Report.CyclePlan.ReadSourceLines (DRagLint.Report.CyclePlan.pas)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Create (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.BuildGateFiles (DRagLint.Refactor.RedundantCast.pas), DRagLint.Refactor.RedundantCast.TMaskedSource.Create (DRagLint.Refactor.RedundantCast.pas) (+1 more)</para>
 /// <para>Calls: DRagLint.Report.CyclePlan.SourceEncodingOf</para>
 /// <para>Returns: TEncoding.UTF8.GetString(pBytes, Length(TEncoding.UTF8.GetPreamble), Length(pBytes) - Length(TEncoding.UTF8.GetPreamble)); TEncoding.ANSI.GetString(pBytes)</para>
 /// <para>Mutates: pEncoding (out)</para>
@@ -325,7 +325,7 @@ function DecodeSource(const pBytes: TBytes; out pEncoding: TEncoding): string;
 /// <returns>The bytes, with the UTF-8 BOM first when the encoding is UTF-8.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Save (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Save (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.BuildGateFiles (DRagLint.Refactor.RedundantCast.pas)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function EncodeSource(const pText: string; pEncoding: TEncoding): TBytes;

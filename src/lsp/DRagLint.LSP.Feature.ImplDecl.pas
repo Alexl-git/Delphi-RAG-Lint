@@ -31,7 +31,7 @@ type
   /// Stateless; registered from this unit's initialization. Lines
   /// and characters in the replies are 0-based.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Feature.ImplDecl.pas)</para>
+  /// <para>Used by: DRagLint.LSP.Feature.ImplDecl.initialization (DRagLint.LSP.Feature.ImplDecl.pas)</para>
   /// <para>Used in units: DRagLint.LSP.Feature.ImplDecl</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

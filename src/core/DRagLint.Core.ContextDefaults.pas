@@ -28,7 +28,7 @@ function DragLintLocalDataDir: string;
 /// else DragLintLocalDataDir\context-defaults.json; '' when neither resolves.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: [dclDragLintWizard]DragLint.Plugin.DbResolver.PublishLibraryDefaults (DragLint.Plugin.DbResolver.pas), DRagLint.Project.ContextFile.ContextDefaultsFile (DRagLint.Project.ContextFile.pas)</para>
+/// <para>Called from: [dclDragLintWizard]DragLint.Plugin.DbResolver.PublishLibraryDefaults (DragLint.Plugin.DbResolver.pas), [drag-lint]DRagLint.Project.ContextFile.ContextDefaultsFile (DRagLint.Project.ContextFile.pas)</para>
 /// <para>Calls: DRagLint.Core.ContextDefaults.DragLintLocalDataDir, GetEnvironmentVariable</para>
 /// <para>Returns: GetEnvironmentVariable(CORE_CONTEXT_DEFAULTS_ENV); Dir + PathDelim + DEFAULTS_FILE_NAME</para>
 /// <seealso cref="DRagLint.Core.ContextDefaults.DragLintLocalDataDir"/>

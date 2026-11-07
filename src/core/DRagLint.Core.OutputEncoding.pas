@@ -35,7 +35,7 @@ type
   /// <summary>The byte encoding the engine writes to stdout and stderr.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [dclDragLintWizard]declaration (DRagLint.Core.OutputEncoding.pas), DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas), DRagLint.CLI.ParseArgs (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Core.OutputEncoding.CurrentOutputEncoding (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard]DRagLint.Core.OutputEncoding.InstallOutputEncoding (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard]DRagLint.Core.OutputEncoding.OutputEncodingName (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard]DRagLint.Core.OutputEncoding.OutputEncodingOnCommandLine (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard]DRagLint.Core.OutputEncoding.TryParseOutputEncoding (DRagLint.Core.OutputEncoding.pas)</para>
+  /// <para>Used by: [dclDragLintWizard,drag-lint]declaration (DRagLint.Core.OutputEncoding.pas), [drag-lint]DRagLint.CLI.LoadConfigDefaults (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.ParseArgs (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.CurrentOutputEncoding (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.InstallOutputEncoding (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.OutputEncodingName (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.OutputEncodingOnCommandLine (DRagLint.Core.OutputEncoding.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.OutputEncoding.TryParseOutputEncoding (DRagLint.Core.OutputEncoding.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TOutputEncoding = (oeAscii, oeUtf8, oeUtf16);
@@ -163,7 +163,7 @@ function OutputEncodingOnCommandLine(out pEncoding: TOutputEncoding; out pValue:
 /// and characters were lost so far in this run, a "lossy_output":N member is added
 /// as its first member.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), DRagLint.CLI.DoExportEnums (DRagLint.CLI.pas), DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoButterfly (DRagLint.CLI.pas), DRagLint.CLI.DoConvertScaffold (DRagLint.CLI.pas), DRagLint.CLI.DoDepsReport (DRagLint.CLI.pas), DRagLint.CLI.DoExportEnums (DRagLint.CLI.pas), DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas) (+11 more)</para>
 /// <para>Calls: Copy, DRagLint.Core.OutputEncoding.EncodeForOutput, IntToStr</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Core.OutputEncoding.EncodeForOutput"/>

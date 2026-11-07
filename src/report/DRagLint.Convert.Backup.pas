@@ -46,7 +46,7 @@ uses
 /// probes); not atomic -- a concurrent writer could race this, which is
 /// acceptable for drag-lint's single-user CLI usage.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.BackUpChanged (DRagLint.CLI.CycleFix.pas), DRagLint.Convert.Backup.BackupFiles (DRagLint.Convert.Backup.pas)</para>
+/// <para>Called from: DRagLint.Convert.Backup.BackupFiles (DRagLint.Convert.Backup.pas), DRagLint.Refactor.CompileGate.BackUpChanged (DRagLint.Refactor.CompileGate.pas)</para>
 /// <para>Calls: IntToStr</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
@@ -115,7 +115,7 @@ procedure WriteRecoveryRecord(const AUnitFolder, ATimestamp, ARulesFile: string;
 /// The format of WriteRecoveryRecord (which calls it): the header, then each
 /// mapping indented by two spaces, ANSI, CRLF. Used by `cycles --fix --apply`.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.BackUpChanged (DRagLint.CLI.CycleFix.pas), DRagLint.Convert.Backup.WriteRecoveryRecord (DRagLint.Convert.Backup.pas)</para>
+/// <para>Called from: DRagLint.Convert.Backup.WriteRecoveryRecord (DRagLint.Convert.Backup.pas), DRagLint.Refactor.CompileGate.BackUpChanged (DRagLint.Refactor.CompileGate.pas)</para>
 /// <para>Touches: file system</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

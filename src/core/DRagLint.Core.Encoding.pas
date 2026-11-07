@@ -34,7 +34,7 @@ uses
 /// (ASCII is valid UTF-8, so this returns the input unchanged). Pure function;
 /// thread-safe (no shared state; the CP1252 encoding it allocates is freed).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.ValidateAndResolve (DRagLint.Analysis.LintTree.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.CallResolver.TCallResolver.WithStatementsOf (DRagLint.Index.CallResolver.pas) (+6 more)</para>
+/// <para>Called from: DRagLint.Analysis.LintTree.RunLintTree (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.LintTree.ValidateAndResolve (DRagLint.Analysis.LintTree.pas), DRagLint.CLI.ApplyLineMarkers.LineIsPreprocessorInactive (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas) (+13 more)</para>
 /// <para>Calls: DRagLint.Core.Encoding.IsValidUtf8, Move</para>
 /// <para>Complexity: 14 (cyclomatic, outer body), 43 lines (full implementation)</para>
 /// <para>Pure</para>
@@ -47,9 +47,17 @@ function EnsureUtf8Bytes(const ABytes: TBytes): TBytes;
 /// sequence (RFC 3629: no overlong forms, no surrogates, max U+10FFFF).</summary>
 /// <param name="ABytes">Raw bytes, without a BOM. Empty and pure ASCII are valid.</param>
 /// <returns>True for valid UTF-8; False at the first malformed sequence.</returns>
-/// <remarks>Pure; thread-safe. Exposed (W5-D, 2026-10-25) so the text-edit
+/// <remarks>
+/// Pure; thread-safe. Exposed (W5-D, 2026-10-25) so the text-edit
 /// writer (TTextFileFormat.Decode) tells a BOM-less UTF-8 file from an ANSI
-/// one by the SAME rule the indexer uses in EnsureUtf8Bytes.</remarks>
+/// one by the SAME rule the indexer uses in EnsureUtf8Bytes.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Core.Encoding.EnsureUtf8Bytes (DRagLint.Core.Encoding.pas), DRagLint.Refactor.TextEdit.TTextFileFormat.Decode (DRagLint.Refactor.TextEdit.pas)</para>
+/// <para>Calls: Cardinal</para>
+/// <para>Returns: True; False</para>
+/// <para>Complexity: 22 (cyclomatic, outer body), 64 lines (full implementation)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function IsValidUtf8(const ABytes: TBytes): Boolean;
 
 implementation

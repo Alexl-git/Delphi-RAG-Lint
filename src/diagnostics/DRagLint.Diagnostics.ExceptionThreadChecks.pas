@@ -32,11 +32,12 @@ type
     /// <param name="ACfg">Effective lint configuration (thresholds via ThresholdFor).</param>
     /// <param name="AStore">Optional symbol store; nil when the run has no index.</param>
     /// <param name="AFileId">File id within AStore (ignored when AStore is nil).</param>
+    /// <param name="ALibStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
     /// <returns>One finding per violation; empty when clean or unparsable. The CLI filters by --rule.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: AddLoopAssigned, Canon, ContainsText, ContainsTryExcept, Copy, Default, Delete, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckAsyncLambda, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckClosure, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckDestructor (+26 more)</para>
+    /// <para>Calls: AddLoopAssigned, Canon, ContainsText, ContainsTryExcept, Copy, Default, Delete, DescentOf, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckAsyncLambda, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckClosure (+28 more)</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckAsyncLambda"/>

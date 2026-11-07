@@ -40,7 +40,7 @@ type
   /// writes a file and never mutates the server's store list. Lines and
   /// characters in the replies are 0-based.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Feature.Rename.pas)</para>
+  /// <para>Used by: DRagLint.LSP.Feature.Rename.initialization (DRagLint.LSP.Feature.Rename.pas)</para>
   /// <para>Used in units: DRagLint.LSP.Feature.Rename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

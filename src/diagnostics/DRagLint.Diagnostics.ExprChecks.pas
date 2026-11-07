@@ -47,11 +47,12 @@ type
     /// <param name="ACfg">Effective lint configuration (unused by these rules; no thresholds).</param>
     /// <param name="AStore">Optional symbol store; nil when the run has no index. Not consulted.</param>
     /// <param name="AFileId">File id within AStore (ignored when AStore is nil).</param>
+    /// <param name="ALibStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
     /// <returns>One finding per violation; empty when clean or unparsable. The CLI filters by --rule.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ArgsKey, BitMaskPieces, CheckBitMask, CheckCase, CheckDoubleLookup, CheckIndent, CheckRegex, CollectContainsKey, Copy, Default (+17 more)</para>
+    /// <para>Calls: ArgsKey, BitMaskPieces, CheckBitMask, CheckCase, CheckDoubleLookup, CheckIndent, CheckRegex, CollectContainsKey, Copy, CreateStoreTypeOracle (+19 more)</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <para>Directives: static</para>

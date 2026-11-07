@@ -71,8 +71,9 @@ type
                         Message is its LoadError -- nothing written }
 
   /// <remarks>
+  /// <!-- drag-lint:auto -->Message is its LoadError -- nothing written
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Index.ManifestWrite.pas), DRagLint.CLI.DoRegisterProject (DRagLint.CLI.pas), DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Index.ManifestWrite.pas) ?, DRagLint.CLI.DoRegisterProject (DRagLint.CLI.pas) ?, DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.ManifestWrite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -96,7 +97,6 @@ type
 /// nothing.</param>
 /// <returns>A result whose Outcome says what happened; Written lists every
 /// manifest path affected.</returns>
-/// <exception cref="EManifestWriteError"><!-- drag-lint:auto exc -->via DRagLint.Index.ManifestWrite.AppendSectionToText: manifest has no "indexes" object; via DRagLint.Index.ManifestWrite.AppendSectionToText: manifest has no "indexes.sections" array; via DRagLint.Index.ManifestWrite.AppendSectionToText: manifest is not a JSON object</exception>
 /// <remarks>
 /// Refuses when a section already claims the project -- registering a
 /// second owner would create the ambiguity the reindex command exists to

@@ -81,6 +81,7 @@ function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const 
 /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
 /// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
 /// <returns><!-- drag-lint:auto type -->string</returns>
+/// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.DocFormatToStr: Unknown symbol kind: "%s"</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.RenderHoverJson (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
@@ -115,7 +116,7 @@ function RenderSignatureParamsMarkdown(const ASignature: string): string;
   /// const/var/out modifier (if any), the parameter name, and its type text.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Hover.Renderer.pas), DRagLint.Diagnostics.FlowChecks.ModeOf (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Hover.Renderer.ParseSignatureParams (DRagLint.Hover.Renderer.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Hover.Renderer.pas), DRagLint.Diagnostics.FlowChecks.ModeOf (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TMethodArgModes.MethodMode (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Hover.Renderer.ParseSignatureParams (DRagLint.Hover.Renderer.pas)</para>
   /// <para>Used in units: DRagLint.Diagnostics.FlowChecks, DRagLint.Hover.Renderer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -187,7 +188,7 @@ type
 /// <returns>One TParamPart per parameter name, in declaration order.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Diagnostics.FlowChecks.ModeOf (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Hover.Renderer.BuildHoverModel (DRagLint.Hover.Renderer.pas)</para>
+/// <para>Called from: DRagLint.Diagnostics.FlowChecks.ModeOf (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Diagnostics.FlowChecks.TMethodArgModes.MethodMode (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Hover.Renderer.BuildHoverModel (DRagLint.Hover.Renderer.pas)</para>
 /// <para>Calls: Copy, DRagLint.Hover.Renderer.LastTopLevelColon, DRagLint.Hover.Renderer.SplitTopLevel, Pos, StartsText, Trim</para>
 /// <para>Returns: Parts.ToArray</para>
 /// <para>Complexity: 11 (cyclomatic, outer body), 47 lines (full implementation)</para>

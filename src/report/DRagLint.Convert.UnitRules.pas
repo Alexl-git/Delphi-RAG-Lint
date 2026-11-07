@@ -66,7 +66,7 @@ type
   /// keyword); Start then points past the ampersand.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.IsSym (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.IsWord (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas) ?, DRagLint.Convert.UnitRules.TUsesLexer.Next (DRagLint.Convert.UnitRules.pas) (+7 more)</para>
-  /// <para>Used in units: DRagLint.Convert.UnitRules, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.DisallowedChecks, DRagLint.Report.CyclePlan</para>
+  /// <para>Used in units: DRagLint.Convert.UnitRules, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.DisallowedChecks, DRagLint.Refactor.RenameProof, DRagLint.Report.CyclePlan</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTok = record
@@ -255,7 +255,7 @@ type
     /// end of the text, and on every call after it.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Convert.UnitRules.ImplementationKeywordLine (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.ReadUnit (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.EntryHasTrivia (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.ScanClause (DRagLint.Report.CyclePlan.pas)</para>
+    /// <para>Called from: DRagLint.Convert.UnitRules.ImplementationKeywordLine (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.ReadUnit (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.EntryHasTrivia (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.ScanClause (DRagLint.Report.CyclePlan.pas) (+9 more)</para>
     /// <para>Calls: CharInSet, Copy, Default, DRagLint.Convert.UnitRules.IsIdentChar, DRagLint.Convert.UnitRules.IsIdentStart, DRagLint.Convert.UnitRules.TUsesLexer.ReadString, DRagLint.Convert.UnitRules.TUsesLexer.SkipTrivia</para>
     /// <para>Returns: Default(TTok)</para>
     /// <para>Complexity: 12 (cyclomatic, outer body), 43 lines (full implementation)</para>

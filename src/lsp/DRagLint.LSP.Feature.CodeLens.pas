@@ -21,7 +21,7 @@ type
   /// Stateless; registered from this unit's initialization. Lenses
   /// are complete as sent (no codeLens/resolve). Lines are 0-based.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Feature.CodeLens.pas)</para>
+  /// <para>Used by: DRagLint.LSP.Feature.CodeLens.initialization (DRagLint.LSP.Feature.CodeLens.pas)</para>
   /// <para>Used in units: DRagLint.LSP.Feature.CodeLens</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -81,7 +81,7 @@ type
   /// Not thread-safe while loading; <see cref="Shared"/> is meant for the single
   /// CLI thread. The caller of <see cref="Load"/> owns the returned table.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Lint.Compliance.TComplianceTable.Load (DRagLint.Lint.Compliance.pas), DRagLint.Lint.Compliance.TComplianceTable.Shared (DRagLint.Lint.Compliance.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas) (+1 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Lint.Compliance.TComplianceTable.Load (DRagLint.Lint.Compliance.pas), DRagLint.Lint.Compliance.TComplianceTable.Shared (DRagLint.Lint.Compliance.pas), DRagLint.Lint.RuleCatalog.TRuleCatalog.BuildCatalog (DRagLint.Lint.RuleCatalog.pas) (+2 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.Compliance, DRagLint.Lint.RuleCatalog</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

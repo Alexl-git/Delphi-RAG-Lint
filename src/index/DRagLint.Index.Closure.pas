@@ -459,7 +459,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentProject (DRagLint.Doc.Batch.pas), DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas), DRagLint.Project.TargetStudio.ResolveTargetClosure (DRagLint.Project.TargetStudio.pas), DRagLint.Refactor.MultiProjectRename.ClosureUnits (DRagLint.Refactor.MultiProjectRename.pas)</para>
       /// <para>Calls: BindUnit, DRagLint.Index.Closure.TClosureResolver.ExtractUses, DRagLint.Index.Closure.TClosureResolver.IsLibraryFile, DRagLint.Index.Closure.TClosureResolver.MaybePreprocess, DRagLint.Index.Closure.TClosureResolver.ParseDprojRefs, DRagLint.Index.Closure.TClosureResolver.ParseDprojSearchPaths, DRagLint.Index.Closure.TClosureResolver.ParseDprUses, DRagLint.Index.Closure.TClosureResolver.Resolve.BindListedUnits, DRagLint.Index.Closure.TClosureResolver.Resolve.BoundFile, DRagLint.Index.Closure.TClosureResolver.Resolve.EnqueueFile (+11 more)</para>
-      /// <para>Complexity: 27 (cyclomatic, outer body), 342 lines (full implementation)</para>
+      /// <para>Complexity: 30 (cyclomatic, outer body), 351 lines (full implementation)</para>
       /// <para>Reads: FLibraryTail</para>
       /// <para>Catches: Exception (empty)</para>
       /// <para>Touches: file system</para>
