@@ -196,7 +196,7 @@ begin
   Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
-  Writeln('  drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]');
+  Writeln('  drag-lint lint-project --db <file.sqlite> [--library-db <lib.sqlite>|none] [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]');
   Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]');
   Writeln('                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
   Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
@@ -374,7 +374,7 @@ begin
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))');
-  Writeln('  drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]');
+  Writeln('  drag-lint check-ast <file> [--profile <name>] [--db PATH] [--library-db <lib.sqlite>|none] [--rule <id>] [--format text|json] [--json] [--output <file>]');
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)');
   Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
@@ -467,7 +467,7 @@ begin
   Writeln('                               (Claude Code, VS Code and Cursor; an uninstalled client is skipped); --dry-run prints those four commands and runs NOTHING;');
   Writeln('                               --home-dir / --appdata-dir move where the client files are looked for (tests); a failing step stops the run with its exit code');
   Writeln('  drag-lint overview           --db <file.sqlite>    [--max-rows N] [--json]   (ONE bounded first-turn call: freshness, counts per kind, units by layer, top fan-in, entry points, forms; a capped section says how many it omitted)');
-  Writeln('  drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)');
+  Writeln('  drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)');
   Writeln('       see wiki page: bookmarks');
   Writeln('  drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--old-platform-db <file> ...] [--format json|--json] (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on ' +
     'instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent ' +
@@ -794,7 +794,7 @@ begin
   end;
   if pVerb = 'lint-project' then
   begin
-    Writeln('  drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]');
+    Writeln('  drag-lint lint-project --db <file.sqlite> [--library-db <lib.sqlite>|none] [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]');
     Exit;
   end;
   if pVerb = 'lint-all' then
@@ -1199,7 +1199,7 @@ begin
   end;
   if pVerb = 'check-ast' then
   begin
-    Writeln('  drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]');
+    Writeln('  drag-lint check-ast <file> [--profile <name>] [--db PATH] [--library-db <lib.sqlite>|none] [--rule <id>] [--format text|json] [--json] [--output <file>]');
     Exit;
   end;
   if pVerb = 'dump-refs' then

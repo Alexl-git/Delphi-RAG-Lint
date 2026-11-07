@@ -67,7 +67,7 @@ function New-Engine([string]$Tag, [string]$OutDir) {
     $o = $OutDir.Replace('\', '/')
     [IO.File]::WriteAllText("$dir\drag-lint.json", "{ `"settings`": { `"defaultPlatform`": `"Win64`" }, `"indexes`": { `"outDir`": `"$o`" } }", (New-Object Text.ASCIIEncoding))
   }
-  return "$dir\drag-lint.exe"
+  return "$dir\drag-lint.exe"  # exe-freshness: absent -- a private copy of the engine under test, made above
 }
 function Run-Case([string]$Tag, [string]$Engine) {
   $uri = 'file:///' + ($looseFile -replace '\\', '/')

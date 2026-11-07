@@ -4131,7 +4131,7 @@
         {
           "type": "cli",
           "verb": "lint-project",
-          "usage": "drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]",
+          "usage": "drag-lint lint-project --db <file.sqlite> [--library-db <lib.sqlite>|none] [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]",
           "flags": [
             {
               "name": "--db",
@@ -4149,7 +4149,7 @@
             }
           ],
           "helpOrder": 18,
-          "help": ["  drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]"]
+          "help": ["  drag-lint lint-project --db <file.sqlite> [--library-db <lib.sqlite>|none] [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]"]
         },
         {
           "type": "ide-menu",
@@ -4495,12 +4495,12 @@
         {
           "type": "ide-about",
           "caption": "Run AST Checks",
-          "steps": ["Open the file in the editor", "Open the About window (drag-lint > About) and click the Run AST Checks button", "From a shell: `drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json]`"]
+          "steps": ["Open the file in the editor", "Open the About window (drag-lint > About) and click the Run AST Checks button", "From a shell: `drag-lint check-ast <file> [--profile <name>] [--db PATH] [--library-db <lib.sqlite>|none] [--rule <id>] [--format text|json]`"]
         },
         {
           "type": "cli",
           "verb": "check-ast",
-          "usage": "drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]",
+          "usage": "drag-lint check-ast <file> [--profile <name>] [--db PATH] [--library-db <lib.sqlite>|none] [--rule <id>] [--format text|json] [--json] [--output <file>]",
           "flags": [
             {
               "name": "--db",
@@ -4515,7 +4515,7 @@
             }
           ],
           "helpOrder": 73,
-          "help": ["  drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]"]
+          "help": ["  drag-lint check-ast <file> [--profile <name>] [--db PATH] [--library-db <lib.sqlite>|none] [--rule <id>] [--format text|json] [--json] [--output <file>]"]
         }
       ],
       "audience": "both",
@@ -5046,8 +5046,8 @@
         {
           "type": "cli",
           "verb": "bookmarks",
-          "example": "drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--json]",
-          "usage": "drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)",
+          "example": "drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json]",
+          "usage": "drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)",
           "flags": [
             {
               "name": "--in",

@@ -736,7 +736,7 @@
     "version": "1.39.2-alpha"
   },
   "features/run-ast-checks.md": {
-    "hash": "359c8394cf94aa34ff1584d399eac0f5f14a0d1083c85f6f7d8e52e8c6cdeccc",
+    "hash": "8727d25da63f8dd126844acdc8be3903aa9e0618d2febd9dd42649c882a7517a",
     "version": "1.46.0-alpha"
   },
   "features/run-diagnostics-didsave.md": {

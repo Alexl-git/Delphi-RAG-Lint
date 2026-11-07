@@ -103,7 +103,7 @@ Described in [bench-context](../../docs/wiki/bench-context.md).
 Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder.
 
 ```text
-drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)
+drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -173,7 +173,7 @@ Described in [callgraph](../../docs/wiki/callgraph.md).
 Runs drag-lint's AST-level checks against a file.
 
 ```text
-drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json] [--json] [--output <file>]
+drag-lint check-ast <file> [--profile <name>] [--db PATH] [--library-db <lib.sqlite>|none] [--rule <id>] [--format text|json] [--json] [--output <file>]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1151,7 +1151,7 @@ Described in:
 Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol.
 
 ```text
-drag-lint lint-project --db <file.sqlite> [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]
+drag-lint lint-project --db <file.sqlite> [--library-db <lib.sqlite>|none] [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]
 ```
 
 | Flag | Argument | Meaning | Default |

@@ -12,8 +12,8 @@
     {
       "type": "cli",
       "verb": "bookmarks",
-      "example": "drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--json]",
-      "usage": "drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)",
+      "example": "drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json]",
+      "usage": "drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)",
       "flags": [
         {
           "name": "--in",
