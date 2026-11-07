@@ -177,7 +177,8 @@ Sound 'c7' 'RnTypes.TTwoA.FSize' 'FBulk' {
 Refused 'r1' 'RnTypes.TKid.AfterConstruction' 'Born' 'override-of-library'
 
 Write-Host 'What cannot be proved refuses' -ForegroundColor Cyan
-Refused 'r2' 'RnTypes.TTwoB.Kind' 'Sort' 'receiver-untyped'
+# r2 was refused [receiver-untyped] until wave 146: `Xs[0].Kind` on a TList<TTwoB> now binds (run_rename_element_type.ps1).
+Sound 'r2' 'RnTypes.TTwoB.Kind' 'Sort' { param($p) Check 'r2 the element read is rewritten' ((Text-Of $p.Use).Contains('Xs[0].Sort')) }
 Refused 'r3' 'RnTypes.TTwoB.Capacity' 'Room' 'receiver-untyped'
 Refused 'r4' 'RnTypes.TTwoB.Zeta' 'Theta' 'no-ref-occurrence'
 Refused 'r5' 'RnTypes.TTwoA.Count' 'Helper' 'capture-bare'

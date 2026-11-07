@@ -50,7 +50,7 @@ compiles. So would a call renamed to a name a local of that routine already has.
 
 | refusal | why |
 |---|---|
-| `receiver-untyped` | an unbound ref whose receiver has no typed ref: `A[i].X`, a chain over lines, a library-only cast |
+| `receiver-untyped` | an unbound ref whose receiver has no typed ref: a subscript the index cannot type (`F()[0].X`, a project class with a default property, a generic parameter), a chain over lines, a library-only cast |
 | `bare-unbound` | an unbound ref with no receiver |
 | `no-ref-occurrence` | a token the index holds no ref for: an inactive `{$IFDEF}` branch, a record-constant field name, `F().X`, `for X in` |
 | `unresolved-ancestor`, `no-library`, `ambiguous-type` | the receiver's chain cannot be walked to its end |

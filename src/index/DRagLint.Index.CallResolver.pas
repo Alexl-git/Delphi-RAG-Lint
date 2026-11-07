@@ -923,6 +923,14 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LibraryListElementText(const AText: string; AFileId: Int64): string;
+    /// <summary>E-RENAME-ELEMENT-TYPE: the type text a subscript on a library collection yields: the
+    /// element of a list (LibraryListElementText), the value of TDictionary, TObjectDictionary or
+    /// Spring's IDictionary, all of which have a default indexed property.</summary>
+    /// <param name="AText">The collection's type text, as declared.</param>
+    /// <param name="AFileId">The unit that wrote AText: its uses clause must name the collection's unit.</param>
+    /// <returns>The element text as written, or '' when AText is no such collection or the project
+    /// declares a type of that name.</returns>
+    function LibraryIndexedElementText(const AText: string; AFileId: Int64): string;
     /// <summary>1.43 (recv2): the element type of a collection type written AText.</summary>
     /// <param name="AText">The type text.</param>
     /// <param name="ADeclFile">The file AText is written in.</param>
@@ -1844,8 +1852,14 @@ type
     /// <param name="AReceiverExpr">The receiver text holding at least one '[' or '^'.</param>
     /// <param name="AText"><!-- drag-lint:auto type -->out TRcvTypeText</param>
     /// <returns>The receiver type id, or 0 when any step cannot be read (a
-    /// call or cast inside the chain, a subscript on a non-array such as an
-    /// indexed property or a string, an untypable head).</returns>
+    /// call or cast inside the chain, a subscript on a type with no known default
+    /// property such as a project class, an indexed property or a string, an
+    /// untypable head). A subscript on an array or on a library collection
+    /// (LibraryIndexedElementText) answers its element; a generic parameter of the
+    /// declaring or the calling scope answers 0.</returns>
+    /// <remarks>A type text is resolved in the unit that wrote it, so an alias's
+    /// element is the type that alias means even where the site sees another of
+    /// that name.</remarks>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Index.CallResolver.TCallResolver.TypeReceiverCore (DRagLint.Index.CallResolver.pas)</para>
@@ -3285,6 +3299,14 @@ type
     /// </remarks>
     function RefStaticType(const ARef: TReference; AReceiverTypeId: Int64;
       const AReceiverTypeText: string; out AType: TRefStaticType): Boolean;
+    /// <summary>E-RENAME-ELEMENT-TYPE: the static type of a subscripted receiver, `A[i]` in `A[i].X`.
+    /// `A[i]` has no ref of its own, so neither ref_types nor ref_receivers can state it.</summary>
+    /// <param name="ARef">The member reference; its ReceiverText must end in `]`.</param>
+    /// <param name="AType">Out: TypeSymbolId of a project type, TypeQName always, Via = 'element'.</param>
+    /// <returns>True when the receiver ends in a subscript and the selector chain typed it. A type the
+    /// project does not declare has only its text.</returns>
+    /// <remarks>Not thread-safe: the pass's one resolver, one thread. Leaves the with-scope counters alone.</remarks>
+    function RefElementType(const ARef: TReference; out AType: TRefStaticType): Boolean;
 
     /// <summary>Per-run counters of the value-read pass.</summary>
     /// <remarks>Cumulative over the resolver's lifetime.</remarks>
@@ -7140,6 +7162,16 @@ var
   TypeText: string ; // the current value's declared type TEXT, or '' when TypeId holds it
   TypeId  : Int64  ;
   PrevText: string ; // item 4: the type text before the step that failed
+  TextFile : Int64 ; // the unit that wrote TypeText: its names are resolved there
+  TextScope: Int64 ; // the scope that wrote it: its generic parameters are not types
+
+  { The text names a generic parameter of the scope that wrote it or of the site. }
+  function NamesGenericHere(const AText: string): Boolean;
+  begin
+    Result:= False;
+    for var Part: string in AText.Split(['<', '>', ',', ' '], TStringSplitOptions.ExcludeEmpty) do
+      Result:= Result or ScopeNamesGeneric(TextScope, LowerCase(Part)) or ScopeNamesGeneric(ACallRef.EnclosingSymbolId, LowerCase(Part));
+  end;
 
   { Step the current type through one selector: '[' (element) or '^' (pointee).
     A type text this cannot read directly is resolved as a NAMED type and, when
@@ -7154,17 +7186,21 @@ var
         if TypeId <= 0 then Exit;
         if SymbolById(TypeId).Kind <> skTypeAlias then Exit; // a class / record: no default property model
         var Alias: TSymbol:= SymbolById(TypeId);
-        TypeText:= Trim(Alias.Signature);
-        TypeId  := 0;
+        TypeText := Trim(Alias.Signature);
+        TypeId   := 0;
+        TextFile := Alias.FileId;
+        TextScope:= Alias.Id;
       end;
       var Next: string:= if ASel = '^' then (if TypeText.StartsWith('^') then Trim(Copy(TypeText, 2, MaxInt)) else '')
                          else ArrayElementTypeText(TypeText);
+      if (Next = '') and (ASel = '[') then Next:= LibraryIndexedElementText(TypeText, TextFile);
+      if (Next <> '') and (ASel = '[') and NamesGenericHere(Next) then Exit;
       if Next <> '' then
       begin
         TypeText:= Next;
         Exit(True);
       end;
-      TypeId  := ResolveTypeNameToSymbol(TypeText, ACallRef.FileId);
+      TypeId  := ResolveTypeNameToSymbol(TypeText, TextFile);
       TypeText:= '';
     end;
   end;
@@ -7175,7 +7211,7 @@ var
     Result:= TypeId;
     if TypeText <> '' then
       Result:= if TypeText.StartsWith('^') or (ArrayElementTypeText(TypeText) <> '') then 0 // no members
-               else ResolveTypeNameToSymbol(TypeText, ACallRef.FileId);
+               else ResolveTypeNameToSymbol(TypeText, TextFile);
     Result:= DerefPointerAlias(Result);
   end;
 
@@ -7191,7 +7227,11 @@ var
     if (Decl.Id <= 0) and (not Declared) and (Encl.ParentId > 0) and not SameText(AName, 'Result') then
       Decl:= FindChildOfKind(Encl.ParentId, AName, [skField, skProperty]);
     if Decl.Id > 0 then
-      TypeText:= Trim(LocalTypeText(Decl))
+    begin
+      TypeText := Trim(LocalTypeText(Decl));
+      TextFile := Decl.FileId;
+      TextScope:= Decl.ParentId;
+    end
     else if Declared then
       Exit(False) // a local of that name exists but none covers the site
     else if SameText(AName, 'Result') and (Encl.Kind in [skFunction, skMethod]) then
@@ -7207,7 +7247,18 @@ var
         no id -- its text is `array [0 .. 64] of TfrmGageport2` -- so read the
         TEXT and let the selector take the element type. Only when the id path
         had nothing, so no edge that bound before can move. }
-      if (TypeId = 0) and (ArrayElementTypeText(OrdText) <> '') then TypeText:= OrdText;
+      if (TypeId = 0) and (ArrayElementTypeText(OrdText) <> '') then TypeText:= OrdText
+      else if (TypeId = 0) and OrdText.Contains('<') then
+      begin
+        { A unit-level `TList<TTok>`: the element is read in the unit that declared the value. }
+        var Value: TSymbol;
+        if ValueDeclaredText(ACallRef, AName, True, Value) <> '' then
+        begin
+          TypeText := OrdText;
+          TextFile := Value.FileId;
+          TextScope:= Value.ParentId;
+        end;
+      end;
     end;
     Result:= (TypeText <> '') or (TypeId > 0);
   end;
@@ -7217,9 +7268,11 @@ var
   begin
     var Owner: Int64:= CurrentTypeId;
     var Member: TSymbol:= if Owner > 0 then LookupMemberOnType(Owner, AName) else Default(TSymbol);
-    TypeText:= Trim(Member.Signature);
-    TypeId  := 0;
-    Result  := (Member.Id > 0) and (TypeText <> '');
+    TypeText := Trim(Member.Signature);
+    TypeId   := 0;
+    TextFile := Member.FileId;
+    TextScope:= Member.ParentId;
+    Result   := (Member.Id > 0) and (TypeText <> '');
   end;
 
   { Item 4: the text a chain stopped at, when every segment from the failing
@@ -7239,10 +7292,12 @@ var
   end;
 
 begin
-  AText   := Default(TRcvTypeText);
-  TypeText:= '';
-  TypeId  := 0;
-  Ok      := SplitTopLevelDots(AReceiverExpr, Segs);
+  AText    := Default(TRcvTypeText);
+  TypeText := '';
+  TypeId   := 0;
+  TextFile := ACallRef.FileId;
+  TextScope:= ACallRef.EnclosingSymbolId;
+  Ok       := SplitTopLevelDots(AReceiverExpr, Segs);
   SegIx   := 0;
   while Ok and (SegIx <= High(Segs)) do
   begin
@@ -8858,6 +8913,35 @@ begin
   Result:= Trim(Arg);
 end;
 
+function TCallResolver.LibraryIndexedElementText(const AText: string; AFileId: Int64): string;
+var
+  Depth: Integer;
+  Comma: Integer;
+begin
+  Result:= LibraryListElementText(AText, AFileId);
+  if Result <> '' then Exit;
+  var Open: Integer:= AText.IndexOf('<');
+  if (Open <= 0) or not AText.EndsWith('>') then Exit;
+  var Head: string:= LowerCase(AText.Substring(0, Open));
+  var IsSystem: Boolean:= (Head = 'tdictionary') or (Head = 'tobjectdictionary');
+  if not (IsSystem or (Head = 'idictionary')) or FNameToCands.ContainsKey(Head) then Exit;
+  var UsesUnit: Boolean:= False;
+  for var U: string in FileUsesUnits(AFileId) do
+    UsesUnit:= UsesUnit or (if IsSystem then (U = 'system.generics.collections') or (U = 'generics.collections') else U = 'spring.collections');
+  if not UsesUnit then Exit;
+  Depth:= 0;
+  Comma:= -1;
+  for var I: Integer:= Open + 1 to Length(AText) - 2 do
+    if AText.Chars[I] = '<' then Inc(Depth)
+    else if AText.Chars[I] = '>' then Dec(Depth)
+    else if (AText.Chars[I] = ',') and (Depth = 0) then
+    begin
+      if Comma >= 0 then Exit;
+      Comma:= I;
+    end;
+  if Comma >= 0 then Result:= Trim(AText.Substring(Comma + 1, Length(AText) - Comma - 2));
+end;
+
 function TCallResolver.CollectionElementOfText(const AText: string; ADeclFile, ADeclScope, ASiteFile, ASiteScope: Int64): string;
 const
   MAX_ALIAS_HOPS = 4; // the bound TypeOfSelectorChain walks aliases to
@@ -9841,6 +9925,22 @@ begin
     end;
   end;
   Result:= AType.TypeQName <> '';
+end;
+
+function TCallResolver.RefElementType(const ARef: TReference; out AType: TRefStaticType): Boolean;
+var
+  RcvText: TRcvTypeText;
+begin
+  AType := Default(TRefStaticType);
+  Result:= ARef.ReceiverText.EndsWith(']');
+  if not Result then Exit;
+  var Saved: TWithScopeStats:= FWith.Stats;
+  AType.TypeSymbolId:= TypeReceiver(ARef, ARef.ReceiverText, RcvText);
+  FWith.Stats:= Saved;
+  AType.TypeQName:= if AType.TypeSymbolId > 0 then SymbolById(AType.TypeSymbolId).QualifiedName
+                    else if RcvText.Pending = '' then RcvText.Text else '';
+  AType.Via:= 'element';
+  Result   := AType.TypeQName <> '';
 end;
 
 function TCallResolver.OracleStats: TOracleStats;
