@@ -61,6 +61,17 @@ const
   /// Negative, so a caller testing &lt; 0 treats it as "no result".</summary>
   PROCRUN_CANCELLED_EXIT_CODE = -3;
 
+  /// <summary>What the runners answer when no engine resolved (see IsEmptyExeCommand).
+  /// DragLint.Plugin.ExeResolver.ENGINE_NOT_FOUND_MSG is this text: one wording.</summary>
+  PROCRUN_ENGINE_NOT_FOUND_TEXT = 'drag-lint.exe not found -- check drag-lint Options.';
+
+var
+  /// <summary>Told when a spawn was refused because no engine resolved. Set by the
+  /// plugin to put ENGINE_NOT_FOUND_MSG on the status bar; nil in a headless run.</summary>
+  /// <remarks>Called on the thread of the refused spawn, usually a worker; the hook
+  /// marshals to the main thread itself. Must not raise.</remarks>
+  GEngineMissingHook: TProc = nil;
+
 type
   /// <summary>Line callback for RunCaptureStreaming. TProc&lt;string&gt; allows
   /// anonymous closures so callers can capture local variables inline.</summary>
@@ -234,6 +245,19 @@ function RunCaptureStreaming(const ACmdLine: string; AOnLine: TOnLineProc; out A
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ProcRunBeatText: string;
+
+/// <summary>Tells whether a command line was built from an empty exe path.</summary>
+/// <param name="ACmdLine">The full command line, as CreateProcessW would take it.</param>
+/// <returns>True when its first token is the empty quoted string: `"" verb ...`.</returns>
+/// <remarks>EngineExeOrEmpty answers '' when no engine resolves and the sites format
+/// it into `"%s" verb ...`. Every runner in this unit refuses such a line: exit -1,
+/// PROCRUN_ENGINE_NOT_FOUND_TEXT as the output, nothing spawned, GEngineMissingHook
+/// told. A site that spawns without this unit checks it itself. Thread-safe, pure.</remarks>
+function IsEmptyExeCommand(const ACmdLine: string): Boolean;
+
+/// <summary>Runs GEngineMissingHook when one is set; a failing hook is dropped.</summary>
+/// <remarks>Any thread. For a spawn site that does not pass through this unit's runners.</remarks>
+procedure ReportEngineMissing;
 
 implementation
 
@@ -583,6 +607,21 @@ end;
   AStandDownGraceMs > 0 (lane X-BT): a cancel first asks the child to stand
   down (StartStandDown) and keeps draining for the grace; the child's own exit
   ends the run normally, the end of the grace kills the tree. }
+function IsEmptyExeCommand(const ACmdLine: string): Boolean;
+begin
+  Result:= TrimLeft(ACmdLine).StartsWith('""');
+end;
+
+procedure ReportEngineMissing;
+begin
+  if not Assigned(GEngineMissingHook) then Exit;
+  try
+    GEngineMissingHook();
+  except
+    on Exception do GEngineMissingHook:= nil; { a hook that failed once is not asked again }
+  end;
+end;
+
 function RunCore(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer;  // dl:ok too-many-parameters@dc35, cyclomatic-complexity@ec7c -- the one private body behind four public runners; each parameter is one of their distinct contracts (lane X-BT added the stand-down grace), and a record would carry the same nine fields; the branches are the read loop's stop reasons, kept in one place on purpose
   ACreationFlags: DWORD; AHandleOut: PHandle; APidOut: PDWORD; ACancel: THandle;
   const AOnChunk: TChunkProc; AStandDownGraceMs: Integer = 0): Integer;
@@ -676,6 +715,14 @@ begin
   { A cancel already set spawns nothing: a queue shutdown can land between
     dequeuing a job and starting it. }
   if IsSet(ACancel) then Exit(PROCRUN_CANCELLED_EXIT_CODE);
+  { No engine resolved: the site formatted '' into `"%s" verb`. CreateProcessW would
+    fail with an error nobody shows, so the caller's report came out empty. }
+  if IsEmptyExeCommand(ACmdLine) then
+  begin
+    AOutput:= PROCRUN_ENGINE_NOT_FOUND_TEXT;
+    ReportEngineMissing;
+    Exit;
+  end;
   SA.nLength:= SizeOf(SA);
   SA.bInheritHandle:= True;
   SA.lpSecurityDescriptor:= nil;

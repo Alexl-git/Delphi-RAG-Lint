@@ -1475,6 +1475,13 @@ end; // function
 { v0.64.1: forward so all heavy-command handlers above can call DLExe64
   before its implementation appears later in this unit. }
 function DLExe64: string; forward;
+{ False, and the status note, when no engine resolved. For the Editor sites that do not
+  spawn through ProcRun (a detached CreateProcess, a generated .bat). }
+function DLEngineFound(const pExe: string): Boolean;
+begin
+  Result:= pExe <> '';
+  if not Result then ReportEngineMissing;
+end;
 { Same reason: InvokeFormatProjectYadf opens its job report with DLOpenInEditor,
   and UnsavedProjectUnits reads editor buffers with ReadSourceEditorText; both
   implementations appear further down. }
@@ -3202,6 +3209,7 @@ begin
     between the format lines: one unit YADF cannot parse must not abandon the
     remaining units half-formatted. The trailing reindex is separate and always
     runs, so the index matches whatever ended up on disk. }
+  if not DLEngineFound(DLExe64) then Exit;
   Bat:= '@echo off'#13#10;
   for i:= 0 to High(Units) do
     Bat:= Bat + Format('"%s" format "%s"'#13#10, [DLExe64, Units[i]]);
@@ -3715,6 +3723,7 @@ begin
     Exit;
   end;
   ExePath:= DLExe64;
+  if not DLEngineFound(ExePath) then Exit;
 
   TThread.CreateAnonymousThread(
     procedure
@@ -4705,6 +4714,7 @@ begin
 
   Cfg:= LoadSettings;
   ExePath:= DLExe64;
+  if not DLEngineFound(ExePath) then Exit;
 
   { Spawn detached: drag-lint lint <tmp> --json. We don't capture stdout
     in v0.40.3a -- the diagnostic-publish path will be wired in v0.40.4
@@ -6324,6 +6334,7 @@ begin
   ProjDir:= ExcludeTrailingPathDelimiter(ExtractFilePath(Proj));
   Plat   := GetActiveProjectPlatform; // Win32/Win64 -> correct conditional-define resolution
 
+  if not DLEngineFound(DLExe64) then Exit;
   Bat:=
     '@echo off'#13#10 +
     Format('"%s" index "%s" --db "%s" --platform %s || exit /b 1'#13#10, [DLExe64, ProjDir, Db, Plat]) +
@@ -7719,6 +7730,18 @@ begin
     procedure (AText: string)
     begin
       DebugLog(AText);
+    end;
+  { O-PLUGIN-EMPTY-EXE: any spawn refused for want of an engine says so on the status
+    bar; a note, not a dialog, because background spawns (outline, live lint) refuse too. }
+  DragLint.Plugin.ProcRun.GEngineMissingHook:=
+    procedure
+    begin
+      DLT('exe', ENGINE_NOT_FOUND_MSG);
+      TThread.Queue(nil,
+        procedure
+        begin
+          SetDragLintNote('drag-lint: ' + ENGINE_NOT_FOUND_MSG);
+        end);
     end;
   { v0.47: auto-compile the UNSAVED buffer when editing goes idle (AutoCompileBuffer),
     so compiler errors on unsaved code appear without saving or the menu. The runner
