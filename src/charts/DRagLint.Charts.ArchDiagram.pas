@@ -98,7 +98,7 @@ type
     /// <summary>`uses` entries with no target in the index: externals, not drawn.</summary>
     ExternalUses: Integer;
     /// <summary>Highest layer + 1.</summary>
-    LayerCount: Integer; // dl:ok public-field -- the class is private to this implementation section; BuildArchModel reads the result once
+    LayerCount: Integer;
     /// <summary>By layer, highest first, then by Order: reading order of the drawing.</summary>
     Zones: TArray<TArchZone>;
     /// <summary>By zone order of the sort before layering, from then to.</summary>
@@ -229,10 +229,10 @@ type
     function RowZones(pLayer: Integer): TArray<Integer>;
     procedure SweepRow(pLayer: Integer);
   public
-    Layer: TArray<Integer>; // dl:ok public-field -- the class is private to this implementation section; BuildArchModel reads the result once
-    Order: TArray<Integer>; // dl:ok public-field -- the class is private to this implementation section; BuildArchModel reads the result once
-    LayerCount: Integer; // dl:ok public-field -- the class is private to this implementation section; BuildArchModel reads the result once
-    Names: TArray<string>; // dl:ok public-field -- the class is private to this implementation section; BuildArchModel reads the result once
+    Layer: TArray<Integer>; // dl:ok public-field@4fc7 -- the class is private to this implementation section; BuildArchModel reads the result once
+    Order: TArray<Integer>; // dl:ok public-field@298c -- the class is private to this implementation section; BuildArchModel reads the result once
+    LayerCount: Integer; // dl:ok public-field@26ac -- the class is private to this implementation section; BuildArchModel reads the result once
+    Names: TArray<string>; // dl:ok public-field@b3bf -- the class is private to this implementation section; BuildArchModel reads the result once
     constructor Create(const pNames: TArray<string>; const pWeight: TArray<TArray<Integer>>);
     destructor Destroy; override;
     procedure Run;
@@ -345,7 +345,7 @@ begin
     for var T:= 0 to FN - 1 do
       if (Layer[T] <> pLayer) and ((FWeight[Z][T] > 0) or (FWeight[T][Z] > 0)) then
       begin
-        Sum:= Sum + (Order[T] + ROW_CENTRE) / Length(RowZones(Layer[T]));  // dl:ok concat-in-loop -- Sum is a Double; no string is built here
+        Sum:= Sum + (Order[T] + ROW_CENTRE) / Length(RowZones(Layer[T]));
         Inc(Count);
       end;
     Bary[Z]:= if Count > 0 then Sum / Count else (Order[Z] + ROW_CENTRE) / Length(Row);
@@ -793,13 +793,15 @@ begin
   pSb.AppendLine('</g>');
 end;
 
+function MarkerDef(const pKind: string): string;
+begin
+  Result:= Format('<marker id="mk-%s" class="mk-%s" markerWidth="%d" markerHeight="%d" refX="%d" refY="%d" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0L%d %dL0 %dz"/></marker>',
+    [pKind, pKind, ARROW_SIZE, ARROW_SIZE, ARROW_SIZE, ARROW_SIZE div HALF, ARROW_SIZE, ARROW_SIZE div HALF, ARROW_SIZE]);
+end;
+
 function MarkerDefs: string;
 begin
-  Result:= '<defs>';
-  for var Kind in KIND_TEXT do  // dl:ok concat-in-loop -- three iterations, one per arrow kind
-    Result:= Result + Format('<marker id="mk-%s" class="mk-%s" markerWidth="%d" markerHeight="%d" refX="%d" refY="%d" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0L%d %dL0 %dz"/></marker>',
-      [Kind, Kind, ARROW_SIZE, ARROW_SIZE, ARROW_SIZE, ARROW_SIZE div HALF, ARROW_SIZE, ARROW_SIZE div HALF, ARROW_SIZE]);
-  Result:= Result + '</defs>';
+  Result:= '<defs>' + MarkerDef(KIND_TEXT[aekForward]) + MarkerDef(KIND_TEXT[aekBack]) + MarkerDef(KIND_TEXT[aekTangle]) + '</defs>';
 end;
 
 function DiagramSvg(const pModel: TArchModel): string;

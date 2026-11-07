@@ -18,7 +18,9 @@
 param([string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe")
 $ErrorActionPreference = 'Continue'
 $script:Failed = $false
+$script:Checks = 0
 function Check($n, $ok, $d = '') {
+  $script:Checks++
   $s = if ($ok) { 'PASS' } else { 'FAIL' }
   Write-Host ("  [{0}] {1} {2}" -f $s, $n, $d)
   if (-not $ok) { $script:Failed = $true }
@@ -118,13 +120,22 @@ try {
     $js = '<script>zone(M.zones.findIndex(function(z){return z.name==="core"}));var a=P.textContent;edge(M.edges.findIndex(function(e){return e.kind==="back"}));document.title="PANEL|"+a+"|"+P.textContent+"|"+document.querySelectorAll("#d .edge.dim").length;</script></body>'
     [IO.File]::WriteAllText($probe, $page.Replace('</body>', $js), [Text.Encoding]::ASCII)
     $b = Start-Process $edge -ArgumentList '--headless=new', '--disable-gpu', "--user-data-dir=$Work\edge", '--dump-dom', ('file:///' + $probe.Replace('\', '/')) -RedirectStandardOutput $dom -PassThru
-    if ($b.WaitForExit(120000)) {
-      $tt = [regex]::Match([IO.File]::ReadAllText($dom), '<title>(PANEL\|[^<]*)</title>').Groups[1].Value
+    # Edge's children outlive the process started here and hold the file: read it shared, until complete
+    $text = ''; $until = (Get-Date).AddSeconds(120)
+    while ((Get-Date) -lt $until -and -not $text.Contains('</html>')) {
+      [Threading.Thread]::Sleep(1000)
+      try {
+        $fs = [IO.File]::Open($dom, 'Open', 'Read', 'ReadWrite,Delete')
+        try { $text = (New-Object IO.StreamReader($fs)).ReadToEnd() } finally { $fs.Dispose() }
+      } catch { $text = '' }
+    }
+    if ($text.Contains('</html>')) {
+      $tt = [regex]::Match($text, '<title>(PANEL\|[^<]*)</title>').Groups[1].Value
       Write-Host "    panel: $($tt.Substring(0, [Math]::Min(150, $tt.Length)))"
       Check 'panel:folder-lists-units' ($tt.Contains('uCore1') -and $tt.Contains('core/uCore1.pas'))
       Check 'panel:arrow-lists-uses-line' ($tt.Contains('uCore1 uses uData2') -and $tt.Contains('core/uCore1.pas:5 (implementation)'))
-      Check 'panel:others-dimmed' ($tt -match '\|(\d+)$' -and [int]$Matches[1] -eq (@($model.edges).Count - 1))
-    } else { Write-Host '  [SKIP] panel: the browser did not finish in 120 s'; $b.Kill($true) }
+      Check 'panel:others-dimmed' (($tt -match '\|(\d+)$') -and ([int]$Matches[1] -eq (@($model.edges).Count - 1)))
+    } else { Write-Host '  [SKIP] panel: the browser did not finish in 120 s' }
   } else { Write-Host '  [SKIP] panel: no Edge on this box' }
 
   $Html2 = Join-Path $Work 'arch2.html'
@@ -141,9 +152,14 @@ try {
 
   $dot = (& $Exe graph --db $Db --format dot 2>&1 | Out-String)
   Check 'control:graph-dot-unchanged' ($dot -match 'digraph')
+} catch {
+  # a throw must fail the guard: the checks after it never ran
+  Check 'no-exception' $false $_.Exception.Message
 } finally {
-  if (Test-Path $Work) { [IO.Directory]::Delete($Work, $true) }
+  Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($Work) } | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch { } }
+  try { if (Test-Path $Work) { [IO.Directory]::Delete($Work, $true) } } catch { Write-Host "  [NOTE] temp folder left: $Work" }
 }
+if ($script:Checks -lt 30) { Check 'ran-all-checks' $false "only $($script:Checks) checks ran" }
 if ($script:Failed) { Write-Host 'FAIL'; exit 1 }
 Write-Host 'PASS'
 exit 0
