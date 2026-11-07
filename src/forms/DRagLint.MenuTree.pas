@@ -140,7 +140,7 @@ type
     /// <returns><!-- drag-lint:auto -->TMenuNode -- Observed: pChild.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.MenuTree.Dfm.CloneNode (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.AddLinks (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.TWalkCore.GraftFieldRoots (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.Parenting (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.PlaceLinkItem (DRagLint.MenuTree.pas)</para>
+    /// <para>Called from: DRagLint.MenuTree.Dfm.CloneNode (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.AddLinks (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.Dfm.TDfmRootBuilder.Graft (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.TWalkCore.GraftFieldRoots (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.Parenting (DRagLint.MenuTree.pas) (+1 more)</para>
     /// <para>Calls: DRagLint.MenuTree.TMenuNode.AttachTo</para>
     /// <para>Reads: FChildren</para>
     /// <para>Owns returned: borrowed</para>
@@ -158,7 +158,7 @@ type
     /// <returns><!-- drag-lint:auto -->TMenuNode -- Observed: pChild.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.MenuTree.TWalkCore.Parenting (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.PlaceLinkItem (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.SetLinkBeginGroup (DRagLint.MenuTree.pas)</para>
+    /// <para>Called from: DRagLint.MenuTree.Dfm.TDfmRootBuilder.Graft (DRagLint.MenuTree.Dfm.pas), DRagLint.MenuTree.TWalkCore.Parenting (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.PlaceLinkItem (DRagLint.MenuTree.pas), DRagLint.MenuTree.TWalkCore.SetLinkBeginGroup (DRagLint.MenuTree.pas)</para>
     /// <para>Calls: DRagLint.MenuTree.TMenuNode.AttachTo</para>
     /// <para>Reads: FChildren</para>
     /// <para>Owns returned: borrowed</para>

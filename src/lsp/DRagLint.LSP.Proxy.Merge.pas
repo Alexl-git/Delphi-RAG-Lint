@@ -170,7 +170,7 @@ type
     /// <summary><!-- drag-lint:auto sum -->One request the proxy answers itself (A5).</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.NavAnswer (DRagLint.LSP.Proxy.Merge.pas)</para>
     /// <para>Used in units: DRagLint.LSP.Proxy.Merge</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
@@ -252,8 +252,59 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function  TakeCancel(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->The NAV_METHODS index of AMethod when
+    /// --merge-navigation owes it an answer: on, and DelphiLSP did not advertise its
+    /// provider. -1 otherwise.</summary>
+    /// <param name="AMethod"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1; I.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Reads: FOptions, FTheirNavigation</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  NavMethodIndex(const AMethod: string): Integer;
+    /// <summary><!-- drag-lint:auto sum -->Could this frame hold a NAV_METHODS request?
+    /// The scan before the parse.</summary>
+    /// <param name="AFrame"><!-- drag-lint:auto type -->const TBytes</param>
+    /// <param name="ALen"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.FrameContains</para>
+    /// <para>Reads: FOptions</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameContains"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  MayBeNavRequest(const AFrame: TBytes; ALen: Integer): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->Worker thread: the registered feature's result
+    /// for one --merge-navigation request, as JSON. Whatever the plain server would
+    /// answer, null included; [] when no feature answered.</summary>
+    /// <param name="AServer"><!-- drag-lint:auto type -->const TLSPServer</param>
+    /// <param name="AJob"><!-- drag-lint:auto type -->const TAnswerJob</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: '[]'; Res.ToJSON.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Server.TLSPServer.ComputeFeatureResult</para>
+    /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeFeatureResult"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function  NavAnswer(const AServer: TLSPServer; const AJob: TAnswerJob): string;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -372,7 +423,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept (DRagLint.LSP.Proxy.Merge.pas)</para>
     /// <para>Calls: DRagLint.LSP.Proxy.Merge.DocKey, DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.HeadStringValue, DRagLint.LSP.Proxy.Merge.LiveUpdateOf, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.QueueDocUpdate, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.WarmUp, DRagLint.LSP.Server.TLSPServer.FileFromUri</para>
-    /// <para>Complexity: 24 (cyclomatic, outer body), 67 lines (full implementation)</para>
+    /// <para>Complexity: 26 (cyclomatic, outer body), 67 lines (full implementation)</para>
     /// <para>Reads: FOptions, FTestFastPath, FDirtyLock, FDirty</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.DocKey"/>
@@ -449,7 +500,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept (DRagLint.LSP.Proxy.Merge.pas)</para>
     /// <para>Calls: DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.PrefixOf, DRagLint.LSP.Proxy.Merge.TPendingRequest.AddRef, DRagLint.LSP.Proxy.Merge.TPendingRequest.Create, DRagLint.LSP.Proxy.Merge.TPendingRequest.Release, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeHover, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Enqueue, DRagLint.LSP.Server.TLSPServer.FileFromUri, TJSONObject, TPendingRequest</para>
-    /// <para>Complexity: 38 (cyclomatic, outer body), 112 lines (full implementation)</para>
+    /// <para>Complexity: 39 (cyclomatic, outer body), 112 lines (full implementation)</para>
     /// <para>Reads: FOptions, FCompletionOff, FHoverOff, FDefinitionOff, FPendingLock, FPending</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameBody"/>
@@ -527,7 +578,8 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeReply (DRagLint.LSP.Proxy.Merge.pas)</para>
     /// <para>Calls: DRagLint.LSP.Proxy.Merge.Advertises, TJSONObject</para>
-    /// <para>Reads: FTheirReferences, FTheirSymbols</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 46 lines (full implementation)</para>
+    /// <para>Reads: FOptions, FTheirReferences, FTheirSymbols, FTheirNavigation</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.Advertises"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
@@ -542,13 +594,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas)</para>
-    /// <para>Calls: DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server, DRagLint.LSP.Server.TLSPServer.ComputeReferences, DRagLint.LSP.Server.TLSPServer.ComputeWorkspaceSymbols</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.NavAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server, DRagLint.LSP.Server.TLSPServer.ComputeReferences, DRagLint.LSP.Server.TLSPServer.ComputeWorkspaceSymbols</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.MergeErrLine"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.NavAnswer"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer"/>
-    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure AnswerOnWorker(const AJob: TAnswerJob);
@@ -731,7 +783,7 @@ type
     /// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
     /// <para>Calls: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeReply, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.PickupContext, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TrackDocument</para>
     /// <para>Returns: False; FOptions.MergeDiagnostics and MergeDiagnostics(AFrame, ALen, AReplacement)</para>
-    /// <para>Complexity: 19 (cyclomatic, outer body), 17 lines (full implementation)</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 15 lines (full implementation)</para>
     /// <para>Reads: FTestEmptyReplacement, FOptions</para>
     /// <para>Mutates: AReplacement (out)</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics"/>
@@ -795,9 +847,9 @@ type
     /// C&gt;S pump, as the queue-full path does (run_lsp_proxy_trace_guard.ps1).
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
-    /// <para>Calls: DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Enqueue, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TakeCancel, DRagLint.LSP.Server.TLSPServer.FileFromUri, TJSONBool, TJSONObject</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Enqueue, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MayBeNavRequest, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.NavMethodIndex, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TakeCancel, DRagLint.LSP.Server.TLSPServer.FileFromUri, TJSONBool, TJSONObject</para>
     /// <para>Returns: False; True</para>
-    /// <para>Complexity: 25 (cyclomatic, outer body), 81 lines (full implementation)</para>
+    /// <para>Complexity: 33 (cyclomatic, outer body), 92 lines (full implementation)</para>
     /// <para>Reads: FOptions, FClientWriter, FTheirReferences, FTheirSymbols, FAnsweredIds, FStateLock, FAnswersIdle, FTestAnswerInline   Writes: FAnswersOut</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameBody"/>

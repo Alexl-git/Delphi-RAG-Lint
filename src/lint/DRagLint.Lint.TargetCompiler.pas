@@ -248,7 +248,7 @@ function AutoAssumesLegacyCompiler(const pProjectFile: string): Boolean;
 /// <returns>(pNeedsCompiler &gt; 0) and (pTarget &lt; pNeedsCompiler).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Lint.Autofix.BuildAutofixEdits (DRagLint.Lint.Autofix.pas), DRagLint.Lint.QueryRules.TQueryRule.AttachFix (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.TargetCompiler.TTargetRuleGate.Build (DRagLint.Lint.TargetCompiler.pas)</para>
+/// <para>Called from: DRagLint.Lint.Autofix.BuildAutofixEdits (DRagLint.Lint.Autofix.pas), DRagLint.Lint.Autofix.BuildBufferFixEdits (DRagLint.Lint.Autofix.pas), DRagLint.Lint.QueryRules.TQueryRule.AttachFix (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.TargetCompiler.TTargetRuleGate.Build (DRagLint.Lint.TargetCompiler.pas)</para>
 /// <para>Returns: (pNeedsCompiler &gt; 0) and (pTarget &lt; pNeedsCompiler)</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
@@ -278,7 +278,7 @@ function IsCompatOnForTarget(pCompatSince, pTarget: Integer): Boolean;
 /// one target. A host that lints several projects in one process (the LSP)
 /// sets it before each run.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Lint.Autofix.BuildAutofixEdits (DRagLint.Lint.Autofix.pas), DRagLint.Lint.QueryRules.TQueryRule.AttachFix (DRagLint.Lint.QueryRules.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoRules (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Lint.Autofix.BuildAutofixEdits (DRagLint.Lint.Autofix.pas), DRagLint.Lint.Autofix.BuildBufferFixEdits (DRagLint.Lint.Autofix.pas), DRagLint.Lint.QueryRules.TQueryRule.AttachFix (DRagLint.Lint.QueryRules.pas)</para>
 /// <para>Returns: GActiveTarget</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->

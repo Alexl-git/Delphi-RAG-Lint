@@ -65,15 +65,15 @@ type
       /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Calls: Default, DRagLint.Parser.DFM.CollectParseErrors, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSNodeHelper.HasError, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
+      /// <para>Calls: Default, DRagLint.Parser.DFM.CollectParseErrors, DRagLint.Parser.DFM.IsBinaryDfmBytes, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSNodeHelper.HasError, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
       /// <para>Implements: DRagLint.Core.Interfaces.IParser.Parse</para>
       /// <para>Reads: FLanguage</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Parser.DFM.CollectParseErrors"/>
+      /// <seealso cref="DRagLint.Parser.DFM.IsBinaryDfmBytes"/>
       /// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
       /// <seealso cref="DRagLint.Parser.DFM.WalkObject"/>
       /// <seealso cref="TreeSitter.TTSNodeHelper.HasError"/>
-      /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function Parse(const ASource: TBytes; const AFilePath: string): TParseResult;
@@ -86,7 +86,7 @@ type
   /// HandlerName='Button1Click'). Produced by ExtractDfmEventBindings.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Parser.DFM.pas), DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas), DRagLint.Parser.DFM.TDfmState.Create (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.WalkProperty (DRagLint.Parser.DFM.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Parser.DFM.pas), DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas), DRagLint.Parser.DFM.ExtractDfmEventBindings (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.TDfmState.Create (DRagLint.Parser.DFM.pas), DRagLint.Parser.DFM.WalkProperty (DRagLint.Parser.DFM.pas)</para>
   /// <para>Used in units: DRagLint.Doc.SymbolFacts, DRagLint.Parser.DFM</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -129,13 +129,13 @@ external 'tree-sitter-dfm';
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Doc.SymbolFacts.DfmEventMapFor (DRagLint.Doc.SymbolFacts.pas)</para>
-/// <para>Calls: DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.tree_sitter_dfm, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
+/// <para>Calls: DRagLint.Parser.DFM.IsBinaryDfmBytes, DRagLint.Parser.DFM.TDfmState.Create, DRagLint.Parser.DFM.tree_sitter_dfm, DRagLint.Parser.DFM.WalkObject, Integer, Move, TreeSitter.TTSNodeHelper.NamedChild, TreeSitter.TTSNodeHelper.NamedChildCount, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
 /// <para>Pure</para>
+/// <seealso cref="DRagLint.Parser.DFM.IsBinaryDfmBytes"/>
 /// <seealso cref="DRagLint.Parser.DFM.TDfmState.Create"/>
 /// <seealso cref="DRagLint.Parser.DFM.tree_sitter_dfm"/>
 /// <seealso cref="DRagLint.Parser.DFM.WalkObject"/>
 /// <seealso cref="TreeSitter.TTSNodeHelper.NamedChild"/>
-/// <seealso cref="TreeSitter.TTSNodeHelper.NamedChildCount"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ExtractDfmEventBindings(const ASource: TBytes): TArray<TDfmEventBinding>;

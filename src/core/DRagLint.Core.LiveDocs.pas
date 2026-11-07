@@ -44,7 +44,7 @@ type
   /// be pure cost. If a threaded host is ever added, wrap the class in a lock
   /// rather than making the callers defensive.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas) (+22 more)</para>
+  /// <para>Used by: DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildFixActions (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas) (+23 more)</para>
   /// <para>Used in units: DRagLint.Lint.MissingUses, DRagLint.LSP.Completion, DRagLint.LSP.Feature.DocumentSymbol, DRagLint.LSP.Feature.FoldingRange, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.Rename, DRagLint.LSP.Feature.SemanticTokens, DRagLint.LSP.Feature.TypeDefinition, DRagLint.LSP.HierarchyUtil, DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server, DRagLint.Query.HoverModel, DRagLint.Resolver.TypeAt</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -169,7 +169,7 @@ type
       /// <returns>Empty array when the path is neither open nor on disk.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildSignatureHelp (DRagLint.LSP.Completion.pas) (+11 more)</para>
+      /// <para>Called from: DRagLint.LSP.Completion.MarkerReviews (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildFixActions (DRagLint.LSP.Completion.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas) (+12 more)</para>
       /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.Key</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: static</para>

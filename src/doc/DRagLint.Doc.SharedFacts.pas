@@ -257,9 +257,9 @@ type
     /// <para>Returns: KeepUsedInClassesText(ADocText, AStoredRemarks, AStore)</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.KeepUsedInClassesText"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CallsLostUnseen"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.IsLegacyPureOnlyBody"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function KeepUsedInClasses(const ADocText, AStoredRemarks: string;
@@ -355,8 +355,8 @@ type
     /// <seealso cref="DRagLint.Doc.SharedFacts.UnmarkedRegenerationDropsUnvouchable"/>
     /// <seealso cref="DRagLint.Lint.SharedUnit.TSharedUnit.IsShared"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CallsLostUnseen"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RegenerationDropsUnvouchable(const AStored, AFresh: string;
@@ -380,9 +380,9 @@ type
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Doc.ProjectTags.BareEntry"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CallsLostUnseen"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.IsLegacyPureOnlyBody"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.KeepLegacyPure"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function CompareInboundEntries(const X, Y: string): Integer; static;
@@ -403,9 +403,9 @@ type
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.StoredBlockBody"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CallsLostUnseen"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.IsLegacyPureOnlyBody"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function StoredBlockBody(const AText: string): string; static;
@@ -424,6 +424,16 @@ type
     /// is a fact the chosen DB cannot see, so the writer must not delete it: the
     /// caller refuses the declaration and says so. Inbound labels are kept by
     /// ReconcileContent instead; this is the outbound half.
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas)</para>
+    /// <para>Calls: DRagLint.Doc.SharedFacts.UnitVouchable, IfThen, LowerCase, StartsStr, Trim</para>
+    /// <para>Directives: static</para>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.UnitVouchable"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.IsLegacyPureOnlyBody"/>
+    /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function CallsLostUnseen(const AStore: ISymbolStore; const AStoredBody,
       AMergedBody: string): string; static;
@@ -450,9 +460,9 @@ type
     /// <para>Returns: Participates(AStore, AUnitPath, AStoredBody)</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.Participates"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CallsLostUnseen"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.IsLegacyPureOnlyBody"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function WantsWholeInboundLists(const AStoredBody: string;
@@ -481,9 +491,9 @@ type
     /// <para>Mutates: AStoredView (out), AFreshView (out)</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.WithoutFenceLine"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CallsLostUnseen"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.IsLegacyPureOnlyBody"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function LegacyPureViews(const AStored, AFresh: string;
@@ -502,9 +512,9 @@ type
     /// <para>Returns: (not MigrateLegacyPure) and (CollapseWs(AStoredBody) = LEGACY_PURE_PARA)</para>
     /// <seealso cref="DRagLint.Doc.SharedFacts.CollapseWs"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CallsLostUnseen"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.KeepLegacyPure"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsLegacyPureOnlyBody(const AStoredBody: string): Boolean;

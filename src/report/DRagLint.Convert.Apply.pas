@@ -236,7 +236,7 @@ type
   /// DELIBERATE removal counts as remainder at all is an open question for the
   /// converter side -- see docs\converter\apply-remainder-contract.md.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ApplyItemKindName (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.PlanIdentifierMigrates.Item (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.PlanMigrateSites.Item (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ReconcileUnitUses.Warn (DRagLint.Convert.Apply.pas) (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ApplyItemKindName (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.PlanIdentifierMigrates.Item (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.PlanMigrateSites.Item (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ReconcileUnitUses.Warn (DRagLint.Convert.Apply.pas) (+4 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyItemKind = (
@@ -391,7 +391,7 @@ type
   /// only be anchored to the instance's object-block header line. RuleLine is
   /// the 1-based line in the rules file that produced the item, or 0.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoConvertApply.MergeInferred (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.MergeUnreachable (DRagLint.CLI.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas), DRagLint.Convert.Apply.AppendDescendantReport (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.AppendInheritedReport (DRagLint.Convert.Apply.pas) (+37 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoConvertApply.MergeInferred (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.MergeUnreachable (DRagLint.CLI.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas), DRagLint.Convert.Apply.AppendDescendantReport (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.AppendInheritedReport (DRagLint.Convert.Apply.pas) (+38 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -530,7 +530,13 @@ type
 
   /// <summary>One apply/1 glyphs[] object: what one image G-link did on one
   /// instance.</summary>
-  /// <remarks>Instance plus TReemitGlyph's fields. Line is the object's .dfm line.</remarks>
+  /// <remarks>
+  /// Instance plus TReemitGlyph's fields. Line is the object's .dfm line.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.EmitApplyJson.GlyphsJson (DRagLint.CLI.pas), DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldGlyphOutcome (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TApplyGlyph = record
     Instance: string;
     Outcome : TReemitGlyph;
@@ -755,7 +761,7 @@ type
     /// <param name="AValue">The streamed value text.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.AcquireIndexLock (DRagLint.CLI.pas) ?, DRagLint.CLI.DoQueryUnitUsageProjectWide (DRagLint.CLI.pas) ?, DRagLint.CLI.ExpandProjectScope.AddOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.ProjectScopeRoots.AddDir (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.RefFactsFor (DRagLint.Convert.Apply.pas) (+89 more)</para>
+    /// <para>Called from: DRagLint.CLI.AcquireIndexLock (DRagLint.CLI.pas) ?, DRagLint.CLI.DoQueryUnitUsageProjectWide (DRagLint.CLI.pas) ?, DRagLint.CLI.ExpandProjectScope.AddOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.ProjectScopeRoots.AddDir (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.RefFactsFor (DRagLint.Convert.Apply.pas) (+91 more)</para>
     /// <para>Calls: DRagLint.Convert.Apply.BareTypeTail, UpperCase</para>
     /// <para>Reads: FKeys   Writes: FRows</para>
     /// <seealso cref="DRagLint.Convert.Apply.BareTypeTail"/>
@@ -1664,15 +1670,15 @@ procedure AppendDescendantReport(const AUses: TArray<TDescendantUse>; const ADfm
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas)</para>
-/// <para>Calls: BookChosenUnits, BookHasUnitRules, BoundAccessSites, BuildToTypeAdd, CharColumn, Choose, CompareText, Copy, DanglingPasUses, Default (+70 more)</para>
+/// <para>Calls: BookChosenUnits, BookHasUnitRules, BoundAccessSites, BuildToTypeAdd, CharColumn, Choose, CompareText, Copy, DanglingPasUses, Default (+76 more)</para>
 /// <para>Returns: if Length(Picked) = 1 then Spelling; Default(TApplyResult); TApplyResult.Refusal(UsesPlan.Error)</para>
-/// <para>Complexity: 35 (cyclomatic, outer body), 1484 lines (full implementation)</para>
+/// <para>Complexity: 36 (cyclomatic, outer body), 1552 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.Apply.BareTypeTail"/>
+/// <seealso cref="DRagLint.Convert.Apply.BookNothingToDoReason"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.AddCodeEntries"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.Emit"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport"/>
-/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.InstItem"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
@@ -1711,8 +1717,16 @@ function BookHasIdentifierMigrates(const ARules: TConversionRuleSet): Boolean;
 /// 'no #migrate line of the rules file has a site in Unit'; 'the rules file has
 /// no #convert block, unit rule or #migrate line'. Each sentence but the first
 /// ends ' -- nothing to convert'.</returns>
-/// <remarks>Callers ask only once the unit has nothing to do: a book of unit rules
-/// or a #migrate with a site never reaches them. The exit code stays 1.</remarks>
+/// <remarks>
+/// Callers ask only once the unit has nothing to do: a book of unit rules
+/// or a #migrate with a site never reaches them. The exit code stays 1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: 'conversion rules failed validation: ' + string.Join('; ', Lines); Format('no #migrate line of the rules file has a site in %s', [TPath.GetFileName(AUnitPas)]) + NOTHING; 'the rules file has no #convert block, unit rule or #migrate line' + NOTHING</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BookNothingToDoReason(const ARules: TConversionRuleSet; const AUnitPas: string): string;
 
 /// <summary>True when the book's identifier #migrate rules (file scope, or

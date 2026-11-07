@@ -63,7 +63,7 @@ type
   /// <summary>One index whose files table holds the file being renamed.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.StaleEvidence (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.TagMismatch (DRagLint.Refactor.MultiProjectRename.pas) ? (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.StaleEvidence (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.Refactor.MultiProjectRename.TagMismatch (DRagLint.Refactor.MultiProjectRename.pas) ? (+3 more)</para>
   /// <para>Used in units: DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -202,6 +202,12 @@ type
   end; // record
 
   /// <summary>The rename RenameAcrossOwners widens.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.CLI.RenameReach (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners (DRagLint.Refactor.MultiProjectRename.pas) ?</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.MCP.Server, DRagLint.Refactor.MultiProjectRename</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRenameOwnersRequest = record
     /// <summary>The folder of the running engine: where the manifest is looked for.</summary>
     ExeDir: string;
@@ -224,6 +230,12 @@ type
   end; // record
 
   /// <summary>What RenameAcrossOwners found.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas) ?, DRagLint.CLI.FinishRename (DRagLint.CLI.pas) ?, DRagLint.CLI.RenameReach (DRagLint.CLI.pas) ?, DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.MultiProjectRename</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TRenameReach = record
     /// <summary>The merged proof.</summary>
     Proof: TRenameProof;
@@ -260,7 +272,7 @@ type
 /// DB read-only, closing it before the next. Not thread-safe only in so far as
 /// ResolvePlan is not; touches no shared state of its own.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.PlanMultiOwnerNaming (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.PlanMultiOwnerNaming (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners (DRagLint.Refactor.MultiProjectRename.pas)</para>
 /// <para>Calls: Default, DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Refactor.MultiProjectRename.DbKey, DRagLint.Refactor.MultiProjectRename.OwnerOf, DRagLint.Storage.FileMembership.DbMembership, FileExists, SameText</para>
 /// <para>Returns: Default(TOwnerDiscovery)</para>
 /// <para>Complexity: 14 (cyclomatic, outer body), 69 lines (full implementation)</para>
@@ -319,7 +331,7 @@ function FindRenameOwners(const AManifest: TIndexManifest; const APlatform, AFil
 /// <para>Raises nothing: every exception becomes ofUnverified with its message.
 /// The store is opened read-only and released before AReindex runs.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Refactor.MultiProjectRename.OpenOwners (DRagLint.Refactor.MultiProjectRename.pas)</para>
+/// <para>Called from: DRagLint.Refactor.MultiProjectRename.OpenOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners.TakeOwner (DRagLint.Refactor.MultiProjectRename.pas)</para>
 /// <para>Calls: AReindex, DRagLint.Refactor.MultiProjectRename.PreviewStaleText, DRagLint.Refactor.MultiProjectRename.StaleEvidence, DRagLint.Refactor.MultiProjectRename.TagMismatch, Format</para>
 /// <para>Returns: ofUnverified; ofStale; if Evidence = '' then ofReindexed</para>
 /// <para>Complexity: 11 (cyclomatic, outer body), 46 lines (full implementation)</para>
@@ -393,10 +405,23 @@ function PlanMultiProjectRename(const ADiscovery: TOwnerDiscovery;
 /// <returns>The proof with every other owner's edits merged and its refusals added, each naming the project; the
 /// .dproj files the compile gate must also build; notes for what cannot be built or is stale. Refusals added:
 /// CRefuseOwnerLibrary, CRefuseOwnerUnknown, CRefuseOwnerUnverified.</returns>
-/// <remarks>Same owner authority as the naming fix: the manifest's DBs, each file looked up by full path (no disk sweep).
+/// <remarks>
+/// Same owner authority as the naming fix: the manifest's DBs, each file looked up by full path (no disk sweep).
 /// A QName = '' rename is routine-local: no other project can name it, so only the build widens. Writes no index unless
 /// AOwners.Reindex does. A file no other index owns returns AProof unchanged but for the sort. Raises nothing of its own;
-/// a store that cannot be opened is a refusal. Pinned by tests\autotest\run_rename_multiproject_gate.ps1.</remarks>
+/// a store that cannot be opened is a refusal. Pinned by tests\autotest\run_rename_multiproject_gate.ps1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RenameReach (DRagLint.CLI.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
+/// <para>Calls: ChangeFileExt, CompareText, Default, DRagLint.Index.Manifest.TManifestIO.Load, DRagLint.Refactor.MultiProjectRename.DbKey, DRagLint.Refactor.MultiProjectRename.FindRenameOwners, DRagLint.Refactor.MultiProjectRename.ProjectReason, DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners.AddEdits, DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners.Refuse, DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners.TakeOwner (+6 more)</para>
+/// <para>Returns: Default(TRenameReach)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.DbKey"/>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.FindRenameOwners"/>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.ProjectReason"/>
+/// <seealso cref="DRagLint.Refactor.MultiProjectRename.RenameAcrossOwners.AddEdits"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function RenameAcrossOwners(const AOwners: TRenameOwnersRequest; const AProof: TRenameProof): TRenameReach;
 
 /// <summary>The text a `rename-project:` line prints for AFreshness.</summary>

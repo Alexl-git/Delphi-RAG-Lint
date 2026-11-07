@@ -507,14 +507,14 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Trace.Calc.TCalcFactsReader.Facts (DRagLint.Charts.Trace.Calc.pas)</para>
-    /// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlInList, DRagLint.Charts.Index.TChartsIndex.SqlText, IntToStr</para>
+    /// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlInList, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, IntToStr</para>
     /// <para>Reads: FIndex</para>
     /// <para>SQL: reads FILES, REFS, STRING_LITERALS</para>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlInList"/>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
-    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Apply"/>
-    /// <seealso cref="DRagLint.Charts.Trace.Calc.TCalcFactsReader.Create"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure ReadCreating(const pDs: TTraceDataSet; const pCol: string; pFacts: TCalcFacts);

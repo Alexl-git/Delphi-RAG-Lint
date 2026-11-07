@@ -210,7 +210,7 @@ type
     /// <para>Called from: DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.Doc.Batch.AggregateOverFiles (DRagLint.Doc.Batch.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Doc.Batch.HasManagedBlock, DRagLint.Doc.Batch.IsDocumentableKind, DRagLint.Doc.Batch.IsTrivialAccessor, DRagLint.Doc.Document.TDocumenter.BuildForSymbol, DRagLint.Doc.Strip.TDocStripper.StripFile, Format, SameText, Writeln</para>
     /// <para>Returns: Default(TDocBatchResult)</para>
-    /// <para>Complexity: 14 (cyclomatic, outer body), 126 lines (full implementation)</para>
+    /// <para>Complexity: 15 (cyclomatic, outer body), 131 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Doc.Batch.HasManagedBlock"/>

@@ -192,7 +192,7 @@ function ResolveDelphiLspPath(const AOverride: string; ABits: Integer = LSP_BITS
 /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
 /// <para>Calls: CloseHandle, CreatePipe, CreateProcess, DRagLint.Core.JobObject.AssignToDragLintJob, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Create, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.WaitForAnswers, DRagLint.LSP.Proxy.PumpFramed, DRagLint.LSP.Proxy.ResolveDelphiLspPath (+13 more)</para>
 /// <para>Returns: EXIT_SPAWN_FAILED; Integer(Code)</para>
-/// <para>Complexity: 18 (cyclomatic, outer body), 185 lines (full implementation)</para>
+/// <para>Complexity: 20 (cyclomatic, outer body), 185 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.JobObject.AssignToDragLintJob"/>
 /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>

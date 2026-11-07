@@ -44,8 +44,8 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildFixActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function MapSymbolKindToLspKind(AKind: TSymbolKind): Integer;
@@ -63,8 +63,8 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildFixActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function MapLintSeverityToLspSeverity(const ASevText: string): Integer;
@@ -84,8 +84,8 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildFixActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function MapCompilerSeverityToLspSeverity(const ASev: string)                                       : Integer    ;
@@ -107,8 +107,8 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildFixActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildCompletionItems(const AStore: ISymbolStore; const AFile: string; ALine, ACol: Integer): TJSONArray ; overload;
@@ -178,8 +178,8 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildFixActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildDiagnostics(const ALinter: TLinter; const AFile: string; const AStore: ISymbolStore = nil): TJSONArray; overload;
@@ -344,7 +344,7 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildFixActions"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildMissingUsesActions(const AFile: string; AStartLine, AEndLine: Integer;
@@ -358,10 +358,23 @@ type
       /// <param name="ADiagnostics">The client's diagnostics; stays the caller's. nil answers [].</param>
       /// <returns>A NEW array of CodeAction objects the caller owns, one per fix, each
       /// with one WorkspaceEdit on AFile.</returns>
-      /// <remarks>Reads the live buffer, not the disk. A diagnostic older than the
+      /// <remarks>
+      /// Reads the live buffer, not the disk. A diagnostic older than the
       /// buffer gets no action: every edit must replace text the buffer really holds.
       /// A fix that is risky, needs a newer compiler than the target, or is not on the
-      /// list is never offered; "Fix it" in the IDE and `lint --fix` remain for those.</remarks>
+      /// list is never offered; "Fix it" in the IDE and `lint --fix` remain for those.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas)</para>
+      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Lint.Autofix.BuildBufferFixEdits, DRagLint.LSP.Completion.EditsHoldOn, DRagLint.LSP.Completion.FixableFindingOf, DRagLint.LSP.Completion.TLspCompletion.BuildFixActions.Pos0, StringReplace</para>
+      /// <para>Returns: TJSONArray.Create</para>
+      /// <para>Owns returned: new (caller owns)</para>
+      /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
+      /// <seealso cref="DRagLint.Lint.Autofix.BuildBufferFixEdits"/>
+      /// <seealso cref="DRagLint.LSP.Completion.EditsHoldOn"/>
+      /// <seealso cref="DRagLint.LSP.Completion.FixableFindingOf"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildFixActions.Pos0"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function BuildFixActions(const AFile: string; AStartLine, AEndLine: Integer;
         const ADiagnostics: TJSONArray): TJSONArray;
     private
@@ -393,8 +406,8 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildFixActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function EmptySigHelp                                                       : TJSONObject;
@@ -408,8 +421,8 @@ type
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildFixActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function StripParamModifier(const AName: string)                            : string     ;

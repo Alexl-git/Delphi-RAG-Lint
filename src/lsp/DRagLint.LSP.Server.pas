@@ -195,7 +195,7 @@ type
   /// (full sync) and stored in TLiveDocuments; SYMBOL RESOLUTION still comes from the index, so the
   /// original reasoning is intact -- only the text under the caret is live.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.PickupContext (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server (DRagLint.LSP.Proxy.Merge.pas) (+10 more)</para>
+  /// <para>Used by: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.PickupContext (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server (DRagLint.LSP.Proxy.Merge.pas) (+11 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -490,14 +490,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.DbSetFor (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: Default, DRagLint.Project.ContextFile.TryLoadContextDefaults</para>
+      /// <para>Calls: Default, DRagLint.LSP.Server.LibrariesVisibleToThisEngine, DRagLint.Project.ContextFile.TryLoadContextDefaults</para>
       /// <para>Reads: FDefaultsRead, FDefaults   Writes: FDefaultsRead, FDefaults</para>
-      /// <para>Owns returned: borrowed</para>
+      /// <seealso cref="DRagLint.LSP.Server.LibrariesVisibleToThisEngine"/>
       /// <seealso cref="DRagLint.Project.ContextFile.TryLoadContextDefaults"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  Defaults: TContextDefaults;
@@ -1524,15 +1523,15 @@ type
       /// Responds with a JSON array of CodeAction objects or null.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/3, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics, DRagLint.LSP.Server.CodeActionKindRequested, DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction, DRagLint.LSP.Server.TLSPServer.EnsureLinter, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.SendMessage, DRagLint.LSP.Server.TLSPServer.StoresForFile, DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedQuickfixes, StringReplace, StrToIntDef</para>
-      /// <para>Complexity: 14 (cyclomatic, outer body), 111 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/3, DRagLint.LSP.Completion.TLspCompletion.BuildFixActions, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics, DRagLint.LSP.Server.CodeActionKindRequested, DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction, DRagLint.LSP.Server.TLSPServer.EnsureLinter, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.SendMessage, DRagLint.LSP.Server.TLSPServer.StoresForFile, DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedQuickfixes, StringReplace, StrToIntDef</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 117 lines (full implementation)</para>
       /// <para>Reads: FStore</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildFixActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleCodeAction(const AId: TJSONValue; const AParams: TJSONObject);
@@ -2101,8 +2100,21 @@ type
       /// <returns>A NEW value the caller owns (JSON null included); nil when no
       /// feature owns AMethod or the feature answered with an error (one stderr
       /// line).</returns>
-      /// <remarks>Takes the same work lock a request takes in plain mode. A raising
-      /// feature raises through to the caller, which fails open.</remarks>
+      /// <remarks>
+      /// Takes the same work lock a request takes in plain mode. A raising
+      /// feature raises through to the caller, which fails open.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.NavAnswer (DRagLint.LSP.Proxy.Merge.pas)</para>
+      /// <para>Calls: DRagLint.LSP.Context.TLspFeature.Handle, DRagLint.LSP.Server.TLspCaptureContext.TakeResult, DRagLint.LSP.Server.TLspServerContextAdapter.Create</para>
+      /// <para>Returns: nil; Capture.TakeResult</para>
+      /// <para>Reads: FFeatureByMethod, FWorkLock</para>
+      /// <seealso cref="DRagLint.LSP.Context.TLspFeature.Handle"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLspCaptureContext.TakeResult"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLspServerContextAdapter.Create"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       function ComputeFeatureResult(const AMethod: string; const AParams: TJSONObject): TJSONValue;
       /// <summary>The body `workspace/symbol` answers for a query.</summary>
       /// <param name="AQuery">The client's query; '' answers an empty array.</param>

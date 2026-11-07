@@ -136,10 +136,11 @@ function FingerprintLimbValue(const AFingerprint, APrefix: string): string;
 /// <returns>A platform token such as 'Win64'.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.EvaluateLibraryGate (DRagLint.CLI.pas)</para>
-/// <para>Calls: DRagLint.CLI.LibraryReady.FingerprintLimbValue, DRagLint.CLI.LibraryReady.PlatformOfDproj, SameText</para>
-/// <para>Returns: APlatformArg; 'Win64'; 'Win32'; Plat; ADefaultPlatform</para>
+/// <para>Called from: DRagLint.CLI.ContextDefaultLibraryDb (DRagLint.CLI.pas), DRagLint.CLI.EvaluateLibraryGate (DRagLint.CLI.pas)</para>
+/// <para>Calls: DRagLint.CLI.LibraryReady.CanonicalPlatform, DRagLint.CLI.LibraryReady.FingerprintLimbValue, DRagLint.CLI.LibraryReady.PlatformOfDproj</para>
+/// <para>Returns: APlatformArg; Stamped; Plat; ADefaultPlatform</para>
 /// <para>Mutates: ASource (out)</para>
+/// <seealso cref="DRagLint.CLI.LibraryReady.CanonicalPlatform"/>
 /// <seealso cref="DRagLint.CLI.LibraryReady.FingerprintLimbValue"/>
 /// <seealso cref="DRagLint.CLI.LibraryReady.PlatformOfDproj"/>
 /// <!-- drag-lint:auto END -->
@@ -152,11 +153,12 @@ function ChooseLibraryPlatform(const APlatformArg, AProjectFingerprint, ADproj, 
 /// <returns>The canonical spelling of a KnownPlatforms token (Win32, Win64, Linux64, OSX64, OSXARM64, Android, ...), or '' (no file, no element, unknown token). A non-Windows token is returned as is, so such a project no longer falls to the Win32 manifest default (L-C20).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.LibraryReady.ChooseLibraryPlatform (DRagLint.CLI.LibraryReady.pas)</para>
-/// <para>Calls: ChangeFileExt, Copy, ExtractFileExt, Pos, SameText, Trim</para>
+/// <para>Called from: DRagLint.CLI.LibraryReady.ChooseLibraryPlatform (DRagLint.CLI.LibraryReady.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
+/// <para>Calls: ChangeFileExt, Copy, DRagLint.CLI.LibraryReady.CanonicalPlatform, ExtractFileExt, Pos, SameText, Trim</para>
 /// <para>Returns: ''</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.CLI.LibraryReady.CanonicalPlatform"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function PlatformOfDproj(const ADproj: string): string;

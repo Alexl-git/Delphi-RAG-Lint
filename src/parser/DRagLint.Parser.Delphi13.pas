@@ -18,7 +18,7 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoDumpParseUses (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.CLI.IndexDictionary (DRagLint.CLI.pas) (+4 more)</para>
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoDumpParseUses (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas) (+4 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.UsesReconcile, DRagLint.Format.Yadf, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -89,7 +89,7 @@ type
 /// <returns><!-- drag-lint:auto type -->PTSLanguage</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas), DRagLint.LSP.Server.TLSPServer.IdentifierAtPosition (DRagLint.LSP.Server.pas), DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas), DRagLint.Parser.Delphi13.TDelphi13Parser.Create (DRagLint.Parser.Delphi13.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoInfo (DRagLint.CLI.pas), DRagLint.Lint.Linter.TLinter.Create (DRagLint.Lint.Linter.pas), DRagLint.LSP.SyntaxTree.ParseDelphiUtf8 (DRagLint.LSP.SyntaxTree.pas), DRagLint.Parser.Delphi13.TDelphi13Parser.Create (DRagLint.Parser.Delphi13.pas)</para>
 /// <para>Directives: cdecl; external</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -98,9 +98,15 @@ external 'tree-sitter-delphi13';
 
 type
   /// <summary>X4: one SCOPEDENUMS switch met in a scanned text.</summary>
-  /// <remarks>Offset is the byte offset of the directive's opening bracket;
+  /// <remarks>
+  /// Offset is the byte offset of the directive's opening bracket;
   /// IsOn is the state it sets. E14 exported it so the indexer can carry a
-  /// switch written inside an include file into the host.</remarks>
+  /// switch written inside an include file into the host.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Parser.Delphi13.pas), DRagLint.Index.IncludeUses.ApplyIncludeScopedEnums (DRagLint.Index.IncludeUses.pas), DRagLint.Index.IncludeUses.IncludeEffect (DRagLint.Index.IncludeUses.pas), DRagLint.Parser.Delphi13.ScanScopedEnumSwitches (DRagLint.Parser.Delphi13.pas), DRagLint.Parser.Delphi13.ScanScopedEnumSwitches.ConsiderDirective (DRagLint.Parser.Delphi13.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Index.IncludeUses, DRagLint.Parser.Delphi13</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TScopedEnumSwitch = record
     /// <summary>Byte offset of the directive's opening bracket.</summary>
     Offset: Integer;
@@ -113,7 +119,16 @@ type
 /// blanked); a host file or an include's TPPIncludeSite.Resolved.</param>
 /// <returns>The switches; empty when none. String literals and comments that
 /// are not directives are skipped.</returns>
-/// <remarks>Pure; thread-safe. X4, exported for E14.</remarks>
+/// <remarks>
+/// Pure; thread-safe. X4, exported for E14.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Index.IncludeUses.ApplyIncludeScopedEnums (DRagLint.Index.IncludeUses.pas), DRagLint.Index.IncludeUses.IncludeEffect (DRagLint.Index.IncludeUses.pas), DRagLint.Parser.Delphi13.TWalkState.Create (DRagLint.Parser.Delphi13.pas)</para>
+/// <para>Calls: DRagLint.Parser.Delphi13.ScanScopedEnumSwitches.ConsiderDirective, Trim, UpperCase</para>
+/// <para>Returns: nil; Found.ToArray</para>
+/// <para>Complexity: 25 (cyclomatic, outer body), 79 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Parser.Delphi13.ScanScopedEnumSwitches.ConsiderDirective"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ScanScopedEnumSwitches(const ASource: TBytes): TArray<TScopedEnumSwitch>;
 
 implementation

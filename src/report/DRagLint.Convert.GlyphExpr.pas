@@ -41,7 +41,7 @@ type
   /// expression text, so an error can point at it. A parsed term is SYNTAX
   /// only; its ranges are checked by ValidateGlyphExpr.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.GlyphExpr.ParseGlyphExpr (DRagLint.Convert.GlyphExpr.pas), DRagLint.Convert.GlyphExpr.ParseTermBody (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.GlyphExpr.ValidateGlyphExpr (DRagLint.Convert.GlyphExpr.pas) ?</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.GlyphExpr.AlternativeDenominator (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.GlyphExpr.ParseGlyphExpr (DRagLint.Convert.GlyphExpr.pas), DRagLint.Convert.GlyphExpr.ParseTermBody (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.GlyphExpr.ValidateGlyphExpr (DRagLint.Convert.GlyphExpr.pas) ? (+2 more)</para>
   /// <para>Used in units: DRagLint.Convert.GlyphExpr</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -57,7 +57,7 @@ type
   /// Column is the 1-based column of the alternative's first term (or,
   /// for an empty alternative, where one was expected).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.GlyphExpr.ParseGlyphExpr (DRagLint.Convert.GlyphExpr.pas), DRagLint.Convert.GlyphExpr.ValidateGlyphExpr (DRagLint.Convert.GlyphExpr.pas) ?</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.GlyphExpr.AlternativeDenominator (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.GlyphExpr.BareSlotsFit (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.GlyphExpr.ParseGlyphExpr (DRagLint.Convert.GlyphExpr.pas), DRagLint.Convert.GlyphExpr.ValidateGlyphExpr (DRagLint.Convert.GlyphExpr.pas) ?</para>
   /// <para>Used in units: DRagLint.Convert.GlyphExpr</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -72,8 +72,8 @@ type
   /// (the editor round-trips it byte-exact); Alternatives are in source
   /// order.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.GlyphExpr.IsGlyphCountExpr (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.GlyphExpr.ParseGlyphExpr (DRagLint.Convert.GlyphExpr.pas), DRagLint.Convert.GlyphExpr.ValidateGlyphExpr (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.Rules.IsGlyphImageLink (DRagLint.Convert.Rules.pas) ? (+1 more)</para>
-  /// <para>Used in units: DRagLint.Convert.GlyphExpr, DRagLint.Convert.Rules</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLinks (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.Convert.GlyphExpr.ParseGlyphExpr (DRagLint.Convert.GlyphExpr.pas), DRagLint.Convert.GlyphExpr.ValidateGlyphExpr (DRagLint.Convert.GlyphExpr.pas) ? (+5 more)</para>
+  /// <para>Used in units: DRagLint.Convert.DfmReemit, DRagLint.Convert.GlyphExpr, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGlyphExpr = record
@@ -110,7 +110,7 @@ type
 /// checks (I in 1..N, N at least 1) are ValidateGlyphExpr's job, so 'G[0/4]'
 /// parses cleanly and then fails validation. Pure.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.Rules.IsGlyphImageLink (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ValidateBlocks.CheckGlyphLink (DRagLint.Convert.Rules.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLinks (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.IsGlyphImageLink (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ValidateBlocks.CheckGlyphLink (DRagLint.Convert.Rules.pas)</para>
 /// <para>Calls: CharInSet, Copy, Default, DRagLint.Convert.GlyphExpr.OnlyError, DRagLint.Convert.GlyphExpr.ParseGlyphExpr.SkipBlanks, DRagLint.Convert.GlyphExpr.ParseTermBody, Pos</para>
 /// <para>Returns: nil; OnlyError(P, 'expected "G[" to start a term'); OnlyError(Err.Column, Err.Message); OnlyError(Alt.Column, 'empty alternative: expected a G[..] term before or after the comma')</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 49 lines (full implementation)</para>
@@ -153,7 +153,7 @@ function ValidateGlyphExpr(const AExpr: TGlyphExpr): TArray<TGlyphExprError>;
 /// A 'G[count]' link carries the target's glyph COUNT; every other
 /// G-link is an IMAGE link. Pure.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.GlyphExpr.ValidateGlyphExpr (DRagLint.Convert.GlyphExpr.pas), DRagLint.Convert.Rules.IsGlyphImageLink (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ValidateBlocks.CheckGlyphLink (DRagLint.Convert.Rules.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLinks (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphExpr.ValidateGlyphExpr (DRagLint.Convert.GlyphExpr.pas), DRagLint.Convert.Rules.IsGlyphImageLink (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ValidateBlocks.CheckGlyphLink (DRagLint.Convert.Rules.pas)</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -181,6 +181,10 @@ type
   /// Text is the alternative verbatim. Slots lists the source slots it takes, in
   /// stitch order, a G[*/N] term expanded (1-based). Dropped lists the slots of
   /// 1..N that the rule leaves out, ascending: named by the RULE, never inferred.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.Convert.GlyphExpr.SelectGlyphAlternative (DRagLint.Convert.GlyphExpr.pas)</para>
+  /// <para>Used in units: DRagLint.Convert.DfmReemit, DRagLint.Convert.GlyphExpr</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGlyphSelection = record
     Text   : string;
@@ -192,6 +196,9 @@ type
   /// <remarks>
   /// gckProperty reads the leaf off the instance, the declared default when it is
   /// absent; gckFixed is always the same count; gckSingle holds exactly one glyph.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphExpr.pas)</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGlyphCountKind = (gckProperty, gckFixed, gckSingle);
 
@@ -200,6 +207,10 @@ type
   /// ClassQName applies to the class and its descendants. PropName is for
   /// gckProperty; Value is the default of gckProperty and the count of gckFixed.
   /// docs\GLYPH-CLASSES.md is the record each row is seeded from.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.DfmReemit.ReemitBlock.ReadGlyphCount (DRagLint.Convert.DfmReemit.pas) ?, DRagLint.Convert.GlyphExpr.GlyphCountReaders (DRagLint.Convert.GlyphExpr.pas) ?, DRagLint.Convert.GlyphExpr.GlyphCountReaders.PropertyRow (DRagLint.Convert.GlyphExpr.pas), DRagLint.Convert.Rules.GlyphReaderIndexFor (DRagLint.Convert.Rules.pas) ?</para>
+  /// <para>Used in units: DRagLint.Convert.DfmReemit, DRagLint.Convert.GlyphExpr, DRagLint.Convert.Rules</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGlyphCountReader = record
     ClassQName: string;
@@ -218,6 +229,16 @@ type
 /// AActualN.</returns>
 /// <remarks>
 /// Pure. A G[count] term never matches: it is not an image expression.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.GlyphExpr.AlternativeDenominator, DRagLint.Convert.GlyphExpr.AlternativeText, DRagLint.Convert.GlyphExpr.BareSlotsFit</para>
+/// <para>Returns: False; True</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 44 lines (full implementation)</para>
+/// <para>Mutates: ASelection (out)</para>
+/// <seealso cref="DRagLint.Convert.GlyphExpr.AlternativeDenominator"/>
+/// <seealso cref="DRagLint.Convert.GlyphExpr.AlternativeText"/>
+/// <seealso cref="DRagLint.Convert.GlyphExpr.BareSlotsFit"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function SelectGlyphAlternative(const AExpr: TGlyphExpr; AActualN: Integer;
   out ASelection: TGlyphSelection): Boolean;
@@ -227,6 +248,12 @@ function SelectGlyphAlternative(const AExpr: TGlyphExpr; AActualN: Integer;
 /// <remarks>
 /// Pure. A class outside the table cannot carry a G-link: that is the
 /// investigation rule made mechanical (grammar 3.2).
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.ReadGlyphCount (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.GlyphReaderIndexFor (DRagLint.Convert.Rules.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.GlyphExpr.GlyphCountReaders.PropertyRow</para>
+/// <para>Effect-free (proven)</para>
+/// <seealso cref="DRagLint.Convert.GlyphExpr.GlyphCountReaders.PropertyRow"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function GlyphCountReaders: TArray<TGlyphCountReader>;
 

@@ -608,7 +608,7 @@ function UnitRuleWatchList(const ARules: TConversionRuleSet; const AExtraAdds: T
 /// <remarks>
 /// Pure.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.UsesReconcile.ImplementationLine (DRagLint.Convert.UsesReconcile.pas)</para>
+/// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.FoldGlyphOutcome (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.ImplementationLine (DRagLint.Convert.UsesReconcile.pas)</para>
 /// <para>Calls: DRagLint.Convert.UnitRules.IsWord, DRagLint.Convert.UnitRules.TUnitText.Create, DRagLint.Convert.UnitRules.TUnitText.LineOf, DRagLint.Convert.UnitRules.TUsesLexer.Create, DRagLint.Convert.UnitRules.TUsesLexer.Next</para>
 /// <para>Returns: 0; Txt.LineOf(T.Start)</para>
 /// <seealso cref="DRagLint.Convert.UnitRules.IsWord"/>

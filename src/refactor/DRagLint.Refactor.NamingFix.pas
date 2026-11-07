@@ -214,13 +214,13 @@ function FreeCandidates(const AStore: ISymbolStore; const ATarget: TNamingTarget
 /// POSITION-VERIFIED against the file as it is on disk now.</summary>
 /// <param name="AStore">Store backing the nsGlobal rename; nil yields no edits for an
 /// nsGlobal target. Unused for nsLocal.</param>
+/// <param name="ALibraries">The platform libraries the proof asks; empty = none open, and
+/// the proof of an nsGlobal target that changes more than letter case refuses.</param>
 /// <param name="ATarget">A tsReady target from BuildNamingTargets built against AStore.</param>
 /// <param name="ANewName">The new identifier. Not checked for conflicts here -- pass a
 /// FreeCandidates result.</param>
 /// <param name="ASkipped">Out: edits dropped because the recorded span no longer
 /// holds the identifier (the stale-position guard); those sites are not written.</param>
-/// <param name="ALibraries">The platform libraries the proof asks; empty = none open, and
-/// the proof of an nsGlobal target that changes more than letter case refuses.</param>
 /// <param name="ARefusal">Out: '' or why the proof refused the rename ('file:line:col:
 /// refused [kind]: why (N not proved)'); the result is then empty.</param>
 /// <returns>The surviving edits; empty when ATarget is not tsReady, ANewName is empty,
@@ -237,14 +237,15 @@ function FreeCandidates(const AStore: ISymbolStore; const ATarget: TNamingTarget
 /// by run_autofix_apply_accounting.ps1 and the naming autofix suites.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Refactor.MultiProjectRename.CandidateWhy (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.PlanLocal (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
-/// <para>Calls: Copy, Default, DRagLint.Refactor.NamingFix.BuildTargetEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.BuildTargetEdits.LinesFor, DRagLint.Refactor.Rename.TRenameRefactoring.Build, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal, SameText, SpanHoldsIdent</para>
+/// <para>Calls: Copy, Default, DRagLint.Refactor.NamingFix.BuildTargetEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.BuildTargetEdits.LinesFor, DRagLint.Refactor.Rename.TRenameRefactoring.Build, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal, DRagLint.Refactor.RenameProof.ProveLocalRename, DRagLint.Refactor.RenameProof.ProveRename, DRagLint.Refactor.RenameProof.RefusalLine, Format, SameText, SpanHoldsIdent</para>
 /// <para>Returns: nil; Edits.ToArray</para>
-/// <para>Complexity: 15 (cyclomatic, outer body), 170 lines (full implementation)</para>
-/// <para>Mutates: ASkipped (out)</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 185 lines (full implementation)</para>
+/// <para>Mutates: ASkipped (out), ARefusal (out)</para>
 /// <seealso cref="DRagLint.Refactor.NamingFix.BuildTargetEdits.EmitRenameEdits"/>
 /// <seealso cref="DRagLint.Refactor.NamingFix.BuildTargetEdits.LinesFor"/>
 /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Build"/>
 /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal"/>
+/// <seealso cref="DRagLint.Refactor.RenameProof.ProveLocalRename"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BuildTargetEdits(const AStore: ISymbolStore; const ALibraries: TArray<ISymbolStore>; const ATarget: TNamingTarget;
@@ -264,6 +265,7 @@ function BuildTargetEdits(const AStore: ISymbolStore; const ALibraries: TArray<I
 /// conflict/collision are skipped (no edit emitted for that finding).</summary>
 /// <param name="AStore">Symbol store backing the qualified-name resolution and
 /// the global rename engine. Must not be nil.</param>
+/// <param name="ALibraries">The platform libraries the proof asks; see BuildTargetEdits.</param>
 /// <param name="AFindings">Candidate findings; non-naming rule-ids are ignored.</param>
 /// <param name="ANaming">Effective naming config supplying the target casing
 /// (MethodCase / LocalCase / ConstCase) and prefixes (FieldPrefix / ParamPrefix /
@@ -282,7 +284,6 @@ function BuildTargetEdits(const AStore: ISymbolStore; const ALibraries: TArray<I
 /// index predates an edit that moved the declaration (spec criterion 12).
 /// Counted separately from ASkippedCount, which counts edits. A finding whose
 /// name the store does not know in that file at all is not counted.</param>
-/// <param name="ALibraries">The platform libraries the proof asks; see BuildTargetEdits.</param>
 /// <param name="ARefusals">Out: one line per finding left alone because no free candidate
 /// could be proved (E-RENAME-OTHER-PATHS); nothing is written for it.</param>
 /// <returns>The applied edit set (empty if nothing was fixable).</returns>
@@ -319,8 +320,9 @@ function BuildTargetEdits(const AStore: ISymbolStore; const ALibraries: TArray<I
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Refactor.NamingFix.BuildNamingTargets, DRagLint.Refactor.NamingFix.BuildTargetEdits, DRagLint.Refactor.NamingFix.FreeCandidates, SameText</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 61 lines (full implementation)</para>
 /// <para>Catches: Exception (empty)</para>
-/// <para>Mutates: AFixCount (out), ASkippedCount (out), AStaleCount (out)</para>
+/// <para>Mutates: AFixCount (out), ASkippedCount (out), AStaleCount (out), ARefusals (out)</para>
 /// <seealso cref="DRagLint.Refactor.NamingFix.BuildNamingTargets"/>
 /// <seealso cref="DRagLint.Refactor.NamingFix.BuildTargetEdits"/>
 /// <seealso cref="DRagLint.Refactor.NamingFix.FreeCandidates"/>

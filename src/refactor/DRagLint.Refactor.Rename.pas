@@ -18,8 +18,8 @@ uses
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.MCP.Server.pas), DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.BuildWorkspaceEdit (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.FormatRenameEditsAsJson (DRagLint.MCP.Server.pas) (+21 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Feature.Rename, DRagLint.MCP.Server, DRagLint.Refactor.NamingFix, DRagLint.Refactor.Rename, DRagLint.Refactor.RenameProof</para>
+  /// <para>Used by: declaration (DRagLint.MCP.Server.pas), DRagLint.CLI.CountDistinctFiles (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.BuildWorkspaceEdit (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.FormatRenameEditsAsJson (DRagLint.MCP.Server.pas) (+23 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Feature.Rename, DRagLint.MCP.Server, DRagLint.Refactor.MultiProjectRename, DRagLint.Refactor.NamingFix, DRagLint.Refactor.Rename, DRagLint.Refactor.RenameProof</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRenameEdit = record
@@ -176,14 +176,14 @@ type
       /// named too, even when the index keeps no files row for that .inc.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas), DRagLint.Refactor.RenameProof.TProver.CheckNewNameDeclarations (DRagLint.Refactor.RenameProof.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindUsersOfUnit, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps, DRagLint.Core.Model.TUnitUse.FromInclude, DRagLint.Refactor.Rename.IdentOccursIn, DRagLint.Refactor.Rename.LastDotSegment, ExtractFileExt, FileExists, Format, LowerCase, SameText</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindUsersOfUnit, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps, DRagLint.Core.Model.TUnitUse.FromInclude, DRagLint.Refactor.Rename.IdentOccursIn, DRagLint.Refactor.Rename.IsDeclaredInRoutine, DRagLint.Refactor.Rename.LastDotSegment, ExtractFileExt, FileExists, Format, LowerCase, SameText</para>
       /// <para>Returns: ''</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindUsersOfUnit"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps"/>
       /// <seealso cref="DRagLint.Core.Model.TUnitUse.FromInclude"/>
       /// <seealso cref="DRagLint.Refactor.Rename.IdentOccursIn"/>
-      /// <seealso cref="DRagLint.Refactor.Rename.LastDotSegment"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.IsDeclaredInRoutine"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function IncludeUseReason(const AStore: ISymbolStore; const AQName: string): string;
@@ -207,14 +207,14 @@ type
       /// with the 'TPF0' signature.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoRename (DRagLint.CLI.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.Rename.FindIdentFrom, DRagLint.Refactor.Rename.IsBinaryDfm, DRagLint.Refactor.Rename.LastDotSegment, FileExists, Format</para>
+      /// <para>Calls: ChangeFileExt, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Refactor.Rename.FindIdentFrom, DRagLint.Refactor.Rename.IsBinaryDfm, DRagLint.Refactor.Rename.IsDeclaredInRoutine, DRagLint.Refactor.Rename.LastDotSegment, FileExists, Format</para>
       /// <para>Returns: ''</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName"/>
       /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
       /// <seealso cref="DRagLint.Refactor.Rename.FindIdentFrom"/>
       /// <seealso cref="DRagLint.Refactor.Rename.IsBinaryDfm"/>
-      /// <seealso cref="DRagLint.Refactor.Rename.LastDotSegment"/>
+      /// <seealso cref="DRagLint.Refactor.Rename.IsDeclaredInRoutine"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BinaryDfmReason(const AStore: ISymbolStore; const AQName: string): string;
@@ -374,7 +374,7 @@ type
       /// column; byte wins. Every returned Col is a character column, as StaleEditReason and Apply expect.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.RenameProof.ProveLocalRename (DRagLint.Refactor.RenameProof.pas)</para>
-      /// <para>Calls: AddEdit, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.EnclosingProc, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.FindIdentAt, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.NStr, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.SyncForwardHeaders, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.Walk, EditOf, HdrName (+10 more)</para>
+      /// <para>Calls: AddEdit, ArgsSig, Copy, Default, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.EnclosingProc, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.FindIdentAt, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.NStr, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.SyncForwardHeaders, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocalScan.Walk (+17 more)</para>
       /// <para>Returns: nil; Final.ToArray</para>
       /// <para>Mutates: AWithSites (out), ANewNameSites (out)</para>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
@@ -395,7 +395,7 @@ type
 /// <returns>True on a whole-identifier match.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Refactor.Rename.NameAfterDeclKeywords (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.Rename.SnapEditsToToken (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.Rename.TRenameRefactoring.StaleEditReason (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.RenameProof.TProver.AddDeclTokens (DRagLint.Refactor.RenameProof.pas), DRagLint.Refactor.RenameProof.TProver.ScanDfmNames (DRagLint.Refactor.RenameProof.pas)</para>
+/// <para>Called from: DRagLint.Refactor.Rename.NameAfterDeclKeywords (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.Rename.SnapEditsToToken (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.Rename.TRenameRefactoring.StaleEditReason (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.RenameProof.TProver.AddDeclTokens (DRagLint.Refactor.RenameProof.pas), DRagLint.Refactor.RenameProof.TProver.ScanDfmComponent (DRagLint.Refactor.RenameProof.pas) (+1 more)</para>
 /// <para>Calls: Copy, DRagLint.Refactor.Rename.IsIdentChar, SameText</para>
 /// <para>Returns: OpenEdge and CloseEdge and SameText(Copy(ALine, ACol, Length(AName)), AName)</para>
 /// <seealso cref="DRagLint.Refactor.Rename.IsIdentChar"/>
@@ -444,6 +444,15 @@ function SkipNonIdent(const AText: string; APos: Integer): Integer;
 /// <param name="AStore">The project index.</param>
 /// <param name="ADfmPath">The form file.</param>
 /// <returns>The class; Id = 0 when the file is binary or missing, or the sibling .pas holds no such class.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.Rename.DfmBindingBelongsTo (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.RenameProof.TProver.ScanDfmComponent (DRagLint.Refactor.RenameProof.pas)</para>
+/// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Refactor.Rename.DfmRootClassName, SameText</para>
+/// <para>Returns: Default(TSymbol)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
+/// <seealso cref="DRagLint.Refactor.Rename.DfmRootClassName"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DfmRootSymbol(const AStore: ISymbolStore; const ADfmPath: string): TSymbol;
 
 /// <summary>True when an event binding in ADfmPath binds the method AName of class AOwner (X-25).</summary>
@@ -454,15 +463,15 @@ function DfmRootSymbol(const AStore: ISymbolStore; const ADfmPath: string): TSym
 /// <returns>False when the form's root class cannot be found: a binding is only rewritten when it provably belongs.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Refactor.Rename.TRenameRefactoring.Build (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.RenameProof.TProver.ProcessDfmRefs (DRagLint.Refactor.RenameProof.pas)</para>
-/// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors, DRagLint.Refactor.Rename.ClassDescendsFrom, DRagLint.Refactor.Rename.DfmRootClassName, SameText</para>
+/// <para>Called from: DRagLint.Refactor.Rename.TRenameRefactoring.Build (DRagLint.Refactor.Rename.pas), DRagLint.Refactor.RenameProof.TProver.ProcessDfmRefs (DRagLint.Refactor.RenameProof.pas), DRagLint.Refactor.RenameProof.TProver.ScanDfmComponent (DRagLint.Refactor.RenameProof.pas)</para>
+/// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors, DRagLint.Refactor.Rename.ClassDescendsFrom, DRagLint.Refactor.Rename.DfmRootClassName, DRagLint.Refactor.Rename.DfmRootSymbol</para>
 /// <para>Returns: False; True</para>
-/// <para>Complexity: 13 (cyclomatic, outer body), 27 lines (full implementation)</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 20 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
-/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetTransitiveAncestors"/>
 /// <seealso cref="DRagLint.Refactor.Rename.ClassDescendsFrom"/>
 /// <seealso cref="DRagLint.Refactor.Rename.DfmRootClassName"/>
+/// <seealso cref="DRagLint.Refactor.Rename.DfmRootSymbol"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function DfmBindingBelongsTo(const AStore: ISymbolStore; const ADfmPath: string;

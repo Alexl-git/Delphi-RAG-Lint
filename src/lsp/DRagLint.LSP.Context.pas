@@ -36,9 +36,9 @@ type
   /// <para>Not thread-safe: call only from inside TLspFeature.Handle, which runs
   /// on the server's message loop.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Context.pas), declaration (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CallHierarchy.Incoming (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CallHierarchy.NodesToJson (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CallHierarchy.Outgoing (DRagLint.LSP.Feature.CallHierarchy.pas) (+47 more)</para>
+  /// <para>Used by: declaration (DRagLint.LSP.Context.pas), declaration (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CallHierarchy.Incoming (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CallHierarchy.NodesToJson (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CallHierarchy.Outgoing (DRagLint.LSP.Feature.CallHierarchy.pas) (+48 more)</para>
   /// <para>Used in units: DRagLint.LSP.Context, DRagLint.LSP.Feature.CallHierarchy, DRagLint.LSP.Feature.CodeLens, DRagLint.LSP.Feature.DocumentHighlight, DRagLint.LSP.Feature.DocumentSymbol, DRagLint.LSP.Feature.ExecuteCommand, DRagLint.LSP.Feature.FoldingRange, DRagLint.LSP.Feature.ImplDecl, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.Ping (+6 more)</para>
-  /// <para>Implemented by: TLspServerContextAdapter</para>
+  /// <para>Implemented by: TLspCaptureContext, TLspServerContextAdapter</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   ILspServerContext = interface
@@ -95,7 +95,7 @@ type
     /// <returns>The store list, in lookup order.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle (DRagLint.LSP.Feature.DocumentSymbol.pas), DRagLint.LSP.Feature.ExecuteCommand.ShowCallers (DRagLint.LSP.Feature.ExecuteCommand.pas), DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Handle (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.Rename.ResolveTarget (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.SemanticTokens.TLspSemanticTokensFeature.Handle (DRagLint.LSP.Feature.SemanticTokens.pas) (+2 more)</para>
+    /// <para>Called from: DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle (DRagLint.LSP.Feature.DocumentSymbol.pas), DRagLint.LSP.Feature.ExecuteCommand.ShowCallers (DRagLint.LSP.Feature.ExecuteCommand.pas), DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Handle (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.Rename.HandleRename (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.Rename.ResolveTarget (DRagLint.LSP.Feature.Rename.pas) (+3 more)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
@@ -240,7 +240,7 @@ type
   /// table; a feature cannot shadow one. Two features claiming one method:
   /// the first registered keeps it.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Context.pas), declaration (DRagLint.LSP.Feature.CallHierarchy.pas), declaration (DRagLint.LSP.Feature.CodeLens.pas), declaration (DRagLint.LSP.Feature.DocumentHighlight.pas), declaration (DRagLint.LSP.Feature.DocumentSymbol.pas) (+13 more)</para>
+  /// <para>Used by: declaration (DRagLint.LSP.Context.pas), declaration (DRagLint.LSP.Feature.CallHierarchy.pas), declaration (DRagLint.LSP.Feature.CodeLens.pas), declaration (DRagLint.LSP.Feature.DocumentHighlight.pas), declaration (DRagLint.LSP.Feature.DocumentSymbol.pas) (+14 more)</para>
   /// <para>Used in units: DRagLint.LSP.Context, DRagLint.LSP.Feature.CallHierarchy, DRagLint.LSP.Feature.CodeLens, DRagLint.LSP.Feature.DocumentHighlight, DRagLint.LSP.Feature.DocumentSymbol, DRagLint.LSP.Feature.ExecuteCommand, DRagLint.LSP.Feature.FoldingRange, DRagLint.LSP.Feature.ImplDecl, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.Ping, DRagLint.LSP.Feature.Rename, DRagLint.LSP.Feature.SemanticTokens, DRagLint.LSP.Feature.TypeDefinition, DRagLint.LSP.Feature.TypeHierarchy, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -252,7 +252,6 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>virtual</para>
     /// <para>constructor</para>
-    /// <para>Effect-free (proven)</para>
     /// <para>Directives: virtual</para>
     /// <seealso cref="DRagLint.LSP.Context.TLspFeature.AddCapabilities"/>
     /// <seealso cref="DRagLint.LSP.Context.TLspFeature.Handle"/>
@@ -299,7 +298,7 @@ type
     /// object. Owned by the server; do not keep it.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
+    /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeFeatureResult (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
     /// <para>Overridden by: DRagLint.LSP.Feature.CallHierarchy.TLspCallHierarchyFeature.Handle, DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle, DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.Handle, DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle, DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Handle, DRagLint.LSP.Feature.FoldingRange.TLspFoldingRangeFeature.Handle (+8 more)</para>
     /// <para>abstract</para>
     /// <para>virtual</para>

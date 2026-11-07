@@ -534,7 +534,7 @@ type
     /// <remarks>
     /// Port of Get-DataSourceChain (Emit-Common.ps1:1724).
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Chain.TBindingBuild.Chain (DRagLint.Charts.Chain.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ReadBindings (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.FollowChain (DRagLint.Charts.Q.FeedsFrom.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas) ?</para>
+    /// <para>Called from: DRagLint.Charts.Chain.TBindingBuild.Chain (DRagLint.Charts.Chain.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.ReadBindings (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.FeedsFrom.TFeedsFromChart.FollowChain (DRagLint.Charts.Q.FeedsFrom.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas)</para>
     /// <para>Calls: Default, DRagLint.Charts.Chain.StepBoundColumns, DRagLint.Charts.Chain.StepControls, DRagLint.Charts.Chain.StepDataSet, DRagLint.Charts.Chain.StepDataSource, DRagLint.Charts.Chain.StepLocateForm, DRagLint.Charts.Chain.StepRhsType, DRagLint.Charts.Chain.StepTable</para>
     /// <para>Returns: B.Chain</para>
     /// <seealso cref="DRagLint.Charts.Chain.StepBoundColumns"/>
@@ -551,7 +551,7 @@ type
     /// <remarks>
     /// Port of Get-RePointChain (Emit-Common.ps1:2018).
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Chain.TChainWalker.ResolveRePointTable (DRagLint.Charts.Chain.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas) ?</para>
+    /// <para>Called from: DRagLint.Charts.Chain.TChainWalker.ResolveRePointTable (DRagLint.Charts.Chain.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas)</para>
     /// <para>Calls: Default, DRagLint.Charts.Chain.BareRhsStop, DRagLint.Charts.Chain.DotSegment, DRagLint.Charts.Chain.MakeHop, DRagLint.Charts.Chain.MemberIsDataSourceField, DRagLint.Charts.Chain.PropertyField, DRagLint.Charts.Chain.RePointDataSet, DRagLint.Charts.Chain.RePointMember, DRagLint.Charts.Chain.RhsRoot, DRagLint.Charts.Chain.TRePointBuild.Done (+6 more)</para>
     /// <para>Returns: B.Walk</para>
     /// <para>Reads: FReader, FIndex</para>
@@ -571,7 +571,7 @@ type
     /// <remarks>
     /// Port of Get-RePointPick (Emit-Common.ps1:2175).
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Chain.TChainWalker.ResolveRePointTable (DRagLint.Charts.Chain.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas) ?</para>
+    /// <para>Called from: DRagLint.Charts.Chain.TChainWalker.ResolveRePointTable (DRagLint.Charts.Chain.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.AnchorFromControl (DRagLint.Charts.Trace.Anchor.pas)</para>
     /// <para>Calls: Default, DRagLint.Charts.Source.TSourceReader.SourceFresh, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Text.FileNameOf, Format, SameText</para>
     /// <para>Returns: Default(TRePointPick)</para>
     /// <para>Complexity: 11 (cyclomatic, outer body), 42 lines (full implementation)</para>
@@ -590,7 +590,7 @@ type
     /// <remarks>
     /// Port of Get-DataSetTableLiterals (Emit-Common.ps1:2201).
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Chain.TChainWalker.ResolveRePointTable (DRagLint.Charts.Chain.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet (DRagLint.Charts.Trace.Anchor.pas) ?</para>
+    /// <para>Called from: DRagLint.Charts.Chain.TChainWalker.ResolveRePointTable (DRagLint.Charts.Chain.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.CompleteAnchorFromDataSet (DRagLint.Charts.Trace.Anchor.pas)</para>
     /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlInList, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, Format</para>
     /// <para>Reads: FSet, FIndex</para>
     /// <para>SQL: reads STRING_LITERALS</para>
@@ -720,10 +720,11 @@ function ChainKey(const pDfm, pDs: string): string;
 /// Get-CloneDb on its path; the caller guards the path before it opens the index.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.CheckRoles (DRagLint.Charts.Q.LandsWhere.pas)</para>
-/// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TIndexRow.S, SameText</para>
+/// <para>Calls: Default, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, SameText</para>
 /// <para>Returns: Default(TOrmLinksState)</para>
 /// <para>SQL: reads ORM_LINKS</para>
 /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+/// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
 /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

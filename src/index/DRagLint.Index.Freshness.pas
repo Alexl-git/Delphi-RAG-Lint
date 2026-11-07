@@ -162,7 +162,7 @@ function FreshnessNote(const AReport: TFreshnessReport; const ADbPath: string): 
 /// fresh checks GetMetaValue(INDEXED_AT_KEY) itself, as RefreshOwner does.</para>
 /// <para>One query plus one stat per row. Store errors propagate.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Refactor.MultiProjectRename.StaleEvidence (DRagLint.Refactor.MultiProjectRename.pas)</para>
+/// <para>Called from: DRagLint.CLI.CountStaleFilesWithoutCallEdges (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.StaleEvidence (DRagLint.Refactor.MultiProjectRename.pas)</para>
 /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps, DRagLint.Index.Freshness.StampState</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps"/>
 /// <seealso cref="DRagLint.Index.Freshness.StampState"/>

@@ -11089,7 +11089,11 @@ begin
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   if AArgs.Format <> '' then Format:= LowerCase(AArgs.Format)
   else Format:= 'dot';
-  if not MatchText(Format, ['dot', 'mermaid', 'json', 'html']) then begin Writeln('ERROR: graph supports --format dot|mermaid|json|html (got "', Format, '")'); Exit(2); end;
+  if not MatchText(Format, ['dot', 'mermaid', 'json', 'html']) then
+  begin
+    Writeln('ERROR: graph supports --format dot|mermaid|json|html (got "', Format, '")');
+    Exit(2);
+  end;
   RootSubstr:= AArgs.Name;
 
   Conn:= TFDConnection.Create(nil);
@@ -30540,7 +30544,10 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'convert-validate') then Exit(2);
   if AArgs.RulesFile = '' then
-  begin Writeln('Usage: drag-lint convert-validate --rules FILE [--from FromType] [--to ToType] [--print-parsed] [--glyph-stitch] [--db PATH ...]'); Exit(2); end;
+  begin
+    Writeln('Usage: drag-lint convert-validate --rules FILE [--from FromType] [--to ToType] [--print-parsed] [--glyph-stitch] [--db PATH ...]');
+    Exit(2);
+  end;
   if not TFile.Exists(AArgs.RulesFile) then
   begin Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile])); Exit(2); end;
 

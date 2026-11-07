@@ -632,14 +632,14 @@ function PlanRoutineInversion(const pSource: IEdgeSurfaceSource; const pSurface:
 /// With one routine and nothing moved the result equals PlanRoutineInversion's.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Report.CyclePlan.TCyclePlanner.PlanInversion (DRagLint.Report.CyclePlan.pas)</para>
-/// <para>Calls: ChangeFileExt, Default, DRagLint.Report.CycleEdge.AssignmentEdit, DRagLint.Report.CycleEdge.CodeStarts, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FileLines, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.Store, DRagLint.Report.CycleEdge.LineOf, DRagLint.Report.CycleEdge.PlanRoutineInversion, DRagLint.Report.CycleEdge.ReplaceInCode, DRagLint.Report.CycleEdge.RoutineSlice, DRagLint.Report.CycleEdge.StartAt, ExtractFileName, Format</para>
+/// <para>Calls: ChangeFileExt, Default, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Report.CycleEdge.AssignmentEdit, DRagLint.Report.CycleEdge.CodeStarts, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FileLines, DRagLint.Report.CycleEdge.IEdgeSurfaceSource.Store, DRagLint.Report.CycleEdge.LineOf, DRagLint.Report.CycleEdge.PlanRoutineInversion, DRagLint.Report.CycleEdge.ReplaceInCode, DRagLint.Report.CycleEdge.RoutineSlice, DRagLint.Report.CycleEdge.StartAt, ExtractFileName, Format</para>
 /// <para>Returns: Default(TRecipeSteps); PlanRoutineInversion(pSource, pSurface, pRefusal); Parts[0]</para>
 /// <para>Mutates: pRefusal (out)</para>
+/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.AssignmentEdit"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.CodeStarts"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FidOfStem"/>
 /// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.FileLines"/>
-/// <seealso cref="DRagLint.Report.CycleEdge.IEdgeSurfaceSource.Store"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function PlanRoutinesInversion(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface;

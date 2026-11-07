@@ -123,7 +123,7 @@ const
 /// <para>WIDENED 2026-10-30 (1.39.1, known issue of 1.39.0): <c>warm-rule-cache</c> listens, started by DRagLint.CLI.DoWarmRuleCache. A warm only reads and its result is disposable, so a stand-down is taken AT ONCE by a watcher thread (no safe point to wait for) and the process exits CONTROL_EXIT_STOOD_DOWN; shutdown and an index of the same database stop it, and the engine image is free again.</para>
 /// <para>WIDENED 2026-11-07 (E-NARROW-CHANNEL, wave 146): <c>narrow-param</c>, <c>redundant-cast</c> (lint --fix --fix-rule redundant-cast) and <c>create-enum-helper</c> listen on an <c>--apply</c> run, opened by the Do* verb through DRagLint.Refactor.CompileGate.OpenGateStandDown. A stand-down is taken while the gate waits on a build: the build tree is killed, the written files are rolled back and the run ends Refusal = cancelled (exit 1).</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), DRagLint.Refactor.CompileGate.OpenGateStandDown (DRagLint.Refactor.CompileGate.pas)</para>
 /// <para>Pure</para>
 /// <para>Calls: SameText</para>
 /// <para>Returns: SameText(ACommand, 'lsp') or SameText(ACommand, 'cycles') or SameText(ACommand, 'index')</para>
@@ -489,7 +489,7 @@ type
   /// <para>Thread-safety: the host hooks are interlocked; the listener owns
   /// the pipe handles exclusively.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [dclDragLintWizard,drag-lint]declaration (DRagLint.Core.ControlChannel.pas) ?, [drag-lint]declaration (DRagLint.LSP.Server.pas) ?, [drag-lint]declaration (DRagLint.Refactor.CompileGate.pas) ?, [drag-lint]DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), [drag-lint]DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.TControlListener.Create (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.TControlListener.ServeStandDown (DRagLint.Core.ControlChannel.pas)</para>
+  /// <para>Used by: [dclDragLintWizard,drag-lint]declaration (DRagLint.Core.ControlChannel.pas) ?, [drag-lint]declaration (DRagLint.LSP.Server.pas) ?, [drag-lint]declaration (DRagLint.Refactor.CompileGate.pas) ?, [drag-lint]DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), [drag-lint]DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.TControlListener.Create (DRagLint.Core.ControlChannel.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.TControlListener.ServeStandDown (DRagLint.Core.ControlChannel.pas), [drag-lint]DRagLint.Refactor.CompileGate.OpenGateStandDown (DRagLint.Refactor.CompileGate.pas)</para>
   /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.CLI.CycleFix, [drag-lint]DRagLint.Core.ControlChannel, [drag-lint]DRagLint.LSP.Server, [drag-lint]DRagLint.Refactor.CompileGate</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -562,7 +562,7 @@ type
       /// <exception cref="EInvalidOperation">Not called on the main thread.</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas)</para>
+      /// <para>Called from: DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas) (+1 more)</para>
       /// <para>Calls: Copy, DRagLint.Core.ControlChannel.BeatPipeNameFor, DRagLint.Core.ControlChannel.ControlPipeNameFor, DRagLint.Core.ControlChannel.CurrentUserSidString</para>
       /// <para>Pure</para>
       /// <para>constructor</para>
@@ -597,7 +597,7 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: [drag-lint]DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), [drag-lint]DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BeatChannelOpen (DRagLint.Core.ControlChannel.pas), [dclDragLintWizard]DragLint.Plugin.About.StartBackgroundSelfInfoFetch (DragLint.Plugin.About.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.InvokeReverseCallTreeMessages (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.RunCompileDiagnoseAsync (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.RunFullCompileSweepAsync (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.Editor.RunGhostCheckAsync (DragLint.Plugin.Editor.pas) ?,
-      /// [dclDragLintWizard]DragLint.Plugin.Editor.RunGhostRecoverFor (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.LiveDiagnostics.TLiveRunner.OnTick (DragLint.Plugin.LiveDiagnostics.pas) ?</para>
+      /// [dclDragLintWizard]DragLint.Plugin.Editor.RunGhostRecoverFor (DragLint.Plugin.Editor.pas) ?, [dclDragLintWizard]DragLint.Plugin.LiveDiagnostics.TLiveRunner.OnTick (DragLint.Plugin.LiveDiagnostics.pas) ?, [drag-lint]DRagLint.Refactor.CompileGate.OpenGateStandDown (DRagLint.Refactor.CompileGate.pas)</para>
       /// <para>Calls: DRagLint.Core.ControlChannel.ConvertStringSecurityDescriptorToSecurityDescriptorW, DRagLint.Core.ControlChannel.TControlChannel.CreatePipeInstance, DRagLint.Core.ControlChannel.TControlListener.Create, DuplicateHandle, PChar, SysErrorMessage</para>
       /// <para>Returns: False; True</para>
       /// <para>Mutates: AError (out)</para>
@@ -708,7 +708,7 @@ type
       /// <summary>Host hook: every store is closed; the `exiting` reply may go.</summary>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: [drag-lint]DRagLint.CLI.CycleFix.RunCycleFix (DRagLint.CLI.CycleFix.pas), [drag-lint]DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BatchChannelClose (DRagLint.Core.ControlChannel.pas)</para>
+      /// <para>Called from: [drag-lint]DRagLint.CLI.CycleFix.RunCycleFix (DRagLint.CLI.CycleFix.pas), [drag-lint]DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.ControlChannel.BatchChannelClose (DRagLint.Core.ControlChannel.pas), [drag-lint]DRagLint.Refactor.CompileGate.CloseGateStandDown (DRagLint.Refactor.CompileGate.pas) ?</para>
       /// <para>Calls: DRagLint.Core.ControlChannel.HangStoreCloseForTests, InterlockedCompareExchange</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.ControlChannel.HangStoreCloseForTests"/>

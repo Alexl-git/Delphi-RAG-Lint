@@ -48,7 +48,7 @@ type
   /// the engine is to take it from the yields class.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: [drag-lint]declaration (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), [drag-lint]DRagLint.Convert.Apply.LinkPasStatus (DRagLint.Convert.Apply.pas), [drag-lint]DRagLint.Convert.Apply.PlanValueCastSites (DRagLint.Convert.Apply.pas), [drag-lint]DRagLint.Convert.CastLib.ApplyValueCast (DRagLint.Convert.CastLib.pas) ?, [drag-lint]DRagLint.Convert.CastLib.ClassCastFor (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.CastLib.FindClassCast (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.CastLib.LoadCastLib (DRagLint.Convert.CastLib.pas) ?, [drag-lint]DRagLint.Convert.CastLib.LoadCastLibText (DRagLint.Convert.CastLib.pas) ?, [drag-lint]DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas),
-  /// [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.ClassCastUnderPath (DRagLint.Convert.DfmReemit.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.RemapLeaf (DRagLint.Convert.DfmReemit.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas)</para>
+  /// [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.CastTargetFraming (DRagLint.Convert.DfmReemit.pas) ?, [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.ClassCastUnderPath (DRagLint.Convert.DfmReemit.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.GlyphTargetFraming (DRagLint.Convert.DfmReemit.pas) ?, [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.RemapLeaf (DRagLint.Convert.DfmReemit.pas), [drag-lint]DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas)</para>
   /// <para>Used in units: ConvRules.CastLib, ConvRules.MainForm, ConvRulesModelTests, DRagLint.Convert.Apply, DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -244,7 +244,7 @@ function ClassCastFor(const ADefs: TArray<TCastDef>; const AFrom, ATo: string): 
 /// lookups cannot drift apart. It lives here rather than in a consumer for the
 /// reason this unit exists: one parser, two consumers, no drift.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.LinkPasStatus (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ClassCastUnderPath (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.LinkPasStatus (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ApplyEnumCast (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.ClassCastUnderPath (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.GlyphTargetFraming (DRagLint.Convert.DfmReemit.pas)</para>
 /// <para>Calls: Default, SameText</para>
 /// <para>Returns: False; True</para>
 /// <para>Mutates: ADef (out)</para>

@@ -831,14 +831,14 @@ type
       /// Without one it is pure AST and every Enter/Acquire receiver is a lock. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Copy, Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, MonitorArgKey, NodeStr, SameText, StringReplace, WalkBody</para>
+      /// <para>Calls: ContainsStr, Copy, Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.RefTypeRules.TExprTypeReader.Create, Format, Integer, LowerCase (+6 more)</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Create"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CheckCriticalSection(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;

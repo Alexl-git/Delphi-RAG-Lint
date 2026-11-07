@@ -51,7 +51,7 @@ type
 /// <returns>The decoded bytes; empty for an empty or non-hex value.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphVacuum.HarvestCollection (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.HarvestObject (DRagLint.Convert.GlyphVacuum.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink.ReadStrip (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphVacuum.HarvestCollection (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.HarvestObject (DRagLint.Convert.GlyphVacuum.pas)</para>
 /// <para>Calls: Byte, CharInSet, Copy, StrToIntDef, UpCase</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -111,7 +111,7 @@ type
   /// name, then THAT class's own framing.</para>
   /// <para>gdfUnknown -- not known; never guessed.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.GraphicClassFraming (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.ParseDataFraming (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.UnwrapPictureInner (DRagLint.Convert.GlyphStrip.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.DfmReemit.ReemitBlock.CastTargetFraming (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.GlyphTargetFraming (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas) (+4 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGraphicDataFraming = (gdfUnknown, gdfGraphic, gdfSized, gdfSizedInclusive, gdfPicture);
@@ -125,7 +125,7 @@ type
 /// cast library (`dfmdata`, see ParseDataFraming), because the engine has no
 /// way to know whether a class it never read overrides ReadData.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.UnwrapPictureInner (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.WrapGraphicData (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.CastTargetFraming (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.GlyphTargetFraming (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.UnwrapPictureInner (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.WrapGraphicData (DRagLint.Convert.GlyphStrip.pas)</para>
 /// <para>Calls: DRagLint.Convert.GlyphStrip.BareClassName, SameText</para>
 /// <para>Returns: gdfPicture; gdfSized; gdfSizedInclusive; gdfGraphic; gdfUnknown</para>
 /// <seealso cref="DRagLint.Convert.GlyphStrip.BareClassName"/>
@@ -138,7 +138,7 @@ function GraphicClassFraming(const AClassName: string): TGraphicDataFraming;
 /// <returns>The framing; gdfUnknown for any other text.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.CastTargetFraming (DRagLint.Convert.DfmReemit.pas)</para>
 /// <para>Calls: SameText, Trim</para>
 /// <para>Returns: gdfGraphic; gdfSized; gdfSizedInclusive; gdfPicture; gdfUnknown</para>
 /// <!-- drag-lint:auto END -->
@@ -159,7 +159,7 @@ function ParseDataFraming(const AKeyword: string): TGraphicDataFraming;
 /// unknown class name, a size field that disagrees with the bytes that follow,
 /// and inner bytes that are not a recognised image.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink.ReadStrip (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas)</para>
 /// <para>Calls: Copy, DRagLint.Convert.GlyphStrip.IsLengthPrefixedImage, DRagLint.Convert.GlyphStrip.ReadPictureClassName, DRagLint.Convert.GlyphStrip.SniffImageFormat, DRagLint.Convert.GlyphStrip.UnwrapPictureInner, Format</para>
 /// <para>Returns: AReason = ''</para>
 /// <para>Mutates: AImage (out), AFormat (out), AWrapper (out), AReason (out)</para>
@@ -182,7 +182,7 @@ function UnwrapGraphicData(const APayload: TBytes; out AImage: TBytes;
 /// holds AFormat.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.WrapGraphicData (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.WrapGraphicData (DRagLint.Convert.GlyphStrip.pas)</para>
 /// <para>Calls: Byte, Copy, DRagLint.Convert.GlyphStrip.GraphicClassFraming, DRagLint.Convert.GlyphStrip.Int32Bytes, DRagLint.Convert.GlyphStrip.PictureClassForFormat, DRagLint.Convert.GlyphStrip.WrapGraphicData, Format</para>
 /// <para>Returns: True; (Cls &lt;&gt; '') and WrapGraphicData(AImage, AFormat, GraphicClassFraming(Cls), Inner, AReason); False</para>
 /// <para>Recursive</para>
@@ -202,7 +202,7 @@ function WrapGraphicData(const AImage: TBytes; const AFormat: string;
 /// <returns>The value text, CRLF line breaks; '{}' for no bytes.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas)</para>
 /// <para>Calls: IntToHex</para>
 /// <para>Returns: SB.ToString</para>
 /// <!-- drag-lint:auto END -->
@@ -214,6 +214,9 @@ type
   /// <remarks>
   /// gsfNone: it can. gsfFormat: the image is not a bitmap layout this stitcher
   /// reads. gsfNotAStrip: a good bitmap whose width does not divide by N.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.CheckBitmapStrip (DRagLint.Convert.GlyphStrip.pas)</para>
+  /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGlyphStripFailure = (gsfNone, gsfFormat, gsfNotAStrip);
 
@@ -226,6 +229,16 @@ type
 /// Pure. Reads BI_RGB and BI_BITFIELDS at 1, 4, 8, 16, 24 and 32 bpp, headers of 40
 /// bytes or more. RLE, a core header and an embedded V5 profile are gsfFormat:
 /// slicing them needs more than moving columns.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink.ReadStrip (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.StitchBitmapSlots (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Calls: DRagLint.Convert.GlyphStrip.BmpInt32At, DRagLint.Convert.GlyphStrip.BmpStride, DRagLint.Convert.GlyphStrip.StartsWith, Format, Int64</para>
+/// <para>Returns: gsfFormat; gsfNotAStrip; gsfNone</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 42 lines (full implementation)</para>
+/// <para>Mutates: AReason (out)</para>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.BmpInt32At"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.BmpStride"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.StartsWith"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function CheckBitmapStrip(const ABmp: TBytes; ASourceN: Integer; out AReason: string): TGlyphStripFailure;
 
@@ -242,6 +255,17 @@ function CheckBitmapStrip(const ABmp: TBytes; ASourceN: Integer; out AReason: st
 /// palette and row order are the source's: pixels move, they are never re-encoded.
 /// A slot of a 1 or 4 bpp strip may start mid-byte, so columns are copied bit by bit
 /// there. Row padding is zero.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: DRagLint.Convert.GlyphStrip.BmpInt32At, DRagLint.Convert.GlyphStrip.BmpSetInt32At, DRagLint.Convert.GlyphStrip.BmpStride, DRagLint.Convert.GlyphStrip.CheckBitmapStrip, DRagLint.Convert.GlyphStrip.CopyRowBits, FillChar, Format, Int64, Move</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: AStitched (out), AReason (out)</para>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.BmpInt32At"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.BmpSetInt32At"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.BmpStride"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.CheckBitmapStrip"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.CopyRowBits"/>
+/// <!-- drag-lint:auto END -->
 /// </remarks>
 function StitchBitmapSlots(const ABmp: TBytes; ASourceN: Integer; const ASlots: TArray<Integer>;
   out AStitched: TBytes; out AReason: string): Boolean;

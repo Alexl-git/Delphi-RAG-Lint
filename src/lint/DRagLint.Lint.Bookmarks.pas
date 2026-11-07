@@ -44,6 +44,9 @@ type
 
     /// <summary>The bookmarks of AText whose Code equals ACode (case-insensitive for the
     /// tagged kind, exact digits for the numbered kind).</summary>
+    /// <param name="AText">The source text.</param>
+    /// <param name="ACode">The code to look for.</param>
+    /// <returns>The matching bookmarks; [] when there is none.</returns>
     class function Find(const AText, ACode: string): TArray<TBookmark>; static;
   end;
 

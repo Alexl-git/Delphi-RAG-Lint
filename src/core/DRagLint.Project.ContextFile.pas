@@ -48,7 +48,7 @@ type
   /// <summary>Per-platform library override from the central defaults file.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Project.ContextFile.pas) ?, DRagLint.LSP.Server.DefaultsLibraryDbFor (DRagLint.LSP.Server.pas) ?, DRagLint.Project.ContextFile.TryLoadContextDefaults (DRagLint.Project.ContextFile.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Project.ContextFile.pas) ?, DRagLint.LSP.Server.DefaultsLibraryDbFor (DRagLint.LSP.Server.pas) ?, DRagLint.LSP.Server.LibrariesVisibleToThisEngine (DRagLint.LSP.Server.pas) ?, DRagLint.Project.ContextFile.TryLoadContextDefaults (DRagLint.Project.ContextFile.pas)</para>
   /// <para>Used in units: DRagLint.LSP.Server, DRagLint.Project.ContextFile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -319,7 +319,6 @@ type
       /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
       /// <returns><!-- drag-lint:auto type -->string</returns>
-      /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.DocFormatToStr: Unknown symbol kind: "%s"</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>

@@ -41,7 +41,7 @@ const
 /// <remarks>
 /// Pure. Lets a caller walk every platform table.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined (DRagLint.Lint.IfdefUndefined.pas)</para>
+/// <para>Called from: DRagLint.CLI.LibraryReady.CanonicalPlatform (DRagLint.CLI.LibraryReady.pas), DRagLint.Lint.IfdefUndefined.TIfdefUndefinedCheck.IsCompilerPredefined (DRagLint.Lint.IfdefUndefined.pas)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function KnownPlatforms: TArray<string>;
