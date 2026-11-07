@@ -1062,7 +1062,7 @@ Register it with Claude Code / VS Code / Cursor instead of editing their config 
 `drag-lint mcp-config --all [--db <index>] [--dry-run]` (merged, backed up, idempotent; see the
 Servers table in section 2), or `drag-lint init --project <X.dproj>` to register + index + wire in one go.
 It speaks **JSON-RPC 2.0 over stdio**. The MCP surface is a **curated subset**
-of the CLI -- exactly **15 tools**:
+of the CLI -- exactly **17 tools**:
 
 > **Like the CLI's read verbs**, the server opens every index READ-ONLY (the
 > `--db` of `serve` and a per-call `"db"` argument alike) and never migrates it:

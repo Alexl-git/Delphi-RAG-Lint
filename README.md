@@ -802,9 +802,9 @@ Or add it to your MCP config by hand (e.g. `~/.claude/claude_desktop_config.json
 }
 ```
 
-15 tools are then available to Claude: `find_symbol`, `find_callers`,
+17 tools are then available to Claude: `find_symbol`, `find_callers`,
 `get_symbol_doc`, `get_context_bundle`, `rename_symbol`, `run_compile_check`,
-and more (see [MCP tools](#mcp-tools-15) below).
+and more (see [MCP tools](#mcp-tools-17) below).
 
 ### Click-to-source links (draglint://)
 
@@ -1248,7 +1248,7 @@ A verb's usage line names the canonical flag only. Each alias is accepted wherev
 
 <!-- dl:registry:end flag-aliases -->
 
-### MCP tools (15)
+### MCP tools (17)
 
 Verified against `src\mcp\DRagLint.MCP.Server.pas` (`HandleToolsList`) -- this
 is the complete set the server registers; it does not expose `import_log`,
