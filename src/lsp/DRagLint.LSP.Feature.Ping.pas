@@ -28,7 +28,7 @@ type
   /// <remarks>
   /// Stateless; registered from this unit's initialization.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Feature.Ping.pas)</para>
+  /// <para>Used by: DRagLint.LSP.Feature.Ping.initialization (DRagLint.LSP.Feature.Ping.pas)</para>
   /// <para>Used in units: DRagLint.LSP.Feature.Ping</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -87,7 +87,7 @@ type
   /// environment variable DRAGLINT_LSP_TEST_RAISE is non-empty; in production
   /// the method does not exist and answers -32601. Advertises nothing.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Feature.Ping.pas)</para>
+  /// <para>Used by: DRagLint.LSP.Feature.Ping.initialization (DRagLint.LSP.Feature.Ping.pas)</para>
   /// <para>Used in units: DRagLint.LSP.Feature.Ping</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

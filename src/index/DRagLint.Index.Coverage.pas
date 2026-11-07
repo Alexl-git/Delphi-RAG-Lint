@@ -26,7 +26,7 @@ type
   /// <summary>Classification of a folder relative to the index manifest.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: Config.IndexesFrame.TIndexesFrame.CovKindColor (Config.IndexesFrame.pas), declaration (Config.IndexesFrame.pas), declaration (DRagLint.Index.Coverage.pas)</para>
+  /// <para>Used by: Config.IndexesFrame.TIndexesFrame.CovKindColor (Config.IndexesFrame.pas), declaration (Config.IndexesFrame.pas), [drag-lint]declaration (DRagLint.Index.Coverage.pas), [drag-lint]DRagLint.Index.Coverage.CoverageKindStr (DRagLint.Index.Coverage.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCoverageKind = (

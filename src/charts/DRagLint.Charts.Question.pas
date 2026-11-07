@@ -369,7 +369,7 @@ type
 /// <param name="pEmitter">The emitter.</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: initialization/finalization (DRagLint.Charts.Q.ClassSurface.pas), initialization/finalization (DRagLint.Charts.Q.Deps.pas), initialization/finalization (DRagLint.Charts.Q.EventWiring.pas), initialization/finalization (DRagLint.Charts.Q.ShownWhere.pas), initialization/finalization (DRagLint.Charts.Q.TouchesTables.pas) (+20 more)</para>
+/// <para>Called from: DRagLint.Charts.Q.Architecture.initialization (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.Butterfly.initialization (DRagLint.Charts.Q.Butterfly.pas), DRagLint.Charts.Q.ChangeImpact.initialization (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.initialization (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.initialization (DRagLint.Charts.Q.Consumers.pas) (+20 more)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure RegisterChartQuestion(const pId: string; const pEmitter: TChartEmitter);

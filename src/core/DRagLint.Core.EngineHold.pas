@@ -129,7 +129,7 @@ function ReleaseEngineHold(out AError: string): Boolean;
 /// Cheap enough to call from a 1 s UI timer: one stat and one short
 /// read. Never raises.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas), [dclDragLintWizard]DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), [dclDragLintWizard]DragLint.Plugin.JobQueue.TDragLintJobQueue.WaitWhileEngineHeld (DragLint.Plugin.JobQueue.pas), [dclDragLintWizard]DragLint.Plugin.StatusBar.TDragLintStatusBar.PollEngineHold (DragLint.Plugin.StatusBar.pas)</para>
+/// <para>Called from: [drag-lint]DRagLint.CLI.DoIdeRelease (DRagLint.CLI.pas), [dclDragLintWizard]DragLint.Plugin.Editor.EnsureLspClient (DragLint.Plugin.Editor.pas), [dclDragLintWizard]DragLint.Plugin.JobQueue.TDragLintJobQueue.WaitWhileEngineHeld (DragLint.Plugin.JobQueue.pas), [dclDragLintWizard]DragLint.Plugin.StatusBar.TDragLintStatusBar.PollEngineHold (DragLint.Plugin.StatusBar.pas)</para>
 /// <para>Calls: DRagLint.Core.EngineHold.EngineHoldFilePath, DRagLint.Core.EngineHold.NowEpochUtc, Integer, Trim, TryStrToInt64</para>
 /// <para>Returns: False; True</para>
 /// <para>Catches: Exception (empty); Exception (swallowed)</para>

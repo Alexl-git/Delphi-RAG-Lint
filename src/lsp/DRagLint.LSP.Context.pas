@@ -36,8 +36,8 @@ type
   /// <para>Not thread-safe: call only from inside TLspFeature.Handle, which runs
   /// on the server's message loop.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Context.pas), declaration (DRagLint.LSP.Feature.CodeLens.pas), declaration (DRagLint.LSP.Feature.DocumentSymbol.pas), DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle (DRagLint.LSP.Feature.CodeLens.pas), DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle (DRagLint.LSP.Feature.DocumentSymbol.pas) (+24 more)</para>
-  /// <para>Used in units: DRagLint.LSP.Context, DRagLint.LSP.Feature.CodeLens, DRagLint.LSP.Feature.DocumentSymbol, DRagLint.LSP.Feature.ExecuteCommand, DRagLint.LSP.Feature.ImplDecl, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.Ping, DRagLint.LSP.Feature.Rename, DRagLint.LSP.Feature.SemanticTokens, DRagLint.LSP.Server</para>
+  /// <para>Used by: declaration (DRagLint.LSP.Context.pas), declaration (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CallHierarchy.Incoming (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CallHierarchy.NodesToJson (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CallHierarchy.Outgoing (DRagLint.LSP.Feature.CallHierarchy.pas) (+47 more)</para>
+  /// <para>Used in units: DRagLint.LSP.Context, DRagLint.LSP.Feature.CallHierarchy, DRagLint.LSP.Feature.CodeLens, DRagLint.LSP.Feature.DocumentHighlight, DRagLint.LSP.Feature.DocumentSymbol, DRagLint.LSP.Feature.ExecuteCommand, DRagLint.LSP.Feature.FoldingRange, DRagLint.LSP.Feature.ImplDecl, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.Ping (+6 more)</para>
   /// <para>Implemented by: TLspServerContextAdapter</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -48,7 +48,7 @@ type
     /// <returns>The local path; '' for an empty URI.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle (DRagLint.LSP.Feature.CodeLens.pas), DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle (DRagLint.LSP.Feature.DocumentSymbol.pas), DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Handle (DRagLint.LSP.Feature.ExecuteCommand.pas), DRagLint.LSP.Feature.ImplDecl.TLspImplDeclFeature.Handle (DRagLint.LSP.Feature.ImplDecl.pas), DRagLint.LSP.Feature.InlayHint.RequestPath (DRagLint.LSP.Feature.InlayHint.pas) (+2 more)</para>
+    /// <para>Called from: DRagLint.LSP.Feature.CallHierarchy.Prepare (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle (DRagLint.LSP.Feature.CodeLens.pas), DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.Handle (DRagLint.LSP.Feature.DocumentHighlight.pas), DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle (DRagLint.LSP.Feature.DocumentSymbol.pas), DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Handle (DRagLint.LSP.Feature.ExecuteCommand.pas) (+7 more)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
@@ -63,7 +63,7 @@ type
     /// <returns>The URI.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.LSP.Feature.ExecuteCommand.ShowCallers (DRagLint.LSP.Feature.ExecuteCommand.pas), DRagLint.LSP.Feature.ImplDecl.SymbolUri (DRagLint.LSP.Feature.ImplDecl.pas), DRagLint.LSP.Feature.Rename.BuildWorkspaceEdit (DRagLint.LSP.Feature.Rename.pas)</para>
+    /// <para>Called from: DRagLint.LSP.Feature.ExecuteCommand.ShowCallers (DRagLint.LSP.Feature.ExecuteCommand.pas), DRagLint.LSP.Feature.ImplDecl.SymbolUri (DRagLint.LSP.Feature.ImplDecl.pas), DRagLint.LSP.Feature.Rename.BuildWorkspaceEdit (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.HierarchyUtil.BuildHierarchyItem (DRagLint.LSP.HierarchyUtil.pas)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
@@ -79,7 +79,7 @@ type
     /// file's cached index, whatever was hovered before.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle (DRagLint.LSP.Feature.CodeLens.pas), DRagLint.LSP.Feature.ImplDecl.AddDescendantMethods (DRagLint.LSP.Feature.ImplDecl.pas), DRagLint.LSP.Feature.Ping.TPingFeature.Handle (DRagLint.LSP.Feature.Ping.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Called from: DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle (DRagLint.LSP.Feature.CodeLens.pas), DRagLint.LSP.Feature.ImplDecl.AddDescendantMethods (DRagLint.LSP.Feature.ImplDecl.pas), DRagLint.LSP.Feature.Ping.TPingFeature.Handle (DRagLint.LSP.Feature.Ping.pas), DRagLint.LSP.Feature.TypeDefinition.UniqueType (DRagLint.LSP.Feature.TypeDefinition.pas), DRagLint.LSP.HierarchyUtil.FindItemSymbol (DRagLint.LSP.HierarchyUtil.pas) (+1 more)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
@@ -95,7 +95,7 @@ type
     /// <returns>The store list, in lookup order.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle (DRagLint.LSP.Feature.DocumentSymbol.pas), DRagLint.LSP.Feature.ExecuteCommand.ShowCallers (DRagLint.LSP.Feature.ExecuteCommand.pas), DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Handle (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.Rename.ResolveTarget (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.SemanticTokens.TLspSemanticTokensFeature.Handle (DRagLint.LSP.Feature.SemanticTokens.pas)</para>
+    /// <para>Called from: DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle (DRagLint.LSP.Feature.DocumentSymbol.pas), DRagLint.LSP.Feature.ExecuteCommand.ShowCallers (DRagLint.LSP.Feature.ExecuteCommand.pas), DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Handle (DRagLint.LSP.Feature.InlayHint.pas), DRagLint.LSP.Feature.Rename.ResolveTarget (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.SemanticTokens.TLspSemanticTokensFeature.Handle (DRagLint.LSP.Feature.SemanticTokens.pas) (+2 more)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
@@ -136,7 +136,7 @@ type
     /// floor).</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.LSP.Feature.ImplDecl.TLspImplDeclFeature.Handle (DRagLint.LSP.Feature.ImplDecl.pas), DRagLint.LSP.Feature.Rename.ResolveTarget (DRagLint.LSP.Feature.Rename.pas)</para>
+    /// <para>Called from: DRagLint.LSP.Feature.CallHierarchy.Prepare (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.ImplDecl.TLspImplDeclFeature.Handle (DRagLint.LSP.Feature.ImplDecl.pas), DRagLint.LSP.Feature.Rename.ResolveTarget (DRagLint.LSP.Feature.Rename.pas), DRagLint.LSP.Feature.TypeDefinition.TLspTypeDefinitionFeature.Handle (DRagLint.LSP.Feature.TypeDefinition.pas), DRagLint.LSP.Feature.TypeHierarchy.Prepare (DRagLint.LSP.Feature.TypeHierarchy.pas)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
@@ -157,6 +157,16 @@ type
     /// <param name="ACol0">0-based column.</param>
     /// <param name="AIncludeDecl">Also list the declarations of the name.</param>
     /// <returns>A new Location[] array, possibly empty; the caller owns it.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.Handle (DRagLint.LSP.Feature.DocumentHighlight.pas)</para>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileToUri"/>
+    /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.HoverMarkdown"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function References(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
     /// <summary>The `counts` array `draglint/callerCounts` answers for a file.</summary>
     /// <param name="APath">The local path.</param>
@@ -189,7 +199,7 @@ type
     /// nil sends result null.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle (DRagLint.LSP.Feature.CodeLens.pas), DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle (DRagLint.LSP.Feature.DocumentSymbol.pas), DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Handle (DRagLint.LSP.Feature.ExecuteCommand.pas), DRagLint.LSP.Feature.ImplDecl.TLspImplDeclFeature.Handle (DRagLint.LSP.Feature.ImplDecl.pas), DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Handle (DRagLint.LSP.Feature.InlayHint.pas) (+4 more)</para>
+    /// <para>Called from: DRagLint.LSP.Feature.CallHierarchy.TLspCallHierarchyFeature.Handle (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle (DRagLint.LSP.Feature.CodeLens.pas), DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.Handle (DRagLint.LSP.Feature.DocumentHighlight.pas), DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle (DRagLint.LSP.Feature.DocumentSymbol.pas), DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Handle (DRagLint.LSP.Feature.ExecuteCommand.pas) (+9 more)</para>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.CallerCounts"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.Definition"/>
     /// <seealso cref="DRagLint.LSP.Context.ILspServerContext.FileFromUri"/>
@@ -230,8 +240,8 @@ type
   /// table; a feature cannot shadow one. Two features claiming one method:
   /// the first registered keeps it.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Context.pas), declaration (DRagLint.LSP.Feature.CodeLens.pas), declaration (DRagLint.LSP.Feature.DocumentSymbol.pas), declaration (DRagLint.LSP.Feature.ExecuteCommand.pas), declaration (DRagLint.LSP.Feature.ImplDecl.pas) (+8 more)</para>
-  /// <para>Used in units: DRagLint.LSP.Context, DRagLint.LSP.Feature.CodeLens, DRagLint.LSP.Feature.DocumentSymbol, DRagLint.LSP.Feature.ExecuteCommand, DRagLint.LSP.Feature.ImplDecl, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.Ping, DRagLint.LSP.Feature.Rename, DRagLint.LSP.Feature.SemanticTokens, DRagLint.LSP.Server</para>
+  /// <para>Used by: declaration (DRagLint.LSP.Context.pas), declaration (DRagLint.LSP.Feature.CallHierarchy.pas), declaration (DRagLint.LSP.Feature.CodeLens.pas), declaration (DRagLint.LSP.Feature.DocumentHighlight.pas), declaration (DRagLint.LSP.Feature.DocumentSymbol.pas) (+13 more)</para>
+  /// <para>Used in units: DRagLint.LSP.Context, DRagLint.LSP.Feature.CallHierarchy, DRagLint.LSP.Feature.CodeLens, DRagLint.LSP.Feature.DocumentHighlight, DRagLint.LSP.Feature.DocumentSymbol, DRagLint.LSP.Feature.ExecuteCommand, DRagLint.LSP.Feature.FoldingRange, DRagLint.LSP.Feature.ImplDecl, DRagLint.LSP.Feature.InlayHint, DRagLint.LSP.Feature.Ping, DRagLint.LSP.Feature.Rename, DRagLint.LSP.Feature.SemanticTokens, DRagLint.LSP.Feature.TypeDefinition, DRagLint.LSP.Feature.TypeHierarchy, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLspFeature = class abstract
@@ -254,7 +264,7 @@ type
     /// <returns>Method names, e.g. ['textDocument/documentSymbol'].</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Overridden by: DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Methods, DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Methods, DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Methods, DRagLint.LSP.Feature.ImplDecl.TLspImplDeclFeature.Methods, DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Methods, DRagLint.LSP.Feature.Rename.TLspRenameFeature.Methods (+3 more)</para>
+    /// <para>Overridden by: DRagLint.LSP.Feature.CallHierarchy.TLspCallHierarchyFeature.Methods, DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Methods, DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.Methods, DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Methods, DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Methods, DRagLint.LSP.Feature.FoldingRange.TLspFoldingRangeFeature.Methods (+8 more)</para>
     /// <para>abstract</para>
     /// <para>virtual</para>
     /// <para>Directives: virtual; abstract</para>
@@ -271,7 +281,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleInitialize (DRagLint.LSP.Server.pas)</para>
-    /// <para>Overridden by: DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.AddCapabilities, DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.AddCapabilities, DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.AddCapabilities, DRagLint.LSP.Feature.ImplDecl.TLspImplDeclFeature.AddCapabilities, DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.AddCapabilities, DRagLint.LSP.Feature.Rename.TLspRenameFeature.AddCapabilities (+3 more)</para>
+    /// <para>Overridden by: DRagLint.LSP.Feature.CallHierarchy.TLspCallHierarchyFeature.AddCapabilities, DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.AddCapabilities, DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.AddCapabilities, DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.AddCapabilities, DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.AddCapabilities, DRagLint.LSP.Feature.FoldingRange.TLspFoldingRangeFeature.AddCapabilities (+8 more)</para>
     /// <para>abstract</para>
     /// <para>virtual</para>
     /// <para>Directives: virtual; abstract</para>
@@ -290,7 +300,7 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
-    /// <para>Overridden by: DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle, DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle, DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Handle, DRagLint.LSP.Feature.ImplDecl.TLspImplDeclFeature.Handle, DRagLint.LSP.Feature.InlayHint.TLspInlayHintFeature.Handle, DRagLint.LSP.Feature.Rename.TLspRenameFeature.Handle (+3 more)</para>
+    /// <para>Overridden by: DRagLint.LSP.Feature.CallHierarchy.TLspCallHierarchyFeature.Handle, DRagLint.LSP.Feature.CodeLens.TLspCodeLensFeature.Handle, DRagLint.LSP.Feature.DocumentHighlight.TLspDocumentHighlightFeature.Handle, DRagLint.LSP.Feature.DocumentSymbol.TLspDocumentSymbolFeature.Handle, DRagLint.LSP.Feature.ExecuteCommand.TLspExecuteCommandFeature.Handle, DRagLint.LSP.Feature.FoldingRange.TLspFoldingRangeFeature.Handle (+8 more)</para>
     /// <para>abstract</para>
     /// <para>virtual</para>
     /// <para>Directives: virtual; abstract</para>
@@ -310,7 +320,7 @@ type
 /// <param name="AClass">The class; registering the same class twice is a no-op.</param>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: initialization/finalization (DRagLint.LSP.Feature.CodeLens.pas), initialization/finalization (DRagLint.LSP.Feature.ImplDecl.pas), initialization/finalization (DRagLint.LSP.Feature.InlayHint.pas), initialization/finalization (DRagLint.LSP.Feature.Rename.pas), initialization/finalization (DRagLint.LSP.Feature.SemanticTokens.pas) (+3 more)</para>
+/// <para>Called from: DRagLint.LSP.Feature.CallHierarchy.initialization (DRagLint.LSP.Feature.CallHierarchy.pas), DRagLint.LSP.Feature.CodeLens.initialization (DRagLint.LSP.Feature.CodeLens.pas), DRagLint.LSP.Feature.DocumentHighlight.initialization (DRagLint.LSP.Feature.DocumentHighlight.pas), DRagLint.LSP.Feature.DocumentSymbol.initialization (DRagLint.LSP.Feature.DocumentSymbol.pas), DRagLint.LSP.Feature.ExecuteCommand.initialization (DRagLint.LSP.Feature.ExecuteCommand.pas) (+8 more)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure RegisterLspFeature(AClass: TLspFeatureClass);

@@ -15,7 +15,7 @@ type
   /// <summary>Iteration direction of a data-flow analysis.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Direction (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Direction (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TLiveness.Direction (DRagLint.Analysis.Flow.Lattices.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Direction (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Direction (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TLiveness.Direction (DRagLint.Analysis.Flow.Lattices.pas) (+3 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TFlowDir = (fdForward, fdBackward);
@@ -26,9 +26,9 @@ type
   /// must be commutative/associative and monotone; `Transfer` monotone. The
   /// solver terminates because the lattice has finite height.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)</para>
-  /// <para>Used in units: DRagLint.Analysis.DataFlow, DRagLint.Analysis.Flow.Lattices, DRagLint.Diagnostics.FlowChecks</para>
-  /// <para>Implemented by: TDefiniteAssignment, TEscape, TFreedState, TLiveness</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.DataFlow.pas), declaration (DRagLint.Analysis.Flow.Lattices.pas), declaration (DRagLint.Index.DataFlowFacts.pas), DRagLint.Analysis.DataFlow.TDataFlowSolver.Solve (DRagLint.Analysis.DataFlow.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.Analysis.DataFlow, DRagLint.Analysis.Flow.Lattices, DRagLint.Diagnostics.FlowChecks, DRagLint.Index.DataFlowFacts</para>
+  /// <para>Implemented by: TDefiniteAssignment, TEscape, TFreedState, TLiveness, TTaintReach</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   IDataFlowAnalysis<TValue> = interface
@@ -122,8 +122,8 @@ type
   /// <summary>Worklist fixpoint solver over a CFG.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Analysis.Liveness.LiveAtBoundary (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas)</para>
-  /// <para>Used in units: DRagLint.Analysis.Liveness, DRagLint.Diagnostics.FlowChecks</para>
+  /// <para>Used by: DRagLint.Analysis.Liveness.LiveAtBoundary (DRagLint.Analysis.Liveness.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check.CheckRoutine (DRagLint.Diagnostics.FlowChecks.pas), DRagLint.Index.DataFlowFacts.TCollector.RunCfg (DRagLint.Index.DataFlowFacts.pas)</para>
+  /// <para>Used in units: DRagLint.Analysis.Liveness, DRagLint.Diagnostics.FlowChecks, DRagLint.Index.DataFlowFacts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDataFlowSolver<TValue> = class
@@ -168,7 +168,7 @@ type
   /// PRINTING is gated on DRAGLINT_PROFILE. Same rule as FlowPhaseTicks: the
   /// measured code has to be the shipped code.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.DataFlow.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.DataFlow.pas), DRagLint.Analysis.DataFlow.DataFlowStats (DRagLint.Analysis.DataFlow.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.Analysis.DataFlow, DRagLint.CLI</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -227,11 +227,21 @@ type
 
 /// <summary>Snapshot of the solver counters accumulated since process start.</summary>
 /// <returns>A copy. The counters keep accumulating after the call.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DataFlowStats: TDataFlowStats;
 
 /// <summary>The per-analysis split of the same counters, heaviest first.</summary>
 /// <returns>One entry per IDataFlowAnalysis class that has run, sorted by
 /// SolveSeconds descending. Empty before the first solve.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function DataFlowLatticeStats: TArray<TDataFlowLatticeStat>;
 
 /// <summary>Fold one finished Solve into the process-wide counters.</summary>

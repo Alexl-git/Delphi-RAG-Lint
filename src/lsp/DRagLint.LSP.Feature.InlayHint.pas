@@ -25,7 +25,7 @@ type
   /// Stateless; registered from this unit's initialization. Lines are
   /// 0-based, columns UTF-16 code units. No inlayHint/resolve.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Feature.InlayHint.pas)</para>
+  /// <para>Used by: DRagLint.LSP.Feature.InlayHint.initialization (DRagLint.LSP.Feature.InlayHint.pas)</para>
   /// <para>Used in units: DRagLint.LSP.Feature.InlayHint</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

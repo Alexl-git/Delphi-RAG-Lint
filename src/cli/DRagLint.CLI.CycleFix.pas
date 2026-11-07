@@ -70,6 +70,11 @@ type
   end;
 
   /// <summary>The gate's stand-down exception, under the name this verb's handlers and doc-comments use.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.CycleFix.ApplyGroup (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RerunAfterReindex (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunAll (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.VerifyAfter (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.VerifyAfterCore (DRagLint.CLI.CycleFix.pas) (+1 more)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   ECycleFixCancelled = ECompileGateCancelled;
 
   /// <summary>The post-apply verification (VerifyAfter): the child re-index and the comparison.</summary>
@@ -105,9 +110,9 @@ type
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.CycleFix.PassBaselineGate (DRagLint.CLI.CycleFix.pas)</para>
-/// <para>Calls: DRagLint.CLI.CycleFix.RunMsBuild, IncludeTrailingPathDelimiter</para>
+/// <para>Calls: DRagLint.Refactor.CompileGate.RunMsBuild, IncludeTrailingPathDelimiter</para>
 /// <para>Returns: RunMsBuild(pOpts.Project, pOpts.Platform, IncludeTrailingPathDelimiter(pLogDir) + 'baseline.log', 'baseline build')</para>
-/// <seealso cref="DRagLint.CLI.CycleFix.RunMsBuild"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.RunMsBuild"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BaselineCompile(const pOpts: TCycleFixOptions; const pLogDir: string): TBuildOutcome;
@@ -132,14 +137,14 @@ function BaselineCompile(const pOpts: TCycleFixOptions; const pLogDir: string): 
 /// the second build decides.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.CycleFix.CompileAfter (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunRepairProbe (DRagLint.CLI.CycleFix.pas)</para>
-/// <para>Calls: ContainsText, Copy, DRagLint.CLI.CycleFix.AddToUses, DRagLint.CLI.CycleFix.ParseDccLine, DRagLint.CLI.CycleFix.TryRepair.AddRepair, DRagLint.CLI.CycleFix.TryRepair.FileOf, DRagLint.CLI.CycleFix.TryRepair.QueueUses, DRagLint.CLI.CycleFix.TryRepair.RepairCast, DRagLint.CLI.CycleFix.TryRepair.RepairPointer, DRagLint.CLI.CycleFix.TryRepair.Resolve (+12 more)</para>
+/// <para>Calls: ContainsText, Copy, DRagLint.CLI.CycleFix.TryRepair.AddRepair, DRagLint.CLI.CycleFix.TryRepair.FileOf, DRagLint.CLI.CycleFix.TryRepair.QueueUses, DRagLint.CLI.CycleFix.TryRepair.RepairCast, DRagLint.CLI.CycleFix.TryRepair.RepairPointer, DRagLint.CLI.CycleFix.TryRepair.Resolve, DRagLint.Refactor.CompileGate.AddToUses, DRagLint.Refactor.CompileGate.ParseDccLine (+12 more)</para>
 /// <para>Returns: Repairs.ToArray</para>
 /// <para>Complexity: 11 (cyclomatic, outer body), 146 lines (full implementation)</para>
-/// <seealso cref="DRagLint.CLI.CycleFix.AddToUses"/>
-/// <seealso cref="DRagLint.CLI.CycleFix.ParseDccLine"/>
 /// <seealso cref="DRagLint.CLI.CycleFix.TryRepair.AddRepair"/>
 /// <seealso cref="DRagLint.CLI.CycleFix.TryRepair.FileOf"/>
 /// <seealso cref="DRagLint.CLI.CycleFix.TryRepair.QueueUses"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.TryRepair.RepairCast"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.TryRepair.RepairPointer"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function TryRepair(const pView: TCyclePlanView; const pErrors: TArray<string>;
@@ -157,10 +162,9 @@ function TryRepair(const pView: TCyclePlanView; const pErrors: TArray<string>;
 /// cover every file TryRepair may touch.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.CycleFix.ApplyGroup (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.RunRepairProbe (DRagLint.CLI.CycleFix.pas)</para>
-/// <para>Calls: Default, DRagLint.CLI.CycleFix.RunMsBuild, DRagLint.CLI.CycleFix.TryRepair, ExpandFileName, ExtractFilePath, Format, IncludeTrailingPathDelimiter</para>
-/// <para>Returns: Default(TCompileAfterResult)</para>
-/// <seealso cref="DRagLint.CLI.CycleFix.RunMsBuild"/>
+/// <para>Calls: DRagLint.CLI.CycleFix.TryRepair, DRagLint.Refactor.CompileGate.CompileAfterWith, ExpandFileName, ExtractFilePath</para>
 /// <seealso cref="DRagLint.CLI.CycleFix.TryRepair"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.CompileAfterWith"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function CompileAfter(const pView: TCyclePlanView; const pProjectDir, pBuildProject, pPlatform,
@@ -174,7 +178,7 @@ function CompileAfter(const pView: TCyclePlanView; const pProjectDir, pBuildProj
 /// <param name="pTx">Receives what was written and what a rollback needs.</param>
 /// <returns>True when every file was written; False when anything failed, in which case the
 /// project is already rolled back (pTx.Error says why, pTx.RollbackFailure what could not be restored).</returns>
-/// <exception cref="EInOutError"><!-- drag-lint:auto exc -->the shadow holds no staged copy of %s (%s); the new unit's file already exists: %s</exception>
+/// <exception cref="EInOutError"><!-- drag-lint:auto exc -->the shadow holds no staged copy of %s (%s); via DRagLint.Refactor.CompileGate.WriteStaged: the new unit's file already exists: %s</exception>
 /// <remarks>
 /// Order: every touched file's original bytes are read into memory; unless pNoBackup each
 /// changed file is copied to its NextBackupName sibling and a recovery.txt block is appended
@@ -183,16 +187,10 @@ function CompileAfter(const pView: TCyclePlanView; const pProjectDir, pBuildProj
 /// written. Each write passes FailWriteForTests (DRAGLINT_TEST_FAIL_WRITE_AT).
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.CycleFix.ApplyGroup (DRagLint.CLI.CycleFix.pas)</para>
-/// <para>Calls: Default, DRagLint.CLI.CycleFix.BackUpChanged, DRagLint.CLI.CycleFix.DistinctPaths, DRagLint.CLI.CycleFix.MakeDirs, DRagLint.CLI.CycleFix.RollBack, DRagLint.CLI.CycleFix.SameBytes, DRagLint.CLI.CycleFix.WriteAll.StagedBytes, DRagLint.CLI.CycleFix.WriteAll.WriteOne, ExtractFilePath, FailWriteForTests, Format, FormatDateTime, IsUnderTemp, LowerCase, ShadowPathOf</para>
-/// <para>Returns: True; False</para>
-/// <para>Catches: Exception (swallowed)</para>
-/// <para>Mutates: pTx (out)</para>
+/// <para>Calls: DRagLint.CLI.CycleFix.ShadowPathOf, DRagLint.Refactor.CompileGate.WriteStaged, Format, FormatDateTime</para>
 /// <para>Touches: file system</para>
-/// <seealso cref="DRagLint.CLI.CycleFix.BackUpChanged"/>
-/// <seealso cref="DRagLint.CLI.CycleFix.DistinctPaths"/>
-/// <seealso cref="DRagLint.CLI.CycleFix.MakeDirs"/>
-/// <seealso cref="DRagLint.CLI.CycleFix.RollBack"/>
-/// <seealso cref="DRagLint.CLI.CycleFix.SameBytes"/>
+/// <seealso cref="DRagLint.CLI.CycleFix.ShadowPathOf"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.WriteStaged"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function WriteAll(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string; pNoBackup: Boolean;
@@ -245,9 +243,9 @@ function SameCyclesOutput(const pPredicted, pActual: string): Boolean;
 /// caller prints `TEST BREAK active` to stderr when it is not 0.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.CycleFix.AnnounceSeams (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.ApplyGroup (DRagLint.CLI.CycleFix.pas)</para>
-/// <para>Calls: DRagLint.CLI.CycleFix.IsUnderTemp, GetEnvironmentVariable, StrToIntDef</para>
+/// <para>Calls: DRagLint.Refactor.CompileGate.IsUnderTemp, GetEnvironmentVariable, StrToIntDef</para>
 /// <para>Returns: StrToIntDef(GetEnvironmentVariable('DRAGLINT_CYCLEFIX_BREAK'), 0); 0</para>
-/// <seealso cref="DRagLint.CLI.CycleFix.IsUnderTemp"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.IsUnderTemp"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BreakSeam(const pOpts: TCycleFixOptions): Integer;
@@ -295,9 +293,9 @@ function MechanisabilityGate(const pView: TCyclePlanView; const pOwn: TOwnRoots)
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.CycleFix.RunCycleFixGroups (DRagLint.CLI.CycleFix.pas)</para>
-/// <para>Calls: DRagLint.CLI.CycleFix.FreshScratchName</para>
+/// <para>Calls: DRagLint.Refactor.CompileGate.FreshScratchName</para>
 /// <para>Returns: GShadowPick</para>
-/// <seealso cref="DRagLint.CLI.CycleFix.FreshScratchName"/>
+/// <seealso cref="DRagLint.Refactor.CompileGate.FreshScratchName"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function DefaultShadowDir: string;

@@ -22,7 +22,7 @@ type
   /// Stateless; registered from this unit's initialization. Lines and
   /// characters are 0-based.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Feature.ExecuteCommand.pas)</para>
+  /// <para>Used by: DRagLint.LSP.Feature.ExecuteCommand.initialization (DRagLint.LSP.Feature.ExecuteCommand.pas)</para>
   /// <para>Used in units: DRagLint.LSP.Feature.ExecuteCommand</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -19,9 +19,16 @@ uses
 type
   /// <summary>Static facts about the file being linted that a tree-sitter query cannot see
   /// (index fact F1, ref_types; type ancestry), offered to the predicates of a .scm rule (O2).</summary>
-  /// <remarks>Optional everywhere: no oracle, an index older than 1.44 or an unknown answer means
+  /// <remarks>
+  /// Optional everywhere: no oracle, an index older than 1.44 or an unknown answer means
   /// the rule decides exactly as it did before. An answer may only ADD evidence; an unknown never
-  /// silences a rule. An implementation belongs to ONE file and one thread.</remarks>
+  /// silences a rule. An implementation belongs to ONE file and one thread.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Lint.QueryRules.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.QueryOracleForFile (DRagLint.CLI.pas), DRagLint.Diagnostics.ExprChecks.TExprChecker.Check (DRagLint.Diagnostics.ExprChecks.pas), DRagLint.Lint.Linter.EmitFieldByNameLoopFinding (DRagLint.Lint.Linter.pas) (+6 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Diagnostics.ExprChecks, DRagLint.Lint.Linter, DRagLint.Lint.QueryRules, DRagLint.LSP.Completion</para>
+  /// <para>Implemented by: TStoreTypeOracle</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   ITypeOracle = interface
     ['{6B1F5E0A-3C57-4B8E-9D52-1E0C7A44F2B9}']
     /// <summary>The static type and origin ref_types records for the reference at a position.</summary>
@@ -31,15 +38,36 @@ type
     /// <param name="ALeaf">Out: the type's leaf name.</param>
     /// <param name="AVia">Out: where the type came from: decl, member, result, ctor, cast or inline.</param>
     /// <returns>False with no table, no row or a conflicting row.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.QueryRules.DeclaredTypeMatches (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.QueryRules.EvalNotMetaclassReceiver (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.QueryRules.EvalOracleVia (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.QueryRules.ReceiverProvenOtherClass (DRagLint.Lint.QueryRules.pas)</para>
+    /// <seealso cref="DRagLint.Lint.QueryRules.ITypeOracle.ClassDescends"/>
+    /// <seealso cref="DRagLint.Lint.QueryRules.ITypeOracle.IsMetaclass"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function TypeAt(ALine, ACol: Integer; const AName: string; out ALeaf, AVia: string): Boolean;
     /// <summary>Whether a class is PROVEN to descend from an ancestor (index fact type_ancestors).</summary>
     /// <param name="AClassLeaf">The class name, leaf only.</param>
     /// <param name="AAncestorLeaf">The ancestor name, leaf only.</param>
     /// <returns>True only when the whole ancestry was followed and the ancestor is in it.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.QueryRules.EvalEnclosingDescends (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.QueryRules.EvalNotMetaclassReceiver (DRagLint.Lint.QueryRules.pas), DRagLint.Lint.QueryRules.ReceiverProvenOtherClass (DRagLint.Lint.QueryRules.pas)</para>
+    /// <seealso cref="DRagLint.Lint.QueryRules.ITypeOracle.IsMetaclass"/>
+    /// <seealso cref="DRagLint.Lint.QueryRules.ITypeOracle.TypeAt"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function ClassDescends(const AClassLeaf, AAncestorLeaf: string): Boolean;
     /// <summary>Whether a type name is a metaclass (`class of T`) in the project or the library index.</summary>
     /// <param name="ALeaf">The type's leaf name; case-insensitive.</param>
     /// <returns>True only on a classref symbol of that name, with no class of the same name in that index.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.Lint.QueryRules.EvalNotMetaclassReceiver (DRagLint.Lint.QueryRules.pas)</para>
+    /// <seealso cref="DRagLint.Lint.QueryRules.ITypeOracle.ClassDescends"/>
+    /// <seealso cref="DRagLint.Lint.QueryRules.ITypeOracle.TypeAt"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
     function IsMetaclass(const ALeaf: string): Boolean;
   end;
 
@@ -324,13 +352,14 @@ type
       /// <param name="ARootNode"><!-- drag-lint:auto type -->const TTSNode</param>
       /// <param name="ASource"><!-- drag-lint:auto type -->const TBytes</param>
       /// <param name="AFilePath"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AOracle">Optional (O2): static facts for #declared-type?, #oracle-via? and #enclosing-class-descends?. nil asks TQueryTypeOracleScope.Current; none = the rule decides as before.</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed:
       /// FoundList.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas) ?, DRagLint.Lint.Linter.TLinter.CheckFileImpl (DRagLint.Lint.Linter.pas)</para>
-      /// <para>Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.RuleProfileArmed, DRagLint.Lint.QueryRules.TDeclScopeCache.Create, DRagLint.Lint.QueryRules.TQueryRule.AttachFix, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee, DRagLint.Lint.QueryRules.TQueryRule.IsPrecededByExcludedText (+9 more)</para>
-      /// <para>Complexity: 16 (cyclomatic, outer body), 90 lines (full implementation)</para>
+      /// <para>Calls: Default, DRagLint.Lint.QueryRules.AllPredicatesPass, DRagLint.Lint.QueryRules.NoteRuleTicks, DRagLint.Lint.QueryRules.RuleProfileArmed, DRagLint.Lint.QueryRules.TDeclScopeCache.Create, DRagLint.Lint.QueryRules.TQueryRule.AttachFix, DRagLint.Lint.QueryRules.TQueryRule.HasRequiredAncestor, DRagLint.Lint.QueryRules.TQueryRule.InExcludedAncestor, DRagLint.Lint.QueryRules.TQueryRule.IsArgumentOfExcludedCallee, DRagLint.Lint.QueryRules.TQueryRule.IsPrecededByExcludedText (+10 more)</para>
+      /// <para>Complexity: 17 (cyclomatic, outer body), 92 lines (full implementation)</para>
       /// <para>Reads: FQuery, FWarnCapture, FId, FSeverity, FMessage, FFixes, FRuleId</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Lint.QueryRules.AllPredicatesPass"/>
@@ -340,7 +369,6 @@ type
       /// <seealso cref="DRagLint.Lint.QueryRules.TQueryRule.AttachFix"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      /// <param name="AOracle">Optional (O2): static facts for #declared-type?, #oracle-via? and #enclosing-class-descends?. nil asks TQueryTypeOracleScope.Current; none = the rule decides as before.</param>
       function Run(const ARootNode: TTSNode; const ASource: TBytes; const AFilePath: string; const AOracle: ITypeOracle = nil): TArray<TLintFinding>;
       /// <summary>A literal the FILE TEXT must contain for this rule's query to
       /// be capable of matching -- a cheap pre-filter the caller may use to skip
@@ -457,19 +485,52 @@ function QueryRuleTimings: TArray<TQueryRuleTiming>;
 type
 
   /// <summary>Makes an oracle the .scm rules of the current thread consult until it is freed.</summary>
-  /// <remarks>Linter.LintFile runs the rules without a store, so the verbs that own one wrap the
+  /// <remarks>
+  /// Linter.LintFile runs the rules without a store, so the verbs that own one wrap the
   /// call in a scope instead of widening that signature. Scopes nest (the previous one is
-  /// restored). Create and Free on the SAME thread; an explicit AOracle on TQueryRule.Run wins.</remarks>
+  /// restored). Create and Free on the SAME thread; an explicit AOracle on TQueryRule.Run wins.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.Lint.Linter.EmitFieldByNameLoopFinding (DRagLint.Lint.Linter.pas), DRagLint.Lint.QueryRules.TQueryRule.Run (DRagLint.Lint.QueryRules.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas) (+1 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.Linter, DRagLint.Lint.QueryRules, DRagLint.LSP.Completion</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TQueryTypeOracleScope = class
     strict private
       FOracle  : ITypeOracle;
       FPrevious: TQueryTypeOracleScope;
     public
       /// <param name="AOracle">May be nil: the scope then answers "no oracle" to the rules.</param>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
+      /// <para>constructor</para>
+      /// <para>Writes: FOracle, FPrevious</para>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryTypeOracleScope.Current"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryTypeOracleScope.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       constructor Create(const AOracle: ITypeOracle);
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Reads: FPrevious</para>
+      /// <para>Directives: override</para>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryTypeOracleScope.Create"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryTypeOracleScope.Current"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       destructor Destroy; override;
       /// <summary>The oracle of the innermost live scope on this thread.</summary>
       /// <returns>nil when no scope is live.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Lint.Linter.EmitFieldByNameLoopFinding (DRagLint.Lint.Linter.pas), DRagLint.Lint.QueryRules.TQueryRule.Run (DRagLint.Lint.QueryRules.pas)</para>
+      /// <para>Returns: if GOracleScope = nil then nil</para>
+      /// <para>Effect-free (proven)</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryTypeOracleScope.Create"/>
+      /// <seealso cref="DRagLint.Lint.QueryRules.TQueryTypeOracleScope.Destroy"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Current: ITypeOracle; static;
   end;
 
@@ -479,16 +540,35 @@ type
 /// <param name="ALibStore">The platform library index, or nil. Without it ClassDescends cannot
 /// follow an ancestor outside the project and answers False.</param>
 /// <returns>An oracle, or nil when there is nothing to ask.</returns>
-/// <remarks>Reads the file's ref_types rows once, on the first question. No ref_types table
-/// (an index older than 1.44) = TypeAt answers False for ever.</remarks>
+/// <remarks>
+/// Reads the file's ref_types rows once, on the first question. No ref_types table
+/// (an index older than 1.44) = TypeAt answers False for ever.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoLintAll (DRagLint.CLI.pas) ?, DRagLint.CLI.QueryOracleForFile (DRagLint.CLI.pas) ?, DRagLint.Diagnostics.ExprChecks.TExprChecker.Check.CheckDoubleLookup (DRagLint.Diagnostics.ExprChecks.pas) ?, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
+/// <para>Calls: DRagLint.Lint.QueryRules.TStoreTypeOracle.Create</para>
+/// <para>Returns: TStoreTypeOracle.Create(AStore, AFileId, ALibStore, nil)</para>
+/// <para>Overload 1 of 2</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Lint.QueryRules.TStoreTypeOracle.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore = nil): ITypeOracle; overload;
 /// <summary>CreateStoreTypeOracle with a library opened only if a rule asks about an ancestry.</summary>
 /// <param name="AStore">See the other overload.</param>
 /// <param name="AFileId">See the other overload.</param>
 /// <param name="ALibOpener">Called at most once, on the first ClassDescends; may return nil.</param>
 /// <returns>An oracle, or nil when there is nothing to ask.</returns>
-/// <remarks>For `lint &lt;file&gt;`, whose .scm pass runs before the library store is open: most files
-/// never ask, and resolving the library costs a manifest load.</remarks>
+/// <remarks>
+/// For `lint &lt;file&gt;`, whose .scm pass runs before the library store is open: most files
+/// never ask, and resolving the library costs a manifest load.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Calls: DRagLint.Lint.QueryRules.TStoreTypeOracle.Create</para>
+/// <para>Returns: TStoreTypeOracle.Create(AStore, AFileId, nil, ALibOpener)</para>
+/// <para>Overload 2 of 2</para>
+/// <para>Directives: overload</para>
+/// <seealso cref="DRagLint.Lint.QueryRules.TStoreTypeOracle.Create"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64; const ALibOpener: TFunc<ISymbolStore>): ITypeOracle; overload;
 /// <summary>Whether the index PROVES a rule's receiver is some other class (1.45 lane lj, row 10).</summary>
 /// <param name="AOracle">May be nil: nothing is proven.</param>
@@ -497,6 +577,19 @@ function CreateStoreTypeOracle(const AStore: ISymbolStore; AFileId: Int64; const
 /// <param name="ARoots">Leaf names the rule is about (TDataSet, TDictionary, ...); a receiver that is one of them or descends from one is kept.</param>
 /// <returns>True only when ref_types gives a leaf type whose whole ancestry is known (it reaches TObject)
 /// and neither it nor an ancestor is in ARoots. No table, no row, an interface or a half-known ancestry = False.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Diagnostics.ExprChecks.TExprChecker.Check.CheckDoubleLookup (DRagLint.Diagnostics.ExprChecks.pas), DRagLint.Lint.Linter.EmitFieldByNameLoopFinding (DRagLint.Lint.Linter.pas)</para>
+/// <para>Calls: Copy, DRagLint.Lint.QueryRules.ITypeOracle.ClassDescends, DRagLint.Lint.QueryRules.ITypeOracle.TypeAt, DRagLint.Lint.QueryRules.NodeText, Integer, Pos, SameText, TreeSitter.TTSNodeHelper.ChildByField/1, TreeSitter.TTSNodeHelper.IsNull, TreeSitter.TTSNodeHelper.NodeType, TreeSitter.TTSNodeHelper.StartPoint</para>
+/// <para>Returns: False; AOracle.ClassDescends(Leaf, 'TObject')</para>
+/// <para>Complexity: 10 (cyclomatic, outer body), 19 lines (full implementation)</para>
+/// <seealso cref="DRagLint.Lint.QueryRules.ITypeOracle.ClassDescends"/>
+/// <seealso cref="DRagLint.Lint.QueryRules.ITypeOracle.TypeAt"/>
+/// <seealso cref="DRagLint.Lint.QueryRules.NodeText"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.ChildByField"/>
+/// <seealso cref="TreeSitter.TTSNodeHelper.IsNull"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function ReceiverProvenOtherClass(const AOracle: ITypeOracle; const ARecv: TTSNode; const ASource: TBytes; const ARoots: array of string): Boolean;
 /// <summary>The declared type of AName as seen from byte offset AByte of a
 /// parsed file -- the same scope walk #declared-type? makes.</summary>

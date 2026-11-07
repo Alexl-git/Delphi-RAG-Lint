@@ -31,7 +31,7 @@ type
   /// <para>Stateless; registered from this unit's initialization. Columns are
   /// UTF-16 code units, lines 0-based.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Feature.SemanticTokens.pas)</para>
+  /// <para>Used by: DRagLint.LSP.Feature.SemanticTokens.initialization (DRagLint.LSP.Feature.SemanticTokens.pas)</para>
   /// <para>Used in units: DRagLint.LSP.Feature.SemanticTokens</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

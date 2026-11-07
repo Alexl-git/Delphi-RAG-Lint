@@ -197,10 +197,10 @@ type
       /// run at the default target (37) publishes exactly what it did before.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/3 (DRagLint.LSP.Completion.pas), DRagLint.LSP.Server.TLSPServer.PublishDiagnostics (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware, DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat, DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds (+18 more)</para>
+      /// <para>Calls: DRagLint.Core.Interfaces.ISymbolStore.FindCompilerFindingsForFile, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckSyntaxErrors, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware, DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat, DRagLint.Diagnostics.CloneChecks.TCloneChecker.Check, DRagLint.Lint.Config.TLintConfig.ApplySeverity, DRagLint.Lint.Config.TLintConfig.Load, DRagLint.Lint.Linter.TLinter.DefaultDisabledRuleIds (+20 more)</para>
       /// <para>Returns: TJSONArray.Create</para>
       /// <para>Overload 2 of 2</para>
-      /// <para>Complexity: 30 (cyclomatic, outer body), 283 lines (full implementation)</para>
+      /// <para>Complexity: 31 (cyclomatic, outer body), 291 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: overload</para>

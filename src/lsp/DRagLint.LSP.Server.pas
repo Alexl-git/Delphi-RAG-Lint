@@ -492,6 +492,7 @@ type
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.DbSetFor (DRagLint.LSP.Server.pas)</para>
       /// <para>Calls: Default, DRagLint.Project.ContextFile.TryLoadContextDefaults</para>
       /// <para>Reads: FDefaultsRead, FDefaults   Writes: FDefaultsRead, FDefaults</para>
+      /// <para>Owns returned: borrowed</para>
       /// <seealso cref="DRagLint.Project.ContextFile.TryLoadContextDefaults"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>

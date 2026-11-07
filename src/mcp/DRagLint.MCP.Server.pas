@@ -133,8 +133,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.HandleToolsCall (DRagLint.MCP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Context.Bundler.TContextBundler.Build, DRagLint.Context.Bundler.TContextBundler.RenderJson, DRagLint.Core.Interfaces.ISymbolStore.FindByDocTag, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolDoc (+40 more)</para>
-      /// <para>Complexity: 108 (cyclomatic, outer body), 502 lines (full implementation)</para>
+      /// <para>Calls: Default, DRagLint.Context.Bundler.TContextBundler.Build, DRagLint.Context.Bundler.TContextBundler.RenderJson, DRagLint.Core.Interfaces.ISymbolStore.FindByDocTag, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByQualifiedName, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsFuzzy, DRagLint.Core.Interfaces.ISymbolStore.FindTransitiveCallers, DRagLint.Core.Interfaces.ISymbolStore.FindUndocumented, DRagLint.Core.Interfaces.ISymbolStore.GetClassSurface (+47 more)</para>
+      /// <para>Complexity: 115 (cyclomatic, outer body), 529 lines (full implementation)</para>
       /// <para>Reads: FDbPaths, FStore, FLinter, FCallNote   Writes: FCallNote</para>
       /// <para>Catches: EImplementorsTarget (swallowed)</para>
       /// <para>Touches: file system</para>
@@ -319,6 +319,7 @@ type
       /// <param name="AQName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
       /// <returns><!-- drag-lint:auto type -->string</returns>
+      /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.DocFormatToStr: Unknown symbol kind: "%s"</exception>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.MCP.Server.TMCPServer.DispatchToolsCall (DRagLint.MCP.Server.pas)</para>

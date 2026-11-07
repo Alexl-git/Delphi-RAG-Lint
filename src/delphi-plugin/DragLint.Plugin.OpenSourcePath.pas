@@ -36,7 +36,7 @@ interface
 /// mapped drive letter can still be a network share the user has mapped; a
 /// path cannot name a NEW server.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Core.DragLintUri.CheckTarget (DRagLint.Core.DragLintUri.pas), [dclDragLintWizard]DragLint.Plugin.OpenSourceServer.DoOpenInIDE (DragLint.Plugin.OpenSourceServer.pas)</para>
+/// <para>Called from: [drag-lint]DRagLint.Core.DragLintUri.CheckTarget (DRagLint.Core.DragLintUri.pas), [dclDragLintWizard]DragLint.Plugin.OpenSourceServer.DoOpenInIDE (DragLint.Plugin.OpenSourceServer.pas)</para>
 /// <para>Calls: DragLint.Plugin.OpenSourcePath.CheckDrive, DragLint.Plugin.OpenSourcePath.CheckExtension, DragLint.Plugin.OpenSourcePath.CheckLengthAndChars, DragLint.Plugin.OpenSourcePath.CheckSegments</para>
 /// <para>Returns: AReason = ''</para>
 /// <para>Mutates: AReason (out)</para>

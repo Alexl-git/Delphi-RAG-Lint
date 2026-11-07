@@ -19,7 +19,7 @@ type
   /// Stateless; registered from this unit's initialization. Lines and
   /// columns on the wire are 0-based; the store's are 1-based.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Feature.DocumentSymbol.pas)</para>
+  /// <para>Used by: DRagLint.LSP.Feature.DocumentSymbol.initialization (DRagLint.LSP.Feature.DocumentSymbol.pas)</para>
   /// <para>Used in units: DRagLint.LSP.Feature.DocumentSymbol</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -67,9 +67,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ApplyEntryDefs, ApplyWithRecordEntity, AssignedUnderSameGuard, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectGuardTokens, CollectInterfaceDerefs, CollectReadsAndCallDefs, CollectSameUnitClassKinds (+53 more)</para>
+    /// <para>Calls: ApplyEntryDefs, ApplyWithRecordEntity, AssignedUnderSameGuard, AssignmentBaseIndex, AssignmentTargetIndex, CollectAndOrLeftDefs, CollectGuardTokens, CollectInterfaceDerefs, CollectReadsAndCallDefs, CollectSameUnitClassKinds (+54 more)</para>
     /// <para>Returns: nil; True; not ParamClearlyNonOwning(DP, PName, CPF.Src); False; CanBeCallTarget(MemSym.Kind); pmUnknown</para>
-    /// <para>Complexity: 62 (cyclomatic, outer body), 1245 lines (full implementation)</para>
+    /// <para>Complexity: 62 (cyclomatic, outer body), 1253 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Analysis.Cfg.CfgFindProcs"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>
