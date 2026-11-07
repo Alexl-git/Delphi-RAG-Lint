@@ -126,6 +126,7 @@ uses
   DRagLint.Lint.UnusedEnumValue in '..\lint\DRagLint.Lint.UnusedEnumValue.pas',
   DRagLint.Lint.UnusedGlobal in '..\lint\DRagLint.Lint.UnusedGlobal.pas',
   DRagLint.Lint.DataModuleFormGlobal in '..\lint\DRagLint.Lint.DataModuleFormGlobal.pas',
+  DRagLint.Lint.ParamTooWide in '..\lint\DRagLint.Lint.ParamTooWide.pas',
   DRagLint.Lint.InitSections in '..\lint\DRagLint.Lint.InitSections.pas',
   DRagLint.Lint.RefTypeRules in '..\lint\DRagLint.Lint.RefTypeRules.pas',
   DRagLint.Lint.SharedScope in '..\lint\DRagLint.Lint.SharedScope.pas',

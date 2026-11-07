@@ -249,6 +249,7 @@ uses
   DRagLint.Lint.UnusedGlobal, { CollectUnusedGlobal -- 1.40 lane unusedg } // dl:unit DRagLint.Lint.UnusedGlobal accepted -- UNUSED_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectUnusedGlobal, the collector this unit calls
   DRagLint.Lint.RefTypeRules, { CollectRefTypeRules -- 1.44 lane rulesf1 } // dl:unit DRagLint.Lint.RefTypeRules accepted -- the rule-id constants the dispatch names travel with CollectRefTypeRules, the collector this unit calls
   DRagLint.Lint.DataModuleFormGlobal, { CollectDataModuleFormGlobal -- 1.42 lane ruleset } // dl:unit DRagLint.Lint.DataModuleFormGlobal accepted -- DATAMODULE_FORM_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectDataModuleFormGlobal, the collector this unit calls
+  DRagLint.Lint.ParamTooWide, { CollectParamTooWide -- 1.46 lane t4 } // dl:unit DRagLint.Lint.ParamTooWide accepted -- PARAM_TOO_WIDE_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectParamTooWide, the collector this unit calls
   DRagLint.Lint.InitSections, { the F2 section rules -- 1.44 lane rulesf2 } // dl:unit DRagLint.Lint.InitSections accepted -- the *_RULE ids are what the dispatch (WantRule / OptedIn) names; they travel with the collectors this unit calls
   DRagLint.Lint.ReadNeverAssigned, { CollectReadNeverAssigned -- owner request #5b } // dl:unit DRagLint.Lint.ReadNeverAssigned accepted -- READ_NEVER_ASSIGNED_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectReadNeverAssigned, the collector this unit calls
   DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
@@ -4778,6 +4779,9 @@ begin
       for var Is_ in CollectGlobalNeverFreed(AStore, ALibraryStore) do Findings.Add(Is_);
     if WantRule(DATAMODULE_FORM_GLOBAL_RULE) and OptedIn(DATAMODULE_FORM_GLOBAL_RULE) then
       for var Dm in CollectDataModuleFormGlobal(AStore, ALibraryStore) do Findings.Add(Dm);
+    { parameter-type-too-wide (1.46 lane t4): OFF; the narrow-param plan's fixes -- a routine scan plus a file read per routine, which a post-hoc filter would hide while still charging for it. }
+    if WantRule(PARAM_TOO_WIDE_RULE) and OptedIn(PARAM_TOO_WIDE_RULE) then
+      for var Pw in CollectParamTooWide(AStore, ALibraryStore) do Findings.Add(Pw);
     { The rules on index fact F1 (1.44 lane rulesf1): OptedIn-gated -- one refs read and one parse per file.
       An index older than 1.44 answers nothing (see the unit). }
     var RefTypeWanted: TArray<string>:= nil;
