@@ -57,6 +57,11 @@ type
     FilePath: string            ;
     Line    : Integer           ;
     Edits   : TArray<TTextEdit> ;
+    /// <summary>E-DOC-REFUSE: non-empty when the declaration was left UNTOUCHED
+    /// (Action = daUnchanged, no edits) because rewriting its block would have
+    /// deleted `Calls:` entries the chosen index cannot see. The text names the
+    /// declaration, the lost entries and the remedy.</summary>
+    Refused : string            ;
   end;
 
   /// <remarks>
@@ -1399,6 +1404,22 @@ begin
   begin
     Result.Action:= daUnchanged;
     Exit;
+  end;
+  { E-DOC-REFUSE: the outbound half of the guard above. A `Calls:` entry naming a
+    unit this index does not hold cannot be re-derived from it, so the regeneration
+    would delete a true fact. REFUSE the declaration and say why; never delete. }
+  if Existing.HasContent then
+  begin
+    var Lost: string:= TSharedFacts.CallsLostUnseen(AStore,
+      TSharedFacts.StoredBlockBody(Existing.Remarks), TSharedFacts.StoredBlockBody(Merged));
+    if Lost <> '' then
+    begin
+      Result.Action := daUnchanged;
+      Result.Refused:= Format('REFUSED %s (%s:%d): the stored block names %s, which the chosen --db cannot see; ' +
+        'writing it would delete the fact. Document with a --db that indexes that unit, or edit the block by hand.',
+        [ASym.QualifiedName, ExtractFileName(Path), ASym.StartLine, Lost]);
+      Exit;
+    end;
   end;
   if Trim(Merged) = '' then
   begin

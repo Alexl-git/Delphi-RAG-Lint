@@ -165,6 +165,10 @@ type
     /// property accessors (not counted in DeclCount -- see IsTrivialAccessor).
     /// Always 0 when AOptions.IncludeAccessors was True for the run.</summary>
     AccessorsSkipped: Integer;
+    /// <summary>E-DOC-REFUSE: declarations left untouched because rewriting their
+    /// block would have deleted facts the chosen index cannot see (each one is
+    /// explained on stderr as it happens).</summary>
+    Refused: Integer;
     /// <summary>v(ADP3 T2): --strip. Count of marked tags dropped
     /// (TDocStripper.TagsRemoved, summed across every file the batch
     /// touched). 0 unless AOptions.Strip was True for this run.</summary>
@@ -426,6 +430,11 @@ begin
       Res := TDocumenter.BuildForSymbol(AStore, Sym, AOptions.Handles, AOptions.IncludeSeeAlso,
         AOptions.IncludeSince, AOptions.BaseDir, AOptions.ExtraStores, AOptions.MaxReturnCases,
         AOptions.MaxCallers, AOptions.ComplexityMin);
+      if Res.Refused <> '' then
+      begin
+        Inc(Result.Refused);
+        Writeln(ErrOutput, 'doc: ' + Res.Refused);
+      end;
       if Length(Res.Edits) = 0 then Continue; // daUnchanged / daNotFound: nothing to do
 
       // Facts-only filter (Stubs=False, the default): keep the edit when the
@@ -509,6 +518,7 @@ begin
       Inc(Result.DeclCount, Sub.DeclCount);
       Inc(Result.DocCount , Sub.DocCount );
       Inc(Result.AccessorsSkipped, Sub.AccessorsSkipped); // ADP1 T2
+      Inc(Result.Refused, Sub.Refused); // E-DOC-REFUSE
       Inc(Result.TagsRemoved  , Sub.TagsRemoved  ); // v(ADP3 T2): --strip
       Inc(Result.BlocksRemoved, Sub.BlocksRemoved); // v(ADP3 T2): --strip
       for E in Sub.Edits do Collected.Add(E);
