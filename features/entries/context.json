@@ -48,7 +48,7 @@
         }
       ],
       "helpOrder": 39,
-      "help": ["  drag-lint context            --task \"verb qname\" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a \"## Wiki\" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)", "                               [--max-callers N] [--context N] [--no-docs] [--max-body-tokens N]", "                               a whole TYPE target keeps its method bodies up to --max-body-tokens estimated tokens (default 20000; 0 = uncapped): a FOCUS method named after the type (\"modify TFoo Bar\") first, then the most-called-in-type, then the smallest; the rest are listed as header + line range under \"## Omitted bodies\" (json body_cap, bodies_omitted, omitted_bodies). A member target is never cut (CTX-TYPECAP). When the cap engages, the class surface also drops the member docs of the omitted bodies; a kept body keeps its docs (CTX-SURFACE-DOCS)", "                               --library-db also counts, in the Library calls line, the calls whose receiver type the library binds now (json library_calls.via stored|oracle).", "                               a method reached only THROUGH an interface also gets \"## Callers via interface dispatch (IFoo.Bar): N site(s)\" sections, after the direct callers; --format json gains \"via_dispatch\" [{via,kind,sites}] (present only when non-empty) (RB-5)"]
+      "help": ["  drag-lint context            --task \"verb qname\" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] [--library-db <library.sqlite>]   (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a \"## Wiki\" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)", "                               [--max-callers N] [--context N] [--no-docs] [--max-body-tokens N]", "                               a whole TYPE target keeps its method bodies up to --max-body-tokens estimated tokens (default 20000; 0 = uncapped): a FOCUS method named after the type (\"modify TFoo Bar\") first, then the most-called-in-type, then the smallest; the rest are listed as header + line range under \"## Omitted bodies\" (json body_cap, bodies_omitted, omitted_bodies). A member target is never cut (CTX-TYPECAP). When the cap engages, the class surface also drops the member docs of the omitted bodies; a kept body keeps its docs (CTX-SURFACE-DOCS)", "                               the Library calls line also counts the calls whose receiver type the library binds now (json library_calls.via stored|oracle); the library is --library-db or a second --db, else the manifest's for the DB's platform; --library-db none turns that off.", "                               a method reached only THROUGH an interface also gets \"## Callers via interface dispatch (IFoo.Bar): N site(s)\" sections, after the direct callers; --format json gains \"via_dispatch\" [{via,kind,sites}] (present only when non-empty) (RB-5)"]
     }
   ],
   "audience": "both",
@@ -60,7 +60,7 @@
     },
     {
       "ask": "How many library routines does this routine call, when the project index has no stored library links?",
-      "command": "drag-lint context --task \"modify <QName>\" --db <db> --library-db <library.sqlite>"
+      "command": "drag-lint context --task \"modify <QName>\" --db <db>"
     },
     {
       "ask": "Can I get the bundle without doc comments?",
@@ -78,9 +78,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-11-04",
+    "date": "2026-11-07",
     "by": "ENGINE",
-    "build": "1.42.0-alpha",
+    "build": "1.45.0-alpha",
     "surfaceHash": "57103fb1a1a0c210d8412084e7c3f8338c13bb87f58b19dbb88024f11aadf55d"
   }
 }

@@ -3,7 +3,8 @@
   `context --task "modify <routine>"` prints ONE line `Library calls: N (top: a, b, c)`
   when the routine's body holds N calls whose refs.external_target is set (a project
   indexed with --library-db), and `--format json` carries `library_calls`
-  {count, top}. A project indexed WITHOUT a library has no external_target, so the
+  {count, top}. A project indexed WITHOUT a library has no external_target and, when no
+  library is named or found in the manifest (E-CONTEXT-LIBCALLS, last block), the
   line is ABSENT (and json has no library_calls key). Positive control: the same
   routine on the library DB shows the line only where it must (count > 0).
 
@@ -75,6 +76,45 @@ try {
     $jn = (& $exePath context --task 'modify Go' --db $app --library-db none --format json 2>&1) -join "`n"
     $on = $jn.Substring($jn.IndexOf('{')) | ConvertFrom-Json
     Check 'R2 --library-db none: no oracle, no library_calls key' ($null -eq $on.PSObject.Properties['library_calls'])
+    # --- E-CONTEXT-LIBCALLS (1.46): the oracle count is the DEFAULT. With no --library-db the
+    #     library comes from the engine's manifest (its library section, for the platform the
+    #     project DB was indexed for); --library-db none is the opt-out. An engine COPY with its
+    #     own manifest, so the answer never depends on this machine's real libraries.
+    $engDir = Join-Path $WorkDir 'engine'; New-Item -ItemType Directory -Path $engDir -Force | Out-Null
+    $srcDir = Split-Path $exePath
+    Copy-Item $exePath $engDir -Force
+    Copy-Item (Join-Path $srcDir '*.dll') $engDir -Force
+    $eng = Join-Path $engDir (Split-Path $exePath -Leaf)
+    Copy-Item $libDb (Join-Path $WorkDir 'lib-Win64.sqlite') -Force
+    function Set-Manifest([string]$Sections) {
+      $json = '{"settings":{"defaultPlatform":"Win64"},"indexes":{"outDir":"' + ($WorkDir -replace '\\','\\') + '","sections":[' + $Sections + ']}}'
+      [IO.File]::WriteAllText((Join-Path $engDir 'drag-lint.json'), $json)
+    }
+    function CtxJson([string[]]$Extra) {
+      $s = (& $eng context --task 'modify Go' --db $app --format json @Extra 2>$null) -join "`n"
+      return $s.Substring($s.IndexOf('{')) | ConvertFrom-Json
+    }
+    Set-Manifest '{"name":"Library","db":"lib-{platform}.sqlite","source":"registry-libraries","platforms":["Win32","Win64"]}'
+    $d1 = CtxJson @('--platform','Win64')
+    Check 'DEFAULT: no --library-db, the manifest library binds Go' ($d1.library_calls.count -eq $nOr) "got $($d1.library_calls.count), want $nOr"
+    Check 'DEFAULT: via is oracle' ($d1.library_calls.via -eq 'oracle') "got $($d1.library_calls.via)"
+    $dm = (& $eng context --task 'modify Go' --db $app --platform Win64 2>&1) -join "`n"
+    Check 'DEFAULT: the markdown line is there' ($dm -match "(?m)^Library calls: $nOr \(top: [^)]+\)\s*$")
+    $d2 = CtxJson @('--platform','Win64','--library-db','none')
+    Check 'OPT-OUT: --library-db none keeps the stored-only answer' ($null -eq $d2.PSObject.Properties['library_calls'])
+    $d3 = CtxJson @('--platform','Win32')
+    Check 'PLATFORM: no library DB for Win32, no key, no error' ($null -eq $d3.PSObject.Properties['library_calls'])
+    Check 'PLATFORM CONTROL: that bundle still resolved Go' ($d3.resolved -ne $false -and "$($d3.qname)$($d3.q_name)$($d3.target)" -match 'Go')
+    Copy-Item $libDb (Join-Path $WorkDir 'fixed.sqlite') -Force
+    Set-Manifest '{"name":"Library","db":"fixed.sqlite","source":"registry-libraries","platforms":["Win32"]}'
+    $d4 = CtxJson @('--platform','Win64')
+    Check 'PLATFORM: a section that does not target the platform is not opened' ($null -eq $d4.PSObject.Properties['library_calls'])
+    Set-Manifest '{"name":"Lib-ish","db":"lib-Win64.sqlite","include":["C:\\TEMP\\no-such-folder"]}'
+    $d5 = CtxJson @('--platform','Win64')
+    Check 'KIND: a project section named like a library is not opened' ($null -eq $d5.PSObject.Properties['library_calls'])
+    Set-Manifest '{"name":"Library","db":"app.sqlite","source":"registry-libraries","platforms":["Win64"]}'
+    $d6 = CtxJson @('--platform','Win64')
+    Check 'SELF: the project DB is never its own library' ($null -eq $d6.PSObject.Properties['library_calls'])
   } finally { Pop-Location }
 } finally { if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) } }
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
