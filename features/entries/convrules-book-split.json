@@ -1,0 +1,28 @@
+{
+  "id": "convrules-book-split",
+  "title": "BDE and Data.DB rule books",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.36.0-alpha",
+  "summary": "The BDE-to-FireDAC conversion rules are two books (BDE, Data.DB) run in that order; the Convert tab warns on the wrong order",
+  "intro": "Convert BDE components in two books, BDE first.",
+  "wikiPage": "convrules-book-split",
+  "surfaces": [
+    {
+      "type": "script",
+      "path": "tests/autotest/run_convert_book_split.ps1"
+    },
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Convert tab > rule book list"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-06",
+    "by": "alexanderl",
+    "build": "1.45.0-alpha"
+  }
+}

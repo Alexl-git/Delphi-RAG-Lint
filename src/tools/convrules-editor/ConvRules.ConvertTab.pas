@@ -1772,6 +1772,29 @@ begin
       begin
         Result:= ReadBookText(APath);
       end);
+  // C-PRECHECK-UNAPPLIED: .dfm components whose class has a rule in a book this run does not apply.
+  // Read from the .dfm files themselves (they are often not in the index); a warning, never a refusal.
+  begin
+    var LApplied: TArray<string>:= nil;
+    var LOthers : TArray<string>:= nil;
+    var LDfmNames: TArray<string>:= nil;
+    var LDfmTexts: TArray<string>:= nil;
+    for var LEntry: TBookEntry in FEntries do
+      if TArray.IndexOf<string>(Pre.Runnable, LEntry.Path) >= 0 then
+        LApplied:= LApplied + [ReadBookText(LEntry.Path)]
+      else
+        LOthers := LOthers + [ReadBookText(LEntry.Path)];
+    for var LUnit: string in Units do
+    begin
+      var LDfm: string:= ChangeFileExt(LUnit, '.dfm');
+      if TFile.Exists(LDfm) then
+      begin
+        LDfmNames:= LDfmNames + [ExtractFileName(LDfm)];
+        LDfmTexts:= LDfmTexts + [TFile.ReadAllText(LDfm, TEncoding.ANSI)];
+      end;
+    end;
+    FNotes:= FNotes + UnappliedClassNotes(LApplied, LOthers, LDfmNames, LDfmTexts);
+  end;
   if FProbeNote <> '' then
     FNotes:= [FProbeNote] + FNotes; // R2: the real cause, before any "engine support pending" note
   for var LNote: string in FNotes do

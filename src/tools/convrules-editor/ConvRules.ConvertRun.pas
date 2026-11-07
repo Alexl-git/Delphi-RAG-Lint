@@ -383,6 +383,19 @@ type
 /// <remarks>Matched on the file name, case-insensitive. A warning only (Preflight Notes): the run is
 /// not refused, since a user may deliberately run Book-2 alone or in the order they chose.</remarks>
 function BookOrderNote(const ARunnable: TArray<string>): string;
+/// <summary>C-PRECHECK-UNAPPLIED: the notes for .dfm components whose class has a conversion rule that
+/// this run will not apply.</summary>
+/// <param name="AAppliedBooks">Rule text of every book that WILL run (Preflight.Runnable).</param>
+/// <param name="AOtherBooks">Rule text of every other listed book (unchecked or skipped).</param>
+/// <param name="ADfmNames">Display names of the source units' .dfm files, parallel to ADfmTexts.</param>
+/// <param name="ADfmTexts">The .dfm texts (text format); an unreadable file is passed as ''.</param>
+/// <returns>One note per class, e.g. 'TTable: 3 components in 2 .dfm files have a rule in a rule book that
+/// this run does not apply (88 in all)'; empty when every ruled class is applied or no .dfm holds one.</returns>
+/// <remarks>Owner ruling 2026-11-04: a converter pre-check, not a lint rule, because the .dfm files are read
+/// directly (they are often not in the index). A class whose From type is in an applied book is never
+/// reported; the note is a warning only and never refuses the run. Components are the `object`, `inherited`
+/// and `inline` lines; the class is matched by its bare name, case-insensitive.</remarks>
+function UnappliedClassNotes(const AAppliedBooks, AOtherBooks, ADfmNames, ADfmTexts: TArray<string>): TArray<string>;
 /// <summary>The backup paths for ONE unit's files, sharing one number: N is one
 /// above the highest existing .BCK&lt;N&gt; over ALL of AFiles, so a unit's .pas
 /// and .dfm restore points pair up by number (X.pas.BCK1 + X.dfm.BCK3 -> both
@@ -1186,6 +1199,104 @@ begin
       LDataDb:= LIdx;
   if (LBde >= 0) and (LDataDb >= 0) and (LDataDb < LBde) then
     Result:= DATADB_BOOK + ': listed before ' + BDE_BOOK + ' -- the BDE book must convert first; move it below the BDE book';
+end;
+// The distinct bare From types of a book's #convert headers, lower-cased.
+function BookFromSet(const ABookText: string; ASet: TDictionary<string, Boolean>): Boolean;
+var
+  LBook: TRuleBook;
+  LNode: TRuleNode;
+  LFrom: string;
+begin
+  Result:= False;
+  LBook:= TRuleBook.Create;
+  try
+    for var LLine: string in ABookText.Split([#10]) do
+    begin
+      LNode:= LBook.ParseLine(LLine.TrimRight([#13]));
+      try
+        if LNode.Kind = rnkConvert then
+        begin
+          LFrom:= Trim(LNode.FromType);
+          if LFrom.Contains('.') then
+            LFrom:= LFrom.Substring(LFrom.LastIndexOf('.') + 1);
+          if LFrom <> '' then
+          begin
+            ASet.AddOrSetValue(LowerCase(LFrom), True);
+            Result:= True;
+          end;
+        end;
+      finally
+        LNode.Free;
+      end; // try
+    end;
+  finally
+    LBook.Free;
+  end; // try
+end;
+
+function UnappliedClassNotes(const AAppliedBooks, AOtherBooks, ADfmNames, ADfmTexts: TArray<string>): TArray<string>;
+var
+  LApplied: TDictionary<string, Boolean>;
+  LRuled  : TDictionary<string, Boolean>;
+  LCount  : TDictionary<string, Integer>;
+  LFiles  : TDictionary<string, Integer>;
+  LNames  : TList<string>;
+  LSeen   : TDictionary<string, Boolean>;
+  LRegex  : TRegEx;
+  LKey    : string;
+  LOld    : Integer;
+begin
+  Result:= nil;
+  LApplied:= TDictionary<string, Boolean>.Create;
+  LRuled  := TDictionary<string, Boolean>.Create;
+  LCount  := TDictionary<string, Integer>.Create;
+  LFiles  := TDictionary<string, Integer>.Create;
+  LNames  := TList<string>.Create;
+  LSeen   := TDictionary<string, Boolean>.Create;
+  try
+    for var LText: string in AAppliedBooks do
+      BookFromSet(LText, LApplied);
+    for var LText: string in AOtherBooks do
+      BookFromSet(LText, LRuled);
+    LRegex:= TRegEx.Create('^[ \t]*(?:object|inherited|inline)[ \t]+[^:\s]+[ \t]*:[ \t]*([A-Za-z_][\w.]*)', [roMultiLine]);
+    for var N: Integer:= 0 to Min(High(ADfmNames), High(ADfmTexts)) do
+    begin
+      LSeen.Clear;
+      for var LMatch: TMatch in LRegex.Matches(ADfmTexts[N]) do
+      begin
+        LKey:= LowerCase(LMatch.Groups[1].Value);
+        if LKey.Contains('.') then
+          LKey:= LKey.Substring(LKey.LastIndexOf('.') + 1);
+        if not LRuled.ContainsKey(LKey) or LApplied.ContainsKey(LKey) then
+          Continue;
+        if not LCount.ContainsKey(LKey) then
+          LNames.Add(LMatch.Groups[1].Value);
+        LCount.TryGetValue(LKey, LOld);
+        LCount.AddOrSetValue(LKey, LOld + 1);
+        if not LSeen.ContainsKey(LKey) then
+        begin
+          LSeen.Add(LKey, True);
+          LFiles.TryGetValue(LKey, LOld);
+          LFiles.AddOrSetValue(LKey, LOld + 1);
+        end;
+      end; // for match
+    end; // for dfm
+    for var LName: string in LNames do
+    begin
+      LKey:= LowerCase(LName);
+      if LKey.Contains('.') then
+        LKey:= LKey.Substring(LKey.LastIndexOf('.') + 1);
+      Result:= Result + [Format('%s: %d component(s) in %d .dfm file(s) have a rule in a rule book this run does not apply',
+        [LName, LCount[LKey], LFiles[LKey]])];
+    end;
+  finally
+    LSeen.Free;
+    LNames.Free;
+    LFiles.Free;
+    LCount.Free;
+    LRuled.Free;
+    LApplied.Free;
+  end; // try
 end;
 function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported, AGlyphSupported: Boolean): TPreflight;
 var

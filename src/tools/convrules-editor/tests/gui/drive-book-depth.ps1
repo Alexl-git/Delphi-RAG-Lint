@@ -192,6 +192,16 @@ function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -no
 function WaitSaved($path, $pattern, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { try { if ([IO.File]::ReadAllText($path) -match $pattern) { return } } catch {}; Start-Sleep -Milliseconds 100 } }
 function WaitFor($procId, $caption, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Txt($h) -eq $caption) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
 function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; do { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; if (((Get-Date) - $t0).TotalSeconds -ge $sec) { break }; Start-Sleep -Milliseconds 250 } while ($true); return [IntPtr]::Zero }
+# GUILOCK (C-GUI-LEFTOVERS): wait for the editor to be IDLE, not for a fixed time: no progress window, message box or common dialog up, the main window enabled, and that state held for 1 s. Returns $false on the deadline.
+function WaitIdle($procId, $main, $sec) {
+  $idleSince = $null; $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
+    $busy = (@([W]::Tops($procId) | Where-Object { [W]::Cls($_) -in 'TEngineWaitForm', 'TMessageForm', '#32770' }).Count -gt 0) -or -not [W]::IsWindowEnabled($main)
+    if ($busy) { $idleSince = $null } elseif ($null -eq $idleSince) { $idleSince = Get-Date } elseif (((Get-Date) - $idleSince).TotalSeconds -ge 1) { return $true }
+    Start-Sleep -Milliseconds 100
+  }
+  return $false
+}
 function TopsNow($procId) { (Forms $procId | ForEach-Object { $h = $_; $s = '{0}/{1}' -f [W]::Cls($h), [W]::Txt($h); if ([W]::Cls($h) -eq '#32770') { $s += ' [' + ((Find $h 'Static' $null | ForEach-Object { [W]::Txt($_) } | Where-Object { $_ }) -join ' ') + ']' }; $s }) -join ' | ' }
 function Find($parent, $cls, $text) { [W]::Kids($parent) | Where-Object { [W]::Cls($_) -eq $cls -and ($text -eq $null -or [W]::Txt($_) -eq $text) } }
 function SetText($h, $s) { [void][W]::SendS($h, 0x000C, [IntPtr]::Zero, $s) }
@@ -254,7 +264,7 @@ $nd = Join-Path $tmp 'NoDepth.rules'; [IO.File]::WriteAllText($nd, "#unuse OldUn
 $p = Start-Process $Exe -PassThru
 try {
   $main = WaitCls $p.Id 'TConvRulesForm' 30
-  Start-Sleep -Seconds 1
+  [void](WaitIdle $p.Id $main 30)
   $cb = DepthCombo $main
   Check 'depth.nobook.enabled.matches.capability' (($cb -ne [IntPtr]::Zero) -and ([W]::IsWindowEnabled($cb) -eq $hasDepth) -and ((Sel $cb) -eq 4)) ("enabled=" + [W]::IsWindowEnabled($cb) + " sel=" + (Sel $cb))
 } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
@@ -282,7 +292,6 @@ try {
     'SKIP  depth.change.*  (engine lacks book_depth -- REQUIRED after the 1.20.6 re-pin)'
   }
   [void][W]::InvokeMenu($main, 'File|Exit')
-  Start-Sleep -Milliseconds 500
   # The unsaved-changes prompt is Yes / No / Cancel; No = discard. The book is clean
   # here (saved above, or never changed), so normally no prompt appears at all.
   Answer $p.Id '&No' | Out-Null
@@ -322,7 +331,7 @@ function ClickIn($dlg, $cap) { $b = @(Find $dlg 'TButton' $cap); if ($b.Count -g
 $p = Start-Process $Exe -ArgumentList "`"$d3`"" -PassThru
 try {
   $main = WaitCls $p.Id 'TConvRulesForm' 30
-  Start-Sleep -Seconds 2
+  [void](WaitIdle $p.Id $main 30)
   $cb = DepthCombo $main
   $pick = @(Find $main 'TButton' 'Pick...')[0]
   $row2 = @(Find $main 'TComboBox' $null | Where-Object { [W]::Top($_) -gt [W]::Top($pick) + 20 -and [W]::Top($_) -lt [W]::Top($pick) + 45 } | Sort-Object { [W]::Left($_) })
@@ -341,7 +350,7 @@ try {
   # The rest of New Conversion (proptree + grid load) runs on; the combo is set
   # right after the clear, so wait for the engine to finish before reading it.
   $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $SLOW_SEC -and ([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' })) { Start-Sleep -Milliseconds 500 }
-  Start-Sleep -Seconds 1
+  [void](WaitIdle $p.Id $main $SLOW_SEC)
   Check 'depth.newfile.shows.default' ((Sel $cb) -eq 4) ("sel=" + (Sel $cb))
 } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
 # --- 4. C-3: an INVALID / DUPLICATE #depth shows NO selection; ANY pick, 5 included, repairs the book ---
@@ -368,7 +377,6 @@ foreach ($b in $bad) {
       Check ("depth.$($b.name).pick.five.repairs") (($txt -match '(?m)^#depth 5\r$') -and (([regex]::Matches($txt, '#depth')).Count -eq 1) -and ($txt -notmatch 'deep|#depth 2|#depth 9')) $txt
     }
     [void][W]::InvokeMenu($main, 'File|Exit')
-    Start-Sleep -Milliseconds 500
     Answer $p.Id '&No' | Out-Null
   } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
 }
