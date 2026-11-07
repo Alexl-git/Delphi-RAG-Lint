@@ -32459,7 +32459,11 @@ var
       #useswap still has the unit's uses clauses to change, so it runs them and
       reports the component part as skipped (component_part skipped-no-dfm). }
     if not TFile.Exists(DfmPath) and not BookHasUnitRules(Rules) and not BookHasIdentifierMigrates(Rules) then
+    begin
+      var NothingWhy: string:= BookNothingToDoReason(Rules, UnitPas);
+      if NothingWhy <> '' then Exit(FailUnit(NothingWhy, 1));
       Exit(FailUnit(Format('sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath]), 1));
+    end;
 
     { 1.22.0 (C8 N1, N3; replaces 1.20.6's ruling-R6 refusal). Inherited /
       inline .dfm objects of a From type are declared by an ANCESTOR, so they
@@ -32618,7 +32622,11 @@ var
     if (JCtx.ComponentPart = 'applied') and not TFile.Exists(DfmPath) then
     begin
       if not IdSites then
+      begin
+        var NothingWhy: string:= BookNothingToDoReason(Rules, UnitPas);
+        if NothingWhy <> '' then Exit(FailUnit(NothingWhy, 1));
         Exit(FailUnit(Format('sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath]), 1));
+      end;
       JCtx.ComponentPart:= 'skipped-no-dfm';
       JCtx.DfmPath      := '';
     end;
@@ -32805,7 +32813,7 @@ begin
   { one unit keeps its old order: a missing .dfm (book without unit rules)
     fails before any --db is opened }
   if (Length(Units) = 1) and not TFile.Exists(TPath.ChangeExtension(Units[0], '.dfm')) and not BookHasUnitRules(Rules) and
-     not BookHasIdentifierMigrates(Rules) then
+     not BookHasIdentifierMigrates(Rules) and (BookNothingToDoReason(Rules, Units[0]) = '') then
   begin
     Writeln(Format('ERROR: sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)',
       [TPath.ChangeExtension(Units[0], '.dfm')]));

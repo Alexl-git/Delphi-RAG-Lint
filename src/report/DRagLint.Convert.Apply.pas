@@ -1680,6 +1680,23 @@ function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPat
 /// </remarks>
 function BookHasIdentifierMigrates(const ARules: TConversionRuleSet): Boolean;
 
+/// <summary>Why convert-apply has nothing to do for a book that is at fault
+/// itself, not the unit: the one sentence for a book with parse errors or with
+/// no #convert block, replacing the "sibling .dfm not found" and "no convertible
+/// instances found" sentences, which speak of #convert rules this book does not
+/// have (E-MIGRATE-T-TO-T, wave 146).</summary>
+/// <param name="ARules">The parsed book.</param>
+/// <param name="AUnitPas">The unit being converted; named in the #migrate sentence.</param>
+/// <returns>'' for a book with a #convert block and no parse error (the caller's
+/// own sentence stands). Otherwise, first match: 'conversion rules failed
+/// validation: line N: ...' (every parse error); 'the rules file holds no rules';
+/// 'no #migrate line of the rules file has a site in Unit'; 'the rules file has
+/// no #convert block, unit rule or #migrate line'. Each sentence but the first
+/// ends ' -- nothing to convert'.</returns>
+/// <remarks>Callers ask only once the unit has nothing to do: a book of unit rules
+/// or a #migrate with a site never reaches them. The exit code stays 1.</remarks>
+function BookNothingToDoReason(const ARules: TConversionRuleSet; const AUnitPas: string): string;
+
 /// <summary>True when the book's identifier #migrate rules (file scope, or
 /// in-block with uses units or an enum-value New) touch at least one site in
 /// AUnitPas's code -- a site renamed or a site reported as a migrate-check.</summary>
@@ -6345,6 +6362,33 @@ begin
   Result:= False;
 end;
 
+function BookNothingToDoReason(const ARules: TConversionRuleSet; const AUnitPas: string): string;
+const
+  NOTHING = ' -- nothing to convert';
+var
+  HasConvert, HasMigrate: Boolean;
+begin
+  if Length(ARules.ParseErrors) > 0 then
+  begin
+    var Lines: TArray<string>:= nil;
+    for var E: TRuleError in ARules.ParseErrors do
+      Lines:= Lines + [Format('line %d: %s', [E.LineNo, E.Message])];
+    Exit('conversion rules failed validation: ' + string.Join('; ', Lines));
+  end;
+  HasConvert:= False;
+  HasMigrate:= False;
+  for var R: TConversionRule in ARules.Rules do
+  begin
+    if R.Kind = rkConvert then HasConvert:= True;
+    if R.Kind = rkMigrate then HasMigrate:= True;
+  end;
+  if HasConvert then Exit('');
+  if Length(ARules.Rules) = 0 then Exit('the rules file holds no rules' + NOTHING);
+  if HasMigrate then
+    Exit(Format('no #migrate line of the rules file has a site in %s', [TPath.GetFileName(AUnitPas)]) + NOTHING);
+  Result:= 'the rules file has no #convert block, unit rule or #migrate line' + NOTHING;
+end;
+
 function UnitHasIdentifierMigrateSites(const ATrees: TConvertTreeCache; const AUnitPas: string;
   const ABook: TApplyBook): Boolean;
 var
@@ -7109,7 +7153,10 @@ var
   // -- surface #1: locate the published field decl 'Name: FromType;' via the
   // field symbol (gives us the line range to scope the text search), then find
   // the exact FromType token span for a tekReplaceInLine edit.
-  procedure PlanFieldRetype;
+  // AOwnerClass '' = an own instance: any field of that name and From type, and a
+  // miss is warned. Otherwise a retyped inherited one (E-CONVAPPLY-IFACE-USES): only
+  // a field AOwnerClass itself redeclares, and a miss is the normal case, so silent.
+  procedure PlanFieldRetype(const AOwnerClass: string = '');
   var
     E    : TTextEdit;
     It   : TApplyItem;
@@ -7121,6 +7168,7 @@ var
     begin
       if (Sym.Kind <> skField) or (not SameText(Sym.Name, Inst.InstanceName)) or
          (not SameText(Sym.Signature, Inst.FromType)) then Continue;
+      if (AOwnerClass <> '') and not EndsText('.' + AOwnerClass + '.' + Inst.InstanceName, Sym.QualifiedName) then Continue;
 
       var FLine, FCol, FEndCol: Integer;
       if LocateFieldTypeToken(PasLines, Sym.StartLine, Sym.EndLine,
@@ -7145,7 +7193,7 @@ var
       end;
       Break; { one matching field symbol is enough }
     end;
-    if not Found then
+    if not Found and (AOwnerClass = '') then
       { A multi-declarator field line (`Edit1, Edit2: TOldEdit;`) indexes only
         the FIRST declarator as a field symbol, so a later name on the shared
         line is not located here -- the .dfm/access/creator surfaces still
@@ -7231,7 +7279,9 @@ var
 
   // Surfaces #1 and #5 for an own instance. A retyped inherited one (C8 N2)
   // has neither here -- its field is the ancestor's and nothing in this unit
-  // creates it -- so it gets its converted[] line instead, at ABlockLine.
+  // creates it -- so it gets its converted[] line instead, at ABlockLine. The
+  // exception is a field the .dfm root class REDECLARES: that line is in this
+  // unit, it names the From type, and it needs the To unit in its own section.
   procedure PlanDeclSurfaces(ABlockLine: Integer);
   begin
     var K: Integer:= InheritedIndexOf(AInherited, Inst.InstanceName, INH_ACTION_RETYPED);
@@ -7241,6 +7291,7 @@ var
       PlanCreatorSites;
       Exit;
     end;
+    PlanFieldRetype(DfmRootClass(DfmText));
     var RIt: TApplyItem:= InstItem(aikInheritedInstanceRetyped, afConverted,
       Format('%s: inherited %s -> %s (declared in %s)',
         [Inst.InstanceName, Inst.FromType, Inst.ToType, AInherited[K].AncestorUnit]));
@@ -7924,7 +7975,9 @@ begin
   if (Length(Instances) = 0) and not HasInheritedAction(AInherited, INH_ACTION_CODE) and
      not (IdSites or UnitHasIdentifierMigrateSites(ATrees, AUnitPas, ABook)) then
   begin
-    Result.Error:= 'no convertible instances found (no #convert rule matched a .dfm instance, or --only filtered everything out)';
+    Result.Error:= BookNothingToDoReason(ABook.Rules, AUnitPas);
+    if Result.Error = '' then
+      Result.Error:= 'no convertible instances found (no #convert rule matched a .dfm instance, or --only filtered everything out)';
     Exit;
   end;
 

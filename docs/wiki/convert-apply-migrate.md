@@ -60,8 +60,11 @@ in the code, not a member of a converted instance:
 * No component instance needed (1.42): a unit with NO sibling `.dfm`, or a
   `.dfm` no `#convert` block matches, still gets its identifier `#migrate`
   sites renamed (`component_part` reads as before: `skipped-no-dfm`, `skipped-no-instances` or `applied`). A unit
-  with no `#migrate` site keeps the old answer (`sibling .dfm not found`,
-  exit 1; `no convertible instances found`).
+  with no `#migrate` site keeps the old answer when the book has a `#convert` block (`sibling .dfm not found`,
+  exit 1; `no convertible instances found`). A book with none says what is wrong with it, exit 1 (1.46):
+  `no #migrate line of the rules file has a site in <unit>`, `the rules file holds no rules`,
+  `the rules file has no #convert block, unit rule or #migrate line`; a parse error is named first
+  (`conversion rules failed validation: line N: ...`), with or without a sibling `.dfm`.
 * Old platform (1.43 ENUMMAP): `--old-platform-db <file>` (repeatable) names the index of the platform the
   code was written against, for example a Delphi 5 library DB. The From enum's members are read from it first
   and today's `--db` members are added after it, so a member today's enum lost still maps by name and is
