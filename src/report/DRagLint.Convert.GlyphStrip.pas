@@ -690,7 +690,7 @@ const
   RowAlignBits     = 32;
   RowAlignBytes    = 4;
   HighBitIndex     = 7;
-  BmpBitDepths     = [1, 4, 8, 16, 24, 32]; // dl:ok magic-literal -- the depths a DIB defines; the names would only repeat them
+  BmpBitDepths     = [1, 4, 8, 16, 24, 32];
 
 function BmpInt32At(const ABytes: TBytes; AOffset: Integer): Integer;
 begin
