@@ -5090,6 +5090,13 @@ begin
           '  ref_id          INTEGER PRIMARY KEY REFERENCES refs(id) ON DELETE CASCADE,' +
           '  receiver_ref_id INTEGER NOT NULL REFERENCES refs(id) ON DELETE CASCADE)');
   TryExec('CREATE INDEX IF NOT EXISTS idx_ref_receivers_receiver ON ref_receivers(receiver_ref_id)');
+  { E-RENAME-ELEMENT-TYPE (wave 146): the static type of a subscripted receiver, `A[i]` in `A[i].X`, which has
+    no ref of its own, written by ResolveRefTypes. ADDITIVE and probed for by its reader (rename's proof), as ref_types. }
+  TryExec('CREATE TABLE IF NOT EXISTS ref_element_types (' +
+          '  ref_id         INTEGER PRIMARY KEY REFERENCES refs(id) ON DELETE CASCADE,' +
+          '  type_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,' +
+          '  type_qname     TEXT NOT NULL)');
+  TryExec('CREATE INDEX IF NOT EXISTS idx_ref_element_types_type ON ref_element_types(type_symbol_id)');
   { 2026-10-27 (taint wave T0, plan 2026-10-27-taint-interprocedural-plan.md section 2):
     per-routine data-flow facts, written by the indexer (PutDataFlows) inside the file tx.
     ADDITIVE and probed for (HasDataFlows), so NO SCHEMA_VERSION bump -- the member_accesses /
@@ -15259,9 +15266,18 @@ begin
   if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
   if Suffix = '' then FConn.ExecSQL('DELETE FROM ref_types')  // dl:ok sql-update-delete-without-where@556b -- a whole-database pass rewrites every row of this derived table
   else FConn.ExecSQL('DELETE FROM ref_types WHERE ref_id IN (SELECT refs.id FROM refs WHERE ' + RT_UNIVERSE + Suffix + ')');  // dl:ok sql-injection-concat@472b -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text
+  if Suffix = '' then FConn.ExecSQL('DELETE FROM ref_element_types')
+  else FConn.ExecSQL('DELETE FROM ref_element_types WHERE ref_id IN (SELECT refs.id FROM refs WHERE ' + RT_UNIVERSE + Suffix + ')');
   Q  := TFDQuery.Create(nil);
   Ins:= TFDQuery.Create(nil);
+  var InsElem: TFDQuery:= TFDQuery.Create(nil);
   try
+    InsElem.Connection:= FConn;
+    InsElem.SQL.Text  := 'INSERT OR REPLACE INTO ref_element_types(ref_id, type_symbol_id, type_qname) VALUES (:rid, :tid, :q)';
+    InsElem.ParamByName('rid').DataType:= ftLargeint;
+    InsElem.ParamByName('tid').DataType:= ftLargeint;
+    InsElem.ParamByName('q'  ).DataType:= ftString;
+    InsElem.Prepare;
     Ins.Connection:= FConn;
     Ins.SQL.Text  := 'INSERT OR REPLACE INTO ref_types(ref_id, type_symbol_id, type_qname, via) VALUES (:rid, :tid, :q, :v)';
     Ins.ParamByName('rid').DataType:= ftLargeint;
@@ -15311,12 +15327,21 @@ begin
         Ins.ExecSQL;
         Inc(ABound);
       end;
+      if AResolver.RefElementType(Ref, RefType) then
+      begin
+        InsElem.ParamByName('rid').AsLargeInt:= Ref.Id;
+        if RefType.TypeSymbolId > 0 then InsElem.ParamByName('tid').AsLargeInt:= RefType.TypeSymbolId
+        else InsElem.ParamByName('tid').Clear;
+        InsElem.ParamByName('q').AsWideString:= RefType.TypeQName;
+        InsElem.ExecSQL;
+      end;
       Q.Next;
     end;
     Q.Close;
   finally
     Q.Free;
     Ins.Free;
+    InsElem.Free;
   end;
 end;
 
