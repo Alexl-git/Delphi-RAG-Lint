@@ -78,6 +78,8 @@ $Allowlist += @('ancestor-not-in-project')
 $Allowlist += @('side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive', 'effect-free-in-loop-invariant')
 # ui-access-in-thread-typed -> tests\lint-project\ui-thread-typed\run_ui_thread_typed.ps1 (project rule on ref_types, needs a library DB; 1.45 lane uithread)
 $Allowlist += @('ui-access-in-thread-typed')
+# by-value-arg-before-assignment -> tests\autotest\run_flow_out_arg_rules.ps1 (the mode comes from ref_types, so it needs an index; 1.46 lane t1)
+$Allowlist += @('by-value-arg-before-assignment')
 # The clippy-parity wave is fully fixtured (tests\lint) and integrated; the list is kept empty so a future wave can reuse it.
 $Pending = @()
 

@@ -1,0 +1,12 @@
+# OnlyOut: Dummy only receives an out argument.
+local-only-out-arg 20
+# OutThenRead: read, so not write-only.
+!local-only-out-arg 27
+# VarIsAUse: a var argument may be read by the callee.
+!dead-store-before-out-arg 37
+# DeadStore: the first store is overwritten by the out argument.
+dead-store-before-out-arg 46
+# ReadBetween: the first store is read first.
+!dead-store-before-out-arg 55
+# MaybeRuns: the out argument does not run on every path.
+!dead-store-before-out-arg 65

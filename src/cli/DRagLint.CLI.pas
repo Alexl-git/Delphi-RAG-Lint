@@ -15772,10 +15772,10 @@ const
     'length-zero-compare', 'freeandnil-on-interface', 'win64-pointer-cast',
     'nativeint-truncation', 'redundant-cast', 'unsafe-typecast-without-is', 'lossy-cast',
     'abstract-method-instantiation', 'interface-object-mixing');
-  LINT_GATE_FLOW: array[0..9] of string = (
+  LINT_GATE_FLOW: array[0..12] of string = (
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
-    'loop-var-after-loop', 'object-leak');
+    'loop-var-after-loop', 'object-leak', 'local-only-out-arg', 'dead-store-before-out-arg', 'by-value-arg-before-assignment');
   LINT_GATE_PROJECT_RULES: array[0..44] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',

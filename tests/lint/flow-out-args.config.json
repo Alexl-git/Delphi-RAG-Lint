@@ -1,0 +1,1 @@
+{ "enabled": ["local-only-out-arg", "dead-store-before-out-arg"] }

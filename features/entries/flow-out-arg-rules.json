@@ -1,0 +1,24 @@
+{
+  "id": "flow-out-arg-rules",
+  "title": "Data-flow rules that know a parameter's mode",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.44.1-alpha",
+  "summary": "Three OFF rules: a local that only receives out arguments, a store overwritten by an out argument, a local passed by value to a method before it is assigned",
+  "intro": "Read this to see what write-only-local, overwrite-before-read and used-before-assignment cannot see, and the three OFF rules that report it.",
+  "wikiPage": "flow-out-arg-rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-06",
+    "by": "ENGINE",
+    "build": "1.45.0-alpha",
+    "surfaceHash": "c86e88b99bad3d1352c6b7e19e7394f26a185b860c009bb97ac366379a830ab4"
+  }
+}
