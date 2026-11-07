@@ -149,6 +149,10 @@ type
     Files: TArray<TGateFile>;
     /// <summary>Optional repair pass; nil = none.</summary>
     Repair: TGateRepairFunc;
+    /// <summary>The other .dproj files that compile the rewritten units (E-RENAME-MULTIPROJECT): each is built before the
+    /// write and after it, on the same terms as Project; any failure refuses or rolls back, naming it. The repair pass
+    /// does not run for them.</summary>
+    AlsoProjects: TArray<string>;
   end;
 
   /// <summary>What ApplyGated did.</summary>
@@ -966,6 +970,7 @@ begin
   GGateVerb:= if pReq.Verb <> '' then pReq.Verb else GGateVerb;
   GRsVars  := pReq.RsVars;
   var Dir:= IncludeTrailingPathDelimiter(pReq.LogDir);
+  var AfterFailed:= 'the project';
   var Touched: TArray<string>:= nil;
   var Wanted:= TDictionary<string, TBytes>.Create;
   try
@@ -987,6 +992,18 @@ begin
         Outcome.Refusal:= if Outcome.Baseline.TimedOut then CGateBuildTimeout else CGateDirtyBaseline;
         Outcome.Detail := Format('the project does not build BEFORE the rewrite (%d dcc line(s), first: %s); nothing written',
           [Length(Outcome.Baseline.Errors), if Length(Outcome.Baseline.Errors) > 0 then Outcome.Baseline.Errors[0] else '']);
+        Exit(Outcome);
+      end;
+      { The other projects that compile these units: one that is already broken would make the after build mean nothing. }
+      for var I:= 0 to High(pReq.AlsoProjects) do
+      begin
+        var Also:= RunMsBuild(pReq.AlsoProjects[I], pReq.Platform, Dir + Format('also%d\baseline.log', [I + 1]), 'baseline build of ' + ExtractFileName(pReq.AlsoProjects[I]));
+        Outcome.Baseline.Seconds:= Outcome.Baseline.Seconds + Also.Seconds;
+        if Also.Ok then Continue;
+        Outcome.Baseline:= Also;
+        Outcome.Refusal:= if Also.TimedOut then CGateBuildTimeout else CGateDirtyBaseline;
+        Outcome.Detail := Format('%s, which also compiles the rewritten units, does not build BEFORE the rewrite (%d dcc line(s), first: %s); nothing written',
+          [pReq.AlsoProjects[I], Length(Also.Errors), if Length(Also.Errors) > 0 then Also.Errors[0] else '']);
         Exit(Outcome);
       end;
     except
@@ -1025,6 +1042,20 @@ begin
         { at the top: dcc reads nothing after the final end. }
         TFile.WriteAllBytes(Outcome.Tx.Written[0], TEncoding.ASCII.GetBytes(CTestBreakLine) + TFile.ReadAllBytes(Outcome.Tx.Written[0]));  // dl:ok taint-path-traversal@57e9 -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
       Outcome.After:= CompileAfterWith(pReq.Project, pReq.Platform, Dir, pReq.Repair);
+      if Outcome.After.Ok then
+        for var I:= 0 to High(pReq.AlsoProjects) do
+        begin
+          var Also:= CompileAfterWith(pReq.AlsoProjects[I], pReq.Platform, Dir + Format('also%d', [I + 1]), nil);
+          Also.Builds := Also.Builds + Outcome.After.Builds;
+          Also.Seconds:= Also.Seconds + Outcome.After.Seconds;
+          Also.Repairs:= Outcome.After.Repairs;
+          Outcome.After:= Also;
+          if not Also.Ok then
+          begin
+            AfterFailed:= pReq.AlsoProjects[I];
+            Break;
+          end;
+        end;
     except
       on E: ECompileGateCancelled do
       begin
@@ -1040,8 +1071,8 @@ begin
     if not Outcome.After.Ok then
     begin
       RollBackAs(if Outcome.After.TimedOut then CGateBuildTimeout else CGateCompileError,
-        Format('the project does not build after the rewrite (%d dcc line(s), first: %s)',
-          [Length(Outcome.After.Errors), if Length(Outcome.After.Errors) > 0 then Outcome.After.Errors[0] else '']));
+        Format('%s does not build after the rewrite (%d dcc line(s), first: %s)',
+          [AfterFailed, Length(Outcome.After.Errors), if Length(Outcome.After.Errors) > 0 then Outcome.After.Errors[0] else '']));
       Exit(Outcome);
     end;
     Outcome.Applied:= True;

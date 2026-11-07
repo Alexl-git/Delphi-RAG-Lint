@@ -68,8 +68,28 @@ compiles. So would a call renamed to a name a local of that routine already has.
 
 A proved rewrite then passes the compile gate (`--project`; `--platform`, `--rsvars`, `--build-timeout`, `--no-backup`):
 baseline build (`dirty-baseline`), all-or-nothing write, after build, rollback (`compile-error`, exit 1). `--library-db`
-names the platform library; the manifest's is the default. The LSP rename and `lint --fix` naming fixes still use the
-unproved edit set: the editor reviews a WorkspaceEdit, and `lint --fix` has its own refusals.
+names the platform library; the manifest's is the default.
+
+The same proof stands behind the LSP's `textDocument/rename` (a refusal answers error -32803 with its kind) and the
+`lint --fix` naming fixes (`skipped (not-proved): N` on stderr, one `note:` per finding; `--fix-line` prints
+`autofix: rename refused`). The only exception is a re-casing (`doIt` to `DoIt`): identifiers are case-insensitive, so it
+cannot change a binding and a token it misses still compiles. Neither path builds: the LSP only describes the edit, and
+`lint --fix` writes without the gate.
+
+**A unit other projects compile.** The manifest's indexes say which projects own each edited file (by full path, as
+[Multi-Project Rename](Multi-Project-Rename.md) does). Every owner's index is proved too, its edits merged, its refusals
+named `project B: ...`; `--plan` prints `also: the gate builds <dproj>`; `--apply` builds every owner before and after the
+write and rolls all of it back when any of them fails, naming that project. A stale owner is reindexed first by `--apply`,
+never by a preview.
+
+| refusal | why |
+|---|---|
+| `owner-library` | a registry library's index holds the file: a library unit is not project code |
+| `owner-unknown` | an index or the manifest could not be read, so a project may be missed |
+| `owner-unverified` | an owner's index cannot be trusted (another project's closure, still stale) or does not hold the target |
+
+A folder index that owns the file is proved but cannot be built; a `note:` says so.
+
 ## What it needs
 An index IS required. The project's DB lives at
 `<project folder>\_D-RAG\<project file>.sqlite`; run

@@ -15,10 +15,12 @@ interface
 
 uses
   System.SysUtils
+  , DRagLint.Core.Interfaces
   , DRagLint.Core.Model
   , DRagLint.Index.Manifest
   , DRagLint.Lint.Config
   , DRagLint.Refactor.NamingFix
+  , DRagLint.Refactor.RenameProof // dl:ok uses-global-census@61f3 -- the owner refusals belong in the one catalogue of refusal kinds, read by name
   , DRagLint.Refactor.TextEdit
   ;
 
@@ -199,6 +201,38 @@ type
     Targets: TArray<TTargetPlan>;
   end; // record
 
+  /// <summary>The rename RenameAcrossOwners widens.</summary>
+  TRenameOwnersRequest = record
+    /// <summary>The folder of the running engine: where the manifest is looked for.</summary>
+    ExeDir: string;
+    /// <summary>--platform; '' = the manifest's default.</summary>
+    Platform: string;
+    /// <summary>The index AProof came from; never proved twice.</summary>
+    PrimaryDb: string;
+    /// <summary>The project the gate builds anyway; '' when none is known yet.</summary>
+    PrimaryProject: string;
+    /// <summary>The target; '' for a routine-local rename.</summary>
+    QName: string;
+    /// <summary>The new name.</summary>
+    NewName: string;
+    /// <summary>The platform libraries the proof asks.</summary>
+    Libraries: TArray<ISymbolStore>;
+    /// <summary>As RefreshOwner's AReindex; nil = no owner is reindexed.</summary>
+    Reindex: TFunc<string, string, Boolean>;
+    /// <summary>True when the result will be written: a stale owner then refuses instead of being noted.</summary>
+    Writing: Boolean;
+  end; // record
+
+  /// <summary>What RenameAcrossOwners found.</summary>
+  TRenameReach = record
+    /// <summary>The merged proof.</summary>
+    Proof: TRenameProof;
+    /// <summary>The other .dproj files to build, as the manifest names them.</summary>
+    AlsoProjects: TArray<string>;
+    /// <summary>What the caller should say: a folder index that cannot be built, a preview on a stale owner.</summary>
+    Notes: TArray<string>;
+  end; // record
+
 /// <summary>Probes every index the manifest configures for APlatform and
 /// reports which of them hold AFilePath, which do not, and which could not be
 /// asked.</summary>
@@ -314,6 +348,8 @@ function RefreshOwner(const AOwner: TRenameOwner; const AReindex: TFunc<string, 
 /// planned on its current data, and its stale-position or unresolved results
 /// do not drop a target -- the plan is provisional for that owner, and the
 /// apply (which passes a callback) reindexes it and plans again.</param>
+/// <param name="ALibraries">The platform libraries BuildTargetEdits' proof asks: a candidate
+/// the proof refuses in an owner is that owner's reason, the next candidate gets its turn.</param>
 /// <returns>Owners: one report per owner. Targets: one plan per target Key, and one
 /// rdDropped plan per finding no opened store resolved (no owner opened, or all
 /// unverified) -- so a refusal is never silent.
@@ -349,7 +385,19 @@ function RefreshOwner(const AOwner: TRenameOwner; const AReindex: TFunc<string, 
 /// </remarks>
 function PlanMultiProjectRename(const ADiscovery: TOwnerDiscovery;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
-  const AReindex: TFunc<string, string, Boolean>): TMultiRenamePlan;
+  const AReindex: TFunc<string, string, Boolean>; const ALibraries: TArray<ISymbolStore>): TMultiRenamePlan;
+
+/// <summary>E-RENAME-MULTIPROJECT: what `rename` must add for the other projects that compile the edited units.</summary>
+/// <param name="AOwners">Who and what is being renamed; see TRenameOwnersRequest.</param>
+/// <param name="AProof">The proof on the primary index.</param>
+/// <returns>The proof with every other owner's edits merged and its refusals added, each naming the project; the
+/// .dproj files the compile gate must also build; notes for what cannot be built or is stale. Refusals added:
+/// CRefuseOwnerLibrary, CRefuseOwnerUnknown, CRefuseOwnerUnverified.</returns>
+/// <remarks>Same owner authority as the naming fix: the manifest's DBs, each file looked up by full path (no disk sweep).
+/// A QName = '' rename is routine-local: no other project can name it, so only the build widens. Writes no index unless
+/// AOwners.Reindex does. A file no other index owns returns AProof unchanged but for the sort. Raises nothing of its own;
+/// a store that cannot be opened is a refusal. Pinned by tests\autotest\run_rename_multiproject_gate.ps1.</remarks>
+function RenameAcrossOwners(const AOwners: TRenameOwnersRequest; const AProof: TRenameProof): TRenameReach;
 
 /// <summary>The text a `rename-project:` line prints for AFreshness.</summary>
 /// <param name="AFreshness">The owner's freshness.</param>
@@ -468,9 +516,9 @@ implementation
 uses
   System.Classes
   , System.Generics.Collections
+  , System.Generics.Defaults
   , System.StrUtils
   , System.IOUtils
-  , DRagLint.Core.Interfaces
   , DRagLint.Refactor.Rename
   , DRagLint.Storage.SQLite
   , DRagLint.Index.Freshness // dl:unit DRagLint.Index.Freshness accepted -- StaleEvidence calls ChangedFilePaths and reads the INDEXED_AT_KEY stamp the freshness module defines; the const travels with that call
@@ -962,11 +1010,12 @@ end; // function
 
 { Why ACand cannot be used in one owner's store; '' when it can, with AEdits
   the store's edits for it. }
-function CandidateWhy(const AState: TOwnerState; const ATarget: TNamingTarget;
+function CandidateWhy(const AState: TOwnerState; const ALibraries: TArray<ISymbolStore>; const ATarget: TNamingTarget;
   const ACand: string; out AEdits: TArray<TTextEdit>): string;
 var
   Skipped: Integer;
   Why    : string ;
+  Refused: string ;
 begin
   AEdits:= nil;
   if IndexStr(ACand, FreeCandidates(AState.Store, ATarget)) < 0 then
@@ -974,11 +1023,12 @@ begin
     Why:= TRenameRefactoring.ConflictReason(AState.Store, ATarget.QName, ACand);
     Exit(ProjectReason(AState.Report.Owner, if Why <> '' then Why else 'name ' + ACand + ' is not free'));
   end;
-  AEdits:= BuildTargetEdits(AState.Store, ATarget, ACand, Skipped);
+  AEdits:= BuildTargetEdits(AState.Store, ALibraries, ATarget, ACand, Skipped, Refused);
   { A preview's stale owner (ofStale) keeps the edits that could be placed:
     its plan is provisional, and the apply re-plans after reindexing it. }
   if AState.Report.Freshness <> ofStale then
   begin
+    if Refused <> '' then Exit(ProjectReason(AState.Report.Owner, Refused));
     if Skipped > 0 then
       Exit(ProjectReason(AState.Report.Owner, Format('%d edit(s) at a position the index no longer matches (stale index)', [Skipped])));
     if Length(AEdits) = 0 then Exit(ProjectReason(AState.Report.Owner, 'no edit could be placed'));
@@ -1039,7 +1089,7 @@ end; // function
   AParts[I] the edits of owner I; otherwise the first owner's reason. An owner
   whose target is not tsReady (only a preview's tolerated stale owner reaches
   here so) contributes no edits and no veto. }
-function TryCandidate(const AStates: TArray<TOwnerState>; const ATargets: TArray<TNamingTarget>;
+function TryCandidate(const AStates: TArray<TOwnerState>; const ALibraries: TArray<ISymbolStore>; const ATargets: TArray<TNamingTarget>;
   const ACand: string; out AParts: TArray<TArray<TTextEdit>>): string;
 var
   I: Integer;
@@ -1049,7 +1099,7 @@ begin
   for I:= 0 to High(AStates) do
   begin
     if ATargets[I].Status <> tsReady then Continue;
-    Result:= CandidateWhy(AStates[I], ATargets[I], ACand, AParts[I]);
+    Result:= CandidateWhy(AStates[I], ALibraries, ATargets[I], ACand, AParts[I]);
     if Result <> '' then Break;
   end;
 end; // function
@@ -1072,7 +1122,7 @@ begin
 end; // function
 
 { An nsGlobal target: one name free in EVERY owner, every owner's edits merged. }
-function PlanGlobal(const AStates: TArray<TOwnerState>; const ABlock: string;
+function PlanGlobal(const AStates: TArray<TOwnerState>; const ALibraries: TArray<ISymbolStore>; const ABlock: string;
   const ABase: TNamingTarget): TTargetPlan;
 var
   Ts      : TArray<TNamingTarget>          ;
@@ -1104,7 +1154,7 @@ begin
   FirstWhy:= '';
   for Cand in ABase.Candidates do
   begin
-    Why:= TryCandidate(AStates, Ts, Cand, Parts);
+    Why:= TryCandidate(AStates, ALibraries, Ts, Cand, Parts);
     if Why = '' then Why:= MergeEdits(Parts, ABase.Finding.FilePath, Result.Edits);
     if Why = '' then
     begin
@@ -1121,12 +1171,13 @@ end; // function
 
 { An nsLocal target: routine-local, so no other project can reference it --
   built ONCE, from the first opened owner that resolved it. }
-function PlanLocal(const AStates: TArray<TOwnerState>; const ABase: TNamingTarget): TTargetPlan;
+function PlanLocal(const AStates: TArray<TOwnerState>; const ALibraries: TArray<ISymbolStore>; const ABase: TNamingTarget): TTargetPlan;
 var
   I          : Integer       ;
   T          : TNamingTarget ;
   FreeNames  : TArray<string>;
   Skipped    : Integer       ;
+  Refused    : string        ;
   Provisional: Boolean       ;
 begin
   Result         := Default(TTargetPlan);
@@ -1153,8 +1204,13 @@ begin
       else
       begin
         Result.NewName:= FreeNames[0];
-        Result.Edits  := BuildTargetEdits(AStates[I].Store, T, FreeNames[0], Skipped);
-        if ((Skipped > 0) or (Length(Result.Edits) = 0)) and not Provisional then
+        Result.Edits  := BuildTargetEdits(AStates[I].Store, ALibraries, T, FreeNames[0], Skipped, Refused);
+        if (Refused <> '') and not Provisional then
+        begin
+          Result.Edits := nil;
+          Result.Reason:= ProjectReason(AStates[I].Report.Owner, Refused);
+        end
+        else if ((Skipped > 0) or (Length(Result.Edits) = 0)) and not Provisional then
         begin
           Result.Edits := nil;
           Result.Reason:= ProjectReason(AStates[I].Report.Owner, 'no edit could be placed (stale index)');
@@ -1301,7 +1357,7 @@ end; // function
 
 function PlanMultiProjectRename(const ADiscovery: TOwnerDiscovery;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
-  const AReindex: TFunc<string, string, Boolean>): TMultiRenamePlan;
+  const AReindex: TFunc<string, string, Boolean>; const ALibraries: TArray<ISymbolStore>): TMultiRenamePlan;
 var
   States: TArray<TOwnerState>;
   Seen  : TList<string>      ;
@@ -1324,8 +1380,7 @@ begin
       begin
         if Seen.Contains(T.Key) then Continue;
         Seen.Add(T.Key);
-        if T.Scope = nsLocal then Result.Targets:= Result.Targets + [PlanLocal(States, T)]
-        else Result.Targets:= Result.Targets + [PlanGlobal(States, Block, T)];
+        Result.Targets:= Result.Targets + [if T.Scope = nsLocal then PlanLocal(States, ALibraries, T) else PlanGlobal(States, ALibraries, Block, T)];
       end; // for
     { A finding no usable store built a target for -- no owner opened at all,
       or every one unverified -- is still PLANNED, as dropped: it must reach
@@ -1340,6 +1395,134 @@ begin
   finally
     Seen.Free;
     for I:= 0 to High(States) do States[I].Store:= nil;
+  end; // try
+end; // function
+
+function RenameAcrossOwners(const AOwners: TRenameOwnersRequest; const AProof: TRenameProof): TRenameReach;
+var
+  Refusals: TArray<TRenameRefusal>;
+  Edits   : TDictionary<string, TRenameEdit>;
+  Seen    : TDictionary<string, Boolean>;
+
+  procedure Refuse(const AKind, AFile, AWhy: string);
+  var
+    R: TRenameRefusal;
+  begin
+    R:= Default(TRenameRefusal);
+    R.Kind    := AKind;
+    R.FilePath:= AFile;
+    R.Why     := AWhy;
+    Refusals  := Refusals + [R];
+  end; // procedure
+
+  procedure AddEdits(const AFrom: TArray<TRenameEdit>);
+  begin
+    for var E in AFrom do Edits.AddOrSetValue(LowerCase(ExpandFileName(E.FilePath)) + '|' + IntToStr(E.Line) + '|' + IntToStr(E.Col), E);
+  end; // procedure
+
+  { A project owner beyond the primary: its index is proved too, and it is built. }
+  procedure TakeOwner(const AOwner: TRenameOwner; const AFile: string);
+  var
+    Reason: string;
+  begin
+    var Fresh:= RefreshOwner(AOwner, AOwners.Reindex, Reason);
+    if (Fresh = ofUnverified) or ((Fresh = ofStale) and AOwners.Writing) then
+    begin
+      Refuse(CRefuseOwnerUnverified, AFile, ProjectReason(AOwner, 'unverified -- ' + Reason));
+      Exit;
+    end;
+    if Fresh = ofStale then Result.Notes:= Result.Notes + [ProjectReason(AOwner, 'planned on a stale index -- ' + Reason)];
+    if AOwners.QName <> '' then
+    begin
+      var Store: ISymbolStore:= TSQLiteSymbolStore.Create(AOwner.DbPath, True);
+      var P:= ProveRename(Store, AOwners.Libraries, AOwners.QName, AOwners.NewName);
+      if not P.Found then
+        Refuse(CRefuseOwnerUnverified, AFile, ProjectReason(AOwner, 'its index does not hold ' + AOwners.QName));
+      AddEdits(P.Edits);
+      for var R in P.Refusals do
+      begin
+        var Mine:= R;
+        Mine.Why:= ProjectReason(AOwner, R.Why);
+        Refusals:= Refusals + [Mine];
+      end;
+    end;
+    if AOwner.ProjectFile = '' then Result.Notes:= Result.Notes + [ProjectReason(AOwner, 'a folder index has no project to build')]
+    else if not SameText(ExpandFileName(AOwner.ProjectFile), ExpandFileName(AOwners.PrimaryProject))
+      and not SameText(ChangeFileExt(ExpandFileName(AOwner.ProjectFile), '.dproj'), ExpandFileName(AOwners.PrimaryProject)) then
+      Result.AlsoProjects:= Result.AlsoProjects + [AOwner.ProjectFile];
+  end; // procedure
+
+var
+  ManifestErr: string;
+  Manifest   : TIndexManifest;
+begin
+  Result:= Default(TRenameReach);
+  Result.Proof:= AProof;
+  if Length(AProof.Edits) = 0 then Exit;
+  Refusals:= AProof.Refusals;
+  ManifestErr:= '';
+  Manifest:= Default(TIndexManifest);
+  try
+    Manifest   := TManifestIO.Load(AOwners.ExeDir, GetCurrentDir);
+    ManifestErr:= Manifest.LoadError;
+  except
+    on E: Exception do ManifestErr:= E.Message;
+  end; // try
+  if ManifestErr <> '' then
+  begin
+    Refuse(CRefuseOwnerUnknown, '', 'the manifest did not load completely, so a project may be missed: ' + ManifestErr);
+    Result.Proof.Refusals:= Refusals;
+    Exit;
+  end;
+  var Plat:= if AOwners.Platform <> '' then AOwners.Platform else Manifest.Settings.DefaultPlatform;
+  Edits:= TDictionary<string, TRenameEdit>.Create;
+  Seen := TDictionary<string, Boolean>.Create;
+  try
+    AddEdits(AProof.Edits);
+    Seen.Add(DbKey(AOwners.PrimaryDb), True);
+    var Files:= TDictionary<string, Boolean>.Create;
+    try
+      for var E in AProof.Edits do
+      begin
+        var Path:= ExpandFileName(E.FilePath);
+        if Files.ContainsKey(LowerCase(Path)) then Continue;
+        Files.Add(LowerCase(Path), True);
+        var Disc:= FindRenameOwners(Manifest, Plat, Path, AOwners.PrimaryDb);
+        for var U in Disc.Unknown do Refuse(CRefuseOwnerUnknown, Path, 'ownership unknown: ' + U);
+        for var O in Disc.Owners do
+        begin
+          if Seen.ContainsKey(DbKey(O.DbPath)) then Continue;
+          Seen.Add(DbKey(O.DbPath), True);
+          if O.Kind = okLibrary then Refuse(CRefuseOwnerLibrary, Path, 'library ' + O.SectionName + ': ' + REASON_LIBRARY)
+          else
+            try
+              TakeOwner(O, Path);
+            except
+              on Ex: Exception do Refuse(CRefuseOwnerUnverified, Path, ProjectReason(O, Ex.Message));
+            end; // try
+        end; // for
+      end; // for
+    finally
+      Files.Free;
+    end; // try
+    { back to front per file, one edit per position: what ProveRename promises }
+    var Merged:= TList<TRenameEdit>.Create(Edits.Values);
+    try
+      Merged.Sort(TComparer<TRenameEdit>.Construct(
+        function(const pA, pB: TRenameEdit): Integer
+        begin
+          Result:= CompareText(pA.FilePath, pB.FilePath);
+          if Result = 0 then Result:= pB.Line - pA.Line;
+          if Result = 0 then Result:= pB.Col - pA.Col;
+        end));
+      Result.Proof.Edits:= Merged.ToArray;
+    finally
+      Merged.Free;
+    end; // try
+    Result.Proof.Refusals:= Refusals;
+  finally
+    Seen.Free;
+    Edits.Free;
   end; // try
 end; // function
 
