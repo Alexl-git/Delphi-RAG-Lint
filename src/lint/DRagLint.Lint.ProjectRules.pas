@@ -4773,7 +4773,7 @@ begin
     if WantRule(FINALIZATION_AFTER_DEPENDENCY_RULE) and OptedIn(FINALIZATION_AFTER_DEPENDENCY_RULE) then
       for var Is_ in CollectFinalizationAfterDependency(AStore) do Findings.Add(Is_);
     if WantRule(HEAVY_INITIALIZATION_RULE) and OptedIn(HEAVY_INITIALIZATION_RULE) then
-      for var Is_ in CollectHeavyInitialization(AStore) do Findings.Add(Is_);
+      for var Is_ in CollectHeavyInitialization(AStore, ALibraryStore) do Findings.Add(Is_);
     if WantRule(GLOBAL_NEVER_FREED_RULE) and OptedIn(GLOBAL_NEVER_FREED_RULE) then
       for var Is_ in CollectGlobalNeverFreed(AStore, ALibraryStore) do Findings.Add(Is_);
     if WantRule(DATAMODULE_FORM_GLOBAL_RULE) and OptedIn(DATAMODULE_FORM_GLOBAL_RULE) then
