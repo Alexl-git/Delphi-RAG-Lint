@@ -6785,6 +6785,30 @@ begin
   end;
 end;
 
+/// <summary>Drops every path that lies under one of the --exclude-under roots.</summary>
+/// <param name="APaths">Scope list (files or folders) a project index is about to walk.</param>
+/// <param name="ARoots">The --exclude-under values; empty means keep everything.</param>
+/// <returns>APaths without the entries under an excluded root (case-insensitive, whole path segments).</returns>
+/// <remarks>E-UNWITH-EXCLUDE: the folder walk asks the indexer's exclude roots, but a project scope list is
+/// FILES handed to IndexFile, which never does, so the flag was accepted and ignored for `index --project`.</remarks>
+function DropUnderExcludeRoots(const APaths, ARoots: TArray<string>): TArray<string>;
+begin
+  Result:= APaths;
+  if Length(ARoots) = 0 then Exit;
+  var Norm: TArray<string>:= [];
+  for var R in ARoots do
+    if R <> '' then Norm:= Norm + [LowerCase(IncludeTrailingPathDelimiter(ExcludeTrailingPathDelimiter(R)))];
+  Result:= [];
+  for var P in APaths do
+  begin
+    var L: string:= LowerCase(P);
+    var Hit: Boolean:= False;
+    for var N in Norm do
+      if StartsStr(N, L) then Hit:= True;
+    if not Hit then Result:= Result + [P];
+  end;
+end;
+
 function DoIndex(const AArgs: TArgs): Integer;
 var
   IdxStudio: TTargetStudio                             ;
@@ -7166,6 +7190,7 @@ begin
           sibling .dfm and the project file(s). See its remarks for why both are
           load-bearing. }
         Folders:= ExpandProjectScope(AArgs.ProjectPath, CR.Files);
+        Folders:= DropUnderExcludeRoots(Folders, AArgs.ExcludeUnder); { E-UNWITH-EXCLUDE }
 
         { FAIL LOUDLY. A project that resolves to nothing must NOT fall back to
           a folder walk -- that fallback is the defect above returning -- and
