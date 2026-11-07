@@ -1819,6 +1819,7 @@ begin
       Inc(i);
       Result.CycleRsVars:= ParamStr(i);
     end
+    else if A = '--ctor-wide' then SetCycleCtorWide(True) // cycles --plan / --fix: the wider constructor-inversion whitelist; process-wide, default off
     else if (A = '--build-timeout') and (i < ParamCount) then
     begin
       Inc(i);
