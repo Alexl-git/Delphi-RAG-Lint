@@ -457,12 +457,14 @@ line 3: warning: link OptionsImage.NumGlyphs <- NumGlyphs is a straight carry of
 `--print-parsed` shows the expression as its own field:
 `line 2: link OptionsImage.Glyph <- Picture [glyph G[*/4], G[1/5]G[2/5]G[3/5]G[4/5]] [cast AssignGraphic]`.
 
-**Not yet realised.** Extracting and stitching the slots is the next build
-(CV-2). Until it lands, `convert-apply` (and the hidden `convert-reemit`)
-**refuse** a book whose `#link` carries a glyph expression (exit 1, one
-`line N: ... not yet realised` line per G-link) instead of carrying the source
-image whole. Also still to come with CV-2: the validate error for a G-link on a
-source class that has no N reader in `docs\GLYPH-CLASSES.md`.
+**Realised behind a switch.** `convert-apply --glyph-stitch` extracts and stitches the
+slots on the `.dfm` surface and `convert-validate --glyph-stitch` adds the error for a
+G-link on a source class with no N reader. Without the switch, `convert-apply` (and,
+always, the hidden `convert-reemit`) **refuse** a book whose `#link` carries a glyph
+expression (exit 1, one `line N: ... not yet realised` line per G-link) instead of
+carrying the source image whole. `G[count]` is the number of SLOTS the chosen alternative
+takes. Outcomes: apply/1 `glyphs[]`; see `docs\wiki\convert-apply.md`. Still to come: the
+`.pas` constant tiers (a `.pas` site of a G-linked member is reported and left alone).
 
 Exit codes: **0** valid / parse-ok (warnings allowed); **1** errors found (parse or
 validation); **2** bad args (no `--rules`) or unreadable rules file.

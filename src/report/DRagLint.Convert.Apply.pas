@@ -355,9 +355,15 @@ type
                                there until converted by hand (owner Q2: the old
                                text is kept). Field todos; Value 'DL_NONE',
                                OldValue the wrapped text. }
-    aikEncodingNotChecked);  { 1.34.1 (CONV-ENC E3): a binary (TPF0) .dfm has no
+    aikEncodingNotChecked,  { 1.34.1 (CONV-ENC E3): a binary (TPF0) .dfm has no
                                text encoding, so the encoding guard never
                                compared it. A warning; FilePath set. }
+    aikGlyphNoAlternative,   { --glyph-stitch: the source's actual N matches no
+                               alternative of the G-link; nothing written. }
+    aikGlyphFormatUnsupported, { --glyph-stitch: not a bitmap this stitcher reads,
+                               no usable cast or no readable count; nothing written. }
+    aikGlyphNotAStrip);      { --glyph-stitch: the width does not divide by N;
+                               nothing written. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -522,6 +528,15 @@ type
     MigrateTo    : string;  { G4: the New of the #migrate convert-apply realises for the member (DL_NONE_MARK for a break); '' when none }
   end;
 
+  /// <summary>One apply/1 glyphs[] object: what one image G-link did on one
+  /// instance.</summary>
+  /// <remarks>Instance plus TReemitGlyph's fields. Line is the object's .dfm line.</remarks>
+  TApplyGlyph = record
+    Instance: string;
+    Outcome : TReemitGlyph;
+    Line    : Integer;
+  end;
+
   /// <summary>Human-readable summary of one convert-apply run, grouped by
   /// surface: Converted lists one line per instance actually rewritten;
   /// AccessSites and CreatorSites list the .pas property/event-access and
@@ -557,6 +572,9 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyReport = record
+    { Disjoint from Items for a stitched outcome (a receipt, like ResolvedDefaults);
+      a to-do outcome is ALSO one aikGlyph* item. apply/1 glyphs[]. }
+    Glyphs      : TArray<TApplyGlyph>;
     Converted   : TArray<string>;
     AccessSites : TArray<string>;
     CreatorSites: TArray<string>;
@@ -1930,7 +1948,8 @@ const
     'book-warning', 'ref-path-like', 'ref-dangling', 'ref-not-checked',
     'unit-rule-kept', 'uses-unit-ambiguous', 'unit-rule-unverified', 'unit-rule-dangling',
     'value-cast-applied', 'value-cast-check', 'convert-class-inferred',
-    'migrate-applied', 'migrate-check', 'deliberate-break', 'encoding-not-checked');
+    'migrate-applied', 'migrate-check', 'deliberate-break', 'encoding-not-checked',
+    'glyph-no-alternative', 'glyph-format-unsupported', 'glyph-not-a-strip');
 begin
   Result:= NAMES[AKind];
 end;
@@ -5424,6 +5443,7 @@ function LinkPasStatus(const ALink: TConversionRule; const ACastLib: TCastLib): 
 begin
   var Dotted  : Boolean:= (Pos('.', ALink.ToPath) > 0) or (Pos('.', ALink.FromPath) > 0);
   var Identity: Boolean:= SameText(ALink.ToPath, ALink.FromPath);
+  if ALink.GlyphExpr <> '' then Exit(PAS_USE_CAST_REFUSED);
   if ALink.Cast <> '' then
   begin
     var VD: TCastDef;
@@ -5917,7 +5937,7 @@ begin
     begin
       var PlainLink: Boolean:= (L.Kind = rkLink) and (L.FromPath <> '') and (L.ToPath <> '') and (Pos('.', L.FromPath) = 0);
       var Renames  : Boolean:= (Pos('.', L.ToPath) = 0) and not SameText(L.FromPath, L.ToPath);
-      if PlainLink and ((L.Cast <> '') or Renames) then
+      if PlainLink and ((L.Cast <> '') or (L.GlyphExpr <> '') or Renames) then
         Taken.AddOrSetValue(UpperCase(IntToStr(LinkRuleBlock(AIn.Book.Rules, L)) + '|' + L.FromPath), L.LineNo);
     end;
     var Block: Integer:= 0;
@@ -6752,6 +6772,7 @@ var
   Converted   : TList<string>;
   Warnings    : TList<string>;
   ReemitNotes : TList<string>;
+  ReportGlyphs: TArray<TApplyGlyph>;
   CreatorSites: TList<string>;
   AccessSites : TList<string>;
   Todos       : TList<string>;
@@ -6930,6 +6951,41 @@ var
     end;
   end;
 
+  { One image G-link's outcome. A stitched one is a receipt (glyphs[] only). A to-do
+    one is also a todos[] item and a line at the top of the unit's implementation
+    section, with a fixed owner (ruled: unmatched is a to-do, not a hard stop). }
+  procedure FoldGlyphOutcome(const AOutcome: TReemitGlyph; ABlockLine: Integer);
+  const
+    KIND_NOT_A_STRIP    = 'glyph-not-a-strip';
+    KIND_NO_ALTERNATIVE = 'glyph-no-alternative';
+    KIND_STITCHED       = 'glyph-stitched';
+  begin
+    var AG: TApplyGlyph;
+    AG.Instance:= Inst.InstanceName;
+    AG.Outcome := AOutcome;
+    AG.Line    := ABlockLine;
+    ReportGlyphs:= ReportGlyphs + [AG];
+    if AOutcome.Kind = KIND_STITCHED then Exit;
+    var Kind: TApplyItemKind:= aikGlyphFormatUnsupported;
+    if AOutcome.Kind = KIND_NOT_A_STRIP then Kind:= aikGlyphNotAStrip
+    else if AOutcome.Kind = KIND_NO_ALTERNATIVE then Kind:= aikGlyphNoAlternative;
+    var Todo: string:= Format('{ TODO(converter): drag-lint glyph: %s.%s N=%d %s }',
+      [Inst.InstanceName, AOutcome.FromPath, AOutcome.SourceN, AOutcome.Message.Replace('}', ')')]);
+    var GIt: TApplyItem:= InstItem(Kind, afTodos, Todo);
+    GIt.FilePath:= AUnitPas;
+    GIt.Line    := ImplementationKeywordLine(PasLines.Text);
+    GIt.Path    := AOutcome.FromPath;
+    GIt.RuleLine:= AOutcome.RuleLine;
+    Emit(GIt);
+    if GIt.Line < 1 then Exit;
+    var TE: TTextEdit:= Default(TTextEdit);
+    TE.FilePath:= AUnitPas;
+    TE.Kind    := tekInsertLines;
+    TE.Line    := GIt.Line;
+    TE.Text    := Todo;
+    Edits.Add(TE);
+  end;
+
   // Folds one instance's re-emit report into ReemitNotes, giving each entry the
   // kind its SOURCE array implies rather than one inferred from its prose.
   // ABlockLine is the instance's .dfm object-block header line: TDfmNode carries
@@ -6958,6 +7014,7 @@ var
       other callers pass whole sentences, which are not paths. }
     FoldBookChecks(AReport, ABlockLine);
     for var VI: TApplyItem in ValueCastDfmItems(AReport.ValueCasts, Inst, ADfmPath, DfmLines, ABlockLine) do Emit(VI);
+    for var GL: TReemitGlyph in AReport.Glyphs do FoldGlyphOutcome(GL, ABlockLine);
     for var DN: string in AReport.Dropped do
     begin
       var DIt: TApplyItem:= InstItem(aikUnmappedProperty, afReemitNotes,
@@ -7397,6 +7454,27 @@ var
     begin
       if LinkRule.Kind <> rkLink then Continue;
       if (LinkRule.ToPath = '') or (LinkRule.FromPath = '') then Continue;
+      { Grammar section 7, build 1: every .pas site of a G-linked member is tier 3, a
+        to-do with the site left compiling. A class cast on the same link already
+        reports its sites below; a cast-less one would otherwise be RENAMED. }
+      if (LinkRule.GlyphExpr <> '') and (LinkRule.Cast = '') and not LinkRule.FromPath.Contains('.') then
+      begin
+        for var GSite: TAccessSite in FindMemberAccessSites(PasStore, PasFileId, PasLines, LinkRule.FromPath,
+          LinkScopeNames(ABook.Rules, ConvertedInstNames, InstFromType, LinkRule)) do
+        begin
+          It:= PlainItem(aikCastNotApplied, afWarnings,
+            Format('line %d: #link %s <- %s %s -- glyph link: access site %s:%d %s.%s not rewritten; convert it by hand',
+              [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.GlyphExpr,
+               ExtractFileName(AUnitPas), GSite.Line, GSite.InstanceName, LinkRule.FromPath]));
+          It.Instance:= GSite.InstanceName;
+          It.FilePath:= AUnitPas;
+          It.Path    := LinkRule.FromPath;
+          It.RuleLine:= LinkRule.LineNo;
+          It.Line    := GSite.Line;
+          Emit(It);
+        end;
+        Continue;
+      end;
       { A CAST IS NOT YET PERFORMED, SO THE RENAME IS REFUSED RATHER THAN
         HALF-APPLIED. This surface rewrites the member IDENTIFIER at an access
         site: `obj.Old` -> `obj.New`. A rule carrying `: Round` says the VALUE
@@ -8201,6 +8279,7 @@ begin
     Result.Report.AccessSites:= AccessSites.ToArray;
     Result.Report.Todos    := Todos.ToArray;
     Result.Report.Items    := Items.ToArray;
+    Result.Report.Glyphs   := ReportGlyphs;
     Result.Report.ResolvedDefaults:= ResolvedDefaults.ToArray;
     Result.Ok:= True;
   finally

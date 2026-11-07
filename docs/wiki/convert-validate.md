@@ -23,6 +23,9 @@ the expression. `line N: warning: ...` lines (a straight `NumGlyphs` carry besid
 a G-link) never change the exit code. `convert-apply` refuses a G-linked book
 until the extraction build lands. Full grammar: `docs\CONVERSION-RULES.md`.
 
+With `--glyph-stitch` a `#link` carrying an image `G[I/N]` expression on a class with no
+glyph-count reader is an error, when `--from` names the class. Parse-only mode stays silent.
+
 ## Reaching it in the IDE
 No IDE surface -- this is a CLI-only feature.
 

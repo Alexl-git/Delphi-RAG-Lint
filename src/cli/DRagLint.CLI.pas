@@ -756,6 +756,7 @@ type
     // only diagnostics). --from/--to reuse CallFrom/RenameTo (the From/To types).
     RulesFile     : string ; // --rules <file>  (conversion-rules DSL)
     CastLibFile   : string ; // --castlib <file>  (class + enum cast library)
+    GlyphStitch   : Boolean; // --glyph-stitch (convert-apply, convert-validate): realise G-links, N reader check; OFF = refusal
     NoWarnUnlinked: Boolean; // --no-warn-unlinked  (convert-apply: keep the unlinked count, drop the warnings)
     NoReconcileUses: Boolean; // --no-reconcile-uses (convert-apply, C9: the 1.26.6 unit rules exactly)
     NoReindex     : Boolean; // --no-reindex (convert-apply, C9: do not refresh the unit's project DB after --apply)
@@ -1746,6 +1747,7 @@ begin
     else if (A = '--surface') and (i < ParamCount) then begin Inc(i); Result.Surface:= ParamStr(i); end // convert-scaffold (Task 5): --surface dfm|pas
     else if (A = '--rules') and (i < ParamCount) then begin Inc(i); Result.RulesFile:= ParamStr(i); end // convert-validate: rules DSL file
     else if (A = '--append') then Result.AppendOut:= True // glyph-vacuum: merge into --output
+    else if A = '--glyph-stitch' then Result.GlyphStitch:= True // convert-apply, convert-validate: realise G-links
     else if (A = '--castlib') and (i < ParamCount) then // convert-*: .castlib (class + enum casts)
     begin
       Inc(i);
@@ -30118,7 +30120,7 @@ var
 begin
   if not ExplicitDbsExist(AArgs, 'convert-validate') then Exit(2);
   if AArgs.RulesFile = '' then
-  begin Writeln('Usage: drag-lint convert-validate --rules FILE [--from FromType] [--to ToType] [--print-parsed] [--db PATH ...]'); Exit(2); end;
+  begin Writeln('Usage: drag-lint convert-validate --rules FILE [--from FromType] [--to ToType] [--print-parsed] [--glyph-stitch] [--db PATH ...]'); Exit(2); end;
   if not TFile.Exists(AArgs.RulesFile) then
   begin Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile])); Exit(2); end;
 
@@ -30170,6 +30172,19 @@ begin
   end;
 
   Errors:= ValidateConversionRules(RuleSet, FromCls, ToCls, Unreach);
+  if AArgs.GlyphStitch then
+  begin
+    { --from names ONE class, so only the blocks converting THAT class are judged. }
+    var GlyphBlocks: TArray<TBlockClasses>:= [Default(TBlockClasses)];
+    for var GR: TConversionRule in RuleSet.Rules do
+      if GR.Kind = rkConvert then
+      begin
+        var GB: TBlockClasses:= Default(TBlockClasses);
+        if SameText(GR.FromType.Substring(GR.FromType.LastIndexOf('.') + 1), FromCls.QName.Substring(FromCls.QName.LastIndexOf('.') + 1)) then GB.FromClass:= FromCls;
+        GlyphBlocks:= GlyphBlocks + [GB];
+      end;
+    Errors:= Errors + MissingGlyphCountReaders(RuleSet, GlyphBlocks);
+  end;
   finally
     Caches.Free;
   end;
@@ -30823,6 +30838,8 @@ begin
     [Length(AReport.Converted), AEditCount, AVerb]));
   { Converted keeps its heading-less shape -- it reads as the header's detail. }
   for S in AReport.Converted do Writeln('  ' + S);
+  for var GL: TApplyGlyph in AReport.Glyphs do
+    Writeln((if GL.Outcome.Kind = 'glyph-stitched' then '  ' + GL.Instance + ': ' else '*** GLYPH TODO: ' + GL.Instance + ': ') + GL.Outcome.Message);
   Block('AccessSites',  AReport.AccessSites);
   Block('CreatorSites', AReport.CreatorSites);
   Block('Todos',        AReport.Todos);
@@ -31093,7 +31110,31 @@ procedure EmitApplyJson(const ACtx: TApplyJsonCtx);
     for S in AItems do Result.Add(S);
   end;
 
-  function ItemJson(const AItem: TApplyItem): TJSONObject;
+  { apply/1 glyphs[]: always present, [] when none (asks N3). The key names are the
+  ones the editor's ConvRules.ConvertRun.GlyphOutcomes reads. }
+function GlyphsJson(const AGlyphs: TArray<TApplyGlyph>): TJSONArray;
+begin
+  Result:= TJSONArray.Create;
+  for var G: TApplyGlyph in AGlyphs do
+  begin
+    var O: TJSONObject:= TJSONObject.Create;
+    O.AddPair('instance' , G.Instance);
+    O.AddPair('from_path', G.Outcome.FromPath);
+    O.AddPair('to_path'  , G.Outcome.ToPath);
+    O.AddPair('kind'     , G.Outcome.Kind);
+    O.AddPair('source_n' , TJSONNumber.Create(G.Outcome.SourceN));
+    O.AddPair('alternative', G.Outcome.Alternative);
+    var D: TJSONArray:= TJSONArray.Create;
+    for var Slot: Integer in G.Outcome.DroppedSlots do D.Add(Slot);
+    O.AddPair('dropped_slots', D);
+    O.AddPair('rule_line', TJSONNumber.Create(G.Outcome.RuleLine));
+    O.AddPair('line'     , TJSONNumber.Create(G.Line));
+    O.AddPair('message'  , G.Outcome.Message);
+    Result.AddElement(O);
+  end;
+end;
+
+function ItemJson(const AItem: TApplyItem): TJSONObject;
   begin
     Result:= TJSONObject.Create;
     Result.AddPair('kind'     , ApplyItemKindName(AItem.Kind));
@@ -31209,6 +31250,7 @@ begin
       JResolved.AddElement(JRD);
     end;
     JRoot.AddPair('resolved_defaults', JResolved);
+    JRoot.AddPair('glyphs', GlyphsJson(ACtx.Report.Glyphs));
 
     { unlinked_source_properties / unlinked_source_property_sites / unlinked[]
       -- row 6 steps 1-3, complete (2026-09-16). Step 1 shipped the two
@@ -31531,11 +31573,11 @@ end;
   a tree), a block whose type resolves nowhere comes back in AUnresolved (C13 d:
   the caller REFUSES the unit, see UnresolvedReason), a bare type the scope left
   ambiguous in AFixes (refused or inferred, see BuildBlockClasses), and a #link carrying a glyph expression is refused
-  (UnrealisedGlyphLinks). A path through a member that exists but is
+  (UnrealisedGlyphLinks) unless AGlyphStitch, which checks its class has an N reader instead. A path through a member that exists but is
   inaccessible is not an error: it comes back in AUnreachable (T2h, owner
   ruling R12), one record per block it is unreachable in -- print through
   DistinctUnreachable, filter per block through WithoutUnreachableRules. }
-function ValidateConvertBook(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet; const ARuleLines: TArray<string>;
+function ValidateConvertBook(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet; const ARuleLines: TArray<string>; AGlyphStitch: Boolean;
   out AUnreachable: TArray<TUnreachablePath>; out AUnresolved: TArray<TRuleError>;
   out AFixes: TArray<TQualifyFix>): TArray<TRuleError>;
 var
@@ -31549,7 +31591,8 @@ begin
     Classes    := BuildBlockClasses(ATrees, ARules, ARuleLines, TypeErrs, Fixes);
     AUnresolved:= TypeErrs.ToArray;
     AFixes     := Fixes.ToArray;
-    Result     := ValidateConversionRulesPerBlock(ARules, Classes, AUnreachable) + UnrealisedGlyphLinks(ARules);
+    Result     := ValidateConversionRulesPerBlock(ARules, Classes, AUnreachable);
+    Result     := Result + (if AGlyphStitch then MissingGlyphCountReaders(ARules, Classes) else UnrealisedGlyphLinks(ARules));
   finally
     Fixes.Free;
     TypeErrs.Free;
@@ -32491,7 +32534,7 @@ var
       BookChecked:= True;
       BookKey    := ScopeKey;
       ValHere    := Trees.ClassesBuilt;
-      RuleErrors := ValidateConvertBook(Trees, Rules, RulesText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]),
+      RuleErrors := ValidateConvertBook(Trees, Rules, RulesText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]), AArgs.GlyphStitch,
         BookUnreachable, Unresolved, QualifyFixes);
       ValHere    := Trees.ClassesBuilt - ValHere;
       BookBuilt  := BookBuilt + ValHere;
@@ -32769,7 +32812,7 @@ begin
 
   if (Length(Units) = 0) or (AArgs.RulesFile = '') then
   begin
-    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--raise-encoding "<path>=utf8-bom" ...] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--progress] [--format json]');
+    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--glyph-stitch] [--apply] [--no-backup] [--raise-encoding "<path>=utf8-bom" ...] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--progress] [--format json]');
     Exit(2);
   end;
   { one unit keeps its old first check; a batch checks each unit in RunUnit }
