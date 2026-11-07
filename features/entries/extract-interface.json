@@ -1,0 +1,84 @@
+{
+  "id": "extract-interface",
+  "title": "Extract an interface from the members used (scratch + compile gate)",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.44.1-alpha",
+  "summary": "Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate",
+  "intro": "Read this when a class needs an interface and you want it to hold what its callers actually use, not every public method. The default prints the plan, the very text it would write; --apply builds a scratch copy with the change first, then builds the project before and after and rolls back on any error. No consumer is retyped, so no lifetime changes.",
+  "wikiPage": "extract-interface",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "extract-interface",
+      "example": "drag-lint extract-interface --class <name> --plan --db <db>",
+      "usage": "drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
+      "flags": [
+        {
+          "name": "--class",
+          "arg": "<name>"
+        },
+        {
+          "name": "--members",
+          "arg": "<a,b>"
+        },
+        {
+          "name": "--name",
+          "arg": "<IFoo>"
+        },
+        {
+          "name": "--reparent-interfaced"
+        },
+        {
+          "name": "--plan"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--platform",
+          "arg": "<p>"
+        },
+        {
+          "name": "--rsvars",
+          "arg": "<bat>"
+        },
+        {
+          "name": "--build-timeout",
+          "arg": "<s>"
+        },
+        {
+          "name": "--no-compile"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--format",
+          "arg": "json"
+        }
+      ],
+      "help": ["  drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - declare an interface from the members of a class the project uses and add it to the class: plan by default, every refusal named, --apply through a scratch build and the compile gate"]
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-06",
+    "by": "ENGINE",
+    "build": "1.45.0-alpha",
+    "surfaceHash": "7f36a5ad2615cfa9ae3027b2503c1ba1b633d2de66cecdd40a8da6afd1c8d5d8"
+  }
+}
