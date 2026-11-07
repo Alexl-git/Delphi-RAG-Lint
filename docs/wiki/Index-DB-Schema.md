@@ -293,11 +293,14 @@ In a real index `local_var`/`param` dominate the row count (typed locals and par
 emitted so receivers can be typed), then `field` and `method`.
 
 **refs.kind** (curated in `DoSchema`; every literal passed to `EmitRef`/`AddRef`):
-`attribute call di-resolve di-unresolved event-binding handle handle-all member-access raise
-raise-expr read reraise sql_table_ref type_use write`. Notes: a dotted call emits BOTH a
+`attribute call di-resolve di-unresolved event-binding handle handle-all member-access property-spec raise
+raise-expr read record-field reraise sql_table_ref type_use write`. Notes: a dotted call emits BOTH a
 `call` and a co-located `member-access` ref at the same span; only `call` is resolved to
 `call_edges`. `raise`/`raise-expr`/`reraise`/`handle`/`handle-all` are exception facts
 (deep parse only; never resolved); `event-binding` is a DFM event hookup (name = handler).
+`property-spec` is a name a property's `read`/`write`/`stored` gives (receiver_text = the owner's qualified name), `record-field` a field name in a record constant
+(receiver_text = the path from the constant's type: `TBox.Pts[]`); both bind `refs.symbol_id` only (or `external_target`): no call edge, no `member_accesses` row.
+`inherited X` is a `call` (statement or arguments) or `member-access` (expression) with receiver_text `inherited`. `symbols.directives` holds `sealed` on a `class sealed`.
 
 **call_edges.confidence**: `certain`, `ambiguous`. **member_accesses.mode**: `read`, `write`.
 **dispatch_edges.kind**: `override`, `implements`.

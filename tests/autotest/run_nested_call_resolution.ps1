@@ -42,18 +42,13 @@
   THE TWO `inherited` ASSERTIONS ARE REGRESSION PINS, NOT TDD-DRIVEN
   --------------------------------------------------------------------------------
   They passed on first run and are recorded as such. `inherited X` is the one
-  shape that looks bare (no dot, so the receiver scan reports '') while naming
-  the ANCESTOR scope explicitly -- exactly the hazard the walk could create. It
-  turns out the parser emits NO call ref for `inherited X;` or `inherited
-  X(Args);` at all, so the resolver never sees one and needs no guard. That is
-  worth pinning precisely because it is load-bearing and invisible: the day the
-  parser starts emitting those refs, the walk needs an `inherited` guard, and
-  these two assertions are what will say so.
-
-  A comment in DRagLint.Index.CallResolver.TypeReceiver used to assert the
-  opposite -- that `inherited M` arrived as a bare kind-1 call and resolved on
-  the ancestor chain. Measuring it for this test is what showed it was wrong; the
-  comment has been corrected.
+  shape that looks bare (no dot) while naming the ANCESTOR scope explicitly --
+  exactly the hazard the walk could create. Until 1.46 the parser emitted no ref
+  for it at all. E-PARSER-NOREFS emits one with the parse fact receiver_text =
+  `inherited`, which keeps it out of the bare walk, and the resolver's kind 13
+  starts the lookup at the parent: these two assertions are the ones that say
+  the guard this comment asked for is in place. The positive half, that the ref
+  binds the ancestor's method, is tests\autotest\run_parser_norefs.ps1 i6.
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7. Needs python on PATH for the sqlite
   read-back (same as run_helper_edges.ps1).

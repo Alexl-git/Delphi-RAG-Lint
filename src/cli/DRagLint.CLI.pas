@@ -15739,7 +15739,7 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak');
-  LINT_GATE_PROJECT_RULES: array[0..43] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..44] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
@@ -15750,14 +15750,14 @@ const
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
     'effect-free-in-loop-invariant', 'ancestor-not-in-project', 'opaque-to-analysis', 'datamodule-form-global',
     'global-set-in-initialization-never-freed', 'heavy-initialization', 'finalization-after-dependency', 'init-order-hazard',
-    'is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed');
+    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed');
   { The project rules TProjectLintRules.Run gates on OptedIn (global-only-uses-edge,
     uses-global-census, ...). `lint <file>` hands Run NO opt-in list, so even with an
     index it never evaluates them unless --rule names one: a dl:ok for one of them
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..29] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..30] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
@@ -15765,7 +15765,7 @@ const
     'side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive',
     'effect-free-in-loop-invariant', 'opaque-to-analysis', 'datamodule-form-global',
     'global-set-in-initialization-never-freed', 'heavy-initialization', 'finalization-after-dependency', 'init-order-hazard',
-    'is-always-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed');
+    'is-always-true', 'is-never-true', 'upcast-then-downcast', 'with-on-temporary', 'interface-holder-of-non-refcounted', 'argument-narrows', 'redundant-cast', 'unsafe-typecast-without-is', 'ui-access-in-thread-typed');
   { The OptedIn-gated project rules that ship ON, and that `lint <file>` therefore
     opts in itself when a store CONTAINS the file (lane DIRLINT, 2026-10-27). Each
     is answered exactly for one file -- its own call sites, narrowed by AOnlyFileId
@@ -19030,7 +19030,7 @@ var
         can notice for you -- which is the argument for the enum-derived
         treatment symbols.kind gets below. }
       AValues:= 'attribute,call,di-resolve,di-unresolved,event-binding,'
-              + 'handle,handle-all,member-access,raise,raise-expr,read,reraise,'
+              + 'handle,handle-all,member-access,property-spec,raise,raise-expr,read,record-field,reraise,'
               + 'sql_table_ref,type_use,write';
     end
     else if Key = 'symbols.kind' then
