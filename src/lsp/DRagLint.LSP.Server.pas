@@ -3501,12 +3501,48 @@ begin
     if SameText(L.PlatformName, APlatform) then Exit(L.LibraryDb);
 end;
 
+{ The outDir a PRIVATE engine copy's own drag-lint.json declares, with a trailing
+  delimiter; '' for an engine at a deployed location, for no json, for no outDir. }
+function PrivateEngineOutDir: string;
+begin
+  Result:= '';
+  var ExeDir: string:= ExtractFilePath(ParamStr(0));
+  var LowDir: string:= LowerCase(ExeDir);
+  if LowDir.Contains('\third_party\dll-win64\') or LowDir.Contains('\program files')
+    or LowDir.Contains('\appdata\local\programs\') or LowDir.Contains('\globalstorage\') then Exit;
+  var Cfg: string:= ExeDir + 'drag-lint.json';
+  if not TFile.Exists(Cfg) then Exit;
+  try
+    var Manifest: TIndexManifest:= TManifestIO.ParseText(TFile.ReadAllText(Cfg), ExeDir);
+    if Manifest.OutDir <> '' then
+      Result:= IncludeTrailingPathDelimiter(TPath.GetFullPath(TPath.Combine(ExeDir, Manifest.OutDir)));
+  except
+    on E: Exception do Result:= ''; { a manifest that will not load keeps today's fallback }
+  end;
+end;
+
+{ E-PLATLIB-PRIVATE-OUTDIR: the central defaults belong to the USER, not to this engine. A
+  private engine that names its own outDir must not reach through them to the real library,
+  so a defaults library outside that outDir is dropped, and stderr says so. A deployed engine
+  keeps every entry. Pinned by tests\autotest\run_lsp_library_private_outdir.ps1. }
+function LibrariesVisibleToThisEngine(const ALibraries: TArray<TLibraryDefault>): TArray<TLibraryDefault>;
+begin
+  Result:= ALibraries;
+  var OutDir: string:= PrivateEngineOutDir;
+  if OutDir = '' then Exit;
+  Result:= nil;
+  for var L: TLibraryDefault in ALibraries do
+    if (L.LibraryDb = '') or StartsText(OutDir, TPath.GetFullPath(L.LibraryDb)) then Result:= Result + [L]
+    else Writeln(ErrOutput, 'drag-lint LSP: private engine: defaults library ', L.LibraryDb, ' ignored, it is outside the outDir of this engine''s drag-lint.json (', OutDir, ')');
+end;
+
 function TLSPServer.Defaults: TContextDefaults;
 begin
   if not FDefaultsRead then
   begin
     FDefaultsRead:= True;
-    if not TryLoadContextDefaults(FDefaults) then FDefaults:= Default(TContextDefaults);
+    if TryLoadContextDefaults(FDefaults) then FDefaults.Libraries:= LibrariesVisibleToThisEngine(FDefaults.Libraries)
+    else FDefaults:= Default(TContextDefaults);
   end;
   Result:= FDefaults;
 end;

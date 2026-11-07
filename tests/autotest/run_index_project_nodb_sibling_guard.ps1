@@ -209,6 +209,7 @@ function Invoke-Engine([string]$ExePath, [string]$Cwd, [string[]]$Argv, [int]$Ti
   $quoted = @($Argv | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } })
   $p = Start-Process $ExePath -ArgumentList $quoted -WorkingDirectory $Cwd `
          -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError $e
+  $null = $p.Handle  # Windows PowerShell 5.1: ExitCode stays blank unless the handle was cached before exit
   if (-not $p.WaitForExit($TimeoutSec * 1000)) { try { $p.Kill() } catch { }; return [pscustomobject]@{ Code = -1; Text = 'TIMEOUT' } }
   $so = [string](Get-Content $o -Raw -ErrorAction SilentlyContinue)
   $t  = ($so + "`n" + (Get-Content $e -Raw -ErrorAction SilentlyContinue))

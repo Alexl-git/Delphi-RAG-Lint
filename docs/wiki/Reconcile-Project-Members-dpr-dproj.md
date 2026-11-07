@@ -35,7 +35,7 @@ report marks each line (`[project unit -> --apply]` or
 `[third-party -> library: --apply --to library]`) and ends with a
 **SUGGESTED FIXES** block: one command per fix, already narrowed with `--only`
 to the units that suit it. `--json` gives each MISSING item `owner`,
-`suggestedFix` and `folder`.
+`suggestedFix` and `folder`; a `{$I}` include is reported with `owner` include and `suggestedFix` none, never as a fix target. A listed unit under a library root is not an EXTRA.
 
 `--apply --to library` edits the manifest named by `--config`, or else the
 `drag-lint.json` beside the exe. It writes `<manifest>.bak` first and keeps
