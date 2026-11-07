@@ -96,6 +96,7 @@ Find symbols, callers, callees, text and types in the index.
 | [Class Surface](Class-Surface) | drag-lint > Inspect Symbol > Class Surface...; `surface` |  |
 | [Compiler Hints](Compiler-Hints) | drag-lint > Code Quality > Compiler Hints...; `query hints` |  |
 | [context](context) | `context` |  |
+| [exception-facts](exception-facts) | `exception-facts` |  |
 | [Find Undocumented (public)](Find-Undocumented-public) | drag-lint > Code Quality > Find Undocumented (public)...; `query find` |  |
 | [Find Usages](Find-Usages) | drag-lint > Find Usages... |  |
 | [Find Usages](Find-Usages-context) | Structure form: Find Usages; `usages` |  |
@@ -132,29 +133,29 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**308 rules. 110 have an auto-fix. 260 are on by default.** 215 are built-in checks; 93 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**314 rules. 110 have an auto-fix. 261 are on by default.** 220 are built-in checks; 94 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
 | bug-patterns | 88 | 33 |
 | complexity | 13 | 2 |
-| data-flow | 9 | 2 |
+| data-flow | 12 | 2 |
 | dead-code | 19 | 15 |
 | documentation | 5 | 4 |
 | firedac | 3 | 3 |
 | metrics | 8 | - |
 | modernize | 4 | 4 |
 | naming | 14 | 9 |
-| other | 11 | 3 |
+| other | 12 | 3 |
 | platform | 10 | 4 |
 | policy | 3 | - |
-| project-wide | 46 | 6 |
+| project-wide | 48 | 6 |
 | refactoring | 20 | 8 |
 | resource-lifetime | 16 | 7 |
 | review-markers | 5 | 2 |
 | security | 22 | 2 |
 | structure | 12 | 6 |
-| **Total** | **308** | **110** |
+| **Total** | **314** | **110** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -165,6 +166,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Copy Diagnostics (Current File)](Copy-Diagnostics-Current-File) | About window: Copy Diagnostics (Current File); `lint` |  |
 | [Copy Selected Diagnostics](Copy-Selected-Diagnostics) | Structure form: Copy |  |
 | [Data module reaching a global form (lint rule)](datamodule-form-global) | `lint-all` |  |
+| [Data-flow rules that know a parameter's mode](flow-out-arg-rules) | `lint-all` |  |
 | [Downgrade fixes (compat rules)](compat-downgrade-fixes) | `lint` | planned |
 | [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
 | [Effect-free call in a loop that could move out (lint rule)](effect-free-in-loop-invariant) | `lint-all` |  |
@@ -184,10 +186,11 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Interfaced object set to nil (lint rule)](interfaced-object-nil-leak) | `lint-all` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules on the static type of a reference](ref-type-rules) | `lint-all` |  |
-| [Lint rules](rules) | 308 rules, 110 fixable; `rules` |  |
+| [Lint rules](rules) | 314 rules, 110 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project`; drag-lint > Code Quality > Project Structure Rules (god-class, layering...)... |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Opaque to analysis (lint rule)](opaque-to-analysis) | `lint-all` |  |
+| [Parameter type too wide (lint rule)](parameter-type-too-wide) | `lint-all` |  |
 | [Read but never assigned (lint rule)](read-never-assigned) | `lint-all` |  |
 | [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
 | [Rescan this unit](Rescan-this-unit) | Structure form: Rescan this unit; `index` |  |
@@ -207,6 +210,7 @@ DocInsight comments generated from the index, and drift detection.
 
 | Feature | Surfaces | Status |
 |---|---|---|
+| [bookmarks](bookmarks) | `bookmarks` |  |
 | [dl:wiki concept blocks](Wiki-Blocks-Authoring) | `wiki`; procedure: `docs\wiki\Wiki-Blocks-Authoring.md` |  |
 | [Doc Comment Stub (symbol)](Doc-Comment-Stub-symbol) | drag-lint > Generate & Export > Doc Comment Stub (symbol)...; `generate-docs` |  |
 | [doc-drift](doc-drift) | `doc-drift` |  |
@@ -225,7 +229,7 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Allow this message](Allow-this-message) | Structure form: Allow this message; `allow` |  |
-| [allow](allow) | `allow` |  |
+| [allow](allow) | drag-lint > Code Quality > Allow a Finding on This Line...; `allow` |  |
 | [Create helper class](Create-helper-class) | Structure form: Create helper class; `create-enum-helper` |  |
 | [create-enum-helper](create-enum-helper) | `create-enum-helper`; drag-lint > Generate & Export > Enum Record Helper (symbol)... |  |
 | [extract-method](extract-method) | `extract-method`; drag-lint > Extract Method (selection)... (Ctrl+Alt+M) |  |
@@ -238,7 +242,7 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Rename Symbol](Rename-Symbol) | drag-lint > Rename Symbol...; `rename` |  |
 | [safe-delete](safe-delete) | `safe-delete`; drag-lint > Safe Delete Symbol... |  |
 | [Unit Test Stub (symbol)](Unit-Test-Stub-symbol) | drag-lint > Generate & Export > Unit Test Stub (symbol)...; `generate-test` |  |
-| [unwith](unwith) | `unwith` |  |
+| [unwith](unwith) | `unwith`; `lint` |  |
 | [Uses & Deps Tab](Features) | drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes... |  |
 | [Uses Audit -- interface->impl moves + unused (this unit)](Uses-Audit-interface-impl-moves-unused-this-unit) | drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused...; `uses-audit` |  |
 | [Uses Cleanup Preview (compiler-verified, this unit)](Uses-Cleanup-Preview-compiler-verified-this-unit) | drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified)...; `uses-fix` |  |
@@ -249,7 +253,9 @@ Rule-driven migration of legacy component types.
 
 | Feature | Surfaces | Status |
 |---|---|---|
+| [BDE and Data.DB rule books](convrules-book-split) | `tests/autotest/run_convert_book_split.ps1`; `ConvRulesEditor.exe` (Convert tab > rule book list) |  |
 | [Conditional #mapping authoring](convrules-editor-mappings) | `ConvRulesEditor.exe` (Mapping > Mappings...) |  |
+| [Convert Components](Convert-Components) | drag-lint > Convert Components > Convert Selected Component(s)...; drag-lint > Convert Components > Convert All of This Type on the Form...; drag-lint > Convert Components > Open Conversion Editor... |  |
 | [Convert progress](convrules-editor-convert-progress) | `ConvRulesEditor.exe` (Convert tab progress line) |  |
 | [convert-apply #migrate (member, type and enum rename / DL_NONE)](convert-apply-migrate) | `convert-apply` |  |
 | [convert-apply](convert-apply) | `convert-apply` |  |
@@ -261,6 +267,7 @@ Rule-driven migration of legacy component types.
 | [Examine: mark the properties a form uses](convrules-editor-examine) | `ConvRulesEditor.exe` (Conversion > Examine...); `ConvRulesEditor.exe` (Conversion > Clear marks) |  |
 | [Glyph expressions (G[I/N])](convrules-editor-glyph) | `ConvRulesEditor.exe` (Mapping > Glyph expression...) |  |
 | [glyph-vacuum](glyph-vacuum) | `glyph-vacuum` |  |
+| [Inherited units, ancestors first](convrules-editor-inherited-units) | `ConvRulesEditor.exe` (Convert tab > Add... (offers ancestors root first)) |  |
 | [Member migration (#migrate)](convrules-editor-migrate) | `ConvRulesEditor.exe` (Work list tab > Migrate...); `ConvRulesEditor.exe` (Classes tab > Members list > Add...) |  |
 | [Progress window and busy guard](convrules-editor-busy-guard) | `ConvRulesEditor.exe` (Progress window (appears by itself)) |  |
 | [proptree](proptree) | `proptree` |  |
@@ -364,7 +371,8 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [LSP protocol extensions](lsp-proxy-merge) | `lsp textDocument/documentSymbol`; `lsp textDocument/implementation`; `lsp textDocument/declaration`; `lsp textDocument/rename`; `lsp textDocument/codeLens`; `lsp textDocument/semanticTokens/full`; `lsp textDocument/inlayHint`; `lsp textDocument/prepareCallHierarchy`; `lsp callHierarchy/incomingCalls`; `lsp callHierarchy/outgoingCalls`; `lsp textDocument/prepareTypeHierarchy`; `lsp typeHierarchy/supertypes`; `lsp typeHierarchy/subtypes`; `lsp textDocument/typeDefinition`; `lsp textDocument/documentHighlight`; `lsp textDocument/foldingRange`; `lsp workspace/executeCommand`; `lsp draglint/ping` |  |
 | [LSP proxy merge](lsp-proxy-merge) | `lsp` |  |
 | [lsp](lsp) | `lsp` |  |
-| [MCP server](Register-MCP-Server) | `mcp find_symbol`; `mcp find_callers`; `mcp lint`; `mcp get_symbol_doc`; `mcp find_by_doc_tag`; `mcp find_undocumented`; `mcp get_impact`; `mcp get_wiring`; `mcp get_surface`; `mcp get_slice`; `mcp get_context_bundle`; `mcp get_type_at_position`; `mcp rename_symbol`; `mcp run_ast_checks`; `mcp run_compile_check` |  |
+| [MCP get_neighbors](MCP-Get-Neighbors) | `mcp get_neighbors` |  |
+| [MCP server](Register-MCP-Server) | `mcp find_symbol`; `mcp find_callers`; `mcp lint`; `mcp get_symbol_doc`; `mcp find_by_doc_tag`; `mcp find_undocumented`; `mcp get_impact`; `mcp get_neighbors`; `mcp get_implementors`; `mcp get_wiring`; `mcp get_surface`; `mcp get_slice`; `mcp get_context_bundle`; `mcp get_type_at_position`; `mcp rename_symbol`; `mcp run_ast_checks`; `mcp run_compile_check` |  |
 | [Output encoding (--output-encoding)](output-encoding) | `sql` |  |
 | [project-context](project-context) | `project-context` |  |
 | [Register the MCP server (Claude Code, VS Code, Cursor)](Register-MCP-Server) | `mcp-config` |  |

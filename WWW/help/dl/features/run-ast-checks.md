@@ -4,10 +4,10 @@ title: Run AST Checks
 summary: Runs drag-lint's AST-level checks against a file
 product: DL
 group: linting
-order: 30033
+order: 30035
 since: 0.31.0-alpha
 status: shipped
-updated: 1.44.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Run AST Checks

@@ -191,7 +191,7 @@
   drag-lint export enums       --db <file.sqlite>    [--format firebird-sql|csv|json|delphi-const] [--output <file>]
   drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]
   drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]
-  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]
+  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]
   drag-lint todos              [<path>]                (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])
   drag-lint diff               --db <old.sqlite> --db <new.sqlite>  [--json]
   drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)

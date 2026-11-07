@@ -4,10 +4,10 @@ title: Curate rule books
 summary: "ConvRulesEditor: split, delete, merge and compose #convert blocks across rule books on disk"
 product: DL
 group: component-conversion
-order: 60007
+order: 60009
 since: 1.20.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Curate rule books

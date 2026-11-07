@@ -4,10 +4,10 @@ title: find-callees
 summary: Lists the resolved outgoing calls of one routine, plus the library-bound ones
 product: DL
 group: search-navigation
-order: 20006
+order: 20007
 since: 0.91.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # find-callees

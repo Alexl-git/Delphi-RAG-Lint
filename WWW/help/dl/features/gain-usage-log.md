@@ -4,10 +4,10 @@ title: Gain (counted savings)
 summary: "Sums the per-user usage log: tokens returned versus source bytes avoided, per verb and per day"
 product: DL
 group: search-navigation
-order: 20011
+order: 20012
 since: 1.38.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Gain (counted savings)

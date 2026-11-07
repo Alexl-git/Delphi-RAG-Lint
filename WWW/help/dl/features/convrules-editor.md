@@ -4,10 +4,10 @@ title: ConvRulesEditor
 summary: Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27)
 product: DL
 group: component-conversion
-order: 60008
+order: 60010
 since: 0.0.0
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # ConvRulesEditor

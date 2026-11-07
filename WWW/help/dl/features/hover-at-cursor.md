@@ -4,10 +4,10 @@ title: Hover at Cursor
 summary: "Hover card for the symbol under the caret: signature, type, documentation, callers; an interface method also lists its implementers"
 product: DL
 group: search-navigation
-order: 20016
+order: 20017
 since: 0.7.0-alpha
 status: shipped
-updated: 1.44.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Hover at Cursor

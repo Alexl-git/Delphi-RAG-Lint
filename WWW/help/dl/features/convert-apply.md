@@ -7,7 +7,7 @@ group: component-conversion
 order: 60001
 since: 1.2.0-alpha
 status: shipped
-updated: 1.43.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # convert-apply
@@ -29,6 +29,7 @@ Full flag list: [convert-apply in the CLI reference](../cli.md#convert-apply).
 | `--db` | `PATH` |  |  |
 | `--only` |  |  |  |
 | `--castlib` | `<file>` |  |  |
+| `--glyph-stitch` |  |  |  |
 | `--apply` |  |  |  |
 | `--no-backup` |  |  |  |
 | `--raise-encoding` | `<path>=utf8-bom` |  |  |
@@ -168,6 +169,21 @@ converts a base data module and its descendants together. The JSON
 ancestor that is not in the run is still never converted for you: its
 descendant's objects stay `skipped` / `unconverted` until it is.
 
+### Glyph strips: --glyph-stitch (OFF by default)
+
+A `#link` may carry a `G[I/N]` expression (see `docs\CONVERSION-RULES.md`). Without
+`--glyph-stitch`, `convert-apply` refuses such a book, as it always has. With it, each
+image G-link slices the source `TBitmap` strip, stitches the chosen slots into a new
+bitmap of the same height, depth and palette, and writes it to `<ToPath>.Data` through the
+link's cast (give `--castlib`). A `G[count]` link writes the number of slots chosen, after
+the image leaf. N comes from the per-class reader table; a class outside it is an error.
+
+No alternative for the actual N, a payload that is not a bitmap strip, a width that does
+not divide by N or a missing cast write neither the image nor the count: a TODO line at the
+top of the unit's `implementation`, a `*** GLYPH TODO:` line, and an outcome in apply/1
+`glyphs[]`. A source with no glyph at all is not an error. A `.pas` site of a G-linked
+member is reported and left alone. `info --json` does not advertise `glyph_stitch` yet, so
+the conversion editor keeps G-link books greyed until the owner promotes the switch.
 ### Exit codes
 `0` converted (or nothing to do); `1` the unit was REFUSED (a deliberate
 refusal: nothing written, the reason printed); `2` a write failed or was

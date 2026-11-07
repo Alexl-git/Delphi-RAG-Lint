@@ -4,10 +4,10 @@ title: "Examine: mark the properties a form uses"
 summary: "ConvRulesEditor Conversion menu: pick .dfm/.pas files and mark in green the From properties they actually use"
 product: DL
 group: component-conversion
-order: 60010
+order: 60012
 since: 1.31.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Examine: mark the properties a form uses

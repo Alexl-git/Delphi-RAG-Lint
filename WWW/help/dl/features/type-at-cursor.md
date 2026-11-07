@@ -4,10 +4,10 @@ title: Type at Cursor
 summary: Resolves the static type of the expression under the editor caret
 product: DL
 group: search-navigation
-order: 20033
+order: 20034
 since: 0.19.0-alpha
 status: shipped
-updated: 1.44.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Type at Cursor

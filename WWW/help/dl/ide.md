@@ -12,6 +12,7 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
 * drag-lint
   * [About](features/about-and-status.md)
   * Code Quality
+    * [Allow a Finding on This Line...](features/allow.md)
     * [Compiler Hints...](features/compiler-hints.md)
     * [Find Dead Code...](features/find-dead-code.md)
     * [Find Undocumented (public)...](features/find-undocumented-public.md)
@@ -22,6 +23,10 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
   * [Compile & Diagnose](features/compile-diagnose.md)
   * Compile Buffer (unsaved): [Compile Buffer (unsaved)](features/compile-buffer-unsaved.md), [ghost-check](features/ghost-check.md)
   * [Compile Dependents](features/compile-dependents.md)
+  * Convert Components
+    * [Convert All of This Type on the Form...](features/convert-components.md)
+    * [Convert Selected Component(s)...](features/convert-components.md)
+    * [Open Conversion Editor...](features/convert-components.md)
   * [Convert Public Field to Property at Cursor](features/quick-fix-convert-public-field-to-property-at-cursor.md)
   * [Extract Method (selection)... (Ctrl+Alt+M)](features/extract-method.md)
   * Find Usages...: [Find Usages](features/find-usages.md), [query find-callers](features/query-find-callers.md), [usages](features/usages.md)

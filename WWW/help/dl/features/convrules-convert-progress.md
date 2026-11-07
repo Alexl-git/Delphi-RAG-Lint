@@ -4,10 +4,10 @@ title: Convert progress
 summary: "ConvRulesEditor Convert tab: per-step progress (unit, book, phase, elapsed) on the status bar and the tab"
 product: DL
 group: component-conversion
-order: 60006
+order: 60008
 since: 1.26.7-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Convert progress

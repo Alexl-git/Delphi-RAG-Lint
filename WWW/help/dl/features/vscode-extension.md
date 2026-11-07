@@ -4,10 +4,10 @@ title: "VS Code extension: Problems stay current"
 summary: VS Code extension commands, and Problems that follow files an agent edits on disk
 product: DL
 group: editor-integration
-order: 110023
+order: 110024
 since: 1.38.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.46.0-alpha
 ---
 
 # VS Code extension: Problems stay current

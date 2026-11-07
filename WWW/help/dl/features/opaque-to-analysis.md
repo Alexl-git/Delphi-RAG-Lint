@@ -4,10 +4,10 @@ title: Opaque to analysis (lint rule)
 summary: "Project-wide lint rule (info, off by default): a routine whose non-library calls are mostly unresolvable, so impact and call trees are blind inside it"
 product: DL
 group: linting
-order: 30029
+order: 30030
 since: 1.42.0-alpha
 status: shipped
-updated: 1.44.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Opaque to analysis (lint rule)

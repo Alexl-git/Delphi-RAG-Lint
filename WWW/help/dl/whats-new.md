@@ -9,6 +9,15 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.46.0-alpha
+
+* [bookmarks](features/bookmarks.md) -- Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder.
+* [Convert Components](features/convert-components.md) -- Opens ConvRulesEditor on the components selected in the form designer.
+* [exception-facts](features/exception-facts.md) -- Lists which routine raises and handles which exception type, by routine or by type.
+* [Data-flow rules that know a parameter's mode](features/flow-out-arg-rules.md) -- Three OFF rules: a local that only receives out arguments, a store overwritten by an out argument, a local passed by value to a method before it is assigned.
+* [MCP get_neighbors](features/mcp-get-neighbors.md) -- MCP tool: the call-graph neighbourhood of a symbol within 1..3 hops.
+* [Parameter type too wide (lint rule)](features/parameter-type-too-wide.md) -- Project lint rule, OFF by default: a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan.
+
 ## 1.44.1-alpha
 
 * [Finalization reaching a unit already finalized (lint rule)](features/finalization-after-dependency.md) -- Project lint rule: a finalization section reaches a global that a unit finalized earlier in the computed order tears down.
@@ -17,7 +26,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Initialization reaching a unit that initializes later (lint rule)](features/init-order-hazard.md) -- Project lint rule: an initialization section reaches a global that a unit initializing later in the computed order sets in its own initialization.
 * [Narrow parameter types (compile-gated)](features/narrow-param.md) -- Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate.
 * [Remove redundant casts (compile-gated)](features/redundant-cast-fix.md) -- Removes hard casts whose operand already has exactly the target type, proved from the index's static types and written through the compile gate.
-* [Lint rules on the static type of a reference](features/ref-type-rules.md) -- Lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows, UI access from a thread; sharper redundant-cast and unsafe casts.
+* [Lint rules on the static type of a reference](features/ref-type-rules.md) -- Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread; sharper redundant-cast and unsafe casts.
 * [unwith](features/unwith.md) -- Removes with blocks, proving every name binds to what it bound before.
 
 ## 1.42.0-alpha
@@ -34,6 +43,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 1.40.0-alpha
 
+* [Inherited units, ancestors first](features/convrules-inherited-units.md) -- ConvRulesEditor offers and orders the ancestors of an inherited form root-first before Convert.
 * [Engine heartbeat: the IDE tells a busy engine from a stuck one](features/engine-heartbeat.md) -- A running engine reports what it is doing, so the IDE kills only an engine whose status stopped moving.
 * [Interface Implementors Report](features/interface-implementors.md) -- Who implements an interface, which method answers each interface method in each class, and who calls or uses an interface member.
 * [Read but never assigned (lint rule)](features/read-never-assigned.md) -- Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates.
@@ -62,6 +72,10 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 * [Gap-wave lint rules](features/gap-wave-rules.md) -- About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave.
 * [Include-file indexing and IF evaluation](features/inc-indexing.md) -- Include files are indexed under the active build, value defines and IF expressions are evaluated, and an undecidable IF is reported as a pp-unresolved-if hint.
 * [Taint analysis (SQL, command, path)](features/taint-analysis.md) -- taint-sql-injection, taint-command-injection and taint-path-traversal follow index data_flows facts from a source to a sink.
+
+## 1.36.0-alpha
+
+* [BDE and Data.DB rule books](features/convrules-book-split.md) -- The BDE-to-FireDAC conversion rules are two books (BDE, Data.DB) run in that order; the Convert tab warns on the wrong order.
 
 ## 1.35.1-alpha
 
@@ -466,7 +480,7 @@ drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.co
 
 ## 0.4.0-alpha
 
-* [MCP server](features/mcp-server.md) -- Exposes the index to MCP clients as 15 tools.
+* [MCP server](features/mcp-server.md) -- Exposes the index to MCP clients as 17 tools.
 * [serve](features/serve.md) -- Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index.
 
 ## 0.2.0-alpha

@@ -4,10 +4,10 @@ title: convert-validate
 summary: "Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees"
 product: DL
 group: component-conversion
-order: 60004
+order: 60005
 since: 1.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # convert-validate
@@ -27,6 +27,7 @@ Full flag list: [convert-validate in the CLI reference](../cli.md#convert-valida
 | `--rules` | `<file>` |  |  |
 | `--from` | `<FromType>` |  |  |
 | `--to` | `<ToType>` |  |  |
+| `--glyph-stitch` |  |  |  |
 | `--print-parsed` |  |  |  |
 | `--db` | `PATH` |  |  |
 
@@ -58,6 +59,9 @@ malformed terms, I or N out of range, two alternatives for one N, and a
 the expression. `line N: warning: ...` lines (a straight `NumGlyphs` carry beside
 a G-link) never change the exit code. `convert-apply` refuses a G-linked book
 until the extraction build lands. Full grammar: `docs\CONVERSION-RULES.md`.
+
+With `--glyph-stitch` a `#link` carrying an image `G[I/N]` expression on a class with no
+glyph-count reader is an error, when `--from` names the class. Parse-only mode stays silent.
 
 ### What it needs
 Optional, per the feature map's Index column.

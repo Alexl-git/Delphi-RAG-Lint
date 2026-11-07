@@ -78,9 +78,9 @@
   ],
   "notes": "issued by the plugin from InvokeExtractMethod (DragLint.Plugin.Keyboard.pas)",
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-11-07",
     "by": "ENGINE",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "8594720b159a50644ee2542e8baacfdde83e4c6e6926c746789f8c5498b3d68b"
+    "build": "1.46.0-alpha",
+    "surfaceHash": "d99567feb498e6f2a0adc2759a647f525cfc667d7d776caabe0b882c938e0f80"
   }
 }

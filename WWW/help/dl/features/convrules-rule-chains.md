@@ -4,10 +4,10 @@ title: Rule chains (single-pass warning, merge / split)
 summary: "ConvRulesEditor marks #convert chains, cycles, duplicate From types and unit swap chains on Save; offers merge into TA -> TC or split into stage books"
 product: DL
 group: component-conversion
-order: 60016
+order: 60019
 since: 1.35.1-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Rule chains (single-pass warning, merge / split)

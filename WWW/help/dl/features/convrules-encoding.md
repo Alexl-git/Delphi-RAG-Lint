@@ -4,10 +4,10 @@ title: Rule book and source encoding
 summary: ConvRulesEditor keeps each book's encoding, asks before a lossy save, and before a Convert whose rules a source cannot hold (raise it, fix the rules, or cancel)
 product: DL
 group: component-conversion
-order: 60009
+order: 60011
 since: 1.35.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Rule book and source encoding

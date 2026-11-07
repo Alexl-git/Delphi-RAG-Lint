@@ -46,5 +46,11 @@
       "command": "drag-lint exception-facts --target <routine> --db <db>"
     }
   ],
-  "notes": "wave 146 lane b5; spec docs\\superpowers\\specs\\2026-11-06-raise-handle-type-facts.md; guard tests\\autotest\\run_exception_facts.ps1"
+  "notes": "wave 146 lane b5; spec docs\\superpowers\\specs\\2026-11-06-raise-handle-type-facts.md; guard tests\\autotest\\run_exception_facts.ps1",
+  "verified": {
+    "date": "2026-11-07",
+    "by": "ENGINE",
+    "build": "1.46.0-alpha",
+    "surfaceHash": "78e7a3f80bd7e0aeb56cbb985eba75505379ac97d74f75c1c06923e64af4b955"
+  }
 }

@@ -4,10 +4,10 @@ title: Stream buffer used after free (lint rule)
 summary: "Lint rule, OFF by default: a pointer into a memory stream buffer is used after the stream was freed"
 product: DL
 group: linting
-order: 30036
+order: 30038
 since: 1.42.0-alpha
 status: shipped
-updated: 1.44.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Stream buffer used after free (lint rule)

@@ -80,7 +80,7 @@
   "verified": {
     "date": "2026-11-07",
     "by": "ENGINE",
-    "build": "1.45.0-alpha",
-    "surfaceHash": "57103fb1a1a0c210d8412084e7c3f8338c13bb87f58b19dbb88024f11aadf55d"
+    "build": "1.46.0-alpha",
+    "surfaceHash": "a9b3674f6f8ea21550bbfdac27a045d2cba3fc23effdfe3cefc995f768599fb4"
   }
 }

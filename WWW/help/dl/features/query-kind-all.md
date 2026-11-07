@@ -4,10 +4,10 @@ title: query --kind --all
 summary: Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap
 product: DL
 group: search-navigation
-order: 20021
+order: 20022
 since: 1.19.1-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # query --kind --all

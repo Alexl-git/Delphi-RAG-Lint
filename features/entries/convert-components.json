@@ -4,7 +4,7 @@
   "group": "component-conversion",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.44.1-alpha",
+  "since": "1.46.0-alpha",
   "summary": "Opens ConvRulesEditor on the components selected in the form designer",
   "intro": "Read this when you want to convert components from the form designer. Select them, choose drag-lint > Convert Components > Convert Selected Component(s)...; drag-lint saves and closes the unit and opens ConvRulesEditor on its Convert tab with the matching books checked. You press Convert. The unit reopens when the editor closes.",
   "wikiPage": "Convert-Components",
@@ -33,9 +33,9 @@
     }
   ],
   "verified": {
-    "date": "2026-11-06",
+    "date": "2026-11-07",
     "by": "ENGINE",
-    "build": "1.45.0-alpha",
+    "build": "1.46.0-alpha",
     "surfaceHash": "3ad7d4dbd4fa62932adaf79bb073d71c7ae59f666f5d4f13b36417bd0ab50cc3"
   }
 }

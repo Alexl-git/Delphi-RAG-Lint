@@ -4,10 +4,10 @@ title: "Unit rules (#use, #unuse, #useswap)"
 summary: "ConvRulesEditor Uses Units menu and Unit Rules tab: add, remove and swap units in the converted unit's uses clause"
 product: DL
 group: component-conversion
-order: 60018
+order: 60021
 since: 1.31.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Unit rules (#use, #unuse, #useswap)

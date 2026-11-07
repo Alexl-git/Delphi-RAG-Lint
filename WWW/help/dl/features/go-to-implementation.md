@@ -4,10 +4,10 @@ title: Go to Implementation
 summary: Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node
 product: DL
 group: search-navigation
-order: 20014
+order: 20015
 since: 0.43.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Go to Implementation

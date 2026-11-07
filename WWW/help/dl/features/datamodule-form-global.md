@@ -7,7 +7,7 @@ group: linting
 order: 30007
 since: 1.42.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Data module reaching a global form (lint rule)
@@ -55,6 +55,9 @@ One warning per data module unit and form variable, at the first reference, with
 - A name the data module's own unit also declares (a field or local of that name wins in scope).
 - A form class whose chain to `TForm` goes through a class neither index knows; with no library index, that means any library base class.
 - A member access such as `Foo.MainForm`: only a bare name is the global.
+
+### Measured (2026-11-06)
+The rule is OFF by default. On Loader2025 it reports 75 findings, one per data module, all against one form variable (frmLoader2019_Main, 5 to 137 references each). All 75 were checked by hand against the source (a sample of the references: lstSource.Items.Add, LogError, IBD.InTransaction): every one is a real data-layer-to-main-form dependency, none a false positive. It stays OFF because it is a design hint that a legacy loader repeats in every module; enable it with `--enable datamodule-form-global` when untangling that layer.
 
 ---
 

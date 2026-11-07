@@ -4,10 +4,10 @@ title: "Conditional #mapping authoring"
 summary: "ConvRulesEditor Mapping menu: author a conditional #mapping (one enum value sets several target properties) and #apply it to a conversion"
 product: DL
 group: component-conversion
-order: 60012
+order: 60015
 since: 1.31.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Conditional #mapping authoring

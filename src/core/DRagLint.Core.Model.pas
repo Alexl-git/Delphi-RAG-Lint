@@ -17,7 +17,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.45.0-alpha';
+  DRAGLINT_VERSION = '1.46.0-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -229,7 +229,14 @@ const
       now emits a refs row (Parser.Delphi13.IsCallRootedReceiver, complement of G5),
       so ref_types, member_accesses and call_edges grow for those shapes. Guards
       run_ref_type_helpers, run_facts_ref_types. The resolver code is unchanged. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.32.0-alpha';
+  { 1.32.0 -> 1.33.0 (2026-11-07, 1.46, lane/146-int -- ONE bump for the wave, over 1.45 which never deployed):
+    * grammar b12b539: a final `external L name '...'` with no `;` parses (E-SHLOBJ-PARSE, lane b2).
+    * parser: refs for `inherited X`, property specifiers (property-spec), `for .. in` iterators, record-constant
+      field names (record-field); `absolute` is a read; symbols.directives holds sealed (E-PARSER-NOREFS, lane b1).
+    * parser + storage: reraise / raise-expr carry the handler's type; raise and handle rows bind (lane b5).
+    * storage write side: ref_element_types (lane b3).
+    * Doc.SymbolFacts: purity reads a write to a by-value scalar as no effect (lane b7). }
+  DRAGLINT_EXTRACTOR_VERSION = '1.33.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
@@ -448,7 +455,12 @@ const
   /// tests\callresolve\run_inline_var_ctor_bind.ps1, run_nested_outer_local_bind.ps1); a with
   /// target whose surface leaves the index falls through when the library proves it lacks
   /// the name (WITH-SELF-PROP, guard tests\autotest\run_with_self_prop.ps1).</para>
-  DRAGLINT_RESOLVER_VERSION = '1.20.0-alpha';
+  /// <para>1.20.0-alpha -&gt; 1.21.0-alpha (2026-11-07, 1.46): A[i].X by element type
+  /// (E-RENAME-ELEMENT-TYPE); the nearest override binds certain (E-BIND-NEAREST-WINS, guards
+  /// tests\callresolve\run_bind_nearest_wins.ps1, run_bind_nearest_dcc.ps1); redeclared property
+  /// accessors; library globals, unit-qualified routines, the TObject root and class-var fields
+  /// (E-RECV-UNDECIDABLE D02/D03/D04/D12); exception types bind.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.21.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
