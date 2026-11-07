@@ -169,7 +169,7 @@
                                --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;
                                stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.
                                in lsp mode the engine also listens on a per-user maintenance pipe -- see `drag-lint shutdown`.
-                               --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>] [--delphi-lsp-bits 32|64]: relay in front of RAD Studio's DelphiLSP,
+                               --proxy [--delphi-lsp <path>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-navigation] [--merge-budget-ms <n>] [--delphi-lsp-bits 32|64]: relay in front of RAD Studio's DelphiLSP,
                                so registering drag-lint as the Code Insight server keeps the compiler front end.
                                --trace appends every relayed LSP message to <file> with a direction tag (C>S / S>C); off by default.
                                --merge-diagnostics: append drag-lint's lint findings to DelphiLSP's publishDiagnostics (one notification, source-tagged); OFF by default.
