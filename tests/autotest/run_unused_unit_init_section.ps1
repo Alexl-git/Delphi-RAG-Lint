@@ -141,7 +141,7 @@ $py = Get-Command python -ErrorAction SilentlyContinue
 if ($py) {
   $oldLib = Join-Path $WorkDir 'oldlib.sqlite'
   Copy-Item $libDb $oldLib
-  $stamp = & $py.Source -I -c "import sqlite3,sys;c=sqlite3.connect(sys.argv[1]);r=c.execute(`"select value from schema_meta where key='resolver_fingerprint'`").fetchone();v=r[0].replace('r=1.20.0-alpha','r=1.19.0-alpha');c.execute(`"update schema_meta set value=? where key='resolver_fingerprint'`",(v,));c.commit();print(v)" $oldLib
+  $stamp = & $py.Source -I -c "import sqlite3,sys;c=sqlite3.connect(sys.argv[1]);r=c.execute(`"select value from schema_meta where key='resolver_fingerprint'`").fetchone();import re;v=re.sub(r'r=[0-9.]+-alpha','r=1.19.0-alpha',r[0]);c.execute(`"update schema_meta set value=? where key='resolver_fingerprint'`",(v,));c.commit();print(v)" $oldLib
   Check 'setup: copy stamped with the older resolver' ($stamp -match 'r=1\.19\.0-alpha') "$stamp"
   $old = Run-Lint $Exe $oldLib $prjDb 'oldlib'
   $oi = Line $old 'uIdleInit'

@@ -815,9 +815,25 @@ var
     Result:= ReadSeen.ContainsKey(AId) and not Written.ContainsKey(AId);
   end;
 
-  { An initialised, absolute or absolute-aliased global (the alias's target is
-    indexed as a second var on the alias's line); also one whose declaration
-    cannot be read. }
+  { An initialised, absolute or absolute-aliased global; also one whose declaration
+    cannot be read. Since extractor 1.33 (146 b1) the name after `absolute` is a READ
+    ref, no longer a second var on the alias's line, so the alias's target is found by
+    reading the other globals' declarations for `absolute <Name>`. }
+  function NamesAsAbsoluteTarget(const ADecl, AName: string): Boolean;
+  var
+    P: Integer;
+    W: string;
+  begin
+    P:= Pos('absolute', LowerCase(ADecl));
+    if P = 0 then Exit(False);
+    W:= Trim(Copy(ADecl, P + Length('absolute'), MaxInt));
+    P:= 1;
+    while (P <= Length(W)) and CharInSet(W[P], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) do Inc(P);
+    W:= Copy(W, 1, P - 1);
+    if W.Contains('.') then W:= Copy(W, W.LastIndexOf('.') + 2, MaxInt);
+    Result:= SameText(W, AName);
+  end;
+
   function GlobalExempt(const ASym: TSymbol): Boolean;
   var
     L: TList<TSymbol>;
@@ -830,6 +846,9 @@ var
       if (V.Id = ASym.Id) and ((Tail = '') or Tail.Contains('=')) then Exit(True);
       if HasWord(Coll.DeclLine(V), 'absolute') then Exit(True);
     end;
+    for var Others in VarsByName.Values do
+      for var V in Others do
+        if (V.Id <> ASym.Id) and NamesAsAbsoluteTarget(Coll.DeclLine(V), ASym.Name) then Exit(True);
   end;
   procedure Report(const ASym: TSymbol; AIsField: Boolean);
   var

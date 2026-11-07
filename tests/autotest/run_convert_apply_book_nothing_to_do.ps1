@@ -111,5 +111,5 @@ Check 'C3 CONTROL #migrate T -> T with a site: exit 0, the bytes changed' (($r.C
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
-  if ($WorkDir -like 'C:\TEMP\draglint_convert_apply_nothing_*' -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
+  if ((Split-Path $WorkDir -Leaf) -like 'draglint_convert_apply_nothing_*' -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
 }

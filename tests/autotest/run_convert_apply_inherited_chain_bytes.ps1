@@ -557,5 +557,5 @@ Check 'CR CONTROL ... and DIES at load: Delphi reads the From property on the co
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
-  if ($WorkDir -like 'C:\TEMP\draglint_convert_apply_inh_chain_*' -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
+  if ((Split-Path $WorkDir -Leaf) -like 'draglint_convert_apply_inh_chain_*' -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
 }

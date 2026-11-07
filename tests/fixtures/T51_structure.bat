@@ -11,7 +11,7 @@ call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat" >NUL
 REM -NU: DCUs go to a private folder, never beside the sources in src\ -- a stray
 REM src\*.dcu is reused by any later build that searches that directory.
 if not exist "%HERE%_dcu\T51_structure" mkdir "%HERE%_dcu\T51_structure"
-dcc64 -NU"%HERE%_dcu\T51_structure" -E%HERE% -U%HERE%..\..\src\delphi-plugin %HERE%T51_structure.dpr > "%HERE%t51_build.txt" 2>&1
+dcc64 -NU"%HERE%_dcu\T51_structure" -E%HERE% -U%HERE%..\..\src\delphi-plugin;%HERE%..\..\src\core %HERE%T51_structure.dpr > "%HERE%t51_build.txt" 2>&1
 if not exist "%HERE%T51_structure.exe" (echo FAIL: build failed && type "%HERE%t51_build.txt" && exit /b 1)
 "%HERE%T51_structure.exe" > "%HERE%t51_out.txt"
 type "%HERE%t51_out.txt"

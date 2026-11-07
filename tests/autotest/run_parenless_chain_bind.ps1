@@ -288,7 +288,9 @@ end.
   Declines 'ViaNeedsArg' 'Run' 'FW.NeedsArg'
   Declines 'ViaProc'     'Run' 'FW.Proc'
   Declines 'ViaLost'     'Run' 'FW.Lost'
-  Declines 'ViaOverride' 'Run' 'FK.Virt'
+  # 146 int: b4's nearest-wins makes the TKid.Virt / TWorker.Virt pair certain (the override is nearest), so the hop types:
+  # dcc gives FK.Virt the override's return type, TWorker, and Run is TWorker.Run.
+  Binds 'ViaOverride'    'Run'  'FK.Virt'        'uChainA.TWorker.Run'
 }
 finally {
   if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }

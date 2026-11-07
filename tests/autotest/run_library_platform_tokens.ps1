@@ -52,7 +52,7 @@ if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
 
 $exe = Join-Path $WorkDir ([IO.Path]::GetFileNameWithoutExtension($DprName) + '.exe')
 if (-not (Test-Path $exe)) { Write-Host "FATAL: built exe missing: $exe" -ForegroundColor Red; exit 2 }
-Copy-Item -Path (Join-Path $PSScriptRoot '..\..\third_party\dll-win64\*.dll') -Destination $WorkDir -Force -ErrorAction SilentlyContinue  # a READ out of dll-win64 (the jobs guard reads the first path)
+Copy-Item "$PSScriptRoot\..\..\third_party\dll-win64\*.dll" $WorkDir -Force -ErrorAction SilentlyContinue  # a READ out of dll-win64 (the jobs guard reads the first path)
 & $exe
 $rc = $LASTEXITCODE
 if ($rc -eq 0) { Write-Host 'PASS' -ForegroundColor Green } else { Write-Host 'FAIL' -ForegroundColor Red }
