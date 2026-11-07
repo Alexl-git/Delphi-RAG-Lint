@@ -11,6 +11,9 @@ type
   TRtMid = class(TRtBase)
   end;
 
+  TdlgLocal = class(TRtBase)
+  end;
+
   TRtLeaf = class(TRtMid)
   public
     Link: TRtLeaf;
