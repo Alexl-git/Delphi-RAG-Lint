@@ -72,6 +72,8 @@ contains
   DragLint.Plugin.FanOut in 'DragLint.Plugin.FanOut.pas',
   DragLint.Plugin.UsagesForm in 'DragLint.Plugin.UsagesForm.pas',
   DragLint.Plugin.UsagesQuery in 'DragLint.Plugin.UsagesQuery.pas',
+  DragLint.Plugin.ConvertRequest in 'DragLint.Plugin.ConvertRequest.pas',
+  DragLint.Plugin.ConvertLaunch in 'DragLint.Plugin.ConvertLaunch.pas',
   DragLint.Plugin.SymbolSearchForm in 'DragLint.Plugin.SymbolSearchForm.pas',
   DRagLint.Workspace.Config in '..\workspace\DRagLint.Workspace.Config.pas',
   DragLint.Plugin.HoverTracker in 'DragLint.Plugin.HoverTracker.pas',

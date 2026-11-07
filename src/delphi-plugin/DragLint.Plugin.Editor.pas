@@ -818,6 +818,7 @@ uses
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.Reports
+  , DragLint.Plugin.ConvertLaunch
   , DragLint.Plugin.CycleFix // dl:unit DragLint.Plugin.CycleFix accepted -- CYCLE_FIX_TIMEOUT_MS is the one plugin cycle-fix time limit; a second copy here is what let it drift (see StructureForm)
   ;
 
@@ -7625,6 +7626,19 @@ begin
   AddWrappedItem(SubGen, 'Export Graph (DOT)...'         , InvokeExportGraphDot);
   AddWrappedItem(SubGen, 'Export to Obsidian...'         , InvokeExportObsidian);
 
+  { C12 plugin half: hands the designer's selection to ConvRulesEditor. No existing item
+    moved; the contract is docs\superpowers\specs\2026-10-06-c12-ide-convert-menu-design.md. }
+  var SubConvert: TMenuItem:= TMenuItem.Create(RootMenu);
+  SubConvert.Caption:= 'Convert Components';
+  RootMenu.Add(SubConvert);
+  var ConvertWrap: TMenuActionWrapper:= TMenuActionWrapper.Create(UpdateConvertComponentsMenu);
+  GWrappers.Add(ConvertWrap);
+  SubConvert.OnClick:= ConvertWrap.HandleClick;
+  AddWrappedItem(SubConvert, 'Convert Selected Component(s)...', InvokeConvertSelectedComponents).Tag:= CONVERT_TAG_SELECTION;
+  AddWrappedItem(SubConvert, 'Convert All of This Type on the Form...', InvokeConvertAllOfTypeOnForm).Tag:= CONVERT_TAG_SELECTION;
+  AddSeparator(SubConvert);
+  AddWrappedItem(SubConvert, 'Open Conversion Editor...', InvokeOpenConversionEditor).Tag:= CONVERT_TAG_OPEN;
+
   { v0.46: Index && Maintenance submenu }
   var SubMaint: TMenuItem:= TMenuItem.Create(RootMenu);
   SubMaint.Caption:= 'Index && Maintenance';
@@ -7913,6 +7927,7 @@ begin
     this is what stops a duplicate/stale entry surviving an uninstall. Do it
     before GWrappers so its OnClick wrapper isn't dangling. }
         TDStep('-> FreeAndNil tool-window items and menus');
+        ShutdownConvertLaunch;
         FreeAndNil(GDockToolWinItem );
         FreeAndNil(GGraphToolWinItem);
         { Wrappers hold the OnClick method pointers; free them before the menu items }
