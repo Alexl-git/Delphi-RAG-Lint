@@ -2239,6 +2239,14 @@ begin
   FMemo.Add(Key, Result);
 end;
 
+{ A comment is a named child of an argument list, so with one in it positions are not known. }
+function ArgsArePositional(const AArgs: TTSNode): Boolean;
+begin
+  Result:= True;
+  for var I: Integer := 0 to AArgs.NamedChildCount - 1 do
+    if AArgs.NamedChild(I).NodeType.Contains('omment') then Exit(False);
+end;
+
 { SHAPE 1c of used-before-assignment: `Reader.Fill(Buf[0], 8)` with Fill's parameter `var B`.
 
   The lattice cannot see this and must not: Flow.Lattices is extraction-hashed and asks the mode
@@ -2283,10 +2291,7 @@ var
     var Args: TTSNode:= N.ChildByField('args');
     if Args.IsNull then Exit;
     var Count: Integer:= Args.NamedChildCount;
-    { A comment is a named child, so positions are not known. }
-    var Positional: Boolean:= True;
-    for var I: Integer := 0 to Count - 1 do
-      if Args.NamedChild(I).NodeType.Contains('omment') then Positional:= False;
+    var Positional: Boolean:= ArgsArePositional(Args);
     for var I: Integer := 0 to Count - 1 do
     begin
       var Arg: TTSNode:= Args.NamedChild(I);
@@ -2401,10 +2406,7 @@ var
     var Args: TTSNode:= N.ChildByField('args');
     if Args.IsNull then Exit;
     var Count: Integer:= Args.NamedChildCount;
-    { A comment is a named child, so positions are not known. }
-    var Positional: Boolean:= True;
-    for var I: Integer := 0 to Count - 1 do
-      if Args.NamedChild(I).NodeType.Contains('omment') then Positional:= False;
+    var Positional: Boolean:= ArgsArePositional(Args);
     for var I: Integer := 0 to Count - 1 do
     begin
       var Arg: TTSNode:= Args.NamedChild(I);
@@ -2423,9 +2425,16 @@ var
     end;
   end;
 
+  function IsAndOr(const N: TTSNode): Boolean;
+  begin
+    var Op: TTSNode:= N.ChildByField('operator');
+    var OpText: string:= if Op.IsNull then '' else LowerCase(Trim(NodeStr(Op, ASrc)));
+    Result:= (OpText = 'and') or (OpText = 'or');
+  end;
+
   procedure Walk(const N: TTSNode; AMaybe: Boolean);
   var
-    K, OpText: string;
+    K: string;
   begin
     if N.IsNull then Exit;
     K:= N.NodeType;
@@ -2434,38 +2443,25 @@ var
     begin
       var Idx: Integer:= AVars.IndexOfAt(LowerCase(NodeStr(N, ASrc)), Integer(N.StartByte));
       if Idx >= 0 then Inc(Mentions[Idx]);
-      Exit;
-    end;
-    if K = 'exprDot' then
+    end
+    else if K = 'exprDot' then
+      Walk(N.ChildByField('lhs'), AMaybe) { the rhs is a member name }
+    else if K = 'exprCall' then
+      WalkCall(N, AMaybe)
+    else if (K = 'exprBinary') and IsAndOr(N) then
     begin
       Walk(N.ChildByField('lhs'), AMaybe);
-      Exit; { the rhs is a member name }
-    end;
-    if K = 'exprCall' then
-    begin
-      WalkCall(N, AMaybe);
-      Exit;
-    end;
-    if K = 'exprBinary' then
-    begin
-      var Op: TTSNode:= N.ChildByField('operator');
-      OpText:= if Op.IsNull then '' else LowerCase(Trim(NodeStr(Op, ASrc)));
-      if (OpText = 'and') or (OpText = 'or') then
-      begin
-        Walk(N.ChildByField('lhs'), AMaybe);
-        Walk(N.ChildByField('rhs'), True);
-        Exit;
-      end;
-    end;
-    if K = 'exprIf' then
+      Walk(N.ChildByField('rhs'), True);
+    end
+    else if K = 'exprIf' then
     begin
       var Cond: TTSNode:= N.ChildByField('condition');
       Walk(Cond, AMaybe);
       for var I: Integer := 0 to N.NamedChildCount - 1 do
-        if not (N.NamedChild(I) = Cond) then Walk(N.NamedChild(I), True);
-      Exit;
-    end;
-    for var I: Integer := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I), AMaybe);
+        if not (N.NamedChild(I) = Cond) then Walk(N.NamedChild(I), True);  // dl:ok nonminimal-bool@5e3f -- REVIEWED 2026-11-06: TTSNode declares = and no <>, so the rule's rewrite does not compile
+    end
+    else
+      for var I: Integer := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I), AMaybe);
   end;
 
 begin
@@ -3455,9 +3451,9 @@ var
           if (not Item.Opaque) and (Item.Node.NodeType = 'assignment') then
           begin
             var Store: Integer:= AssignmentTargetIndex(Item.Node, PF.Src, Vars);
-            if (Store >= 0) and (Vars.Get(Store).Kind = vkLocal) and NewRead[Store] and (not LiveNow[Store])
-               and (not Vars.Get(Store).Captured)
-               and (not IntInArray(Integer(Item.Node.StartByte), ObrReported))
+            var IsDead: Boolean:= (Store >= 0) and (Vars.Get(Store).Kind = vkLocal) and NewRead[Store];
+            IsDead:= IsDead and (not LiveNow[Store]) and (not Vars.Get(Store).Captured);
+            if IsDead and (not IntInArray(Integer(Item.Node.StartByte), ObrReported))
                and (not StoreHasEffectLivenessCannotSee(Item.Node, Vars.Get(Store).Name,
                           Vars.Get(Store).TypeText, PF.Src, AStore, AFileId)) then
             begin
@@ -3474,7 +3470,8 @@ var
     end;
 
   begin
-    TickAt := TStopwatch.GetTimeStamp; TickEx := 0;
+    TickAt := TStopwatch.GetTimeStamp;
+    TickEx := 0;
     Scans := nil;
     Cfg := TCfgBuilder.Build(AProc, PF.Src, True);
     FlowTick(0, TickAt, TickEx);
@@ -4243,7 +4240,13 @@ var
                   [Vars.Get(I).Name]), CreateRow[I], CreateCol[I]);
         end;
 
-      finally Reads.Free; CallDefs.Free; SeqDefs.Free; Derefs.Free; Scans.Free; end;
+      finally
+        Reads.Free;
+        CallDefs.Free;
+        SeqDefs.Free;
+        Derefs.Free;
+        Scans.Free;
+      end;
     finally
       { The escape window closes here, and with it the routine. NOTE these are
         WINDOWS, not isolated calls -- each phase is charged everything between
