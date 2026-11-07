@@ -11,7 +11,9 @@ interface
 
 uses
   System.Classes
+  , System.SysUtils
   , Vcl.Controls
+  , DragLint.Plugin.LspClient
   ;
 
 /// <summary><!-- drag-lint:auto sum -->---- public API ----</summary>
@@ -75,11 +77,19 @@ procedure HideFindUsages;
 /// </remarks>
 procedure CreateEmbeddedUsages(AOwner: TComponent; AParent: TWinControl);
 
+var
+  /// <summary>Hands over the running LSP client, or nil; set by DragLint.Plugin.Editor to
+  /// CurrentLspClient, which never spawns. A hook because Editor already uses this unit.</summary>
+  /// <remarks>With a connected client whose databases cover the query, Find Usages asks
+  /// `draglint/usages` and spawns nothing. Otherwise, and when the server is late (10 s) or
+  /// answers an error, it runs `drag-lint usages`. Both give the same document. A client
+  /// stopped mid-question leaves "(searching...)" until Refresh. Main thread only.</remarks>
+  GUsagesLspClient: TFunc<TDragLintLspClient> = nil;
+
 implementation
 
 uses
-  System.SysUtils
-  , System.JSON
+  System.JSON
   , System.StrUtils
   , Vcl.Forms
   , Vcl.ComCtrls
@@ -93,6 +103,7 @@ uses
   , DragLint.Plugin.Settings
   , DragLint.Plugin.CliAsync
   , DragLint.Plugin.ExeResolver
+  , DragLint.Plugin.UsagesQuery
   ;
 
 { v0.40.5: local copy of the BPL build-stamp helper to avoid circular use
@@ -112,6 +123,9 @@ end;
 
 const
   USAGES_QUERY_STALL_MS = 30000;
+  { A server still silent after this has its question dropped and the CLI answers: a
+    wide query on a large index can outlast it, and the CLI then has its own budget. }
+  USAGES_LSP_BUDGET_MS = 10000;
 
 type
   TUsageNodeData = class
@@ -136,6 +150,8 @@ type
       FWidth         : string        ; { v0.42: narrow|wide|very-wide }
       FLastCallerNode: TTreeNode     ;
       FRun           : TCliRunSlot   ; { the query in flight; a newer one supersedes it }
+      FLspId         : Integer       ; { the server request in flight, 0 for none }
+      FLspClient     : TDragLintLspClient; { who FLspId belongs to; compared, never called unchecked }
       procedure BtnRefreshClick(Sender: TObject);
       procedure BtnCloseClick  (Sender: TObject);
       procedure TreeDblClick   (Sender: TObject);
@@ -144,6 +160,10 @@ type
       procedure FormDestroy(Sender: TObject);
       procedure ClearNodeData;
       procedure RunQuery;
+      procedure RunCliQuery;
+      function TryLspQuery: Boolean;
+      procedure CancelLspQuery;
+      procedure LspAnswered(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue);
       procedure ShowResult(AExitCode: Integer; const AOutput: string);
       procedure ParseUsagesGrouped(const AOutput: string; out AParsed: Boolean);
       procedure NavigateToNode(ANode: TTreeNode);
@@ -229,10 +249,12 @@ begin
   Action:= caFree;
   GUsagesForm:= nil;
   FRun.Cancel;  { nobody is left to read the answer }
+  CancelLspQuery;
 end;
 
 procedure TDragLintUsagesForm.FormDestroy(Sender: TObject);
 begin
+  CancelLspQuery;    { its callback holds this form }
   FreeAndNil(FRun);  { abandons the run in flight: its answer never reaches a dead form }
   ClearNodeData;
 end;
@@ -596,11 +618,62 @@ begin
   end; // try
 end; // procedure
 
-procedure TDragLintUsagesForm.RunQuery;
+procedure TDragLintUsagesForm.CancelLspQuery;
+begin
+  { FLspClient is only compared: the shared client may have been freed and replaced,
+    and its request died with it (nothing is told after Stop). }
+  if (FLspId <> 0) and Assigned(GUsagesLspClient) and (GUsagesLspClient() = FLspClient) and (FLspClient <> nil) then
+    FLspClient.CancelRequest(FLspId);
+  FLspId    := 0;
+  FLspClient:= nil;
+end;
+
+function TDragLintUsagesForm.TryLspQuery: Boolean;
 var
-  CmdLine : string ;
+  Client: TDragLintLspClient;
+  Dbs   : TArray<string>    ;
+  Params: TJSONObject       ;
+begin
+  Result:= False;
+  if not Assigned(GUsagesLspClient) then Exit;
+  Client:= GUsagesLspClient();
+  if (Client = nil) or (Client.State <> dlsConnected) or not Client.IsAlive then Exit;
+  Dbs:= FDbPaths;
+  if Length(Dbs) = 0 then Dbs:= [FDbPath];
+  if not ServerCoversDbs(Dbs, Client.DbPaths) then Exit;
+  Params:= UsagesLspParams(FSymbolName, FWidth);
+  try
+    FLspId:= Client.RequestAsync('draglint/usages', Params, USAGES_LSP_BUDGET_MS, LspAnswered);
+  finally
+    Params.Free;
+  end;
+  if FLspId = 0 then Exit;
+  FLspClient:= Client;
+  Result:= True;
+end;
+
+procedure TDragLintUsagesForm.LspAnswered(AId: Integer; AStatus: TDLLspReplyStatus; AReply: TJSONValue);
+var
+  Json: string;
+begin
+  if AId <> FLspId then Exit; { superseded }
+  if (AStatus = lrsResult) and UsagesFromReply(AReply, Json) then
+  begin
+    FLspId    := 0;
+    FLspClient:= nil;
+    ShowResult(0, Json);
+    Exit;
+  end;
+  { Late (the notice, not an answer), an engine without the method, or a reply this
+    form cannot read: the CLI answers, and the server's own answer is no longer wanted. }
+  CancelLspQuery;
+  RunCliQuery;
+end;
+
+procedure TDragLintUsagesForm.RunQuery;
 begin
   FRun.Cancel;
+  CancelLspQuery;
   FTree.Items.BeginUpdate;
   try
     ClearNodeData;
@@ -611,10 +684,17 @@ begin
     FTree.Items.EndUpdate;
   end;
   if FExePath = '' then Exit;
+  if FWidth = '' then FWidth:= 'narrow';
+  if TryLspQuery then Exit;
+  RunCliQuery;
+end; // procedure
 
+procedure TDragLintUsagesForm.RunCliQuery;
+var
+  CmdLine : string ;
+begin
   { v0.42: the new 'usages' command finds reads/writes/etc. (not just calls)
     and supports the width selector. }
-  if FWidth = '' then FWidth:= 'narrow';
   CmdLine:= Format('"%s" usages --name "%s" --width %s', [FExePath, FSymbolName, FWidth]);
   { v0.40.3: emit one --db per resolved path. Falls back to legacy
     single-DB if FDbPaths is empty but FDbPath is set. }
