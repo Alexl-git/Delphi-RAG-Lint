@@ -12,8 +12,24 @@
     {
       "type": "cli",
       "verb": "create-enum-helper",
-      "usage": "drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] - generate a Byte-family record helper for an enum",
+      "usage": "drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]] - generate a Byte-family record helper for an enum",
       "flags": [
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--platform",
+          "arg": "<p>"
+        },
+        {
+          "name": "--rsvars",
+          "arg": "<bat>"
+        },
+        {
+          "name": "--build-timeout",
+          "arg": "<s>"
+        },
         {
           "name": "--qname",
           "arg": "<TEnum>"
@@ -40,7 +56,7 @@
         }
       ],
       "helpOrder": 57,
-      "help": ["  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH]  - generate a Byte-family record helper for an enum", "     --methods tobyte,frombyte,tointeger,frominteger,tostring,fromstring (default: all 6); --tostring rtti (default, RTTI GetEnumName) or case (explicit case statement)", "     idempotent: a helper for the enum already indexed anywhere -> action=exists, no edit"]
+      "help": ["  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] [--project <X.dproj> [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]  - generate a Byte-family record helper for an enum", "     --methods tobyte,frombyte,tointeger,frominteger,tostring,fromstring (default: all 6); --tostring rtti (default, RTTI GetEnumName) or case (explicit case statement)", "     idempotent: a helper for the enum already indexed anywhere -> action=exists, no edit"]
     },
     {
       "type": "ide-menu",

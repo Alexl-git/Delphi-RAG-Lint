@@ -40,3 +40,11 @@ drag-lint create-enum-helper --qname Unit1.TColorKind --apply --db C:\Projects\M
 
 This would generate a record helper with all six default methods for
 `TColorKind`.
+
+## Compile gate (opt-in) and Cancel
+
+With `--apply --project <X.dproj>` the edit goes through the compile gate: the project is built first (a project that
+does not build is refused, nothing written), the file is written under a `.BCK` backup, the project is built again, and a
+compile error rolls the write back. `--platform`, `--rsvars` and `--build-timeout <s>` shape the build as for `unwith`.
+Without `--project` the verb writes as it always did, with no build. A refusal prints `REFUSED (<kind>): ...` on stderr
+and exits 1.

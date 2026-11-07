@@ -121,6 +121,7 @@ const
 /// with "cancelled -- rolled back" (not 0: the run did not finish).</para>
 /// <para>WIDENED 2026-10-28 (DEC-13 reopened, owner): <c>index</c> (single root, `--project`, `--all`) and `lint-all` listen too, started by the Do* verb through BatchChannelOpen. A stand-down is taken BETWEEN FILES (index: the storage layer's file-transaction gate, so no file row is ever half written) or between files of the lint scan (lint-all stops and prints the findings so far). Exit code CONTROL_EXIT_STOOD_DOWN.</para>
 /// <para>WIDENED 2026-10-30 (1.39.1, known issue of 1.39.0): <c>warm-rule-cache</c> listens, started by DRagLint.CLI.DoWarmRuleCache. A warm only reads and its result is disposable, so a stand-down is taken AT ONCE by a watcher thread (no safe point to wait for) and the process exits CONTROL_EXIT_STOOD_DOWN; shutdown and an index of the same database stop it, and the engine image is free again.</para>
+/// <para>WIDENED 2026-11-07 (E-NARROW-CHANNEL, wave 146): <c>narrow-param</c>, <c>redundant-cast</c> (lint --fix --fix-rule redundant-cast) and <c>create-enum-helper</c> listen on an <c>--apply</c> run, opened by the Do* verb through DRagLint.Refactor.CompileGate.OpenGateStandDown. A stand-down is taken while the gate waits on a build: the build tree is killed, the written files are rolled back and the run ends Refusal = cancelled (exit 1).</para>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.CycleFix.StartStandDownChannel (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoWarmRuleCache (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), DRagLint.Core.ControlChannel.BatchChannelOpen (DRagLint.Core.ControlChannel.pas)</para>
 /// <para>Pure</para>
@@ -853,7 +854,8 @@ begin
   { PROVISIONAL -- see the interface remarks. `lsp`, `cycles` (its --fix run), and (DEC-13, 2026-10-28)
     the long one-shot runs `index` and `lint-all`. }
   Result:= SameText(ACommand, 'lsp') or SameText(ACommand, 'cycles') or SameText(ACommand, 'index')
-    or SameText(ACommand, 'lint-all') or SameText(ACommand, 'warm-rule-cache');
+    or SameText(ACommand, 'lint-all') or SameText(ACommand, 'warm-rule-cache')
+    or SameText(ACommand, 'narrow-param') or SameText(ACommand, 'redundant-cast') or SameText(ACommand, 'create-enum-helper');
 end;
 
 { ---- batch channel (DEC-13) ---------------------------------------------- }
