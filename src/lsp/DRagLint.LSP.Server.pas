@@ -6051,6 +6051,12 @@ begin
         var RmSrc: TJSONObject:= BuildRemoveUnusedSourceAction(Path, BufText);
         if RmSrc <> nil then Actions.AddElement(RmSrc);
       end;
+      var FixActs: TJSONArray:= TLspCompletion.BuildFixActions(Path, StartLine, EndLine, Diags);
+      try
+        for var J:= 0 to FixActs.Count - 1 do Actions.AddElement(FixActs.Items[J].Clone as TJSONValue);
+      finally
+        FixActs.Free;
+      end;
       Reply.AddPair('result', Actions);
     finally
       if Context = nil then Diags.Free; { only free if we built it; context owns it }

@@ -180,6 +180,14 @@ Registered through the LSP feature registry (`DRagLint.LSP.Feature.CallHierarchy
 
 `lsp` answers `workspace/executeCommand` for `draglint.showCallers` -- the command the codeLens `<n> callers` runs -- with arguments `[uri, line]` (0-based): `[{uri, line, character}]`, every distinct (file, line) call site of the routine(s) declared on that line, across every `--db` store, ordered by file then line, so the row count equals the lens count. An unknown command answers `-32601`, bad arguments `-32602`. Capability `executeCommandProvider: {commands: ["draglint.showCallers"]}`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.ExecuteCommand`); guard: `tests\autotest\run_lsp_execute_command_guard.ps1`.
 
+## Quick fixes on a finding (textDocument/codeAction)
+
+Besides `Mark as reviewed: <rule>`, the light bulb offers `Fix: <rule>` on a drag-lint
+finding of `mixed-case-hex`, `length-zero-compare` or `deprecated-rtl-function`. The edit
+comes from the same fixer as `lint --fix` and reads the live buffer, unsaved text included.
+A diagnostic older than the buffer gets no `Fix:` action: every edit must replace text the
+buffer really holds. A risky fix, a fix that needs a newer compiler than the target and
+every other rule stay with `lint --fix`.
 ## Reaching it in the IDE
 
 CLI+internal: the plugin starts this process itself, from

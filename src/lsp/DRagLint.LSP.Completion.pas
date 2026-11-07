@@ -349,6 +349,21 @@ type
       /// </remarks>
       class function BuildMissingUsesActions(const AFile: string; AStartLine, AEndLine: Integer;
         const ADiagnostics: TJSONArray): TJSONArray;
+      /// <summary>"Fix: &lt;rule&gt;" quickfixes for the drag-lint findings on the lines
+      /// asked about, from the existing autofixers of a short list of rules
+      /// (mixed-case-hex, length-zero-compare, deprecated-rtl-function).</summary>
+      /// <param name="AFile">Local path of the document.</param>
+      /// <param name="AStartLine">First line asked about, 1-based.</param>
+      /// <param name="AEndLine">Last line asked about, 1-based.</param>
+      /// <param name="ADiagnostics">The client's diagnostics; stays the caller's. nil answers [].</param>
+      /// <returns>A NEW array of CodeAction objects the caller owns, one per fix, each
+      /// with one WorkspaceEdit on AFile.</returns>
+      /// <remarks>Reads the live buffer, not the disk. A diagnostic older than the
+      /// buffer gets no action: every edit must replace text the buffer really holds.
+      /// A fix that is risky, needs a newer compiler than the target, or is not on the
+      /// list is never offered; "Fix it" in the IDE and `lint --fix` remain for those.</remarks>
+      class function BuildFixActions(const AFile: string; AStartLine, AEndLine: Integer;
+        const ADiagnostics: TJSONArray): TJSONArray;
     private
       /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore</param>
@@ -411,6 +426,8 @@ uses
   , DRagLint.Core.UsesInsert   { TUsesSection / SectionWord: unit-missing-from-uses data }
   , DRagLint.Lint.MissingUses  { unit-missing-from-uses: findings + their uses edits } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
   , DRagLint.LSP.UsesOnSave    { TUsesOnSave: the source.addMissingImports twin of the quickfix }
+  , DRagLint.Lint.Autofix      { BuildBufferFixEdits: the "Fix: <rule>" quickfixes }
+  , DRagLint.Refactor.TextEdit { TTextEdit: what a fixer returns }
   ;
 
 { TLspCompletion }
@@ -1579,6 +1596,100 @@ begin
     Lines.Free;
   end; // try
 end; // function
+
+{ The fixes a light bulb offers (L-PROBLEMS-AUTOFIX). All three are registered,
+  not risky, respell one span in place under an ExpectText guard, and read nothing
+  but the finding and the lines they are handed, so they work on an unsaved buffer. }
+function IsBufferSafeFixRule(const ARuleId: string): Boolean;
+begin
+  Result:= SameText(ARuleId, 'mixed-case-hex') or SameText(ARuleId, 'length-zero-compare') or
+           SameText(ARuleId, 'deprecated-rtl-function');
+end;
+
+{ The finding a published diagnostic stands for; False for one that is not a
+  drag-lint finding on the listed rules, or has no whole range. LSP is 0-based. }
+function FixableFindingOf(const AFile: string; const ADiag: TJSONValue; out AFinding: TLintFinding): Boolean;
+var
+  SL, SC, EL, EC: Integer;
+begin
+  Result:= False;
+  AFinding:= Default(TLintFinding);
+  if ADiag is not TJSONObject then Exit;
+  if not (ADiag.TryGetValue<string>('code', AFinding.RuleId) and IsBufferSafeFixRule(AFinding.RuleId)) then Exit;
+  if not ADiag.TryGetValue<string>('source', AFinding.Severity) or not StartsText('drag-lint', AFinding.Severity) then Exit;
+  if not (ADiag.TryGetValue<Integer>('range.start.line', SL) and ADiag.TryGetValue<Integer>('range.start.character', SC) and
+          ADiag.TryGetValue<Integer>('range.end.line', EL) and ADiag.TryGetValue<Integer>('range.end.character', EC)) then Exit;
+  AFinding.Severity := '';
+  AFinding.FilePath := AFile;
+  AFinding.StartLine:= SL + 1;
+  AFinding.StartCol := SC + 1;
+  AFinding.EndLine  := EL + 1;
+  AFinding.EndCol   := EC + 1;
+  if not ADiag.TryGetValue<string>('message', AFinding.Message) then AFinding.Message:= '';
+  Result:= True;
+end;
+
+{ True when every edit replaces text the buffer really holds, on one line. The
+  fixers set ExpectText; a client's diagnostic may be older than its buffer. }
+function EditsHoldOn(const AEdits: TArray<TTextEdit>; ALines: TStringList): Boolean;
+begin
+  Result:= Length(AEdits) > 0;
+  for var E: TTextEdit in AEdits do
+    if (E.Kind <> tekReplaceInLine) or (E.ExpectText = '') or (E.Line < 1) or (E.Line > ALines.Count) or
+       (Copy(ALines[E.Line - 1], E.Col, E.EndCol - E.Col) <> E.ExpectText) then Exit(False);
+end;
+
+class function TLspCompletion.BuildFixActions(const AFile: string; AStartLine, AEndLine: Integer;
+  const ADiagnostics: TJSONArray): TJSONArray;
+
+  function Pos0(ALine, ACol: Integer): TJSONObject;
+  begin
+    Result:= TJSONObject.Create;
+    Result.AddPair('line'     , TJSONNumber.Create(ALine - 1));
+    Result.AddPair('character', TJSONNumber.Create(ACol  - 1));
+  end;
+
+begin
+  Result:= TJSONArray.Create;
+  if ADiagnostics = nil then Exit;
+  var Lines: TStringList:= nil;
+  try
+    for var Diag: TJSONValue in ADiagnostics do
+    begin
+      var F: TLintFinding;
+      if not FixableFindingOf(AFile, Diag, F) or (F.StartLine < AStartLine) or (F.StartLine > AEndLine) then Continue;
+      if Lines = nil then
+      begin
+        Lines:= TStringList.Create;
+        Lines.AddStrings(TLiveDocuments.ReadLines(AFile));
+      end;
+      var Edits: TArray<TTextEdit>:= BuildBufferFixEdits(F, Lines);
+      if not EditsHoldOn(Edits, Lines) then Continue;
+      var LspEdits: TJSONArray:= TJSONArray.Create;
+      for var E: TTextEdit in Edits do
+      begin
+        var Range: TJSONObject:= TJSONObject.Create;
+        Range.AddPair('start', Pos0(E.Line, E.Col));
+        Range.AddPair('end'  , Pos0(E.Line, E.EndCol));
+        var TE: TJSONObject:= TJSONObject.Create;
+        TE.AddPair('range'  , Range);
+        TE.AddPair('newText', E.Text);
+        LspEdits.AddElement(TE);
+      end;
+      var Changes: TJSONObject:= TJSONObject.Create;
+      Changes.AddPair('file:///' + StringReplace(AFile, '\', '/', [rfReplaceAll]), LspEdits);
+      var WEdit: TJSONObject:= TJSONObject.Create;
+      WEdit.AddPair('changes', Changes);
+      var Action: TJSONObject:= TJSONObject.Create;
+      Action.AddPair('title', 'Fix: ' + F.RuleId);
+      Action.AddPair('kind' , 'quickfix');
+      Action.AddPair('edit' , WEdit);
+      Result.AddElement(Action);
+    end;
+  finally
+    Lines.Free;
+  end;
+end;
 
 class function TLspCompletion.BuildMissingUsesDiagnostics(const AFile: string; const AStores: TArray<ISymbolStore>): TJSONArray;
 
