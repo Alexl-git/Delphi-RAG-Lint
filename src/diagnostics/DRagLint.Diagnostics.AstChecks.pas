@@ -307,12 +307,13 @@ type
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64 = 0</param>
+      /// <param name="ALibStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed: nil;
       /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoCheckAst (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
-      /// <para>Calls: CatOf, CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.CollectDeclTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectEnums, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectGuards, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+27 more)</para>
+      /// <para>Calls: CatOf, CharInSet, Copy, Default, DRagLint.Diagnostics.AstChecks.CollectDeclTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectEnums, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CollectGuards, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get (+32 more)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.CollectDeclTypes"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.CheckExpr"/>
@@ -321,7 +322,7 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware.VisitProcsDualHandle"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckTypeAware(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0): TArray<TLintFinding>;
+      class function CheckTypeAware(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;
       /// <summary>Removes each <c>concat-in-loop</c> finding whose assignment target is
       /// PROVEN not to be a string: a numeric, boolean, enum or pointer type by the
       /// store's category, or a dynamic array / set by its declared type text.</summary>
@@ -345,12 +346,12 @@ type
       /// Never raises; a file that does not parse returns AFindings unchanged.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/4 (DRagLint.LSP.Completion.pas)</para>
-      /// <para>Calls: AliasContainerTarget, DRagLint.Diagnostics.AstChecks.CollectDeclTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat.Walk, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, IsContainerType, LookupType, LowerCase, ProvenNonString, SameText, SrcText, Trim</para>
+      /// <para>Calls: AliasContainerTarget, DRagLint.Diagnostics.AstChecks.CollectDeclTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat.Walk, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.RefTypeRules.TExprTypeReader.Create, Format, Integer, IsContainerType, LookupType, LowerCase, ProvenNonString, SameText, SrcText, Trim</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.CollectDeclTypes"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.DropNonStringConcat.Walk"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Create"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function DropNonStringConcat(const AFile: string; const AStore: ISymbolStore; AFileId: Int64; const AFindings: TArray<TLintFinding>): TArray<TLintFinding>;
@@ -438,18 +439,20 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function CheckUseAfterFree(const AFile: string): TArray<TLintFinding>;
-      /// <summary>UI (VCL/FMX) access inside a TThread.Execute that is not on the main thread.</summary>
+      /// <summary>UI (VCL/FMX) access in thread code the file itself proves, not on the main thread.</summary>
       /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
       /// <returns>'ui-access-in-thread' findings; empty if none.</returns>
       /// <remarks>
-      /// Heuristic, tuned for low false positives: only inside a method named 'Execute' whose
-      /// class (declared in the same file) has a base type whose name contains 'Thread', and only for
-      /// strong UI members (assignment to '.Caption'; calls to '.SetFocus'/'.Repaint'/'.BringToFront').
-      /// Access inside a nested anonymous method (a likely Synchronize/Queue body) is skipped. Pure AST;
-      /// no DB. Never raises.
+      /// Heuristic, tuned for low false positives. Thread code: a method named 'Execute' whose class
+      /// reaches, through base types declared in the same file, a name containing 'Thread'; and a lambda
+      /// passed to TThread.CreateAnonymousThread, TTask.Run/Create/Future or TParallel.For, as written.
+      /// Only strong UI members: assignment to '.Caption'; '.SetFocus', '.Repaint', '.BringToFront',
+      /// '.SendToBack', '.ProcessMessages'. The arguments of Synchronize/Queue/ForceQueue and any other
+      /// nested anonymous method are skipped. Pure AST; no DB. Never raises. With an index,
+      /// ui-access-in-thread-typed answers the same question on the receiver's static type.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.CollectClasses, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Flag, Format, Integer, LowerCase, NodeStr, Pos, SameText, WalkExec</para>
+      /// <para>Calls: CalleeLast, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.CollectClasses, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Flag, Format, Integer, IsThreadClass (+7 more)</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckUiThread.CollectClasses"/>
@@ -592,12 +595,14 @@ type
       class function CheckEnumBareReadScoped(const AFile: string; const AStore: ISymbolStore;
         AFileId: Int64): TArray<TLintFinding>;
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
+      /// <param name="AStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
+      /// <param name="AFileId"><!-- drag-lint:auto type -->Int64 = 0</param>
       /// <returns><!-- drag-lint:auto -->TArray&lt;TLintFinding&gt; -- Observed: nil;
       /// Findings.ToArray.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, Move, NodeStr</para>
+      /// <para>Calls: Default, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, InInitialization, Integer, Move, NodeStr, SameText, WrittenOnlyInInitialization</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMutableGlobalVars.CheckGlobalVarDecls"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
@@ -606,7 +611,7 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckMutableGlobalVars(const AFile: string): TArray<TLintFinding>;
+      class function CheckMutableGlobalVars(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0): TArray<TLintFinding>;
       /// <summary>Flags a value-returning FUNCTION that also mutates observable state
       /// (a Command-Query Separation violation, Fowler): a query that is also a command.
       /// The conservative mutation predicate is a write to a class FIELD -- either an
@@ -792,44 +797,51 @@ type
       /// matching X.Close / X.Active := False in a finally block -- leaks a server cursor
       /// on an exception path.</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <param name="AStore">Optional project index. With a ref_types table (index fact F1) an `X.Open` whose receiver has a known static type with no TDataSet in its whole ancestry is not reported; nil, no table, no row or an unfollowable ancestry keep the finding.</param>
+      /// <param name="AFileId">The unit's id in AStore; 0 skips the fact.</param>
+      /// <param name="ALibStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
       /// <returns>One finding per opened-but-not-finally-closed dataset variable.</returns>
       /// <remarks>
       /// Severity warning. Per-routine flow analysis (mirrors CheckUnprotectedFree).
-      /// Pure AST; no DB. Never raises.
+      /// Pure AST, plus the optional F1 receiver type. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: CollectLocalTypes, DeclNames, Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.CollectPlainActiveTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, HasActiveField, Integer (+9 more)</para>
+      /// <para>Calls: CollectLocalTypes, DeclNames, Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.CollectPlainActiveTypes, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.RefTypeRules.TExprTypeReader.Create, Format, HasActiveField (+11 more)</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.CollectPlainActiveTypes"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckDatasetOpen.VisitProcs"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Create"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckDatasetOpen(const AFile: string): TArray<TLintFinding>;
+      class function CheckDatasetOpen(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;
       /// <summary>Flags a critical section acquired (X.Enter or X.Acquire) in a routine with
       /// no matching X.Leave / X.Release in a finally block -- a lock leaked on an exception
       /// path deadlocks.</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
+      /// <param name="AStore">Optional symbol store; nil = no type facts.</param>
+      /// <param name="AFileId">File id within AStore (ignored when AStore is nil).</param>
+      /// <param name="ALibStore">Optional platform-library store for the ancestry walk.</param>
       /// <returns>One finding per acquired-but-not-finally-released lock variable.</returns>
       /// <remarks>
       /// Severity error. Per-routine flow analysis (mirrors CheckDatasetOpen).
-      /// Pure AST; no DB. Never raises.
+      /// With a store, an Enter/Acquire whose receiver F1 type is provably not a lock (no lock class in its ancestry, no lock-like word in its name) is not a lock acquire and is not reported.
+      /// Without one it is pure AST and every Enter/Acquire receiver is a lock. Never raises.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-      /// <para>Calls: Copy, Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, Format, Integer, LowerCase, MonitorArgKey, NodeStr, SameText, StringReplace, WalkBody</para>
+      /// <para>Calls: ContainsStr, Copy, Default, DotMethod, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, DRagLint.Lint.RefTypeRules.TExprTypeReader.Create, Format, Integer, LowerCase (+6 more)</para>
       /// <para>Returns: nil; Findings.ToArray</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection.VisitProcs"/>
       /// <seealso cref="DRagLint.Diagnostics.ParseCache.TAstParseCache.Get"/>
+      /// <seealso cref="DRagLint.Lint.RefTypeRules.TExprTypeReader.Create"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.Check"/>
-      /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckCriticalSection(const AFile: string): TArray<TLintFinding>;
+      class function CheckCriticalSection(const AFile: string; const AStore: ISymbolStore = nil; AFileId: Int64 = 0; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;
       /// <summary>Flags a routine with more than 5 Exit statements -- hard to reason about
       /// control flow; consolidate exits or use guard clauses consistently.</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
@@ -1150,6 +1162,13 @@ begin
           ATypeMap.AddOrSetValue(LowName, AMBIGUOUS_DECL_TYPE);
           Break;
         end;
+    end
+    else if TypeNode.IsNull and (N.NodeType = 'declArg') then
+    begin
+      { 1.46 E-CAST: an untyped `var X` has no type; left out, X would inherit the file-wide type of a namesake. }
+      for J:= 0 to N.NamedChildCount - 1 do
+        if N.NamedChild(J).NodeType = 'identifier' then
+          ATypeMap.AddOrSetValue(LowerCase(SrcText(N.NamedChild(J), ASrc)), AMBIGUOUS_DECL_TYPE);
     end
     else if not TypeNode.IsNull then
     begin
@@ -2777,7 +2796,7 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckTypeAware(const AFile: string; const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
+class function TAstChecker.CheckTypeAware(const AFile: string; const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 var
   Src     : TBytes                    ;
   PF      : TParsedFile        ;
@@ -2787,6 +2806,7 @@ var
   EnumMems: TDictionary<string,TStringList>; { v0.74: same-file enum type (lower) -> member names }
   Scopes  : TObjectList<TDictionary<string,string>>; { INLINEVAR-SCOPE: routine / block decl maps, innermost last }
   ScopeEnd: TObjectList<TDictionary<string,Int64>>;  { parallel: an inline var's statement end byte; empty for a routine }
+  Reader  : TExprTypeReader;  { 1.45 la: F1 types of dotted / call operands; nil without a store (OperandType) }
 
   { v11 (M1): the store's resolved category for a declared type text, or
     tcUnknown when there is no store / it can't resolve (caller then falls back
@@ -3120,6 +3140,22 @@ var
     Result:= True;
   end;
 
+  { 1.45 lane la (rows 1, 18-20): the type of an operand. The declared type of a plain
+    identifier (LookupType) answers first, exactly as before; an identifier that map cannot
+    type (no declaration, or AMBIGUOUS) and every dotted chain or call (`Rec.Total`,
+    `Self.FItems`, `GetKind()`) ask the static-type fact F1 instead. No store, no ref_types
+    table or no row: False, and the caller keeps what it did without a type. }
+  function OperandType(const N: TTSNode; out AType: string): Boolean;
+  begin
+    AType:= '';
+    Result:= False;
+    if N.IsNull then Exit;
+    if (N.NodeType = 'identifier') and LookupType(N, AType) and (AType <> AMBIGUOUS_DECL_TYPE) then Exit(True);
+    AType:= '';
+    Result:= (Reader <> nil) and ((N.NodeType = 'identifier') or (N.NodeType = 'exprDot') or (N.NodeType = 'exprCall'))
+             and Reader.TypeLeafOf(N, AType);
+  end;
+
   function OperandIsFloat(const N: TTSNode): Boolean;
   var
     T  : string;
@@ -3127,15 +3163,12 @@ var
   begin
     Result:= False;
     if N.IsNull then Exit;
-    if N.NodeType = 'identifier' then
-    begin
-      if LookupType(N, T) then Result:= TypeTextIsFloat(T);
-    end
-    else if N.NodeType = 'literalNumber' then
+    if N.NodeType = 'literalNumber' then
     begin
       Txt:= NodeStr(N);
       Result:= (Pos('.', Txt) > 0) and (Pos('$', Txt) = 0);
-    end;
+    end
+    else if OperandType(N, T) then Result:= TypeTextIsFloat(T);
   end;
 
   { A quoted string/char literal ('...' or #NN) can never be a float, so it forces
@@ -3163,16 +3196,13 @@ var
   begin
     Result:= False;
     if N.IsNull then Exit;
-    if N.NodeType = 'identifier' then
-    begin
-      if LookupType(N, T) then Result:= (CatOf(T) = tcString);
-    end
-    else if N.NodeType = 'literalString' then
+    if N.NodeType = 'literalString' then
     begin
       Txt:= NodeStr(N);
       for i:= 1 to Length(Txt) do
         if CharInSet(Txt[i], ['A'..'Z', 'a'..'z']) then Exit(True);
-    end;
+    end
+    else if OperandType(N, T) then Result:= (CatOf(T) = tcString);
   end;
 
   procedure CheckExpr(const N: TTSNode);
@@ -3217,8 +3247,7 @@ var
                and ((Length(St) = 0) or (St[1] <> 'k')) then
             begin Selector:= Sc; Break; end;
           end;
-        if (not Selector.IsNull) and (Selector.NodeType = 'identifier')
-           and LookupType(Selector, T) then
+        if (not Selector.IsNull) and OperandType(Selector, T) then
         begin
           var Members: TStringList:= ResolveEnumMembers(T);
           if Members <> nil then
@@ -3337,8 +3366,7 @@ var
             if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
             begin
               A0:= Args.NamedChild(0);
-              if (not A0.IsNull) and (A0.NodeType = 'identifier')
-                 and LookupType(A0, T)
+              if (not A0.IsNull) and OperandType(A0, T)
                  and TypeTextIsString(T) then
               begin
                 P:= N.StartPoint;
@@ -3367,7 +3395,7 @@ var
         if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
         begin
           A0:= Args.NamedChild(0);
-          if (A0.NodeType = 'identifier') and LookupType(A0, T) and TypeTextIsInterface(T) then
+          if OperandType(A0, T) and TypeTextIsInterface(T) then
           begin
             P:= Entity.StartPoint;
             F:= Default(TLintFinding);
@@ -3394,7 +3422,7 @@ var
           if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
           begin
             A0:= Args.NamedChild(0);
-            if (A0.NodeType = 'identifier') and LookupType(A0, T) and TypeTextIsPointer(T) then
+            if OperandType(A0, T) and TypeTextIsPointer(T) then
             begin
               P:= Entity.StartPoint;
               F:= Default(TLintFinding);
@@ -3425,7 +3453,7 @@ var
           if (not Args.IsNull) and (Args.NamedChildCount >= 1) then
           begin
             A0:= Args.NamedChild(0);
-            if (A0.NodeType = 'identifier') and LookupType(A0, T) then
+            if OperandType(A0, T) then
             begin
               var Tl: string:= LowerCase(Trim(T));
               if (Tl = 'nativeint') or (Tl = 'nativeuint') or (Tl = 'intptr') or (Tl = 'uintptr')
@@ -3451,12 +3479,14 @@ var
         the per-file TypeMap) is a no-op cast. T-prefixed class-like entity only
         (avoids scalar-cast noise), single identifier argument only. Pure-AST via
         the type map -> near-zero FP (an exact declared-type match to the cast
-        target is not a protected-member hack, which needs a base-typed operand). }
+        target is not a protected-member hack, which needs a base-typed operand).
+        1.46 E-CAST: the second letter may be lower case (TcxEdit, TdlgFoo): the
+        match on the operand's declared type already rules out a routine like Trim. }
       if (not Entity.IsNull) and (Entity.NodeType = 'identifier') then
       begin
         var En: string:= NodeStr(Entity);
         var FactLeaf: string;
-        if (Length(En) >= 2) and (En[1] = 'T') and (En[2] >= 'A') and (En[2] <= 'Z') then
+        if (Length(En) >= 2) and (En[1] = 'T') and CharInSet(En[2], ['A'..'Z', 'a'..'z']) then
         begin
           Args:= N.ChildByField('args');
           if (not Args.IsNull) and (Args.NamedChildCount = 1) then
@@ -3537,7 +3567,7 @@ var
           if (not Args.IsNull) and (Args.NamedChildCount = 1) then
           begin
             A0:= Args.NamedChild(0);
-            if (A0.NodeType = 'identifier') and LookupType(A0, T) then
+            if OperandType(A0, T) then
             begin
               var Tl: string:= LowerCase(Trim(T));
               if (Tl = 'string') or (Tl = 'unicodestring') or (Tl = 'widestring') or (Tl = 'widechar') then
@@ -3656,6 +3686,20 @@ var
     Aliased : TDictionary<string, string>;  { X (lower) -> X's original-case source text, aliased into an interface var }
     FreedAt : TDictionary<string, TTSNode>; { X (lower) -> the manual-free node (fire site) }
 
+    { 1.45 la (row 20): True only when index fact F1 types X and the ancestry says it is a TComponent,
+      a TNoRefCountObject or a TSingletonImplementation: such an object ignores _AddRef/_Release, so an
+      interface alias of it plus a manual Free is no dual handle. No store, no table, no row or an
+      ancestry that does not name one of them: False, the finding stands. }
+    function IsNonRefCounted(const AX: TTSNode): Boolean;
+    var
+      Leaf: string;
+    begin
+      Result:= False;
+      if (Reader = nil) or not Reader.TypeLeafOf(AX, Leaf) then Exit;
+      Result:= (Reader.Descends(Leaf, 'TComponent') = tdYes) or (Reader.Descends(Leaf, 'TNoRefCountObject') = tdYes)
+               or (Reader.Descends(Leaf, 'TSingletonImplementation') = tdYes);
+    end;
+
     { 'I := X' / 'I := X as ISomething' where I is interface-typed and X is a
       simple class-typed identifier -> record X (lower key, original-case
       value) in Aliased. }
@@ -3692,7 +3736,8 @@ var
             Xn:= LowerCase(NodeStr(Src2));
             { X must be a declared CLASS-typed local (an object handle), not itself
               an interface -- that is what makes it a genuine dual handle. }
-            if TypeMap.TryGetValue(Xn, TX) and LooksLikeClassType(TX) and (not TypeTextIsInterface(TX)) then
+            if TypeMap.TryGetValue(Xn, TX) and LooksLikeClassType(TX) and (not TypeTextIsInterface(TX))
+               and not IsNonRefCounted(Src2) then
               Aliased.AddOrSetValue(Xn, NodeStr(Src2));
           end;
         end;
@@ -3783,6 +3828,7 @@ begin
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
+  Reader:= nil;
   Findings:= TList<TLintFinding>.Create;
   TypeMap := TDictionary<string,string>.Create;
   Guards  := TDictionary<string,Integer>.Create;
@@ -3790,7 +3836,7 @@ begin
   Scopes  := TObjectList<TDictionary<string,string>>.Create(True);
   ScopeEnd:= TObjectList<TDictionary<string,Int64>>.Create(True);
   try
-
+    if (AStore <> nil) and (AFileId > 0) then Reader:= TExprTypeReader.Create(AStore, ALibStore, AFileId, Src);
     if PF.Tree <> nil then
     begin
       CollectDeclTypes(PF.Tree.RootNode, Src, TypeMap, True); { inline `var X: T` too (Gitea #5) }
@@ -3803,6 +3849,7 @@ begin
   finally
     for var Ml in EnumMems.Values do Ml.Free;
     EnumMems.Free;
+    Reader.Free;
     ScopeEnd.Free;
     Scopes.Free;
     Guards.Free;
@@ -3823,6 +3870,7 @@ var
   NonString: TDictionary<string, Boolean>; { 'line:col' of a proven non-string target }
   Scopes   : TObjectList<TDictionary<string, string>>; { per-routine decl maps, innermost last }
   HasConcat: Boolean;
+  Reader   : TExprTypeReader; { 1.45 la: F1 type of a target the declared-type maps cannot type; nil without a store }
 
   { True when ATypeText names a container that is never a string. }
   function IsContainerType(const ATypeText: string): Boolean;
@@ -3922,6 +3970,10 @@ var
         Target:= LowerCase(Trim(SrcText(Lhs, PF.Src)));
         if Target = 'result' then TypeText:= Ret
         else if not LookupType(Target, TypeText) then TypeText:= '';
+        { an inline var with no written type, a field of an ancestor in another unit: the fact types what the maps cannot }
+        var FactLeaf: string;
+        if ((TypeText = '') or (TypeText = AMBIGUOUS_DECL_TYPE)) and (Reader <> nil) and Reader.TypeLeafOf(Lhs, FactLeaf) then
+          TypeText:= FactLeaf;
         if ProvenNonString(TypeText) then
         begin
           P:= N.StartPoint;
@@ -3949,7 +4001,9 @@ begin
   TypeMap  := TDictionary<string, string>.Create;
   NonString:= TDictionary<string, Boolean>.Create;
   Scopes   := TObjectList<TDictionary<string, string>>.Create(True);
+  Reader   := nil;
   try
+    if AFileId > 0 then Reader:= TExprTypeReader.Create(AStore, nil, AFileId, PF.Src);
     CollectDeclTypes(PF.Tree.RootNode, PF.Src, TypeMap, True); { inline `var X: T` too }
     Walk(PF.Tree.RootNode, '');
     if NonString.Count = 0 then Exit;
@@ -3958,6 +4012,7 @@ begin
       if not (SameText(F.RuleId, RULE_ID) and NonString.ContainsKey(Format('%d:%d', [F.StartLine, F.StartCol]))) then
         Result:= Result + [F];
   finally
+    Reader.Free;
     Scopes.Free;
     NonString.Free;
     TypeMap.Free;
@@ -4716,6 +4771,57 @@ var
     for I:= 0 to N.NamedChildCount - 1 do CollectClasses(N.NamedChild(I));
   end;
 
+  { True when the class's chain of bases, as far as this file declares it, reaches a name
+    containing 'thread'. A base declared elsewhere ends the chain: no index here to follow it. }
+  function IsThreadClass(const AClass: string): Boolean;
+  const
+    MAX_CHAIN = 16;
+  var
+    Name: string;
+    Base: string;
+    Hop : Integer;
+  begin
+    Result:= False;
+    Name:= LowerCase(AClass);
+    for Hop:= 1 to MAX_CHAIN do
+    begin
+      if not ClassBase.TryGetValue(Name, Base) then Exit;
+      Name:= LowerCase(Base);
+      if Name.Contains('thread') then Exit(True);
+    end;
+  end;
+
+  function CalleeLast(const ACall: TTSNode): string;
+  var
+    Ent: TTSNode;
+  begin
+    Result:= '';
+    Ent:= ACall.ChildByField('entity');
+    if Ent.IsNull then Exit;
+    if Ent.NodeType = 'identifier' then Result:= NodeStr(Ent)
+    else if Ent.NodeType = 'exprDot' then Result:= NodeStr(Ent.ChildByField('rhs'));
+  end;
+
+  { TThread.CreateAnonymousThread, TTask.Run/Create/Future, TParallel.For, as written. }
+  function IsThreadStart(const ACall: TTSNode): Boolean;
+  const
+    STARTS: array[0..4] of string = ('tthread.createanonymousthread', 'ttask.run', 'ttask.create', 'ttask.future', 'tparallel.for');
+  var
+    Ent  : TTSNode;
+    Name : string ;
+    Lt   : Integer;
+    Start: string ;
+  begin
+    Result:= False;
+    Ent:= ACall.ChildByField('entity');
+    if Ent.IsNull or (Ent.NodeType = 'identifier') then Exit;
+    Name:= LowerCase(StringReplace(StringReplace(NodeStr(Ent), '&', '', [rfReplaceAll]), ' ', '', [rfReplaceAll]));
+    Lt:= Pos('<', Name);
+    if Lt > 0 then Name:= Copy(Name, 1, Lt - 1);
+    for Start in STARTS do
+      if (Name = Start) or Name.EndsWith('.' + Start) then Exit(True);
+  end;
+
   procedure Flag(const ANode: TTSNode; const AMember: string);
   var
     P: TTSPoint    ;
@@ -4725,7 +4831,7 @@ var
     F:= Default(TLintFinding);
     F.RuleId  := 'ui-access-in-thread';
     F.Severity:= 'warning';
-    F.Message := Format('UI access (.%s) inside a TThread.Execute -- VCL/FMX is not thread-safe; wrap it in Synchronize/Queue', [AMember]);
+    F.Message := Format('UI access (.%s) in thread code -- VCL/FMX is not thread-safe; wrap it in Synchronize/Queue', [AMember]);
     F.FilePath:= AFile;
     F.StartLine:= Integer(P.Row   ) + 1;
     F.StartCol := Integer(P.Column) + 1;
@@ -4743,6 +4849,9 @@ var
   begin
     if N.IsNull or (Findings.Count >= 200) then Exit;
     if (N.NodeType = 'lambda') or (N.NodeType = 'defProc') then Exit; { likely Synchronize/Queue body, or nested routine }
+    { Synchronize(Form1.Repaint) names the method on the main thread's behalf. }
+    if (N.NodeType = 'exprCall') and (SameText(CalleeLast(N), 'Synchronize') or SameText(CalleeLast(N), 'Queue')
+      or SameText(CalleeLast(N), 'ForceQueue')) then Exit;
     if N.NodeType = 'assignment' then
     begin
       Lhs:= N.ChildByField('lhs');
@@ -4758,7 +4867,8 @@ var
       if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then
       begin
         Mname:= NodeStr(Rhs);
-        if SameText(Mname, 'SetFocus') or SameText(Mname, 'Repaint') or SameText(Mname, 'BringToFront') then Flag(N, Mname);
+        if SameText(Mname, 'SetFocus') or SameText(Mname, 'Repaint') or SameText(Mname, 'BringToFront')
+          or SameText(Mname, 'SendToBack') or SameText(Mname, 'ProcessMessages') then Flag(N, Mname);
       end;
     end;
     for I:= 0 to N.ChildCount - 1 do WalkExec(N.Child(I));
@@ -4772,9 +4882,22 @@ var
     Lhs  : TTSNode;
     Rhs  : TTSNode;
     Body : TTSNode;
-    Base : string ;
+    Args : TTSNode;
+    Arg  : TTSNode;
+    A, B : Integer;
   begin
     if N.IsNull then Exit;
+    if (N.NodeType = 'exprCall') and IsThreadStart(N) then
+    begin
+      Args:= N.ChildByField('args');
+      if not Args.IsNull then
+        for A:= 0 to Args.NamedChildCount - 1 do
+        begin
+          Arg:= Args.NamedChild(A);
+          if Arg.NodeType = 'lambda' then
+            for B:= 0 to Arg.NamedChildCount - 1 do WalkExec(Arg.NamedChild(B));
+        end;
+    end;
     if N.NodeType = 'defProc' then
     begin
       Hdr:= N.ChildByField('header');
@@ -4786,7 +4909,7 @@ var
           Lhs:= Nm.ChildByField('lhs');
           Rhs:= Nm.ChildByField('rhs');
           if (not Lhs.IsNull) and (not Rhs.IsNull) and (Lhs.NodeType = 'identifier') and SameText(NodeStr(Rhs), 'Execute') then
-            if ClassBase.TryGetValue(LowerCase(NodeStr(Lhs)), Base) and (Pos('thread', LowerCase(Base)) > 0) then
+            if IsThreadClass(NodeStr(Lhs)) then
             begin
               Body:= N.ChildByField('body');
               if not Body.IsNull then WalkExec(Body);
@@ -5747,7 +5870,7 @@ begin
   end;
 end;
 
-class function TAstChecker.CheckMutableGlobalVars(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckMutableGlobalVars(const AFile: string; const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 var
   Src     : TBytes;
   PF      : TParsedFile;
@@ -5760,6 +5883,52 @@ var
     SetLength(B, Integer(ANode.EndByte) - Integer(ANode.StartByte));
     Move(Src[ANode.StartByte], B[0], Length(B));
     Result:= TEncoding.UTF8.GetString(B);
+  end;
+
+  { 1.45 la (row 21, index fact F2): True when the variable declared at ALine has at least one write
+    and EVERY write the index knows sits inside this unit's initialization section: a value set once
+    before the program runs is not shared MUTABLE state. Writes are the refs of kind 'write' bound to
+    the variable (any unit), plus the same-named refs of this file the resolver left unbound; the
+    first one outside an initialization section, or one with no enclosing symbol, answers False.
+    No store, no section attribution (an index older than 1.44) or no write at all: False, the
+    variable is reported as before. }
+  function WrittenOnlyInInitialization(const AName: string; ALine: Integer): Boolean;
+  const
+    REF_KIND_WRITE = 'write';
+
+    function InInitialization(const ARef: TReference): Boolean;
+    begin
+      Result:= (ARef.EnclosingSymbolId > 0) and (AStore.GetSymbolById(ARef.EnclosingSymbolId).Kind = skInitialization);
+    end;
+  var
+    S      : TSymbol;
+    R      : TReference;
+    Writes : Integer;
+    Bound  : TDictionary<Int64, Boolean>;
+  begin
+    Result:= False;
+    if (AStore = nil) or (AFileId <= 0) then Exit;
+    for S in AStore.FindSymbolsByExactName(AName) do
+    begin
+      if (S.Kind <> skVarDecl) or (S.FileId <> AFileId) or (S.StartLine <> ALine) then Continue;
+      Writes:= 0;
+      Bound := TDictionary<Int64, Boolean>.Create;
+      try
+        for R in AStore.FindReferencesTo(S.Id) do
+        begin
+          Bound.AddOrSetValue(R.Id, True);
+          if R.Kind <> REF_KIND_WRITE then Continue;
+          if not InInitialization(R) then Exit;
+          Inc(Writes);
+        end;
+        for R in AStore.GetReferencesFromFile(AFileId) do
+          if (not Bound.ContainsKey(R.Id)) and (R.Kind = REF_KIND_WRITE) and (R.ReceiverText = '') and SameText(R.NameText, AName)
+             and not InInitialization(R) then Exit;
+      finally
+        Bound.Free;
+      end;
+      Exit(Writes > 0);
+    end;
   end;
 
   { Find every unit-scope declVars -> declVar and emit one finding per declared identifier.
@@ -5794,6 +5963,7 @@ var
           VarName:= NodeStr(NameId);
           if VarName = '' then Continue;
           P:= NameId.StartPoint;
+          if WrittenOnlyInInitialization(VarName, Integer(P.Row) + 1) then Continue;
           F:= Default(TLintFinding);
           F.RuleId  := 'mutable-global-variable';
           F.Severity:= 'info';
@@ -8545,8 +8715,9 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckDatasetOpen(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckDatasetOpen(const AFile: string; const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 var
+  Reader         : TExprTypeReader            ;  // 1.45 la: F1 static type of the receiver; nil without a store
   Src            : TBytes                     ;
   PF      : TParsedFile        ;
   Findings       : TList<TLintFinding>        ;
@@ -8732,6 +8903,25 @@ var
     Result:= LocalTypes.TryGetValue(AVar, Ty) and PlainActiveTypes.ContainsKey(Ty);
   end;
 
+  { 1.45 la (row 10): True only when index fact F1 types the receiver of the X.M node N and the whole
+    ancestry of that type is known and has no TDataSet in it (a port, a connection, a report). No
+    store, no ref_types table, no row, an unknown or library-only ancestry: False, and the finding
+    stands as it always did. }
+  function ReceiverKnownNotDataset(const N: TTSNode): Boolean;
+  var
+    Dot : TTSNode;
+    Leaf: string ;
+  begin
+    Result:= False;
+    if Reader = nil then Exit;
+    Dot:= N;
+    if N.NodeType = 'exprCall' then Dot:= N.ChildByField('entity');
+    if Dot.IsNull then Exit;
+    var L: TTSNode:= Dot.ChildByField('lhs');
+    if L.IsNull or not Reader.TypeLeafOf(L, Leaf) then Exit;
+    Result:= Reader.Descends(Leaf, 'TDataSet') = tdNo;
+  end;
+
   procedure WalkBody(const N: TTSNode; AInFinally: Boolean);
   var
     I   : Integer;
@@ -8744,7 +8934,7 @@ var
     if DotMethod(N, V, M) then
     begin
       if SameText(M, 'Open') then
-      begin if IsWholeStatement(N) and not Opened.ContainsKey(V) then Opened.Add(V, N.StartPoint); end
+      begin if IsWholeStatement(N) and not Opened.ContainsKey(V) and not ReceiverKnownNotDataset(N) then Opened.Add(V, N.StartPoint); end
       else if SameText(M, 'Close') and AInFinally then ClosedInFinally.AddOrSetValue(V, True);
     end
     else if IsActiveAssign(N, True, V) then
@@ -8815,21 +9005,24 @@ begin
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
+  Reader:= nil;
   Findings:= TList<TLintFinding>.Create;
   PlainActiveTypes:= TDictionary<string, Boolean>.Create;
   LocalTypes:= TDictionary<string, string>.Create;
   try
+    if (AStore <> nil) and (AFileId > 0) then Reader:= TExprTypeReader.Create(AStore, ALibStore, AFileId, Src);
     CollectPlainActiveTypes(PF.Tree.RootNode);
     VisitProcs(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
+    Reader.Free;
     LocalTypes.Free;
     PlainActiveTypes.Free;
     Findings.Free;
   end;
 end; // function
 
-class function TAstChecker.CheckCriticalSection(const AFile: string): TArray<TLintFinding>;
+class function TAstChecker.CheckCriticalSection(const AFile: string; const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 const
   { Namespaces the TMonitor keys so a lock named 'lock' passed to
     TMonitor.Enter can never be discharged by an instance Lock.Leave. }
@@ -8840,6 +9033,7 @@ var
   Findings        : TList<TLintFinding>          ;
   Acquired        : TDictionary<string, TTSPoint>;
   ReleasedInFinally: TDictionary<string, Boolean>;
+  Reader          : TExprTypeReader              ;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -8904,6 +9098,37 @@ var
     Result:= True;
   end;
 
+  { 1.46 t2 (row 16): True only when index fact F1 types the receiver of the X.Enter / X.Acquire node N and
+    that type is provably not a lock: not a known lock class, no lock class among its ancestors, and no
+    lock-like word in its name (a user wrapper such as TMyLock stays a lock). A TSemaphore or a
+    TEvent-like type with an Acquire is such a receiver. No store, no ref_types row or an unknown
+    ancestry: False, and the finding stands as it always did. }
+  function ReceiverKnownNotLock(const N: TTSNode): Boolean;
+  const
+    LOCK_TYPES: array[0..6] of string = (
+      'tcriticalsection', 'tmonitor', 'tmutex', 'tspinlock', 'tlightweightmrew',
+      'tmultireadexclusivewritesynchronizer', 'trtlcriticalsection');
+    LOCK_WORDS: array[0..4] of string = ('lock', 'mutex', 'critical', 'monitor', 'sync');
+  var
+    Dot, L: TTSNode;
+    Leaf  : string ;
+    I     : Integer;
+  begin
+    Result:= False;
+    if Reader = nil then Exit;
+    Dot:= N;
+    if N.NodeType = 'exprCall' then Dot:= N.ChildByField('entity');
+    if Dot.IsNull then Exit;
+    L:= Dot.ChildByField('lhs');
+    if L.IsNull or not (Reader.Ready and Reader.TypeLeafOf(L, Leaf)) then Exit;
+    Leaf:= LowerCase(Leaf);
+    for I:= Low(LOCK_TYPES) to High(LOCK_TYPES) do
+      if (Leaf = LOCK_TYPES[I]) or (Reader.Descends(Leaf, LOCK_TYPES[I]) <> tdNo) then Exit;
+    for I:= Low(LOCK_WORDS) to High(LOCK_WORDS) do
+      if ContainsStr(Leaf, LOCK_WORDS[I]) then Exit;
+    Result:= True;
+  end;
+
   procedure WalkBody(const N: TTSNode; AInFinally: Boolean);
   var
     I   : Integer;
@@ -8931,7 +9156,7 @@ var
         end;
       end
       else if SameText(M, 'Enter') or SameText(M, 'Acquire') then
-      begin if not Acquired.ContainsKey(V) then Acquired.Add(V, N.StartPoint); end
+      begin if not Acquired.ContainsKey(V) and not ReceiverKnownNotLock(N) then Acquired.Add(V, N.StartPoint); end
       else if (SameText(M, 'Leave') or SameText(M, 'Release')) and AInFinally then ReleasedInFinally.AddOrSetValue(V, True);
     end;
     if N.NodeType = 'try' then
@@ -9000,12 +9225,14 @@ begin
   PF:= TAstParseCache.Get(AFile);
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
+  Reader:= nil;
   Findings:= TList<TLintFinding>.Create;
   try
-
+    if (AStore <> nil) and (AFileId > 0) then Reader:= TExprTypeReader.Create(AStore, ALibStore, AFileId, Src);
     VisitProcs(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
+    Reader.Free;
     Findings.Free;
   end;
 end; // function

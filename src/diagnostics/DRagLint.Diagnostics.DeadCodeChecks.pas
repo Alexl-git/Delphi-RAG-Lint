@@ -94,6 +94,7 @@ uses
   , TreeSitter
   , TreeSitterLib
   , DRagLint.Core.Model
+  , DRagLint.Core.Interfaces
   , DRagLint.Diagnostics.ParseCache
   ;
 
@@ -115,6 +116,9 @@ type
     /// <param name="AMaxBoolOps"><!-- drag-lint:auto type -->Integer = 4</param>
     /// <param name="AMaxUnitLines"><!-- drag-lint:auto type -->Integer = 2000</param>
     /// <param name="AMaxChainHops"><!-- drag-lint:auto type -->Integer = 4</param>
+    /// <param name="AStore">The project index, or nil. With a 1.44+ index (ref_types, type_ancestors) three rules use static types: message-chain does not count a hop that returns the type of its receiver (a fluent call, a string helper), default-encoding-io decides text versus binary by TStrings ancestry, exception-constructed-but-not-raised decides by Exception ancestry. Nil, an index older than 1.44, or a type the index does not know: exactly today's name heuristics.</param>
+    /// <param name="AFileId">The file's id in AStore; 0 means no facts.</param>
+    /// <param name="ALibStore">The platform library index, or nil; without it an ancestry that leaves the project answers unknown.</param>
     /// <returns>Array of findings (severity 'warning'); empty when the file is
     /// clean or could not be parsed.</returns>
     /// <remarks>
@@ -194,9 +198,9 @@ type
     /// the checker itself has no shared mutable state.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: AnsiChar, ArgsHaveNoEncoding, Byte, CallReceiverField, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassImplementsInterface, ClassIsFormLike (+75 more)</para>
+    /// <para>Calls: AnsiChar, ArgsHaveNoEncoding, Byte, CallReceiverField, CharInSet, CheckBooleanFlagParam, CheckUnusedParams, ClassifyRefs, ClassImplementsInterface, ClassIsFormLike (+79 more)</para>
     /// <para>Returns: nil; Deduped.ToArray</para>
-    /// <para>Complexity: 18 (cyclomatic, outer body), 2758 lines (full implementation)</para>
+    /// <para>Complexity: 21 (cyclomatic, outer body), 2803 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.AddLongLineFindings"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckPublicWritableFields"/>
     /// <seealso cref="DRagLint.Diagnostics.DeadCodeChecks.TDeadCodeChecker.Check.CheckReferencedNeverSet"/>
@@ -206,13 +210,15 @@ type
     /// </remarks>
     class function Check(const AFile: string; AMinCaseBranches: Integer = 2;
       AMaxBoolOps: Integer = 4; AMaxUnitLines: Integer = 2000;
-      AMaxChainHops: Integer = 4): TArray<TLintFinding>;
+      AMaxChainHops: Integer = 4; const AStore: ISymbolStore = nil; AFileId: Int64 = 0;
+      const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;
   end;
 
 implementation
 
 uses
-  DRagLint.Analysis.Flow.Lattices;
+  DRagLint.Analysis.Flow.Lattices
+  , DRagLint.Lint.RefTypeRules;
 
 { True when ABareName (already lower-cased, unqualified) is the name of a
   published TForm/TFrame event handler.
@@ -302,8 +308,11 @@ begin
 end;
 
 class function TDeadCodeChecker.Check(const AFile: string; AMinCaseBranches: Integer;
-  AMaxBoolOps: Integer; AMaxUnitLines: Integer; AMaxChainHops: Integer): TArray<TLintFinding>;
+  AMaxBoolOps: Integer; AMaxUnitLines: Integer; AMaxChainHops: Integer; const AStore: ISymbolStore; AFileId: Int64;
+  const ALibStore: ISymbolStore): TArray<TLintFinding>;
 var
+  { index fact F1/type_ancestors reader for this unit; nil = no facts, today's logic }
+  Reader         : TExprTypeReader             ;
   Src            : TBytes                      ;
   PF             : TParsedFile                 ;
   Findings       : TList<TLintFinding>         ;
@@ -1233,6 +1242,17 @@ var
           or ((Length(S) >= 9) and SameText(Copy(S, Length(S) - 8, 9), 'Exception'));
   end;
 
+  { exception-constructed-but-not-raised: the name test, refined by the index. A class the index proves to descend from Exception is one even if its name does not look like it; one it proves does NOT descend from Exception (EDIParser = class(TObject)) is not. tdUnknown, or no reader: the name test alone. }
+  function IsExceptionClassName(const AName: string): Boolean;
+  begin
+    Result:= LooksLikeExceptionClass(AName);
+    if Reader = nil then Exit;
+    case Reader.Descends(Trim(AName), 'Exception') of
+      tdYes: Result:= True;
+      tdNo : Result:= False;
+    end;
+  end;
+
   { The class-type text (original case) of an 'on <v>: <Type> do' handler, or ''.
     Tries the 'type' field, else the first named child that is not the variable. }
   function HandlerClassText(const H: TTSNode): string;
@@ -1488,6 +1508,21 @@ var
     Result:= (TypeTxt <> '') and (Pos('string', TypeTxt) = 0);
   end;
 
+  { default-encoding-io: the receiver's STATIC type from the index, when it settles the question. tdYes (descends from TStrings) = text, so the call is reported even when the type's name lacks "string"; tdNo = a binary loader (TPicture, TMemoryStream), not reported. Any other outcome keeps ReceiverIsKnownNonText. }
+  function ReceiverIsNonText(const AEnt: TTSNode): Boolean;
+  var Recv: TTSNode; Leaf: string;
+  begin
+    Result:= ReceiverIsKnownNonText(AEnt);
+    if (Reader = nil) or AEnt.IsNull or (AEnt.NodeType <> 'exprDot') then Exit;
+    if not (ContainsText(NodeStr(AEnt), 'loadfromfile') or ContainsText(NodeStr(AEnt), 'savetofile')) then Exit;
+    Recv:= AEnt.ChildByField('lhs');
+    if Recv.IsNull or not Reader.TypeLeafOf(Recv, Leaf) then Exit;
+    case Reader.Descends(Leaf, 'TStrings') of
+      tdYes: Result:= False;
+      tdNo : Result:= True;
+    end;
+  end;
+
   { v0.81 #9: True if none of an exprCall's arguments mentions TEncoding --
     i.e. the call used the default-encoding overload rather than passing an
     explicit TEncoding (TEncoding.UTF8, TEncoding.ANSI, a custom TEncoding
@@ -1570,14 +1605,23 @@ var
     member). 'a.b.c.d.e' = 4 hops (b,c,d,e off a). }
   function CountChainHops(const ATop: TTSNode): Integer;
   var
-    Cur: TTSNode;
+    Cur, Nxt, Hop: TTSNode;
+    HopLeaf, RecvLeaf: string;
   begin
     Result:= 0;
     Cur:= ATop;
     while (not Cur.IsNull) and (Cur.NodeType = 'exprDot') do
     begin
-      Inc(Result);
-      Cur:= Cur.ChildByField('lhs');
+      Nxt:= Cur.ChildByField('lhs');
+      { index fact: a hop whose result has the type of its receiver (a fluent call, a string helper) is not a Demeter hop }
+      Hop:= Cur;
+      if (not Cur.Parent.IsNull) and (Cur.Parent.NodeType = 'exprCall') and IsChainLink(Cur.Parent, Cur) then Hop:= Cur.Parent;
+      if (Reader <> nil) and Reader.TypeLeafOf(Hop, HopLeaf) and Reader.TypeLeafOf(Nxt, RecvLeaf)
+         and SameText(HopLeaf, RecvLeaf) then
+        { same type: not counted }
+      else
+        Inc(Result);
+      Cur:= Nxt;
       while (not Cur.IsNull) and (Cur.NodeType = 'exprCall') do
         Cur:= Cur.ChildByField('entity');
     end;
@@ -1925,7 +1969,7 @@ var
           var Rhs: TTSNode:= Ent.ChildByField('rhs');
           var Lhs: TTSNode:= Ent.ChildByField('lhs');
           if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') and SameText(Trim(NodeStr(Rhs)), 'Create')
-             and (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') and LooksLikeExceptionClass(NodeStr(Lhs)) then
+             and (not Lhs.IsNull) and (Lhs.NodeType = 'identifier') and IsExceptionClassName(NodeStr(Lhs)) then
             EmitAt(N, 'exception-constructed-but-not-raised',
               Format('%s.Create(...) is constructed as a statement but never raised -- did you mean ''raise %s.Create(...)''?',
                 [Trim(NodeStr(Lhs)), Trim(NodeStr(Lhs))]), 'warning');
@@ -2151,7 +2195,7 @@ var
     begin
       var Ent: TTSNode:= N.ChildByField('entity');
       if (not Ent.IsNull) and IsDefaultEncodingApi(Trim(NodeStr(Ent)))
-        and not ReceiverIsKnownNonText(Ent) then
+        and not ReceiverIsNonText(Ent) then
       begin
         var ArgsN: TTSNode:= N.ChildByField('args');
         if ArgsHaveNoEncoding(ArgsN) then
@@ -2939,7 +2983,13 @@ begin
   AddrTaken      := TDictionary<string, Boolean>.Create;
   DeclTypes      := TDictionary<string, string >.Create;
   SameClassVars  := nil;
+  Reader         := nil;
   try
+    if (AStore <> nil) and (AFileId > 0) then
+    begin
+      Reader:= TExprTypeReader.Create(AStore, ALibStore, AFileId, Src);
+      if not Reader.Ready then FreeAndNil(Reader);  // dl:ok unprotected-object-free@9f17 -- REVIEWED 2026-11-06: Reader is freed by the enclosing finally; this only drops a reader that is not ready
+    end;
     { v0.74: unit-too-large (#6) -- one info finding when the unit exceeds
       AMaxUnitLines source lines (root node's last row). }
     if (AMaxUnitLines > 0) and (PF.Tree <> nil) then
@@ -3040,6 +3090,7 @@ begin
     LocalFunctions.Free;
     AddrTaken.Free;
     DeclTypes.Free;
+    Reader.Free;
   end;
   { De-duplicate by (RuleId, StartLine, StartCol). }
   Seen:= TDictionary<string, Boolean>.Create;

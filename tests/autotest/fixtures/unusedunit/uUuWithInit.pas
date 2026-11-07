@@ -26,5 +26,6 @@ end;
 
 initialization
   ZzRegistered:= True;
+  Randomize;
 
 end.

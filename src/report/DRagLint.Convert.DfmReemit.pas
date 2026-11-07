@@ -263,6 +263,25 @@ type
     RuleLine  : Integer;
   end;
 
+  /// <summary>What happened to one image G-link on one instance (grammar 6).</summary>
+  /// <remarks>
+  /// Kind is 'glyph-stitched', or a to-do kind: 'glyph-no-alternative',
+  /// 'glyph-format-unsupported', 'glyph-not-a-strip'. A to-do kind wrote neither the
+  /// image nor its G[count] leaves. SourceN is 0 when the count was never read.
+  /// DroppedSlots is named by the rule's chosen alternative, never inferred.
+  /// Message is the sentence the report prints.
+  /// </remarks>
+  TReemitGlyph = record
+    FromPath    : string;
+    ToPath      : string;
+    Kind        : string;
+    SourceN     : Integer;
+    Alternative : string;
+    DroppedSlots: TArray<Integer>;
+    RuleLine    : Integer;
+    Message     : string;
+  end;
+
   /// <summary>A structured report of what the re-emit did and what needs human
   /// attention. WARN-level: Dropped, Mismatched, OwnedParts. Silent: Ignored (an
   /// acknowledged #ignore).</summary>
@@ -300,6 +319,8 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TReemitReport = record
+    /// <summary>What happened to each image G-link of the block; see TReemitGlyph.</summary>
+    Glyphs     : TArray<TReemitGlyph>;
     Dropped    : TArray<string>;
     Ignored    : TArray<string>;
     Mismatched : TArray<string>;
@@ -471,9 +492,17 @@ uses
   TreeSitter,
   TreeSitterLib,
   DRagLint.Parser.DFM, // for tree_sitter_dfm (external decl lives there)
+  DRagLint.Convert.GlyphExpr,
   DRagLint.Convert.GlyphStrip;
 
 const
+  { glyph outcomes (apply/1 glyphs[].kind) and what a stitched leaf is called }
+  GLYPH_STITCHED           = 'glyph-stitched';
+  GLYPH_NO_ALTERNATIVE     = 'glyph-no-alternative';
+  GLYPH_FORMAT_UNSUPPORTED = 'glyph-format-unsupported';
+  GLYPH_NOT_A_STRIP        = 'glyph-not-a-strip';
+  GLYPH_DATA_LEAF          = '.Data';
+  FORMAT_BMP               = 'bmp';
   { .dfm block keywords, as ObjectKeyword spells them }
   KW_OBJECT    = 'object';
   KW_INHERITED = 'inherited';
@@ -1170,7 +1199,7 @@ var
   begin
     Result:= False; AToPath:= '';
     for Q in ARules.Rules do
-      if (Q.Kind = rkLink) and SameText(Q.FromPath, AFromPath) then
+      if (Q.Kind = rkLink) and (Q.GlyphExpr = '') and SameText(Q.FromPath, AFromPath) then
       begin AToPath:= Q.ToPath; Exit(True); end;
   end;
 
@@ -1215,7 +1244,7 @@ var
     if not TreesDescribeThisBlock then Exit;
     for Q in ARules.Rules do
     begin
-      if (Q.Kind <> rkLink) or (Q.Cast <> '') or not SameText(Q.FromPath, AFromPrefix) then Continue;
+      if (Q.Kind <> rkLink) or (Q.Cast <> '') or (Q.GlyphExpr <> '') or not SameText(Q.FromPath, AFromPrefix) then Continue;
       if Trim(Q.ToPath) = '???' then Exit(False);
       SrcT:= LeafTypeOf(AFrom, Q.FromPath);
       DstT:= LeafTypeOf(ATo, Q.ToPath);
@@ -1300,7 +1329,7 @@ var
     Best      := 0;
     for Q in ARules.Rules do
     begin
-      if (Q.Kind <> rkLink) or (Q.Cast = '') or (Q.FromPath = '') then Continue;
+      if (Q.Kind <> rkLink) or (Q.Cast = '') or (Q.GlyphExpr <> '') or (Q.FromPath = '') then Continue;
       if Length(Q.FromPath) <= Best then Continue;
       if not SameText(Copy(ALeafPath, 1, Length(Q.FromPath) + 1), Q.FromPath + '.') then Continue;
       if FindClassCast(ACastLib, Q.Cast, CD) then
@@ -1340,6 +1369,23 @@ var
     P:= Start;
     while (P <= Length(AValueText)) and CharInSet(AValueText[P], [' ', #9]) do Inc(P);
     Result:= Copy(AValueText, Start, P - Start);
+  end;
+
+  // The filer format a keep-bytes cast's target reads: declared by the castlib's
+  // dfmdata, else the framing of its single yields class when that is a VCL graphic.
+  function CastTargetFraming(const ACast: TCastDef; out AFraming: TGraphicDataFraming; out AWhy: string): Boolean;
+  begin
+    AWhy:= '';
+    AFraming:= if Trim(ACast.DfmData) <> '' then ParseDataFraming(ACast.DfmData)
+      else if Length(ACast.Yields) = 1 then GraphicClassFraming(ACast.Yields[0])
+      else gdfUnknown;
+    Result:= AFraming <> gdfUnknown;
+    if Result then Exit;
+    AWhy:= if Trim(ACast.DfmData) <> '' then
+        Format('dfmdata "%s" is not a filer format (graphic, bitmap, metafile, picture)', [Trim(ACast.DfmData)])
+      else
+        Format('the filer format of the cast target (%s) is not known to the engine -- ' +
+          'declare it with dfmdata graphic|bitmap|metafile|picture', [string.Join(', ', ACast.Yields)]);
   end;
 
   (* THE KEPT BYTES ARE TRANSFORMED BETWEEN FILER FORMATS, NOT COPIED (1.26.2).
@@ -1382,21 +1428,7 @@ var
         [Fmt, if Trim(ACast.Compat) <> '' then ACast.Compat else 'none declared']);
       Exit;
     end;
-    if Trim(ACast.DfmData) <> '' then
-      Framing:= ParseDataFraming(ACast.DfmData)
-    else if Length(ACast.Yields) = 1 then
-      Framing:= GraphicClassFraming(ACast.Yields[0])
-    else
-      Framing:= gdfUnknown;
-    if Framing = gdfUnknown then
-    begin
-      if Trim(ACast.DfmData) <> '' then
-        AWhy:= Format('dfmdata "%s" is not a filer format (graphic, bitmap, metafile, picture)', [Trim(ACast.DfmData)])
-      else
-        AWhy:= Format('the filer format of the cast target (%s) is not known to the engine -- ' +
-          'declare it with dfmdata graphic|bitmap|metafile|picture', [string.Join(', ', ACast.Yields)]);
-      Exit;
-    end;
+    if not CastTargetFraming(ACast, Framing, AWhy) then Exit;
     if not WrapGraphicData(Image, Fmt, Framing, Framed, AWhy) then Exit;
     if (Length(Framed) = Length(Payload)) and CompareMem(Pointer(Framed), Pointer(Payload), Length(Framed)) then
       ACarry:= AValueText
@@ -1563,6 +1595,199 @@ var
     { C8 N2: absent from an inherited block means inherited, not defaulted }
     if InheritedRoot then Exit(False);
     Result:= LeafDefaultOf(AFrom, ADottedPath, AValue);
+  end;
+
+  // The filer format a stitched image is framed in for this link's target. A cast
+  // must be a keep-bytes one that accepts bmp; a link with no cast keeps the
+  // source's own framing, which is only right when the leaf types are identical.
+  function GlyphTargetFraming(const ALink: TConversionRule; out AFraming: TGraphicDataFraming; out AWhy: string): Boolean;
+  var
+    CD  : TCastDef;
+    SrcT: string;
+  begin
+    Result  := False;
+    AFraming:= gdfUnknown;
+    AWhy    := '';
+    if ALink.Cast <> '' then
+    begin
+      if not FindClassCast(ACastLib, ALink.Cast, CD) then
+        AWhy:= Format('cast %s is not in the cast library (give --castlib)', [ALink.Cast])
+      else if not SameText(Trim(CD.Dfm), 'keep-bytes-if-compatible') then
+        AWhy:= Format('cast %s has no dfm keep-bytes-if-compatible, so stitched bytes have no way to land', [ALink.Cast])
+      else if not CompatHas(CD.Compat, FORMAT_BMP) then
+        AWhy:= Format('cast %s does not accept bmp (compat: %s)', [ALink.Cast, CD.Compat])
+      else
+        Result:= CastTargetFraming(CD, AFraming, AWhy);
+      Exit;
+    end;
+    SrcT:= LeafTypeOf(AFrom, ALink.FromPath);
+    if (SrcT = '') or not SameText(BareTypeTail(SrcT), BareTypeTail(LeafTypeOf(ATo, ALink.ToPath))) then
+    begin
+      AWhy:= Format('no cast on the link and the leaf types differ (%s, %s)', [SrcT, LeafTypeOf(ATo, ALink.ToPath)]);
+      Exit;
+    end;
+    AFraming:= GraphicClassFraming(SrcT);
+    Result  := AFraming <> gdfUnknown;
+    if not Result then AWhy:= Format('the filer format of %s is not known to the engine', [SrcT]);
+  end;
+
+  // The instance's actual glyph count through the class table. A count the block
+  // does not stream is the declared default, except in an inherited block, where
+  // it is inherited and so unknown: never guessed. The count leaf is consumed when
+  // no #link names it, since a G[count] replaces it.
+  function ReadGlyphCount(out AN: Integer; out AWhy: string): Boolean;
+  var
+    Row  : Integer;
+    Rd   : TGlyphCountReader;
+    Value: string;
+    Dummy: string;
+  begin
+    Result:= False;
+    AN    := 0;
+    AWhy  := '';
+    Row   := GlyphReaderIndexFor(AFrom);
+    if Row < 0 then
+    begin
+      AWhy:= Format('no glyph-count reader for %s', [AFrom.QName]);
+      Exit;
+    end;
+    Rd:= GlyphCountReaders[Row];
+    case Rd.Kind of
+      gckSingle: AN:= 1;
+      gckFixed : AN:= Rd.Value;
+      gckProperty:
+      begin
+        if FindLeafValue(Rd.PropName, Value) then
+        begin
+          AN:= StrToIntDef(Trim(Value), 0);
+          if AN < 1 then
+          begin
+            AWhy:= Format('%s = %s is not a glyph count', [Rd.PropName, Trim(Value)]);
+            Exit;
+          end;
+        end
+        else if InheritedRoot then
+        begin
+          AWhy:= Format('%s is not streamed in this inherited block, so the count is the ancestor''s and unknown here', [Rd.PropName]);
+          Exit;
+        end
+        else
+          AN:= Rd.Value;
+        if not FindLinkFor(Rd.PropName, Dummy) then ConsumedPaths:= ConsumedPaths + [Rd.PropName];
+      end;
+    end;
+    Result:= True;
+  end;
+
+  // One image G-link on this instance (grammar section 6). Writes the image and its
+  // G[count] leaves, or reports a to-do kind and writes neither; never carries whole.
+  procedure RealiseGlyphLink(const ALink: TConversionRule; const AExpr: TGlyphExpr);
+  var
+    Outcome  : TReemitGlyph;
+    DataPath : string;
+    ValueText: string;
+    Image    : TBytes;
+    Stitched : TBytes;
+    Framed   : TBytes;
+    Fmt      : string;
+    Wrapper  : string;
+    Why      : string;
+    Sel      : TGlyphSelection;
+    Framing  : TGraphicDataFraming;
+    Check    : TGlyphStripFailure;
+    Q        : TConversionRule;
+    QExpr    : TGlyphExpr;
+
+    procedure Fail(const AKind, AReason: string);
+    begin
+      Outcome.Kind   := AKind;
+      Outcome.Message:= Format('%s: %s -> %s: %s (rule line %d)', [AKind, ALink.FromPath, ALink.ToPath, AReason, ALink.LineNo]);
+      Result.Report.Glyphs:= Result.Report.Glyphs + [Outcome];
+    end;
+
+    function DroppedText: string;
+    var
+      Names: TArray<string>;
+      Slot : Integer;
+    begin
+      Result:= '';
+      if Length(Sel.Dropped) = 0 then Exit;
+      Names:= nil;
+      for Slot in Sel.Dropped do Names:= Names + [IntToStr(Slot)];
+      Result:= Format(' (%s %s dropped by rule line %d)',
+        [if Length(Names) = 1 then 'slot' else 'slots', string.Join(', ', Names), ALink.LineNo]);
+    end;
+
+    // The count, then the image, then whether it divides by the count. The count
+    // comes first: reading it is what consumes the source's count leaf, and a to-do
+    // outcome must not report that leaf dropped as well.
+    function ReadStrip: Boolean;
+    begin
+      Check:= gsfFormat;
+      if not ReadGlyphCount(Outcome.SourceN, Why) or
+         not UnwrapGraphicData(DecodeDfmHex(ValueText), Image, Fmt, Wrapper, Why) then Exit(False);
+      if not SameText(Fmt, FORMAT_BMP) then
+      begin
+        Why:= Format('a %s image is not a strip', [Fmt]);
+        Exit(False);
+      end;
+      Check := CheckBitmapStrip(Image, Outcome.SourceN, Why);
+      Result:= Check = gsfNone;
+    end;
+
+  begin
+    DataPath:= ALink.FromPath + GLYPH_DATA_LEAF;
+    if not FindLeafValue(DataPath, ValueText) then Exit; // an empty source glyph is not an error (ruled)
+    ConsumedPaths:= ConsumedPaths + [DataPath];
+    Outcome         := Default(TReemitGlyph);
+    Outcome.FromPath:= ALink.FromPath;
+    Outcome.ToPath  := ALink.ToPath;
+    Outcome.RuleLine:= ALink.LineNo;
+    if not ReadStrip then
+    begin
+      Fail(if Check = gsfNotAStrip then GLYPH_NOT_A_STRIP else GLYPH_FORMAT_UNSUPPORTED, Why);
+      Exit;
+    end;
+    if not SelectGlyphAlternative(AExpr, Outcome.SourceN, Sel) then
+    begin
+      Fail(GLYPH_NO_ALTERNATIVE, Format('N=%d matches no alternative of "%s"', [Outcome.SourceN, AExpr.Text]));
+      Exit;
+    end;
+    Outcome.Alternative := Sel.Text;
+    Outcome.DroppedSlots:= Sel.Dropped;
+    if not GlyphTargetFraming(ALink, Framing, Why) or
+       not StitchBitmapSlots(Image, Outcome.SourceN, Sel.Slots, Stitched, Why) or
+       not WrapGraphicData(Stitched, Fmt, Framing, Framed, Why) then
+    begin
+      Fail(GLYPH_FORMAT_UNSUPPORTED, Why);
+      Exit;
+    end;
+    PlaceAtPath(TRoot, ALink.ToPath + GLYPH_DATA_LEAF, EncodeDfmHex(Framed, HexIndentOf(ValueText)), dnkBinary, Created);
+    { G[count] AFTER its image leaf whatever the source order: NumGlyphs is declared
+      "after picture!", order-dependent at stream time. The number is the chosen
+      alternative's SLOTS: grammar table 3.4 gives G[*/4] a count of 4. }
+    for Q in ARules.Rules do
+      if (Q.Kind = rkLink) and (Q.GlyphExpr <> '') and SameText(Q.FromPath, ALink.FromPath) and
+         (Length(ParseGlyphExpr(Q.GlyphExpr, QExpr)) = 0) and IsGlyphCountExpr(QExpr) then
+        PlaceAtPath(TRoot, Q.ToPath, IntToStr(Length(Sel.Slots)), dnkScalar, Created);
+    Outcome.Kind   := GLYPH_STITCHED;
+    Outcome.Message:= Format('%s: %s N=%d -> %s %s%s',
+      [GLYPH_STITCHED, ALink.FromPath, Outcome.SourceN, ALink.ToPath, Sel.Text, DroppedText]);
+    Result.Report.Glyphs:= Result.Report.Glyphs + [Outcome];
+  end;
+
+  // Step 3c. An owned-part recursion has the parent's classes, so nothing is
+  // stitched there: the leaf reaches RemapLeaf, and is reported dropped.
+  procedure RealiseGlyphLinks;
+  var
+    Q   : TConversionRule;
+    Expr: TGlyphExpr;
+  begin
+    if not TreesDescribeThisBlock then Exit;
+    for Q in ARules.Rules do
+      if (Q.Kind = rkLink) and (Q.GlyphExpr <> '') and (Length(ParseGlyphExpr(Q.GlyphExpr, Expr)) = 0) and
+         not IsGlyphCountExpr(Expr) then
+        RealiseGlyphLink(Q, Expr);
   end;
 
   // True when ANY #link/#ignore/#remove rule's FromPath/PropName references a
@@ -2360,6 +2585,9 @@ begin
     // RemapLeaf skip whatever a mapping consumed (IsConsumed).
     ApplyMappings;
 
+    // 3c. Image G-links and their G[count] leaves, before the leaf walk so it skips what they consumed.
+    RealiseGlyphLinks;
+
     // 4. Per top-level F leaf, remap. Nested sub-objects are classified as an
     // owned part (recurse via #convert) or a contained child (copied verbatim).
     for i:= 0 to FRoot.Children.Count - 1 do
@@ -2413,7 +2641,7 @@ begin
     if TreesDescribeThisBlock and not InheritedRoot then
     for R in ARules.Rules do
     begin
-      if (R.Kind <> rkLink) or (R.FromPath = '') then Continue;
+      if (R.Kind <> rkLink) or (R.FromPath = '') or (R.GlyphExpr <> '') then Continue;
       if Trim(R.ToPath) = '???' then Continue;  // unfilled stub; step 4 reports it
       if IsIgnored(R.FromPath) then Continue;
       { #remove means the property must be ABSENT from T. RemapLeaf checks it

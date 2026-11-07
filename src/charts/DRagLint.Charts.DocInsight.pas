@@ -60,7 +60,7 @@ const
 /// the header lines is formatted exactly as before the header existed.
 /// Pure function; thread-safe.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.AskVerb.FormatAskAnswer (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.UpdateDoc (DRagLint.Charts.Compare.pas), [dclDragLintWizard]DragLint.Plugin.ReportText.FormatReportAsDocInsight (DragLint.Plugin.ReportText.pas)</para>
+/// <para>Called from: [drag-lint]DRagLint.Charts.AskVerb.FormatAskAnswer (DRagLint.Charts.AskVerb.pas), [drag-lint]DRagLint.Charts.Compare.UpdateDoc (DRagLint.Charts.Compare.pas), [dclDragLintWizard]DragLint.Plugin.ReportText.FormatReportAsDocInsight (DragLint.Plugin.ReportText.pas)</para>
 /// <para>Calls: DRagLint.Charts.DocInsight.EmitWrapped, DRagLint.Charts.DocInsight.RemoveAutodocMarker, DRagLint.Charts.DocInsight.RenderAnswerLine, DRagLint.Charts.DocInsight.ScrubLine, DRagLint.Charts.DocInsight.SplitAnswerLines, DRagLint.Charts.DocInsight.XmlEscape, Format, FormatDateTime, Trim, TrimRight</para>
 /// <para>Returns: RemoveAutodocMarker(SB.ToString)</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 56 lines (full implementation)</para>
@@ -143,7 +143,7 @@ function LeadingSpaces(const pLine: string): Integer;
 /// empty element. A BOM is NOT removed.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Adapter.Text.SplitPhysical (DRagLint.Charts.Adapter.Text.pas), DRagLint.Charts.AskVerb.AnswerLines (DRagLint.Charts.AskVerb.pas), DRagLint.Charts.Compare.HeaderOf (DRagLint.Charts.Compare.pas), DRagLint.Charts.Compare.LoadRemarksSide (DRagLint.Charts.Compare.pas), [dclDragLintWizard]DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight (DRagLint.Charts.DocInsight.pas)</para>
+/// <para>Called from: [drag-lint]DRagLint.Charts.Adapter.Text.SplitPhysical (DRagLint.Charts.Adapter.Text.pas), [drag-lint]DRagLint.Charts.AskVerb.AnswerLines (DRagLint.Charts.AskVerb.pas), [drag-lint]DRagLint.Charts.Compare.HeaderOf (DRagLint.Charts.Compare.pas), [drag-lint]DRagLint.Charts.Compare.LoadRemarksSide (DRagLint.Charts.Compare.pas), [dclDragLintWizard,drag-lint]DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight (DRagLint.Charts.DocInsight.pas), [drag-lint]DRagLint.Charts.Pairs.EngineJson (DRagLint.Charts.Pairs.pas)</para>
 /// <para>Calls: StringReplace</para>
 /// <para>Returns: StringReplace(StringReplace(pText, #13#10, #10, [rfReplaceAll]), #13, #10, [rfReplaceAll]).Split([#10])</para>
 /// <!-- drag-lint:auto END -->

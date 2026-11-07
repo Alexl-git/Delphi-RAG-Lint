@@ -58,13 +58,16 @@ function CollectFinalizationAfterDependency(const AStore: ISymbolStore): TArray<
 /// a dialog: work that can fail or block before the application has an exception handler or a window,
 /// and that every process using the unit pays for at start.</summary>
 /// <param name="AStore">The project index; nil yields no findings.</param>
+/// <param name="ALibraryStore">The platform library index, or nil. A call the project index leaves unresolved is
+/// followed into the library when exactly one library routine of that name lives in a unit the calling file uses.</param>
 /// <returns>One 'heavy-initialization' hint per section, anchored at the call or reference that starts
 /// the first path; the message names each category and a routine that shows it.</returns>
 /// <remarks>Not thread-safe. Evidence is positive only: the section's refs and the reached routines'
 /// refs against the curated names below, plus symbol_facts.touches (registry, network, transactions)
-/// and sql_reads / sql_writes of a reached routine. A path behind an `if` counts, because the index has
+/// and sql_reads / sql_writes of a reached routine. With a library index the walk also enters library routines
+/// (certain library call edges, at most LIBRARY_WALK_DEPTH levels). A path behind an `if` counts, because the index has
 /// no branch conditions. TPath alone is not a file access. Certain call edges only.</remarks>
-function CollectHeavyInitialization(const AStore: ISymbolStore): TArray<TLintFinding>;
+function CollectHeavyInitialization(const AStore: ISymbolStore; const ALibraryStore: ISymbolStore = nil): TArray<TLintFinding>;
 
 /// <summary>A unit's initialization sets its own global variable to a new object (`G:= TFoo.Create`) and
 /// no source that names the variable frees it, so the object lives to process exit and shows as a leak in
@@ -130,6 +133,8 @@ const
   HEAVY_BARE_FILE: array[0..3] of string = ('AssignFile', 'Rewrite', 'Reset', 'FindFirst');
   HEAVY_MEMBER_FILE: array[0..1] of string = ('LoadFromFile', 'SaveToFile');
   HEAVY_MEMBER_DB: array[0..3] of string = ('ExecSQL', 'StartTransaction', 'Commit', 'Rollback');
+  LIBRARY_WALK_DEPTH = 4;
+  LIBRARY_WALK_NODES = 200;
   HEAVY_BARE_DIALOG: array[0..3] of string = ('ShowMessage', 'MessageDlg', 'MessageBox', 'InputBox');
 
 type
@@ -187,6 +192,8 @@ type
     function RefsOf(const ASym: TSymbol): TArray<TReference>;
     /// <summary>The certain, resolved call edges out of ASymbolId.</summary>
     function EdgesOf(ASymbolId: Int64): TArray<TCallEdge>;
+    /// <summary>True when the project index resolved the reference to a certain call edge.</summary>
+    function HasEdge(ASymbolId, ARefId: Int64): Boolean;
     /// <summary>The symbol row, read once.</summary>
     function Symbol(AId: Int64): TSymbol;
     /// <summary>Does AFileId's source declare a symbol of this lower-case name?</summary>
@@ -486,6 +493,13 @@ begin
     if (E.TargetSymbolId > 0) and (E.Confidence = CONFIDENCE_CERTAIN) and not FClosureRef.ContainsKey(E.RefId) then
       Result:= Result + [E];
   FEdges.Add(ASymbolId, Result);
+end;
+
+function TInitGraph.HasEdge(ASymbolId, ARefId: Int64): Boolean;
+begin
+  Result:= False;
+  for var E in EdgesOf(ASymbolId) do
+    if E.RefId = ARefId then Exit(True);
 end;
 
 function TInitGraph.Symbol(AId: Int64): TSymbol;
@@ -857,10 +871,127 @@ begin
     else '';
 end;
 
-function CollectHeavyInitialization(const AStore: ISymbolStore): TArray<TLintFinding>;
+{ The heavy categories a LIBRARY routine reaches (its own refs, its facts, its certain call edges, depth-bounded):
+  category -> the qualified name of the library routine that shows it. Memoised per library symbol. }
+procedure LibraryHeavy(const ALib: ISymbolStore; ARootId: Int64; AWitness: TDictionary<string, string>;
+  AFileRefs: TObjectDictionary<Int64, TList<TReference>>);
 var
-  Witness: TDictionary<string, string>;
-  Anchor : TReference;
+  Seen : TDictionary<Int64, Boolean>;
+  Queue: TList<TPair<Int64, Integer>>;
+
+  function RefsOfLib(const ASym: TSymbol): TArray<TReference>;
+  var
+    L: TList<TReference>;
+  begin
+    if not AFileRefs.ContainsKey(ASym.FileId) then
+    begin
+      AFileRefs.Add(ASym.FileId, nil);
+      for var R in ALib.GetReferencesFromFile(ASym.FileId) do
+        if R.EnclosingSymbolId > 0 then
+        begin
+          if not AFileRefs.TryGetValue(-R.EnclosingSymbolId, L) then
+          begin
+            L:= TList<TReference>.Create;
+            AFileRefs.Add(-R.EnclosingSymbolId, L);
+          end;
+          L.Add(R);
+        end;
+    end;
+    Result:= nil;
+    if AFileRefs.TryGetValue(-ASym.Id, L) then Result:= L.ToArray;
+  end;
+
+  procedure Note(const ACategory, AVia: string);
+  begin
+    if not AWitness.ContainsKey(ACategory) then AWitness.Add(ACategory, AVia);
+  end;
+
+begin
+  Seen:= TDictionary<Int64, Boolean>.Create;
+  Queue:= TList<TPair<Int64, Integer>>.Create;
+  try
+    Seen.Add(ARootId, True);
+    Queue.Add(TPair<Int64, Integer>.Create(ARootId, 0));
+    var Head: Integer:= 0;
+    while (Head < Queue.Count) and (Queue.Count <= LIBRARY_WALK_NODES) do
+    begin
+      var Cur: TPair<Int64, Integer>:= Queue[Head];
+      Inc(Head);
+      var Sym: TSymbol:= ALib.GetSymbolById(Cur.Key);
+      if Sym.Id = 0 then Continue;
+      for var R in RefsOfLib(Sym) do
+      begin
+        var Category: string:= HeavyCategoryOfRef(R);
+        if Category <> '' then Note(Category, Sym.QualifiedName);
+      end;
+      var Facts: TSymbolFacts:= ALib.GetSymbolFacts(Cur.Key);
+      var Bar: Integer:= Pos(TOUCH_SEPARATOR, Facts.Touches);
+      if (Facts.SqlReads <> '') or (Facts.SqlWrites <> '') or ((Bar > 0) and (Bar < Length(Facts.Touches))) then
+        Note(CATEGORY_DATABASE, Sym.QualifiedName);
+      if ContainsText(Facts.Touches, CATEGORY_REGISTRY) then Note(CATEGORY_REGISTRY, Sym.QualifiedName);
+      if ContainsText(Facts.Touches, CATEGORY_NETWORK) then Note(CATEGORY_NETWORK, Sym.QualifiedName);
+      if Cur.Value >= LIBRARY_WALK_DEPTH then Continue;
+      for var E in ALib.GetCallEdgesFromSymbol(Cur.Key) do
+        if (E.TargetSymbolId > 0) and (E.Confidence = CONFIDENCE_CERTAIN) and not Seen.ContainsKey(E.TargetSymbolId) then
+        begin
+          Seen.Add(E.TargetSymbolId, True);
+          Queue.Add(TPair<Int64, Integer>.Create(E.TargetSymbolId, Cur.Value + 1));
+        end;
+    end;
+  finally
+    Queue.Free;
+    Seen.Free;
+  end;
+end;
+
+function CollectHeavyInitialization(const AStore: ISymbolStore; const ALibraryStore: ISymbolStore): TArray<TLintFinding>;
+var
+  Witness   : TDictionary<string, string>;
+  Anchor    : TReference;
+  Graph     : TInitGraph;
+  LibMemo   : TObjectDictionary<Int64, TDictionary<string, string>>;
+  LibRefs   : TObjectDictionary<Int64, TList<TReference>>;
+  LibTarget : TDictionary<string, Int64>;
+
+  { The one library routine an unresolved call names: same name, in a unit the calling file uses, and (with a
+    receiver) the same type or unit. 0 when none or when the name is ambiguous. }
+  function LibraryTarget(const ACaller: TSymbol; const AReference: TReference): Int64;
+  begin
+    var Key: string:= Format('%d|%s|%s', [ACaller.FileId, LowerCase(AReference.ReceiverText), LowerCase(AReference.NameText)]);
+    if LibTarget.TryGetValue(Key, Result) then Exit;
+    Result:= 0;
+    var Hits: Integer:= 0;
+    for var S in ALibraryStore.FindSymbolsByExactName(AReference.NameText) do
+    begin
+      var UnitName: string:= TPath.GetFileNameWithoutExtension(ALibraryStore.GetFilePath(S.FileId));
+      if not Graph.FileUses(ACaller.FileId, LowerCase(UnitName)) then Continue;
+      if (AReference.ReceiverText <> '')
+        and not EndsText('.' + AReference.ReceiverText + '.' + AReference.NameText, S.QualifiedName) then Continue;
+      Inc(Hits);
+      Result:= S.Id;
+    end;
+    if Hits <> 1 then Result:= 0;
+    LibTarget.Add(Key, Result);
+  end;
+
+  procedure NoteLibrary(const ACaller: TSymbol; const AReference: TReference; const AAt: TReference);
+  begin
+    var Target: Int64:= LibraryTarget(ACaller, AReference);
+    if Target = 0 then Exit;
+    var Found: TDictionary<string, string>;
+    if not LibMemo.TryGetValue(Target, Found) then
+    begin
+      Found:= TDictionary<string, string>.Create;
+      LibMemo.Add(Target, Found);
+      LibraryHeavy(ALibraryStore, Target, Found, LibRefs);
+    end;
+    for var P in Found do
+      if not Witness.ContainsKey(P.Key) then
+      begin
+        Witness.Add(P.Key, P.Value);
+        if Anchor.StartLine = 0 then Anchor:= AAt;
+      end;
+  end;
 
   procedure Note(const ACategory: string; const AVia: TSymbol; const AAt: TReference);
   begin
@@ -872,9 +1003,12 @@ var
 begin
   Result:= nil;
   if AStore = nil then Exit;
-  var Graph: TInitGraph:= TInitGraph.Create(AStore);
+  Graph:= TInitGraph.Create(AStore);
   var Findings: TList<TLintFinding>:= TList<TLintFinding>.Create;
   Witness:= TDictionary<string, string>.Create;
+  LibMemo:= TObjectDictionary<Int64, TDictionary<string, string>>.Create([doOwnsValues]);
+  LibRefs:= TObjectDictionary<Int64, TList<TReference>>.Create([doOwnsValues]);
+  LibTarget:= TDictionary<string, Int64>.Create;
   try
     for var Pair in Graph.Units do
     begin
@@ -887,7 +1021,12 @@ begin
         for var R in Graph.RefsOf(Item.Key) do
         begin
           var Category: string:= HeavyCategoryOfRef(R);
-          if Category = '' then Continue;
+          if Category = '' then
+          begin
+            if (ALibraryStore <> nil) and ((R.Kind = REF_CALL) or (R.Kind = REF_MEMBER)) and not Graph.HasEdge(Item.Key.Id, R.Id) then
+              NoteLibrary(Item.Key, R, if IsSection then R else Item.Value);
+            Continue;
+          end;
           if IsSection then Note(Category, Item.Key, R) else Note(Category, Item.Key, Item.Value);
         end;
         if not IsSection then
@@ -926,6 +1065,9 @@ begin
     end;
     Result:= Findings.ToArray;
   finally
+    LibTarget.Free;
+    LibRefs.Free;
+    LibMemo.Free;
     Witness.Free;
     Findings.Free;
     Graph.Free;

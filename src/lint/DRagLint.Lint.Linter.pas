@@ -498,11 +498,17 @@ var
   Listed : TArray<string>;
   Shown  : Integer       ;
   I      : Integer       ;
+  Oracle : ITypeOracle   ;
 begin
   Calls:= TList<TTSNode>.Create;
   Names:= TStringList.Create;
   try
     CollectFieldByNameCalls(ALoop, ASource, Calls);
+    { 1.45 lj (row 10): a receiver the index proves is some other class is not a dataset lookup. }
+    Oracle:= TQueryTypeOracleScope.Current;
+    if Oracle <> nil then
+      for I:= Calls.Count - 1 downto 0 do
+        if ReceiverProvenOtherClass(Oracle, Calls[I].ChildByField('entity').ChildByField('lhs'), ASource, ['TDataSet']) then Calls.Delete(I);
     if Calls.Count = 0 then Exit;
 
     Names.Sorted    := True    ;

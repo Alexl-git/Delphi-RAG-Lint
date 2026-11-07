@@ -29,6 +29,8 @@ without a re-parse.
 
 `ref_receivers(ref_id, receiver_ref_id)` joins a member access to the ref of its receiver: `A.Item.Bar`, Bar to Item, and `F(x).Bar`, Bar to F. A resolve-pass fact from positions the parse stored, same file and line; an indexer `A[i].Bar`, a chain over lines or a space around the dot has no row. Separate from `ref_types` because the refs that need it are the unbound ones, which have no `ref_types` row. Read by `rename`'s proof.
 
+`ref_element_types(ref_id, type_symbol_id, type_qname)` holds the static type of a subscripted receiver: for `A[i].Bar`, the type of `A[i]` on Bar's row, since `A[i]` has no ref. Arrays, `TList` / `TObjectList` / `IList` / `IReadOnlyList` elements and `TDictionary` / `TObjectDictionary` / `IDictionary` values, through aliases, read in the unit that wrote the type. `type_symbol_id` is NULL for a type the project does not declare (`string`). No row: the chain could not type it. Additive, written with `ref_types`, read by `rename`'s proof.
+
 `ref_types` holds the static type of a reference, at most one row per `refs` row
 of kind read, write, member-access or call. No row means the pass has no type to
 state: a procedure, a type name, an unresolved member.

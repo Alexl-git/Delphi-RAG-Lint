@@ -75,7 +75,7 @@ type
     /// <returns>The value's text; '' for NULL or an absent column.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.MemberRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.OrmLinksState (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.DataSetSites (DRagLint.Charts.Chain.pas) (+103 more)</para>
+    /// <para>Called from: DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.MemberRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.OrmLinksState (DRagLint.Charts.Chain.pas) (+120 more)</para>
     /// <para>Calls: DRagLint.Charts.Index.TIndexRow.IndexOf</para>
     /// <para>Returns: if (K &lt; 0) or FNulls[K] then ''</para>
     /// <para>Reads: FNulls, FValues</para>
@@ -91,7 +91,7 @@ type
     /// <returns>The value; 0 for NULL, an absent column or non-integer text.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.MemberRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.DataSetSites (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.TChainWalker.DataSetTableLiterals (DRagLint.Charts.Chain.pas) (+72 more)</para>
+    /// <para>Called from: DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BindingRow (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.MemberRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.OrmLinksState (DRagLint.Charts.Chain.pas) (+91 more)</para>
     /// <para>Calls: DRagLint.Charts.Index.TIndexRow.S, StrToIntDef</para>
     /// <para>Returns: StrToIntDef(S(pCol), 0)</para>
     /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
@@ -187,8 +187,8 @@ type
   /// connection (spec P5: no process is started). Not thread-safe; one owning thread.
   /// Lines the PS wrote with Write-Host ' NOTE: ...' are collected in Notes instead.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.LoadTableLiterals (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.ModuleDangles (DRagLint.Charts.Chain.pas) (+113 more)</para>
-  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Columns, DRagLint.Charts.Exceptions, DRagLint.Charts.MemberAccess, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary, DRagLint.Charts.Q.Cycles (+22 more)</para>
+  /// <para>Used by: DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.LoadTableLiterals (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.ModuleDangles (DRagLint.Charts.Chain.pas) (+117 more)</para>
+  /// <para>Used in units: DRagLint.Charts.Chain, DRagLint.Charts.Columns, DRagLint.Charts.Exceptions, DRagLint.Charts.MemberAccess, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.ChangeImpact, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.Consumers, DRagLint.Charts.Q.CrossesBoundary, DRagLint.Charts.Q.Cycles (+23 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TChartsIndex = class
@@ -201,7 +201,7 @@ type
     /// <remarks>
     /// The store is owned and freed by Destroy. Errors opening it propagate.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.Create (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas) (+19 more)</para>
+    /// <para>Called from: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.ClassSurface.Emit (DRagLint.Charts.Q.ClassSurface.pas), DRagLint.Charts.Q.Consumers.TConsumersChart.Create (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas) (+20 more)</para>
     /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.Create</para>
     /// <para>constructor</para>
     /// <para>Writes: FNotes, FStore</para>
@@ -235,7 +235,7 @@ type
     /// so nothing is cut. PS trap closed: the unary-comma contract (a 0- or 1-row result must
     /// stay an array) does not exist here -- a list is always a list.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.LoadTableLiterals (DRagLint.Charts.Chain.pas) (+83 more)</para>
+    /// <para>Called from: DRagLint.Charts.Chain.AccessorField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.BareRhsStop (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.DataSourceRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.FieldRows (DRagLint.Charts.Chain.pas), DRagLint.Charts.Chain.LoadTableLiterals (DRagLint.Charts.Chain.pas) (+86 more)</para>
     /// <para>Calls: DRagLint.Charts.Index.TIndexRow.Create, DRagLint.Storage.SQLite.TSQLiteSymbolStore.GetConnection</para>
     /// <para>Returns: TObjectList&lt;TIndexRow&gt;.Create(True)</para>
     /// <para>Reads: FStore</para>
@@ -385,12 +385,12 @@ type
     /// A heuristic, not a cause -- see Get-EdgelessDisclosure.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.DrawFocus (DRagLint.Charts.Q.ExceptionPaths.pas), DRagLint.Charts.Q.TestedBy.Emit (DRagLint.Charts.Q.TestedBy.pas)</para>
-    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, IntToStr</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, IntToStr</para>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Create"/>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Destroy"/>
-    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EdgelessDisclosure"/>
-    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.EnclosingRoutineJoin"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function EdgelessFiles(pMinCallRefs: Integer = EDGELESS_MIN_CALL_REFS): TArray<TPair<string, Integer>>;

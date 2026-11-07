@@ -5,15 +5,15 @@
   "owner": "LSP",
   "status": "shipped",
   "since": "1.33.0-alpha",
-  "summary": "Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session",
-  "intro": "Read this when you run an editor against DelphiLSP and want drag-lint answers merged into the same session. lsp --proxy forwards to DelphiLSP and four merge flags add drag-lint results. It is a separate mode from lsp --full-rules: with --proxy the engine only relays and merges, and --full-rules is ignored.",
+  "summary": "Merges drag-lint diagnostics, completion, hover, definition and navigation (hierarchy, type definition, highlight, folding) into a DelphiLSP proxy session",
+  "intro": "Read this when you run an editor against DelphiLSP and want drag-lint answers merged into the same session. lsp --proxy forwards to DelphiLSP and five merge flags add drag-lint results. It is a separate mode from lsp --full-rules: with --proxy the engine only relays and merges, and --full-rules is ignored.",
   "wikiPage": "lsp-proxy-merge",
   "surfaces": [
     {
       "type": "cli",
       "verb": "lsp",
       "example": "drag-lint lsp --proxy --delphi-lsp-bits 32 --merge-diagnostics --merge-budget-ms 300 --merge-completion --merge-hover --merge-definition",
-      "usage": "drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits 32|64] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]",
+      "usage": "drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits 32|64] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-navigation] [--merge-budget-ms <n>]",
       "flags": [
         {
           "name": "--proxy"
@@ -43,6 +43,9 @@
           "name": "--merge-definition"
         },
         {
+          "name": "--merge-navigation"
+        },
+        {
           "name": "--merge-budget-ms",
           "arg": "<n>"
         }
@@ -57,7 +60,11 @@
     },
     {
       "ask": "How do I merge every drag-lint answer into a DelphiLSP session?",
-      "command": "drag-lint lsp --proxy --merge-diagnostics --merge-completion --merge-hover --merge-definition"
+      "command": "drag-lint lsp --proxy --merge-diagnostics --merge-completion --merge-hover --merge-definition --merge-navigation"
+    },
+    {
+      "ask": "How do I get type and call hierarchy, go to type definition, highlight and folding in a DelphiLSP session?",
+      "command": "drag-lint lsp --proxy --merge-navigation"
     },
     {
       "ask": "How do I see what the proxy relays?",
@@ -75,9 +82,9 @@
     "build": "1.33.0-alpha"
   },
   "verified": {
-    "date": "2026-10-26",
-    "by": "LSP",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "a1589efeb3fa3e144fe329fe4fa2364dd4c3f0bea57db985478b28be70efa76b"
+    "date": "2026-11-07",
+    "by": "ENGINE",
+    "build": "1.46.0-alpha",
+    "surfaceHash": "382a804739cefb86c690c97b9791c70d40f522947fa32409a1c16ddb8fb67f58"
   }
 }

@@ -4,10 +4,10 @@ title: Glyph expressions (G[I/N])
 summary: "ConvRulesEditor Mapping menu: set, change or clear the G[I/N] glyph expression on the selected link"
 product: DL
 group: component-conversion
-order: 60011
+order: 60013
 since: 1.31.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Glyph expressions (G[I/N])

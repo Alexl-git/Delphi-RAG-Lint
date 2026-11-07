@@ -216,6 +216,23 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function MakeRelPath(const AFile, ABase: string): string;
+      /// <summary>True when AFile lies under one of the library roots (the same test the closure uses to leave library files out).</summary>
+      /// <param name="AFile">The file to test.</param>
+      /// <returns>True for a file under a library root.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Index.Reconcile.TProjectReconciler.Analyze (DRagLint.Index.Reconcile.pas)</para>
+      /// <para>Calls: IncludeTrailingPathDelimiter, LowerCase, StringReplace</para>
+      /// <para>Returns: False</para>
+      /// <para>Reads: FLibraryRoots</para>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Analyze"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Apply"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers"/>
+      /// <seealso cref="DRagLint.Index.Reconcile.TProjectReconciler.Create"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      function UnderLibraryRoot(const AFile: string): Boolean;
     public
       /// <summary>Create a reconciler.
       /// ALibraryRoots: registry library folders used to exclude library files
@@ -247,8 +264,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.CLI.UnitNotInLibraryFindings (DRagLint.CLI.pas)</para>
-      /// <para>Calls: DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Index.Reconcile.IsStaleName, DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers, DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers, DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath, LowerCase, SameText</para>
-      /// <para>Complexity: 11 (cyclomatic, outer body), 125 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Index.Closure.TClosureResolver.Create, DRagLint.Index.Closure.TClosureResolver.Resolve, DRagLint.Index.Reconcile.IsStaleName, DRagLint.Index.Reconcile.TProjectReconciler.CollectDprMembers, DRagLint.Index.Reconcile.TProjectReconciler.CollectDprojMembers, DRagLint.Index.Reconcile.TProjectReconciler.MakeRelPath, DRagLint.Index.Reconcile.TProjectReconciler.UnderLibraryRoot, LowerCase, SameText</para>
+      /// <para>Complexity: 12 (cyclomatic, outer body), 128 lines (full implementation)</para>
       /// <para>Reads: FLibraryRoots, FStaleGlobs</para>
       /// <para>Touches: file system</para>
       /// <seealso cref="DRagLint.Index.Closure.TClosureResolver.Create"/>
@@ -358,6 +375,13 @@ begin
   end;
   if TPath.IsPathRooted(AToken) then Result:= TPath.GetFullPath(AToken)
   else Result:= TPath.GetFullPath(TPath.Combine(ABaseDir, AToken));
+end;
+
+function TProjectReconciler.UnderLibraryRoot(const AFile: string): Boolean;
+begin
+  for var Root: string in FLibraryRoots do
+    if LowerCase(AFile).StartsWith(IncludeTrailingPathDelimiter(LowerCase(StringReplace(Root, '/', '\', [rfReplaceAll])))) then Exit(True);
+  Result:= False;
 end;
 
 function TProjectReconciler.MakeRelPath(const AFile, ABase: string): string;
@@ -592,9 +616,12 @@ begin
         end;
 
         // ---- Step 4: Extra = Members not in ClosureSet ---------------------
+        { E-RECONCILE-ARRAYHELPER: a listed unit under a library root is left out of
+          the closure by design (IsLibraryFile), so "not in the closure" does not mean
+          "unused" for it; it is not an extra. }
         for var Pair in Members do
         begin
-          if not ClosureSet.ContainsKey(Pair.Key) then
+          if (not ClosureSet.ContainsKey(Pair.Key)) and not UnderLibraryRoot(Pair.Key) then
           begin
             Item.Kind:= rkExtra;
             Item.UnitName:= Pair.Value;

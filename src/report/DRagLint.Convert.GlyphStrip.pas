@@ -51,7 +51,7 @@ type
 /// <returns>The decoded bytes; empty for an empty or non-hex value.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphVacuum.HarvestCollection (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.HarvestObject (DRagLint.Convert.GlyphVacuum.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink.ReadStrip (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphVacuum.HarvestCollection (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.HarvestObject (DRagLint.Convert.GlyphVacuum.pas)</para>
 /// <para>Calls: Byte, CharInSet, Copy, StrToIntDef, UpCase</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -111,7 +111,7 @@ type
   /// name, then THAT class's own framing.</para>
   /// <para>gdfUnknown -- not known; never guessed.</para>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.GraphicClassFraming (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.ParseDataFraming (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.UnwrapPictureInner (DRagLint.Convert.GlyphStrip.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.DfmReemit.ReemitBlock.CastTargetFraming (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.GlyphTargetFraming (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas) (+4 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TGraphicDataFraming = (gdfUnknown, gdfGraphic, gdfSized, gdfSizedInclusive, gdfPicture);
@@ -125,7 +125,7 @@ type
 /// cast library (`dfmdata`, see ParseDataFraming), because the engine has no
 /// way to know whether a class it never read overrides ReadData.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.UnwrapPictureInner (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.WrapGraphicData (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.CastTargetFraming (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.GlyphTargetFraming (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.UnwrapPictureInner (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.WrapGraphicData (DRagLint.Convert.GlyphStrip.pas)</para>
 /// <para>Calls: DRagLint.Convert.GlyphStrip.BareClassName, SameText</para>
 /// <para>Returns: gdfPicture; gdfSized; gdfSizedInclusive; gdfGraphic; gdfUnknown</para>
 /// <seealso cref="DRagLint.Convert.GlyphStrip.BareClassName"/>
@@ -138,7 +138,7 @@ function GraphicClassFraming(const AClassName: string): TGraphicDataFraming;
 /// <returns>The framing; gdfUnknown for any other text.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.CastTargetFraming (DRagLint.Convert.DfmReemit.pas)</para>
 /// <para>Calls: SameText, Trim</para>
 /// <para>Returns: gdfGraphic; gdfSized; gdfSizedInclusive; gdfPicture; gdfUnknown</para>
 /// <!-- drag-lint:auto END -->
@@ -159,7 +159,7 @@ function ParseDataFraming(const AKeyword: string): TGraphicDataFraming;
 /// unknown class name, a size field that disagrees with the bytes that follow,
 /// and inner bytes that are not a recognised image.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink.ReadStrip (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas)</para>
 /// <para>Calls: Copy, DRagLint.Convert.GlyphStrip.IsLengthPrefixedImage, DRagLint.Convert.GlyphStrip.ReadPictureClassName, DRagLint.Convert.GlyphStrip.SniffImageFormat, DRagLint.Convert.GlyphStrip.UnwrapPictureInner, Format</para>
 /// <para>Returns: AReason = ''</para>
 /// <para>Mutates: AImage (out), AFormat (out), AWrapper (out), AReason (out)</para>
@@ -182,7 +182,7 @@ function UnwrapGraphicData(const APayload: TBytes; out AImage: TBytes;
 /// holds AFormat.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.WrapGraphicData (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.WrapGraphicData (DRagLint.Convert.GlyphStrip.pas)</para>
 /// <para>Calls: Byte, Copy, DRagLint.Convert.GlyphStrip.GraphicClassFraming, DRagLint.Convert.GlyphStrip.Int32Bytes, DRagLint.Convert.GlyphStrip.PictureClassForFormat, DRagLint.Convert.GlyphStrip.WrapGraphicData, Format</para>
 /// <para>Returns: True; (Cls &lt;&gt; '') and WrapGraphicData(AImage, AFormat, GraphicClassFraming(Cls), Inner, AReason); False</para>
 /// <para>Recursive</para>
@@ -202,12 +202,73 @@ function WrapGraphicData(const AImage: TBytes; const AFormat: string;
 /// <returns>The value text, CRLF line breaks; '{}' for no bytes.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas)</para>
 /// <para>Calls: IntToHex</para>
 /// <para>Returns: SB.ToString</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function EncodeDfmHex(const ABytes: TBytes; const AIndent: string): string;
+
+type
+  /// <summary>Why a bitmap could not be treated as a strip of N glyphs.</summary>
+  /// <remarks>
+  /// gsfNone: it can. gsfFormat: the image is not a bitmap layout this stitcher
+  /// reads. gsfNotAStrip: a good bitmap whose width does not divide by N.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.CheckBitmapStrip (DRagLint.Convert.GlyphStrip.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TGlyphStripFailure = (gsfNone, gsfFormat, gsfNotAStrip);
+
+/// <summary>Whether a bare BMP file can be read as a strip of N glyphs.</summary>
+/// <param name="ABmp">The bare image file, from UnwrapGraphicData.</param>
+/// <param name="ASourceN">The glyph count the class reader gave.</param>
+/// <param name="AReason">Why not; '' on gsfNone.</param>
+/// <returns>gsfNone when StitchBitmapSlots can slice it.</returns>
+/// <remarks>
+/// Pure. Reads BI_RGB and BI_BITFIELDS at 1, 4, 8, 16, 24 and 32 bpp, headers of 40
+/// bytes or more. RLE, a core header and an embedded V5 profile are gsfFormat:
+/// slicing them needs more than moving columns.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink.ReadStrip (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphStrip.StitchBitmapSlots (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Calls: DRagLint.Convert.GlyphStrip.BmpInt32At, DRagLint.Convert.GlyphStrip.BmpStride, DRagLint.Convert.GlyphStrip.StartsWith, Format, Int64</para>
+/// <para>Returns: gsfFormat; gsfNotAStrip; gsfNone</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 42 lines (full implementation)</para>
+/// <para>Mutates: AReason (out)</para>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.BmpInt32At"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.BmpStride"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.StartsWith"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function CheckBitmapStrip(const ABmp: TBytes; ASourceN: Integer; out AReason: string): TGlyphStripFailure;
+
+/// <summary>Builds a new BMP from slots of a strip, side by side in the given
+/// order.</summary>
+/// <param name="ABmp">The bare source file; CheckBitmapStrip must accept it.</param>
+/// <param name="ASourceN">The source's glyph count.</param>
+/// <param name="ASlots">The 1-based slots to take, in stitch order; not empty.</param>
+/// <param name="AStitched">The new bare file on success, nil otherwise.</param>
+/// <param name="AReason">Why it failed; '' on success.</param>
+/// <returns>True on success.</returns>
+/// <remarks>
+/// Pure. Height, bit depth, every header field but the sizes and the width, the
+/// palette and row order are the source's: pixels move, they are never re-encoded.
+/// A slot of a 1 or 4 bpp strip may start mid-byte, so columns are copied bit by bit
+/// there. Row padding is zero.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.RealiseGlyphLink (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: DRagLint.Convert.GlyphStrip.BmpInt32At, DRagLint.Convert.GlyphStrip.BmpSetInt32At, DRagLint.Convert.GlyphStrip.BmpStride, DRagLint.Convert.GlyphStrip.CheckBitmapStrip, DRagLint.Convert.GlyphStrip.CopyRowBits, FillChar, Format, Int64, Move</para>
+/// <para>Returns: False; True</para>
+/// <para>Mutates: AStitched (out), AReason (out)</para>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.BmpInt32At"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.BmpSetInt32At"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.BmpStride"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.CheckBitmapStrip"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.CopyRowBits"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function StitchBitmapSlots(const ABmp: TBytes; ASourceN: Integer; const ASlots: TArray<Integer>;
+  out AStitched: TBytes; out AReason: string): Boolean;
 
 implementation
 
@@ -633,6 +694,156 @@ begin
   finally
     SB.Free;
   end;
+end;
+
+const
+  // BITMAPFILEHEADER / DIB field offsets, counted from the start of the file
+  BmpFileSizeAt    = 2;
+  BmpPixelOffsetAt = 10;
+  DibSizeAt        = BmpFileHeaderLen;
+  DibWidthAt       = BmpFileHeaderLen + InfoWidthOffset;
+  DibHeightAt      = BmpFileHeaderLen + InfoHeightOffset;
+  DibBitCountAt    = BmpFileHeaderLen + InfoBitCountOffset;
+  DibCompressionAt = BmpFileHeaderLen + 16;
+  DibSizeImageAt   = BmpFileHeaderLen + 20;
+  V5HeaderLen      = 124;
+  V5ProfileSizeAt  = BmpFileHeaderLen + 116;
+  BI_RGB_VALUE     = 0;
+  BI_BITFIELDS_VALUE = 3;
+  BitsPerByte      = 8;
+  RowAlignBits     = 32;
+  RowAlignBytes    = 4;
+  HighBitIndex     = 7;
+  BmpBitDepths     = [1, 4, 8, 16, 24, 32];
+
+function BmpInt32At(const ABytes: TBytes; AOffset: Integer): Integer;
+begin
+  Move(ABytes[AOffset], Result, SizeOf(Result));
+end;
+
+procedure BmpSetInt32At(var ABytes: TBytes; AOffset, AValue: Integer);
+begin
+  Move(AValue, ABytes[AOffset], SizeOf(AValue));
+end;
+
+function BmpStride(AWidth, ABitCount: Integer): Integer;
+begin
+  Result:= ((AWidth * ABitCount + RowAlignBits - 1) div RowAlignBits) * RowAlignBytes;
+end;
+
+function CheckBitmapStrip(const ABmp: TBytes; ASourceN: Integer; out AReason: string): TGlyphStripFailure;
+var
+  HeaderLen  : Integer;
+  Width      : Integer;
+  Rows       : Integer;
+  BitCount   : Integer;
+  Compression: Integer;
+  PixelOffset: Integer;
+begin
+  Result := gsfFormat;
+  AReason:= '';
+  if (Length(ABmp) < BmpFileHeaderLen + BitmapInfoHeader) or not StartsWith(ABmp, 0, BmpMagic) then
+  begin
+    AReason:= 'not a BMP file with a full header';
+    Exit;
+  end;
+  HeaderLen  := BmpInt32At(ABmp, DibSizeAt);
+  Width      := BmpInt32At(ABmp, DibWidthAt);
+  Rows       := Abs(BmpInt32At(ABmp, DibHeightAt));
+  BitCount   := ABmp[DibBitCountAt];
+  Compression:= BmpInt32At(ABmp, DibCompressionAt);
+  PixelOffset:= BmpInt32At(ABmp, BmpPixelOffsetAt);
+  if HeaderLen < BitmapInfoHeader then
+    AReason:= Format('a %d-byte DIB header is not readable here', [HeaderLen])
+  else if (HeaderLen = V5HeaderLen) and (BmpInt32At(ABmp, V5ProfileSizeAt) <> 0) then
+    AReason:= 'a V5 bitmap with an embedded colour profile is not readable here'
+  else if (Compression <> BI_RGB_VALUE) and (Compression <> BI_BITFIELDS_VALUE) then
+    AReason:= Format('compression %d (RLE or embedded) cannot be sliced by columns', [Compression])
+  else if BitCount not in BmpBitDepths then
+    AReason:= Format('%d bits per pixel is not a bitmap depth', [BitCount])
+  else if (Width <= 0) or (Rows = 0) then
+    AReason:= Format('a %d x %d bitmap holds no pixels', [Width, Rows])
+  else if (PixelOffset < BmpFileHeaderLen + HeaderLen) or
+          (Int64(PixelOffset) + Int64(BmpStride(Width, BitCount)) * Rows > Length(ABmp)) then
+    AReason:= 'the file is shorter than its header says'
+  else if (ASourceN < 1) or (Width mod ASourceN <> 0) then
+  begin
+    AReason:= Format('width %d does not divide into %d glyphs', [Width, ASourceN]);
+    Result := gsfNotAStrip;
+  end
+  else
+    Result:= gsfNone;
+end;
+
+// Copies ABitCount bits, most significant first as a DIB row stores them. ADst is
+// zero where it writes (a fresh pixel array), so only set bits are written.
+procedure CopyRowBits(const ASrc: TBytes; ASrcBit: Int64; var ADst: TBytes; ADstBit: Int64; ABitCount: Integer);
+var
+  I  : Integer;
+  S  : Int64;
+  D  : Int64;
+begin
+  if (ASrcBit mod BitsPerByte = 0) and (ADstBit mod BitsPerByte = 0) and (ABitCount mod BitsPerByte = 0) then
+  begin
+    Move(ASrc[ASrcBit div BitsPerByte], ADst[ADstBit div BitsPerByte], ABitCount div BitsPerByte);
+    Exit;
+  end;
+  for I:= 0 to ABitCount - 1 do
+  begin
+    S:= ASrcBit + I;
+    D:= ADstBit + I;
+    if (ASrc[S div BitsPerByte] shr (HighBitIndex - S mod BitsPerByte)) and 1 <> 0 then
+      ADst[D div BitsPerByte]:= ADst[D div BitsPerByte] or (1 shl (HighBitIndex - D mod BitsPerByte));
+  end;
+end;
+
+function StitchBitmapSlots(const ABmp: TBytes; ASourceN: Integer; const ASlots: TArray<Integer>;
+  out AStitched: TBytes; out AReason: string): Boolean;
+var
+  Width      : Integer;
+  Rows       : Integer;
+  BitCount   : Integer;
+  PixelOffset: Integer;
+  SlotBits   : Integer;
+  NewWidth   : Integer;
+  SrcStride  : Integer;
+  DstStride  : Integer;
+  Row        : Integer;
+  K          : Integer;
+begin
+  Result   := False;
+  AStitched:= nil;
+  if CheckBitmapStrip(ABmp, ASourceN, AReason) <> gsfNone then Exit;
+  if Length(ASlots) = 0 then
+  begin
+    AReason:= 'no slot to stitch';
+    Exit;
+  end;
+  for K:= 0 to High(ASlots) do
+    if (ASlots[K] < 1) or (ASlots[K] > ASourceN) then
+    begin
+      AReason:= Format('slot %d is outside 1..%d', [ASlots[K], ASourceN]);
+      Exit;
+    end;
+  Width      := BmpInt32At(ABmp, DibWidthAt);
+  Rows       := Abs(BmpInt32At(ABmp, DibHeightAt));
+  BitCount   := ABmp[DibBitCountAt];
+  PixelOffset:= BmpInt32At(ABmp, BmpPixelOffsetAt);
+  SlotBits   := (Width div ASourceN) * BitCount;
+  NewWidth   := (Width div ASourceN) * Length(ASlots);
+  SrcStride  := BmpStride(Width, BitCount);
+  DstStride  := BmpStride(NewWidth, BitCount);
+  SetLength(AStitched, PixelOffset + DstStride * Rows);
+  FillChar(AStitched[0], Length(AStitched), 0);
+  Move(ABmp[0], AStitched[0], PixelOffset);
+  BmpSetInt32At(AStitched, BmpFileSizeAt, Length(AStitched));
+  BmpSetInt32At(AStitched, DibWidthAt, NewWidth);
+  BmpSetInt32At(AStitched, DibSizeImageAt, DstStride * Rows);
+  for Row:= 0 to Rows - 1 do
+    for K:= 0 to High(ASlots) do
+      CopyRowBits(ABmp, Int64(PixelOffset + Row * SrcStride) * BitsPerByte + Int64(ASlots[K] - 1) * SlotBits,
+        AStitched, Int64(PixelOffset + Row * DstStride) * BitsPerByte + Int64(K) * SlotBits, SlotBits);
+  Result:= True;
 end;
 
 end.

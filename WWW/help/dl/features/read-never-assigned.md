@@ -4,10 +4,10 @@ title: Read but never assigned (lint rule)
 summary: "Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates"
 product: DL
 group: linting
-order: 30030
+order: 30032
 since: 1.40.0-alpha
 status: shipped
-updated: 1.44.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Read but never assigned (lint rule)

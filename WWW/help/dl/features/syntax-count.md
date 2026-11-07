@@ -4,10 +4,10 @@ title: syntax-count
 summary: "Counts modern syntax in the parse of every unit, uncapped: Delphi 13 if-expressions, is not, not in; inline var/const; anonymous methods; multiline strings"
 product: DL
 group: search-navigation
-order: 20032
+order: 20033
 since: 1.42.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # syntax-count

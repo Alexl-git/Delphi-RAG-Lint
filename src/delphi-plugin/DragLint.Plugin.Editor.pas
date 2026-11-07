@@ -27,7 +27,7 @@ const (* v0.40.1: hardcoded version; build stamp resolved at runtime from the
      loaded BPL's file modtime (see PluginBuildTag). Compiler intrinsics
      like the dollar-I DATE/TIME macros emit unquoted strings in Delphi 13
      and don't fit in a const expression. *)
-  PLUGIN_VERSION = 'v1.44.1-alpha';
+  PLUGIN_VERSION = 'v1.46.0-alpha';
 
   { Stamp every user-visible plugin dialog with the version + the actual
   build time of the BPL the IDE has loaded so the user can verify at a
@@ -818,6 +818,7 @@ uses
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.Reports
+  , DragLint.Plugin.ConvertLaunch
   , DragLint.Plugin.CycleFix // dl:unit DragLint.Plugin.CycleFix accepted -- CYCLE_FIX_TIMEOUT_MS is the one plugin cycle-fix time limit; a second copy here is what let it drift (see StructureForm)
   ;
 
@@ -1475,6 +1476,13 @@ end; // function
 { v0.64.1: forward so all heavy-command handlers above can call DLExe64
   before its implementation appears later in this unit. }
 function DLExe64: string; forward;
+{ False, and the status note, when no engine resolved. For the Editor sites that do not
+  spawn through ProcRun (a detached CreateProcess, a generated .bat). }
+function DLEngineFound(const pExe: string): Boolean;
+begin
+  Result:= pExe <> '';
+  if not Result then ReportEngineMissing;
+end;
 { Same reason: InvokeFormatProjectYadf opens its job report with DLOpenInEditor,
   and UnsavedProjectUnits reads editor buffers with ReadSourceEditorText; both
   implementations appear further down. }
@@ -3202,6 +3210,7 @@ begin
     between the format lines: one unit YADF cannot parse must not abandon the
     remaining units half-formatted. The trailing reindex is separate and always
     runs, so the index matches whatever ended up on disk. }
+  if not DLEngineFound(DLExe64) then Exit;
   Bat:= '@echo off'#13#10;
   for i:= 0 to High(Units) do
     Bat:= Bat + Format('"%s" format "%s"'#13#10, [DLExe64, Units[i]]);
@@ -3715,6 +3724,7 @@ begin
     Exit;
   end;
   ExePath:= DLExe64;
+  if not DLEngineFound(ExePath) then Exit;
 
   TThread.CreateAnonymousThread(
     procedure
@@ -4705,6 +4715,7 @@ begin
 
   Cfg:= LoadSettings;
   ExePath:= DLExe64;
+  if not DLEngineFound(ExePath) then Exit;
 
   { Spawn detached: drag-lint lint <tmp> --json. We don't capture stdout
     in v0.40.3a -- the diagnostic-publish path will be wired in v0.40.4
@@ -6324,6 +6335,7 @@ begin
   ProjDir:= ExcludeTrailingPathDelimiter(ExtractFilePath(Proj));
   Plat   := GetActiveProjectPlatform; // Win32/Win64 -> correct conditional-define resolution
 
+  if not DLEngineFound(DLExe64) then Exit;
   Bat:=
     '@echo off'#13#10 +
     Format('"%s" index "%s" --db "%s" --platform %s || exit /b 1'#13#10, [DLExe64, ProjDir, Db, Plat]) +
@@ -7006,6 +7018,43 @@ begin
   DLRunReport(Format('helpers-of "%s" --db "%s"', [T, Db]), 'drag-lint-helpers-of.txt');
 end;
 
+/// <summary>Records a dl:ok review of one finding on the caret's line (allow): the other
+/// way to `Allow this message` on the Structure form, with no Structure tree needed.</summary>
+/// <remarks>The rule box is pre-filled when the diagnostics hold a rule for that line;
+/// No in the question previews, Yes writes the marker. The engine builds the marker text.</remarks>
+procedure InvokeAllowFinding(Sender: TObject);
+var
+  ESS           : IOTAEditorServices;
+  EV            : IOTAEditView      ;
+  FileName, Rule: string            ;
+  Line          : Integer           ;
+  Apply         : Boolean           ;
+  Diags         : TArray<TDragLintDiagnostic>;
+begin
+  EV:= nil;
+  if Supports(BorlandIDEServices, IOTAEditorServices, ESS) then EV:= ESS.TopView;
+  if (EV = nil) or (EV.Buffer = nil) then
+  begin
+    ShowMessage('drag-lint: put the caret on the finding''s line in an editor first.');
+    Exit;
+  end;
+  FileName:= EV.Buffer.FileName;
+  Line:= EV.Position.Row - 1; { the cache is 0-based }
+  Rule:= '';
+  Diags:= Cache.GetForLine(FileName, Line);
+  for var D in Diags do
+    if D.Code <> '' then
+    begin
+      Rule:= D.Code;
+      Break;
+    end;
+  if not DLAskText(Format('Rule to allow on line %d:', [Line + 1]), Rule, Rule) then Exit;
+  if not DLAskApply(Format('Record a dl:ok review of %s on line %d?', [Rule, Line + 1]), Apply) then Exit;
+  DLSaveAllIfApply(Apply);
+  DLRunReport(Format('allow "%s" --fix-line %d --fix-rule "%s"%s', [FileName, Line + 1, Rule, DLApplyArg(Apply)]),
+    'drag-lint-allow.txt');
+end;
+
 /// <summary>Lists the full transitive ancestor chain of a class or interface
 /// (query ancestors); the name box is pre-filled with the identifier at the caret.</summary>
 procedure InvokeQueryAncestors(Sender: TObject);
@@ -7598,6 +7647,7 @@ begin
   AddWrappedItem(SubQuality, 'Compiler Hints...'            , InvokeCompilerHints   );
   AddWrappedItem(SubQuality, 'Top Symbols (fan-in)...'      , InvokeTopSymbols      );
   AddWrappedItem(SubQuality, 'Project Structure Rules (god-class, layering...)...', InvokeLintProject);
+  AddWrappedItem(SubQuality, 'Allow a Finding on This Line...', InvokeAllowFinding);
 
   { v0.46: Generate / Export submenu }
   var SubGen: TMenuItem:= TMenuItem.Create(RootMenu);
@@ -7613,6 +7663,19 @@ begin
   AddWrappedItem(SubGen, 'Export Enums (Delphi const)...', InvokeExportEnums   );
   AddWrappedItem(SubGen, 'Export Graph (DOT)...'         , InvokeExportGraphDot);
   AddWrappedItem(SubGen, 'Export to Obsidian...'         , InvokeExportObsidian);
+
+  { C12 plugin half: hands the designer's selection to ConvRulesEditor. No existing item
+    moved; the contract is docs\superpowers\specs\2026-10-06-c12-ide-convert-menu-design.md. }
+  var SubConvert: TMenuItem:= TMenuItem.Create(RootMenu);
+  SubConvert.Caption:= 'Convert Components';
+  RootMenu.Add(SubConvert);
+  var ConvertWrap: TMenuActionWrapper:= TMenuActionWrapper.Create(UpdateConvertComponentsMenu);
+  GWrappers.Add(ConvertWrap);
+  SubConvert.OnClick:= ConvertWrap.HandleClick;
+  AddWrappedItem(SubConvert, 'Convert Selected Component(s)...', InvokeConvertSelectedComponents).Tag:= CONVERT_TAG_SELECTION;
+  AddWrappedItem(SubConvert, 'Convert All of This Type on the Form...', InvokeConvertAllOfTypeOnForm).Tag:= CONVERT_TAG_SELECTION;
+  AddSeparator(SubConvert);
+  AddWrappedItem(SubConvert, 'Open Conversion Editor...', InvokeOpenConversionEditor).Tag:= CONVERT_TAG_OPEN;
 
   { v0.46: Index && Maintenance submenu }
   var SubMaint: TMenuItem:= TMenuItem.Create(RootMenu);
@@ -7719,6 +7782,19 @@ begin
     procedure (AText: string)
     begin
       DebugLog(AText);
+    end;
+  GUsagesLspClient:= CurrentLspClient;
+  { O-PLUGIN-EMPTY-EXE: any spawn refused for want of an engine says so on the status
+    bar; a note, not a dialog, because background spawns (outline, live lint) refuse too. }
+  DragLint.Plugin.ProcRun.GEngineMissingHook:=
+    procedure
+    begin
+      DLT('exe', ENGINE_NOT_FOUND_MSG);
+      TThread.Queue(nil,
+        procedure
+        begin
+          SetDragLintNote('drag-lint: ' + ENGINE_NOT_FOUND_MSG);
+        end);
     end;
   { v0.47: auto-compile the UNSAVED buffer when editing goes idle (AutoCompileBuffer),
     so compiler errors on unsaved code appear without saving or the menu. The runner
@@ -7889,6 +7965,7 @@ begin
     this is what stops a duplicate/stale entry surviving an uninstall. Do it
     before GWrappers so its OnClick wrapper isn't dangling. }
         TDStep('-> FreeAndNil tool-window items and menus');
+        ShutdownConvertLaunch;
         FreeAndNil(GDockToolWinItem );
         FreeAndNil(GGraphToolWinItem);
         { Wrappers hold the OnClick method pointers; free them before the menu items }

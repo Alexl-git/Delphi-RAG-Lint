@@ -72,7 +72,7 @@
     }
   ],
   "audience": "both",
-  "pitfalls": ["A second --db is the library slot, not another project: to judge a dl:ok on a dl:shared unit use --shared-db.", "lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.", "A vendored folder INSIDE the project folder is linted as your own code until `excludeRoots` names it in `<project>\\_D-RAG\\drag-lint-project.json`."],
+  "pitfalls": ["A second --db is the library slot, not another project: to judge a dl:ok on a dl:shared unit use --shared-db.", "`--library-db <lib>` names the library slot too and wins over a second --db and the manifest; a missing file refuses (exit 2), `none` means no library. Without a library, a type whose ancestry lives there stays unknown and the type-aware rules stay silent on it.", "lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.", "A vendored folder INSIDE the project folder is linted as your own code until `excludeRoots` names it in `<project>\\_D-RAG\\drag-lint-project.json`."],
   "questions": [
     {
       "ask": "How healthy is my whole project against every lint rule?",
@@ -92,9 +92,9 @@
     }
   ],
   "verified": {
-    "date": "2026-11-05",
+    "date": "2026-11-06",
     "by": "ENGINE",
-    "build": "1.44.0-alpha",
+    "build": "1.45.0-alpha",
     "surfaceHash": "34bb135e3fd6246d01bc5198932f19af50c3bee4d7b07d595dc1fbd8e5a66f89"
   }
 }

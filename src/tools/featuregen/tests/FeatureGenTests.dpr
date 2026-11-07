@@ -2972,8 +2972,12 @@ begin
   lExit := RunCmd('add', AddProbeArgs(lCopy) + ['--home-order', '3'], lOut);
   Check('Cmd.AddRefusesDuplicateHomeOrder', (lExit = 1) and (Pos('homeOrder 3 is also used by outline', lOut) > 0)
     and not TFile.Exists(TPath.Combine(lCopy, 'features\entries\zz-probe.json')), IntToStr(lExit) + ' ' + lOut);
-  RunCmd('add', AddProbeArgs(lCopy), lOut);
+  lExit := RunCmd('add', AddProbeArgs(lCopy), lOut);
   lFile := TPath.Combine(lCopy, 'features\entries\zz-probe.json');
+  // A refused probe must not end the whole runner with EFileNotFoundException (red in 1.44 and 1.45:
+  // add's default since = the current version, refused while CHANGELOG has no heading for it).
+  Check('Cmd.HomeOrder.probeAdded', lExit = 0, lOut);
+  if lExit <> 0 then Exit;
   lBefore := ReadBytesText(lFile);
   lExit := RunCmd('update', ['--repo', lCopy, '--id', 'zz-probe', '--set', 'homeOrder=3'], lOut);
   Check('Cmd.UpdateRefusesDuplicateHomeOrder', (lExit = 1) and (Pos('homeOrder 3 is also used by outline', lOut) > 0)

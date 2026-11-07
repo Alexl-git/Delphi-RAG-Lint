@@ -1,8 +1,9 @@
 unit DRagLint.Diagnostics.ExprChecks;
 
 { Clippy-parity wave (plan 2026-10-27-clippy-rules-plan.md), lane L6.
-  Pure AST rules (no symbol store needed); AStore is accepted for the uniform
-  checker signature and ignored.
+  Pure AST rules, except double-dictionary-lookup: it asks the type oracle (index
+  fact F1, then the ancestry, through ALibStore) whether the receiver is another
+  class. With no store the rules answer from the tree alone.
   Rules:
     bad-bit-mask            : (X and M) = V with V holding a bit outside M (never true),
                               (X or M) = V with M holding a bit outside V (never true);
@@ -46,11 +47,12 @@ type
     /// <param name="ACfg">Effective lint configuration (unused by these rules; no thresholds).</param>
     /// <param name="AStore">Optional symbol store; nil when the run has no index. Not consulted.</param>
     /// <param name="AFileId">File id within AStore (ignored when AStore is nil).</param>
+    /// <param name="ALibStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
     /// <returns>One finding per violation; empty when clean or unparsable. The CLI filters by --rule.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: ArgsKey, BitMaskPieces, CheckBitMask, CheckCase, CheckDoubleLookup, CheckIndent, CheckRegex, CollectContainsKey, Copy, Default (+17 more)</para>
+    /// <para>Calls: ArgsKey, BitMaskPieces, CheckBitMask, CheckCase, CheckDoubleLookup, CheckIndent, CheckRegex, CollectContainsKey, Copy, CreateStoreTypeOracle (+19 more)</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <para>Directives: static</para>
@@ -59,7 +61,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
-      const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; static;
+      const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -71,6 +73,7 @@ uses
   , System.RegularExpressions
   , TreeSitter
   , DRagLint.Diagnostics.ParseCache
+  , DRagLint.Lint.QueryRules { ITypeOracle -- the index's static types (1.45 lj) }
   ;
 
 const
@@ -278,11 +281,13 @@ begin
 end;
 
 class function TExprChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@ae41 -- REVIEWED 2026-10-27: gate-fixed checker signature shared by all LINT_GATE_* checkers; these rules need no config
-  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;  // dl:ok unused-parameter@255c -- gate-fixed checker signature; pure-AST rules need no symbol store
+  const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 var
   PF      : TParsedFile;
   Src     : TBytes;
   Findings: TList<TLintFinding>;
+  Oracle  : ITypeOracle;
+  OracleTried: Boolean;
 
   procedure EmitAt(const ANode: TTSNode; const ARuleId, AMessage, ASeverity: string);
   var
@@ -413,6 +418,11 @@ var
     EntTxt, Recv, Key: string;
     I: Integer;
   begin
+    if (Oracle = nil) and not OracleTried then
+    begin
+      OracleTried:= True;
+      Oracle:= CreateStoreTypeOracle(AStore, AFileId, ALibStore);
+    end;
     ThenN:= N.ChildByField('then');
     if ThenN.IsNull then Exit;
     Calls:= TList<TTSNode>.Create;
@@ -429,6 +439,8 @@ var
         Recv:= Trim(Copy(EntTxt, 1, Length(EntTxt) - Length('.containskey')));
         Key := ArgsKey(Args, Src);
         if (Recv = '') or (Key = '') or (Key.Contains('(')) or (Key.Contains(',')) then Continue;
+        { 1.45 lj (row 10): a receiver the index proves is some other class has no TryGetValue to advise. }
+        if ReceiverProvenOtherClass(Oracle, Ent.ChildByField('lhs'), Src, ['TDictionary', 'IDictionary']) then Continue;
         if ReadsSubscript(ThenN, Recv, Key) then
         begin
           EmitAt(N, 'double-dictionary-lookup',

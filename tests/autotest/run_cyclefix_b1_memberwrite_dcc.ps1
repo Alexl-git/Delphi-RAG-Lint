@@ -155,7 +155,14 @@ try {
   $bc = Invoke-Build (Join-Path $prop.Dir 'MemberWrite.dproj')
   Check 'pc2b it does NOT compile (the build check has teeth)' (-not $bc.Ok) $bc.Errors
 } finally {
-  if (-not $KeepWorkDir -and (Test-Path -LiteralPath $WorkDir)) { [IO.Directory]::Delete($WorkDir, $true) }
+  # Cleanup is best effort: under load a just-exited MemberWrite.exe (or a scanner) still holds
+  # the demo exe for a moment. Retry, then WARN; a locked scratch dir is not a product failure.
+  if (-not $KeepWorkDir) {
+    for ($i = 0; ($i -lt 15) -and (Test-Path -LiteralPath $WorkDir); $i++) {
+      try { [IO.Directory]::Delete($WorkDir, $true) } catch { Start-Sleep -Seconds 2 }
+    }
+    if (Test-Path -LiteralPath $WorkDir) { Write-Host "WARN: work dir still locked, left behind: $WorkDir" -ForegroundColor Yellow }
+  }
 }
 
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

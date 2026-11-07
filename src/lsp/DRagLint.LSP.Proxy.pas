@@ -115,6 +115,12 @@ type
     /// DelphiLSP does not advertise them (its initialize reply gains both
     /// providers). Off by default.</summary>
     MergeDefinition: Boolean;
+    /// <summary>--merge-navigation: answer the type and call hierarchy,
+    /// textDocument/typeDefinition, documentHighlight and foldingRange requests
+    /// in the proxy for every one of those providers DelphiLSP does not advertise
+    /// (its initialize reply gains the provider). A provider DelphiLSP advertises
+    /// stays DelphiLSP's: its requests are forwarded. Off by default.</summary>
+    MergeNavigation: Boolean;
     /// <summary>--merge-budget-ms: per-frame budget for a merge handler, in
     /// milliseconds. Over budget, DelphiLSP's bytes are forwarded untouched.
     /// The CLI sets LSP_MERGE_BUDGET_DEFAULT_MS when the flag is absent; a
@@ -186,7 +192,7 @@ function ResolveDelphiLspPath(const AOverride: string; ABits: Integer = LSP_BITS
 /// <para>Called from: DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
 /// <para>Calls: CloseHandle, CreatePipe, CreateProcess, DRagLint.Core.JobObject.AssignToDragLintJob, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Create, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.WaitForAnswers, DRagLint.LSP.Proxy.PumpFramed, DRagLint.LSP.Proxy.ResolveDelphiLspPath (+13 more)</para>
 /// <para>Returns: EXIT_SPAWN_FAILED; Integer(Code)</para>
-/// <para>Complexity: 18 (cyclomatic, outer body), 185 lines (full implementation)</para>
+/// <para>Complexity: 20 (cyclomatic, outer body), 185 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Core.JobObject.AssignToDragLintJob"/>
 /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
@@ -214,7 +220,7 @@ var
     pre-P0 path. Assigned once by RunLspProxy before any pump starts, never
     cleared, so the pumps read it without a lock. }
   GInterceptor: TFrameInterceptor = nil;
-  { Merge plan A5: the C>S answerer. nil unless --merge-definition. A frame it
+  { Merge plan A5: the C>S answerer. nil unless --merge-definition or --merge-navigation. A frame it
     takes (True) is answered by the merge engine and NOT forwarded. Assigned
     with GInterceptor, never cleared. }
   GAnswerer: TFrameAnswerer = nil;
@@ -792,7 +798,7 @@ begin
     freed -- the pumps are unjoined daemons that may still be inside it when
     this function returns (see TProxyMergeEngine). }
   if AOptions.MergeDiagnostics or AOptions.MergeCompletion or
-     AOptions.MergeHover or AOptions.MergeDefinition then
+     AOptions.MergeHover or AOptions.MergeDefinition or AOptions.MergeNavigation then
   begin
     MergeEngine:= TProxyMergeEngine.Create(AOptions);  // dl:ok object-leak@d16a -- deliberate: unjoined daemon pumps may still be inside the engine at return; lives until process exit
     GInterceptor:=
@@ -802,7 +808,7 @@ begin
         Result:= MergeEngine.Intercept(ADir, AFrame, ALen, AReplacement);
       end;
     MergeEngine.ClientWriter:= WriteToClient;
-    if AOptions.MergeDefinition then
+    if AOptions.MergeDefinition or AOptions.MergeNavigation then
     begin
       GAnswerer:=
         function(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean

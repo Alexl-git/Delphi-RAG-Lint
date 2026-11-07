@@ -4,10 +4,10 @@ title: Document project
 summary: Generates or repairs managed DocInsight comments for every public declaration of the active project, started from the Structure form right-click menu
 product: DL
 group: documentation
-order: 40006
+order: 40007
 since: 0.90.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Document project

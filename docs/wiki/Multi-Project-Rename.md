@@ -8,7 +8,9 @@ unit renames the symbol in EVERY project that compiles it, or in none.
 
 It applies to the seven naming fixes: `const-casing`, `method-pascalcase`,
 `local-var-casing`, `field-name-prefix`, `param-name-prefix`,
-`type-name-prefix`, `local-field-prefix`. Every other fix is unchanged.
+`type-name-prefix`, `local-field-prefix`. Every other fix is unchanged. The
+`rename` verb does the same with its own proof and builds every owner: see
+[Rename Symbol](Rename-Symbol.md).
 
 ## Which projects count
 
@@ -104,6 +106,7 @@ be done safely, lists them, and applies the rest.
 | `ownership unknown: manifest did not load completely: <file>` | a `drag-lint.json` / `.drag-lint.json` has a syntax error, so the owners cannot be known -- EVERY naming fix is refused until it is fixed | fix the named file |
 | `two projects edit <file> line N col M differently` | the owners disagree about a reference | reindex both owners; if it persists, report it |
 | `rename-dropped-at-write: ... (stale)` | the file changed on disk between planning and writing; the WHOLE rename was dropped | save, let the index catch up, retry |
+| `project <P>: <file>:<line>:<col>: refused [<kind>]: ...` | an occurrence in that project could not be proved, the proof [Rename Symbol](Rename-Symbol.md) describes (a re-casing needs none); the next candidate style was tried too | fix what the kind names, or rename by hand |
 
 A naming fix the index cannot place because the index is stale says so instead
 of `no fixable findings` (`<N>` is 0 when nothing else in the run was fixable):

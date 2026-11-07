@@ -4,10 +4,10 @@ title: document-all
 summary: Documents every public declaration in every indexed unit, with no project scope
 product: DL
 group: documentation
-order: 40004
+order: 40005
 since: 0.93.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # document-all

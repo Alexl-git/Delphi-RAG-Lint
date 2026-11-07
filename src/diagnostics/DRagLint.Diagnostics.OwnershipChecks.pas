@@ -127,6 +127,7 @@ type
     FOwnFlags  : TDictionary<string, Integer>;
     FFotFields : TDictionary<string, Boolean>;
     FFotSetBy  : TDictionary<string, Boolean>;
+    FFotClasses: TDictionary<string, Boolean>;
     FEmitted   : TDictionary<string, Boolean>;
     function NodeStr(const N: TTSNode): string;
     function Canon(const AText: string): string;
@@ -148,6 +149,8 @@ type
     procedure CheckForeachFree(const AForeach: TTSNode; const AOwning: TDictionary<string, string>);
     procedure CheckOwnedRoutine(const ARoutine: TTSNode; const AIdx: Integer);
     procedure CheckMismatch(const ARoutine: TTSNode);
+    procedure CollectFotClasses;
+    function FotTypeOf(const ARoutine: TTSNode; const ALocals: TDictionary<string, string>; const ATarget: string): Boolean;
     procedure CheckFotRoutine(const ARoutine: TTSNode; const AIdx: Integer);
     procedure CheckFotOtherMethods;
     procedure CheckPairs(const ARoutine: TTSNode);
@@ -233,12 +236,14 @@ begin
   FOwnFlags  := TDictionary<string, Integer>.Create;
   FFotFields := TDictionary<string, Boolean>.Create;
   FFotSetBy  := TDictionary<string, Boolean>.Create;
+  FFotClasses:= TDictionary<string, Boolean>.Create;
   FEmitted   := TDictionary<string, Boolean>.Create;
 end;
 
 destructor TOwnershipScan.Destroy;
 begin
   FEmitted.Free;
+  FFotClasses.Free;
   FFotSetBy.Free;
   FFotFields.Free;
   FOwnFlags.Free;
@@ -853,9 +858,49 @@ begin
   end;
 end;
 
+{ Classes of this file whose constructor sets FreeOnTerminate := True: every instance frees itself,
+  so a WaitFor or Free on a variable of that type is a use-after-free whichever method makes it. }
+procedure TOwnershipScan.CollectFotClasses;
+var
+  R, N : TTSNode;
+  Nodes: TList<TTSNode>;
+  Lhs  : string;
+begin
+  Nodes:= TList<TTSNode>.Create;
+  try
+    for R in FRoutines do
+    begin
+      if (not IsCtor(R)) or (ClassOf(R) = '') then Continue;
+      Nodes.Clear;
+      Gather(R, ['assignment'], Nodes);
+      for N in Nodes do
+      begin
+        Lhs:= Canon(NodeStr(N.ChildByField('lhs')));
+        if ((Lhs = 'freeonterminate') or (Lhs = 'self.freeonterminate')) and (Canon(NodeStr(N.ChildByField('rhs'))) = 'true') then
+          FFotClasses.AddOrSetValue(LowerCase(StripGeneric(ClassOf(R))), True);
+      end;
+    end;
+  finally
+    Nodes.Free;
+  end;
+end;
+
+{ True when ATarget is a local, parameter or field of this routine's class declared as a class found by CollectFotClasses. }
+function TOwnershipScan.FotTypeOf(const ARoutine: TTSNode; const ALocals: TDictionary<string, string>;
+  const ATarget: string): Boolean;
+var
+  T: string;
+begin
+  Result:= False;
+  if FFotClasses.Count = 0 then Exit;
+  if not (ALocals.TryGetValue(ATarget, T) or FFieldType.TryGetValue(LowerCase(StripGeneric(ClassOf(ARoutine))) + '.' + ATarget, T)) then Exit;
+  Result:= FFotClasses.ContainsKey(LowerCase(StripGeneric(T)));
+end;
+
 procedure TOwnershipScan.CheckFotRoutine(const ARoutine: TTSNode; const AIdx: Integer);
 var
   Fot         : TDictionary<string, Boolean>;
+  Locals, All : TDictionary<string, string>;
   Nodes       : TList<TTSNode>;
   N           : TTSNode;
   C           : TCallInfo;
@@ -864,7 +909,10 @@ var
 begin
   Fot  := TDictionary<string, Boolean>.Create;
   Nodes:= TList<TTSNode>.Create;
+  Locals:= TDictionary<string, string>.Create;
+  All   := TDictionary<string, string>.Create;
   try
+    LocalsOf(ARoutine, Locals, All);
     Gather(ARoutine, ['assignment', 'statement'], Nodes);
     for N in Nodes do
     begin
@@ -894,9 +942,14 @@ begin
       else if (C.Callee = 'freeandnil') and (C.Arg0 <> '') then Target:= C.Arg0;
       if (Target <> '') and Fot.ContainsKey(Target) then
         Emit(RULE_FOT, C.Node, Format('%s.FreeOnTerminate is True, so the thread frees itself -- %s may touch a ' +
-          'thread that is already gone; clear FreeOnTerminate or drop the wait/free', [Target, Trim(NodeStr(C.Node))]), '');
+          'thread that is already gone; clear FreeOnTerminate or drop the wait/free', [Target, Trim(NodeStr(C.Node))]), '')
+      else if (Target <> '') and FotTypeOf(ARoutine, All, Target) then
+        Emit(RULE_FOT, C.Node, Format('%s is a thread class whose constructor sets FreeOnTerminate, so it frees itself -- %s may touch a ' +
+          'thread that is already gone; drop the wait/free', [Target, Trim(NodeStr(C.Node))]), '');
     end;
   finally
+    All.Free;
+    Locals.Free;
     Nodes.Free;
     Fot.Free;
   end;
@@ -1082,6 +1135,7 @@ begin
     Defs.Free;
   end;
   CollectFileFacts;
+  CollectFotClasses;
   CheckFieldCreated;
   CheckOwnedItems;
   for I:= 0 to FRoutines.Count - 1 do

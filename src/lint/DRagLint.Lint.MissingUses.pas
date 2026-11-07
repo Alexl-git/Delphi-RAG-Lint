@@ -1,7 +1,8 @@
 unit DRagLint.Lint.MissingUses;
 
-{ Rule unit-missing-from-uses: an identifier the index could not bind, that
-  no declaration in scope explains, but that a unit the file does NOT use
+{ Rule unit-missing-from-uses: an identifier no declaration in scope explains,
+  whether the index left it unbound or bound it through a uses entry the text
+  no longer holds, but that a unit the file does NOT use
   declares in its interface -- the IDE's "Undeclared identifier: 'CodeSite'"
   with the answer attached: "'CodeSite' is declared in unit CodeSiteLogging --
   add it to the implementation uses clause".
@@ -14,7 +15,10 @@ unit DRagLint.Lint.MissingUses;
   named in the message as a warning.
 
   PRECISION FIRST. A name is reported only when every one of these holds:
-  the index left the site unbound (refs.symbol_id NULL); it has no receiver
+  the index left the site unbound (refs.symbol_id NULL) or bound it to a
+  unit-level declaration of a unit the text does not use (the resolver honours
+  the uses list, so that means the index is older than the text; any other
+  binding keeps the site out); it has no receiver
   (a member after a dot is never a candidate); the source still holds the name
   at the indexed position (a stale index answers nothing); no declaration of
   that name exists in this file (locals, fields, generic parameters...); no
@@ -78,7 +82,7 @@ type
   /// <summary>The unit-missing-from-uses checker.</summary>
   /// <remarks>
   /// Store-backed: reads the file's refs, symbols and uses from the
-  /// store that indexes it, and looks the unresolved names up in every lookup
+  /// store that indexes it, and looks the candidate names up in every lookup
   /// store (the project index and the platform library). Read-only; never
   /// writes a store. Not thread-safe across calls sharing a store only in the
   /// sense ISymbolStore itself is not.
@@ -95,7 +99,9 @@ type
     /// <param name="AFileId">The file's id in AFileStore; 0 -> no findings.</param>
     /// <param name="ALookup">Stores to look names up in; AFileStore is used
     /// when it is not among them. nil entries are ignored.</param>
-    /// <returns>One finding per unresolved use, in ref order.</returns>
+    /// <returns>One finding per use the text's uses clauses do not explain (unbound,
+    /// or bound to a unit-level declaration of a unit the text does not use), grouped
+    /// by name in first-use order.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Lint.MissingUses.TMissingUsesChecker.Check (DRagLint.Lint.MissingUses.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas)</para>
@@ -355,7 +361,7 @@ begin
   end;
 end;
 
-class function TMissingUsesChecker.Analyze(const AFile: string;  // dl:ok cyclomatic-complexity@162c -- REVIEWED 2026-10-29: the body is the rule's ordered list of precision guards, one Continue each; splitting it scatters the contract the unit header states
+class function TMissingUsesChecker.Analyze(const AFile: string;  // dl:ok cyclomatic-complexity@1b9d -- REVIEWED 2026-10-29: the body is the rule's ordered list of precision guards, one Continue each; splitting it scatters the contract the unit header states
   const AFileStore: ISymbolStore; AFileId: Int64;
   const ALookup: TArray<ISymbolStore>): TArray<TMissingUsesFinding>;
 var
@@ -371,6 +377,8 @@ var
   ThisUnit : string;
   ImplLine : Integer;
   GuardState: Integer; { 0 not asked, 1 every used unit is indexed, 2 not }
+  OwnStore : Integer; { AFileStore's index in Stores: a ref's symbol id is an id of that store }
+  BoundOk  : TDictionary<Int64, Boolean>;
 
   function ParentOf(AStoreIdx: Integer; AId: Int64): TSymbol;
   begin
@@ -401,6 +409,17 @@ var
       var PP: TSymbol:= ParentOf(AStoreIdx, P.ParentId);
       if PP.Kind = skUnit then Exit(PP.Name);
     end;
+  end;
+
+  { True when the symbol a ref is bound to explains the name: anything but a
+    unit-level declaration of a unit the text does not use. A dangling id, a local
+    or a member answers True -- the binding alone never makes a candidate. }
+  function BindingExplains(ASymbolId: Int64): Boolean;
+  begin
+    if BoundOk.TryGetValue(ASymbolId, Result) then Exit;
+    var U: string:= DeclaringUnit(OwnStore, AFileStore.GetSymbolById(ASymbolId));
+    Result:= (U = '') or IsUsed(U);
+    BoundOk.Add(ASymbolId, Result);
   end;
 
   { True when some lookup store indexes a unit AEntry names, trying the
@@ -613,6 +632,9 @@ begin
   for var Have: ISymbolStore in Stores do
     if Have = AFileStore then HaveOwn:= True;
   if not HaveOwn then Stores:= [AFileStore] + Stores;
+  OwnStore:= 0;
+  for var Si: Integer:= 0 to High(Stores) do
+    if Stores[Si] = AFileStore then OwnStore:= Si;
 
   OwnNames := TDictionary<string, Boolean>.Create;
   Infos    := TDictionary<string, TNameInfo>.Create;
@@ -620,6 +642,7 @@ begin
   Occs     := TDictionary<string, TArray<TOccurrence>>.Create;
   Order    := TList<string>.Create;
   WithCache:= TDictionary<Int64, Boolean>.Create;
+  BoundOk  := TDictionary<Int64, Boolean>.Create;
   try
     ThisUnit  := '';
     GuardState:= 0;
@@ -628,10 +651,11 @@ begin
     if ThisUnit = '' then Exit;
     for var R: TReference in AFileStore.GetReferencesFromFile(AFileId) do
     begin
-      if (R.SymbolId > 0) or (R.ReceiverText <> '') or not IsRefKindOfInterest(R.Kind) then Continue;
+      if (R.ReceiverText <> '') or not IsRefKindOfInterest(R.Kind) then Continue;
       var N: string:= R.NameText;
       if (N = '') or N.Contains('.') or IsIntrinsicName(N) then Continue;
       if OwnNames.ContainsKey(LowerCase(N)) or IsUsed(N) then Continue;
+      if (R.SymbolId > 0) and BindingExplains(R.SymbolId) then Continue;
       if not NameAt(Lines, R.StartLine, R.StartCol, N) then Continue; { stale index: say nothing }
       var Info: TNameInfo:= InfoOf(N);
       if Info.InScope or (Length(Info.Candidates) = 0) then Continue;
@@ -684,6 +708,7 @@ begin
       end;
     end;
   finally
+    BoundOk.Free;
     WithCache.Free;
     Order.Free;
     Occs.Free;

@@ -133,7 +133,7 @@ procedure ArmBusyTimeout(AConn: TFDConnection; ABusyTimeoutMs: Integer = DEFAULT
 /// asks for it (TSQLiteSymbolStore.IsSchemaCurrent) and refuses a stale one.
 /// Thread-safe: touches only AConn.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DbLooksHealthy (DRagLint.CLI.pas), DRagLint.CLI.DoDiff (DRagLint.CLI.pas), DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas), DRagLint.CLI.DoGraph (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas) (+10 more)</para>
+/// <para>Called from: DRagLint.CLI.CountStaleFilesWithoutCallEdges (DRagLint.CLI.pas), DRagLint.CLI.DbLooksHealthy (DRagLint.CLI.pas), DRagLint.CLI.DoDiff (DRagLint.CLI.pas), DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas), DRagLint.CLI.DoGraph (DRagLint.CLI.pas) (+11 more)</para>
 /// <para>Calls: DRagLint.Storage.FileMembership.ArmBusyTimeout, DRagLint.Storage.FileMembership.HeaderSaysWal</para>
 /// <seealso cref="DRagLint.Storage.FileMembership.ArmBusyTimeout"/>
 /// <seealso cref="DRagLint.Storage.FileMembership.HeaderSaysWal"/>
@@ -324,7 +324,7 @@ function DbMembership(const ADbPath, AFilePath: string; out AReason: string): TD
 /// run_project_db_resolve.ps1 (6d).
 /// Thread-safe: no shared state; each call owns its connection.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoQueryTypeUsage (DRagLint.CLI.pas), DRagLint.CLI.DoQueryUnitUsage (DRagLint.CLI.pas), DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb.TheOnlyProjectDb (DRagLint.CLI.pas) (+3 more)</para>
+/// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoQueryTypeUsage (DRagLint.CLI.pas), DRagLint.CLI.DoQueryUnitUsage (DRagLint.CLI.pas), DRagLint.CLI.QueryOracleForFile (DRagLint.CLI.pas), DRagLint.CLI.ResolveConsumerDbs (DRagLint.CLI.pas) (+4 more)</para>
 /// <para>Calls: DRagLint.Storage.FileMembership.DbMembership</para>
 /// <para>Returns: DbMembership(ADbPath, AFilePath, Reason) = dmMember</para>
 /// <seealso cref="DRagLint.Storage.FileMembership.DbMembership"/>

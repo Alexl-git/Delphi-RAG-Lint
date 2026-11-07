@@ -234,7 +234,7 @@ type
     /// <returns>True when they are the same unit.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Convert.Apply.TConvertTreeCache.ScopedClass (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.TConvertTreeCache.SetScope (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.TReconciler.BuildPostPlan (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.ComponentUnits (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.DecideWatch (DRagLint.Convert.UsesReconcile.pas) (+5 more)</para>
+    /// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.BuildToTypeAdd (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.PickTieCandidate (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.PickTieCandidate.Choose (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.DemoteOnlySkips (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ReconcileUnitUses (DRagLint.Convert.Apply.pas) (+11 more)</para>
     /// <para>Calls: DRagLint.Convert.UsesReconcile.TUsesUnitIndex.Build, EndsStr, LowerCase, Trim</para>
     /// <para>Returns: not (FStems.ContainsKey(Short) and FStems.ContainsKey(Long))</para>
     /// <para>Reads: FStems</para>

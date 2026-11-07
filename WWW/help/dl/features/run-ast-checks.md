@@ -4,10 +4,10 @@ title: Run AST Checks
 summary: Runs drag-lint's AST-level checks against a file
 product: DL
 group: linting
-order: 30033
+order: 30035
 since: 0.31.0-alpha
 status: shipped
-updated: 1.44.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Run AST Checks
@@ -33,7 +33,7 @@ Full flag list: [check-ast in the CLI reference](../cli.md#check-ast).
 * drag-lint About window, button **Run AST Checks**
    1. Open the file in the editor
    2. Open the About window (drag-lint > About) and click the Run AST Checks button
-   3. From a shell: `drag-lint check-ast <file> [--profile <name>] [--db PATH] [--rule <id>] [--format text|json]`
+   3. From a shell: `drag-lint check-ast <file> [--profile <name>] [--db PATH] [--library-db <lib.sqlite>|none] [--rule <id>] [--format text|json]`
 
 ## Details
 

@@ -514,6 +514,9 @@ function TPurityRun.Classify(AIndex: Integer; const AText: string): TArgInfo;
 begin
   Result:= ClassifyArgument(AText, FCtx[AIndex].Locals, FCtx[AIndex].Params, FCtx[AIndex].Fields, FCtx[AIndex].Escaping);
   if (Result.Cls = acUnknown) and SameText(Result.Text, NAME_RESULT) then Result.Cls:= acLocal;
+  { A by-value scalar is the routine's own copy: Inc(AIdx) reaches nothing of the caller's. }
+  if (Result.Cls = acParam) and IsByValueScalarParam(FRoutines[AIndex].Signature, Result.ParamOrdinal) then
+    Result.Cls:= acLocal;
 end;
 
 function TPurityRun.SelfReceiver: TArgInfo;
@@ -928,7 +931,10 @@ begin
         construction (spec 3.3 / P3); a name the table does not know cannot be
         placed and is unknown. }
       if FCtx[AIndex].Params.TryGetValue(LowerKey(Name), K) then
-        ASum.AddParam(K, 'writes through parameter #' + IntToStr(K) + ' (' + Name + ')', AChanged)
+      begin
+        if not IsByValueScalarParam(FRoutines[AIndex].Signature, K) then
+          ASum.AddParam(K, 'writes through parameter #' + IntToStr(K) + ' (' + Name + ')', AChanged);
+      end
       else
         ASum.AddFlag(efUnknown, 'writes through parameter ' + Name + ' (not in the parameter table)', AChanged);
   end;

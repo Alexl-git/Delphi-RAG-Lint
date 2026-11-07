@@ -7,7 +7,7 @@ group: refactoring
 order: 50005
 since: 0.85.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # extract-method
@@ -28,6 +28,10 @@ Full flag list: [extract-method in the CLI reference](../cli.md#extract-method).
 | `--from-line` | `<L1>` |  |  |
 | `--to-line` | `<L2>` |  |  |
 | `--name` | `<N>` |  |  |
+| `--project` | `<X.dproj>` |  |  |
+| `--platform` | `<p>` |  |  |
+| `--rsvars` | `<bat>` |  |  |
+| `--build-timeout` | `<s>` |  |  |
 | `--json` |  |  |  |
 | `--apply` |  |  |  |
 | `--no-backup` |  |  |  |
@@ -71,6 +75,14 @@ drag-lint extract-method --in C:\Projects\MyApp\Unit1.pas --from-line 120 --to-l
 
 This would pull lines 120-135 of `Unit1.pas` into a new method named
 `ValidateInput`.
+
+### Compile gate (opt-in) and Cancel
+
+With `--apply --project <X.dproj>` the edit goes through the compile gate: the project is built first (a project that
+does not build is refused, nothing written), the file is written under a `.BCK` backup, the project is built again, and a
+compile error rolls the write back. `--platform`, `--rsvars` and `--build-timeout <s>` shape the build as for `unwith`.
+Without `--project` the verb writes as it always did, with no build. A refusal prints `REFUSED (<kind>): ...` on stderr
+and exits 1.
 
 ---
 

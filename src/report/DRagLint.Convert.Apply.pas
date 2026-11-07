@@ -236,7 +236,7 @@ type
   /// DELIBERATE removal counts as remainder at all is an open question for the
   /// converter side -- see docs\converter\apply-remainder-contract.md.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ApplyItemKindName (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.PlanIdentifierMigrates.Item (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.PlanMigrateSites.Item (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ReconcileUnitUses.Warn (DRagLint.Convert.Apply.pas) (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ApplyItemKindName (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.PlanIdentifierMigrates.Item (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.PlanMigrateSites.Item (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.ReconcileUnitUses.Warn (DRagLint.Convert.Apply.pas) (+4 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyItemKind = (
@@ -355,9 +355,15 @@ type
                                there until converted by hand (owner Q2: the old
                                text is kept). Field todos; Value 'DL_NONE',
                                OldValue the wrapped text. }
-    aikEncodingNotChecked);  { 1.34.1 (CONV-ENC E3): a binary (TPF0) .dfm has no
+    aikEncodingNotChecked,  { 1.34.1 (CONV-ENC E3): a binary (TPF0) .dfm has no
                                text encoding, so the encoding guard never
                                compared it. A warning; FilePath set. }
+    aikGlyphNoAlternative,   { --glyph-stitch: the source's actual N matches no
+                               alternative of the G-link; nothing written. }
+    aikGlyphFormatUnsupported, { --glyph-stitch: not a bitmap this stitcher reads,
+                               no usable cast or no readable count; nothing written. }
+    aikGlyphNotAStrip);      { --glyph-stitch: the width does not divide by N;
+                               nothing written. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -385,7 +391,7 @@ type
   /// only be anchored to the instance's object-block header line. RuleLine is
   /// the 1-based line in the rules file that produced the item, or 0.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.DoConvertApply.MergeInferred (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.MergeUnreachable (DRagLint.CLI.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas), DRagLint.Convert.Apply.AppendDescendantReport (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.AppendInheritedReport (DRagLint.Convert.Apply.pas) (+37 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoConvertApply.MergeInferred (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.MergeUnreachable (DRagLint.CLI.pas), DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas), DRagLint.Convert.Apply.AppendDescendantReport (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.AppendInheritedReport (DRagLint.Convert.Apply.pas) (+38 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -522,6 +528,21 @@ type
     MigrateTo    : string;  { G4: the New of the #migrate convert-apply realises for the member (DL_NONE_MARK for a break); '' when none }
   end;
 
+  /// <summary>One apply/1 glyphs[] object: what one image G-link did on one
+  /// instance.</summary>
+  /// <remarks>
+  /// Instance plus TReemitGlyph's fields. Line is the object's .dfm line.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.EmitApplyJson.GlyphsJson (DRagLint.CLI.pas), DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldGlyphOutcome (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TApplyGlyph = record
+    Instance: string;
+    Outcome : TReemitGlyph;
+    Line    : Integer;
+  end;
+
   /// <summary>Human-readable summary of one convert-apply run, grouped by
   /// surface: Converted lists one line per instance actually rewritten;
   /// AccessSites and CreatorSites list the .pas property/event-access and
@@ -557,6 +578,9 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TApplyReport = record
+    { Disjoint from Items for a stitched outcome (a receipt, like ResolvedDefaults);
+      a to-do outcome is ALSO one aikGlyph* item. apply/1 glyphs[]. }
+    Glyphs      : TArray<TApplyGlyph>;
     Converted   : TArray<string>;
     AccessSites : TArray<string>;
     CreatorSites: TArray<string>;
@@ -737,7 +761,7 @@ type
     /// <param name="AValue">The streamed value text.</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.AcquireIndexLock (DRagLint.CLI.pas) ?, DRagLint.CLI.DoQueryUnitUsageProjectWide (DRagLint.CLI.pas) ?, DRagLint.CLI.ExpandProjectScope.AddOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.ProjectScopeRoots.AddDir (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.RefFactsFor (DRagLint.Convert.Apply.pas) (+89 more)</para>
+    /// <para>Called from: DRagLint.CLI.AcquireIndexLock (DRagLint.CLI.pas) ?, DRagLint.CLI.DoQueryUnitUsageProjectWide (DRagLint.CLI.pas) ?, DRagLint.CLI.ExpandProjectScope.AddOnce (DRagLint.CLI.pas) ?, DRagLint.CLI.ProjectScopeRoots.AddDir (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.RefFactsFor (DRagLint.Convert.Apply.pas) (+91 more)</para>
     /// <para>Calls: DRagLint.Convert.Apply.BareTypeTail, UpperCase</para>
     /// <para>Reads: FKeys   Writes: FRows</para>
     /// <seealso cref="DRagLint.Convert.Apply.BareTypeTail"/>
@@ -1646,15 +1670,15 @@ procedure AppendDescendantReport(const AUses: TArray<TDescendantUse>; const ADfm
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas)</para>
-/// <para>Calls: BookChosenUnits, BookHasUnitRules, BoundAccessSites, BuildToTypeAdd, CharColumn, Choose, CompareText, Copy, DanglingPasUses, Default (+70 more)</para>
+/// <para>Calls: BookChosenUnits, BookHasUnitRules, BoundAccessSites, BuildToTypeAdd, CharColumn, Choose, CompareText, Copy, DanglingPasUses, Default (+76 more)</para>
 /// <para>Returns: if Length(Picked) = 1 then Spelling; Default(TApplyResult); TApplyResult.Refusal(UsesPlan.Error)</para>
-/// <para>Complexity: 35 (cyclomatic, outer body), 1484 lines (full implementation)</para>
+/// <para>Complexity: 36 (cyclomatic, outer body), 1552 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.Apply.BareTypeTail"/>
+/// <seealso cref="DRagLint.Convert.Apply.BookNothingToDoReason"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.AddCodeEntries"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.Emit"/>
 /// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport"/>
-/// <seealso cref="DRagLint.Convert.Apply.BuildApplyPlan.InstItem"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
@@ -1679,6 +1703,31 @@ function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPat
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BookHasIdentifierMigrates(const ARules: TConversionRuleSet): Boolean;
+
+/// <summary>Why convert-apply has nothing to do for a book that is at fault
+/// itself, not the unit: the one sentence for a book with parse errors or with
+/// no #convert block, replacing the "sibling .dfm not found" and "no convertible
+/// instances found" sentences, which speak of #convert rules this book does not
+/// have (E-MIGRATE-T-TO-T, wave 146).</summary>
+/// <param name="ARules">The parsed book.</param>
+/// <param name="AUnitPas">The unit being converted; named in the #migrate sentence.</param>
+/// <returns>'' for a book with a #convert block and no parse error (the caller's
+/// own sentence stands). Otherwise, first match: 'conversion rules failed
+/// validation: line N: ...' (every parse error); 'the rules file holds no rules';
+/// 'no #migrate line of the rules file has a site in Unit'; 'the rules file has
+/// no #convert block, unit rule or #migrate line'. Each sentence but the first
+/// ends ' -- nothing to convert'.</returns>
+/// <remarks>
+/// Callers ask only once the unit has nothing to do: a book of unit rules
+/// or a #migrate with a site never reaches them. The exit code stays 1.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoConvertApply (DRagLint.CLI.pas), DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas)</para>
+/// <para>Calls: Format</para>
+/// <para>Returns: 'conversion rules failed validation: ' + string.Join('; ', Lines); Format('no #migrate line of the rules file has a site in %s', [TPath.GetFileName(AUnitPas)]) + NOTHING; 'the rules file has no #convert block, unit rule or #migrate line' + NOTHING</para>
+/// <para>Touches: file system</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function BookNothingToDoReason(const ARules: TConversionRuleSet; const AUnitPas: string): string;
 
 /// <summary>True when the book's identifier #migrate rules (file scope, or
 /// in-block with uses units or an enum-value New) touch at least one site in
@@ -1930,7 +1979,8 @@ const
     'book-warning', 'ref-path-like', 'ref-dangling', 'ref-not-checked',
     'unit-rule-kept', 'uses-unit-ambiguous', 'unit-rule-unverified', 'unit-rule-dangling',
     'value-cast-applied', 'value-cast-check', 'convert-class-inferred',
-    'migrate-applied', 'migrate-check', 'deliberate-break', 'encoding-not-checked');
+    'migrate-applied', 'migrate-check', 'deliberate-break', 'encoding-not-checked',
+    'glyph-no-alternative', 'glyph-format-unsupported', 'glyph-not-a-strip');
 begin
   Result:= NAMES[AKind];
 end;
@@ -5424,6 +5474,7 @@ function LinkPasStatus(const ALink: TConversionRule; const ACastLib: TCastLib): 
 begin
   var Dotted  : Boolean:= (Pos('.', ALink.ToPath) > 0) or (Pos('.', ALink.FromPath) > 0);
   var Identity: Boolean:= SameText(ALink.ToPath, ALink.FromPath);
+  if ALink.GlyphExpr <> '' then Exit(PAS_USE_CAST_REFUSED);
   if ALink.Cast <> '' then
   begin
     var VD: TCastDef;
@@ -5917,7 +5968,7 @@ begin
     begin
       var PlainLink: Boolean:= (L.Kind = rkLink) and (L.FromPath <> '') and (L.ToPath <> '') and (Pos('.', L.FromPath) = 0);
       var Renames  : Boolean:= (Pos('.', L.ToPath) = 0) and not SameText(L.FromPath, L.ToPath);
-      if PlainLink and ((L.Cast <> '') or Renames) then
+      if PlainLink and ((L.Cast <> '') or (L.GlyphExpr <> '') or Renames) then
         Taken.AddOrSetValue(UpperCase(IntToStr(LinkRuleBlock(AIn.Book.Rules, L)) + '|' + L.FromPath), L.LineNo);
     end;
     var Block: Integer:= 0;
@@ -6345,6 +6396,33 @@ begin
   Result:= False;
 end;
 
+function BookNothingToDoReason(const ARules: TConversionRuleSet; const AUnitPas: string): string;
+const
+  NOTHING = ' -- nothing to convert';
+var
+  HasConvert, HasMigrate: Boolean;
+begin
+  if Length(ARules.ParseErrors) > 0 then
+  begin
+    var Lines: TArray<string>:= nil;
+    for var E: TRuleError in ARules.ParseErrors do
+      Lines:= Lines + [Format('line %d: %s', [E.LineNo, E.Message])];
+    Exit('conversion rules failed validation: ' + string.Join('; ', Lines));
+  end;
+  HasConvert:= False;
+  HasMigrate:= False;
+  for var R: TConversionRule in ARules.Rules do
+  begin
+    if R.Kind = rkConvert then HasConvert:= True;
+    if R.Kind = rkMigrate then HasMigrate:= True;
+  end;
+  if HasConvert then Exit('');
+  if Length(ARules.Rules) = 0 then Exit('the rules file holds no rules' + NOTHING);
+  if HasMigrate then
+    Exit(Format('no #migrate line of the rules file has a site in %s', [TPath.GetFileName(AUnitPas)]) + NOTHING);
+  Result:= 'the rules file has no #convert block, unit rule or #migrate line' + NOTHING;
+end;
+
 function UnitHasIdentifierMigrateSites(const ATrees: TConvertTreeCache; const AUnitPas: string;
   const ABook: TApplyBook): Boolean;
 var
@@ -6737,7 +6815,7 @@ begin
   end;
 end;
 
-function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@e3f8, too-many-locals@ddbd, cyclomatic-complexity@fbdb -- (327 lines, re-reviewed 2026-11-04 int3: +the C18 #migrate hook and its 1.42 identifier form, PlanMigrateSites itself lives outside it; +InstToType and the 1.27.0 pas_uses input record, the surfaces themselves live outside it): parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own; locals -- one per output surface + per-unit views, shared by the nested routines (same refactor)
+function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@37f2, too-many-locals@7c2a, cyclomatic-complexity@a8a7 -- (327 lines, re-reviewed 2026-11-04 int3: +the C18 #migrate hook and its 1.42 identifier form, PlanMigrateSites itself lives outside it; +InstToType and the 1.27.0 pas_uses input record, the surfaces themselves live outside it): parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own; locals -- one per output surface + per-unit views, shared by the nested routines (same refactor)
   const ABook: TApplyBook; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean;
   var AInherited: TArray<TInheritedInstance>): TApplyResult;
@@ -6752,6 +6830,7 @@ var
   Converted   : TList<string>;
   Warnings    : TList<string>;
   ReemitNotes : TList<string>;
+  ReportGlyphs: TArray<TApplyGlyph>;
   CreatorSites: TList<string>;
   AccessSites : TList<string>;
   Todos       : TList<string>;
@@ -6930,6 +7009,41 @@ var
     end;
   end;
 
+  { One image G-link's outcome. A stitched one is a receipt (glyphs[] only). A to-do
+    one is also a todos[] item and a line at the top of the unit's implementation
+    section, with a fixed owner (ruled: unmatched is a to-do, not a hard stop). }
+  procedure FoldGlyphOutcome(const AOutcome: TReemitGlyph; ABlockLine: Integer);
+  const
+    KIND_NOT_A_STRIP    = 'glyph-not-a-strip';
+    KIND_NO_ALTERNATIVE = 'glyph-no-alternative';
+    KIND_STITCHED       = 'glyph-stitched';
+  begin
+    var AG: TApplyGlyph;
+    AG.Instance:= Inst.InstanceName;
+    AG.Outcome := AOutcome;
+    AG.Line    := ABlockLine;
+    ReportGlyphs:= ReportGlyphs + [AG];
+    if AOutcome.Kind = KIND_STITCHED then Exit;
+    var Kind: TApplyItemKind:= aikGlyphFormatUnsupported;
+    if AOutcome.Kind = KIND_NOT_A_STRIP then Kind:= aikGlyphNotAStrip
+    else if AOutcome.Kind = KIND_NO_ALTERNATIVE then Kind:= aikGlyphNoAlternative;
+    var Todo: string:= Format('{ TODO(converter): drag-lint glyph: %s.%s N=%d %s }',
+      [Inst.InstanceName, AOutcome.FromPath, AOutcome.SourceN, AOutcome.Message.Replace('}', ')')]);
+    var GIt: TApplyItem:= InstItem(Kind, afTodos, Todo);
+    GIt.FilePath:= AUnitPas;
+    GIt.Line    := ImplementationKeywordLine(PasLines.Text);
+    GIt.Path    := AOutcome.FromPath;
+    GIt.RuleLine:= AOutcome.RuleLine;
+    Emit(GIt);
+    if GIt.Line < 1 then Exit;
+    var TE: TTextEdit:= Default(TTextEdit);
+    TE.FilePath:= AUnitPas;
+    TE.Kind    := tekInsertLines;
+    TE.Line    := GIt.Line;
+    TE.Text    := Todo;
+    Edits.Add(TE);
+  end;
+
   // Folds one instance's re-emit report into ReemitNotes, giving each entry the
   // kind its SOURCE array implies rather than one inferred from its prose.
   // ABlockLine is the instance's .dfm object-block header line: TDfmNode carries
@@ -6958,6 +7072,7 @@ var
       other callers pass whole sentences, which are not paths. }
     FoldBookChecks(AReport, ABlockLine);
     for var VI: TApplyItem in ValueCastDfmItems(AReport.ValueCasts, Inst, ADfmPath, DfmLines, ABlockLine) do Emit(VI);
+    for var GL: TReemitGlyph in AReport.Glyphs do FoldGlyphOutcome(GL, ABlockLine);
     for var DN: string in AReport.Dropped do
     begin
       var DIt: TApplyItem:= InstItem(aikUnmappedProperty, afReemitNotes,
@@ -7109,7 +7224,10 @@ var
   // -- surface #1: locate the published field decl 'Name: FromType;' via the
   // field symbol (gives us the line range to scope the text search), then find
   // the exact FromType token span for a tekReplaceInLine edit.
-  procedure PlanFieldRetype;
+  // AOwnerClass '' = an own instance: any field of that name and From type, and a
+  // miss is warned. Otherwise a retyped inherited one (E-CONVAPPLY-IFACE-USES): only
+  // a field AOwnerClass itself redeclares, and a miss is the normal case, so silent.
+  procedure PlanFieldRetype(const AOwnerClass: string = '');
   var
     E    : TTextEdit;
     It   : TApplyItem;
@@ -7121,6 +7239,7 @@ var
     begin
       if (Sym.Kind <> skField) or (not SameText(Sym.Name, Inst.InstanceName)) or
          (not SameText(Sym.Signature, Inst.FromType)) then Continue;
+      if (AOwnerClass <> '') and not EndsText('.' + AOwnerClass + '.' + Inst.InstanceName, Sym.QualifiedName) then Continue;
 
       var FLine, FCol, FEndCol: Integer;
       if LocateFieldTypeToken(PasLines, Sym.StartLine, Sym.EndLine,
@@ -7145,7 +7264,7 @@ var
       end;
       Break; { one matching field symbol is enough }
     end;
-    if not Found then
+    if not Found and (AOwnerClass = '') then
       { A multi-declarator field line (`Edit1, Edit2: TOldEdit;`) indexes only
         the FIRST declarator as a field symbol, so a later name on the shared
         line is not located here -- the .dfm/access/creator surfaces still
@@ -7231,7 +7350,9 @@ var
 
   // Surfaces #1 and #5 for an own instance. A retyped inherited one (C8 N2)
   // has neither here -- its field is the ancestor's and nothing in this unit
-  // creates it -- so it gets its converted[] line instead, at ABlockLine.
+  // creates it -- so it gets its converted[] line instead, at ABlockLine. The
+  // exception is a field the .dfm root class REDECLARES: that line is in this
+  // unit, it names the From type, and it needs the To unit in its own section.
   procedure PlanDeclSurfaces(ABlockLine: Integer);
   begin
     var K: Integer:= InheritedIndexOf(AInherited, Inst.InstanceName, INH_ACTION_RETYPED);
@@ -7241,6 +7362,7 @@ var
       PlanCreatorSites;
       Exit;
     end;
+    PlanFieldRetype(DfmRootClass(DfmText));
     var RIt: TApplyItem:= InstItem(aikInheritedInstanceRetyped, afConverted,
       Format('%s: inherited %s -> %s (declared in %s)',
         [Inst.InstanceName, Inst.FromType, Inst.ToType, AInherited[K].AncestorUnit]));
@@ -7397,6 +7519,27 @@ var
     begin
       if LinkRule.Kind <> rkLink then Continue;
       if (LinkRule.ToPath = '') or (LinkRule.FromPath = '') then Continue;
+      { Grammar section 7, build 1: every .pas site of a G-linked member is tier 3, a
+        to-do with the site left compiling. A class cast on the same link already
+        reports its sites below; a cast-less one would otherwise be RENAMED. }
+      if (LinkRule.GlyphExpr <> '') and (LinkRule.Cast = '') and not LinkRule.FromPath.Contains('.') then
+      begin
+        for var GSite: TAccessSite in FindMemberAccessSites(PasStore, PasFileId, PasLines, LinkRule.FromPath,
+          LinkScopeNames(ABook.Rules, ConvertedInstNames, InstFromType, LinkRule)) do
+        begin
+          It:= PlainItem(aikCastNotApplied, afWarnings,
+            Format('line %d: #link %s <- %s %s -- glyph link: access site %s:%d %s.%s not rewritten; convert it by hand',
+              [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.GlyphExpr,
+               ExtractFileName(AUnitPas), GSite.Line, GSite.InstanceName, LinkRule.FromPath]));
+          It.Instance:= GSite.InstanceName;
+          It.FilePath:= AUnitPas;
+          It.Path    := LinkRule.FromPath;
+          It.RuleLine:= LinkRule.LineNo;
+          It.Line    := GSite.Line;
+          Emit(It);
+        end;
+        Continue;
+      end;
       { A CAST IS NOT YET PERFORMED, SO THE RENAME IS REFUSED RATHER THAN
         HALF-APPLIED. This surface rewrites the member IDENTIFIER at an access
         site: `obj.Old` -> `obj.New`. A rule carrying `: Round` says the VALUE
@@ -7924,7 +8067,9 @@ begin
   if (Length(Instances) = 0) and not HasInheritedAction(AInherited, INH_ACTION_CODE) and
      not (IdSites or UnitHasIdentifierMigrateSites(ATrees, AUnitPas, ABook)) then
   begin
-    Result.Error:= 'no convertible instances found (no #convert rule matched a .dfm instance, or --only filtered everything out)';
+    Result.Error:= BookNothingToDoReason(ABook.Rules, AUnitPas);
+    if Result.Error = '' then
+      Result.Error:= 'no convertible instances found (no #convert rule matched a .dfm instance, or --only filtered everything out)';
     Exit;
   end;
 
@@ -8201,6 +8346,7 @@ begin
     Result.Report.AccessSites:= AccessSites.ToArray;
     Result.Report.Todos    := Todos.ToArray;
     Result.Report.Items    := Items.ToArray;
+    Result.Report.Glyphs   := ReportGlyphs;
     Result.Report.ResolvedDefaults:= ResolvedDefaults.ToArray;
     Result.Ok:= True;
   finally

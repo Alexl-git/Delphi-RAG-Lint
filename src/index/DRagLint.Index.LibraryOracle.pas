@@ -85,6 +85,10 @@ type
     function Kids(AStore: Integer; AId: Int64): TArray<TSymbol>;
     function Ancestors(AStore: Integer; AId: Int64): TArray<TTypeAncestor>;
     function DeclaringMember(const ACand: TLibCand; const AName: string; out AHit: TSymbol): Boolean;
+    function ImplicitRootMember(const ACand: TLibCand; const AName: string; out AHit: TSymbol): Boolean;
+    function AgreedMember(const ATypeText, AMember: string; AKind: TExternalKind): string;
+    function VisibleOf(const ACands: TArray<TLibCand>; const AUses: TArray<string>): TArray<TLibCand>;
+    function UnitRoutine(const AChain, AMember: string; const AUses: TArray<string>; out AQName: string): Integer;
     function StepPending(var ACand: TLibCand; const APending: string; out AReason: string): Boolean;
     function MemberOf(const ACand: TLibCand; const AMember: string; AKind: TExternalKind;
       out AReason: string): string;
@@ -102,11 +106,18 @@ type
     /// <param name="AUsesUnits">Lower-cased unit names the referencing file uses (both sections + the .dpr).</param>
     /// <param name="AReason">ambiguous-type|no-member|no-store|no-type when the result is ''.</param>
     /// <returns>The qualified name, or '' with AReason set.</returns>
+    /// <remarks>A type name Pick cannot choose still answers when every candidate is a class
+    /// and all of them give the SAME member (`Acc.Free` on TList): the choice cannot matter.</remarks>
     function Bind(const ATypeText, APending, AMember: string; AKind: TExternalKind;
       const AUsesUnits: TArray<string>; out AReason: string): string;
     /// <summary>Binds a receiver whose HEAD identifier no project rung typed: in Delphi's
-    /// order, a member inherited by the enclosing class from AScopeType, a library type, a
-    /// library unit-level var / const, then `Unit.Name.TType` as a unit-qualified type.</summary>
+    /// order, a member inherited by the enclosing class from AScopeType, a routine of a used
+    /// unit the whole chain names (`System.SysUtils.DeleteFile`), a library type, a library
+    /// unit-level var / const, then `Unit.Name.TType` as a unit-qualified type.</summary>
+    /// <remarks>A type in a unit the file does not use cannot be what the head names: when a
+    /// library var / const of the name IS visible, the value rung answers, and only a visible
+    /// value (`Application` beside typelib interfaces of that name). Without a visible value
+    /// the type rung behaves as it always did. Several visible values decline.</remarks>
     /// <param name="AChain">The receiver, a dot-joined identifier chain (`CodeSite`, `TEncoding.UTF8`).</param>
     /// <param name="AMember">The called member name.</param>
     /// <param name="AKind">ekCall or ekMemberAccess.</param>
@@ -160,9 +171,14 @@ function NormalizeTypeLeaf(const ATypeText: string): string;
 /// its own floor list.</returns>
 function IsRootAncestorName(const AName: string): Boolean;
 
+const
+  /// <summary>The class every class with no written parent descends from.</summary>
+  IMPLICIT_ROOT_CLASS = 'TObject';
+
 implementation
 
 const
+  IMPLICIT_ROOT_UNIT = 'system';
   OK_CALL   : TOracleKindSet = [skProcedure, skFunction, skMethod, skConstructor, skDestructor];
   OK_ACCESS : TOracleKindSet = [skProcedure, skFunction, skMethod, skConstructor, skDestructor, skProperty, skField];
   TYPE_KINDS: TOracleKindSet = [skClass, skInterface, skRecord];
@@ -451,7 +467,68 @@ begin
         AHit:= S;
         Exit(True);
       end;
+  Result:= ImplicitRootMember(ACand, AName, AHit);
+end;
+
+{ The last step of a class's chain, which no ancestor row records when the class has no
+  written parent: TObject. Only for a class (an interface or record has no such root) and
+  only when every written ancestor resolved: an unknown parent may redeclare the member. }
+function TLibraryOracle.ImplicitRootMember(const ACand: TLibCand; const AName: string; out AHit: TSymbol): Boolean;
+begin
   Result:= False;
+  AHit  := Default(TSymbol);
+  if ACand.Kind <> skClass then Exit;
+  for var Id: Int64 in ACand.Ids do
+    for var A: TTypeAncestor in Ancestors(ACand.Store, Id) do
+      if not A.Resolved and not IsRootAncestorName(A.Name) then Exit;
+  for var T: TLibCand in Cached(FTypes, IMPLICIT_ROOT_CLASS, TYPE_KINDS, True) do
+    if T.UnitStem = IMPLICIT_ROOT_UNIT then
+      for var Id: Int64 in T.Ids do
+        for var S: TSymbol in Kids(T.Store, Id) do
+          if SameText(S.Name, AName) and (S.Kind <> skParam) then
+          begin
+            AHit:= S;
+            Exit(True);
+          end;
+end;
+
+{ One target whichever candidate the type name means: every candidate is a class and each
+  declares the member under the same qualified name. }
+function TLibraryOracle.AgreedMember(const ATypeText, AMember: string; AKind: TExternalKind): string;
+var
+  Hit: TSymbol;
+begin
+  Result:= '';
+  for var C: TLibCand in Cached(FTypes, NormalizeTypeLeaf(ATypeText), TYPE_KINDS, True) do
+  begin
+    if (C.Kind <> skClass) or not DeclaringMember(C, AMember, Hit)
+       or (Hit.Kind not in (if AKind = ekMemberAccess then OK_ACCESS else OK_CALL)) then Exit('');
+    if (Result <> '') and not SameText(Result, Hit.QualifiedName) then Exit('');
+    Result:= Hit.QualifiedName;
+  end;
+end;
+
+function TLibraryOracle.VisibleOf(const ACands: TArray<TLibCand>; const AUses: TArray<string>): TArray<TLibCand>;
+begin
+  Result:= [];
+  for var C: TLibCand in ACands do
+    if InUses(C.UnitStem, AUses) then Result:= Result + [C];
+end;
+
+{ How many qualified routines named AMember live in a unit the file uses whose name is AChain,
+  written whole (`System.SysUtils`) or as the suffix InUses accepts (`SysUtils`). }
+function TLibraryOracle.UnitRoutine(const AChain, AMember: string; const AUses: TArray<string>;
+  out AQName: string): Integer;
+begin
+  Result:= 0;
+  AQName:= '';
+  var Lc: string:= LowerCase(AChain);
+  for var R: TLibCand in VisibleOf(Cached(FRoutines, AMember, ROUTINE_KINDS, False), AUses) do
+    if (R.UnitStem = Lc) or R.UnitStem.EndsWith('.' + Lc) then
+    begin
+      Inc(Result);
+      AQName:= R.QName;
+    end;
 end;
 
 function TLibraryOracle.HelpersDeclare(const AStore: ISymbolStore; const AStoreTag, ATypeName, AMember: string): Boolean;
@@ -565,11 +642,16 @@ begin
   if Length(FStores) = 0 then AReason:= R_NO_STORE
   else if PickType(ATypeText, AUsesUnits + ['system', 'sysinit'], C, AReason)
           and StepPending(C, APending, AReason) then
-    Result:= MemberOf(C, AMember, AKind, AReason);
+    Result:= MemberOf(C, AMember, AKind, AReason)
+  else if (AReason = R_AMBIGUOUS) and (APending = '') then
+  begin
+    Result:= AgreedMember(ATypeText, AMember, AKind);
+    if Result <> '' then AReason:= '';
+  end;
   Result:= Count(Result, AReason);
 end;
 
-function TLibraryOracle.BindHead(const AChain, AMember: string; AKind: TExternalKind;  // dl:ok too-many-exit-points@9b3b -- REVIEWED 2026-10-28 (item 4, lane R4R): the exits are Delphi's name-lookup ORDER for an untyped head -- inherited member, library type, library global, unit-qualified type -- each answering and leaving, plus the three declines inside the first rung that must stop the walk (a nearer member hides a farther meaning). One exit would thread a found flag through four rungs whose order is the contract.
+function TLibraryOracle.BindHead(const AChain, AMember: string; AKind: TExternalKind;  // dl:ok too-many-exit-points@18cf -- REVIEWED 2026-10-28 (item 4, lane R4R): the exits are Delphi's name-lookup ORDER for an untyped head -- inherited member, library type, library global, unit-qualified type -- each answering and leaving, plus the three declines inside the first rung that must stop the walk (a nearer member hides a farther meaning). One exit would thread a found flag through four rungs whose order is the contract.
   const AUsesUnits: TArray<string>; const AScopeType: string; out AReason: string;
   out ATypeText: string): string;
 var
@@ -609,11 +691,26 @@ begin
     C:= Step;
     Exit(Count(Finish(C.Name), AReason));
   end;
-  { 2. The head IS a library type: `TEncoding.UTF8`, `TStringList.Create`. }
-  if PickType(Head, Visible, C, Why) then Exit(Count(Finish(C.Name), AReason));
-  if Why = R_AMBIGUOUS then Exit(Count('', R_AMBIGUOUS));
-  { 3. A library unit-level var / const: `Application`, `CodeSite`. }
   var Values: TArray<TLibCand>:= Cached(FValues, Head, VALUE_KINDS, False);
+  var SeenValues: TArray<TLibCand>:= VisibleOf(Values, Visible);
+  var SeenType: Boolean:= Length(VisibleOf(Cached(FTypes, Head, TYPE_KINDS, True), Visible)) > 0;
+  { 1b. `System.SysUtils.DeleteFile`: nothing visible is named Head, so the chain is a unit. }
+  if not SeenType and (Length(SeenValues) = 0) then
+  begin
+    var Routine: string;
+    var Routines: Integer:= UnitRoutine(AChain, AMember, Visible, Routine);
+    if Routines > 1 then Exit(Count('', R_AMBIGUOUS));
+    if Routines = 1 then Exit(Count(Routine, ''));
+  end;
+  if SeenType or (Length(SeenValues) = 0) then
+  begin
+    { 2. The head IS a library type: `TEncoding.UTF8`, `TStringList.Create`. }
+    if PickType(Head, Visible, C, Why) then Exit(Count(Finish(C.Name), AReason));
+    if Why = R_AMBIGUOUS then Exit(Count('', R_AMBIGUOUS));
+  end
+  else
+    Values:= SeenValues; // a type in an unused unit does not hide what the file can see
+  { 3. A library unit-level var / const: `Application`, `CodeSite`. }
   if Length(Values) > 0 then
   begin
     var V: TLibCand;

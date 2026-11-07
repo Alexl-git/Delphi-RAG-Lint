@@ -4,10 +4,10 @@ title: "dl:wiki concept blocks"
 summary: "The format of a dl:wiki block -- the concept notes the wiki verb reads"
 product: DL
 group: documentation
-order: 40010
+order: 40011
 since: 1.7.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # dl:wiki concept blocks

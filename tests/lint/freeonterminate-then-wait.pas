@@ -8,13 +8,25 @@ uses
   System.Classes;
 
 type
+  TSelfFreeing = class(TThread)
+  public
+    constructor Create;
+  end;
+
+  TPlain = class(TThread)
+  public
+    constructor Create;
+  end;
+
   TOwner = class
   private
     FWorker: TThread;
+    FSelf: TSelfFreeing;
   public
     procedure Start;
     procedure Stop;
     procedure Fine;
+    procedure StopSelf;
   end;
 
 implementation
@@ -69,6 +81,38 @@ end;
 procedure TOwner.Fine;
 begin
   Start;
+end;
+
+constructor TSelfFreeing.Create;
+begin
+  inherited Create(True);
+  FreeOnTerminate:= True;
+end;
+
+constructor TPlain.Create;
+begin
+  inherited Create(True);
+end;
+
+procedure LocalCtorFot;
+var
+  W: TSelfFreeing;
+begin
+  W:= TSelfFreeing.Create;
+  W.WaitFor; {HIT}
+end;
+
+procedure LocalPlain;
+var
+  W: TPlain;
+begin
+  W:= TPlain.Create;
+  W.WaitFor; {OK}
+end;
+
+procedure TOwner.StopSelf;
+begin
+  FSelf.Free; {HIT}
 end;
 
 end.

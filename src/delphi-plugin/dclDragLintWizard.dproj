@@ -108,6 +108,9 @@
         <DCCReference Include="DragLint.Plugin.FanOutState.pas"/>
         <DCCReference Include="DragLint.Plugin.FanOut.pas"/>
         <DCCReference Include="DragLint.Plugin.UsagesForm.pas"/>
+        <DCCReference Include="DragLint.Plugin.UsagesQuery.pas"/>
+        <DCCReference Include="DragLint.Plugin.ConvertRequest.pas"/>
+        <DCCReference Include="DragLint.Plugin.ConvertLaunch.pas"/>
         <DCCReference Include="DragLint.Plugin.SymbolSearchForm.pas"/>
         <DCCReference Include="..\workspace\DRagLint.Workspace.Config.pas"/>
         <DCCReference Include="DragLint.Plugin.HoverTracker.pas"/>

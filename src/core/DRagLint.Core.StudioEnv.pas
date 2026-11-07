@@ -71,8 +71,8 @@ type
   /// cache is kept -- a cached root would go stale across an install without
   /// any way to notice.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.BuildEnvBat (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas), [dclDragLintWizard]DRagLint.Project.Resolver.TProjectResolver.StudioCommonDir (DRagLint.Project.Resolver.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix, DRagLint.Diagnostics.CompileCheck, DRagLint.LSP.Proxy, DRagLint.Project.Resolver</para>
+  /// <para>Used by: [drag-lint]DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoSelfTestStudioRoot (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [drag-lint]DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), [drag-lint]DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), [drag-lint]DRagLint.LSP.Proxy.ResolveDelphiLspPath (DRagLint.LSP.Proxy.pas), [dclDragLintWizard,drag-lint]DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas), [dclDragLintWizard,drag-lint]DRagLint.Project.Resolver.TProjectResolver.StudioCommonDir (DRagLint.Project.Resolver.pas), [drag-lint]DRagLint.Refactor.CompileGate.BuildEnvBat (DRagLint.Refactor.CompileGate.pas)</para>
+  /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Diagnostics.CompileCheck, [drag-lint]DRagLint.LSP.Proxy, [drag-lint]DRagLint.Project.Resolver, [drag-lint]DRagLint.Refactor.CompileGate</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TStudioEnv = class
@@ -142,7 +142,7 @@ type
     /// <see cref="DRagLint.Core.StudioEnv.TStudioEnv.Root"/> so the failure
     /// names Studio.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.BuildEnvBat (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard]DRagLint.Core.StudioEnv.TStudioEnv.SelfTest (DRagLint.Core.StudioEnv.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), [dclDragLintWizard]DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas)</para>
+    /// <para>Called from: [drag-lint]DRagLint.CLI.ApplySectionCompilerVersion (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.StudioEnv.TStudioEnv.SelfTest (DRagLint.Core.StudioEnv.pas), [drag-lint]DRagLint.Diagnostics.CompileCheck.TCompileChecker.ResolveIdeLibraryPath (DRagLint.Diagnostics.CompileCheck.pas), [dclDragLintWizard,drag-lint]DRagLint.Project.Resolver.TProjectResolver.Create (DRagLint.Project.Resolver.pas), [drag-lint]DRagLint.Refactor.CompileGate.BuildEnvBat (DRagLint.Refactor.CompileGate.pas)</para>
     /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.TryRoot</para>
     /// <para>Returns: ''</para>
     /// <para>Pure</para>
@@ -186,7 +186,7 @@ type
     /// Composed, never stored. Its existence is NOT checked here --
     /// callers pass it to cmd.exe, whose own failure names the file.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.CLI.CycleFix.BuildEnvBat (DRagLint.CLI.CycleFix.pas), DRagLint.Core.StudioEnv.TStudioEnv.SelfTest (DRagLint.Core.StudioEnv.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas)</para>
+    /// <para>Called from: DRagLint.CLI.CompileUnitInContext (DRagLint.CLI.pas), DRagLint.Core.StudioEnv.TStudioEnv.SelfTest (DRagLint.Core.StudioEnv.pas), DRagLint.Diagnostics.CompileCheck.TCompileChecker.Run (DRagLint.Diagnostics.CompileCheck.pas), DRagLint.Refactor.CompileGate.BuildEnvBat (DRagLint.Refactor.CompileGate.pas)</para>
     /// <para>Calls: DRagLint.Core.StudioEnv.TStudioEnv.Root</para>
     /// <para>Returns: TPath.Combine(Root, 'bin\rsvars.bat')</para>
     /// <para>Touches: file system</para>

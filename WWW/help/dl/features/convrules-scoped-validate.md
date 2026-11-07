@@ -4,10 +4,10 @@ title: Scoped validation on Save
 summary: "ConvRulesEditor File menu: Save and Validate check the syntax and only the changed #convert blocks, one engine pass per distinct From/To pair"
 product: DL
 group: component-conversion
-order: 60017
+order: 60020
 since: 1.31.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Scoped validation on Save

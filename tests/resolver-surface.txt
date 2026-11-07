@@ -161,6 +161,10 @@ src/storage/DRagLint.Storage.SQLite.pas::ResolveValueReadRefs
 # TYPE USES (2026-10-23, B-31). A SEVENTH stream (ResolveTypeUseRefs ->
 # TCallResolver.ResolveTypeUse) writes refs.symbol_id for type_use refs.
 src/storage/DRagLint.Storage.SQLite.pas::ResolveTypeUseRefs
+# EXCEPTION TYPES (2026-11-06, wave 146 b5). raise / handle rows, identity only; spec
+# 2026-11-06-raise-handle-type-facts. ResolveExceptionType -> LookupTypeName (already on the surface).
+src/storage/DRagLint.Storage.SQLite.pas::ResolveExceptionTypeRefs
+src/index/DRagLint.Index.CallResolver.pas::ResolveExceptionType
 # ENUM CASTS (2026-10-25, X6 / gap G1). An EIGHTH stream (ResolveEnumCastRefs ->
 # TCallResolver.ResolveEnumCast) writes refs.symbol_id for a TEnum(x) `call` ref; it and the
 # type_use stream share the query-and-bind loop BindRefStream.

@@ -53,6 +53,11 @@ const
 /// the unit comment for the evidence and the exempt shapes), anchored at the
 /// symbol's declaration.</returns>
 /// <remarks>
+/// An UNBOUND write of a field's name (a receiver the resolver could not bind) silences the name
+/// project-wide, except that when ref_receivers and ref_types give the receiver a known static type
+/// that is neither the field's class nor a relative of it (type_ancestors, both directions), that
+/// write no longer counts. An unknown receiver, an undecidable ancestry, a global, or an index
+/// without those tables keeps the name-only rule.
 /// Reads refs file by file (one query per file), and the source text
 /// only of the files that hold a still-undecided ref or a would-be finding's
 /// declaration. A source file that cannot be read, or whose text no longer
@@ -60,9 +65,9 @@ const
 /// silence.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas)</para>
-/// <para>Calls: CompareText, ContainsText, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.AddCandidate, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.GlobalExempt, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.ParentOf, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.Report (+10 more)</para>
+/// <para>Calls: CompareText, ContainsText, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.AddCandidate, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.GlobalExempt, DRagLint.Lint.ReadNeverAssigned.CollectReadNeverAssigned.NoteUnboundWrite (+17 more)</para>
 /// <para>Returns: nil; Findings.ToArray</para>
-/// <para>Complexity: 26 (cyclomatic, outer body), 218 lines (full implementation)</para>
+/// <para>Complexity: 26 (cyclomatic, outer body), 281 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByKind"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetReferencesFromFile"/>
@@ -81,10 +86,14 @@ uses
   , System.StrUtils
   , System.Generics.Collections
   , System.Generics.Defaults
+  , FireDAC.Comp.Client
+  , FireDAC.Stan.Param  // dl:ok unused-unit-in-uses@c61d -- REVIEWED 2026-11-06: needed to expand the inline TFDParam setters (removing it gives H2443); no identifier names it
+  , DRagLint.Storage.SQLite
+  , DRagLint.Lint.RefTypeRules
   ;
 
 const
-  REF_WRITE         = 'write';
+  REF_WRITE        = 'write';
   REF_READ          = 'read';
   REF_MEMBER_ACCESS = 'member-access';
   REF_CALL          = 'call';
@@ -658,6 +667,31 @@ begin
   Result:= False;
 end;
 
+{ The prepared receiver-type query over ref_receivers + ref_types, or nil when the store is not
+  SQLite or the index predates either table (the rule then keeps its name-only evidence). }
+function OpenReceiverQuery(const AStore: ISymbolStore): TFDQuery;
+begin
+  Result:= nil;
+  if AStore is not TSQLiteSymbolStore then Exit;
+  var Q: TFDQuery:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= (AStore as TSQLiteSymbolStore).GetConnection;
+    Q.SQL.Text  := 'SELECT COUNT(*) FROM sqlite_master WHERE type = ''table'' AND name IN (''ref_receivers'', ''ref_types'')';
+    Q.Open;
+    var Both: Boolean:= Q.Fields[0].AsInteger = 2;
+    Q.Close;
+    if Both then
+    begin
+      Q.SQL.Text:= 'SELECT t.type_qname FROM ref_receivers rr JOIN ref_types t ON t.ref_id = rr.receiver_ref_id ' +
+                   'WHERE rr.ref_id = :id LIMIT 1';
+      Result:= Q;
+      Q:= nil;
+    end;
+  finally
+    Q.Free;
+  end;
+end;
+
 function CollectReadNeverAssigned(const AStore, ALibStore: ISymbolStore): TArray<TLintFinding>;
 var
   Cand       : TDictionary<Int64, TSymbol>;
@@ -670,6 +704,64 @@ var
   Parents    : TDictionary<Int64, TSymbol>;
   Coll       : TCollector;
   Findings   : TList<TLintFinding>;
+  TypedWrites: TObjectDictionary<string, TList<string>>;  { name -> receiver type leaves of the unbound writes }
+  RcvQuery   : TFDQuery;                                  { nil: no ref_receivers / ref_types facts }
+
+  function ParentOf(const ASym: TSymbol; out AParent: TSymbol): Boolean; forward;
+
+  { The static type leaf of the receiver of ref AId (F1 + ref_receivers), '' when unknown. }
+  function ReceiverLeaf(AId: Int64): string;
+  begin
+    Result:= '';
+    if RcvQuery = nil then Exit;
+    RcvQuery.ParamByName('id').AsLargeInt:= AId;
+    RcvQuery.Open;
+    try
+      if not RcvQuery.Eof then Result:= RcvQuery.Fields[0].AsString;
+    finally
+      RcvQuery.Close;
+    end;
+    var Dot: Integer:= LastDelimiter('.', Result);
+    if Dot > 0 then Result:= Copy(Result, Dot + 1, MaxInt);
+  end;
+
+  { An unbound write of a candidate's name: a known receiver type is kept apart, anything else is
+    the project-wide name evidence of old. }
+  procedure NoteUnboundWrite(const ARef: TReference);
+  begin
+    var Lc: string:= LowerCase(ARef.NameText);
+    if NameWritten.ContainsKey(Lc) then Exit;
+    var Leaf: string:= ReceiverLeaf(ARef.Id);
+    if Leaf = '' then
+    begin
+      NameWritten.AddOrSetValue(Lc, True);
+      Exit;
+    end;
+    var L: TList<string>;
+    if not TypedWrites.TryGetValue(Lc, L) then
+    begin
+      L:= TList<string>.Create;
+      TypedWrites.Add(Lc, L);
+    end;
+    L.Add(Leaf);
+  end;
+
+  { Whether the unbound writes of the symbol's name may reach it: a global, a name written through an
+    unknown receiver, or a receiver type that is the field's class, a relative of it, or undecidable. }
+  function WriteMayReach(const ASym: TSymbol): Boolean;
+  var
+    L    : TList<string>;
+    Owner: TSymbol;
+  begin
+    Result:= True;
+    if NameWritten.ContainsKey(LowerCase(ASym.Name)) then Exit;
+    if not TypedWrites.TryGetValue(LowerCase(ASym.Name), L) then Exit(False);
+    if (ASym.Kind <> skField) or not ParentOf(ASym, Owner) then Exit;
+    for var Leaf in L do
+      if (TypeDescendsFrom(AStore, ALibStore, Leaf, Owner.Name) <> tdNo)
+        or (TypeDescendsFrom(AStore, ALibStore, Owner.Name, Leaf) <> tdNo) then Exit;
+    Result:= False;
+  end;
 
   function ParentOf(const ASym: TSymbol; out AParent: TSymbol): Boolean;
   begin
@@ -715,7 +807,7 @@ var
       end;
     end
     else if (R.SymbolId <= 0) and CandNames.ContainsKey(LowerCase(R.NameText)) then
-      if SameText(R.Kind, REF_WRITE) then NameWritten.AddOrSetValue(LowerCase(R.NameText), True)
+      if SameText(R.Kind, REF_WRITE) then NoteUnboundWrite(R)
       else if IsRw then Queue(R);
   end;
   function Undecided(AId: Int64): Boolean;
@@ -723,9 +815,25 @@ var
     Result:= ReadSeen.ContainsKey(AId) and not Written.ContainsKey(AId);
   end;
 
-  { An initialised, absolute or absolute-aliased global (the alias's target is
-    indexed as a second var on the alias's line); also one whose declaration
-    cannot be read. }
+  { An initialised, absolute or absolute-aliased global; also one whose declaration
+    cannot be read. Since extractor 1.33 (146 b1) the name after `absolute` is a READ
+    ref, no longer a second var on the alias's line, so the alias's target is found by
+    reading the other globals' declarations for `absolute <Name>`. }
+  function NamesAsAbsoluteTarget(const ADecl, AName: string): Boolean;
+  var
+    P: Integer;
+    W: string;
+  begin
+    P:= Pos('absolute', LowerCase(ADecl));
+    if P = 0 then Exit(False);
+    W:= Trim(Copy(ADecl, P + Length('absolute'), MaxInt));
+    P:= 1;
+    while (P <= Length(W)) and CharInSet(W[P], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.']) do Inc(P);
+    W:= Copy(W, 1, P - 1);
+    if W.Contains('.') then W:= Copy(W, W.LastIndexOf('.') + 2, MaxInt);
+    Result:= SameText(W, AName);
+  end;
+
   function GlobalExempt(const ASym: TSymbol): Boolean;
   var
     L: TList<TSymbol>;
@@ -738,6 +846,9 @@ var
       if (V.Id = ASym.Id) and ((Tail = '') or Tail.Contains('=')) then Exit(True);
       if HasWord(Coll.DeclLine(V), 'absolute') then Exit(True);
     end;
+    for var Others in VarsByName.Values do
+      for var V in Others do
+        if (V.Id <> ASym.Id) and NamesAsAbsoluteTarget(Coll.DeclLine(V), ASym.Name) then Exit(True);
   end;
   procedure Report(const ASym: TSymbol; AIsField: Boolean);
   var
@@ -771,6 +882,8 @@ begin
   Written    := TDictionary<Int64, Boolean>.Create;
   ReadSeen   := TDictionary<Int64, Boolean>.Create;
   NameWritten:= TDictionary<string, Boolean>.Create;
+  TypedWrites:= TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
+  RcvQuery   := nil;
   Pending    := TObjectDictionary<Int64, TList<TReference>>.Create([doOwnsValues]);
   Parents    := TDictionary<Int64, TSymbol>.Create;
   Coll       := TCollector.Create(AStore, ALibStore);
@@ -798,6 +911,7 @@ begin
       L.Add(V);
     end;
     if Cand.Count = 0 then Exit;
+    RcvQuery:= OpenReceiverQuery(AStore);
 
     { pass 1: bound writes decide at once; reads are queued for the text check }
     for var Fi in AStore.GetAllFileIds do
@@ -819,7 +933,7 @@ begin
             if Coll.Classify(R) = wvWrite then Written.AddOrSetValue(R.SymbolId, True);
           end
           else if OpenNames.ContainsKey(Lc) and not NameWritten.ContainsKey(Lc) and (Coll.Classify(R) = wvWrite) then
-            NameWritten.AddOrSetValue(Lc, True);
+            NoteUnboundWrite(R);
         end;
     finally
       OpenNames.Free;
@@ -829,7 +943,7 @@ begin
     var Open: TList<TSymbol>:= TList<TSymbol>.Create;
     try
       for var Pair in Cand do
-        if Undecided(Pair.Key) and not NameWritten.ContainsKey(LowerCase(Pair.Value.Name)) then Open.Add(Pair.Value);
+        if Undecided(Pair.Key) and not WriteMayReach(Pair.Value) then Open.Add(Pair.Value);
       if Open.Count > 0 then
       begin
         var PropWrites: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
@@ -869,6 +983,8 @@ begin
     Coll.Free;
     Parents.Free;
     Pending.Free;
+    RcvQuery.Free;
+    TypedWrites.Free;
     NameWritten.Free;
     ReadSeen.Free;
     Written.Free;

@@ -1,0 +1,14 @@
+engine: drag-lint 1.45.0-alpha (loaded defaults from C:\Projects\.drag-lint.json)
+convert-apply: 13 instance(s) converted, 45 edit(s) planned
+  btn4: glyph-stitched: Picture N=4 -> OptionsImage.Glyph G[*/4]
+  btn5: glyph-stitched: Picture N=5 -> OptionsImage.Glyph G[1/5]G[2/5]G[3/5]G[4/5] (slot 5 dropped by rule line 3)
+  btn3: glyph-stitched: Picture N=3 -> OptionsImage.Glyph G[3/3]G[1/3] (slot 2 dropped by rule line 3)
+  btnP8: glyph-stitched: Picture N=4 -> OptionsImage.Glyph G[*/4]
+  btnP4: glyph-stitched: Picture N=4 -> OptionsImage.Glyph G[*/4]
+  btnP1: glyph-stitched: Picture N=5 -> OptionsImage.Glyph G[1/5]G[2/5]G[3/5]G[4/5] (slot 5 dropped by rule line 3)
+  btn16: glyph-stitched: Picture N=4 -> OptionsImage.Glyph G[*/4]
+  btn32: glyph-stitched: Picture N=4 -> OptionsImage.Glyph G[*/4]
+*** GLYPH TODO: btn2: glyph-no-alternative: Picture -> OptionsImage.Glyph: N=2 matches no alternative of "G[*/4], G[1/5]G[2/5]G[3/5]G[4/5], G[3/3]G[1/3]" (rule line 3)
+*** GLYPH TODO: btnOdd: glyph-not-a-strip: Picture -> OptionsImage.Glyph: width 64 does not divide into 3 glyphs (rule line 3)
+*** GLYPH TODO: btnPng: glyph-format-unsupported: Picture -> OptionsImage.Glyph: a png image is not a strip (rule line 3)
+*** GLYPH TODO: btnDef: glyph-no-alternative: Picture -> OptionsImage.Glyph: N=1 matches no alternative of "G[*/4], G[1/5]G[2/5]G[3/5]G[4/5], G[3/3]G[1/3]" (rule line 3)

@@ -7,7 +7,7 @@ group: refactoring
 order: 50001
 since: 0.54.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # allow
@@ -36,7 +36,10 @@ Full flag list: [allow in the CLI reference](../cli.md#allow).
 
 ## Where to click
 
-No IDE surface: this feature runs from the CLI (see How to run it).
+* RAD Studio main menu: **drag-lint > Code Quality > Allow a Finding on This Line...**
+   1. Put the caret on the line of the finding
+   2. Choose drag-lint > Code Quality > Allow a Finding on This Line...
+   3. Confirm the rule (prefilled when the diagnostics hold one for that line), then choose Yes to write the dl:ok review or No for a dry-run preview
 
 ## Details
 

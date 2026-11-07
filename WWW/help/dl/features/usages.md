@@ -4,10 +4,10 @@ title: usages
 summary: Finds usage sites of a named symbol, with a choice of report width
 product: DL
 group: search-navigation
-order: 20034
+order: 20035
 since: 0.33.0-alpha
 status: shipped
-updated: 1.44.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # usages

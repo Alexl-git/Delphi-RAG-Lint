@@ -4,10 +4,10 @@ title: Doc Comment Stub (symbol)
 summary: Uses generate-docs to produce a doc-comment stub for one qualified symbol
 product: DL
 group: documentation
-order: 40001
+order: 40002
 since: 0.25.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Doc Comment Stub (symbol)

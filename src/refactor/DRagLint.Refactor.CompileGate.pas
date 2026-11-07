@@ -149,6 +149,10 @@ type
     Files: TArray<TGateFile>;
     /// <summary>Optional repair pass; nil = none.</summary>
     Repair: TGateRepairFunc;
+    /// <summary>The other .dproj files that compile the rewritten units (E-RENAME-MULTIPROJECT): each is built before the
+    /// write and after it, on the same terms as Project; any failure refuses or rolls back, naming it. The repair pass
+    /// does not run for them.</summary>
+    AlsoProjects: TArray<string>;
   end;
 
   /// <summary>What ApplyGated did.</summary>
@@ -343,12 +347,26 @@ function RollBack(const pTx: TApplyTransaction): string;
 /// prove the rollback on a rewrite that is itself sound.</remarks>
 function ApplyGated(const pReq: TGateRequest): TGateOutcome;
 
+/// <summary>Opens the control channel of a gated `--apply` run, so `drag-lint shutdown` and the IDE's Cancel
+/// reach it while it waits on a build (E-NARROW-CHANNEL).</summary>
+/// <param name="pVerb">The verb hosting the run; must be one ControlChannelEnabledFor accepts.</param>
+/// <param name="pDb">The run's --db; the channel answers `shutdown --db` for it.</param>
+/// <returns>True when the channel listens (GStandDown is set). False when the verb does not listen or the
+/// pipe could not start (said on stderr: a cancel then kills the run instead of rolling it back).</returns>
+/// <remarks>Main thread only. Pair with CloseGateStandDown in a finally. A request taken while ApplyGated
+/// builds kills the build and rolls back: ApplyGated returns Refusal = CGateCancelled.</remarks>
+function OpenGateStandDown(const pVerb, pDb: string): Boolean;
+
+/// <summary>Closes the channel OpenGateStandDown opened; a pending or taken request is answered `exiting`.</summary>
+/// <remarks>Safe when no channel is open. Call after the run's files are rolled back or kept.</remarks>
+procedure CloseGateStandDown;
+
 implementation
 
 uses
   System.IOUtils, System.StrUtils, System.RegularExpressions, System.Diagnostics, System.Math,
   System.Generics.Collections,
-  DRagLint.Convert.Backup, DRagLint.Core.StudioEnv, DRagLint.Refactor.TextEdit;
+  DRagLint.Convert.Backup, DRagLint.Core.StudioEnv, DRagLint.Core.Model, DRagLint.Refactor.TextEdit;  // dl:ok uses-global-census@6535 -- version and ref-kind constants of the model; a small unit of its own would add nothing (146 int)
 
 const
   CDefaultPlatform = 'win64';
@@ -943,7 +961,7 @@ begin
   Result.TimedOut:= B.TimedOut;
 end;
 
-function ApplyGated(const pReq: TGateRequest): TGateOutcome;  // dl:ok too-many-exit-points@75a4 -- one guard per named refusal, in the documented order: the exits are the contract
+function ApplyGated(const pReq: TGateRequest): TGateOutcome;  // dl:ok too-many-exit-points@277f -- one guard per named refusal, in the documented order: the exits are the contract
 const
   CTestBreakVar  = 'DRAGLINT_GATE_TEST_BREAK';
   CTestBreakLine = #13#10'this line does not compile (DRAGLINT_GATE_TEST_BREAK)'#13#10;
@@ -966,6 +984,7 @@ begin
   GGateVerb:= if pReq.Verb <> '' then pReq.Verb else GGateVerb;
   GRsVars  := pReq.RsVars;
   var Dir:= IncludeTrailingPathDelimiter(pReq.LogDir);
+  var AfterFailed:= 'the project';
   var Touched: TArray<string>:= nil;
   var Wanted:= TDictionary<string, TBytes>.Create;
   try
@@ -987,6 +1006,18 @@ begin
         Outcome.Refusal:= if Outcome.Baseline.TimedOut then CGateBuildTimeout else CGateDirtyBaseline;
         Outcome.Detail := Format('the project does not build BEFORE the rewrite (%d dcc line(s), first: %s); nothing written',
           [Length(Outcome.Baseline.Errors), if Length(Outcome.Baseline.Errors) > 0 then Outcome.Baseline.Errors[0] else '']);
+        Exit(Outcome);
+      end;
+      { The other projects that compile these units: one that is already broken would make the after build mean nothing. }
+      for var I:= 0 to High(pReq.AlsoProjects) do
+      begin
+        var Also:= RunMsBuild(pReq.AlsoProjects[I], pReq.Platform, Dir + Format('also%d\baseline.log', [I + 1]), 'baseline build of ' + ExtractFileName(pReq.AlsoProjects[I]));
+        Outcome.Baseline.Seconds:= Outcome.Baseline.Seconds + Also.Seconds;
+        if Also.Ok then Continue;
+        Outcome.Baseline:= Also;
+        Outcome.Refusal:= if Also.TimedOut then CGateBuildTimeout else CGateDirtyBaseline;
+        Outcome.Detail := Format('%s, which also compiles the rewritten units, does not build BEFORE the rewrite (%d dcc line(s), first: %s); nothing written',
+          [pReq.AlsoProjects[I], Length(Also.Errors), if Length(Also.Errors) > 0 then Also.Errors[0] else '']);
         Exit(Outcome);
       end;
     except
@@ -1025,6 +1056,20 @@ begin
         { at the top: dcc reads nothing after the final end. }
         TFile.WriteAllBytes(Outcome.Tx.Written[0], TEncoding.ASCII.GetBytes(CTestBreakLine) + TFile.ReadAllBytes(Outcome.Tx.Written[0]));  // dl:ok taint-path-traversal@57e9 -- the path is the operator's own --project, the run's fixed scratch or the Studio root: local input, no privilege crossed
       Outcome.After:= CompileAfterWith(pReq.Project, pReq.Platform, Dir, pReq.Repair);
+      if Outcome.After.Ok then
+        for var I:= 0 to High(pReq.AlsoProjects) do
+        begin
+          var Also:= CompileAfterWith(pReq.AlsoProjects[I], pReq.Platform, Dir + Format('also%d', [I + 1]), nil);
+          Also.Builds := Also.Builds + Outcome.After.Builds;
+          Also.Seconds:= Also.Seconds + Outcome.After.Seconds;
+          Also.Repairs:= Outcome.After.Repairs;
+          Outcome.After:= Also;
+          if not Also.Ok then
+          begin
+            AfterFailed:= pReq.AlsoProjects[I];
+            Break;
+          end;
+        end;
     except
       on E: ECompileGateCancelled do
       begin
@@ -1040,8 +1085,8 @@ begin
     if not Outcome.After.Ok then
     begin
       RollBackAs(if Outcome.After.TimedOut then CGateBuildTimeout else CGateCompileError,
-        Format('the project does not build after the rewrite (%d dcc line(s), first: %s)',
-          [Length(Outcome.After.Errors), if Length(Outcome.After.Errors) > 0 then Outcome.After.Errors[0] else '']));
+        Format('%s does not build after the rewrite (%d dcc line(s), first: %s)',
+          [AfterFailed, Length(Outcome.After.Errors), if Length(Outcome.After.Errors) > 0 then Outcome.After.Errors[0] else '']));
       Exit(Outcome);
     end;
     Outcome.Applied:= True;
@@ -1050,5 +1095,29 @@ begin
   end;
   Result:= Outcome;
 end;
+function OpenGateStandDown(const pVerb, pDb: string): Boolean;
+begin
+  Result:= False;
+  if (GStandDown <> nil) or not ControlChannelEnabledFor(pVerb) then Exit;
+  var Ctl:= TControlChannel.Create([ExpandFileName(pDb)], DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, pVerb);
+  var Err: string;
+  if Ctl.Start(Err) then
+  begin
+    GStandDown  := Ctl;
+    GCancelTaken:= False;
+    GProgressDb := ExpandFileName(pDb); { the progress lines name the shutdown --db that cancels the run }
+    Exit(True);
+  end;
+  Writeln(ErrOutput, pVerb, ': control channel NOT started (', Err, '); a cancel will kill this run instead of rolling it back');
+  Ctl.Free;
+end;
 
+procedure CloseGateStandDown;
+begin
+  if GStandDown = nil then Exit;
+  var Ctl:= GStandDown;
+  GStandDown:= nil;
+  Ctl.StandDownComplete;
+  Ctl.Free;
+end;
 end.

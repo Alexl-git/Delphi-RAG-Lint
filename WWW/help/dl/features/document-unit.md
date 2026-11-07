@@ -4,17 +4,17 @@ title: Document unit
 summary: Generates or repairs managed DocInsight comments for every public declaration in the unit open in the active editor (facts-only)
 product: DL
 group: documentation
-order: 40007
+order: 40008
 since: 0.90.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Document unit
 
 Generates or repairs managed DocInsight comments for every public declaration in the unit open in the active editor (facts-only).
 
-Read this when the file you are editing needs documentation, not just one symbol. Right-click in the Structure form and choose Document unit to generate or repair managed DocInsight comments for every public declaration in the active editor file; the node you clicked does not matter.
+Read this when the file you are editing needs documentation, not just one symbol. Right-click in the Structure form and choose Document unit to generate or repair managed DocInsight comments for every public declaration in the active editor file; the node you clicked does not matter. A declaration whose stored block names Calls: entries of a unit the chosen index cannot see is left untouched and reported as REFUSED (JSON key refused) instead of being rewritten.
 
 ## How to run it
 
@@ -70,6 +70,10 @@ drag-lint document --unit C:\Projects\MyApp\Unit1.pas --apply --db C:\Projects\M
 
 This would write managed DocInsight comments onto every public declaration
 in `Unit1.pas`.
+
+### Refusals
+
+A declaration whose stored block names `Calls:` entries of a unit the chosen `--db` cannot see is left untouched: `document --apply` prints `doc: REFUSED <qname> ...` on stderr, a summary line, and the JSON `refused` count (`--qname`: `refused` text). Index that unit, or edit the block by hand. Exit code stays 0.
 
 ---
 

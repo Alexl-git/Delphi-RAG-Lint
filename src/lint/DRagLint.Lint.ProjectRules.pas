@@ -86,9 +86,9 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) ?</para>
-    /// <para>Calls: AWholeGraph, ChangeFileExt, CollectFrom, CollectWholeGraphRule, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath (+61 more)</para>
-    /// <para>Returns: TDictionary&lt;string, Boolean&gt;.Create; Flags &lt;&gt; 0; nil; Findings.ToArray</para>
-    /// <para>Complexity: 108 (cyclomatic, outer body), 937 lines (full implementation)</para>
+    /// <para>Calls: AWholeGraph, ChangeFileExt, CollectFrom, CollectWholeGraphRule, CompareDottedVersions, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileIds (+70 more)</para>
+    /// <para>Returns: TDictionary&lt;string, Boolean&gt;.Create; Flags &lt;&gt; 0; InfoIn(AStore, Found); InfoIn(ALibraryStore, Found); nil; Findings.ToArray</para>
+    /// <para>Complexity: 134 (cyclomatic, outer body), 1039 lines (full implementation)</para>
     /// <para>Pure</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
@@ -241,6 +241,7 @@ implementation
 
 uses
   DRagLint.Core.FileTime,
+  DRagLint.Core.Versions, { CompareDottedVersions -- the resolver-version gate of InitSectionInfo (145 lane lf) }
   DRagLint.Report.CycleEdge, { BareUsesBinding / ProjectUnitScopes -- circular-uses binds a bare
                                uses name exactly as the cycles graph does (A3-b) }
   DRagLint.Lint.EnumOrdinalPersisted, { CollectEnumOrdinalPersisted -- lane X6 }
@@ -248,6 +249,7 @@ uses
   DRagLint.Lint.UnusedGlobal, { CollectUnusedGlobal -- 1.40 lane unusedg } // dl:unit DRagLint.Lint.UnusedGlobal accepted -- UNUSED_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectUnusedGlobal, the collector this unit calls
   DRagLint.Lint.RefTypeRules, { CollectRefTypeRules -- 1.44 lane rulesf1 } // dl:unit DRagLint.Lint.RefTypeRules accepted -- the rule-id constants the dispatch names travel with CollectRefTypeRules, the collector this unit calls
   DRagLint.Lint.DataModuleFormGlobal, { CollectDataModuleFormGlobal -- 1.42 lane ruleset } // dl:unit DRagLint.Lint.DataModuleFormGlobal accepted -- DATAMODULE_FORM_GLOBAL_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectDataModuleFormGlobal, the collector this unit calls
+  DRagLint.Lint.ParamTooWide, { CollectParamTooWide -- 1.46 lane t4 } // dl:unit DRagLint.Lint.ParamTooWide accepted -- PARAM_TOO_WIDE_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectParamTooWide, the collector this unit calls
   DRagLint.Lint.InitSections, { the F2 section rules -- 1.44 lane rulesf2 } // dl:unit DRagLint.Lint.InitSections accepted -- the *_RULE ids are what the dispatch (WantRule / OptedIn) names; they travel with the collectors this unit calls
   DRagLint.Lint.ReadNeverAssigned, { CollectReadNeverAssigned -- owner request #5b } // dl:unit DRagLint.Lint.ReadNeverAssigned accepted -- READ_NEVER_ASSIGNED_RULE is the rule id the dispatch (WantRule / OptedIn) names; it travels with CollectReadNeverAssigned, the collector this unit calls
   DRagLint.Lint.EffectRules, { the three B-EFFECT purity / ui_affinity readers }
@@ -4201,6 +4203,8 @@ var
   { unused-unit-in-uses severity split: unit name -> does it have an
     initialization section? See the finding site for the measurement. }
   UnitHasInit   : TDictionary<string, Integer>      ;
+  { unused-unit-in-uses (145 lane lf): unit name -> what InitSectionInfo said about its initialization section. }
+  UnitInitInfo  : TDictionary<string, string>       ;
   { unused-unit-in-uses (1.40, UNUSEDUNIT-INLINE): resolved call target id ->
     lowercase unit stem when that routine is `inline`, '' otherwise. }
   InlineUnitOfSym: TDictionary<Int64, string>      ;
@@ -4509,6 +4513,81 @@ var
     Result:= Flags <> 0;
   end;
 
+  { What does the used unit's `initialization` section DO? (145 lane lf, F2 section refs.)
+
+    Returns '#' = the section is IDLE: every ref enclosed by it names a variable, constant or enum
+    value the unit declares itself (`GFlag := False`, `GCount := 0`), so it registers nothing and
+    removing the unit cannot change behaviour. Returns a comma list = the names it references (what
+    the INFO message should name). Returns '' = UNKNOWN, and the caller keeps today's plain INFO.
+
+    UNKNOWN is the default for every doubt: the store that holds the unit was resolved by a resolver
+    older than CMinSectionResolver (its section refs are not backfilled, so an empty section would
+    be indistinguishable from a real one), the unit also has a finalization section or a class
+    constructor/destructor, or the unit is in no store. An unbound ref other than True/False/nil
+    counts as activity; it never counts as idle. }
+  function InitSectionInfo(const AUnitName: string): string;
+  const
+    CMinSectionResolver = '1.20.0-alpha'; { ResolveSectionEnclosing (1.44 facts) is stamped by this resolver }
+    CResolverKey        = 'resolver_fingerprint';
+    CResolverLimb       = 'r=';
+    function InfoIn(const AFrom: ISymbolStore; out AFound: Boolean): string;
+    var
+      U, Ch, Tgt: TSymbol;
+      SecId     : Int64;
+      Fp, Ver   : string;
+      R         : TReference;
+      Names     : string;
+      Active    : Boolean;
+      HasOther  : Boolean;
+    begin
+      Result:= '';
+      AFound:= False;
+      if AFrom = nil then Exit;
+      for U in AFrom.FindSymbolsByExactName(AUnitName) do
+      begin
+        if U.Kind <> skUnit then Continue;
+        AFound:= True;
+        Fp:= AFrom.GetMetaValue(CResolverKey);
+        if not Fp.StartsWith(CResolverLimb) then Exit;
+        Ver:= Copy(Fp, Length(CResolverLimb) + 1, MaxInt);
+        if Ver.Contains(';') then Ver:= Copy(Ver, 1, Pos(';', Ver) - 1);
+        if (Ver = '') or (CompareDottedVersions(Ver, CMinSectionResolver) < 0) then Exit;
+        SecId   := 0;
+        HasOther:= False;
+        for Ch in AFrom.FindAllChildSymbols(U.Id) do
+        begin
+          if Ch.Kind = skInitialization then SecId:= Ch.Id;
+          if Ch.Kind = skFinalization then HasOther:= True;
+        end;
+        if (SecId = 0) or HasOther or UnitDeclaresClassCtorDtor(AFrom, U) then Exit;
+        Names := '';
+        Active:= False;
+        for R in AFrom.GetReferencesFromFile(U.FileId) do
+        begin
+          if R.EnclosingSymbolId <> SecId then Continue;
+          if R.SymbolId > 0 then
+          begin
+            Tgt:= AFrom.GetSymbolById(R.SymbolId);
+            if (Tgt.FileId = U.FileId) and (Tgt.Kind in [skVarDecl, skConstDecl, skEnumValue]) then Continue;
+          end
+          else if MatchText(R.NameText, ['True', 'False', 'nil']) then Continue;
+          Active:= True;
+          if not (',' + LowerCase(Names) + ',').Contains(',' + LowerCase(R.NameText) + ',') then
+            Names:= if Names = '' then R.NameText else Names + ',' + R.NameText;
+        end;
+        Result:= if Active then Names else '#';
+        Break;
+      end;
+    end;
+  var
+    Found: Boolean;
+  begin
+    if UnitInitInfo.TryGetValue(AUnitName, Result) then Exit;
+    Result:= InfoIn(AStore, Found);
+    if not Found then Result:= InfoIn(ALibraryStore, Found);
+    UnitInitInfo.Add(AUnitName, Result);
+  end;
+
   { A referenced name, plus its GENERIC BASE.
 
     A reference to TComparer<TRuleInfo>.Construct arrives with the type
@@ -4563,6 +4642,7 @@ begin
   UnitIndexed:= TDictionary<string, Boolean>      .Create;
   ExportsOfUnit:= TObjectDictionary<string, TDictionary<string, Boolean>>.Create([doOwnsValues]);
   UnitHasInit  := TDictionary<string, Integer>      .Create;
+  UnitInitInfo := TDictionary<string, string>       .Create;
   InlineUnitOfSym:= TDictionary<Int64, string>     .Create;
   RefdIds    := TDictionary<Int64 , Boolean>      .Create;
   RefdNames  := TDictionary<string, Boolean>      .Create;
@@ -4694,21 +4774,26 @@ begin
     if WantRule(FINALIZATION_AFTER_DEPENDENCY_RULE) and OptedIn(FINALIZATION_AFTER_DEPENDENCY_RULE) then
       for var Is_ in CollectFinalizationAfterDependency(AStore) do Findings.Add(Is_);
     if WantRule(HEAVY_INITIALIZATION_RULE) and OptedIn(HEAVY_INITIALIZATION_RULE) then
-      for var Is_ in CollectHeavyInitialization(AStore) do Findings.Add(Is_);
+      for var Is_ in CollectHeavyInitialization(AStore, ALibraryStore) do Findings.Add(Is_);
     if WantRule(GLOBAL_NEVER_FREED_RULE) and OptedIn(GLOBAL_NEVER_FREED_RULE) then
       for var Is_ in CollectGlobalNeverFreed(AStore, ALibraryStore) do Findings.Add(Is_);
     if WantRule(DATAMODULE_FORM_GLOBAL_RULE) and OptedIn(DATAMODULE_FORM_GLOBAL_RULE) then
       for var Dm in CollectDataModuleFormGlobal(AStore, ALibraryStore) do Findings.Add(Dm);
+    { parameter-type-too-wide (1.46 lane t4): OFF; the narrow-param plan's fixes -- a routine scan plus a file read per routine, which a post-hoc filter would hide while still charging for it. }
+    if WantRule(PARAM_TOO_WIDE_RULE) and OptedIn(PARAM_TOO_WIDE_RULE) then
+      for var Pw in CollectParamTooWide(AStore, ALibraryStore) do Findings.Add(Pw);
     { The rules on index fact F1 (1.44 lane rulesf1): OptedIn-gated -- one refs read and one parse per file.
       An index older than 1.44 answers nothing (see the unit). }
     var RefTypeWanted: TArray<string>:= nil;
     if WantRule(IS_ALWAYS_TRUE_RULE) and OptedIn('is-always-true') then RefTypeWanted:= RefTypeWanted + [IS_ALWAYS_TRUE_RULE];
+    if WantRule(IS_NEVER_TRUE_RULE) and OptedIn('is-never-true') then RefTypeWanted:= RefTypeWanted + [IS_NEVER_TRUE_RULE];
     if WantRule(UPCAST_THEN_DOWNCAST_RULE) and OptedIn('upcast-then-downcast') then RefTypeWanted:= RefTypeWanted + [UPCAST_THEN_DOWNCAST_RULE];
     if WantRule(WITH_ON_TEMPORARY_RULE) and OptedIn('with-on-temporary') then RefTypeWanted:= RefTypeWanted + [WITH_ON_TEMPORARY_RULE];
     if WantRule(INTERFACE_HOLDER_RULE) and OptedIn('interface-holder-of-non-refcounted') then RefTypeWanted:= RefTypeWanted + [INTERFACE_HOLDER_RULE];
     if WantRule(ARGUMENT_NARROWS_RULE) and OptedIn('argument-narrows') then RefTypeWanted:= RefTypeWanted + [ARGUMENT_NARROWS_RULE];
     if WantRule(REDUNDANT_CAST_RULE) and OptedIn('redundant-cast') then RefTypeWanted:= RefTypeWanted + [REDUNDANT_CAST_RULE];
     if WantRule(UNSAFE_TYPECAST_RULE) and OptedIn('unsafe-typecast-without-is') then RefTypeWanted:= RefTypeWanted + [UNSAFE_TYPECAST_RULE];
+    if WantRule(UI_ACCESS_IN_THREAD_TYPED_RULE) and OptedIn('ui-access-in-thread-typed') then RefTypeWanted:= RefTypeWanted + [UI_ACCESS_IN_THREAD_TYPED_RULE];
     for var Rt in CollectRefTypeRules(AStore, ALibraryStore, RefTypeWanted, AOnlyFileId) do Findings.Add(Rt);
     { gap-rules wave, lane G8. The two DFM rules and uses-movable-to-implementation are ON by
       default and walk one table each (uses-movable back ON in lane IMOV after REFTYPE: 0 FP on
@@ -4920,11 +5005,14 @@ begin
                   as surely as an initialization one, but unlike it the finding is not
                   even informational: the unit is excluded outright (D3). }
                 if UnitHasSideEffectSection(U.UnitName, HasInit) and not HasInit then Continue;
-                if HasInit then UF.Severity:= 'info' else UF.Severity:= 'warning';
-                if HasInit then
-                  UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- possible dead import. It HAS an initialization section, so it may still be doing its work through that: removing it can build cleanly and fail at runtime. VERIFY BEFORE REMOVING.', [U.UnitName])
+                var InitInfo: string:= if HasInit then InitSectionInfo(U.UnitName) else '';
+                UF.Severity:= if HasInit and (InitInfo <> '#') then 'info' else 'warning';
+                if InitInfo = '#' then  // dl:ok ifthen-to-if-expression@5813 -- REVIEWED 2026-11-06: three outcomes, not two: the first arm is a guard, so one if-expression cannot replace the chain without nesting
+                  UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Its initialization section only assigns the unit''s own variables and constants (no registration, no call), so removing it changes nothing.', [U.UnitName])
                 else
-                  UF.Message:= Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Type-helper members and classes instantiated by the sibling .dfm ARE counted, and this unit has no initialization section.', [U.UnitName]);
+                  UF.Message:= if HasInit then Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- possible dead import. It HAS an initialization section, so it may still be doing its work through that: removing it can build cleanly and fail at runtime. VERIFY BEFORE REMOVING.', [U.UnitName])
+                    else Format('Unit ''%s'' is listed in the uses clause but no symbols from it are referenced -- dead import. Type-helper members and classes instantiated by the sibling .dfm ARE counted, and this unit has no initialization section.', [U.UnitName]);
+                if (InitInfo <> '') and (InitInfo <> '#') then UF.Message:= UF.Message + ' Its initialization section references: ' + InitInfo + '.';
                 UF.Message  := UF.Message + U.IncludeSuffix; { N-06 }
                 UF.FilePath := Path;
                 UF.StartLine:= U.HostLine;
@@ -5115,6 +5203,7 @@ begin
     UnitIndexed.Free;
     ExportsOfUnit.Free;
     UnitHasInit.Free;
+    UnitInitInfo.Free;
     InlineUnitOfSym.Free;
     PathOfFile .Free;
     StemsOfName.Free;

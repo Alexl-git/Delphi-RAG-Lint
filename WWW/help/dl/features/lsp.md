@@ -7,7 +7,7 @@ group: editor-integration
 order: 110012
 since: 0.6.0-alpha
 status: shipped
-updated: 1.44.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # lsp
@@ -34,6 +34,7 @@ Full flag list: [lsp in the CLI reference](../cli.md#lsp).
 | `--merge-completion` |  |  |  |
 | `--merge-hover` |  |  |  |
 | `--merge-definition` |  |  |  |
+| `--merge-navigation` |  |  |  |
 | `--merge-budget-ms` | `<n>` |  |  |
 | `--full-rules` |  |  |  |
 | `--delphi-lsp-bits` | `32\|64` |  |  |
@@ -63,7 +64,7 @@ drag-lint lsp --db <file.sqlite>
 #### Proxy mode: merging drag-lint into DelphiLSP
 
 ```text
-drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits <32|64>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]
+drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits <32|64>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-navigation] [--merge-budget-ms <n>]
 ```
 
 `--delphi-lsp-bits 32` forwards to `bin\DelphiLSP.exe` (the 32-bit server the IDE launches
@@ -91,6 +92,12 @@ drag-lint add to those answers:
   `textDocument/references` and `workspace/symbol` itself from the index;
   those requests are never forwarded (one reply each, `[]` when no index
   opens). OFF by default.
+- `--merge-navigation` -- answer the type and call hierarchy,
+  `textDocument/typeDefinition`, `textDocument/documentHighlight` and
+  `textDocument/foldingRange` in the proxy, with exactly what plain `lsp` answers.
+  Decided per provider from DelphiLSP's `initialize` reply: one it lacks (absent,
+  `false` or `null`) is added and answered here, never forwarded (one reply, `[]`
+  when no index opens); one it advertises stays DelphiLSP's. OFF by default.
 - `--merge-budget-ms <n>` -- the per-frame time budget of a merge handler
   (default 300). A handler that overruns it, raises, or cannot open the index
   makes the proxy forward DelphiLSP's original bytes untouched; merging fails
@@ -206,8 +213,28 @@ Guards: `run_pp_profile_in_guard.ps1`, `run_parsecache_profile_resolver_guard.ps
 
 `lsp` answers `textDocument/inlayHint` with parameter-name hints: for every call in the requested range of a tree-sitter parse of the live buffer (else the file on disk), the callee is looked up by exact name across the file's stores, and only when that name means exactly ONE routine (one qualified name, one parameter list -- an overload set is silent) whose parameter count, read from the indexed signature, equals the argument count does each argument get a `<paramName>:` hint (kind 2 Parameter, `paddingRight: true`) at its start. Capability `inlayHintProvider: true`; an unknown file answers `[]`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.InlayHint`); guard: `tests\autotest\run_lsp_inlay_hint_guard.ps1`.
 
+### Hierarchies, type definition, highlights and folding
+
+Five more methods, each answered from the index and each a miss (null or `[]`, never an error or a wrong place) when the index cannot prove an answer:
+
+- **Call hierarchy** (`textDocument/prepareCallHierarchy`, `callHierarchy/incomingCalls`, `callHierarchy/outgoingCalls`; capability `callHierarchyProvider`): prepare answers the routine under the cursor, incoming the RESOLVED callers (one item per calling routine, every call site a `fromRange`), outgoing the resolved callees. An unresolved call (RTL, other index) is left out; property and field accesses are not calls. Guard: `tests\autotest\run_lsp_call_hierarchy_guard.ps1`.
+- **Type hierarchy** (`textDocument/prepareTypeHierarchy`, `typeHierarchy/supertypes`, `typeHierarchy/subtypes`; capability `typeHierarchyProvider`): supertypes are the direct ancestors the index resolved to a type; subtypes are the direct descendants whose resolved ancestor edge lands on this very symbol, in the same index. Guard: `tests\autotest\run_lsp_type_hierarchy_guard.ps1`.
+- **Type definition** (`textDocument/typeDefinition`; capability `typeDefinitionProvider`): the type itself when the cursor is on one, else the static type the index recorded for that reference (`ref_types`, indexes from 1.44), else the type the symbol was declared with. A name that is not exactly one indexed type answers `[]`. Guard: `tests\autotest\run_lsp_type_definition_guard.ps1`.
+- **Document highlight** (`textDocument/documentHighlight`; capability `documentHighlightProvider`): the references of the symbol under the cursor, cut to the requested file, all kind Text (the index does not tell reads from writes at a bare reference). Guard: `tests\autotest\run_lsp_document_highlight_guard.ps1`.
+- **Folding** (`textDocument/foldingRange`; capability `foldingRangeProvider`): routines, class / record / interface types, begin..end blocks, try, case and asm statements, multi-line `uses` (kind `imports`) and multi-line comments (kind `comment`), from the tree-sitter parse of the live buffer, so it works on a file no index holds. Guard: `tests\autotest\run_lsp_folding_range_guard.ps1`.
+
+Registered through the LSP feature registry (`DRagLint.LSP.Feature.CallHierarchy`, `.TypeHierarchy`, `.TypeDefinition`, `.DocumentHighlight`, `.FoldingRange`; shared item code in `DRagLint.LSP.HierarchyUtil`).
+
 `lsp` answers `workspace/executeCommand` for `draglint.showCallers` -- the command the codeLens `<n> callers` runs -- with arguments `[uri, line]` (0-based): `[{uri, line, character}]`, every distinct (file, line) call site of the routine(s) declared on that line, across every `--db` store, ordered by file then line, so the row count equals the lens count. An unknown command answers `-32601`, bad arguments `-32602`. Capability `executeCommandProvider: {commands: ["draglint.showCallers"]}`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.ExecuteCommand`); guard: `tests\autotest\run_lsp_execute_command_guard.ps1`.
 
+### Quick fixes on a finding (textDocument/codeAction)
+
+Besides `Mark as reviewed: <rule>`, the light bulb offers `Fix: <rule>` on a drag-lint
+finding of `mixed-case-hex`, `length-zero-compare` or `deprecated-rtl-function`. The edit
+comes from the same fixer as `lint --fix` and reads the live buffer, unsaved text included.
+A diagnostic older than the buffer gets no `Fix:` action: every edit must replace text the
+buffer really holds. A risky fix, a fix that needs a newer compiler than the target and
+every other rule stay with `lint --fix`.
 ### What it needs
 
 An index IS required. The project's DB lives at
@@ -253,7 +280,7 @@ First hit wins, per field:
 5. `%LOCALAPPDATA%\drag-lint\context-defaults.json` (read only; `DRAGLINT_CONTEXT_DEFAULTS` overrides the path);
 6. the placeholder `Win64`.
 
-The library DB for the platform: an explicit `--db library-<Platform>.sqlite`, else the context file's `libraryDb`, else `libraries.<Platform>.libraryDb` in the defaults file, else what `resolve-dbs` resolves. An explicit `--db` list that names no `library-<Platform>.sqlite` does not shut the library out: the active platform's library still comes from the context defaults (that platform only; the notice says `library from context defaults`). No library DB for the platform -> library answers are refused, never taken from another platform. Opened sets (project DB + library DB) are kept in an LRU of 3.
+The library DB for the platform: an explicit `--db library-<Platform>.sqlite`, else the context file's `libraryDb`, else `libraries.<Platform>.libraryDb` in the defaults file, else what `resolve-dbs` resolves. A private engine copy (not at a deployed location) whose own `drag-lint.json` declares an `outDir` ignores a defaults library outside that `outDir` and says so on stderr. An explicit `--db` list that names no `library-<Platform>.sqlite` does not shut the library out: the active platform's library still comes from the context defaults (that platform only; the notice says `library from context defaults`). No library DB for the platform -> library answers are refused, never taken from another platform. Opened sets (project DB + library DB) are kept in an LRU of 3.
 
 What you see:
 

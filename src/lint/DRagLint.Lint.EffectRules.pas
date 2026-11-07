@@ -324,6 +324,51 @@ begin
   Result:= MatchText(T, CBoolTypes);
 end;
 
+{ Is the 0-based parameter AOrdinal of a stored signature declared BY VALUE with a scalar or string type? Writing
+  such a parameter (Inc(AIdx)) changes a local copy: the caller never sees it, so it is no effect. var, out and
+  const are never by-value here; an array, class, pointer or untyped parameter is not judged (False). }
+function IsByValueScalarParam(const ASignature: string; AOrdinal: Integer): Boolean;
+const
+  CScalarTypes: array[0..21] of string = ('Integer', 'Cardinal', 'Int64', 'UInt64', 'NativeInt', 'NativeUInt',
+    'SmallInt', 'ShortInt', 'Byte', 'Word', 'LongInt', 'LongWord', 'Boolean', 'Char', 'string', 'Double',
+    'Single', 'Extended', 'Real', 'Currency', 'AnsiChar', 'WideChar');
+begin
+  Result:= False;
+  var S: string:= Trim(ASignature);
+  var Open: Integer:= Pos('(', S);
+  if Open = 0 then Exit;
+  var Depth: Integer:= 0;
+  var Groups: TArray<string>:= nil;
+  var GroupStart: Integer:= Open + 1;
+  for var I:= Open + 1 to Length(S) do
+  begin
+    var C: Char:= S[I];
+    if (C = '(') or (C = '<') or (C = '[') then Inc(Depth)
+    else if ((C = ')') or (C = '>') or (C = ']')) and (Depth > 0) then Dec(Depth)
+    else if (C = ')') or ((C = ';') and (Depth = 0)) then
+    begin
+      Groups:= Groups + [Copy(S, GroupStart, I - GroupStart)];
+      GroupStart:= I + 1;
+      if C = ')' then Break;
+    end;
+  end;
+  var Index: Integer:= 0;
+  for var G in Groups do
+  begin
+    var Colon: Integer:= Pos(':', G);
+    if Colon = 0 then Exit;
+    var Names: TArray<string>:= Trim(Copy(G, 1, Colon - 1)).Split([',']);
+    var TypeName: string:= Trim(Copy(G, Colon + 1, MaxInt));
+    if AOrdinal < Index + Length(Names) then
+    begin
+      var First: string:= Trim(Names[0]);
+      if StartsText('var ', First) or StartsText('out ', First) or StartsText('const ', First) then Exit;
+      Exit(MatchText(TypeName, CScalarTypes));
+    end;
+    Inc(Index, Length(Names));
+  end;
+end;
+
 { ---- side-effect-in-short-circuit ------------------------------------------ }
 
 type
@@ -544,7 +589,13 @@ begin
       var SF: TSymbolFacts;
       if (not Facts.TryGetValue(Sym.Id, SF)) or (SF.EffectFree <> CEffectFreeNotProven) then Continue;
       var Sum: TEffectSummary:= TEffectSummary.Decode(SF.EffectSummary);
-      if (Sum.Flags * [efGlobal, efHeap, efSelfFields] = []) and (Length(Sum.Params) = 0) then Continue;
+      { A write to a by-value scalar parameter is local (Inc(AIdx)); a heap flag beside a '?' is a gap in the
+        proof, not a proven effect. Neither alone is an effect worth a finding. }
+      var Written: TArray<Integer>:= nil;
+      for var PIdx in Sum.Params do
+        if not IsByValueScalarParam(Sym.Signature, PIdx) then Written:= Written + [PIdx];
+      if (Sum.Flags * [efGlobal, efSelfFields] = []) and (Length(Written) = 0)
+        and ((efHeap not in Sum.Flags) or (efUnknown in Sum.Flags)) then Continue;
       var BoolRet: Boolean:= IsBooleanReturn(Sym.Signature);
       var Deliberate: Boolean:= CalleeIsDeliberate(AStore, Sym, Sum, SF.EffectWitness, BoolRet);
       for var C in AStore.FindResolvedCallers(Sym.Id) do

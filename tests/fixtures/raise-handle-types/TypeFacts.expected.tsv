@@ -1,0 +1,19 @@
+kind	name_text	start_line	start_col	receiver_text	enclosing	bound
+raise	ELocal	16	9		TypeFacts.Thrower	TypeFacts.ELocal
+handle	ELocal	27	11		TypeFacts.Stamp	TypeFacts.ELocal
+raise-expr	E	27	27	ELocal	TypeFacts.Stamp
+handle	EDup	28	11		TypeFacts.Stamp	ExcA.EDup
+raise-expr	X	28	25		TypeFacts.Stamp
+handle	EAbort	29	8		TypeFacts.Stamp
+reraise	raise	29	18	EAbort	TypeFacts.Stamp
+handle	EConvertError	30	11		TypeFacts.Stamp
+handle-all	except	34	7		TypeFacts.Stamp
+reraise	raise	35	9		TypeFacts.Stamp
+handle	EArgumentException	38	11		TypeFacts.Stamp
+reraise	raise	41	9	EArgumentException	TypeFacts.Stamp
+handle	EOnlyA	43	12		TypeFacts.Stamp	ExcA.EOnlyA
+handle-all	else	46	3		TypeFacts.Stamp
+reraise	raise	47	5		TypeFacts.Stamp
+raise-expr	E	53	9		TypeFacts.OutsideHandler
+raise	Exception	58	9		TypeFacts.RaiseLib
+raise	EDup	13	9		TypeFactsB.ThrowB	ExcB.EDup

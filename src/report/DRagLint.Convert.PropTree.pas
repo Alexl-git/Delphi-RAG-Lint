@@ -813,7 +813,7 @@ type
   /// <remarks>
   /// Produced by ResolvePropertyDeclaredType.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.PropTree.pas) ?, DRagLint.Convert.PropTree.ResolvePropertyDeclaredType (DRagLint.Convert.PropTree.pas), DRagLint.Symbol.Describe.DescribeDeclaredType (DRagLint.Symbol.Describe.pas) ?</para>
+  /// <para>Used by: declaration (DRagLint.Convert.PropTree.pas) ?, DRagLint.Convert.PropTree.initialization (DRagLint.Convert.PropTree.pas) ?, DRagLint.Convert.PropTree.ResolvePropertyDeclaredType (DRagLint.Convert.PropTree.pas), DRagLint.Symbol.Describe.DescribeDeclaredType (DRagLint.Symbol.Describe.pas) ?</para>
   /// <para>Used in units: DRagLint.Convert.PropTree, DRagLint.Symbol.Describe</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

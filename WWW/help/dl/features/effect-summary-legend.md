@@ -4,10 +4,10 @@ title: Effect Summary Legend
 summary: The purity analysis writes a short token string for every routine it judges -- symbolfacts.effectsummary in the index
 product: DL
 group: documentation
-order: 40008
+order: 40009
 since: 1.16.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Effect Summary Legend

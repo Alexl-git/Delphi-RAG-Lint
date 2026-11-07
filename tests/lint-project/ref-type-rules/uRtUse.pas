@@ -12,6 +12,8 @@ procedure HolderTests(AComp: TRtCompThing; ACounted: TRtCountedThing; ARef: TRtR
 procedure NarrowTests(AWide: Int64; AKey: TRtKey2; ASmall: Integer; ADouble: Double);
 procedure RedundantTests(ALeaf: TRtLeaf; ABase: TRtBase);
 procedure RedundantShadow;
+procedure RedundantVarParam(Sender: TObject; var ALibProps: TcxLibProps; var ALeaf2: TdlgLocal);
+procedure RedundantUntypedVar(var ALeaf);
 procedure UnsafeTests(ALeaf: TRtLeaf; ABase: TRtBase);
 
 implementation
@@ -51,6 +53,22 @@ var
 begin
   Sink:= TRtLeaf(GShadow).Tag;  // CONTROL-REDUNDANT-SHADOW // TRIGGER-UNSAFE-SHADOW
   Sink:= Sink + 1;
+end;
+
+{ E-CAST (OperatorList.pas:380): the miss was never the var parameter; the callee's second letter is lower case, the
+  shape of every DevExpress type and of this project's dialogs. TcxLibProps is declared nowhere, as a library type is
+  not in a project index. }
+procedure RedundantVarParam(Sender: TObject; var ALibProps: TcxLibProps; var ALeaf2: TdlgLocal);
+begin
+  if ALibProps is TcxLibProps then TcxLibProps(ALibProps).Tag:= 1;  // TRIGGER-REDUNDANT-LOWERLIB
+  TdlgLocal(ALeaf2).Tag:= 1;  // TRIGGER-REDUNDANT-LOWERLOCAL
+  Trim(ALeaf2);  // CONTROL-REDUNDANT-LOWERCALL
+end;
+
+{ An untyped parameter has no type: the name in another routine's parameter list says nothing about this one. }
+procedure RedundantUntypedVar(var ALeaf);
+begin
+  TRtLeaf(ALeaf).Tag:= 1;  // CONTROL-REDUNDANT-UNTYPEDVAR
 end;
 
 procedure NarrowTests(AWide: Int64; AKey: TRtKey2; ASmall: Integer; ADouble: Double);
@@ -121,6 +139,37 @@ begin
   Sink:= TRtLeaf(ABase).Tag;  // CONTROL-UPDOWN-ONECAST
   Sink:= TRtLeaf(TRtMid(ABase)).Tag;  // CONTROL-UPDOWN-INNERNARROWS // TRIGGER-UNSAFE-INNER
   Sink:= TRtBase(TRtMid(ALeaf)).Tag + Sink;  // CONTROL-UPDOWN-BOTHUP
+end;
+
+procedure NeverTests(ALeaf: TRtLeaf; ABase: TRtBase; AOther: TRtOther; ASealed: TRtSealed; AFaced: TRtFaced;
+  AOpen: TRtOpen; AFace: IRtFace; AUnf: TRtUnfollowed);
+var
+  Holder: TRtLeaf;
+begin
+  Holder:= ALeaf;
+  if ALeaf is TRtOther then Exit;  // TRIGGER-NEVER-SIBLING
+  if AOther is TRtBase then Exit;  // TRIGGER-NEVER-SIBLINGREV
+  if Holder.Link is TRtOther then Exit;  // TRIGGER-NEVER-CHAIN
+  if ASealed is IRtFace then Exit;  // TRIGGER-NEVER-SEALEDINTF
+  if AFace is TRtSealed then Exit;  // TRIGGER-NEVER-INTFSEALED
+  if ABase is TRtLeaf then Exit;  // CONTROL-NEVER-DOWN
+  if AOpen is IRtFace then Exit;  // CONTROL-NEVER-OPENINTF
+  if AFaced is IRtFace then Exit;  // CONTROL-NEVER-IMPLEMENTS
+  if AFace is TRtOpen then Exit;  // CONTROL-NEVER-INTFOPEN
+  if AFace is TRtFaced then Exit;  // CONTROL-NEVER-INTFIMPLEMENTS
+  if AFace is IRtOther then Exit;  // CONTROL-NEVER-INTFINTF
+  if AUnf is TRtOther then Exit;  // CONTROL-NEVER-INCOMPLETE
+end;
+
+{ Micronite2027 sgSManager.pas:591 was the rule's only real finding and it was false: the name after
+  `absolute` was emitted as a second local, so B read as a TRtOther. }
+procedure NeverAbsolute;
+var
+  B: TRtBase;
+  O: TRtOther absolute B;
+begin
+  if B is TRtLeaf then Exit;  // CONTROL-NEVER-ABSOLUTE
+  O.Free;
 end;
 
 procedure IsTests(ALeaf: TRtLeaf; ABase: TRtBase; const AObj: TObject);

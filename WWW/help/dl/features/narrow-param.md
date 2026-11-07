@@ -7,7 +7,7 @@ group: refactoring
 order: 50006
 since: 1.44.1-alpha
 status: shipped
-updated: 1.44.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Narrow parameter types (compile-gated)
@@ -96,6 +96,11 @@ A narrow type outside the unit's scope adds its unit to the section's uses claus
 ### See also
 
 [Remove redundant casts](redundant-cast-fix.md), same gate. Guard: `tests\autotest\run_refact_narrow_param.ps1`.
+
+### Cancel
+
+An `--apply` run listens on the maintenance control channel: `drag-lint shutdown --db <db>` (or the IDE's Cancel) kills the
+build the gate waits on, restores every written file and ends the run with exit 1 and the refusal `cancelled`.
 
 ---
 

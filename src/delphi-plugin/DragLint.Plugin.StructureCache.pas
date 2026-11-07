@@ -230,6 +230,7 @@ uses
   , System.Classes
   , System.JSON
   , System.IOUtils
+  , DragLint.Plugin.ProcRun
   , DragLint.Plugin.Telemetry
   ;
 
@@ -312,6 +313,11 @@ var
 begin
   Result := False;
   AOutput:= '';
+  if IsEmptyExeCommand(ACmdLine) then
+  begin
+    ReportEngineMissing;
+    Exit;
+  end;
   SA.nLength:= SizeOf(SA);
   SA.bInheritHandle:= True;
   SA.lpSecurityDescriptor:= nil;

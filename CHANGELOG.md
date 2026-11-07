@@ -3,6 +3,69 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.46.0-alpha -- 2026-11-07
+
+Wave 146, integrated on lane/146-int. ONE extractor bump over 1.45 (1.33.0-alpha) and ONE resolver bump (1.21.0-alpha): every index re-parses once. Grammar b12b539 staged.
+
+### Breaking
+- LSP rename and `lint --fix` naming renames now run the same occurrence proof as `rename --apply`; what cannot be proved is refused by name. A re-casing needs no proof. A new name with a token in an inactive `{$IFDEF}` branch is refused.
+- `rename` in a unit other projects compile proves the rename in every owning project, merges the edits and builds every owner before and after the write. New refusals: owner-library, owner-unknown, owner-unverified.
+
+### Added
+- `exception-facts --target R | --name T` (new verb): which routine raises and handles which exception type, one row per site, with how the type is known. Needs the re-parse.
+- `bookmarks` (new verb): list and find `dl:bk` comment anchors, read-only.
+- Rules, all OFF: `is-never-true` (an `is` test no object can pass), `parameter-type-too-wide` (the narrow-param plan's fixes as a rule), `local-only-out-arg`, `dead-store-before-out-arg`, `by-value-arg-before-assignment` (parameter modes for what write-only-local, overwrite-before-read and used-before-assignment cannot see).
+- Rule `shared-marker-legacy-shape` (warning): flags `// note // dl:shared A`, which reads as unshared.
+- MCP: `initialize` carries instructions (drag-lint first); new tool `get_neighbors`. `graph --format json|html`.
+- `convert-apply` / `convert-validate --glyph-stitch` (OFF by default): realises `G[I/N]` glyph links on the `.dfm` surface; apply/1 `glyphs[]` is always present; item kinds glyph-no-alternative, glyph-format-unsupported, glyph-not-a-strip.
+- `extract-method` and `create-enum-helper` gate on an opt-in `--project`; `narrow-param` and `redundant-cast` open the control channel; `lint --fix --fix-rule with-statement` routes to `unwith`. Generic `lint --fix` writers are not gated yet.
+- `lint --fix --fix-rule redundant-cast --format json`: `not_identity_by` splits the real conversions by class, with one example each.
+- index: table `ref_element_types`. `symbols.directives` holds `sealed`.
+- IDE: drag-lint > Convert Components opens ConvRulesEditor on the components selected in the form designer; Code Quality > Allow a Finding on This Line... records a `dl:ok` review from the caret. Find Usages asks the running language server and starts no process when the server covers the query. Live proof owed.
+- VS Code: optional `dragLint.engineStaleNoticeMinutes` notice when a newer engine is deployed.
+- `lsp --proxy --merge-navigation` (OFF by default): type and call hierarchy, typeDefinition, documentHighlight and foldingRange answered in the proxy for each provider DelphiLSP does not advertise. LSP: `Fix: <rule>` quick fixes for mixed-case-hex, length-zero-compare and deprecated-rtl-function, read from the live buffer. Live proof owed.
+- `lint-all`: stderr note when stale files have no call edges.
+
+### Changed
+- Index: references now recorded for `inherited X`, property specifiers (new kind property-spec), the iterator of `for X in`, and record-constant field names (new kind record-field); rename no longer refuses the last two. A typed constant types its receiver.
+- Resolver: `A[i].X` is decided by the element type (TList, TObjectList, IList, IReadOnlyList, TDictionary, TObjectDictionary, IDictionary subscripts, through aliases). YADF: 56 of 68 sampled renames proved, was 28.
+- Resolver: the nearest override on an inheritance chain binds certain instead of ambiguous; an override without `overload` leaves its sibling overloads reachable (asked of dcc). A redeclared property records its inherited accessor; `read FRec.X` records field FRec.
+- Resolver: a library global binds even when a type of that name sits in a unit the file does not use (Application, Screen); unit-qualified library routines bind (System.SysUtils.DeleteFile); the implicit TObject root answers for classes with a complete chain; a type name with several class candidates answers when all give the same member; a field in a class-level var section types its receiver.
+- Resolver: a parenless function in a dotted chain types the next hop (`H.Get.Next.Run`, `FW.Next.Run`): Micronite2027 +279 edges, +310 ref_types, 0 lost, 0 changed.
+- A `raise;` and `raise E;` in a handler record the handler's type; raise and handler rows bind to the type when the DB holds it (usages raises / handles read exact).
+- `context`: the Library calls line counts calls the library binds at query time by default, from the manifest's library for the DB's platform; `--library-db none` turns that off.
+- `heavy-initialization` follows calls into the platform library. `freeonterminate-then-wait` also fires on WaitFor/Free of a variable whose class sets FreeOnTerminate in its constructor.
+- `unit-missing-from-uses` reports a unit taken out of `uses` before the reindex. `index --project` honours `--exclude-under`.
+- rename: a local, parameter or other routine-local symbol is proved inside its routine in every form of the verb; a parameter's implementation header renames with it. `rename --kind param` syncs the routine's own declaration, not sibling overloads. Renaming a form component rewrites the owner's and descendants' text `.dfm` and `Owner.Name` references from other forms.
+- Library platform choice honours non-Windows dproj and fingerprint platforms. The Convert tab notes `.dfm` components whose class has a rule in a book the run does not apply.
+
+### Fixed
+- Grammar: a final `external L name '...'` without `;` parses (Delphi 5 shlobj.pas: 5 parse errors -> 0, two routines recovered).
+- Index: the name after `absolute` is a read, no longer a second local of the alias's type.
+- Purity: a write to a by-value scalar or string parameter is no longer reported as a parameter write. `side-effect-in-short-circuit` no longer reports such routines or an unproven heap flag.
+- `criticalsection-not-released` no longer fires on Enter/Acquire of a receiver typed provably not a lock (TSemaphore).
+- `redundant-cast` sees types whose second letter is lower case (TcxEdit, TdlgFoo); an untyped `var X` no longer borrows a namesake's type.
+- `document --apply` no longer rewrites `<param name="S, X">` / `"var X"` tags as stale; it leaves a declaration untouched (REFUSED) instead of deleting Calls: entries of units the `--db` cannot see.
+- `convert-apply`: a descendant class that redeclares an ancestor's field gets that line retyped and the To unit in that section's uses (was E2003 after `#unuse`). A book with no `#convert` block, or a parse error with no `.dfm`, says what is wrong with the book; exit code unchanged.
+- IDE: no engine found now says so: commands that could not resolve drag-lint.exe spawned an empty command and showed nothing.
+- `reconcile-project`: a `{$I}` include is reported with suggestedFix none; a listed unit under a library root is no longer an EXTRA.
+- LSP: a private engine with its own outDir no longer falls back to a central-defaults library outside it.
+
+## v1.45.0-alpha -- 2026-11-06
+
+Integrated on lane/145-int, never deployed; its extractor bump (1.32.0-alpha, a member read off a call receiver gets a ref) rides 1.46.
+
+### Added
+- New rule `ui-access-in-thread-typed` (OFF by default).
+- LSP: call and type hierarchy, type definition, document highlight, folding range.
+
+### Changed
+- `lint-all` honours `--library-db <lib>|none`; it wins over a second `--db` and the manifest; a missing file refuses (exit 2). Type-aware checkers read the library for ancestry (TLabel, TStringList, TThread) in lint-all.
+- `unused-unit-in-uses` reads the initialization section: idle is a warning, active stays info and names what it references.
+
+### Fixed
+- `constructor-call-on-instance` stays silent on a metaclass receiver.
+- `mutable-global-variable` skips a variable written only inside initialization.
 ## v1.44.1-alpha -- 2026-11-06
 
 1.44 wave 2, integrated on lane/144-int2. ONE bump: DRAGLINT_RESOLVER_VERSION 1.20.0-alpha (`index --all --resolve-only`, no re-parse). No extractor bump: the extractor baseline is re-pinned because CallResolver.pas lives under src\index; no parser, grammar or preprocessor unit changed. New tables are additive, so no SCHEMA_VERSION move.

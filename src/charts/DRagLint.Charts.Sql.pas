@@ -603,16 +603,16 @@ type
     /// computed by the caller from the rows.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.ReadDatabase (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.ReadDatabase (DRagLint.Charts.Q.LandsWhere.pas)</para>
-    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Sql.SqlVerbTables, DRagLint.Charts.Sql.TSqlCatalog.SqlProcBodyText, DRagLint.Charts.Sql.TSqlCatalog.TableSet</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Sql.SqlVerbTables, DRagLint.Charts.Sql.TSqlCatalog.SqlProcBodyText, DRagLint.Charts.Sql.TSqlCatalog.TableSet</para>
     /// <para>Returns: FProcs</para>
     /// <para>Reads: FProcsDone, FProcs, FIndex   Writes: FProcs, FProcsDone</para>
     /// <para>Owns returned: borrowed</para>
     /// <para>SQL: reads FILES, SYMBOLS</para>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
     /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
     /// <seealso cref="DRagLint.Charts.Sql.SqlVerbTables"/>
-    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.SqlProcBodyText"/>
-    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.TableSet"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ProcedureSet: TArray<TSqlProcedure>;
@@ -622,16 +622,16 @@ type
     /// Port of Get-SqlTriggerSet (Emit-Common.ps1:1466).
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.ReadDatabase (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.ReadDatabase (DRagLint.Charts.Q.LandsWhere.pas)</para>
-    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Sql.SqlVerbTables, DRagLint.Charts.Sql.TSqlCatalog.SqlBodyText, DRagLint.Charts.Sql.TSqlCatalog.TableSet, SameText</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Index.TIndexRow.I, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Sql.SortUniqueNames, DRagLint.Charts.Sql.SqlVerbTables, DRagLint.Charts.Sql.TSqlCatalog.SqlBodyText, DRagLint.Charts.Sql.TSqlCatalog.TableSet, SameText</para>
     /// <para>Returns: FTrigs</para>
     /// <para>Reads: FTrigsDone, FTrigs, FIndex   Writes: FTrigs, FTrigsDone</para>
     /// <para>Owns returned: borrowed</para>
     /// <para>SQL: reads FILES, SYMBOLS</para>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
     /// <seealso cref="DRagLint.Charts.Sql.SortUniqueNames"/>
     /// <seealso cref="DRagLint.Charts.Sql.SqlVerbTables"/>
-    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.SqlBodyText"/>
-    /// <seealso cref="DRagLint.Charts.Sql.TSqlCatalog.TableSet"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function TriggerSet: TArray<TSqlTrigger>;
@@ -727,10 +727,11 @@ function WordRx(const pName: string): string;
 /// Emit-LandsWhere.ps1; both ports share this one.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Q.Consumers.TConsumersChart.CheckRoles (DRagLint.Charts.Q.Consumers.pas), DRagLint.Charts.Q.LandsWhere.TLandsWhereChart.CheckRoles (DRagLint.Charts.Q.LandsWhere.pas)</para>
-/// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Query</para>
+/// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TIndexRow.I</para>
 /// <para>Returns: Rows[0].I('n')</para>
 /// <para>SQL: reads SYMBOLS</para>
 /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+/// <seealso cref="DRagLint.Charts.Index.TIndexRow.I"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function SqlTableSymbolCount(pIndex: TChartsIndex): Integer;

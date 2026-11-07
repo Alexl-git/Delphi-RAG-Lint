@@ -4,10 +4,10 @@ title: convert-scaffold
 summary: Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type
 product: DL
 group: component-conversion
-order: 60003
+order: 60004
 since: 1.1.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # convert-scaffold

@@ -38,6 +38,7 @@ Find symbols, callers, callees, text and types in the index.
 | [Compiler Hints](features/compiler-hints.md) | Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity | 0.1.0-alpha |
 | [query --concept](features/concept-search.md) | Ranked BM25 concept search over identifier words and doc-comment prose | 1.38.0-alpha |
 | [context](features/context.md) | Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers | 0.6.0-alpha |
+| [exception-facts](features/exception-facts.md) | Lists which routine raises and handles which exception type, by routine or by type | 1.46.0-alpha |
 | [find-callees](features/find-callees.md) | Lists the resolved outgoing calls of one routine, plus the library-bound ones | 0.91.0-alpha |
 | [Find Undocumented (public)](features/find-undocumented-public.md) | Uses query find to list indexed symbols filtered by documentation state, kind, or visibility | 0.1.0-alpha |
 | [find-unit](features/find-unit.md) | Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause | 0.69.0-alpha |
@@ -90,6 +91,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Fix all in unit](features/fix-all-in-unit.md) | Applies autofixes for every fixable finding in the current unit, starting from the Structure form | 0.1.0-alpha |
 | [Fix all reliability (1.31.3)](features/fix-all-reliability.md) | Fix all no longer drops every rename for library-root members, shows a wait cursor and refuses a second fix, and keeps E-prefixed exception classes | 1.31.3-alpha |
 | [Fix it](features/fix-it.md) | Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling | 0.1.0-alpha |
+| [Data-flow rules that know a parameter's mode](features/flow-out-arg-rules.md) | Three OFF rules: a local that only receives out arguments, a store overwritten by an out argument, a local passed by value to a method before it is assigned | 1.46.0-alpha |
 | [Format Whole Project with YADF](features/format-whole-project-with-yadf.md) | Runs YADF formatting across a project's files, with indexing involved as part of the same action | 0.1.0-alpha |
 | [Format with YADF](features/format-with-yadf.md) | Reformats one Pascal unit by driving the external YADF formatter | 0.16.0-alpha |
 | [Gap-wave lint rules](features/gap-wave-rules.md) | About 50 new lint rules (bug patterns, dead code, data flow, platform, structure) added in the 1.37.0 gap wave | 1.37.0-alpha |
@@ -104,8 +106,9 @@ Rules, autofix, suppression markers and project-wide checks.
 | [lint-tree](features/lint-tree.md) | Answers one question lint-all cannot: does an interface edit to this unit reach any dependent? | 1.11.0-alpha |
 | [Rename across every project that compiles a shared unit](features/multi-project-rename.md) | A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects | 1.29.0-alpha |
 | [Opaque to analysis (lint rule)](features/opaque-to-analysis.md) | Project-wide lint rule (info, off by default): a routine whose non-library calls are mostly unresolvable, so impact and call trees are blind inside it | 1.42.0-alpha |
+| [Parameter type too wide (lint rule)](features/parameter-type-too-wide.md) | Project lint rule, OFF by default: a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan | 1.46.0-alpha |
 | [Read but never assigned (lint rule)](features/read-never-assigned.md) | Project-wide lint rule: a field or global that is read but that nothing in the project assigns or creates | 1.40.0-alpha |
-| [Lint rules on the static type of a reference](features/ref-type-rules.md) | Project lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows and three more; sharper redundant-cast and unsafe casts | 1.44.1-alpha |
+| [Lint rules on the static type of a reference](features/ref-type-rules.md) | Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread; sharper redundant-cast and unsafe casts | 1.44.1-alpha |
 | [Rescan this unit](features/rescan-this-unit.md) | Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed | 1.28.3-alpha |
 | [Run AST Checks](features/run-ast-checks.md) | Runs drag-lint's AST-level checks against a file | 0.31.0-alpha |
 | [Run Diagnostics (didSave)](features/run-diagnostics-didsave.md) | Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification | 0.22.0-alpha |
@@ -123,6 +126,7 @@ DocInsight comments generated from the index, and drift detection.
 
 | Feature | What it does | Since |
 | --- | --- | --- |
+| [bookmarks](features/bookmarks.md) | Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder | 1.46.0-alpha |
 | [Doc Comment Stub (symbol)](features/doc-comment-stub-symbol.md) | Uses generate-docs to produce a doc-comment stub for one qualified symbol | 0.25.0-alpha |
 | [doc-drift](features/doc-drift.md) | Diagnostic that computes deterministic doc-vs-code drift findings for one symbol | 0.93.0-alpha |
 | [doc-forget](features/doc-forget.md) | Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply | 1.17.0-alpha |
@@ -167,8 +171,10 @@ Rule-driven migration of legacy component types.
 | --- | --- | --- |
 | [convert-apply](features/convert-apply.md) | Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add | 1.2.0-alpha |
 | [convert-apply #migrate (member, type and enum rename / DL_NONE)](features/convert-apply-migrate.md) | #migrate renames or DL_NONE-breaks a member at its .pas access sites; at file scope (or with a uses unit) it renames a type, enum or identifier | 1.22.0-alpha |
+| [Convert Components](features/convert-components.md) | Opens ConvRulesEditor on the components selected in the form designer | 1.46.0-alpha |
 | [convert-scaffold](features/convert-scaffold.md) | Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type | 1.1.0-alpha |
 | [convert-validate](features/convert-validate.md) | Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees | 1.1.0-alpha |
+| [BDE and Data.DB rule books](features/convrules-book-split.md) | The BDE-to-FireDAC conversion rules are two books (BDE, Data.DB) run in that order; the Convert tab warns on the wrong order | 1.36.0-alpha |
 | [Progress window and busy guard](features/convrules-busy-guard.md) | ConvRulesEditor shows a cancellable progress window for long engine calls and refuses Save, Add, Convert and Delete while one runs | 1.35.0-alpha |
 | [Convert progress](features/convrules-convert-progress.md) | ConvRulesEditor Convert tab: per-step progress (unit, book, phase, elapsed) on the status bar and the tab | 1.26.7-alpha |
 | [Curate rule books](features/convrules-curate.md) | ConvRulesEditor: split, delete, merge and compose #convert blocks across rule books on disk | 1.20.0-alpha |
@@ -176,6 +182,7 @@ Rule-driven migration of legacy component types.
 | [Rule book and source encoding](features/convrules-encoding.md) | ConvRulesEditor keeps each book's encoding, asks before a lossy save, and before a Convert whose rules a source cannot hold (raise it, fix the rules, or cancel) | 1.35.0-alpha |
 | [Examine: mark the properties a form uses](features/convrules-examine.md) | ConvRulesEditor Conversion menu: pick .dfm/.pas files and mark in green the From properties they actually use | 1.31.0-alpha |
 | [Glyph expressions (G[I/N])](features/convrules-glyph.md) | ConvRulesEditor Mapping menu: set, change or clear the G[I/N] glyph expression on the selected link | 1.31.0-alpha |
+| [Inherited units, ancestors first](features/convrules-inherited-units.md) | ConvRulesEditor offers and orders the ancestors of an inherited form root-first before Convert | 1.40.0-alpha |
 | [Conditional #mapping authoring](features/convrules-mappings.md) | ConvRulesEditor Mapping menu: author a conditional #mapping (one enum value sets several target properties) and #apply it to a conversion | 1.31.0-alpha |
 | [Member migration (#migrate)](features/convrules-migrate-members.md) | ConvRulesEditor: write #migrate Old -> New or -> DL_NONE (one row, or DL_NONE for all selected rows) into the row's book, or via the block's Members list | 1.35.0-alpha |
 | [Qualify #convert quick fix](features/convrules-qualify-fix.md) | ConvRulesEditor Convert tab: one click writes the engine's qualified #convert line (apply/1 qualify_fixes) into the open book | 1.31.5-alpha |
@@ -276,11 +283,12 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [Installation](features/installation.md) | Getting the CLI, the IDE plugin, or the LSP running | 0.21.0-alpha |
 | [lsp](features/lsp.md) | Starts the LSP (Language Server Protocol) stdio server | 0.6.0-alpha |
 | [LSP full rule set on save](features/lsp-full-rules.md) | Runs the full lint rule set on save so the editor shows what the CLI shows | 1.33.0-alpha |
-| [LSP protocol extensions](features/lsp-protocol-extensions.md) | Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index | 1.33.0-alpha |
-| [LSP proxy merge](features/lsp-proxy-merge.md) | Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session | 1.33.0-alpha |
+| [LSP protocol extensions](features/lsp-protocol-extensions.md) | Answers outline, implementation, rename, lens, tokens, inlay hints, call and type hierarchy, type definition, highlights, folding and commands from the index | 1.33.0-alpha |
+| [LSP proxy merge](features/lsp-proxy-merge.md) | Merges drag-lint diagnostics, completion, hover, definition and navigation (hierarchy, type definition, highlight, folding) into a DelphiLSP proxy session | 1.33.0-alpha |
 | [Switch VS Code Delphi MCP entry](features/lsp-switch-vscode.md) | Turns the VS Code Delphi MCP entry off and on with a backup | 1.33.0-alpha |
 | [Register the MCP server (Claude Code, VS Code, Cursor)](features/mcp-config-writer.md) | Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable | 1.26.1-alpha |
-| [MCP server](features/mcp-server.md) | Exposes the index to MCP clients as 15 tools | 0.4.0-alpha |
+| [MCP get_neighbors](features/mcp-get-neighbors.md) | MCP tool: the call-graph neighbourhood of a symbol within 1..3 hops | 1.46.0-alpha |
+| [MCP server](features/mcp-server.md) | Exposes the index to MCP clients as 17 tools | 0.4.0-alpha |
 | [Output encoding (--output-encoding)](features/output-encoding.md) | Chooses the bytes verbs write to stdout, stderr and --output files: ASCII with \uXXXX escapes (default), UTF-8 or UTF-16LE, never a BOM; lossy ascii warns once | 1.35.0-alpha |
 | [project-context](features/project-context.md) | Writes or checks the `.dlcontext.json` file beside a project: platform, config and define set, with the .dproj SHA-1 for staleness | 1.38.0-alpha |
 | [serve](features/serve.md) | Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index | 0.4.0-alpha |

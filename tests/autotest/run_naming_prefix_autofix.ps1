@@ -45,6 +45,8 @@ param(
 )
 try {
 $ErrorActionPreference = 'Stop'
+# E-RENAME-OTHER-PATHS: a naming fix now runs the rename proof, and these fixtures have no library: the proof's own test seam.
+$env:DRAGLINT_RENAME_TEST_UNGATED = '1'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
   $s = if ($ok) { 'PASS' } else { 'FAIL' }

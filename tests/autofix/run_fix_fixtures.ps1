@@ -39,6 +39,9 @@ param(
   [string]$WorkDir = "$env:TEMP\drag-lint-fix-fixtures-$PID"
 )
 $ErrorActionPreference = 'Stop'
+# E-RENAME-OTHER-PATHS (146 r2): a naming fix runs the rename proof, and these fixtures have no library: the proof's own test seam,
+# as in run_const_casing_word_fix.ps1. The property-accessor-name case was refused (applied false) without it.
+$env:DRAGLINT_RENAME_TEST_UNGATED = '1'
 $script:pass = 0; $script:fail = 0; $script:skip = 0
 function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   if ($Ok) { $script:pass++; Write-Host "[PASS] $Name" -ForegroundColor Green }

@@ -17,8 +17,8 @@ type
   /// <summary>Which uses clause of a unit an insertion targets.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [dclDragLintWizard]declaration (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard]declaration (DragLint.Plugin.MissingUses.pas), [dclDragLintWizard]DRagLint.Core.UsesInsert.SectionTokenIndex (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.BuildInsertion (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.FormatMessage (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.ParseMessage (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.SectionWord (DRagLint.Core.UsesInsert.pas), DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas), [dclDragLintWizard]DragLint.Plugin.Editor.InvokeQuickFixUses (DragLint.Plugin.Editor.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLAddUnitToUsesSection (DragLint.Plugin.MissingUses.pas),
-  /// [dclDragLintWizard]DragLint.Plugin.MissingUses.DLCursorMissingUses (DragLint.Plugin.MissingUses.pas)</para>
+  /// <para>Used by: [dclDragLintWizard,drag-lint]declaration (DRagLint.Core.UsesInsert.pas), [drag-lint]declaration (DRagLint.Lint.MissingUses.pas) ?, [dclDragLintWizard]declaration (DragLint.Plugin.MissingUses.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.UsesInsert.SectionTokenIndex (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.UsesInsert.TUsesText.BuildInsertion (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.UsesInsert.TUsesText.FormatMessage (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.UsesInsert.TUsesText.ParseMessage (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard,drag-lint]DRagLint.Core.UsesInsert.TUsesText.SectionWord (DRagLint.Core.UsesInsert.pas), [drag-lint]DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas), [drag-lint]DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.BuildFinding (DRagLint.Lint.MissingUses.pas) ?,
+  /// [dclDragLintWizard]DragLint.Plugin.Editor.InvokeQuickFixUses (DragLint.Plugin.Editor.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLAddUnitToUsesSection (DragLint.Plugin.MissingUses.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLCursorMissingUses (DragLint.Plugin.MissingUses.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUsesSection = (usInterface, usImplementation);
@@ -29,8 +29,8 @@ type
   /// of line Line (Col = Length(line) + 1 appends). Text uses CRLF line breaks
   /// and is 7-bit ASCII whenever the unit names are.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [dclDragLintWizard]declaration (DRagLint.Core.UsesInsert.pas) ?, [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.ApplyToLine (DRagLint.Core.UsesInsert.pas) ?, [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.BuildInsertion (DRagLint.Core.UsesInsert.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLAddUnitToUsesSection (DragLint.Plugin.MissingUses.pas) ?</para>
-  /// <para>Used in units: [dclDragLintWizard]DRagLint.Core.UsesInsert, DRagLint.Lint.MissingUses, [dclDragLintWizard]DragLint.Plugin.MissingUses</para>
+  /// <para>Used by: [dclDragLintWizard,drag-lint]declaration (DRagLint.Core.UsesInsert.pas) ?, [drag-lint]declaration (DRagLint.Lint.MissingUses.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.UsesInsert.TUsesText.ApplyToLine (DRagLint.Core.UsesInsert.pas) ?, [dclDragLintWizard,drag-lint]DRagLint.Core.UsesInsert.TUsesText.BuildInsertion (DRagLint.Core.UsesInsert.pas), [drag-lint]DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas) ?, [dclDragLintWizard]DragLint.Plugin.MissingUses.DLAddUnitToUsesSection (DragLint.Plugin.MissingUses.pas) ?</para>
+  /// <para>Used in units: [dclDragLintWizard,drag-lint]DRagLint.Core.UsesInsert, [drag-lint]DRagLint.Lint.MissingUses, [dclDragLintWizard]DragLint.Plugin.MissingUses</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUsesInsertion = record
@@ -45,8 +45,8 @@ type
   /// Comments, strings and compiler directives are skipped by a small
   /// tokenizer, so a `uses` or `;` inside a comment never counts. Thread-safe.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas), DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze (DRagLint.Lint.MissingUses.pas), DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.BuildFinding (DRagLint.Lint.MissingUses.pas), DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.IsUsed (DRagLint.Lint.MissingUses.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas), [dclDragLintWizard]DragLint.Plugin.Editor.InvokeQuickFixUses (DragLint.Plugin.Editor.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLAddUnitToUsesSection (DragLint.Plugin.MissingUses.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLCursorMissingUses (DragLint.Plugin.MissingUses.pas)</para>
-  /// <para>Used in units: DRagLint.Lint.MissingUses, DRagLint.LSP.Completion, [dclDragLintWizard]DragLint.Plugin.Editor, [dclDragLintWizard]DragLint.Plugin.MissingUses</para>
+  /// <para>Used by: [drag-lint]DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas), [drag-lint]DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze (DRagLint.Lint.MissingUses.pas), [drag-lint]DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.BuildFinding (DRagLint.Lint.MissingUses.pas), [drag-lint]DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.IsUsed (DRagLint.Lint.MissingUses.pas), [drag-lint]DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas), [dclDragLintWizard]DragLint.Plugin.Editor.InvokeQuickFixUses (DragLint.Plugin.Editor.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLAddUnitToUsesSection (DragLint.Plugin.MissingUses.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLCursorMissingUses (DragLint.Plugin.MissingUses.pas)</para>
+  /// <para>Used in units: [drag-lint]DRagLint.Lint.MissingUses, [drag-lint]DRagLint.LSP.Completion, [dclDragLintWizard]DragLint.Plugin.Editor, [dclDragLintWizard]DragLint.Plugin.MissingUses</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TUsesText = class
@@ -56,7 +56,7 @@ type
     /// <returns>'interface' or 'implementation'.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: [dclDragLintWizard]DRagLint.Core.UsesInsert.TUsesText.FormatMessage (DRagLint.Core.UsesInsert.pas), DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas), [dclDragLintWizard]DragLint.Plugin.Editor.InvokeQuickFixUses (DragLint.Plugin.Editor.pas)</para>
+    /// <para>Called from: [dclDragLintWizard,drag-lint]DRagLint.Core.UsesInsert.TUsesText.FormatMessage (DRagLint.Core.UsesInsert.pas), [drag-lint]DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics (DRagLint.LSP.Completion.pas), [dclDragLintWizard]DragLint.Plugin.Editor.InvokeQuickFixUses (DragLint.Plugin.Editor.pas)</para>
     /// <para>Returns: if ASection = usInterface then 'interface'</para>
     /// <para>Effect-free (proven)</para>
     /// <para>Directives: static</para>
@@ -173,7 +173,7 @@ type
     /// style. A missing clause is created right after the section keyword as
     /// CRLF CRLF `uses` CRLF ` X;`.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas), DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.BuildFinding (DRagLint.Lint.MissingUses.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLAddUnitToUsesSection (DragLint.Plugin.MissingUses.pas)</para>
+    /// <para>Called from: [drag-lint]DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas), [drag-lint]DRagLint.Lint.MissingUses.TMissingUsesChecker.Analyze.BuildFinding (DRagLint.Lint.MissingUses.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLAddUnitToUsesSection (DragLint.Plugin.MissingUses.pas)</para>
     /// <para>Calls: Default, DRagLint.Core.UsesInsert.ClauseEntries, DRagLint.Core.UsesInsert.IndentBefore, DRagLint.Core.UsesInsert.SectionTokenIndex, DRagLint.Core.UsesInsert.Tokenize, DRagLint.Core.UsesInsert.TUsesText.SameUnit, DRagLint.Core.UsesInsert.TUsesText.UsesEntries, SameText, Trim</para>
     /// <para>Returns: False; True</para>
     /// <para>Complexity: 17 (cyclomatic, outer body), 70 lines (full implementation)</para>
@@ -236,7 +236,7 @@ type
     /// ("is declared in units A, B").</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLCursorMissingUses (DragLint.Plugin.MissingUses.pas)</para>
+    /// <para>Called from: [drag-lint]DRagLint.Lint.MissingUses.FixMissingUses (DRagLint.Lint.MissingUses.pas), [dclDragLintWizard]DragLint.Plugin.MissingUses.DLCursorMissingUses (DragLint.Plugin.MissingUses.pas)</para>
     /// <para>Calls: Copy, DRagLint.Core.UsesInsert.IsIdentChar, Pos, PosEx, StartsText</para>
     /// <para>Returns: False; True</para>
     /// <para>Mutates: AUnit (out), ASection (out)</para>

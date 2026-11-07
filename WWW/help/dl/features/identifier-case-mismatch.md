@@ -4,10 +4,10 @@ title: Identifier case mismatch (lint rule)
 summary: "Lint rule, OFF by default: a name spelled in a different case from its declaration"
 product: DL
 group: linting
-order: 30021
+order: 30022
 since: 1.42.0-alpha
 status: shipped
-updated: 1.44.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Identifier case mismatch (lint rule)

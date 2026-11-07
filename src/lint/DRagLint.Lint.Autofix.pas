@@ -123,7 +123,7 @@ function IsSingleFixOnlyRule(const ARuleId: string): Boolean;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
 /// <para>Calls: ContainsText, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits, DRagLint.Lint.Autofix.BuildAutofixEdits.AddReplaceEdit, DRagLint.Lint.Autofix.BuildAutofixEdits.LinesFor, DRagLint.Lint.Autofix.DeclTypeOf, DRagLint.Lint.Autofix.EnsureImplUses, DRagLint.Lint.Autofix.Fixers, DRagLint.Lint.Autofix.FixOwnerKey (+13 more)</para>
-/// <para>Complexity: 171 (cyclomatic, outer body), 526 lines (full implementation)</para>
+/// <para>Complexity: 158 (cyclomatic, outer body), 501 lines (full implementation)</para>
 /// <para>Mutates: AFixableCount (out)</para>
 /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
 /// <seealso cref="DRagLint.Lint.Autofix.BuildAutofixEdits.AddReplaceEdit"/>
@@ -133,6 +133,18 @@ function IsSingleFixOnlyRule(const ARuleId: string): Boolean;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCount: Integer): TArray<TTextEdit>;
+
+/// <summary>The edits of one finding's registered per-finding fixer, read against
+/// ALines (an editor buffer) instead of the file on disk.</summary>
+/// <param name="AFinding">The finding to fix.</param>
+/// <param name="ALines">The text the fixer reads; stays the caller's.</param>
+/// <returns>The edits; nil when the rule has no registered per-finding fixer (a
+/// legacy-chain, per-file, store-backed or sidecar fix), the fix is risky or needs a
+/// newer compiler than the run targets, or the fixer declines.</returns>
+/// <remarks>Only for a fixer that reads nothing but AFinding and ALines: one that
+/// looks at the disk or the index (DeclTypeOf, AutofixStore) would mix two versions
+/// of the file. The caller picks those by rule id.</remarks>
+function BuildBufferFixEdits(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
 
 /// <summary>Drops every finding's edits that overlap an edit of an EARLIER
 /// finding in the same file, so one --fix pass never writes mixed bytes.</summary>
@@ -189,7 +201,7 @@ function FixOwnerKey(const AFinding: TLintFinding): string;
 /// registered fixer. Call it from a fixer unit's RegisterFixers, which this
 /// unit's initialization runs; not thread-safe after start-up.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: initialization/finalization (DRagLint.Fix.Decl.pas), initialization/finalization (DRagLint.Fix.Expr.pas), initialization/finalization (DRagLint.Fix.Hygiene.pas), initialization/finalization (DRagLint.Fix.Stmt.pas), initialization/finalization (DRagLint.Fix.Store.pas) (+6 more)</para>
+/// <para>Called from: DRagLint.Diagnostics.BoundsNilChecks.initialization (DRagLint.Diagnostics.BoundsNilChecks.pas), DRagLint.Diagnostics.OwnershipChecks.initialization (DRagLint.Diagnostics.OwnershipChecks.pas), DRagLint.Diagnostics.ParityExtChecks.initialization (DRagLint.Diagnostics.ParityExtChecks.pas), DRagLint.Fix.Decl.initialization (DRagLint.Fix.Decl.pas), DRagLint.Fix.DeclParity.initialization (DRagLint.Fix.DeclParity.pas) (+6 more)</para>
 /// <para>Calls: Default, DRagLint.Lint.Autofix.Fixers</para>
 /// <seealso cref="DRagLint.Lint.Autofix.Fixers"/>
 /// <!-- drag-lint:auto END -->
@@ -205,7 +217,7 @@ procedure RegisterFixer(const ARuleId: string; const AFixer: TFindingFixer; ARis
 /// Same contract as RegisterFixer; called once per file that has a
 /// finding of the rule.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: initialization/finalization (DRagLint.Fix.Expr.pas), initialization/finalization (DRagLint.Fix.ProjectWide.pas), initialization/finalization (DRagLint.Fix.Stmt.pas), initialization/finalization (DRagLint.Fix.Store.pas), initialization/finalization (DRagLint.Lint.MissingUses.pas)</para>
+/// <para>Called from: DRagLint.Fix.Expr.initialization (DRagLint.Fix.Expr.pas), DRagLint.Fix.ProjectWide.initialization (DRagLint.Fix.ProjectWide.pas), DRagLint.Fix.Stmt.initialization (DRagLint.Fix.Stmt.pas), DRagLint.Fix.Store.initialization (DRagLint.Fix.Store.pas), DRagLint.Lint.MissingUses.initialization (DRagLint.Lint.MissingUses.pas)</para>
 /// <para>Calls: Default, DRagLint.Lint.Autofix.Fixers</para>
 /// <seealso cref="DRagLint.Lint.Autofix.Fixers"/>
 /// <!-- drag-lint:auto END -->
@@ -233,7 +245,7 @@ function AutofixTargetSkipped: Integer;
 /// A hook rather than a uses: the fixer units use this unit, never
 /// the reverse, so no unit cycle forms (circular-uses).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: initialization/finalization (DRagLint.Fix.Templates.pas)</para>
+/// <para>Called from: DRagLint.Fix.Templates.initialization (DRagLint.Fix.Templates.pas)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 procedure RegisterSidecarFixer(const AFixer: TFindingFixer);
@@ -590,6 +602,16 @@ var
   Risky: Boolean;
 begin
   Result:= IsLegacyFixRule(ARuleId) or Fixers.ContainsKey(ARuleId) or IsSidecarFixRule(ARuleId, Risky);
+end;
+
+function BuildBufferFixEdits(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+var
+  R: TRegisteredFixer;
+begin
+  Result:= nil;
+  if IsLegacyFixRule(AFinding.RuleId) or not Fixers.TryGetValue(AFinding.RuleId, R) then Exit;
+  if (not Assigned(R.Finding)) or R.Risky or IsGatedByTarget(R.NeedsCompiler, ActiveTargetCompiler) then Exit;
+  Result:= R.Finding(AFinding, ALines);
 end;
 
 { The NAMING fixes. Each rewrites a declaration and every use the index knows

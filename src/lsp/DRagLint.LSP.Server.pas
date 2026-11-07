@@ -195,7 +195,7 @@ type
   /// (full sync) and stored in TLiveDocuments; SYMBOL RESOLUTION still comes from the index, so the
   /// original reasoning is intact -- only the text under the caret is live.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.PickupContext (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server (DRagLint.LSP.Proxy.Merge.pas) (+10 more)</para>
+  /// <para>Used by: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.PickupContext (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server (DRagLint.LSP.Proxy.Merge.pas) (+11 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.LSP.Proxy.Merge, DRagLint.LSP.Server</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -490,13 +490,13 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.ComputeFileContext (DRagLint.LSP.Server.pas), DRagLint.LSP.Server.TLSPServer.DbSetFor (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: Default, DRagLint.Project.ContextFile.TryLoadContextDefaults</para>
+      /// <para>Calls: Default, DRagLint.LSP.Server.LibrariesVisibleToThisEngine, DRagLint.Project.ContextFile.TryLoadContextDefaults</para>
       /// <para>Reads: FDefaultsRead, FDefaults   Writes: FDefaultsRead, FDefaults</para>
+      /// <seealso cref="DRagLint.LSP.Server.LibrariesVisibleToThisEngine"/>
       /// <seealso cref="DRagLint.Project.ContextFile.TryLoadContextDefaults"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
       /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientContext"/>
-      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ApplyClientSettingsFile"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function  Defaults: TContextDefaults;
@@ -1523,15 +1523,15 @@ type
       /// Responds with a JSON array of CodeAction objects or null.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.DispatchMessage (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/3, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics, DRagLint.LSP.Server.CodeActionKindRequested, DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction, DRagLint.LSP.Server.TLSPServer.EnsureLinter, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.SendMessage, DRagLint.LSP.Server.TLSPServer.StoresForFile, DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedQuickfixes, StringReplace, StrToIntDef</para>
-      /// <para>Complexity: 14 (cyclomatic, outer body), 111 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes, DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions, DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics/3, DRagLint.LSP.Completion.TLspCompletion.BuildFixActions, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions, DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics, DRagLint.LSP.Server.CodeActionKindRequested, DRagLint.LSP.Server.TLSPServer.BuildRemoveUnusedSourceAction, DRagLint.LSP.Server.TLSPServer.EnsureLinter, DRagLint.LSP.Server.TLSPServer.FileFromUri, DRagLint.LSP.Server.TLSPServer.SendMessage, DRagLint.LSP.Server.TLSPServer.StoresForFile, DRagLint.LSP.UsesOnSave.TUsesOnSave.RemoveUnusedQuickfixes, StringReplace, StrToIntDef</para>
+      /// <para>Complexity: 15 (cyclomatic, outer body), 117 lines (full implementation)</para>
       /// <para>Reads: FStore</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadBytes"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
+      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildFixActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesActions"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildMissingUsesDiagnostics"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure HandleCodeAction(const AId: TJSONValue; const AParams: TJSONObject);
@@ -2092,6 +2092,30 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ComputeReferences(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
+      /// <summary>What a registered LSP feature answers for a request, without
+      /// writing it anywhere: the merge proxy's way to serve a feature (stdout is
+      /// the relay's, never this server's, in that mode).</summary>
+      /// <param name="AMethod">The LSP method name.</param>
+      /// <param name="AParams">The request's params; may be nil. Stays the caller's.</param>
+      /// <returns>A NEW value the caller owns (JSON null included); nil when no
+      /// feature owns AMethod or the feature answered with an error (one stderr
+      /// line).</returns>
+      /// <remarks>
+      /// Takes the same work lock a request takes in plain mode. A raising
+      /// feature raises through to the caller, which fails open.
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.NavAnswer (DRagLint.LSP.Proxy.Merge.pas)</para>
+      /// <para>Calls: DRagLint.LSP.Context.TLspFeature.Handle, DRagLint.LSP.Server.TLspCaptureContext.TakeResult, DRagLint.LSP.Server.TLspServerContextAdapter.Create</para>
+      /// <para>Returns: nil; Capture.TakeResult</para>
+      /// <para>Reads: FFeatureByMethod, FWorkLock</para>
+      /// <seealso cref="DRagLint.LSP.Context.TLspFeature.Handle"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLspCaptureContext.TakeResult"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLspServerContextAdapter.Create"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnnounceProxyOpen"/>
+      /// <seealso cref="DRagLint.LSP.Server.TLSPServer.AnyStoreOwns"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
+      function ComputeFeatureResult(const AMethod: string; const AParams: TJSONObject): TJSONValue;
       /// <summary>The body `workspace/symbol` answers for a query.</summary>
       /// <param name="AQuery">The client's query; '' answers an empty array.</param>
       /// <returns>A NEW SymbolInformation[] array, possibly empty; the caller owns it.</returns>
@@ -2274,9 +2298,21 @@ type
     function CallerCounts(const APath: string): TJSONArray;
     function HoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
     function Linter: TLinter;
-    procedure Reply(const AId: TJSONValue; AResult: TJSONValue);
-    procedure ReplyError(const AId: TJSONValue; ACode: Integer; const AMessage: string);
+    procedure Reply(const AId: TJSONValue; AResult: TJSONValue); virtual;
+    procedure ReplyError(const AId: TJSONValue; ACode: Integer; const AMessage: string); virtual;
     procedure Notify(const AMethod: string; AParams: TJSONObject);
+  end;
+
+  { The context TLSPServer.ComputeFeatureResult hands a feature: keeps the reply
+    instead of writing it to stdout. One instance per call. }
+  TLspCaptureContext = class(TLspServerContextAdapter)
+  strict private
+    FResult: TJSONValue;
+  public
+    destructor Destroy; override;
+    procedure Reply(const AId: TJSONValue; AResult: TJSONValue); override;
+    procedure ReplyError(const AId: TJSONValue; ACode: Integer; const AMessage: string); override;
+    function TakeResult: TJSONValue;
   end;
 
 constructor TLspServerContextAdapter.Create(AServer: TLSPServer);
@@ -3132,6 +3168,51 @@ begin
   SendResult(AId, ComputeReferences(Path, Line, Col, IncludeDecl));
 end; // procedure
 
+destructor TLspCaptureContext.Destroy;
+begin
+  FResult.Free;
+  inherited Destroy;
+end;
+
+procedure TLspCaptureContext.Reply(const AId: TJSONValue; AResult: TJSONValue);
+begin
+  FResult.Free;
+  FResult:= if AResult = nil then TJSONNull.Create else AResult;
+end;
+
+procedure TLspCaptureContext.ReplyError(const AId: TJSONValue; ACode: Integer; const AMessage: string);
+begin
+  Writeln(ErrOutput, 'drag-lint LSP: a feature answered an error (', ACode, '): ', AMessage);   { stderr only: stdout is the relay's }
+end;
+
+function TLspCaptureContext.TakeResult: TJSONValue;
+begin
+  Result := FResult;
+  FResult:= nil;
+end;
+
+function TLSPServer.ComputeFeatureResult(const AMethod: string; const AParams: TJSONObject): TJSONValue;
+var
+  Feature: TLspFeature;
+begin
+  Result:= nil;
+  if not FFeatureByMethod.TryGetValue(AMethod, Feature) then Exit;
+  var Capture: TLspCaptureContext:= TLspCaptureContext.Create(Self);
+  var Ctx: ILspServerContext:= Capture;   { the interface reference owns the instance }
+  var Id: TJSONValue:= TJSONNumber.Create(0);   { a feature replies only to a request; the id goes nowhere }
+  try
+    FWorkLock.Enter;
+    try
+      Feature.Handle(Ctx, AMethod, Id, AParams);
+    finally
+      FWorkLock.Leave;
+    end;
+    Result:= Capture.TakeResult;
+  finally
+    Id.Free;
+  end;
+end;
+
 function TLSPServer.ComputeReferences(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
 var
   Arr        : TJSONArray        ;
@@ -3501,12 +3582,48 @@ begin
     if SameText(L.PlatformName, APlatform) then Exit(L.LibraryDb);
 end;
 
+{ The outDir a PRIVATE engine copy's own drag-lint.json declares, with a trailing
+  delimiter; '' for an engine at a deployed location, for no json, for no outDir. }
+function PrivateEngineOutDir: string;
+begin
+  Result:= '';
+  var ExeDir: string:= ExtractFilePath(ParamStr(0));
+  var LowDir: string:= LowerCase(ExeDir);
+  if LowDir.Contains('\third_party\dll-win64\') or LowDir.Contains('\program files')
+    or LowDir.Contains('\appdata\local\programs\') or LowDir.Contains('\globalstorage\') then Exit;
+  var Cfg: string:= ExeDir + 'drag-lint.json';
+  if not TFile.Exists(Cfg) then Exit;
+  try
+    var Manifest: TIndexManifest:= TManifestIO.ParseText(TFile.ReadAllText(Cfg), ExeDir);
+    if Manifest.OutDir <> '' then
+      Result:= IncludeTrailingPathDelimiter(TPath.GetFullPath(TPath.Combine(ExeDir, Manifest.OutDir)));
+  except
+    on E: Exception do Result:= ''; { a manifest that will not load keeps today's fallback }
+  end;
+end;
+
+{ E-PLATLIB-PRIVATE-OUTDIR: the central defaults belong to the USER, not to this engine. A
+  private engine that names its own outDir must not reach through them to the real library,
+  so a defaults library outside that outDir is dropped, and stderr says so. A deployed engine
+  keeps every entry. Pinned by tests\autotest\run_lsp_library_private_outdir.ps1. }
+function LibrariesVisibleToThisEngine(const ALibraries: TArray<TLibraryDefault>): TArray<TLibraryDefault>;
+begin
+  Result:= ALibraries;
+  var OutDir: string:= PrivateEngineOutDir;
+  if OutDir = '' then Exit;
+  Result:= nil;
+  for var L: TLibraryDefault in ALibraries do
+    if (L.LibraryDb = '') or StartsText(OutDir, TPath.GetFullPath(L.LibraryDb)) then Result:= Result + [L]
+    else Writeln(ErrOutput, 'drag-lint LSP: private engine: defaults library ', L.LibraryDb, ' ignored, it is outside the outDir of this engine''s drag-lint.json (', OutDir, ')');
+end;
+
 function TLSPServer.Defaults: TContextDefaults;
 begin
   if not FDefaultsRead then
   begin
     FDefaultsRead:= True;
-    if not TryLoadContextDefaults(FDefaults) then FDefaults:= Default(TContextDefaults);
+    if TryLoadContextDefaults(FDefaults) then FDefaults.Libraries:= LibrariesVisibleToThisEngine(FDefaults.Libraries)
+    else FDefaults:= Default(TContextDefaults);
   end;
   Result:= FDefaults;
 end;
@@ -5982,6 +6099,12 @@ begin
       begin
         var RmSrc: TJSONObject:= BuildRemoveUnusedSourceAction(Path, BufText);
         if RmSrc <> nil then Actions.AddElement(RmSrc);
+      end;
+      var FixActs: TJSONArray:= TLspCompletion.BuildFixActions(Path, StartLine, EndLine, Diags);
+      try
+        for var J:= 0 to FixActs.Count - 1 do Actions.AddElement(FixActs.Items[J].Clone as TJSONValue);
+      finally
+        FixActs.Free;
       end;
       Reply.AddPair('result', Actions);
     finally

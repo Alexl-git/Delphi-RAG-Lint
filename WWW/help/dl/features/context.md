@@ -7,7 +7,7 @@ group: search-navigation
 order: 20005
 since: 0.6.0-alpha
 status: shipped
-updated: 1.42.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # context
@@ -81,7 +81,7 @@ and a capped list of callers, as markdown.
 
 ### Library calls
 
-When the project was indexed with a library (`--library-db`, or `libraryResolve` in the manifest), a routine whose body calls library members gets one extra line above `## Callers`: `Library calls: N (top: a, b, c)`. N counts the calls whose stored `external_target` is set; the top three targets are the most frequent. `--format json` carries the same as `library_calls` (`count`, `top`). A project indexed without a library has no external targets, so the line and the key are both absent. `--library-db <library.sqlite>` (or a second `--db`) opts into a query-time count: calls with no stored link whose receiver is typed by name are bound against the library now (the same binding `find-callees` uses, read-only; a library that cannot be opened is a stderr NOTE and the stored-only count). `library_calls.via` says where the count came from: `stored`, or `oracle` when at least one call was bound at query time. It never attaches a library you did not name.
+When the project was indexed with a library (`--library-db`, or `libraryResolve` in the manifest), a routine whose body calls library members gets one extra line above `## Callers`: `Library calls: N (top: a, b, c)`. N counts the calls whose stored `external_target` is set; the top three targets are the most frequent. `--format json` carries the same as `library_calls` (`count`, `top`). The count is also query-time by default: calls with no stored link whose receiver is typed by name are bound against the library now (the same binding `find-callees` uses, read-only; a library that cannot be opened is a stderr NOTE and the stored-only count). The library is `--library-db <library.sqlite>` or a second `--db`; with neither, the manifest's library section for `--platform`, else the platform the project DB was indexed for, else the manifest default. `--library-db none` turns that off, and a project with no library anywhere gets no line and no key. `library_calls.via` says where the count came from: `stored`, or `oracle` when at least one call was bound at query time. This reads only: nothing is written to the project DB, and what an index run stores still needs `--library-db` or `libraryResolve`.
 
 ### A whole type: the body cap
 

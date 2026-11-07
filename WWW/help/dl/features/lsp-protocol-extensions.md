@@ -1,20 +1,20 @@
 ---
 id: lsp-protocol-extensions
 title: LSP protocol extensions
-summary: Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index
+summary: Answers outline, implementation, rename, lens, tokens, inlay hints, call and type hierarchy, type definition, highlights, folding and commands from the index
 product: DL
 group: editor-integration
 order: 110014
 since: 1.33.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.46.0-alpha
 ---
 
 # LSP protocol extensions
 
-Answers outline, implementation, rename, code lens, semantic tokens, inlay hints and commands from the index.
+Answers outline, implementation, rename, lens, tokens, inlay hints, call and type hierarchy, type definition, highlights, folding and commands from the index.
 
-Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens and parameter hints, all answered from the index. Tokens and hints come from a parse of the preprocessed text, so code in an inactive {$IFDEF} branch gets none, and rename never edits it. The defines are those of the file's own project's active build.
+Read this when you want more than hover and definition from drag-lint lsp: the outline, rename, caller-count lenses, tokens, parameter hints, call and type hierarchy, go to type definition and same-file highlights, all answered from the index (folding comes from a parse and needs no index). Tokens and hints come from a parse of the preprocessed text, so code in an inactive {$IFDEF} branch gets none, and rename never edits it. The defines are those of the file's own project's active build.
 
 ## Details
 
@@ -26,7 +26,7 @@ feature is for and how it was verified.
 ### Proxy merge
 
 `drag-lint lsp --proxy` relays every message between the editor and RAD Studio's
-DelphiLSP. Four opt-in merge flags add drag-lint answers to DelphiLSP's, so one
+DelphiLSP. Five opt-in merge flags add drag-lint answers to DelphiLSP's, so one
 session shows the compiler's errors and drag-lint's findings together; two more
 flags tune the proxy itself:
 
@@ -36,6 +36,7 @@ flags tune the proxy itself:
 | `--merge-completion` | drag-lint items unioned into the completion reply, keyed on label and kind |
 | `--merge-hover` | drag-lint hover facts appended after a `---` rule |
 | `--merge-definition` | drag-lint locations when DelphiLSP answers null or empty; also references and workspace symbols |
+| `--merge-navigation` | type and call hierarchy, type definition, document highlight and folding answered from the index, for each provider DelphiLSP does not advertise |
 | `--merge-budget-ms` | per-frame time budget, default 300 |
 | `--delphi-lsp-bits` | `32` forwards to the 32-bit DelphiLSP, `64` (default) to bin64 |
 

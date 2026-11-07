@@ -734,12 +734,12 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Trace.Walk.TRoutineWalk.ClassifyCalls (DRagLint.Charts.Trace.Walk.pas), DRagLint.Charts.Trace.Walk.TTraceWalker.LineYield (DRagLint.Charts.Trace.Walk.pas)</para>
-    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Trace.Walk.TTraceWalker.IndexOf, Format</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Index.TIndexRow.S, DRagLint.Charts.Trace.Walk.TTraceWalker.IndexOf, Format</para>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
     /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.IndexOf"/>
     /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
     /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
-    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FibLiterals(pSide: TTraceSide; pFid: Integer): TObjectList<TIndexRow>;
@@ -1114,14 +1114,14 @@ type
     /// Port of Get-DatabaseSteps (Trace.Walk.ps1:1726), Get-WalkedCaseSelector and Get-SelectStop.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.ReadThroughRoute (DRagLint.Charts.Q.RoundTrip.pas), DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WriteThroughCrossing (DRagLint.Charts.Q.RoundTrip.pas)</para>
-    /// <para>Calls: DRagLint.Charts.Columns.SqlColumnState, DRagLint.Charts.Columns.TServerSqlHit.None, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceStopText, DRagLint.Charts.Trace.Walk.AddRtItem, DRagLint.Charts.Trace.Walk.StepsMatching, DRagLint.Charts.Trace.Walk.TDatabaseSteps.Create, DRagLint.Charts.Trace.Walk.TTraceWalker.SelectStop, DRagLint.Charts.Trace.Walk.TTraceWalker.WriteStatementStop, SameText</para>
+    /// <para>Calls: DRagLint.Charts.Columns.SqlColumnState, DRagLint.Charts.Columns.TServerSqlHit.None, DRagLint.Charts.Sql.TSqlTableSet.Table, DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ColumnFactNote, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceStopText, DRagLint.Charts.Trace.Walk.AddRtItem, DRagLint.Charts.Trace.Walk.StepsMatching, DRagLint.Charts.Trace.Walk.TDatabaseSteps.Create, DRagLint.Charts.Trace.Walk.TTraceWalker.SelectStop, DRagLint.Charts.Trace.Walk.TTraceWalker.WriteStatementStop, SameText</para>
     /// <para>Returns: TDatabaseSteps.Create</para>
     /// <para>Catches: Exception (re-raise)</para>
     /// <seealso cref="DRagLint.Charts.Columns.SqlColumnState"/>
     /// <seealso cref="DRagLint.Charts.Columns.TServerSqlHit.None"/>
+    /// <seealso cref="DRagLint.Charts.Sql.TSqlTableSet.Table"/>
+    /// <seealso cref="DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.ColumnFactNote"/>
     /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceStep"/>
-    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
-    /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceStopText"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function DatabaseSteps(const pServerItems: TArray<TTraceItem>; pCtx: TTraceContext; const pMode: string): TDatabaseSteps;
@@ -1134,14 +1134,14 @@ type
     /// Port of Get-FillRoutes (Trace.Walk.ps1:1925).
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.Emit (DRagLint.Charts.Q.RoundTrip.pas)</para>
-    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Text.ShortName, DRagLint.Charts.Text.UnitNameOf, DRagLint.Charts.Trace.Walk.TTraceContext.Clone, DRagLint.Charts.Trace.Walk.TTraceWalker.LineLits, DRagLint.Charts.Trace.Walk.TTraceWalker.WalkRoutine, Format, IntToStr, UpperCase</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TChartsIndex.SqlText, DRagLint.Charts.Text.ShortName, DRagLint.Charts.Text.UnitNameOf, DRagLint.Charts.Trace.Walk.TTraceContext.Clone, DRagLint.Charts.Trace.Walk.TTraceWalker.LineLits, DRagLint.Charts.Trace.Walk.TTraceWalker.WalkRoutine, Format, IntToStr, UpperCase</para>
     /// <para>Returns: TObjectList&lt;TFillRoute&gt;.Create</para>
     /// <para>Catches: Exception (re-raise)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.SqlText"/>
     /// <seealso cref="DRagLint.Charts.Text.ShortName"/>
     /// <seealso cref="DRagLint.Charts.Text.UnitNameOf"/>
-    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceContext.Clone"/>
-    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.LineLits"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FillRoutes(const pDs: TTraceDataSet; pCtx: TTraceContext; pDepth: Integer): TObjectList<TFillRoute>;
@@ -1172,14 +1172,14 @@ type
     /// Port of Get-AlsoRoutes (Trace.Walk.ps1:1979) with Test-TableSpecificSender.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.WalkAlso (DRagLint.Charts.Q.RoundTrip.pas)</para>
-    /// <para>Calls: DRagLint.Charts.Text.ShortName, DRagLint.Charts.Text.UnitNameOf, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Walk.TableSpecificSender, DRagLint.Charts.Trace.Walk.TTraceWalker.RoutineFacts, Format</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.AllRows, DRagLint.Charts.Text.ShortName, DRagLint.Charts.Text.UnitNameOf, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Walk.TableSpecificSender, DRagLint.Charts.Trace.Walk.TTraceWalker.RoutineFacts, Format</para>
     /// <para>Returns: TObjectList&lt;TTraceItem&gt;.Create</para>
     /// <para>Catches: Exception (re-raise)</para>
+    /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.AllRows"/>
     /// <seealso cref="DRagLint.Charts.Text.ShortName"/>
     /// <seealso cref="DRagLint.Charts.Text.UnitNameOf"/>
     /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceStep"/>
     /// <seealso cref="DRagLint.Charts.Trace.Shim.TraceAnchorText"/>
-    /// <seealso cref="DRagLint.Charts.Trace.Walk.TableSpecificSender"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function AlsoRoutes(const pSenders: TArray<TTraceItem>; const pSkipIds: TArray<Integer>; pCtx: TTraceContext): TObjectList<TTraceItem>;
@@ -1221,14 +1221,14 @@ type
     /// Port of Get-IndexStamp (Emit-RoundTrip.ps1:95).
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.AsOf (DRagLint.Charts.Q.RoundTrip.pas)</para>
-    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Query, FormatDateTime, StrToInt64, UnixToDateTime</para>
+    /// <para>Calls: DRagLint.Charts.Index.TChartsIndex.Query, DRagLint.Charts.Index.TIndexRow.S, FormatDateTime, StrToInt64, UnixToDateTime</para>
     /// <para>Returns: STAMP_NONE; FormatDateTime(STAMP_FORMAT, UnixToDateTime(StrToInt64(Q[0].S('v')), True), TFormatSettings.Invariant)</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Charts.Index.TChartsIndex.Query"/>
+    /// <seealso cref="DRagLint.Charts.Index.TIndexRow.S"/>
     /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AddCallsStep"/>
     /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.AlsoRoutes"/>
     /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.CountRows"/>
-    /// <seealso cref="DRagLint.Charts.Trace.Walk.TTraceWalker.Create"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IndexStamp(pIndex: TChartsIndex): string; static;

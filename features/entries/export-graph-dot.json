@@ -17,7 +17,7 @@
     {
       "type": "cli",
       "verb": "graph",
-      "usage": "drag-lint graph --db <file.sqlite> [--format dot|mermaid] [--name <root-substr>] [--output <file>]",
+      "usage": "drag-lint graph --db <file.sqlite> [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]",
       "flags": [
         {
           "name": "--db",
@@ -36,7 +36,7 @@
         }
       ],
       "helpOrder": 29,
-      "help": ["  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid] [--name <root-substr>] [--output <file>]"]
+      "help": ["  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]"]
     }
   ],
   "audience": "both",
@@ -52,9 +52,9 @@
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-11-07",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "0e877648e9e95bc29f72a1412184983695c8be612d4c1c34a46695de46aaa73b"
+    "build": "1.46.0-alpha",
+    "surfaceHash": "cfa73ef402d259c06d66a408e41bc3e536fb01f52d4e68cd46eaaa3cc36117c1"
   }
 }

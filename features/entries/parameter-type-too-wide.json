@@ -1,0 +1,25 @@
+{
+  "id": "parameter-type-too-wide",
+  "title": "Parameter type too wide (lint rule)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.46.0-alpha",
+  "summary": "Project lint rule, OFF by default: a class-typed parameter that an ancestor type could carry, proved by the narrow-param plan",
+  "intro": "Read this to see what parameter-type-too-wide reports and how it relates to narrow-param. It runs in lint-all and lint-project over a project index.",
+  "wikiPage": "parameter-type-too-wide",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "example": "drag-lint lint-all --db <project.sqlite> --rule parameter-type-too-wide"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-07",
+    "by": "ENGINE",
+    "build": "1.46.0-alpha",
+    "surfaceHash": "c86e88b99bad3d1352c6b7e19e7394f26a185b860c009bb97ac366379a830ab4"
+  }
+}

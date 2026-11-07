@@ -371,6 +371,13 @@ line to delete or rethink.
   deliberate: they are different facts about the same property, and suppressing
   either would hide something true.
 
+## Glyph outcomes (`--glyph-stitch`)
+
+`glyphs[]` is always present, `[]` when none: `{instance, from_path, to_path, kind, source_n,
+alternative, dropped_slots[], rule_line, line, message}`. `kind` `glyph-stitched` is a receipt:
+like `resolved_defaults` it is in neither `items[]` nor the six arrays, so `converted[]` keeps
+counting instances. `glyph-no-alternative`, `glyph-format-unsupported` and `glyph-not-a-strip`
+are ALSO one `items[]` entry of that kind in field `todos`, so the remainder stays truthful.
 ## Open questions we are NOT deciding for you
 
 From `docs\INBOX-split-merge-value-conversion-scope.md`:

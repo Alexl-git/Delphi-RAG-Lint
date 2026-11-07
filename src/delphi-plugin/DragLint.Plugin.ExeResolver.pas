@@ -28,6 +28,10 @@ unit DragLint.Plugin.ExeResolver;
 
 interface
 
+uses
+  DragLint.Plugin.ProcRun
+  ;
+
 /// <summary>Resolves the drag-lint CLI exe for ALL plugin spawn sites.</summary>
 /// <returns>Full path when a candidate exists; else the bare name
 /// 'drag-lint.exe' (resolved via PATH by CreateProcess).</returns>
@@ -54,7 +58,7 @@ function DragLintExe: string;
 const
   /// <summary>The one user-facing message every plugin site shows when no usable
   /// engine exe resolves. Kept in one place so the wording cannot drift.</summary>
-  ENGINE_NOT_FOUND_MSG = 'drag-lint.exe not found -- check drag-lint Options.';
+  ENGINE_NOT_FOUND_MSG = PROCRUN_ENGINE_NOT_FOUND_TEXT;
 
 /// <summary>Diagnostic twin of <see cref="RequireEngine"/>: same usability test, but
 /// pExe keeps the resolved path even when it is unusable so a message can name it

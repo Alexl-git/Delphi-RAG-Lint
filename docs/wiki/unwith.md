@@ -52,3 +52,9 @@ Reindex the real DB after a good apply; only the copy was written.
 
 One build configuration is proved (the project's active one). The timing of a nil dereference in a target chain moves from
 the `with` to the first use; a failing `as` is covered by `cast-after-side-effect`, a nil is not.
+
+## From `lint --fix`
+
+`drag-lint lint --fix --fix-rule with-statement --db <db> [--in <f.pas> [--fix-line <L>]] [--apply --project <X.dproj>]`
+is the same run as `unwith`: without `--apply` it prints the plan, with it the gate builds and rolls back as above.
+`--apply` without `--project` exits 2.

@@ -125,7 +125,7 @@ type
   /// old identifier after the last such prefix. This preserves the receiver
   /// intent without over-modelling it in Batch 1 (validation ignores Scope).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Convert.Apply.PlanMigrateSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.EvaluateMapping (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.ParseConversionRules (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseCheckRefDirective (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseMappingDirective (DRagLint.Convert.Rules.pas) (+66 more)</para>
+  /// <para>Used by: DRagLint.Convert.Apply.PlanMigrateSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.EvaluateMapping (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.ParseConversionRules (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseCheckRefDirective (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseMappingDirective (DRagLint.Convert.Rules.pas) (+71 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -183,8 +183,8 @@ type
   /// ASCII-only description (e.g. 'unknown directive: #frobnicate' or
   /// 'link ToPath not found in --to tree: Bogus.Path').
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.BuildBlockClasses.RequireResolved (DRagLint.CLI.pas), DRagLint.Convert.Rules.BookChainWarnings (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ConversionRuleWarnings (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.AddError (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.UnrealisedGlyphLinks (DRagLint.Convert.Rules.pas) (+17 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Rules</para>
+  /// <para>Used by: DRagLint.CLI.BuildBlockClasses.RequireResolved (DRagLint.CLI.pas), DRagLint.Convert.Rules.BookChainWarnings (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ConversionRuleWarnings (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.MissingGlyphCountReaders (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.AddError (DRagLint.Convert.Rules.pas) (+19 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleError = record
@@ -215,7 +215,7 @@ type
   /// resolve paths lazily and never read it. At most one '#depth' per book: a
   /// second one is a parse error on its own line and the first one stands.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) ?, DRagLint.CLI.QualifyConvertArg (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveTreeDepth (DRagLint.CLI.pas) (+57 more)</para>
+  /// <para>Used by: DRagLint.CLI.ConvertApplyComponentPart (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) ?, DRagLint.CLI.QualifyConvertArg (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveTreeDepth (DRagLint.CLI.pas) (+59 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -241,7 +241,7 @@ type
   /// 1.20.6 (T2b): replaced TBlockTrees -- no property tree is built; each path
   /// is resolved segment by segment (TPropMemberCache.ResolvePath, psDfm).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.Rules.pas) ?, DRagLint.CLI.BuildBlockClasses (DRagLint.CLI.pas) ?, DRagLint.CLI.ValidateConvertBook (DRagLint.CLI.pas) ?, DRagLint.Convert.Rules.ValidateBlocks (DRagLint.Convert.Rules.pas) ?, DRagLint.Convert.Rules.ValidateBlocks.ClassesOf (DRagLint.Convert.Rules.pas) (+4 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.Rules.pas) ?, DRagLint.CLI.BuildBlockClasses (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.ValidateConvertBook (DRagLint.CLI.pas) ?, DRagLint.Convert.Rules.ValidateBlocks.ClassesOf (DRagLint.Convert.Rules.pas) (+6 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -567,6 +567,41 @@ function BookChainWarnings(const ARules: TConversionRuleSet): TArray<TRuleError>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function UnrealisedGlyphLinks(const ARules: TConversionRuleSet): TArray<TRuleError>;
+
+/// <summary>The row of GlyphCountReaders that covers a class.</summary>
+/// <param name="AClass">The class; its own name and its ancestors are compared.</param>
+/// <returns>The row's index, -1 when no row covers it.</returns>
+/// <remarks>
+/// Reads the class graph through AClass's cache; no write.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.ReadGlyphCount (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.MissingGlyphCountReaders (DRagLint.Convert.Rules.pas)</para>
+/// <para>Calls: DRagLint.Convert.GlyphExpr.GlyphCountReaders, DRagLint.Convert.PropCache.TClassRef.DescendsFrom, SameText</para>
+/// <para>Returns: -1</para>
+/// <seealso cref="DRagLint.Convert.GlyphExpr.GlyphCountReaders"/>
+/// <seealso cref="DRagLint.Convert.PropCache.TClassRef.DescendsFrom"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function GlyphReaderIndexFor(const AClass: TClassRef): Integer;
+
+/// <summary>A G-link on a class with no N reader, under convert-*'s --glyph-stitch
+/// (grammar 3.2: a validate error, the investigation rule made mechanical).</summary>
+/// <param name="ARules">The parsed rule set.</param>
+/// <param name="AClasses">Index-aligned as for ValidateConversionRulesPerBlock:
+/// [0] is the region before the first #convert. A block whose From class does not
+/// resolve is skipped, since nothing can be said about it.</param>
+/// <returns>One error per image G-link with no reader, in source order.</returns>
+/// <remarks>
+/// A G[count] link is not listed: its image link already is.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas), DRagLint.CLI.ValidateConvertBook (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Convert.PropCache.TClassRef.RootType, DRagLint.Convert.Rules.GlyphReaderIndexFor, DRagLint.Convert.Rules.IsGlyphImageLink, Format</para>
+/// <seealso cref="DRagLint.Convert.PropCache.TClassRef.RootType"/>
+/// <seealso cref="DRagLint.Convert.Rules.GlyphReaderIndexFor"/>
+/// <seealso cref="DRagLint.Convert.Rules.IsGlyphImageLink"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function MissingGlyphCountReaders(const ARules: TConversionRuleSet;
+  const AClasses: TArray<TBlockClasses>): TArray<TRuleError>;
 
 implementation
 
@@ -1794,6 +1829,40 @@ begin
     E.Message:= Format('link %s <- %s %s: glyph-expression links are validated but not yet realised ' +
       'by convert-apply (CV-2) -- refusing rather than carrying the source image whole',
       [R.ToPath, R.FromPath, R.GlyphExpr]);
+    Result:= Result + [E];
+  end;
+end;
+
+function GlyphReaderIndexFor(const AClass: TClassRef): Integer;
+var
+  Readers: TArray<TGlyphCountReader>;
+  I      : Integer;
+begin
+  Readers:= GlyphCountReaders;
+  for I:= 0 to High(Readers) do
+    if SameText(AClass.QName, Readers[I].ClassQName) or AClass.DescendsFrom(Readers[I].ClassQName) then Exit(I);
+  Result:= -1;
+end;
+
+function MissingGlyphCountReaders(const ARules: TConversionRuleSet;
+  const AClasses: TArray<TBlockClasses>): TArray<TRuleError>;
+var
+  R    : TConversionRule;
+  E    : TRuleError;
+  Block: Integer;
+begin
+  Result:= nil;
+  Block := 0;
+  for R in ARules.Rules do
+  begin
+    if R.Kind = rkConvert then Inc(Block);
+    if not IsGlyphImageLink(R) or (Block > High(AClasses)) then Continue;
+    if (AClasses[Block].FromClass.RootType = '') or (GlyphReaderIndexFor(AClasses[Block].FromClass) >= 0) then Continue;
+    E        := Default(TRuleError);
+    E.LineNo := R.LineNo;
+    E.Message:= Format('link %s <- %s: no glyph-count reader for %s -- investigate the class and add it to ' +
+      'docs\GLYPH-CLASSES.md and the engine''s class table before writing a G-rule',
+      [R.ToPath, R.FromPath, AClasses[Block].FromClass.QName]);
     Result:= Result + [E];
   end;
 end;

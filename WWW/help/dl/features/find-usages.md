@@ -4,10 +4,10 @@ title: Find Usages
 summary: Lists every reference to the symbol under the editor caret across the indexed project
 product: DL
 group: search-navigation
-order: 20009
+order: 20010
 since: 0.33.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Find Usages
@@ -40,6 +40,9 @@ not a one-shot CLI command.
 This is a different feature-map row from the right-click "Find Usages"
 action on a Structure-tree node, which does have an underlying verb -- see
 [Find Usages (context)](find-usages-context.md).
+
+### Where the answer comes from
+When the language server is running and its databases cover the query, the form asks it (`draglint/usages`) and starts no process. Otherwise, and when the server has not answered within 10 s or answers an error (an older engine), it runs `drag-lint usages`. Both give the same rows.
 
 ### What it needs
 The feature map marks this row's Index column "n/a" and its Mechanism

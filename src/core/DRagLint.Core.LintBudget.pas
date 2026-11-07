@@ -47,7 +47,7 @@ function IsLibraryIndexPath(const pDbPath: string): Boolean;
 /// <remarks>
 /// Pure; thread-safe.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.LSP.Server.TLSPServer.RunFullRulesLint (DRagLint.LSP.Server.pas), [dclDragLintWizard]DragLint.Plugin.LiveDiagnostics.TLintDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas)</para>
+/// <para>Called from: [drag-lint]DRagLint.LSP.Server.TLSPServer.RunFullRulesLint (DRagLint.LSP.Server.pas), [dclDragLintWizard]DragLint.Plugin.LiveDiagnostics.TLintDiagnosticProvider.GetDiagnostics (DragLint.Plugin.LiveDiagnostics.pas)</para>
 /// <para>Calls: DRagLint.Core.LintBudget.IsLibraryIndexPath</para>
 /// <para>Returns: if IsLibraryIndexPath(pOwningDbPath) then LINT_CHILD_LIBRARY_TIMEOUT_MS</para>
 /// <seealso cref="DRagLint.Core.LintBudget.IsLibraryIndexPath"/>

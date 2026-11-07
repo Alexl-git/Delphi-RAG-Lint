@@ -26,7 +26,7 @@ type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Exceptions.ExceptionSourceRowsIn (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Exceptions.Skipped (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Exceptions.TExceptionIndex.SourceRows (DRagLint.Charts.Exceptions.pas) ?, DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.NestedSkip (DRagLint.Charts.Q.ExceptionPaths.pas) (+1 more)</para>
-  /// <para>Used in units: DRagLint.Charts.Exceptions, DRagLint.Charts.Q.ExceptionPaths, DRagLint.Charts.Remarks</para>
+  /// <para>Used in units: DRagLint.Charts.Exceptions, DRagLint.Charts.Q.ExceptionPaths, DRagLint.Charts.Remarks, DRagLint.Lint.InitSections</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TLineSpan = record

@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70009
 since: 0.6.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Export Graph (DOT)
@@ -46,9 +46,9 @@ dependency structure with Graphviz.
 
 ### Running it from the CLI
 ```text
-drag-lint graph --db <file.sqlite> [--format dot|mermaid] [--name <root-substr>] [--output <file>]
+drag-lint graph --db <file.sqlite> [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]
 ```
-`--format` selects `dot` or `mermaid`; `--name` roots the graph at a
+`--format` selects `dot`, `mermaid`, `json` (`drag-lint.graph/1`: an edges list of from/to/weight) or `html` (one self-contained page); `--name` roots the graph at a
 substring match; `--output` writes to a file instead of stdout.
 
 ### What it needs

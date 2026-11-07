@@ -1,0 +1,41 @@
+{
+  "id": "convert-components",
+  "title": "Convert Components",
+  "group": "component-conversion",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.46.0-alpha",
+  "summary": "Opens ConvRulesEditor on the components selected in the form designer",
+  "intro": "Read this when you want to convert components from the form designer. Select them, choose drag-lint > Convert Components > Convert Selected Component(s)...; drag-lint saves and closes the unit and opens ConvRulesEditor on its Convert tab with the matching books checked. You press Convert. The unit reopens when the editor closes.",
+  "wikiPage": "Convert-Components",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Convert Components > Convert Selected Component(s)...",
+      "steps": ["Open the form in the designer and select the component(s)", "Choose drag-lint > Convert Components > Convert Selected Component(s)...", "Save the unit if asked; it closes and ConvRulesEditor opens on its Convert tab", "Check the scope and the books, press Convert, close the editor; the unit reopens"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Convert Components > Convert All of This Type on the Form...",
+      "steps": ["Open the form in the designer and select a component of each type to convert", "Choose drag-lint > Convert Components > Convert All of This Type on the Form...", "Save the unit if asked; it closes and ConvRulesEditor opens on its Convert tab with every instance of those types in scope", "Press Convert, close the editor; the unit reopens"]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Convert Components > Open Conversion Editor...",
+      "steps": ["Open the unit", "Choose drag-lint > Convert Components > Open Conversion Editor...", "ConvRulesEditor opens with the unit loaded and no scope; the unit stays open"]
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "How do I convert the components I selected on a form?",
+      "command": "drag-lint > Convert Components > Convert Selected Component(s)..."
+    }
+  ],
+  "verified": {
+    "date": "2026-11-07",
+    "by": "ENGINE",
+    "build": "1.46.0-alpha",
+    "surfaceHash": "3ad7d4dbd4fa62932adaf79bb073d71c7ae59f666f5d4f13b36417bd0ab50cc3"
+  }
+}

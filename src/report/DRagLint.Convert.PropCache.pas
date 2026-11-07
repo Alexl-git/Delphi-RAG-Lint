@@ -351,7 +351,7 @@ type
   /// query then answers absent and RootType is ''. The record does not own
   /// Cache.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ConvertClassIn (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate.ClassFor (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.ClassFor (DRagLint.Convert.Apply.pas) (+11 more)</para>
+  /// <para>Used by: DRagLint.CLI.ConvertClassIn (DRagLint.CLI.pas), DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate (DRagLint.CLI.pas) ?, DRagLint.CLI.DoConvertValidate.ClassFor (DRagLint.CLI.pas) ?, DRagLint.Convert.Apply.TConvertTreeCache.ClassFor (DRagLint.Convert.Apply.pas) (+12 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -362,7 +362,7 @@ type
     /// <returns>MembersOf(QName).RootType, or '' when unset.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.CarryParamData (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.CarryParamData.FlushItem (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.ValidateBlocks.Missing (DRagLint.Convert.Rules.pas)</para>
+    /// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.CarryParamData (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.DfmReemit.ReemitBlock.CarryParamData.FlushItem (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.MissingGlyphCountReaders (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ValidateBlocks.Missing (DRagLint.Convert.Rules.pas)</para>
     /// <para>Calls: DRagLint.Convert.PropCache.TPropMemberCache.MembersOf</para>
     /// <para>Returns: Cache.MembersOf(QName).RootType</para>
     /// <para>Reads: QName, Cache</para>
@@ -416,7 +416,7 @@ type
     /// <returns>False when unset; otherwise the cache's answer.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TargetRedeclaresDefault (DRagLint.Convert.DfmReemit.pas)</para>
+    /// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TargetRedeclaresDefault (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.GlyphReaderIndexFor (DRagLint.Convert.Rules.pas)</para>
     /// <para>Calls: DRagLint.Convert.PropCache.TPropMemberCache.DescendsFrom</para>
     /// <para>Returns: Cache.DescendsFrom(QName, AAncestorQName)</para>
     /// <para>Reads: QName, Cache</para>

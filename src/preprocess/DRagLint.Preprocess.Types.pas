@@ -25,7 +25,7 @@ type
   /// offsets into the input; Line is 0-based (matches lexer.js lineAt).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Preprocess.Lexer.pas), DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas), DRagLint.Lint.IfdefUndefined.ScanSource (DRagLint.Lint.IfdefUndefined.pas), DRagLint.Preprocess.Lexer.LexDirectives (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.Lexer.LexDirectives.FlushText (DRagLint.Preprocess.Lexer.pas) (+2 more)</para>
+  /// <para>Used by: DRagLint.CLI.DoDumpPpLex (DRagLint.CLI.pas) ?, DRagLint.Lint.IfdefUndefined.AddDirectiveTests (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Lint.IfdefUndefined.ScanSource (DRagLint.Lint.IfdefUndefined.pas) ?, DRagLint.Preprocess.Lexer.LexDirectives (DRagLint.Preprocess.Lexer.pas), DRagLint.Preprocess.Lexer.LexDirectives.FlushText (DRagLint.Preprocess.Lexer.pas) (+4 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Lint.IfdefUndefined, DRagLint.Preprocess, DRagLint.Preprocess.Lexer</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -44,8 +44,8 @@ type
   /// integer (for {$IF CompilerVersion >= 37} style checks).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Core.Indexer.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoPpProfile (DRagLint.CLI.pas), DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.SetPreprocess (DRagLint.Core.Indexer.pas) (+9 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Diagnostics.ParseCache, DRagLint.Index.Closure, DRagLint.Preprocess, DRagLint.Preprocess.Profile, DRagLint.Preprocess.Types</para>
+  /// <para>Used by: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas) ?, DRagLint.CLI.BuildProjectFileScope (DRagLint.CLI.pas) ?, DRagLint.CLI.InstallFileProfileResolver (DRagLint.CLI.pas) ?, DRagLint.CLI.ResolveIndexProfile (DRagLint.CLI.pas), DRagLint.Index.Closure.TClosureResolver.Create (DRagLint.Index.Closure.pas) (+24 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Core.Interfaces, DRagLint.Diagnostics.ParseCache, DRagLint.Index.Closure, DRagLint.Index.PPUnitSource, DRagLint.Preprocess, DRagLint.Preprocess.Profile, DRagLint.Preprocess.Types, DRagLint.Project.DefineProfile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDefineProfile = record
@@ -89,8 +89,8 @@ type
   /// BaseDir + NearSearch behaviour unchanged.
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Preprocess.Types.pas), DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas), DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Preprocess.Types.TPPOptionsDefault (DRagLint.Preprocess.Types.pas) (+3 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Diagnostics.ParseCache, DRagLint.Preprocess, DRagLint.Preprocess.Types</para>
+  /// <para>Used by: DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas) ?, DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas) ?, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas) ?, DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites (DRagLint.Diagnostics.ParseCache.pas) ?, DRagLint.Preprocess.Types.TPPOptionsDefault (DRagLint.Preprocess.Types.pas) (+9 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Diagnostics.ParseCache, DRagLint.Index.Closure, DRagLint.Index.PPUnitSource, DRagLint.Preprocess, DRagLint.Preprocess.Types</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TPPOptions = record
@@ -109,8 +109,14 @@ type
   /// absolute resolved include path. Resolved holds the include's preprocessed
   /// bytes exactly as the recursion produced them -- under the host's live
   /// defines at that point -- so a consumer parses those, never re-preprocesses.</summary>
-  /// <remarks>Unresolved, inactive and over-depth includes produce no site.
-  /// Sites are recorded in source order (a nested site follows its parent).</remarks>
+  /// <remarks>
+  /// Unresolved, inactive and over-depth includes produce no site.
+  /// Sites are recorded in source order (a nested site follows its parent).
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Core.Indexer.pas) ?, DRagLint.CLI.DoPreprocessFile (DRagLint.CLI.pas) ?, DRagLint.CLI.InstallLintIncludeContexts (DRagLint.CLI.pas) ?, DRagLint.Core.Indexer.TIndexer.RememberIncludeSites (DRagLint.Core.Indexer.pas) ?, DRagLint.Preprocess.PreprocessInto.ApplyIncludeDefines (DRagLint.Preprocess.pas) (+15 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Core.Indexer, DRagLint.Diagnostics.ParseCache, DRagLint.Index.Closure, DRagLint.Index.IncludeUses, DRagLint.Preprocess</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TPPIncludeSite = record
     HostLine: Integer;
     HostCol : Integer;
@@ -127,7 +133,7 @@ type
 /// <returns><!-- drag-lint:auto -->TPPOptions -- Observed: Default(TPPOptions).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Preprocess.Preprocess/2 (DRagLint.Preprocess.pas)</para>
+/// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFileBody (DRagLint.Core.Indexer.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.Closure.TClosureResolver.TryPreprocessWithSites (DRagLint.Index.Closure.pas) (+2 more)</para>
 /// <para>Calls: Default</para>
 /// <para>Effect-free (proven)</para>
 /// <!-- drag-lint:auto END -->
@@ -150,7 +156,7 @@ function TPPOptionsDefault: TPPOptions;
 /// importing that unit on purpose -- see the duplicate-global note beside its
 /// own tree_sitter_delphi13 declaration.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.CallResolver.TCallResolver.WithStatementsOf (DRagLint.Index.CallResolver.pas), DRagLint.Parser.Delphi13.TDelphi13Parser.Parse (DRagLint.Parser.Delphi13.pas)</para>
+/// <para>Called from: DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.HostIncludeSites (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Diagnostics.ParseCache.TAstParseCache.UnresolvedIfs (DRagLint.Diagnostics.ParseCache.pas), DRagLint.Index.CallResolver.TCallResolver.WithStatementsOf (DRagLint.Index.CallResolver.pas), DRagLint.LSP.Feature.FoldingRange.TLspFoldingRangeFeature.Handle (DRagLint.LSP.Feature.FoldingRange.pas) (+2 more)</para>
 /// <para>Calls: Copy</para>
 /// <para>Returns: Copy(ASource, 0, Length(ASource))</para>
 /// <para>Complexity: 10 (cyclomatic, outer body), 27 lines (full implementation)</para>

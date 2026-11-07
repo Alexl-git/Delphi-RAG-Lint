@@ -12,12 +12,33 @@ drag-lint lint-all --db <project.sqlite> --rule argument-narrows
 | Rule | Default | Reports |
 |---|---|---|
 | `is-always-true` | ON | `x is T` where the static type of `x` already descends from `T`: the test only asks whether `x` is nil |
+| `is-never-true` | OFF | `x is T` that no object can answer yes to: two classes where neither descends from the other, or a sealed class against an interface it does not implement, either way round. Proof only: both ancestries followed to the end and no homonym; a class that is not sealed against an interface stays silent, a descendant may implement it. The sealed half needs a 1.46 parse (`symbols.directives`) |
 | `upcast-then-downcast` | ON | `TLeaf(TBase(x))` or `(x as TBase) as TLeaf` where `x` already is a `TBase` |
 | `with-on-temporary` | ON | `with TFoo.Create do` with no free in the body and no owner taking the object |
 | `interface-holder-of-non-refcounted` | ON | An interface variable assigned a `TComponent` / `TNoRefCountObject` / `TSingletonImplementation` descendant (a variable, `as`, a constructor, `Self`) |
 | `argument-narrows` | ON | A variable, field or function result passed to a narrower by-value numeric parameter of a project routine |
 | `redundant-cast` | ON | Also `T(a.b)`, `T(F(x))` and `x as T`; the index overrules the per-file type map for `T(x)` |
 | `unsafe-typecast-without-is` | OFF | Also `T(a.b)` and `T(F(x))`; with a row in `ref_types` the rule fires only when both ends are classes and the cast narrows |
+
+| `ui-access-in-thread-typed` | OFF | Thread code reads, writes or calls a member of a receiver whose static type is a UI class, directly or over resolved calls; see below |
+
+## `ui-access-in-thread-typed`
+
+The typed answer to "does a thread touch the VCL". `ui-access-in-thread` (lexical, no index) and
+`ui-access-in-thread-transitive` (`ui_affinity`) keep their ids, so their `dl:ok` markers stay valid.
+
+| Question | Answer |
+|---|---|
+| Thread code | `Execute` of any `TThread` descendant through the indexed ancestry; a lambda or named routine passed to `TThread.CreateAnonymousThread`, `TTask.Run`, `TTask.Create`, `TTask.Future` or `TParallel.For` |
+| UI classes | Descendants of `TControl`, `TCustomForm`, `TFmxObject`; `TApplication` and `TScreen`. `Application` and `Screen` count as globals when unbound and the unit names a Forms unit but not `SvcMgr` or `WebBroker` |
+| What fires | `Label1.Caption := x`, `if Label1.Visible`, `Label1.Hide`, `TLabel(x).Hide`, `TLabel.Create(nil)`, `Memo1.Lines.Add` (because of `Memo1`), and a bare `Caption` or `Close` in a form's own lambda or method when the library declares it on a UI class |
+| Over calls | Up to 5 certain call edges; the finding sits on the call in the thread code and prints the path and the first access |
+| Safe | The arguments of `Synchronize`, `Queue`, `ForceQueue`; a body naming `MainThreadID` or `CurrentThread`; a called routine naming `Synchronize` or `Queue` (taken to marshal itself) |
+| Silent | An untyped receiver, a subscript, a `with` body, a stored lambda; a member the project declares (a plain field of a form; its methods are followed as calls); `Tag`, `Name`, `ClassName` and the other `TObject` / `TComponent` data; `Application.Terminated`, `ExeName`, `Handle` |
+| Not UI here | `TStrings`, `TBitmap`, `TCanvas`, menus: `Lst.Add`, `Bmp.Canvas` stay silent. A `TStrings` held apart from its control has no type that names the control |
+
+It needs the library index for the ancestry: without it only `Application` and `Screen` answer.
+A project class named `TControl`, `TTask` or the like silences that name for the whole index.
 
 ## What keeps a rule silent
 

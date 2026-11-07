@@ -4,10 +4,10 @@ title: Progress window and busy guard
 summary: ConvRulesEditor shows a cancellable progress window for long engine calls and refuses Save, Add, Convert and Delete while one runs
 product: DL
 group: component-conversion
-order: 60005
+order: 60007
 since: 1.35.0-alpha
 status: shipped
-updated: 1.36.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # Progress window and busy guard

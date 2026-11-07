@@ -32,11 +32,12 @@ type
     /// <param name="ACfg">Effective lint configuration (thresholds via ThresholdFor).</param>
     /// <param name="AStore">Optional symbol store; nil when the run has no index.</param>
     /// <param name="AFileId">File id within AStore (ignored when AStore is nil).</param>
+    /// <param name="ALibStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
     /// <returns>One finding per violation; empty when clean or unparsable. The CLI filters by --rule.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: AddLoopAssigned, Canon, ContainsText, ContainsTryExcept, Copy, Default, Delete, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckAsyncLambda, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckClosure, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckDestructor (+26 more)</para>
+    /// <para>Calls: AddLoopAssigned, Canon, ContainsText, ContainsTryExcept, Copy, Default, Delete, DescentOf, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckAsyncLambda, DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckClosure (+28 more)</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.ExceptionThreadChecks.TExceptionThreadChecker.Check.CheckAsyncLambda"/>
@@ -47,7 +48,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
-      const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; static;
+      const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -58,6 +59,7 @@ uses
   , System.Generics.Collections
   , TreeSitter
   , DRagLint.Diagnostics.ParseCache
+  , DRagLint.Lint.RefTypeRules
   ;
 
 const
@@ -75,7 +77,7 @@ const
   MAX_ANCESTRY = 16;
 
 class function TExceptionThreadChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@5857 -- signature fixed by the shared checker gate; no thresholds
-  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;  // dl:ok unused-parameter@255c -- AST-only checker, needs no index
+  const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 var
   Src      : TBytes;
   PF       : TParsedFile;
@@ -84,6 +86,7 @@ var
   ExecOvr  : TDictionary<string, Boolean>;
   AllNodes : TList<TTSNode>;
   Node     : TTSNode;
+  Reader   : TExprTypeReader;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -193,19 +196,50 @@ var
     end;
   end;
 
+  { The index fact (type_ancestors) on whether ACls descends from AAnc; tdUnknown without a store, without
+    the 1.44 tables, or when the ancestry is not provable. Never raises. The reader is made on first use. }
+  function DescentOf(const ACls, AAnc: string): TDescent;
+  begin
+    Result:= tdUnknown;
+    if AStore = nil then Exit;
+    if Reader = nil then Reader:= TExprTypeReader.Create(AStore, ALibStore, AFileId, Src);
+    if Reader.Ready then Result:= Reader.Descends(ACls, AAnc);
+  end;
+
+  { Spelling decides today (a parent in this file named T*thread). The index may overrule it: tdNo drops a class
+    that only looks like a thread, tdYes adds a class whose thread base is declared in another unit. }
   function IsThreadClass(const AName: string): Boolean;
   var
     Cur, Par: string;
     Depth   : Integer;
+    Spelled : Boolean;
   begin
     Result:= False;
     Cur:= AName;
+    Spelled:= False;
     for Depth:= 1 to MAX_ANCESTRY do
     begin
-      if not ParentOf.TryGetValue(Cur, Par) then Exit;
-      if (Length(Par) >= Length('tthread')) and StartsText('t', Par) and EndsText('thread', Par) then Exit(True);
+      if not ParentOf.TryGetValue(Cur, Par) then Break;
+      if (Length(Par) >= Length('tthread')) and StartsText('t', Par) and EndsText('thread', Par) then
+      begin
+        Spelled:= True;
+        Break;
+      end;
       Cur:= Par;
     end;
+    Result:= if Spelled then DescentOf(AName, 'tthread') <> tdNo
+      else ParentOf.ContainsKey(AName) and (DescentOf(AName, 'tthread') = tdYes);
+  end;
+
+  { A network client by constructor name (today), or a class the index proves descends from one. }
+  function IsNetClient(const AClass: string): Boolean;
+  var
+    I: Integer;
+  begin
+    Result:= InList(AClass, NET_CLIENTS);
+    if Result or (AStore = nil) then Exit;
+    for I:= Low(NET_CLIENTS) to High(NET_CLIENTS) do
+      if DescentOf(AClass, NET_CLIENTS[I]) = tdYes then Exit(True);
   end;
 
   procedure CollectClass(const N: TTSNode);
@@ -391,7 +425,7 @@ var
         if Rhs.IsNull then Continue;
         Ctor:= Canon(NodeStr(if Rhs.NodeType = 'exprCall' then Rhs.ChildByField('entity') else Rhs));
         if not EndsText('.create', Ctor) then Continue;
-        if not InList(Copy(Ctor, 1, Length(Ctor) - Length('.create')), NET_CLIENTS) then Continue;
+        if not IsNetClient(Copy(Ctor, 1, Length(Ctor) - Length('.create'))) then Continue;
         Target:= Canon(NodeStr(N.ChildByField('lhs')));
         Scope:= if Locals.IndexOf(Target) >= 0 then ADefProc else ARoot;
         if not (SetsTimeout(Scope, Target) or PassedAsArgument(Scope, Target)) then
@@ -525,6 +559,7 @@ begin
   Findings:= TList<TLintFinding>.Create;
   ParentOf:= TDictionary<string, string>.Create;
   ExecOvr := TDictionary<string, Boolean>.Create;
+  Reader  := nil;
   try
     AllNodes:= Nodes(PF.Tree.RootNode);
     try
@@ -547,6 +582,7 @@ begin
     end;
     Result:= Findings.ToArray;
   finally
+    Reader.Free;
     ExecOvr.Free;
     ParentOf.Free;
     Findings.Free;

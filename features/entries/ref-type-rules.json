@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.44.1-alpha",
-  "summary": "Project lint rules on the static type of a reference (ref_types): is-always-true, argument-narrows and three more; sharper redundant-cast and unsafe casts",
+  "summary": "Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread; sharper redundant-cast and unsafe casts",
   "intro": "Read this to see which rules stand on ref_types, what each reports and what keeps it silent. They run in lint-all and lint-project over a 1.44 index.",
   "wikiPage": "ref-type-rules",
   "surfaces": [
@@ -17,9 +17,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-06",
+    "date": "2026-11-07",
     "by": "ENGINE",
-    "build": "1.44.1-alpha",
-    "surfaceHash": "5372b9900e3a52313e7772981f1d9acbd3eb9c5dd9083b10a47dcce1f117dcf0"
+    "build": "1.46.0-alpha",
+    "surfaceHash": "c86e88b99bad3d1352c6b7e19e7394f26a185b860c009bb97ac366379a830ab4"
   }
 }

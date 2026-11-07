@@ -61,6 +61,41 @@
       ],
       "helpOrder": 62,
       "help": ["  drag-lint unwith --db <db> [--in <F> [--line <N>]] (--plan | --apply --project <X.dproj>) [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <L>|none] [--no-backup] [--build-config <c>] [--no-preprocess] [--json|--format json]  - remove with blocks, proved binding by binding"]
+    },
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "drag-lint lint --fix --fix-rule with-statement --db <db> --in <f.pas> --apply --project <X.dproj>",
+      "usage": "drag-lint lint --fix --fix-rule with-statement --db <db> [--in <f.pas> [--fix-line <L>]] [--apply --project <X.dproj>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <db>|none] [--no-backup] [--json]",
+      "flags": [
+        {
+          "name": "--fix"
+        },
+        {
+          "name": "--fix-rule",
+          "arg": "with-statement"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--in",
+          "arg": "<f.pas>"
+        },
+        {
+          "name": "--fix-line",
+          "arg": "<L>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        }
+      ],
+      "help": ["  drag-lint lint --fix --fix-rule with-statement --db <db> [--in <f.pas> [--fix-line <L>]] [--apply --project <X.dproj>] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--library-db <db>|none] [--no-backup] [--json]   - the same as `unwith`: no --apply = --plan"]
     }
   ],
   "audience": "both",
@@ -76,9 +111,9 @@
   ],
   "notes": "lane 144 unwith; guard tests\\autotest\\run_unwith.ps1",
   "verified": {
-    "date": "2026-11-06",
+    "date": "2026-11-07",
     "by": "ENGINE",
-    "build": "1.44.1-alpha",
-    "surfaceHash": "7426434ce539017495092f70912a8e63770ae77871211fdb0ad321085b89dd0c"
+    "build": "1.46.0-alpha",
+    "surfaceHash": "8eeb31410c1a6836b0a27b0d5307d75f602d2273dbd552597b20b1ec2d97bb16"
   }
 }

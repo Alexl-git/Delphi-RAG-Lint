@@ -214,32 +214,42 @@ function FreeCandidates(const AStore: ISymbolStore; const ATarget: TNamingTarget
 /// POSITION-VERIFIED against the file as it is on disk now.</summary>
 /// <param name="AStore">Store backing the nsGlobal rename; nil yields no edits for an
 /// nsGlobal target. Unused for nsLocal.</param>
+/// <param name="ALibraries">The platform libraries the proof asks; empty = none open, and
+/// the proof of an nsGlobal target that changes more than letter case refuses.</param>
 /// <param name="ATarget">A tsReady target from BuildNamingTargets built against AStore.</param>
 /// <param name="ANewName">The new identifier. Not checked for conflicts here -- pass a
 /// FreeCandidates result.</param>
 /// <param name="ASkipped">Out: edits dropped because the recorded span no longer
 /// holds the identifier (the stale-position guard); those sites are not written.</param>
-/// <returns>The surviving edits; empty when ATarget is not tsReady, ANewName is empty
-/// or nothing survived.</returns>
+/// <param name="ARefusal">Out: '' or why the proof refused the rename ('file:line:col:
+/// refused [kind]: why (N not proved)'); the result is then empty.</param>
+/// <returns>The surviving edits; empty when ATarget is not tsReady, ANewName is empty,
+/// the proof refused or nothing survived.</returns>
 /// <remarks>
-/// An edit on the finding's own line takes the finding's verified
+/// E-RENAME-OTHER-PATHS: a new name that differs in more than letter case goes through
+/// the proof `rename --apply` uses (ProveRename / ProveLocalRename) and the result is the
+/// proof's edits, or a refusal. A re-casing skips it: identifiers are case-insensitive, so
+/// it cannot change what any token binds to, and a token it misses still compiles.
+/// A stale position is reported first (ASkipped), as the reindex hint it asks for.
+/// An unproved edit on the finding's own line takes the finding's verified
 /// [StartCol, EndCol) span; every other edit uses the rename engine's coordinates.
 /// Each edit carries ExpectText for the applier to re-verify at write time. Pinned
 /// by run_autofix_apply_accounting.ps1 and the naming autofix suites.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Refactor.MultiProjectRename.CandidateWhy (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.PlanLocal (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
-/// <para>Calls: Copy, Default, DRagLint.Refactor.NamingFix.BuildTargetEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.BuildTargetEdits.LinesFor, DRagLint.Refactor.Rename.TRenameRefactoring.Build, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal, SameText, SpanHoldsIdent</para>
+/// <para>Calls: Copy, Default, DRagLint.Refactor.NamingFix.BuildTargetEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.BuildTargetEdits.LinesFor, DRagLint.Refactor.Rename.TRenameRefactoring.Build, DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal, DRagLint.Refactor.RenameProof.ProveLocalRename, DRagLint.Refactor.RenameProof.ProveRename, DRagLint.Refactor.RenameProof.RefusalLine, Format, SameText, SpanHoldsIdent</para>
 /// <para>Returns: nil; Edits.ToArray</para>
-/// <para>Complexity: 15 (cyclomatic, outer body), 170 lines (full implementation)</para>
-/// <para>Mutates: ASkipped (out)</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 185 lines (full implementation)</para>
+/// <para>Mutates: ASkipped (out), ARefusal (out)</para>
 /// <seealso cref="DRagLint.Refactor.NamingFix.BuildTargetEdits.EmitRenameEdits"/>
 /// <seealso cref="DRagLint.Refactor.NamingFix.BuildTargetEdits.LinesFor"/>
 /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.Build"/>
 /// <seealso cref="DRagLint.Refactor.Rename.TRenameRefactoring.BuildLocal"/>
+/// <seealso cref="DRagLint.Refactor.RenameProof.ProveLocalRename"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function BuildTargetEdits(const AStore: ISymbolStore; const ATarget: TNamingTarget;
-  const ANewName: string; out ASkipped: Integer): TArray<TTextEdit>;
+function BuildTargetEdits(const AStore: ISymbolStore; const ALibraries: TArray<ISymbolStore>; const ATarget: TNamingTarget;
+  const ANewName: string; out ASkipped: Integer; out ARefusal: string): TArray<TTextEdit>;
 
 /// <summary>Turns naming findings -- the 3 phase-1 re-casing rules
 /// (method-pascalcase, local-var-casing, const-casing) AND the 3 phase-2
@@ -255,6 +265,7 @@ function BuildTargetEdits(const AStore: ISymbolStore; const ATarget: TNamingTarg
 /// conflict/collision are skipped (no edit emitted for that finding).</summary>
 /// <param name="AStore">Symbol store backing the qualified-name resolution and
 /// the global rename engine. Must not be nil.</param>
+/// <param name="ALibraries">The platform libraries the proof asks; see BuildTargetEdits.</param>
 /// <param name="AFindings">Candidate findings; non-naming rule-ids are ignored.</param>
 /// <param name="ANaming">Effective naming config supplying the target casing
 /// (MethodCase / LocalCase / ConstCase) and prefixes (FieldPrefix / ParamPrefix /
@@ -273,6 +284,8 @@ function BuildTargetEdits(const AStore: ISymbolStore; const ATarget: TNamingTarg
 /// index predates an edit that moved the declaration (spec criterion 12).
 /// Counted separately from ASkippedCount, which counts edits. A finding whose
 /// name the store does not know in that file at all is not counted.</param>
+/// <param name="ARefusals">Out: one line per finding left alone because no free candidate
+/// could be proved (E-RENAME-OTHER-PATHS); nothing is written for it.</param>
 /// <returns>The applied edit set (empty if nothing was fixable).</returns>
 /// <remarks>
 /// Re-casing (phase 1) is collision-free in a case-insensitive language
@@ -307,16 +320,17 @@ function BuildTargetEdits(const AStore: ISymbolStore; const ATarget: TNamingTarg
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Refactor.NamingFix.BuildNamingTargets, DRagLint.Refactor.NamingFix.BuildTargetEdits, DRagLint.Refactor.NamingFix.FreeCandidates, SameText</para>
+/// <para>Complexity: 11 (cyclomatic, outer body), 61 lines (full implementation)</para>
 /// <para>Catches: Exception (empty)</para>
-/// <para>Mutates: AFixCount (out), ASkippedCount (out), AStaleCount (out)</para>
+/// <para>Mutates: AFixCount (out), ASkippedCount (out), AStaleCount (out), ARefusals (out)</para>
 /// <seealso cref="DRagLint.Refactor.NamingFix.BuildNamingTargets"/>
 /// <seealso cref="DRagLint.Refactor.NamingFix.BuildTargetEdits"/>
 /// <seealso cref="DRagLint.Refactor.NamingFix.FreeCandidates"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function BuildNamingFixEdits(const AStore: ISymbolStore;
+function BuildNamingFixEdits(const AStore: ISymbolStore; const ALibraries: TArray<ISymbolStore>;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
-  out AFixCount: Integer; out ASkippedCount: Integer; out AStaleCount: Integer): TArray<TTextEdit>;
+  out AFixCount: Integer; out ASkippedCount: Integer; out AStaleCount: Integer; out ARefusals: TArray<string>): TArray<TTextEdit>;
 
 /// <summary>The identifier a naming finding's span holds in the file today.</summary>
 /// <param name="AFile">Path of the source file.</param>
@@ -349,7 +363,8 @@ uses
   System.RegularExpressions,
   TreeSitter,
   DRagLint.Diagnostics.ParseCache,
-  DRagLint.Refactor.Rename;
+  DRagLint.Refactor.Rename,
+  DRagLint.Refactor.RenameProof;
 
 function StyleFromConfigText(const AConfigCase: string): TNameStyle;
 begin
@@ -879,8 +894,8 @@ begin
       Result:= Result + [Cand];
 end;
 
-function BuildTargetEdits(const AStore: ISymbolStore; const ATarget: TNamingTarget;
-  const ANewName: string; out ASkipped: Integer): TArray<TTextEdit>;
+function BuildTargetEdits(const AStore: ISymbolStore; const ALibraries: TArray<ISymbolStore>; const ATarget: TNamingTarget;
+  const ANewName: string; out ASkipped: Integer; out ARefusal: string): TArray<TTextEdit>;
 var
   Edits: TList<TTextEdit>;
   Cache: TDictionary<string, TStringList>;
@@ -994,6 +1009,7 @@ var
   F: TLintFinding;
 begin
   ASkipped:= 0;
+  ARefusal:= '';
   Result:= nil;
   if (ATarget.Status <> tsReady) or (ANewName = '') then Exit;
   if (ATarget.Scope = nsGlobal) and (AStore = nil) then Exit;
@@ -1043,6 +1059,20 @@ begin
         (Type.OldName) itself, so no local workaround is needed here. }
       EmitRenameEdits(TRenameRefactoring.Build(AStore, ATarget.QName, ANewName),
         ATarget.SymLine, F.StartCol, F.EndCol, ATarget.OldName);
+    { The edit set above only answers "is the index stale here". A name that changes more than case is written from the
+      proof or not at all: the proof's columns are the identifier tokens', so no finding span overrides them. }
+    if (ASkipped = 0) and (Edits.Count > 0) and not SameText(ATarget.OldName, ANewName) then
+    begin
+      var Proof: TRenameProof:= if ATarget.Scope = nsLocal then ProveLocalRename(AStore, F.FilePath, F.StartLine, F.StartCol, ANewName)
+                                else ProveRename(AStore, ALibraries, ATarget.QName, ANewName);
+      Edits.Clear;
+      if Length(Proof.Refusals) > 0 then
+      begin
+        ARefusal:= RefusalLine(Proof.Refusals[0]) + Format(' (%d not proved)', [Length(Proof.Refusals)]);
+        Exit;
+      end;
+      EmitRenameEdits(Proof.Edits, 0, 0, 0, ATarget.OldName);
+    end;
     Result:= Edits.ToArray;
   finally
     for var SL: TStringList in Cache.Values do SL.Free;
@@ -1051,18 +1081,20 @@ begin
   end;
 end;
 
-function BuildNamingFixEdits(const AStore: ISymbolStore;
+function BuildNamingFixEdits(const AStore: ISymbolStore; const ALibraries: TArray<ISymbolStore>; // dl:ok too-many-parameters@d5aa -- one caller; four inputs and the four separately reported outcomes, a record would only rename them
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
-  out AFixCount: Integer; out ASkippedCount: Integer; out AStaleCount: Integer): TArray<TTextEdit>;
+  out AFixCount: Integer; out ASkippedCount: Integer; out AStaleCount: Integer; out ARefusals: TArray<string>): TArray<TTextEdit>;
 var
   T        : TNamingTarget;
   FreeNames: TArray<string>;
   TargetTE : TArray<TTextEdit>;
   Skipped  : Integer;
+  Refusal  : string;
 begin
   AFixCount:= 0;
   ASkippedCount:= 0;
   AStaleCount:= 0;
+  ARefusals:= nil;
   Result:= nil;
   if AStore = nil then Exit;
 
@@ -1075,7 +1107,22 @@ begin
         alone rather than renamed into a clash. }
       FreeNames:= FreeCandidates(AStore, T);
       if Length(FreeNames) = 0 then Continue;
-      TargetTE:= BuildTargetEdits(AStore, T, FreeNames[0], Skipped);
+      { The next free candidate gets its turn when the proof refuses one: capture depends on the name. }
+      var FirstRefusal: string:= '';
+      TargetTE:= nil;
+      Skipped:= 0;
+      for var Cand in FreeNames do
+      begin
+        TargetTE:= BuildTargetEdits(AStore, ALibraries, T, Cand, Skipped, Refusal);
+        if Refusal = '' then
+        begin
+          FreeNames[0]:= Cand;
+          FirstRefusal:= '';
+          Break;
+        end;
+        if FirstRefusal = '' then FirstRefusal:= Refusal;
+      end;
+      if FirstRefusal <> '' then ARefusals:= ARefusals + [FirstRefusal];
       { All or nothing once the new name differs in more than letter case
         (glyActive -> GLY_ACTIVE, Foo -> TFoo): renaming the sites the guard
         kept and leaving the skipped ones writes a unit that no longer

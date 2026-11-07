@@ -76,6 +76,10 @@ $Allowlist += @('ancestor-not-in-project')
 #   side-effect-in-short-circuit, property-getter-with-effect, ui-access-in-thread-transitive
 #     -> tests\lint-project\effect-rules\run_effect_rules.ps1 (lane B-EFFECT, 1.37.0)
 $Allowlist += @('side-effect-in-short-circuit', 'property-getter-with-effect', 'ui-access-in-thread-transitive', 'effect-free-in-loop-invariant')
+# ui-access-in-thread-typed -> tests\lint-project\ui-thread-typed\run_ui_thread_typed.ps1 (project rule on ref_types, needs a library DB; 1.45 lane uithread)
+$Allowlist += @('ui-access-in-thread-typed')
+# by-value-arg-before-assignment -> tests\autotest\run_flow_out_arg_rules.ps1 (the mode comes from ref_types, so it needs an index; 1.46 lane t1)
+$Allowlist += @('by-value-arg-before-assignment')
 # The clippy-parity wave is fully fixtured (tests\lint) and integrated; the list is kept empty so a future wave can reuse it.
 $Pending = @()
 
@@ -92,6 +96,7 @@ $OwnRunner = @{
     'opaque-to-analysis'        = 'tests\autotest\run_opaque_to_analysis.ps1'
     'datamodule-form-global'    = 'tests\lint-project\datamodule-form-global\run_datamodule_form_global.ps1'
     'global-set-in-initialization-never-freed' = 'tests\lint-project\global-set-in-initialization-never-freed\run_global_set_in_initialization_never_freed.ps1'
+    'parameter-type-too-wide' = 'tests\lint-project\parameter-type-too-wide\run_parameter_type_too_wide.ps1'
     'heavy-initialization' = 'tests\lint-project\heavy-initialization\run_heavy_initialization.ps1'
     'finalization-after-dependency' = 'tests\lint-project\finalization-after-dependency\run_finalization_after_dependency.ps1'
     'init-order-hazard' = 'tests\lint-project\init-order-hazard\run_init_order_hazard.ps1'
@@ -100,6 +105,7 @@ $OwnRunner = @{
     'interface-holder-of-non-refcounted'= 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
     'argument-narrows'          = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
     'is-always-true'            = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
+    'is-never-true'             = 'tests\lint-project\ref-type-rules\run_ref_type_rules.ps1'
 }
 function HasOwnRunner([string]$Id, [hashtable]$Map = $OwnRunner) {
   if (-not $Map.ContainsKey($Id)) { return $false }

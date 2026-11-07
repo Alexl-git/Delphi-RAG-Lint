@@ -266,7 +266,7 @@ type
     /// decoded the same way (a UTF-32 BOM is not); `-split "\r?\n"` splits on LF and drops one CR
     /// before it, keeping a lone CR in the text; the cache hashtable key is case-insensitive.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Charts.Chain.PropertyField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Exceptions.TExceptionIndex.SourceRows (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.ReadCallers (DRagLint.Charts.Q.ExceptionPaths.pas), DRagLint.Charts.Source.TSourceReader.SourceContext (DRagLint.Charts.Source.pas), DRagLint.Charts.Trace.Calc.TCalcFactsReader.ReadHandler (DRagLint.Charts.Trace.Calc.pas) (+2 more)</para>
+    /// <para>Called from: DRagLint.Charts.Chain.PropertyField (DRagLint.Charts.Chain.pas), DRagLint.Charts.Exceptions.TExceptionIndex.SourceRows (DRagLint.Charts.Exceptions.pas), DRagLint.Charts.Q.ExceptionPaths.TExceptionPathsChart.ReadCallers (DRagLint.Charts.Q.ExceptionPaths.pas), DRagLint.Charts.Source.TSourceReader.SourceContext (DRagLint.Charts.Source.pas), DRagLint.Charts.Trace.Anchor.TTraceAnchorResolver.PropertyReadField (DRagLint.Charts.Trace.Anchor.pas) (+2 more)</para>
     /// <para>Calls: DRagLint.Charts.Source.ReadLatin1, DRagLint.Charts.Source.SplitLines</para>
     /// <para>Returns: SplitLines(TRegEx.Replace(ReadLatin1(pReadPath), STRIP_PATTERN, BlankMatch))</para>
     /// <para>Reads: FStripped</para>

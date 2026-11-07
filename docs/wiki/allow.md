@@ -4,6 +4,9 @@ Records a `dl:ok` review of one finding, so it stops being reported without
 being fixed. Reach for it when a lint finding is a deliberate, reviewed
 exception rather than something you intend to change.
 
+## Reaching it in the IDE
+drag-lint > Code Quality > Allow a Finding on This Line... works from the caret: confirm the rule (prefilled when the diagnostics hold one for that line), then Yes writes the review and No shows a dry-run preview. The right-click [Allow this message](Allow-this-message) on the Structure form does the same for one tree node.
+
 ## Running it from the CLI
 
 ```

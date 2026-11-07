@@ -96,8 +96,11 @@ Check '1 CONTROL a bare-name hit prints no hint' ($r.Out -notmatch 'hint:') ($r.
 
 # 2 FC-GETTER-DEFAULT
 $r = Run @('query', 'find-callers', '--name', 'GetActive', '--db', $db)
-Check '2 plain find-callers on a getter keeps answering 0 (owner default: behaviour kept)' (($r.Code -eq 1) -and ($r.Out -match '0 caller')) ($r.Out -replace "`n", ' | ')
-Check '2 its hint points at --resolved' ($r.Out -match 'hint:.*--resolved') ($r.Out -replace "`n", ' | ')
+# 146 int: since extractor 1.33 (b1, E-PARSER-NOREFS) the property's `read GetActive` is a property-spec REF, and the plain form is
+# kind-blind (every site that names it), so it answers that one site. The owner default still holds: plain does not
+# follow the property's readers -- uQ.Go stays a --resolved answer.
+Check '2 plain find-callers on a getter answers only the property''s read specifier' (($r.Code -eq 0) -and ($r.Out -match '1 caller') -and ($r.Out -match 'read GetActive')) ($r.Out -replace "`n", ' | ')
+Check '2 plain does not follow the property readers (owner default)' ($r.Out -notmatch 'uQ\.Go') ($r.Out -replace "`n", ' | ')
 $r = Run @('query', 'find-callers', '--name', 'GetActive', '--resolved', '--db', $db)
 Check '2 CONTROL --resolved finds the getter caller' (($r.Code -eq 0) -and ($r.Out -match 'uQ\.Go')) ($r.Out -replace "`n", ' | ')
 

@@ -21,6 +21,8 @@
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")
 $ErrorActionPreference = 'Continue'
+# E-RENAME-OTHER-PATHS: a naming fix now runs the rename proof, and these fixtures have no library: the proof's own test seam.
+$env:DRAGLINT_RENAME_TEST_UNGATED = '1'
 $script:fail = $false
 function Check($n, $ok, $d = '') {
   Write-Host ("  [{0}] {1} {2}" -f (@('FAIL','PASS')[[int][bool]$ok]), $n, $d) -ForegroundColor (@('Red','Green')[[int][bool]$ok])

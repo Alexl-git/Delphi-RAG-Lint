@@ -5,11 +5,13 @@ unit DRagLint.LSP.Feature.Rename;
   ILspServerContext.ResolveSymbolAt (the hover resolution).
 
   rename is a WRITE surface, so this unit only ever DESCRIBES the edit: it
-  replies a WorkspaceEdit built by TRenameRefactoring.Build and never calls
-  TRenameRefactoring.Apply -- the client applies the edit to its buffers.
+  replies a WorkspaceEdit from the proof `rename --apply` runs (ProveRename; a
+  case-only rename takes TRenameRefactoring.Build: it cannot change a binding) and
+  never calls TRenameRefactoring.Apply -- the client applies the edit to its buffers.
   It refuses (error -32803, RequestFailed) everything the CLI `rename` verb
   refuses: a reserved word, a sibling-name collision (skipped for a case-only
-  rename, the spec's case-insensitive rule), a use inside an indexed .inc, plus
+  rename, the spec's case-insensitive rule), a use inside an indexed .inc, any
+  occurrence the proof cannot decide (its first refusal, by kind), plus
   a new name that is not an identifier, a position that resolves to nothing
   this document's store declares, and an edit whose token is no longer where
   the index says (stale index or unsaved buffer), the declaration's
@@ -38,7 +40,7 @@ type
   /// writes a file and never mutates the server's store list. Lines and
   /// characters in the replies are 0-based.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.LSP.Feature.Rename.pas)</para>
+  /// <para>Used by: DRagLint.LSP.Feature.Rename.initialization (DRagLint.LSP.Feature.Rename.pas)</para>
   /// <para>Used in units: DRagLint.LSP.Feature.Rename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -72,8 +74,8 @@ type
     /// token under the cursor and the resolved symbol's Name -- or null when
     /// the position resolves to no symbol the document's own store
     /// (StoresForFile[0]) declares. rename replies a WorkspaceEdit
-    /// {changes: {uri: TextEdit[]}}: one TextEdit per TRenameRefactoring.Build
-    /// edit, its range the OldName token starting exactly at the edit's column
+    /// {changes: {uri: TextEdit[]}}: one TextEdit per proved edit (ProveRename, the
+    /// document's own store with the rest of StoresForFile as its libraries), its range the OldName token starting exactly at the edit's column
     /// as a whole word (every edit, the declaration included), newText the new name.</summary>
     /// <param name="ACtx">The server surface.</param>
     /// <param name="AMethod">One of the two methods.</param>
@@ -107,6 +109,7 @@ uses
   , DRagLint.Core.Model
   , DRagLint.Core.Interfaces
   , DRagLint.Refactor.Rename
+  , DRagLint.Refactor.RenameProof
   , DRagLint.Refactor.TextEdit
   , DRagLint.Core.LiveDocs
   ;
@@ -346,7 +349,17 @@ begin
     if Length(Edits) = 0 then Reason:= Format('no edits computed for %s', [QN]);
   end;
   var Res: TJSONObject:= nil;
+  // A moved token is "reindex", the answer it asks for: checked before the proof, which would call it unaccounted for.
   if Reason = '' then Reason:= BuildWorkspaceEdit(ACtx, Edits, Res);
+  // E-RENAME-OTHER-PATHS: the same proof `rename --apply` runs; the editor reviews edits, not the tokens they leave out.
+  // A re-casing skips it: identifiers are case-insensitive, so it cannot change a binding and a missed token still compiles.
+  if (Reason = '') and not SameText(T.Sym.Name, NewName) then
+  begin
+    FreeAndNil(Res);
+    var Proof: TRenameProof:= ProveRename(T.Store, Copy(ACtx.StoresForFile(T.Path), 1), QN, NewName);
+    Reason:= if Length(Proof.Refusals) > 0 then RefusalLine(Proof.Refusals[0]) + Format(' (%d not proved)', [Length(Proof.Refusals)])
+             else BuildWorkspaceEdit(ACtx, Proof.Edits, Res);
+  end;
   if Reason <> '' then
   begin
     ACtx.ReplyError(AId, ERR_REQUEST_FAILED, 'cannot rename -- ' + Reason);

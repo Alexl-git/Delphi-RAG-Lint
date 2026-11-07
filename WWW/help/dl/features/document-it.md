@@ -4,10 +4,10 @@ title: Document it
 summary: Generates or repairs a managed DocInsight comment on the single symbol represented by a Structure-tree node
 product: DL
 group: documentation
-order: 40005
+order: 40006
 since: 0.90.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Document it

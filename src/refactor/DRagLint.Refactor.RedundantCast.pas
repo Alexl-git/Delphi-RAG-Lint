@@ -57,6 +57,17 @@ type
     Reason: string;
   end;
 
+  /// <summary>How many real conversions fell in one class, with one of them to read.</summary>
+  TConversionClass = record
+    /// <summary>enum-target, other-target (a record or the like), downcast, upcast, unrelated, chain-unknown (an ancestor
+    /// no index holds), or same-name (two symbols of one name: the one class a later proof could still remove).</summary>
+    Name: string;
+    /// <summary>How many casts.</summary>
+    Count: Integer;
+    /// <summary>The first one met: file:line and the type names.</summary>
+    Example: string;
+  end;
+
   /// <summary>The verdict over one index.</summary>
   TCastPlan = record
     /// <summary>The casts proved identity, in file and line order.</summary>
@@ -65,6 +76,8 @@ type
     Refused: TArray<TCastSite>;
     /// <summary>The casts between two different types: real conversions, in neither list.</summary>
     NotIdentity: Integer;
+    /// <summary>NotIdentity split by why the two types differ; the counts add up to NotIdentity.</summary>
+    NotIdentityBy: TArray<TConversionClass>;
   end;
 
   /// <summary>A source file read once: its text, the same text with comments and strings blanked, and its lines.</summary>
@@ -172,6 +185,7 @@ const
   CMsPerSec    = 1000;
   CFixRule     = 'lint --fix --fix-rule redundant-cast';
   CSchema      = 'redundant-cast/1';
+  CRootClass   = 'TObject';
 
 type
   TNameRow = record
@@ -202,12 +216,17 @@ type
     FFixes     : TList<TCastSite>;
     FRefused   : TList<TCastSite>;
     FNotIdent  : Integer;
+    FNotIdentBy: TDictionary<string, TConversionClass>;
     function FileOf(const pPath: string): TMaskedSource;
     function StampOk(const pPath: string): Boolean;
     function NamesOf(const pName: string): TArray<TNameRow>;
     function SymOf(pId: Int64): TSymRow;
     function InScope(const pPath: string; pLine: Integer): Boolean;
     function HasOverloads(const pSym: TSymRow; const pName: string): Boolean;
+    function HeritageOf(const pName: string; out pFound: Boolean): string;
+    function ChainHolds(const pFrom, pAncestor: string; out pWhole: Boolean): Boolean;
+    function ClassOfConversion(const pTarget: TSymRow; const pOperandName: string): string;
+    procedure CountConversion(const pSite: TCastSite; const pTarget: TSymRow; const pOperandName: string);
     function UnresolvedAncestorOf(pEnclosing: Int64): string;
     function RoutineStartLine(pEnclosing: Int64): Integer;
     function CastColsOf(pFileId: Int64; pLine: Integer): TList<Integer>;
@@ -450,10 +469,12 @@ begin
   FCastSpans:= TObjectDictionary<string, TList<Integer>>.Create([doOwnsValues]);
   FFixes    := TList<TCastSite>.Create;
   FRefused  := TList<TCastSite>.Create;
+  FNotIdentBy:= TDictionary<string, TConversionClass>.Create;
 end;
 
 destructor TCastPlanner.Destroy;
 begin
+  FNotIdentBy.Free;
   FRefused.Free;
   FFixes.Free;
   FCastSpans.Free;
@@ -587,48 +608,100 @@ begin
   end;
 end;
 
+// The heritage text of the class of that name, project first, then the libraries; pFound False when no index holds it.
+function TCastPlanner.HeritageOf(const pName: string; out pFound: Boolean): string;
+
+  function ReadFrom(pConn: TFDConnection; out pHit: Boolean): string;
+  begin
+    Result:= '';
+    pHit:= False;
+    var Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= pConn;
+      Q.SQL.Text:= 'SELECT heritage FROM symbols WHERE name = :n COLLATE NOCASE AND kind = ''class'' ORDER BY (heritage IS NULL) LIMIT 1';
+      Q.ParamByName('n').AsWideString:= pName;
+      Q.Open;
+      pHit:= not Q.Eof;
+      if pHit then Result:= Q.FieldByName('heritage').AsString;
+    finally
+      Q.Free;
+    end;
+  end;
+
+begin
+  Result:= ReadFrom(FConn, pFound);
+  if pFound then Exit;
+  for var C in FLibConns do
+  begin
+    Result:= ReadFrom(C, pFound);
+    if pFound then Exit;
+  end;
+end;
+
+// The class part of a heritage list: its first entry, without the generic arguments and the unit qualifier.
+function ParentOf(const pHeritage: string): string;
+begin
+  Result:= Trim(pHeritage);
+  if Result.Contains(',') then Result:= Trim(Copy(Result, 1, Pos(',', Result) - 1));
+  if Result.Contains('<') then Result:= Copy(Result, 1, Pos('<', Result) - 1);
+  Result:= Trim(Result);
+  while Result.Contains('.') do Result:= Copy(Result, Pos('.', Result) + 1, MaxInt);
+end;
+
+// True when pAncestor is pFrom or above it. pWhole: the climb reached TObject, so a False is a proof, not a gap.
+function TCastPlanner.ChainHolds(const pFrom, pAncestor: string; out pWhole: Boolean): Boolean;
+begin
+  pWhole:= False;
+  var Name:= pFrom;
+  var Depth:= 0;
+  while (Name <> '') and (Depth < CMaxChain) do
+  begin
+    if SameText(Name, pAncestor) then Exit(True);
+    if SameText(Name, CRootClass) then
+    begin
+      pWhole:= True;
+      Exit(False);
+    end;
+    var Found: Boolean;
+    var Up:= HeritageOf(Name, Found);
+    if not Found then Exit(False);
+    Name:= ParentOf(Up);
+    if Name = '' then Name:= CRootClass;
+    Inc(Depth);
+  end;
+  Result:= False;
+end;
+
+// Why a target and an operand type of another name are a real conversion. Reads the indexes; decides nothing.
+function TCastPlanner.ClassOfConversion(const pTarget: TSymRow; const pOperandName: string): string;
+begin
+  var TargetLeaf:= pTarget.QName.Substring(pTarget.QName.LastIndexOf('.') + 1);
+  if SameText(TargetLeaf, pOperandName) then Exit('same-name');
+  if SameText(pTarget.Kind, 'enum') then Exit('enum-target');
+  if not SameText(pTarget.Kind, 'class') then Exit('other-target');
+  var UpWhole, DownWhole: Boolean;
+  if ChainHolds(TargetLeaf, pOperandName, DownWhole) then Exit('downcast');
+  if ChainHolds(pOperandName, TargetLeaf, UpWhole) then Exit('upcast');
+  Result:= if DownWhole and UpWhole then 'unrelated' else 'chain-unknown';
+end;
+
+procedure TCastPlanner.CountConversion(const pSite: TCastSite; const pTarget: TSymRow; const pOperandName: string);
+begin
+  Inc(FNotIdent);
+  var Name:= ClassOfConversion(pTarget, pOperandName);
+  var Item: TConversionClass;
+  if not FNotIdentBy.TryGetValue(Name, Item) then
+  begin
+    Item:= Default(TConversionClass);
+    Item.Name:= Name;
+    Item.Example:= Format('%s:%d %s of %s', [pSite.FilePath, pSite.Line, pSite.CastText, pOperandName]);
+  end;
+  Inc(Item.Count);
+  FNotIdentBy.AddOrSetValue(Name, Item);
+end;
+
 // The first ancestor of the class enclosing pEnclosing no index holds; '' when the chain is whole or there is no class.
 function TCastPlanner.UnresolvedAncestorOf(pEnclosing: Int64): string;
-
-  function HeritageOf(const pName: string; out pFound: Boolean): string;
-
-    function ReadFrom(pConn: TFDConnection; out pHit: Boolean): string;
-    begin
-      Result:= '';
-      pHit:= False;
-      var Q:= TFDQuery.Create(nil);
-      try
-        Q.Connection:= pConn;
-        Q.SQL.Text:= 'SELECT heritage FROM symbols WHERE name = :n COLLATE NOCASE AND kind = ''class'' ORDER BY (heritage IS NULL) LIMIT 1';
-        Q.ParamByName('n').AsWideString:= pName;
-        Q.Open;
-        pHit:= not Q.Eof;
-        if pHit then Result:= Q.FieldByName('heritage').AsString;
-      finally
-        Q.Free;
-      end;
-    end;
-
-  begin
-    Result:= ReadFrom(FConn, pFound);
-    if pFound then Exit;
-    for var C in FLibConns do
-    begin
-      Result:= ReadFrom(C, pFound);
-      if pFound then Exit;
-    end;
-  end;
-
-  // The class part of a heritage list: its first entry, without the generic arguments and the unit qualifier.
-  function ParentOf(const pHeritage: string): string;
-  begin
-    Result:= Trim(pHeritage);
-    if Result.Contains(',') then Result:= Trim(Copy(Result, 1, Pos(',', Result) - 1));
-    if Result.Contains('<') then Result:= Copy(Result, 1, Pos('<', Result) - 1);
-    Result:= Trim(Result);
-    while Result.Contains('.') do Result:= Copy(Result, Pos('.', Result) + 1, MaxInt);
-  end;
-
 begin
   Result:= '';
   var Sym:= SymOf(pEnclosing);
@@ -827,7 +900,8 @@ begin
       record, not an alias): not the identity this fix removes, whatever the bare text means. No write either way;
       a conversion is counted, not refused. A plain alias target stays refused: it could be the operand's very type. }
     else if not SameText(SymOf(pTypeId).Kind, 'type') and
-      not SameText(OperandQName.Substring(OperandQName.LastIndexOf('.') + 1), pName) then Inc(FNotIdent)
+      not SameText(OperandQName.Substring(OperandQName.LastIndexOf('.') + 1), pName) then
+      CountConversion(Site, SymOf(pTypeId), OperandQName.Substring(OperandQName.LastIndexOf('.') + 1))
     else Refuse(Site, 'operand-type-unresolved', Format('the type of %s is the bare text %s', [OperandName, OperandQName]));
     Exit;
   end;
@@ -843,7 +917,7 @@ begin
     var OperandTypeSym:= SymOf(OperandType);
     if SameText(TypeSym.Kind, 'type') or SameText(OperandTypeSym.Kind, 'type') then
       Refuse(Site, 'alias-not-identical', Format('%s and %s are different symbols; an alias declared with `type` is a distinct type', [TypeSym.QName, OperandTypeSym.QName]))
-    else Inc(FNotIdent);
+    else CountConversion(Site, TypeSym, OperandTypeSym.QName.Substring(OperandTypeSym.QName.LastIndexOf('.') + 1));
     Exit;
   end;
   var Rows:= NamesOf(pName);
@@ -985,6 +1059,12 @@ begin
   Result.Fixes      := FFixes.ToArray;
   Result.Refused    := FRefused.ToArray;
   Result.NotIdentity:= FNotIdent;
+  Result.NotIdentityBy:= FNotIdentBy.Values.ToArray;
+  TArray.Sort<TConversionClass>(Result.NotIdentityBy, TComparer<TConversionClass>.Construct(
+    function(const pA, pB: TConversionClass): Integer
+    begin
+      Result:= CompareText(pA.Name, pB.Name);
+    end));
   var ByPlace:= TComparer<TCastSite>.Construct(
     function(const pA, pB: TCastSite): Integer
     begin
@@ -1167,6 +1247,16 @@ begin
       J.AddPair('schema', CSchema);
       J.AddPair('applied', TJSONBool.Create(Ran and Gate.Applied));
       J.AddPair('not_identity', TJSONNumber.Create(Plan.NotIdentity));
+      var ByClass:= TJSONArray.Create;
+      J.AddPair('not_identity_by', ByClass);
+      for var C in Plan.NotIdentityBy do
+      begin
+        var One:= TJSONObject.Create;
+        ByClass.AddElement(One);
+        One.AddPair('class', C.Name);
+        One.AddPair('count', TJSONNumber.Create(C.Count));
+        One.AddPair('example', C.Example);
+      end;
       var Fixes:= TJSONArray.Create;
       J.AddPair('fixes', Fixes);
       for var S in Plan.Fixes do Fixes.AddElement(SiteToJson(S));

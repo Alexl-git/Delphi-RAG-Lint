@@ -35,6 +35,12 @@ unit DRagLint.LSP.Proxy.Merge;
   requests are then ANSWERED here (Answer, written through ClientWriter) and
   never forwarded.
 
+  --merge-navigation does the same for the plain server's newer features: the
+  type and call hierarchy, typeDefinition, documentHighlight and foldingRange
+  (NAV_CAPS / NAV_METHODS). Each provider DelphiLSP does not advertise is added
+  to its initialize reply and its requests are answered by the registered LSP
+  feature (TLSPServer.ComputeFeatureResult); one it advertises stays its own.
+
   FAIL OPEN, ALWAYS. A handler that raises, overruns its budget or cannot open
   the index makes the relay forward DelphiLSP's original bytes. The engine
   never decides on its own to drop a frame. }
@@ -164,7 +170,7 @@ type
     /// <summary><!-- drag-lint:auto sum -->One request the proxy answers itself (A5).</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Used by: declaration (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas), DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.NavAnswer (DRagLint.LSP.Proxy.Merge.pas)</para>
     /// <para>Used in units: DRagLint.LSP.Proxy.Merge</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
@@ -181,6 +187,8 @@ type
       Line0      : Integer;
       Col0       : Integer;
       IncludeDecl: Boolean;
+      NavMethod  : string;    { --merge-navigation: the feature method; '' = references / symbols }
+      NavParams  : string;    { its params, as JSON }
     end;
   private
     FOptions    : TLspProxyOptions;
@@ -216,6 +224,7 @@ type
     FDefinitionWarned: Integer;
     FTheirReferences : Integer;
     FTheirSymbols    : Integer;
+    FTheirNavigation : Integer;   { bit per NAV_CAPS entry DelphiLSP advertised; written once by MergeInitialize }
     FClientWriter    : TClientWriter;
     FAnswersOut      : Integer;
     FAnswersIdle     : TEvent;
@@ -243,6 +252,60 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function  TakeCancel(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->The NAV_METHODS index of AMethod when
+    /// --merge-navigation owes it an answer: on, and DelphiLSP did not advertise its
+    /// provider. -1 otherwise.</summary>
+    /// <param name="AMethod"><!-- drag-lint:auto type -->const string</param>
+    /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1; I.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Reads: FOptions, FTheirNavigation</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    function  NavMethodIndex(const AMethod: string): Integer;
+    /// <summary><!-- drag-lint:auto sum -->Could this frame hold a NAV_METHODS request?
+    /// The scan before the parse.</summary>
+    /// <param name="AFrame"><!-- drag-lint:auto type -->const TBytes</param>
+    /// <param name="ALen"><!-- drag-lint:auto type -->Integer</param>
+    /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.FrameContains</para>
+    /// <para>Reads: FOptions</para>
+    /// <para>Effect-free (proven)</para>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameContains"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    function  MayBeNavRequest(const AFrame: TBytes; ALen: Integer): Boolean;
+    /// <summary><!-- drag-lint:auto sum -->Worker thread: the registered feature's result
+    /// for one --merge-navigation request, as JSON. Whatever the plain server would
+    /// answer, null included; [] when no feature answered.</summary>
+    /// <param name="AServer"><!-- drag-lint:auto type -->const TLSPServer</param>
+    /// <param name="AJob"><!-- drag-lint:auto type -->const TAnswerJob</param>
+    /// <returns><!-- drag-lint:auto -->string -- Observed: '[]'; Res.ToJSON.</returns>
+    /// <remarks>
+    /// <!-- drag-lint:auto BEGIN -->
+    /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker (DRagLint.LSP.Proxy.Merge.pas)</para>
+    /// <para>Calls: DRagLint.LSP.Server.TLSPServer.ComputeFeatureResult</para>
+    /// <seealso cref="DRagLint.LSP.Server.TLSPServer.ComputeFeatureResult"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion"/>
+    /// <!-- drag-lint:auto END -->
+    /// </remarks>
+    function  NavAnswer(const AServer: TLSPServer; const AJob: TAnswerJob): string;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.Merge.TMergeWorker.Execute (DRagLint.LSP.Proxy.Merge.pas)</para>
@@ -360,7 +423,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept (DRagLint.LSP.Proxy.Merge.pas)</para>
     /// <para>Calls: DRagLint.LSP.Proxy.Merge.DocKey, DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.HeadStringValue, DRagLint.LSP.Proxy.Merge.LiveUpdateOf, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.QueueDocUpdate, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.WarmUp, DRagLint.LSP.Server.TLSPServer.FileFromUri</para>
-    /// <para>Complexity: 24 (cyclomatic, outer body), 67 lines (full implementation)</para>
+    /// <para>Complexity: 26 (cyclomatic, outer body), 67 lines (full implementation)</para>
     /// <para>Reads: FOptions, FTestFastPath, FDirtyLock, FDirty</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.DocKey"/>
@@ -437,7 +500,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Intercept (DRagLint.LSP.Proxy.Merge.pas)</para>
     /// <para>Calls: DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.PrefixOf, DRagLint.LSP.Proxy.Merge.TPendingRequest.AddRef, DRagLint.LSP.Proxy.Merge.TPendingRequest.Create, DRagLint.LSP.Proxy.Merge.TPendingRequest.Release, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeCompletion, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeDefinition, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.ComputeHover, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Enqueue, DRagLint.LSP.Server.TLSPServer.FileFromUri, TJSONObject, TPendingRequest</para>
-    /// <para>Complexity: 38 (cyclomatic, outer body), 112 lines (full implementation)</para>
+    /// <para>Complexity: 39 (cyclomatic, outer body), 112 lines (full implementation)</para>
     /// <para>Reads: FOptions, FCompletionOff, FHoverOff, FDefinitionOff, FPendingLock, FPending</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameBody"/>
@@ -515,7 +578,8 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeReply (DRagLint.LSP.Proxy.Merge.pas)</para>
     /// <para>Calls: DRagLint.LSP.Proxy.Merge.Advertises, TJSONObject</para>
-    /// <para>Reads: FTheirReferences, FTheirSymbols</para>
+    /// <para>Complexity: 11 (cyclomatic, outer body), 46 lines (full implementation)</para>
+    /// <para>Reads: FOptions, FTheirReferences, FTheirSymbols, FTheirNavigation</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.Advertises"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnnounceOpen"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer"/>
@@ -530,13 +594,13 @@ type
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Answer (DRagLint.LSP.Proxy.Merge.pas)</para>
-    /// <para>Calls: DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server, DRagLint.LSP.Server.TLSPServer.ComputeReferences, DRagLint.LSP.Server.TLSPServer.ComputeWorkspaceSymbols</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.NavAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server, DRagLint.LSP.Server.TLSPServer.ComputeReferences, DRagLint.LSP.Server.TLSPServer.ComputeWorkspaceSymbols</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.MergeErrLine"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.FlushDocUpdates"/>
+    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.NavAnswer"/>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer"/>
-    /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Server"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure AnswerOnWorker(const AJob: TAnswerJob);
@@ -719,7 +783,7 @@ type
     /// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
     /// <para>Calls: DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeReply, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.PickupContext, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.RecordRequest, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TrackDocument</para>
     /// <para>Returns: False; FOptions.MergeDiagnostics and MergeDiagnostics(AFrame, ALen, AReplacement)</para>
-    /// <para>Complexity: 19 (cyclomatic, outer body), 17 lines (full implementation)</para>
+    /// <para>Complexity: 13 (cyclomatic, outer body), 15 lines (full implementation)</para>
     /// <para>Reads: FTestEmptyReplacement, FOptions</para>
     /// <para>Mutates: AReplacement (out)</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MergeDiagnostics"/>
@@ -766,7 +830,9 @@ type
     /// (one with an id) when MergeDefinition is on, ClientWriter is set and
     /// DelphiLSP's initialize reply did not advertise that provider: drag-lint
     /// answers it (TLSPServer.ComputeReferences / ComputeWorkspaceSymbols, on
-    /// the merge worker) and the relay must NOT forward it. True also for a
+    /// the merge worker) and the relay must NOT forward it. The same for a
+    /// NAV_METHODS request when MergeNavigation is on (the registered feature
+    /// answers, TLSPServer.ComputeFeatureResult). True also for a
     /// $/cancelRequest whose params.id is a request Answer took and has not
     /// seen cancelled yet: it is consumed and nothing is written (DelphiLSP
     /// never saw that id; group-4 P1). False otherwise, and for a frame that
@@ -781,9 +847,9 @@ type
     /// C&gt;S pump, as the queue-full path does (run_lsp_proxy_trace_guard.ps1).
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.RunLspProxy (DRagLint.LSP.Proxy.pas)</para>
-    /// <para>Calls: DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Enqueue, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TakeCancel, DRagLint.LSP.Server.TLSPServer.FileFromUri, TJSONBool, TJSONObject</para>
+    /// <para>Calls: DRagLint.LSP.Proxy.Merge.FrameBody, DRagLint.LSP.Proxy.Merge.FrameContains, DRagLint.LSP.Proxy.Merge.MergeErrLine, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.AnswerOnWorker, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.EndAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.Enqueue, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.MayBeNavRequest, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.NavMethodIndex, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.SendAnswer, DRagLint.LSP.Proxy.Merge.TProxyMergeEngine.TakeCancel, DRagLint.LSP.Server.TLSPServer.FileFromUri, TJSONBool, TJSONObject</para>
     /// <para>Returns: False; True</para>
-    /// <para>Complexity: 25 (cyclomatic, outer body), 81 lines (full implementation)</para>
+    /// <para>Complexity: 33 (cyclomatic, outer body), 92 lines (full implementation)</para>
     /// <para>Reads: FOptions, FClientWriter, FTheirReferences, FTheirSymbols, FAnsweredIds, FStateLock, FAnswersIdle, FTestAnswerInline   Writes: FAnswersOut</para>
     /// <para>Catches: Exception (swallowed)</para>
     /// <seealso cref="DRagLint.LSP.Proxy.Merge.FrameBody"/>
@@ -982,6 +1048,19 @@ const
   MERGE_DEFINITION_PREFIX = 'drag-lint lsp --proxy: merge-definition ';
   CAP_REFERENCES       = 'referencesProvider';
   CAP_WORKSPACE_SYMBOL = 'workspaceSymbolProvider';
+  { --merge-navigation: each provider and the requests it covers. A follow-up
+    (supertypes, incomingCalls) belongs to the provider of its prepare request. }
+  NAV_CAPS: array[0..4] of string = ('typeHierarchyProvider', 'callHierarchyProvider', 'typeDefinitionProvider',
+    'documentHighlightProvider', 'foldingRangeProvider');
+  NAV_METHODS: array[0..8] of string = ('textDocument/prepareTypeHierarchy', 'typeHierarchy/supertypes', 'typeHierarchy/subtypes',
+    'textDocument/prepareCallHierarchy', 'callHierarchy/incomingCalls', 'callHierarchy/outgoingCalls',
+    'textDocument/typeDefinition', 'textDocument/documentHighlight', 'textDocument/foldingRange');
+  NAV_METHOD_CAP: array[0..8] of Integer = (0, 0, 0, 1, 1, 1, 2, 3, 4);
+  { What a frame holding any NAV_METHODS name must contain: a cheap pre-parse scan
+    (four needles, not nine, on a path every client frame takes). }
+  NAV_NEEDLES: array[0..3] of RawByteString = ('Hierarchy', 'textDocument/typeDefinition',
+    'textDocument/documentHighlight', 'textDocument/foldingRange');
+  MERGE_NAVIGATION_PREFIX = 'drag-lint lsp --proxy: merge-navigation ';
   { Between DelphiLSP's hover text and drag-lint's facts (spec criterion 15). }
   HOVER_SEPARATOR = #10#10'---'#10#10;
   { Bounds that keep a client that never sees a reply (cancelled requests) or a
@@ -1620,7 +1699,7 @@ begin
     begin
       try
         if FOptions.MergeDiagnostics then EnsureLinter;
-        if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then Server;   { opens the index; a failure is reported there }
+        if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition or FOptions.MergeNavigation then Server;   { opens the index; a failure is reported there }
       finally
         TInterlocked.Exchange(FWarming, 0);
       end;
@@ -1639,7 +1718,7 @@ end;
   the server, so only when an index-backed merge is on and a writer is set. }
 procedure TProxyMergeEngine.AnnounceOpen(const APath: string);
 begin
-  if not (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition) or not Assigned(FClientWriter) then Exit;
+  if not (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition or FOptions.MergeNavigation) or not Assigned(FClientWriter) then Exit;
   Enqueue(
     procedure
     var
@@ -1672,7 +1751,7 @@ begin
     so method and uri are read from the head of the body and the (possibly
     whole-file) text is never parsed. Anything the scan cannot read for
     certain falls through to the full parse below. }
-  DirtyOnly:= FOptions.MergeDiagnostics and not (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition);
+  DirtyOnly:= FOptions.MergeDiagnostics and not (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition or FOptions.MergeNavigation);
   if DirtyOnly and HeadStringValue(AFrame, ALen, 'method', JSON_DEPTH_TOP, Method) and (Method = METHOD_DID_CHANGE)
      and HeadStringValue(AFrame, ALen, 'uri', JSON_DEPTH_TEXT_DOCUMENT, Uri) then
   begin
@@ -1706,7 +1785,7 @@ begin
           FDirtyLock.Leave;
         end;
       end;
-      if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then
+      if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition or FOptions.MergeNavigation then
       begin
         Upd:= LiveUpdateOf(Method, Json, LiveText);
         if Upd <> luNone then QueueDocUpdate(Path, Upd = luRemove, LiveText);
@@ -1764,7 +1843,7 @@ end;
   textDocument/hover (MergeHover) request by id and queues drag-lint's answer
   for it on the worker at once, so it is usually ready before DelphiLSP
   answers. Never delays the frame beyond one JSON parse. }
-procedure TProxyMergeEngine.RecordRequest(const AFrame: TBytes; ALen: Integer);  // dl:ok too-many-exit-points@3bc9, cyclomatic-complexity@13e4 -- each Exit is a decline (nothing recorded, relay unchanged); one flat guard sequence reads better than nesting (re-reviewed A5: 8 exits; the four request kinds share one parse, so the kind selection adds branches, not state)
+procedure TProxyMergeEngine.RecordRequest(const AFrame: TBytes; ALen: Integer);  // dl:ok too-many-exit-points@3bc9, cyclomatic-complexity@6112 -- each Exit is a decline (nothing recorded, relay unchanged); one flat guard sequence reads better than nesting (re-reviewed A5: 8 exits; the four request kinds share one parse, so the kind selection adds branches, not state)
 var
   Json  : TJSONValue;
   Method: string;
@@ -1790,7 +1869,7 @@ begin
           and FrameContains(AFrame, ALen, METHOD_HOVER);
   Def  := FOptions.MergeDefinition and (TInterlocked.CompareExchange(FDefinitionOff, 0, 0) = 0)
           and FrameContains(AFrame, ALen, METHOD_DEFINITION);
-  Init := FOptions.MergeDefinition and FrameContains(AFrame, ALen, '"' + METHOD_INITIALIZE + '"');
+  Init := (FOptions.MergeDefinition or FOptions.MergeNavigation) and FrameContains(AFrame, ALen, '"' + METHOD_INITIALIZE + '"');
   if not (Comp or Hover or Def or Init) then Exit;
   Kind:= rkCompletion;
   try
@@ -1921,6 +2000,7 @@ function TProxyMergeEngine.MergeInitialize(const AReply: TJSONObject): Boolean;
 var
   Res : TJSONValue;
   Caps: TJSONValue;
+  Mask: Integer;
 begin
   Result:= False;
   Res:= AReply.GetValue('result');
@@ -1932,20 +2012,59 @@ begin
     TJSONObject(Res).AddPair('capabilities', Caps);
   end
   else if not (Caps is TJSONObject) then Exit;
-  if Advertises(TJSONObject(Caps).GetValue(CAP_REFERENCES)) then TInterlocked.Exchange(FTheirReferences, 1)
-  else
+  if FOptions.MergeDefinition then
   begin
-    TJSONObject(Caps).RemovePair(CAP_REFERENCES).Free;   { false / null: replaced }
-    TJSONObject(Caps).AddPair(CAP_REFERENCES, TJSONBool.Create(True));
-    Result:= True;
+    if Advertises(TJSONObject(Caps).GetValue(CAP_REFERENCES)) then TInterlocked.Exchange(FTheirReferences, 1)
+    else
+    begin
+      TJSONObject(Caps).RemovePair(CAP_REFERENCES).Free;   { false / null: replaced }
+      TJSONObject(Caps).AddPair(CAP_REFERENCES, TJSONBool.Create(True));
+      Result:= True;
+    end;
+    if Advertises(TJSONObject(Caps).GetValue(CAP_WORKSPACE_SYMBOL)) then TInterlocked.Exchange(FTheirSymbols, 1)
+    else
+    begin
+      TJSONObject(Caps).RemovePair(CAP_WORKSPACE_SYMBOL).Free;
+      TJSONObject(Caps).AddPair(CAP_WORKSPACE_SYMBOL, TJSONBool.Create(True));
+      Result:= True;
+    end;
   end;
-  if Advertises(TJSONObject(Caps).GetValue(CAP_WORKSPACE_SYMBOL)) then TInterlocked.Exchange(FTheirSymbols, 1)
-  else
+  if FOptions.MergeNavigation then
   begin
-    TJSONObject(Caps).RemovePair(CAP_WORKSPACE_SYMBOL).Free;
-    TJSONObject(Caps).AddPair(CAP_WORKSPACE_SYMBOL, TJSONBool.Create(True));
-    Result:= True;
+    Mask:= 0;
+    for var I: Integer:= Low(NAV_CAPS) to High(NAV_CAPS) do
+      if Advertises(TJSONObject(Caps).GetValue(NAV_CAPS[I])) then Mask:= Mask or (1 shl I)
+      else
+      begin
+        TJSONObject(Caps).RemovePair(NAV_CAPS[I]).Free;
+        TJSONObject(Caps).AddPair(NAV_CAPS[I], TJSONBool.Create(True));
+        Result:= True;
+      end;
+    TInterlocked.Exchange(FTheirNavigation, Mask);
   end;
+end;
+
+{ The NAV_METHODS index of AMethod when --merge-navigation owes it an answer: on,
+  and DelphiLSP did not advertise its provider. -1 otherwise. }
+function TProxyMergeEngine.NavMethodIndex(const AMethod: string): Integer;
+begin
+  Result:= -1;
+  if not FOptions.MergeNavigation then Exit;
+  for var I: Integer:= Low(NAV_METHODS) to High(NAV_METHODS) do
+    if AMethod = NAV_METHODS[I] then
+    begin
+      if (TInterlocked.CompareExchange(FTheirNavigation, 0, 0) and (1 shl NAV_METHOD_CAP[I])) = 0 then Result:= I;
+      Exit;
+    end;
+end;
+
+{ Could this frame hold a NAV_METHODS request? The scan before the parse. }
+function TProxyMergeEngine.MayBeNavRequest(const AFrame: TBytes; ALen: Integer): Boolean;
+begin
+  Result:= False;
+  if not FOptions.MergeNavigation then Exit;
+  for var Needle: RawByteString in NAV_NEEDLES do
+    if FrameContains(AFrame, ALen, Needle) then Exit(True);
 end;
 
 { C>S pump: consumes a $/cancelRequest for an id Answer took (group-4 P1).
@@ -1989,14 +2108,16 @@ var
   IncDecl: TJSONValue;
   Refs  : Boolean;
   Syms  : Boolean;
+  Nav   : Boolean;
   Job   : TAnswerJob;
 begin
   Result:= False;
-  if not FOptions.MergeDefinition or not Assigned(FClientWriter) then Exit;
+  if not (FOptions.MergeDefinition or FOptions.MergeNavigation) or not Assigned(FClientWriter) then Exit;
   if TakeCancel(AFrame, ALen, AOnTake) then Exit(True);
-  Refs:= (TInterlocked.CompareExchange(FTheirReferences, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_REFERENCES);
-  Syms:= (TInterlocked.CompareExchange(FTheirSymbols, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_WORKSPACE_SYMBOL);
-  if not (Refs or Syms) then Exit;
+  Refs:= FOptions.MergeDefinition and (TInterlocked.CompareExchange(FTheirReferences, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_REFERENCES);
+  Syms:= FOptions.MergeDefinition and (TInterlocked.CompareExchange(FTheirSymbols, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_WORKSPACE_SYMBOL);
+  Nav := MayBeNavRequest(AFrame, ALen);
+  if not (Refs or Syms or Nav) then Exit;
   Method:= '';
   try
     Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
@@ -2004,7 +2125,8 @@ begin
       if not (Json is TJSONObject) or not Json.TryGetValue<string>('method', Method) then Exit;
       Refs:= Refs and (Method = METHOD_REFERENCES);
       Syms:= Syms and (Method = METHOD_WORKSPACE_SYMBOL);
-      if not (Refs or Syms) then Exit;
+      Nav := Nav and (NavMethodIndex(Method) >= 0);
+      if not (Refs or Syms or Nav) then Exit;
       IdVal:= TJSONObject(Json).GetValue('id');
       if IdVal = nil then Exit;   { a notification of that name is not a request we owe }
       Job.Id         := IdVal.ToJSON;
@@ -2014,7 +2136,15 @@ begin
       Job.Line0      := 0;
       Job.Col0       := 0;
       Job.IncludeDecl:= True;   { as TLSPServer.HandleReferences defaults it }
-      if Syms then
+      Job.NavMethod  := '';
+      Job.NavParams  := '';
+      if Nav then
+      begin
+        Job.NavMethod:= Method;
+        var NavParams: TJSONValue:= TJSONObject(Json).GetValue('params');
+        if NavParams is TJSONObject then Job.NavParams:= NavParams.ToJSON;
+      end
+      else if Syms then
       begin
         if not Json.TryGetValue<string>('params.query', Job.Query) then Job.Query:= '';
       end
@@ -2076,7 +2206,11 @@ begin
       FlushDocUpdates;
       S:= Server;
       Arr:= nil;
-      if S <> nil then
+      if AJob.NavMethod <> '' then
+      begin
+        if S <> nil then Body:= NavAnswer(S, AJob);
+      end
+      else if S <> nil then
         if AJob.Symbols then Arr:= S.ComputeWorkspaceSymbols(AJob.Query)
         else if AJob.Path <> '' then Arr:= S.ComputeReferences(AJob.Path, AJob.Line0, AJob.Col0, AJob.IncludeDecl);
       if Arr <> nil then
@@ -2087,11 +2221,36 @@ begin
         end;
     except
       on E: Exception do
-        MergeErrLine(MERGE_DEFINITION_PREFIX + 'answered a request with [] (' + E.ClassName + ': ' + E.Message + ').');
+        MergeErrLine((if AJob.NavMethod <> '' then MERGE_NAVIGATION_PREFIX else MERGE_DEFINITION_PREFIX) +
+                     'answered a request with [] (' + E.ClassName + ': ' + E.Message + ').');
     end;
     SendAnswer(AJob.Id, Body);
   finally
     EndAnswer;
+  end;
+end;
+
+{ Worker thread: the registered feature's result for one --merge-navigation
+  request, as JSON. Whatever the plain server would answer, null included; [] when
+  no feature answered. }
+function TProxyMergeEngine.NavAnswer(const AServer: TLSPServer; const AJob: TAnswerJob): string;
+var
+  Params: TJSONValue;
+  Res   : TJSONValue;
+begin
+  Result:= '[]';
+  Params:= nil;
+  if AJob.NavParams <> '' then Params:= TJSONObject.ParseJSONValue(AJob.NavParams);
+  try
+    Res:= AServer.ComputeFeatureResult(AJob.NavMethod, Params as TJSONObject);
+    if Res <> nil then
+      try
+        Result:= Res.ToJSON;
+      finally
+        Res.Free;
+      end;
+  finally
+    Params.Free;
   end;
 end;
 
@@ -2463,14 +2622,12 @@ begin
   if FTestEmptyReplacement then Exit(True);
   if ADir = mdClientToServer then
   begin
-    if FOptions.MergeDiagnostics or FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then
-      TrackDocument(AFrame, ALen);
-    if FOptions.MergeDiagnostics or FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then
-      PickupContext(AFrame, ALen);
-    if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then RecordRequest(AFrame, ALen);
+    TrackDocument(AFrame, ALen);
+    PickupContext(AFrame, ALen);
+    if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition or FOptions.MergeNavigation then RecordRequest(AFrame, ALen);
     Exit(False);
   end;
-  if (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition) and
+  if (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition or FOptions.MergeNavigation) and
      MergeReply(AFrame, ALen, AReplacement) then Exit(True);
   Result:= FOptions.MergeDiagnostics and MergeDiagnostics(AFrame, ALen, AReplacement);
 end;

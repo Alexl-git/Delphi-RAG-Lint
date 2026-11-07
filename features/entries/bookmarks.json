@@ -1,0 +1,39 @@
+{
+  "id": "bookmarks",
+  "title": "bookmarks",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.46.0-alpha",
+  "summary": "Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder",
+  "intro": "Read this when you marked code with // dl:bk3 or // dl:bk:A7K3QX comments and want them listed, or one found by its code: bookmarks prints file:line for each anchor and never writes.",
+  "wikiPage": "bookmarks",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "bookmarks",
+      "example": "drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json]",
+      "usage": "drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)",
+      "flags": [
+        {
+          "name": "--in",
+          "arg": "<file.pas|dir>"
+        },
+        {
+          "name": "--name",
+          "arg": "<code>"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-07",
+    "by": "ENGINE",
+    "build": "1.46.0-alpha",
+    "surfaceHash": "12ec1cf485a59f42b29a1cf39d98e9b6edf664414ac87b8a716c6e81f18ca3c8"
+  }
+}

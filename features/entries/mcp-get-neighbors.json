@@ -1,0 +1,31 @@
+{
+  "id": "mcp-get-neighbors",
+  "title": "MCP get_neighbors",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.46.0-alpha",
+  "summary": "MCP tool: the call-graph neighbourhood of a symbol within 1..3 hops",
+  "intro": "Ask an MCP client for get_neighbors to see everything one to three resolved call edges away from a symbol, callers and callees alike, each with its fewest hops. The answer is capped at 200 rows and always states how many were omitted.",
+  "wikiPage": "MCP-Get-Neighbors",
+  "surfaces": [
+    {
+      "type": "mcp",
+      "tool": "get_neighbors"
+    }
+  ],
+  "audience": "both",
+  "questions": [
+    {
+      "ask": "What is around this routine in the call graph?",
+      "command": "drag-lint serve --db <index>  (then tools/call get_neighbors {\"qname\":\"Unit.Routine\",\"hops\":2})"
+    }
+  ],
+  "access": "cli-only",
+  "verified": {
+    "date": "2026-11-07",
+    "by": "ENGINE",
+    "build": "1.46.0-alpha",
+    "surfaceHash": "6af5a1405d8780f913b3a827a1859d44c90f4133a595e9033b312f23cb5320ee"
+  }
+}

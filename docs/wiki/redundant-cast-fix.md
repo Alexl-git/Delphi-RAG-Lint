@@ -10,13 +10,17 @@ drag-lint lint --fix --fix-rule redundant-cast --db <db> --project <X.dproj> --a
 
 Exit: 0 plan, or applied and built, or nothing to do. 1 the gate refused and the project is unchanged. 2 bad flags, an index
 older than `ref_types`, or a rollback that failed. `--format json` prints `redundant-cast/1`: `fixes[]`, `refused[]` (each with
-`kind` and `reason`), `not_identity`, `gate`.
+`kind` and `reason`), `not_identity`, `not_identity_by`, `gate`.
 
 ## What it proves
 
 The operand's last name has a row in `ref_types`, the cast has one too, and both name the SAME type symbol. Removing such a cast
 changes nothing: same type, same overloads, same member binding. Identity only: an upcast can change which hidden non-virtual
 member binds, so `TBase(Derived)` is a real conversion and is left alone (counted as `not_identity`, not listed).
+
+`not_identity_by` splits that count by why the two types differ, each class with one example: `enum-target` (a scalar to an enum, `TCommandID(Hdr.CommandID)`),
+`other-target`, `downcast`, `upcast`, `unrelated`, `chain-unknown` (an ancestor no index holds: attach the library) and `same-name` (two symbols of one
+name). A zero fix count beside a large `not_identity` means those casts do real work, not that the proof gave up.
 
 ## What it refuses, and why
 
@@ -47,3 +51,8 @@ A plain `lint --fix` no longer touches `redundant-cast`: it says so on stderr an
 
 The compile gate: `DRagLint.Refactor.CompileGate`, shared with [`cycles --fix`](Circular-Uses-Report-cycles-fix-plan). Guard:
 `tests\autotest\run_refact_redundant_cast.ps1`.
+
+## Cancel
+
+An `--apply` run listens on the maintenance control channel: `drag-lint shutdown --db <db>` (or the IDE's Cancel) kills the
+build the gate waits on, restores every written file and ends the run with exit 1 and the refusal `cancelled`.

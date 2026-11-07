@@ -56,6 +56,11 @@ const
       exhaustive-enum-case        handling a deliberate subset with no else is
                                   ordinary.
       interface-object-mixing     first-cut same-routine dual-handle heuristic.
+      ui-access-in-thread-typed   1.45: OFF until measured on re-resolved real DBs.
+      is-never-true               1.46: OFF per its row; its sealed half needs re-parsed DBs.
+      local-only-out-arg, dead-store-before-out-arg, by-value-arg-before-assignment
+                                  1.46: OFF until the owner rules on the counts; spec
+                                  2026-11-06-liveness-out-args-by-value.
       multiple-statements-per-line pure style.
       magic-literal               medium-FP; floods legacy code.
       boolean-flag-parameter      a common, deliberate idiom here.
@@ -110,7 +115,12 @@ const
     { 1.42 lane opaque }
     'opaque-to-analysis',
     { 1.42 lane ruleset: the old ROADMAP candidates }
-    'stream-buffer-after-free', 'interfaced-object-nil-leak', 'identifier-case-mismatch', 'datamodule-form-global'];
+    'stream-buffer-after-free', 'interfaced-object-nil-leak', 'identifier-case-mismatch', 'datamodule-form-global', 'ui-access-in-thread-typed',
+    'is-never-true',
+    { 1.46 lane t4 }
+    'parameter-type-too-wide',
+    { 1.46 lane t1 }
+    'local-only-out-arg', 'dead-store-before-out-arg', 'by-value-arg-before-assignment'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -523,7 +533,7 @@ begin
     B('virtual-method-in-constructor', 'bug-patterns', 'warning', 'Virtual/dynamic method called from a constructor');
     B('try-except-swallowed',          'bug-patterns', 'warning', 'try..except swallows the exception (no raise/log)');
     B('criticalsection-not-released',  'bug-patterns', 'error',   'Critical section acquired without a matching Leave/Release/TMonitor.Exit in finally');
-    B('ui-access-in-thread',           'bug-patterns', 'warning', 'UI access inside a TThread.Execute (not thread-safe)');
+    B('ui-access-in-thread',           'bug-patterns', 'warning', 'UI access (.Caption :=, .SetFocus, Application.ProcessMessages, ...) in thread code named in the same file: Execute of a class whose ancestry in that file reaches a *thread* name, or a lambda passed to TThread.CreateAnonymousThread, TTask.Run/Create/Future or TParallel.For; never needs an index');
     B('global-form-variable',          'bug-patterns', 'warning', 'Unit-level global variable of the form class type -- potential leak');
     B('unsafe-typecast-without-is',    'bug-patterns', 'warning', 'Hard cast TFoo(x) of an object reference with no guarding ''x is TFoo''; with a 1.44 index (ref_types) also T(a.b) and T(F(x)), and only when the index and the library prove both ends are classes and the cast narrows (no record casts, no upcasts)', False); { OFF by default -- heuristic; many unguarded casts are provably safe. Opt in via "enabled" }
     B('exception-constructed-but-not-raised', 'bug-patterns', 'warning', 'Exception E...Create(...) constructed as a statement but never raised');
@@ -631,6 +641,9 @@ begin
     B('out-param-not-set',     'data-flow', 'warning', 'out parameter not assigned on every path');
     B('overwrite-before-read', 'data-flow', 'warning', 'Value overwritten before it is read');
     B('write-only-local',      'data-flow', 'info',    'Local assigned but never read');
+    B('local-only-out-arg', 'data-flow', 'info', 'Local that only receives out arguments and is read nowhere; the out mode comes from the signature, or from the receiver''s static type (ref_types) on a method', False); { OFF: 1.46 lane t1 }
+    B('dead-store-before-out-arg', 'data-flow', 'warning', 'Value overwritten by an out argument before it is read; the out mode comes from the signature, or from the receiver''s static type (ref_types) on a method', False); { OFF: 1.46 lane t1 }
+    B('by-value-arg-before-assignment', 'data-flow', 'error', 'Local passed by value or const to a method before it is assigned; the parameter mode comes from the receiver''s static type (ref_types)', False); { OFF: 1.46 lane t1 }
     B('loop-var-after-loop',   'data-flow', 'warning', 'Loop variable used after the loop');
     B('object-leak',           'data-flow', 'info',    'Created object may leak (not freed on every path)');
     B('not-assigned-interface','data-flow', 'warning', 'Interface variable dereferenced before assignment (nil interface call)');
@@ -910,6 +923,7 @@ begin
     B('interfaced-object-nil-leak', 'resource-lifetime', 'warning', 'Object reference of a TInterfacedObject descendant is set to nil while it holds a fresh instance -- an object reference holds no count, so nil releases nothing and the instance leaks', False);
     B('identifier-case-mismatch', 'naming', 'info', 'A name is spelled in a different case from its declaration -- locals and parameters from the AST, bound refs from the index', False);
     B('datamodule-form-global', 'project-wide', 'warning', 'A unit declaring a TDataModule descendant reaches another unit''s global form variable -- the data layer now needs that form to exist', False);
+    B('parameter-type-too-wide', 'project-wide', 'hint', 'A class-typed parameter whose routine uses only members an ancestor of the declared type already declares, proved by the narrow-param plan (not virtual, overloaded, published or an interface method; every use is a member read or call or a nil test): it could be declared as that ancestor, so callers are not tied to the wider type. Reports exactly the fixes of narrow-param --all --plan; the refusals are not findings. OFF by default; one dl:ok on the routine line reviews it', False);
     B('global-set-in-initialization-never-freed', 'project-wide', 'hint', 'A unit''s initialization sets its own global to a new object and no source that names the variable frees it -- it lives to process exit and shows in every leak report');
     B('heavy-initialization', 'project-wide', 'hint', 'An initialization section reaches the file system, the registry, the network, a database or a dialog -- it can fail or block before the application has an exception handler or a window');
     B('finalization-after-dependency', 'project-wide', 'warning', 'A finalization section reaches a global that a unit finalized earlier in the computed order tears down in its own finalization -- the read sees a freed object');
@@ -919,6 +933,8 @@ begin
     B('interface-holder-of-non-refcounted', 'project-wide', 'warning', 'An interface variable is assigned a TComponent-like object: _AddRef does nothing, so the holder keeps nothing alive and dangles once the owner frees the object; needs a 1.44 index (ref_types)');
     B('argument-narrows', 'project-wide', 'warning', 'A call passes a variable, field or function result of a wider numeric type than the by-value parameter (Int64 to Integer): the compiler truncates silently; needs a 1.44 index (ref_types)');
     B('is-always-true', 'project-wide', 'warning', 'x is T where the static type of x already descends from T: the test only asks whether x is nil; needs a 1.44 index (ref_types)'); { ON (1.44 lane rulesf1): YADF 0, Loader2025 0, Micronite2027 1, a true positive read in the source }
+    B('is-never-true', 'project-wide', 'warning', 'x is T that no object can answer yes to: two classes where neither descends from the other, or a sealed class against an interface it does not implement; the branch is dead. Proof only: both ancestries followed to the end; needs a 1.44 index (ref_types), and a 1.46 parse for sealed', False);
+    B('ui-access-in-thread-typed', 'project-wide', 'warning', 'Thread code (Execute of any TThread descendant, a lambda or routine passed to TThread.CreateAnonymousThread, TTask.Run/Create/Future, TParallel.For) reads, writes or calls a member of a receiver whose static type descends from TControl, TCustomForm, TFmxObject, or is TApplication/TScreen, directly or over resolved calls, outside Synchronize/Queue; needs a 1.44 index (ref_types) and the library index', False); { OFF (1.45 lane uithread) until measured on re-resolved DBs. }
     { taint wave T2: store-backed interprocedural taint (DRagLint.Lint.TaintRules; catalogues rules\taint-*.json) }
     B('taint-sql-injection', 'security', 'error', 'Tainted data reaches an SQL text sink -- a catalogued source (command line, edit control, request) flows across routines into ExecSQL / SQL.Text (CWE-89)');
     B('taint-command-injection', 'security', 'error', 'Tainted data reaches a process launch sink -- a catalogued source flows across routines into ShellExecute / CreateProcess / WinExec (CWE-78)');

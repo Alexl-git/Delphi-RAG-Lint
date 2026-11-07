@@ -32,11 +32,12 @@ type
     /// <param name="ACfg">Effective lint configuration (thresholds via ThresholdFor).</param>
     /// <param name="AStore">Optional symbol store; nil when the run has no index.</param>
     /// <param name="AFileId">File id within AStore (ignored when AStore is nil).</param>
+    /// <param name="ALibStore"><!-- drag-lint:auto type -->const ISymbolStore = nil</param>
     /// <returns>One finding per violation; empty when clean or unparsable. The CLI filters by --rule.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
-    /// <para>Calls: Canon, Classify, Copy, Default, Delete, DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, EmitAt, Format, Integer (+8 more)</para>
+    /// <para>Calls: Canon, Classify, ContainsStr, Copy, Default, Delete, DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check.Visit, DRagLint.Diagnostics.ParseCache.TAstParseCache.Get, EmitAt, Format (+10 more)</para>
     /// <para>Returns: nil; Findings.ToArray</para>
     /// <para>Directives: static</para>
     /// <seealso cref="DRagLint.Diagnostics.ConcurrencyChecks.TConcurrencyChecker.Check.Visit"/>
@@ -44,7 +45,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ACfg: TLintConfig;
-      const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>; static;
+      const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>; static;
   end;
 
 implementation
@@ -55,11 +56,16 @@ uses
   , System.Generics.Collections
   , TreeSitter
   , DRagLint.Diagnostics.ParseCache
+  , DRagLint.Lint.RefTypeRules
   ;
 
 class function TConcurrencyChecker.Check(const AFile: string; const ACfg: TLintConfig;  // dl:ok unused-parameter@7485 -- REVIEWED 2026-10-28: gate-fixed checker signature (LINT_GATE_CONCURRENCY call sites); the rules are threshold-free
-  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;  // dl:ok unused-parameter@255c -- gate-fixed checker signature; the rules are store-free
+  const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 const
+  LOCK_TYPES: array[0..6] of string = (
+    'tcriticalsection', 'tmonitor', 'tmutex', 'tspinlock', 'tlightweightmrew',
+    'tmultireadexclusivewritesynchronizer', 'trtlcriticalsection');
+  LOCK_WORDS: array[0..4] of string = ('lock', 'mutex', 'critical', 'monitor', 'sync');
   BLOCKING: array[0..7] of string = (
     'synchronize', 'waitfor', 'sendmessage', 'sleep', 'showmessage', 'messagedlg',
     'processmessages', 'waitforsingleobject');
@@ -67,6 +73,7 @@ var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
+  Reader  : TExprTypeReader;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -109,6 +116,34 @@ var
     Findings.Add(F);
   end;
 
+  { False only when the index PROVES the receiver of an Enter / Acquire call is not a lock: its static type is
+    known, is not a lock type, does not descend from one, and carries no lock-like word in its name (a user
+    wrapper such as TMyLock stays a lock). No store, no ref_types table or no row: True, as before. }
+  function ReceiverMayBeLock(const ANode: TTSNode): Boolean;
+  var
+    D, R  : TTSNode;
+    Leaf  : string;
+    I     : Integer;
+    Proven: Boolean;
+  begin
+    Result:= True;
+    if AStore = nil then Exit;
+    D:= ANode;
+    if (D.NodeType = 'exprCall') and (D.ChildCount > 0) then D:= D.Child(0);
+    if D.NodeType <> 'exprDot' then Exit;
+    R:= D.ChildByField('lhs');
+    if R.IsNull then Exit;
+    if Reader = nil then Reader:= TExprTypeReader.Create(AStore, ALibStore, AFileId, Src);
+    if not (Reader.Ready and Reader.TypeLeafOf(R, Leaf)) then Exit;
+    Leaf:= LowerCase(Leaf);
+    Proven:= True;
+    for I:= Low(LOCK_TYPES) to High(LOCK_TYPES) do
+      if (Leaf = LOCK_TYPES[I]) or (Reader.Descends(Leaf, LOCK_TYPES[I]) <> tdNo) then Proven:= False;
+    for I:= Low(LOCK_WORDS) to High(LOCK_WORDS) do
+      if ContainsStr(Leaf, LOCK_WORDS[I]) then Proven:= False;
+    Result:= not Proven;
+  end;
+
   function IsBlocking(const ALastSeg: string): Boolean;
   var
     I: Integer;
@@ -140,7 +175,9 @@ var
     else if (ACallee = 'tmonitor.exit') or (ACallee = 'leavecriticalsection') then
       AHeld.Remove(AFirstArg)
     else if (Receiver <> '') and ((LastSeg = 'enter') or (LastSeg = 'acquire')) then
-      AHeld.AddOrSetValue(Receiver, Receiver)
+    begin
+      if ReceiverMayBeLock(ANode) then AHeld.AddOrSetValue(Receiver, Receiver);
+    end
     else if (Receiver <> '') and ((LastSeg = 'leave') or (LastSeg = 'release')) then
       AHeld.Remove(Receiver)
     else if (AHeld.Count > 0) and IsBlocking(LastSeg) then
@@ -203,10 +240,12 @@ begin
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
+  Reader  := nil;
   try
     Visit(PF.Tree.RootNode);
     Result:= Findings.ToArray;
   finally
+    Reader.Free;
     Findings.Free;
   end;
 end;

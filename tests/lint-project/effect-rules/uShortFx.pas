@@ -32,6 +32,7 @@ function Cached: Boolean;
 function StoredCount: Boolean;
 function Grow(ACount: Integer): Integer;
 function GrowIf(ACount: Integer): Integer;
+function Advance(AIdx: Integer): Integer;
 procedure Driver;
 
 var
@@ -134,6 +135,13 @@ begin
   Result:= GMax;
 end;
 
+{ Moves its BY-VALUE scalar parameter: the caller never sees it -- the stage stores 'p0' for the Inc, the rule must not. }
+function Advance(AIdx: Integer): Integer;
+begin
+  Inc(AIdx);
+  Result:= AIdx * 2;
+end;
+
 procedure Driver;
 var
   N : Integer;
@@ -171,6 +179,7 @@ begin
   if Assigned(B2) and B.Bump then N:= 18;      { SC-TRIGGER-10: the guard tests another object }
   if (N > 0) and (Grow(N) > 0) then N:= 19;    { SC-TRIGGER-11: tests what it assigns, yet no memo }
   if (N > 0) and (GrowIf(N) > 0) then N:= 20;  { SC-TRIGGER-12: guarded writes, but it takes a parameter }
+  if Ok and (Advance(N) > 3) then N:= 21;           { SC-CONTROL-15: moves only its by-value scalar parameter }
   B.Free;
 end;
 
