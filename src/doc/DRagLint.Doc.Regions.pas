@@ -3202,7 +3202,7 @@ var
   // says whether such a tag names the signature parameter AParam.
   function IsCompoundParamTag(const AName: string): Boolean;
   begin
-    Result:= (Pos(',', AName) > 0) or (Pos(' ', Trim(AName)) > 0);
+    Result:= AName.Contains(',') or Trim(AName).Contains(' ');
   end;
   function ParamTagCovers(const AName, AParam: string): Boolean;
   var Part: string; Words: TArray<string>;
@@ -4037,10 +4037,14 @@ begin
         if not (IsCompoundParamTag(CP.Name) and ParamTagCovers(CP.Name, P)) then Continue;
         var CompoundStandalone: Boolean:= False;
         for var SP in StandaloneParam.Params do
-          if SameText(SP.Name, CP.Name) then begin CompoundStandalone:= True; Break; end;
+          if SameText(SP.Name, CP.Name) then
+          begin
+            CompoundStandalone:= True;
+            Break;
+          end;
         if not CompoundStandalone then Continue;
         ParamEmitted:= True;
-        if Pos('|' + LowerCase(CP.Name) + '|', CompoundDone) = 0 then
+        if not CompoundDone.Contains('|' + LowerCase(CP.Name) + '|') then
         begin
           CompoundDone:= CompoundDone + LowerCase(CP.Name) + '|';
           Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'param', '<param name="' + CP.Name + '">', CP.Desc, '</param>'));
@@ -4123,7 +4127,10 @@ begin
       var StillThere: Boolean:= False;
       for P in ASigParams do
         if SameText(EP.Name, P) or (IsCompoundParamTag(EP.Name) and ParamTagCovers(EP.Name, P)) then
-        begin StillThere:= True; Break; end;
+        begin
+          StillThere:= True;
+          Break;
+        end;
       var IsStandaloneParam: Boolean:= False;
       for var SP in StandaloneParam.Params do
         if SameText(SP.Name, EP.Name) then begin IsStandaloneParam:= True; Break; end;

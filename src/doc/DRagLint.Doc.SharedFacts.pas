@@ -2214,7 +2214,7 @@ begin
     for E in M.Groups[1].Value.Split([',']) do
     begin
       var T: string:= Trim(E);
-      if (T = '') or (Pos('.', T) = 0) or StartsStr(UNSEEN_MORE, T) then Continue;
+      if (T = '') or (not T.Contains('.')) or StartsStr(UNSEEN_MORE, T) then Continue;
       if Kept.ContainsKey(LowerCase(T)) then Continue;
       if UnitVouchable(AStore, T) then Continue;
       Result:= Result + IfThen(Result = '', '', ', ') + T;
