@@ -7018,6 +7018,43 @@ begin
   DLRunReport(Format('helpers-of "%s" --db "%s"', [T, Db]), 'drag-lint-helpers-of.txt');
 end;
 
+/// <summary>Records a dl:ok review of one finding on the caret's line (allow): the other
+/// way to `Allow this message` on the Structure form, with no Structure tree needed.</summary>
+/// <remarks>The rule box is pre-filled when the diagnostics hold a rule for that line;
+/// No in the question previews, Yes writes the marker. The engine builds the marker text.</remarks>
+procedure InvokeAllowFinding(Sender: TObject);
+var
+  ESS           : IOTAEditorServices;
+  EV            : IOTAEditView      ;
+  FileName, Rule: string            ;
+  Line          : Integer           ;
+  Apply         : Boolean           ;
+  Diags         : TArray<TDragLintDiagnostic>;
+begin
+  EV:= nil;
+  if Supports(BorlandIDEServices, IOTAEditorServices, ESS) then EV:= ESS.TopView;
+  if (EV = nil) or (EV.Buffer = nil) then
+  begin
+    ShowMessage('drag-lint: put the caret on the finding''s line in an editor first.');
+    Exit;
+  end;
+  FileName:= EV.Buffer.FileName;
+  Line:= EV.Position.Row - 1; { the cache is 0-based }
+  Rule:= '';
+  Diags:= Cache.GetForLine(FileName, Line);
+  for var D in Diags do
+    if D.Code <> '' then
+    begin
+      Rule:= D.Code;
+      Break;
+    end;
+  if not DLAskText(Format('Rule to allow on line %d:', [Line + 1]), Rule, Rule) then Exit;
+  if not DLAskApply(Format('Record a dl:ok review of %s on line %d?', [Rule, Line + 1]), Apply) then Exit;
+  DLSaveAllIfApply(Apply);
+  DLRunReport(Format('allow "%s" --fix-line %d --fix-rule "%s"%s', [FileName, Line + 1, Rule, DLApplyArg(Apply)]),
+    'drag-lint-allow.txt');
+end;
+
 /// <summary>Lists the full transitive ancestor chain of a class or interface
 /// (query ancestors); the name box is pre-filled with the identifier at the caret.</summary>
 procedure InvokeQueryAncestors(Sender: TObject);
@@ -7610,6 +7647,7 @@ begin
   AddWrappedItem(SubQuality, 'Compiler Hints...'            , InvokeCompilerHints   );
   AddWrappedItem(SubQuality, 'Top Symbols (fan-in)...'      , InvokeTopSymbols      );
   AddWrappedItem(SubQuality, 'Project Structure Rules (god-class, layering...)...', InvokeLintProject);
+  AddWrappedItem(SubQuality, 'Allow a Finding on This Line...', InvokeAllowFinding);
 
   { v0.46: Generate / Export submenu }
   var SubGen: TMenuItem:= TMenuItem.Create(RootMenu);

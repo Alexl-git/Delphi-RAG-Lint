@@ -10,6 +10,11 @@
   "wikiPage": "allow",
   "surfaces": [
     {
+      "type": "ide-menu",
+      "path": "drag-lint > Code Quality > Allow a Finding on This Line...",
+      "steps": ["Put the caret on the line of the finding", "Choose drag-lint > Code Quality > Allow a Finding on This Line...", "Confirm the rule (prefilled when the diagnostics hold one for that line), then choose Yes to write the dl:ok review or No for a dry-run preview"]
+    },
+    {
       "type": "cli",
       "verb": "allow",
       "usage": "drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>] (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)",
@@ -70,9 +75,9 @@
     "by": "ENGINE"
   },
   "verified": {
-    "date": "2026-10-26",
+    "date": "2026-11-06",
     "by": "ENGINE",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "4f6ecc0acddb27a4f5b8e096b1c668322ab7caf91ca4bc36b0867b1c6ab6f28a"
+    "build": "1.45.0-alpha",
+    "surfaceHash": "743633f9c86c0e8c21028de9a717befee3c186bfa8a97c46128007873b4cf949"
   }
 }
