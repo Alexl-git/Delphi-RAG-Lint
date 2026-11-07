@@ -44,6 +44,22 @@ $scratch = Join-Path C:\TEMP "draglint_resolvedbs_$PID"
 if (Test-Path $scratch) { Remove-Item $scratch -Recurse -Force }
 New-Item -ItemType Directory -Path $scratch | Out-Null
 
+# A freshly linked exe (src\cli\Win64\Debug) has no manifest beside it, and that says
+# nothing about the contract under test. Take a private engine copy with a fixture
+# manifest instead of failing the precondition (E-NODB-RESIDUE). A real manifest beside
+# the exe is still what is tested when there is one.
+if (-not (Test-Path $manifest)) {
+  $fixEng = Join-Path $scratch 'fixture-engine'
+  New-Item -ItemType Directory -Path $fixEng | Out-Null
+  Copy-Item $exePath $fixEng
+  Copy-Item (Join-Path (Split-Path $exePath -Parent) '*.dll') $fixEng
+  $fixOut = (Join-Path $scratch 'fixture-dbs').Replace('\', '/')
+  $fixMf = '{ "indexes": { "outDir": "' + $fixOut + '", "sections": [ { "name": "Library", "source": "registry-libraries", "db": "library-{platform}.sqlite", "platforms": ["Win32", "Win64"], "include": ["' + $scratch.Replace('\', '/') + '"] } ] } }'
+  $exePath  = Join-Path $fixEng (Split-Path $exePath -Leaf)
+  $manifest = Join-Path $fixEng 'drag-lint.json'
+  [IO.File]::WriteAllText($manifest, $fixMf, [Text.Encoding]::ASCII)
+}
+
 function RunResolve([string[]]$ExtraArgs) {
   $o = (& $exePath resolve-dbs @ExtraArgs 2>&1 | Out-String)
   return @{ Out = $o; Code = $LASTEXITCODE
