@@ -134,6 +134,18 @@ function IsSingleFixOnlyRule(const ARuleId: string): Boolean;
 /// </remarks>
 function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCount: Integer): TArray<TTextEdit>;
 
+/// <summary>The edits of one finding's registered per-finding fixer, read against
+/// ALines (an editor buffer) instead of the file on disk.</summary>
+/// <param name="AFinding">The finding to fix.</param>
+/// <param name="ALines">The text the fixer reads; stays the caller's.</param>
+/// <returns>The edits; nil when the rule has no registered per-finding fixer (a
+/// legacy-chain, per-file, store-backed or sidecar fix), the fix is risky or needs a
+/// newer compiler than the run targets, or the fixer declines.</returns>
+/// <remarks>Only for a fixer that reads nothing but AFinding and ALines: one that
+/// looks at the disk or the index (DeclTypeOf, AutofixStore) would mix two versions
+/// of the file. The caller picks those by rule id.</remarks>
+function BuildBufferFixEdits(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+
 /// <summary>Drops every finding's edits that overlap an edit of an EARLIER
 /// finding in the same file, so one --fix pass never writes mixed bytes.</summary>
 /// <param name="AEdits">The pass's edits, in finding order (BuildAutofixEdits
@@ -590,6 +602,16 @@ var
   Risky: Boolean;
 begin
   Result:= IsLegacyFixRule(ARuleId) or Fixers.ContainsKey(ARuleId) or IsSidecarFixRule(ARuleId, Risky);
+end;
+
+function BuildBufferFixEdits(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
+var
+  R: TRegisteredFixer;
+begin
+  Result:= nil;
+  if IsLegacyFixRule(AFinding.RuleId) or not Fixers.TryGetValue(AFinding.RuleId, R) then Exit;
+  if (not Assigned(R.Finding)) or R.Risky or IsGatedByTarget(R.NeedsCompiler, ActiveTargetCompiler) then Exit;
+  Result:= R.Finding(AFinding, ALines);
 end;
 
 { The NAMING fixes. Each rewrites a declaration and every use the index knows

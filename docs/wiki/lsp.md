@@ -17,7 +17,7 @@ drag-lint lsp --db <file.sqlite>
 ### Proxy mode: merging drag-lint into DelphiLSP
 
 ```
-drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits <32|64>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-budget-ms <n>]
+drag-lint lsp --proxy [--delphi-lsp <path>] [--delphi-lsp-bits <32|64>] [--trace <file>] [--merge-diagnostics] [--merge-completion] [--merge-hover] [--merge-definition] [--merge-navigation] [--merge-budget-ms <n>]
 ```
 
 `--delphi-lsp-bits 32` forwards to `bin\DelphiLSP.exe` (the 32-bit server the IDE launches
@@ -45,6 +45,12 @@ drag-lint add to those answers:
   `textDocument/references` and `workspace/symbol` itself from the index;
   those requests are never forwarded (one reply each, `[]` when no index
   opens). OFF by default.
+- `--merge-navigation` -- answer the type and call hierarchy,
+  `textDocument/typeDefinition`, `textDocument/documentHighlight` and
+  `textDocument/foldingRange` in the proxy, with exactly what plain `lsp` answers.
+  Decided per provider from DelphiLSP's `initialize` reply: one it lacks (absent,
+  `false` or `null`) is added and answered here, never forwarded (one reply, `[]`
+  when no index opens); one it advertises stays DelphiLSP's. OFF by default.
 - `--merge-budget-ms <n>` -- the per-frame time budget of a merge handler
   (default 300). A handler that overruns it, raises, or cannot open the index
   makes the proxy forward DelphiLSP's original bytes untouched; merging fails
@@ -174,6 +180,14 @@ Registered through the LSP feature registry (`DRagLint.LSP.Feature.CallHierarchy
 
 `lsp` answers `workspace/executeCommand` for `draglint.showCallers` -- the command the codeLens `<n> callers` runs -- with arguments `[uri, line]` (0-based): `[{uri, line, character}]`, every distinct (file, line) call site of the routine(s) declared on that line, across every `--db` store, ordered by file then line, so the row count equals the lens count. An unknown command answers `-32601`, bad arguments `-32602`. Capability `executeCommandProvider: {commands: ["draglint.showCallers"]}`. Registered through the LSP feature registry (`DRagLint.LSP.Feature.ExecuteCommand`); guard: `tests\autotest\run_lsp_execute_command_guard.ps1`.
 
+## Quick fixes on a finding (textDocument/codeAction)
+
+Besides `Mark as reviewed: <rule>`, the light bulb offers `Fix: <rule>` on a drag-lint
+finding of `mixed-case-hex`, `length-zero-compare` or `deprecated-rtl-function`. The edit
+comes from the same fixer as `lint --fix` and reads the live buffer, unsaved text included.
+A diagnostic older than the buffer gets no `Fix:` action: every edit must replace text the
+buffer really holds. A risky fix, a fix that needs a newer compiler than the target and
+every other rule stay with `lint --fix`.
 ## Reaching it in the IDE
 
 CLI+internal: the plugin starts this process itself, from

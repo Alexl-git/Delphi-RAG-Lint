@@ -35,6 +35,12 @@ unit DRagLint.LSP.Proxy.Merge;
   requests are then ANSWERED here (Answer, written through ClientWriter) and
   never forwarded.
 
+  --merge-navigation does the same for the plain server's newer features: the
+  type and call hierarchy, typeDefinition, documentHighlight and foldingRange
+  (NAV_CAPS / NAV_METHODS). Each provider DelphiLSP does not advertise is added
+  to its initialize reply and its requests are answered by the registered LSP
+  feature (TLSPServer.ComputeFeatureResult); one it advertises stays its own.
+
   FAIL OPEN, ALWAYS. A handler that raises, overruns its budget or cannot open
   the index makes the relay forward DelphiLSP's original bytes. The engine
   never decides on its own to drop a frame. }
@@ -181,6 +187,8 @@ type
       Line0      : Integer;
       Col0       : Integer;
       IncludeDecl: Boolean;
+      NavMethod  : string;    { --merge-navigation: the feature method; '' = references / symbols }
+      NavParams  : string;    { its params, as JSON }
     end;
   private
     FOptions    : TLspProxyOptions;
@@ -216,6 +224,7 @@ type
     FDefinitionWarned: Integer;
     FTheirReferences : Integer;
     FTheirSymbols    : Integer;
+    FTheirNavigation : Integer;   { bit per NAV_CAPS entry DelphiLSP advertised; written once by MergeInitialize }
     FClientWriter    : TClientWriter;
     FAnswersOut      : Integer;
     FAnswersIdle     : TEvent;
@@ -243,6 +252,9 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function  TakeCancel(const AFrame: TBytes; ALen: Integer; const AOnTake: TProc): Boolean;
+    function  NavMethodIndex(const AMethod: string): Integer;
+    function  MayBeNavRequest(const AFrame: TBytes; ALen: Integer): Boolean;
+    function  NavAnswer(const AServer: TLSPServer; const AJob: TAnswerJob): string;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.LSP.Proxy.Merge.TMergeWorker.Execute (DRagLint.LSP.Proxy.Merge.pas)</para>
@@ -766,7 +778,9 @@ type
     /// (one with an id) when MergeDefinition is on, ClientWriter is set and
     /// DelphiLSP's initialize reply did not advertise that provider: drag-lint
     /// answers it (TLSPServer.ComputeReferences / ComputeWorkspaceSymbols, on
-    /// the merge worker) and the relay must NOT forward it. True also for a
+    /// the merge worker) and the relay must NOT forward it. The same for a
+    /// NAV_METHODS request when MergeNavigation is on (the registered feature
+    /// answers, TLSPServer.ComputeFeatureResult). True also for a
     /// $/cancelRequest whose params.id is a request Answer took and has not
     /// seen cancelled yet: it is consumed and nothing is written (DelphiLSP
     /// never saw that id; group-4 P1). False otherwise, and for a frame that
@@ -982,6 +996,19 @@ const
   MERGE_DEFINITION_PREFIX = 'drag-lint lsp --proxy: merge-definition ';
   CAP_REFERENCES       = 'referencesProvider';
   CAP_WORKSPACE_SYMBOL = 'workspaceSymbolProvider';
+  { --merge-navigation: each provider and the requests it covers. A follow-up
+    (supertypes, incomingCalls) belongs to the provider of its prepare request. }
+  NAV_CAPS: array[0..4] of string = ('typeHierarchyProvider', 'callHierarchyProvider', 'typeDefinitionProvider',
+    'documentHighlightProvider', 'foldingRangeProvider');
+  NAV_METHODS: array[0..8] of string = ('textDocument/prepareTypeHierarchy', 'typeHierarchy/supertypes', 'typeHierarchy/subtypes',
+    'textDocument/prepareCallHierarchy', 'callHierarchy/incomingCalls', 'callHierarchy/outgoingCalls',
+    'textDocument/typeDefinition', 'textDocument/documentHighlight', 'textDocument/foldingRange');
+  NAV_METHOD_CAP: array[0..8] of Integer = (0, 0, 0, 1, 1, 1, 2, 3, 4);
+  { What a frame holding any NAV_METHODS name must contain: a cheap pre-parse scan
+    (four needles, not nine, on a path every client frame takes). }
+  NAV_NEEDLES: array[0..3] of RawByteString = ('Hierarchy', 'textDocument/typeDefinition',
+    'textDocument/documentHighlight', 'textDocument/foldingRange');
+  MERGE_NAVIGATION_PREFIX = 'drag-lint lsp --proxy: merge-navigation ';
   { Between DelphiLSP's hover text and drag-lint's facts (spec criterion 15). }
   HOVER_SEPARATOR = #10#10'---'#10#10;
   { Bounds that keep a client that never sees a reply (cancelled requests) or a
@@ -1620,7 +1647,7 @@ begin
     begin
       try
         if FOptions.MergeDiagnostics then EnsureLinter;
-        if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then Server;   { opens the index; a failure is reported there }
+        if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition or FOptions.MergeNavigation then Server;   { opens the index; a failure is reported there }
       finally
         TInterlocked.Exchange(FWarming, 0);
       end;
@@ -1639,7 +1666,7 @@ end;
   the server, so only when an index-backed merge is on and a writer is set. }
 procedure TProxyMergeEngine.AnnounceOpen(const APath: string);
 begin
-  if not (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition) or not Assigned(FClientWriter) then Exit;
+  if not (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition or FOptions.MergeNavigation) or not Assigned(FClientWriter) then Exit;
   Enqueue(
     procedure
     var
@@ -1672,7 +1699,7 @@ begin
     so method and uri are read from the head of the body and the (possibly
     whole-file) text is never parsed. Anything the scan cannot read for
     certain falls through to the full parse below. }
-  DirtyOnly:= FOptions.MergeDiagnostics and not (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition);
+  DirtyOnly:= FOptions.MergeDiagnostics and not (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition or FOptions.MergeNavigation);
   if DirtyOnly and HeadStringValue(AFrame, ALen, 'method', JSON_DEPTH_TOP, Method) and (Method = METHOD_DID_CHANGE)
      and HeadStringValue(AFrame, ALen, 'uri', JSON_DEPTH_TEXT_DOCUMENT, Uri) then
   begin
@@ -1706,7 +1733,7 @@ begin
           FDirtyLock.Leave;
         end;
       end;
-      if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then
+      if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition or FOptions.MergeNavigation then
       begin
         Upd:= LiveUpdateOf(Method, Json, LiveText);
         if Upd <> luNone then QueueDocUpdate(Path, Upd = luRemove, LiveText);
@@ -1790,7 +1817,7 @@ begin
           and FrameContains(AFrame, ALen, METHOD_HOVER);
   Def  := FOptions.MergeDefinition and (TInterlocked.CompareExchange(FDefinitionOff, 0, 0) = 0)
           and FrameContains(AFrame, ALen, METHOD_DEFINITION);
-  Init := FOptions.MergeDefinition and FrameContains(AFrame, ALen, '"' + METHOD_INITIALIZE + '"');
+  Init := (FOptions.MergeDefinition or FOptions.MergeNavigation) and FrameContains(AFrame, ALen, '"' + METHOD_INITIALIZE + '"');
   if not (Comp or Hover or Def or Init) then Exit;
   Kind:= rkCompletion;
   try
@@ -1921,6 +1948,7 @@ function TProxyMergeEngine.MergeInitialize(const AReply: TJSONObject): Boolean;
 var
   Res : TJSONValue;
   Caps: TJSONValue;
+  Mask: Integer;
 begin
   Result:= False;
   Res:= AReply.GetValue('result');
@@ -1932,20 +1960,59 @@ begin
     TJSONObject(Res).AddPair('capabilities', Caps);
   end
   else if not (Caps is TJSONObject) then Exit;
-  if Advertises(TJSONObject(Caps).GetValue(CAP_REFERENCES)) then TInterlocked.Exchange(FTheirReferences, 1)
-  else
+  if FOptions.MergeDefinition then
   begin
-    TJSONObject(Caps).RemovePair(CAP_REFERENCES).Free;   { false / null: replaced }
-    TJSONObject(Caps).AddPair(CAP_REFERENCES, TJSONBool.Create(True));
-    Result:= True;
+    if Advertises(TJSONObject(Caps).GetValue(CAP_REFERENCES)) then TInterlocked.Exchange(FTheirReferences, 1)
+    else
+    begin
+      TJSONObject(Caps).RemovePair(CAP_REFERENCES).Free;   { false / null: replaced }
+      TJSONObject(Caps).AddPair(CAP_REFERENCES, TJSONBool.Create(True));
+      Result:= True;
+    end;
+    if Advertises(TJSONObject(Caps).GetValue(CAP_WORKSPACE_SYMBOL)) then TInterlocked.Exchange(FTheirSymbols, 1)
+    else
+    begin
+      TJSONObject(Caps).RemovePair(CAP_WORKSPACE_SYMBOL).Free;
+      TJSONObject(Caps).AddPair(CAP_WORKSPACE_SYMBOL, TJSONBool.Create(True));
+      Result:= True;
+    end;
   end;
-  if Advertises(TJSONObject(Caps).GetValue(CAP_WORKSPACE_SYMBOL)) then TInterlocked.Exchange(FTheirSymbols, 1)
-  else
+  if FOptions.MergeNavigation then
   begin
-    TJSONObject(Caps).RemovePair(CAP_WORKSPACE_SYMBOL).Free;
-    TJSONObject(Caps).AddPair(CAP_WORKSPACE_SYMBOL, TJSONBool.Create(True));
-    Result:= True;
+    Mask:= 0;
+    for var I: Integer:= Low(NAV_CAPS) to High(NAV_CAPS) do
+      if Advertises(TJSONObject(Caps).GetValue(NAV_CAPS[I])) then Mask:= Mask or (1 shl I)
+      else
+      begin
+        TJSONObject(Caps).RemovePair(NAV_CAPS[I]).Free;
+        TJSONObject(Caps).AddPair(NAV_CAPS[I], TJSONBool.Create(True));
+        Result:= True;
+      end;
+    TInterlocked.Exchange(FTheirNavigation, Mask);
   end;
+end;
+
+{ The NAV_METHODS index of AMethod when --merge-navigation owes it an answer: on,
+  and DelphiLSP did not advertise its provider. -1 otherwise. }
+function TProxyMergeEngine.NavMethodIndex(const AMethod: string): Integer;
+begin
+  Result:= -1;
+  if not FOptions.MergeNavigation then Exit;
+  for var I: Integer:= Low(NAV_METHODS) to High(NAV_METHODS) do
+    if AMethod = NAV_METHODS[I] then
+    begin
+      if (TInterlocked.CompareExchange(FTheirNavigation, 0, 0) and (1 shl NAV_METHOD_CAP[I])) = 0 then Result:= I;
+      Exit;
+    end;
+end;
+
+{ Could this frame hold a NAV_METHODS request? The scan before the parse. }
+function TProxyMergeEngine.MayBeNavRequest(const AFrame: TBytes; ALen: Integer): Boolean;
+begin
+  Result:= False;
+  if not FOptions.MergeNavigation then Exit;
+  for var Needle: RawByteString in NAV_NEEDLES do
+    if FrameContains(AFrame, ALen, Needle) then Exit(True);
 end;
 
 { C>S pump: consumes a $/cancelRequest for an id Answer took (group-4 P1).
@@ -1989,14 +2056,16 @@ var
   IncDecl: TJSONValue;
   Refs  : Boolean;
   Syms  : Boolean;
+  Nav   : Boolean;
   Job   : TAnswerJob;
 begin
   Result:= False;
-  if not FOptions.MergeDefinition or not Assigned(FClientWriter) then Exit;
+  if not (FOptions.MergeDefinition or FOptions.MergeNavigation) or not Assigned(FClientWriter) then Exit;
   if TakeCancel(AFrame, ALen, AOnTake) then Exit(True);
-  Refs:= (TInterlocked.CompareExchange(FTheirReferences, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_REFERENCES);
-  Syms:= (TInterlocked.CompareExchange(FTheirSymbols, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_WORKSPACE_SYMBOL);
-  if not (Refs or Syms) then Exit;
+  Refs:= FOptions.MergeDefinition and (TInterlocked.CompareExchange(FTheirReferences, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_REFERENCES);
+  Syms:= FOptions.MergeDefinition and (TInterlocked.CompareExchange(FTheirSymbols, 0, 0) = 0) and FrameContains(AFrame, ALen, METHOD_WORKSPACE_SYMBOL);
+  Nav := MayBeNavRequest(AFrame, ALen);
+  if not (Refs or Syms or Nav) then Exit;
   Method:= '';
   try
     Json:= TJSONObject.ParseJSONValue(FrameBody(AFrame, ALen));
@@ -2004,7 +2073,8 @@ begin
       if not (Json is TJSONObject) or not Json.TryGetValue<string>('method', Method) then Exit;
       Refs:= Refs and (Method = METHOD_REFERENCES);
       Syms:= Syms and (Method = METHOD_WORKSPACE_SYMBOL);
-      if not (Refs or Syms) then Exit;
+      Nav := Nav and (NavMethodIndex(Method) >= 0);
+      if not (Refs or Syms or Nav) then Exit;
       IdVal:= TJSONObject(Json).GetValue('id');
       if IdVal = nil then Exit;   { a notification of that name is not a request we owe }
       Job.Id         := IdVal.ToJSON;
@@ -2014,7 +2084,15 @@ begin
       Job.Line0      := 0;
       Job.Col0       := 0;
       Job.IncludeDecl:= True;   { as TLSPServer.HandleReferences defaults it }
-      if Syms then
+      Job.NavMethod  := '';
+      Job.NavParams  := '';
+      if Nav then
+      begin
+        Job.NavMethod:= Method;
+        var NavParams: TJSONValue:= TJSONObject(Json).GetValue('params');
+        if NavParams is TJSONObject then Job.NavParams:= NavParams.ToJSON;
+      end
+      else if Syms then
       begin
         if not Json.TryGetValue<string>('params.query', Job.Query) then Job.Query:= '';
       end
@@ -2076,7 +2154,11 @@ begin
       FlushDocUpdates;
       S:= Server;
       Arr:= nil;
-      if S <> nil then
+      if AJob.NavMethod <> '' then
+      begin
+        if S <> nil then Body:= NavAnswer(S, AJob);
+      end
+      else if S <> nil then
         if AJob.Symbols then Arr:= S.ComputeWorkspaceSymbols(AJob.Query)
         else if AJob.Path <> '' then Arr:= S.ComputeReferences(AJob.Path, AJob.Line0, AJob.Col0, AJob.IncludeDecl);
       if Arr <> nil then
@@ -2087,11 +2169,36 @@ begin
         end;
     except
       on E: Exception do
-        MergeErrLine(MERGE_DEFINITION_PREFIX + 'answered a request with [] (' + E.ClassName + ': ' + E.Message + ').');
+        MergeErrLine((if AJob.NavMethod <> '' then MERGE_NAVIGATION_PREFIX else MERGE_DEFINITION_PREFIX) +
+                     'answered a request with [] (' + E.ClassName + ': ' + E.Message + ').');
     end;
     SendAnswer(AJob.Id, Body);
   finally
     EndAnswer;
+  end;
+end;
+
+{ Worker thread: the registered feature's result for one --merge-navigation
+  request, as JSON. Whatever the plain server would answer, null included; [] when
+  no feature answered. }
+function TProxyMergeEngine.NavAnswer(const AServer: TLSPServer; const AJob: TAnswerJob): string;
+var
+  Params: TJSONValue;
+  Res   : TJSONValue;
+begin
+  Result:= '[]';
+  Params:= nil;
+  if AJob.NavParams <> '' then Params:= TJSONObject.ParseJSONValue(AJob.NavParams);
+  try
+    Res:= AServer.ComputeFeatureResult(AJob.NavMethod, Params as TJSONObject);
+    if Res <> nil then
+      try
+        Result:= Res.ToJSON;
+      finally
+        Res.Free;
+      end;
+  finally
+    Params.Free;
   end;
 end;
 
@@ -2463,14 +2570,12 @@ begin
   if FTestEmptyReplacement then Exit(True);
   if ADir = mdClientToServer then
   begin
-    if FOptions.MergeDiagnostics or FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then
-      TrackDocument(AFrame, ALen);
-    if FOptions.MergeDiagnostics or FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then
-      PickupContext(AFrame, ALen);
-    if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition then RecordRequest(AFrame, ALen);
+    TrackDocument(AFrame, ALen);
+    PickupContext(AFrame, ALen);
+    if FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition or FOptions.MergeNavigation then RecordRequest(AFrame, ALen);
     Exit(False);
   end;
-  if (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition) and
+  if (FOptions.MergeCompletion or FOptions.MergeHover or FOptions.MergeDefinition or FOptions.MergeNavigation) and
      MergeReply(AFrame, ALen, AReplacement) then Exit(True);
   Result:= FOptions.MergeDiagnostics and MergeDiagnostics(AFrame, ALen, AReplacement);
 end;
