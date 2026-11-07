@@ -23,6 +23,8 @@ Wave 146, integrated on lane/146-int. ONE extractor bump over 1.45 (1.33.0-alpha
 - index: table `ref_element_types`. `symbols.directives` holds `sealed`.
 - IDE: drag-lint > Convert Components opens ConvRulesEditor on the components selected in the form designer; Code Quality > Allow a Finding on This Line... records a `dl:ok` review from the caret. Find Usages asks the running language server and starts no process when the server covers the query. Live proof owed.
 - VS Code: optional `dragLint.engineStaleNoticeMinutes` notice when a newer engine is deployed.
+- `lsp --proxy --merge-navigation` (OFF by default): type and call hierarchy, typeDefinition, documentHighlight and foldingRange answered in the proxy for each provider DelphiLSP does not advertise. LSP: `Fix: <rule>` quick fixes for mixed-case-hex, length-zero-compare and deprecated-rtl-function, read from the live buffer. Live proof owed.
+- `lint-all`: stderr note when stale files have no call edges.
 
 ### Changed
 - Index: references now recorded for `inherited X`, property specifiers (new kind property-spec), the iterator of `for X in`, and record-constant field names (new kind record-field); rename no longer refuses the last two. A typed constant types its receiver.
@@ -45,6 +47,8 @@ Wave 146, integrated on lane/146-int. ONE extractor bump over 1.45 (1.33.0-alpha
 - `document --apply` no longer rewrites `<param name="S, X">` / `"var X"` tags as stale; it leaves a declaration untouched (REFUSED) instead of deleting Calls: entries of units the `--db` cannot see.
 - `convert-apply`: a descendant class that redeclares an ancestor's field gets that line retyped and the To unit in that section's uses (was E2003 after `#unuse`). A book with no `#convert` block, or a parse error with no `.dfm`, says what is wrong with the book; exit code unchanged.
 - IDE: no engine found now says so: commands that could not resolve drag-lint.exe spawned an empty command and showed nothing.
+- `reconcile-project`: a `{$I}` include is reported with suggestedFix none; a listed unit under a library root is no longer an EXTRA.
+- LSP: a private engine with its own outDir no longer falls back to a central-defaults library outside it.
 
 ## v1.45.0-alpha -- 2026-11-06
 
