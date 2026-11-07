@@ -83,7 +83,8 @@ $synth = "ExePath:= DLExe64;`r`n  { Spawn detached: drag-lint lint"
 if ($synth -match $sites[1][2]) { Write-Host '  [FAIL] positive control: anchor matched a site with no refusal'; $rc = 1 }
 else { Write-Host '  [PASS] positive control: anchor rejects a site with no refusal' }
 # Every CreateProcess in the plugin is on this list, so a new direct spawn has to be looked at here.
-$known = 'Editor=2 GraphWindow=1 LiveDiagnostics=1 LspClient=1 ProcRun=1 ProjectNotifier=2 StructureCache=1'
+# ConvertLaunch starts ConvRulesEditor, whose path was proven by FileExists first (FindEditor).
+$known = 'ConvertLaunch=1 Editor=2 GraphWindow=1 LiveDiagnostics=1 LspClient=1 ProcRun=1 ProjectNotifier=2 StructureCache=1'
 $seen = @()
 foreach ($f in (Get-ChildItem $SrcDir -Filter 'DragLint.Plugin.*.pas' | Sort-Object Name)) {
   $n = ([regex]::Matches([IO.File]::ReadAllText($f.FullName), '(?m)^(?!\s*(///|\{)).*\bCreateProcess[W]?\(')).Count
