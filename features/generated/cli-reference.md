@@ -1206,6 +1206,7 @@ drag-lint lsp --db <file.sqlite> (LSP stdio server) [--stdio] [--parent-pid <n>]
 | `--merge-completion` |  |  |  |
 | `--merge-hover` |  |  |  |
 | `--merge-definition` |  |  |  |
+| `--merge-navigation` |  |  |  |
 | `--merge-budget-ms` | `<n>` |  |  |
 | `--full-rules` |  |  |  |
 | `--delphi-lsp-bits` | `32\|64` |  |  |

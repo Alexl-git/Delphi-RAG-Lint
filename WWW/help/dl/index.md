@@ -284,7 +284,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [lsp](features/lsp.md) | Starts the LSP (Language Server Protocol) stdio server | 0.6.0-alpha |
 | [LSP full rule set on save](features/lsp-full-rules.md) | Runs the full lint rule set on save so the editor shows what the CLI shows | 1.33.0-alpha |
 | [LSP protocol extensions](features/lsp-protocol-extensions.md) | Answers outline, implementation, rename, lens, tokens, inlay hints, call and type hierarchy, type definition, highlights, folding and commands from the index | 1.33.0-alpha |
-| [LSP proxy merge](features/lsp-proxy-merge.md) | Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session | 1.33.0-alpha |
+| [LSP proxy merge](features/lsp-proxy-merge.md) | Merges drag-lint diagnostics, completion, hover, definition and navigation (hierarchy, type definition, highlight, folding) into a DelphiLSP proxy session | 1.33.0-alpha |
 | [Switch VS Code Delphi MCP entry](features/lsp-switch-vscode.md) | Turns the VS Code Delphi MCP entry off and on with a backup | 1.33.0-alpha |
 | [Register the MCP server (Claude Code, VS Code, Cursor)](features/mcp-config-writer.md) | Adds drag-lint serve to Claude Code, VS Code and Cursor MCP config: merged, backed up, idempotent, removable | 1.26.1-alpha |
 | [MCP get_neighbors](features/mcp-get-neighbors.md) | MCP tool: the call-graph neighbourhood of a symbol within 1..3 hops | 1.46.0-alpha |

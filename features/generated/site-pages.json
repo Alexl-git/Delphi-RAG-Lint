@@ -544,24 +544,24 @@
     "version": "1.46.0-alpha"
   },
   "features/lsp-full-rules.md": {
-    "hash": "96965f2536772c45470bbe6a9d6b34452af65adcb0902440c77c1bc13730b77e",
-    "version": "1.43.0-alpha"
+    "hash": "883a34bd101e4725a1181b27baf8bb35edcaef00629eaa808ca891e04fa4c0e4",
+    "version": "1.46.0-alpha"
   },
   "features/lsp-protocol-extensions.md": {
-    "hash": "290ef34115688a3ac52b5aa20cf07865c743815883d7c7b4ca50bd88030fddc2",
-    "version": "1.45.0-alpha"
+    "hash": "439e654e2d16048b9496babb13e5c30f8a548214f980b43b04bf91f6bd80164a",
+    "version": "1.46.0-alpha"
   },
   "features/lsp-proxy-merge.md": {
-    "hash": "d04c697850efd58c6207f1389d91f97370be237dcd8c5397a682b8ed47e7e338",
-    "version": "1.39.2-alpha"
+    "hash": "2985c169f7a33bac6348499524f221848ed03e8f636f3d28b461fe7b6b612524",
+    "version": "1.46.0-alpha"
   },
   "features/lsp-switch-vscode.md": {
-    "hash": "d460a5df1a72452ad5e7c2669fdcac75b8db9d5a8004262633d289c119c3ae3f",
-    "version": "1.39.2-alpha"
+    "hash": "cc3a7cddc6857176ee6bb3e19c02e7a73e383aeb4e00187a0874639adad91ddb",
+    "version": "1.46.0-alpha"
   },
   "features/lsp.md": {
-    "hash": "2dbf5a67de058e648ef36f450a3a7001944002f8246d6f47457927e9690a9873",
-    "version": "1.45.0-alpha"
+    "hash": "2bc7ac77c5e47d49d72d50de111400e351e277f2e2e281e6fe3675fcf3dc4e3d",
+    "version": "1.46.0-alpha"
   },
   "features/maintenance.md": {
     "hash": "b880c95ae36ec3086769089c61fa0662ad531a2c62d3edaba207c4d91e74741d",
@@ -700,8 +700,8 @@
     "version": "1.42.0-alpha"
   },
   "features/reconcile-project-members-dpr-dproj.md": {
-    "hash": "58c9954de742c00fd8de8098b4e314655a5996502fa20fc7cd091499cf3dc4d7",
-    "version": "1.44.1-alpha"
+    "hash": "b455af7edf5c7be1130e432502e7e2d2aec48655a25292436801a66024244730",
+    "version": "1.46.0-alpha"
   },
   "features/recover-buffer-compile-files.md": {
     "hash": "7048ee52536f0d928467fd1b7f7a9a5cc5189c31b756318ae5c4089dd9ac8001",

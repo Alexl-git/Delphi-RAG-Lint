@@ -82,9 +82,9 @@
     "build": "1.33.0-alpha"
   },
   "verified": {
-    "date": "2026-10-26",
-    "by": "LSP",
-    "build": "1.35.1-alpha",
-    "surfaceHash": "a1589efeb3fa3e144fe329fe4fa2364dd4c3f0bea57db985478b28be70efa76b"
+    "date": "2026-11-07",
+    "by": "ENGINE",
+    "build": "1.46.0-alpha",
+    "surfaceHash": "382a804739cefb86c690c97b9791c70d40f522947fa32409a1c16ddb8fb67f58"
   }
 }

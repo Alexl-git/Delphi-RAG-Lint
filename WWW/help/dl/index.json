@@ -2390,7 +2390,7 @@
   {
     "id": "lsp-proxy-merge",
     "title": "LSP proxy merge",
-    "summary": "Merges drag-lint diagnostics, completion, hover and definition into a DelphiLSP proxy session",
+    "summary": "Merges drag-lint diagnostics, completion, hover, definition and navigation (hierarchy, type definition, highlight, folding) into a DelphiLSP proxy session",
     "group": "editor-integration",
     "order": 110015,
     "since": "1.33.0-alpha",
