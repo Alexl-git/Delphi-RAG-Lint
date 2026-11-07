@@ -149,6 +149,7 @@
   "interfaced-object-nil-leak": {"cwe": ["CWE-401"], "cert": ["MEM31-C"]},
   "invalid-regex-literal": {},
   "is-always-true": {"cwe": ["CWE-571"]},
+  "is-never-true": {"cwe": ["CWE-570"]},
   "is-not-operator": {},
   "is-prefix-not-boolean": {},
   "large-magic-number": {"cwe": ["CWE-1106"]},

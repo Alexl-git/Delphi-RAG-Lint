@@ -123,6 +123,37 @@ begin
   Sink:= TRtBase(TRtMid(ALeaf)).Tag + Sink;  // CONTROL-UPDOWN-BOTHUP
 end;
 
+procedure NeverTests(ALeaf: TRtLeaf; ABase: TRtBase; AOther: TRtOther; ASealed: TRtSealed; AFaced: TRtFaced;
+  AOpen: TRtOpen; AFace: IRtFace; AUnf: TRtUnfollowed);
+var
+  Holder: TRtLeaf;
+begin
+  Holder:= ALeaf;
+  if ALeaf is TRtOther then Exit;  // TRIGGER-NEVER-SIBLING
+  if AOther is TRtBase then Exit;  // TRIGGER-NEVER-SIBLINGREV
+  if Holder.Link is TRtOther then Exit;  // TRIGGER-NEVER-CHAIN
+  if ASealed is IRtFace then Exit;  // TRIGGER-NEVER-SEALEDINTF
+  if AFace is TRtSealed then Exit;  // TRIGGER-NEVER-INTFSEALED
+  if ABase is TRtLeaf then Exit;  // CONTROL-NEVER-DOWN
+  if AOpen is IRtFace then Exit;  // CONTROL-NEVER-OPENINTF
+  if AFaced is IRtFace then Exit;  // CONTROL-NEVER-IMPLEMENTS
+  if AFace is TRtOpen then Exit;  // CONTROL-NEVER-INTFOPEN
+  if AFace is TRtFaced then Exit;  // CONTROL-NEVER-INTFIMPLEMENTS
+  if AFace is IRtOther then Exit;  // CONTROL-NEVER-INTFINTF
+  if AUnf is TRtOther then Exit;  // CONTROL-NEVER-INCOMPLETE
+end;
+
+{ Micronite2027 sgSManager.pas:591 was the rule's only real finding and it was false: the name after
+  `absolute` was emitted as a second local, so B read as a TRtOther. }
+procedure NeverAbsolute;
+var
+  B: TRtBase;
+  O: TRtOther absolute B;
+begin
+  if B is TRtLeaf then Exit;  // CONTROL-NEVER-ABSOLUTE
+  O.Free;
+end;
+
 procedure IsTests(ALeaf: TRtLeaf; ABase: TRtBase; const AObj: TObject);
 var
   Holder: TRtLeaf;

@@ -4782,6 +4782,7 @@ begin
       An index older than 1.44 answers nothing (see the unit). }
     var RefTypeWanted: TArray<string>:= nil;
     if WantRule(IS_ALWAYS_TRUE_RULE) and OptedIn('is-always-true') then RefTypeWanted:= RefTypeWanted + [IS_ALWAYS_TRUE_RULE];
+    if WantRule(IS_NEVER_TRUE_RULE) and OptedIn('is-never-true') then RefTypeWanted:= RefTypeWanted + [IS_NEVER_TRUE_RULE];
     if WantRule(UPCAST_THEN_DOWNCAST_RULE) and OptedIn('upcast-then-downcast') then RefTypeWanted:= RefTypeWanted + [UPCAST_THEN_DOWNCAST_RULE];
     if WantRule(WITH_ON_TEMPORARY_RULE) and OptedIn('with-on-temporary') then RefTypeWanted:= RefTypeWanted + [WITH_ON_TEMPORARY_RULE];
     if WantRule(INTERFACE_HOLDER_RULE) and OptedIn('interface-holder-of-non-refcounted') then RefTypeWanted:= RefTypeWanted + [INTERFACE_HOLDER_RULE];
