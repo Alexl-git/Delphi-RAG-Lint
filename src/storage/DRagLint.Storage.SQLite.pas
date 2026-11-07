@@ -15192,7 +15192,7 @@ begin
   Suffix:= '';
   if AScopeWhere <> '' then Suffix:= Suffix + ' AND (' + AScopeWhere + ')';
   if AStaleWhere <> '' then Suffix:= Suffix + ' AND (' + AStaleWhere + ')';
-  FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + KINDS + ' AND refs.symbol_id IS NOT NULL' + Suffix);  // dl:ok sql-injection-concat@b5e1 -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveTypeUseRefs uses.
+  FConn.ExecSQL('UPDATE refs SET symbol_id = NULL WHERE ' + KINDS + ' AND refs.symbol_id IS NOT NULL' + Suffix);  // dl:ok sql-injection-concat@a515 -- Suffix is SQL this pass BUILT (MaterializeResolveScope's and the stale prescan's refs predicates), never user text -- the construction ResolveTypeUseRefs uses.
   BindRefStream(EXC_UNIVERSE, REF_KIND_RAISE, Suffix, AResolver.ResolveExceptionType, ACandidates, ABound);
 end;
 
@@ -15556,6 +15556,7 @@ var
   TReadCandidates: Int64    ; { GAP-CALLERS type-read stream -- unbound type-named read rows offered }
   TReadBound     : Int64    ; { of those, the rows whose symbol_id was set                  }
   TWrites        : Double   ; { seconds the write stream took -- printed on its own line     }
+  TExc          : Double    ; { b5: seconds in ResolveExceptionTypeRefs                       }
   Streamed  : Int64         ; { call-site refs examined -- see ResolveLog }
   T0        : Int64         ;
   TMaps     : Double        ; { seconds spent building TCallResolver's maps }
@@ -15676,6 +15677,7 @@ begin
   TypeBound      := 0;
   ExcCandidates  := 0;
   ExcBound       := 0;
+  TExc           := 0;
   CastCandidates := 0;
   CastBound      := 0;
   TReadCandidates:= 0;
@@ -16046,7 +16048,9 @@ begin
       { B-31 (2026-10-23): the SEVENTH stream, type_use refs, identity only. }
       ResolveTypeUseRefs(Resolver, ScopeWhere, StaleWhere, TypeCandidates, TypeBound);
       { b5 (spec 2026-11-06-raise-handle-type-facts): raise / handle rows, identity only. }
+      TMark:= TStopwatch.GetTimeStamp;
       ResolveExceptionTypeRefs(Resolver, ScopeWhere, StaleWhere, ExcCandidates, ExcBound);
+      TExc:= (TStopwatch.GetTimeStamp - TMark) / TStopwatch.Frequency;
       { X6 / G1 (2026-10-25): the EIGHTH stream, enum hard casts, identity only. }
       ResolveEnumCastRefs(Resolver, ScopeWhere, StaleWhere, CastCandidates, CastBound);
       { GAP-CALLERS (1.40): the NINTH stream, type-name reads, identity only;
@@ -16246,7 +16250,7 @@ begin
       [TypeBound, TypeCandidates,
        Resolver.TypeUseStats.Generic, Resolver.TypeUseStats.Qualified, Resolver.TypeUseStats.Unlisted,
        Resolver.TypeUseStats.Ambiguous, Resolver.TypeUseStats.NotFound, Resolver.TypeUseStats.Unreadable]));
-    ResolveLog(Format('calls      exception-types: %d of %d raise/handle ref(s) bound', [ExcBound, ExcCandidates]));
+    ResolveLog(Format('calls      exception-types: %d of %d raise/handle ref(s) bound  [%.1fs]', [ExcBound, ExcCandidates, TExc]));
     { X6 / G1 (2026-10-25). The enum hard-cast stream. }
     ResolveLog(Format('calls      enum-casts: %d of %d enum-named call ref(s) bound', [CastBound, CastCandidates]));
     ResolveLog(Format('calls      type-reads: %d of %d type-named read ref(s) bound', [TReadBound, TReadCandidates]));

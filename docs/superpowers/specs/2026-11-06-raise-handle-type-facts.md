@@ -78,24 +78,24 @@ drag-lint exception-facts --db <db> --target <routine> [--json]   types this rou
 drag-lint exception-facts --db <db> --name <Type>      [--json]   routines that raise or handle this type
 ```
 
-One row per site: action (raises / raises-var / reraises / handles / handles-all), type as spelled,
+One row per site: action (raises / raises-expr / reraises / handles / handles-all), type as spelled,
 type_qname when known, how the type is known, routine, file, line, col. `via`:
 
 * `bound` the row's own symbol_id;
 * `handler` the type came from the enclosing handler (3.1);
 * `local` a raise-expr whose name is a local var / param of the routine (its Signature);
 * `name` a unique indexed type of that spelling;
+* `spelled` the source names it, the DB does not hold it (`on E: Exception` in a project DB);
 * `unknown` nothing: `raise MakeError(..)`, or a bare `except raise; end`.
 
-A type not in the DB prints its spelling with an empty type_qname: not "unknown", not an error.
 `--name` matches a reraise / handler-var raise by its stamped type too, and does NOT walk ancestry
 (`on E: Exception` is not listed under EFoo). Ancestry is `ask exception-paths`' job. Read-only.
 
 ## 4. What a pre-bump DB answers
 
 Rows from 1.36 on exist, so the verb answers; reraise types are '' and via stays `unknown` until the
-re-parse, symbol_id NULL until the resolve pass. No fallback path: stale DBs are refused the way every
-read verb refuses them.
+re-parse, symbol_id NULL until the resolve pass. No fallback path. Only an old SCHEMA is refused, the way
+every read verb refuses it.
 
 ## 5. Guards
 
