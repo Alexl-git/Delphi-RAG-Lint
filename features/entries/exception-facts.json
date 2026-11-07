@@ -1,0 +1,50 @@
+{
+  "id": "exception-facts",
+  "title": "exception-facts",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.46.0-alpha",
+  "summary": "Lists which routine raises and handles which exception type, by routine or by type",
+  "intro": "Read this when the question is a set: every routine that raises or catches a type, or every type one routine raises and catches. It reads the raise and handler sites the index holds, one row per site, and says how each type is known. For where an exception ends up through the callers, use ask exception-paths.",
+  "wikiPage": "exception-facts",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "exception-facts",
+      "usage": "drag-lint exception-facts (--target <routine> | --name <Type>) --db <db> [--json]",
+      "flags": [
+        {
+          "name": "--target",
+          "arg": "<routine>"
+        },
+        {
+          "name": "--name",
+          "arg": "<Type>"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--json"
+        }
+      ],
+      "helpOrder": 63,
+      "help": ["  drag-lint exception-facts (--target <routine> | --name <Type>) --db <db> [--json]   (which routine raises and handles which exception type; one row per site; no ancestry, no callers: ask exception-paths walks those)"]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Which routines raise or catch this exception type?",
+      "command": "drag-lint exception-facts --name <Type> --db <db>"
+    },
+    {
+      "ask": "Which exception types does this routine raise and catch?",
+      "command": "drag-lint exception-facts --target <routine> --db <db>"
+    }
+  ],
+  "notes": "wave 146 lane b5; spec docs\\superpowers\\specs\\2026-11-06-raise-handle-type-facts.md; guard tests\\autotest\\run_exception_facts.ps1"
+}

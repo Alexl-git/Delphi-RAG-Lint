@@ -216,6 +216,7 @@ uses
   , DRagLint.Refactor   .TestStub
   , DRagLint.Refactor   .ExtractMethod
   , DRagLint.CLI.Unwith
+  , DRagLint.Query.ExceptionFacts
   , DRagLint.Refactor.CompileGate
   , DRagLint.Refactor   .EnumHelper
   , DRagLint.Format     .Yadf
@@ -19080,7 +19081,9 @@ var
             + 'carries the type arguments, e.g. TComparer<TFoo>.'
     else if Key = 'refs.receiver_text' then
       ADesc:= 'The receiver expression, when the reference is qualified '
-            + '(the "A" of A.B). Empty for a bare name.';
+            + '(the "A" of A.B). Empty for a bare name. On a reraise, and on a '
+            + 'raise-expr naming the handler variable: the type of the nearest '
+            + 'enclosing on..do, empty under a bare except.';
 
     Result:= (ADesc <> '') or (AValues <> '');
   end;
@@ -22730,6 +22733,33 @@ begin
   Writeln(Format('Applied: extracted "%s" (%d file).', [AArgs.Name, Touched]));
   Result:= 0;
 end; // function
+
+/// <summary>drag-lint exception-facts (--target R | --name T) --db D [--json]: which routine raises and
+/// handles which exception type, one row per site. Spec 2026-11-06-raise-handle-type-facts, 3.3.</summary>
+/// <param name="AArgs">Parsed CLI args.</param>
+/// <returns>0 with rows or without; 2 on a usage error or a missing or stale DB.</returns>
+/// <remarks>Read-only. An empty answer is exit 0: a routine that raises nothing is an answer.</remarks>
+function DoExceptionFacts(const AArgs: TArgs): Integer;
+begin
+  if (AArgs.Target = '') = (AArgs.Name = '') then
+  begin
+    Writeln(ErrOutput, 'ERROR: exception-facts needs exactly one of --target <routine> and --name <Type>');
+    Exit(2);
+  end;
+  if not ExplicitDbsExist(AArgs, 'exception-facts') then Exit(2);
+  if NoDbResolved(AArgs.DbPath, 'exception-facts') then Exit(2);
+  var RoOk: Boolean;
+  OpenReadOnlyStore(AArgs.DbPath, RoOk);
+  if not RoOk then
+  begin
+    StaleDbRefusesRun(AArgs, 'exception-facts', AArgs.DbPath);
+    Exit(2);
+  end;
+  var Facts:= ExceptionFactsOf(AArgs.DbPath, AArgs.Target, AArgs.Name);
+  if AArgs.AsJson then Writeln(ExceptionFactsJson(Facts))
+  else WriteExceptionFacts(Facts);
+  Result:= 0;
+end;
 
 /// <summary>drag-lint unwith --db D [--in F [--line N]] (--plan | --apply --project P) [--platform P] [--rsvars R]
 /// [--build-timeout S] [--library-db L|none] [--no-backup] [--json]: removes `with` blocks, proved binding by binding.</summary>
@@ -38534,6 +38564,7 @@ begin
     else if Args.Command = 'init'              then Result:= RunInitVerbFromCommandLine
     else if Args.Command = 'syntax-count'      then Result:= RunSyntaxCountVerb { GAP-SYNTAXQ: own flags, DRagLint.Query.SyntaxCountVerb }
     else if Args.Command = 'usages'            then Result:= DoUsages          (Args)
+    else if Args.Command = 'exception-facts'   then Result:= DoExceptionFacts  (Args)
     else if Args.Command = 'slice'             then Result:= DoSlice           (Args)
     else if Args.Command = 'context'           then Result:= DoContext         (Args)
     else if Args.Command = 'bench-context'     then Result:= DoBenchContext    (Args)
