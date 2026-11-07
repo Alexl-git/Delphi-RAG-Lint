@@ -15811,7 +15811,7 @@ const
     'used-before-assignment', 'not-assigned-interface', 'double-free', 'function-result-not-set',
     'out-param-not-set', 'overwrite-before-read', 'write-only-local', 'split-variable',
     'loop-var-after-loop', 'object-leak', 'local-only-out-arg', 'dead-store-before-out-arg', 'by-value-arg-before-assignment');
-  LINT_GATE_PROJECT_RULES: array[0..44] of string = (
+  LINT_GATE_PROJECT_RULES: array[0..45] of string = (
     'unused-public-symbol', 'unused-private-member', 'circular-uses', 'cycle-participant-unit', 'global-only-uses-edge',
     'dfm-property-not-declared', 'dependent-project-not-recompiled', 'duplicate-global-decl',
     'uses-global-census', 'discarded-effect-free-result', 'query-name-with-effect',
@@ -15829,7 +15829,7 @@ const
     cannot be judged unused there (LintUnjudgedMarkerRules). Pinned against the
     OptedIn('<id>') calls in DRagLint.Lint.ProjectRules.pas by
     tests\autotest\run_marker_unused_optin_gated_rules.ps1. }
-  PROJECT_RULES_OPTIN_GATED: array[0..30] of string = (
+  PROJECT_RULES_OPTIN_GATED: array[0..31] of string = (
     'global-only-uses-edge', 'uses-global-census', 'dfm-property-not-declared',
     'dependent-project-not-recompiled', 'discarded-effect-free-result', 'cycle-participant-unit',
     'query-name-with-effect', 'assert-with-side-effect', 'virtual-never-overridden',
