@@ -1193,9 +1193,9 @@ var
           if Ch.NodeType = 'identifier' then
           begin
             PrefixDone:= True;
-            Result:= Result + Squeezed(Prefix) + ' ' + Squeezed(NStr(Ch)) + ':' + Squeezed(TypeText) + ';'; // dl:ok concat-in-loop -- one header's parameters, a handful
+            Result:= Result + Squeezed(Prefix) + ' ' + Squeezed(NStr(Ch)) + ':' + Squeezed(TypeText) + ';';
           end
-          else if not PrefixDone then Prefix:= Prefix + NStr(Ch);
+          else if not PrefixDone and (Prefix = '') then Prefix:= NStr(Ch);
         end;
       end;
     end;
