@@ -57,6 +57,9 @@ const
                                   ordinary.
       interface-object-mixing     first-cut same-routine dual-handle heuristic.
       ui-access-in-thread-typed   1.45: OFF until measured on re-resolved real DBs.
+      local-only-out-arg, dead-store-before-out-arg, by-value-arg-before-assignment
+                                  1.46: OFF until the owner rules on the counts; spec
+                                  2026-11-06-liveness-out-args-by-value.
       multiple-statements-per-line pure style.
       magic-literal               medium-FP; floods legacy code.
       boolean-flag-parameter      a common, deliberate idiom here.
@@ -111,7 +114,8 @@ const
     { 1.42 lane opaque }
     'opaque-to-analysis',
     { 1.42 lane ruleset: the old ROADMAP candidates }
-    'stream-buffer-after-free', 'interfaced-object-nil-leak', 'identifier-case-mismatch', 'datamodule-form-global', 'ui-access-in-thread-typed'];
+    'stream-buffer-after-free', 'interfaced-object-nil-leak', 'identifier-case-mismatch', 'datamodule-form-global', 'ui-access-in-thread-typed',
+    'local-only-out-arg', 'dead-store-before-out-arg', 'by-value-arg-before-assignment'];
 
   { THE WHOLE-ROUTINE METRIC RULES, in one place because the CHECKER and the
     `allow` WRITER must agree on the list or a marker is written under one hash
@@ -632,6 +636,9 @@ begin
     B('out-param-not-set',     'data-flow', 'warning', 'out parameter not assigned on every path');
     B('overwrite-before-read', 'data-flow', 'warning', 'Value overwritten before it is read');
     B('write-only-local',      'data-flow', 'info',    'Local assigned but never read');
+    B('local-only-out-arg', 'data-flow', 'info', 'Local that only receives out arguments and is read nowhere; the out mode comes from the signature, or from the receiver''s static type (ref_types) on a method', False); { OFF: 1.46 lane t1 }
+    B('dead-store-before-out-arg', 'data-flow', 'warning', 'Value overwritten by an out argument before it is read; the out mode comes from the signature, or from the receiver''s static type (ref_types) on a method', False); { OFF: 1.46 lane t1 }
+    B('by-value-arg-before-assignment', 'data-flow', 'error', 'Local passed by value or const to a method before it is assigned; the parameter mode comes from the receiver''s static type (ref_types)', False); { OFF: 1.46 lane t1 }
     B('loop-var-after-loop',   'data-flow', 'warning', 'Loop variable used after the loop');
     B('object-leak',           'data-flow', 'info',    'Created object may leak (not freed on every path)');
     B('not-assigned-interface','data-flow', 'warning', 'Interface variable dereferenced before assignment (nil interface call)');

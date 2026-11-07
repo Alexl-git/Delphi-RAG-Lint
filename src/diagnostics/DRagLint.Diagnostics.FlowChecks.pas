@@ -2039,12 +2039,13 @@ end;
 type
   /// <summary>What a METHOD does with an argument, from the receiver's static type (index fact F1,
   /// ref_types): receiver type -> the method's overload set over that type's ancestry -> var/out.</summary>
-  /// <remarks>Answers pmVar or pmOut only when the proof is whole, and pmUnknown otherwise, which
-  /// means "today's logic": no store, no ref_types table, no row, a receiver inside a `with`, a type
-  /// name with more than one declaration, an ancestry that cannot be followed to its end, a member
+  /// <remarks>Answers pmVar, pmOut or pmConst only when the proof is whole, and pmUnknown otherwise,
+  /// which means "today's logic": no store, no ref_types table, no row, a receiver inside a `with`, a
+  /// type name with more than one declaration, an ancestry that cannot be followed to its end, a member
   /// that is not a method, a class helper with a method of that name, or overloads that do not all
-  /// say var/out at this position. It never says "by value" (lane 145 L-D): a by-value argument is
-  /// a Lattices matter, and the extractor fingerprint covers that unit.
+  /// say the same at this position. pmConst means "by value or const", and is withheld for an untyped or
+  /// pointer-typed parameter; only by-value-arg-before-assignment asks for it, as a post-pass, because
+  /// the extractor fingerprint covers Flow.Lattices (spec 2026-11-06-liveness-out-args-by-value).
   /// One instance per file; not thread-safe; owns a TExprTypeReader, so it must not outlive the store.</remarks>
   TMethodArgModes = class
     strict private
@@ -2070,7 +2071,7 @@ type
       /// <param name="ACall">An exprCall node; a call whose entity is not `receiver.member` answers pmUnknown.</param>
       /// <param name="AIndex">0-based argument position.</param>
       /// <param name="AArgCount">The number of arguments the call passes.</param>
-      /// <returns>pmVar, pmOut or pmUnknown; see the class remarks.</returns>
+      /// <returns>pmVar, pmOut, pmConst or pmUnknown; see the class remarks.</returns>
       function ModeOfArg(const ACall: TTSNode; AIndex, AArgCount: Integer): TParamMode;
       /// <summary>True when a named type is a static array: every symbol of that name is a type alias
       /// written `array[...]`.</summary>
@@ -2148,6 +2149,22 @@ begin
   end;
 end;
 
+{ True when a by-value or const parameter of this written type really reads its argument. Untyped and
+  pointer-typed parameters do not prove it: Delphi takes a static array's address implicitly, and the
+  callee writes through the pointer (see the possible-def note in Flow.Lattices). The `P` + capital test
+  belongs here and not in the oracle's closed list: a false "not proven" only leaves a rule silent. }
+function ByValueParamReadsItsArgument(const ATypeText: string): Boolean;
+const
+  POINTER_SPELLING = '^(\^|pointer$|P[A-Z]|LP[A-Z])';
+begin
+  var T: string:= ATypeText;
+  var Eq: Integer:= Pos('=', T);
+  if Eq > 0 then T:= Copy(T, 1, Eq - 1);
+  T:= Trim(T);
+  Result:= (T <> '') and not TRegEx.IsMatch(T, POINTER_SPELLING)
+           and not SameText(T, 'pointer');
+end;
+
 function TMethodArgModes.MethodMode(const ATypeLeaf, AMethod: string; AIndex, AArgCount: Integer): TParamMode;  // dl:ok too-many-exit-points@3129 -- REVIEWED 2026-11-06: each exit declines one way the proof is not whole, and all answer pmUnknown
 var
   IsRecord, Any: Boolean;
@@ -2188,6 +2205,8 @@ begin
     if (AArgCount < Required) or (AArgCount > Length(PS)) or (AIndex > High(PS)) then Continue;
     if SameText(PS[AIndex].Modifier, 'var') then M:= pmVar
     else if SameText(PS[AIndex].Modifier, 'out') then M:= pmOut
+    else if ((PS[AIndex].Modifier = '') or SameText(PS[AIndex].Modifier, 'const'))
+            and ByValueParamReadsItsArgument(PS[AIndex].TypeText) then M:= pmConst
     else Exit;
     if Any and (M <> Seen) then Exit;
     Any := True;
@@ -2318,6 +2337,270 @@ begin
   Other  := False;
   Walk(AItem, False);
   Result:= Written and not Other;
+end;
+
+type
+  { One argument's mode, whatever the call's shape. Answers pmUnknown when nothing is proved. }
+  TArgModeAt = reference to function(const ACall: TTSNode; AIndex, ACount: Integer): TParamMode;
+
+  { What one CFG item does with the routine's locals through call arguments. Every mention of a local
+    named here is that argument, so `G.Two(X, X)` and `Use(X + G.Get(X))` name nothing. }
+  TItemArgScan = record
+    PureOut: TArray<Integer>; { bare `out` arguments of a call that certainly runs }
+    ByValue: TArray<Integer>; { one bare by-value or const argument of a METHOD call }
+  end;
+
+  { Item -> its scan, once: the second solve asks for an item on every pass. One per routine; does not
+    own the var table. }
+  TArgScanMemo = class
+  strict private
+    FMemo: TDictionary<UInt64, TItemArgScan>;
+    FVars: TRoutineVarTable;
+    FSrc : TBytes;
+    FMode: TArgModeAt;
+  public
+    constructor Create(AVars: TRoutineVarTable; const ASrc: TBytes; const AMode: TArgModeAt);
+    destructor Destroy; override;
+    function ScanOf(const AItem: TCfgItem): TItemArgScan;
+  end;
+
+  { TLiveness, except that a local held only by bare `out` arguments in an item is killed there and
+    not used: the callee's contract is that it does not read an `out`. Everything but Transfer
+    delegates, so the two cannot drift on the boundary or the join. Not thread-safe. }
+  TOutAwareLiveness = class(TInterfacedObject, IDataFlowAnalysis<TArray<Boolean>>)
+  strict private
+    FBase: IDataFlowAnalysis<TArray<Boolean>>;
+    FVars: TRoutineVarTable;
+    FSrc : TBytes;
+    FScan: TArgScanMemo;
+  public
+    constructor Create(const ABase: IDataFlowAnalysis<TArray<Boolean>>; AVars: TRoutineVarTable;
+      const ASrc: TBytes; AScan: TArgScanMemo);
+    function Direction: TFlowDir;
+    function Bottom: TArray<Boolean>;
+    function Boundary: TArray<Boolean>;
+    function Join(const A, B: TArray<Boolean>): TArray<Boolean>;
+    function Transfer(const ABlock: TCfgBlock; const AIn: TArray<Boolean>): TArray<Boolean>;
+    function Equals(const A, B: TArray<Boolean>): Boolean; reintroduce;
+  end;
+
+{ The argument walk behind TItemArgScan. Which argument is `out` decides nothing unless the call
+  certainly runs: `X := 1; if A and G.TryOut(X) then ..; Use(X)` keeps the store alive, so the right
+  of and/or and an if-expression's branches never kill. Only a routine's vkLocal asks the oracle. }
+function ScanItemArgs(const AItem: TCfgItem; const ASrc: TBytes; AVars: TRoutineVarTable;
+  const AMode: TArgModeAt): TItemArgScan;
+var
+  Mentions, Outs, Values: TArray<Integer>;
+
+  procedure Walk(const N: TTSNode; AMaybe: Boolean); forward;
+
+  procedure WalkCall(const N: TTSNode; AMaybe: Boolean);
+  begin
+    var Ent: TTSNode:= N.ChildByField('entity');
+    Walk(Ent, AMaybe);
+    var Args: TTSNode:= N.ChildByField('args');
+    if Args.IsNull then Exit;
+    var Count: Integer:= Args.NamedChildCount;
+    { A comment is a named child, so positions are not known. }
+    var Positional: Boolean:= True;
+    for var I: Integer := 0 to Count - 1 do
+      if Args.NamedChild(I).NodeType.Contains('omment') then Positional:= False;
+    for var I: Integer := 0 to Count - 1 do
+    begin
+      var Arg: TTSNode:= Args.NamedChild(I);
+      var Idx: Integer:= -1;
+      if Positional and (Arg.NodeType = 'identifier') then
+        Idx:= AVars.IndexOfAt(LowerCase(NodeStr(Arg, ASrc)), Integer(Arg.StartByte));
+      if (Idx < 0) or (AVars.Get(Idx).Kind <> vkLocal) then
+      begin
+        Walk(Arg, AMaybe);
+        Continue;
+      end;
+      Inc(Mentions[Idx]);
+      var Mode: TParamMode:= AMode(N, I, Count);
+      if (Mode = pmOut) and not AMaybe then Inc(Outs[Idx])
+      else if (Mode in [pmValue, pmConst]) and (not Ent.IsNull) and (Ent.NodeType = 'exprDot') then Inc(Values[Idx]);
+    end;
+  end;
+
+  procedure Walk(const N: TTSNode; AMaybe: Boolean);
+  var
+    K, OpText: string;
+  begin
+    if N.IsNull then Exit;
+    K:= N.NodeType;
+    if (K = 'type') or (K = 'typeref') or (K = 'varDef') then Exit;
+    if K = 'identifier' then
+    begin
+      var Idx: Integer:= AVars.IndexOfAt(LowerCase(NodeStr(N, ASrc)), Integer(N.StartByte));
+      if Idx >= 0 then Inc(Mentions[Idx]);
+      Exit;
+    end;
+    if K = 'exprDot' then
+    begin
+      Walk(N.ChildByField('lhs'), AMaybe);
+      Exit; { the rhs is a member name }
+    end;
+    if K = 'exprCall' then
+    begin
+      WalkCall(N, AMaybe);
+      Exit;
+    end;
+    if K = 'exprBinary' then
+    begin
+      var Op: TTSNode:= N.ChildByField('operator');
+      OpText:= if Op.IsNull then '' else LowerCase(Trim(NodeStr(Op, ASrc)));
+      if (OpText = 'and') or (OpText = 'or') then
+      begin
+        Walk(N.ChildByField('lhs'), AMaybe);
+        Walk(N.ChildByField('rhs'), True);
+        Exit;
+      end;
+    end;
+    if K = 'exprIf' then
+    begin
+      var Cond: TTSNode:= N.ChildByField('condition');
+      Walk(Cond, AMaybe);
+      for var I: Integer := 0 to N.NamedChildCount - 1 do
+        if not (N.NamedChild(I) = Cond) then Walk(N.NamedChild(I), True);
+      Exit;
+    end;
+    for var I: Integer := 0 to N.NamedChildCount - 1 do Walk(N.NamedChild(I), AMaybe);
+  end;
+
+begin
+  Result:= Default(TItemArgScan);
+  if AItem.Opaque then Exit;
+  SetLength(Mentions, AVars.Count);
+  SetLength(Outs, AVars.Count);
+  SetLength(Values, AVars.Count);
+  if AItem.Node.NodeType = 'assignment' then
+  begin
+    Walk(AItem.Node.ChildByField('rhs'), False);
+    { A whole-variable target is no mention: that store is the item's own kill. }
+    if AssignmentTargetIndex(AItem.Node, ASrc, AVars) < 0 then Walk(AItem.Node.ChildByField('lhs'), False);
+  end
+  else
+    Walk(AItem.Node, False);
+  for var I: Integer := 0 to AVars.Count - 1 do
+    if Mentions[I] > 0 then
+      if Outs[I] = Mentions[I] then Result.PureOut:= Result.PureOut + [I]
+      else if (Mentions[I] = 1) and (Values[I] = 1) then Result.ByValue:= Result.ByValue + [I];
+end;
+
+constructor TArgScanMemo.Create(AVars: TRoutineVarTable; const ASrc: TBytes; const AMode: TArgModeAt);
+begin
+  inherited Create;
+  FMemo:= TDictionary<UInt64, TItemArgScan>.Create;
+  FVars:= AVars;
+  FSrc := ASrc;
+  FMode:= AMode;
+end;
+
+destructor TArgScanMemo.Destroy;
+begin
+  FMemo.Free;
+  inherited Destroy;
+end;
+
+function TArgScanMemo.ScanOf(const AItem: TCfgItem): TItemArgScan;
+const
+  HIGH_HALF = 32;
+begin
+  var Key: UInt64:= (UInt64(AItem.Node.StartByte) shl HIGH_HALF) or UInt64(AItem.Node.EndByte);
+  if FMemo.TryGetValue(Key, Result) then Exit;
+  Result:= ScanItemArgs(AItem, FSrc, FVars, FMode);
+  FMemo.Add(Key, Result);
+end;
+
+function IntInArray(AValue: Integer; const AItems: TArray<Integer>): Boolean;
+begin
+  Result:= False;
+  for var X: Integer in AItems do
+    if X = AValue then Exit(True);
+end;
+
+{ One item of TOutAwareLiveness, backwards. The caller owns the two scratch lists, so the store search
+  in CheckRoutine replays exactly what the solve computed. }
+procedure OutAwareBackward(const AIt: TCfgItem; const ASrc: TBytes; AVars: TRoutineVarTable;
+  const APureOut: TArray<Integer>; AReads, ACallDefs: TList<Integer>; var ALive: TArray<Boolean>);
+
+  procedure Gen(AList: TList<Integer>);
+  begin
+    for var X: Integer in AList do
+      if not IntInArray(X, APureOut) then ALive[X]:= True;
+  end;
+
+begin
+  if AIt.Opaque then
+  begin
+    for var J: Integer := 0 to AVars.Count - 1 do
+      if AVars.Get(J).Kind = vkLocal then ALive[J]:= True;
+    Exit;
+  end;
+  AReads.Clear;
+  ACallDefs.Clear;
+  if AIt.Node.NodeType = 'assignment' then
+  begin
+    var Tgt: Integer:= AssignmentTargetIndex(AIt.Node, ASrc, AVars);
+    if Tgt >= 0 then ALive[Tgt]:= False;
+    CollectReadsAndCallDefs(AIt.Node.ChildByField('rhs'), ASrc, AVars, AReads, ACallDefs);
+    if Tgt < 0 then CollectReadsAndCallDefs(AIt.Node.ChildByField('lhs'), ASrc, AVars, AReads, ACallDefs);
+  end
+  else
+    CollectReadsAndCallDefs(AIt.Node, ASrc, AVars, AReads, ACallDefs);
+  for var X: Integer in APureOut do ALive[X]:= False;
+  Gen(AReads);
+  Gen(ACallDefs);
+end;
+
+constructor TOutAwareLiveness.Create(const ABase: IDataFlowAnalysis<TArray<Boolean>>;
+  AVars: TRoutineVarTable; const ASrc: TBytes; AScan: TArgScanMemo);
+begin
+  inherited Create;
+  FBase:= ABase;
+  FVars:= AVars;
+  FSrc := ASrc;
+  FScan:= AScan;
+end;
+
+function TOutAwareLiveness.Direction: TFlowDir;
+begin
+  Result:= FBase.Direction;
+end;
+
+function TOutAwareLiveness.Bottom: TArray<Boolean>;
+begin
+  Result:= FBase.Bottom;
+end;
+
+function TOutAwareLiveness.Boundary: TArray<Boolean>;
+begin
+  Result:= FBase.Boundary;
+end;
+
+function TOutAwareLiveness.Join(const A, B: TArray<Boolean>): TArray<Boolean>;
+begin
+  Result:= FBase.Join(A, B);
+end;
+
+function TOutAwareLiveness.Equals(const A, B: TArray<Boolean>): Boolean;
+begin
+  Result:= FBase.Equals(A, B);
+end;
+
+function TOutAwareLiveness.Transfer(const ABlock: TCfgBlock; const AIn: TArray<Boolean>): TArray<Boolean>;
+begin
+  Result:= Copy(AIn); { AIn is the block's live-OUT; this returns live-IN }
+  var Reads: TList<Integer>:= TList<Integer>.Create;
+  var CallDefs: TList<Integer>:= TList<Integer>.Create;
+  try
+    for var I: Integer := ABlock.Items.Count - 1 downto 0 do
+      OutAwareBackward(ABlock.Items[I], FSrc, FVars, FScan.ScanOf(ABlock.Items[I]).PureOut, Reads, CallDefs, Result);
+  finally
+    Reads.Free;
+    CallDefs.Free;
+  end;
 end;
 
 { SHAPE 3 of used-before-assignment: partial record initialisation.
@@ -3033,6 +3316,7 @@ var
   UnitSigs    : TDictionary<string, TArray<string>>;
   SameUnitClassKinds: TDictionary<string, Boolean>; { when the store answers tcUnknown }
   MethodModes : TMethodArgModes; { built on the first candidate finding of the file }
+  ArgMode     : TArgModeAt;      { the three out-arg / by-value rules; see ScanItemArgs }
 
   procedure Emit(const ARule, ASev, AMsg: string; ALine, ACol: Integer);
   var F: TLintFinding;
@@ -3068,8 +3352,130 @@ var
     FreedV: Integer; FKind: TFreeKind;
     TickAt : Int64;  { phase cursor -- see FlowTick }
     TickEx : Int64;  { time already charged exactly, to subtract from the window }
+    Scans  : TArgScanMemo; { per item of THIS routine }
+    ObrReported: TArray<Integer>; { stores overwrite-before-read reported in this routine }
+
+    { by-value-arg-before-assignment. The lattice records no read of `G.Take(X)`: its mode dispatch
+      asks bare names only. Called on the state BEFORE this item's defs, as the rule above it. }
+    procedure CheckByValueArgs(const AIt: TCfgItem);
+    begin
+      if AIt.Opaque then Exit;
+      for var C: Integer in CallDefs do
+      begin
+        if CurMust[C] or (Reads.IndexOf(C) >= 0) or (SeqDefs.IndexOf(C) >= 0) then Continue;
+        var Loc: TRoutineVar:= Vars.Get(C);
+        if (Loc.Kind <> vkLocal) or IsManagedType(Loc.TypeText, AStore, AFileId) then Continue;
+        if not IntInArray(C, Scans.ScanOf(AIt).ByValue) then Continue;
+        { Delphi passes a static array's address, so the callee may be filling it. }
+        if MethodModes.IsStaticArrayType(Loc.TypeText) then Continue;
+        if CurMay[C] then
+        begin
+          var Guards: TList<string>:= TList<string>.Create;
+          try
+            CollectGuardTokens(AIt.Node, Cfg.RoutineNode, PF.Src, Guards);
+            if (Guards.Count > 0) and AssignedUnderSameGuard(Cfg.RoutineNode, Cfg.RoutineNode,
+                 PF.Src, Loc.Name, Integer(AIt.Node.StartByte), Guards) then Continue;
+          finally
+            Guards.Free;
+          end;
+        end;
+        var Row: Integer:= Integer(AIt.Node.StartPoint.Row) + 1;
+        var Col: Integer:= Integer(AIt.Node.StartPoint.Column) + 1;
+        if CurMay[C] then
+          Emit('by-value-arg-before-assignment', 'warning',
+            Format('Local "%s" may be passed by value to a method before it is assigned.', [Loc.Name]), Row, Col)
+        else
+          Emit('by-value-arg-before-assignment', 'error',
+            Format('Local "%s" is passed by value to a method before it is assigned.', [Loc.Name]), Row, Col);
+      end;
+    end;
+
+    { local-only-out-arg and dead-store-before-out-arg. Runs a second solve, and only for a routine with
+      an item a local is purely an `out` argument of; everything else pays one scan per item. }
+    procedure CheckOutArgLiveness(const ALiveBase: IDataFlowAnalysis<TArray<Boolean>>);
+    var
+      NewIn, NewOut: TArray<TArray<Boolean>>;
+      Item: TCfgItem;
+    begin
+      var OutAny: TArray<Boolean>;
+      var NewRead: TArray<Boolean>;
+      SetLength(OutAny, Vars.Count);
+      SetLength(NewRead, Vars.Count);
+      var HasOut: Boolean:= False;
+      for var BI: Integer := 0 to Cfg.BlockCount - 1 do
+        for var II: Integer := 0 to Cfg.Blocks[BI].Items.Count - 1 do
+        begin
+          Item:= Cfg.Blocks[BI].Items[II];
+          var Pure: TArray<Integer>:= Scans.ScanOf(Item).PureOut;
+          for var X: Integer in Pure do
+          begin
+            OutAny[X]:= True;
+            HasOut:= True;
+          end;
+          if Item.Opaque then Continue;
+          { read-anywhere, mirroring the precompute in CheckRoutine, minus the pure-out arguments }
+          Reads.Clear;
+          CallDefs.Clear;
+          if Item.Node.NodeType = 'assignment' then
+          begin
+            CollectReadsAndCallDefs(Item.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs);
+            if AssignmentTargetIndex(Item.Node, PF.Src, Vars) < 0 then
+            begin
+              var Base: Integer:= AssignmentBaseIndex(Item.Node, PF.Src, Vars);
+              if Base >= 0 then NewRead[Base]:= True;
+              CollectReadsAndCallDefs(Item.Node.ChildByField('lhs'), PF.Src, Vars, Reads, CallDefs);
+            end;
+          end
+          else
+            CollectReadsAndCallDefs(Item.Node, PF.Src, Vars, Reads, CallDefs);
+          for var X: Integer in Reads do
+            if not IntInArray(X, Pure) then NewRead[X]:= True;
+          for var X: Integer in CallDefs do
+            if not IntInArray(X, Pure) then NewRead[X]:= True;
+        end;
+      if not HasOut then Exit;
+
+      for var VI: Integer := 0 to Vars.Count - 1 do
+      begin
+        var Loc: TRoutineVar:= Vars.Get(VI);
+        if (Loc.Kind = vkLocal) and OutAny[VI] and (not NewRead[VI]) and (not Loc.Captured) then
+          Emit('local-only-out-arg', 'info',
+            Format('Local "%s" only receives out arguments; nothing reads it.', [Loc.Name]),
+            Loc.DeclLine, Loc.DeclCol);
+      end;
+
+      var Ana2: IDataFlowAnalysis<TArray<Boolean>>:= TOutAwareLiveness.Create(ALiveBase, Vars, PF.Src, Scans);
+      if not TDataFlowSolver<TArray<Boolean>>.Solve(Cfg, Ana2, NewIn, NewOut) then Exit;
+      for var BI: Integer := 0 to Cfg.BlockCount - 1 do
+      begin
+        var LiveNow: TArray<Boolean>:= Copy(NewOut[BI]);
+        for var II: Integer := Cfg.Blocks[BI].Items.Count - 1 downto 0 do
+        begin
+          Item:= Cfg.Blocks[BI].Items[II];
+          if (not Item.Opaque) and (Item.Node.NodeType = 'assignment') then
+          begin
+            var Store: Integer:= AssignmentTargetIndex(Item.Node, PF.Src, Vars);
+            if (Store >= 0) and (Vars.Get(Store).Kind = vkLocal) and NewRead[Store] and (not LiveNow[Store])
+               and (not Vars.Get(Store).Captured)
+               and (not IntInArray(Integer(Item.Node.StartByte), ObrReported))
+               and (not StoreHasEffectLivenessCannotSee(Item.Node, Vars.Get(Store).Name,
+                          Vars.Get(Store).TypeText, PF.Src, AStore, AFileId)) then
+            begin
+              ObrReported:= ObrReported + [Integer(Item.Node.StartByte)];
+              Emit('dead-store-before-out-arg', 'warning',
+                Format('Assignment to "%s" is overwritten by an out argument before it is read (dead store).',
+                  [Vars.Get(Store).Name]),
+                Integer(Item.Node.StartPoint.Row) + 1, Integer(Item.Node.StartPoint.Column) + 1);
+            end;
+          end;
+          OutAwareBackward(Item, PF.Src, Vars, Scans.ScanOf(Item).PureOut, Reads, CallDefs, LiveNow);
+        end;
+      end;
+    end;
+
   begin
     TickAt := TStopwatch.GetTimeStamp; TickEx := 0;
+    Scans := nil;
     Cfg := TCfgBuilder.Build(AProc, PF.Src, True);
     FlowTick(0, TickAt, TickEx);
     Vars := TRoutineVarTable.Build(AProc, PF.Src);
@@ -3084,6 +3490,7 @@ var
       Reads := TList<Integer>.Create; CallDefs := TList<Integer>.Create;
       SeqDefs := TList<Integer>.Create;
       Derefs := TList<TIfaceDeref>.Create;
+      Scans := TArgScanMemo.Create(Vars, PF.Src, ArgMode);
       try
         { ---- used-before-assignment: per-item replay of must/may within a block ---- }
         for B := 0 to Cfg.BlockCount - 1 do
@@ -3272,6 +3679,7 @@ var
                       Format('Local "%s" is used before it is assigned.', [V.Name]), ROW, COL);
                 end;
               end;
+            CheckByValueArgs(It);
             { ---- not-assigned-interface: interface-var dereferences (exprDot /
               `as`) not yet must-assigned at this point. Interfaces are managed
               (IsManagedType skips them above), so this fills that gap on the SAME
@@ -3517,6 +3925,7 @@ var
                   Emit('overwrite-before-read', 'warning',
                     Format('Assignment to "%s" is overwritten before it is read (dead store).',
                       [Vars.Get(Tgt).Name]), ROW, COL);
+                  ObrReported := ObrReported + [Integer(It.Node.StartByte)];
                 end;
                 { backward transfer for this item (mirror TLiveness.Transfer) }
                 Reads.Clear; CallDefs.Clear;
@@ -3552,6 +3961,8 @@ var
                 Format('Local "%s" is assigned but never read.', [V.Name]),
                 V.DeclLine, V.DeclCol);
           end;
+
+          CheckOutArgLiveness(LiveAna);
 
           { ============ split-variable (refactoring, OFF): a local reused for two
             UNRELATED purposes -- it has >=2 DISJOINT def-use lifetimes. Distinct
@@ -3832,7 +4243,7 @@ var
                   [Vars.Get(I).Name]), CreateRow[I], CreateCol[I]);
         end;
 
-      finally Reads.Free; CallDefs.Free; SeqDefs.Free; Derefs.Free; end;
+      finally Reads.Free; CallDefs.Free; SeqDefs.Free; Derefs.Free; Scans.Free; end;
     finally
       { The escape window closes here, and with it the routine. NOTE these are
         WINDOWS, not isolated calls -- each phase is charged everything between
@@ -4262,6 +4673,19 @@ begin
 
   SameUnitClassKinds := nil; { built on first need, see CheckRoutine }
   MethodModes := nil;
+  ArgMode :=
+    function(const ACall: TTSNode; AIndex, ACount: Integer): TParamMode
+    begin
+      Result := pmUnknown;
+      var Ent: TTSNode := ACall.ChildByField('entity');
+      if Ent.IsNull then Exit;
+      if Ent.NodeType = 'identifier' then Result := ParamMode(Trim(NodeStr(Ent, PF.Src)), AIndex)
+      else if AStore <> nil then
+      begin
+        if MethodModes = nil then MethodModes := TMethodArgModes.Create(AStore, ALibStore, AFileId, PF.Src);
+        Result := MethodModes.ModeOfArg(ACall, AIndex, ACount);
+      end;
+    end;
   try
     Procs := CfgFindProcs(PF.Tree.RootNode);
     for PI := 0 to High(Procs) do CheckRoutine(Procs[PI]);
