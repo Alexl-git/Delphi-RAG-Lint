@@ -56,7 +56,7 @@ const
   CRefuseRedeclaredProperty = 'redeclared-property';
   /// <summary>A binary or unindexed form file may bind the name; a form that no longer loads is no compile error.</summary>
   CRefuseDfmNotRewritten = 'dfm-not-rewritten';
-  /// <summary>A text form file names a published field or property; nothing rewrites it.</summary>
+  /// <summary>A text form file names a published property, or a component where nothing can tell which one is meant.</summary>
   CRefuseDfmNameUnbound = 'dfm-name-unbound';
   /// <summary>The new name is already a member in the class family, or a unit-level symbol.</summary>
   CRefuseNewNameCollides = 'new-name-collides';
@@ -144,7 +144,13 @@ type
 /// <remarks>Reads every source file the index lists that holds either name. Writes nothing. Identity needs a
 /// `type_symbol_id`: a NULL, a missing row or an unresolved ancestor is a refusal, never a guess. A chain that reaches a
 /// library type ends there: a library class cannot descend from a project class (refused when the target's qualified
-/// name is in the library too).</remarks>
+/// name is in the library too). A symbol declared inside a routine (a local, a parameter, a local constant or type, a
+/// nested routine) is scoped: only the owning routine's own lines are read, no other unit can name it or capture the new
+/// name, and any bare occurrence of the new name in those lines refuses as CRefuseCaptureLocal. No library is needed.
+/// A published field of a form class is a component: its name in the owning form's and descendants' text .dfm
+/// (`object Name: TType`, `inherited Name: TType`, `Prop = Name`, `Prop = Owner.Name`) is an edit. Another form's
+/// own component of that name is another symbol's. What cannot be told apart (under an `inline`, inside a list, a form
+/// whose root class is not indexed, an enum value of the same name) refuses as CRefuseDfmNameUnbound.</remarks>
 function ProveRename(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;
   const pQName, pNewName: string): TRenameProof;
 
@@ -198,6 +204,7 @@ uses
   System.StrUtils,
   System.Math,
   System.JSON,
+  System.RegularExpressions,
   System.Generics.Collections,
   DRagLint.Core.Model, // dl:unit DRagLint.Core.Model accepted -- the one spelling of a ref kind the parser writes
   System.Generics.Defaults,
@@ -229,12 +236,14 @@ const
   CRootClass      = 'TObject';
   CNotLocal       = '''' + CKindParam + ''', ''' + CKindLocal + '''';
   CTypeKinds      = '''class'', ''form'', ''interface'', ''record'', ''type'', ''object''';
+  CRoutineKinds: array[0..4] of string = (CKindMethod, 'procedure', 'function', 'constructor', 'destructor');
+  CBinaryDfmNote  = 'binary .dfm';
 
 type
   TSymRow = record
     Id, FileId, ParentId: Int64;
     Kind, Name, QName, Modifiers, Directives: string;
-    Line, Col, ImplLine: Integer;
+    Line, Col, EndLine, ImplLine, ImplEndLine: Integer;
     VisExplicit: Boolean;
   end;
 
@@ -250,6 +259,12 @@ type
 
   TWithSpan = record
     StartLine, StartCol, EndLine, EndCol: Integer;
+  end;
+
+  { Lines of one file a routine-local symbol can be named on. }
+  TScopeSpan = record
+    FileId: Int64;
+    First, Last: Integer;
   end;
 
   { One identifier token of a source file. }
@@ -284,6 +299,8 @@ type
     FLibRoots  : TList<string>;
     FIsMember  : Boolean;
     FIsRoutineLocal: Boolean;
+    FScoped    : Boolean;
+    FScope     : TList<TScopeSpan>;
     FTargetInLib: Boolean;
     FOldSyms   : TArray<TSymRow>;
     FNewSyms   : TArray<TSymRow>;
@@ -320,7 +337,11 @@ type
     function IsSpecifierToken(const pText: string; pStart: Integer): Boolean;
     function DecideInherited(pFileId: Int64; pLine: Integer; out pKind, pWhy: string): TChainVerdict;
     function DecideOutsideElement(const pType: string; out pKind, pWhy: string): TChainVerdict;
-    function IsDeclArgName(const pPath: string; pLine, pByteCol: Integer): Boolean;
+    function IsDeclArgName(const pPath: string; pLine, pByteCol: Integer; out pRoutineLine: Integer): Boolean;
+    function InScope(pFileId: Int64; pLine: Integer): Boolean;
+    function IsTargetsOwnHeader(pRoutineLine: Integer): Boolean;
+    procedure BuildScope;
+    procedure CheckScopeIncludes(pFileId: Int64; const pPath: string; pLines: TStringList);
     function ChainMemberExists(pClass: Int64; const pName: string): Boolean;
     procedure BuildGroup;
     procedure BuildFamily;
@@ -335,6 +356,8 @@ type
     procedure ScanFile(pFileId: Int64; const pPath: string);
     procedure ProcessDfmRefs;
     procedure ScanDfmNames(const pPath, pText: string);
+    procedure ScanDfmComponent(const pPath, pText: string; pInstances: TStringList);
+    function OwnerInstances: TStringList;
     procedure CheckDfmNames;
   public
     constructor Create(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>; const pQName, pNewName: string);
@@ -407,6 +430,7 @@ begin
   FPropCache := TDictionary<Int64, TArray<TSymRow>>.Create;
   FEdits     := TList<TRenameEdit>.Create;
   FRefusals  := TList<TRenameRefusal>.Create;
+  FScope     := TList<TScopeSpan>.Create;
   FSeenRefuse:= TDictionary<string, Boolean>.Create;
 end;
 
@@ -414,6 +438,7 @@ destructor TProver.Destroy;
 begin
   FSeenRefuse.Free;
   FRefusals.Free;
+  FScope.Free;
   FEdits.Free;
   FPropCache.Free;
   FWithCache.Free;
@@ -468,13 +493,15 @@ begin
   Result.Directives:= pQ.FieldByName('directives').AsString;
   Result.Line      := pQ.FieldByName('start_line').AsInteger;
   Result.Col       := pQ.FieldByName('start_col').AsInteger;
+  Result.EndLine   := pQ.FieldByName('end_line').AsInteger;
   Result.ImplLine  := pQ.FieldByName('impl_start_line').AsInteger;
+  Result.ImplEndLine:= pQ.FieldByName('impl_end_line').AsInteger;
   Result.VisExplicit:= pQ.FieldByName('vis_explicit').AsInteger <> 0;
 end;
 
 const
   CSymCols = 'SELECT id, file_id, parent_id, kind, name, qualified_name, modifiers, directives, start_line, start_col, ' +
-             'impl_start_line, vis_explicit FROM symbols WHERE ';
+             'end_line, impl_start_line, impl_end_line, vis_explicit FROM symbols WHERE ';
 
 function TProver.SymRow(pId: Int64): TSymRow;
 begin
@@ -987,13 +1014,15 @@ begin
   Result:= MatchText(Copy(pText, P + 1, E - P), ['read', 'write', 'stored']);
 end;
 
-{ True when the token names a parameter in a header the index keeps no symbol for (a procedural type, a forward header):
-  a declaration binds to nothing. A token in the parameter's TYPE is not one. }
-function TProver.IsDeclArgName(const pPath: string; pLine, pByteCol: Integer): Boolean;
+{ True when the token names a parameter in a header the index keeps no symbol for (a procedural type, a forward header,
+  an implementation header): a declaration binds to nothing. A token in the parameter's TYPE is not one. pRoutineLine:
+  the first line of the routine whose implementation header holds the token; 0 for any other header. }
+function TProver.IsDeclArgName(const pPath: string; pLine, pByteCol: Integer; out pRoutineLine: Integer): Boolean;
 var
   Found: Boolean;
+  FoundLine: Integer;
 
-  procedure Walk(const pNode, pParent: TTSNode);
+  procedure Walk(const pNode, pParent: TTSNode; pHeaderOf: Integer);
   begin
     if Found or pNode.IsNull then Exit;
     var SL:= Integer(pNode.StartPoint.Row) + 1;
@@ -1004,16 +1033,82 @@ var
       if pParent.IsNull or (pParent.NodeType <> 'declArg') then Exit;
       var TypeNode:= pParent.ChildByField('type');
       Found:= TypeNode.IsNull or (pNode.StartByte < TypeNode.StartByte);
+      if Found then FoundLine:= pHeaderOf;
       Exit;
     end;
-    for var I:= 0 to pNode.NamedChildCount - 1 do Walk(pNode.NamedChild(I), pNode);
+    var IsProc:= pNode.NodeType = 'defProc';
+    var Header:= if IsProc then pNode.ChildByField('header') else Default(TTSNode);
+    for var I:= 0 to pNode.NamedChildCount - 1 do
+    begin
+      var Ch:= pNode.NamedChild(I);
+      if not IsProc then Walk(Ch, pNode, pHeaderOf)
+      else if Ch = Header then Walk(Ch, pNode, SL)
+      else Walk(Ch, pNode, 0);
+    end;
   end;
 
 begin
   Found:= False;
+  FoundLine:= 0;
   var PF:= TAstParseCache.Get(pPath);
-  if PF.Tree <> nil then Walk(PF.Tree.RootNode, Default(TTSNode));
+  if PF.Tree <> nil then Walk(PF.Tree.RootNode, Default(TTSNode), 0);
   Result:= Found;
+  pRoutineLine:= FoundLine;
+end;
+
+function TProver.InScope(pFileId: Int64; pLine: Integer): Boolean;
+begin
+  Result:= False;
+  for var Span in FScope do
+    if (Span.FileId = pFileId) and InRange(pLine, Span.First, Span.Last) then Exit(True);
+end;
+
+{ True when pRoutineLine starts the implementation of the routine a parameter of the group belongs to. }
+function TProver.IsTargetsOwnHeader(pRoutineLine: Integer): Boolean;
+begin
+  Result:= False;
+  if pRoutineLine <= 0 then Exit;
+  for var S in FGroup.Values do
+    if SameText(S.Kind, CKindParam) and (SymRow(S.ParentId).ImplLine = pRoutineLine) then Exit(True);
+end;
+
+{ A symbol declared inside a routine has a scope the index knows: the routine's declaration and implementation lines. }
+procedure TProver.BuildScope;
+
+  procedure AddSpan(pFileId: Int64; pFirst, pLast: Integer);
+  var
+    Span: TScopeSpan;
+  begin
+    Span.FileId:= pFileId;
+    Span.First:= pFirst;
+    Span.Last:= Max(pFirst, pLast);
+    FScope.Add(Span);
+  end;
+
+begin
+  FScoped:= FGroup.Count > 0;
+  for var S in FGroup.Values do
+    if not MatchText(SymRow(S.ParentId).Kind, CRoutineKinds) then FScoped:= False;
+  if not FScoped then Exit;
+  for var S in FGroup.Values do
+  begin
+    var P:= SymRow(S.ParentId);
+    AddSpan(S.FileId, S.Line, S.EndLine);
+    AddSpan(P.FileId, P.Line, P.EndLine);
+    if P.ImplLine > 0 then AddSpan(P.FileId, P.ImplLine, P.ImplEndLine);
+  end;
+end;
+
+{ The index holds no refs inside an include: one inside the routine could use either name. }
+procedure TProver.CheckScopeIncludes(pFileId: Int64; const pPath: string; pLines: TStringList);
+const
+  CIncludeDirective = '(\{|\(\*)\$(I|INCLUDE)\s';
+begin
+  for var Span in FScope do
+    if Span.FileId = pFileId then
+      for var L:= Span.First to Min(Span.Last, pLines.Count) do
+        if TRegEx.IsMatch(pLines[L - 1], CIncludeDirective, [roIgnoreCase]) then
+          Refuse(CRefuseNoRefOccurrence, pPath, L, 0, 'an {$I} inside the routine: included text holds no refs, so an occurrence there cannot be decided');
 end;
 
 { `inherited Name` holds no ref: it names what the enclosing method's class's PARENT answers to. }
@@ -1203,6 +1298,8 @@ end;
 
 procedure TProver.CheckNewNameDeclarations;
 begin
+  { A local hides what the new name means elsewhere; only its own routine can tell, and ClassifyNewToken asks that. }
+  if FScoped then Exit;
   var Path0:= '';
   for var S in FGroup.Values do
   begin
@@ -1322,8 +1419,8 @@ begin
       end;
     Cur:= Sc.ParentId;
   end;
-  { A unit-level target is met by a member of the enclosing class first. }
-  if not FIsMember then
+  { A unit-level target is met by a member of the enclosing class first. A routine's own local is met first itself. }
+  if not FIsMember and not FScoped then
   begin
     var Cls:= EnclosingClass(pRef.Enclosing);
     if (Cls > 0) and ChainMemberExists(Cls, FNew) then
@@ -1374,9 +1471,12 @@ begin
     TakeVerdict(pTok, V, Kind, '`inherited ' + FOld + '`: ' + Why);
     Exit;
   end;
-  if IsDeclArgName(pTok.Path, pTok.Line, pTok.ByteCol) then
+  var RoutineLine: Integer;
+  if IsDeclArgName(pTok.Path, pTok.Line, pTok.ByteCol, RoutineLine) then
   begin
-    Inc(FOther);
+    { The parameter's own implementation header carries no symbol: it renames with the declaration, or dcc says E2037. }
+    if FScoped and IsTargetsOwnHeader(RoutineLine) then AddEdit(pTok.Path, pTok.Line, pTok.Col)
+    else Inc(FOther);
     Exit;
   end;
   Refuse(CRefuseNoRefOccurrence, pTok.Path, pTok.Line, pTok.Col,
@@ -1528,11 +1628,19 @@ procedure TProver.ClassifyNewToken(const pTok: TTok; pDecls: TDeclMap);
 var
   Rows: TList<TRefRow>;
 begin
+  { Inside the routine every bare use of the new name, a declaration included, would meet the renamed symbol. }
+  if FScoped then
+  begin
+    if not pTok.Qualified then
+      Refuse(CRefuseCaptureLocal, pTok.Path, pTok.Line, pTok.Col, Format('the routine already uses "%s" here; it would bind to the renamed local, and that can compile', [FNew]));
+    Exit;
+  end;
   if pDecls.ContainsKey(Format('%d:%d', [pTok.Line, pTok.Col])) then Exit;
   if not FNewRefs.TryGetValue(KeyOf(pTok.FileId, pTok.Line, pTok.ByteCol), Rows) then
   begin
+    var RoutineLine: Integer;
     var Explained:= ((PropertyOwnerAt(pTok.FileId, pTok.Line) > 0) and IsSpecifierToken(pTok.Text, pTok.Start))
-      or IsDeclArgName(pTok.Path, pTok.Line, pTok.ByteCol);
+      or IsDeclArgName(pTok.Path, pTok.Line, pTok.ByteCol, RoutineLine);
     if not Explained then
       Refuse(CRefuseCaptureNoRef, pTok.Path, pTok.Line, pTok.Col, Format('the new name "%s" sits here and the index holds no ref for it', [FNew]));
     Exit;
@@ -1575,6 +1683,12 @@ procedure TProver.ScanFile(pFileId: Int64; const pPath: string);
 var
   Text: string;
 begin
+  if FScoped then
+  begin
+    var Mine:= False;
+    for var Span in FScope do Mine:= Mine or (Span.FileId = pFileId);
+    if not Mine then Exit;
+  end;
   if not TFile.Exists(pPath) then Exit;
   TTextFileFormat.ReadFile(pPath, Text);
   var HasOld:= ContainsText(Text, FOld);
@@ -1585,6 +1699,7 @@ begin
   var NewDecls:= TDeclMap.Create;
   try
     Lines.Text:= Text;
+    if FScoped then CheckScopeIncludes(pFileId, pPath, Lines);
     AddDeclTokens(FOldSyms, pFileId, Lines, OldDecls);
     AddDeclTokens(FNewSyms, pFileId, Lines, NewDecls);
     var Len:= Length(Text);
@@ -1619,7 +1734,7 @@ begin
         while (I <= Len) and CharInSet(Text[I], ['A'..'Z', 'a'..'z', '_', '0'..'9']) do Inc(I);
         var IsOld:= (I - Start = Length(FOld)) and SameText(Copy(Text, Start, I - Start), FOld);
         var IsNew:= (I - Start = Length(FNew)) and SameText(Copy(Text, Start, I - Start), FNew);
-        if IsOld or IsNew then
+        if (IsOld or IsNew) and (not FScoped or InScope(pFileId, Line)) then
         begin
           var Tok: TTok;
           Tok.Path   := pPath;
@@ -1711,18 +1826,152 @@ begin
   end;
 end;
 
-{ A published field or property named in a text form: nothing rewrites it, and a form that no longer loads is no compile
-  error. Binary and unindexed forms: SkippedDfmNotes. }
+{ The name each owner's form file gives its root object: `Prop = DM1.Name` in another form means the owner's component. }
+function TProver.OwnerInstances: TStringList;
+begin
+  Result:= TStringList.Create;
+  Result.CaseSensitive:= False;
+  for var S in FGroup.Values do
+  begin
+    var Dfm:= ChangeFileExt(FStore.GetFilePath(S.FileId), '.dfm');
+    if not TFile.Exists(Dfm) then Continue;
+    var Text: string;
+    TTextFileFormat.ReadFile(Dfm, Text);
+    var M:= TRegEx.Match(Text, '^\s*(?:object|inherited|inline)\s+(\w+)\s*:', [roIgnoreCase, roMultiLine]);
+    if M.Success then Result.Add(M.Groups[1].Value);
+  end;
+end;
+
+{ A component's name in a text form, line by line. Who owns the form decides a bare name; only what the line's shape can
+  tell apart is decided at all: the rest refuses, because a form that no longer loads is no compile error. }
+procedure TProver.ScanDfmComponent(const pPath, pText: string; pInstances: TStringList);
+const
+  CValueSep = ' = ';
+var
+  S, Value: string;
+  Colon, Eq: Integer;
+  IsHeader, InInline, RootKnown, Mine, IsEnum: Boolean;
+
+  { One token of the old name at pAt of line pLine. }
+  procedure Decide(pLine, pAt: Integer);
+  begin
+    var Undecided:= True;
+    var IsEdit:= False;
+    if IsHeader then
+    begin
+      Undecided:= (pAt < Colon) and (InInline or not RootKnown);
+      IsEdit:= (pAt < Colon) and Mine and not Undecided;
+    end
+    else if (Eq > 0) and (pAt < Eq) then Undecided:= False { a property's own name }
+    else if (Eq > 0) and (SameText(Value, FOld) or StartsText(FOld + '.', Value)) then
+    begin
+      Undecided:= InInline or not RootKnown or (Mine and IsEnum);
+      IsEdit:= Mine and not Undecided;
+    end
+    else if (Eq > 0) and (pAt >= 2) and (S[pAt - 1] = '.') and EndsText('.' + FOld, Value) then
+    begin
+      Undecided:= pInstances.IndexOf(Copy(Value, 1, Length(Value) - Length(FOld) - 1)) < 0;
+      IsEdit:= not Undecided;
+    end;
+    if Undecided then
+      Refuse(CRefuseDfmNameUnbound, pPath, pLine, pAt,
+        Format('this form names "%s" where nothing tells which component it means: fix it by hand', [FOld]))
+    else if IsEdit then
+    begin
+      AddEdit(pPath, pLine, pAt);
+      Inc(FBound);
+    end
+    else Inc(FOther);
+  end;
+
+begin
+  RootKnown:= DfmRootSymbol(FStore, pPath).Id <> 0;
+  Mine:= False;
+  for var G in FGroup.Values do
+    if DfmBindingBelongsTo(FStore, pPath, FStore.GetSymbolById(G.ParentId), FOld) then Mine:= True;
+  IsEnum:= (Length(ReadSyms('name = :n COLLATE NOCASE AND kind = ''enum_value''', FOld)) > 0)
+    or LibAny('SELECT 1 FROM symbols WHERE name = :n COLLATE NOCASE AND kind = ''enum_value'' LIMIT 1', FOld);
+  var Lines:= TStringList.Create;
+  try
+    Lines.Text:= pText;
+    var Depth:= 0;
+    var InlineAt:= 0;
+    var InBlob:= False;
+    for var L:= 0 to Lines.Count - 1 do
+    begin
+      S:= Lines[L];
+      if InBlob then
+      begin
+        InBlob:= not S.Contains('}');
+        Continue;
+      end;
+      var T:= Trim(S);
+      if SameText(T, 'end') or SameText(T, 'end>') then
+      begin
+        if Depth = InlineAt then InlineAt:= 0;
+        Dec(Depth);
+        Continue;
+      end;
+      if SameText(T, 'item') then
+      begin
+        Inc(Depth);
+        Continue;
+      end;
+      var FirstWord:= Copy(T, 1, Pos(' ', T + ' ') - 1);
+      Colon:= Pos(':', S);
+      IsHeader:= MatchText(FirstWord, ['object', 'inherited', 'inline']) and (Colon > 0);
+      InInline:= InlineAt > 0;
+      Eq:= if IsHeader then 0 else Pos(CValueSep, S);
+      Value:= if Eq > 0 then Trim(Copy(S, Eq + Length(CValueSep), MaxInt)) else '';
+      var At:= 1;
+      var InStr:= False;
+      while At <= Length(S) do
+      begin
+        if S[At] = '''' then InStr:= not InStr
+        else if not InStr and (S[At] = '{') then
+        begin
+          InBlob:= Pos('}', S, At) = 0;
+          Break;
+        end
+        else if not InStr and IsIdentAt(S, FOld, At) then
+        begin
+          Decide(L + 1, At);
+          Inc(At, Length(FOld) - 1);
+        end;
+        Inc(At);
+      end;
+      if IsHeader then
+      begin
+        Inc(Depth);
+        if SameText(FirstWord, 'inline') and (Depth > 1) and (InlineAt = 0) then InlineAt:= Depth;
+      end;
+    end;
+  finally
+    Lines.Free;
+  end;
+end;
+
+{ A published field or property named in a text form. A field is a component and its form is rewritten; a property's name
+  in a form is not, and a form that no longer loads is no compile error. Binary and unindexed forms: SkippedDfmNotes. }
 procedure TProver.CheckDfmNames;
 begin
-  for var S in FGroup.Values do
-    for var Note in TRenameRefactoring.SkippedDfmNotes(FStore, S.QName) do
-      Refuse(CRefuseDfmNotRewritten, FStore.GetFilePath(S.FileId), S.Line, 0, Note);
   var Streamed:= False;
+  var Component:= True;
   for var S in FGroup.Values do
+  begin
+    if not SameText(S.Kind, CKindField) then Component:= False;
     if MatchText(S.Kind, [CKindField, CKindProperty]) and MatchText(SymRow(S.ParentId).Kind, [CKindClass, CKindForm])
        and (HasWord(S.Modifiers, 'published') or not S.VisExplicit) then Streamed:= True;
+  end;
+  Component:= Component and Streamed;
+  for var S in FGroup.Values do
+    for var Note in TRenameRefactoring.SkippedDfmNotes(FStore, S.QName) do
+      { a text form outside the index is read below all the same; only a binary one stays out of reach }
+      if not Component or ContainsText(Note, CBinaryDfmNote) then
+        Refuse(CRefuseDfmNotRewritten, FStore.GetFilePath(S.FileId), S.Line, 0, Note);
   if not Streamed then Exit;
+  var Instances: TStringList:= nil;
+  if Component then Instances:= OwnerInstances;
   var Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
@@ -1744,13 +1993,15 @@ begin
         var Text: string;
         TTextFileFormat.ReadFile(Path, Text);
         if not ContainsText(Text, FOld) then Continue;
-        ScanDfmNames(Path, Text);
+        if Component then ScanDfmComponent(Path, Text, Instances)
+        else ScanDfmNames(Path, Text);
       end;
     finally
       Dfms.Free;
     end;
   finally
     Q.Free;
+    Instances.Free;
   end;
 end;
 
@@ -1777,6 +2028,7 @@ begin
     Probe.Free;
   end;
   BuildFamily;
+  BuildScope;
   FTargetInLib:= LibHasQName(FQName);
   FOldSyms:= ReadSyms('name = :n COLLATE NOCASE', FOld);
   FNewSyms:= ReadSyms('name = :n COLLATE NOCASE', FNew);
@@ -1796,8 +2048,11 @@ begin
   finally
     Q.Free;
   end;
-  ProcessDfmRefs;
-  CheckDfmNames;
+  if not FScoped then { no form can name a routine's local }
+  begin
+    ProcessDfmRefs;
+    CheckDfmNames;
+  end;
   Result:= ProofOf(FEdits, FRefusals);
   Result.Found:= True;
   Result.Bound:= FBound;
@@ -1875,7 +2130,11 @@ begin
         var Target: Int64:= 0;
         var MemberNew: Boolean;
         var Q:= TFDQuery.Create(nil);
+        var SrcLines:= TStringList.Create; { Site.Col is a character column; refs.start_col is the parse's byte column }
         try
+          var SrcText: string;
+          TTextFileFormat.ReadFile(pFile, SrcText);
+          SrcLines.Text:= SrcText;
           Q.Connection:= Conn;
           Q.SQL.Text:= 'SELECT id FROM files WHERE path = :p COLLATE NOCASE';
           Q.ParamByName('p').AsWideString:= ExpandFileName(pFile);
@@ -1906,7 +2165,7 @@ begin
             Q.Close;
             Q.ParamByName('f').AsLargeInt:= Fid;
             Q.ParamByName('l').AsInteger:= Site.Line;
-            Q.ParamByName('c').AsInteger:= Site.Col;
+            Q.ParamByName('c').AsInteger:= TEncoding.UTF8.GetByteCount(Copy(SrcLines[Site.Line - 1], 1, Site.Col - 1)) + 1;
             Q.Open;
             var ToTarget:= False;
             var ToOther := False;
@@ -1932,6 +2191,7 @@ begin
               AddRefusal(CRefuseWithUndecided, Site, 'an occurrence under a `with` the resolver did not bind: the target''s surface is not known');
           end;
         finally
+          SrcLines.Free;
           Q.Free;
         end;
       end;

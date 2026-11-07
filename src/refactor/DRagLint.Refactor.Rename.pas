@@ -328,14 +328,16 @@ type
       /// <summary>Routine-local rename of the parameter or local variable whose
       /// declaration identifier sits at (ALine, ACol) (1-based) in AFile. Emits a
       /// TRenameEdit for the declaration, every in-scope use within the owning
-      /// routine body, and the matching parameter in any same-named forward/interface
-      /// declProc header. Shadowing nested routines, qualified members (X.Name) on
+      /// routine body, and the matching parameter in the header this routine implements:
+      /// its class member's or forward/interface declProc, the same class path, the same
+      /// routine name and the same parameter list (or any, when the implementation header
+      /// repeats none). Shadowing nested routines, qualified members (X.Name) on
       /// both exprDot and genericDot rhs sides, and with-statement members are
       /// conservatively skipped. Empty array if no param/local decl is found at that
       /// position. Pure AST -- no symbol store.
-      /// Known limitations (deliberate conservative choices): occurrences inside a
-      /// with block are skipped entirely; a same-named param in an unrelated same-name
-      /// overload header may be touched (header-only, not a body rename).</summary>
+      /// Known limitation (deliberate conservative choice): occurrences inside a
+      /// with block are skipped entirely. A nested routine's forward header is not
+      /// followed; the compile gate reports it.</summary>
       /// <param name="AFile"><!-- drag-lint:auto type -->const string</param>
       /// <param name="ALine"><!-- drag-lint:auto type -->Integer</param>
       /// <param name="ACol"><!-- drag-lint:auto type -->Integer</param>
@@ -367,7 +369,8 @@ type
       /// <param name="ANewNameSites">Out: bare occurrences of ANewName in the routine. Each would bind to the
       /// renamed local afterwards, and dcc accepts that when the types agree.</param>
       /// <returns>What BuildLocal returns.</returns>
-      /// <remarks>Pure AST. Columns are the parse's, UTF-8 bytes.</remarks>
+      /// <remarks>Pure AST. ACol is either the identifier's UTF-8 byte column (a lint finding's) or its character
+      /// column; byte wins. Every returned Col is a character column, as StaleEditReason and Apply expect.</remarks>
       class function BuildLocalScan(const AFile: string; ALine, ACol: Integer; const ANewName: string;
         out AWithSites, ANewNameSites: TArray<TRenameEdit>): TArray<TRenameEdit>;
   end;
@@ -394,6 +397,12 @@ function ByteColToCharCol(const ALine: string; AByteCol: Integer): Integer;
 /// <param name="APos">1-based position.</param>
 /// <returns>APos itself when none starts there.</returns>
 function SkipNonIdent(const AText: string; APos: Integer): Integer;
+/// <summary>The class a text form file streams: the root object's type, as the sibling .pas declares it.</summary>
+/// <param name="AStore">The project index.</param>
+/// <param name="ADfmPath">The form file.</param>
+/// <returns>The class; Id = 0 when the file is binary or missing, or the sibling .pas holds no such class.</returns>
+function DfmRootSymbol(const AStore: ISymbolStore; const ADfmPath: string): TSymbol;
+
 /// <summary>True when an event binding in ADfmPath binds the method AName of class AOwner (X-25).</summary>
 /// <param name="AStore">The project index.</param>
 /// <param name="ADfmPath">The form file.</param>
@@ -628,6 +637,15 @@ begin
     if Anc.SymbolId = AOwnerId then Exit(True);
 end;
 
+function DfmRootSymbol(const AStore: ISymbolStore; const ADfmPath: string): TSymbol;
+begin
+  Result:= Default(TSymbol);
+  var RootName:= DfmRootClassName(ADfmPath);
+  if RootName = '' then Exit;
+  for var Cand in AStore.FindSymbolsByFile(ChangeFileExt(ADfmPath, '.pas')) do
+    if (Cand.Kind in [skClass, skForm]) and SameText(Cand.Name, RootName) then Exit(Cand);
+end;
+
 // True when an event binding in ADfmPath binds the method AName of class
 // AOwner (X-25): the form's root class (declared in the sibling .pas) IS
 // AOwner, or descends from it with no class from the root down to AOwner
@@ -639,20 +657,13 @@ function DfmBindingBelongsTo(const AStore: ISymbolStore; const ADfmPath: string;
 var
   RootName: string;
   Root    : TSymbol;
-  Cand    : TSymbol;
   Anc     : TTypeAncestor;
 begin
   Result:= False;
   RootName:= '';
   if AOwner.Kind in [skClass, skForm] then RootName:= DfmRootClassName(ADfmPath);
   if RootName = '' then Exit;
-  Root:= Default(TSymbol);
-  for Cand in AStore.FindSymbolsByFile(ChangeFileExt(ADfmPath, '.pas')) do
-    if (Cand.Kind in [skClass, skForm]) and SameText(Cand.Name, RootName) then
-    begin
-      Root:= Cand;
-      Break;
-    end;
+  Root:= DfmRootSymbol(AStore, ADfmPath);
   if Root.Id = AOwner.Id then Exit(True);
   if (Root.Id = 0) or (AStore.FindChildSymbolByName(Root.Id, AName).Id <> 0)
      or not ClassDescendsFrom(AStore, Root.Id, AOwner.Id) then Exit;
@@ -1034,11 +1045,19 @@ var
   function NColOf(const N: TTSNode): Integer;
   begin Result:= Integer(N.StartPoint.Column) + 1; end;
 
+  { The parse counts UTF-8 bytes; StaleEditReason and Apply count characters. }
+  function NCharCol(const N: TTSNode): Integer;
+  var ByteCol: Integer;
+  begin
+    ByteCol:= Integer(N.StartPoint.Column);
+    Result:= TEncoding.UTF8.GetCharCount(Src, Integer(N.StartByte) - ByteCol, ByteCol) + 1;
+  end;
+
   function EditOf(const N: TTSNode): TRenameEdit;
   begin
     Result.FilePath:= AFile;
     Result.Line    := NLine(N);
-    Result.Col     := NColOf(N);
+    Result.Col     := NCharCol(N);
     Result.OldName := Target;
     Result.NewName := ANewName;
   end;
@@ -1048,18 +1067,19 @@ var
     Edits.Add(EditOf(N));
   end;
 
-  { Find the identifier node at (ALine,ACol). Returns null node if none. }
-  function FindIdentAt(const N: TTSNode): TTSNode;
+  { Find the identifier node at (ALine,ACol), by byte or by character column. Returns null node if none. }
+  function FindIdentAt(const N: TTSNode; AByChar: Boolean): TTSNode;
   var I: Integer; Ch, R: TTSNode;
   begin
     Result:= Default(TTSNode);
     if N.IsNull then Exit;
-    if (N.NodeType = 'identifier') and (NLine(N) = ALine) and (NColOf(N) = ACol) then
+    var ColOf:= if AByChar then NCharCol(N) else NColOf(N);
+    if (N.NodeType = 'identifier') and (NLine(N) = ALine) and (ColOf = ACol) then
       Exit(N);
     for I:= 0 to N.NamedChildCount - 1 do
     begin
       Ch:= N.NamedChild(I);
-      R:= FindIdentAt(Ch);
+      R:= FindIdentAt(Ch, AByChar);
       if not R.IsNull then Exit(R);
     end;
   end;
@@ -1136,27 +1156,48 @@ var
     if N.NodeType = 'with' then Dec(WithDepth);
   end;
 
-  { Add the matching parameter in any forward/interface declProc with the same
-    routine name as OwnerProc. Scans all declProc nodes in the file.
+  { Add the matching parameter in the declaration OwnerProc implements: same class path, same routine name, same
+    parameter list; any list when the implementation header repeats none, as Delphi allows. A sibling overload, another
+    class's method and another routine's implementation header are not it.
     NOTE: declProc has 'args' as a direct child field (no 'header' wrapper). }
   procedure SyncForwardHeaders(const ARoot: TTSNode);
-  var I   : Integer;
-    OwnerName: string;
+  var
+    OwnerShort, OwnerClass, OwnerSig: string;
 
-    function HdrName(const AProc: TTSNode): string;
-    var H, Nm: TTSNode;
+    function Squeezed(const AText: string): string;
+    begin
+      Result:= LowerCase(AText.Replace(' ', '').Replace(#9, '').Replace(#13, '').Replace(#10, ''));
+    end;
+
+    { `const A, B: T = 0` as `const a:t;const b:t;`: grouping and default values may differ between the two headers. }
+    function ArgsSig(const AHeader: TTSNode): string;
+    var
+      AN, Arg, Ch, TN: TTSNode;
+      K, J: Integer;
     begin
       Result:= '';
-      { defProc: name is under header field }
-      H:= AProc.ChildByField('header');
-      if not H.IsNull then
+      AN:= AHeader.ChildByField('args');
+      if AN.IsNull then Exit;
+      for K:= 0 to AN.NamedChildCount - 1 do
       begin
-        Nm:= H.ChildByField('name');
-        if not Nm.IsNull then begin Result:= Trim(NStr(Nm)); Exit; end;
+        Arg:= AN.NamedChild(K);
+        if Arg.NodeType <> 'declArg' then Continue;
+        TN:= Arg.ChildByField('type');
+        var TypeText:= if TN.IsNull then '' else NStr(TN);
+        var Prefix:= '';
+        var PrefixDone:= False;
+        for J:= 0 to Arg.NamedChildCount - 1 do
+        begin
+          Ch:= Arg.NamedChild(J);
+          if Ch = TN then Break;
+          if Ch.NodeType = 'identifier' then
+          begin
+            PrefixDone:= True;
+            Result:= Result + Squeezed(Prefix) + ' ' + Squeezed(NStr(Ch)) + ':' + Squeezed(TypeText) + ';';
+          end
+          else if not PrefixDone and (Prefix = '') then Prefix:= NStr(Ch);
+        end;
       end;
-      { declProc: name is a direct child field }
-      Nm:= AProc.ChildByField('name');
-      if not Nm.IsNull then Result:= Trim(NStr(Nm));
     end;
 
     procedure ScanDeclArgs(const AProc: TTSNode);
@@ -1181,28 +1222,51 @@ var
       end;
     end;
 
-  var
-    Stack: TList<TTSNode>;
-    Cur  : TTSNode;
-  begin
-    OwnerName:= HdrName(OwnerProc);
-    if OwnerName = '' then Exit;
-    Stack:= TList<TTSNode>.Create;
-    try
-      Stack.Add(ARoot);
-      while Stack.Count > 0 do
+    { The outermost defProc around OwnerProc: OwnerProc itself unless it is nested. }
+    function OutermostProc(const N: TTSNode): TTSNode;
+    var I: Integer;
+    begin
+      Result:= Default(TTSNode);
+      if N.IsNull or (N.StartByte > OwnerProc.StartByte) or (N.EndByte < OwnerProc.EndByte) then Exit;
+      if N.NodeType = 'defProc' then Exit(N);
+      for I:= 0 to N.NamedChildCount - 1 do
       begin
-        Cur:= Stack[Stack.Count - 1];
-        Stack.Delete(Stack.Count - 1);
-        if Cur.NodeType = 'declProc' then
-        begin
-          if SameText(HdrName(Cur), OwnerName) then ScanDeclArgs(Cur);
-        end;
-        for I:= 0 to Cur.NamedChildCount - 1 do Stack.Add(Cur.NamedChild(I));
+        Result:= OutermostProc(N.NamedChild(I));
+        if not Result.IsNull then Exit;
       end;
-    finally
-      Stack.Free;
     end;
+
+    procedure Visit(const N: TTSNode; const AClassPath: string);
+    var I: Integer;
+    begin
+      if N.IsNull or (N.NodeType = 'defProc') then Exit;
+      if N.NodeType = 'declProc' then
+      begin
+        if (Squeezed(NStr(N.ChildByField('name'))) = OwnerShort) and (AClassPath = OwnerClass)
+           and ((OwnerSig = '') or (ArgsSig(N) = OwnerSig)) then ScanDeclArgs(N);
+        Exit;
+      end;
+      var Path:= AClassPath;
+      if N.NodeType = 'declType' then
+      begin
+        var TypeName:= Squeezed(NStr(N.ChildByField('name')));
+        Path:= if Path = '' then TypeName else Path + '.' + TypeName;
+      end;
+      for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I), Path);
+    end;
+
+  begin
+    var IsTopLevel:= OutermostProc(ARoot) = OwnerProc;
+    if not IsTopLevel then Exit;
+    var Header:= OwnerProc.ChildByField('header');
+    if Header.IsNull then Exit;
+    var OwnerName:= Squeezed(NStr(Header.ChildByField('name')));
+    if OwnerName = '' then Exit;
+    var Dot:= LastDelimiter('.', OwnerName);
+    OwnerShort:= Copy(OwnerName, Dot + 1, MaxInt);
+    OwnerClass:= Copy(OwnerName, 1, Dot - 1);
+    OwnerSig:= ArgsSig(Header);
+    Visit(ARoot, '');
   end;
 
 var
@@ -1221,7 +1285,8 @@ begin
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
 
-  IdNode:= FindIdentAt(PF.Tree.RootNode);
+  IdNode:= FindIdentAt(PF.Tree.RootNode, False);
+  if IdNode.IsNull then IdNode:= FindIdentAt(PF.Tree.RootNode, True);
   if IdNode.IsNull then Exit;
   Target:= Trim(NStr(IdNode));
   if Target = '' then Exit;
@@ -1372,6 +1437,17 @@ begin
   end;
 end;
 
+{ True when the name's symbols are declared inside routines: nothing outside the owner can name them. }
+function IsDeclaredInRoutine(const AStore: ISymbolStore; const AQName: string): Boolean;
+var
+  Syms: TArray<TSymbol>;
+begin
+  Syms:= AStore.FindSymbolsByQualifiedName(AQName);
+  Result:= Length(Syms) > 0;
+  for var S in Syms do
+    if (S.ParentId <= 0) or not CanBeCallTarget(AStore.GetSymbolById(S.ParentId).Kind) then Exit(False);
+end;
+
 class function TRenameRefactoring.IncludeUseReason(const AStore: ISymbolStore;
   const AQName: string): string;
 var
@@ -1382,6 +1458,8 @@ begin
   Result:= '';
   ShortName:= LastDotSegment(AQName);
   if ShortName = '' then Exit;
+  // RenameProof refuses an include inside the owning routine; one elsewhere cannot hold this name
+  if IsDeclaredInRoutine(AStore, AQName) then Exit;
   Hits:= TStringList.Create;
   try
     for Stamp in AStore.GetAllFileStamps do
@@ -1418,6 +1496,7 @@ begin
   ShortName:= LastDotSegment(AQName);
   Syms:= AStore.FindSymbolsByQualifiedName(AQName);
   if (ShortName = '') or (Length(Syms) = 0) then Exit;
+  if IsDeclaredInRoutine(AStore, AQName) then Exit; { no form can name a routine's local }
   DfmPath:= ChangeFileExt(AStore.GetFilePath(Syms[0].FileId), '.dfm');
   if not FileExists(DfmPath) then Exit;
   Bytes:= TFile.ReadAllBytes(DfmPath);
