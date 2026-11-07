@@ -1,0 +1,24 @@
+{
+  "id": "convrules-inherited-units",
+  "title": "Inherited units, ancestors first",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.40.0-alpha",
+  "summary": "ConvRulesEditor offers and orders the ancestors of an inherited form root-first before Convert",
+  "intro": "Keeps an inherited form behind its ancestor in a conversion run.",
+  "wikiPage": "convrules-editor-inherited-units",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Convert tab > Add... (offers ancestors root first)"
+    }
+  ],
+  "audience": "both",
+  "verified": {
+    "date": "2026-11-06",
+    "by": "alexanderl",
+    "build": "1.45.0-alpha"
+  }
+}
