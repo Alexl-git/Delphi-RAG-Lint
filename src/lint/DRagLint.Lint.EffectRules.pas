@@ -339,24 +339,18 @@ begin
   if Open = 0 then Exit;
   var Depth: Integer:= 0;
   var Groups: TArray<string>:= nil;
-  var Cur: string:= '';
+  var GroupStart: Integer:= Open + 1;
   for var I:= Open + 1 to Length(S) do
   begin
     var C: Char:= S[I];
     if (C = '(') or (C = '<') or (C = '[') then Inc(Depth)
     else if ((C = ')') or (C = '>') or (C = ']')) and (Depth > 0) then Dec(Depth)
-    else if (C = ')') then
+    else if (C = ')') or ((C = ';') and (Depth = 0)) then
     begin
-      Groups:= Groups + [Cur];
-      Break;
-    end
-    else if (C = ';') and (Depth = 0) then
-    begin
-      Groups:= Groups + [Cur];
-      Cur:= '';
-      Continue;
+      Groups:= Groups + [Copy(S, GroupStart, I - GroupStart)];
+      GroupStart:= I + 1;
+      if C = ')' then Break;
     end;
-    Cur:= Cur + C;
   end;
   var Index: Integer:= 0;
   for var G in Groups do

@@ -897,7 +897,8 @@ var
           L.Add(R);
         end;
     end;
-    if AFileRefs.TryGetValue(-ASym.Id, L) then Result:= L.ToArray else Result:= nil;
+    Result:= nil;
+    if AFileRefs.TryGetValue(-ASym.Id, L) then Result:= L.ToArray;
   end;
 
   procedure Note(const ACategory, AVia: string);
