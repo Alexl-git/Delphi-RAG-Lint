@@ -12,7 +12,7 @@
 
   KNOWN GAP (reported, not asserted): `FW.Next.Run` -- a call on a function RESULT that is
   itself a dotted call -- stays unbound. When it starts binding this guard prints
-  "KNOWN GAP CLOSED": move ViaChain into the asserted list.
+  (closed, b8: ViaChain asserted) was: move ViaChain into the asserted list.
 
   POSITIVE CONTROL: ViaUnknown calls Run on a receiver of an undeclared type; it must stay
   unbound, and the checker, asked to assert it, must flag exactly that site. Without it a
@@ -180,15 +180,13 @@ end.
     return $h
   }
 
-  $asserted = 'ViaCast','ViaField','ViaFor','ViaGlobal','ViaInherited','ViaLocal','ViaParam','ViaProp','ViaPub','ViaResult','ViaSelfField','ViaWith'
+  $asserted = 'ViaCast','ViaChain','ViaField','ViaFor','ViaGlobal','ViaInherited','ViaLocal','ViaParam','ViaProp','ViaPub','ViaResult','ViaSelfField','ViaWith'
   $sites = Get-RunSites $db
   Write-Host 'dotted .Run call sites' -ForegroundColor Cyan
   Check 'the checker sees every routine (14 sites)' ($sites.Count -eq 14) "sites=$($sites.Count)"
   foreach ($r in $asserted) {
     Check "$r binds to uA.TWorker.Run" ($sites.Contains($r) -and $sites[$r] -ceq 'uA.TWorker.Run') "got=$($sites[$r])"
   }
-  if ($sites.Contains('ViaChain') -and $sites['ViaChain'] -ne '-') { Write-Host '  KNOWN GAP CLOSED: ViaChain binds now; assert it.' -ForegroundColor Yellow }
-  else { Write-Host '  known gap (not asserted): ViaChain  FW.Next.Run unbound' -ForegroundColor DarkYellow }
 
   Write-Host 'positive control: a receiver of unknown type must stay unbound, and the checker must say so' -ForegroundColor Cyan
   Check 'ViaUnknown (pU: TNoSuchType) is a Run site with NO edge' ($sites.Contains('ViaUnknown') -and ($sites['ViaUnknown'] -ceq '-')) "got=$($sites['ViaUnknown'])"
