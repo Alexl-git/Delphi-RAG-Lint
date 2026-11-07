@@ -188,7 +188,11 @@ try {
                                  message  = 'Local "Scratch" may be read before assignment' }) }
         }
       }
-      return Receive-Lsp
+      while ($true) {
+        $frame = Receive-Lsp
+        if ($null -eq $frame) { return $null }
+        if ($null -ne ($frame | ConvertFrom-Json).id) { return $frame }
+      }
     }
 
     # ---- E3: a drag-lint diagnostic produces a real edit -------------------
