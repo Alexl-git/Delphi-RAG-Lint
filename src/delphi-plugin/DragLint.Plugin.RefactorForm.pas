@@ -95,6 +95,15 @@ procedure ShowRefactorDialog(const ASuggestedQName: string; const AProjectDb: st
 /// </remarks>
 function DLRenameCmdLine(const AExePath, AQName, ANewName, ADb, AFromFile: string; ADryRun, ABackup: Boolean): string;  // dl:ok unused-public-symbol@c8e6 -- public as the test seam: LspNonBlockingTests T8/T9 drive it (not in the plugin index)
 
+/// <summary>Counts the occurrences a rename dry run could NOT prove.</summary>
+/// <param name="AOutput">The dry run's stdout and stderr, interleaved.</param>
+/// <returns>The number of `drag-lint: note: ... refused [kind]: ...` lines. A note
+/// without `refused [` (the stale-index note, a reach note) is not counted.</returns>
+/// <remarks>Pure. The dry run exits 0 with refusals; the apply refuses with exit 2
+/// and writes nothing whenever one is printed (DRagLint.CLI FinishRename), so
+/// DoPreview enables Apply only when this is 0. Test seam: tests\RenamePreviewTests.dpr.</remarks>
+function DLRenamePreviewRefusals(const AOutput: string): Integer;
+
 /// <summary>Reads the symbol the typeat verb resolved from its JSON answer.</summary>
 /// <param name="AOutput">Captured text of `typeat ... --format json` (stderr may
 /// be merged in, so text before the first `{` is ignored).</param>
@@ -286,6 +295,16 @@ begin
   if not ABackup then Result:= Result + ' --no-backup';
 end;
 
+function DLRenamePreviewRefusals(const AOutput: string): Integer;
+const
+  NOTE_PREFIX = 'drag-lint: note: ';
+  REFUSED_TAG = 'refused [';
+begin
+  Result:= 0;
+  for var Line in AOutput.Split([#10]) do
+    if Line.TrimLeft.StartsWith(NOTE_PREFIX) and (Pos(REFUSED_TAG, Line) > 0) then Inc(Result);
+end;
+
 function TRefactorHandler.RenameCmdLine(ADryRun: Boolean): string;
 begin
   Result:= DLRenameCmdLine(FExePath, FEdQName.Text, FEdNewName.Text, FProjectDb, FFromFile, ADryRun, FCbBackup.Checked);
@@ -309,8 +328,15 @@ begin
   FPreviewOk:= False;
   RunAsync(RenameCmdLine(True), '(running dry-run...)',
     procedure(AExitCode: Integer; const AOutput: string)
+    var
+      Refused: Integer;
     begin
-      FPreviewOk:= AExitCode = 0;
+      { The dry run exits 0 with unproved occurrences; the apply would then refuse
+        and write nothing, so Apply stays disabled and the memo says why. }
+      Refused:= DLRenamePreviewRefusals(AOutput);
+      FPreviewOk:= (AExitCode = 0) and (Refused = 0);
+      if (AExitCode = 0) and (Refused > 0) then
+        FMemo.Lines.Add(Format('Apply disabled: %d occurrence(s) not proved -- the rename would refuse and write nothing.', [Refused]));
       FBtnApply.Enabled:= FPreviewOk;
       FBtnClose.Caption:= 'Cancel';
     end);
