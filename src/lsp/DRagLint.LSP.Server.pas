@@ -247,6 +247,7 @@ type
       FShuttingDown: Boolean             ;
       FControl     : TControlChannel     ; { nil = no channel (every mode but lsp); not owned }
       FFullRules   : Boolean             ; { C1: --full-rules; OFF by default }
+      FExceptionFacts: Boolean           ; { D1 (wave 148): Raises: hover line + exception code lens; ON by default, lsp --no-exception-facts }
       FFullRulesSuperseded: Boolean      ; { the last RunFullRulesLint child was discarded because a newer save of the same file was waiting }
       FStartProject : string             ; { C15: explicit --project the CLI was started with, or '' }
       FStartPlatform: string             ; { C15: explicit --platform the CLI was started with, or '' }
@@ -1964,6 +1965,12 @@ type
       /// drag-lint lsp: full-rules <file> <ms> ms <n> findings. Falls back to the subset (and
       /// says so on stderr) on timeout, non-zero exit or invalid JSON.</remarks>
       property FullRules: Boolean read FFullRules write FFullRules;
+      /// <summary>D1 (owner ruling, wave 148): when True (the default) hover adds the routine's
+      /// 'Raises:' line and textDocument/codeLens adds 'raises N types, handles M types' on a
+      /// routine header, both read through DRagLint.Query.ExceptionFacts (the reader the
+      /// `exception-facts verb and the MCP tool use). False = lsp --no-exception-facts:
+      /// hover and lenses byte-identical to 1.46.</summary>
+      property ExceptionFacts: Boolean read FExceptionFacts write FExceptionFacts;
       /// <summary>C15: the explicit --project the CLI was started with ('' when none was typed).</summary>
       /// <remarks>Set by the CLI from its parsed arguments. Forwarded to the --full-rules lint child so
       /// it resolves the same profile as the in-process lint; '' forwards nothing.</remarks>
@@ -2163,6 +2170,20 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ComputeCallerCounts(const APath: string): TJSONArray;
+      /// <summary>The exception code lenses of one file: [{line, title}], line 0-based on the
+      /// routine's declaration (the caller lens line).</summary>
+      /// <param name="APath">Local path of the document.</param>
+      /// <returns>A new array the caller frees; [] when ExceptionFacts is off, the file is not
+      /// indexed, or no routine in it raises or handles.</returns>
+      /// <remarks>One read of DRagLint.Query.ExceptionFacts.ExceptionFactsOfFile on the first
+      /// store of the file's context set that holds the file.</remarks>
+      function ComputeExceptionLenses(const APath: string): TJSONArray;
+      /// <summary>The 'Raises:' hover line of ASym as a one-element array, or [] (switch off,
+      /// not a routine, a store with no path, nothing raised).</summary>
+      /// <param name="AStore">The store ASym came from.</param>
+      /// <param name="ASym">The hovered symbol.</param>
+      /// <returns>[ExceptionRaisesLine(...)] or [].</returns>
+      function ExceptionFactLines(const AStore: ISymbolStore; const ASym: TSymbol): TArray<string>;
       /// <summary>The markdown `textDocument/hover` shows for a position.</summary>
       /// <param name="APath">Local path of the document.</param>
       /// <param name="ALine0">0-based line.</param>
@@ -2218,6 +2239,7 @@ uses
   System.StrUtils, { LSP-1 CORE: MatchText }
   System.RegularExpressions, { 1.44 lspctx: a project file's units and declared platform }
   DRagLint.Query.Implementors, { 1.40 ifrpt: the implementors counts of draglint/callerCounts }
+  DRagLint.Query.ExceptionFacts, { D1 (wave 148): the Raises: hover line and the exception lens }
   DRagLint.Lint.MissingUses, { MISSING_USES_RULE: publish + codeAction } // dl:unit DRagLint.Lint.MissingUses accepted -- MISSING_USES_RULE is the rule id the checker reports under, so the id travels with TMissingUsesChecker
   DRagLint.Project.DefineProfile,
   DRagLint.Symbol.Describe,  // DescribeDeclaredType: the type a hover shows for a value kind
@@ -2298,6 +2320,7 @@ type
     function Definition(const APath: string; ALine0, ACol0: Integer): TJSONArray;
     function References(const APath: string; ALine0, ACol0: Integer; AIncludeDecl: Boolean): TJSONArray;
     function CallerCounts(const APath: string): TJSONArray;
+    function ExceptionLenses(const APath: string): TJSONArray;
     function HoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
     function Linter: TLinter;
     procedure Reply(const AId: TJSONValue; AResult: TJSONValue); virtual;
@@ -2366,6 +2389,11 @@ end;
 function TLspServerContextAdapter.CallerCounts(const APath: string): TJSONArray;
 begin
   Result:= FServer.ComputeCallerCounts(APath);
+end;
+
+function TLspServerContextAdapter.ExceptionLenses(const APath: string): TJSONArray;
+begin
+  Result:= FServer.ComputeExceptionLenses(APath);
 end;
 
 function TLspServerContextAdapter.HoverMarkdown(const APath: string; ALine0, ACol0: Integer): string;
@@ -2474,6 +2502,7 @@ constructor TLSPServer.Create(const ADbPaths: TArray<string>);var
   S   : ISymbolStore;
 begin
   inherited Create;
+  FExceptionFacts:= True; { D1: owner ruling, default ON }
   FStdIn:= THandleStream.Create(GetStdHandle(STD_INPUT_HANDLE));
   FLinter:= nil;
   SetLength(FStores    , 0);
@@ -4904,6 +4933,7 @@ begin
     var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
     { E-USE-EDGES-PHASE2: the property/field 'Used in:' line, same formatter as the doc block. }
     HovFactLines:= TDocRegions.FormatUsedInLines(HovFacts) + HovFactLines;
+    HovFactLines:= HovFactLines + ExceptionFactLines(HitStore, Sel); { D1: Raises:, after the doc-block facts }
     MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines,
       FormatDeclaredType(DescribeDeclaredType(Sel, HitStore)));
   end
@@ -5026,6 +5056,7 @@ begin
         var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions);
         var NdLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(NdFacts, LoadDocComplexityMin);
         NdLines:= TDocRegions.FormatUsedInLines(NdFacts) + NdLines; { E-USE-EDGES-PHASE2 }
+        NdLines:= NdLines + ExceptionFactLines(HitStore, Filtered[0]); { D1: Raises: }
         if Length(NdLines) > 0 then
         begin
           Sb.AppendLine('');
@@ -5168,6 +5199,60 @@ begin
     raise;
   end;
   SendResult(AId, Res);
+end;
+
+function TLSPServer.ExceptionFactLines(const AStore: ISymbolStore; const ASym: TSymbol): TArray<string>;
+begin
+  Result:= [];
+  if (not FExceptionFacts) or not (ASym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) then Exit;
+  var DbPath: string:= StorePathOf(AStore);
+  if DbPath = '' then Exit;
+  var Line: string:= ExceptionRaisesLine(ExceptionFactsOf(DbPath, ASym.QualifiedName, ''));
+  if Line <> '' then Result:= [Line];
+end;
+
+function TLSPServer.ComputeExceptionLenses(const APath: string): TJSONArray;
+begin
+  Result:= TJSONArray.Create;
+  if (not FExceptionFacts) or (APath = '') then Exit;
+  var DbPath: string:= '';
+  var FilePath: string:= '';
+  for var St: ISymbolStore in StoresForFile(APath) do
+  begin
+    var Fid: Int64:= St.FindFileIdByPath(APath);
+    if Fid <= 0 then Continue;
+    DbPath:= StorePathOf(St);
+    FilePath:= St.GetFilePath(Fid);
+    if DbPath <> '' then Break;
+  end;
+  if (DbPath = '') or (FilePath = '') then Exit;
+  var ByRoutine: TObjectDictionary<Integer, TList<TExceptionFact>>:= TObjectDictionary<Integer, TList<TExceptionFact>>.Create([doOwnsValues]);
+  try
+    for var F: TExceptionFact in ExceptionFactsOfFile(DbPath, FilePath) do
+    begin
+      if F.RoutineLine <= 0 then Continue;
+      var L: TList<TExceptionFact>;
+      if not ByRoutine.TryGetValue(F.RoutineLine, L) then
+      begin
+        L:= TList<TExceptionFact>.Create;
+        ByRoutine.Add(F.RoutineLine, L);
+      end;
+      L.Add(F);
+    end;
+    var Lines: TArray<Integer>:= ByRoutine.Keys.ToArray;
+    TArray.Sort<Integer>(Lines);
+    for var Ln: Integer in Lines do
+    begin
+      var Title: string:= ExceptionLensTitle(ByRoutine[Ln].ToArray);
+      if Title = '' then Continue;
+      var O: TJSONObject:= TJSONObject.Create;
+      Result.AddElement(O);
+      O.AddPair('line' , TJSONNumber.Create(Ln - 1));
+      O.AddPair('title', Title);
+    end;
+  finally
+    ByRoutine.Free;
+  end;
 end;
 
 function TLSPServer.ComputeCallerCounts(const APath: string): TJSONArray;
@@ -5711,7 +5796,7 @@ begin
       then re-parsed into the reply. Re-parsing costs a few microseconds and
       buys the guarantee that the two surfaces cannot format differently. }
     var Asm_     : THoverAssembly:= AssembleHover(Comp.Store, Comp.Sel);
-    FactLines:= Asm_.FactLines;
+    FactLines:= Asm_.FactLines + ExceptionFactLines(Comp.Store, Comp.Sel); { D1: the popup's Raises: line }
     var ModelJson: string:= DRagLint.Hover.Renderer.RenderHoverJson(Asm_.Model, FactLines);
     var ModelVal : TJSONValue := nil;
     try
