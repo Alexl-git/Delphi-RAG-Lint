@@ -90,7 +90,7 @@ type
 /// not shadowed inside (shadowed); its type has a whole chain (unresolved-ancestor), no generic form (generic-type), one
 /// meaning (ambiguous-type-name); every use is `p.m` read, written or called, or a nil test, with no `with` in the body
 /// (with-body, other-use, no-member-use); each m has a first declaring class in the chain (member-not-in-chain), is
-/// not overloaded (overloaded-member), and an index binding agrees with it (binding-mismatch); the narrow type is in scope
+/// not overloaded (overloaded-member), and an index binding agrees with it (binding-mismatch); the narrow type is not generic (generic-ancestor) and is in scope
 /// or its unit can be added without a cycle (uses-cycle).</remarks>
 function PlanNarrowParams(const pStore: ISymbolStore; const pLibraries: TArray<ISymbolStore>;  // dl:ok unused-public-symbol@a394 -- public API for the next gated rewrites (items 3 and 4) and the owed report rule
   const pOpts: TNarrowParamOptions): TNarrowPlan;
@@ -767,6 +767,13 @@ begin
       Exit;
     end;
     var Narrow:= Chain[Deepest];
+    { the chain holds an ancestor by its bare name: `TBase<T>` written as `TBase` does not compile, and the type
+      arguments the heritage gives are not carried (148 RN; found on Micronite TmcPLANLIST -> TMicObjectBase<I>) }
+    if Narrow.GenericParams <> '' then
+    begin
+      AddRefused(pR, pParam, 'generic-ancestor', Format('%s is generic: the narrow type needs the type arguments %s''s heritage gives', [Narrow.Name, Chain[Deepest - 1].Name]));
+      Exit;
+    end;
     if Length(ClassesNamed(Narrow.Name)) > 1 then
     begin
       AddRefused(pR, pParam, 'ambiguous-type-name', Format('%s names more than one class', [Narrow.Name]));

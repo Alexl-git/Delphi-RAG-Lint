@@ -33,6 +33,16 @@ type
     procedure LeafOnly;
   end;
 
+  TGenBase<T> = class(TRoot)
+  public
+    GenField: Integer;
+  end;
+
+  TGenLeaf = class(TGenBase<Integer>)
+  public
+    procedure GenLeafOnly;
+  end;
+
   ICounted = interface
     procedure Consume(pValue: TLeaf);
   end;
@@ -80,6 +90,10 @@ begin
 end;
 
 procedure TLeaf.LeafOnly;
+begin
+end;
+
+procedure TGenLeaf.GenLeafOnly;
 begin
 end;
 
