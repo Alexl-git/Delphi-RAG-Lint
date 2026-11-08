@@ -1191,4 +1191,6 @@
 #   Superseded: 1.32.0-alpha|528aeb7cc87b8ed1806b7259887e331f00b00b98a8228dfb4c66d06637543db7
 # 2026-11-07 lane 147-PRE: hash re-pinned WITHOUT a version bump after merging 146-x5 (E-INSTALLER-R2) -- src\index\Manifest + ManifestWrite gain TInstalledLayout (which manifest FILE is read and rewritten; off by default); no parse, symbol, ref or call edge changes.
 #   Superseded: 1.33.0-alpha|5c05d332cf1e502943a0298bb03536aa2ee298d6e6721b51736c079701c33a37
-1.33.0-alpha|b442941d11f971de0ce881054db103e4cc1d08e1e72469d4089dfe226fe1f81f
+# 2026-11-08 lane 147-X5P (E-INSTALLER-R2-REST phase 2): hash re-pinned WITHOUT a version bump -- src\index\Manifest + ManifestWrite gain manifest migrate, %VAR% expansion of outDir and the roaming library default (where a manifest and its DBs LIVE, all OFF unless DRAGLINT_LAYOUT=v2); no parse, symbol, ref or call edge changes.
+#   Superseded: 1.33.0-alpha|b442941d11f971de0ce881054db103e4cc1d08e1e72469d4089dfe226fe1f81f
+1.33.0-alpha|ef9265932f3260e0d6745b05627bda56d85f63741e93936bd1e61ce5de36f026
