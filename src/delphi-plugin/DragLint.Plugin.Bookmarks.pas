@@ -44,8 +44,7 @@ var
 implementation
 
 uses
-  System.Classes
-  , System.IOUtils
+  System.IOUtils
   , System.UITypes
   , Vcl.Dialogs
   , ToolsAPI
@@ -238,7 +237,7 @@ begin
     end);
 end;
 
-procedure InvokeBookmarksRestore(Sender: TObject);
+procedure InvokeBookmarksRestore(Sender: TObject);  // dl:ok too-many-exit-points@3fdf -- one Exit per refusal of a three-step flow (pick, dry run, apply); the steps are nested callbacks, so a single exit point would mean nesting each refusal
 var
   Exe : string;
   Dlg : TOpenDialog;

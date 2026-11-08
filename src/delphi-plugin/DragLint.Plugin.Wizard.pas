@@ -163,7 +163,7 @@ begin
   RegisterDragLintOptions;
   try RegisterProjectMenu; except end;
   { C12 N7: the designer right-click Convert entries (unregistered by the IDE with the package). }
-  try RegisterConvertSelectionEditor; except end;
+  RegisterConvertSelectionEditor;
   StartOpenSourceServer;
   { Register the dockable forms at STARTUP so the IDE can restore them when it
     reloads a saved desktop that had them docked. Registering only on menu click

@@ -378,7 +378,7 @@ type
 /// <returns>The path without quotes; '' when there is no --db.</returns>
 /// <remarks>Pure. lint-all passes the project DB first and the library DB second, so
 /// the first one is the project's.</remarks>
-function JobDbArg(const ACmdLine: string): string;
+function JobDbArg(const ACmdLine: string): string;  // dl:ok unused-public-symbol@a0df -- public as the test seam: tests\JobQueueDbHoldTests.dpr (outside the plugin project) pins the parse
 
 { Called ONCE per deferral episode, with a line like
     JobQueue: deferred "Refresh Findings" (key refresh-findings:c:\x.sqlite)
@@ -690,7 +690,7 @@ begin
   for I:= 0 to FPending.Count - 1 do
   begin
     J:= FPending[I];
-    if (FHeldDbs.Count = 0) or not (J.Kind in DB_HELD_KINDS)
+    if (FHeldDbs.Count = 0) or (J.Kind not in DB_HELD_KINDS)
        or (FHeldDbs.IndexOf(NormalisedDb(JobDbArg(J.CmdLine))) < 0) then Exit(I);
   end;
   Result:= -1;

@@ -102,7 +102,7 @@ function DLRenameCmdLine(const AExePath, AQName, ANewName, ADb, AFromFile: strin
 /// <remarks>Pure. The dry run exits 0 with refusals; the apply refuses with exit 2
 /// and writes nothing whenever one is printed (DRagLint.CLI FinishRename), so
 /// DoPreview enables Apply only when this is 0. Test seam: tests\RenamePreviewTests.dpr.</remarks>
-function DLRenamePreviewRefusals(const AOutput: string): Integer;
+function DLRenamePreviewRefusals(const AOutput: string): Integer;  // dl:ok unused-public-symbol@6a7e -- public as the test seam: tests\RenamePreviewTests.dpr (outside the plugin project) drives it
 
 /// <summary>Reads the symbol the typeat verb resolved from its JSON answer.</summary>
 /// <param name="AOutput">Captured text of `typeat ... --format json` (stderr may
@@ -302,7 +302,7 @@ const
 begin
   Result:= 0;
   for var Line in AOutput.Split([#10]) do
-    if Line.TrimLeft.StartsWith(NOTE_PREFIX) and (Pos(REFUSED_TAG, Line) > 0) then Inc(Result);
+    if Line.TrimLeft.StartsWith(NOTE_PREFIX) and Line.Contains(REFUSED_TAG) then Inc(Result);
 end;
 
 function TRefactorHandler.RenameCmdLine(ADryRun: Boolean): string;

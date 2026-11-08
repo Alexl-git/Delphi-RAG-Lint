@@ -217,10 +217,8 @@ end;
 
 function BookmarkRowText(const ARow: TBookmarkRow): string;
 begin
-  if SameText(ARow.Kind, KIND_TAGGED) then
-    Result:= Format('bk:%s  line %d', [ARow.Code, ARow.Line])
-  else
-    Result:= Format('bk%s  line %d', [ARow.Code, ARow.Line]);
+  Result:= if SameText(ARow.Kind, KIND_TAGGED) then Format('bk:%s  line %d', [ARow.Code, ARow.Line])
+           else Format('bk%s  line %d', [ARow.Code, ARow.Line]);
   if ARow.Reason <> '' then Result:= Result + '  -- ' + ARow.Reason;
 end;
 
