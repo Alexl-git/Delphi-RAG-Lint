@@ -31,15 +31,15 @@
     {
       "type": "cli",
       "verb": "bookmarks-strip",
-      "example": "drag-lint bookmarks-strip --in <file.pas|dir> --out <sidecar.json> [--name <code>] [--apply] [--json]",
-      "usage": "drag-lint bookmarks-strip --in <file.pas|dir> --out <sidecar.json> [--name <code>] [--apply] [--json] (removes the dl:bk comment anchors and records them in a sidecar for bookmarks-restore; dry run without --apply; never overwrites a sidecar; exit 3 = none)",
+      "example": "drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json]",
+      "usage": "drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json] (removes the dl:bk comment anchors and records them in a sidecar for bookmarks-restore; dry run without --apply; never overwrites a sidecar; exit 3 = none)",
       "flags": [
         {
           "name": "--in",
           "arg": "<file.pas|dir>"
         },
         {
-          "name": "--out",
+          "name": "--output",
           "arg": "<sidecar.json>"
         },
         {
@@ -75,9 +75,9 @@
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "by": "ENGINE",
     "build": "1.46.0-alpha",
-    "surfaceHash": "12ec1cf485a59f42b29a1cf39d98e9b6edf664414ac87b8a716c6e81f18ca3c8"
+    "surfaceHash": "917e0439bbf7557eb00f25f900e59ed11de7687c219baf6000ada1b62aabb066"
   }
 }
