@@ -4394,7 +4394,7 @@ var
   { E-RENAME-RESIDUE: Delphi's own tie-break among two or more in-scope types of a name, or 0. A candidate counts
     only as a TOP-LEVEL type (its qualified name is its unit's name, a dot, its name): a nested one is visible by
     its bare name only inside its class, and where the text sits is not known here. }
-  function PickShadowingType(ACands: TList<TSymbol>; AFile: Int64; const AQual: string): Int64;
+  function PickShadowingType(ACands: TList<TSymbol>; AFile: Int64; const AQual: string): Int64; // dl:ok too-many-exit-points@0600 -- REVIEWED 2026-11-07 (lane 147-B5): each Exit is one of the three Delphi tie-break rules deciding, or one of its declines (nested candidate, duplicate qualifier match, implementation-section own type, unit missing from or split across the uses sections); a flag-and-fall-through rewrite would hide which rule answered.
   var
     Picked  : TList<TSymbol>;
     BestLine, BestCol: Integer;
