@@ -23,6 +23,11 @@ drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup] [--db PAT
 
 Generates/repairs a managed DocInsight comment for that one qualified name.
 
+On a property or field with resolved uses the managed block says where it is
+used, with the access mode: `Used in: uCons.TConsumer.Go (uCons.pas) [rw]`. That
+line replaces the name-matched `Used by:` (wave 147, on by default); with no
+resolved use the `Used by:` line is written as before.
+
 ## What it needs
 
 Optional, per the feature map's Index column.

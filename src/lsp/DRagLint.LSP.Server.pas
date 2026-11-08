@@ -4900,6 +4900,8 @@ begin
     // mirroring a default `document` run.
     var HovFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Sel, LoadDocHandlesOptions); { gap 3: the SAME 'Catches:' knob document writes with }
     var HovFactLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(HovFacts, LoadDocComplexityMin);
+    { E-USE-EDGES-PHASE2: the property/field 'Used in:' line, same formatter as the doc block. }
+    HovFactLines:= TDocRegions.FormatUsedInLines(HovFacts) + HovFactLines;
     MdValue:= DRagLint.Hover.Renderer.RenderHoverMarkdown(Sel, Doc, HovRhs, HovFactLines,
       FormatDeclaredType(DescribeDeclaredType(Sel, HitStore)));
   end
@@ -5021,6 +5023,7 @@ begin
       begin
         var NdFacts: TDocFacts:= TDocFactsBuilder.Build(HitStore, Filtered[0], LoadDocHandlesOptions);
         var NdLines: TArray<string>:= TDocRegions.FormatPhase2FactLines(NdFacts, LoadDocComplexityMin);
+        NdLines:= TDocRegions.FormatUsedInLines(NdFacts) + NdLines; { E-USE-EDGES-PHASE2 }
         if Length(NdLines) > 0 then
         begin
           Sb.AppendLine('');

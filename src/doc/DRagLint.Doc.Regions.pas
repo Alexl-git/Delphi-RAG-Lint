@@ -588,6 +588,22 @@ type
     /// </remarks>
     class function FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;
       AHasOtherContent: Boolean = True): TArray<string>;
+    /// <summary>The 'Used in:' fact line of a property or field (zero or one
+    /// line): its resolved uses, 'Routine (file.pas) [r|w|rw]' per entry,
+    /// XML-escaped.</summary>
+    /// <param name="AFacts">Facts from TDocFactsBuilder.Build; only UsedIn and
+    /// UsedInSitesTotal are read.</param>
+    /// <returns>One line 'Used in: ...' (with '(+N more)' past the cap), or an
+    /// empty array when AFacts.UsedIn is empty -- the FormatPhase2FactLines
+    /// shape, so a caller prepends or appends it the same way.</returns>
+    /// <remarks>E-USE-EDGES-PHASE2 (owner ruling 2026-11-08: default ON). ONE
+    /// formatter for every surface: RenderFactsBlock writes it in place of
+    /// 'Used by:', and the hover assembly (CLI md/json, LSP hover and
+    /// hoverBundle) appends it to its fact lines -- so the doc block and the
+    /// popup cannot disagree. Entries are sorted with
+    /// TSharedFacts.CompareInboundEntries, after the cap, like every inbound
+    /// list. Guard: tests\autotest\run_used_in_render.ps1.</remarks>
+    class function FormatUsedInLines(const AFacts: TDocFacts): TArray<string>;
     /// <summary>Produces the full merged DocInsight comment text (///-prefixed
     /// lines joined by CRLF): preserved hand-written prose + a regenerated
     /// managed facts block (fenced inside remarks) + managed param/summary/
@@ -2637,6 +2653,33 @@ begin
   end;
 end;
 
+class function TDocRegions.FormatUsedInLines(const AFacts: TDocFacts): TArray<string>;
+var
+  Rendered: TArray<string>;
+  Lines   : TList<string>;
+begin
+  Result:= nil;
+  if Length(AFacts.UsedIn) = 0 then Exit;
+  SetLength(Rendered, Length(AFacts.UsedIn));
+  for var I:= 0 to High(AFacts.UsedIn) do
+    Rendered[I]:= EscXml(AFacts.UsedIn[I].Display) + ' (' + EscXml(AFacts.UsedIn[I].Location) + ') [' +
+                  AFacts.UsedIn[I].Mode + ']';
+  TArray.Sort<string>(Rendered, TComparer<string>.Construct(
+    function(const X, Y: string): Integer
+    begin
+      Result:= TSharedFacts.CompareInboundEntries(X, Y);
+    end));
+  Lines:= TList<string>.Create;
+  try
+    Lines.Add('Used in: ' + string.Join(', ', Rendered) +
+              (if AFacts.UsedInSitesTotal > Length(AFacts.UsedIn)
+                 then Format(' (+%d more)', [AFacts.UsedInSitesTotal - Length(AFacts.UsedIn)]) else ''));
+    Result:= Lines.ToArray;
+  finally
+    Lines.Free;
+  end;
+end;
+
 class function TDocRegions.RenderFactsBlock(const AFacts: TDocFacts; const APrefix: string;
   AIncludeReturns: Boolean = False; AComplexityMin: Integer = 10): string;
 var
@@ -2818,8 +2861,14 @@ begin
       var RefVerb: string;
       if CanBeCallTarget(AFacts.SymbolKind) then RefVerb:= 'Called from: '
       else RefVerb:= 'Used by: ';
-      AppendFact(RefVerb + JoinRefs(AFacts.CalledFrom) + MoreSuffix(Length(AFacts.CalledFrom), AFacts.CalledFromTotal));
+      // E-USE-EDGES-PHASE2: a property/field with RESOLVED uses says so with
+      // modes, and the name-matched list is not rendered beside it (a resolved
+      // list must not be diluted with guesses -- spec 2026-09-14 sec 8.1).
+      if Length(AFacts.UsedIn) = 0 then
+        AppendFact(RefVerb + JoinRefs(AFacts.CalledFrom) + MoreSuffix(Length(AFacts.CalledFrom), AFacts.CalledFromTotal));
     end;
+    for var UsedInLine in FormatUsedInLines(AFacts) do
+      AppendFact(UsedInLine);
     if Length(AFacts.Calls) > 0 then
       AppendFact('Calls: ' + JoinEsc(AFacts.Calls) + MoreSuffix(Length(AFacts.Calls), AFacts.CallsTotal));
     // Mined Result:=/Exit() return cases as a FACT line -- emitted ONLY when the

@@ -48,12 +48,16 @@
     {
       "ask": "How do I add or repair a doc comment on just one declaration?",
       "command": "drag-lint document --qname <Foo.TBar.Baz> --apply"
+    },
+    {
+      "ask": "What does the managed block say about where a property or field is used?",
+      "command": "drag-lint document --qname <Unit.TFoo.Prop> --apply   (writes Used in: Routine (file.pas) [r|w|rw] in place of Used by:)"
     }
   ],
   "verified": {
-    "date": "2026-10-21",
+    "date": "2026-11-08",
     "by": "ENGINE",
-    "build": "1.33.0-alpha",
-    "surfaceHash": "ce9006423b4e73d27870db7f5d6a7c21c1ce666f93b55fb6e31fdb7fd1a2994c"
+    "build": "1.46.0-alpha",
+    "surfaceHash": "ac4838ac360a28ffef7cf43933580ae9ced66a7baf8a96d658e73bf1170938d7"
   }
 }

@@ -28,7 +28,9 @@
              -- three of them under or after a `with` (merge of D13 with D14)
     check 2  NEG-*: five writes stay NULL (ambiguous, not found, a `with`
              target that cannot be typed, Result, own name)
-    check 3  no write ref owns a call_edges or member_accesses row
+    check 3  a write bound to a property/field owns ONE member_accesses row
+             (mode write; + the call edge of a method setter, wave 147); every
+             other write owns neither row
     check 4  the calls-stage `writes:` log line, every counter pinned
     check 5  SCOPED re-index: a second exported GShared in uWriteLib2 (a file
              the use unit does not change) UNBINDS W-USED-UNIT and leaves the
@@ -133,10 +135,20 @@ try {
     Check ("check 2  {0}: write {1} stays unbound" -f $n.M, $n.N) $ok $det
   }
 
-  # --- check 3: identity only -----------------------------------------------------
-  $extra = @(Sql ("SELECT r.id FROM refs r WHERE r.kind = 'write' AND (EXISTS (SELECT 1 FROM call_edges ce WHERE ce.ref_id = r.id) " +
-                  "OR EXISTS (SELECT 1 FROM member_accesses ma WHERE ma.ref_id = r.id))") | Where-Object { $_ })
-  Check 'check 3  no write ref owns a call_edges or member_accesses row' ($extra.Count -eq 0) "rows=$($extra.Count)"
+  # --- check 3: identity only, except a property/field use (E-USE-EDGES-PHASE2) ----
+  # Wave 147: a write bound to a PROPERTY or FIELD owns its member_accesses row
+  # (mode 'write', member = the bound symbol) and, for a method setter only, the
+  # call edge to that setter. Every other write stays identity only.
+  $extra = @(Sql ("SELECT r.id FROM refs r LEFT JOIN symbols s ON s.id = r.symbol_id WHERE r.kind = 'write' AND (" +
+                  "(COALESCE(s.kind, '') NOT IN ('property', 'field') AND (EXISTS (SELECT 1 FROM call_edges ce WHERE ce.ref_id = r.id) " +
+                  "OR EXISTS (SELECT 1 FROM member_accesses ma WHERE ma.ref_id = r.id))) " +
+                  "OR EXISTS (SELECT 1 FROM member_accesses ma WHERE ma.ref_id = r.id AND (ma.mode <> 'write' OR ma.member_symbol_id <> r.symbol_id)) " +
+                  "OR EXISTS (SELECT 1 FROM call_edges ce WHERE ce.ref_id = r.id AND NOT EXISTS (SELECT 1 FROM member_accesses ma " +
+                  "WHERE ma.ref_id = r.id AND ma.accessor_kind = 'method' AND ma.accessor_symbol_id = ce.target_symbol_id)))") | Where-Object { $_ })
+  Check 'check 3a no non-member write owns a row; member rows are mode write on the bound symbol' ($extra.Count -eq 0) "rows=$($extra.Count)"
+  $uses = @(Sql ("SELECT r.id FROM refs r JOIN symbols s ON s.id = r.symbol_id WHERE r.kind = 'write' AND s.kind IN ('property', 'field') " +
+                 "AND NOT EXISTS (SELECT 1 FROM member_accesses ma WHERE ma.ref_id = r.id)") | Where-Object { $_ })
+  Check 'check 3b every write bound to a property/field owns its member_accesses row' ($uses.Count -eq 0) "rows=$($uses.Count)"
 
   # --- check 4: the log line ------------------------------------------------------
   $line = @($log1 -split "`n" | Where-Object { $_ -match 'calls\s+writes:' }) -join ' | '

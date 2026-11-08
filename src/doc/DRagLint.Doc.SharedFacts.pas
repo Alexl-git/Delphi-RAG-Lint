@@ -555,7 +555,7 @@ uses
   ;
 
 const
-  { INBOUND_LABELS -- the four labels whose entries depend on WHICH project is
+  { INBOUND_LABELS -- the labels whose entries depend on WHICH project is
     looking -- moved to DRagLint.Doc.ProjectTags with the tag grammar (2026-09-23),
     together with the history of why 'Used in units:' belongs in it. }
 
@@ -650,8 +650,10 @@ const
     KeepUsedInClasses writes and keeps it; BlockDrifted takes it out of the
     stored side (WithoutUsedInClasses). Registered so an unwrapped inbound fact
     before it is bounded. }
-  ALL_LABELS: array[0..31] of string = (
-    'Called from:', 'Used by:', 'Calls:', 'Returns:', 'Used in units:',
+  { E-USE-EDGES-PHASE2 (wave 147): 'Used in:' -- the resolved uses of a
+    property / field, rendered in place of 'Used by:' (FormatUsedInLine). }
+  ALL_LABELS: array[0..32] of string = (
+    'Called from:', 'Used by:', 'Used in:', 'Calls:', 'Returns:', 'Used in units:',
     'Used in classes:',
     'Complexity:', 'Owns returned:', 'Handles:', 'Catches:', 'SQL:', 'Covered by:',
     'Mutates:', 'Touches:', 'Transaction:', 'Registered as:', 'Dataset:',

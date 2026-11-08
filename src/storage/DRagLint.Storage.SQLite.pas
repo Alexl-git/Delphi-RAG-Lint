@@ -735,9 +735,14 @@ type
       /// <param name="ACandidates">Out: write rows offered to the resolver.</param>
       /// <param name="ABound">Out: rows whose symbol_id was set.</param>
       /// <remarks>
-      /// IDENTITY ONLY: no call_edges row and no member_accesses row -- a bare
-      /// write is not a call, and member_accesses stays the record of DOTTED
-      /// accesses that who-writes / find-callers already read. Runs inside
+      /// A PROPERTY or FIELD target (E-USE-EDGES-PHASE2, 2026-11-07) also gets
+      /// its use edge, exactly as a dotted write and a bare read do: a
+      /// member_accesses row, mode 'write', with the property's write accessor,
+      /// and a call_edges row when that accessor is a method (the setter IS
+      /// called). Every other target (local, parameter, var, const, class var)
+      /// stays IDENTITY ONLY: refs.symbol_id, no row in either table. The rows
+      /// are cleared by ResolveCallTargets' scoped/stale/whole DELETE that runs
+      /// before every stream. ABound counts both shapes. Runs inside
       /// ResolveCallTargets' transaction. NULLs refs.symbol_id over the write
       /// rows in scope before rebuilding, for the reason ResolveEnumValueRefs
       /// gives: on a SCOPED run a write that now declines would otherwise keep a
@@ -15844,7 +15849,7 @@ var
   Q      : TFDQuery  ;
   Ref    : TReference;
   Reason : string    ;
-  Id     : Int64     ;
+  Edge   : TCallEdge ;
   FldId  : TField    ;
   FldFile: TField    ;
   FldName: TField    ;
@@ -15882,10 +15887,18 @@ begin
       Ref.StartCol := FldCol .AsInteger;
       { Every decline is counted by reason inside the resolver (WriteStats) and
         printed on the stage's log line -- a decline writes nothing. }
-      Id:= AResolver.ResolveWriteRef(Ref, Reason);
-      if Id > 0 then
+      { E-USE-EDGES-PHASE2: a property/field target also records its use --
+        member_accesses mode 'write' (+ the setter's call edge), the row a
+        dotted write already owns; anything else stays identity only. }
+      Edge:= AResolver.ResolveWriteEdge(Ref, Reason);
+      if Edge.MemberMode <> '' then
       begin
-        FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Id;
+        WriteMemberAccess(Ref.Id, Edge);
+        Inc(ABound);
+      end
+      else if Edge.TargetSymbolId > 0 then
+      begin
+        FQSetRefSymbol.ParamByName('sid').AsLargeInt:= Edge.TargetSymbolId;
         FQSetRefSymbol.ParamByName('rid').AsLargeInt:= Ref.Id;
         FQSetRefSymbol.ExecSQL;
         Inc(ABound);
