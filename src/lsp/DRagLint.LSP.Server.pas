@@ -5204,7 +5204,7 @@ end;
 function TLSPServer.ExceptionFactLines(const AStore: ISymbolStore; const ASym: TSymbol): TArray<string>;
 begin
   Result:= [];
-  if (not FExceptionFacts) or not (ASym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) then Exit;
+  if (not FExceptionFacts) or (ASym.Kind not in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) then Exit;
   var DbPath: string:= StorePathOf(AStore);
   if DbPath = '' then Exit;
   var Line: string:= ExceptionRaisesLine(ExceptionFactsOf(DbPath, ASym.QualifiedName, ''));
