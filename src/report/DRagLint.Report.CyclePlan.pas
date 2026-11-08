@@ -6045,12 +6045,16 @@ begin
     'implementation-only cycle that may remain.');
   Emit('');
   RenderDone(True);
+  var W:= TStopwatch.StartNew;  { lane 148 CY: DRAGLINT_CYCLE_TIMING sub-stages of the render }
   RenderMoves(CStepMoves);
   RenderDecisions(CStepUses);
   RenderLeafUnits(CStepCreate);
   RenderEdits(CStepEdit);
+  PlanStage('RenderIntfCycle moves/decisions/leaves/edits', W);
   RenderChecklist(pPlan.CycleIndex - 1);
+  PlanStage('RenderIntfCycle checklist', W);
   RenderPartB;
+  PlanStage('RenderIntfCycle RenderPartB', W);
 end;
 
 { E18 T7 R3: every edge of the cycle with the recipe that applies to it, or the
