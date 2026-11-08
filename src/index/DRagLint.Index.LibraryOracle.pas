@@ -485,7 +485,7 @@ end;
 function TLibraryOracle.NamesVisibleType(const AText, ALeaf: string; const AUses: TArray<string>): Boolean;
 begin
   Result:= False;
-  var Generic: Boolean:= Pos('<', AText) > 0;
+  var Generic: Boolean:= AText.Contains('<');
   for var C: TLibCand in VisibleOf(Cached(FTypes, ALeaf, TYPE_KINDS, True), AUses) do
     if not Generic or (FStores[C.Store].GetSymbolById(C.Ids[0]).GenericParams <> '') then Exit(True);
 end;

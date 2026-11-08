@@ -434,6 +434,16 @@ begin
   Result:= AOracle.Bind(TypeText, Pending, ARef.NameText, ekCall, UsedUnits, Reason);
 end; // function
 
+{ D08 / D10 (owner ruling 2026-11-08): the stored external target, named for what it is when
+  it is not a library routine -- X (built-in) for a compiler intrinsic, X (event) for an
+  event property the call fires. '' when the ref has no stored target. }
+function LabelledExternalTarget(const ARef: TReference): string;
+begin
+  Result:= ARef.ExternalTarget;
+  if Result = '' then Exit;
+  if ARef.ExternalKind = EXTERNAL_KIND_INTRINSIC then Result:= Format('%s (built-in)', [ARef.ExternalTarget])
+  else if ARef.ExternalKind = EXTERNAL_KIND_INDIRECT then Result:= Format('%s (event)', [ARef.ExternalTarget]);
+end;
 { Library calls (item 4 / C3, RSV-R2): one query per target id, counted from the stored
   external_target and, when AOracle is set, from calls the oracle binds now; with
   neither, a project indexed without a library gets count 0 and the line stays out of the bundle. ACount is incremented (the
@@ -456,10 +466,7 @@ begin
       for var TId: Int64 in ATargetIds do
         for var LR: TReference in AStore.GetUnresolvedCallsFromSymbol(TId) do
         begin
-          var Target: string:= LR.ExternalTarget;
-          { D08 / D10 (owner ruling 2026-11-08): name what is not a library routine. }
-          if (Target <> '') and (LR.ExternalKind = EXTERNAL_KIND_INTRINSIC) then Target:= Target + ' (built-in)'
-          else if (Target <> '') and (LR.ExternalKind = EXTERNAL_KIND_INDIRECT) then Target:= Target + ' (event)';
+          var Target: string:= LabelledExternalTarget(LR);
           if Target <> '' then AVia:= (if AVia = '' then 'stored' else AVia)
           else
           begin
