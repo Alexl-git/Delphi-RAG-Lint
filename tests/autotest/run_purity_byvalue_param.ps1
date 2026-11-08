@@ -28,7 +28,7 @@ param(
   [string]$WorkDir = "C:\TEMP\draglint_purity_byvalue_$PID"
 )
 try {
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'   # engine stderr banner under PS5 is not an error (GD 148, per R3); every step below checks its own result
 $script:fail = $false
 function Check($n,$ok,$d){
   Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int][bool]$ok]),$n) -ForegroundColor (@('Red','Green')[[int][bool]$ok])

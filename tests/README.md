@@ -7,6 +7,8 @@
 That is the whole definition. It is enumerated dynamically by
 [`tests/run_battery.ps1`](run_battery.ps1); there is no list to keep in sync.
 
+**Guards run under pwsh 7** (pwsh -File ...), not Windows PowerShell 5: the engine prints a stderr banner that PS5 turns into a terminating error under $ErrorActionPreference = Stop. un_battery.ps1 refuses to start under PS5 (exit 2).
+
 ```
 pwsh -File tests\run_battery.ps1                    # the battery (default: everything, serial)
 pwsh -File tests\run_battery.ps1 -List              # enumerate only, run nothing
