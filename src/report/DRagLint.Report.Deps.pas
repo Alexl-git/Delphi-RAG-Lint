@@ -392,7 +392,7 @@ begin
       QFiles:= TFDQuery.Create(nil);
       try
         QFiles.Connection:= SQLiteStore.GetConnection;
-        QFiles.Sql.Text:= 'SELECT id, path FROM files WHERE language NOT IN (''dfm'', ''json'', ''text'')';
+        QFiles.Sql.Text:= 'SELECT id, path FROM files WHERE language NOT IN (''dfm'', ''json'', ''text'', ''markdown'')';
         QFiles.Open;
         while not QFiles.Eof do
         begin

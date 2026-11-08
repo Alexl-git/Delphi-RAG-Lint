@@ -86,6 +86,8 @@ uses
   DRagLint.Parser.SpringDI in '..\parser\DRagLint.Parser.SpringDI.pas',
   DRagLint.Parser.DFM in '..\parser\DRagLint.Parser.DFM.pas',
   DRagLint.Parser.Sql in '..\parser\DRagLint.Parser.Sql.pas',
+  DRagLint.Parser.Markdown in '..\parser\DRagLint.Parser.Markdown.pas',
+  DRagLint.Query.TextNodes in '..\query\DRagLint.Query.TextNodes.pas',
   DRagLint.Sql.FbSnapshot in '..\sql\DRagLint.Sql.FbSnapshot.pas',
   DRagLint.Sql.OrmLinker in '..\sql\DRagLint.Sql.OrmLinker.pas',
   DRagLint.Sql.Guarded in '..\sql\DRagLint.Sql.Guarded.pas',
