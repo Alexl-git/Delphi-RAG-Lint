@@ -2915,9 +2915,26 @@ var
   var
     S, L: string;
     C   : TTypeCategory;
+
+    { RF 2026-11-08 (146 t3): the component-library prefixes are lower-case after the T
+      (TcxGrid, TdxBarManager, TfrmMain, TdlgFoo), so `S[2] in A..Z` never saw them. A short
+      lower-case run (1..4) followed by an upper-case letter is the same shape; plain
+      lower-case words (Trim, Trunc, Time) and the Try* routines have no such capital. }
+    function LowerPrefixedClass: Boolean;
+    const
+      FIRST_PREFIX_CHAR = 2; { after the T }
+      LAST_CAPITAL_AT   = 6; { 1..4 lower-case letters, then the capital }
+    var
+      I: Integer;
+    begin
+      I:= FIRST_PREFIX_CHAR;
+      while (I <= Length(S)) and CharInSet(S[I], ['a'..'z']) do Inc(I);
+      Result:= (I > FIRST_PREFIX_CHAR) and (I <= LAST_CAPITAL_AT) and (I <= Length(S)) and CharInSet(S[I], ['A'..'Z'])
+               and not SameText(Copy(S, 1, 3), 'Try');
+    end;
   begin
     S:= Trim(T);
-    Result:= (Length(S) >= 2) and (S[1] = 'T') and (S[2] >= 'A') and (S[2] <= 'Z');
+    Result:= (Length(S) >= 2) and (S[1] = 'T') and (CharInSet(S[2], ['A'..'Z']) or LowerPrefixedClass);
     if not Result then Exit;
     C:= CatOf(S);
     if C <> tcUnknown then begin Result:= (C = tcClass); Exit; end;

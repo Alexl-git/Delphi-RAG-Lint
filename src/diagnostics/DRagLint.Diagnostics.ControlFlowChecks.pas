@@ -295,7 +295,7 @@ begin
 end;
 
 { True when the code under N may change one of ANames: assignment, for-loop variable,
-  foreach variable, address-of, with / asm, or (AStrictCalls) handing the name to a call
+  foreach variable, address-of, asm, or (AStrictCalls) handing the name to a call
   whose callee is not a known read-only RTL routine (a possible var / out argument). }
 function TCfRun.BodyModifies(const N: TTSNode; ANames: TDictionary<string, Boolean>; AStrictCalls: Boolean): Boolean;  // dl:ok too-many-exit-points@ac76 -- REVIEWED 2026-10-27: early-out guards of a recursive tree search; a single exit would nest every guard
 var
@@ -308,7 +308,10 @@ begin
   Result:= False;
   if N.IsNull then Exit;
   T:= N.NodeType;
-  if (T = 'with') or (T = 'asm') then Exit(True);
+  { A with is NOT a modification by itself (RF 2026-11-08, uStyles.pas:506): the names tracked here are
+    plain locals, which a with-target cannot reach without the body naming them; the walk below sees
+    an assignment / Inc / var-argument inside the with body like any other. asm stays opaque. }
+  if T = 'asm' then Exit(True);
   if T = 'assignment' then
   begin
     if ANames.ContainsKey(RootIdent(N.ChildByField('lhs'))) then Exit(True);
