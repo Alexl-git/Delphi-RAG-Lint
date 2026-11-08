@@ -7856,7 +7856,15 @@ var
 begin
   Result:= 0;
   AText := Default(TRcvTypeText); { item 4: '' for bare / Self / with-typed / untyped }
-  if ACallRef.EnclosingSymbolId <= 0 then Exit; // no enclosing routine -> give up
+  if ACallRef.EnclosingSymbolId <= 0 then
+  begin
+    { No enclosing routine -> no project rung can type the receiver. A program's main
+      block is such a place (`Application.Run` in the .dpr): offer the head to the library
+      oracle exactly as the fall-through at the end does. BindExternally still declines a
+      head that names a project type or unit-level value, so nothing local is overridden. }
+    if (AReceiverExpr <> '') and not SameText(AReceiverExpr, 'inherited') then AText.Head:= AReceiverExpr;
+    Exit;
+  end;
   Encl:= SymbolById(ACallRef.EnclosingSymbolId);
 
   // --- Kind 13 (E-PARSER-NOREFS): `inherited M`, whose parse fact is the receiver
