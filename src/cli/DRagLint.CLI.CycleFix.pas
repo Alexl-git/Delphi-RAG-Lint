@@ -34,7 +34,7 @@ type
     Project: string;
     /// <summary>--db: the index of that project.</summary>
     Db: string;
-    /// <summary>--platform, '' = win64; only echoed in the JSON.</summary>
+    /// <summary>--platform; '' = the project's active Platform, else win32 (ruling a3; RunCycleFix resolves it).</summary>
     Platform: string;
     /// <summary>--apply: write the chosen group's plan into the project (Task 11); with --part all, loop until the group is gone (Task 12).</summary>
     Apply: Boolean;
@@ -431,6 +431,7 @@ uses
   DRagLint.Core.FileTime,
   System.Classes, System.IOUtils, System.JSON, System.DateUtils, System.Hash,
   System.StrUtils, System.RegularExpressions, System.Diagnostics, System.Math, Winapi.Windows,
+  DRagLint.CLI.LibraryReady,    // PlatformOfDproj: the project's active Platform (ruling a3)
   DRagLint.Core.ControlChannel, // lane X-BT: the stand-down request (Cancel) the run listens for
   DRagLint.Core.Model;          // DRAGLINT_VERSION / DRAGLINT_EXTRACTOR_VERSION, what the channel's `status` reports
 
@@ -438,7 +439,7 @@ const
   CExitMechanical = 0;
   CExitRefused    = 1;
   CExitError      = 2;
-  CDefaultPlatform = 'win64';
+  CNoPlatform      = 'win32';  // ruling a3: neither --platform nor the project names one (Delphi 7 / 2007..XE)
   CSchema          = 'cycle-fix/1';
   CNeedsProject    = 'cycles --fix needs --project <X.dproj>';
   CVerdictOk       = 'Verdict: mechanical (dry run; add --apply to write)';
@@ -1590,6 +1591,15 @@ end;
 
 // A refusal of the whole run before any group is planned (dirty-baseline, no-compiler): exit 1,
 // nothing staged. JSON: the top-level `refusals` and `baseline`, `cycles` empty.
+// The platform the run builds for, lowercase: --platform, else the project's active Platform
+// (PlatformOfDproj), else win32 -- owner ruling a3 (L-C20). Idempotent on a resolved pOpts.
+function CycleFixPlatform(const pOpts: TCycleFixOptions): string;
+begin
+  Result:= pOpts.Platform;
+  if Result = '' then Result:= PlatformOfDproj(pOpts.Project);
+  Result:= if Result = '' then CNoPlatform else LowerCase(Result);
+end;
+
 // A cycle-fix/1 document holding the run's header pairs: schema, mode, project, db, platform.
 function NewRunDoc(const pOpts: TCycleFixOptions): TJSONObject;
 begin
@@ -1598,7 +1608,7 @@ begin
   Result.AddPair('mode', if pOpts.Apply then 'apply' else 'dry-run');
   Result.AddPair('project', pOpts.Project);
   Result.AddPair('db', pOpts.Db);
-  Result.AddPair('platform', if pOpts.Platform = '' then CDefaultPlatform else LowerCase(pOpts.Platform));
+  Result.AddPair('platform', CycleFixPlatform(pOpts));
 end;
 
 procedure ReportGateRefusal(const pOpts: TCycleFixOptions; const pGate: TGateReport; const pRefusal: TRefusal);
@@ -2564,24 +2574,26 @@ function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
 begin
   Result:= CExitError; { the exit code the kept-scratch note prints when an exception leaves this code }
-  var Ctl:= StartStandDownChannel(pOpts);
+  var Opts: TCycleFixOptions:= pOpts;
+  Opts.Platform:= CycleFixPlatform(pOpts); { ruling a3: every build, child run and JSON echo use ONE platform }
+  var Ctl:= StartStandDownChannel(Opts);
   GStandDown  := Ctl;
   GCancelTaken:= False;
-  GProgressDb := ExpandFileName(pOpts.Db);
+  GProgressDb := ExpandFileName(Opts.Db);
   try
     try
-      if RerunAfterReindex(pOpts, pStore, Result) then Exit;
+      if RerunAfterReindex(Opts, pStore, Result) then Exit;
       try
-        if SameText(pOpts.Part, CPartAll) then Result:= RunAllSelected(pOpts, pSccs, pGraph)
-        else Result:= RunCycleFixGroups(pOpts, pStore, pSccs, pGraph, pLibStore);
+        Result:= if SameText(Opts.Part, CPartAll) then RunAllSelected(Opts, pSccs, pGraph)
+                 else RunCycleFixGroups(Opts, pStore, pSccs, pGraph, pLibStore);
       finally
-        DeleteDefaultScratch(pOpts, Result);
+        DeleteDefaultScratch(Opts, Result);
       end;
     except
       on ECycleFixCancelled do
       begin
         { taken before WriteAll (ApplyGroup handles every later one): the project was not touched }
-        ReportCancelledBeforeWrite(pOpts);
+        ReportCancelledBeforeWrite(Opts);
         Result:= CExitRefused;
       end;
     end;

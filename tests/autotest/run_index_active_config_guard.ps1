@@ -14,7 +14,7 @@
                         two counts SWAP (POSITIVE CONTROL: the limb drives a re-parse)
     d  --build-config Debug on the Release-marked .dproj -> (a) again, limb cfg=debug
     e  FOLDER db (no .dproj) -> fingerprint has NO cfg= limb and is exactly
-                        v=<ver>;schema=<n>;pp=1;plat=win64   (libraries untouched)
+                        v=<ver>;schema=<n>;pp=1;plat=win32   (no platform named -> Win32, ruling a3)
     f  marker-less .dproj + App.delphilsp.json (-DMYFEATURE, dcc64) -> OnlyInDebug=1,
                         source=delphilsp, limb is the LITERAL ;cfg=<json>;defs=<8hex>
     g  a .dproj defines edit changes defs= and re-parses (same config name)
@@ -124,7 +124,7 @@ Check 'd same fingerprint as a' ($fp -eq $fpDebug)
 $FDb = "$WorkDir\folder\folder.sqlite"
 & $Exe index "$WorkDir\folder" --db $FDb 2>&1 | Out-Null
 $ffp = Fp $FDb
-Check 'e folder fingerprint has NO cfg limb' ($ffp -match '^v=[^;]+;schema=\d+;pp=1;plat=win64$') $ffp
+Check 'e folder fingerprint has NO cfg limb' ($ffp -match '^v=[^;]+;schema=\d+;pp=1;plat=win32$') $ffp
 
 # ---- f: marker-less .dproj + delphilsp.json -> literal cfg=<json> ----
 New-Dproj $Dproj 'Debug' $false

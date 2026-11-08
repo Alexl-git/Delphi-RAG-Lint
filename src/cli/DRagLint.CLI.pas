@@ -3103,8 +3103,13 @@ end;
 /// <summary>The platform token an index run PREPROCESSES against, resolved from
 /// a possibly-empty section/CLI token.</summary>
 /// <param name="APlatform">Raw token: a section's Platform (empty for
-/// folder/closure sections) or --platform. '' resolves to Win64.</param>
-/// <returns>A non-empty platform token; never ''.</returns>
+/// folder/closure sections) or --platform. A non-empty token always wins.</param>
+/// <param name="ADproj">The project file (.dproj, or a .dpr mapped to its sibling .dproj) whose
+/// active Platform decides when APlatform is ''; '' = no project.</param>
+/// <returns>A non-empty platform token; never ''. Owner ruling a3 (L-C20): APlatform, else the
+/// project's active Platform (PlatformOfDproj; for a marker-less .dproj the platform its
+/// &lt;project&gt;.delphilsp.json names), else Win32 -- a project that names no platform
+/// (Delphi 7 has no .dproj; Delphi 2007..XE .dproj files carry no Win32/Win64 token) is Win32.</returns>
 /// <remarks>
 /// ONE definition of the default, because two callers deriving it separately is
 /// precisely the defect this closes (INBOX-indexer-fingerprint-disagrees-between-
@@ -3117,30 +3122,44 @@ end;
 /// path the 12.5-hour library walk uses.
 ///
 /// The fingerprint must describe what preprocessing ACTUALLY did, and what it
-/// did is resolve '' to Win64. Recording the unresolved token was the bug.
+/// did is resolve the token. Recording the unresolved token was the bug; callers
+/// that hold a project pass the RESOLVED platform (TActiveBuild.Platform) to the fingerprint.
 /// </remarks>
-function EffectiveIndexPlatform(const APlatform: string): string;
+function EffectiveIndexPlatform(const APlatform: string; const ADproj: string = ''): string;
+const
+  CNoPlatformDefault = 'Win32'; // ruling a3: no platform named anywhere -> Win32
 begin
-  if APlatform = '' then Result:= 'Win64' else Result:= APlatform;
+  Result:= APlatform;
+  if Result = '' then Result:= PlatformOfDproj(ADproj);
+  if (Result = '') and (ADproj <> '') then
+  begin
+    { a marker-less .dproj: the IDE's <project>.delphilsp.json (dllname dcc32/dcc64) names the
+      active platform -- ResolveActiveBuild's own order (marker, delphilsp, default) }
+    var LspDefs: TArray<string>;
+    var LspNums: TArray<TPair<string, Integer>>;
+    var LspSws : TArray<TPair<string, Boolean>>;
+    var LspPlat: string;
+    if ReadDelphiLspDefines(ADproj, LspPlat, LspDefs, LspNums, LspSws) then Result:= LspPlat;
+  end;
+  if Result = '' then Result:= CNoPlatformDefault;
 end;
 
 /// <summary>PP-Task-9: resolve the define profile the indexer preprocesses
 /// against. When a .dproj is given, derive the per-config profile from it
 /// (ProfileFromDproj: Base + selected-config DCC_Define, unioned with the
 /// platform built-ins); otherwise fall back to PlatformBuiltins for the target
-/// platform (default Win64 -- the library/no-project fallback the plan
-/// specifies). ADproj '' selects the built-ins path. APlatform '' defaults to
-/// Win64 inside the resolver. AConfig '' is treated as Release by
-/// ProfileFromDproj.</summary>
+/// platform. ADproj '' selects the built-ins path. APlatform '' resolves by
+/// EffectiveIndexPlatform (the .dproj's active Platform, else Win32). AConfig '' is
+/// treated as Release by ProfileFromDproj.</summary>
 /// <param name="ADproj">Path to a .dproj, or '' for the built-ins fallback.</param>
-/// <param name="APlatform">Target platform ('Win32'/'Win64'); '' -&gt; Win64.</param>
+/// <param name="APlatform">Target platform ('Win32'/'Win64'); '' -&gt; the .dproj's, else Win32.</param>
 /// <param name="AConfig">'Release'/'Debug'; '' -&gt; Release. Ignored without a .dproj.</param>
 /// <returns>The active define profile for the index run.</returns>
 function ResolveIndexProfile(const ADproj, APlatform, AConfig: string): TDefineProfile;
 var
   Plat: string;
 begin
-  Plat:= EffectiveIndexPlatform(APlatform); // library / no-project fallback (plan default)
+  Plat:= EffectiveIndexPlatform(APlatform, ADproj); // ruling a3: the project's platform, else Win32
   if ADproj <> '' then Result:= ProfileFromDproj(ADproj, Plat, AConfig)
   else Result:= Default(TDefineProfile);
   if ADproj = '' then Result:= BuiltinsProfile(Plat); // lane INC2: + CompilerVersion and the default switches
@@ -3151,15 +3170,16 @@ end;
 /// delphilsp.json -D set only when the .dproj has no Config marker (owner D1), the
 /// platform built-ins always unioned in.</summary>
 /// <param name="ADproj">Path to a .dproj, or '' for the built-ins build (library / folder sections).</param>
-/// <param name="APlatform">Section / --platform token; '' -&gt; Win64. It ALWAYS decides the platform: a
-/// Win64 library DB must not become Win32 because a project marker says so.</param>
+/// <param name="APlatform">Section / --platform token. A non-empty token ALWAYS decides the platform: a
+/// Win64 library DB must not become Win32 because a project marker says so. '' -&gt; the .dproj's active
+/// Platform, else Win32 (EffectiveIndexPlatform, ruling a3).</param>
 /// <param name="AConfig">--build-config; '' = the .dproj's own active Config marker.</param>
 /// <returns>The resolved build; Dproj = '' and Config = '' for the built-ins build.</returns>
 /// <remarks>Never raises. Unlike ResolveIndexProfile (kept as-is for lint / lsp / rename, which
 /// resolve Release) this reads the ACTIVE config.</remarks>
 function ResolveIndexBuild(const ADproj, APlatform, AConfig: string): TActiveBuild;
 begin
-  Result:= ResolveActiveBuild(ADproj, EffectiveIndexPlatform(APlatform), AConfig, True);
+  Result:= ResolveActiveBuild(ADproj, EffectiveIndexPlatform(APlatform, ADproj), AConfig, True);
 end;
 
 /// <summary>The build an `index --all` section preprocesses with: the active build of its
@@ -3281,7 +3301,7 @@ end;
 // Returns True on success, False (and prints the error) on failure.
 // PP-Task-9: APreprocess (default True) enables per-config directive
 // resolution for this section's index. The profile is derived from the
-// section's platform (library sections carry it; folder/closure default Win64)
+// section's platform (library sections carry it; a closure section takes its .dproj's, else Win32)
 // -- unioned with a .dproj's config defines when the section is a single-project
 // closure. --no-preprocess (from index --all) passes False for a raw all-branch
 // build.
@@ -4698,7 +4718,8 @@ begin
     // PP-Task-9: per-config directive resolution for this section (default ON).
     // A single-project closure section resolves defines from its .dproj; every
     // other section uses the platform built-ins (library sections carry their
-    // platform; folder/multi-root sections default to Win64).
+    // platform; a closure section takes its .dproj's active Platform; folder/multi-root
+    // sections and a project naming none are Win32 -- ruling a3).
 
     // Resolve the section profile ONCE and reuse it for both the indexer and
     // (PP-Task-10) the closure resolver, so uses-discovery and symbol-extraction
@@ -4711,7 +4732,7 @@ begin
     { INBOX 2.3: same fingerprint gate as the single-root path -- the manifest
       path is the one that builds the big shared indexes, so it is the one where
       a silently stale parse survives longest. }
-    ApplyIndexerFingerprint(Store, Indexer, AForceReparse, ARebuild, APreprocess, AItem.Platform, SectionCfgLimb, AResolveOnly);
+    ApplyIndexerFingerprint(Store, Indexer, AForceReparse, ARebuild, APreprocess, SectionBuild.Platform, SectionCfgLimb, AResolveOnly); // the platform the section PREPROCESSED with (ruling a3)
 
     { RESOLVER STALENESS -- and this path needs it MORE than the single-root one,
       not less. `index --all --only <Section>` is what tools\reindex-all.ps1
@@ -4858,7 +4879,7 @@ begin
         if SecStudio.Note <> '' then Writeln('  ', SecStudio.Note);
         Resolver:= SecStudio.OpenResolver;
         try
-          var SecTail: TArray<string>:= Resolver.ClosureSearchTail(EffectiveIndexPlatform(AItem.Platform));
+          var SecTail: TArray<string>:= Resolver.ClosureSearchTail(SectionBuild.Platform);
           Cl:= TClosureResolver.Create(Resolver.ClosureLibraryRoots);
           try
             // PP-Task-10: per-config uses-discovery -- honour the SAME profile
@@ -4871,7 +4892,7 @@ begin
             if APreprocess then
             begin
               var PPLibArgs: TArgs:= Default(TArgs);
-              PPLibArgs.CheckPlatform:= AItem.Platform;
+              PPLibArgs.CheckPlatform:= SectionBuild.Platform;
               PPSrc:= InstallPPUnitSource(SectionProfile, nil, [ResolveLibraryDb(PPLibArgs)]);
             end;
             for F in AItem.Roots do
@@ -5064,8 +5085,8 @@ begin
       section that failed above exits before this point and deliberately leaves
       the OLD fingerprint in place, so the next run re-parses it. A --resolve-only
       section walked nothing: it stamps only what it can vouch for. }
-    if AResolveOnly then CommitAfterResolveOnly(Store, APreprocess, AItem.Platform, SectionCfgLimb)
-    else CommitIndexerFingerprint(Store, APreprocess, AItem.Platform, SectionCfgLimb);
+    if AResolveOnly then CommitAfterResolveOnly(Store, APreprocess, SectionBuild.Platform, SectionCfgLimb)
+    else CommitIndexerFingerprint(Store, APreprocess, SectionBuild.Platform, SectionCfgLimb);
     { The manifest path must stamp the scan type too, and this is the site that
       matters MOST: nearly every project database is built through
       `index --all --only <Section>`, not through a bare `index`. Stamping only
@@ -7060,10 +7081,9 @@ begin
   // conditional-compilation branches are resolved PER-CONFIG before parsing;
   // --no-preprocess reverts to the prior raw all-branch behaviour. Profile comes
   // from --project (a .dproj -> per-config defines) when given, else the platform
-  // built-ins (--platform, default Win64). Build config defaults to Release.
-  var PpPlatform: string:= AArgs.CheckPlatform;
-  if PpPlatform = '' then PpPlatform:= 'Win64';
+  // built-ins (--platform, else the project's active Platform, else Win32 -- ruling a3).
   var IdxBuild: TActiveBuild:= ResolveIndexBuild(AArgs.ProjectPath, AArgs.CheckPlatform, AArgs.BuildConfig);
+  var PpPlatform: string:= IdxBuild.Platform;
   var IdxCfgLimb: string:= IndexCfgLimb(IdxBuild);
   Indexer.SetPreprocess(not AArgs.NoPreprocess, IdxBuild.Profile);
   if not AArgs.NoPreprocess then WriteIndexDefinesLine(IdxBuild);
