@@ -53,12 +53,12 @@ const
 
 function ReadRaw(const pPath: string; pEnc: TEncoding): string;
 begin
-  Result:= pEnc.GetString(TFile.ReadAllBytes(pPath));
+  Result:= pEnc.GetString(TFile.ReadAllBytes(pPath));  // dl:ok taint-path-traversal@c5c8 -- CLI file I/O on a path the user passed or the drag-lint manifest names; the env var is the user's own config, no privilege boundary (147 INT sweep)
 end;
 
 procedure WriteRaw(const pPath, pText: string; pEnc: TEncoding);
 begin
-  TFile.WriteAllBytes(pPath, pEnc.GetBytes(pText));
+  TFile.WriteAllBytes(pPath, pEnc.GetBytes(pText));  // dl:ok taint-path-traversal@2d2f -- CLI file I/O on a path the user passed or the drag-lint manifest names; the env var is the user's own config, no privilege boundary (147 INT sweep)
 end;
 
 function Sha256Of(const pText: string; pEnc: TEncoding): string;
@@ -150,7 +150,7 @@ begin
     Exit(EXIT_USAGE);
   end;
   if TDirectory.Exists(pIn) then
-    Files:= TDirectory.GetFiles(pIn, '*.pas', TSearchOption.soAllDirectories)
+    Files:= TDirectory.GetFiles(pIn, '*.pas', TSearchOption.soAllDirectories)  // dl:ok taint-path-traversal@497f -- CLI file I/O on a path the user passed or the drag-lint manifest names; the env var is the user's own config, no privilege boundary (147 INT sweep)
   else if FileExists(pIn) then
     Files:= [pIn]
   else
@@ -206,7 +206,7 @@ begin
     if pApply and (Count > 0) then
     begin
       { the sidecar first: once it is on disk no source write can lose an anchor }
-      TFile.WriteAllBytes(pOut, TEncoding.UTF8.GetBytes(Side.ToJSON));
+      TFile.WriteAllBytes(pOut, TEncoding.UTF8.GetBytes(Side.ToJSON));  // dl:ok taint-path-traversal@8a5b -- CLI file I/O on a path the user passed or the drag-lint manifest names; the env var is the user's own config, no privilege boundary (147 INT sweep)
       for F in Changed.Keys do WriteRaw(F, Changed[F], Enc);
     end;
     if pJson then
@@ -256,7 +256,7 @@ begin
     Fail(pJson, 'not-found', 'error: sidecar not found: ' + pFrom);
     Exit(EXIT_NOT_FOUND);
   end;
-  Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(pFrom, TEncoding.UTF8));
+  Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(pFrom, TEncoding.UTF8));  // dl:ok taint-path-traversal@af6d -- CLI file I/O on a path the user passed or the drag-lint manifest names; the env var is the user's own config, no privilege boundary (147 INT sweep)
   if (Root is not TJSONObject) or (TJSONObject(Root).GetValue<string>('format', '') <> SIDECAR_FORMAT) then
   begin
     Root.Free;

@@ -66,7 +66,6 @@ uses
   , System.Generics.Collections
   , System.RegularExpressions
   , System.NetEncoding
-  , FireDAC.Stan.Param
   , Data.DB
   , DRagLint.Core.Model
   ;

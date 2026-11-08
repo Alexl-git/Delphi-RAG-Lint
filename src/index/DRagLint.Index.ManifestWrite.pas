@@ -197,7 +197,7 @@ type
 /// <seealso cref="DRagLint.Index.ManifestWrite.RebasedManifestText"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function MigrateExeManifest(const AEngineDir: string; AApply: Boolean;
+function MigrateExeManifest(const AEngineDir: string; AApply: Boolean;  // dl:ok doc-drift@f4f7 -- the <exception> tag is engine-generated via a callee (TInstalledLayout.Enabled); doc-drift judges the body only: engine disagreement, 148 row
   ADate: TDateTime): TMigrateResult;
 
 implementation

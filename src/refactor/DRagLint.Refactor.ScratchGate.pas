@@ -9,7 +9,7 @@ interface
 
 uses
   FireDAC.Comp.Client,
-  DRagLint.Refactor.CompileGate;
+  DRagLint.Refactor.CompileGate;  // dl:ok uses-global-census@4ebc -- the CompileGate globals travel with the gated refactor verbs by design (R3 / G3P compile gate)
 
 const
   /// <summary>Refusal kind: the files have no common folder (two drives), so no mirror keeps their relative paths.</summary>

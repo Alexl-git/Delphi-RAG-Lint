@@ -228,7 +228,7 @@ type
     /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripMark"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function IsManagedText(const S: string): Boolean;
+    class function IsManagedText(const S: string): Boolean;  // dl:ok compiler-magic-comments@e170 -- the doc comment quotes the legacy 'TODO: describe.' sentinel this routine detects; it is not a TODO
     /// <summary>True when S is engine-owned tag text WITHOUT regard to
     /// emptiness: it carries AUTO_MARK (IsManagedText), or it is the legacy
     /// 'TODO: describe.' sentinel. This is the ownership test for
@@ -258,7 +258,7 @@ type
     /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripMark"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function IsEngineOwnedTagText(const S: string): Boolean;
+    class function IsEngineOwnedTagText(const S: string): Boolean;  // dl:ok compiler-magic-comments@4482 -- the doc comment quotes the legacy 'TODO: describe.' sentinel this routine detects; it is not a TODO
 
     /// <summary>True when S is the engine's own HARVESTED &lt;summary&gt; prose
     /// -- i.e. it carries AUTO_SUM.</summary>
@@ -333,7 +333,7 @@ type
     /// <seealso cref="DRagLint.Doc.Regions.TDocMarkers.StripMark"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function IsManagedDesc(const S: string): Boolean;
+    class function IsManagedDesc(const S: string): Boolean;  // dl:ok compiler-magic-comments@e01e -- the doc comment quotes the legacy 'TODO: describe.' sentinel this routine detects; it is not a TODO
     /// <summary>Strips human-invisible engine bookkeeping from S for DISPLAY
     /// ONLY: a leading AUTO_MARK (via StripMark) plus any AUTO_BEGIN/AUTO_END
     /// facts-fence marker text found anywhere in S -- the facts LINES between
@@ -1891,7 +1891,7 @@ begin
   end;
 end;
 
-class function TDocBlockScanner.SplitResidualLines(const ARawBlock: string;
+class function TDocBlockScanner.SplitResidualLines(const ARawBlock: string;  // dl:ok method-too-long@53ac, cognitive-complexity@dc12, deep-nesting@a2ef, cyclomatic-complexity@8b8c -- moved verbatim by the E-TDOCREGIONS-RFC split (147 G2/B1 merge); pre-existing size, splitting it is a 148 row
   AEngineEmitsOwnRemarks: Boolean;
   out AAccountedRaw: string; out AResidualLines: TArray<string>): Boolean;
 type
@@ -2620,7 +2620,7 @@ end;
 // literal spaces for Reads/Writes, semicolon-space for SQL), same order.
 // Lines are UNPREFIXED -- callers (RenderFactsBlock, hover) each apply
 // whatever leading text their own surface needs.
-class function TDocFactsRenderer.FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;
+class function TDocFactsRenderer.FormatPhase2FactLines(const AFacts: TDocFacts; AComplexityMin: Integer = 10;  // dl:ok method-too-long@9ae9, cyclomatic-complexity@4f78 -- moved verbatim by the E-TDOCREGIONS-RFC split (147 G2/B1 merge); pre-existing size, splitting it is a 148 row
   AHasOtherContent: Boolean = True): TArray<string>;
 var
   Lines: TStringList;
@@ -3407,7 +3407,7 @@ begin
   end;
 end;
 
-class function TDocCommentMerger.MergeComment(const AExisting: TParsedDoc;
+class function TDocCommentMerger.MergeComment(const AExisting: TParsedDoc;  // dl:ok method-too-long@49c2, cognitive-complexity@038e, cyclomatic-complexity@c8c3 -- moved verbatim by the E-TDOCREGIONS-RFC split (147 G2/B1 merge); pre-existing size, splitting it is a 148 row
   const ASigParams: TArray<string>; const AFacts: TDocFacts;
   AHasReturn: Boolean; const APrefix: string; AComplexityMin: Integer;
   AExistingHasAnyTag: Boolean): string;
@@ -3792,8 +3792,7 @@ var
   begin
     if TDocMarkers.IsManagedText(S) then
     begin
-      if Trim(TDocMarkers.StripMark(S)) = '' then Result:= taEngineOwned
-      else Result:= taPreserveStripped;
+      Result:= if Trim(TDocMarkers.StripMark(S)) = '' then taEngineOwned else taPreserveStripped;
     end
     else if SameText(Trim(S), 'TODO: describe.') then Result:= taEngineOwned
     else if AHasTag then Result:= taPreserveVerbatim
@@ -4402,7 +4401,11 @@ begin
               // RULING D-4, the meaning half: a body a human wrote is never
               // overwritten -- including one typed INSIDE the engine's own tag
               // without removing the marker (taPreserveStripped).
-              taPreserveStripped: begin Sb.AppendLine(EmitTagged('<param name="' + P + '">', TDocMarkers.StripMark(EP.Desc), '</param>')); ParamEmitted:= True; end;
+              taPreserveStripped:
+                begin
+                  Sb.AppendLine(EmitTagged('<param name="' + P + '">', TDocMarkers.StripMark(EP.Desc), '</param>'));
+                  ParamEmitted:= True;
+                end;
               taPreserveVerbatim: begin Sb.AppendLine(EmitPreserved(Eff.RawBlock, LinePrefix, 'param', '<param name="' + P + '">', EP.Desc, '</param>')); ParamEmitted:= True; end;
               taEngineOwned: ;  // engine-owned and empty: fall through and REGENERATE
             end;

@@ -67,7 +67,7 @@ uses
   System.Classes, System.IOUtils, System.JSON, System.StrUtils, System.RegularExpressions,
   System.Generics.Collections, System.Generics.Defaults, System.Math, Winapi.Windows,
   FireDAC.Comp.Client,
-  DRagLint.Core.Model, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate,
+  DRagLint.Core.Model, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate,  // dl:ok uses-global-census@98a3 -- the CompileGate globals travel with the gated refactor verbs by design (R3 / G3P compile gate)
   DRagLint.Refactor.ScratchGate, DRagLint.Refactor.RedundantCast, DRagLint.Storage.SQLite, DRagLint.Lint.InitSections,
   TreeSitter, DRagLint.Diagnostics.ParseCache;
 
@@ -563,7 +563,7 @@ end;
 
 function RunLazyInit(const pStore: ISymbolStore; const pOpts: TLazyInitOptions): Integer;  // dl:ok too-many-exit-points@ea4e -- one guard per named refusal, in the documented order: the exits are the contract
 
-  function Fail(const pMessage: string): Integer;
+  function Fail(const pMessage: string): Integer;  // dl:ok duplicate-code@7744 -- sibling verb plumbing (lazy-init / extract-interface / deps share the refactor-verb shape); a shared helper is a 148 row (147 INT sweep)
   begin
     Result:= CExitError;
     if pOpts.Json then
@@ -618,7 +618,7 @@ begin
   var Gate:= Default(TGateOutcome);
   var Ran:= False;
   if pOpts.Apply then
-    if Plans[0].RefusalKind <> '' then Result:= CExitRefused
+    if Plans[0].RefusalKind <> '' then Result:= CExitRefused  // dl:ok duplicate-code@55f9 -- sibling verb plumbing (lazy-init / extract-interface / deps share the refactor-verb shape); a shared helper is a 148 row (147 INT sweep)
     else
     begin
       var Secs:= StrToIntDef(pOpts.BuildTimeout, 0);
@@ -653,7 +653,7 @@ begin
       J.AddPair('applied', TJSONBool.Create(Ran and Gate.Applied));
       var Arr:= TJSONArray.Create;
       J.AddPair('sections', Arr);
-      for var P in Plans do Arr.AddElement(PlanJson(P));
+      for var P in Plans do Arr.AddElement(PlanJson(P));  // dl:ok duplicate-code@bae4 -- sibling verb plumbing (lazy-init / extract-interface / deps share the refactor-verb shape); a shared helper is a 148 row (147 INT sweep)
       if Ran then
       begin
         var G:= TJSONObject.Create;

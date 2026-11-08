@@ -138,7 +138,6 @@ const
   META_KEY_FINGERPRINT = 'indexer_fingerprint';
   BARYCENTRE_SWEEPS = 2;
   ROW_CENTRE = 0.5;
-  TOP_FIRST = 0;
   KIND_TEXT: array[TArchEdgeKind] of string = ('forward', 'back', 'tangle');
 
   { geometry of the drawing, in SVG units }

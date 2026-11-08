@@ -1864,7 +1864,7 @@ begin
       Inc(i);
       Result.EiClass:= ParamStr(i);
     end
-    else if (A = '--members') and (Result.Command = 'extract-interface') and (i < ParamCount) then
+    else if (A = '--members') and (Result.Command = 'extract-interface') and (i < ParamCount) then  // dl:ok duplicate-code@55a2 -- sibling verb plumbing (lazy-init / extract-interface / deps share the refactor-verb shape); a shared helper is a 148 row (147 INT sweep)
     begin
       Inc(i);
       Result.EiMembers:= ParamStr(i);
@@ -3441,7 +3441,7 @@ begin
       var MdDir: string:= TPath.GetDirectoryName(ProjAbs);
       if TDirectory.Exists(MdDir) then
       begin
-        var MdFiles: TArray<string>:= TDirectory.GetFiles(MdDir, '*.md', TSearchOption.soTopDirectoryOnly);
+        var MdFiles: TArray<string>:= TDirectory.GetFiles(MdDir, '*.md', TSearchOption.soTopDirectoryOnly);  // dl:ok taint-path-traversal@db48 -- CLI file I/O on a path the user passed or the drag-lint manifest names; the env var is the user's own config, no privilege boundary (147 INT sweep)
         TArray.Sort<string>(MdFiles);
         for var MdFile in MdFiles do
           if SameText(ExtractFileExt(MdFile), '.md') then AddOnce(MdFile); { the mask also matches *.mdx }
@@ -15693,7 +15693,7 @@ begin
       if AArgs.CompileGate then
       begin
         ApplySkipped:= 0;
-        if not ApplyEditsGated(Edits, 'lint --fix', AArgs, Touched) then Exit(1);  // dl:ok too-many-exit-points@277f -- the refusal is the verb's exit 1; ApplyEditsGated printed the reason and nothing is changed
+        if not ApplyEditsGated(Edits, 'lint --fix', AArgs, Touched) then Exit(1);
       end
       else Touched:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup, ApplySkipped);
       { Report EDITS WRITTEN, not fixable FINDINGS. FixCount counts findings and
@@ -17361,7 +17361,11 @@ begin
   if AArgs.Fix and SameText(AArgs.FixRule, WITH_STATEMENT_RULE_ID) then Exit(DoUnwithFix(AArgs));
   if AArgs.CompileGate then
   begin
-    if not AArgs.Fix then begin Writeln(ErrOutput, 'ERROR: lint --compile-gate needs --fix (it gates the --apply write)'); Exit(2); end;
+    if not AArgs.Fix then
+    begin
+      Writeln(ErrOutput, 'ERROR: lint --compile-gate needs --fix (it gates the --apply write)');
+      Exit(2);
+    end;
   end;
   if not ApplyRunTargetCompiler(AArgs, LoadLintConfig(AArgs).TargetCompiler) then Exit(2);
   TraceLintChecker('setup');
