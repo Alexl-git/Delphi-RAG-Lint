@@ -1,21 +1,22 @@
 <#
-  run_recv_intrinsic_latebound.ps1 -- spec 2026-11-06-recv-undecidable, classes D08 and D10:
-  dotted calls that have NO routine to bind to, reported by name instead of as plain misses.
+  run_recv_intrinsic_latebound.ps1 -- spec 2026-11-06-recv-undecidable, classes D08 and D10,
+  owner ruling 2026-11-08 (wave 147): BIND both, marked.
 
     D08 a dynamic-array constructor: `TBytes.Create(1, 2)`, `TArray<Integer>.Create(1)`.
-        A compiler intrinsic -- no declaration exists. Counted as `intrinsic`.
-    D10 a call through an event property: `B.OnClick(nil)`. The routine behind it is chosen
-        at run time. Counted as `late-bound`.
+        A compiler intrinsic -- no declaration exists. Bound to the synthetic built-in name
+        System.@intrinsic.DynArray.Create, refs.external_kind = 'intrinsic'.
+    D10 a call through an event property or procedural field: `B.OnClick(nil)`. Bound to the
+        PROPERTY (field) by name, refs.external_kind = 'indirect' -- the routine behind it is
+        chosen at run time, so it is never an edge to a routine.
 
-  CLASSIFY ONLY: the resolve line `calls receivers: ...` gains the two counters; no stored
-  row changes (the sites stay with no edge and no external target -- asserted). Controls: a
-  library method binds (`B.Click`), a library class constructor binds (`TStrX.Create`), an
-  unknown type head stays `no-type` and is not counted intrinsic (`TNope.Create`), a field of a
-  procedural type is late-bound too (`B.FOnPing`), a non-Create member of a dynamic array type
-  is not intrinsic (`TBytes.Nothing`).
+  The resolve line `calls receivers:` counts them as `intrinsic` / `late-bound` (not in
+  external-bound). find-callers on the property lists the firing site with mode `event`; an
+  intrinsic row carries mode `built-in`. Controls: a library method binds with no kind
+  (`B.Click`), a library class constructor too (`TStrX.Create`), an unknown type head stays
+  unbound (`TNope.Create`), a non-Create member of a dynamic array type is not intrinsic
+  (`TBytes.Nothing`), the member-access twin of `B.OnClick` keeps its plain property binding.
   Run from any CWD, pwsh 7.
-#>
-[CmdletBinding()]
+#>[CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [string]$WorkDir = "C:\TEMP\draglint_recv_intrinsic_$PID"
@@ -115,7 +116,9 @@ Push-Location C:\TEMP
 Check 'V library index built' (Test-Path $libDb) $libDb
 $log = & $exePath index --project (Join-Path $app 'App.dpr') --db $appDb --library-db $libDb 2>&1 | Out-String
 Check 'V app index built' (Test-Path $appDb) $appDb
-$j = & $exePath sql --db $appDb --json --limit 2000 --query "SELECT '' p, r.receiver_text, r.name_text, coalesce(r.external_target,''), coalesce(t.qualified_name,'') FROM refs r LEFT JOIN call_edges c ON c.ref_id = r.id LEFT JOIN symbols t ON t.id = c.target_symbol_id WHERE r.kind = 'call' AND r.receiver_text <> ''" | Out-String | ConvertFrom-Json
+$j = & $exePath sql --db $appDb --json --limit 2000 --query "SELECT '' p, r.receiver_text, r.name_text, coalesce(r.external_target,''), coalesce(t.qualified_name,''), r.kind, coalesce(r.external_kind,'') FROM refs r LEFT JOIN call_edges c ON c.ref_id = r.id LEFT JOIN symbols t ON t.id = c.target_symbol_id WHERE r.receiver_text <> '' AND r.kind IN ('call','member-access')" | Out-String | ConvertFrom-Json
+$fc = & $exePath query find-callers --name OnClick --db $appDb --json 2>$null | Out-String
+$cx = & $exePath context --task "modify uGo.Go" --db $appDb --format markdown 2>$null | Out-String
 Pop-Location
 
 $line = @($log -split "`r?`n" | Where-Object { $_ -match 'calls\s+receivers:' }) | Select-Object -First 1
@@ -125,24 +128,30 @@ $late = if ($line -match 'late-bound (\d+)') { [int]$Matches[1] } else { -1 }
 Check "D08 intrinsic = 2 (TBytes.Create, TArray<Integer>.Create; not TBytes.Nothing, not TNope.Create) -- got $intr" ($intr -eq 2) $line
 Check "D10 late-bound = 2 (B.OnClick property, B.FOnPing field) -- got $late" ($late -eq 2) $line
 
-$rows = foreach ($r in $j.rows) { [pscustomobject]@{ Rcv=[string]$r[1]; Name=[string]$r[2]; Ext=[string]$r[3]; Edge=[string]$r[4] } }
+$rows = foreach ($r in $j.rows) { [pscustomobject]@{ Rcv=[string]$r[1]; Name=[string]$r[2]; Ext=[string]$r[3]; Edge=[string]$r[4]; Kind=[string]$r[5]; XK=[string]$r[6] } }
 Check "V the sites were read ($(@($rows).Count))" (@($rows).Count -ge 8)
-function Site($rcv,$name){ @($rows | Where-Object { $_.Rcv -eq $rcv -and $_.Name -eq $name }) | Select-Object -First 1 }
+function Site($rcv,$name,$kind){ @($rows | Where-Object { $_.Rcv -eq $rcv -and $_.Name -eq $name -and $_.Kind -eq $kind }) | Select-Object -First 1 }
+function Bound($id,$rcv,$name,$want,$xk){
+  $s = Site $rcv $name 'call'
+  Check "$id $rcv.$name -> external $want, kind '$xk' (got ext='$($s.Ext)' kind='$($s.XK)' edge='$($s.Edge)')" ($null -ne $s -and $s.Ext -ceq $want -and $s.XK -eq $xk -and $s.Edge -eq '')
+}
 function None($id,$rcv,$name){
-  $s = Site $rcv $name
-  Check "$id $rcv.$name stays unbound -- classify only (got ext='$($s.Ext)' edge='$($s.Edge)')" ($null -ne $s -and $s.Ext -eq '' -and $s.Edge -eq '')
+  $s = Site $rcv $name 'call'
+  Check "$id CONTROL $rcv.$name stays unbound (got ext='$($s.Ext)' kind='$($s.XK)')" ($null -ne $s -and $s.Ext -eq '' -and $s.XK -eq '' -and $s.Edge -eq '')
 }
-function Ext($id,$rcv,$name,$want){
-  $s = Site $rcv $name
-  Check "$id CONTROL $rcv.$name -> external $want (got ext='$($s.Ext)' edge='$($s.Edge)')" ($null -ne $s -and $s.Ext -ceq $want -and $s.Edge -eq '')
-}
-None 'D08a' 'TBytes' 'Create'
-None 'D08b' 'TArray<Integer>' 'Create'
-None 'D10a' 'B' 'OnClick'
-None 'D10b' 'B' 'FOnPing'
-Ext  'C1' 'B' 'Click' 'Lib.Controls.TButtonX.Click'
-Ext  'C2' 'TStrX' 'Create' 'Lib.Controls.TStrX.Create'
-
+Bound 'D08a' 'TBytes' 'Create' 'System.@intrinsic.DynArray.Create' 'intrinsic'
+Bound 'D08b' 'TArray<Integer>' 'Create' 'System.@intrinsic.DynArray.Create' 'intrinsic'
+Bound 'D10a' 'B' 'OnClick' 'Lib.Controls.TButtonX.OnClick' 'indirect'
+Bound 'D10b' 'B' 'FOnPing' 'Lib.Controls.TButtonX.FOnPing' 'indirect'
+Bound 'C1' 'B' 'Click' 'Lib.Controls.TButtonX.Click' ''
+Bound 'C2' 'TStrX' 'Create' 'Lib.Controls.TStrX.Create' ''
+None  'C3' 'TNope' 'Create'
+None  'C4' 'TBytes' 'Nothing'
+$m = Site 'B' 'OnClick' 'member-access'
+Check "C5 CONTROL B.OnClick member-access twin keeps the plain property binding (got ext='$($m.Ext)' kind='$($m.XK)')" ($null -ne $m -and $m.Ext -ceq 'Lib.Controls.TButtonX.OnClick' -and $m.XK -eq '')
+Check "F1 find-callers --name OnClick lists the firing site with mode event" ($fc -match '"mode"\s*:\s*"event"') ($fc.Substring(0,[Math]::Min(400,$fc.Length)))
+$lc = @($cx -split "`r?`n" | Where-Object { $_ -match '^Library calls:' }) | Select-Object -First 1
+Check "F2 context labels the built-in and the event (got '$lc')" ($lc -match 'System\.@intrinsic\.DynArray\.Create \(built-in\)' -and $lc -match 'TButtonX\.OnClick \(event\)' -and $lc -notmatch 'TButtonX\.Click \(')
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0

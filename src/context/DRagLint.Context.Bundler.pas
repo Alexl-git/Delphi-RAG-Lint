@@ -457,6 +457,9 @@ begin
         for var LR: TReference in AStore.GetUnresolvedCallsFromSymbol(TId) do
         begin
           var Target: string:= LR.ExternalTarget;
+          { D08 / D10 (owner ruling 2026-11-08): name what is not a library routine. }
+          if (Target <> '') and (LR.ExternalKind = EXTERNAL_KIND_INTRINSIC) then Target:= Target + ' (built-in)'
+          else if (Target <> '') and (LR.ExternalKind = EXTERNAL_KIND_INDIRECT) then Target:= Target + ' (event)';
           if Target <> '' then AVia:= (if AVia = '' then 'stored' else AVia)
           else
           begin

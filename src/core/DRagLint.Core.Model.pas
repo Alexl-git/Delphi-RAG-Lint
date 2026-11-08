@@ -890,6 +890,11 @@ type
     // call ref, filled by GetUnresolvedCallsFromSymbol only ('' when NULL or absent column).
     ReceiverTypeText: string;
     ExternalTarget  : string;
+    /// <summary>refs.external_kind (wave 147, owner ruling 2026-11-08): '' for a routine target,
+    /// EXTERNAL_KIND_INDIRECT for a call through an event property / procedural field (the
+    /// target is the PROPERTY), EXTERNAL_KIND_INTRINSIC for a compiler intrinsic (the target is
+    /// the synthetic INTRINSIC_DYNARRAY_CREATE). Filled where ExternalTarget is.</summary>
+    ExternalKind    : string;
     /// <summary>How the site was bound (XERJ item 3, derived at read time, never stored):
     /// RESOLUTION_EXACT | RESOLUTION_AMBIGUOUS | RESOLUTION_EXTERNAL | RESOLUTION_NAME_ONLY.
     /// Filled by FindCallersByName only (so also by FindCallersByNameWithContext); '' elsewhere.</summary>
@@ -935,6 +940,10 @@ type
     // Spring), set only when TargetSymbolId = 0. A ref never carries both: a
     // local edge always wins, and cross-DB resolution runs last.
     ExternalTarget      : string;
+    // wave 147 (owner ruling 2026-11-08), persisted as refs.external_kind: '' = a routine,
+    // EXTERNAL_KIND_INDIRECT = an event property / procedural field (run-time target),
+    // EXTERNAL_KIND_INTRINSIC = a compiler intrinsic with a synthetic target name.
+    ExternalKind        : string;
     // v(2026-08-16): True when the receiver could NOT be derived from source
     // matching the index -- the file was edited since it was indexed, or could
     // not be read. It means "unknown", NEVER "no receiver", and the persistence
@@ -2641,6 +2650,24 @@ const
   RESOLUTION_EXTERNAL  = 'external';
   /// <summary>See RESOLUTION_EXACT.</summary>
   RESOLUTION_NAME_ONLY = 'name-only';
+
+  /// <summary>refs.external_kind of a call through an event property or procedural field:
+  /// external_target names the PROPERTY / field; the routine behind it is chosen at run time,
+  /// so it is never a routine edge (owner ruling 2026-11-08, E-RECV-UNDECIDABLE D10).</summary>
+  EXTERNAL_KIND_INDIRECT  = 'indirect';
+  /// <summary>refs.external_kind of a compiler intrinsic call (`TBytes.Create(1, 2)`):
+  /// external_target is a synthetic built-in name that no index declares (D08).</summary>
+  EXTERNAL_KIND_INTRINSIC = 'intrinsic';
+  /// <summary>The synthetic built-in target of a dynamic-array constructor call. A NAME, never
+  /// a symbol row: dead-code / unused-symbol rules see no declaration to judge, and the `@`
+  /// keeps it from matching any real qualified name.</summary>
+  INTRINSIC_DYNARRAY_CREATE = 'System.@intrinsic.DynArray.Create';
+  /// <summary>Caller-row `mode` of a site bound to an EVENT property (external_kind
+  /// 'indirect'): the site fires whatever handler is assigned at run time.</summary>
+  CALLER_MODE_EVENT    = 'event';
+  /// <summary>Caller-row `mode` of a site bound to a compiler intrinsic (external_kind
+  /// 'intrinsic'): no user routine is called.</summary>
+  CALLER_MODE_BUILT_IN = 'built-in';
 
 /// <summary>The SQL predicate selecting call-site refs, for the queries that
 /// build their WHERE clause as text.</summary>
