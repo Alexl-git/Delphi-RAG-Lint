@@ -96,7 +96,7 @@ type
     function Ancestors(AStore: Integer; AId: Int64): TArray<TTypeAncestor>;
     function DeclaringMember(const ACand: TLibCand; const AName: string; out AHit: TSymbol): Boolean;
     function ImplicitRootMember(const ACand: TLibCand; const AName: string; out AHit: TSymbol): Boolean;
-    function AgreedMember(const ATypeText, AMember: string; AKind: TExternalKind): string;
+    function AgreedMember(const ATypeText, AMember: string; AKind: TExternalKind; const AUses: TArray<string>): string;
     function VisibleOf(const ACands: TArray<TLibCand>; const AUses: TArray<string>): TArray<TLibCand>;
     function UnitRoutine(const AChain, AMember: string; const AUses: TArray<string>; out AQName: string): Integer;
     function StepPending(var ACand: TLibCand; const APending: string; const AHelperUses: TArray<string>;
@@ -606,13 +606,20 @@ begin
 end;
 
 { One target whichever candidate the type name means: every candidate is a class and each
-  declares the member under the same qualified name. }
-function TLibraryOracle.AgreedMember(const ATypeText, AMember: string; AKind: TExternalKind): string;
+  declares the member under the same qualified name. Only the candidates AUses can see are
+  asked when any is visible (a unit the file does not use cannot be what the name means --
+  wave-146 b7 leftover, `List.Free` on TList<T> beside Spring's unseen TList); with none
+  visible, every candidate is asked as before. }
+function TLibraryOracle.AgreedMember(const ATypeText, AMember: string; AKind: TExternalKind;
+  const AUses: TArray<string>): string;
 var
   Hit: TSymbol;
 begin
   Result:= '';
-  for var C: TLibCand in Cached(FTypes, NormalizeTypeLeaf(ATypeText), TYPE_KINDS, True) do
+  var Cands: TArray<TLibCand>:= Cached(FTypes, NormalizeTypeLeaf(ATypeText), TYPE_KINDS, True);
+  var Seen: TArray<TLibCand>:= VisibleOf(Cands, AUses);
+  if Length(Seen) > 0 then Cands:= Seen;
+  for var C: TLibCand in Cands do
   begin
     if (C.Kind <> skClass) or not DeclaringMember(C, AMember, Hit)
        or (Hit.Kind not in (if AKind = ekMemberAccess then OK_ACCESS else OK_CALL)) then Exit('');
@@ -768,7 +775,7 @@ begin
     Result:= MemberOf(C, AMember, AKind, AReason)
   else if (AReason = R_AMBIGUOUS) and (APending = '') then
   begin
-    Result:= AgreedMember(ATypeText, AMember, AKind);
+    Result:= AgreedMember(ATypeText, AMember, AKind, AUsesUnits + ['system', 'sysinit']);
     if Result <> '' then AReason:= '';
   end;
   Result:= Count(Result, AReason);
