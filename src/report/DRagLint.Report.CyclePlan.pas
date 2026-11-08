@@ -2561,8 +2561,9 @@ begin
       { --ctor-wide: an `override` stays in the class: the base class inherits the same virtual from the same
         parent, so a call through the base class dispatches to the class's own body }
       if GCtorWide and (C.Kind in [skMethod, skFunction, skProcedure]) and SameText(Trim(C.Directives), 'override') then Continue;
-      { --ctor-wide: a field in the published section is what a .dfm streams into: FieldAddress finds it on the class that declares it, at run time }
-      if GCtorWide and (C.Kind = skField) and (ContainsText(C.Modifiers, 'published') or not C.VisExplicit) then
+      { a field in the published section is what a .dfm streams into: FieldAddress finds it on the class that declares it,
+        at run time; pulled into the base class it would turn protected (E-CTORINV-DEFAULT-PATH: no longer --ctor-wide only) }
+      if (C.Kind = skField) and (ContainsText(C.Modifiers, 'published') or not C.VisExplicit) then
       begin
         Why:= Format('field `%s` is published (or in an unlabelled section): a .dfm streams into it, it cannot move to a base class', [C.Name]);
         Break;
@@ -2884,7 +2885,7 @@ begin
   Result:= TRegEx.IsMatch(Rest, (if IntoList then '^\s*\)\s*(;|$|end\b|else\b)' else '^\s*(;|$|end\b|else\b)'), [roIgnoreCase]);
 end;
 
-{ --ctor-wide: the occurrence at pCol of line pLine is a dotted unit name in a uses clause: the slot of the same
+{ The occurrence at pCol of line pLine is a dotted unit name in a uses clause: the slot of the same
   name is not meant (`Loader2025.FolderProcessor` beside a field `FolderProcessor`). }
 function InUsesClause(const pLines: TArray<string>; pLine, pCol: Integer): Boolean;
 begin
@@ -3133,14 +3134,14 @@ begin
     First:= BodyAt;
     Last := R.ImplEndLine;
   end;
-  var Starts:= CodeStarts(F.Lines);  { --ctor-wide: a multi-line comment naming the slot is no use of it }
+  var Starts:= CodeStarts(F.Lines);  { a multi-line comment naming the slot is no use of it }
   for var L:= First to Last do
   begin
     if L = pSlot.Line then Continue;
-    var Code:= if GCtorWide then CodeOf(LineAt(F.Lines, L), Starts[L - 1]) else CodePart(LineAt(F.Lines, L));
+    var Code:= CodeOf(LineAt(F.Lines, L), Starts[L - 1]);
     var Names:= SlotNames(pSlots, if pSlot.IsField then RoutineAt(F, L).Id else pSlot.RoutineId);
     for var U in TRegEx.Matches(Code, '\b' + pSlot.Name + '\b', [roIgnoreCase]) do
-      if GCtorWide and InUsesClause(F.Lines, L, U.Index) then Continue
+      if InUsesClause(F.Lines, L, U.Index) then Continue
       else if not IsSlotUse(Code, U.Index, U.Length, Names, pFields) and not ((pItem.CtorName <> '') and
         TRegEx.IsMatch(Copy(Code, U.Index + U.Length, MaxInt), '^\s*:=\s*' + pItem.Sym.Name + '\s*\.\s*' + pItem.CtorName + '\b',
           [roIgnoreCase])) then
@@ -3300,12 +3301,12 @@ begin
       for var E in TRegEx.Matches(CodePart(LineAt(F.Lines, L)), '\b' + Fld.Name + '\s*\[[^\]]*\]\s*\.\s*([A-Za-z_]\w*)', [roIgnoreCase]) do
         if not MatchText(E.Groups[1].Value, Own) then Pulled:= Pulled + [E.Groups[1].Value];
   end;
-  { --ctor-wide: a multi-line comment naming the field is no use of it }
+  { a multi-line comment naming the field is no use of it }
   var Starts:= CodeStarts(F.Lines);
   for var L:= 1 to Length(F.Lines) do
   begin
     if L = pLine then Continue;
-    var Code:= if GCtorWide then CodeOf(LineAt(F.Lines, L), Starts[L - 1]) else CodePart(LineAt(F.Lines, L));
+    var Code:= CodeOf(LineAt(F.Lines, L), Starts[L - 1]);
     for var U in TRegEx.Matches(Code, '\b' + Fld.Name + '\b', [roIgnoreCase]) do
       if not (if IsList then IsListFieldUse(Code, U.Index, U.Length, pItem.Sym.Name, Pulled, pSlots)
         else IsSwitchableFieldUse(Code, U.Index, U.Length, Pulled, pSlots)) then
@@ -4259,10 +4260,32 @@ begin
   if D.Verdict = uvMove then AddUses(F.Fid, scImpl, EntryText(F, U));
 end;
 
+{ E-DPROJ-LEAF-LINEBREAK: the .dproj edit that lists pInclude after the DCCReference on line pAt (0-based) of
+  pDproj. A self-closing anchor is copied with its Include swapped. A form or data module is listed with children
+  (`<Form>`, `<DesignClass>`, up to `</DCCReference>`): the new line is a self-closing DCCReference at the anchor's
+  indent and goes after the element's close, or the .dproj no longer parses (msbuild refuses it and the dcc gate
+  rolls the fix back). Was --ctor-wide only (lane 146 r4); RegisterLeaves and RegisterDeclUnit both use it. }
+function DprojRefAfter(const pDproj: TArray<string>; pAt: Integer; const pInclude: string): TFileEdit;
+begin
+  Result:= Default(TFileEdit);
+  Result.Kind:= ekInsertAfter;
+  var Line:= pDproj[pAt];
+  var At  := pAt;
+  if Trim(Line).EndsWith('/>') then
+    Line:= TRegEx.Replace(Line, 'Include="[^"]*"', 'Include="' + pInclude + '"')
+  else
+  begin
+    while (At < High(pDproj)) and not ContainsText(pDproj[At], '</DCCReference>') do Inc(At);
+    Line:= Copy(Line, 1, Length(Line) - Length(TrimLeft(Line))) + '<DCCReference Include="' + pInclude + '"/>';
+  end;
+  Result.First   := At + 1;
+  Result.Last    := At + 1;
+  Result.NewLines:= [Line];
+end;
+
 procedure TCyclePlanner.RegisterLeaves;
 var
   Dproj: TArray<string>;
-  E    : TFileEdit;
 begin
   if FProjectFid = 0 then Exit;
   var Prj:= GetFile(FProjectFid);
@@ -4278,22 +4301,7 @@ begin
     for var I:= 0 to High(Dproj) do
       if ContainsText(Dproj[I], 'Include="' + U.InPath + '"') then
       begin
-        E:= Default(TFileEdit);
-        E.Kind    := ekInsertAfter;
-        E.First   := I + 1;
-        E.Last    := I + 1;
-        E.NewLines:= [StringReplace(Dproj[I], U.InPath, ExtractFilePath(U.InPath) + FLeafName[Stem] + '.pas', [rfIgnoreCase])];
-        { --ctor-wide: a form or data module is listed with children (`<Form>`, `<DesignClass>`): the leaf's line closes
-          itself and goes after the element's close, or the .dproj no longer parses. }
-        if GCtorWide and not Trim(Dproj[I]).EndsWith('/>') then
-        begin
-          var Close:= I;
-          while (Close < High(Dproj)) and not ContainsText(Dproj[Close], '</DCCReference>') do Inc(Close);
-          E.First   := Close + 1;
-          E.Last    := Close + 1;
-          E.NewLines:= [E.NewLines[0].TrimRight.TrimRight(['>']) + '/>'];
-        end;
-        FDprojEdits.Add(E);
+        FDprojEdits.Add(DprojRefAfter(Dproj, I, ExtractFilePath(U.InPath) + FLeafName[Stem] + '.pas'));
         Break;
       end;
   end;
@@ -6328,8 +6336,6 @@ end;
 { A2: the declaring unit joins the program's uses (`Name in 'path'`, the path relative to the .dpr) and,
   when the .dproj has no DCCReference for it, gains one after the last DCCReference. }
 procedure TCyclePlanner.RegisterDeclUnit;
-var
-  E: TFileEdit;
 begin
   if (FProjectFid = 0) or not FInversion.RegisterDecl then Exit;
   var Rel:= ExtractRelativePath(PathOf(FProjectFid), PathOf(FidOfStem(FInversion.DeclStem)));
@@ -6341,12 +6347,7 @@ begin
     if ContainsText(Dproj[I], 'Include="' + Rel + '"') then Exit
     else if ContainsText(Dproj[I], '<DCCReference') then Last:= I;
   if Last < 0 then Exit;
-  E:= Default(TFileEdit);
-  E.Kind    := ekInsertAfter;
-  E.First   := Last + 1;
-  E.Last    := Last + 1;
-  E.NewLines:= [StringReplace(Dproj[Last], TRegEx.Match(Dproj[Last], 'Include="([^"]*)"').Groups[1].Value, Rel, [rfIgnoreCase])];
-  FDprojEdits.Add(E);
+  FDprojEdits.Add(DprojRefAfter(Dproj, Last, Rel));
 end;
 
 function TCyclePlanner.IsInversionStem(const pStem: string): Boolean;
