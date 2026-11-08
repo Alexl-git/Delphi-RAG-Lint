@@ -41,7 +41,6 @@ uses
     DragLint.Plugin.Settings
   , DRagLint.Plugin.DbProbe
   , DRagLint.Index.Manifest
-  , DragLint.Plugin.ManifestPaths
   ;
 
 { v(project-scoped): resolves the ACTIVE PROJECT's .dproj to the ONE index DB the
@@ -391,6 +390,7 @@ implementation
 uses
   DragLint.Plugin.IndexJob
   , DRagLint.Core.ContextDefaults
+  , DragLint.Plugin.ManifestPaths { layout v2 phase 3: every manifest lookup }
   ;
 
 function ActiveProjectWriteDb(out AProjectFile, AWhy: string): string;
