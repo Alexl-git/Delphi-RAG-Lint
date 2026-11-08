@@ -140,6 +140,8 @@ uses
   , DRagLint.Lint.Autofix   { IsFixableRule & co. + BuildAutofixEdits -- the autofix registry (lane A0) }
   , DRagLint.Refactor.RedundantCast { lane 144 item 1: the gated redundant-cast fix }
   , DRagLint.Refactor.NarrowParam   { lane 144 item 2: narrow-param }
+  , DRagLint.Refactor.ExtractInterface   { lane 146 g3: extract-interface }
+  , DRagLint.Refactor.LazyInit   { lane 146 g3: lazy-init }
   , DRagLint.Lint.TargetCompiler { --target-compiler: ResolveTargetCompiler, TTargetRuleGate (1.38) }
   , DRagLint.Project.TargetStudio { GH #13: the library path of the project's Delphi }
   { DRagLint.Core.Model moved to the INTERFACE uses (for DRAGLINT_VERSION); it
@@ -526,6 +528,9 @@ type
     FixRule      : string ; // --fix-rule <id> ('' = all rules)
     NpRoutine    : string ; // narrow-param --routine <QName>
     NpParam      : string ; // narrow-param --param <name>
+    EiClass      : string ; // extract-interface --class <name>
+    EiMembers    : string ; // extract-interface --members <a,b>
+    EiReparent   : Boolean; // extract-interface --reparent-interfaced
     FixNaming    : Boolean; // --fix-naming (batch --fix: explicit consent to the opt-in naming fixes)
     { --stand-in-for <realpath>: analyse THIS file's text, but answer as though
       it were <realpath>. The IDE lints an unsaved buffer by writing a snapshot
@@ -1844,6 +1849,17 @@ begin
     // AutoFix Chunk 1 (Task 3): single-finding fix targeting (lint --fix)
     else if (A = '--fix-line') and (i < ParamCount) then begin Inc(i); Result.FixLine:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--fix-rule') and (i < ParamCount) then begin Inc(i); Result.FixRule:= ParamStr(i); end
+    else if (A = '--class') and (Result.Command = 'extract-interface') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.EiClass:= ParamStr(i);
+    end
+    else if (A = '--members') and (Result.Command = 'extract-interface') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.EiMembers:= ParamStr(i);
+    end
+    else if A = '--reparent-interfaced' then Result.EiReparent:= True
     else if (A = '--routine') and (i < ParamCount) then
     begin
       Inc(i);
@@ -17120,6 +17136,53 @@ begin
   if (U.InFile = '') and (AArgs.Target <> '') and TFile.Exists(AArgs.Target) then U.InFile:= AArgs.Target;
   if AArgs.FixLine > 0 then U.RefLine:= AArgs.FixLine;
   Result:= DoUnwith(U);
+end;
+
+{ lane 146 g3: extract-interface }
+function DoExtractInterface(const AArgs: TArgs): Integer;
+begin
+  var Opts:= Default(TExtractInterfaceOptions);
+  Opts.ClassRef    := AArgs.EiClass;
+  Opts.Members     := AArgs.EiMembers;
+  Opts.IfaceName   := AArgs.Name;
+  Opts.Reparent    := AArgs.EiReparent;
+  Opts.Project     := AArgs.ProjectPath;
+  Opts.Platform    := AArgs.CheckPlatform;
+  Opts.RsVars      := AArgs.CycleRsVars;
+  Opts.BuildTimeout:= AArgs.CycleBuildTimeout;
+  Opts.Apply       := AArgs.Apply;
+  Opts.NoBackup    := AArgs.NoBackup;
+  Opts.NoCompile   := AArgs.NoCompile;
+  Opts.Json        := AArgs.AsJson or SameText(AArgs.Format, 'json');
+  if not ExplicitDbsExist(AArgs, 'extract-interface') then Exit(2);
+  if NoDbResolved(AArgs.DbPath, 'extract-interface') then Exit(2);
+  var Ok: Boolean;
+  var Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+  if not Ok then Exit(2);
+  Result:= RunExtractInterface(Store, RefactorLibraries(AArgs), Opts);
+end;
+
+{ lane 146 g3: lazy-init }
+function DoLazyInit(const AArgs: TArgs): Integer;
+begin
+  var Opts:= Default(TLazyInitOptions);
+  Opts.UnitName    := AArgs.GhostUnit;
+  Opts.All         := AArgs.IndexAll;
+  Opts.RoutineName := AArgs.Name;
+  Opts.Project     := AArgs.ProjectPath;
+  Opts.Platform    := AArgs.CheckPlatform;
+  Opts.RsVars      := AArgs.CycleRsVars;
+  Opts.BuildTimeout:= AArgs.CycleBuildTimeout;
+  Opts.Apply       := AArgs.Apply;
+  Opts.NoBackup    := AArgs.NoBackup;
+  Opts.NoCompile   := AArgs.NoCompile;
+  Opts.Json        := AArgs.AsJson or SameText(AArgs.Format, 'json');
+  if not ExplicitDbsExist(AArgs, 'lazy-init') then Exit(2);
+  if NoDbResolved(AArgs.DbPath, 'lazy-init') then Exit(2);
+  var Ok: Boolean;
+  var Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
+  if not Ok then Exit(2);
+  Result:= RunLazyInit(Store, Opts);
 end;
 { O2 (1.45): the type oracle for the .scm rules of `lint <file>`, which run BEFORE the flow store below
   is opened. Same membership rule as that block (the --db first, then ResolveConsumerDbs, the
@@ -39064,6 +39127,8 @@ begin
     else if Args.Command = 'lint-project'      then Result:= DoLintProject     (Args)
     else if Args.Command = 'cycles'            then Result:= DoCycles          (Args)
     else if Args.Command = 'narrow-param'      then Result:= DoNarrowParam     (Args)
+    else if Args.Command = 'extract-interface' then Result:= DoExtractInterface(Args)
+    else if Args.Command = 'lazy-init'         then Result:= DoLazyInit        (Args)
     else if Args.Command = 'uses-audit'        then Result:= DoUsesAudit       (Args)
     else if Args.Command = 'uses-fix'          then Result:= DoUsesFix         (Args)
     else if Args.Command = 'forms-csv'         then Result:= DoFormsCsv        (Args)
