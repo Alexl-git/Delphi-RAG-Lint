@@ -609,7 +609,7 @@ written with `--no-reindex`, unverified); 1 refused, rolled back after a compile
 timeout, or written but not verified; 2 error -- a write or build failed part-way (rolled back,
 project not changed, or the rollback failure is named), or bad flags (`--part all` applies
 Part A then Part B in one run). A group the engine cannot cut
-mechanically is refused with a named reason, never guessed at. A class the consumer constructs goes through a New<TX> pointer next to its base class (constructor inversion, since 1.44); a site outside its whitelist refuses `ctor-inversion-surface`. The IDE offers it under
+mechanically is refused with a named reason, never guessed at. A class the consumer constructs goes through a New<TX> pointer next to its base class (constructor inversion, since 1.44); a site outside its whitelist refuses `ctor-inversion-surface`. `--ctor-wide` (off by default) widens that whitelist for a hub-shaped group such as data modules a worker owns; it can lift sites without cutting the cycle. The IDE offers it under
 *Uses & Dependencies*, on the Uses & Deps tab's *Circular uses* section, and on a
 `circular-uses` finding in the Structure window; details on the wiki page
 [Circular Uses Report (cycles + fix plan)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Uses-Report-cycles-fix-plan).

@@ -1950,6 +1950,7 @@ begin
   if pOpts.RsVars <> '' then Result:= Result + ' --rsvars ' + Quoted(pOpts.RsVars);
   if pOpts.NoBackup then Result:= Result + ' --no-backup';
   if pOpts.BuildTimeout <> '' then Result:= Result + ' --build-timeout ' + Quoted(pOpts.BuildTimeout);
+  if CycleCtorWide then Result:= Result + ' --ctor-wide';
 end;
 
 // pFile holds the child's stdout and stderr (merged); a stderr note can sit in front of the JSON on the same
