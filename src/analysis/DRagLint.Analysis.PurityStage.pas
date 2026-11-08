@@ -53,7 +53,11 @@ type
     /// <remarks>Every routine that owns a symbol_facts row with body_loc &gt; 0
     /// receives a verdict; a routine in a file whose on-disk mtime no longer
     /// matches files.mtime_unix is `?` with the witness
-    /// <c>source changed since indexing</c> (plan ruling 7). Complexity: one
+    /// <c>source changed since indexing</c> (plan ruling 7); a routine in a file
+    /// that holds no read/write/member-access ref at all (a shallow parse:
+    /// library mode or --shallow) is `?` with the witness
+    /// <c>no usage facts (shallow parse)</c> unless an earlier witness already
+    /// names a concrete effect (146 g1). Complexity: one
     /// pass over the refs of every file plus the fixpoint, which visits each
     /// routine once per change of a callee it depends on.</remarks>
     class function Run(const AStore: ISymbolStore): TPurityStats; static;
@@ -105,6 +109,10 @@ const
   WITNESS_NO_FACTS        = 'no facts for callee';
   WITNESS_VIRTUAL         = 'virtual/interface dispatch';
   WITNESS_NOT_ROUTINE     = 'target is not a routine';
+  /// <summary>146 g1: the file holds no read/write/member-access refs at all,
+  /// the mark of a shallow (library-mode / --shallow) parse. Its bodies were
+  /// never recorded, so no routine in it can be proven effect-free.</summary>
+  WITNESS_SHALLOW         = 'no usage facts (shallow parse)';
 
   ROUTINE_KINDS = [skProcedure, skFunction, skMethod, skConstructor, skDestructor];
   CAST_KINDS    = [skClass, skInterface, skRecord, skEnum, skTypeAlias];
@@ -208,7 +216,7 @@ type
     procedure Load;
     procedure BuildContexts;
     procedure ScanFiles;
-    procedure ScanRoutine(AIndex: Integer; const ALines: TArray<string>; ARefs: TList<TReference>);
+    procedure ScanRoutine(AIndex: Integer; const ALines: TArray<string>; ARefs: TList<TReference>; AShallow: Boolean);
     function  ScanBody(AIndex: Integer; const ALines: TArray<string>): TBodyScan;
     procedure ApplyFacts(AIndex: Integer; const AFacts: TSymbolFacts; var ASum: TEffectSummary; var AChanged: Boolean);
     procedure AddInheritedUse(AIndex: Integer; var ASum: TEffectSummary; var AChanged: Boolean; AUses: TList<TCalleeUse>);
@@ -740,6 +748,7 @@ var
   ByRoutine: TObjectDictionary<Int64, TList<TReference>>;
   RefList  : TList<TReference>;
   Changed  : Boolean;
+  Shallow  : Boolean;
 begin
   I:= 0;
   while I <= High(FRoutines) do
@@ -786,9 +795,15 @@ begin
     Inc(FTkFile, TStopwatch.GetTimeStamp - Tk0);
     Tk0:= TStopwatch.GetTimeStamp;
     ByRoutine:= TObjectDictionary<Int64, TList<TReference>>.Create([doOwnsValues]);
+    { 146 g1: a file with NO usage ref anywhere was parsed shallow (library
+      mode, --shallow): only its calls were recorded, so an empty ref list
+      proves nothing about a body. Counted over the whole file, not per
+      routine, so a deep routine that merely reads nothing is unaffected. }
+    Shallow:= True;
     try
       for var R in FStore.GetReferencesFromFile(FileId) do
       begin
+        if (R.Kind = REF_KIND_READ) or (R.Kind = REF_KIND_WRITE) or (R.Kind = REF_KIND_MEMBER) then Shallow:= False;
         if R.EnclosingSymbolId = 0 then Continue;
         if not ((R.Kind = REF_KIND_CALL) or (R.Kind = REF_KIND_READ) or (R.Kind = REF_KIND_WRITE) or (R.Kind = REF_KIND_MEMBER)) then Continue;
         if not ByRoutine.TryGetValue(R.EnclosingSymbolId, RefList) then
@@ -811,7 +826,7 @@ begin
             end))
         else
           RefList:= nil;
-        ScanRoutine(K, Lines, RefList);
+        ScanRoutine(K, Lines, RefList, Shallow);
       end;
     finally
       ByRoutine.Free;
@@ -1204,7 +1219,7 @@ begin
   ASum.AddFlag(efUnknown, 'accesses ' + ARef.ReceiverText + '.' + ARef.NameText + ' (unbound member)', AChanged);
 end;
 
-procedure TPurityRun.ScanRoutine(AIndex: Integer; const ALines: TArray<string>; ARefs: TList<TReference>);
+procedure TPurityRun.ScanRoutine(AIndex: Integer; const ALines: TArray<string>; ARefs: TList<TReference>; AShallow: Boolean);
 var
   Sum      : TEffectSummary;
   Changed  : Boolean;
@@ -1267,6 +1282,9 @@ begin
         end;
       Inc(FTkRefLoop, TStopwatch.GetTimeStamp - Tk0);
     end;
+    { Last, so a concrete witness found above (a field write from the facts)
+      keeps the witness slot; the flag alone already makes the verdict '?'. }
+    if AShallow then Sum.AddFlag(efUnknown, WITNESS_SHALLOW, Changed);
     FLocal[AIndex]:= Sum;
     FUses[AIndex]:= UseList.ToArray;
   finally
