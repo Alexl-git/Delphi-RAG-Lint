@@ -176,8 +176,8 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+105 more)</para>
-  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Index, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Implementors, DRagLint.Charts.Q.MemberAccess (+27 more)</para>
+  /// <para>Used by: DRagLint.CLI.AddLibraryPendingNotes (DRagLint.CLI.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.AnyDbSchemaCurrent (DRagLint.CLI.pas), DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoCompileCheck (DRagLint.CLI.pas) (+108 more)</para>
+  /// <para>Used in units: DRagLint.Charts.AskVerb, DRagLint.Charts.Compare, DRagLint.Charts.Index, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Implementors, DRagLint.Charts.Q.MemberAccess (+29 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TSQLiteSymbolStore = class(TInterfacedObject, ISymbolStore)
@@ -434,7 +434,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ScopedResolveIsSound (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CallEdgesNeedRebuild, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CountFiles, DRagLint.Storage.SQLite.TSQLiteSymbolStore.RemovalsHatch, Format, GetEnvironmentVariable</para>
-      /// <para>Complexity: 15 (cyclomatic, outer body), 86 lines (full implementation)</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 86 lines (full implementation)</para>
       /// <para>Reads: FScopeWhole, FScopeWholeByShare, FScopeCorpusBefore, FScopeNewWrites, FScopeRemovals, FScopeWrites, FScopeMaxFiles, FScopeWholeWhy (+3 more)</para>
       /// <para>Pure</para>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
@@ -711,7 +711,7 @@ type
       /// member-read stream, so both write the identical three facts. A FIELD
       /// accessor earns no edge: the member_accesses row IS that use.
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveMemberReadRefs (DRagLint.Storage.SQLite.pas)</para>
+      /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveMemberReadRefs (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveWriteRefs (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: SameText</para>
       /// <para>Reads: FQSetRefSymbol, FQInsertMemberAccess, FQInsertCallEdge</para>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
@@ -750,15 +750,15 @@ type
       /// ref, so the NULL can never erase another stream's answer.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Storage.SQLite.TSQLiteSymbolStore.ResolveCallTargets (DRagLint.Storage.SQLite.pas)</para>
-      /// <para>Calls: Default, DRagLint.Core.ControlChannel.BeatProgress, DRagLint.Index.CallResolver.TCallResolver.ResolveWriteRef, DRagLint.Storage.SQLite.BeatStreamOpen</para>
+      /// <para>Calls: Default, DRagLint.Core.ControlChannel.BeatProgress, DRagLint.Index.CallResolver.TCallResolver.ResolveWriteEdge, DRagLint.Storage.SQLite.BeatStreamOpen, DRagLint.Storage.SQLite.TSQLiteSymbolStore.WriteMemberAccess</para>
       /// <para>Reads: FConn, FQSetRefSymbol</para>
       /// <para>SQL: reads REFS; writes REFS</para>
       /// <para>Mutates: ACandidates (out), ABound (out)</para>
       /// <seealso cref="DRagLint.Core.ControlChannel.BeatProgress"/>
-      /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ResolveWriteRef"/>
+      /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.ResolveWriteEdge"/>
       /// <seealso cref="DRagLint.Storage.SQLite.BeatStreamOpen"/>
+      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.WriteMemberAccess"/>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
-      /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure ResolveWriteRefs(AResolver: TCallResolver;
@@ -1398,7 +1398,7 @@ type
       /// <para>Called from: DRagLint.CLI.DoFbSnapshot (DRagLint.CLI.pas), DRagLint.FormsMap.GenerateFormsCsvCore (DRagLint.FormsMap.pas), DRagLint.Sql.OrmLinker.TOrmLinker.Run (DRagLint.Sql.OrmLinker.pas)</para>
       /// <para>Calls: DRagLint.Storage.SQLite.TSQLiteSymbolStore.CanonicalizeFilePaths, DRagLint.Storage.SQLite.TSQLiteSymbolStore.ConfigureUnitUseStatements, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FinishDeferredTextIndex, DRagLint.Storage.SQLite.TSQLiteSymbolStore.IsSchemaCurrent, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.DropStringLiteralTriggers, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.DropTriggerVerbose, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.PrintTriggerCount, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.ProbeFts5, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.ProbeTrigram, DRagLint.Storage.SQLite.TSQLiteSymbolStore.Migrate.SqliteVersion (+10 more)</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.Migrate</para>
-      /// <para>Complexity: 16 (cyclomatic, outer body), 642 lines (full implementation)</para>
+      /// <para>Complexity: 16 (cyclomatic, outer body), 648 lines (full implementation)</para>
       /// <para>Reads: FConn, FFts5Available, FTrigramAvailable, FQGetSymbolFacts   Writes: FFts5Available, FTrigramAvailable, FHasEffectCols, FHasUseOriginCols</para>
       /// <para>Catches: Exception (empty); Exception (re-raise); Exception (swallowed)</para>
       /// <para>SQL: reads SQLITE_MASTER; writes SCHEMA_META, STRING_FTS_TRI</para>
@@ -1770,7 +1770,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Calls: DRagLint.Core.FileTime.NowUnixUtc, DRagLint.Storage.SQLite.NormalizeStoredPath, DRagLint.Storage.SQLite.RollFileBatch, DRagLint.Storage.SQLite.StringLiteralsEmpty, DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginDeferredTextIndex, DRagLint.Storage.SQLite.TSQLiteSymbolStore.BeginTargetedTextIndex, DRagLint.Storage.SQLite.TSQLiteSymbolStore.CountFiles, DRagLint.Storage.SQLite.TSQLiteSymbolStore.NoteScopeRemoval, GFileTxGate</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.OpenFileTx</para>
-      /// <para>Complexity: 10 (cyclomatic, outer body), 84 lines (full implementation)</para>
+      /// <para>Complexity: 11 (cyclomatic, outer body), 84 lines (full implementation)</para>
       /// <para>Reads: FBatchOpen, FFtsDeferChecked, FFts5Available, FReadOnly, FConn, FBatchFiles, FBatchStamp, FScopeCorpusBefore (+5 more)   Writes: FFtsDeferChecked, FScopeCorpusBefore, FScopeNewWrites, FScopeWrites</para>
       /// <para>Catches: Exception (re-raise)</para>
       /// <para>SQL: reads FILES</para>
@@ -2118,6 +2118,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Calls: Default</para>
     /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.GetUnresolvedCallsFromSymbol</para>
+    /// <para>Complexity: 10 (cyclomatic, outer body), 56 lines (full implementation)</para>
     /// <para>Reads: FConn</para>
     /// <para>SQL: reads REFS</para>
     /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.AdditionsHatch"/>
@@ -2602,7 +2603,7 @@ type
       /// <para>Called from: DRagLint.Lint.ProjectRules.TProjectLintRules.Run (DRagLint.Lint.ProjectRules.pas) ?, DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindCallersByNameWithContext (DRagLint.Storage.SQLite.pas), DRagLint.Storage.SQLite.TSQLiteSymbolStore.FindEventHandlersForForm (DRagLint.Storage.SQLite.pas)</para>
       /// <para>Calls: Default, DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasMemberAccesses, SameText</para>
       /// <para>Implements: DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName</para>
-      /// <para>Complexity: 15 (cyclomatic, outer body), 83 lines (full implementation)</para>
+      /// <para>Complexity: 17 (cyclomatic, outer body), 88 lines (full implementation)</para>
       /// <para>Reads: FConn</para>
       /// <para>SQL: reads CALL_EDGES, MEMBER_ACCESSES, REFS</para>
       /// <seealso cref="DRagLint.Storage.SQLite.TSQLiteSymbolStore.HasMemberAccesses"/>
@@ -3574,6 +3575,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function IsDescendantOf(const AClassName, AAncestorName: string; AFileId: Int64): Boolean;
+      /// <summary><!-- drag-lint:auto sum -->Deliberately shares TypeCandidateIds with
+      /// IsDescendantOf. The two are asked about the SAME class name in the same breath
+      /// at every call site, and a candidate set that differed between them would make
+      /// the bridge fire for a type the descendant test never considered -- a divergence
+      /// with no symptom until it suppressed a real leak.</summary>
       /// <param name="AClassName"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
       /// <returns><!-- drag-lint:auto type -->TArray&lt;string&gt;</returns>
@@ -3755,7 +3761,7 @@ type
       /// <returns><!-- drag-lint:auto -->TFDConnection -- Observed: FConn.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: DRagLint.Charts.Index.TChartsIndex.Query (DRagLint.Charts.Index.pas), DRagLint.CLI.DoSchema (DRagLint.CLI.pas), DRagLint.CLI.DoSql (DRagLint.CLI.pas), DRagLint.CLI.DoUsesReport.LoadFilesAndEdges (DRagLint.CLI.pas), DRagLint.CLI.ReadRefTypeFact (DRagLint.CLI.pas) (+37 more)</para>
+      /// <para>Called from: DRagLint.Charts.Index.TChartsIndex.Query (DRagLint.Charts.Index.pas), DRagLint.CLI.DoSchema (DRagLint.CLI.pas), DRagLint.CLI.DoSql (DRagLint.CLI.pas), DRagLint.CLI.DoUsesReport.LoadFilesAndEdges (DRagLint.CLI.pas), DRagLint.CLI.ReadRefTypeFact (DRagLint.CLI.pas) (+40 more)</para>
       /// <para>Reads: FConn</para>
       /// <para>Owns returned: borrowed</para>
       /// <para>Effect-free (proven)</para>
