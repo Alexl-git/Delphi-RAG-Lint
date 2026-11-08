@@ -3117,8 +3117,9 @@ end;
 /// active Platform decides when APlatform is ''; '' = no project.</param>
 /// <returns>A non-empty platform token; never ''. Owner ruling a3 (L-C20): APlatform, else the
 /// project's active Platform (PlatformOfDproj; for a marker-less .dproj the platform its
-/// &lt;project&gt;.delphilsp.json names), else Win32 -- a project that names no platform
-/// (Delphi 7 has no .dproj; Delphi 2007..XE .dproj files carry no Win32/Win64 token) is Win32.</returns>
+/// &lt;project&gt;.delphilsp.json names), else the manifest's defaultPlatform (an explicit setting wins over
+/// the fallback: controller ruling 2026-11-08 on a3, owner may reverse), else Win32 -- a project that names
+/// no platform (Delphi 7 has no .dproj; Delphi 2007..XE .dproj files carry no Win32/Win64 token) is Win32.</returns>
 /// <remarks>
 /// ONE definition of the default, because two callers deriving it separately is
 /// precisely the defect this closes (INBOX-indexer-fingerprint-disagrees-between-
@@ -3134,6 +3135,8 @@ end;
 /// did is resolve the token. Recording the unresolved token was the bug; callers
 /// that hold a project pass the RESOLVED platform (TActiveBuild.Platform) to the fingerprint.
 /// </remarks>
+function ManifestDefaultPlatform: string; forward;
+
 function EffectiveIndexPlatform(const APlatform: string; const ADproj: string = ''): string;
 const
   CNoPlatformDefault = 'Win32'; // ruling a3: no platform named anywhere -> Win32
@@ -3150,6 +3153,9 @@ begin
     var LspPlat: string;
     if ReadDelphiLspDefines(ADproj, LspPlat, LspDefs, LspNums, LspSws) then Result:= LspPlat;
   end;
+  { the manifest's defaultPlatform before the a3 fallback: a platformless .dpr under a manifest that
+    says Win64 preprocesses AND picks its library as Win64 (run_library_resolve_marker step d) }
+  if Result = '' then Result:= ManifestDefaultPlatform;
   if Result = '' then Result:= CNoPlatformDefault;
 end;
 
