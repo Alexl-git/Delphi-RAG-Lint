@@ -17723,7 +17723,7 @@ begin
     Q.Connection:= FConn;
     Q.SQL.Text:= 'SELECT th.*, s.kind FROM type_helpers th ' +
                  'JOIN symbols s ON s.id = th.helper_symbol_id ' +
-                 'WHERE th.target_name = :target_name';
+                 'WHERE th.target_name = :target_name COLLATE NOCASE'; // Delphi names: TMemINIFile is TMemIniFile
     Q.ParamByName('target_name').AsWideString:= ATargetName;
     Q.Open;
     ReadHelperEdges(Q, List);

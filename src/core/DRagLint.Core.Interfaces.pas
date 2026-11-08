@@ -1639,7 +1639,9 @@ type
     /// </remarks>
     function GetVirtualMethodsIncludingAncestors(const AClassName: string; AFileId: Int64): TArray<string>;
     /// <summary>v15: all helpers (record/class) whose target type name matches
-    /// ATargetName (whole-DB). Empty when no helper targets that type.
+    /// ATargetName (whole-DB), compared case-insensitively as Delphi compares
+    /// names (`class helper for TMemINIFile` targets TMemIniFile). Empty when
+    /// no helper targets that type.
     /// NAME-ONLY match: two unrelated same-named types in different units
     /// (e.g. two distinct `TColor` enums) are indistinguishable to this call
     /// -- prefer FindHelpersOfTypeSymbol when the candidate's own symbol id

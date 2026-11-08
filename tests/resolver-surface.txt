@@ -43,6 +43,13 @@ src/storage/DRagLint.Storage.SQLite.pas::ResolveRefReceivers
 # ResolveDispatch is the writer; the resolver unit is all derive logic.
 src/index/DRagLint.Index.DispatchResolver.pas::*
 src/index/DRagLint.Index.LibraryOracle.pas::*
+# 2026-11-08 (wave 147 B4, E-RECV-UNDECIDABLE D01/D05): the helper READERS feed the
+# resolve pass -- CallResolver (helper rungs, LookupLibraryTypeHelper) and LibraryOracle
+# (HelpersDeclare, HelperCands) call them during a walk, so a change to them changes what
+# call_edges / refs.external_target get. They were excluded as query-side readers.
+src/storage/DRagLint.Storage.SQLite.pas::FindHelpersOfType
+src/storage/DRagLint.Storage.SQLite.pas::FindHelpersOfTypeSymbol
+src/storage/DRagLint.Storage.SQLite.pas::ReadHelperEdges
 
 # What ResolveCallTargets calls (autodoc facts, not inference).
 src/storage/DRagLint.Storage.SQLite.pas::UpsertCallEdge
@@ -258,10 +265,7 @@ EXCLUDE resolvesecs
 # Query-side READERS. A reader cannot make stored data stale -- it consumes the
 # derived tables, it does not produce them. Every one of these is reached from
 # `query`, the doc engine or the IDE, never from a walk.
-EXCLUDE findhelpersoftype
-EXCLUDE findhelpersoftypesymbol
 EXCLUDE findhelpermembernamesinunit
-EXCLUDE readhelperedges
 EXCLUDE findresolvedcallers
 EXCLUDE findunresolvednamecallers
 EXCLUDE getcalledgesfromsymbol

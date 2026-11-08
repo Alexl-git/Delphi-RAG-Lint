@@ -70,6 +70,10 @@ type
     FStems    : TDictionary<string, string>;
     FFileUses : TDictionary<string, TArray<string>>;
     FHelperMembers: TDictionary<string, string>;
+    FHelperTypes  : TDictionary<string, TArray<TLibCand>>;
+    function HelperCands(const ALeaf: string): TArray<TLibCand>;
+    function PickTypeOrHelper(const ATypeText: string; const ATypeUses, AHelperUses: TArray<string>;
+      out ACand: TLibCand; out AReason: string): Boolean;
     function HelpersDeclare(const AStore: ISymbolStore; const AStoreTag, ATypeName, AMember: string): Boolean;
     function CandProvesAbsent(const ACand: TLibCand; const AMember: string; const AProjectStore: ISymbolStore): Boolean;
     function Key(AStore: Integer; AId: Int64): string;
@@ -89,7 +93,8 @@ type
     function AgreedMember(const ATypeText, AMember: string; AKind: TExternalKind): string;
     function VisibleOf(const ACands: TArray<TLibCand>; const AUses: TArray<string>): TArray<TLibCand>;
     function UnitRoutine(const AChain, AMember: string; const AUses: TArray<string>; out AQName: string): Integer;
-    function StepPending(var ACand: TLibCand; const APending: string; out AReason: string): Boolean;
+    function StepPending(var ACand: TLibCand; const APending: string; const AHelperUses: TArray<string>;
+      out AReason: string): Boolean;
     function MemberOf(const ACand: TLibCand; const AMember: string; AKind: TExternalKind;
       out AReason: string): string;
     function Count(const AResult, AReason: string): string;
@@ -107,7 +112,10 @@ type
     /// <param name="AReason">ambiguous-type|no-member|no-store|no-type when the result is ''.</param>
     /// <returns>The qualified name, or '' with AReason set.</returns>
     /// <remarks>A type name Pick cannot choose still answers when every candidate is a class
-    /// and all of them give the SAME member (`Acc.Free` on TList): the choice cannot matter.</remarks>
+    /// and all of them give the SAME member (`Acc.Free` on TList): the choice cannot matter.
+    /// A name no library type answers (a built-in such as string or Boolean, at the head or
+    /// as a pending segment's type) is answered by its one library helper visible from the
+    /// calling file (`S.Split` -> TStringHelper.Split); two visible helpers decline.</remarks>
     function Bind(const ATypeText, APending, AMember: string; AKind: TExternalKind;
       const AUsesUnits: TArray<string>; out AReason: string): string;
     /// <summary>Binds a receiver whose HEAD identifier no project rung typed: in Delphi's
@@ -283,10 +291,12 @@ begin
   FStems    := TDictionary<string, string>.Create;
   FFileUses := TDictionary<string, TArray<string>>.Create;
   FHelperMembers:= TDictionary<string, string>.Create;
+  FHelperTypes  := TDictionary<string, TArray<TLibCand>>.Create;
 end;
 
 destructor TLibraryOracle.Destroy;
 begin
+  FHelperTypes.Free;
   FHelperMembers.Free;
   FFileUses.Free;
   FStems.Free;
@@ -435,6 +445,56 @@ begin
   Result:= Pick(Cached(FTypes, Leaf, TYPE_KINDS, True), AUses, ACand, AReason);
 end;
 
+{ E-RECV-UNDECIDABLE D05: every library helper whose target is named ALeaf
+  (`record helper for string` -> TStringHelper), one candidate per helper. }
+function TLibraryOracle.HelperCands(const ALeaf: string): TArray<TLibCand>;
+begin
+  var K: string:= LowerCase(ALeaf);
+  if FHelperTypes.TryGetValue(K, Result) then Exit;
+  Result:= [];
+  for var Si:= 0 to High(FStores) do
+  begin
+    if FStores[Si] = nil then Continue;
+    for var H: THelperEdge in FStores[Si].FindHelpersOfType(ALeaf) do
+    begin
+      var S: TSymbol:= FStores[Si].GetSymbolById(H.HelperSymbolId);
+      if S.Id <= 0 then Continue;
+      var C: TLibCand:= Default(TLibCand);
+      C.Store   := Si;
+      C.Ids     := [S.Id];
+      C.QName   := S.QualifiedName;
+      C.Name    := S.Name;
+      C.UnitStem:= UnitStemOf(Si, S.FileId);
+      C.FileId  := S.FileId;
+      C.Kind    := S.Kind;
+      C.Sig     := S.Signature;
+      Result:= Result + [C];
+    end;
+  end;
+  FHelperTypes.Add(K, Result);
+end;
+
+{ A type name no library type answers may still have members: a built-in type's
+  helper (`S.Split`, `B.ToString`). Only one helper per type is active in Delphi,
+  so exactly one visible helper answers; two decline. The helper's scope is the
+  CALLING file's (AHelperUses), whatever unit named the type. }
+function TLibraryOracle.PickTypeOrHelper(const ATypeText: string; const ATypeUses, AHelperUses: TArray<string>;
+  out ACand: TLibCand; out AReason: string): Boolean;
+begin
+  Result:= PickType(ATypeText, ATypeUses, ACand, AReason);
+  if Result or (AReason <> R_NO_TYPE) then Exit;
+  var Leaf: string:= NormalizeTypeLeaf(ATypeText);
+  if (Leaf = '') or Leaf.StartsWith('^') then Exit;
+  var Seen: TArray<TLibCand>:= VisibleOf(HelperCands(Leaf), AHelperUses);
+  if Length(Seen) = 1 then
+  begin
+    ACand  := Seen[0];
+    AReason:= '';
+    Exit(True);
+  end;
+  if Length(Seen) > 1 then AReason:= R_AMBIGUOUS;
+end;
+
 function TLibraryOracle.Kids(AStore: Integer; AId: Int64): TArray<TSymbol>;
 begin
   var K: string:= Key(AStore, AId);
@@ -581,7 +641,8 @@ begin
     Result:= Result and CandProvesAbsent(C, AMember, AProjectStore);
 end;
 
-function TLibraryOracle.StepPending(var ACand: TLibCand; const APending: string; out AReason: string): Boolean;
+function TLibraryOracle.StepPending(var ACand: TLibCand; const APending: string;
+  const AHelperUses: TArray<string>; out AReason: string): Boolean;
 var
   Hit : TSymbol ;
   Next: TLibCand;
@@ -598,7 +659,7 @@ begin
     end;
     { The member's type is named in ITS declaring unit: prefer that unit, then
       what that unit uses -- never the project file's uses. }
-    if not PickType(MemberTypeText(Hit), LibraryUses(ACand.Store, Hit.FileId), Next, AReason) then
+    if not PickTypeOrHelper(MemberTypeText(Hit), LibraryUses(ACand.Store, Hit.FileId), AHelperUses, Next, AReason) then
     begin
       if AReason = R_NO_TYPE then AReason:= R_NO_MEMBER;
       Exit(False);
@@ -640,8 +701,8 @@ begin
   Result := '';
   AReason:= '';
   if Length(FStores) = 0 then AReason:= R_NO_STORE
-  else if PickType(ATypeText, AUsesUnits + ['system', 'sysinit'], C, AReason)
-          and StepPending(C, APending, AReason) then
+  else if PickTypeOrHelper(ATypeText, AUsesUnits + ['system', 'sysinit'], AUsesUnits + ['system', 'sysinit'], C, AReason)
+          and StepPending(C, APending, AUsesUnits + ['system', 'sysinit'], AReason) then
     Result:= MemberOf(C, AMember, AKind, AReason)
   else if (AReason = R_AMBIGUOUS) and (APending = '') then
   begin
@@ -666,7 +727,7 @@ var
   function Finish(const AText: string): string;
   begin
     ATypeText:= AText + (if Pending <> '' then '.' + Pending else '');
-    Result   := if StepPending(C, Pending, AReason) then MemberOf(C, AMember, AKind, AReason) else '';
+    Result   := if StepPending(C, Pending, Visible, AReason) then MemberOf(C, AMember, AKind, AReason) else '';
   end;
 
 begin
