@@ -61,7 +61,7 @@ try {
   # A real stale case is what every pre-1.26 DB looks like after Migrate -- the table exists
   # and is EMPTY -- so empty a COPY of the fresh index (python sqlite3). Positive control: the
   # fresh index itself must NOT print the note (else the note check could never fail).
-  $staleNoteRx = 'taint: this index has no data_flows facts'
+  $staleNoteRx = 'taint: no data_flows rows for the routines in scope'
   $stale = Join-Path $tmp 'stale.sqlite'
   [IO.File]::Copy($db, $stale, $true)
   $emptyFlows = 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("DELETE FROM data_flows"); c.commit(); print(c.execute("SELECT COUNT(*) FROM data_flows").fetchone()[0])'
@@ -78,6 +78,20 @@ try {
   & $exePath lint-all @common --config $empty 2>$freshErr | Out-Null
   $freshNote = (Get-Content $freshErr -Raw) -match $staleNoteRx
   Check 'fresh index: no stale note (positive control)' (-not $freshNote) 'the note fired on an index the extractor filled'
+
+  # K1 / E-TAINT-NOTE-WRONG: a FRESH index whose routines pass no values has an empty data_flows too;
+  # the note must name that cause, not claim the index is pre-1.26.0 only. Positive control: the
+  # fixture index above (rows present) printed no note.
+  $tinyDir = Join-Path $tmp 'tiny'; [IO.Directory]::CreateDirectory($tinyDir) | Out-Null
+  [IO.File]::WriteAllText((Join-Path $tinyDir 'A.pas'), "unit A;`r`ninterface`r`nprocedure P1;`r`nprocedure P2;`r`nimplementation`r`nprocedure P1; begin end;`r`nprocedure P2; begin end;`r`nend.`r`n")
+  [IO.File]::WriteAllText((Join-Path $tinyDir 'B.pas'), "unit B;`r`ninterface`r`nprocedure Q1;`r`nimplementation`r`nprocedure Q1; begin end;`r`nend.`r`n")
+  $tinyDb = Join-Path $tmp 'tiny.sqlite'
+  & $exePath index $tinyDir --db $tinyDb 2>&1 | Out-Null
+  $tinyErr = Join-Path $tmp 'tiny.err'
+  & $exePath lint-all --db $tinyDb --json --quiet --config $empty 2>$tinyErr | Out-Null
+  $tinyTxt = Get-Content $tinyErr -Raw
+  Check 'tiny fresh index: note fires' ($tinyTxt -match $staleNoteRx) "stderr: $tinyTxt"
+  Check 'tiny fresh index: note names the no-values cause' ($tinyTxt -match 'none of them passes a value') "stderr: $tinyTxt"
 
   if ($Mode -eq 'fixture') {
     # fixture mode measures the HAND rows only: drop what the extractor wrote first
