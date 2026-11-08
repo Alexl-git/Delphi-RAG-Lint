@@ -4,10 +4,10 @@ title: doc-drift
 summary: Diagnostic that computes deterministic doc-vs-code drift findings for one symbol
 product: DL
 group: documentation
-order: 40003
+order: 40004
 since: 0.93.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # doc-drift

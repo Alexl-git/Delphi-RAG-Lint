@@ -4,10 +4,10 @@ title: Uses Cleanup Preview (compiler-verified, this unit)
 summary: The removals a Uses Audit suggests, but verified by actually compiling
 product: DL
 group: refactoring
-order: 50019
+order: 50020
 since: 0.43.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Uses Cleanup Preview (compiler-verified, this unit)

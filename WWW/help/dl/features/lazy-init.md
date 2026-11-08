@@ -7,7 +7,7 @@ group: refactoring
 order: 50007
 since: 1.47.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Prepare heavy initialization for lazy loading (first phase)
@@ -19,7 +19,7 @@ Read this when the heavy-initialization rule reports a unit and you want the wor
 ## How to run it
 
 ```text
-drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
+drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--defer] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
 ```
 
 Example:
@@ -37,6 +37,7 @@ Full flag list: [lazy-init in the CLI reference](../cli.md#lazy-init).
 | `--unit` | `<name>` |  |  |
 | `--all` |  |  |  |
 | `--name` | `<routine>` |  |  |
+| `--defer` |  |  |  |
 | `--plan` |  |  |  |
 | `--apply` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
@@ -96,7 +97,18 @@ initialization
 
 As in [extract-interface](extract-interface.md): a build on a scratch mirror, then the ordinary compile gate. A build says the code compiles, not that it behaves the same; the extraction keeps the order by construction, and `tests\autotest\run_refact_lazy_init.ps1` compares a program's output before and after.
 
-Not built: moving the call out of the section. Design: `docs\superpowers\specs\2026-11-06-extract-interface-lazy-init.md`.
+### --defer: start the work on first use (phase 2)
+
+```text
+drag-lint lazy-init --unit <name> --plan --defer --db <db>
+drag-lint lazy-init --unit <name> --apply --defer --project <X.dproj> --db <db>
+```
+
+Opt-in, one `--unit` (with `--all` it exits 2). The section no longer calls the routine. Every routine of the unit that touches a global the section writes (the entry points, listed in the plan as `entry_points[]{name,line}`, JSON `deferred: true`) calls it as its first statement; the routine gets a forward declaration after the implementation uses clause, and finalization runs its body only when the work ran. A program that never touches the unit never runs the work.
+
+More refusals, after `name-taken`: `no-lazy-global` (the section writes no global, so nothing marks a first use), `global-read-elsewhere` (a global it writes is declared in the interface or read by another unit), `reader-outside-routine` / `asm-reader` (a use the call cannot be put in front of), `parse-failed`, `no-entry-point`. After a deferred run the section is empty, so a second `--defer` refuses with `empty-section`.
+
+Not thread-safe: the guard is a plain Boolean set before the work. A unit first used from two threads at once must call the routine from the application's start. Effects other units rely on without touching the globals (a registration, a print) move to the first use too: read the plan before `--apply`. Design: `docs\superpowers\specs\2026-11-06-extract-interface-lazy-init.md`.
 
 ---
 

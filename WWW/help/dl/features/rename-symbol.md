@@ -4,10 +4,10 @@ title: Rename Symbol
 summary: Renames a symbol across the whole indexed project
 product: DL
 group: refactoring
-order: 50014
+order: 50015
 since: 0.24.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Rename Symbol
@@ -97,7 +97,7 @@ A symbol declared inside a routine (a local, a parameter, a local constant or ty
 
 | refusal | why |
 |---|---|
-| `receiver-untyped` | an unbound ref whose receiver has no typed ref: a subscript the index cannot type (`F()[0].X`, a project class with a default property, a generic parameter), a chain over lines, a library-only cast |
+| `receiver-untyped` | an unbound ref whose receiver has no typed ref: a subscript the index cannot type (`F()[0].X`, a generic parameter), a chain over lines, a library-only cast. A default or indexed property (`Bag[0].X`, `Bag.Items[0].X`), a `class(TList<T>)` descendant and a receiver of a library type (`Lines.Capacity`) are typed and decided (1.47) |
 | `bare-unbound` | an unbound ref with no receiver |
 | `no-ref-occurrence` | a token the index holds no ref for: an inactive `{$IFDEF}` branch, or a chain the parse dropped |
 | `unresolved-ancestor`, `no-library`, `ambiguous-type` | the receiver's chain cannot be walked to its end |

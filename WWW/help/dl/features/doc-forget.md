@@ -4,10 +4,10 @@ title: doc-forget
 summary: Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply
 product: DL
 group: documentation
-order: 40004
+order: 40005
 since: 1.17.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # doc-forget

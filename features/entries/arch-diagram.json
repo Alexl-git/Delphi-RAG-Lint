@@ -44,9 +44,9 @@
   ],
   "notes": "wave 146 lane x3, NOT FOR MERGE until the owner has seen the picture; spec docs\\superpowers\\specs\\2026-11-06-archify-layer-diagrams.md; guard tests\\autotest\\run_arch_diagram.ps1",
   "verified": {
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "by": "ENGINE",
-    "build": "1.46.0-alpha",
+    "build": "1.47.0-alpha",
     "surfaceHash": "ab2b5e72a961c370c9c96cdc39380451472d2aff80de376435e72e216058591a"
   }
 }

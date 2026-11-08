@@ -126,7 +126,8 @@ DocInsight comments generated from the index, and drift detection.
 
 | Feature | What it does | Since |
 | --- | --- | --- |
-| [bookmarks](features/bookmarks.md) | Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder | 1.46.0-alpha |
+| [bookmarks](features/bookmarks.md) | Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder, and strips / restores them on request | 1.46.0-alpha |
+| [Bookmarks (IDE)](features/bookmarks-ide.md) | Lists, finds, strips and restores the // dl:bk comment anchors of the current unit from the IDE | 1.47.0-alpha |
 | [Doc Comment Stub (symbol)](features/doc-comment-stub-symbol.md) | Uses generate-docs to produce a doc-comment stub for one qualified symbol | 0.25.0-alpha |
 | [doc-drift](features/doc-drift.md) | Diagnostic that computes deterministic doc-vs-code drift findings for one symbol | 0.93.0-alpha |
 | [doc-forget](features/doc-forget.md) | Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply | 1.17.0-alpha |
@@ -151,6 +152,7 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Extract an interface from the members used (scratch + compile gate)](features/extract-interface.md) | Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate | 1.47.0-alpha |
 | [extract-method](features/extract-method.md) | Pulls a run of statements out of a routine into a new method | 0.85.0-alpha |
 | [Prepare heavy initialization for lazy loading (first phase)](features/lazy-init.md) | Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate | 1.47.0-alpha |
+| [Lint --fix through the compile gate](features/lint-fix-compile-gate.md) | lint --fix --apply --project X.dproj --compile-gate writes the fixes only if the project still builds; a fix that breaks the compile is refused and rolled back | 1.47.0-alpha |
 | [Narrow parameter types (compile-gated)](features/narrow-param.md) | Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate | 1.44.1-alpha |
 | [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md) | The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope | 1.2.0-alpha |
 | [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](features/quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md) | Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause | 0.47.0-alpha |
@@ -211,7 +213,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [Cycles fix (mechanical, compile-gated)](features/cycles-fix.md) | Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output | 1.33.0-alpha |
 | [deps-report](features/deps-report.md) | Produces a third-party dependency rollup from an index: which external units/libraries an indexed codebase depends on | 0.95.0-alpha |
 | [Export Enums (Delphi const)](features/export-enums-delphi-const.md) | Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations | 0.6.0-alpha |
-| [Export Graph (DOT)](features/export-graph-dot.md) | Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring | 0.6.0-alpha |
+| [Export Graph (DOT)](features/export-graph-dot.md) | Uses graph to export the indexed call/reference graph in DOT format, whole or rooted at a name substring; json and html add the Markdown text nodes | 0.6.0-alpha |
 | [Export to Obsidian](features/export-to-obsidian.md) | Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages | 0.6.0-alpha |
 | [Find Dead Code](features/find-dead-code.md) | Scans the index for code with no references -- candidates to delete | 0.25.0-alpha |
 | [Forms for testers (CSV)](features/generate-test-helper-csv.md) | A CSV of a project's forms, one row per form, telling a tester how to reach each one from the main form | 0.44.0-alpha |
@@ -315,7 +317,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-refs](features/dump-refs.md) | Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution | 0.82.0-alpha |
 | [Feature registry](features/feature-registry.md) | The machine-checked master list of every feature, and the generator of the index pages | 1.22.0-alpha |
 | [info](features/info.md) | Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities | 0.19.0-alpha |
-| [manifest where (installed layout v2)](features/installed-layout-v2.md) | Shows which drag-lint.json, log folder and library folder this engine resolves and why; phase 1 of installed layout v2, off by default, moves nothing | 1.47.0-alpha |
+| [manifest where / migrate (installed layout v2)](features/installed-layout-v2.md) | Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default | 1.47.0-alpha |
 | [Library Drift Check](features/library-drift-check.md) | Flags registered library roots that have source on disk but nothing in the index | 0.47.0-alpha |
 | [Maintenance](features/maintenance.md) | Indexes, the manifest, reindexing, and what to do when something looks wrong | 1.4.0-alpha |
 | [Open Plugin Log](features/open-plugin-log.md) | Opens the drag-lint plugin's own log file | 0.39.0-alpha |

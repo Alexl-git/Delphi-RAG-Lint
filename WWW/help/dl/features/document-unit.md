@@ -4,10 +4,10 @@ title: Document unit
 summary: Generates or repairs managed DocInsight comments for every public declaration in the unit open in the active editor (facts-only)
 product: DL
 group: documentation
-order: 40008
+order: 40009
 since: 0.90.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Document unit

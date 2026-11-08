@@ -116,7 +116,7 @@ Described in [bench-context](../../docs/wiki/bench-context.md).
 
 ### bookmarks
 
-Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder.
+Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder, and strips / restores them on request.
 
 ```text
 drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)
@@ -126,6 +126,40 @@ drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--
 | --- | --- | --- | --- |
 | `--in` | `<file.pas\|dir>` |  |  |
 | `--name` | `<code>` |  |  |
+| `--json` |  |  |  |
+
+Described in [bookmarks](../../docs/wiki/bookmarks.md).
+
+### bookmarks-restore
+
+Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder, and strips / restores them on request.
+
+```text
+drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json] (puts the anchors a bookmarks-strip removed back, byte-identical when the file is unchanged; a file with an anchor it cannot place is left untouched; dry run without --apply; exit 4 = some unplaced)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--from` | `<sidecar.json>` |  |  |
+| `--apply` |  |  |  |
+| `--json` |  |  |  |
+
+Described in [bookmarks](../../docs/wiki/bookmarks.md).
+
+### bookmarks-strip
+
+Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder, and strips / restores them on request.
+
+```text
+drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json] (removes the dl:bk comment anchors and records them in a sidecar for bookmarks-restore; dry run without --apply; never overwrites a sidecar; exit 3 = none)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--in` | `<file.pas\|dir>` |  |  |
+| `--output` | `<sidecar.json>` |  |  |
+| `--name` | `<code>` |  |  |
+| `--apply` |  |  |  |
 | `--json` |  |  |  |
 
 Described in [bookmarks](../../docs/wiki/bookmarks.md).
@@ -866,7 +900,7 @@ Described in [glyph-vacuum](../../docs/wiki/glyph-vacuum.md).
 
 ### graph
 
-Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring.
+Uses graph to export the indexed call/reference graph in DOT format, whole or rooted at a name substring; json and html add the Markdown text nodes.
 
 ```text
 drag-lint graph --db <file.sqlite> [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]
@@ -1067,7 +1101,7 @@ Described in [init: one command from a project to a wired AI client](../../docs/
 Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate.
 
 ```text
-drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
+drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--defer] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1075,6 +1109,7 @@ drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj
 | `--unit` | `<name>` |  |  |
 | `--all` |  |  |  |
 | `--name` | `<routine>` |  |  |
+| `--defer` |  |  |  |
 | `--plan` |  |  |  |
 | `--apply` |  |  |  |
 | `--project` | `<X.dproj>` |  |  |
@@ -1140,16 +1175,18 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 | `--project-rules` |  |  |  |
 | `--build-config` | `<name>` |  |  |
 | `--stand-in-for` | `<realpath>` |  |  |
+| `--in` | `<f.pas>` |  |  |
 | `--fix` |  |  |  |
-| `--fix-rule` | `redundant-cast` |  |  |
-| `--project` | `<X.dproj>` |  |  |
 | `--apply` |  |  |  |
+| `--project` | `<X.dproj>` |  |  |
+| `--compile-gate` |  |  |  |
 | `--fix-line` | `<L>` |  |  |
+| `--fix-rule` | `<id>` |  |  |
 | `--no-backup` |  |  |  |
+| `--platform` | `<p>` |  |  |
 | `--rsvars` | `<bat>` |  |  |
 | `--build-timeout` | `<s>` |  |  |
 | `--no-compile` |  |  |  |
-| `--in` | `<f.pas>` |  |  |
 
 Described in:
 
@@ -1160,6 +1197,7 @@ Described in:
 * [Fix all reliability (1.31.3)](../../docs/wiki/Fix-all-reliability.md)
 * [Fix it](../../docs/wiki/Fix-it.md)
 * [Lint Buffer (Unsaved)](../../docs/wiki/Lint-Buffer-Unsaved.md)
+* [Lint --fix through the compile gate](../../docs/wiki/lint-fix-compile-gate.md)
 * [Rename across every project that compiles a shared unit](../../docs/wiki/Multi-Project-Rename.md)
 * [Remove redundant casts (compile-gated)](../../docs/wiki/redundant-cast-fix.md)
 * [Target compiler (--target-compiler)](../../docs/wiki/target-compiler.md)
@@ -1291,18 +1329,20 @@ Described in:
 
 ### manifest
 
-Shows which drag-lint.json, log folder and library folder this engine resolves and why; phase 1 of installed layout v2, off by default, moves nothing.
+Shows which drag-lint.json this engine reads and why; moves the exe-side one to %APPDATA% once (renamed, never deleted). Installed layout v2, off by default.
 
 ```text
 drag-lint manifest where [--manifest <path>] [--json] (read-only: which drag-lint.json, log folder and library folder this engine resolves, and each lookup rung. Order: explicit DRAGLINT_MANIFEST / --manifest, then with DRAGLINT_LAYOUT=v2 the file in %APPDATA%\drag-lint, then beside the exe. Creates, moves and renames nothing)
+drag-lint manifest migrate [--apply] [--json] (one-time, installed layout v2 phase 2: without --apply plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\drag-lint\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)
 ```
 
 | Flag | Argument | Meaning | Default |
 | --- | --- | --- | --- |
 | `--manifest` | `path` |  |  |
 | `--json` |  |  |  |
+| `--apply` |  |  |  |
 
-Described in [manifest where (installed layout v2)](../../docs/wiki/installed-layout-v2.md).
+Described in [manifest where / migrate (installed layout v2)](../../docs/wiki/installed-layout-v2.md).
 
 ### mcp-config
 

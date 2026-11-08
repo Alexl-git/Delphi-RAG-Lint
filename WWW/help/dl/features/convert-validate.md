@@ -7,7 +7,7 @@ group: component-conversion
 order: 60005
 since: 1.1.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # convert-validate
@@ -59,6 +59,9 @@ malformed terms, I or N out of range, two alternatives for one N, and a
 the expression. `line N: warning: ...` lines (a straight `NumGlyphs` carry beside
 a G-link) never change the exit code. `convert-apply` refuses a G-linked book
 until the extraction build lands. Full grammar: `docs\CONVERSION-RULES.md`.
+A raw `A -> B` line (the PCRE escape hatch) is valid grammar but convert-apply executes no raw line:
+validate prints `line N: warning: raw find/replace line is not executed by convert-apply (only # directives are); write it as a #convert or #migrate line`,
+exit code unchanged.
 
 With `--glyph-stitch` a `#link` carrying an image `G[I/N]` expression on a class with no
 glyph-count reader is an error, when `--from` names the class. Parse-only mode stays silent.

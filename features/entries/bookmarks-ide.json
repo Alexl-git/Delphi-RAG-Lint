@@ -40,5 +40,11 @@
       "ask": "How do I take my bookmarks out of a unit before a commit and put them back?",
       "command": "drag-lint > Bookmarks > Strip Bookmarks from This Unit..., later drag-lint > Bookmarks > Restore Bookmarks..."
     }
-  ]
+  ],
+  "verified": {
+    "date": "2026-11-08",
+    "by": "ENGINE",
+    "build": "1.47.0-alpha",
+    "surfaceHash": "e2d2fadc800e8cef1a3eee5da4a9b69ceb2e2fc2ab7bcfb102799c1dfbeb28e1"
+  }
 }

@@ -4,10 +4,10 @@ title: shared-unit
 summary: "Reads or extends the dl:shared marker on a unit, recording which projects share it"
 product: DL
 group: documentation
-order: 40010
+order: 40011
 since: 1.10.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # shared-unit

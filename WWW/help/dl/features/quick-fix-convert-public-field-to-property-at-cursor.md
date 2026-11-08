@@ -4,10 +4,10 @@ title: "Quick-Fix: Convert Public Field to Property at Cursor"
 summary: Rewrites a public field under the caret as a property
 product: DL
 group: refactoring
-order: 50011
+order: 50012
 since: 1.2.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Quick-Fix: Convert Public Field to Property at Cursor

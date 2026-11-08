@@ -4,10 +4,10 @@ title: Uses Audit -- interface->impl moves + unused (this unit)
 summary: For one unit, reports which uses entries could move from the interface section to implementation, and which are unused entirely
 product: DL
 group: refactoring
-order: 50018
+order: 50019
 since: 0.43.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Uses Audit -- interface->impl moves + unused (this unit)

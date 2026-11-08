@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70006
 since: 0.43.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Circular Uses Report (cycles + fix plan)
@@ -154,8 +154,9 @@ prints the verdict. No source file of the project is written -- but the dry run 
 project by default** (the baseline gate), and that build writes what any build writes (dcu,
 exe). `--no-compile` skips it. Exit 0 mechanical, 1 refused, 2 error (bad flags, no such group).
 
-**Builds.** Every build is `msbuild /p:Config=Debug` of the project for `--platform` (default
-`win64`; the IDE passes its active platform). The Release configuration is never built.
+**Builds.** Every build is `msbuild /p:Config=Debug` of the project for `--platform` (default:
+the project's active platform from its `.dproj`, else `win32` -- a Delphi 7 `.dpr` or a
+Delphi 2007..XE `.dproj` names none; the IDE passes its active platform). The Release configuration is never built.
 
 **Scratch.** The default shadow tree and the gate's `C:\TEMP\draglint_cyclefix_<pid>_build\`
 (build logs, `reindex.log`, `all-iteration-<n>.json`) are **deleted at exit** -- the text dry run

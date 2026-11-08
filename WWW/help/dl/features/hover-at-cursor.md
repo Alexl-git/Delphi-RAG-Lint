@@ -7,7 +7,7 @@ group: search-navigation
 order: 20017
 since: 0.7.0-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Hover at Cursor
@@ -92,6 +92,16 @@ see `ask effects`.
 
 Hovering a forward declaration (`TFoo = class;`) shows the REAL declaration,
 led by `forward declaration -> line N`.
+
+### What the card says about where a property is used
+
+A property or field with resolved uses carries the analysis fact
+`Used in: Routine (file.pas) [r|w|rw], ...`: one entry per routine that reads
+(`r`), writes (`w`) or does both (`rw`) with it -- dotted, bare, `Self.` and
+`with` accesses, all bound by the resolver, never matched by name. It is the
+same line `document` writes into the managed block, in `--format md`, in the
+JSON `facts` array and in the IDE popup. Capped by `docs.max_callers` with
+`(+N more)`.
 
 ### When the engine is slow
 The IDE never waits for the engine. A hover (the menu command or a mouse

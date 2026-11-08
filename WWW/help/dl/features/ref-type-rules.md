@@ -7,7 +7,7 @@ group: linting
 order: 30033
 since: 1.44.1-alpha
 status: shipped
-updated: 1.46.0-alpha
+updated: 1.47.0-alpha
 ---
 
 # Lint rules on the static type of a reference
@@ -56,7 +56,7 @@ drag-lint lint-all --db <project.sqlite> --rule argument-narrows
 | `redundant-cast` | ON | Also `T(a.b)`, `T(F(x))` and `x as T`; the index overrules the per-file type map for `T(x)` |
 | `unsafe-typecast-without-is` | OFF | Also `T(a.b)` and `T(F(x))`; with a row in `ref_types` the rule fires only when both ends are classes and the cast narrows |
 
-| `ui-access-in-thread-typed` | OFF | Thread code reads, writes or calls a member of a receiver whose static type is a UI class, directly or over resolved calls; see below |
+| `ui-access-in-thread-typed` | ON (1.47) | Thread code reads, writes or calls a member of a receiver whose static type is a UI class, directly or over resolved calls; see below |
 
 ### `ui-access-in-thread-typed`
 
@@ -71,6 +71,7 @@ The typed answer to "does a thread touch the VCL". `ui-access-in-thread` (lexica
 | Over calls | Up to 5 certain call edges; the finding sits on the call in the thread code and prints the path and the first access |
 | Safe | The arguments of `Synchronize`, `Queue`, `ForceQueue`; a body naming `MainThreadID` or `CurrentThread`; a called routine naming `Synchronize` or `Queue` (taken to marshal itself) |
 | Silent | An untyped receiver, a subscript, a `with` body, a stored lambda; a member the project declares (a plain field of a form; its methods are followed as calls); `Tag`, `Name`, `ClassName` and the other `TObject` / `TComponent` data; `Application.Terminated`, `ExeName`, `Handle` |
+| Never constructed | An `Execute` whose class nothing in the project names outside its own method headers (no `TExit.Create`, no variable, no descendant, no `class of`) still fires, as a `hint` with ` (class never constructed)` appended: the code is wrong but does not run today (1.47) |
 | Not UI here | `TStrings`, `TBitmap`, `TCanvas`, menus: `Lst.Add`, `Bmp.Canvas` stay silent. A `TStrings` held apart from its control has no type that names the control |
 
 It needs the library index for the ancestry: without it only `Application` and `Screen` answer.
