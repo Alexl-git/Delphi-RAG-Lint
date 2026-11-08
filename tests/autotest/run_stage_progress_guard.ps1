@@ -58,7 +58,10 @@ try {
   $Beat = @{ DRAGLINT_STAGE_HEARTBEAT_MS = 200; DRAGLINT_TEST_RESOLVE_DELAY_MS = 1500 }
   $moving = $Beat + @{ DRAGLINT_TEST_BEAT_MOVES = '1' }
   $v = Run-Exe @('index', $src, '--db', $db, '--resolve-only') $moving
-  $line = @($v.Text -split "`r?`n" | Where-Object { $_ -match 'stage: calls -- still running' })
+  # 148 IX: a beat that lands AFTER the hold names the stream then running ("resolve ref receivers 15 of 15",
+  # "resolve calls (counting rows) 0"); under load one usually does. The counter under test is the hold's
+  # step, so the lines that name it are the ones checked. A beat with no counter at all still fails here.
+  $line = @($v.Text -split "`r?`n" | Where-Object { $_ -match 'stage: calls -- still running, \d+m\d{2}s elapsed, calls \d+' })
   $last = if ($line.Count) { $line[-1] } else { '' }
   Check 'P1 a moving counter is on the beat line, with a rate' ($last -match 'still running, \d+m\d{2}s elapsed, calls \d+, \d+/s$') "beats=$($line.Count) last='$last'"
 
