@@ -17,6 +17,7 @@ THE LIMITS, each an arm:
   I  usages --in --no-create: nothing built, the 'no index yet' error stands
   J  usages --in on a private copy: nothing built
   K,L  the servers (lsp, serve) never build, even given --project on a deployed engine
+  M  a build that times out AFTER writing the DB file says the index is INCOMPLETE (148 IX)
 POSITIVE CONTROL: arm A shows the fixture CAN be built, so the nothing-built arms are not vacuous.
 
 Usage: pwsh -NoProfile -File tests\autotest\run_autocreate_project_db.ps1 [-Exe <drag-lint.exe>]
@@ -140,6 +141,19 @@ try {
     if (-not $sp.WaitForExit(60000)) { $sp.Kill($true) }
     Check ($verb[0] + ': ' + $verb[1] + ' --project on a deployed engine -- nothing built') (-not (Test-Path (Db $ps))) ("stderr=" + [IO.File]::ReadAllText($e).Trim())
   }
+
+  # M -- 148 IX (144 qsmall "auto-create on a large project"): a build that does not finish in time
+  # (REINDEX_TIMEOUT_MS = 10 min; the drag-lint self-index takes ~13 min idle) is terminated after the
+  # parse wrote the DB file. It used to say nothing more, because "building it failed" was printed only
+  # when NO file existed: the run, and every later one, read a half-built index as if complete.
+  # Seams: the child inherits DRAGLINT_TEST_RESOLVE_DELAY_MS (holds its calls stage) and the parent
+  # waits DRAGLINT_TEST_REINDEX_TIMEOUT_MS.
+  $pm = New-Proj 'pm'
+  $env:DRAGLINT_TEST_RESOLVE_DELAY_MS = '60000'; $env:DRAGLINT_TEST_REINDEX_TIMEOUT_MS = '6000'
+  try { $rm = Invoke-Q $deployed @('query', '--name', 'FooMarker', '--project', "$pm\App.dpr") }
+  finally { foreach ($v in 'DRAGLINT_TEST_RESOLVE_DELAY_MS', 'DRAGLINT_TEST_REINDEX_TIMEOUT_MS') { [Environment]::SetEnvironmentVariable($v, $null) } }
+  Check 'M0: precondition -- the timed-out child left a DB file' (Test-Path (Db $pm)) ("stderr=" + $rm.Err.Trim())
+  Check 'M1: a timed-out build says the index is INCOMPLETE and how to finish it' ($rm.Err -match 'INCOMPLETE.*drag-lint index --project') ("stderr=" + $rm.Err.Trim())
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { try { [IO.Directory]::Delete($WorkDir, $true) } catch { Write-Host "  (cleanup: $_)" } }
 }

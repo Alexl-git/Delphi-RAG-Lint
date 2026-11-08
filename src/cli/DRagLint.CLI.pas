@@ -32596,7 +32596,8 @@ begin
   end;
   ExitCode:= 0;
   try
-    WaitRes:= WaitForSingleObject(PI.hProcess, REINDEX_TIMEOUT_MS);
+    { TEST SEAM (148 IX): DRAGLINT_TEST_REINDEX_TIMEOUT_MS shortens the wait, so a guard can time a child out. }
+    WaitRes:= WaitForSingleObject(PI.hProcess, Cardinal(StrToIntDef(GetEnvironmentVariable('DRAGLINT_TEST_REINDEX_TIMEOUT_MS'), REINDEX_TIMEOUT_MS)));
     WaitErr:= if WaitRes = WAIT_FAILED then SysErrorMessage(GetLastError) else '';
     if WaitRes = WAIT_OBJECT_0 then
       GetExitCodeProcess(PI.hProcess, ExitCode)
@@ -35359,8 +35360,14 @@ begin
     Writeln(ErrOutput, Format('NOTE: the index of %s did not exist; building it now at %s (first use; pass --no-create to skip): drag-lint index --project "%s" --db "%s"',
       [AArgs.ProjectPath, AProjDb, AArgs.ProjectPath, AProjDb]));
     Flush(ErrOutput);
-    if (not ReindexOwnerProject(AArgs.ProjectPath, AProjDb)) and (not TFile.Exists(AProjDb)) then
-      Writeln(ErrOutput, 'NOTE: building it failed; the run continues without the project index.');
+    { 148 IX: a build stopped after the parse wrote the file (the 10-minute child timeout on a large project)
+      leaves a HALF index. Say so, or this run and every later one read it as complete.
+      Guard: run_autocreate_project_db.ps1 arm M. }
+    if not ReindexOwnerProject(AArgs.ProjectPath, AProjDb) then
+      if TFile.Exists(AProjDb) then
+        Writeln(ErrOutput, Format('NOTE: building it did not finish; %s is INCOMPLETE and answers short until ' +
+          'this completes it: drag-lint index --project "%s" --db "%s"', [AProjDb, AArgs.ProjectPath, AProjDb]))
+      else Writeln(ErrOutput, 'NOTE: building it failed; the run continues without the project index.');
   finally
     Lock.Free;
     TFile.Delete(LockPath);
