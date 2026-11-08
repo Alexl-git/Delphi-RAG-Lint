@@ -104,8 +104,13 @@ Rules:
   `tests\run_battery.ps1` sets `DRAGLINT_LAYOUT=v1` for every child, so only the layout guards
   (which set it per engine run) ever see v2. A script run by hand outside the battery after the
   flip still needs `DRAGLINT_LAYOUT=v1` or `DRAGLINT_MANIFEST`.
-* Phase 3 NOT done: the plugin (`src\plugin\*`) belongs to lane P1 this wave and needs the owner's
-  IDE test; still the gate for phase 4 shipping.
+* Phase 3 built (lane/148-XP3, 2026-11-08), behind the same switch: new pure unit
+  `DragLint.Plugin.ManifestPaths` asks `TInstalledLayout` for every plugin manifest lookup
+  (`DbResolver.ManifestPathBesideEngine` / `TryLoadManifest` / `ManifestLibraryDbFor`, with
+  outDir read through `ExpandOutDir` + `DefaultOutDir`; `OptionsFrames.ManifestPathForWrite` via
+  `WriteTarget`). Layout OFF and no `DRAGLINT_MANIFEST`: the same two paths as before. The plugin's
+  own logs were already in `%LOCALAPPDATA%\drag-lint\logs` (CHARTS P1). Guard
+  `tests\plugin\run_plugin_manifest_layout_v2.ps1`. Owner IDE test owed (VM-TEST-CHECKLIST L8).
 * Phase 4 built behind the ISPP define `LayoutV2` (`Build-Installer.ps1 -LayoutV2`), OFF: starter
   `installer\drag-lint.starter-v2.json` to `{userappdata}\drag-lint` unless a v1 manifest is beside
   the engine; `[Run]` `manifest migrate --apply` (with `DRAGLINT_LAYOUT=v2` for that process) on an

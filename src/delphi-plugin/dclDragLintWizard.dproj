@@ -156,6 +156,7 @@
         <DCCReference Include="DragLint.Plugin.CycleFix.pas"/>
         <DCCReference Include="DragLint.Plugin.UsesDepsFrame.pas"/>
         <DCCReference Include="DragLint.Plugin.ExeResolver.pas"/>
+        <DCCReference Include="DragLint.Plugin.ManifestPaths.pas"/>
         <DCCReference Include="DragLint.Plugin.SeverityGlyph.pas"/>
         <DCCReference Include="DragLint.Plugin.Fonts.pas"/>
         <DCCReference Include="..\core\DRagLint.Hover.Contrast.pas"/>
