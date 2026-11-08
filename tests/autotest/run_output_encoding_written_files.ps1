@@ -88,7 +88,7 @@ foreach ($name in $surfaces.Keys) {
   Check "$name utf16: raw UTF-16LE path" (HasBytes $bW $utf16) ''
 }
 
-Write-Host 'lint-all default report path (beside the DB)' -ForegroundColor Cyan
+Write-Host 'lint-all default report path (the current directory; here also the DB folder)' -ForegroundColor Cyan
 $stamp = Get-Date -Format 'yyyyMMdd'
 $rep = Join-Path $WorkDir "lint-report-$stamp.txt"
 $null = Run @('lint-all', '--db', $db)
