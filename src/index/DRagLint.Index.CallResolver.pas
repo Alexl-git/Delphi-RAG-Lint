@@ -10611,6 +10611,17 @@ begin
     var Anc: string:= FirstUnresolvedAncestorName(ProjId);
     { A class whose chain is complete ends at the root no ancestor row records. }
     if (Anc = '') and (SymbolById(ProjId).Kind = skClass) then Anc:= IMPLICIT_ROOT_CLASS;
+    { Wave-146 b7 leftover: a GENERIC alias (`TAccountList = TList<TAccountInfo>`) records no
+      ancestor row; the type text it declares is the library type it names, unless the
+      generic's name is a project type (then this index, not the library, owns the answer). }
+    if Anc = '' then
+    begin
+      var Alias: TSymbol:= SymbolById(ProjId);
+      var Lt: Integer:= Pos('<', Alias.Signature);
+      if (Alias.Kind = skTypeAlias) and (Lt > 1)
+         and (ResolveTypeNameToSymbol(Trim(Copy(Alias.Signature, 1, Lt - 1)), ACallRef.FileId) = 0) then
+        Anc:= Trim(Alias.Signature);
+    end;
     if (Anc = '') or ChainDeclaresName(ProjId, First) then Exit;
     Exit(FOracle.Bind(Anc, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
   end;

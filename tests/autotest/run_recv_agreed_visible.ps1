@@ -77,6 +77,19 @@ implementation
 end.
 '@
 
+W $lib 'Lib.G.pas' @'
+unit Lib.G;
+interface
+type
+  TList<T> = class(TObject)
+  public
+    procedure Add(const V: T);
+  end;
+implementation
+procedure TList<T>.Add(const V: T); begin end;
+end.
+'@
+
 W $app 'uSee.pas' @'
 unit uSee;
 interface
@@ -106,11 +119,29 @@ begin
 end;
 end.
 '@
+W $app 'uAlias.pas' @'
+unit uAlias;
+interface
+uses Lib.A, Lib.G;
+type
+  TAccList = TList<Integer>;
+procedure GoAlias;
+implementation
+procedure GoAlias;
+var
+  L: TAccList;
+begin
+  L.Free;
+  L.Add(1);
+end;
+end.
+'@
 W $app 'App.dpr' @'
 program App;
 uses
   uSee in 'uSee.pas',
-  uAll in 'uAll.pas';
+  uAll in 'uAll.pas',
+  uAlias in 'uAlias.pas';
 begin
 end.
 '@
@@ -125,7 +156,7 @@ $j = & $exePath sql --db $appDb --json --limit 2000 --query "SELECT '' p, f.path
 Pop-Location
 
 $rows = foreach ($r in $j.rows) { [pscustomobject]@{ File=[IO.Path]::GetFileNameWithoutExtension([string]$r[1]); Rcv=[string]$r[2]; Name=[string]$r[3]; Ext=[string]$r[4] } }
-Check "V the sites were read ($(@($rows).Count))" (@($rows).Count -ge 3)
+Check "V the sites were read ($(@($rows).Count))" (@($rows).Count -ge 5)
 function Site($file,$rcv,$name){ @($rows | Where-Object { $_.File -eq $file -and $_.Rcv -eq $rcv -and $_.Name -eq $name }) | Select-Object -First 1 }
 $s = Site 'uSee' 'L' 'Free'
 Check "A1 uSee L.Free -> System.TObject.Free (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -ceq 'System.TObject.Free')
@@ -133,6 +164,11 @@ $s = Site 'uAll' 'L' 'Free'
 Check "A2 CONTROL uAll L.Free stays unbound: the visible Lib.C TList has an unknown parent (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -eq '')
 $s = Site 'uSee' 'L' 'Add'
 Check "A3 CONTROL uSee L.Add stays unbound: the visible candidates disagree (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -eq '')
+
+$s = Site 'uAlias' 'L' 'Free'
+Check "A4 uAlias L.Free on a generic alias (TAccList = TList<Integer>, no ancestor row) -> System.TObject.Free (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -ceq 'System.TObject.Free')
+$s = Site 'uAlias' 'L' 'Add'
+Check "A5 CONTROL uAlias L.Add stays unbound: Lib.A and Lib.G disagree (got '$($s.Ext)')" ($null -ne $s -and $s.Ext -eq '')
 
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
