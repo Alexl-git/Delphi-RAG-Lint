@@ -102,10 +102,45 @@ begin
 end;
 end.
 '@
+W $lib 'Gen.Coll.pas' @'
+unit Gen.Coll;
+interface
+type
+  TArray = class(TObject)
+  public
+    class procedure Sort;
+  end;
+implementation
+class procedure TArray.Sort; begin end;
+end.
+'@
+W $lib 'SpringX.pas' @'
+unit SpringX;
+interface
+uses System.SysUtils;
+type
+  TBytes = SysUtils.TBytes;
+implementation
+end.
+'@
+W $app 'uGo2.pas' @'
+unit uGo2;
+interface
+uses System.SysUtils, SpringX, Gen.Coll;
+procedure Go2;
+implementation
+procedure Go2;
+begin
+  TArray<string>.Create('a');
+  TBytes.Create(1);
+end;
+end.
+'@
 W $app 'App.dpr' @'
 program App;
 uses
-  uGo in 'uGo.pas';
+  uGo in 'uGo.pas',
+  uGo2 in 'uGo2.pas';
 begin
 end.
 '@
@@ -125,7 +160,7 @@ $line = @($log -split "`r?`n" | Where-Object { $_ -match 'calls\s+receivers:' })
 Check 'V the resolve receivers line was printed' ($null -ne $line) ''
 $intr = if ($line -match 'intrinsic (\d+)') { [int]$Matches[1] } else { -1 }
 $late = if ($line -match 'late-bound (\d+)') { [int]$Matches[1] } else { -1 }
-Check "D08 intrinsic = 2 (TBytes.Create, TArray<Integer>.Create; not TBytes.Nothing, not TNope.Create) -- got $intr" ($intr -eq 2) $line
+Check "D08 intrinsic = 4 (TBytes.Create, TArray<Integer>.Create, TArray<string>.Create beside a non-generic TArray class, TBytes = SysUtils.TBytes in a used unit; not TBytes.Nothing, not TNope.Create) -- got $intr" ($intr -eq 4) $line
 Check "D10 late-bound = 2 (B.OnClick property, B.FOnPing field) -- got $late" ($late -eq 2) $line
 
 $rows = foreach ($r in $j.rows) { [pscustomobject]@{ Rcv=[string]$r[1]; Name=[string]$r[2]; Ext=[string]$r[3]; Edge=[string]$r[4]; Kind=[string]$r[5]; XK=[string]$r[6] } }
@@ -141,6 +176,9 @@ function None($id,$rcv,$name){
 }
 Bound 'D08a' 'TBytes' 'Create' 'System.@intrinsic.DynArray.Create' 'intrinsic'
 Bound 'D08b' 'TArray<Integer>' 'Create' 'System.@intrinsic.DynArray.Create' 'intrinsic'
+Bound 'D08c' 'TArray<string>' 'Create' 'System.@intrinsic.DynArray.Create' 'intrinsic'
+$n = @($rows | Where-Object { $_.Rcv -eq 'TBytes' -and $_.Name -eq 'Create' -and $_.Kind -eq 'call' -and $_.XK -eq 'intrinsic' }).Count
+Check "D08d TBytes.Create in uGo2 (Spring-style TBytes = SysUtils.TBytes visible) is intrinsic too -- 2 sites, got $n" ($n -eq 2)
 Bound 'D10a' 'B' 'OnClick' 'Lib.Controls.TButtonX.OnClick' 'indirect'
 Bound 'D10b' 'B' 'FOnPing' 'Lib.Controls.TButtonX.FOnPing' 'indirect'
 Bound 'C1' 'B' 'Click' 'Lib.Controls.TButtonX.Click' ''

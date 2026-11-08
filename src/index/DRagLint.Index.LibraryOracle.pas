@@ -79,6 +79,8 @@ type
     FAliases      : TDictionary<string, TArray<TLibCand>>;
     FLastKind     : string;
     function IsDynArrayType(const ATypeText: string; const AUses: TArray<string>; ADepth: Integer): Boolean;
+    function NamesVisibleType(const AText, ALeaf: string; const AUses: TArray<string>): Boolean;
+    function InQualifier(const AText: string; const ACands: TArray<TLibCand>): TArray<TLibCand>;
     function HelperCands(const ALeaf: string): TArray<TLibCand>;
     function PickTypeOrHelper(const ATypeText: string; const ATypeUses, AHelperUses: TArray<string>;
       out ACand: TLibCand; out AReason: string): Boolean;
@@ -477,16 +479,43 @@ end;
   `array of ..`, directly or through at most MAX_ALIAS_HOPS further aliases
   (`TBytes = TArray<Byte>`). A name that is also a visible class / record / interface, or that
   no visible alias declares, is not one. }
+{ A visible class / record / interface the type text can name: a text WITH generic arguments
+  (`TArray<Integer>`) names only a generic declaration, so System.Generics.Collections' plain
+  `TArray` class does not hide System's `TArray<T> = array of T`. }
+function TLibraryOracle.NamesVisibleType(const AText, ALeaf: string; const AUses: TArray<string>): Boolean;
+begin
+  Result:= False;
+  var Generic: Boolean:= Pos('<', AText) > 0;
+  for var C: TLibCand in VisibleOf(Cached(FTypes, ALeaf, TYPE_KINDS, True), AUses) do
+    if not Generic or (FStores[C.Store].GetSymbolById(C.Ids[0]).GenericParams <> '') then Exit(True);
+end;
+
+{ The candidates a UNIT-QUALIFIED text can mean (`SysUtils.TBytes` -> System.SysUtils's, as
+  Spring writes it): declared in a unit whose name is the qualifier or ends with `.qualifier`.
+  An unqualified text keeps every candidate. }
+function TLibraryOracle.InQualifier(const AText: string; const ACands: TArray<TLibCand>): TArray<TLibCand>;
+begin
+  var Plain: string:= AText;
+  var Lt: Integer:= Pos('<', Plain);
+  if Lt > 0 then Plain:= Copy(Plain, 1, Lt - 1);
+  var Dot: Integer:= Plain.LastIndexOf('.');
+  if Dot < 0 then Exit(ACands);
+  var Q: string:= LowerCase(Trim(Copy(Plain, 1, Dot)));
+  Result:= [];
+  for var C: TLibCand in ACands do
+    if (C.UnitStem = Q) or C.UnitStem.EndsWith('.' + Q) then Result:= Result + [C];
+end;
+
 function TLibraryOracle.IsDynArrayType(const ATypeText: string; const AUses: TArray<string>;
   ADepth: Integer): Boolean;
 begin
   var Text: string:= Trim(ATypeText);
   if Text.ToLower.StartsWith('array of') then Exit(True);
   var Leaf: string:= NormalizeTypeLeaf(Text);
-  { Too deep, not a plain name, or a visible class / record / interface of the name. }
-  if (ADepth > MAX_ALIAS_HOPS) or (Leaf = '') or Leaf.StartsWith('^')
-     or (Length(VisibleOf(Cached(FTypes, Leaf, TYPE_KINDS, True), AUses)) > 0) then Exit(False);
-  var Seen: TArray<TLibCand>:= VisibleOf(Cached(FAliases, Leaf, [skTypeAlias], False), AUses);
+  { Too deep, not a plain name, or a visible class / record / interface the text can name. }
+  if (ADepth > MAX_ALIAS_HOPS) or (Leaf = '') or Leaf.StartsWith('^') or NamesVisibleType(Text, Leaf, AUses) then
+    Exit(False);
+  var Seen: TArray<TLibCand>:= InQualifier(Text, VisibleOf(Cached(FAliases, Leaf, [skTypeAlias], False), AUses));
   Result:= Length(Seen) > 0;
   for var C: TLibCand in Seen do
     Result:= Result and IsDynArrayType(C.Sig, LibraryUses(C.Store, C.FileId) + [IMPLICIT_ROOT_UNIT], ADepth + 1);
