@@ -1507,10 +1507,12 @@ begin
   Result.AddPair('verify_reason', pApply.Verify.Reason);
 end;
 
-// The 1-based group holding pStem (with or without .pas), 0 when none does.
+// The 1-based group holding pStem (with or without .pas), 0 when none does. Only a `.pas` suffix is
+// dropped: a dotted unit name (`Wide.Worker`) is the stem itself, ChangeFileExt would cut it to `Wide`.
 function GroupOfUnit(const pSccs: TList<TArray<string>>; const pStem: string): Integer;
 begin
-  var Stem:= LowerCase(ChangeFileExt(pStem, ''));
+  var Stem:= LowerCase(pStem);
+  if Stem.EndsWith('.pas') then Stem:= Copy(Stem, 1, Length(Stem) - Length('.pas'));
   for var I:= 0 to pSccs.Count - 1 do
     for var S in pSccs[I] do
       if S = Stem then Exit(I + 1);
