@@ -185,7 +185,7 @@ begin
   Writeln('                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,');
   Writeln('                               unit-name and the reported path)');
   Writeln('  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr|unit-not-in-library|help] [--json]');
-  Writeln('  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)');
+  Writeln('  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]] [--project <X.dproj> --compile-gate [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)');
   Writeln('                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.');
   Writeln('                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to');
   Writeln('                               apply every fixable finding in the file. Only rules whose catalog entry has');
@@ -194,12 +194,15 @@ begin
   Writeln('                               every owning project) included, is ON by default; only "autofix_off": [...] in drag-lint-lint.json withholds one;');
   Writeln('                               with it the run still prints "rename-local: <N>" (stderr) for the single-project renames.');
   Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
+  Writeln('                               --compile-gate (opt-in; needs --apply and --project <X.dproj>): the write goes through the compile gate -- baseline build, all-or-nothing write,');
+  Writeln('                               after build, rollback on a compile error (exit 1, REFUSED named, nothing changed); without it nothing builds and --project only filters.');
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>]   (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--library-db <lib.sqlite>|none] [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]');
+  Writeln('                               --fix [--apply [--project <X.dproj> --compile-gate]]: as lint --fix; --compile-gate writes through the compile gate (rollback on a compile error)');
   Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]');
   Writeln('                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
-  Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
+  Writeln('                               --fix [--fix-naming] [--apply [--project <X.dproj> --compile-gate]]: autofix every unit, as lint --fix (dry run without --apply)');
   Writeln('                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
   Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
@@ -376,6 +379,7 @@ begin
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))');
   Writeln('  drag-lint check-ast <file> [--profile <name>] [--db PATH] [--library-db <lib.sqlite>|none] [--rule <id>] [--format text|json] [--json] [--output <file>]');
+  Writeln('                               --fix [--apply [--project <X.dproj> --compile-gate]]: as lint --fix; --compile-gate writes through the compile gate (rollback on a compile error)');
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)');
   Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
@@ -777,7 +781,7 @@ begin
     Writeln('                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,');
     Writeln('                               unit-name and the reported path)');
     Writeln('  drag-lint lint  --project <file.dproj> [--build-config <name>] [--rule unit-not-in-dpr|unit-not-in-library|help] [--json]');
-    Writeln('  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)');
+    Writeln('  drag-lint lint  --in <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply [--no-backup]] [--project <X.dproj> --compile-gate [--platform <p>] [--rsvars <bat>] [--build-timeout <s>]]   (AUTOFIX one file; --apply keeps a .bak beside each file it writes unless --no-backup)');
     Writeln('                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.');
     Writeln('                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to');
     Writeln('                               apply every fixable finding in the file. Only rules whose catalog entry has');
@@ -786,6 +790,8 @@ begin
     Writeln('                               every owning project) included, is ON by default; only "autofix_off": [...] in drag-lint-lint.json withholds one;');
     Writeln('                               with it the run still prints "rename-local: <N>" (stderr) for the single-project renames.');
     Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
+    Writeln('                               --compile-gate (opt-in; needs --apply and --project <X.dproj>): the write goes through the compile gate -- baseline build, all-or-nothing write,');
+    Writeln('                               after build, rollback on a compile error (exit 1, REFUSED named, nothing changed); without it nothing builds and --project only filters.');
     Exit;
   end;
   if pVerb = 'allow' then
@@ -801,13 +807,14 @@ begin
   if pVerb = 'lint-project' then
   begin
     Writeln('  drag-lint lint-project --db <file.sqlite> [--library-db <lib.sqlite>|none] [--profile <name>] [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect|enum-ordinal-persisted|unused-enum-value|unused-global|help] [--layers <f.json>] [--json] [--output <f>]');
+    Writeln('                               --fix [--apply [--project <X.dproj> --compile-gate]]: as lint --fix; --compile-gate writes through the compile gate (rollback on a compile error)');
     Exit;
   end;
   if pVerb = 'lint-all' then
   begin
     Writeln('  drag-lint lint-all           [--profile <name>] [--target-compiler <ver|auto>] [--db <file.sqlite>] [--project <.dproj>] [--build-config <name>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--labels] [--quiet] [--lint-third-party] [--no-preprocess] [--shared-db <db> ...] [--library-db none]');
     Writeln('                               --output <file>: the text report goes to the file; with --json or --format sarif the JSON / SARIF document does instead (a note on stderr, stdout stays empty).');
-    Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
+    Writeln('                               --fix [--fix-naming] [--apply [--project <X.dproj> --compile-gate]]: autofix every unit, as lint --fix (dry run without --apply)');
     Writeln('                               --rule <id>: report ONLY that rule (one id per run; a comma list or a second, different --rule exits 2); naming an OFF-by-default rule opts it in');
     Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
     Writeln('                               --quiet: suppress per-file progress lines written to stderr');
@@ -1211,6 +1218,7 @@ begin
   if pVerb = 'check-ast' then
   begin
     Writeln('  drag-lint check-ast <file> [--profile <name>] [--db PATH] [--library-db <lib.sqlite>|none] [--rule <id>] [--format text|json] [--json] [--output <file>]');
+    Writeln('                               --fix [--apply [--project <X.dproj> --compile-gate]]: as lint --fix; --compile-gate writes through the compile gate (rollback on a compile error)');
     Exit;
   end;
   if pVerb = 'dump-refs' then
