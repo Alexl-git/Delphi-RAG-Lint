@@ -130,13 +130,14 @@ $r = Exec @('index', '--project', $dpr, '--db', $dbAuto, '--target-compiler', 'a
 $n = Names $dbAuto
 Check 'index auto on the .dpr: exit 0 and preprocessed as D5' (($r.Code -eq 0) -and ($n -contains 'K_VER130')) "exit $($r.Code); $($n -join ',')"
 
-# CONTROLS: the default and a modern old target are untouched.
+# CONTROLS: the default and a modern old target are untouched. --platform Win64: a .dpr names no
+# platform, which is Win32 since 1.47 (owner ruling a3); these controls pin the WIN64 set, not the default.
 $db37 = Join-Path $WorkDir 'd37.sqlite'
-$r = Exec @('index', '--project', $dpr, '--db', $db37, '--target-compiler', '13', '--library-db', 'none')
+$r = Exec @('index', '--project', $dpr, '--db', $db37, '--target-compiler', '13', '--library-db', 'none', '--platform', 'Win64')
 $n = Names $db37
 Check 'CONTROL target 13 = Delphi 13: VER370 + UNICODE + WIN64 + CONDEXPR' (($n -contains 'K_VER370') -and ($n -contains 'K_UNICODE') -and ($n -contains 'K_WIN64') -and ($n -contains 'K_CONDEXPR') -and ($n -notcontains 'K_VER130')) ($n -join ',')
 $db14 = Join-Path $WorkDir 'd14.sqlite'
-$r = Exec @('index', '--project', $dpr, '--db', $db14, '--target-compiler', '6', '--library-db', 'none')
+$r = Exec @('index', '--project', $dpr, '--db', $db14, '--target-compiler', '6', '--library-db', 'none', '--platform', 'Win64')
 $n = Names $db14
 Check 'CONTROL target 6 (14): the set above 13 did not move' (($n -contains 'K_WIN64') -and ($n -contains 'K_CONDEXPR')) ($n -join ',')
 

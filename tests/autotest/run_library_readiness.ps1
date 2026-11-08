@@ -84,7 +84,7 @@ c.commit(); c.close()
   }
   Push-Location C:\TEMP
   try {
-    & $exe index $lib --db $good 2>&1 | Out-Null
+    & $exe index $lib --db $good --platform Win64 2>&1 | Out-Null
     Check 'library fixture indexed' ((Test-Path $good) -and ($LASTEXITCODE -eq 0))
 
     # ---- ready: the positive control

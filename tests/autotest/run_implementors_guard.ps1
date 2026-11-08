@@ -192,7 +192,7 @@ if (Test-Path $RealDb) {
   $out = & $exePath implementors --target DRagLint.Core.Interfaces.IParser.Parse --db $RealDb --json 2>$null | Out-String
   $j = $null; try { $j = $out | ConvertFrom-Json } catch { }
   $n = (Names $j.implementors 'class') -join ','
-  Check 'T8 src\cli: IParser.Parse -> the three parsers' ($n -eq 'TDelphi13Parser,TDFMParser,TFirebirdSqlParser') $n
+  Check 'T8 src\cli: IParser.Parse -> the four parsers (TMarkdownParser since 1.47, Markdown text nodes)' ($n -eq 'TDelphi13Parser,TDFMParser,TFirebirdSqlParser,TMarkdownParser') $n
 } else { Write-Host '[SKIP] T8 (no src\cli index)' }
 
 if (-not $script:fail) { [IO.Directory]::Delete($WorkDir, $true) }
