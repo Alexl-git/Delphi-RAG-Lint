@@ -586,6 +586,7 @@ type
     // comma-split parsing, just a different meaning per-command (documented at
     // the call site).
     OnlySections: TArray<string>; // --only <Sec1,Sec2,...>  restrict sections to build | convert-apply instance allow-list
+    OnlyTypes   : TArray<string>; // --only-type <T1,T2,...>  convert-apply: every instance of these bare #convert From types (exclusive with --only)
     // v0.45: index manifest (Task 8)
     Jobs: Integer; // --jobs <n>  parallel worker processes (0 = manifest/auto)
     // v0.45: index manifest (Task 9) -- DB selection + size guard
@@ -1666,6 +1667,15 @@ begin
     else if A = '--all'              then Result.IndexAll       := True
     else if A = '--prune'            then Result.Prune          := True
     else if A = '--no-prune'         then Result.NoPrune        := True
+    else if (A = '--only-type') and (i < ParamCount) then
+    begin
+      Inc(i);
+      for var TP in ParamStr(i).Split([',']) do
+      begin
+        var TT:= Trim(TP);
+        if TT <> '' then Result.OnlyTypes:= Result.OnlyTypes + [TT];
+      end;
+    end
     else if (A = '--only') and (i < ParamCount) then
     begin
       Inc(i);
@@ -21468,6 +21478,9 @@ begin
         removal that would strand ONLY instances --only left out is skipped
         (apply/1 uses[] action 'skipped') instead of refusing the unit. }
       JCap.AddPair('only_skips_unit_rules', TJSONBool.Create(True));
+      { 1.47.0 (wave 148 CV, C12 N5): convert-apply --only-type T1,T2 converts every
+        instance of those bare #convert From types; exclusive with --only. }
+      JCap.AddPair('only_type', TJSONBool.Create(True));
       { 1.27.0 (C9): convert-apply reconciles uses (watch list kept by .dfm needs,
         introduced names added, ambiguity reported, apply/1 kept/moved rows,
         uses_unresolved, uses_reconcile, uses_reindex) }
@@ -33022,6 +33035,7 @@ var
   var
     UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
     ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }
+    OnlyEff  : TArray<string>; { this unit's instance allow-list: --only, or --only-type expanded against its .dfm }
 
     { apply/1 classes_built for THIS unit: the book's validation set plus what
       this unit's own run added -- what a single-unit run of it reports }
@@ -33046,7 +33060,7 @@ var
     begin
       Matched  := nil;
       Unmatched:= nil;
-      for var N: string in AArgs.OnlySections do
+      for var N: string in OnlyEff do
       begin
         var IsCode: Boolean:= False;
         for var Inh: TInheritedInstance in JCtx.InheritedInsts do
@@ -33090,15 +33104,20 @@ var
     // Sibling .dfm: same base name + '.dfm', same folder as --unit.
     DfmPath:= TPath.ChangeExtension(UnitPas, '.dfm');
     JCtx.DfmPath:= DfmPath;
+    { wave 148 CV (C12 N5): --only-type expands to this unit's instance names }
+    OnlyEff:= AArgs.OnlySections;
+    if Length(AArgs.OnlyTypes) > 0 then
+      ExpandOnlyTypes(if TFile.Exists(DfmPath) then TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)) else '',
+        Rules, AArgs.OnlyTypes, OnlyEff, JCtx.OnlyMatched, JCtx.OnlyUnmatched);
     { C13 N3: which --only names name an object of a #convert From type }
     if Length(AArgs.OnlySections) > 0 then
       SplitOnlyNames(if TFile.Exists(DfmPath) then TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)) else '',
-        Rules, AArgs.OnlySections, JCtx.OnlyMatched, JCtx.OnlyUnmatched);
+        Rules, OnlyEff, JCtx.OnlyMatched, JCtx.OnlyUnmatched);
     { 1.25.1: a kept parent's nested From-type children convert with it
       (the --only unmatched line is printed below, once C8 N2a's code-only
       names have been matched) }
-    if (Length(AArgs.OnlySections) > 0) and TFile.Exists(DfmPath) then
-      JCtx.OnlyIncluded:= NestedOnlyInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)), Rules, AArgs.OnlySections);
+    if (Length(OnlyEff) > 0) and TFile.Exists(DfmPath) then
+      JCtx.OnlyIncluded:= NestedOnlyInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)), Rules, OnlyEff);
     if not UseJson then
       for var NO: TNestedOnly in JCtx.OnlyIncluded do
         Writeln(Format('--only: %s converts too -- nested in %s', [NO.Instance.InstanceName, NO.Parent]));
@@ -33119,14 +33138,16 @@ var
       inherited[], a 'line N: warning:' line) -- while the unit's own
       instances, code and unit rules convert. R26 still counts them as left
       unconverted, so a #unuse that would break them refuses the unit. }
-    JCtx.InheritedInsts:= FindInheritedInstances(Trees, UnitPas, DfmPath, Rules, AArgs.OnlySections);
+    JCtx.InheritedInsts:= FindInheritedInstances(Trees, UnitPas, DfmPath, Rules, OnlyEff);
     { 1.26.0 (C8 N2a): fields a converted ancestor declares that this unit's
       code uses with no .dfm block -- inherited[] action 'code'. A --only name
       that names one counts as matched. }
     JCtx.InheritedInsts:= JCtx.InheritedInsts +
-      FindInheritedCodeUses(Trees, UnitPas, Rules, AArgs.OnlySections, JCtx.InheritedInsts);
-    if Length(JCtx.OnlyUnmatched) > 0 then MatchCodeOnlyNames;
-    if (Length(JCtx.OnlyUnmatched) > 0) and not UseJson then
+      FindInheritedCodeUses(Trees, UnitPas, Rules, OnlyEff, JCtx.InheritedInsts);
+    if (Length(JCtx.OnlyUnmatched) > 0) and (Length(AArgs.OnlyTypes) = 0) then MatchCodeOnlyNames;
+    if (Length(JCtx.OnlyUnmatched) > 0) and (Length(AArgs.OnlyTypes) > 0) and not UseJson then
+      Writeln('--only-type: no #convert instance of type ' + String.Join(', ', JCtx.OnlyUnmatched) + ' (ignored)')
+    else if (Length(JCtx.OnlyUnmatched) > 0) and not UseJson then
       Writeln('--only: no #convert instance named ' + String.Join(', ', JCtx.OnlyUnmatched) + ' (ignored)');
     { EVERY block is validated against its OWN From/To classes (1.20.6, Task 2
       and T2b) -- driven from the rules file's own #convert headers rather than
@@ -33249,7 +33270,7 @@ var
       no #convert block, or no .dfm instance a block matches; everywhere else
       BuildApplyPlan runs the whole book (its unit rules folded in). A book with
       no unit rules takes the old path unchanged, errors included. }
-    JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections,
+    JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, OnlyEff,
       Length(JCtx.InheritedInsts) > 0, HasRetype);
     if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
     { 1.27.0 (C15): a castlib the engine cannot execute (an unknown value
@@ -33280,9 +33301,9 @@ var
     end;
     PlanRes:= if (JCtx.ComponentPart = 'applied') or IdSites then
                 BuildApplyPlan(Trees, UnitPas, JCtx.DfmPath, Book,
-                  AArgs.OnlySections, CastLib, not AArgs.NoWarnUnlinked, JCtx.InheritedInsts)
+                  OnlyEff, CastLib, not AArgs.NoWarnUnlinked, JCtx.InheritedInsts)
               else
-                BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, AArgs.OnlySections, not AArgs.NoReconcileUses);
+                BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, OnlyEff, not AArgs.NoReconcileUses);
     JCtx.UsesReconcile:= if AArgs.NoReconcileUses then 'off'
                          else if PlanRes.Report.UsesReconcile <> '' then PlanRes.Report.UsesReconcile
                          else 'on';
@@ -33318,7 +33339,7 @@ var
     if JCtx.ComponentPart = 'applied' then
     begin
       JCtx.Descendants:= FindDescendantUses(Trees, UnitPas, DfmPath, Rules,
-        ConvertedInstancesOf(PlanRes.Report, DfmPath, Rules, AArgs.OnlySections));
+        ConvertedInstancesOf(PlanRes.Report, DfmPath, Rules, OnlyEff));
       AppendDescendantReport(JCtx.Descendants, DfmPath, PlanRes.Report);
     end;
     JCtx.Report   := PlanRes.Report;
@@ -33425,7 +33446,12 @@ begin
 
   if (Length(Units) = 0) or (AArgs.RulesFile = '') then
   begin
-    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--glyph-stitch] [--apply] [--no-backup] [--raise-encoding "<path>=utf8-bom" ...] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--progress] [--format json]');
+    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,... | --only-type Type1,Type2,...] [--castlib <file>] [--glyph-stitch] [--apply] [--no-backup] [--raise-encoding "<path>=utf8-bom" ...] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--progress] [--format json]');
+    Exit(2);
+  end;
+  if (Length(AArgs.OnlyTypes) > 0) and (Length(AArgs.OnlySections) > 0) then
+  begin
+    Writeln('ERROR: --only-type and --only are mutually exclusive');
     Exit(2);
   end;
   { one unit keeps its old first check; a batch checks each unit in RunUnit }
