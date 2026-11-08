@@ -602,7 +602,13 @@ define further codes.
 > uses (wave 147, default ON) renders `Used in: Routine (file.pas) [r|w|rw]`
 > instead of `Used by:` -- one entry per routine, built from the resolved
 > member accesses only (no name-matched guesses), same cap; `hover` (md, json,
-> LSP) carries the same line. `docs.accessor_trivial_max_lines`
+> LSP) carries the same line. Since wave 148 the list also takes the resolved
+> uses recorded in every extra `--db` (looked up by full qualified name), and
+> a getter / setter keeps `Called from:` and adds `Used in (via property X):`
+> -- the property accesses that ran it, same modes and cap (hover too; hover
+> reads its one `--db` only). The first `document --apply` after an upgrade
+> rewrites those blocks once, and `doc-drift` reports them stale until then.
+> `docs.accessor_trivial_max_lines`
 > (default `2`, code-level -- stays
 > ON even with no `docs` section at all) is the trivial-accessor threshold
 > above. `docs.complexity_min` (default `10`) is the cyclomatic-complexity

@@ -774,12 +774,14 @@ type
       AHasOtherContent: Boolean = True): TArray<string>;
     /// <summary>The 'Used in:' fact line of a property or field (zero or one
     /// line): its resolved uses, 'Routine (file.pas) [r|w|rw]' per entry,
-    /// XML-escaped.</summary>
-    /// <param name="AFacts">Facts from TDocFactsBuilder.Build; only UsedIn and
-    /// UsedInSitesTotal are read.</param>
-    /// <returns>One line 'Used in: ...' (with '(+N more)' past the cap), or an
-    /// empty array when AFacts.UsedIn is empty -- the FormatPhase2FactLines
-    /// shape, so a caller prepends or appends it the same way.</returns>
+    /// XML-escaped; and (wave 148) one 'Used in (via property X):' line per
+    /// property a getter/setter serves, listing the accesses that ran it.</summary>
+    /// <param name="AFacts">Facts from TDocFactsBuilder.Build; only UsedIn,
+    /// UsedInSitesTotal and UsedInVia are read.</param>
+    /// <returns>'Used in: ...' (with '(+N more)' past the cap) when UsedIn is
+    /// non-empty, then the via lines; an empty array when both are empty -- the
+    /// FormatPhase2FactLines shape, so a caller prepends or appends it the same
+    /// way.</returns>
     /// <remarks>
     /// E-USE-EDGES-PHASE2 (owner ruling 2026-11-08: default ON). ONE
     /// formatter for every surface: RenderFactsBlock writes it in place of
@@ -2905,27 +2907,38 @@ begin
   end;
 end;
 
-class function TDocFactsRenderer.FormatUsedInLines(const AFacts: TDocFacts): TArray<string>;
+{ One 'Used in' entry list: 'Routine (file.pas) [mode], ...' sorted like every
+  inbound list, plus '(+N more)' when ATotal exceeds what is shown. }
+function JoinUsedInEntries(const AUses: TArray<TDocFactRef>; ATotal: Integer): string;
 var
   Rendered: TArray<string>;
-  Lines   : TList<string>;
 begin
-  Result:= nil;
-  if Length(AFacts.UsedIn) = 0 then Exit;
-  SetLength(Rendered, Length(AFacts.UsedIn));
-  for var I:= 0 to High(AFacts.UsedIn) do
-    Rendered[I]:= EscXml(AFacts.UsedIn[I].Display) + ' (' + EscXml(AFacts.UsedIn[I].Location) + ') [' +
-                  AFacts.UsedIn[I].Mode + ']';
+  SetLength(Rendered, Length(AUses));
+  for var I:= 0 to High(AUses) do
+    Rendered[I]:= EscXml(AUses[I].Display) + ' (' + EscXml(AUses[I].Location) + ') [' + AUses[I].Mode + ']';
   TArray.Sort<string>(Rendered, TComparer<string>.Construct(
     function(const X, Y: string): Integer
     begin
       Result:= TSharedFacts.CompareInboundEntries(X, Y);
     end));
+  Result:= string.Join(', ', Rendered) +
+           (if ATotal > Length(AUses) then Format(' (+%d more)', [ATotal - Length(AUses)]) else '');
+end;
+
+class function TDocFactsRenderer.FormatUsedInLines(const AFacts: TDocFacts): TArray<string>;
+var
+  Lines: TList<string>;
+begin
   Lines:= TList<string>.Create;
   try
-    Lines.Add('Used in: ' + string.Join(', ', Rendered) +
-              (if AFacts.UsedInSitesTotal > Length(AFacts.UsedIn)
-                 then Format(' (+%d more)', [AFacts.UsedInSitesTotal - Length(AFacts.UsedIn)]) else ''));
+    if Length(AFacts.UsedIn) > 0 then
+      Lines.Add('Used in: ' + JoinUsedInEntries(AFacts.UsedIn, AFacts.UsedInSitesTotal));
+    { Wave 148 UP (spec sec 8.1 bullet 2): a getter/setter's echo rows, one line
+      per property it serves, after 'Called from:' (which is unchanged). }
+    for var Via in AFacts.UsedInVia do
+      if Length(Via.Entries) > 0 then
+        Lines.Add('Used in (via property ' + EscXml(Via.PropertyName) + '): ' +
+                  JoinUsedInEntries(Via.Entries, Via.EntriesTotal));
     Result:= Lines.ToArray;
   finally
     Lines.Free;

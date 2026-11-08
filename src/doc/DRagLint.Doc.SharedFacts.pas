@@ -652,8 +652,13 @@ const
     before it is bounded. }
   { E-USE-EDGES-PHASE2 (wave 147): 'Used in:' -- the resolved uses of a
     property / field, rendered in place of 'Used by:' (FormatUsedInLine). }
-  ALL_LABELS: array[0..32] of string = (
-    'Called from:', 'Used by:', 'Used in:', 'Calls:', 'Returns:', 'Used in units:',
+  { Wave 148 UP: 'Used in (via property ' -- a getter/setter's echo line; the
+    property name and '):' follow, so the registered label is the fixed prefix
+    (the 'Overload ' precedent). Block boundary only: it is NOT in
+    ProjectTags.INBOUND_LABELS, so a dl:shared unit does not reconcile it per
+    project (wave 149 row). }
+  ALL_LABELS: array[0..33] of string = (
+    'Called from:', 'Used by:', 'Used in:', 'Used in (via property ', 'Calls:', 'Returns:', 'Used in units:',
     'Used in classes:',
     'Complexity:', 'Owns returned:', 'Handles:', 'Catches:', 'SQL:', 'Covered by:',
     'Mutates:', 'Touches:', 'Transaction:', 'Registered as:', 'Dataset:',

@@ -28,6 +28,14 @@ used, with the access mode: `Used in: uCons.TConsumer.Go (uCons.pas) [rw]`. That
 line replaces the name-matched `Used by:` (wave 147, on by default); with no
 resolved use the `Used by:` line is written as before.
 
+Since wave 148 the line also lists uses that only another project's index
+records (`document --db A --db B`: the extra `--db` is asked by the full
+qualified name), and a getter or setter keeps `Called from:` and gains
+`Used in (via property Value): uCons.TConsumer.Go (uCons.pas) [r]` -- the
+property accesses that ran it. Expect a one-time rewrite: the first
+`document --apply` on a project rewrites every such block, and `doc-drift`
+reports them as a stale facts block until it has run.
+
 ## What it needs
 
 Optional, per the feature map's Index column.
