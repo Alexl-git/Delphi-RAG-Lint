@@ -21,17 +21,6 @@ interface
 /// </remarks>
 function RunUsesRecoverVerb: Integer;
 
-/// <summary>The unit names a C++Builder header includes, in file order.</summary>
-/// <param name="pText">The whole .hpp text.</param>
-/// <returns>One name per `#include &lt;X.hpp&gt;` or `#include "X.hpp"` line (X as written);
-/// other includes are skipped. No #if evaluation.</returns>
-function ParseHppIncludes(const pText: string): TArray<string>;
-
-/// <summary>The unit names of a dcc map file's segment rows, first occurrence order, no repeats.</summary>
-/// <param name="pText">The whole .map text (-GS or -GD).</param>
-/// <returns>Every distinct `M=&lt;unit&gt;` value. A unit with no code or data segment has none.</returns>
-function ParseMapUnits(const pText: string): TArray<string>;
-
 implementation
 
 uses
@@ -87,15 +76,21 @@ type
 
   /// <summary>One sourceless unit of the report. Owned by TUsesRecoverRun.Units.</summary>
   TRecoveredUnit = class
+  private
+    FName  : string;
+    FReach : string;
+    FHeader: string;
+    FUsedBy: TList<string>;
+    FEdges : TList<TRecoveredEdge>;
   public
-    Name  : string;
-    Reach : string;
-    Header: string;
-    UsedBy: TList<string>;
-    Edges : TList<TRecoveredEdge>;
     constructor Create(const pName, pReach, pHeader: string);
     destructor Destroy; override;
     procedure AddUser(const pUser: string);
+    property Name: string read FName;
+    property Reach: string read FReach;
+    property Header: string read FHeader;
+    property UsedBy: TList<string> read FUsedBy;
+    property Edges: TList<TRecoveredEdge> read FEdges;
   end;
 
   /// <summary>The state of one run: name sets read from the DBs, the header index, the result.</summary>
@@ -107,23 +102,32 @@ type
     FMap     : TDictionary<string, Boolean>;
     FMapOrder: TArray<string>;
     FSeen    : TDictionary<string, TRecoveredUnit>;
+    FOpts    : TUsesRecoverOptions;
+    FHasMap  : Boolean;
+    FUnits   : TObjectList<TRecoveredUnit>;
+    FNoHeader: TObjectList<TRecoveredUnit>;
+    FMapOnly : TArray<string>;
     function InSet(const pSet: TDictionary<string, Boolean>; const pName: string): Boolean;
     function Classify(const pName: string): string;
     function FindHeader(const pName: string; out pCanonical: string): string;
   public
-    Opts    : TUsesRecoverOptions;
-    HasMap  : Boolean;
-    Units   : TObjectList<TRecoveredUnit>;
-    NoHeader: TObjectList<TRecoveredUnit>;
-    MapOnly : TArray<string>;
     constructor Create(const pOpts: TUsesRecoverOptions);
     destructor Destroy; override;
     function Load(out pError: string): Boolean;
     procedure Recover(const pDirect: TDictionary<string, TList<string>>);
     function InMap(const pName: string): Boolean;
     function HeaderCount: Integer;
+    property Opts: TUsesRecoverOptions read FOpts;
+    property HasMap: Boolean read FHasMap;
+    property Units: TObjectList<TRecoveredUnit> read FUnits;
+    property NoHeader: TObjectList<TRecoveredUnit> read FNoHeader;
+    property MapOnly: TArray<string> read FMapOnly;
   end;
 
+/// <summary>The unit names a C++Builder header includes, in file order.</summary>
+/// <param name="pText">The whole .hpp text.</param>
+/// <returns>One name per `#include &lt;X.hpp&gt;` or `#include "X.hpp"` line (X as written);
+/// other includes are skipped. No #if evaluation.</returns>
 function ParseHppIncludes(const pText: string): TArray<string>;
 var
   LMatch: TMatch;
@@ -134,6 +138,9 @@ begin
     Result:= Result + [LMatch.Groups[1].Value];
 end;
 
+/// <summary>The unit names of a dcc map file's segment rows, first occurrence order, no repeats.</summary>
+/// <param name="pText">The whole .map text (-GS or -GD).</param>
+/// <returns>Every distinct `M=&lt;unit&gt;` value. A unit with no code or data segment has none.</returns>
 function ParseMapUnits(const pText: string): TArray<string>;
 var
   LMatch: TMatch;
@@ -175,18 +182,18 @@ end;
 constructor TRecoveredUnit.Create(const pName, pReach, pHeader: string);
 begin
   inherited Create;
-  Name:= pName;
-  Reach:= pReach;
-  Header:= pHeader;
-  UsedBy:= TList<string>.Create;
-  Edges:= TList<TRecoveredEdge>.Create;
+  FName:= pName;
+  FReach:= pReach;
+  FHeader:= pHeader;
+  FUsedBy:= TList<string>.Create;
+  FEdges:= TList<TRecoveredEdge>.Create;
 end;
 
 destructor TRecoveredUnit.Destroy;
 begin
-  Edges.Free;
-  UsedBy.Free;
-  inherited;
+  FEdges.Free;
+  FUsedBy.Free;
+  inherited Destroy;
 end;
 
 procedure TRecoveredUnit.AddUser(const pUser: string);
@@ -200,26 +207,26 @@ end;
 constructor TUsesRecoverRun.Create(const pOpts: TUsesRecoverOptions);
 begin
   inherited Create;
-  Opts:= pOpts;
+  FOpts:= pOpts;
   FIndexed:= TDictionary<string, Boolean>.Create;
   FLibrary:= TDictionary<string, Boolean>.Create;
   FHeaders:= TDictionary<string, string>.Create;
   FMap:= TDictionary<string, Boolean>.Create;
   FSeen:= TDictionary<string, TRecoveredUnit>.Create;
-  Units:= TObjectList<TRecoveredUnit>.Create(True);
-  NoHeader:= TObjectList<TRecoveredUnit>.Create(True);
+  FUnits:= TObjectList<TRecoveredUnit>.Create(True);
+  FNoHeader:= TObjectList<TRecoveredUnit>.Create(True);
 end;
 
 destructor TUsesRecoverRun.Destroy;
 begin
-  NoHeader.Free;
-  Units.Free;
+  FNoHeader.Free;
+  FUnits.Free;
   FSeen.Free;
   FMap.Free;
   FHeaders.Free;
   FLibrary.Free;
   FIndexed.Free;
-  inherited;
+  inherited Destroy;
 end;
 
 function TUsesRecoverRun.InSet(const pSet: TDictionary<string, Boolean>; const pName: string): Boolean;
@@ -269,14 +276,60 @@ begin
   Result:= FHeaders.Count;
 end;
 
-{ The base names of every source file of one index, into pSet. Read-only open. }
+const
+  SQL_SOURCE_FILES = 'select path from files';
+  SQL_UNRESOLVED_USES = 'select u.unit_name, f.path from unit_uses u join files f on f.id = u.file_id where u.target_file_id is null';
+
+{ The lower-cased base name of every .pas/.dpr/.dpk row of pQuery's connection, into pSet. }
+procedure ReadSourceNames(const pQuery: TFDQuery; const pSet: TDictionary<string, Boolean>);
+begin
+  pQuery.Open(SQL_SOURCE_FILES);
+  try
+    while not pQuery.Eof do
+    begin
+      if IsSourcePath(pQuery.Fields[0].AsString) then
+        pSet.AddOrSetValue(LowerCase(TPath.GetFileNameWithoutExtension(pQuery.Fields[0].AsString)), True);
+      pQuery.Next;
+    end;
+  finally
+    pQuery.Close;
+  end;
+end;
+
+{ Every unit_uses name with no target file, mapped to the distinct file names that use it.
+  pDirect owns the lists it is given. }
+procedure ReadUnresolvedUses(const pQuery: TFDQuery; const pDirect: TDictionary<string, TList<string>>);
+var
+  LKey, LUser: string;
+  LUsers: TList<string>;
+begin
+  pQuery.Open(SQL_UNRESOLVED_USES);
+  try
+    while not pQuery.Eof do
+    begin
+      LKey:= pQuery.Fields[0].AsString;
+      LUser:= ExtractFileName(pQuery.Fields[1].AsString);
+      if not pDirect.TryGetValue(LKey, LUsers) then
+      begin
+        LUsers:= TList<string>.Create;
+        pDirect.Add(LKey, LUsers);
+      end;
+      if not LUsers.Contains(LUser) then
+        LUsers.Add(LUser);
+      pQuery.Next;
+    end;
+  finally
+    pQuery.Close;
+  end;
+end;
+
+{ The base names of every source file of one index, into pSet, and (when pDirect is assigned)
+  its unresolved uses. Read-only open; False with pError set on any failure. }
 function LoadSourceNames(const pDbPath: string; const pSet: TDictionary<string, Boolean>;
   const pDirect: TDictionary<string, TList<string>>; out pError: string): Boolean;
 var
   LStore: TSQLiteSymbolStore;
   LQuery: TFDQuery;
-  LKey, LUser: string;
-  LUsers: TList<string>;
 begin
   pError:= '';
   if not FileExists(pDbPath) then
@@ -290,32 +343,9 @@ begin
       LQuery:= TFDQuery.Create(nil);
       try
         LQuery.Connection:= LStore.GetConnection;
-        LQuery.Open('select path from files');
-        while not LQuery.Eof do
-        begin
-          if IsSourcePath(LQuery.Fields[0].AsString) then
-            pSet.AddOrSetValue(LowerCase(TPath.GetFileNameWithoutExtension(LQuery.Fields[0].AsString)), True);
-          LQuery.Next;
-        end;
-        LQuery.Close;
+        ReadSourceNames(LQuery, pSet);
         if Assigned(pDirect) then
-        begin
-          LQuery.Open('select u.unit_name, f.path from unit_uses u join files f on f.id = u.file_id ' +
-            'where u.target_file_id is null');
-          while not LQuery.Eof do
-          begin
-            LKey:= LQuery.Fields[0].AsString;
-            LUser:= ExtractFileName(LQuery.Fields[1].AsString);
-            if not pDirect.TryGetValue(LKey, LUsers) then
-            begin
-              LUsers:= TList<string>.Create;
-              pDirect.Add(LKey, LUsers);
-            end;
-            if not LUsers.Contains(LUser) then
-              LUsers.Add(LUser);
-            LQuery.Next;
-          end;
-        end;
+          ReadUnresolvedUses(LQuery, pDirect);
       finally
         LQuery.Free;
       end;
@@ -351,7 +381,7 @@ begin
   for LLib in Opts.LibraryDbs do
     if not LoadSourceNames(LLib, FLibrary, nil, pError) then
       Exit(False);
-  HasMap:= Opts.MapPath <> '';
+  FHasMap:= Opts.MapPath <> '';
   if HasMap then
   begin
     if not FileExists(Opts.MapPath) then
@@ -421,11 +451,11 @@ begin
   finally
     LQueue.Free;
   end;
-  MapOnly:= nil;
+  FMapOnly:= nil;
   for LName in FMapOrder do
     if (not IsImplicitUnit(LName)) and (Classify(LName) = CStatusSourceless)
       and (not FSeen.ContainsKey(LowerCase(LName))) then
-      MapOnly:= MapOnly + [LName];
+      FMapOnly:= FMapOnly + [LName];
 end;
 
 function ParseUsesRecoverArgs(const pArgs: TArray<string>; out pOpts: TUsesRecoverOptions;
@@ -637,12 +667,10 @@ begin
     WriteVerbHelp(CVerb);
     Result:= CExitOk;
   end
-  else if LOpts.DbPath = '' then
-    Result:= Usage('give --db <file.sqlite>', LOpts.AsJson)
-  else if Length(LOpts.HppDirs) = 0 then
-    Result:= Usage('give at least one --hpp-dir <dir>', LOpts.AsJson)
   else
-    Result:= Execute(LOpts);
+    Result:= if LOpts.DbPath = '' then Usage('give --db <file.sqlite>', LOpts.AsJson)
+      else if Length(LOpts.HppDirs) = 0 then Usage('give at least one --hpp-dir <dir>', LOpts.AsJson)
+      else Execute(LOpts);
 end;
 
 end.
