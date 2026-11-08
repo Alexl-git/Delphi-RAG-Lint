@@ -285,7 +285,7 @@ type
       /// Pure function. Insertion must use TReviewMarkers.InsertInto().
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow, DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.RuleCatalog.DocCommentMarkerLine, DRagLint.Lint.RuleCatalog.IsRoutineMetricRule, DRagLint.Lint.RuleCatalog.MetricHash, SameText, StringReplace, StrToIntDef</para>
+      /// <para>Calls: DRagLint.Lint.ReviewMarker.TReviewMarkers.HashWindow, DRagLint.Lint.ReviewMarker.TReviewMarkers.InsertInto, DRagLint.Lint.ReviewMarker.TReviewMarkers.Parse, DRagLint.Lint.RuleCatalog.DocCommentMarkerLine, DRagLint.Lint.RuleCatalog.IsRoutineMetricRule, DRagLint.Lint.RuleCatalog.MetricHash, DRagLint.LSP.Completion.PathToFileUri, SameText, StrToIntDef</para>
       /// <para>Returns: TJSONArray.Create</para>
       /// <para>Complexity: 22 (cyclomatic, outer body), 136 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
@@ -336,15 +336,15 @@ type
       /// TextEdit), so the editor keeps the rest of the buffer untouched.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction, SameText, StringReplace</para>
+      /// <para>Calls: DRagLint.LSP.Completion.PathToFileUri, DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction, SameText</para>
       /// <para>Returns: TJSONArray.Create</para>
       /// <para>Complexity: 12 (cyclomatic, outer body), 50 lines (full implementation)</para>
       /// <para>Owns returned: new (caller owns)</para>
+      /// <seealso cref="DRagLint.LSP.Completion.PathToFileUri"/>
       /// <seealso cref="DRagLint.LSP.UsesOnSave.TUsesOnSave.AddMissingImportAction"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCodeActions"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildCompletionItems"/>
       /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildDiagnostics"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildFixActions"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildMissingUsesActions(const AFile: string; AStartLine, AEndLine: Integer;
@@ -365,14 +365,14 @@ type
       /// list is never offered; "Fix it" in the IDE and `lint --fix` remain for those.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.LSP.Server.TLSPServer.HandleCodeAction (DRagLint.LSP.Server.pas)</para>
-      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Lint.Autofix.BuildBufferFixEdits, DRagLint.LSP.Completion.EditsHoldOn, DRagLint.LSP.Completion.FixableFindingOf, DRagLint.LSP.Completion.TLspCompletion.BuildFixActions.Pos0, StringReplace</para>
+      /// <para>Calls: DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines, DRagLint.Lint.Autofix.BuildBufferFixEdits, DRagLint.LSP.Completion.EditsHoldOn, DRagLint.LSP.Completion.FixableFindingOf, DRagLint.LSP.Completion.PathToFileUri, DRagLint.LSP.Completion.TLspCompletion.BuildFixActions.Pos0</para>
       /// <para>Returns: TJSONArray.Create</para>
       /// <para>Owns returned: new (caller owns)</para>
       /// <seealso cref="DRagLint.Core.LiveDocs.TLiveDocuments.ReadLines"/>
       /// <seealso cref="DRagLint.Lint.Autofix.BuildBufferFixEdits"/>
       /// <seealso cref="DRagLint.LSP.Completion.EditsHoldOn"/>
       /// <seealso cref="DRagLint.LSP.Completion.FixableFindingOf"/>
-      /// <seealso cref="DRagLint.LSP.Completion.TLspCompletion.BuildFixActions.Pos0"/>
+      /// <seealso cref="DRagLint.LSP.Completion.PathToFileUri"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function BuildFixActions(const AFile: string; AStartLine, AEndLine: Integer;

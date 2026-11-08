@@ -50,7 +50,7 @@ type
   /// Specific rather than a bare Exception so a caller can tell a
   /// malformed config apart from an I/O failure and report it usefully.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Index.ManifestWrite.AppendSectionToText (DRagLint.Index.ManifestWrite.pas)</para>
+  /// <para>Used by: DRagLint.Index.ManifestWrite.AppendSectionToText (DRagLint.Index.ManifestWrite.pas), DRagLint.Index.ManifestWrite.RebasedManifestText (DRagLint.Index.ManifestWrite.pas)</para>
   /// <para>Used in units: DRagLint.Index.ManifestWrite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -97,6 +97,7 @@ type
 /// nothing.</param>
 /// <returns>A result whose Outcome says what happened; Written lists every
 /// manifest path affected.</returns>
+/// <exception cref="EManifestError"><!-- drag-lint:auto exc -->via DRagLint.Index.Manifest.TInstalledLayout.Enabled: (root): expected object, got</exception>
 /// <remarks>
 /// Refuses when a section already claims the project -- registering a
 /// second owner would create the ambiguity the reindex command exists to
@@ -105,16 +106,16 @@ type
 /// from one thread.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoRegisterProject (DRagLint.CLI.pas)</para>
-/// <para>Calls: Default, DRagLint.Index.Manifest.ResolveProjectDb, DRagLint.Index.Manifest.TManifestIO.Load, DRagLint.Index.ManifestWrite.AppendSectionToText, DRagLint.Index.ManifestWrite.BuildSectionJson, DRagLint.Index.ManifestWrite.FindManifestCopies</para>
+/// <para>Calls: Default, DRagLint.Index.Manifest.ResolveProjectDb, DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor, DRagLint.Index.Manifest.TInstalledLayout.Enabled, DRagLint.Index.Manifest.TInstalledLayout.WriteTarget, DRagLint.Index.Manifest.TManifestIO.Load, DRagLint.Index.ManifestWrite.AppendSectionToText, DRagLint.Index.ManifestWrite.BuildSectionJson, DRagLint.Index.ManifestWrite.FindManifestCopies, ExtractFileDir, GetEnvironmentVariable, SameText</para>
 /// <para>Returns: Default(TRegisterResult)</para>
-/// <para>Complexity: 11 (cyclomatic, outer body), 100 lines (full implementation)</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 116 lines (full implementation)</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Index.Manifest.ResolveProjectDb"/>
+/// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor"/>
+/// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.Enabled"/>
+/// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.WriteTarget"/>
 /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load"/>
-/// <seealso cref="DRagLint.Index.ManifestWrite.AppendSectionToText"/>
-/// <seealso cref="DRagLint.Index.ManifestWrite.BuildSectionJson"/>
-/// <seealso cref="DRagLint.Index.ManifestWrite.FindManifestCopies"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function RegisterProjectSection(const AEngineDir, AProjectFile, AName: string;
@@ -127,9 +128,10 @@ function RegisterProjectSection(const AEngineDir, AProjectFile, AName: string;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas)</para>
-/// <para>Calls: DRagLint.Index.ManifestWrite.FindManifestCopies.Consider, ExcludeTrailingPathDelimiter</para>
-/// <para>Returns: Acc.ToStringArray</para>
+/// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation, DRagLint.Index.ManifestWrite.FindManifestCopies.Consider, ExcludeTrailingPathDelimiter</para>
+/// <para>Returns: []; [Located.Path]; Acc.ToStringArray</para>
 /// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation"/>
 /// <seealso cref="DRagLint.Index.ManifestWrite.FindManifestCopies.Consider"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
@@ -137,6 +139,11 @@ function FindManifestCopies(const AEngineDir: string): TArray<string>;
 
 type
   /// <summary>What `manifest migrate` did or would do.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.ManifestWrite.pas), DRagLint.CLI.DoManifestMigrate (DRagLint.CLI.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMigrateOutcome = (
     mgMigrated,         { roaming file written, exe-side file renamed (or would be) }
     mgNothingToMigrate, { no drag-lint.json beside the engine                         }
@@ -147,6 +154,12 @@ type
     mgFailed);          { parse or I/O error; see Message                             }
 
   /// <summary>Result of <see cref="MigrateExeManifest"/>.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.ManifestWrite.pas) ?, DRagLint.Index.ManifestWrite.MigrateExeManifest (DRagLint.Index.ManifestWrite.pas)</para>
+  /// <para>Used in units: DRagLint.Index.ManifestWrite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TMigrateResult = record
     Outcome  : TMigrateOutcome;
     Source   : string; { the exe-side drag-lint.json                       }
@@ -164,13 +177,26 @@ type
 /// <param name="AApply">False plans and touches nothing; allowed with the layout OFF.</param>
 /// <param name="ADate">Date stamped into the renamed file's name.</param>
 /// <returns>Outcome plus every path involved.</returns>
-/// <remarks>Paths are rebased so that every DB stays where it was: `outDir` becomes
+/// <exception cref="EManifestError"><!-- drag-lint:auto exc -->via DRagLint.Index.Manifest.TInstalledLayout.Enabled: (root): expected object, got</exception>
+/// <remarks>
+/// Paths are rebased so that every DB stays where it was: `outDir` becomes
 /// absolute (the exe dir when it was absent, which also stops the roaming default of
 /// ruling 3 from moving the DBs), and every relative section `include` becomes absolute
 /// against the exe dir. The roaming file is written first, then the source is renamed;
 /// if the rename fails both files remain and the layout-v2 reader answers from the
 /// roaming one. The BPL-side sibling copy is not touched (plugin, phase 3). Not
-/// thread-safe.</remarks>
+/// thread-safe.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoManifestMigrate (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor, DRagLint.Index.Manifest.TInstalledLayout.Enabled, DRagLint.Index.ManifestWrite.RebasedManifestText, ExtractFileDir, FormatDateTime, GetEnvironmentVariable, IntToStr</para>
+/// <para>Returns: Default(TMigrateResult)</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor"/>
+/// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.Enabled"/>
+/// <seealso cref="DRagLint.Index.ManifestWrite.RebasedManifestText"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function MigrateExeManifest(const AEngineDir: string; AApply: Boolean;
   ADate: TDateTime): TMigrateResult;
 

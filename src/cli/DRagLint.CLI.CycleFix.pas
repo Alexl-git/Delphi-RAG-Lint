@@ -25,7 +25,7 @@ type
   /// <summary>The `cycles --fix` flags, as DoCycles parsed them.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.BaselineCompile (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.ReindexTargetProblem (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.TamperAllowed (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.DoCycles (DRagLint.CLI.pas) (+32 more)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.BaselineCompile (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.ReindexTargetProblem (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.CycleFix.TamperAllowed (DRagLint.CLI.CycleFix.pas) ?, DRagLint.CLI.DoCycles (DRagLint.CLI.pas) (+33 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.CycleFix</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -395,14 +395,14 @@ function TamperAllowed(const pOpts: TCycleFixOptions): Boolean;
 /// answered when the run ends, with its own result.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoCycles (DRagLint.CLI.pas)</para>
-/// <para>Calls: DRagLint.CLI.CycleFix.DeleteDefaultScratch, DRagLint.CLI.CycleFix.ReportCancelledBeforeWrite, DRagLint.CLI.CycleFix.RerunAfterReindex, DRagLint.CLI.CycleFix.RunAllSelected, DRagLint.CLI.CycleFix.RunCycleFixGroups, DRagLint.CLI.CycleFix.StartStandDownChannel, DRagLint.Core.ControlChannel.TControlChannel.StandDownComplete, ExpandFileName, SameText</para>
-/// <para>Returns: CExitError; RunAllSelected(pOpts, pSccs, pGraph); RunCycleFixGroups(pOpts, pStore, pSccs, pGraph, pLibStore); CExitRefused</para>
+/// <para>Calls: DRagLint.CLI.CycleFix.CycleFixPlatform, DRagLint.CLI.CycleFix.DeleteDefaultScratch, DRagLint.CLI.CycleFix.ReportCancelledBeforeWrite, DRagLint.CLI.CycleFix.RerunAfterReindex, DRagLint.CLI.CycleFix.RunAllSelected, DRagLint.CLI.CycleFix.RunCycleFixGroups, DRagLint.CLI.CycleFix.StartStandDownChannel, DRagLint.Core.ControlChannel.TControlChannel.StandDownComplete, ExpandFileName, SameText</para>
+/// <para>Returns: CExitError; if SameText(Opts.Part, CPartAll) then RunAllSelected(Opts, pSccs, pGraph); CExitRefused</para>
 /// <para>Catches: ECycleFixCancelled (swallowed)</para>
+/// <seealso cref="DRagLint.CLI.CycleFix.CycleFixPlatform"/>
 /// <seealso cref="DRagLint.CLI.CycleFix.DeleteDefaultScratch"/>
 /// <seealso cref="DRagLint.CLI.CycleFix.ReportCancelledBeforeWrite"/>
 /// <seealso cref="DRagLint.CLI.CycleFix.RerunAfterReindex"/>
 /// <seealso cref="DRagLint.CLI.CycleFix.RunAllSelected"/>
-/// <seealso cref="DRagLint.CLI.CycleFix.RunCycleFixGroups"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;

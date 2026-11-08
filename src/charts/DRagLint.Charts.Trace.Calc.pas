@@ -627,7 +627,7 @@ function ResolveCalcField(pFacts: TCalcFacts): TCalcInfo;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Charts.Q.RoundTrip.TRoundTripRun.BuildAnchor (DRagLint.Charts.Q.RoundTrip.pas)</para>
 /// <para>Calls: DRagLint.Charts.Trace.FormA.NewTraceCond, DRagLint.Charts.Trace.FormA.NewTraceFacet, DRagLint.Charts.Trace.FormA.NewTraceStep, DRagLint.Charts.Trace.Shim.TraceAnchorText, DRagLint.Charts.Trace.Shim.TraceNoteText, DRagLint.Charts.Trace.Shim.TraceStopText, Format, IntToStr, pCmdFor, SameText</para>
-/// <para>Complexity: 17 (cyclomatic, outer body), 74 lines (full implementation)</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 74 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceCond"/>
 /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceFacet"/>
 /// <seealso cref="DRagLint.Charts.Trace.FormA.NewTraceStep"/>

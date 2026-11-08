@@ -81,7 +81,6 @@ function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const 
 /// <param name="ASym"><!-- drag-lint:auto type -->const TSymbol</param>
 /// <param name="ADoc"><!-- drag-lint:auto type -->const TParsedDoc</param>
 /// <returns><!-- drag-lint:auto type -->string</returns>
-/// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.Core.Model.DocFormatToStr: Unknown symbol kind: "%s"</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.RenderHoverJson (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
@@ -105,7 +104,7 @@ function RenderHoverJson(const ASym: TSymbol; const ADoc: TParsedDoc): string; o
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: Copy, DRagLint.Hover.Renderer.LastTopLevelColon, DRagLint.Hover.Renderer.SplitTopLevel, Format, Pos, StartsText, Trim</para>
-/// <para>Complexity: 16 (cyclomatic, outer body), 82 lines (full implementation)</para>
+/// <para>Complexity: 17 (cyclomatic, outer body), 82 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Hover.Renderer.LastTopLevelColon"/>
 /// <seealso cref="DRagLint.Hover.Renderer.SplitTopLevel"/>
 /// <!-- drag-lint:auto END -->

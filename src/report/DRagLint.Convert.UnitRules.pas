@@ -255,7 +255,7 @@ type
     /// end of the text, and on every call after it.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Convert.UnitRules.ImplementationKeywordLine (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.ReadUnit (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.EntryHasTrivia (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.ScanClause (DRagLint.Report.CyclePlan.pas) (+9 more)</para>
+    /// <para>Called from: DRagLint.Convert.UnitRules.ImplementationKeywordLine (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.ParseClause (DRagLint.Convert.UnitRules.pas), DRagLint.Convert.UnitRules.TUnitRulePlanner.ReadUnit (DRagLint.Convert.UnitRules.pas), DRagLint.Report.CyclePlan.EntryHasTrivia (DRagLint.Report.CyclePlan.pas), DRagLint.Report.CyclePlan.ScanClause (DRagLint.Report.CyclePlan.pas) (+15 more)</para>
     /// <para>Calls: CharInSet, Copy, Default, DRagLint.Convert.UnitRules.IsIdentChar, DRagLint.Convert.UnitRules.IsIdentStart, DRagLint.Convert.UnitRules.TUsesLexer.ReadString, DRagLint.Convert.UnitRules.TUsesLexer.SkipTrivia</para>
     /// <para>Returns: Default(TTok)</para>
     /// <para>Complexity: 12 (cyclomatic, outer body), 43 lines (full implementation)</para>

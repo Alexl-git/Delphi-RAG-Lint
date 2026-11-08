@@ -125,7 +125,7 @@ type
   /// old identifier after the last such prefix. This preserves the receiver
   /// intent without over-modelling it in Batch 1 (validation ignores Scope).
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Convert.Apply.PlanMigrateSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.EvaluateMapping (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.ParseConversionRules (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseCheckRefDirective (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseMappingDirective (DRagLint.Convert.Rules.pas) (+71 more)</para>
+  /// <para>Used by: DRagLint.Convert.Apply.PlanMigrateSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.EvaluateMapping (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Rules.ParseConversionRules (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseCheckRefDirective (DRagLint.Convert.Rules.pas), DRagLint.Convert.Rules.ParseConversionRules.ParseMappingDirective (DRagLint.Convert.Rules.pas) (+72 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit, DRagLint.Convert.Rules, DRagLint.Convert.UnitRules, DRagLint.Convert.UsesReconcile</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

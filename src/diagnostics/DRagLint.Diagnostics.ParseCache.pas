@@ -35,8 +35,8 @@ type
   /// Not thread-safe; the lint pipeline is single-threaded per process.
   /// Call Clear between files in a batch to bound memory.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers.LineIsPreprocessorInactive (DRagLint.CLI.pas), DRagLint.CLI.ConfigureLspLint (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas) (+93 more)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.Unwith, DRagLint.Core.Indexer, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.BoundsNilChecks, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.ConcurrencyChecks, DRagLint.Diagnostics.ControlFlowChecks, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.DeclChecks (+29 more)</para>
+  /// <para>Used by: DRagLint.CLI.ApplyLineMarkers.LineIsPreprocessorInactive (DRagLint.CLI.pas), DRagLint.CLI.ConfigureLspLint (DRagLint.CLI.pas), DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintTree (DRagLint.CLI.pas) (+94 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.CLI.Unwith, DRagLint.Core.Indexer, DRagLint.Diagnostics.AstChecks, DRagLint.Diagnostics.BoundsNilChecks, DRagLint.Diagnostics.CloneChecks, DRagLint.Diagnostics.ConcurrencyChecks, DRagLint.Diagnostics.ControlFlowChecks, DRagLint.Diagnostics.DeadCodeChecks, DRagLint.Diagnostics.DeclChecks (+30 more)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TAstParseCache = class
@@ -212,7 +212,7 @@ type
     /// <exception cref="ETreeSitterException"><!-- drag-lint:auto exc -->via TreeSitter.TTSParser.SetLanguage: Failed to set parser language to 0x%p</exception>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/2 (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection (DRagLint.Diagnostics.AstChecks.pas) (+76 more)</para>
+    /// <para>Called from: DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity/2 (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckControlFlowInFinally (DRagLint.Diagnostics.AstChecks.pas), DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection (DRagLint.Diagnostics.AstChecks.pas) (+77 more)</para>
     /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Diagnostics.ParseCache.TAstParseCache.ApplyPreprocess, DRagLint.Diagnostics.ParseCache.tree_sitter_delphi13, Integer, LowerCase, Move, TreeSitter.TTSParser.Create, TreeSitter.TTSParser.Parse, TreeSitter.TTSParser.SetLanguage</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Encoding.EnsureUtf8Bytes"/>

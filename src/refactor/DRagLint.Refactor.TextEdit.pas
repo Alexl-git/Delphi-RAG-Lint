@@ -203,7 +203,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/3 (DRagLint.Refactor.TextEdit.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText (DRagLint.Refactor.TextEdit.pas)</para>
     /// <para>Calls: DRagLint.Refactor.TextEdit.AnchorIsValid, DRagLint.Refactor.TextEdit.CollectBrokenAtoms, DRagLint.Refactor.TextEdit.DeletesOverlap, DRagLint.Refactor.TextEdit.EditAtomKey, DRagLint.Refactor.TextEdit.EditTopLine, DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyOneEdit, DRagLint.Refactor.TextEdit.TTextFileFormat.LineBreakOf, Format, Writeln</para>
-    /// <para>Complexity: 14 (cyclomatic, outer body), 122 lines (full implementation)</para>
+    /// <para>Complexity: 15 (cyclomatic, outer body), 122 lines (full implementation)</para>
     /// <para>Mutates: AApplied (out), ASkippedEdits (var)</para>
     /// <seealso cref="DRagLint.Refactor.TextEdit.AnchorIsValid"/>
     /// <seealso cref="DRagLint.Refactor.TextEdit.CollectBrokenAtoms"/>
@@ -579,7 +579,7 @@ function FirstLineOfCodePoint(const AText: string; ACode: Integer): Integer;
 /// <para>Called from: DRagLint.CLI.EncodingGuardReason (DRagLint.CLI.pas), DRagLint.Refactor.TextEdit.EscapeUnfitForPascal.FlushCode (DRagLint.Refactor.TextEdit.pas)</para>
 /// <para>Calls: Copy, DRagLint.Refactor.TextEdit.CodePointAt, DRagLint.Refactor.TextEdit.EncodingHolds, DRagLint.Refactor.TextEdit.EscapeUnfitForDfm.CloseOut, DRagLint.Refactor.TextEdit.EscapeUnfitForDfm.OpenOut</para>
 /// <para>Returns: SB.ToString</para>
-/// <para>Complexity: 11 (cyclomatic, outer body), 86 lines (full implementation)</para>
+/// <para>Complexity: 12 (cyclomatic, outer body), 86 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Refactor.TextEdit.CodePointAt"/>
 /// <seealso cref="DRagLint.Refactor.TextEdit.EncodingHolds"/>
 /// <seealso cref="DRagLint.Refactor.TextEdit.EscapeUnfitForDfm.CloseOut"/>
@@ -604,7 +604,7 @@ function EscapeUnfitForDfm(const AText: string; AEnc: TEncoding): string;
 /// <para>Called from: DRagLint.CLI.CycleFix.CheckInsertedText (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.EscapeInsertedText (DRagLint.CLI.CycleFix.pas)</para>
 /// <para>Calls: CharInSet, Copy, DRagLint.Refactor.TextEdit.EscapeUnfitForPascal.FlushCode, EscapeUnfitForDfm, PosEx</para>
 /// <para>Returns: SB.ToString</para>
-/// <para>Complexity: 18 (cyclomatic, outer body), 66 lines (full implementation)</para>
+/// <para>Complexity: 19 (cyclomatic, outer body), 66 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Refactor.TextEdit.EscapeUnfitForPascal.FlushCode"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

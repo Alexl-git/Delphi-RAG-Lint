@@ -54,7 +54,7 @@ type
   /// only where the source states it. Nothing in this record is ever
   /// invented.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.ParamNoteFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocRegions.MergeComment.ParamTypeFor (DRagLint.Doc.Regions.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamNotes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Facts.MineParamTypes (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.ParamNoteFor (DRagLint.Doc.Regions.pas), DRagLint.Doc.Regions.TDocCommentMerger.MergeComment.ParamTypeFor (DRagLint.Doc.Regions.pas)</para>
   /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Doc.Regions</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -65,7 +65,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddDistinct (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.ToFactRef (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.IsCertain (DRagLint.Doc.Regions.pas) ? (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.AddDistinct (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build.ToFactRef (DRagLint.Doc.Facts.pas), DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.IsCertain (DRagLint.Doc.Regions.pas) ? (+1 more)</para>
   /// <para>Used in units: DRagLint.Doc.Facts, DRagLint.Doc.Regions</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -169,7 +169,7 @@ type
   /// fields carry the true count so the renderer can add '(+N more)'.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) ?, DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) ?, DRagLint.Doc.Facts.DemoteForeignSummary (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+9 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas) ?, DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas) ?, DRagLint.Doc.Facts.DemoteForeignSummary (DRagLint.Doc.Facts.pas) ?, DRagLint.Doc.Facts.TDocFactsBuilder.Build (DRagLint.Doc.Facts.pas) (+14 more)</para>
   /// <para>Used in units: DRagLint.Doc.Document, DRagLint.Doc.Drift, DRagLint.Doc.Facts, DRagLint.Doc.Regions, DRagLint.LSP.Server, DRagLint.Query.HoverModel</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -745,7 +745,7 @@ type
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), DRagLint.LSP.Server.TLSPServer.ComputeHoverAt (DRagLint.LSP.Server.pas), DRagLint.Query.HoverModel.AssembleHover (DRagLint.Query.HoverModel.pas)</para>
     /// <para>Calls: ChangeFileExt, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNames, DRagLint.Core.Interfaces.ISymbolStore.FindDescendantNamesOfKind, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName (+48 more)</para>
-    /// <para>Complexity: 85 (cyclomatic, outer body), 1134 lines (full implementation)</para>
+    /// <para>Complexity: 92 (cyclomatic, outer body), 1173 lines (full implementation)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindAllChildSymbols"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindChildSymbolByName"/>

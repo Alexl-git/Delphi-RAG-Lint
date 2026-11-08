@@ -264,10 +264,21 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   /// <summary>Which rung of the engine-level manifest lookup answered.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TInstalledLayout.OriginName (DRagLint.Index.Manifest.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TManifestOrigin = (moExplicit, moAppData, moExeDir);
 
   /// <summary>The engine-level manifest file one process resolved: read and write agree
   /// because both ask <see cref="TInstalledLayout.ManifestLocation"/>.</summary>
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Index.Manifest.pas) ?, DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation (DRagLint.Index.Manifest.pas) ?, DRagLint.Index.Manifest.TInstalledLayout.ResolveManifest (DRagLint.Index.Manifest.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Manifest</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TManifestLocation = record
     /// <summary>Full path of the file; it need not exist (see Exists).</summary>
     Path: string;
@@ -283,9 +294,15 @@ type
   /// <summary>Path resolution of installed layout v2, phase 1
   /// (docs\superpowers\specs\2026-11-06-installed-layout-v2.md). It only answers paths:
   /// it creates, moves and renames nothing.</summary>
-  /// <remarks>The layout is OFF unless DRAGLINT_LAYOUT=v2. The explicit manifest
+  /// <remarks>
+  /// The layout is OFF unless DRAGLINT_LAYOUT=v2. The explicit manifest
   /// (DRAGLINT_MANIFEST, set by --manifest) is honoured in BOTH layouts: an explicit request
-  /// that was silently ignored would load the real manifest, the failure it exists to stop.</remarks>
+  /// that was silently ignored would load the real manifest, the failure it exists to stop.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.ApplyManifestSwitch (DRagLint.CLI.pas), DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas) (+5 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Manifest, DRagLint.Index.ManifestWrite</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TInstalledLayout = class
     public
       const
@@ -305,6 +322,19 @@ type
       /// <summary>True when this process runs with the v2 layout switched on.</summary>
       /// <returns>DRAGLINT_LAYOUT=v2: True. Unset: DEFAULT_LAYOUT_V2 (False). Any other value,
       /// v1 included: False.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TInstalledLayout.LibraryDir (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TInstalledLayout.LogDir (DRagLint.Index.Manifest.pas) (+4 more)</para>
+      /// <para>Calls: GetEnvironmentVariable, SameText</para>
+      /// <para>Returns: if Value = '' then DEFAULT_LAYOUT_V2</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.LibraryDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.LogDir"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function Enabled: Boolean; static;
 
       /// <summary>The lookup order itself, with every input passed in: explicit, then
@@ -315,28 +345,95 @@ type
       /// <param name="pEngineDir">The engine exe folder.</param>
       /// <param name="pLayoutV2">The switch; False skips the roaming rung.</param>
       /// <returns>The file to read. The roaming rung answers only when its file exists.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation (DRagLint.Index.Manifest.pas)</para>
+      /// <para>Calls: Default, ExtractFilePath</para>
+      /// <para>Returns: Default(TManifestLocation)</para>
+      /// <para>Touches: file system</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.Enabled"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.LibraryDir"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ResolveManifest(const pExplicit, pAppDataRoot, pEngineDir: string;
         pLayoutV2: Boolean): TManifestLocation; static;
 
       /// <summary><see cref="ResolveManifest"/> fed from this process's environment.</summary>
       /// <param name="pEngineDir">The engine exe folder.</param>
       /// <returns>The manifest TManifestIO.Load reads and the writers rewrite.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas), DRagLint.Index.Manifest.TInstalledLayout.WriteTarget (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TManifestIO.Load (DRagLint.Index.Manifest.pas) (+1 more)</para>
+      /// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.Enabled, DRagLint.Index.Manifest.TInstalledLayout.ResolveManifest, GetEnvironmentVariable</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.Enabled"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ResolveManifest"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ManifestLocation(const pEngineDir: string): TManifestLocation; static;
 
       /// <summary>Folder the engine's own logs go to.</summary>
       /// <param name="pEngineDir">The engine exe folder (the answer with the switch off).</param>
       /// <returns>v2: %LOCALAPPDATA%\drag-lint\logs, '' when LOCALAPPDATA is unset. Not created.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.CLI.Run (DRagLint.CLI.pas)</para>
+      /// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.Enabled, GetEnvironmentVariable</para>
+      /// <para>Returns: if Local = '' then ''</para>
+      /// <para>Touches: file system</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.Enabled"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.LibraryDir"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function LogDir(const pEngineDir: string): string; static;
 
       /// <summary>Default folder of the library DBs under the new layout.</summary>
       /// <returns>v2: %LOCALAPPDATA%\drag-lint\library, else ''. Reported only in phase 1:
       /// no DB is opened or written there (outDir still decides).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoManifest (DRagLint.CLI.pas), DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir (DRagLint.Index.Manifest.pas)</para>
+      /// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.Enabled, GetEnvironmentVariable</para>
+      /// <para>Returns: if Enabled and (Local &lt;&gt; '') then TPath.Combine(Local, 'drag-lint\library')</para>
+      /// <para>Touches: file system</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.Enabled"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.LogDir"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function LibraryDir: string; static;
 
       /// <summary>The roaming manifest path for an APPDATA root:
       /// &lt;pAppDataRoot&gt;\drag-lint\drag-lint.json.</summary>
       /// <param name="pAppDataRoot">The %APPDATA% folder.</param>
       /// <returns>The path (it need not exist); '' when pAppDataRoot is ''.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir (DRagLint.Index.Manifest.pas), DRagLint.Index.Manifest.TInstalledLayout.WriteTarget (DRagLint.Index.Manifest.pas), DRagLint.Index.ManifestWrite.MigrateExeManifest (DRagLint.Index.ManifestWrite.pas), DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas)</para>
+      /// <para>Returns: if pAppDataRoot = '' then ''</para>
+      /// <para>Touches: file system</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.Enabled"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.LibraryDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.LogDir"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function AppDataManifestFor(const pAppDataRoot: string): string; static;
 
       /// <summary>The file a WRITER should write when it may create one (phase 2): the file
@@ -344,6 +441,19 @@ type
       /// on, the roaming file; else the exe-side path (today's behaviour).</summary>
       /// <param name="pEngineDir">The engine exe folder.</param>
       /// <returns>Full path of the file to write; it need not exist.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Index.ManifestWrite.RegisterProjectSection (DRagLint.Index.ManifestWrite.pas)</para>
+      /// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor, DRagLint.Index.Manifest.TInstalledLayout.Enabled, DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation, GetEnvironmentVariable</para>
+      /// <para>Returns: Located.Path; Roaming</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.Enabled"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function WriteTarget(const pEngineDir: string): string; static;
 
       /// <summary>E6: expands %NAME% environment references in an `outDir` value. Layout OFF:
@@ -351,6 +461,18 @@ type
       /// <param name="pValue">The raw `outDir` text.</param>
       /// <returns>The value with every %NAME% of a SET variable replaced; an unset name, a
       /// lone % and %% stay literal.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)</para>
+      /// <para>Calls: Copy, Delete, DRagLint.Index.Manifest.TInstalledLayout.Enabled, GetEnvironmentVariable, Pos</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.Enabled"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.LibraryDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.LogDir"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function ExpandOutDir(const pValue: string): string; static;
 
       /// <summary>Ruling 3: the `outDir` a manifest with none gets. Only a manifest read from
@@ -359,14 +481,47 @@ type
       /// <param name="pRootDir">The folder the manifest was found in.</param>
       /// <returns>LibraryDir for the roaming manifest under v2; '' otherwise (RootDir decides,
       /// today's behaviour).</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.Index.Manifest.TManifestIO.ParseTextEx (DRagLint.Index.Manifest.pas)</para>
+      /// <para>Calls: DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor, DRagLint.Index.Manifest.TInstalledLayout.Enabled, DRagLint.Index.Manifest.TInstalledLayout.LibraryDir, ExtractFileDir, GetEnvironmentVariable, IncludeTrailingPathDelimiter, SameText</para>
+      /// <para>Returns: ''; LibraryDir</para>
+      /// <para>Touches: file system</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.Enabled"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.LibraryDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.LogDir"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function DefaultOutDir(const pRootDir: string): string; static;
 
       /// <summary>Stable text name of a rung: explicit, appdata or exe-dir.</summary>
       /// <param name="pOrigin">The rung.</param>
       /// <returns>The name used by `manifest where`.</returns>
+      /// <remarks>
+      /// <!-- drag-lint:auto BEGIN -->
+      /// <para>Called from: DRagLint.CLI.DoManifest (DRagLint.CLI.pas)</para>
+      /// <para>Returns: 'explicit'; 'appdata'; 'exe-dir'</para>
+      /// <para>Effect-free (proven)</para>
+      /// <para>Directives: static</para>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.AppDataManifestFor"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.DefaultOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.Enabled"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ExpandOutDir"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.LibraryDir"/>
+      /// <!-- drag-lint:auto END -->
+      /// </remarks>
       class function OriginName(pOrigin: TManifestOrigin): string; static;
   end;
 
+  /// <remarks>
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: DRagLint.CLI.ApplyReconcileToLibrary (DRagLint.CLI.pas), DRagLint.CLI.ContextDefaultLibraryDb (DRagLint.CLI.pas), DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas) (+36 more)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Manifest, DRagLint.Index.ManifestWrite, DRagLint.LSP.Server, DRagLint.Project.DefineProfile, DRagLint.Refactor.MultiProjectRename</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
   TManifestIO = class
     public
       /// <summary>Load and merge: reads the global config beside AEngineDir, then
@@ -383,17 +538,17 @@ type
       /// what parsed. A WRITE verb must refuse when LoadError is not ''.</para>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.CLI.ContextDefaultLibraryDb (DRagLint.CLI.pas), DRagLint.CLI.DoCycles.OpenPlanLibrary (DRagLint.CLI.pas), DRagLint.CLI.DoImpactAllProjects (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas), DRagLint.CLI.DoIndexAll (DRagLint.CLI.pas) (+26 more)</para>
-      /// <para>Calls: Default, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.Load.NoteLoadError, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, FirstLoadWarning, SameText, Writeln</para>
+      /// <para>Calls: Default, DRagLint.Index.Manifest.TDocSettings.Defaults, DRagLint.Index.Manifest.TIndexSettings.Defaults, DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation, DRagLint.Index.Manifest.TManifestIO.Load.MergeSections, DRagLint.Index.Manifest.TManifestIO.Load.NoteLoadError, DRagLint.Index.Manifest.TManifestIO.ParseText, DRagLint.Index.Manifest.TManifestIO.ParseTextEx, FirstLoadWarning, SameText, Writeln</para>
       /// <para>Returns: Default(TIndexManifest); GlobalManifest; LocalManifest</para>
-      /// <para>Complexity: 26 (cyclomatic, outer body), 144 lines (full implementation)</para>
+      /// <para>Complexity: 27 (cyclomatic, outer body), 148 lines (full implementation)</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>
       /// <para>Directives: static</para>
       /// <seealso cref="DRagLint.Index.Manifest.TDocSettings.Defaults"/>
       /// <seealso cref="DRagLint.Index.Manifest.TIndexSettings.Defaults"/>
+      /// <seealso cref="DRagLint.Index.Manifest.TInstalledLayout.ManifestLocation"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load.MergeSections"/>
       /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.Load.NoteLoadError"/>
-      /// <seealso cref="DRagLint.Index.Manifest.TManifestIO.ParseText"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function Load(const AEngineDir, AStartDir: string): TIndexManifest; static;

@@ -1672,7 +1672,7 @@ procedure AppendDescendantReport(const AUses: TArray<TDescendantUse>; const ADfm
 /// <para>Called from: DRagLint.CLI.DoConvertApply.RunUnit (DRagLint.CLI.pas)</para>
 /// <para>Calls: BookChosenUnits, BookHasUnitRules, BoundAccessSites, BuildToTypeAdd, CharColumn, Choose, CompareText, Copy, DanglingPasUses, Default (+76 more)</para>
 /// <para>Returns: if Length(Picked) = 1 then Spelling; Default(TApplyResult); TApplyResult.Refusal(UsesPlan.Error)</para>
-/// <para>Complexity: 36 (cyclomatic, outer body), 1552 lines (full implementation)</para>
+/// <para>Complexity: 36 (cyclomatic, outer body), 1565 lines (full implementation)</para>
 /// <para>Touches: file system</para>
 /// <seealso cref="DRagLint.Convert.Apply.BareTypeTail"/>
 /// <seealso cref="DRagLint.Convert.Apply.BookNothingToDoReason"/>

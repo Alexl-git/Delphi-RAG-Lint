@@ -255,7 +255,7 @@ type
     /// <returns>Candidates in store order; memoised.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: DRagLint.Convert.UsesReconcile.TReconciler.ComponentUnits (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanDangling (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanNewNames (DRagLint.Convert.UsesReconcile.pas)</para>
+    /// <para>Called from: DRagLint.Convert.Apply.BuildApplyPlan.PlanUsesAdditions (DRagLint.Convert.Apply.pas), DRagLint.Convert.UsesReconcile.TReconciler.ComponentUnits (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanDangling (DRagLint.Convert.UsesReconcile.pas), DRagLint.Convert.UsesReconcile.TReconciler.PlanNewNames (DRagLint.Convert.UsesReconcile.pas)</para>
     /// <para>Calls: BoolToStr, Default, DRagLint.Convert.UsesReconcile.TUsesUnitIndex.AtUnitLevel, DRagLint.Convert.UsesReconcile.TUsesUnitIndex.StemOf, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, ExtractFileExt, LowerCase, SameText</para>
     /// <para>Complexity: 12 (cyclomatic, outer body), 33 lines (full implementation)</para>
     /// <para>Reads: FDeclMemo, FStores, FDbs</para>

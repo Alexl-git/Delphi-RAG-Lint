@@ -142,7 +142,7 @@ function DisclosureText(pHiddenRows, pHiddenSites: Integer; const pNoun: string 
 /// keeps empty segments, as does string.Split. The PS sort only fixes which directory seeds
 /// the prefix, which a case-insensitive comparison makes irrelevant, so no sort is done.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.IndexRootLen (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.CrossesBoundary.IndexRootLen (DRagLint.Charts.Q.CrossesBoundary.pas), DRagLint.Charts.Q.ProtocolTrace.IndexRootLen (DRagLint.Charts.Q.ProtocolTrace.pas)</para>
+/// <para>Called from: DRagLint.Charts.ArchDiagram.CommonRootOf (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.IndexRootLen (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.CrossesBoundary.IndexRootLen (DRagLint.Charts.Q.CrossesBoundary.pas), DRagLint.Charts.Q.ProtocolTrace.IndexRootLen (DRagLint.Charts.Q.ProtocolTrace.pas)</para>
 /// <para>Calls: SameText</para>
 /// <para>Returns: 0; Length(Common)</para>
 /// <!-- drag-lint:auto END -->
@@ -158,7 +158,7 @@ function CommonRootLen(const pDirs: TArray<string>): Integer;
 /// Port of Get-PathZone (Emit-Common.ps1:587). PS trap closed: .NET GetDirectoryName
 /// treats '/' as a separator and Delphi ExtractFileDir does not, so '/' is normalised first.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas), DRagLint.Charts.Q.ProtocolTrace.Emit (DRagLint.Charts.Q.ProtocolTrace.pas)</para>
+/// <para>Called from: DRagLint.Charts.ArchDiagram.BuildArchModel (DRagLint.Charts.ArchDiagram.pas), DRagLint.Charts.Q.Architecture.Emit (DRagLint.Charts.Q.Architecture.pas), DRagLint.Charts.Q.ChangeImpact.Emit (DRagLint.Charts.Q.ChangeImpact.pas), DRagLint.Charts.Q.CrossesBoundary.Emit (DRagLint.Charts.Q.CrossesBoundary.pas), DRagLint.Charts.Q.ProtocolTrace.Emit (DRagLint.Charts.Q.ProtocolTrace.pas)</para>
 /// <para>Calls: Copy, DRagLint.Charts.Text.NormalSeparators, ExtractFileDir, Trim</para>
 /// <para>Returns: UNKNOWN_TEXT; ROOT_ZONE; string.Join(ZONE_SEP, Copy(Parts, pRootLen, MaxInt))</para>
 /// <seealso cref="DRagLint.Charts.Text.NormalSeparators"/>

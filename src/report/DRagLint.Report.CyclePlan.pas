@@ -325,7 +325,7 @@ function DecodeSource(const pBytes: TBytes; out pEncoding: TEncoding): string;
 /// <returns>The bytes, with the UTF-8 BOM first when the encoding is UTF-8.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Save (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas), DRagLint.Refactor.RedundantCast.BuildGateFiles (DRagLint.Refactor.RedundantCast.pas)</para>
+/// <para>Called from: DRagLint.CLI.CycleFix.StageShadow (DRagLint.CLI.CycleFix.pas), DRagLint.CLI.CycleFix.TRepairFile.Save (DRagLint.CLI.CycleFix.pas), DRagLint.Refactor.ExtractInterface.RunExtractInterface (DRagLint.Refactor.ExtractInterface.pas), DRagLint.Refactor.LazyInit.RunLazyInit (DRagLint.Refactor.LazyInit.pas), DRagLint.Refactor.NarrowParam.BuildGateFiles (DRagLint.Refactor.NarrowParam.pas) (+1 more)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function EncodeSource(const pText: string; pEncoding: TEncoding): TBytes;
@@ -567,11 +567,23 @@ function ComputeInterfaceSccs(const pGraph: TCycleGraph): TList<TArray<string>>;
 /// <param name="pOn">True: a store to a field pulled into the base class, `L.Add(TX.Create(..))` on a list that
 /// switches and a dotted unit name in a uses clause beside a slot of the same name are planned, and an `override` stays
 /// in the class (the base class inherits the same virtual). False, the default: exactly the 1.44 whitelist.</param>
-/// <remarks>Process-wide; the CLI sets it once while it parses its arguments, before any planner exists.</remarks>
+/// <remarks>
+/// Process-wide; the CLI sets it once while it parses its arguments, before any planner exists.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.ParseArgs (DRagLint.CLI.pas)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 procedure SetCycleCtorWide(pOn: Boolean);
 
 /// <summary>Whether SetCycleCtorWide switched the wider whitelist on.</summary>
 /// <returns>True when `--ctor-wide` was given; a `--part all` iteration forwards it to its child.</returns>
+/// <remarks>
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.CycleFix.AllIterationCmd (DRagLint.CLI.CycleFix.pas)</para>
+/// <para>Returns: GCtorWide</para>
+/// <para>Effect-free (proven)</para>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function CycleCtorWide: Boolean;
 
 implementation

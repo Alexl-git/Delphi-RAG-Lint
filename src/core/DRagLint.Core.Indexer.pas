@@ -294,8 +294,8 @@ type
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFolder (DRagLint.Core.Indexer.pas), DRagLint.Core.Indexer.TIndexer.WalkAndIndex (DRagLint.Core.Indexer.pas)</para>
-      /// <para>Calls: DRagLint.Core.Indexer.TIndexer.IndexFile, DRagLint.Core.Indexer.TIndexer.ParserFor, DRagLint.Core.Indexer.TIndexer.ShouldPruneDir, DRagLint.Core.Indexer.TIndexer.SqlFileAllowedFilter, DRagLint.Core.Indexer.TIndexer.WalkAndIndex, DRagLint.Index.Glob.TGlob.MatchesAny, DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored, DRagLint.Index.IgnoreFiles.TIgnoreStack.PopDir, DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir, ExcludeTrailingPathDelimiter, ExtractFileExt, ExtractFileName, Format, Writeln</para>
-      /// <para>Complexity: 16 (cyclomatic, outer body), 73 lines (full implementation)</para>
+      /// <para>Calls: DRagLint.Core.Indexer.TIndexer.IndexFile, DRagLint.Core.Indexer.TIndexer.ParserFor, DRagLint.Core.Indexer.TIndexer.ShouldPruneDir, DRagLint.Core.Indexer.TIndexer.SqlFileAllowedFilter, DRagLint.Core.Indexer.TIndexer.WalkAndIndex, DRagLint.Index.Glob.TGlob.MatchesAny, DRagLint.Index.IgnoreFiles.TIgnoreStack.IsIgnored, DRagLint.Index.IgnoreFiles.TIgnoreStack.PopDir, DRagLint.Index.IgnoreFiles.TIgnoreStack.PushDir, ExcludeTrailingPathDelimiter, ExtractFileExt, ExtractFileName, Format, SameText, Writeln</para>
+      /// <para>Complexity: 17 (cyclomatic, outer body), 77 lines (full implementation)</para>
       /// <para>Reads: FIgnoreStack, FWalkFilter, FCountOnly   Writes: FProgressTotal</para>
       /// <para>Recursive</para>
       /// <para>Catches: Exception (swallowed)</para>
@@ -417,7 +417,7 @@ type
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: DRagLint.Core.Indexer.TIndexer.IndexFile (DRagLint.Core.Indexer.pas)</para>
       /// <para>Calls: DRagLint.Core.Encoding.EnsureUtf8Bytes, DRagLint.Core.FileTime.FileMTimeUnix, DRagLint.Core.Indexer.BuildContainingLineMap, DRagLint.Core.Indexer.BuildEnclosingLineMap, DRagLint.Core.Indexer.FindDocRegionAbove, DRagLint.Core.Indexer.HasBinaryDfmHeader, DRagLint.Core.Indexer.PaintDocOwner, DRagLint.Core.Indexer.PreferBodyRoutine, DRagLint.Core.Indexer.ProfNow, DRagLint.Core.Indexer.TIndexer.Intern (+53 more)</para>
-      /// <para>Complexity: 86 (cyclomatic, outer body), 571 lines (full implementation)</para>
+      /// <para>Complexity: 87 (cyclomatic, outer body), 573 lines (full implementation)</para>
       /// <para>Reads: FVisitedKeys, FVisited, FWalkFilter, FResumeFingerprint, FStore, FIncludeContext, FPreprocessEnabled, FIncContexts (+6 more)   Writes: FSkippedUpToDate, FParsedFiles, FFailedFiles</para>
       /// <para>Catches: Exception (swallowed)</para>
       /// <para>Touches: file system</para>

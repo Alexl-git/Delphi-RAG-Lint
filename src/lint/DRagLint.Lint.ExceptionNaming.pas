@@ -52,7 +52,7 @@ const
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Lint.ExceptionUnitWriter.PlanExceptionEntries (DRagLint.Lint.ExceptionUnitWriter.pas), DRagLint.Lint.Linter.TLinter.EnrichExceptionFindings (DRagLint.Lint.Linter.pas)</para>
 /// <para>Calls: CharInSet, Copy, DRagLint.Lint.ExceptionNaming.CaseWord, DRagLint.Lint.ExceptionNaming.FirstClause, DRagLint.Lint.ExceptionNaming.InArray, DRagLint.Lint.ExceptionNaming.StripContextPrefix, DRagLint.Lint.ExceptionNaming.StripSpecifiers, DRagLint.Lint.ExceptionNaming.WordsOf, LowerCase, UpperCase</para>
-/// <para>Complexity: 15 (cyclomatic, outer body), 49 lines (full implementation)</para>
+/// <para>Complexity: 16 (cyclomatic, outer body), 49 lines (full implementation)</para>
 /// <para>Pure</para>
 /// <seealso cref="DRagLint.Lint.ExceptionNaming.CaseWord"/>
 /// <seealso cref="DRagLint.Lint.ExceptionNaming.FirstClause"/>

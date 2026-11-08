@@ -254,7 +254,7 @@ function SqlActionName(ACode: Integer): string;
 /// <para>Called from: DRagLint.CLI.DoSql (DRagLint.CLI.pas)</para>
 /// <para>Calls: CharInSet, StringReplace, Trim</para>
 /// <para>Returns: False; True</para>
-/// <para>Complexity: 30 (cyclomatic, outer body), 80 lines (full implementation)</para>
+/// <para>Complexity: 31 (cyclomatic, outer body), 80 lines (full implementation)</para>
 /// <para>Mutates: AReason (out)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

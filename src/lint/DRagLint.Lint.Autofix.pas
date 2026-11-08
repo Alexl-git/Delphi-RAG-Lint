@@ -123,7 +123,7 @@ function IsSingleFixOnlyRule(const ARuleId: string): Boolean;
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
 /// <para>Calls: ContainsText, Copy, Default, DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits, DRagLint.Lint.Autofix.BuildAutofixEdits.AddReplaceEdit, DRagLint.Lint.Autofix.BuildAutofixEdits.LinesFor, DRagLint.Lint.Autofix.DeclTypeOf, DRagLint.Lint.Autofix.EnsureImplUses, DRagLint.Lint.Autofix.Fixers, DRagLint.Lint.Autofix.FixOwnerKey (+13 more)</para>
-/// <para>Complexity: 158 (cyclomatic, outer body), 501 lines (full implementation)</para>
+/// <para>Complexity: 159 (cyclomatic, outer body), 501 lines (full implementation)</para>
 /// <para>Mutates: AFixableCount (out)</para>
 /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.BuildUnusedLocalFixEdits"/>
 /// <seealso cref="DRagLint.Lint.Autofix.BuildAutofixEdits.AddReplaceEdit"/>
@@ -141,9 +141,20 @@ function BuildAutofixEdits(const AFindings: TArray<TLintFinding>; out AFixableCo
 /// <returns>The edits; nil when the rule has no registered per-finding fixer (a
 /// legacy-chain, per-file, store-backed or sidecar fix), the fix is risky or needs a
 /// newer compiler than the run targets, or the fixer declines.</returns>
-/// <remarks>Only for a fixer that reads nothing but AFinding and ALines: one that
+/// <remarks>
+/// Only for a fixer that reads nothing but AFinding and ALines: one that
 /// looks at the disk or the index (DeclTypeOf, AutofixStore) would mix two versions
-/// of the file. The caller picks those by rule id.</remarks>
+/// of the file. The caller picks those by rule id.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.LSP.Completion.TLspCompletion.BuildFixActions (DRagLint.LSP.Completion.pas)</para>
+/// <para>Calls: DRagLint.Lint.Autofix.Fixers, DRagLint.Lint.Autofix.IsLegacyFixRule, DRagLint.Lint.TargetCompiler.ActiveTargetCompiler, DRagLint.Lint.TargetCompiler.IsGatedByTarget</para>
+/// <para>Returns: nil; R.Finding(AFinding, ALines)</para>
+/// <seealso cref="DRagLint.Lint.Autofix.Fixers"/>
+/// <seealso cref="DRagLint.Lint.Autofix.IsLegacyFixRule"/>
+/// <seealso cref="DRagLint.Lint.TargetCompiler.ActiveTargetCompiler"/>
+/// <seealso cref="DRagLint.Lint.TargetCompiler.IsGatedByTarget"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
 function BuildBufferFixEdits(const AFinding: TLintFinding; ALines: TStringList): TArray<TTextEdit>;
 
 /// <summary>Drops every finding's edits that overlap an edit of an EARLIER
@@ -307,7 +318,7 @@ function WrapInTryFinally(const APath: string; ALines: TStrings; AFirstLine, ALa
 /// <para>Called from: DRagLint.Fix.DeclParity.FixNeedlessExit (DRagLint.Fix.DeclParity.pas), DRagLint.Fix.Templates.BuildSidecarFixEdits (DRagLint.Fix.Templates.pas)</para>
 /// <para>Calls: CharInSet, Copy, Default, Trim</para>
 /// <para>Returns: False; True; AEdit.ExpectText &lt;&gt; ''</para>
-/// <para>Complexity: 17 (cyclomatic, outer body), 43 lines (full implementation)</para>
+/// <para>Complexity: 18 (cyclomatic, outer body), 43 lines (full implementation)</para>
 /// <para>Mutates: AEdit (out)</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>

@@ -108,8 +108,8 @@ type
   /// changes for anyone who has not opted in. Not thread-safe: the closure set
   /// is cached in class state, keyed on the store it was built from.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: [drag-lint]DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocument (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLint (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [drag-lint]DRagLint.Doc.Document.SameButForLegacyPure (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas),
-  /// [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.StripOwnTag (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.WithoutLegacyPure (DRagLint.Doc.SharedFacts.pas)</para>
+  /// <para>Used by: [drag-lint]DRagLint.CLI.DoDocDrift (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocument (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLint (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.DoLintProject (DRagLint.CLI.pas), [drag-lint]DRagLint.CLI.Run (DRagLint.CLI.pas), [drag-lint]DRagLint.Doc.Document.SameButForLegacyPure (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.Regions.TDocFactsRenderer.FormatUsedInLines (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas),
+  /// [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.StripOwnTag (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.WithoutLegacyPure (DRagLint.Doc.SharedFacts.pas)</para>
   /// <para>Used in units: [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Doc.Document, [drag-lint]DRagLint.Doc.Drift, [drag-lint]DRagLint.Doc.Regions, [drag-lint]DRagLint.Doc.SharedFacts</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -374,7 +374,7 @@ type
     /// non-determinism. Two comparators is the mirrored-predicate trap; there
     /// is deliberately only one, and both callers route through it.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: [drag-lint]DRagLint.Doc.Regions.TDocRegions.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas)</para>
+    /// <para>Called from: [drag-lint]DRagLint.Doc.Regions.TDocFactsRenderer.FormatUsedInLines (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.Regions.TDocFactsRenderer.RenderFactsBlock.JoinRefs (DRagLint.Doc.Regions.pas), [drag-lint]DRagLint.Doc.SharedFacts.ReconcileContent.SortedJoin (DRagLint.Doc.SharedFacts.pas)</para>
     /// <para>Calls: CompareText, DRagLint.Doc.ProjectTags.BareEntry</para>
     /// <para>Returns: CompareText(BareEntry(X), BareEntry(Y)); CompareText(X, Y)</para>
     /// <para>Directives: static</para>
