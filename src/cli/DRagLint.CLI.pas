@@ -16076,8 +16076,9 @@ var
 /// <param name="ANarrowRule">--rule; '' = every taint rule.</param>
 /// <param name="AOnlyPath">Keep only findings in this file ('' = all).</param>
 /// <returns>Taint findings with their Path.</returns>
-/// <remarks>A DB indexed before extractor 1.26.0 (no or empty data_flows) prints ONE note to
-/// stderr and reports nothing. DRAGLINT_DEBUG / DRAGLINT_PROFILE print the
+/// <remarks>A scope whose routines have no data_flows rows (a DB indexed before extractor
+/// 1.26.0, OR a fresh index whose routines pass no values) prints ONE note to
+/// stderr naming both causes, and reports nothing. DRAGLINT_DEBUG / DRAGLINT_PROFILE print the
 /// `taint: sinks N, keys N, ...` stats line to stderr.</remarks>
 function RunTaintRules(const AStore, ALibStore: ISymbolStore; const AScope: TArray<Int64>;
                        const ACfg: TLintConfig; const ANarrowRule, AOnlyPath: string): TArray<TLintFinding>;
@@ -16094,8 +16095,9 @@ begin
   if Stats.StaleIndex and not GTaintStaleNoted then
   begin
     GTaintStaleNoted:= True;
-    Writeln(ErrOutput, 'taint: this index has no data_flows facts (built before extractor 1.26.0) -- ' +
-      're-index to enable taint-sql-injection / taint-command-injection / taint-path-traversal');
+    Writeln(ErrOutput, 'taint: no data_flows rows for the routines in scope -- either the index was built ' +
+      'before extractor 1.26.0 (re-index it) or none of them passes a value to a call or writes a ' +
+      'field; taint-sql-injection / taint-command-injection / taint-path-traversal have nothing to examine');
   end;
   if (GetEnvironmentVariable('DRAGLINT_DEBUG') <> '') or (GetEnvironmentVariable('DRAGLINT_PROFILE') <> '') then
     Writeln(ErrOutput, Stats.ToLine);
