@@ -295,9 +295,16 @@ type
         LAYOUT_ENV = 'DRAGLINT_LAYOUT';
         /// <summary>The only DRAGLINT_LAYOUT value that turns the layout on (case-insensitive).</summary>
         LAYOUT_V2 = 'v2';
+        /// <summary>The DRAGLINT_LAYOUT value that keeps the flat v1 layout: the way back once
+        /// the default flips (phase 5).</summary>
+        LAYOUT_V1 = 'v1';
+        /// <summary>The layout when DRAGLINT_LAYOUT is unset. The phase-5 flip is this one
+        /// constant; it stays False until the VM test and the owner's go.</summary>
+        DEFAULT_LAYOUT_V2 = False;
 
       /// <summary>True when this process runs with the v2 layout switched on.</summary>
-      /// <returns>True for DRAGLINT_LAYOUT=v2; False for unset or any other value.</returns>
+      /// <returns>DRAGLINT_LAYOUT=v2: True. Unset: DEFAULT_LAYOUT_V2 (False). Any other value,
+      /// v1 included: False.</returns>
       class function Enabled: Boolean; static;
 
       /// <summary>The lookup order itself, with every input passed in: explicit, then
@@ -325,6 +332,34 @@ type
       /// <returns>v2: %LOCALAPPDATA%\drag-lint\library, else ''. Reported only in phase 1:
       /// no DB is opened or written there (outDir still decides).</returns>
       class function LibraryDir: string; static;
+
+      /// <summary>The roaming manifest path for an APPDATA root:
+      /// &lt;pAppDataRoot&gt;\drag-lint\drag-lint.json.</summary>
+      /// <param name="pAppDataRoot">The %APPDATA% folder.</param>
+      /// <returns>The path (it need not exist); '' when pAppDataRoot is ''.</returns>
+      class function AppDataManifestFor(const pAppDataRoot: string): string; static;
+
+      /// <summary>The file a WRITER should write when it may create one (phase 2): the file
+      /// the read answered when that exists or was named explicitly; else, with the layout
+      /// on, the roaming file; else the exe-side path (today's behaviour).</summary>
+      /// <param name="pEngineDir">The engine exe folder.</param>
+      /// <returns>Full path of the file to write; it need not exist.</returns>
+      class function WriteTarget(const pEngineDir: string): string; static;
+
+      /// <summary>E6: expands %NAME% environment references in an `outDir` value. Layout OFF:
+      /// the value is returned unchanged (today's behaviour, a literal folder name).</summary>
+      /// <param name="pValue">The raw `outDir` text.</param>
+      /// <returns>The value with every %NAME% of a SET variable replaced; an unset name, a
+      /// lone % and %% stay literal.</returns>
+      class function ExpandOutDir(const pValue: string): string; static;
+
+      /// <summary>Ruling 3: the `outDir` a manifest with none gets. Only a manifest read from
+      /// the roaming folder, with the layout on, defaults to <see cref="LibraryDir"/>: its
+      /// own folder roams, and DBs must not.</summary>
+      /// <param name="pRootDir">The folder the manifest was found in.</param>
+      /// <returns>LibraryDir for the roaming manifest under v2; '' otherwise (RootDir decides,
+      /// today's behaviour).</returns>
+      class function DefaultOutDir(const pRootDir: string): string; static;
 
       /// <summary>Stable text name of a rung: explicit, appdata or exe-dir.</summary>
       /// <param name="pOrigin">The rung.</param>
@@ -1251,7 +1286,7 @@ begin
     if JIndexes <> nil then
     begin
       V:= JIndexes.GetValue('outDir');
-      if (V <> nil) and (V.Value <> '') then Result.OutDir:= V.Value;
+      if (V <> nil) and (V.Value <> '') then Result.OutDir:= TInstalledLayout.ExpandOutDir(V.Value);
 
       V:= JIndexes.GetValue('exclude');
       if V is TJSONArray then Result.GlobalExclude:= JsonStrArr(TJSONArray(V));
@@ -1264,6 +1299,7 @@ begin
           if JSections.Items[I] is TJSONObject then Result.Sections[I]:= ParseSection(TJSONObject(JSections.Items[I]), Format('indexes.sections[%d]', [I]));
       end;
     end; // if
+    if Result.OutDir = '' then Result.OutDir:= TInstalledLayout.DefaultOutDir(ARootDir);
   finally
     RootVal.Free;
   end; // try
@@ -1286,7 +1322,60 @@ end;
 
 class function TInstalledLayout.Enabled: Boolean;
 begin
-  Result:= SameText(GetEnvironmentVariable(LAYOUT_ENV), LAYOUT_V2);
+  var Value:= GetEnvironmentVariable(LAYOUT_ENV);
+  Result:= if Value = '' then DEFAULT_LAYOUT_V2 else SameText(Value, LAYOUT_V2);
+end;
+
+class function TInstalledLayout.AppDataManifestFor(const pAppDataRoot: string): string;
+begin
+  Result:= if pAppDataRoot = '' then '' else TPath.Combine(pAppDataRoot, 'drag-lint\drag-lint.json');
+end;
+
+class function TInstalledLayout.WriteTarget(const pEngineDir: string): string;
+begin
+  var Located:= ManifestLocation(pEngineDir);
+  Result:= Located.Path;
+  if Located.Exists or (Located.Origin <> moExeDir) or not Enabled then Exit;
+  var Roaming:= AppDataManifestFor(GetEnvironmentVariable('APPDATA'));
+  if Roaming <> '' then Result:= Roaming;
+end;
+
+class function TInstalledLayout.ExpandOutDir(const pValue: string): string;
+begin
+  if not Enabled then Exit(pValue);
+  Result:= '';
+  var Rest:= pValue;
+  var Open:= Pos('%', Rest);
+  while Open > 0 do
+  begin
+    var Close:= Pos('%', Rest, Open + 1);
+    if Close = 0 then Break;
+    var Name := Copy(Rest, Open + 1, Close - Open - 1);
+    var Value:= if Name = '' then '' else GetEnvironmentVariable(Name);
+    if Value = '' then
+    begin
+      { unset name or %%: keep the opening % literally, rescan from the closing one }
+      Result:= Result + Copy(Rest, 1, Open);
+      Delete(Rest, 1, Open);
+    end
+    else
+    begin
+      Result:= Result + Copy(Rest, 1, Open - 1) + Value;
+      Delete(Rest, 1, Close);
+    end;
+    Open:= Pos('%', Rest);
+  end;
+  Result:= Result + Rest;
+end;
+
+class function TInstalledLayout.DefaultOutDir(const pRootDir: string): string;
+begin
+  Result:= '';
+  if (pRootDir = '') or not Enabled then Exit;
+  var Roaming:= AppDataManifestFor(GetEnvironmentVariable('APPDATA'));
+  if (Roaming <> '') and SameText(IncludeTrailingPathDelimiter(TPath.GetFullPath(pRootDir)),
+    IncludeTrailingPathDelimiter(ExtractFileDir(Roaming))) then
+    Result:= LibraryDir;
 end;
 
 class function TInstalledLayout.ResolveManifest(const pExplicit, pAppDataRoot, pEngineDir: string;
