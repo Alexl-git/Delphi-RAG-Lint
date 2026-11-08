@@ -515,6 +515,7 @@ type
     FixCycleGiven  : Boolean; // --cycle was on the command line (so 0 / junk is an error, not 'absent')
     FixPart        : string ; // --part a|b|all (cycles --fix)
     NoCompile      : Boolean; // --no-compile (cycles --fix: skip the baseline build)
+    CompileGate    : Boolean; // --compile-gate (lint --fix --apply: write through the --project build gate; opt-in)
     ShadowOut      : string ; // --shadow-out <dir> (cycles --fix, debug: where the shadow tree is staged)
     CycleRsVars    : string ; // --rsvars <rsvars.bat> (cycles --fix: the Studio build environment, for a Studio the registry does not name)
     CycleBuildTimeout: string ; // --build-timeout <s> (cycles --fix: whole seconds one build may take; '' / 0 = no limit, the default)
@@ -1026,6 +1027,7 @@ end;
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
 function DoUnwith(const AArgs: TArgs): Integer; forward;
+function ApplyEditsGated(const AEdits: TArray<TTextEdit>; const AVerb: string; const AArgs: TArgs; out ATouched: Integer): Boolean; forward;
 procedure AutoCreateMissingProjectDb(const AArgs: TArgs; const AProjDb: string); forward;
 function ManifestStartDir(const AProjectPath: string): string; forward;
 function LoadManifestForProject(const AEngineDir, AProjectPath: string): TIndexManifest; forward;
@@ -1817,6 +1819,7 @@ begin
       Result.FixPart:= LowerCase(ParamStr(i));  // dl:ok duplicate-code@378f -- the flag parser is a table of one-value flags (Inc(i); Result.X:= ParamStr(i)); the shape repeats by construction
     end
     else if A = '--no-compile' then Result.NoCompile:= True
+    else if A = '--compile-gate' then Result.CompileGate:= True
     else if (A = '--shadow-out') and (i < ParamCount) then
     begin
       Inc(i);
@@ -15140,6 +15143,13 @@ begin
       JSON/text output rather than silently swallowing --format sarif. }
     if SameText(AArgs.Format, 'sarif') then Writeln(ErrOutput, '--fix does not support SARIF output; using text output.');
 
+    { --compile-gate writes through a build of the --project .dproj (lint, lint-all, lint-project, check-ast share this writer). }
+    if AArgs.CompileGate and AArgs.Apply and ((not SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj')) or (not TFile.Exists(AArgs.ProjectPath))) then
+    begin
+      Writeln(ErrOutput, 'ERROR: --fix --apply --compile-gate needs --project <X.dproj>: the compile gate builds it');
+      Exit(2);
+    end;
+
     { AutoFix Chunk 1 (Task 3): narrow to a single finding when --fix-line and/or
       --fix-rule are given. Each SET flag filters; an unset flag matches all. With
       neither flag the set is unchanged, so whole-file --fix is byte-identical. }
@@ -15426,6 +15436,7 @@ begin
       finding's (two rules rewriting one span) is withheld WHOLE and reported
       deferred; the next --fix pass re-lints and applies it.
       tests\autofix\run_fix_overlap_deferred.ps1. }
+    var GateRefused: Boolean:= False;
     var DeferredOwners: TArray<string>;
     Edits:= DeferConflictingFixes(Edits, DeferredOwners);
     if Length(DeferredOwners) > 0 then
@@ -15484,7 +15495,15 @@ begin
         finally
           EditLineKeys.Free;
         end;
-        if AArgs.Apply and (FixCount > 0) then TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
+        if AArgs.Apply and (FixCount > 0) then
+        begin
+          if AArgs.CompileGate then
+          begin
+            var GateTouched: Integer;
+            if not ApplyEditsGated(Edits, 'lint --fix', AArgs, GateTouched) then GateRefused:= True;
+          end
+          else TTextEditApplier.Apply(Edits, not AArgs.NoBackup);
+        end;
         JArr:= TJSONArray.Create;
         try
           for F in Targeted do
@@ -15517,7 +15536,7 @@ begin
       finally
         EditedKeys.Free;
       end; // try
-      Exit(0);
+      Exit(if GateRefused then 1 else 0);
     end; // if
 
     { Empty unless the naming stale-position guard dropped something, so the
@@ -15571,7 +15590,13 @@ begin
         check of its own. Fold those into the same "skipped (stale index)"
         suffix rather than reporting them separately. }
       var ApplySkipped: Integer;
-      var Touched: Integer:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup, ApplySkipped);
+      var Touched: Integer;
+      if AArgs.CompileGate then
+      begin
+        ApplySkipped:= 0;
+        if not ApplyEditsGated(Edits, 'lint --fix', AArgs, Touched) then Exit(1);  // dl:ok too-many-exit-points@277f -- the refusal is the verb's exit 1; ApplyEditsGated printed the reason and nothing is changed
+      end
+      else Touched:= TTextEditApplier.Apply(Edits, not AArgs.NoBackup, ApplySkipped);
       { Report EDITS WRITTEN, not fixable FINDINGS. FixCount counts findings and
         one doc-drift finding emits a delete+insert PAIR, so `applied FixCount`
         overstated the work whenever anything was refused -- it printed
@@ -17185,6 +17210,10 @@ begin
   if not ExplicitDbsExist(AArgs, 'lint') then Exit(2);
   if AArgs.Fix and SameText(AArgs.FixRule, REDUNDANT_CAST_RULE_ID) then Exit(DoRedundantCastFix(AArgs));
   if AArgs.Fix and SameText(AArgs.FixRule, WITH_STATEMENT_RULE_ID) then Exit(DoUnwithFix(AArgs));
+  if AArgs.CompileGate then
+  begin
+    if not AArgs.Fix then begin Writeln(ErrOutput, 'ERROR: lint --compile-gate needs --fix (it gates the --apply write)'); Exit(2); end;
+  end;
   if not ApplyRunTargetCompiler(AArgs, LoadLintConfig(AArgs).TargetCompiler) then Exit(2);
   TraceLintChecker('setup');
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
