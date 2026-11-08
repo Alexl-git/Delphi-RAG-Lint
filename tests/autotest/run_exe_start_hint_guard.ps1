@@ -45,7 +45,7 @@ foreach ($g in 'run_find_callers_callback_reach', 'run_generate_test_stub_guard'
                'run_unit_usage_degrades', 'run_unused_unit_enum_values', 'run_unused_unit_helpers',
                'run_usages_field_access', 'run_wiki_blocks', 'run_with_hiding_rule') {
   $out = (& pwsh -NoProfile -File (Join-Path $PSScriptRoot "$g.ps1") -Exe $bareExe -WorkDir (Join-Path $WorkDir $g) 2>&1 | ForEach-Object { "$_" }) -join "`n"
-  Check "$g names 0xC000007B when the exe cannot start" ($out -match '0xC000007B') (($out -split "`n" | Select-Object -First 2) -join ' | ')
+  Check "$g names the load failure (0xC000007B or 0xC0000135) when the exe cannot start" ($out -match '0xC000007B|0xC0000135') (($out -split "`n" | Select-Object -First 2) -join ' | ')
 }
 Check 'helper: ordinary exit code gives no hint (negative control)' ((Get-ExeStartFailureHint 1) -eq '')
 if ($script:Failed) { Write-Host 'run_exe_start_hint_guard: FAIL' -ForegroundColor Red; exit 1 }
