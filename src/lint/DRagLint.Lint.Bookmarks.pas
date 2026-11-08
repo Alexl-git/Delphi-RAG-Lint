@@ -96,7 +96,7 @@ type
 implementation
 
 uses
-  System.SysUtils, System.Generics.Collections;
+  System.SysUtils, System.Math, System.Generics.Collections;
 
 const
   BK_TAG     = 'dl:bk';
@@ -431,7 +431,7 @@ begin
     begin
       if (N = 0) or (Lines[N - 1].Brk <> '') then T:= N + 1;
     end
-    else if (E.StrippedLine >= 1) and (E.StrippedLine <= N) and (Lines[E.StrippedLine - 1].Body = E.Anchor) then
+    else if InRange(E.StrippedLine, 1, N) and (Lines[E.StrippedLine - 1].Body = E.Anchor) then
       T:= E.StrippedLine
     else
     begin

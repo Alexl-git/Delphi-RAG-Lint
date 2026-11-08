@@ -65,7 +65,7 @@ function Sha256Of(const pText: string; pEnc: TEncoding): string;
 var
   H: THashSHA2;
 begin
-  H:= THashSHA2.Create;
+  H:= THashSHA2.Create;  // dl:ok object-leak@a45a -- THashSHA2 is a record: Create initialises it, there is nothing to free
   H.Update(pEnc.GetBytes(pText));
   Result:= H.HashAsString;
 end;
@@ -257,7 +257,7 @@ begin
     Exit(EXIT_NOT_FOUND);
   end;
   Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(pFrom, TEncoding.UTF8));
-  if not (Root is TJSONObject) or (TJSONObject(Root).GetValue<string>('format', '') <> SIDECAR_FORMAT) then
+  if (Root is not TJSONObject) or (TJSONObject(Root).GetValue<string>('format', '') <> SIDECAR_FORMAT) then
   begin
     Root.Free;
     Fail(pJson, 'bad-sidecar', 'error: not a ' + SIDECAR_FORMAT + ' sidecar: ' + pFrom);
@@ -296,11 +296,11 @@ begin
       end;
       for K:= 0 to High(Edits) do
       begin
-        if Missing then Status:= ST_FILE_MISSING
-        else if Already then Status:= ST_ALREADY
-        else if AllPlaced then Status:= ST_RESTORED
-        else if Lines[K] = 0 then Status:= ST_UNPLACED
-        else Status:= ST_HELD;
+        Status:= if Missing then ST_FILE_MISSING
+          else if Already then ST_ALREADY
+          else if AllPlaced then ST_RESTORED
+          else if Lines[K] = 0 then ST_UNPLACED
+          else ST_HELD;
         if Status = ST_RESTORED then Inc(NRestored)
         else if Status = ST_ALREADY then Inc(NAlready)
         else if Status <> ST_HELD then Inc(NUnplaced);
