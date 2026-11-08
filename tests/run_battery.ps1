@@ -239,6 +239,12 @@ $DefaultExclusions = [ordered]@{
 
 $repoRoot  = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
+# Installed layout v2 (spec 2026-11-06, phase 5): every guard runs in the flat v1 layout,
+# whatever the engine default or the box says, so a guard that copies the engine beside a
+# fixture manifest never reads the real %APPDATA%\drag-lint\drag-lint.json. The layout
+# guards set DRAGLINT_LAYOUT per engine run themselves. Children inherit this.
+$env:DRAGLINT_LAYOUT = 'v1'
+
 # A fresh worktree lacks the untracked artifacts ~7 guards need; create them first.
 # DRAGLINT_BATTERY_PREPARED stops a nested battery run (the battery_*_guard
 # runners start one) from re-preparing.
