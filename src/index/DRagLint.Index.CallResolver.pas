@@ -531,6 +531,10 @@ type
     FParenlessStats  : TParenlessResolveStats;
     // 2026-09-23 (D13): per-run counters of the write-ref pass, same reason.
     FWriteStats      : TWriteResolveStats;
+    // 2026-11-07 (E-USE-EDGES-PHASE2): the type the LAST ResolveWriteRef found
+    // its member on (`with` target, or the class for `Self.X`); 0 when the
+    // scope walk answered. Read only by ResolveWriteEdge, right after the call.
+    FWriteReceiver   : Int64;
     // Declaring file id -> the resolved target file ids it can see (uses graph).
     FFileScope  : TObjectDictionary<Int64, TList<Int64>>;
     // Cache of a routine/type symbol's direct children, keyed by symbol id, so a
@@ -3398,6 +3402,24 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveWriteRef(const ARef: TReference; out AReason: string): Int64;
+
+    /// <summary>E-USE-EDGES-PHASE2 (2026-11-07): ResolveWriteRef plus the use
+    /// edge of the write -- the bare / `Self.` / `with` counterpart of the
+    /// member_accesses row a dotted write and a bare read already own.</summary>
+    /// <param name="ARef">The write ref, as for ResolveWriteRef.</param>
+    /// <param name="AReason">OUT: ResolveWriteRef's reason, '' when bound.</param>
+    /// <returns>TargetSymbolId = the bound declaration (0 on a decline). For a
+    /// PROPERTY or FIELD target also MemberMode 'write', Confidence 'certain',
+    /// the write accessor of a property (AccessorSymbolId / AccessorKind
+    /// 'method' or 'field'; none for a field or a property without a write
+    /// clause the resolver can find) and ReceiverTypeSymbolId (the `with`
+    /// target's type, else the enclosing class). Any other target (local,
+    /// parameter, unit var, class var, const) leaves MemberMode '' --
+    /// identity only, exactly as before.</returns>
+    /// <remarks>The caller writes a member_accesses row (and the call edge
+    /// of a method setter) when MemberMode is set, else refs.symbol_id only.
+    /// Counted into WriteStats once, by ResolveWriteRef.</remarks>
+    function ResolveWriteEdge(const ARef: TReference; out AReason: string): TCallEdge;
 
     /// <summary>Per-run counters of the write-ref pass. Read by the calls stage
     /// for its ResolveLog line.</summary>
@@ -8762,6 +8784,7 @@ begin
   WType  := 0;
   WKind  := wmNone;
   ViaSelf:= False;
+  FWriteReceiver:= 0;
   Lines  := LinesOf(ARef.FileId);
   Scope  := WriteScopeOf(ARef.EnclosingSymbolId);
   { The `with` scope reads the file's text, so a line that no longer matches
@@ -8781,6 +8804,7 @@ begin
     ViaSelf:= True;
     EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
     Result:= LookupMemberOnType(ClassId, ARef.NameText).Id;
+    FWriteReceiver:= ClassId;
     if Result <= 0 then
     begin
       Result := 0;
@@ -8798,6 +8822,7 @@ begin
   else if Verd = wvMember then
   begin
     if WKind = wmValue then Result:= LookupMemberOnType(WType, ARef.NameText).Id;
+    FWriteReceiver:= WType;
     if Result <= 0 then
     begin
       Result := 0;
@@ -8812,6 +8837,39 @@ begin
       Result:= UnitScopeWriteTarget(ARef.FileId, LowerCase(ARef.NameText), AReason);
   end;
   TallyWrite(AReason);
+end;
+
+function TCallResolver.ResolveWriteEdge(const ARef: TReference; out AReason: string): TCallEdge;
+var
+  M      : TSymbol;
+  Acc    : TSymbol;
+  ClassId: Int64  ;
+begin
+  Result               := Default(TCallEdge);
+  Result.RefId         := ARef.Id;
+  Result.TargetSymbolId:= ResolveWriteRef(ARef, AReason);
+  if Result.TargetSymbolId <= 0 then Exit;
+  M:= SymbolById(Result.TargetSymbolId);
+  if not (M.Kind in [skProperty, skField]) then Exit;
+  Result.Confidence := 'certain';
+  Result.MemberMode := 'write';
+  { The scope walk found a member on the enclosing class chain: that class is
+    the receiver, as ResolveBareMemberRead records for a bare read. }
+  if FWriteReceiver > 0 then Result.ReceiverTypeSymbolId:= FWriteReceiver
+  else
+  begin
+    EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
+    Result.ReceiverTypeSymbolId:= ClassId;
+  end;
+  if M.Kind = skProperty then
+  begin
+    Acc:= ResolveAccessor(M, 'write');
+    if Acc.Id > 0 then
+    begin
+      Result.AccessorSymbolId:= Acc.Id;
+      Result.AccessorKind    := (if Acc.Kind = skField then 'field' else 'method');
+    end;
+  end;
 end;
 
 function TCallResolver.LocalScopeCovers(const ADecl: TSymbol; AFileId: Int64; ALine, ACol: Integer): Boolean;
