@@ -507,7 +507,7 @@ is captured as a parse error (never raised).
 | `#remove <property>` | remove a property from PAS and DFM |
 | `#remove DFM: <property>` | remove a property from the DFM only |
 | `#migrate [<Class>:] [<obj>.] <old> -> <new> [, <unit> ...]` | replace `old` with `new`; optional class-scope / object-scope; optional uses-add(s). Inside a `#convert` block convert-apply applies the plain forms `#migrate Old -> New` and `#migrate Old -> DL_NONE` to the converted instances' `.pas` sites (C18 slice 1, see "Member migration") |
-| `<pcre-search> -> <pcre-replace>` | raw PCRE find/replace (escape hatch: any non-`#` line containing ` -> `) |
+| `<pcre-search> -> <pcre-replace>` | raw PCRE find/replace (escape hatch: any non-`#` line containing ` -> `); convert-apply executes no raw line, and convert-validate warns so (`line N: warning: raw find/replace line is not executed by convert-apply`) |
 
 Real reFind sample lines (from the BDE2FD sample):
 
