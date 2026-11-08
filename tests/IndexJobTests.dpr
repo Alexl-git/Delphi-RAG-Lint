@@ -285,10 +285,10 @@ procedure TestIndexBusyResult;
 const
   LOCK_MSG = 'ERROR: index: another index run is writing x.sqlite (its lock x.sqlite.indexing.lock is held). Wait.';
 begin
-  Check('9a exit 2 + lock refusal text -> "index busy, will retry", not "failed"',
-        ReindexResultText(2, LOCK_MSG) = 'reindex: index busy, will retry');
+  Check('9a exit 2 + lock refusal text -> "index busy ... the next save retries", not "failed" (148 XP3: nothing retries by itself)',
+        ReindexResultText(2, LOCK_MSG) = 'reindex: index busy (another run), the next save retries');
   Check('9b the finishing-lock variant is busy too',
-        ReindexResultText(2, 'ERROR: index: the lock file x is still being deleted -- another index run on y is just finishing') = 'reindex: index busy, will retry');
+        ReindexResultText(2, 'ERROR: index: the lock file x is still being deleted -- another index run on y is just finishing') = 'reindex: index busy (another run), the next save retries');
   Check('9c POSITIVE CONTROL: exit 2 without the lock text is a failure',
         ReindexResultText(2, 'usage: index needs --project') = 'reindex: failed');
   Check('9d exit 0 is done', ReindexResultText(0, '') = 'reindex: done');
