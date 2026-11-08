@@ -39,6 +39,9 @@ Wave 147, integrated on lane/147-int. ONE extractor bump over 1.46 (1.34.0-alpha
 ### Fixed (integration)
 - lint: deep-nesting counts grammar v1.4.4's statement `ifElse` node (PR #2 moved a statement if-with-else off `exprIf`); without it a trailing else scored the nest ZERO again (run_deep_nesting_else_forms).
 - IDE plugin: version literals read v1.47.0-alpha (Editor PLUGIN_VERSION, Usages form).
+- lint: enum-read-inside-with reports a with-target that is a unit-level function result (`with GetObj do`), the residual the resolver still binds to the enum value after the same-named-type tie-break.
+- index: a project that names no platform takes the manifest's explicit `defaultPlatform` before the Win32 fallback (preprocessing and the library pick agree).
+- lint-all, lint-project and check-ast refuse `--compile-gate` without `--fix` (exit 2) instead of ignoring it; `manifest migrate --dry-run` and `bookmarks-strip / bookmarks-restore --format json` are documented.
 
 ### Measured, no change
 - The raise/handle exception type fact (1.46) costs no measurable parse time (-0.1 percent CPU, 570 files x 4 passes) and 0.1 s of resolve on Micronite2027; the 1.46 '+19 percent rebuild' was machine load (B3).
