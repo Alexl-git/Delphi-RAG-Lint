@@ -3,8 +3,8 @@
   "title": "arch-diagram",
   "group": "graphs-reports",
   "owner": "ENGINE",
-  "status": "internal",
-  "since": "1.46.0-alpha",
+  "status": "shipped",
+  "since": "1.47.0-alpha",
   "summary": "Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses",
   "intro": "Read this when you want the shape of a project in one file you can open anywhere: which folder sits on which, and the uses lines behind every arrow. It needs no Graphviz and fetches nothing.",
   "wikiPage": "arch-diagram",
@@ -42,5 +42,11 @@
       "command": "drag-lint arch-diagram --db <db> --json"
     }
   ],
-  "notes": "wave 146 lane x3, NOT FOR MERGE until the owner has seen the picture; spec docs\\superpowers\\specs\\2026-11-06-archify-layer-diagrams.md; guard tests\\autotest\\run_arch_diagram.ps1"
+  "notes": "wave 146 lane x3, NOT FOR MERGE until the owner has seen the picture; spec docs\\superpowers\\specs\\2026-11-06-archify-layer-diagrams.md; guard tests\\autotest\\run_arch_diagram.ps1",
+  "verified": {
+    "date": "2026-11-07",
+    "by": "ENGINE",
+    "build": "1.46.0-alpha",
+    "surfaceHash": "ab2b5e72a961c370c9c96cdc39380451472d2aff80de376435e72e216058591a"
+  }
 }

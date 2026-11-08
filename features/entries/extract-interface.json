@@ -4,7 +4,7 @@
   "group": "refactoring",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.44.1-alpha",
+  "since": "1.47.0-alpha",
   "summary": "Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate",
   "intro": "Read this when a class needs an interface and you want it to hold what its callers actually use, not every public method. The default prints the plan, the very text it would write; --apply builds a scratch copy with the change first, then builds the project before and after and rolls back on any error. No consumer is retyped, so no lifetime changes.",
   "wikiPage": "extract-interface",

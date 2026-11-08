@@ -3,8 +3,8 @@
   "title": "manifest where (installed layout v2)",
   "group": "maintenance",
   "owner": "ENGINE",
-  "status": "internal",
-  "since": "1.44.1-alpha",
+  "status": "shipped",
+  "since": "1.47.0-alpha",
   "summary": "Shows which drag-lint.json, log folder and library folder this engine resolves and why; phase 1 of installed layout v2, off by default, moves nothing",
   "intro": "Read this when you need to know which manifest an engine would read. manifest where is read-only. The new layout is off unless DRAGLINT_LAYOUT=v2; an explicit manifest (DRAGLINT_MANIFEST or --manifest) wins in both layouts, and a missing explicit file never falls through to another manifest.",
   "wikiPage": "installed-layout-v2",
@@ -12,6 +12,7 @@
     {
       "type": "cli",
       "verb": "manifest",
+      "sub": "where",
       "usage": "drag-lint manifest where [--manifest <path>] [--json] (read-only: which drag-lint.json, log folder and library folder this engine resolves, and each lookup rung. Order: explicit DRAGLINT_MANIFEST / --manifest, then with DRAGLINT_LAYOUT=v2 the file in %APPDATA%\\drag-lint, then beside the exe. Creates, moves and renames nothing)",
       "flags": [
         {
@@ -41,5 +42,11 @@
   "accessReviewed": {
     "date": "2026-11-06",
     "by": "ENGINE"
+  },
+  "verified": {
+    "date": "2026-11-07",
+    "by": "ENGINE",
+    "build": "1.46.0-alpha",
+    "surfaceHash": "46c57ae2c05b84f2f1195404ee27d3e9680f29bc48ef44dbbe285feba70e43dc"
   }
 }

@@ -3,6 +3,10 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v2.0.
 
+## v1.47.0-alpha -- unreleased
+
+Wave 147 (in progress; the integrator writes this section).
+
 ## v1.46.0-alpha -- 2026-11-07
 
 Wave 146, integrated on lane/146-int. ONE extractor bump over 1.45 (1.33.0-alpha) and ONE resolver bump (1.21.0-alpha): every index re-parses once. Grammar b12b539 staged.
