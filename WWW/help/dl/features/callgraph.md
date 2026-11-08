@@ -4,10 +4,10 @@ title: callgraph
 summary: Prints an N-deep resolved call tree for a symbol, in either direction
 product: DL
 group: graphs-reports
-order: 70003
+order: 70004
 since: 0.91.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # callgraph

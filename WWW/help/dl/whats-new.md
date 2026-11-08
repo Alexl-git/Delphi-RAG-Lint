@@ -9,6 +9,13 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.47.0-alpha
+
+* [arch-diagram](features/arch-diagram.md) -- Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses.
+* [Extract an interface from the members used (scratch + compile gate)](features/extract-interface.md) -- Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate.
+* [manifest where (installed layout v2)](features/installed-layout-v2.md) -- Shows which drag-lint.json, log folder and library folder this engine resolves and why; phase 1 of installed layout v2, off by default, moves nothing.
+* [Prepare heavy initialization for lazy loading (first phase)](features/lazy-init.md) -- Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate.
+
 ## 1.46.0-alpha
 
 * [bookmarks](features/bookmarks.md) -- Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder.

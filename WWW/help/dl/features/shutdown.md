@@ -4,10 +4,10 @@ title: shutdown
 summary: Ask running engines (lsp, cycles --fix, index, lint-all) to stand down cleanly, so an index can be rebuilt or an engine replaced
 product: DL
 group: maintenance
-order: 120012
+order: 120013
 since: 0.6.0-alpha
 status: shipped
-updated: 1.38.0-alpha
+updated: 1.46.0-alpha
 ---
 
 # shutdown

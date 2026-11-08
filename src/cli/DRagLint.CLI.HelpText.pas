@@ -271,6 +271,7 @@ begin
   Writeln('  drag-lint export obsidian    --db <file.sqlite>    --output-dir <dir>  [--open]');
   Writeln('  drag-lint top                --db <file.sqlite>    [--by fanin] [--limit N] [--json]');
   Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]');
+  Writeln('  drag-lint arch-diagram       --db <db> [--output <file.html>] [--json]   (one self-contained HTML layer diagram of the units by folder; layers measured from uses; no Graphviz)');
   Writeln('  drag-lint todos              [<path>]                (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])');
   Writeln('  drag-lint diff               --db <old.sqlite> --db <new.sqlite>  [--json]');
   Writeln('  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)');
@@ -467,6 +468,7 @@ begin
   Writeln('                               (Claude Code, VS Code and Cursor; an uninstalled client is skipped); --dry-run prints those four commands and runs NOTHING;');
   Writeln('                               --home-dir / --appdata-dir move where the client files are looked for (tests); a failing step stops the run with its exit code');
   Writeln('  drag-lint overview           --db <file.sqlite>    [--max-rows N] [--json]   (ONE bounded first-turn call: freshness, counts per kind, units by layer, top fan-in, entry points, forms; a capped section says how many it omitted)');
+  Writeln('  drag-lint manifest where [--manifest <path>] [--json]   (read-only: which drag-lint.json, log folder and library folder this engine resolves, and each lookup rung. Order: explicit DRAGLINT_MANIFEST / --manifest, then with DRAGLINT_LAYOUT=v2 the file in %APPDATA%\drag-lint, then beside the exe. Creates, moves and renames nothing)');
   Writeln('  drag-lint bookmarks --in <file.pas|dir> [--name <code>] [--format text|json] [--json] (list / find the // dl:bk<N> and // dl:bk:<CODE> comment anchors; read-only; exit 3 = none)');
   Writeln('       see wiki page: bookmarks');
   Writeln('  drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--old-platform-db <file> ...] [--format json|--json] (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on ' +
@@ -493,13 +495,15 @@ begin
   Writeln('       see wiki page: convert-apply-migrate');
   Writeln('  drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] - generate a Byte-family record helper for an enum');
   Writeln('       see wiki page: Create-helper-class');
-  Writeln('  drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\TEMP\draglint_cyclefix_<pid>\, deleted at exit unless a message of the run cites a file in it, then kept and ' +
-    'named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default win64) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the Studio build ' +
-    'environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE''s Cancel) kills the build, rolls an --apply back and exits 1 ("cancelled -- rolled back"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the ' +
-    'platform library --plan reads class ancestry from (default: the manifest''s library for win64; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
+  Writeln('  drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--f2047 [--unit <stem>]] [--fix --project <X.dproj> [--stall-exit-min <minutes>] [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>] [--rsvars <path>] [--build-timeout <s>]] [--ctor-wide] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>] (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\TEMP\draglint_cyclefix_<pid>\, deleted at exit unless a message of the run cites a file in it, ' +
+    'then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default win64) unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --rsvars <path> = the ' +
+    'Studio build environment the compile gate calls (default: the Studio the registry or BDS names; forwarded to every --part all iteration; a missing file is exit 2); --build-timeout <s> = whole seconds one build may take (default 0 = no limit; forwarded to every --part all iteration; anything but a whole number >= 0 is exit 2); a stand-down request (drag-lint shutdown --db <db>, or the IDE''s Cancel) kills the build, rolls an --apply back and exits 1 ("cancelled -- rolled back"); --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform ' +
+    'name the platform library --plan reads class ancestry from (default: the manifest''s library for win64; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
   Writeln('       see wiki page: Circular-Uses-Report-cycles-fix-plan');
   Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment');
   Writeln('       see wiki page: Document-it');
+  Writeln('  drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]');
+  Writeln('       see wiki page: extract-interface');
   Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff] (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5). Exit 0 also when YADF declines the file (its content guard leaves it unchanged; prints "Declined: <file>", not a failure))');
   Writeln('       see wiki page: Format-with-YADF');
   Writeln('  drag-lint gain [--since yyyy-mm-dd] [--json]');
@@ -514,6 +518,8 @@ begin
   Writeln('       see wiki page: Rebuild-Index-for-This-Project');
   Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
   Writeln('       see wiki page: Rescan-this-unit');
+  Writeln('  drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]');
+  Writeln('       see wiki page: lazy-init');
   Writeln('  drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]');
   Writeln('       see wiki page: Copy-Diagnostics-Current-File');
   Writeln('  drag-lint lint --fix --fix-rule redundant-cast --db <db> [--project <X.dproj> --apply] [--in <f.pas>] [--fix-line <L>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--format json]');
@@ -913,6 +919,11 @@ begin
   if pVerb = 'graph' then
   begin
     Writeln('  drag-lint graph              --db <file.sqlite>    [--format dot|mermaid|json|html] [--name <root-substr>] [--output <file>]');
+    Exit;
+  end;
+  if pVerb = 'arch-diagram' then
+  begin
+    Writeln('  drag-lint arch-diagram       --db <db> [--output <file.html>] [--json]   (one self-contained HTML layer diagram of the units by folder; layers measured from uses; no Graphviz)');
     Exit;
   end;
   if pVerb = 'todos' then
@@ -1408,6 +1419,11 @@ begin
   if pVerb = 'overview' then
   begin
     Writeln('  drag-lint overview           --db <file.sqlite>    [--max-rows N] [--json]   (ONE bounded first-turn call: freshness, counts per kind, units by layer, top fan-in, entry points, forms; a capped section says how many it omitted)');
+    Exit;
+  end;
+  if pVerb = 'manifest' then
+  begin
+    Writeln('  drag-lint manifest where [--manifest <path>] [--json]   (read-only: which drag-lint.json, log folder and library folder this engine resolves, and each lookup rung. Order: explicit DRAGLINT_MANIFEST / --manifest, then with DRAGLINT_LAYOUT=v2 the file in %APPDATA%\drag-lint, then beside the exe. Creates, moves and renames nothing)');
     Exit;
   end;
   Result := False;

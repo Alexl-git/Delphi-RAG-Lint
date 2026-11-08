@@ -4,10 +4,10 @@ title: Unit Test Stub (symbol)
 summary: Uses generate-test to produce a unit-test skeleton for one qualified symbol
 product: DL
 group: refactoring
-order: 50014
+order: 50016
 since: 0.27.0-alpha
 status: shipped
-updated: 1.44.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Unit Test Stub (symbol)

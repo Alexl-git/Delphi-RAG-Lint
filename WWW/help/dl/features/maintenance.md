@@ -4,10 +4,10 @@ title: Maintenance
 summary: Indexes, the manifest, reindexing, and what to do when something looks wrong
 product: DL
 group: maintenance
-order: 120010
+order: 120011
 since: 1.4.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Maintenance

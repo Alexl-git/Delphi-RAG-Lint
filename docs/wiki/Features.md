@@ -232,8 +232,10 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [allow](allow) | drag-lint > Code Quality > Allow a Finding on This Line...; `allow` |  |
 | [Create helper class](Create-helper-class) | Structure form: Create helper class; `create-enum-helper` |  |
 | [create-enum-helper](create-enum-helper) | `create-enum-helper`; drag-lint > Generate & Export > Enum Record Helper (symbol)... |  |
+| [Extract an interface from the members used (scratch + compile gate)](extract-interface) | `extract-interface` |  |
 | [extract-method](extract-method) | `extract-method`; drag-lint > Extract Method (selection)... (Ctrl+Alt+M) |  |
 | [Narrow parameter types (compile-gated)](narrow-param) | `narrow-param` |  |
+| [Prepare heavy initialization for lazy loading (first phase)](lazy-init) | `lazy-init` |  |
 | [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](Quick-Fix-Add-Unit-for-Inline-Hint-H2443-at-Cursor) | drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor |  |
 | [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](Quick-Fix-Add-Unit-for-Undeclared-at-Cursor-Ctrl-Alt-U) | drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U) |  |
 | [Quick-Fix: Convert Public Field to Property at Cursor](Quick-Fix-Convert-Public-Field-to-Property-at-Cursor) | drag-lint > Convert Public Field to Property at Cursor |  |
@@ -285,6 +287,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 
 | Feature | Surfaces | Status |
 |---|---|---|
+| [arch-diagram](arch-diagram) | `arch-diagram` |  |
 | [butterfly](butterfly) | `butterfly`; drag-lint > Uses & Dependencies > Call Graph (Butterfly)... |  |
 | [Call Graph (Butterfly)](Call-Graph-Butterfly) | drag-lint > Uses & Dependencies > Call Graph (Butterfly)...; `reverse-calltree` |  |
 | [callgraph](callgraph) | `callgraph`; drag-lint > Uses & Dependencies > Call Tree (callers or callees, N-deep)... |  |
@@ -406,6 +409,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [info](info) | `info` |  |
 | [Library Drift Check](Library-Drift-Check) | drag-lint > Index & Maintenance > Library Drift Check...; `library-drift` |  |
 | [Maintenance](Maintenance) | procedure: `docs\wiki\Maintenance.md` |  |
+| [manifest where (installed layout v2)](installed-layout-v2) | `manifest where` |  |
 | [Open Plugin Log](Open-Plugin-Log) | About window: Open Plugin Log |  |
 | [resolve-uses](Maintenance) | `resolve-uses` | internal |
 | [selftest](Maintenance) | `selftest` | internal |

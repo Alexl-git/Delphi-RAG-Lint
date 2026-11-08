@@ -4,7 +4,7 @@ title: Rename Symbol
 summary: Renames a symbol across the whole indexed project
 product: DL
 group: refactoring
-order: 50012
+order: 50014
 since: 0.24.0-alpha
 status: shipped
 updated: 1.46.0-alpha

@@ -4,10 +4,10 @@ title: Code-built menu tree and registry drift
 summary: The menu tree a Delphi program builds in code, read statically, and a check that the registered menu paths still match it
 product: DL
 group: graphs-reports
-order: 70015
+order: 70016
 since: 1.33.0-alpha
 status: shipped
-updated: 1.39.2-alpha
+updated: 1.46.0-alpha
 ---
 
 # Code-built menu tree and registry drift

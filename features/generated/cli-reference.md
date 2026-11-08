@@ -46,6 +46,22 @@ drag-lint ambiguous-calls [--qname <Foo.Bar>|--in <file>] --db PATH [--json] (re
 
 Described in [ambiguous-calls](../../docs/wiki/ambiguous-calls.md).
 
+### arch-diagram
+
+Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses.
+
+```text
+drag-lint arch-diagram --db <db> [--output <file.html>] [--json]
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<db>` |  |  |
+| `--output` | `<file.html>` |  |  |
+| `--json` |  |  |  |
+
+Described in [arch-diagram](../../docs/wiki/arch-diagram.md).
+
 ### ask
 
 Ask one report question and print the answer as text.
@@ -600,6 +616,34 @@ Described in:
 * [Export Enums (Delphi const)](../../docs/wiki/Export-Enums-Delphi-const.md)
 * [Export to Obsidian](../../docs/wiki/Export-to-Obsidian.md)
 
+### extract-interface
+
+Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate.
+
+```text
+drag-lint extract-interface --class <name> (--plan | --apply --project <X.dproj>) --db <db> [--members <a,b>] [--name <IFoo>] [--reparent-interfaced] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--class` | `<name>` |  |  |
+| `--members` | `<a,b>` |  |  |
+| `--name` | `<IFoo>` |  |  |
+| `--reparent-interfaced` |  |  |  |
+| `--plan` |  |  |  |
+| `--apply` |  |  |  |
+| `--project` | `<X.dproj>` |  |  |
+| `--db` | `<db>` |  |  |
+| `--no-backup` |  |  |  |
+| `--platform` | `<p>` |  |  |
+| `--rsvars` | `<bat>` |  |  |
+| `--build-timeout` | `<s>` |  |  |
+| `--no-compile` |  |  |  |
+| `--library-db` | `<db>` |  |  |
+| `--format` | `json` |  |  |
+
+Described in [Extract an interface from the members used (scratch + compile gate)](../../docs/wiki/extract-interface.md).
+
 ### extract-method
 
 Pulls a run of statements out of a routine into a new method.
@@ -1018,6 +1062,33 @@ drag-lint init --project <file.dproj> [--dry-run] [--home-dir <dir>] [--appdata-
 
 Described in [init: one command from a project to a wired AI client](../../docs/wiki/init-verb.md).
 
+### lazy-init
+
+Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate.
+
+```text
+drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--unit` | `<name>` |  |  |
+| `--all` |  |  |  |
+| `--name` | `<routine>` |  |  |
+| `--plan` |  |  |  |
+| `--apply` |  |  |  |
+| `--project` | `<X.dproj>` |  |  |
+| `--db` | `<db>` |  |  |
+| `--no-backup` |  |  |  |
+| `--platform` | `<p>` |  |  |
+| `--rsvars` | `<bat>` |  |  |
+| `--build-timeout` | `<s>` |  |  |
+| `--no-compile` |  |  |  |
+| `--library-db` | `<db>` |  |  |
+| `--format` | `json` |  |  |
+
+Described in [Prepare heavy initialization for lazy loading (first phase)](../../docs/wiki/lazy-init.md).
+
 ### library-drift
 
 Flags registered library roots that have source on disk but nothing in the index.
@@ -1217,6 +1288,21 @@ Described in:
 * [lsp](../../docs/wiki/lsp.md)
 * [LSP full rule set on save](../../docs/wiki/lsp-proxy-merge.md)
 * [LSP proxy merge](../../docs/wiki/lsp-proxy-merge.md)
+
+### manifest
+
+Shows which drag-lint.json, log folder and library folder this engine resolves and why; phase 1 of installed layout v2, off by default, moves nothing.
+
+```text
+drag-lint manifest where [--manifest <path>] [--json] (read-only: which drag-lint.json, log folder and library folder this engine resolves, and each lookup rung. Order: explicit DRAGLINT_MANIFEST / --manifest, then with DRAGLINT_LAYOUT=v2 the file in %APPDATA%\drag-lint, then beside the exe. Creates, moves and renames nothing)
+```
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--manifest` | `path` |  |  |
+| `--json` |  |  |  |
+
+Described in [manifest where (installed layout v2)](../../docs/wiki/installed-layout-v2.md).
 
 ### mcp-config
 

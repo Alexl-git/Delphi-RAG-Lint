@@ -4,10 +4,10 @@ title: butterfly
 summary: Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command
 product: DL
 group: graphs-reports
-order: 70001
+order: 70002
 since: 0.99.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # butterfly

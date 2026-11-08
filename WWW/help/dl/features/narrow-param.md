@@ -4,7 +4,7 @@ title: Narrow parameter types (compile-gated)
 summary: Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate
 product: DL
 group: refactoring
-order: 50006
+order: 50008
 since: 1.44.1-alpha
 status: shipped
 updated: 1.46.0-alpha

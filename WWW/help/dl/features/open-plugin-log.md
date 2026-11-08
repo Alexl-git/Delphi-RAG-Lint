@@ -4,10 +4,10 @@ title: Open Plugin Log
 summary: Opens the drag-lint plugin's own log file
 product: DL
 group: maintenance
-order: 120011
+order: 120012
 since: 0.39.0-alpha
 status: shipped
-updated: 1.35.1-alpha
+updated: 1.46.0-alpha
 ---
 
 # Open Plugin Log

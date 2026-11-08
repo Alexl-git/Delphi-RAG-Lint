@@ -148,7 +148,9 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Allow this message](features/allow-this-message.md) | Records a dl:ok review of one finding, so it stops being reported without being fixed | 0.54.0-alpha |
 | [create-enum-helper](features/create-enum-helper.md) | Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type | 0.94.0-alpha |
 | [Create helper class](features/create-helper-class.md) | Generates a Byte-family record helper for an enum type represented by a Structure-tree node | 0.94.0-alpha |
+| [Extract an interface from the members used (scratch + compile gate)](features/extract-interface.md) | Declares an interface from the members of a class the project uses and adds it to the class; --apply through a scratch build and the compile gate | 1.47.0-alpha |
 | [extract-method](features/extract-method.md) | Pulls a run of statements out of a routine into a new method | 0.85.0-alpha |
+| [Prepare heavy initialization for lazy loading (first phase)](features/lazy-init.md) | Names what an initialization section does; --apply moves its body verbatim into a run-once routine, through a scratch build and the compile gate | 1.47.0-alpha |
 | [Narrow parameter types (compile-gated)](features/narrow-param.md) | Retypes a class-typed parameter to the deepest ancestor that declares every member the routine uses, when a static proof holds, through the compile gate | 1.44.1-alpha |
 | [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md) | The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope | 1.2.0-alpha |
 | [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](features/quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md) | Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause | 0.47.0-alpha |
@@ -200,6 +202,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 
 | Feature | What it does | Since |
 | --- | --- | --- |
+| [arch-diagram](features/arch-diagram.md) | Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses | 1.47.0-alpha |
 | [butterfly](features/butterfly.md) | Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command | 0.99.0-alpha |
 | [Call Graph (Butterfly)](features/call-graph-butterfly.md) | Shows callers and callees of one symbol together in a single "butterfly" view | 0.96.0-alpha |
 | [callgraph](features/callgraph.md) | Prints an N-deep resolved call tree for a symbol, in either direction | 0.91.0-alpha |
@@ -312,6 +315,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-refs](features/dump-refs.md) | Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution | 0.82.0-alpha |
 | [Feature registry](features/feature-registry.md) | The machine-checked master list of every feature, and the generator of the index pages | 1.22.0-alpha |
 | [info](features/info.md) | Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities | 0.19.0-alpha |
+| [manifest where (installed layout v2)](features/installed-layout-v2.md) | Shows which drag-lint.json, log folder and library folder this engine resolves and why; phase 1 of installed layout v2, off by default, moves nothing | 1.47.0-alpha |
 | [Library Drift Check](features/library-drift-check.md) | Flags registered library roots that have source on disk but nothing in the index | 0.47.0-alpha |
 | [Maintenance](features/maintenance.md) | Indexes, the manifest, reindexing, and what to do when something looks wrong | 1.4.0-alpha |
 | [Open Plugin Log](features/open-plugin-log.md) | Opens the drag-lint plugin's own log file | 0.39.0-alpha |
