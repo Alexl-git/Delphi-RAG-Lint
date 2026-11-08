@@ -64,7 +64,9 @@ const
     suffix, and UnitVouchable resolves their unit through the dotted prefix. }
   /// <summary>The fact labels whose entries depend on which project is looking,
   /// and so carry project tags.</summary>
-  INBOUND_LABELS: array[0..3] of string = ('Called from:', 'Used by:', 'Used in units:', 'Covered by:');
+  /// <remarks>'Used in:' (wave 147, E-USE-EDGES-PHASE2): a property/field's resolved
+  /// uses, entries 'Routine (file.pas) [r|w|rw]'; inbound like 'Used by:', which it replaces.</remarks>
+  INBOUND_LABELS: array[0..4] of string = ('Called from:', 'Used by:', 'Used in units:', 'Covered by:', 'Used in:');
 
 type
   /// <summary>What one `doc-forget` pass does to the project tags on inbound
