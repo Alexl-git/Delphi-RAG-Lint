@@ -50,7 +50,7 @@ uses
   , ToolsAPI
   , DragLint.Plugin.BookmarksCore
   , DragLint.Plugin.CliAsync
-  , DragLint.Plugin.ExeResolver
+  , DragLint.Plugin.ExeResolver // dl:unit DragLint.Plugin.ExeResolver accepted -- ENGINE_NOT_FOUND_MSG is the text RequireEngine's refusal is reported with; it travels with the resolver
   , DragLint.Plugin.Telemetry
   ;
 

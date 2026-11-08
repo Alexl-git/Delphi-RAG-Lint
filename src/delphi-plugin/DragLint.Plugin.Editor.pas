@@ -819,7 +819,7 @@ uses
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.Reports
   , DragLint.Plugin.ConvertLaunch
-  , DragLint.Plugin.Bookmarks
+  , DragLint.Plugin.Bookmarks // dl:unit DragLint.Plugin.Bookmarks accepted -- GBookmarkNavigate / GBookmarkPick are the hooks this unit assigns at wizard init, the GButterflyNav pattern
   , DragLint.Plugin.CycleFix // dl:unit DragLint.Plugin.CycleFix accepted -- CYCLE_FIX_TIMEOUT_MS is the one plugin cycle-fix time limit; a second copy here is what let it drift (see StructureForm)
   ;
 
