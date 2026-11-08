@@ -3268,7 +3268,7 @@ end;
 // Returns True on success, False (and prints the error) on failure.
 // PP-Task-9: APreprocess (default True) enables per-config directive
 // resolution for this section's index. The profile is derived from the
-// section's platform (library sections carry it; folder/closure default Win64)
+// section's platform (library sections carry it; a closure section takes its .dproj's, else Win32)
 // -- unioned with a .dproj's config defines when the section is a single-project
 // closure. --no-preprocess (from index --all) passes False for a raw all-branch
 // build.
@@ -4674,7 +4674,8 @@ begin
     // PP-Task-9: per-config directive resolution for this section (default ON).
     // A single-project closure section resolves defines from its .dproj; every
     // other section uses the platform built-ins (library sections carry their
-    // platform; folder/multi-root sections default to Win64).
+    // platform; a closure section takes its .dproj's active Platform; folder/multi-root
+    // sections and a project naming none are Win32 -- ruling a3).
 
     // Resolve the section profile ONCE and reuse it for both the indexer and
     // (PP-Task-10) the closure resolver, so uses-discovery and symbol-extraction
