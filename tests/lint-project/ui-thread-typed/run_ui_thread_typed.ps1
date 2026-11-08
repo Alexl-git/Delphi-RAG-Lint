@@ -11,7 +11,9 @@
       globals answer, which proves every other finding comes from the indexed ancestry;
     * without the ref_types table (an index older than 1.44) it answers NOTHING;
     * a project that declares its own TControl and TTask answers NOTHING;
-    * a plain lint-all has the rule OFF.
+    * a plain lint-all has the rule ON (1.47, owner ruling a9) and --disable turns it off;
+    * a thread class the project constructs keeps the warning; one nothing constructs is
+      labelled "(class never constructed)" and reported as a hint (1.47 lane U1).
   On an engine without the rule every TRIGGER check fails: the RED this guard was written against.
 
   Usage: pwsh -File tests\lint-project\ui-thread-typed\run_ui_thread_typed.ps1 [-Exe <drag-lint.exe>]
@@ -80,8 +82,18 @@ try {
   $ownHits = @(Findings @($own, $lib))
   Check 'a project TControl and TTask are not the VCL ones' ($ownHits.Count -eq 0) (($ownHits | ForEach-Object { Pos $_ }) -join ',')
 
+  # Reachability (1.47 lane U1): a thread class nothing constructs is labelled and down-ranked;
+  # the constructed one is the control that the label is not applied to every Execute.
+  $unbuilt = @($found | Where-Object { (Pos $_) -eq @(MarkerLines $src 'TRIGGER-UIT-UNBUILT')[0] })
+  Check 'a never-constructed thread class: labelled and a hint' (($unbuilt.Count -eq 1) -and ($unbuilt[0].message -match '\(class never constructed\)$') -and ($unbuilt[0].severity -eq 'hint')) "$($unbuilt[0].severity): $($unbuilt[0].message)"
+  $built = @($found | Where-Object { (Pos $_) -eq @(MarkerLines $src 'TRIGGER-UIT-BUILT')[0] })
+  Check 'a constructed thread class: a warning, no label' (($built.Count -eq 1) -and ($built[0].message -notmatch 'never constructed') -and ($built[0].severity -eq 'warning')) "$($built[0].severity): $($built[0].message)"
+
+  # ON by default since 1.47 (owner ruling a9).
   $plain = @((Parse-Findings (& $exePath lint-all --db $db --db $lib --format json 2>$null)) | Where-Object { $_.rule -eq $Rule })
-  Check 'a plain lint-all: the rule ships OFF' ($plain.Count -eq 0) "$($plain.Count) finding(s)"
+  Check 'a plain lint-all: the rule ships ON' ($plain.Count -eq $want.Count) "$($plain.Count) of $($want.Count)"
+  $disabled = @((Parse-Findings (& $exePath lint-all --db $db --db $lib --format json --disable $Rule 2>$null)) | Where-Object { $_.rule -eq $Rule })
+  Check '--disable switches it off' ($disabled.Count -eq 0) "$($disabled.Count) finding(s)"
   $enabled = @(Findings @($db, $lib) @('--enable', $Rule))
   Check '--enable switches it on' ($enabled.Count -eq $want.Count) "$($enabled.Count) of $($want.Count)"
 
