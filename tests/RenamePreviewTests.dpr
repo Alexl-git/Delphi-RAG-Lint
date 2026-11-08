@@ -40,6 +40,11 @@ const
   REACH_NOTE = 'drag-lint: note: the index is older than 2 file(s) it covers -- reindex for an exact plan' + sLineBreak + CLEAN;
   REFUSED = 'drag-lint: note: C:\p\B.pas:40:7: refused [shadowed-at-site]: R here is TOther.R' + sLineBreak +
             'drag-lint: note: C:\p\C.pas: refused [binary-dfm]: the form is binary' + sLineBreak + CLEAN;
+  TYPEAT = '{"token":"Foo","resolved":"U.Foo"}';
+  BANNER = '(loaded defaults from C:\Projects\.drag-lint.json)';
+
+var
+  Tok: string;
 
 begin
   GPass:= 0;
@@ -51,6 +56,16 @@ begin
   Check('2a positive control: two refusal notes count two', DLRenamePreviewRefusals(REFUSED) = 2,
         IntToStr(DLRenamePreviewRefusals(REFUSED)));
   Check('2b LF-only output counts too', DLRenamePreviewRefusals(StringReplace(REFUSED, #13#10, #10, [rfReplaceAll])) = 2);
+  (* 148 XP3 item 2: typeat --format json with stderr merged AFTER the object (the engine's
+    "(loaded defaults from ...)" banner, a note). Parsing from the first '{' to the END of the
+    output hands ParseJSONValue trailing text; cut at the last '}' like BookmarksCore.JsonFrom.
+    3a is the positive control: the bare object must still resolve. *)
+  Check('3a typeat: the bare object resolves', DLParseTypeAtResolved(TYPEAT, Tok) = 'U.Foo', Tok);
+  Check('3b typeat: a banner BEFORE the object is ignored', DLParseTypeAtResolved(BANNER + TYPEAT, Tok) = 'U.Foo');
+  Check('3c typeat: a note AFTER the object is ignored', DLParseTypeAtResolved(TYPEAT + sLineBreak + BANNER, Tok) = 'U.Foo',
+        'token=' + Tok);
+  Check('3d typeat: the token comes back with it', Tok = 'Foo', Tok);
+  Check('3e typeat: no JSON answers empty', DLParseTypeAtResolved(BANNER, Tok) = '');
   Writeln;
   Writeln(Format('%d passed, %d failed', [GPass, GFail]));
   if GFail > 0 then Halt(1);
