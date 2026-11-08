@@ -1355,7 +1355,7 @@ begin
     if Value = '' then
     begin
       { unset name or %%: keep the opening % literally, rescan from the closing one }
-      Result:= Result + Copy(Rest, 1, Open);
+      Result:= Result + Copy(Rest, 1, Open);  // dl:ok concat-in-loop@57e8 -- REVIEWED 2026-11-08 (X5P): one outDir value (a path, a few % pairs) per manifest load; O(n^2) on n < 300 chars
       Delete(Rest, 1, Open);
     end
     else

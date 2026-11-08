@@ -354,8 +354,8 @@ begin
     try
       for var i:= 0 to High(Copies) do
         NewTexts[i]:= AppendSectionToText(
-          if Copies[i] = Created then NEW_MANIFEST_TEXT else TFile.ReadAllText(Copies[i]), SectionOb);
-      if Created <> '' then TDirectory.CreateDirectory(ExtractFileDir(Created));
+          if Copies[i] = Created then NEW_MANIFEST_TEXT else TFile.ReadAllText(Copies[i]), SectionOb);  // dl:ok taint-path-traversal@38a7 -- REVIEWED 2026-11-08 (X5P): the path IS the user's own %APPDATA% / DRAGLINT_MANIFEST manifest (owner ruling 1); reading the file the environment names is the design, not a traversal
+      if Created <> '' then TDirectory.CreateDirectory(ExtractFileDir(Created));  // dl:ok taint-path-traversal@444a -- REVIEWED 2026-11-08 (X5P): creates the folder of %APPDATA%\drag-lint\drag-lint.json for the user who runs the engine (layout v2, phase 2); the environment choosing it is the design
     except
       on E: Exception do
       begin
@@ -379,7 +379,7 @@ end;
   from the roaming folder. Empty, absolute and %VAR% values are kept. }
 function RebaseToExeDir(const AValue, AEngineDir: string): string;
 begin
-  if (AValue = '') or (Pos('%', AValue) > 0) or TPath.IsPathRooted(AValue) then Exit(AValue);
+  if (AValue = '') or AValue.Contains('%') or TPath.IsPathRooted(AValue) then Exit(AValue);
   Result:= ExcludeTrailingPathDelimiter(TPath.GetFullPath(TPath.Combine(AEngineDir, AValue)));
 end;
 
@@ -403,14 +403,14 @@ end;
 function RebasedManifestText(const AText, AEngineDir: string): string;
 begin
   var Root:= TJSONObject.ParseJSONValue(AText);
-  if not (Root is TJSONObject) then
+  if Root is not TJSONObject then
   begin
     Root.Free;
     raise EManifestWriteError.Create('manifest is not a JSON object');
   end;
   try
     var Indexes:= TJSONObject(Root).GetValue('indexes');
-    if not (Indexes is TJSONObject) then raise EManifestWriteError.Create('manifest has no "indexes" object');
+    if Indexes is not TJSONObject then raise EManifestWriteError.Create('manifest has no "indexes" object');
     var OutPair:= TJSONObject(Indexes).Get('outDir');
     var OutDir := ExcludeTrailingPathDelimiter(TPath.GetFullPath(AEngineDir));
     if (OutPair <> nil) and (OutPair.JsonValue.Value <> '') then
@@ -427,7 +427,7 @@ begin
   end;
 end;
 
-function MigrateExeManifest(const AEngineDir: string; AApply: Boolean;
+function MigrateExeManifest(const AEngineDir: string; AApply: Boolean;  // dl:ok too-many-exit-points@e030 -- REVIEWED 2026-11-08 (X5P): each exit is a DISTINCT TMigrateOutcome (explicit, no APPDATA, nothing, target exists, unparsable, dry run, layout off, write failed, rename failed); the guard asserts them apart, one exit would thread a state flag through I/O steps whose order is the contract
   ADate: TDateTime): TMigrateResult;
 begin
   Result:= Default(TMigrateResult);
