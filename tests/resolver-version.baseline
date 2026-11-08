@@ -718,7 +718,7 @@
 #   2026-11-05 1.18.0 -> 1.19.0-alpha (1.43, lane/143-int): INLINE-VAR-CTOR-UNTYPED, RECV-UNDECIDABLE slice, WITH-SELF-PROP; includes the log-text-only change idx4 re-pinned at 9b8c6f32. Rides the 1.31.0 extractor re-parse.
 # 2026-11-07 1.46 int: ONE bump for wave 146 (see Core.Model).
 #   Superseded: 1.20.0-alpha|6bc3037a43a8c8b21cff2a69d69feca93e13513de1c390b9cf4651d12aa58d85
-1.22.0-alpha|aef7df537fa6c905c9a54694386dc76b5ed8b5f76e592e3de3025b56b65bddfe
+1.22.0-alpha|96f4b7897ed7b3b3be1bfd58395459aa47d954a2c341634d5cff122590123064
 #   2026-11-06 int2: hash moved WITHOUT a bump from 631322c4: the dl:ok comment on ResolveCallTargets re-stamped by the lint sweep, no code change.
 # superseded: 1.19.0-alpha|e4c14c16d87b21940e6ce6017456b8446a5cc516e342b72b816e3e161612ecba
 #   2026-11-06 1.19.0 -> 1.20.0-alpha (lanes facts + rename): ref_types (static type of a reference), ref_receivers (receiver link of a ref), references in initialization / finalization attributed to the section symbol. Additive, no SCHEMA_VERSION move. Remedy: index --all --resolve-only.
