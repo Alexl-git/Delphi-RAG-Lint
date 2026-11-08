@@ -36,6 +36,9 @@ type
     NoCompile: Boolean;
     /// <summary>--format json.</summary>
     Json: Boolean;
+    /// <summary>--defer (phase 2, opt-in, one --unit): the section no longer calls the run-once routine; every routine of
+    /// the unit that touches a global the section writes calls it first, so the work runs on first use, once.</summary>
+    Defer: Boolean;
   end;
 
 /// <summary>Runs the verb: prints the plan and, with --apply, writes through ApplyThroughScratch.</summary>
@@ -46,17 +49,27 @@ type
 /// <remarks>Refusals, in this order: include-file, stale-file, outside-roots, no-section, ifdef-around-section, empty-section,
 /// include-in-section, unbalanced-ifdef, name-taken. The plan's lazy_candidate is true for a global the section writes that is
 /// declared in the implementation section and read by no other unit: a later phase could rewrite it inside one file.
-/// The run-once guard is a plain Boolean: the section, on one thread, is the routine's only caller in this phase.</remarks>
+/// The run-once guard is a plain Boolean: the section, on one thread, is the routine's only caller in this phase.
+/// <para>With Defer (phase 2) these refusals follow name-taken: no-lazy-global (the section writes no global, so nothing
+/// marks a first use), global-read-elsewhere (a global it writes is not a lazy_candidate: another unit could read it before
+/// any routine here runs), reader-outside-routine / asm-reader (a use the call cannot be put in front of), parse-failed, and
+/// no-entry-point (nothing outside the section touches what it writes: the work would never run). Accepted, the routine gets a
+/// forward declaration after the implementation uses clause, each entry point calls it as its first statement, the section
+/// keeps no call, and finalization runs its body only when the work ran. Not thread-safe: the guard stays a plain Boolean set
+/// before the work (a re-entrant call returns at once); a unit first used from two threads at once must call the routine from
+/// the application's start instead. Effects other units rely on without touching the globals (a registration, a print) move
+/// with the work: the plan lists every statement so the reader can see them.</para></remarks>
 function RunLazyInit(const pStore: ISymbolStore; const pOpts: TLazyInitOptions): Integer;
 
 implementation
 
 uses
   System.Classes, System.IOUtils, System.JSON, System.StrUtils, System.RegularExpressions,
-  System.Generics.Collections, Winapi.Windows,
+  System.Generics.Collections, System.Generics.Defaults, System.Math, Winapi.Windows,
   FireDAC.Comp.Client,
   DRagLint.Core.Model, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.CompileGate,
-  DRagLint.Refactor.ScratchGate, DRagLint.Refactor.RedundantCast, DRagLint.Storage.SQLite, DRagLint.Lint.InitSections;
+  DRagLint.Refactor.ScratchGate, DRagLint.Refactor.RedundantCast, DRagLint.Storage.SQLite, DRagLint.Lint.InitSections,
+  TreeSitter, DRagLint.Diagnostics.ParseCache;
 
 const
   CExitOk      = 0;
@@ -79,12 +92,22 @@ type
     LazyCandidate: Boolean;
   end;
 
+  // --defer: a routine that gets the call, and where.
+  TEntryPoint = record
+    Name: string;
+    Line: Integer;
+    InsertAt: Integer;      // 1-based offset just past the body's `begin`
+    Indent: string;
+  end;
+
   TSectionPlan = record
     UnitName, FilePath, RoutineName, RefusalKind, RefusalReason, Evidence: string;
     Line: Integer;
     Heavy: Boolean;
+    Deferred: Boolean;
     Statements: TArray<TSectionStatement>;
     Globals: TArray<TSectionGlobal>;
+    EntryPoints: TArray<TEntryPoint>;
     Inserted: string;       // the routine, as inserted
     NewText: string;        // the whole file after the edit; '' on a refusal
     Enc: TEncoding;
@@ -200,6 +223,105 @@ begin
   end;
 end;
 
+// The smallest routine implementation (defProc) whose span holds pByte; null when none does.
+procedure InnermostProcAt(const pNode: TTSNode; pByte: Int64; var pBest: TTSNode);
+begin
+  if pNode.IsNull or (Int64(pNode.StartByte) > pByte) or (Int64(pNode.EndByte) < pByte) then Exit;
+  if (pNode.NodeType = 'defProc') and
+     (pBest.IsNull or (Int64(pNode.EndByte) - Int64(pNode.StartByte) < Int64(pBest.EndByte) - Int64(pBest.StartByte))) then
+    pBest:= pNode;
+  for var I: Integer:= 0 to Integer(pNode.NamedChildCount) - 1 do
+    InnermostProcAt(pNode.NamedChild(I), pByte, pBest);
+end;
+
+// --defer: every routine of the file that touches a global the section writes, outside the section and finalization lines
+// [pSkipFrom, pSkipTo]. False with pKind / pReason set on a use the call cannot be put in front of.
+function FindEntryPoints(pConn: TFDConnection; pSource: TMaskedSource; const pPath: string; const pGlobals: TArray<TSectionGlobal>;  // dl:ok too-many-exit-points@0000 -- one exit per named refusal: the exits are the contract
+  pSkipFrom, pSkipTo: Integer; out pPoints: TArray<TEntryPoint>; out pKind, pReason: string): Boolean;
+begin
+  Result:= False;
+  pPoints:= nil;
+  var PF:= TAstParseCache.Get(pPath);
+  if PF.Tree = nil then
+  begin
+    pKind:= 'parse-failed';
+    pReason:= 'the file did not parse';
+    Exit;
+  end;
+  var LineBytes:= TList<Int64>.Create;   // 1-based: LineBytes[L] = byte offset of line L
+  LineBytes.AddRange([0, 0]);
+  for var B:= 0 to Length(PF.Src) - 1 do
+    if PF.Src[B] = 10 then LineBytes.Add(Int64(B) + 1);
+  var Seen:= TDictionary<Int64, Boolean>.Create;
+  var Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= pConn;
+    Q.SQL.Text:= 'SELECT r.start_line, r.start_col, r.name_text FROM refs r JOIN files f ON f.id = r.file_id ' +
+      'WHERE f.path = :p COLLATE NOCASE AND r.name_text = :n COLLATE NOCASE ORDER BY r.start_line, r.start_col';
+    for var G in pGlobals do
+    begin
+      Q.Close;
+      Q.ParamByName('p').AsWideString:= pPath;
+      Q.ParamByName('n').AsWideString:= G.Name;
+      Q.Open;
+      while not Q.Eof do
+      begin
+        var L:= Q.Fields[0].AsInteger;
+        if ((L < pSkipFrom) or (L > pSkipTo)) and (L >= 1) and (L < LineBytes.Count) then
+        begin
+          var Proc:= Default(TTSNode);
+          InnermostProcAt(PF.Tree.RootNode, LineBytes[L] + Max(Q.Fields[1].AsInteger - 1, 0), Proc);
+          if Proc.IsNull then
+          begin
+            pKind:= 'reader-outside-routine';
+            pReason:= Format('%s is used on line %d outside any routine', [Q.Fields[2].AsString, L]);
+            Exit;
+          end;
+          if not Seen.ContainsKey(Int64(Proc.StartByte)) then
+          begin
+            Seen.Add(Int64(Proc.StartByte), True);
+            var Body:= Proc.ChildByField('body');
+            var BL:= if Body.IsNull then 0 else Integer(Body.StartPoint.Row) + 1;
+            var At:= 0;
+            if (BL >= 1) and (BL < Length(pSource.Starts)) then
+              for var M in TRegEx.Matches(Copy(pSource.Masked, pSource.Starts[BL], pSource.LineEnd(BL) - pSource.Starts[BL]), '\bbegin\b', [roIgnoreCase]) do
+                if M.Index <= Integer(Body.StartPoint.Column) + 1 then At:= pSource.Starts[BL] + M.Index - 1 + M.Length;
+            if At = 0 then
+            begin
+              pKind:= 'asm-reader';
+              pReason:= Format('%s is used on line %d in a routine whose body is not a begin block', [Q.Fields[2].AsString, L]);
+              Exit;
+            end;
+            var P:= Default(TEntryPoint);
+            P.Line:= Integer(Proc.StartPoint.Row) + 1;
+            var H:= TRegEx.Match(Copy(pSource.Text, pSource.Starts[P.Line], pSource.LineEnd(P.Line) - pSource.Starts[P.Line]),
+              '\b(procedure|function|constructor|destructor|operator)\s+([\w.]+)', [roIgnoreCase]);
+            P.Name:= if H.Success then H.Groups[2].Value else Format('line %d', [P.Line]);
+            P.InsertAt:= At;
+            var LineText:= Copy(pSource.Text, pSource.Starts[BL], pSource.LineEnd(BL) - pSource.Starts[BL]);
+            P.Indent:= Copy(LineText, 1, Length(LineText) - Length(LineText.TrimLeft)) + '  ';
+            pPoints:= pPoints + [P];
+          end;
+        end;
+        Q.Next;
+      end;
+    end;
+  finally
+    Q.Free;
+    Seen.Free;
+    LineBytes.Free;
+  end;
+  if Length(pPoints) = 0 then
+  begin
+    pKind:= 'no-entry-point';
+    pReason:= 'no routine outside the section touches what it writes: deferred, the work would never run';
+    Exit;
+  end;
+  TArray.Sort<TEntryPoint>(pPoints, TComparer<TEntryPoint>.Construct(
+    function(const pA, pB: TEntryPoint): Integer begin Result:= pA.InsertAt - pB.InsertAt; end));
+  Result:= True;
+end;
+
 function PlanSection(const pStore: ISymbolStore; const pConn: TFDConnection; const pOwn: TOwnRoots; const pOpts: TLazyInitOptions;  // dl:ok too-many-exit-points@735a -- one guard per named refusal, in the documented order: the exits are the contract
   const pPath, pUnit: string; const pHeavy: TArray<TLintFinding>): TSectionPlan;
 
@@ -302,18 +424,61 @@ begin
     var Guard:= 'G' + Name + 'Done';
     var Kept:= Body.TrimRight;
     while StartsStr(#13, Kept) or StartsStr(#10, Kept) do Kept:= Copy(Kept, 2, MaxInt);
+    var Tail:= Copy(Source.Text, BodyEnd, MaxInt);
+    var Head:= Copy(Source.Text, 1, KeyStart - 1);
+    var Section:= 'initialization' + Eol + '  ' + Name + ';' + Eol + Eol;
+    if pOpts.Defer then
+    begin
+      Result.Deferred:= True;
+      if Length(Result.Globals) = 0 then
+      begin
+        Refuse(Result, 'no-lazy-global', 'the section writes no global of the unit: no routine marks a first use');
+        Exit;
+      end;
+      var Shared:= '';
+      for var G in Result.Globals do
+        if not G.LazyCandidate then Shared:= Shared + IfThen(Shared <> '', ', ') + G.Name;
+      if Shared <> '' then
+      begin
+        Refuse(Result, 'global-read-elsewhere', Format('%s: declared in the interface or read by another unit, which could read it before the work ran', [Shared]));
+        Exit;
+      end;
+      var EndAt:= EndM[EndM.Count - 1].Index;
+      var FinalBody:= if BodyEnd < EndAt then Copy(Source.Text, BodyEnd + FinalM.Length, EndAt - BodyEnd - FinalM.Length) else '';
+      if TRegEx.Matches(FinalBody, '\{\$(IFDEF|IFNDEF|IF|IFOPT)\b', [roIgnoreCase]).Count <> TRegEx.Matches(FinalBody, '\{\$(ENDIF|IFEND)\b', [roIgnoreCase]).Count then
+      begin
+        Refuse(Result, 'unbalanced-ifdef', 'a conditional opens or closes across the finalization section''s edge');
+        Exit;
+      end;
+      var Kind, Reason: string;
+      if not FindEntryPoints(pConn, Source, pPath, Result.Globals, Result.Line, Source.LineOf(EndAt), Result.EntryPoints, Kind, Reason) then
+      begin
+        Refuse(Result, Kind, Reason);
+        Exit;
+      end;
+      for var I:= High(Result.EntryPoints) downto 0 do
+        Insert(Eol + Result.EntryPoints[I].Indent + Name + ';', Head, Result.EntryPoints[I].InsertAt);
+      var ImplEnd:= Impl.Index + Impl.Length;
+      var UsesM:= TRegEx.Match(Copy(Source.Masked, ImplEnd, KeyStart - ImplEnd), '\A\s*uses\b[^;]*;', [roIgnoreCase]);
+      Insert(Eol + Eol + 'procedure ' + Name + '; forward;', Head, ImplEnd + (if UsesM.Success then UsesM.Length else 0));
+      var KeptFinal:= FinalBody.TrimRight;
+      while StartsStr(#13, KeptFinal) or StartsStr(#10, KeptFinal) do KeptFinal:= Copy(KeptFinal, 2, MaxInt);
+      Section:= if KeptFinal = '' then '' else
+        'initialization' + Eol + Eol + 'finalization' + Eol + '  if ' + Guard + ' then' + Eol + '  begin' + Eol + KeptFinal + Eol + '  end;' + Eol;
+      Tail:= Copy(Source.Text, EndAt, MaxInt);
+    end;
     Result.Inserted:=
       'var' + Eol +
       '  ' + Guard + ': Boolean;' + Eol + Eol +
-      '/// <summary>Runs what the initialization section of ' + pUnit + ' ran, once per process (drag-lint lazy-init).</summary>' + Eol +
+      '/// <summary>Runs what the initialization section of ' + pUnit + ' ran, once per process (drag-lint lazy-init' +
+      IfThen(pOpts.Defer, ' --defer: on first use') + ').</summary>' + Eol +
       'procedure ' + Name + ';' + Eol +
       'begin' + Eol +
       '  if ' + Guard + ' then Exit;' + Eol +
       '  ' + Guard + ':= True;' + Eol +
       Kept + Eol +
       'end;' + Eol + Eol;
-    var Tail:= Copy(Source.Text, BodyEnd, MaxInt);
-    Result.NewText:= Copy(Source.Text, 1, KeyStart - 1) + Result.Inserted + 'initialization' + Eol + '  ' + Name + ';' + Eol + Eol + Tail;
+    Result.NewText:= Head + Result.Inserted + Section + Tail;
     Result.Enc:= Source.Enc;
   finally
     Source.Free;
@@ -329,6 +494,7 @@ begin
     Writeln(Format('lazy-init: %s:%d  %s: %d statement(s)%s, routine %s%s', [pP.FilePath, pP.Line, pP.UnitName, Length(pP.Statements),
       if pP.Heavy then ', heavy' else ', not reported heavy', pP.RoutineName, if pApply then '' else ' (plan; add --apply --project <X.dproj> to write)']));
   for var S in pP.Statements do Writeln(Format('  %s line %d  %s', [if S.Heavy then 'heavy' else 'light', S.Line, S.Text]));
+  for var E in pP.EntryPoints do Writeln(Format('  entry point %s line %d calls %s first (--defer)', [E.Name, E.Line, pP.RoutineName]));
   for var G in pP.Globals do
     Writeln(Format('  global %s (%s section): %d reader(s) in the unit, %d elsewhere, lazy_candidate=%s',
       [G.Name, G.Section, G.ReadersInUnit, G.ReadersElsewhere, LowerCase(BoolToStr(G.LazyCandidate, True))]));
@@ -353,6 +519,19 @@ begin
   begin
     Result.AddPair('routine', pP.RoutineName);
     Result.AddPair('text', pP.Inserted);
+  end;
+  if pP.Deferred then
+  begin
+    Result.AddPair('deferred', TJSONBool.Create(True));
+    var Es:= TJSONArray.Create;
+    Result.AddPair('entry_points', Es);
+    for var E in pP.EntryPoints do
+    begin
+      var O:= TJSONObject.Create;
+      O.AddPair('name', E.Name);
+      O.AddPair('line', TJSONNumber.Create(E.Line));
+      Es.AddElement(O);
+    end;
   end;
   var Ss:= TJSONArray.Create;
   Result.AddPair('statements', Ss);
@@ -401,6 +580,7 @@ function RunLazyInit(const pStore: ISymbolStore; const pOpts: TLazyInitOptions):
 begin
   if (pOpts.UnitName = '') = not pOpts.All then Exit(Fail(CVerb + ' needs --unit <name> or --all'));
   if pOpts.Apply and pOpts.All then Exit(Fail(CVerb + ' --apply takes one --unit, not --all'));
+  if pOpts.Defer and pOpts.All then Exit(Fail(CVerb + ' --defer takes one --unit, not --all'));
   if pOpts.Apply and pOpts.NoCompile then Exit(Fail(CVerb + ' --apply cannot take --no-compile: every applied rewrite is built'));
   if pOpts.Apply and (pOpts.Project = '') then Exit(Fail(CVerb + ' --apply needs --project <X.dproj>: the gates build it'));
   if pStore is not TSQLiteSymbolStore then Exit(Fail(CVerb + ' needs a SQLite index'));

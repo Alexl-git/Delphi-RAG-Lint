@@ -6,6 +6,11 @@
 
   Positive controls: C1 the fixture has heavy and light sections and every refusal; P1 the comparison of the printed order
   sees a swap. Real bytes: the whole program prints the same lines in the same order before and after, finalization included.
+
+  Phase 2 (lane 147 G3P, --defer): fixture tests\fixtures\refactor\lazydefer. The section's call is dropped and the routine
+  is called first thing in every routine of the unit that touches a global the section writes. Proved on the built
+  program: C4 (control) the untouched program runs the work before main; E9 after --defer main starts first; E10 the work
+  runs exactly once on first use; E12 a run that never uses the unit never runs the work nor its finalization.
 #>
 param(
   [string]$Exe = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe"
@@ -48,7 +53,7 @@ function New-Project([string]$Name) {
 function Run-Json($P, [string[]]$More) {
   $o = & $Exe lazy-init --db $P.Db --project $P.Proj --library-db none --format json @More 2> (Join-Path $Tmp 'run.err')
   $script:LastExit = $LASTEXITCODE
-  return (($o -join "`n") | ConvertFrom-Json)
+  try { return (($o -join "`n") | ConvertFrom-Json) } catch { return $null }  # not JSON (an unknown flag): every check on it fails
 }
 
 try {
@@ -77,6 +82,13 @@ try {
   Check 'D9 --all lists only the sections the rule reports' ((@($all.sections).Count -eq 1) -and ($all.sections[0].unit -eq 'LiHeavy')) (@($all.sections | ForEach-Object unit) -join ' ')
   $named = (Run-Json $A @('--unit', 'LiHeavy', '--plan', '--name', 'BootHeavy')).sections[0]
   Check 'D10 --name names the routine' ($named.text -match 'procedure BootHeavy;')
+  Check 'C3 control: without --defer LiHeavy and LiCrossReader plan with no refusal' (($sec.refusal -eq $null) -and ((Run-Json $A @('--unit', 'LiCrossReader', '--plan')).sections[0].refusal -eq $null))
+  $f1 = Run-Json $A @('--unit', 'LiHeavy', '--plan', '--defer')
+  Check 'F1 --defer refuses a section writing a global another unit reads' (($script:LastExit -eq 0) -and (@($f1.sections)[0].refusal.kind -eq 'global-read-elsewhere') -and (@($f1.sections)[0].refusal.reason -match 'GShared')) "$(@($f1.sections)[0].refusal.kind): $(@($f1.sections)[0].refusal.reason)"
+  $f2 = @((Run-Json $A @('--unit', 'LiCrossReader', '--plan', '--defer')).sections)[0]
+  Check 'F2 --defer refuses a section that writes no global' ($f2.refusal.kind -eq 'no-lazy-global') "$($f2.refusal.kind)"
+  $null = Run-Json $A @('--all', '--plan', '--defer')
+  Check 'F3 --defer with --all exits 2' ($script:LastExit -eq 2) "exit $script:LastExit"
   Check 'D11 the plans wrote nothing' ((Tree-Hash $A.Dir) -ceq $before)
 
   Write-Host 'surface'
@@ -143,6 +155,39 @@ try {
     $r = Run-Json $H @('--unit', 'LiHeavy', '--apply')
     Check 'G1 a program the mirror cannot build: exit 1, scratch-unusable' (($script:LastExit -eq 1) -and ($r.gate.refusal -eq 'scratch-unusable')) "exit $script:LastExit; $($r.gate.refusal)"
     Check 'G2 the tree is identical, never built' (((Tree-Hash $H.Dir) -ceq $hBefore) -and -not (Test-Path (Join-Path $H.Dir 'Win64')))
+
+    Write-Host 'phase 2: --defer moves the work to first use (real bytes)'
+    $L = Join-Path $Tmp 'defer'
+    Copy-Item (Resolve-Path "$PSScriptRoot\..\fixtures\refactor\lazydefer").Path $L -Recurse
+    $D = @{ Dir = $L; Db = (Join-Path $L 'p.sqlite'); Proj = (Join-Path $L 'LdProj.dproj'); Prog = (Join-Path $L 'Win64\Debug\LdProj.exe') }
+    & $Exe index --project $D.Proj --db $D.Db --library-db none *> (Join-Path $Tmp 'defer.index.log')
+    $src = Join-Path $L 'LdHeavy.pas'
+    $dOrig = [IO.File]::ReadAllText($src)
+    Check 'E0 the untouched program builds' ((Build-Project $D.Proj $Tmp) -eq 0)
+    $o0 = @(& $D.Prog)
+    $iMain0 = [array]::IndexOf($o0, 'main start 7'); $iInit0 = [array]::IndexOf($o0, 'LdHeavy init 1')
+    Check 'C4 control: untouched, the work runs at unit init, before main' (($iInit0 -ge 0) -and ($iMain0 -gt $iInit0)) ($o0 -join ' | ')
+    $pd = @((Run-Json $D @('--unit', 'LdHeavy', '--plan', '--defer')).sections)[0]
+    Check 'E1 the plan names the entry points: the routines touching what the section writes' (((@($pd.entry_points | ForEach-Object name) | Sort-Object) -join ',') -eq 'DeferAdd,DeferCount') (($pd.entry_points | ConvertTo-Json -Compress) + " $($pd.refusal.kind) $($pd.refusal.reason)")
+    Check 'E2 the plan wrote nothing' ([IO.File]::ReadAllText($src) -ceq $dOrig)
+    $r = Run-Json $D @('--unit', 'LdHeavy', '--apply', '--defer')
+    Check 'E3 --apply --defer exits 0, applied' (($script:LastExit -eq 0) -and ($r.applied -eq $true)) "exit $script:LastExit; $($r.gate.refusal) $($r.gate.detail) $($r.sections[0].refusal.kind)"
+    $dt = [IO.File]::ReadAllText($src)
+    Check 'E4 forward declaration after the implementation uses clause' ($dt -match '(?s)implementation\r\n\r\nuses\r\n  System\.Classes, System\.SysUtils, System\.IOUtils;\r\n\r\nprocedure EnsureLdHeavyInitialized; forward;\r\n')
+    Check 'E5 each entry point calls the routine first' (($dt -match '(?s)function DeferCount: Integer;\r\nbegin\r\n  EnsureLdHeavyInitialized;\r\n  Result:=') -and ($dt -match '(?s)procedure DeferAdd\(const pText: string\);\r\nbegin\r\n  EnsureLdHeavyInitialized;\r\n  GItems\.Add'))
+    Check 'E6 a routine touching nothing the section writes is left alone' ($dt -match '(?s)function DeferPlain: Integer;\r\nbegin\r\n  Result:= 7;')
+    Check 'E7 the section no longer calls it; finalization runs only after the work ran' (($dt -notmatch '(?s)initialization\r\n  EnsureLdHeavyInitialized;') -and ($dt -match '(?s)finalization\r\n  if GEnsureLdHeavyInitializedDone then\r\n  begin\r\n  Writeln\(''LdHeavy final '', GItems\.Count\);\r\n  GItems\.Free;\r\n  end;\r\nend\.'))
+    Check 'E8 CRLF kept, a backup written' (((Bare-Lf $src) -eq 0) -and (Test-Path "$src.BCK1"))
+    $o1 = @(& $D.Prog)
+    $iMain1 = [array]::IndexOf($o1, 'main start 7'); $iInit1 = [array]::IndexOf($o1, 'LdHeavy init 1')
+    Check 'E9 the work no longer runs at unit init: main starts first' (($iMain1 -eq 0) -and ($iInit1 -gt $iMain1)) ($o1 -join ' | ')
+    Check 'E10 it runs exactly once, on first use' ((@($o1 | Where-Object { $_ -like 'LdHeavy init*' }).Count -eq 1) -and ($o1 -contains 'first 101') -and ($o1 -contains 'second 101')) ($o1 -join ' | ')
+    Check 'E11 the same lines as before, only moved' ((($o0 | Sort-Object) -join "`n") -ceq (($o1 | Sort-Object) -join "`n")) ($o1 -join ' | ')
+    $o2 = @(& $D.Prog none); $x2 = $LASTEXITCODE
+    Check 'E12 never used: the work and its finalization never run, exit 0' ((($o2 -join '|') -ceq 'main start 7|main end') -and ($x2 -eq 0)) "exit $x2; $($o2 -join ' | ')"
+    & $Exe index --project $D.Proj --db $D.Db --library-db none *> $null
+    $fpd = @((Run-Json $D @('--unit', 'LdHeavy', '--plan', '--defer')).sections)[0]
+    Check 'E13 fixed point: a second --defer after a re-index is empty-section (the section no longer calls anything; refusal order)' ($fpd.refusal.kind -eq 'empty-section') "$($fpd.refusal.kind)"
   }
 }
 finally {
