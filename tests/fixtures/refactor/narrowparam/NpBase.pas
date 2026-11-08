@@ -22,6 +22,7 @@ type
 
   TMid = class(TBase)
   public
+    MidField: Integer;
     procedure MidOnly;
     procedure Hidden;
     procedure VirtualM; override;
