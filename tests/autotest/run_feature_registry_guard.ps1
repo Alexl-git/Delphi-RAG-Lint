@@ -44,7 +44,14 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 Write-Host '== feature registry guard (featuregen) ==' -ForegroundColor Cyan
 . (Join-Path $Repo 'tools\featuregen-ensure.ps1')
-$engine = if ($Engine) { $Engine } else { Join-Path $Repo 'third_party\dll-win64\drag-lint.exe' }
+$engine = $Engine
+if (-not $engine) {
+  # default: the deployed engine; a worktree has none, so fall back to its own build output (GD 148)
+  $deployed = Join-Path $Repo 'third_party\dll-win64\drag-lint.exe'
+  $built = Join-Path $Repo 'src\cli\Win64\Debug\drag-lint.exe'
+  $engine = if (Test-Path -LiteralPath $deployed) { $deployed } elseif (Test-Path -LiteralPath $built) { $built } else { $null }
+  if (-not $engine) { Write-Host "GUARD BROKEN: no engine: neither $deployed nor $built exists (pass -Engine)" -ForegroundColor Red; exit 1 }
+}
 try { $exe = Get-FeatureGenExe -Repo $Repo }
 catch { Write-Host "GUARD BROKEN: $($_.Exception.Message) (build\_build_featuregen_local.bat builds it)" -ForegroundColor Red; exit 1 }
 # ---- control 0: the freshness rule itself goes RED on a missing / stale exe -------------
