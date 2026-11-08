@@ -155,6 +155,8 @@ uses
   , DRagLint.Parser .Delphi13
   , DRagLint.Parser .DFM
   , DRagLint.Parser .Sql
+  , DRagLint.Parser .Markdown
+  , DRagLint.Query.TextNodes
   , DRagLint.Sql    .FbSnapshot
   , DRagLint.Sql    .OrmLinker
   , DRagLint.Sql    .Guarded   { TSqlGuard: the authorizer + time cap behind `sql` }
@@ -3321,7 +3323,8 @@ procedure CommitAfterResolveOnly(const AStore: ISymbolStore;
 
 /// <summary>
 /// Expands a compile closure into the full INDEX scope of a project: the closure
-/// itself, the sibling .dfm of every closure unit, and the project file(s).
+/// itself, the sibling .dfm of every closure unit, the project file(s), and the
+/// Markdown files directly beside the project file (text nodes, E-PARITY-GRAPHIFY).
 /// </summary>
 /// <param name="AProjectFile">The .dpr/.dpk/.dproj the closure was resolved from.</param>
 /// <param name="AClosureFiles">TClosureResult.Files, in closure order.</param>
@@ -3404,6 +3407,16 @@ begin
         AddOnce(ProjAbs);
       end
       else if TFile.Exists(ProjAbs) then AddOnce(ProjAbs); // a bare .dpr/.dpk
+      { E-PARITY-GRAPHIFY: the project's own Markdown -- every *.md directly
+        beside the project file, sorted, no subfolders -- as text nodes. }
+      var MdDir: string:= TPath.GetDirectoryName(ProjAbs);
+      if TDirectory.Exists(MdDir) then
+      begin
+        var MdFiles: TArray<string>:= TDirectory.GetFiles(MdDir, '*.md', TSearchOption.soTopDirectoryOnly);
+        TArray.Sort<string>(MdFiles);
+        for var MdFile in MdFiles do
+          if SameText(ExtractFileExt(MdFile), '.md') then AddOnce(MdFile); { the mask also matches *.mdx }
+      end;
     end;
 
     { Lane INC: include files LAST, after every host (the program file too), so
@@ -4680,7 +4693,7 @@ begin
     DParser:= TDelphi13Parser.Create;
     // Library sections: shallow (no usage refs -- would ~double the DB size).
     DParser.EmitUsageRefs:= (AItem.Mode <> smLibrary);
-    Indexer:= TIndexer.Create(Store, [DParser, TDFMParser.Create, TFirebirdSqlParser.Create], ADocs);
+    Indexer:= TIndexer.Create(Store, [DParser, TDFMParser.Create, TFirebirdSqlParser.Create, TMarkdownParser.Create], ADocs);
 
     // PP-Task-9: per-config directive resolution for this section (default ON).
     // A single-project closure section resolves defines from its .dproj; every
@@ -7041,7 +7054,7 @@ begin
   // applies AllowBlankLineGap and CaptureLooseComments when associating
   // doc regions to symbols.
   { v0.40.5 Tier 1: register the Firebird SQL parser alongside Delphi/DFM. }
-  Indexer:= TIndexer.Create(Store, [Parser, TDFMParser.Create, TFirebirdSqlParser.Create], AArgs.Docs);
+  Indexer:= TIndexer.Create(Store, [Parser, TDFMParser.Create, TFirebirdSqlParser.Create, TMarkdownParser.Create], AArgs.Docs);
 
   // PP-Task-9: enable the in-process directive preprocessor by default so
   // conditional-compilation branches are resolved PER-CONFIG before parsing;
@@ -7850,7 +7863,7 @@ begin
     it sits anywhere beneath a listed root. }
   DParser:= TDelphi13Parser.Create;
   DParser.EmitUsageRefs:= ADeep; { v0.42: deep dictionaries get usage refs }
-  Indexer:= TIndexer.Create(Store, [DParser, TDFMParser.Create, TFirebirdSqlParser.Create], ADocs);
+  Indexer:= TIndexer.Create(Store, [DParser, TDFMParser.Create, TFirebirdSqlParser.Create, TMarkdownParser.Create], ADocs);
   for Ex in AExcludeRoots do Indexer.AddExcludeRoot(Ex);
   Store.BeginFileBatch; { PR #10: see FILE BATCH in DRagLint.Storage.SQLite }
   try
@@ -11070,18 +11083,22 @@ var
 
   function GraphJsonOrHtml(AEdges: TStringList; AHtml: Boolean): string;
   var
-    Doc: string;
+    Doc      : string                ;
+    TextNodes: TArray<TGraphTextNode>;
+    TextEdges: TArray<TGraphTextEdge>;
     Row: string;
     Tab: TStringBuilder;
   begin
-    Doc:= '{"schema":"drag-lint.graph/1","edges":[' + string.Join(',', AEdges.ToStringArray) + ']}';
+    { E-PARITY-GRAPHIFY: the Markdown text nodes and their by-name links ride along. }
+    LoadGraphTextNodes(Conn, RootSubstr, TextNodes, TextEdges);
+    Doc:= '{"schema":"drag-lint.graph/1","edges":[' + string.Join(',', AEdges.ToStringArray) + '],' + GraphTextNodesJson(TextNodes, TextEdges) + '}';
     if not AHtml then Exit(Doc);
     Tab:= TStringBuilder.Create;
     try
       for Row in AEdges do Tab.Append('<li><code>').Append(TNetEncoding.HTML.Encode(Row)).AppendLine('</code></li>');
       Result:= '<!DOCTYPE html>' + sLineBreak + '<html><head><meta charset="utf-8"><title>drag-lint graph</title></head><body>' + sLineBreak
         + '<h1>drag-lint unit graph</h1><p>' + IntToStr(AEdges.Count) + ' edges (from, to, weight).</p><ul>' + sLineBreak
-        + Tab.ToString + '</ul>' + sLineBreak + '<script type="application/json" id="graph">' + Doc.Replace('<', '\u003c') + '</script>' + sLineBreak + '</body></html>';
+        + Tab.ToString + '</ul>' + sLineBreak + GraphTextNodesHtml(TextNodes, TextEdges) + '<script type="application/json" id="graph">' + Doc.Replace('<', '\u003c') + '</script>' + sLineBreak + '</body></html>';
     finally
       Tab.Free;
     end;
@@ -18788,7 +18805,7 @@ var
         QFiles.Connection:= SQLiteStore.GetConnection;
         { Filter out DFM rows ? uses clauses only exist in pascal sources.
           Language tag is 'delphi13' for .pas/.dpr/.dpk in v0.40.x indexes. }
-        QFiles.Sql.Text:= 'SELECT id, path FROM files ' + 'WHERE language NOT IN (''dfm'', ''json'', ''text'')';
+        QFiles.Sql.Text:= 'SELECT id, path FROM files ' + 'WHERE language NOT IN (''dfm'', ''json'', ''text'', ''markdown'')';
         QFiles.Open;
         while not QFiles.Eof do
         begin
@@ -37593,7 +37610,7 @@ begin
         // on, per-config preprocess profile from the project.
         DP2:= TDelphi13Parser.Create;
         DP2.EmitUsageRefs:= True;
-        Indexer2:= TIndexer.Create(Store, [DP2, TDFMParser.Create, TFirebirdSqlParser.Create], AArgs.Docs);
+        Indexer2:= TIndexer.Create(Store, [DP2, TDFMParser.Create, TFirebirdSqlParser.Create, TMarkdownParser.Create], AArgs.Docs);
         try
           // The shared TIndexer reports per-file progress ('... -> N symbols') on
           // stdout; redirect stdout to the null device for the whole scan+recompile

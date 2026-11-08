@@ -1484,7 +1484,9 @@ begin
     ParseBytes:= EnsureUtf8Bytes(IncCtx);
     IncSites  := nil;
   end
-  else if FPreprocessEnabled and not IsBinaryDfm then
+  // E-PARITY-GRAPHIFY: Markdown is prose -- an IFDEF directive in it is text, and
+  // an unclosed one would blank the rest of the document. Never pre-processed.
+  else if FPreprocessEnabled and not IsBinaryDfm and not SameText(ExtractFileExt(AFilePath), '.md') then
   begin
     try
       // v(2026-08-16, INBOX-parse-error-shellshock-units): 'defines-only', NOT
@@ -1969,6 +1971,10 @@ begin
     begin
       if ParserFor(ExtractFileExt(F)) = nil then Continue;
       if not SqlFileAllowedFilter(F) then Continue;
+      { E-PARITY-GRAPHIFY: a walk admits no Markdown -- only a project index
+        does, for the .md beside its project file (ExpandProjectScope). A folder
+        or library walk over a docs-heavy tree stays what it was. }
+      if SameText(ExtractFileExt(F), '.md') then Continue;
       FBaseName:= ExtractFileName(F);
       { v0.45: GlobalExclude + SectionExclude on file base name. }
       if TGlob.MatchesAny(FBaseName, FWalkFilter.GlobalExclude ) then Continue;
