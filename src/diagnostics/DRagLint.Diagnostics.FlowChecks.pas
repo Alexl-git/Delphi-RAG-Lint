@@ -62,6 +62,11 @@ type
     /// <param name="AStore">Optional symbol store; nil on the bare lint path.</param>
     /// <param name="AFileId">File id within AStore (0 when no store).</param>
     /// <param name="ALibStore">Optional library symbol store for cross-DB lookups; nil disables.</param>
+    /// <param name="AKeep">Optional "is this rule id kept by the run" predicate (RuleKeptByRun).
+    /// nil computes every rule, as before. When assigned, the out-arg liveness pass
+    /// (local-only-out-arg, dead-store-before-out-arg) and the by-value replay check
+    /// (by-value-arg-before-assignment) run only when one of their ids is kept; every
+    /// other rule is computed regardless. Skipping changes no kept finding.</param>
     /// <returns>All flow findings for the file.</returns>
     /// <exception cref="EFlowOracleMismatch"><!-- drag-lint:auto exc -->via DRagLint.Diagnostics.FlowChecks.OracleCheck: %s: cached %s but a fresh computation says %s, for key "%s". The; via DRagLint.Diagnostics.FlowChecks.OracleCheckPM: oracle param-mode: cached mode %d but a fresh computation says %d, for</exception>
     /// <remarks>
@@ -79,7 +84,8 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const AStore: ISymbolStore = nil;
-      AFileId: Int64 = 0; const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;
+      AFileId: Int64 = 0; const ALibStore: ISymbolStore = nil;
+      const AKeep: TFunc<string, Boolean> = nil): TArray<TLintFinding>;
     /// <summary>Seconds accumulated in one named phase of Check. See the
     /// sub-breakdown block in the implementation.</summary>
     /// <param name="APhase"><!-- drag-lint:auto type -->Integer</param>
@@ -3299,9 +3305,12 @@ begin
 end;
 
 class function TFlowChecker.Check(const AFile: string; const AStore: ISymbolStore;
-  AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
+  AFileId: Int64; const ALibStore: ISymbolStore;
+  const AKeep: TFunc<string, Boolean>): TArray<TLintFinding>;
 var
   PF: TParsedFile;
+  WantByValue: Boolean; { by-value-arg-before-assignment is kept by this run }
+  WantOutArgs: Boolean; { local-only-out-arg or dead-store-before-out-arg is kept }
   Findings: TList<TLintFinding>;
   Procs: TArray<TTSNode>;
   PI: Integer;
@@ -3676,7 +3685,7 @@ var
                       Format('Local "%s" is used before it is assigned.', [V.Name]), ROW, COL);
                 end;
               end;
-            CheckByValueArgs(It);
+            if WantByValue then CheckByValueArgs(It);
             { ---- not-assigned-interface: interface-var dereferences (exprDot /
               `as`) not yet must-assigned at this point. Interfaces are managed
               (IsManagedType skips them above), so this fills that gap on the SAME
@@ -3959,7 +3968,7 @@ var
                 V.DeclLine, V.DeclCol);
           end;
 
-          CheckOutArgLiveness(LiveAna);
+          if WantOutArgs then CheckOutArgLiveness(LiveAna);
 
           { ============ split-variable (refactoring, OFF): a local reused for two
             UNRELATED purposes -- it has >=2 DISJOINT def-use lifetimes. Distinct
@@ -4676,6 +4685,10 @@ begin
 
   SameUnitClassKinds := nil; { built on first need, see CheckRoutine }
   MethodModes := nil;
+  { PF E-LINTALL-SLOWER: the two OFF out-arg/by-value passes cost lint-all on Micronite2027
+    about 60 s (liveness window 1.5 -> 52 s, replay 1.8 -> 13 s); run them only when kept. }
+  WantByValue := (not Assigned(AKeep)) or AKeep('by-value-arg-before-assignment');
+  WantOutArgs := (not Assigned(AKeep)) or AKeep('local-only-out-arg') or AKeep('dead-store-before-out-arg');
   ArgMode :=
     function(const ACall: TTSNode; AIndex, ACount: Integer): TParamMode
     begin

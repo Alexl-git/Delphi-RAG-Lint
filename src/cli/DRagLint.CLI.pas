@@ -17906,7 +17906,8 @@ begin
       if LintRuleWants(NarrowRule, LINT_GATE_FLOW) and (not FlowIsLibrary) then
       begin
         TraceLintChecker('flow');
-        for F in DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(EffPath, FlowStore, FlowFid, FlowLibStore) do
+        for F in DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(EffPath, FlowStore, FlowFid, FlowLibStore,
+                   RuleKeptByRun(AArgs, Cfg, MarkedRuleIds([EffPath]))) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       end;
       { v0.68: naming-convention prefix rules (config-driven). The store enables
@@ -24360,6 +24361,8 @@ begin
     the report is still filtered to AArgs.Rule in FinalizeAndOutput. }
   var Nr: string:= LintNarrowRule(AArgs.Rule);
   if not AArgs.NoPreprocess then InstallLintIncludeContexts(Store, FilePaths, AArgs.ProjectPath);
+  { PF E-LINTALL-SLOWER: which OFF flow passes this run keeps, read once for the per-file loop. }
+  var FlowKeep: TFunc<string, Boolean>:= RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths));
   { DEC-13: lint-all listens for a maintenance stand-down; the scan stops between files. }
   BatchChannelOpen('lint-all', TArray<string>.Create(ExpandFileName(ProjectDb)), DRAGLINT_VERSION, DRAGLINT_EXTRACTOR_VERSION, IsMachineReadableOutput(AArgs));
   var LintStoodAt: Integer:= -1;
@@ -24484,7 +24487,7 @@ begin
         if LintRuleWants(Nr, ['virtual-method-in-constructor']) then
           ScanAdd(28, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath, Store, Store.FindFileIdByPath(PasPath))); { v12 (M1): cross-unit }
         if LintRuleWants(Nr, LINT_GATE_FLOW) then
-          ScanAdd(29, DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore)); { M2: flow checks, store-exact managed types, ownership via library store }
+          ScanAdd(29, DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check(PasPath, Store, Store.FindFileIdByPath(PasPath), LibStore, FlowKeep)); { M2: flow checks, store-exact managed types, ownership via library store }  // dl:ok magic-literal@8ade, large-magic-number@8ade -- REVIEWED 2026-11-08 profiler scan-slot id of the ScanAdd table, not a quantity
         { with-hides-outer-symbol: the SAME library store, and it is not
           optional here -- the owner's own case (Width/Height on a form)
           lives on TCustomForm, which no project index can resolve. }
