@@ -148,9 +148,9 @@ Build orchestration stays at its own verdict. Reopen when an editor-only user is
 | NOT unlocked: escape analysis in the editor | callee walk | `ask exception-paths` draws it; an editor view of it is a later item |
 | NOT unlocked: "log in except" autofix | the project's logging routine | no fact names it |
 
-**Parser cost of the type fact (lane B3, measured tonight):** `<B3: index --rebuild of Micronite2027
-(164 MB copy), 1.46 vs type-fact-off build, 3 runs each = __ percent; fix landed: yes/no; source
-lanes\147\B3\REPORT.md>`. P1 and P2 do not depend on that number: they only read rows the parser already
+**Parser cost of the type fact (lane B3, measured tonight):** index --rebuild of a Micronite2027
+164 MB copy, 1.46 vs a type-fact-off build, 3 runs each: -0.1 percent CPU (CI +-3.7 percent), resolve 0.1 s;
+no fix landed (below the 5 percent bar); source lanes\147\B3\REPORT.md. P1 and P2 do not depend on that number: they only read rows the parser already
 writes. It matters to this programme in one way: if B3 removes or narrows the type fact to recover
 parse time, P1's `via` mix shifts toward `name` / `spelled` and the hover wording must say so.
 
