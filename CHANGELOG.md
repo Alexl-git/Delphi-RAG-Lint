@@ -36,6 +36,10 @@ Wave 147, integrated on lane/147-int. ONE extractor bump over 1.46 (1.34.0-alpha
 - IDE: while the conversion editor is open, the plugin's own reindex and lint-all jobs on that project's index wait in the queue and run when it closes. Rename Symbol's Preview leaves Apply disabled when occurrences are not proved, and says how many.
 - Internal: TDocRegions split into four classes behind a facade (no output change, proved byte-equal on 3 projects).
 
+### Fixed (integration)
+- lint: deep-nesting counts grammar v1.4.4's statement `ifElse` node (PR #2 moved a statement if-with-else off `exprIf`); without it a trailing else scored the nest ZERO again (run_deep_nesting_else_forms).
+- IDE plugin: version literals read v1.47.0-alpha (Editor PLUGIN_VERSION, Usages form).
+
 ### Measured, no change
 - The raise/handle exception type fact (1.46) costs no measurable parse time (-0.1 percent CPU, 570 files x 4 passes) and 0.1 s of resolve on Micronite2027; the 1.46 '+19 percent rebuild' was machine load (B3).
 - local-only-out-arg / dead-store-before-out-arg / by-value-arg-before-assignment stay OFF (CLIENT copy: 24 / 0 / 0 findings; T1).
