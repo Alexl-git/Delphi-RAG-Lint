@@ -10608,7 +10608,13 @@ begin
   end;
   if AText.Text <> '' then
     Exit(FOracle.Bind(AText.Text, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
-  if AText.Head = '' then Exit;
+  if AText.Head = '' then
+  begin
+    { E-RECV-UNDECIDABLE D08: `TArray<Integer>.Create(1)` has no head text (generic
+      arguments); count the intrinsic so it does not read as a miss. Binds nothing. }
+    if Kind = ekCall then FOracle.NoteIntrinsic(AReceiver, ACallRef.NameText, FileUsesUnits(ACallRef.FileId));
+    Exit;
+  end;
   var HeadLc: string:= LowerCase(Trim(AText.Head.Split(['.'])[0]));
   if FNameToCands.ContainsKey(HeadLc) or FNameToUnitValues.ContainsKey(HeadLc) then Exit;
   Result:= FOracle.BindHead(AText.Head, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), ScopeType,

@@ -17028,10 +17028,12 @@ begin
       project indexed WITHOUT a library shows: every one of those sites had a type
       (or a head, or a bare name) to offer and no store to offer it to. }
     ResolveLog(Format('calls      receivers: typed-local %d, typed-by-name-only %d, untyped %d; ' +
-      'external-bound %d, external-declined ambiguous-type %d, no-member %d, no-type %d, no-store %d',
+      'external-bound %d, external-declined ambiguous-type %d, no-member %d, no-type %d, no-store %d, ' +
+      'intrinsic %d, late-bound %d',
       [Resolver.ReceiverStats.TypedLocal, Resolver.ReceiverStats.TypedByNameOnly, Resolver.ReceiverStats.Untyped,
        Resolver.OracleStats.Bound, Resolver.OracleStats.AmbiguousType, Resolver.OracleStats.NoMember,
-       Resolver.OracleStats.NoType, Resolver.OracleStats.NoStore]));
+       Resolver.OracleStats.NoType, Resolver.OracleStats.NoStore,
+       Resolver.OracleStats.Intrinsic, Resolver.OracleStats.LateBound]));
     WriteExternalStores(AExtraStores, Scoped);
     { 2026-09-23 (enum-value-ref-binding). EVERY DECLINE IS PRINTED BY REASON,
       and that is the point of the line rather than a nicety: the pass answers

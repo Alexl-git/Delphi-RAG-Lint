@@ -37,9 +37,13 @@ type
   TExternalKind = (ekCall, ekMemberAccess, ekBareCall);
 
   /// <summary>Counters of the oracle's outcomes, printed on the resolve: summary line.</summary>
-  /// <remarks>Every Bind / BindHead / BindBare call increments exactly one counter.</remarks>
+  /// <remarks>Every Bind / BindHead / BindBare call increments exactly one counter.
+  /// Intrinsic and LateBound (E-RECV-UNDECIDABLE D08 / D10) name declines that have no
+  /// routine to bind to: a dynamic-array constructor (`TBytes.Create`) and a call through an
+  /// event property or procedural field (`V.OnColumnSizeChanged(V, nil)`). Both leave the
+  /// site unbound exactly as before; they only stop it reading as a miss.</remarks>
   TOracleStats = record
-    Bound, AmbiguousType, NoMember, NoStore, NoType: Integer;
+    Bound, AmbiguousType, NoMember, NoStore, NoType, Intrinsic, LateBound: Integer;
   end;
 
 
@@ -71,6 +75,8 @@ type
     FFileUses : TDictionary<string, TArray<string>>;
     FHelperMembers: TDictionary<string, string>;
     FHelperTypes  : TDictionary<string, TArray<TLibCand>>;
+    FAliases      : TDictionary<string, TArray<TLibCand>>;
+    function IsDynArrayType(const ATypeText: string; const AUses: TArray<string>; ADepth: Integer): Boolean;
     function HelperCands(const ALeaf: string): TArray<TLibCand>;
     function PickTypeOrHelper(const ATypeText: string; const ATypeUses, AHelperUses: TArray<string>;
       out ACand: TLibCand; out AReason: string): Boolean;
@@ -118,6 +124,16 @@ type
     /// calling file (`S.Split` -> TStringHelper.Split); two visible helpers decline.</remarks>
     function Bind(const ATypeText, APending, AMember: string; AKind: TExternalKind;
       const AUsesUnits: TArray<string>; out AReason: string): string;
+    /// <summary>E-RECV-UNDECIDABLE D08: counts a dynamic-array constructor call whose receiver
+    /// is a generic type text no head rung reads (`TArray&lt;Integer&gt;.Create(1)`) as
+    /// Stats.Intrinsic.</summary>
+    /// <param name="AReceiver">The call's receiver text as written.</param>
+    /// <param name="AMember">The called member; only `Create` counts.</param>
+    /// <param name="AUsesUnits">The calling file's used units.</param>
+    /// <returns>True when the site was counted.</returns>
+    /// <remarks>Binds nothing and writes nothing; it is not one of the Bind calls the
+    /// "exactly one counter" rule of TOracleStats speaks of, and touches no other counter.</remarks>
+    function NoteIntrinsic(const AReceiver, AMember: string; const AUsesUnits: TArray<string>): Boolean;
     /// <summary>Binds a receiver whose HEAD identifier no project rung typed: in Delphi's
     /// order, a member inherited by the enclosing class from AScopeType, a routine of a used
     /// unit the whole chain names (`System.SysUtils.DeleteFile`), a library type, a library
@@ -198,6 +214,10 @@ const
   R_NO_MEMBER = 'no-member';
   R_NO_STORE  = 'no-store';
   R_NO_TYPE   = 'no-type';
+  R_INTRINSIC = 'intrinsic';   // D08: no declaration exists (`TBytes.Create`)
+  R_LATE_BOUND= 'late-bound';  // D10: the routine is chosen at run time (an event property)
+  { How deep IsDynArrayType follows an alias chain (`TBytes = TArray<Byte>` -> `array of T`). }
+  MAX_ALIAS_HOPS = 3;
 
 function IsIdent(const S: string): Boolean;
 begin
@@ -292,10 +312,12 @@ begin
   FFileUses := TDictionary<string, TArray<string>>.Create;
   FHelperMembers:= TDictionary<string, string>.Create;
   FHelperTypes  := TDictionary<string, TArray<TLibCand>>.Create;
+  FAliases      := TDictionary<string, TArray<TLibCand>>.Create;
 end;
 
 destructor TLibraryOracle.Destroy;
 begin
+  FAliases.Free;
   FHelperTypes.Free;
   FHelperMembers.Free;
   FFileUses.Free;
@@ -443,6 +465,37 @@ begin
     Exit(False);
   end;
   Result:= Pick(Cached(FTypes, Leaf, TYPE_KINDS, True), AUses, ACand, AReason);
+end;
+
+{ E-RECV-UNDECIDABLE D08: True when ATypeText names a dynamic array type: `TArray<X>` (the
+  generic arguments do not matter) or a library alias whose every visible declaration is
+  `array of ..`, directly or through at most MAX_ALIAS_HOPS further aliases
+  (`TBytes = TArray<Byte>`). A name that is also a visible class / record / interface, or that
+  no visible alias declares, is not one. }
+function TLibraryOracle.IsDynArrayType(const ATypeText: string; const AUses: TArray<string>;
+  ADepth: Integer): Boolean;
+begin
+  Result:= False;
+  if ADepth > MAX_ALIAS_HOPS then Exit;
+  var Text: string:= Trim(ATypeText);
+  if Text.ToLower.StartsWith('array of') then Exit(True);
+  var Leaf: string:= NormalizeTypeLeaf(Text);
+  if (Leaf = '') or Leaf.StartsWith('^') then Exit;
+  if Length(VisibleOf(Cached(FTypes, Leaf, TYPE_KINDS, True), AUses)) > 0 then Exit;
+  var Cands: TArray<TLibCand>:= Cached(FAliases, Leaf, [skTypeAlias], False);
+  var Seen: TArray<TLibCand>:= VisibleOf(Cands, AUses);
+  if Length(Seen) = 0 then Exit;
+  for var C: TLibCand in Seen do
+    if not IsDynArrayType(C.Sig, LibraryUses(C.Store, C.FileId) + [IMPLICIT_ROOT_UNIT], ADepth + 1) then Exit;
+  Result:= True;
+end;
+
+function TLibraryOracle.NoteIntrinsic(const AReceiver, AMember: string; const AUsesUnits: TArray<string>): Boolean;
+begin
+  Result:= (Length(FStores) > 0) and SameText(AMember, 'Create') and (Pos('<', AReceiver) > 1)
+           and AReceiver.EndsWith('>') and IsIdent(Copy(AReceiver, 1, Pos('<', AReceiver) - 1))
+           and IsDynArrayType(AReceiver, AUsesUnits + [IMPLICIT_ROOT_UNIT, 'sysinit'], 0);
+  if Result then Inc(FStats.Intrinsic);
 end;
 
 { E-RECV-UNDECIDABLE D05: every library helper whose target is named ALeaf
@@ -675,9 +728,16 @@ var
   Hit: TSymbol;
 begin
   AReason:= '';
-  if DeclaringMember(ACand, AMember, Hit)
-     and (Hit.Kind in (if AKind = ekMemberAccess then OK_ACCESS else OK_CALL)) then
-    Exit(Hit.QualifiedName);
+  if DeclaringMember(ACand, AMember, Hit) then
+  begin
+    if Hit.Kind in (if AKind = ekMemberAccess then OK_ACCESS else OK_CALL) then Exit(Hit.QualifiedName);
+    { D10: a call through a property or field -- an event; what runs is decided at run time. }
+    if (AKind = ekCall) and (Hit.Kind in [skProperty, skField]) then
+    begin
+      AReason:= R_LATE_BOUND;
+      Exit('');
+    end;
+  end;
   AReason:= R_NO_MEMBER;
   Result := '';
 end;
@@ -689,6 +749,8 @@ begin
   else if AReason = R_AMBIGUOUS then Inc(FStats.AmbiguousType)
   else if AReason = R_NO_STORE then Inc(FStats.NoStore)
   else if AReason = R_NO_TYPE then Inc(FStats.NoType)
+  else if AReason = R_INTRINSIC then Inc(FStats.Intrinsic)
+  else if AReason = R_LATE_BOUND then Inc(FStats.LateBound)
   else Inc(FStats.NoMember);
 end;
 
@@ -793,6 +855,10 @@ begin
         Exit(Count(Finish(C.Name), AReason));
       end;
   end;
+  { D08: `TBytes.Create(1, 2)`, `TArray<Integer>.Create(1)` -- a dynamic array's constructor
+    is a compiler intrinsic with no declaration; name it rather than call it a miss. }
+  if (AKind = ekCall) and (Pending = '') and SameText(AMember, 'Create') and IsDynArrayType(Head, Visible, 0) then
+    Exit(Count('', R_INTRINSIC));
   Result:= Count('', R_NO_TYPE);
 end;
 
