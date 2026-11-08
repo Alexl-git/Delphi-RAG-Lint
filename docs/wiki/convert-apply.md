@@ -8,11 +8,11 @@ component-type conversion, after validating and scaffolding the rules file.
 
 ## Running it from the CLI
 ```
-drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--apply] [--no-backup]
+drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,... | --only-type Type1,Type2,...] [--apply] [--no-backup]
 ```
 `--unit <F.pas>` is the unit to convert. `--rules <file>` is the
 conversion-rules file. `--only Name1,Name2,...` restricts the conversion to
-named component instances. Without `--apply` this is dry-run only: a preview
+named component instances; `--only-type Type1,Type2,...` (1.47.0; capability `only_type`) instead takes bare `#convert` From type names and converts every instance of those types, nested and inline ones included, so a form scope needs no name list and cannot go stale between a `.dfm` read and the splice (exclusive with `--only`: both is exit 2; a type that matches nothing is reported in `only_unmatched[]` and, when nothing is left, exits 1 like an unmatched `--only`). Without `--apply` this is dry-run only: a preview
 that writes nothing. `--apply` writes for real, with backups and a
 `recovery.txt`, unless `--no-backup` is also given. `--db PATH` is required
 and may be repeated.
