@@ -8850,7 +8850,7 @@ begin
   Result.TargetSymbolId:= ResolveWriteRef(ARef, AReason);
   if Result.TargetSymbolId <= 0 then Exit;
   M:= SymbolById(Result.TargetSymbolId);
-  if not (M.Kind in [skProperty, skField]) then Exit;
+  if M.Kind not in [skProperty, skField] then Exit;
   Result.Confidence := 'certain';
   Result.MemberMode := 'write';
   { The scope walk found a member on the enclosing class chain: that class is
