@@ -2924,13 +2924,14 @@ var
     const
       FIRST_PREFIX_CHAR = 2; { after the T }
       LAST_CAPITAL_AT   = 6; { 1..4 lower-case letters, then the capital }
+      TRY_PREFIX        = 'Try';
     var
       I: Integer;
     begin
       I:= FIRST_PREFIX_CHAR;
       while (I <= Length(S)) and CharInSet(S[I], ['a'..'z']) do Inc(I);
       Result:= (I > FIRST_PREFIX_CHAR) and (I <= LAST_CAPITAL_AT) and (I <= Length(S)) and CharInSet(S[I], ['A'..'Z'])
-               and not SameText(Copy(S, 1, 3), 'Try');
+               and not SameText(Copy(S, 1, Length(TRY_PREFIX)), TRY_PREFIX);
     end;
   begin
     S:= Trim(T);
