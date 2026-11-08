@@ -1,12 +1,21 @@
 @echo off
 REM Build drag-lint.exe Win64 -> dll-win64/.
+REM Usage: build_draglint_win64.bat [-NoStage]
+REM   -NoStage  build + stage ONLY beside the linked exe (src\cli\Win64\Debug: tree-sitter DLLs,
+REM             rules\, casts.castlib, sqlite3.dll) and stop BEFORE anything is written to
+REM             third_party\dll-win64 (engine, switch, uri handler, stage-engine.ps1). For lane worktrees
+REM             and measurements; the default (no argument) is unchanged.
 setlocal
+set NOSTAGE=
+if /I "%~1"=="-NoStage" set NOSTAGE=1
 set RSVARS="C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"
 call %RSVARS%
 if errorlevel 1 exit /b 1
 
 set HERE=%~dp0
 set ROOT=%HERE%..
+set STAGEDIRS="%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64"
+if defined NOSTAGE set STAGEDIRS="%ROOT%\src\cli\Win64\Debug"
 
 cd /D "%ROOT%\src\cli"
 msbuild /t:Build /p:Config=Debug /p:Platform=Win64 /v:minimal drag-lint.dproj
@@ -53,7 +62,7 @@ REM
 REM tests\run_battery.ps1 (register K41) hashes rules\ against both of these
 REM and shouts on drift, so this copy and that check are a matched pair: the
 REM build makes them right, the battery proves they stayed right.
-for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64") do (
+for %%D in (%STAGEDIRS%) do (
   if not exist "%%~D\rules" mkdir "%%~D\rules"
   REM MIRROR, NOT COPY. copy /Y never DELETES, so a rule RETIRED from rules\
   REM survived beside the exe forever. Retiring hardcoded-absolute-path.scm for
@@ -77,7 +86,7 @@ REM reaches them. Missing it is not cosmetic: 1.26.2's `dfmdata graphic` line is
 REM what lets keep-bytes-if-compatible carry a TPicture glyph into TdxSmartGlyph;
 REM without it the engine (correctly) refuses to carry, and every glyph is a
 REM todo. pack-lint-release.ps1 already puts the same file at the archive root.
-for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64") do (
+for %%D in (%STAGEDIRS%) do (
   copy /Y "%ROOT%\docs\examples\convrules\casts.castlib" "%%~D\casts.castlib" >NUL
   if errorlevel 1 (
     echo ERROR: failed to stage casts.castlib into %%~D
@@ -96,7 +105,7 @@ if not exist "%SQLITE_SRC%" (
 REM A byte-identical copy is left alone: any running deployed engine has the DLL
 REM loaded, so an unconditional copy /Y failed on the lock BEFORE stage-engine.ps1
 REM (below) got its chance to hold and stop the holders (1.40.0 release, 2026-11-02).
-for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64") do (
+for %%D in (%STAGEDIRS%) do (
   fc /b "%SQLITE_SRC%" "%%~D\sqlite3.dll" >NUL 2>&1
   if errorlevel 1 (
     copy /Y "%SQLITE_SRC%" "%%~D\sqlite3.dll" >NUL
@@ -105,6 +114,11 @@ for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64") do (
       exit /b 1
     )
   )
+)
+REM -NoStage: everything above landed beside the linked exe only; stop before the engine/switch/uri-handler stage.
+if defined NOSTAGE (
+  echo OK: -NoStage: built src\cli\Win64\Debug\drag-lint.exe, third_party\dll-win64 untouched
+  exit /b 0
 )
 REM STAGE THE ENGINE. The plain copy stays FIRST and is the ordinary path: when
 REM nothing holds the target this is one copy and no PowerShell is launched.
