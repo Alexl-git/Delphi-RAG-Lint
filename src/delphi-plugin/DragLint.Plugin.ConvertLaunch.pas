@@ -56,6 +56,7 @@ uses
   , DragLint.Plugin.ConvertRequest
   , DragLint.Plugin.DbResolver
   , DragLint.Plugin.ExeResolver
+  , DragLint.Plugin.JobQueue
   , DragLint.Plugin.Settings
   , DragLint.Plugin.Telemetry
   ;
@@ -100,6 +101,7 @@ var
   GWaiter    : TConvertChildWaiter = nil;   { the last editor's; finished when GChildUnit = '' }
   GChildUnit : string = '';                 { what the living editor was opened on; '' = none }
   GReopenPas : string = '';                 { the unit to reopen; '' for a launch with no request }
+  GChildDb   : string = '';                 { the DB the queue holds while the editor lives (C12 N6); '' = none }
   GCapability: Integer = -1;                { -1 not probed; else the editor's convert_request }
   GProbing   : Boolean = False;
 
@@ -195,6 +197,14 @@ end;
 
 { ---- the child ---- }
 
+{ Lifts the queue hold StartChild placed; held reindex / lint-all jobs then run. }
+procedure ReleaseChildDb;
+begin
+  if GChildDb = '' then Exit;
+  JobQueue.ReleaseDb(GChildDb);
+  GChildDb:= '';
+end;
+
 constructor TConvertChildWaiter.Create(AProcess: THandle);
 begin
   FProcess:= AProcess;
@@ -228,6 +238,7 @@ begin
   Pas:= GReopenPas;
   GChildUnit:= '';
   GReopenPas:= '';
+  ReleaseChildDb;
   if Pas <> '' then ReopenUnit(Pas);
 end;
 
@@ -238,8 +249,10 @@ begin
     ShowMessage('The conversion editor is already open for ' + ExtractFileName(GChildUnit) + ' -- close it first.');
 end;
 
-{ False with nothing started. The handle goes to the waiter; a failed start tells the caller. }
-function StartChild(const pCmd, pUnit, pReopen: string): Boolean;
+{ False with nothing started. The handle goes to the waiter; a failed start tells the caller.
+  pDb (may be '') is held in the job queue until the child exits: a save-triggered reindex
+  or lint-all on it would collide with the editor's reindex-before-apply (C12 N6). }
+function StartChild(const pCmd, pUnit, pReopen, pDb: string): Boolean;
 var
   SI : TStartupInfoW      ;
   PI : TProcessInformation;
@@ -257,6 +270,8 @@ begin
   FreeAndNil(GWaiter); { the previous editor's: it ended (RefusedForLivingChild), so this is quick }
   GChildUnit:= pUnit;
   GReopenPas:= pReopen;
+  GChildDb:= pDb;
+  if pDb <> '' then JobQueue.HoldDb(pDb);
   GWaiter:= TConvertChildWaiter.Create(PI.hProcess);
 end;
 
@@ -386,7 +401,7 @@ begin
     Exit;
   end;
   Module:= nil;
-  if not StartChild(ConvertLaunchCommand(pEditor, ReqPath, pSel.Pas, Db, Plat), pSel.Pas, pSel.Pas) then
+  if not StartChild(ConvertLaunchCommand(pEditor, ReqPath, pSel.Pas, Db, Plat), pSel.Pas, pSel.Pas, Db) then
   begin
     ShowMessage('Could not start ' + pEditor + ': ' + SysErrorMessage(GetLastError));
     ReopenUnit(pSel.Pas);
@@ -442,7 +457,7 @@ begin
   Proj:= GetActiveProjectFilePath;
   Db:= if Proj <> '' then PrimaryDbForProject(Proj, LoadSettings) else '';
   { No request, so no probe: every editor that ships takes --form. }
-  if not StartChild(ConvertLaunchCommand(Editor, '', Pas, Db, GetActivePlatformForLibrary), Pas, '') then
+  if not StartChild(ConvertLaunchCommand(Editor, '', Pas, Db, GetActivePlatformForLibrary), Pas, '', Db) then
     ShowMessage('Could not start ' + Editor + ': ' + SysErrorMessage(GetLastError));
 end;
 
@@ -473,6 +488,8 @@ procedure ShutdownConvertLaunch;
 begin
   GReopenPas:= '';
   FreeAndNil(GWaiter);
+  { Unload: the queue is torn down too; touching JobQueue here could re-create it. }
+  GChildDb:= '';
 end;
 
 end.

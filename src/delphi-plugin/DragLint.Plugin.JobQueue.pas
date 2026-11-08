@@ -142,6 +142,11 @@ type
     { Worker thread only: whether THIS deferral episode has been logged.
       Cleared when the hold lifts, so a later hold is reported again. }
     FDeferredLogged: Boolean;
+    { C12 N6: normalised paths of the DBs whose jkReindex / jkLintAll jobs are held
+      (HoldDb). Under FLock. }
+    FHeldDbs: TList<string>;
+    { Index in FPending of the first job not held by HoldDb, or -1. Under FLock. }
+    function FirstRunnableLocked: Integer;
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DragLint.Plugin.JobQueue.TQueueWorker.Execute (DragLint.Plugin.JobQueue.pas)</para>
@@ -351,7 +356,29 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetState: TQueueState;
+    /// <summary>Holds every pending and later-queued jkReindex / jkLintAll job whose
+    /// first --db is ADb, until ReleaseDb(ADb). Other jobs, and jobs on other DBs, run
+    /// as usual, in FIFO order past the held ones (C12 ask N6).</summary>
+    /// <param name="ADb">The DB to hold; compared case-insensitively after
+    /// ExpandFileName. '' does nothing.</param>
+    /// <remarks>Any thread. A queue-side predicate, NOT the engine hold: the LSP child,
+    /// hover and completion keep running. A held job stays pending (still coalesced by
+    /// a later Enqueue, still dropped by ClearPending); a running job is not stopped.
+    /// Holding a held DB again is a no-op; one ReleaseDb lifts it.</remarks>
+    procedure HoldDb(const ADb: string);
+    /// <summary>Lifts HoldDb(ADb); the held jobs then run in their queued order.</summary>
+    /// <param name="ADb">The DB HoldDb was given (same normalisation). A DB that is not
+    /// held is ignored.</param>
+    /// <remarks>Any thread. Wakes the worker.</remarks>
+    procedure ReleaseDb(const ADb: string);
   end;
+
+/// <summary>The value of the FIRST --db argument of an engine command line.</summary>
+/// <param name="ACmdLine">A job's CmdLine; the value may be double-quoted or bare.</param>
+/// <returns>The path without quotes; '' when there is no --db.</returns>
+/// <remarks>Pure. lint-all passes the project DB first and the library DB second, so
+/// the first one is the project's.</remarks>
+function JobDbArg(const ACmdLine: string): string;  // dl:ok unused-public-symbol@a0df -- public as the test seam: tests\JobQueueDbHoldTests.dpr (outside the plugin project) pins the parse
 
 { Called ONCE per deferral episode, with a line like
     JobQueue: deferred "Refresh Findings" (key refresh-findings:c:\x.sqlite)
@@ -556,6 +583,7 @@ begin
   FRunCancel:= TEvent.Create(nil, True { manual-reset }, False, '');
   FShutdown:= False;
   FDeferredLogged:= False;
+  FHeldDbs := TList<string>.Create;
   FState.Running   := False;
   FState.Percent   := -1;
   SyncPendingLocked; { QueueDepth 0, no titles; no other thread exists yet }
@@ -589,6 +617,7 @@ begin
     FWorker.Free;
   end;
   FPending.Free;
+  FHeldDbs.Free;
   FWake.Free;
   FCancel.Free;
   FRunCancel.Free;
@@ -618,6 +647,77 @@ begin
     FLock.Leave;
   end;
   if Delta <> 0 then AdjustBusy(Delta);
+  FWake.SetEvent;
+end;
+
+const
+  { The kinds HoldDb holds: the two that write or read the project DB for minutes. }
+  DB_HELD_KINDS = [jkReindex, jkLintAll];
+  DB_FLAG = ' --db ';
+
+function JobDbArg(const ACmdLine: string): string;
+var
+  P: Integer;
+  Q: Integer;
+begin
+  Result:= '';
+  P:= Pos(DB_FLAG, ACmdLine);
+  if P = 0 then Exit;
+  P:= P + Length(DB_FLAG);
+  while (P <= Length(ACmdLine)) and (ACmdLine[P] = ' ') do Inc(P);
+  if (P <= Length(ACmdLine)) and (ACmdLine[P] = '"') then
+  begin
+    Inc(P);
+    Q:= Pos('"', ACmdLine, P);
+  end
+  else
+    Q:= Pos(' ', ACmdLine, P);
+  if Q = 0 then Q:= Length(ACmdLine) + 1;
+  Result:= Copy(ACmdLine, P, Q - P);
+end;
+
+{ The one spelling HoldDb, ReleaseDb and the predicate compare. }
+function NormalisedDb(const ADb: string): string;
+begin
+  Result:= if Trim(ADb) = '' then '' else LowerCase(ExpandFileName(Trim(ADb)));
+end;
+
+function TDragLintJobQueue.FirstRunnableLocked: Integer;
+var
+  I: Integer;
+  J: TDragLintJob;
+begin
+  for I:= 0 to FPending.Count - 1 do
+  begin
+    J:= FPending[I];
+    if (FHeldDbs.Count = 0) or (J.Kind not in DB_HELD_KINDS)
+       or (FHeldDbs.IndexOf(NormalisedDb(JobDbArg(J.CmdLine))) < 0) then Exit(I);
+  end;
+  Result:= -1;
+end;
+
+procedure TDragLintJobQueue.HoldDb(const ADb: string);
+var
+  Key: string;
+begin
+  Key:= NormalisedDb(ADb);
+  if Key = '' then Exit;
+  FLock.Enter;
+  try
+    if FHeldDbs.IndexOf(Key) < 0 then FHeldDbs.Add(Key);
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TDragLintJobQueue.ReleaseDb(const ADb: string);
+begin
+  FLock.Enter;
+  try
+    FHeldDbs.Remove(NormalisedDb(ADb));
+  finally
+    FLock.Leave;
+  end;
   FWake.SetEvent;
 end;
 
@@ -948,6 +1048,7 @@ var
   PeekTtl : string      ;
   PeekKey : string      ;
   HavePeek: Boolean     ;
+  Idx     : Integer     ;
 begin
   while not FShutdown do
   begin
@@ -961,11 +1062,13 @@ begin
       PeekKey := '';
       FLock.Enter;
       try
-        if FPending.Count > 0 then
+        { The first job HoldDb does not hold (C12 N6); with no DB held, the head. }
+        Idx:= FirstRunnableLocked;
+        if Idx >= 0 then
         begin
           HavePeek:= True;
-          PeekTtl := FPending[0].Title;
-          PeekKey := FPending[0].CoalesceKey;
+          PeekTtl := FPending[Idx].Title;
+          PeekKey := FPending[Idx].CoalesceKey;
         end;
       finally
         FLock.Leave;
@@ -978,13 +1081,15 @@ begin
 
       { RE-READ THE HEAD AFTER THE WAIT. Minutes may have passed, and both
         coalescing and ClearPending can have changed or emptied the queue
-        meanwhile -- so the peeked job is a hint, never the thing that runs. }
+        meanwhile -- so the peeked job is a hint, never the thing that runs.
+        A HoldDb in the meantime is honoured the same way. }
       Job:= nil;
       FLock.Enter;
       try
-        if FPending.Count > 0 then
+        Idx:= FirstRunnableLocked;
+        if Idx >= 0 then
         begin
-          Job:= FPending.Extract(FPending[0]); { take ownership, remove from list }
+          Job:= FPending.Extract(FPending[Idx]); { take ownership, remove from list }
           FState.Running     := True;
           FState.CurrentTitle:= Job.Title;
           FState.Percent     := -1;

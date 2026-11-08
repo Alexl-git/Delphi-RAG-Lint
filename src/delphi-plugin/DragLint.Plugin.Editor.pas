@@ -819,6 +819,7 @@ uses
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.Reports
   , DragLint.Plugin.ConvertLaunch
+  , DragLint.Plugin.Bookmarks // dl:unit DragLint.Plugin.Bookmarks accepted -- GBookmarkNavigate / GBookmarkPick are the hooks this unit assigns at wizard init, the GButterflyNav pattern
   , DragLint.Plugin.CycleFix // dl:unit DragLint.Plugin.CycleFix accepted -- CYCLE_FIX_TIMEOUT_MS is the one plugin cycle-fix time limit; a second copy here is what let it drift (see StructureForm)
   ;
 
@@ -7677,6 +7678,17 @@ begin
   AddSeparator(SubConvert);
   AddWrappedItem(SubConvert, 'Open Conversion Editor...', InvokeOpenConversionEditor).Tag:= CONVERT_TAG_OPEN;
 
+  { E-BOOKMARKS IDE half: the // dl:bk comment anchors of the current unit. Strip and
+    Restore dry-run first and write only after a Yes (nothing strips on its own). }
+  var SubBookmarks: TMenuItem:= TMenuItem.Create(RootMenu);
+  SubBookmarks.Caption:= 'Bookmarks';
+  RootMenu.Add(SubBookmarks);
+  AddWrappedItem(SubBookmarks, 'List Bookmarks in This Unit...', InvokeBookmarksList);
+  AddWrappedItem(SubBookmarks, 'Go to Bookmark...', InvokeBookmarksGoto);
+  AddSeparator(SubBookmarks);
+  AddWrappedItem(SubBookmarks, 'Strip Bookmarks from This Unit...', InvokeBookmarksStrip);
+  AddWrappedItem(SubBookmarks, 'Restore Bookmarks...', InvokeBookmarksRestore);
+
   { v0.46: Index && Maintenance submenu }
   var SubMaint: TMenuItem:= TMenuItem.Create(RootMenu);
   SubMaint.Caption:= 'Index && Maintenance';
@@ -7773,6 +7785,17 @@ begin
     implementation-private here, so wire it through the same hook pattern as
     the SaveNotifier hooks above. }
   DragLint.Plugin.DockForm.GButterflyNav:= DLNavigateToSource;
+  { E-BOOKMARKS IDE half: same hook pattern -- Bookmarks.pas does not use Editor. }
+  DragLint.Plugin.Bookmarks.GBookmarkNavigate:=
+    procedure(AFile: string; ALine: Integer)
+    begin
+      DLNavigateToSource(AFile, ALine);
+    end;
+  DragLint.Plugin.Bookmarks.GBookmarkPick:=
+    function(ACaption, APrompt: string; AItems: TArray<string>): Integer
+    begin
+      Result:= DLPickFromList(ACaption, APrompt, AItems);
+    end;
   { Session 78: the job queue now DEFERS heavy jobs while `ide-release` holds
     the engine, and says so once per deferral episode. It reports through a
     hook rather than calling DebugLog directly because JobQueue.pas must stay
