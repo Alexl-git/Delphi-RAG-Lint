@@ -156,6 +156,49 @@ $dfm = [IO.File]::ReadAllText((P 'TForm1.dfm'))
 Check 'T8 --apply --only-type TSrcLbl: dfm has lblOne: TDstLbl and every TSrcBtn untouched' `
   (($r.Code -eq 0) -and ($dfm -match 'lblOne: TDstLbl') -and ($dfm -match 'btnOne: TSrcBtn') -and ($dfm -match 'btnIn: TSrcBtn') -and ($dfm -match 'btnTwo: TSrcBtn')) $dfm
 
+# ---- E1 (146 c2): the .dfm is read at its own encoding, not as ANSI ------------
+# A UTF-8 + BOM form whose instance name holds a non-ASCII letter: the CLI's --only /
+# --only-type reads decoded the .dfm as ANSI, so the name was mojibake and never matched.
+$ue = [string][char]0x00DC
+$u8 = New-Object System.Text.UTF8Encoding($true)
+function W8([string]$n,[string]$t){ [IO.File]::WriteAllText((Join-Path $WorkDir $n), ($t -replace "`r?`n","`r`n"), $u8) }
+W8 'U8Form.pas' @"
+unit U8Form;
+
+interface
+
+uses
+  Classes, LibT;
+
+type
+  TU8Form = class(TComponent)
+    btn${ue}ber: TSrcBtn;
+  end;
+
+implementation
+
+{`$R *.dfm}
+
+end.
+"@
+W8 'U8Form.dfm' @"
+object U8Form: TU8Form
+  object btn${ue}ber: TSrcBtn
+    Caption = 'Gr${ue}n'
+  end
+end
+"@
+& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+function ApplyU8([string[]]$Extra) {
+  $o = (& $Exe @(@('convert-apply', '--unit', (P 'U8Form.pas'), '--rules', (P 'two.rules'), '--db', $db, '--format', 'json') + $Extra) 2>&1) -join "`n"
+  return [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o }
+}
+$r = ApplyU8 @('--only', "btn${ue}ber"); $j = Json $r.Out
+# Only the NAME MATCH is asserted: the dfm extractor stores a non-ASCII identifier cut at the
+# first non-ASCII letter ("btn"), so the plan cannot locate the block (NEXT-BUMP, dfm grammar);
+# that is not this contract. RED before the fix: only_unmatched = [btn<U-umlaut>ber].
+Check 'E1a --only btn<U-umlaut>ber on a UTF-8+BOM .dfm: the name is MATCHED (was: unmatched, ANSI mojibake)' `
+  (($null -ne $j) -and (@($j.only_matched).Count -eq 1) -and (@($j.only_unmatched).Count -eq 0)) $r.Out
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0

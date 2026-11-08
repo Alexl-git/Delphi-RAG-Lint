@@ -32128,7 +32128,7 @@ begin
     Result:= 'skipped-no-dfm'
   else if not HasConvert then
     Result:= 'skipped-no-convert-rules'
-  else if (Length(FindConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules, AOnly)) = 0) and
+  else if (Length(FindConvertInstances(ReadUnitText(ADfmPath), ARules, AOnly)) = 0) and
           not AHasRetype then
     Result:= 'skipped-no-instances';
 end;
@@ -33107,17 +33107,17 @@ var
     { wave 148 CV (C12 N5): --only-type expands to this unit's instance names }
     OnlyEff:= AArgs.OnlySections;
     if Length(AArgs.OnlyTypes) > 0 then
-      ExpandOnlyTypes(if TFile.Exists(DfmPath) then TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)) else '',
+      ExpandOnlyTypes(if TFile.Exists(DfmPath) then ReadUnitText(DfmPath) else '',
         Rules, AArgs.OnlyTypes, OnlyEff, JCtx.OnlyMatched, JCtx.OnlyUnmatched);
     { C13 N3: which --only names name an object of a #convert From type }
     if Length(AArgs.OnlySections) > 0 then
-      SplitOnlyNames(if TFile.Exists(DfmPath) then TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)) else '',
+      SplitOnlyNames(if TFile.Exists(DfmPath) then ReadUnitText(DfmPath) else '',
         Rules, OnlyEff, JCtx.OnlyMatched, JCtx.OnlyUnmatched);
     { 1.25.1: a kept parent's nested From-type children convert with it
       (the --only unmatched line is printed below, once C8 N2a's code-only
       names have been matched) }
     if (Length(OnlyEff) > 0) and TFile.Exists(DfmPath) then
-      JCtx.OnlyIncluded:= NestedOnlyInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)), Rules, OnlyEff);
+      JCtx.OnlyIncluded:= NestedOnlyInstances(ReadUnitText(DfmPath), Rules, OnlyEff);
     if not UseJson then
       for var NO: TNestedOnly in JCtx.OnlyIncluded do
         Writeln(Format('--only: %s converts too -- nested in %s', [NO.Instance.InstanceName, NO.Parent]));
