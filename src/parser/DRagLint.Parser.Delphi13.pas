@@ -2661,6 +2661,21 @@ begin
   if Names <> '' then Result:= IMPLEMENTS_DIRECTIVE + ' ' + Names;
 end;
 
+{ E-RENAME-RESIDUE (1.47): an indexed property `property Items[I: Integer]: T ...;`
+  records 'indexed', the default one (`...; default;`) 'indexed default'; '' for
+  every other property. The `default` of an array property is a procAttribute
+  after the `;` (ProcDirectivesOf reads it); `default <value>` of a scalar one is
+  the defaultValue field and is not this. The resolver types `A.Items[0]` and
+  `A[0]` from it. Pinned by tests\autotest\run_rename_residue.ps1. }
+function PropIndexDirectives(const ANode: TTSNode): string;
+begin
+  Result:= '';
+  if ANode.ChildByField('args').IsNull then Exit;
+  Result:= PROPERTY_INDEXED_DIRECTIVE;
+  if ContainsText(' ' + ProcDirectivesOf(ANode) + ' ', ' ' + PROPERTY_DEFAULT_DIRECTIVE + ' ') then
+    Result:= Result + ' ' + PROPERTY_DEFAULT_DIRECTIVE;
+end;
+
 function WalkDeclProc(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string; AAsMethod: Boolean): Integer;
 var
   NameNode : TTSNode    ;
@@ -3447,8 +3462,10 @@ begin
         else if PHasGet then PAccess:= 'ro'
         else if PHasSet then PAccess:= 'wo'
         else PAccess:= ''; // bare redeclaration -> NULL -> inherits ancestor's accessors
+        var PDirs:= PropImplementsDirective(ANode, AState.Source);
+        if PDirs = '' then PDirs:= PropIndexDirectives(ANode); { E-RENAME-RESIDUE }
         AState.Emit(skProperty, PName, PQName, AParentSymbolIdx, ANode, TypeTextOf(ANode, AState.Source), AState.CurrentVisibility, '', False, False, PAccess,
-                    PropImplementsDirective(ANode, AState.Source), AState.CurrentVisExplicit); { v22: same reasoning as the field emit above }
+                    PDirs, AState.CurrentVisExplicit); { v22: same reasoning as the field emit above }
       end;
     end;
     EmitPropertySpecRefs(ANode, AState, AParentQualifiedName); { E-PARSER-NOREFS }

@@ -261,6 +261,7 @@ type
     Line, Col: Integer;
     HasReceiverRow: Boolean;
     ElementText: string;  { ref_element_types: `A[i]`'s type when the project does not declare it }
+    ReceiverTypeText: string;  { ref_types.type_qname of the receiver when it has no project symbol: `Lines: TStringList` }
   end;
 
   TChainVerdict = (cvTarget, cvOther, cvUndecided);
@@ -556,7 +557,7 @@ begin
     Q.Connection:= FConn;
     Q.SQL.Text:= 'SELECT r.id, r.file_id, r.symbol_id, r.enclosing_symbol_id, r.kind, r.receiver_text, r.external_target, ' +
                  'r.start_line, r.start_col, ce.confidence, ' +
-                 (if FHasFacts then 'rr.receiver_ref_id, t.type_symbol_id, ' else 'NULL AS receiver_ref_id, NULL AS type_symbol_id, ') +
+                 (if FHasFacts then 'rr.receiver_ref_id, t.type_symbol_id, t.type_qname AS receiver_type_text, ' else 'NULL AS receiver_ref_id, NULL AS type_symbol_id, NULL AS receiver_type_text, ') +
                  (if FHasElementFacts then 'e.type_symbol_id AS element_type, e.type_qname AS element_text '
                   else 'NULL AS element_type, NULL AS element_text ') +
                  'FROM refs r LEFT JOIN call_edges ce ON ce.ref_id = r.id ' +
@@ -579,6 +580,7 @@ begin
     var FRcvType:= Q.FieldByName('type_symbol_id');
     var FElemType:= Q.FieldByName('element_type');
     var FElemText:= Q.FieldByName('element_text');
+    var FRcvTypeText:= Q.FieldByName('receiver_type_text');
     while not Q.Eof do
     begin
       var Row:= Default(TRefRow);
@@ -595,6 +597,7 @@ begin
       Row.HasReceiverRow:= not FRcvRef.IsNull;
       Row.ReceiverType  := if FElemType.IsNull then FRcvType.AsLargeInt else FElemType.AsLargeInt;
       Row.ElementText   := FElemText.AsString;
+      Row.ReceiverTypeText:= FRcvTypeText.AsString;
       var Key:= KeyOf(Row.FileId, Row.Line, Row.Col);
       var Rows: TList<TRefRow>;
       if not Result.TryGetValue(Key, Rows) then
@@ -1491,7 +1494,8 @@ begin
     Format('"%s" sits here and the index holds no ref for it: an inactive {$IFDEF} branch, or a chain the parse dropped', [FOld]));
 end;
 
-{ E-RENAME-ELEMENT-TYPE: `A[i].X` whose element type the project does not declare (a built-in or library type). A
+{ E-RENAME-ELEMENT-TYPE: `A[i].X` whose element type the project does not declare (a built-in or library type);
+  E-RENAME-RESIDUE: also `B.X` whose receiver B has such a static type (ref_types.type_qname, no symbol). A
   project member can answer only through a helper; the target's own type cannot be it, or the row would hold a symbol. }
 function TProver.DecideOutsideElement(const pType: string; out pKind, pWhy: string): TChainVerdict;
 const
@@ -1510,12 +1514,12 @@ begin
   else if Length(ReadSyms('name = :n COLLATE NOCASE AND kind IN (' + CTypeKinds + ')', pType)) > 0 then
   begin
     pKind:= CRefuseAmbiguousType;
-    pWhy := Format('the element type "%s" is also a project type the index did not pick', [pType]);
+    pWhy := Format('the type "%s" is also a project type the index did not pick', [pType]);
   end
   else if not (MatchText(pType, CBuiltinTypes) or LibKindOf(pType, LibKind)) then
   begin
     pKind:= if Length(FLibs) = 0 then CRefuseNoLibrary else CRefuseUnresolvedAncestor;
-    pWhy := Format('the element type "%s" is in neither index', [pType]);
+    pWhy := Format('the type "%s" is in neither index', [pType]);
   end
   else
   begin
@@ -1536,6 +1540,13 @@ begin
   end;
 end;
 
+{ E-RENAME-RESIDUE: a bare type identifier -- no unit qualifier, generic, pointer, array or blank -- the only
+  receiver type text DecideOutsideElement can look up by name in both indexes. }
+function IsPlainTypeName(const pText: string): Boolean;
+begin
+  Result:= (pText <> '') and IsValidIdent(pText);
+end;
+
 { Only unbound rows on the token: the receiver's static type decides, or nothing does. }
 procedure TProver.ClassifyUnbound(const pTok: TTok; const pRow: TRefRow);
 var
@@ -1552,13 +1563,15 @@ begin
     Refuse(CRefuseNoFacts, pTok.Path, pTok.Line, pTok.Col, Prefix + 'the index predates ref_receivers: run index --resolve-only')
   else if pRow.ReceiverText = '' then
     Refuse(CRefuseBareUnbound, pTok.Path, pTok.Line, pTok.Col, Prefix + 'no receiver, and the resolver bound it to nothing')
-  else if (pRow.ReceiverType <= 0) and (pRow.ElementText = '') then
+  else if (pRow.ReceiverType <= 0) and (pRow.ElementText = '') and not IsPlainTypeName(pRow.ReceiverTypeText) then
     Refuse(CRefuseReceiverUntyped, pTok.Path, pTok.Line, pTok.Col,
       Prefix + Format('the receiver "%s" has no static type in the index', [pRow.ReceiverText]))
   else
   begin
+    { E-RENAME-RESIDUE: a receiver typed by a type the project does not declare (`Lines: TStringList`) is decided
+      like a library element type. }
     var Verdict:= if pRow.ReceiverType > 0 then DecideChain(pRow.ReceiverType, pTok.FileId, Kind, Why)
-                  else DecideOutsideElement(pRow.ElementText, Kind, Why);
+                  else DecideOutsideElement(if pRow.ElementText <> '' then pRow.ElementText else pRow.ReceiverTypeText, Kind, Why);
     case Verdict of
       cvTarget:
       begin

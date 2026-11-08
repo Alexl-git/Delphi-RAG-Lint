@@ -1231,7 +1231,12 @@ type
     function CandInScope(ADeclFile, ACandFile: Int64): Boolean;
     /// <summary>Resolve a raw type text (a param/field/local Signature) to a
     /// defining class/interface/record symbol id, in scope of ADeclFileId. 0 when
-    /// unresolvable OR ambiguous (FP-conservative, mirrors ResolveAncestry).</summary>
+    /// unresolvable OR ambiguous (FP-conservative, mirrors ResolveAncestry).
+    /// E-RENAME-RESIDUE (1.47): two or more in scope are not ambiguous when Delphi's own
+    /// rule decides -- the unit qualifier as written (`ResA.TPair`), else the unit's own
+    /// interface-section top-level type, else the unit listed LAST in the uses clause, when
+    /// every candidate is a top-level type of a distinct unit of ONE uses section (the
+    /// section of the type text is not known, so a split across sections still answers 0).</summary>
     /// <param name="ATypeText"><!-- drag-lint:auto type -->const string</param>
     /// <param name="ADeclFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto -->Int64 -- Observed: 0; Cands[InScopeIdx].Id;
@@ -4385,6 +4390,78 @@ var
   Cands: TList<TSymbol>;
   InScopeIdx, InScopeCount: Integer;
   ci   : Integer       ;
+
+  { E-RENAME-RESIDUE: Delphi's own tie-break among two or more in-scope types of a name, or 0. A candidate counts
+    only as a TOP-LEVEL type (its qualified name is its unit's name, a dot, its name): a nested one is visible by
+    its bare name only inside its class, and where the text sits is not known here. }
+  function PickShadowingType(ACands: TList<TSymbol>; AFile: Int64; const AQual: string): Int64;
+  var
+    Picked  : TList<TSymbol>;
+    BestLine, BestCol: Integer;
+    BestSec : TUnitUseSection;
+  begin
+    Result:= 0;
+    Picked:= TList<TSymbol>.Create;
+    try
+      for var C: TSymbol in ACands do
+        if CandInScope(AFile, C.FileId) then Picked.Add(SymbolById(C.Id));
+      var Units: TArray<string>:= [];
+      for var S: TSymbol in Picked do
+      begin
+        var UnitName: string:= ChangeFileExt(ExtractFileName(FStore.GetFilePath(S.FileId)), '');
+        if not SameText(S.QualifiedName, UnitName + '.' + S.Name) then Exit; // nested, or a unit spelled otherwise
+        Units:= Units + [UnitName];
+      end;
+      { 1. The qualifier as written: `ResA.TPair`. A qualifier no candidate matches declines. }
+      if AQual <> '' then
+      begin
+        for var I: Integer:= 0 to Picked.Count - 1 do
+          if SameText(Units[I], AQual) then
+          begin
+            if Result <> 0 then Exit(0);
+            Result:= Picked[I].Id;
+          end;
+        Exit;
+      end;
+      { 2. The unit's own interface-section type shadows every used one. }
+      for var I: Integer:= 0 to Picked.Count - 1 do
+        if Picked[I].FileId = AFile then
+        begin
+          if (Result <> 0) or not SameText(Picked[I].Section, 'interface') then Exit(0);
+          Result:= Picked[I].Id;
+        end;
+      if Result <> 0 then Exit;
+      { 3. The unit listed last wins, when every candidate's unit is in ONE uses section, each once. }
+      BestLine:= -1;
+      BestCol := -1;
+      BestSec := Low(TUnitUseSection);
+      var UsesList: TArray<TUnitUse>:= FStore.GetUnitUsesForFile(AFile);
+      for var I: Integer:= 0 to Picked.Count - 1 do
+      begin
+        var Hits: Integer:= 0;
+        var Hit : TUnitUse:= Default(TUnitUse);
+        for var U: TUnitUse in UsesList do
+          if SameText(U.UnitName, Units[I]) or EndsText('.' + U.UnitName, Units[I]) then
+          begin
+            Inc(Hits);
+            Hit:= U;
+          end;
+        if Hits <> 1 then Exit(0);
+        if (I > 0) and (Hit.Section <> BestSec) then Exit(0);
+        BestSec:= Hit.Section;
+        if (Hit.StartLine > BestLine) or ((Hit.StartLine = BestLine) and (Hit.StartCol > BestCol)) then
+        begin
+          BestLine:= Hit.StartLine;
+          BestCol := Hit.StartCol;
+          Result  := Picked[I].Id;
+        end
+        else if (Hit.StartLine = BestLine) and (Hit.StartCol = BestCol) then Exit(0); // two types of one unit
+      end;
+    finally
+      Picked.Free;
+    end;
+  end;
+
 begin
   Result:= 0;
   // Normalize the same way ResolveAncestry does: strip generics + dotted qualifier.
@@ -4397,6 +4474,7 @@ begin
   // LastDelimiter that ResolveAncestry uses), hence Copy from DotPos + 2 to land
   // one char PAST the dot. A future "switch to 1-based" edit must also drop the +1.
   var DotPos: Integer:= N.LastDelimiter('.');
+  var Qual: string:= if DotPos >= 0 then Trim(Copy(N, 1, DotPos)) else ''; { E-RENAME-RESIDUE: `ResA.TPair` -> 'ResA' }
   if DotPos >= 0 then N:= Trim(Copy(N, DotPos + 2, MaxInt));
   if N = '' then Exit;
   if not FNameToCands.TryGetValue(LowerCase(N), Cands) then Exit;
@@ -4413,7 +4491,9 @@ begin
   if InScopeCount = 1 then
     Result:= Cands[InScopeIdx].Id
   else if (InScopeCount = 0) and (Cands.Count = 1) then
-    Result:= Cands[0].Id;
+    Result:= Cands[0].Id
+  else if InScopeCount > 1 then
+    Result:= PickShadowingType(Cands, ADeclFileId, Qual);
 end;
 
 function TCallResolver.ChildrenOf(AParentId: Int64): TList<TSymbol>;
@@ -7481,6 +7561,7 @@ var
   PrevText: string ; // item 4: the type text before the step that failed
   TextFile : Int64 ; // the unit that wrote TypeText: its names are resolved there
   TextScope: Int64 ; // the scope that wrote it: its generic parameters are not types
+  Indexed  : Boolean; // E-RENAME-RESIDUE: the segment named an indexed property, so its first '[' is the property's own
 
   { The text names a generic parameter of the scope that wrote it or of the site. }
   function NamesGenericHere(const AText: string): Boolean;
@@ -7488,6 +7569,49 @@ var
     Result:= False;
     for var Part: string in AText.Split(['<', '>', ',', ' '], TStringSplitOptions.ExcludeEmpty) do
       Result:= Result or ScopeNamesGeneric(TextScope, LowerCase(Part)) or ScopeNamesGeneric(ACallRef.EnclosingSymbolId, LowerCase(Part));
+  end;
+
+  { E-RENAME-RESIDUE: `A[i]` on a class / record / interface. The nearest type of its chain that declares an
+    `indexed default` property answers that property's type; one whose heritage is a library list or dictionary
+    (`class(TObjectList<TItem>)`) answers its element. The text is read in the unit and scope that wrote it. }
+  function DefaultElement(AOwner: Int64): Boolean;
+  begin
+    Result:= False;
+    var Chain: TArray<Int64>:= [AOwner];
+    for var A: TTypeAncestor in AncestorsOf(AOwner) do
+      if A.Resolved and (A.SymbolId > 0) then Chain:= Chain + [A.SymbolId];
+    for var Id: Int64 in Chain do
+    begin
+      var Kids: TList<TSymbol>:= ChildrenOf(Id);
+      if Kids <> nil then
+        for var P: TSymbol in Kids do
+          if (P.Kind = skProperty) and SameText(P.Directives, PROPERTY_INDEXED_DIRECTIVE + ' ' + PROPERTY_DEFAULT_DIRECTIVE) then
+          begin
+            TypeText := Trim(P.Signature);
+            TextFile := P.FileId;
+            TextScope:= P.ParentId;
+            Exit((TypeText <> '') and not NamesGenericHere(TypeText));
+          end;
+      var Owner: TSymbol:= SymbolById(Id);
+      var Heritage: string:= Trim(Owner.Heritage);
+      var Depth: Integer:= 0;
+      for var I: Integer:= 1 to Length(Heritage) do
+        if Heritage[I] = '<' then Inc(Depth)
+        else if Heritage[I] = '>' then Dec(Depth)
+        else if (Heritage[I] = ',') and (Depth = 0) then
+        begin
+          Heritage:= Trim(Copy(Heritage, 1, I - 1));
+          Break;
+        end;
+      var Element: string:= LibraryIndexedElementText(Heritage, Owner.FileId);
+      if Element <> '' then
+      begin
+        TypeText := Element;
+        TextFile := Owner.FileId;
+        TextScope:= Owner.Id;
+        Exit(not NamesGenericHere(TypeText));
+      end;
+    end;
   end;
 
   { Step the current type through one selector: '[' (element) or '^' (pointee).
@@ -7501,7 +7625,15 @@ var
       if TypeText = '' then
       begin
         if TypeId <= 0 then Exit;
-        if SymbolById(TypeId).Kind <> skTypeAlias then Exit; // a class / record: no default property model
+        if SymbolById(TypeId).Kind <> skTypeAlias then
+        begin
+          if ASel = '[' then
+          begin
+            Result:= DefaultElement(TypeId); // a class / record: its default property, or a list ancestor
+            if Result then TypeId:= 0;
+          end;
+          Exit;
+        end;
         var Alias: TSymbol:= SymbolById(TypeId);
         TypeText := Trim(Alias.Signature);
         TypeId   := 0;
@@ -7548,6 +7680,7 @@ var
       TypeText := Trim(LocalTypeText(Decl));
       TextFile := Decl.FileId;
       TextScope:= Decl.ParentId;
+      Indexed  := (Decl.Kind = skProperty) and StartsText(PROPERTY_INDEXED_DIRECTIVE, Decl.Directives);
     end
     else if Declared then
       Exit(False) // a local of that name exists but none covers the site
@@ -7589,6 +7722,7 @@ var
     TypeId   := 0;
     TextFile := Member.FileId;
     TextScope:= Member.ParentId;
+    Indexed  := (Member.Kind = skProperty) and StartsText(PROPERTY_INDEXED_DIRECTIVE, Member.Directives);
     Result   := (Member.Id > 0) and (TypeText <> '');
   end;
 
@@ -7619,10 +7753,13 @@ begin
   while Ok and (SegIx <= High(Segs)) do
   begin
     PrevText:= if TypeText <> '' then TypeText else if TypeId > 0 then SymbolById(TypeId).Name else '';
+    Indexed := False;
     Ok:= SplitSelectorSegment(Segs[SegIx], Name, Sels)
          and (if SegIx = 0 then TypeHead(Name) else TypeMember(Name));
     if (not Ok) and (SegIx > 0) and (PrevText <> '') then StopAt(SegIx);
-    for var Sel: Char in Sels do Ok:= Ok and ApplySelector(Sel);
+    for var Sel: Char in Sels do
+      if Ok and Indexed and (Sel = '[') then Indexed:= False // the property's own index: its type IS the element
+      else Ok:= Ok and ApplySelector(Sel);
     Inc(SegIx);
   end;
   Result:= if Ok then CurrentTypeId else 0;
