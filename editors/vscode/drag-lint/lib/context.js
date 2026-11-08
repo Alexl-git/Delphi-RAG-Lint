@@ -29,4 +29,13 @@ function initOptions(get) {
   return { project: get('project') || '', platform: get('platform') || '', config: get('config') || '' };
 }
 
-module.exports = { PLATFORMS, baseName, formatStatus, initOptions };
+// Language ids of files that can belong to a Delphi project. The status item is
+// shown only for these; on a .md / .json the server finds no owning project and
+// the item would read 'no project | default platform' for no reason.
+const DELPHI_LANGUAGES = ['pascal', 'objectpascal', 'delphi', 'dfm', 'delphi-project'];
+
+function isDelphiLanguage(id) {
+  return DELPHI_LANGUAGES.includes(String(id || '').toLowerCase());
+}
+
+module.exports = { PLATFORMS, baseName, formatStatus, initOptions, isDelphiLanguage };
