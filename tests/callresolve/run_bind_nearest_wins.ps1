@@ -11,7 +11,7 @@
   certain-only consumer (rename proof, effects, taint) dropped the site.
 
   POSITIVE CONTROL: on the old engine the OVERRIDE, REINTRODUCE, OVERLOAD-OVERRIDE,
-  INTERFACE-CHAIN and PARENLESS checks are RED; the CONTROL checks are green on
+  INTERFACE-CHAIN and PARENLESS checks are RED (RENAMED-PARAM is RED before 149); the CONTROL checks are green on
   both engines. A real tie must stay ambiguous: nearest-wins removes SHADOWED
   candidates, it never picks between candidates at one level.
 
@@ -223,8 +223,9 @@ try {
   # Sibling interfaces are no chain: neither is nearer than the other.
   $z = $edges['IfaceSiblings']
   Check 'CONTROL: sibling interfaces stay ambiguous' (($null -ne $z) -and ($z['conf'] -eq 'ambiguous')) "got $($z['conf']) $($z['target'])"
-  # Documented limit: a renamed parameter is not recognised as the same signature.
-  Edge 'LIMIT: an override with a renamed parameter stays ambiguous' 'RenInt' 'ambiguous' 'uChain.TMid.Ren'
+  # 146 b4 (lane 148 PB, 149 bump): parameters compare by modifier + type, not by text, so an
+  # override that RENAMES a parameter (TMid.Ren(BV) over TBase.Ren(AV)) is still the overridden twin.
+  Edge 'RENAMED-PARAM: the override renaming a parameter wins' 'RenInt' 'certain' 'uChain.TMid.Ren'
 } finally {
   Pop-Location
   if (Test-Path -LiteralPath $scratch) { [IO.Directory]::Delete($scratch, $true) }
