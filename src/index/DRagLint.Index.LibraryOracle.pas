@@ -37,9 +37,13 @@ type
   TExternalKind = (ekCall, ekMemberAccess, ekBareCall);
 
   /// <summary>Counters of the oracle's outcomes, printed on the resolve: summary line.</summary>
-  /// <remarks>Every Bind / BindHead / BindBare call increments exactly one counter.</remarks>
+  /// <remarks>Every Bind / BindHead / BindBare call increments exactly one counter.
+  /// Intrinsic and LateBound (E-RECV-UNDECIDABLE D08 / D10) name declines that have no
+  /// routine to bind to: a dynamic-array constructor (`TBytes.Create`) and a call through an
+  /// event property or procedural field (`V.OnColumnSizeChanged(V, nil)`). Both leave the
+  /// site unbound exactly as before; they only stop it reading as a miss.</remarks>
   TOracleStats = record
-    Bound, AmbiguousType, NoMember, NoStore, NoType: Integer;
+    Bound, AmbiguousType, NoMember, NoStore, NoType, Intrinsic, LateBound: Integer;
   end;
 
 
@@ -70,6 +74,12 @@ type
     FStems    : TDictionary<string, string>;
     FFileUses : TDictionary<string, TArray<string>>;
     FHelperMembers: TDictionary<string, string>;
+    FHelperTypes  : TDictionary<string, TArray<TLibCand>>;
+    FAliases      : TDictionary<string, TArray<TLibCand>>;
+    function IsDynArrayType(const ATypeText: string; const AUses: TArray<string>; ADepth: Integer): Boolean;
+    function HelperCands(const ALeaf: string): TArray<TLibCand>;
+    function PickTypeOrHelper(const ATypeText: string; const ATypeUses, AHelperUses: TArray<string>;
+      out ACand: TLibCand; out AReason: string): Boolean;
     function HelpersDeclare(const AStore: ISymbolStore; const AStoreTag, ATypeName, AMember: string): Boolean;
     function CandProvesAbsent(const ACand: TLibCand; const AMember: string; const AProjectStore: ISymbolStore): Boolean;
     function Key(AStore: Integer; AId: Int64): string;
@@ -86,10 +96,11 @@ type
     function Ancestors(AStore: Integer; AId: Int64): TArray<TTypeAncestor>;
     function DeclaringMember(const ACand: TLibCand; const AName: string; out AHit: TSymbol): Boolean;
     function ImplicitRootMember(const ACand: TLibCand; const AName: string; out AHit: TSymbol): Boolean;
-    function AgreedMember(const ATypeText, AMember: string; AKind: TExternalKind): string;
+    function AgreedMember(const ATypeText, AMember: string; AKind: TExternalKind; const AUses: TArray<string>): string;
     function VisibleOf(const ACands: TArray<TLibCand>; const AUses: TArray<string>): TArray<TLibCand>;
     function UnitRoutine(const AChain, AMember: string; const AUses: TArray<string>; out AQName: string): Integer;
-    function StepPending(var ACand: TLibCand; const APending: string; out AReason: string): Boolean;
+    function StepPending(var ACand: TLibCand; const APending: string; const AHelperUses: TArray<string>;
+      out AReason: string): Boolean;
     function MemberOf(const ACand: TLibCand; const AMember: string; AKind: TExternalKind;
       out AReason: string): string;
     function Count(const AResult, AReason: string): string;
@@ -107,9 +118,22 @@ type
     /// <param name="AReason">ambiguous-type|no-member|no-store|no-type when the result is ''.</param>
     /// <returns>The qualified name, or '' with AReason set.</returns>
     /// <remarks>A type name Pick cannot choose still answers when every candidate is a class
-    /// and all of them give the SAME member (`Acc.Free` on TList): the choice cannot matter.</remarks>
+    /// and all of them give the SAME member (`Acc.Free` on TList): the choice cannot matter.
+    /// A name no library type answers (a built-in such as string or Boolean, at the head or
+    /// as a pending segment's type) is answered by its one library helper visible from the
+    /// calling file (`S.Split` -> TStringHelper.Split); two visible helpers decline.</remarks>
     function Bind(const ATypeText, APending, AMember: string; AKind: TExternalKind;
       const AUsesUnits: TArray<string>; out AReason: string): string;
+    /// <summary>E-RECV-UNDECIDABLE D08: counts a dynamic-array constructor call whose receiver
+    /// is a generic type text no head rung reads (`TArray&lt;Integer&gt;.Create(1)`) as
+    /// Stats.Intrinsic.</summary>
+    /// <param name="AReceiver">The call's receiver text as written.</param>
+    /// <param name="AMember">The called member; only `Create` counts.</param>
+    /// <param name="AUsesUnits">The calling file's used units.</param>
+    /// <returns>True when the site was counted.</returns>
+    /// <remarks>Binds nothing and writes nothing; it is not one of the Bind calls the
+    /// "exactly one counter" rule of TOracleStats speaks of, and touches no other counter.</remarks>
+    function NoteIntrinsic(const AReceiver, AMember: string; const AUsesUnits: TArray<string>): Boolean;
     /// <summary>Binds a receiver whose HEAD identifier no project rung typed: in Delphi's
     /// order, a member inherited by the enclosing class from AScopeType, a routine of a used
     /// unit the whole chain names (`System.SysUtils.DeleteFile`), a library type, a library
@@ -190,6 +214,10 @@ const
   R_NO_MEMBER = 'no-member';
   R_NO_STORE  = 'no-store';
   R_NO_TYPE   = 'no-type';
+  R_INTRINSIC = 'intrinsic';   // D08: no declaration exists (`TBytes.Create`)
+  R_LATE_BOUND= 'late-bound';  // D10: the routine is chosen at run time (an event property)
+  { How deep IsDynArrayType follows an alias chain (`TBytes = TArray<Byte>` -> `array of T`). }
+  MAX_ALIAS_HOPS = 3;
 
 function IsIdent(const S: string): Boolean;
 begin
@@ -283,10 +311,14 @@ begin
   FStems    := TDictionary<string, string>.Create;
   FFileUses := TDictionary<string, TArray<string>>.Create;
   FHelperMembers:= TDictionary<string, string>.Create;
+  FHelperTypes  := TDictionary<string, TArray<TLibCand>>.Create;
+  FAliases      := TDictionary<string, TArray<TLibCand>>.Create;
 end;
 
 destructor TLibraryOracle.Destroy;
 begin
+  FAliases.Free;
+  FHelperTypes.Free;
   FHelperMembers.Free;
   FFileUses.Free;
   FStems.Free;
@@ -435,6 +467,85 @@ begin
   Result:= Pick(Cached(FTypes, Leaf, TYPE_KINDS, True), AUses, ACand, AReason);
 end;
 
+{ E-RECV-UNDECIDABLE D08: True when ATypeText names a dynamic array type: `TArray<X>` (the
+  generic arguments do not matter) or a library alias whose every visible declaration is
+  `array of ..`, directly or through at most MAX_ALIAS_HOPS further aliases
+  (`TBytes = TArray<Byte>`). A name that is also a visible class / record / interface, or that
+  no visible alias declares, is not one. }
+function TLibraryOracle.IsDynArrayType(const ATypeText: string; const AUses: TArray<string>;
+  ADepth: Integer): Boolean;
+begin
+  var Text: string:= Trim(ATypeText);
+  if Text.ToLower.StartsWith('array of') then Exit(True);
+  var Leaf: string:= NormalizeTypeLeaf(Text);
+  { Too deep, not a plain name, or a visible class / record / interface of the name. }
+  if (ADepth > MAX_ALIAS_HOPS) or (Leaf = '') or Leaf.StartsWith('^')
+     or (Length(VisibleOf(Cached(FTypes, Leaf, TYPE_KINDS, True), AUses)) > 0) then Exit(False);
+  var Seen: TArray<TLibCand>:= VisibleOf(Cached(FAliases, Leaf, [skTypeAlias], False), AUses);
+  Result:= Length(Seen) > 0;
+  for var C: TLibCand in Seen do
+    Result:= Result and IsDynArrayType(C.Sig, LibraryUses(C.Store, C.FileId) + [IMPLICIT_ROOT_UNIT], ADepth + 1);
+end;
+
+function TLibraryOracle.NoteIntrinsic(const AReceiver, AMember: string; const AUsesUnits: TArray<string>): Boolean;
+begin
+  var Lt: Integer:= Pos('<', AReceiver);
+  var GenericHead: Boolean:= (Lt > 1) and AReceiver.EndsWith('>') and IsIdent(Copy(AReceiver, 1, Lt - 1));
+  Result:= (Length(FStores) > 0) and SameText(AMember, 'Create') and GenericHead
+           and IsDynArrayType(AReceiver, AUsesUnits + [IMPLICIT_ROOT_UNIT, 'sysinit'], 0);
+  if Result then Inc(FStats.Intrinsic);
+end;
+
+{ E-RECV-UNDECIDABLE D05: every library helper whose target is named ALeaf
+  (`record helper for string` -> TStringHelper), one candidate per helper. }
+function TLibraryOracle.HelperCands(const ALeaf: string): TArray<TLibCand>;
+begin
+  var K: string:= LowerCase(ALeaf);
+  if FHelperTypes.TryGetValue(K, Result) then Exit;
+  Result:= [];
+  for var Si:= 0 to High(FStores) do
+  begin
+    if FStores[Si] = nil then Continue;
+    for var H: THelperEdge in FStores[Si].FindHelpersOfType(ALeaf) do
+    begin
+      var S: TSymbol:= FStores[Si].GetSymbolById(H.HelperSymbolId);
+      if S.Id <= 0 then Continue;
+      var C: TLibCand:= Default(TLibCand);
+      C.Store   := Si;
+      C.Ids     := [S.Id];
+      C.QName   := S.QualifiedName;
+      C.Name    := S.Name;
+      C.UnitStem:= UnitStemOf(Si, S.FileId);
+      C.FileId  := S.FileId;
+      C.Kind    := S.Kind;
+      C.Sig     := S.Signature;
+      Result:= Result + [C];
+    end;
+  end;
+  FHelperTypes.Add(K, Result);
+end;
+
+{ A type name no library type answers may still have members: a built-in type's
+  helper (`S.Split`, `B.ToString`). Only one helper per type is active in Delphi,
+  so exactly one visible helper answers; two decline. The helper's scope is the
+  CALLING file's (AHelperUses), whatever unit named the type. }
+function TLibraryOracle.PickTypeOrHelper(const ATypeText: string; const ATypeUses, AHelperUses: TArray<string>;
+  out ACand: TLibCand; out AReason: string): Boolean;
+begin
+  Result:= PickType(ATypeText, ATypeUses, ACand, AReason);
+  if Result or (AReason <> R_NO_TYPE) then Exit;
+  var Leaf: string:= NormalizeTypeLeaf(ATypeText);
+  if (Leaf = '') or Leaf.StartsWith('^') then Exit;
+  var Seen: TArray<TLibCand>:= VisibleOf(HelperCands(Leaf), AHelperUses);
+  if Length(Seen) = 1 then
+  begin
+    ACand  := Seen[0];
+    AReason:= '';
+    Exit(True);
+  end;
+  if Length(Seen) > 1 then AReason:= R_AMBIGUOUS;
+end;
+
 function TLibraryOracle.Kids(AStore: Integer; AId: Int64): TArray<TSymbol>;
 begin
   var K: string:= Key(AStore, AId);
@@ -493,13 +604,20 @@ begin
 end;
 
 { One target whichever candidate the type name means: every candidate is a class and each
-  declares the member under the same qualified name. }
-function TLibraryOracle.AgreedMember(const ATypeText, AMember: string; AKind: TExternalKind): string;
+  declares the member under the same qualified name. Only the candidates AUses can see are
+  asked when any is visible (a unit the file does not use cannot be what the name means --
+  wave-146 b7 leftover, `List.Free` on TList<T> beside Spring's unseen TList); with none
+  visible, every candidate is asked as before. }
+function TLibraryOracle.AgreedMember(const ATypeText, AMember: string; AKind: TExternalKind;
+  const AUses: TArray<string>): string;
 var
   Hit: TSymbol;
 begin
   Result:= '';
-  for var C: TLibCand in Cached(FTypes, NormalizeTypeLeaf(ATypeText), TYPE_KINDS, True) do
+  var Cands: TArray<TLibCand>:= Cached(FTypes, NormalizeTypeLeaf(ATypeText), TYPE_KINDS, True);
+  var Seen: TArray<TLibCand>:= VisibleOf(Cands, AUses);
+  if Length(Seen) > 0 then Cands:= Seen;
+  for var C: TLibCand in Cands do
   begin
     if (C.Kind <> skClass) or not DeclaringMember(C, AMember, Hit)
        or (Hit.Kind not in (if AKind = ekMemberAccess then OK_ACCESS else OK_CALL)) then Exit('');
@@ -581,7 +699,8 @@ begin
     Result:= Result and CandProvesAbsent(C, AMember, AProjectStore);
 end;
 
-function TLibraryOracle.StepPending(var ACand: TLibCand; const APending: string; out AReason: string): Boolean;
+function TLibraryOracle.StepPending(var ACand: TLibCand; const APending: string;
+  const AHelperUses: TArray<string>; out AReason: string): Boolean;
 var
   Hit : TSymbol ;
   Next: TLibCand;
@@ -598,7 +717,7 @@ begin
     end;
     { The member's type is named in ITS declaring unit: prefer that unit, then
       what that unit uses -- never the project file's uses. }
-    if not PickType(MemberTypeText(Hit), LibraryUses(ACand.Store, Hit.FileId), Next, AReason) then
+    if not PickTypeOrHelper(MemberTypeText(Hit), LibraryUses(ACand.Store, Hit.FileId), AHelperUses, Next, AReason) then
     begin
       if AReason = R_NO_TYPE then AReason:= R_NO_MEMBER;
       Exit(False);
@@ -614,9 +733,16 @@ var
   Hit: TSymbol;
 begin
   AReason:= '';
-  if DeclaringMember(ACand, AMember, Hit)
-     and (Hit.Kind in (if AKind = ekMemberAccess then OK_ACCESS else OK_CALL)) then
-    Exit(Hit.QualifiedName);
+  if DeclaringMember(ACand, AMember, Hit) then
+  begin
+    if Hit.Kind in (if AKind = ekMemberAccess then OK_ACCESS else OK_CALL) then Exit(Hit.QualifiedName);
+    { D10: a call through a property or field -- an event; what runs is decided at run time. }
+    if (AKind = ekCall) and (Hit.Kind in [skProperty, skField]) then
+    begin
+      AReason:= R_LATE_BOUND;
+      Exit('');
+    end;
+  end;
   AReason:= R_NO_MEMBER;
   Result := '';
 end;
@@ -628,6 +754,8 @@ begin
   else if AReason = R_AMBIGUOUS then Inc(FStats.AmbiguousType)
   else if AReason = R_NO_STORE then Inc(FStats.NoStore)
   else if AReason = R_NO_TYPE then Inc(FStats.NoType)
+  else if AReason = R_INTRINSIC then Inc(FStats.Intrinsic)
+  else if AReason = R_LATE_BOUND then Inc(FStats.LateBound)
   else Inc(FStats.NoMember);
 end;
 
@@ -640,12 +768,12 @@ begin
   Result := '';
   AReason:= '';
   if Length(FStores) = 0 then AReason:= R_NO_STORE
-  else if PickType(ATypeText, AUsesUnits + ['system', 'sysinit'], C, AReason)
-          and StepPending(C, APending, AReason) then
+  else if PickTypeOrHelper(ATypeText, AUsesUnits + ['system', 'sysinit'], AUsesUnits + ['system', 'sysinit'], C, AReason)
+          and StepPending(C, APending, AUsesUnits + ['system', 'sysinit'], AReason) then
     Result:= MemberOf(C, AMember, AKind, AReason)
   else if (AReason = R_AMBIGUOUS) and (APending = '') then
   begin
-    Result:= AgreedMember(ATypeText, AMember, AKind);
+    Result:= AgreedMember(ATypeText, AMember, AKind, AUsesUnits + ['system', 'sysinit']);
     if Result <> '' then AReason:= '';
   end;
   Result:= Count(Result, AReason);
@@ -666,7 +794,7 @@ var
   function Finish(const AText: string): string;
   begin
     ATypeText:= AText + (if Pending <> '' then '.' + Pending else '');
-    Result   := if StepPending(C, Pending, AReason) then MemberOf(C, AMember, AKind, AReason) else '';
+    Result   := if StepPending(C, Pending, Visible, AReason) then MemberOf(C, AMember, AKind, AReason) else '';
   end;
 
 begin
@@ -732,6 +860,10 @@ begin
         Exit(Count(Finish(C.Name), AReason));
       end;
   end;
+  { D08: `TBytes.Create(1, 2)`, `TArray<Integer>.Create(1)` -- a dynamic array's constructor
+    is a compiler intrinsic with no declaration; name it rather than call it a miss. }
+  if (AKind = ekCall) and (Pending = '') and SameText(AMember, 'Create') and IsDynArrayType(Head, Visible, 0) then
+    Exit(Count('', R_INTRINSIC));
   Result:= Count('', R_NO_TYPE);
 end;
 

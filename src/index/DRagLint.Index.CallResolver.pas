@@ -586,6 +586,8 @@ type
     FFileUses : TDictionary<Int64, TArray<string>>;
     FDprUses  : TArray<string>;
     FDprLoaded: Boolean;
+    { D01: the project's helper rows per lower-cased library type name (type_helpers by name). }
+    FLibTypeHelpers: TDictionary<string, TArray<THelperEdge>>;
 
     /// <summary>The type a bare type name at ARef names, by Delphi's scope order;
     /// the shared lookup behind ResolveTypeUse and ResolveEnumCast.</summary>
@@ -1297,6 +1299,24 @@ type
     /// </remarks>
     function BindExternally(const ACallRef: TReference; const AReceiver: string; ATypeId: Int64;
       var AText: TRcvTypeText): string;
+    /// <summary>E-RECV-UNDECIDABLE D01: the method ACallRef names on the one PROJECT helper
+    /// written for a type this index does not hold (`TMemIniFileHelper = class helper for
+    /// TMemIniFile` makes `LIni.ReadBoolean` the helper's method).</summary>
+    /// <param name="ACallRef">The dotted call or member access; its file decides helper scope.</param>
+    /// <param name="ATypeText">The receiver's declared type text, a plain name (no unit
+    /// qualifier, no generic arguments, no pending segments); anything else answers 0.</param>
+    /// <param name="AArgCount">Arguments at the site, as for LookupMethodOnType.</param>
+    /// <param name="AArgsKnown">Whether AArgCount was counted.</param>
+    /// <param name="AConfidence">LookupMethodOnType's confidence when a method is found.</param>
+    /// <returns>The helper method's symbol id, or 0.</returns>
+    /// <remarks>Delphi's rules: a helper is in scope in its own file, or where its unit is used
+    /// and it is declared in the interface section; only ONE helper per type is active, so two
+    /// in scope decline (the choice would rest on uses order). Rows whose target this index
+    /// resolved (type_helpers.target_symbol_id set) are LookupMethodOnType's own business and
+    /// are skipped. Target names compare case-insensitively. A member the helper lacks is
+    /// left to the library (0 here): a class helper hides only what it declares.</remarks>
+    function LookupLibraryTypeHelper(const ACallRef: TReference; const ATypeText: string;
+      AArgCount: Integer; AArgsKnown: Boolean; out AConfidence: string): Int64;
     /// <summary>Item 4: the name of the FIRST ancestor of ATypeId (transitive,
     /// breadth-first) this index could not resolve -- a class-position (ordinal
     /// 0) edge before any other.</summary>
@@ -4287,11 +4307,13 @@ begin
   FFileUses  := TDictionary<Int64, TArray<string>>.Create;
   FDprUses   := [];
   FDprLoaded := False;
+  FLibTypeHelpers:= TDictionary<string, TArray<THelperEdge>>.Create;
   BuildMaps;
 end;
 
 destructor TCallResolver.Destroy;
 begin
+  FLibTypeHelpers.Free;
   FFileUses.Free;
   FOracle.Free;
   FRows.Ancestors     .Free;
@@ -7834,7 +7856,15 @@ var
 begin
   Result:= 0;
   AText := Default(TRcvTypeText); { item 4: '' for bare / Self / with-typed / untyped }
-  if ACallRef.EnclosingSymbolId <= 0 then Exit; // no enclosing routine -> give up
+  if ACallRef.EnclosingSymbolId <= 0 then
+  begin
+    { No enclosing routine -> no project rung can type the receiver. A program's main
+      block is such a place (`Application.Run` in the .dpr): offer the head to the library
+      oracle exactly as the fall-through at the end does. BindExternally still declines a
+      head that names a project type or unit-level value, so nothing local is overridden. }
+    if (AReceiverExpr <> '') and not SameText(AReceiverExpr, 'inherited') then AText.Head:= AReceiverExpr;
+    Exit;
+  end;
   Encl:= SymbolById(ACallRef.EnclosingSymbolId);
 
   // --- Kind 13 (E-PARSER-NOREFS): `inherited M`, whose parse fact is the receiver
@@ -10325,6 +10355,22 @@ begin
     Result.Confidence    := Conf;
   end;
 
+  { 4c. E-RECV-UNDECIDABLE D01: a receiver typed BY NAME to a type this index does not
+    hold, and a PROJECT helper for that name in scope (`LIni.ReadBoolean`, MSCTYPES'
+    TMemIniFileHelper on the library's TMemIniFile). Before rung 5 on purpose: in Delphi
+    a helper's method hides a same-named method of the type it helps, so the library is
+    asked only for what the helper does not declare. }
+  if (Result.TargetSymbolId = 0) and (TypeId = 0) and (Rcv <> '') and (RcvType.Pending = '') then
+  begin
+    Target:= LookupLibraryTypeHelper(ACallRef, RcvType.Text, ArgCount, ArgsKnown, Conf);
+    if Target > 0 then
+    begin
+      Result.TargetSymbolId:= Target;
+      Result.Confidence    := Conf;
+      Exit;
+    end;
+  end;
+
   // 5. v21 CROSS-DB, and it runs LAST for a reason: only a call this index could
   // not resolve locally is offered to another index. A local answer always wins,
   // so adding a library store can never change an edge that already existed.
@@ -10565,17 +10611,63 @@ begin
     var Anc: string:= FirstUnresolvedAncestorName(ProjId);
     { A class whose chain is complete ends at the root no ancestor row records. }
     if (Anc = '') and (SymbolById(ProjId).Kind = skClass) then Anc:= IMPLICIT_ROOT_CLASS;
+    { Wave-146 b7 leftover: a GENERIC alias (`TAccountList = TList<TAccountInfo>`) records no
+      ancestor row; the type text it declares is the library type it names, unless the
+      generic's name is a project type (then this index, not the library, owns the answer). }
+    if Anc = '' then
+    begin
+      var Alias: TSymbol:= SymbolById(ProjId);
+      var Lt: Integer:= Pos('<', Alias.Signature);
+      if (Alias.Kind = skTypeAlias) and (Lt > 1)
+         and (ResolveTypeNameToSymbol(Trim(Copy(Alias.Signature, 1, Lt - 1)), ACallRef.FileId) = 0) then
+        Anc:= Trim(Alias.Signature);
+    end;
     if (Anc = '') or ChainDeclaresName(ProjId, First) then Exit;
     Exit(FOracle.Bind(Anc, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
   end;
   if AText.Text <> '' then
     Exit(FOracle.Bind(AText.Text, AText.Pending, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), Reason));
-  if AText.Head = '' then Exit;
+  if AText.Head = '' then
+  begin
+    { E-RECV-UNDECIDABLE D08: `TArray<Integer>.Create(1)` has no head text (generic
+      arguments); count the intrinsic so it does not read as a miss. Binds nothing. }
+    if Kind = ekCall then FOracle.NoteIntrinsic(AReceiver, ACallRef.NameText, FileUsesUnits(ACallRef.FileId));
+    Exit;
+  end;
   var HeadLc: string:= LowerCase(Trim(AText.Head.Split(['.'])[0]));
   if FNameToCands.ContainsKey(HeadLc) or FNameToUnitValues.ContainsKey(HeadLc) then Exit;
   Result:= FOracle.BindHead(AText.Head, ACallRef.NameText, Kind, FileUsesUnits(ACallRef.FileId), ScopeType,
     Reason, HeadText);
   if HeadText <> '' then AText.Text:= HeadText;
+end;
+
+function TCallResolver.LookupLibraryTypeHelper(const ACallRef: TReference; const ATypeText: string;
+  AArgCount: Integer; AArgsKnown: Boolean; out AConfidence: string): Int64;
+var
+  Helpers: TArray<THelperEdge>;
+  Active : Int64;
+begin
+  Result     := 0;
+  AConfidence:= '';
+  if not IsValidIdent(ATypeText) then Exit;
+  var Lc: string:= LowerCase(ATypeText);
+  if not FLibTypeHelpers.TryGetValue(Lc, Helpers) then
+  begin
+    Helpers:= FStore.FindHelpersOfType(ATypeText);
+    FLibTypeHelpers.Add(Lc, Helpers);
+  end;
+  Active:= 0;
+  for var HE: THelperEdge in Helpers do
+  begin
+    if (HE.TargetSymbolId > 0) or (HE.HelperSymbolId <= 0) then Continue;
+    var Helper: TSymbol:= SymbolById(HE.HelperSymbolId);
+    if Helper.Id <= 0 then Continue;
+    if (Helper.FileId <> ACallRef.FileId)
+       and not (SameText(Helper.Section, 'interface') and CandInScope(ACallRef.FileId, Helper.FileId)) then Continue;
+    if Active > 0 then Exit; // a second helper in scope: which one is active rests on uses order
+    Active:= Helper.Id;
+  end;
+  if Active > 0 then Result:= LookupMethodOnType(Active, ACallRef.NameText, AArgCount, AArgsKnown, AConfidence);
 end;
 
 end.
