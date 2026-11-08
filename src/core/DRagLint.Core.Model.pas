@@ -483,6 +483,18 @@ const
   /// base = the interface, impl = the property.</remarks>
   IMPLEMENTS_DIRECTIVE = 'implements';
 
+  /// <summary>symbols.directives token of an INDEXED (array) property
+  /// (`property Items[I: Integer]: TItem read GetItem;`, E-RENAME-RESIDUE, 1.47).</summary>
+  /// <remarks>The value is `indexed`, or `indexed default` for the class's default
+  /// property (`...; default;`). The signature stays the element type, so `A.Items[0]`
+  /// and, through the default property, `A[0]` are typed by it. A delegating property
+  /// cannot be indexed, so the two directive forms never meet.</remarks>
+  PROPERTY_INDEXED_DIRECTIVE = 'indexed';
+
+  /// <summary>Second token of the default array property's directives
+  /// (`indexed default`, see PROPERTY_INDEXED_DIRECTIVE).</summary>
+  PROPERTY_DEFAULT_DIRECTIVE = 'default';
+
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
