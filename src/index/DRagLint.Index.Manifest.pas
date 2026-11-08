@@ -263,6 +263,75 @@ type
   /// <para>Used in units: Config.MainForm, [drag-lint]DRagLint.CLI, [drag-lint]DRagLint.Index.Manifest, [drag-lint]DRagLint.Index.ManifestWrite, [drag-lint]DRagLint.LSP.Server, DragLint.Plugin.DbResolver, [drag-lint]DRagLint.Project.DefineProfile, [drag-lint]DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
+  /// <summary>Which rung of the engine-level manifest lookup answered.</summary>
+  TManifestOrigin = (moExplicit, moAppData, moExeDir);
+
+  /// <summary>The engine-level manifest file one process resolved: read and write agree
+  /// because both ask <see cref="TInstalledLayout.ManifestLocation"/>.</summary>
+  TManifestLocation = record
+    /// <summary>Full path of the file; it need not exist (see Exists).</summary>
+    Path: string;
+    /// <summary>Folder relative paths in the file resolve against: the folder it was
+    /// FOUND in. For moExeDir this is the engine dir string the caller passed.</summary>
+    RootDir: string;
+    /// <summary>The rung that answered.</summary>
+    Origin: TManifestOrigin;
+    /// <summary>True when Path exists on disk at resolve time.</summary>
+    Exists: Boolean;
+  end;
+
+  /// <summary>Path resolution of installed layout v2, phase 1
+  /// (docs\superpowers\specs\2026-11-06-installed-layout-v2.md). It only answers paths:
+  /// it creates, moves and renames nothing.</summary>
+  /// <remarks>The layout is OFF unless DRAGLINT_LAYOUT=v2. The explicit manifest
+  /// (DRAGLINT_MANIFEST, set by --manifest) is honoured in BOTH layouts: an explicit request
+  /// that was silently ignored would load the real manifest, the failure it exists to stop.</remarks>
+  TInstalledLayout = class
+    public
+      const
+        /// <summary>Environment variable naming an explicit manifest file.</summary>
+        MANIFEST_ENV = 'DRAGLINT_MANIFEST';
+        /// <summary>Environment variable holding the layout switch.</summary>
+        LAYOUT_ENV = 'DRAGLINT_LAYOUT';
+        /// <summary>The only DRAGLINT_LAYOUT value that turns the layout on (case-insensitive).</summary>
+        LAYOUT_V2 = 'v2';
+
+      /// <summary>True when this process runs with the v2 layout switched on.</summary>
+      /// <returns>True for DRAGLINT_LAYOUT=v2; False for unset or any other value.</returns>
+      class function Enabled: Boolean; static;
+
+      /// <summary>The lookup order itself, with every input passed in: explicit, then
+      /// (v2 only) the roaming folder, then the exe dir.</summary>
+      /// <param name="pExplicit">Explicit manifest path, '' when none. A missing file is still
+      /// the answer: it never falls through to another manifest.</param>
+      /// <param name="pAppDataRoot">The %APPDATA% folder, '' when unset (that rung is skipped).</param>
+      /// <param name="pEngineDir">The engine exe folder.</param>
+      /// <param name="pLayoutV2">The switch; False skips the roaming rung.</param>
+      /// <returns>The file to read. The roaming rung answers only when its file exists.</returns>
+      class function ResolveManifest(const pExplicit, pAppDataRoot, pEngineDir: string;
+        pLayoutV2: Boolean): TManifestLocation; static;
+
+      /// <summary><see cref="ResolveManifest"/> fed from this process's environment.</summary>
+      /// <param name="pEngineDir">The engine exe folder.</param>
+      /// <returns>The manifest TManifestIO.Load reads and the writers rewrite.</returns>
+      class function ManifestLocation(const pEngineDir: string): TManifestLocation; static;
+
+      /// <summary>Folder the engine's own logs go to.</summary>
+      /// <param name="pEngineDir">The engine exe folder (the answer with the switch off).</param>
+      /// <returns>v2: %LOCALAPPDATA%\drag-lint\logs, '' when LOCALAPPDATA is unset. Not created.</returns>
+      class function LogDir(const pEngineDir: string): string; static;
+
+      /// <summary>Default folder of the library DBs under the new layout.</summary>
+      /// <returns>v2: %LOCALAPPDATA%\drag-lint\library, else ''. Reported only in phase 1:
+      /// no DB is opened or written there (outDir still decides).</returns>
+      class function LibraryDir: string; static;
+
+      /// <summary>Stable text name of a rung: explicit, appdata or exe-dir.</summary>
+      /// <param name="pOrigin">The rung.</param>
+      /// <returns>The name used by `manifest where`.</returns>
+      class function OriginName(pOrigin: TManifestOrigin): string; static;
+  end;
+
   TManifestIO = class
     public
       /// <summary>Load and merge: reads the global config beside AEngineDir, then
@@ -1212,6 +1281,77 @@ begin
 end;
 
 { ---------------------------------------------------------------------- }
+{  TInstalledLayout                                                        }
+{ ---------------------------------------------------------------------- }
+
+class function TInstalledLayout.Enabled: Boolean;
+begin
+  Result:= SameText(GetEnvironmentVariable(LAYOUT_ENV), LAYOUT_V2);
+end;
+
+class function TInstalledLayout.ResolveManifest(const pExplicit, pAppDataRoot, pEngineDir: string;
+  pLayoutV2: Boolean): TManifestLocation;
+const
+  MANIFEST_FILE = 'drag-lint.json';
+  PRODUCT_DIR = 'drag-lint';
+begin
+  Result:= Default(TManifestLocation);
+  if pExplicit <> '' then
+  begin
+    Result.Path   := TPath.GetFullPath(pExplicit);
+    Result.RootDir:= ExtractFilePath(Result.Path);
+    Result.Origin := moExplicit;
+    Result.Exists := TFile.Exists(Result.Path);
+    Exit;
+  end;
+  if pLayoutV2 and (pAppDataRoot <> '') then
+  begin
+    var Candidate:= TPath.Combine(TPath.Combine(pAppDataRoot, PRODUCT_DIR), MANIFEST_FILE);
+    if TFile.Exists(Candidate) then
+    begin
+      Result.Path   := Candidate;
+      Result.RootDir:= ExtractFilePath(Candidate);
+      Result.Origin := moAppData;
+      Result.Exists := True;
+      Exit;
+    end;
+  end;
+  Result.Path   := TPath.Combine(pEngineDir, MANIFEST_FILE);
+  Result.RootDir:= pEngineDir;
+  Result.Origin := moExeDir;
+  Result.Exists := TFile.Exists(Result.Path);
+end;
+
+class function TInstalledLayout.ManifestLocation(const pEngineDir: string): TManifestLocation;
+begin
+  Result:= ResolveManifest(GetEnvironmentVariable(MANIFEST_ENV), GetEnvironmentVariable('APPDATA'),
+    pEngineDir, Enabled);
+end;
+
+class function TInstalledLayout.LogDir(const pEngineDir: string): string;
+begin
+  if not Enabled then Exit(pEngineDir);
+  var Local:= GetEnvironmentVariable('LOCALAPPDATA');
+  Result:= if Local = '' then '' else TPath.Combine(Local, 'drag-lint\logs');
+end;
+
+class function TInstalledLayout.LibraryDir: string;
+begin
+  var Local:= GetEnvironmentVariable('LOCALAPPDATA');
+  Result:= if Enabled and (Local <> '') then TPath.Combine(Local, 'drag-lint\library') else '';
+end;
+
+class function TInstalledLayout.OriginName(pOrigin: TManifestOrigin): string;
+begin
+  case pOrigin of
+    moExplicit: Result:= 'explicit';
+    moAppData : Result:= 'appdata';
+  else
+    Result:= 'exe-dir';
+  end;
+end;
+
+{ ---------------------------------------------------------------------- }
 {  TManifestIO.Load                                                        }
 { ---------------------------------------------------------------------- }
 
@@ -1270,18 +1410,22 @@ begin
   LocalKeys:= [];
   Errors:= '';
 
-  { Try global: <AEngineDir>\drag-lint.json (no leading dot -- the EXE-side config) }
-  GlobalPath:= TPath.Combine(AEngineDir, 'drag-lint.json');
-  if TFile.Exists(GlobalPath) then
+  { Try global: explicit > (layout v2) %APPDATA% > <AEngineDir>\drag-lint.json (no leading
+    dot -- the EXE-side config). See TInstalledLayout. }
+  var Located:= TInstalledLayout.ManifestLocation(AEngineDir);
+  GlobalPath:= Located.Path;
+  if Located.Exists then
   begin
     try
       Content:= TFile.ReadAllText(GlobalPath);
-      GlobalManifest:= ParseText(Content, AEngineDir);
+      GlobalManifest:= ParseText(Content, Located.RootDir);
       HaveGlobal:= True;
     except
       on E: Exception do NoteLoadError(GlobalPath, E.Message);
     end;
-  end;
+  end
+  else if Located.Origin = moExplicit then
+    NoteLoadError(GlobalPath, 'the explicit manifest (' + TInstalledLayout.MANIFEST_ENV + ' or --manifest) does not exist');
 
   { Try local: walk AStartDir .. root for .drag-lint.json }
   LocalPath:= '';

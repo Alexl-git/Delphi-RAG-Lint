@@ -99,7 +99,7 @@ begin
   if AExplicitPath <> '' then
     Result := TPath.GetFullPath(AExplicitPath)
   else
-    Result := TPath.Combine(AExeDir, 'drag-lint.json');
+    Result := TInstalledLayout.ManifestLocation(AExeDir).Path;
 end;
 
 function LoadConfigManifest(const AConfigPath: string;
