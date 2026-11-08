@@ -1079,6 +1079,10 @@ written, and one that would not apply drops the whole group. `lint --fix --json`
 marks such a finding `"declined": true` with a `"decline_reason"` (and `applied:
 false`); text output ends `, N declined (...)`.
 
+`lint` / `lint-all` / `lint-project` / `check-ast` `--fix --apply --compile-gate --project <X.dproj>
+[--platform <p>] [--rsvars <path>] [--build-timeout <s>]` (opt-in, 1.47) builds the project after the
+write and rolls every edited file back when the build fails: the whole run is all or nothing.
+
 #### Docs
 
 | Command | What it does | Notable flags |
