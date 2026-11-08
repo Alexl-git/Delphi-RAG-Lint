@@ -2583,8 +2583,8 @@ begin
     try
       if RerunAfterReindex(Opts, pStore, Result) then Exit;
       try
-        if SameText(Opts.Part, CPartAll) then Result:= RunAllSelected(Opts, pSccs, pGraph)
-        else Result:= RunCycleFixGroups(Opts, pStore, pSccs, pGraph, pLibStore);
+        Result:= if SameText(Opts.Part, CPartAll) then RunAllSelected(Opts, pSccs, pGraph)
+                 else RunCycleFixGroups(Opts, pStore, pSccs, pGraph, pLibStore);
       finally
         DeleteDefaultScratch(Opts, Result);
       end;

@@ -3085,7 +3085,8 @@ end;
 /// <param name="ADproj">The project file (.dproj, or a .dpr mapped to its sibling .dproj) whose
 /// active Platform decides when APlatform is ''; '' = no project.</param>
 /// <returns>A non-empty platform token; never ''. Owner ruling a3 (L-C20): APlatform, else the
-/// project's active Platform (PlatformOfDproj), else Win32 -- a project that names no platform
+/// project's active Platform (PlatformOfDproj; for a marker-less .dproj the platform its
+/// &lt;project&gt;.delphilsp.json names), else Win32 -- a project that names no platform
 /// (Delphi 7 has no .dproj; Delphi 2007..XE .dproj files carry no Win32/Win64 token) is Win32.</returns>
 /// <remarks>
 /// ONE definition of the default, because two callers deriving it separately is
@@ -3108,6 +3109,16 @@ const
 begin
   Result:= APlatform;
   if Result = '' then Result:= PlatformOfDproj(ADproj);
+  if (Result = '') and (ADproj <> '') then
+  begin
+    { a marker-less .dproj: the IDE's <project>.delphilsp.json (dllname dcc32/dcc64) names the
+      active platform -- ResolveActiveBuild's own order (marker, delphilsp, default) }
+    var LspDefs: TArray<string>;
+    var LspNums: TArray<TPair<string, Integer>>;
+    var LspSws : TArray<TPair<string, Boolean>>;
+    var LspPlat: string;
+    if ReadDelphiLspDefines(ADproj, LspPlat, LspDefs, LspNums, LspSws) then Result:= LspPlat;
+  end;
   if Result = '' then Result:= CNoPlatformDefault;
 end;
 
