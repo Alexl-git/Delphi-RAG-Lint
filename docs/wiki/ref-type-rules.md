@@ -21,6 +21,7 @@ drag-lint lint-all --db <project.sqlite> --rule argument-narrows
 | `unsafe-typecast-without-is` | OFF | Also `T(a.b)` and `T(F(x))`; with a row in `ref_types` the rule fires only when both ends are classes and the cast narrows |
 
 | `ui-access-in-thread-typed` | ON (1.47) | Thread code reads, writes or calls a member of a receiver whose static type is a UI class, directly or over resolved calls; see below |
+| `quit-from-thread` | OFF (1.47) | Thread code calls `PostQuitMessage`, `Application.Terminate`, `Halt` or `ExitProcess`: it ends the process, or posts WM_QUIT to the worker's own queue, from the wrong thread; see below |
 
 ## `ui-access-in-thread-typed`
 
@@ -41,6 +42,21 @@ The typed answer to "does a thread touch the VCL". `ui-access-in-thread` (lexica
 It needs the library index for the ancestry: without it only `Application` and `Screen` answer.
 A project class named `TControl`, `TTask` or the like silences that name for the whole index.
 
+## `quit-from-thread`
+
+Same thread code as `ui-access-in-thread-typed` (`Execute` of a `TThread` descendant, a lambda or routine passed to
+`TThread.CreateAnonymousThread`, `TTask.Run` / `Create` / `Future`, `TParallel.For`), so the two share one walk. Ships OFF; opt in with `--enable quit-from-thread`.
+
+| Question | Answer |
+|---|---|
+| What fires | `PostQuitMessage(0)`, `Winapi.Windows.PostQuitMessage`, `Application.Terminate`, `Halt`, `Halt(n)`, `ExitProcess(n)` written in the thread body itself |
+| Safe | The arguments of `Synchronize`, `Queue`, `ForceQueue` (they run on the main thread); a nested routine or a lambda nobody starts on a thread |
+| Not followed | A quit reached over a called routine (`ui-access-in-thread-typed` follows call edges; this rule does not, yet) |
+| Silent | `Self.Terminate` / `Terminate` of the thread itself; the same calls outside thread code; a project that declares its own `TThread` |
+| Never constructed | As above: a hint with ` (class never constructed)` appended |
+
+Real finding it was written for: `TExit.Execute` in ORM3 CLIENT `uMain.pas` calls `PostQuitMessage(0)` from a worker.
+It needs the library index for the ancestry.
 ## What keeps a rule silent
 
 An expression has a static type only as a single name, a member chain, a call, a hard cast or an `as`.

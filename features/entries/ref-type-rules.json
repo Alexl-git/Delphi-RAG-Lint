@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.44.1-alpha",
-  "summary": "Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread; sharper redundant-cast and unsafe casts",
+  "summary": "Lint rules on ref_types: is-always-true, is-never-true, argument-narrows, UI access from a thread, quit from a thread; sharper redundant-cast and unsafe casts",
   "intro": "Read this to see which rules stand on ref_types, what each reports and what keeps it silent. They run in lint-all and lint-project over a 1.44 index.",
   "wikiPage": "ref-type-rules",
   "surfaces": [
