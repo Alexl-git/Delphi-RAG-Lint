@@ -372,6 +372,7 @@ type
       Rule holds one id, so the earlier one used to be dropped in silence; Run
       refuses the command line instead (exit 2). '' otherwise. }
     RuleConflict    : string        ;
+    RuleList        : string        ; // --rule a,b: the ids the report is limited to; Rule is '' then
     ProjectPath     : string        ;
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
     RuleCategory    : string        ; // --category <name>: filter `rules` output
@@ -15109,6 +15110,7 @@ begin
   Survivors:= nil;
   for F in AFindings do
   begin
+    if (AArgs.RuleList <> '') and not MatchText(F.RuleId, AArgs.RuleList.Split([','])) then Continue;
     if (AArgs.Rule <> '') and not SameText(F.RuleId, AArgs.Rule)
        and not (StartsText('review-marker-', F.RuleId) and ContainsText(F.Message, '"' + AArgs.Rule + '"')) then Continue;
     { 1.38: a modernize finding the target compiler cannot take is not advice }
@@ -24126,6 +24128,12 @@ var
   end;
 
 begin
+  { wave 148 RO: an unknown --rule id was a silent empty report here (lint and lint-project already refuse it). }
+  if AArgs.Rule <> '' then
+  begin
+    var RuleExit: Integer;
+    if LintRuleArgAnswered(AArgs, False, RuleExit) then Exit(RuleExit);
+  end;
   if not ApplyRunTargetCompiler(AArgs, LoadLintConfig(AArgs).TargetCompiler) then Exit(2);
   if LintAllRefusesFile(AArgs) or not ExplicitDbsExist(AArgs, 'lint-all') then Exit(2);
   for var SharedDb: string in AArgs.SharedDbs do
@@ -38892,13 +38900,26 @@ begin
       Exit(2);
     end;
 
-    { --rule takes ONE rule id. A comma list ("a,b,c") matched no rule, so lint-all reported
-      0 findings and the run read as clean; refuse it as loudly as a repeated --rule. }
+    { --rule a,b,c (wave 148 RO): a comma list limits the report to those rules AND enables
+      each one (an explicit request, like --enable). Every id is validated first, so an
+      unknown id is still exit 2 and never a silent empty report. Rule is cleared: the
+      checkers are not narrowed, FinalizeAndOutput filters by RuleList. }
     if Args.Rule.Contains(',') then
     begin
-      Writeln(ErrOutput, Format('ERROR: --rule takes one rule id, not a list ("%s"). ' +
-        'Run once per rule, or drop --rule to report every enabled rule.', [Args.Rule]));
-      Exit(2);
+      var ListArgs: TArgs:= Args;
+      for var RuleId: string in Args.Rule.Split([',']) do
+      begin
+        ListArgs.Rule:= Trim(RuleId);
+        var ListExit: Integer;
+        if (ListArgs.Rule = '') or LintRuleArgAnswered(ListArgs, False, ListExit) then
+        begin
+          if ListArgs.Rule = '' then Writeln(ErrOutput, 'ERROR: --rule list has an empty id.');
+          Exit(2);
+        end;
+      end;
+      Args.RuleList:= StringReplace(Args.Rule, ' ', '', [rfReplaceAll]);
+      Args.Enable := ((Args.Enable + ',') + Args.RuleList).TrimLeft([',']);
+      Args.Rule   := '';
     end;
 
     { THE DEFAULT SCHEME: a project's own index + the platform library index.
