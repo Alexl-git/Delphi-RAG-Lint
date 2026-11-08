@@ -25,7 +25,7 @@ drag-lint manifest where [--manifest <path>] [--json] (read-only: which drag-lin
 Full flag list: [manifest in the CLI reference](../cli.md#manifest).
 
 ```text
-drag-lint manifest migrate [--apply] [--json] (one-time, installed layout v2 phase 2: without --apply plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\drag-lint\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)
+drag-lint manifest migrate [--apply] [--dry-run] [--json] (one-time, installed layout v2 phase 2: without --apply (or with --dry-run, which overrides --apply) plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\drag-lint\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)
 ```
 
 Full flag list: [manifest in the CLI reference](../cli.md#manifest).

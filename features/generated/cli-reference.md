@@ -135,7 +135,7 @@ Described in [bookmarks](../../docs/wiki/bookmarks.md).
 Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder, and strips / restores them on request.
 
 ```text
-drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json] (puts the anchors a bookmarks-strip removed back, byte-identical when the file is unchanged; a file with an anchor it cannot place is left untouched; dry run without --apply; exit 4 = some unplaced)
+drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json|--format json] (puts the anchors a bookmarks-strip removed back, byte-identical when the file is unchanged; a file with an anchor it cannot place is left untouched; dry run without --apply; exit 4 = some unplaced)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -151,7 +151,7 @@ Described in [bookmarks](../../docs/wiki/bookmarks.md).
 Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder, and strips / restores them on request.
 
 ```text
-drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json] (removes the dl:bk comment anchors and records them in a sidecar for bookmarks-restore; dry run without --apply; never overwrites a sidecar; exit 3 = none)
+drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json|--format json] (removes the dl:bk comment anchors and records them in a sidecar for bookmarks-restore; dry run without --apply; never overwrites a sidecar; exit 3 = none)
 ```
 
 | Flag | Argument | Meaning | Default |
@@ -1333,7 +1333,7 @@ Shows which drag-lint.json this engine reads and why; moves the exe-side one to 
 
 ```text
 drag-lint manifest where [--manifest <path>] [--json] (read-only: which drag-lint.json, log folder and library folder this engine resolves, and each lookup rung. Order: explicit DRAGLINT_MANIFEST / --manifest, then with DRAGLINT_LAYOUT=v2 the file in %APPDATA%\drag-lint, then beside the exe. Creates, moves and renames nothing)
-drag-lint manifest migrate [--apply] [--json] (one-time, installed layout v2 phase 2: without --apply plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\drag-lint\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)
+drag-lint manifest migrate [--apply] [--dry-run] [--json] (one-time, installed layout v2 phase 2: without --apply (or with --dry-run, which overrides --apply) plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\drag-lint\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)
 ```
 
 | Flag | Argument | Meaning | Default |

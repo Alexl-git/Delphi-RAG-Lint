@@ -24257,6 +24257,16 @@ begin
   end;
 end;
 
+{ --compile-gate gates a --fix --apply write and nothing else (R3). lint-all, lint-project and check-ast
+  share the lint option parse, so without --fix the flag would be accepted and silently ignored:
+  refuse it instead (controller ruling 2026-11-08, owner may reverse). True = refused, message on stderr. }
+function RefuseCompileGateWithoutFix(const AArgs: TArgs; const AVerb: string): Boolean;
+begin
+  Result:= AArgs.CompileGate and not AArgs.Fix;
+  if Result then
+    Writeln(ErrOutput, 'ERROR: ' + AVerb + ' --compile-gate needs --fix (it gates the --fix --apply write only)');
+end;
+
 function DoLintAll(const AArgs: TArgs): Integer;
 var
   Dbs      : TArray<string>              ;
@@ -24315,6 +24325,7 @@ var
   end;
 
 begin
+  if RefuseCompileGateWithoutFix(AArgs, 'lint-all') then Exit(2);
   if not ApplyRunTargetCompiler(AArgs, LoadLintConfig(AArgs).TargetCompiler) then Exit(2);
   if LintAllRefusesFile(AArgs) or not ExplicitDbsExist(AArgs, 'lint-all') then Exit(2);
   for var SharedDb: string in AArgs.SharedDbs do
@@ -25423,6 +25434,7 @@ var
   Findings   : TArray<TLintFinding> ;
   DefDisabled: TArray<string>       ;
 begin
+  if RefuseCompileGateWithoutFix(AArgs, 'lint-project') then Exit(2);
   if AArgs.Rule <> '' then
   begin
     var RuleExit: Integer;
@@ -28804,6 +28816,7 @@ var
   Store   : ISymbolStore        ;
   Findings: TArray<TLintFinding>;
 begin
+  if RefuseCompileGateWithoutFix(AArgs, 'check-ast') then Exit(2);
   if not ExplicitDbsExist(AArgs, 'check-ast') then Exit(2);
   if AArgs.Target = '' then
   begin

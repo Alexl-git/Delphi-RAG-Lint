@@ -5119,8 +5119,8 @@
         {
           "type": "cli",
           "verb": "bookmarks-strip",
-          "example": "drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json]",
-          "usage": "drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json] (removes the dl:bk comment anchors and records them in a sidecar for bookmarks-restore; dry run without --apply; never overwrites a sidecar; exit 3 = none)",
+          "example": "drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json|--format json]",
+          "usage": "drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json|--format json] (removes the dl:bk comment anchors and records them in a sidecar for bookmarks-restore; dry run without --apply; never overwrites a sidecar; exit 3 = none)",
           "flags": [
             {
               "name": "--in",
@@ -5145,8 +5145,8 @@
         {
           "type": "cli",
           "verb": "bookmarks-restore",
-          "example": "drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json]",
-          "usage": "drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json] (puts the anchors a bookmarks-strip removed back, byte-identical when the file is unchanged; a file with an anchor it cannot place is left untouched; dry run without --apply; exit 4 = some unplaced)",
+          "example": "drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json|--format json]",
+          "usage": "drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json|--format json] (puts the anchors a bookmarks-strip removed back, byte-identical when the file is unchanged; a file with an anchor it cannot place is left untouched; dry run without --apply; exit 4 = some unplaced)",
           "flags": [
             {
               "name": "--from",
@@ -13523,7 +13523,7 @@
           "type": "cli",
           "verb": "manifest",
           "sub": "migrate",
-          "usage": "drag-lint manifest migrate [--apply] [--json] (one-time, installed layout v2 phase 2: without --apply plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\\drag-lint\\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)",
+          "usage": "drag-lint manifest migrate [--apply] [--dry-run] [--json] (one-time, installed layout v2 phase 2: without --apply (or with --dry-run, which overrides --apply) plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\\drag-lint\\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)",
           "flags": [
             {
               "name": "--apply"
@@ -13533,7 +13533,7 @@
             }
           ],
           "helpOrder": 105,
-          "help": ["  drag-lint manifest migrate [--apply] [--json]   (one-time, installed layout v2 phase 2: without --apply plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\\drag-lint\\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)"]
+          "help": ["  drag-lint manifest migrate [--apply] [--dry-run] [--json]   (one-time, installed layout v2 phase 2: without --apply (or with --dry-run, which overrides --apply) plans and touches nothing; with --apply and DRAGLINT_LAYOUT=v2 writes %APPDATA%\\drag-lint\\drag-lint.json with outDir and relative includes made absolute, so every DB stays put, then RENAMES the exe-side file to drag-lint.json.migrated-<date>. Never deletes, never overwrites. Exit 0 done / would / nothing to do, 2 refused, 1 failed)"]
         }
       ],
       "audience": "both",

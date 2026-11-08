@@ -80,6 +80,15 @@ try {
   $r = & $Exe lint --in $E.Unit --db $E.Db --enable $Rule --project $E.Proj --compile-gate 2>&1 | Out-String
   Check 'e2 no --fix exit 2' ($LASTEXITCODE -eq 2) "exit $LASTEXITCODE"
   Check 'e3 nothing written' ((Hash $E.Unit) -eq $he)
+  # f: lint-all / lint-project / check-ast share the lint option parse; without --fix they REFUSE
+  #    --compile-gate (exit 2) instead of ignoring it (controller ruling 2026-11-08). Control: the same
+  #    verb without the flag is not exit 2.
+  foreach ($v in 'lint-all', 'lint-project', 'check-ast') {
+    $r = & $Exe $v --db $E.Db --compile-gate 2>&1 | Out-String
+    Check "f $v --compile-gate without --fix exit 2" (($LASTEXITCODE -eq 2) -and ($r -match 'needs --fix')) "exit $LASTEXITCODE"
+  }
+  $r = & $Exe lint-all --db $E.Db 2>&1 | Out-String
+  Check 'f control: lint-all without the flag is not exit 2' ($LASTEXITCODE -ne 2) "exit $LASTEXITCODE"
 }
 finally { try { [IO.Directory]::Delete($Tmp, $true) } catch { } }
 if ($script:Failed) { Write-Host 'FAILED' -ForegroundColor Red; exit 1 }
