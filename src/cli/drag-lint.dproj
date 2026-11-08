@@ -285,6 +285,7 @@
         <DCCReference Include="..\refactor\DRagLint.Refactor.ExtractMethod.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.Unwith.pas"/>
         <DCCReference Include="DRagLint.CLI.Unwith.pas"/>
+        <DCCReference Include="DRagLint.CLI.Bookmarks.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.EnumHelper.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.NamingFix.pas"/>
         <DCCReference Include="..\refactor\DRagLint.Refactor.MultiProjectRename.pas"/>

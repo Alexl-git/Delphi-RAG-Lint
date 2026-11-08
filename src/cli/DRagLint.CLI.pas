@@ -179,6 +179,7 @@ uses
   , DRagLint.Lint   .DocRules
   , DRagLint.Lint   .SharedUnit
   , DRagLint.Lint.Bookmarks { bookmarks verb: dl:bk comment anchors (E-BOOKMARKS) }
+  , DRagLint.CLI.Bookmarks { bookmarks-strip / bookmarks-restore (E-BOOKMARKS phase 2) }
   , DRagLint.Lint   .ExceptionUnitWriter { exceptions-sync: the managed block in the exceptions unit }
   , DRagLint.Project.Resolver
   , DRagLint.Project.ContextFile
@@ -39350,6 +39351,8 @@ begin
     else if Args.Command = 'shutdown'          then Result:= DoShutdown        (Args)
     else if Args.Command = 'shared-unit'       then Result:= DoSharedUnit      (Args)
     else if Args.Command = 'bookmarks'         then Result:= DoBookmarks       (Args)
+    else if Args.Command = 'bookmarks-strip'   then Result:= RunBookmarksStrip(Args.InFile, Args.Output, Args.Name, Args.Apply, Args.AsJson or SameText(Args.Format, 'json'))
+    else if Args.Command = 'bookmarks-restore' then Result:= RunBookmarksRestore(Args.CallFrom, Args.Apply, Args.AsJson or SameText(Args.Format, 'json'))
     else if Args.Command = 'info'              then Result:= DoInfo            (Args)
     else if Args.Command = 'resolve-uses'      then Result:= DoResolveUses     (Args)
     else if Args.Command = 'fb-snapshot'       then Result:= DoFbSnapshot      (Args)

@@ -5,8 +5,8 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "1.46.0-alpha",
-  "summary": "Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder",
-  "intro": "Read this when you marked code with // dl:bk3 or // dl:bk:A7K3QX comments and want them listed, or one found by its code: bookmarks prints file:line for each anchor and never writes.",
+  "summary": "Lists or finds the dl:bk comment-anchor bookmarks in a unit or a folder, and strips / restores them on request",
+  "intro": "Read this when you marked code with // dl:bk3 or // dl:bk:A7K3QX comments and want them listed, or one found by its code (bookmarks, read-only), or taken out of a file and put back later (bookmarks-strip / bookmarks-restore, user-invoked, dry run without --apply).",
   "wikiPage": "bookmarks",
   "surfaces": [
     {
@@ -27,13 +27,57 @@
           "name": "--json"
         }
       ]
+    },
+    {
+      "type": "cli",
+      "verb": "bookmarks-strip",
+      "example": "drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json]",
+      "usage": "drag-lint bookmarks-strip --in <file.pas|dir> --output <sidecar.json> [--name <code>] [--apply] [--json] (removes the dl:bk comment anchors and records them in a sidecar for bookmarks-restore; dry run without --apply; never overwrites a sidecar; exit 3 = none)",
+      "flags": [
+        {
+          "name": "--in",
+          "arg": "<file.pas|dir>"
+        },
+        {
+          "name": "--output",
+          "arg": "<sidecar.json>"
+        },
+        {
+          "name": "--name",
+          "arg": "<code>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    },
+    {
+      "type": "cli",
+      "verb": "bookmarks-restore",
+      "example": "drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json]",
+      "usage": "drag-lint bookmarks-restore --from <sidecar.json> [--apply] [--json] (puts the anchors a bookmarks-strip removed back, byte-identical when the file is unchanged; a file with an anchor it cannot place is left untouched; dry run without --apply; exit 4 = some unplaced)",
+      "flags": [
+        {
+          "name": "--from",
+          "arg": "<sidecar.json>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",
   "verified": {
-    "date": "2026-11-07",
+    "date": "2026-11-08",
     "by": "ENGINE",
     "build": "1.46.0-alpha",
-    "surfaceHash": "12ec1cf485a59f42b29a1cf39d98e9b6edf664414ac87b8a716c6e81f18ca3c8"
+    "surfaceHash": "917e0439bbf7557eb00f25f900e59ed11de7687c219baf6000ada1b62aabb066"
   }
 }
