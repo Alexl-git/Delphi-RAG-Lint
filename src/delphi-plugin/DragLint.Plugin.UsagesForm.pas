@@ -403,7 +403,7 @@ end;
 procedure TDragLintUsagesForm.ParseUsagesGrouped(const AOutput: string; out AParsed: Boolean);
 { v0.42: render the grouped JSON from `drag-lint usages`. Top-level keys:
   declarations (kind/qname/file/line), reads/writes/calls/types/attributes/
-  events (each file/line/col), and impact (depth/callers/units). Each category
+  events/raises/handles (each file/line/col), and impact (depth/callers/units). Each category
   becomes a root tree node with navigable child rows. }
 var
   Root: TJSONValue ;
@@ -508,6 +508,8 @@ begin
     AddRefGroup('types'     , 'Type uses'     );
     AddRefGroup('attributes', 'Attributes'    );
     AddRefGroup('events'    , 'Event handlers');
+    AddRefGroup('raises'    , 'Raised at'     ); { exception classes: raise sites (146 p1 tail) }
+    AddRefGroup('handles'   , 'Handled at'    ); { ... and the except clauses that catch them }
     AddImpactGroup;
   finally
     Root.Free;
