@@ -8349,20 +8349,27 @@ begin
       'ORDER BY m.name, encl_qname';
     Q.ParamByName('x').AsLargeInt:= AAccessorSymbolId;
     Q.Open;
+    var FMember: TField:= Q.FieldByName('member_symbol_id'   );
+    var FName  : TField:= Q.FieldByName('member_name'        );
+    var FEncl  : TField:= Q.FieldByName('enclosing_symbol_id');
+    var FQName : TField:= Q.FieldByName('encl_qname'         );
+    var FPath  : TField:= Q.FieldByName('file_path'          );
+    var FLine  : TField:= Q.FieldByName('start_line'         );
+    var FCol   : TField:= Q.FieldByName('start_col'          );
+    var FMode  : TField:= Q.FieldByName('mode'               );
     while not Q.Eof do
     begin
       E:= Default(TAccessorEchoUse);
-      E.MemberSymbolId:= Q.FieldByName('member_symbol_id').AsLargeInt;
-      E.MemberName    := Q.FieldByName('member_name').AsString;
-      E.Caller.EnclosingSymbolId:= if Q.FieldByName('enclosing_symbol_id').IsNull then 0
-                                   else Q.FieldByName('enclosing_symbol_id').AsLargeInt;
-      E.Caller.EnclosingQName:= Q.FieldByName('encl_qname').AsString;
-      E.Caller.FullPath      := Q.FieldByName('file_path').AsString;
+      E.MemberSymbolId:= FMember.AsLargeInt;
+      E.MemberName    := FName.AsString;
+      E.Caller.EnclosingSymbolId:= if FEncl.IsNull then 0 else FEncl.AsLargeInt;
+      E.Caller.EnclosingQName:= FQName.AsString;
+      E.Caller.FullPath      := FPath.AsString;
       E.Caller.Location      := ExtractFileName(E.Caller.FullPath);
-      E.Caller.CallSiteLine  := if Q.FieldByName('start_line').IsNull then 0 else Q.FieldByName('start_line').AsInteger;
-      E.Caller.CallSiteCol   := if Q.FieldByName('start_col').IsNull then 0 else Q.FieldByName('start_col').AsInteger;
+      E.Caller.CallSiteLine  := if FLine.IsNull then 0 else FLine.AsInteger;
+      E.Caller.CallSiteCol   := if FCol.IsNull then 0 else FCol.AsInteger;
       E.Caller.Confidence    := 'certain';
-      E.Caller.Mode          := Q.FieldByName('mode').AsString;
+      E.Caller.Mode          := FMode.AsString;
       List.Add(E);
       Q.Next;
     end;
