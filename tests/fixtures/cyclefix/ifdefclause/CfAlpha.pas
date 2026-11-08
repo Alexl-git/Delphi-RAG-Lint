@@ -1,8 +1,8 @@
 unit CfAlpha;
 
-// E18 T3a fixture: the partner entry sits inside a conditional region of the
-// implementation uses clause. Removing it cannot be mechanical: the planner
-// must refuse the whole cycle with `directive`.
+// E18 T3a fixture: the partner entry sits inside a conditional region WITH an ELSE branch
+// (lane 148 CY: only a single-branch region goes whole) of the implementation uses clause.
+// Removing it cannot be mechanical: the planner must refuse the whole cycle with `directive`.
 
 interface
 
@@ -13,7 +13,7 @@ implementation
 
 uses
   System.SysUtils
-  {$IFDEF MSWINDOWS} , CfBeta {$ENDIF}; // why: the limit lives there
+  {$IFDEF MSWINDOWS} , CfBeta {$ELSE} , CfBeta {$ENDIF}; // why: the limit lives there
 
 function AlphaTotal: Integer;
 begin

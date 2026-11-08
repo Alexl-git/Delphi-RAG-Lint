@@ -261,6 +261,9 @@ try {
   $h0 = Get-SrcHash $P.Root
   $a = Run-Fix $P @('--apply')
   Check 'q10b another unit declares Foo, listed last: the gate refuses, nothing written' (($a.Exit -eq 1) -and ((Get-SrcHash $P.Root) -ceq $h0)) "exit=$($a.Exit) kinds=$($a.Kinds -join ',') $($a.Reasons)"
+  # lane 148 CY: the PLANNER refuses it (coupling-remains, the moved body names DUnit qualified), no build needed
+  $a = Run-Fix $P @('--no-compile')
+  Check 'q10c the dry run already refuses coupling-remains naming DUnit.Foo' (($a.Exit -eq 1) -and ($a.Kinds -contains 'coupling-remains') -and ($a.Reasons -match 'DUnit\.Foo')) "exit=$($a.Exit) kinds=$($a.Kinds -join ',') $($a.Reasons)"
   $null = Prove-Apply 'pc2 R.DUnit.Foo is a member chain, no qualifier' (R1Spec (CU '' "type`n  TIn = record`n    procedure Foo(pA: Integer);`n  end;`n  TOut = record`n    DUnit: TIn;`n  end;`n`nprocedure TIn.Foo(pA: Integer);`nbegin`n  Writeln('rec ', pA);`nend;`n`nprocedure TCCls.Run;`nvar`n  R: TOut;`nbegin`n  Foo(1);`n  R.DUnit.Foo(2);`nend;"))
 
   Write-Host '== Q1 unsound or impossible shapes refuse' -ForegroundColor Cyan

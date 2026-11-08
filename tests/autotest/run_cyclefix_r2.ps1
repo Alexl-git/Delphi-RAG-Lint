@@ -377,8 +377,10 @@ try {
     @('f21', 'edge-still-used', 'still uses `DemoGagePort`: `LastGage`', $cleanDir, @(, @($G, "  end;`n`nimplementation", "  end;`n`n/// <summary>A routine named like the member.</summary>`nfunction LastGage: Integer;`n`nimplementation"))),
     # fix round 1: a NESTED member type of a class of the cycle (`TDemoGageInfo.TKind`) -- its owner's unit, never `uses TDemoGageInfo`
     @('f22', 'leaf-uses-cycle', '`TDemoGageInfo.TKind`, the type of `TDemoGagePort.Kind`, is declared in `demogageport`', $cleanDir, $NestedIn),
-    # fix round 1: the consumer handles EInvalidCast and casts with an unguarded `as`
-    @('f24', 'exception-semantics', 'line 51 casts with `as TDemoGagePort` without an `is` guard', $cleanDir, @(, @($U, $AttachGuarded, $AttachTryUnguarded)))
+    # fix round 1: the consumer handles EInvalidCast and casts with an unguarded `as`. Lane 148 CY: that is now cut
+    # through the raise-preserving helper AsDemoGagePortSurface (f24h, run_cyclefix_raisecast_dcc.ps1); it still
+    # refuses when the helper's name is taken
+    @('f24', 'exception-semantics', 'line 51 casts with `as TDemoGagePort` without an `is` guard', $cleanDir, @(@($U, $AttachGuarded, $AttachTryUnguarded), @($U, "`nend.", "`nprocedure AsDemoGagePortSurface;`nbegin`nend;`n`nend.")))
   )
   foreach ($c in $Cases) {
     $useLib = if ($c.Count -gt 5 -and $c[5] -eq 'stub') { $Stub } else { $Lib }
@@ -399,6 +401,10 @@ try {
   $v25 = Get-VariantPlan (New-Variant $cleanDir 'v-f25' @(, @($U, $AttachGuarded, $AttachTryGuarded))) 'v-f25' $Lib
   Check 'f25 control for f24: EInvalidCast handled, but every `as` follows its `is` guard -- still cut' `
     ($v25.Ok -and ($v25.Dump.verdict -eq 'mechanical') -and $v25.Text.Contains('by **member hand-over through an extracted interface**')) "[$($v25.Dump.verdict) / $($v25.Dump.refusals)]"
+  # lane 148 CY (fabcyc case 8): the unguarded shape without a name clash is cut through the helper
+  $v24h = Get-VariantPlan (New-Variant $cleanDir 'v-f24h' @(, @($U, $AttachGuarded, $AttachTryUnguarded))) 'v-f24h' $Lib
+  Check 'f24h EInvalidCast handled, unguarded `as`: cut through AsDemoGagePortSurface' `
+    ($v24h.Ok -and ($v24h.Dump.verdict -eq 'mechanical') -and $v24h.Text.Contains('with AsDemoGagePortSurface(Owner) do')) "[$($v24h.Dump.verdict) / $($v24h.Dump.refusals)]"
   # W6 C1: the first IInterface ancestor of the class lives IN the cycle (the old f16 shape, TDemoGageBase = class(TComponent, IInterface)):
   # the ancestor walk goes on to TComponent, so the cast is `TComponent(Owner) as IDemoGagePortSurface` instead of `cast-unseen`
   $vC1 = Get-VariantPlan (New-Variant $cleanDir 'v-f16c1' @(, @($G, "  TDemoGagePort = class(TComponent)`n  private", "  TDemoGageBase = class(TComponent, IInterface)`n  end;`n`n  TDemoGagePort = class(TDemoGageBase)`n  private"))) 'v-f16c1' $Lib

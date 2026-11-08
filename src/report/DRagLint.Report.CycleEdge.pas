@@ -340,6 +340,10 @@ type
     CastAncestor: string;
     /// <summary>The getters the class already declared and the interface reuses as they are.</summary>
     KeptGetters: TArray<string>;
+    /// <summary>Lane 148 CY (fabcyc case 8): `As&lt;Surface&gt;`, the helper the consumer gets when it
+    /// handles EInvalidCast and casts with `as` unguarded: every `X as TX` becomes `As..(X)`, which raises
+    /// EInvalidCast (SInvalidCast) as the class cast did; '' when no helper is needed.</summary>
+    AsHelper: string;
     /// <summary>True when the leaf already declares IfaceDecl with exactly this code text (comments
     /// aside); it is reused, nothing is inserted for it.</summary>
     Reused: Boolean;
@@ -2502,6 +2506,7 @@ const
   CIInterfaceMethods: array[0..2] of string = ('QueryInterface', '_AddRef', '_Release');
   CGuidGroups     : array[0..4] of Integer = (8, 4, 4, 4, 12);
   CSysUtilsUnit   = 'System.SysUtils';
+  CSysConstUnit   = 'System.SysConst'; // lane 148 CY: SInvalidCast, for the As<Surface> helper
   CRootClass      = 'TObject';
 
 function SurfaceGuid(const pText: string): string;
@@ -3111,6 +3116,7 @@ type
     FWithLines: TList<Integer>;
     FCastUsed: Boolean;
     FCastAnc : string;
+    FAsHelper: string;  // lane 148 CY: the raise-preserving cast helper, '' when not needed
     FRefusal : TRecipeRefusal;
     FMethods : TList<TSymbol>;  // B2: instance methods carried as interface methods
     FMethodDecls: TList<string>;  // B2: their interface declarations
@@ -3167,6 +3173,8 @@ type
     function AddLeafUse(const pM: TSymbol; const pTypeName, pShown: string): Boolean;
     function AddNestedLeafUse(const pM: TSymbol; const pOuter, pShown: string): Boolean;
     function CheckCastExceptions: Boolean;
+    function AsHelperLines: TArray<string>;
+    function AsHelperAnchor: Integer;
     function CollectLeafUses: Boolean;
     procedure AddEdit(pFid: Int64; pLine: Integer; pReplace: Boolean; const pLines: TArray<string>);
     procedure BuildClassEdits;
@@ -3966,7 +3974,8 @@ begin
         'is not that of Self, a parameter, a local, or a field or property of the class, and no `%s is %s` guards ' +
         'it earlier in the same routine', [pLine, X, X, FCls.Name, X, FCls.Name])));
     var Repl:= X + ' as ' + FIface;
-    if not Known or not ImplementsIInterface(FIdx, Ty) then
+    if FAsHelper <> '' then Repl:= Format('%s(%s)', [FAsHelper, X])  { lane 148 CY: raises EInvalidCast as before }
+    else if not Known or not ImplementsIInterface(FIdx, Ty) then
     begin
       Repl     := Format('%s(%s) as %s', [FCastAnc, X, FIface]);
       FCastUsed:= True;
@@ -4017,7 +4026,43 @@ begin
   finally
     Done.Free;
   end;
+  if FAsHelper <> '' then
+  begin
+    var At:= AsHelperAnchor;
+    if At < 1 then
+      Exit(Refuse('exception-semantics', FCls.Name, FFromFid, 0, Format('`%s` handles EInvalidCast and casts with ' +
+        '`as %s` unguarded, and no routine start was found to put the raise-preserving helper `%s` before',
+        [UnitOfFile(FStore.GetFilePath(FFromFid)), FCls.Name, FAsHelper])));
+    AddEdit(FFromFid, At, False, AsHelperLines);
+    if not ConsumerSees(CSysUtilsUnit) and not FUses.Contains(CSysUtilsUnit) then FUses.Add(CSysUtilsUnit);
+    if not ConsumerSees(CSysConstUnit) and not FUses.Contains(CSysConstUnit) then FUses.Add(CSysConstUnit);
+  end;
   Result:= CheckCastUnit;
+end;
+
+{ Lane 148 CY: the line the helper goes AFTER -- just before the outermost routine that holds the first `as`
+  the helper serves (above that routine's `//` / `///` comment lines, so they stay its own); 0 when none. }
+function TMemberPlan.AsHelperAnchor: Integer;
+begin
+  Result:= 0;
+  var C:= TRegEx.Escape(FCls.Name);
+  for var R in FSurface.Refs do
+  begin
+    if (R.Kind <> erTypeAs) or not TRegEx.IsMatch(R.LineText, '\bas\s+' + C + '\b', [roIgnoreCase]) then Continue;
+    var S:= FStore.FindEnclosingRoutineByImpl(FFromFid, R.Line);
+    if S.Id <= 0 then Exit(0);
+    while S.ParentId > 0 do
+    begin
+      var P:= FStore.GetSymbolById(S.ParentId);
+      if not (P.Kind in [skProcedure, skFunction, skMethod]) then Break;
+      S:= P;
+    end;
+    var First:= if S.ImplStartLine > 0 then S.ImplStartLine else S.StartLine;
+    if (First < 2) or (First > Length(FLines)) then Exit(0);
+    Result:= First - 1;
+    while (Result > 1) and TRegEx.IsMatch(FLines[Result - 1], '^\s*//') do Dec(Result);
+    Exit;
+  end;
 end;
 
 { A cast ancestor must be visible in the consumer without the class unit. }
@@ -4070,10 +4115,18 @@ end;
 
 { Fix round 1: `as I` raises EIntfCastError where `as TClass` raised EInvalidCast. When the
   consumer handles EInvalidCast anywhere, every `X as TClass` must follow an `X is TClass`
-  guard of its routine (the guard becomes Supports, so the cast cannot fail there). }
+  guard of its routine (the guard becomes Supports, so the cast cannot fail there).
+  Lane 148 CY (fabcyc case 8): an unguarded one no longer refuses. The consumer gets a helper
+  `As<Surface>(X)` (AsHelperLines) that returns nil for nil, the interface when X supports it, and
+  otherwise raises EInvalidCast.CreateRes(@SInvalidCast) -- the class and the message the failed class
+  cast raised (System.SysUtils maps the RTL's reInvalidCast to exactly that); only the raise address
+  differs. Every `X as TX` of the consumer then goes through it (RewriteLine). Refuses
+  exception-semantics as before when a symbol already carries the helper's name. Runs before
+  RewriteConsumer. }
 function TMemberPlan.CheckCastExceptions: Boolean;
 begin
   Result:= True;
+  FAsHelper:= '';
   var Handles:= False;
   for var L in FLines do
     if TRegEx.IsMatch(PlainCode(L), '\bEInvalidCast\b', [roIgnoreCase]) then Handles:= True;
@@ -4092,11 +4145,33 @@ begin
           [roIgnoreCase]) then Guarded:= True;
       end;
       if not Guarded then
-        Exit(Refuse('exception-semantics', FCls.Name, FFromFid, R.Line, Format('line %d casts with `as %s` without ' +
-          'an `is` guard, and `%s` handles EInvalidCast: a failed `as %s` raises EIntfCastError instead', [R.Line,
-          FCls.Name, UnitOfFile(FStore.GetFilePath(FFromFid)), FIface])));
+      begin
+        var Helper:= 'As' + (if (Length(FIface) > 1) and (UpCase(FIface[1]) = 'I') then Copy(FIface, 2, MaxInt) else FIface);
+        if Length(FStore.FindSymbolsByExactName(Helper)) > 0 then
+          Exit(Refuse('exception-semantics', FCls.Name, FFromFid, R.Line, Format('line %d casts with `as %s` without ' +
+            'an `is` guard, and `%s` handles EInvalidCast: a failed `as %s` raises EIntfCastError instead, and the ' +
+            'helper that would raise EInvalidCast, `%s`, names something that exists already', [R.Line,
+            FCls.Name, UnitOfFile(FStore.GetFilePath(FFromFid)), FIface, Helper])));
+        FAsHelper:= Helper;
+        Exit;
+      end;
     end;
   end;
+end;
+
+{ Lane 148 CY: the helper CheckCastExceptions chose, as lines for the consumer's implementation section. }
+function TMemberPlan.AsHelperLines: TArray<string>;
+begin
+  Result:= [
+    Format('/// <summary>`X as %s` through <c>%s</c>: nil for nil, else raises EInvalidCast as the class cast did.</summary>',
+      [FCls.Name, FIface]),
+    Format('function %s(const pX: TObject): %s;', [FAsHelper, FIface]),
+    'begin',
+    '  Result := nil;',
+    '  if (pX <> nil) and not Supports(pX, ' + FIface + ', Result) then',
+    '    raise EInvalidCast.CreateRes(@SInvalidCast);',
+    'end;',
+    ''];
 end;
 { True when the name starting at the 1-based column pCol of line pLine is qualified: the
   last code character before it (on that line, else at the end of the line before) is a
@@ -4711,8 +4786,9 @@ begin
   begin
     FIface:= if pIfaceName <> '' then pIfaceName else DefaultIfaceName(FCls.Name);
     Ok:= CheckMembers and CheckWrites and CheckMethods and CheckClass;
-    Ok:= Ok and CheckTypeDecls and RewriteConsumer;
-    Ok:= Ok and CheckCastExceptions and CheckCastChainMembers;
+    { lane 148 CY: CheckCastExceptions first -- it picks the As<Surface> helper RewriteConsumer writes }
+    Ok:= Ok and CheckTypeDecls and CheckCastExceptions and RewriteConsumer;
+    Ok:= Ok and CheckCastChainMembers;
     Ok:= Ok and CheckWithBodies and CheckMethodMentions and CollectLeafUses;
   end;
   pRefusal:= FRefusal;
@@ -4749,6 +4825,7 @@ begin
   Result.Surfaces[0].MethodSigs   := Result.MethodSigs;
   Result.Surfaces[0].CastAncestor := Result.CastAncestor;
   Result.Surfaces[0].KeptGetters  := Result.KeptGetters;
+  Result.Surfaces[0].AsHelper     := FAsHelper;
 end;
 
 type
