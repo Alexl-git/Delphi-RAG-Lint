@@ -2676,9 +2676,14 @@ var
       condition keyed on a node type the grammar never produces reads as
       coverage that does not exist. (Same family as the kAt/kVar/exprIf
       "keywords are NAMED nodes" bugs already fixed in this tree.)
-      See docs\INBOX-deep-nesting-silent-on-trailing-else-call.md. }
+      See docs\INBOX-deep-nesting-silent-on-trailing-else-call.md.
+      GRAMMAR v1.4.4 (PR #2, wave 147): a STATEMENT if-with-else now parses as
+      ifElse (prec.dynamic), exprIf is left to the if-EXPRESSION. Both count,
+      so trees from either grammar measure the same; run_deep_nesting_else_forms
+      went RED on the v1.4.4 DLL with exprIf alone. }
     Inc1:= 0;
-    if (N.NodeType = 'if') or (N.NodeType = 'exprIf') or (N.NodeType = 'while') or (N.NodeType = 'for') or (N.NodeType = 'repeat') or (N.NodeType = 'case') or
+    if (N.NodeType = 'if') or (N.NodeType = 'exprIf') or (N.NodeType = 'ifElse') or (N.NodeType = 'while') or
+      (N.NodeType = 'for') or (N.NodeType = 'repeat') or (N.NodeType = 'case') or
       (N.NodeType = 'with') or (N.NodeType = 'try') then Inc1:= 1;
 
     { The else BRANCH is the child immediately after the kElse keyword --
@@ -2700,7 +2705,7 @@ var
         the rule is asking for, and counting it would make any long dispatch
         chain look pathological. }
       if (I = ElseIdx) and (not C.IsNull) and
-         ((C.NodeType = 'if') or (C.NodeType = 'exprIf')) then
+         ((C.NodeType = 'if') or (C.NodeType = 'exprIf') or (C.NodeType = 'ifElse')) then
         ChildDepth:= ADepth;   { chain continuation -- same logical level }
       D:= MaxNest(C, ChildDepth);
       if D > M then M:= D;
