@@ -92,6 +92,27 @@ Rules:
 | 4 | Installer: starter manifest to `{userappdata}\drag-lint`, `outDir` = `%LOCALAPPDATA%\drag-lint\library`, `[Run] manifest migrate` on upgrade from v1, checklist update | **VM test** |
 | 5 | Flip: v2 default, `DRAGLINT_LAYOUT=v1` the way back; run migrate on the dev box | owner go + full battery + re-run of VM test |
 
+**State after lane/147-X5P (2026-11-08).**
+
+* Phase 2 built, OFF: `manifest migrate [--apply] [--json]` (plans by default; `--apply` refused
+  unless v2; writes the roaming file with `outDir` and relative section `include`s made absolute,
+  the exe dir when `outDir` was absent, so every DB stays put; then renames). E6 `%NAME%`
+  expansion in `outDir` under v2. Ruling 3: a manifest FOUND in `%APPDATA%\drag-lint` with no
+  `outDir` puts DBs in `%LOCALAPPDATA%\drag-lint\library`. `register-project --apply` under v2 with
+  no manifest anywhere creates the roaming file. Guard `run_installed_layout_v2_phase2_guard.ps1`.
+  Not done: giving the ~37 test scripts `DRAGLINT_MANIFEST`. Done instead, reversible:
+  `tests\run_battery.ps1` sets `DRAGLINT_LAYOUT=v1` for every child, so only the layout guards
+  (which set it per engine run) ever see v2. A script run by hand outside the battery after the
+  flip still needs `DRAGLINT_LAYOUT=v1` or `DRAGLINT_MANIFEST`.
+* Phase 3 NOT done: the plugin (`src\plugin\*`) belongs to lane P1 this wave and needs the owner's
+  IDE test; still the gate for phase 4 shipping.
+* Phase 4 built behind the ISPP define `LayoutV2` (`Build-Installer.ps1 -LayoutV2`), OFF: starter
+  `installer\drag-lint.starter-v2.json` to `{userappdata}\drag-lint` unless a v1 manifest is beside
+  the engine; `[Run]` `manifest migrate --apply` (with `DRAGLINT_LAYOUT=v2` for that process) on an
+  upgrade; user-level `HKCU\Environment\DRAGLINT_LAYOUT=v2` until the flip. Both variants compile;
+  VM test owed (`installer\VM-TEST-CHECKLIST.md` section L).
+* Phase 5 prepared, NOT flipped: the default is the one constant
+  `TInstalledLayout.DEFAULT_LAYOUT_V2 = False`; `DRAGLINT_LAYOUT=v1` is accepted as the way back.
 **Do not set `DRAGLINT_LAYOUT=v2` on a box with the IDE plugin before phase 3:** the plugin still
 reads the manifest beside the BPL or exe, so plugin and engine would disagree on the DB list.
 

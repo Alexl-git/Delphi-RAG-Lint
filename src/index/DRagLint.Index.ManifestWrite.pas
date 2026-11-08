@@ -135,12 +135,55 @@ function RegisterProjectSection(const AEngineDir, AProjectFile, AName: string;
 /// </remarks>
 function FindManifestCopies(const AEngineDir: string): TArray<string>;
 
+type
+  /// <summary>What `manifest migrate` did or would do.</summary>
+  TMigrateOutcome = (
+    mgMigrated,         { roaming file written, exe-side file renamed (or would be) }
+    mgNothingToMigrate, { no drag-lint.json beside the engine                         }
+    mgTargetExists,     { the roaming file exists already: nothing written or renamed }
+    mgLayoutOff,        { --apply with DRAGLINT_LAYOUT not v2: refused                }
+    mgExplicit,         { DRAGLINT_MANIFEST / --manifest in effect: refused           }
+    mgNoAppData,        { %APPDATA% is unset: refused                                 }
+    mgFailed);          { parse or I/O error; see Message                             }
+
+  /// <summary>Result of <see cref="MigrateExeManifest"/>.</summary>
+  TMigrateResult = record
+    Outcome  : TMigrateOutcome;
+    Source   : string; { the exe-side drag-lint.json                       }
+    Target   : string; { %APPDATA%\drag-lint\drag-lint.json                }
+    RenamedTo: string; { drag-lint.json.migrated-yyyy-mm-dd[-n]            }
+    Json     : string; { the text written (or that would be) to Target     }
+    Message  : string;
+  end;
+
+/// <summary>`manifest migrate` (installed layout v2, phase 2, ruling 2): copies the
+/// exe-side drag-lint.json to %APPDATA%\drag-lint\drag-lint.json and RENAMES the
+/// exe-side file to drag-lint.json.migrated-&lt;date&gt;. It never deletes and never
+/// overwrites.</summary>
+/// <param name="AEngineDir">Directory of the running engine (the exe side).</param>
+/// <param name="AApply">False plans and touches nothing; allowed with the layout OFF.</param>
+/// <param name="ADate">Date stamped into the renamed file's name.</param>
+/// <returns>Outcome plus every path involved.</returns>
+/// <remarks>Paths are rebased so that every DB stays where it was: `outDir` becomes
+/// absolute (the exe dir when it was absent, which also stops the roaming default of
+/// ruling 3 from moving the DBs), and every relative section `include` becomes absolute
+/// against the exe dir. The roaming file is written first, then the source is renamed;
+/// if the rename fails both files remain and the layout-v2 reader answers from the
+/// roaming one. The BPL-side sibling copy is not touched (plugin, phase 3). Not
+/// thread-safe.</remarks>
+function MigrateExeManifest(const AEngineDir: string; AApply: Boolean;
+  ADate: TDateTime): TMigrateResult;
+
 implementation
 
 uses
   System.Classes,
   System.IOUtils,
   System.JSON   ;   { SysUtils comes from the interface uses }
+
+const
+  { The roaming manifest register-project creates when none exists (layout v2). }
+  NEW_MANIFEST_TEXT = '{"settings":{},"indexes":{"sections":[]}}';
 
 function FindManifestCopies(const AEngineDir: string): TArray<string>;
 var
@@ -266,11 +309,24 @@ begin
   if Result.Outcome <> roAdded then Exit;
 
   Copies:= FindManifestCopies(AEngineDir);
+  { Layout v2, phase 2: with no manifest anywhere, the roaming file is created
+    (WriteTarget names it only when the layout is on and nothing exists). }
+  var Created:= '';
   if Length(Copies) = 0 then
   begin
-    Result.Outcome:= roNoManifest;
-    Result.Message:= 'no drag-lint.json found at or beside ' + AEngineDir;
-    Exit;
+    var Target:= TInstalledLayout.WriteTarget(AEngineDir);
+    if TInstalledLayout.Enabled and (Target <> '') and not TFile.Exists(Target) and
+      SameText(Target, TInstalledLayout.AppDataManifestFor(GetEnvironmentVariable('APPDATA'))) then
+    begin
+      Created:= Target;
+      Copies := [Target];
+    end
+    else
+    begin
+      Result.Outcome:= roNoManifest;
+      Result.Message:= 'no drag-lint.json found at or beside ' + AEngineDir;
+      Exit;
+    end;
   end;
 
   SecName:= AName;
@@ -285,7 +341,8 @@ begin
     if not AApply then
     begin
       Result.Outcome:= roAdded;   { reported as WOULD add; the caller prints the mode }
-      Result.Message:= 'dry run -- nothing written';
+      Result.Message:= if Created = '' then 'dry run -- nothing written'
+        else 'dry run -- nothing written; would create ' + Created;
       Exit;
     end;
 
@@ -296,7 +353,9 @@ begin
     SetLength(NewTexts, Length(Copies));
     try
       for var i:= 0 to High(Copies) do
-        NewTexts[i]:= AppendSectionToText(TFile.ReadAllText(Copies[i]), SectionOb);
+        NewTexts[i]:= AppendSectionToText(
+          if Copies[i] = Created then NEW_MANIFEST_TEXT else TFile.ReadAllText(Copies[i]), SectionOb);  // dl:ok taint-path-traversal@38a7 -- REVIEWED 2026-11-08 (X5P): the path IS the user's own %APPDATA% / DRAGLINT_MANIFEST manifest (owner ruling 1); reading the file the environment names is the design, not a traversal
+      if Created <> '' then TDirectory.CreateDirectory(ExtractFileDir(Created));  // dl:ok taint-path-traversal@444a -- REVIEWED 2026-11-08 (X5P): creates the folder of %APPDATA%\drag-lint\drag-lint.json for the user who runs the engine (layout v2, phase 2); the environment choosing it is the design
     except
       on E: Exception do
       begin
@@ -310,10 +369,147 @@ begin
       TFile.WriteAllText(Copies[i], NewTexts[i], TEncoding.UTF8);
 
     Result.Outcome:= roAdded;
-    Result.Message:= 'section added';
+    Result.Message:= if Created = '' then 'section added' else 'section added; created ' + Created;
   finally
     SectionOb.Free;
   end;
+end;
+
+{ Rebases one path value written relative to the exe dir so it means the same
+  from the roaming folder. Empty, absolute and %VAR% values are kept. }
+function RebaseToExeDir(const AValue, AEngineDir: string): string;
+begin
+  if (AValue = '') or AValue.Contains('%') or TPath.IsPathRooted(AValue) then Exit(AValue);
+  Result:= ExcludeTrailingPathDelimiter(TPath.GetFullPath(TPath.Combine(AEngineDir, AValue)));
+end;
+
+{ Rebases a section's `include` (string or array) in place. }
+procedure RebaseInclude(const ASection: TJSONObject; const AEngineDir: string);
+begin
+  var Pair:= ASection.Get('include');
+  if Pair = nil then Exit;
+  if Pair.JsonValue is TJSONArray then
+  begin
+    var NewArr:= TJSONArray.Create;
+    for var Item in TJSONArray(Pair.JsonValue) do NewArr.Add(RebaseToExeDir(Item.Value, AEngineDir));
+    Pair.JsonValue:= NewArr;
+  end
+  else if Pair.JsonValue is TJSONString then
+    Pair.JsonValue:= TJSONString.Create(RebaseToExeDir(Pair.JsonValue.Value, AEngineDir));
+end;
+
+{ The migrated text: outDir and every relative include made absolute against the
+  exe dir; every other key kept as it was. Raises on a shape it does not know. }
+function RebasedManifestText(const AText, AEngineDir: string): string;
+begin
+  var Root:= TJSONObject.ParseJSONValue(AText);
+  if Root is not TJSONObject then
+  begin
+    Root.Free;
+    raise EManifestWriteError.Create('manifest is not a JSON object');
+  end;
+  try
+    var Indexes:= TJSONObject(Root).GetValue('indexes');
+    if Indexes is not TJSONObject then raise EManifestWriteError.Create('manifest has no "indexes" object');
+    var OutPair:= TJSONObject(Indexes).Get('outDir');
+    var OutDir := ExcludeTrailingPathDelimiter(TPath.GetFullPath(AEngineDir));
+    if (OutPair <> nil) and (OutPair.JsonValue.Value <> '') then
+      OutDir:= RebaseToExeDir(OutPair.JsonValue.Value, AEngineDir);
+    if OutPair <> nil then OutPair.JsonValue:= TJSONString.Create(OutDir)
+    else TJSONObject(Indexes).AddPair('outDir', OutDir);
+    var Sections:= TJSONObject(Indexes).GetValue('sections');
+    if Sections is TJSONArray then
+      for var S in TJSONArray(Sections) do
+        if S is TJSONObject then RebaseInclude(TJSONObject(S), AEngineDir);
+    Result:= Root.Format(2);
+  finally
+    Root.Free;
+  end;
+end;
+
+function MigrateExeManifest(const AEngineDir: string; AApply: Boolean;  // dl:ok too-many-exit-points@e030 -- REVIEWED 2026-11-08 (X5P): each exit is a DISTINCT TMigrateOutcome (explicit, no APPDATA, nothing, target exists, unparsable, dry run, layout off, write failed, rename failed); the guard asserts them apart, one exit would thread a state flag through I/O steps whose order is the contract
+  ADate: TDateTime): TMigrateResult;
+begin
+  Result:= Default(TMigrateResult);
+  Result.Source:= TPath.Combine(AEngineDir, 'drag-lint.json');
+  Result.Target:= TInstalledLayout.AppDataManifestFor(GetEnvironmentVariable('APPDATA'));
+  if GetEnvironmentVariable(TInstalledLayout.MANIFEST_ENV) <> '' then
+  begin
+    Result.Outcome:= mgExplicit;
+    Result.Message:= 'an explicit manifest is in effect (DRAGLINT_MANIFEST / --manifest); nothing to migrate';
+    Exit;
+  end;
+  if Result.Target = '' then
+  begin
+    Result.Outcome:= mgNoAppData;
+    Result.Message:= '%APPDATA% is not set';
+    Exit;
+  end;
+  if not TFile.Exists(Result.Source) then
+  begin
+    Result.Outcome:= mgNothingToMigrate;
+    Result.Message:= 'no drag-lint.json beside the engine; nothing to migrate';
+    Exit;
+  end;
+  if TFile.Exists(Result.Target) then
+  begin
+    Result.Outcome:= mgTargetExists;
+    Result.Message:= 'the roaming manifest exists already; nothing written or renamed';
+    Exit;
+  end;
+  var Stem:= Result.Source + '.migrated-' + FormatDateTime('yyyy-mm-dd', ADate);
+  Result.RenamedTo:= Stem;
+  var N:= 1;
+  while TFile.Exists(Result.RenamedTo) do
+  begin
+    Inc(N);
+    Result.RenamedTo:= Stem + '-' + IntToStr(N);
+  end;
+  try
+    Result.Json:= RebasedManifestText(TFile.ReadAllText(Result.Source), AEngineDir);
+  except
+    on E: Exception do
+    begin
+      Result.Outcome:= mgFailed;
+      Result.Message:= 'manifest not migrated: ' + E.Message;
+      Exit;
+    end;
+  end;
+  if not AApply then
+  begin
+    Result.Outcome:= mgMigrated;
+    Result.Message:= 'dry run -- nothing written or renamed';
+    Exit;
+  end;
+  if not TInstalledLayout.Enabled then
+  begin
+    Result.Outcome:= mgLayoutOff;
+    Result.Message:= 'refused: DRAGLINT_LAYOUT is not v2, so the engine would lose its manifest after the rename';
+    Exit;
+  end;
+  try
+    TDirectory.CreateDirectory(ExtractFileDir(Result.Target));
+    TFile.WriteAllText(Result.Target, Result.Json, TEncoding.UTF8);
+  except
+    on E: Exception do
+    begin
+      Result.Outcome:= mgFailed;
+      Result.Message:= 'roaming manifest not written: ' + E.Message;
+      Exit;
+    end;
+  end;
+  try
+    TFile.Move(Result.Source, Result.RenamedTo);
+  except
+    on E: Exception do
+    begin
+      Result.Outcome:= mgFailed;
+      Result.Message:= 'roaming manifest written, but the exe-side file was not renamed: ' + E.Message;
+      Exit;
+    end;
+  end;
+  Result.Outcome:= mgMigrated;
+  Result.Message:= 'migrated';
 end;
 
 end.

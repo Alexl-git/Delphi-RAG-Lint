@@ -44,6 +44,14 @@
   #error NumericVersion is not defined -- build with installer\Build-Installer.ps1
 #endif
 
+; INSTALLED LAYOUT V2, phase 4 (docs\superpowers\specs\2026-11-06-installed-layout-v2.md).
+; OFF unless Build-Installer.ps1 -LayoutV2 defines LayoutV2: a setup built without it installs the
+; flat v1 layout exactly as before. With it: the starter manifest goes to {userappdata}\drag-lint
+; (outDir %LOCALAPPDATA%\drag-lint\library), an upgrade from v1 runs `manifest migrate --apply`,
+; and DRAGLINT_LAYOUT=v2 is set for the user until the engine default flips (phase 5).
+; Do NOT ship a -LayoutV2 setup before the plugin lookups (phase 3) and the VM test
+; (installer\VM-TEST-CHECKLIST.md, section L) are done.
+
 #define AppName "drag-lint"
 #define IdeVer  "37.0"
 #define IdeKey  "Software\Embarcadero\BDS\" + IdeVer
@@ -78,6 +86,10 @@ WizardStyle=modern
 LicenseFile={#RepoRoot}\installer\licenses\drag-lint-LICENSE.txt
 UninstallDisplayName={#AppName} {#AppVersion}
 CloseApplications=yes
+#ifdef LayoutV2
+; the user-level DRAGLINT_LAYOUT=v2 below must reach new processes without a log-off
+ChangesEnvironment=yes
+#endif
 RestartApplications=no
 ; (e) code signing: leave disabled until a certificate exists
 ; SignTool=drag-lint $f
@@ -115,8 +127,15 @@ Source: "{#EngineDir}\rules\*";                  DestDir: "{app}\bin\rules"; Com
 ; overwritten, never removed -- after the first run it is the user's file. In an
 ; all-users install it sits under Program Files, so users get modify rights on it
 ; (drag-lint-config.exe edits it in place).
+#ifdef LayoutV2
+; v2: the starter goes to the installing user's roaming folder -- but only when no v1 manifest
+; is beside the engine: an upgrade migrates that one instead ([Run]), and a roaming file
+; placed first would make `manifest migrate` refuse (it never overwrites).
+Source: "{#RepoRoot}\installer\drag-lint.starter-v2.json"; DestDir: "{userappdata}\drag-lint"; DestName: "drag-lint.json"; Components: core; Flags: onlyifdoesntexist uninsneveruninstall; Check: not HasV1Manifest
+#else
 Source: "{#RepoRoot}\installer\drag-lint.starter.json"; DestDir: "{app}\bin"; DestName: "drag-lint.json"; Components: core; Flags: onlyifdoesntexist uninsneveruninstall; Check: not IsAdminInstallMode
 Source: "{#RepoRoot}\installer\drag-lint.starter.json"; DestDir: "{app}\bin"; DestName: "drag-lint.json"; Components: core; Flags: onlyifdoesntexist uninsneveruninstall; Permissions: users-modify; Check: IsAdminInstallMode
+#endif
 Source: "{#RepoRoot}\charts\report-pairs.example.json"; DestDir: "{app}"; Components: core; Flags: ignoreversion
 ; ---- optional tools ---------------------------------------------------------
 Source: "{#EngineDir}\drag-lint-open.exe"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
@@ -152,6 +171,10 @@ Source: "{#RepoRoot}\installer\licenses\*.txt"; DestDir: "{app}\licenses"; Compo
 Source: "{#YadfDir}\LICENSE"; DestDir: "{app}\licenses"; DestName: "YADF-LICENSE.txt"; Components: yadf; Flags: ignoreversion
 
 [Registry]
+#ifdef LayoutV2
+; v2 until the engine default flips (phase 5); removed on uninstall
+Root: HKCU; Subkey: "Environment"; ValueType: string; ValueName: "DRAGLINT_LAYOUT"; ValueData: "v2"; Components: core; Flags: uninsdeletevalue
+#endif
 ; plugin registration: ONE value each, named by our own path; uninstall deletes
 ; exactly that value and never touches other Known Packages entries.
 Root: HKCU; Subkey: "{#IdeKey}\Known Packages";     ValueType: string; ValueName: "{app}\bin\dclDragLintWizard.bpl";     ValueData: "drag-lint IDE plugin"; Components: plugin32; Check: InstallPlugin32; Flags: uninsdeletevalue
@@ -162,6 +185,12 @@ Root: HKCU; Subkey: "{#IdeKey}\Known Packages x64"; ValueType: string; ValueName
 Root: HKCU; Subkey: "{#InstKey}"; ValueType: string; ValueName: "ProtocolRegisteredBy"; ValueData: "{app}"; Tasks: protocol; Check: RegisterProtocol; Flags: uninsdeletevalue uninsdeletekeyifempty
 
 [Run]
+#ifdef LayoutV2
+; v2 upgrade from a flat v1 install: one-time, explicit migration (owner ruling 2). The engine
+; refuses --apply unless DRAGLINT_LAYOUT=v2, so it is set for this one process; as the original
+; user, so %APPDATA% is theirs. It renames the old file, never deletes it.
+Filename: "{cmd}"; Parameters: "/c set DRAGLINT_LAYOUT=v2&& ""{app}\bin\drag-lint.exe"" manifest migrate --apply"; StatusMsg: "Moving drag-lint.json to the user profile ..."; Components: core; Check: HasV1Manifest; Flags: runhidden runasoriginaluser waituntilterminated
+#endif
 Filename: "{app}\bin\drag-lint.exe"; Parameters: "protocol register --handler ""{app}\bin\drag-lint-open.exe"" --force"; StatusMsg: "Registering draglint:// ..."; Tasks: protocol; Check: RegisterProtocol; Flags: runhidden runasoriginaluser waituntilterminated
 Filename: "{app}\bin\drag-lint.exe"; Parameters: "mcp-config --all --engine ""{app}\bin\drag-lint.exe"""; StatusMsg: "Registering the MCP server ..."; Tasks: mcp; Flags: runhidden runasoriginaluser waituntilterminated
 Filename: "{app}\yadf\YADFSetup.exe"; Description: "Open YADFSetup to choose formatting settings"; Components: yadf; Flags: postinstall nowait skipifsilent unchecked runasoriginaluser
@@ -172,6 +201,14 @@ Filename: "{app}\bin\drag-lint.exe"; Parameters: "mcp-config --all --remove"; Ru
 
 [Code]
 { ---- IDE detection (owner D2: offer the plugin only where RAD Studio 13 is) - }
+
+#ifdef LayoutV2
+{ True while a flat v1 manifest sits beside the engine (an upgrade not migrated yet). }
+function HasV1Manifest: Boolean;
+begin
+  Result:= FileExists(ExpandConstant('{app}\bin\drag-lint.json'));
+end;
+#endif
 
 function IdeRoot: string;
 begin

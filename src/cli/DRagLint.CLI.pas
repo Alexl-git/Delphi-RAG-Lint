@@ -38972,9 +38972,53 @@ begin
       SetEnvironmentVariable(TInstalledLayout.MANIFEST_ENV, PChar(TPath.GetFullPath(ParamStr(I + 1))));
 end;
 
+/// <summary>`manifest migrate [--apply] [--json]` (installed layout v2, phase 2): plans,
+/// or with --apply performs, the one-time move of the exe-side drag-lint.json to
+/// %APPDATA%\drag-lint\drag-lint.json; the old file is renamed, never deleted.</summary>
+/// <param name="AArgs">Apply writes; without it (or with --dry-run) nothing is touched.</param>
+/// <returns>0 migrated, would migrate or nothing to migrate; 2 refused (target exists,
+/// layout off on --apply, explicit manifest, no APPDATA); 1 failed.</returns>
+function DoManifestMigrate(const AArgs: TArgs): Integer;
+const
+  EXIT_REFUSED = 2;
+  OUTCOME_NAMES: array[TMigrateOutcome] of string =
+    ('migrated', 'nothing-to-migrate', 'target-exists', 'layout-off', 'explicit', 'no-appdata', 'failed');
+begin
+  var Apply:= AArgs.Apply and not AArgs.DryRun;
+  var Res  := MigrateExeManifest(ExtractFilePath(ParamStr(0)), Apply, Now);
+  case Res.Outcome of
+    mgMigrated, mgNothingToMigrate: Result:= 0;
+    mgFailed                      : Result:= 1;
+  else
+    Result:= EXIT_REFUSED;
+  end;
+  if AArgs.AsJson then
+  begin
+    var Root:= TJSONObject.Create;
+    try
+      Root.AddPair('outcome', OUTCOME_NAMES[Res.Outcome]);
+      Root.AddPair('applied', TJSONBool.Create(Apply and (Res.Outcome = mgMigrated)));
+      Root.AddPair('source', Res.Source);
+      Root.AddPair('target', Res.Target);
+      Root.AddPair('renamedTo', Res.RenamedTo);
+      Root.AddPair('message', Res.Message);
+      Writeln(Root.ToJSON);
+    finally
+      Root.Free;
+    end;
+    Exit;
+  end;
+  Writeln('manifest migrate: ', OUTCOME_NAMES[Res.Outcome], if Apply then '' else ' (dry run; --apply to write)');
+  Writeln('  from:      ', Res.Source);
+  Writeln('  to:        ', Res.Target);
+  if Res.RenamedTo <> '' then Writeln('  rename to: ', Res.RenamedTo);
+  Writeln('  ', Res.Message);
+end;
+
 /// <summary>`manifest where [--json]`: which manifest, log folder and library folder this
-/// process resolves, and why. Read-only: it creates, moves and renames nothing.</summary>
-/// <param name="AArgs">SubCommand must be `where`; AsJson selects the JSON shape.</param>
+/// process resolves, and why. Read-only: it creates, moves and renames nothing.
+/// `manifest migrate` is handed to <see cref="DoManifestMigrate"/>.</summary>
+/// <param name="AArgs">SubCommand must be `where` or `migrate`; AsJson selects the JSON shape.</param>
 /// <returns>0, also when the resolved file does not exist; 3 for any other subcommand.</returns>
 function DoManifest(const AArgs: TArgs): Integer;
 const
@@ -38990,9 +39034,10 @@ var
   Item     : TJSONObject;
   List     : TJSONArray;
 begin
+  if AArgs.SubCommand = 'migrate' then Exit(DoManifestMigrate(AArgs));
   if AArgs.SubCommand <> 'where' then
   begin
-    Writeln(ErrOutput, 'usage: drag-lint manifest where [--manifest <path>] [--json]');
+    Writeln(ErrOutput, 'usage: drag-lint manifest where|migrate [--manifest <path>] [--apply] [--json]');
     Exit(EXIT_BAD_USAGE);
   end;
   EngineDir:= ExtractFilePath(ParamStr(0));
