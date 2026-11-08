@@ -1,0 +1,46 @@
+{
+  "id": "arch-diagram",
+  "title": "arch-diagram",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "internal",
+  "since": "1.46.0-alpha",
+  "summary": "Draws one self-contained HTML layer diagram of a project's units by folder, with the layers measured from the uses clauses",
+  "intro": "Read this when you want the shape of a project in one file you can open anywhere: which folder sits on which, and the uses lines behind every arrow. It needs no Graphviz and fetches nothing.",
+  "wikiPage": "arch-diagram",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "arch-diagram",
+      "usage": "drag-lint arch-diagram --db <db> [--output <file.html>] [--json]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--output",
+          "arg": "<file.html>"
+        },
+        {
+          "name": "--json"
+        }
+      ],
+      "helpOrder": 30,
+      "help": ["  drag-lint arch-diagram       --db <db> [--output <file.html>] [--json]   (one self-contained HTML layer diagram of the units by folder; layers measured from uses; no Graphviz)"]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"],
+  "questions": [
+    {
+      "ask": "Which folder of this project sits on which?",
+      "command": "drag-lint arch-diagram --db <db> --output <file.html>"
+    },
+    {
+      "ask": "Which uses lines make a folder depend on a folder above it?",
+      "command": "drag-lint arch-diagram --db <db> --json"
+    }
+  ],
+  "notes": "wave 146 lane x3, NOT FOR MERGE until the owner has seen the picture; spec docs\\superpowers\\specs\\2026-11-06-archify-layer-diagrams.md; guard tests\\autotest\\run_arch_diagram.ps1"
+}
