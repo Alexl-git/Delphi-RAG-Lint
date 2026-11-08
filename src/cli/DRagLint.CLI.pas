@@ -15312,6 +15312,7 @@ begin
       half renamed), and a single fix's refusal. Empty for a single-project
       unit, which keeps every line below byte-identical for it. }
     var Rename: TRenameOutcome:= Default(TRenameOutcome);
+    var NamingRenames: Integer:= 0; // single-project naming renames of this run (the multi-owner ones are Rename.Applied)
 
     { ADF Task 8: doc-drift is store-backed, so its fix cannot be produced by the
       pure-text BuildAutofixEdits above -- it needs the store (facts + MergeComment).
@@ -15448,6 +15449,7 @@ begin
         begin
           Edits:= Edits + NFEdits;
           Inc(FixCount, NFCount);
+          Inc(NamingRenames, NFCount);
         end;
         { E-RENAME-OTHER-PATHS: the proof `rename --apply` runs refused these; a preview says the same as the apply. }
         if Length(NFRefused) > 0 then
@@ -15528,6 +15530,12 @@ begin
     end;
     if AArgs.Apply then GuardRenameWrites(AArgs, Rename, FixCount);
     Edits:= Edits + Rename.Edits;
+    { A naming rename edits a declaration and every use: with a --project .dproj it is written through the compile gate
+      even without --compile-gate (148 RN; 146 r2 left it proof-only). The other fixers keep R3's opt-in. }
+    var GateWrite: Boolean:= AArgs.CompileGate
+      or ((NamingRenames + Rename.Applied > 0) and SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') and TFile.Exists(AArgs.ProjectPath));
+    if GateWrite and AArgs.Apply and not AArgs.CompileGate then
+      Writeln(ErrOutput, 'drag-lint: note: naming renames are written through the compile gate of ' + ExtractFileName(AArgs.ProjectPath));
     { ONE PASS NEVER WRITES MIXED BYTES: a finding whose edits overlap an earlier
       finding's (two rules rewriting one span) is withheld WHOLE and reported
       deferred; the next --fix pass re-lints and applies it.
@@ -15593,7 +15601,7 @@ begin
         end;
         if AArgs.Apply and (FixCount > 0) then
         begin
-          if AArgs.CompileGate then
+          if GateWrite then
           begin
             var GateTouched: Integer;
             if not ApplyEditsGated(Edits, 'lint --fix', AArgs, GateTouched) then GateRefused:= True;
@@ -15687,7 +15695,7 @@ begin
         suffix rather than reporting them separately. }
       var ApplySkipped: Integer;
       var Touched: Integer;
-      if AArgs.CompileGate then
+      if GateWrite then
       begin
         ApplySkipped:= 0;
         if not ApplyEditsGated(Edits, 'lint --fix', AArgs, Touched) then Exit(1);  // dl:ok too-many-exit-points@277f -- the refusal is the verb's exit 1; ApplyEditsGated printed the reason and nothing is changed
