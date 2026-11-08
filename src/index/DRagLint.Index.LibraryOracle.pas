@@ -475,25 +475,23 @@ end;
 function TLibraryOracle.IsDynArrayType(const ATypeText: string; const AUses: TArray<string>;
   ADepth: Integer): Boolean;
 begin
-  Result:= False;
-  if ADepth > MAX_ALIAS_HOPS then Exit;
   var Text: string:= Trim(ATypeText);
   if Text.ToLower.StartsWith('array of') then Exit(True);
   var Leaf: string:= NormalizeTypeLeaf(Text);
-  if (Leaf = '') or Leaf.StartsWith('^') then Exit;
-  if Length(VisibleOf(Cached(FTypes, Leaf, TYPE_KINDS, True), AUses)) > 0 then Exit;
-  var Cands: TArray<TLibCand>:= Cached(FAliases, Leaf, [skTypeAlias], False);
-  var Seen: TArray<TLibCand>:= VisibleOf(Cands, AUses);
-  if Length(Seen) = 0 then Exit;
+  { Too deep, not a plain name, or a visible class / record / interface of the name. }
+  if (ADepth > MAX_ALIAS_HOPS) or (Leaf = '') or Leaf.StartsWith('^')
+     or (Length(VisibleOf(Cached(FTypes, Leaf, TYPE_KINDS, True), AUses)) > 0) then Exit(False);
+  var Seen: TArray<TLibCand>:= VisibleOf(Cached(FAliases, Leaf, [skTypeAlias], False), AUses);
+  Result:= Length(Seen) > 0;
   for var C: TLibCand in Seen do
-    if not IsDynArrayType(C.Sig, LibraryUses(C.Store, C.FileId) + [IMPLICIT_ROOT_UNIT], ADepth + 1) then Exit;
-  Result:= True;
+    Result:= Result and IsDynArrayType(C.Sig, LibraryUses(C.Store, C.FileId) + [IMPLICIT_ROOT_UNIT], ADepth + 1);
 end;
 
 function TLibraryOracle.NoteIntrinsic(const AReceiver, AMember: string; const AUsesUnits: TArray<string>): Boolean;
 begin
-  Result:= (Length(FStores) > 0) and SameText(AMember, 'Create') and (Pos('<', AReceiver) > 1)
-           and AReceiver.EndsWith('>') and IsIdent(Copy(AReceiver, 1, Pos('<', AReceiver) - 1))
+  var Lt: Integer:= Pos('<', AReceiver);
+  var GenericHead: Boolean:= (Lt > 1) and AReceiver.EndsWith('>') and IsIdent(Copy(AReceiver, 1, Lt - 1));
+  Result:= (Length(FStores) > 0) and SameText(AMember, 'Create') and GenericHead
            and IsDynArrayType(AReceiver, AUsesUnits + [IMPLICIT_ROOT_UNIT, 'sysinit'], 0);
   if Result then Inc(FStats.Intrinsic);
 end;
