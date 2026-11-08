@@ -153,6 +153,46 @@ end.
   $p6 = Put 'BK.pas' ($cf -replace 'unit CF', 'unit BK')
   Fix $p6 'manual-inrange' | Out-Null
   Check 'no-backup control: the default still writes the .bak' (Test-Path -LiteralPath ($p6 + '.bak')) ''
+  # ---- 5. unused-local keeps every dl: anchor (D7) ----------------------------
+  # Shapes: `//` trailing, brace trailing, `var // dl:bk` on the keyword line, an
+  # own-line anchor; plus a plain non-dl trailing comment that must still go.
+  $bk = @"
+unit BM;
+
+interface
+
+procedure Foo;
+
+implementation
+
+procedure Foo;
+var
+  A, B: Integer; // dl:bk anchor-a
+  D: Integer; { dl:bk anchor-d }
+  G: Integer; // plain-gone
+  C: Integer;
+begin
+  C:= 1;
+  if C = 1 then C:= 2;
+end;
+
+procedure Baz;
+var // dl:bk anchor-v
+  E: Integer;
+begin
+end;
+
+end.
+"@
+  $p7 = Put 'BM.pas' $bk
+  Fix $p7 'unused-local' -NoBackup | Out-Null
+  $t7 = Get-Text $p7
+  Check 'bookmark: the // anchor survives' ($t7 -match 'dl:bk anchor-a') $t7
+  Check 'bookmark: the brace anchor survives' ($t7 -match 'dl:bk anchor-d') $t7
+  Check 'bookmark: the var-keyword-line anchor survives' ($t7 -match 'dl:bk anchor-v') $t7
+  # positive control: the dead declarations really went, and a plain comment went with its line
+  Check 'bookmark control: dead declarations removed' (-not ($t7 -match '(?m)^\s*(A, B|D|G|E): Integer')) $t7
+  Check 'bookmark control: a plain trailing comment is still deleted' (-not ($t7 -match 'plain-gone')) $t7
 }
 finally {
   [IO.Directory]::Delete($Work, $true)
