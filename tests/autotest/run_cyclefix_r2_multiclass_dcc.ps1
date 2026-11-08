@@ -389,7 +389,7 @@ try {
   Write-Host '== no class: the operand is an interface its unit keeps (it names a class of the unit)' -ForegroundColor Cyan
   $nc = Join-Path $WorkDir 'noclass-edit'; Copy-Tree $Fx $nc
   Edit-File (Join-Path $nc 'DemoGagePort.pas') $PortDecl ("  TDemoGagePort = class;`n`n  /// <summary>Something with a port.</summary>`n  IDemoHasPort = interface`n    ['{11111111-2222-3333-4444-555555555555}']`n    /// <summary>The port.</summary>`n    function Port: TDemoGagePort;`n  end;`n`n$PortDecl")
-  Edit-File (Join-Path $nc 'DemoUIConnect.pas') $AttachOld "procedure TDemoUIConnect.Attach;`nbegin`n  if Owner is IDemoHasPort then`n    Exit;`nend;"
+  Edit-File (Join-Path $nc 'DemoUIConnect.pas') $AttachOld "procedure TDemoUIConnect.Attach;`nbegin`n  if (Owner as IDemoHasPort).Port = nil then`n    Exit;`nend;"
   Edit-File (Join-Path $nc 'DemoUIConnect.pas') "  if not (Sender is TDemoGagePort) then`n    Exit;`n  with Sender as TDemoGagePort do`n  begin`n    // Log and LastGage bind to the port; InBuf binds to Self.`n    Log.Add('data ' + InBuf);`n    Log.Add(Format('gage now %d', [LastGage]));`n    LastGage := 0; // <-- a WRITE through the with: an interface of reads cannot carry it`n  end;`n" ''
   $ncp = (Get-PlanFile (Join-Path $nc 'MemberWrite.dproj') 'noclass').Text
   Check 'c1 the edge refuses other-ref, naming the interface and its line' ($ncp -match 'IDemoHasPort` \(no class\): refused: other-ref -- line \d+ tests or casts against `IDemoHasPort`') ''
