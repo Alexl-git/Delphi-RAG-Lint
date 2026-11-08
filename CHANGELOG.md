@@ -1298,7 +1298,7 @@ Extractor 1.22.0-alpha (one re-parse for all three fixes).
 
 ### Merged from main (since v1.28.3)
 
-- **Installer R2 + installed layout v2.** The IDE plugin's logs always go to
+- **Installer R2 (CHARTS part only; installed layout v2 NOT shipped -- `manifest migrate` is a proposal, see `docs/superpowers/specs/2026-10-13-installer-layout-v2-proposal.md`).** The IDE plugin's logs always go to
   `%LOCALAPPDATA%\drag-lint\logs` (folder resolved once at load; no log root means no log write,
   never the drive root); Ask-Report also looks in `{app}\charts`; chart resolvers and
   `report-pairs.json` follow the v2 layout. The installer ships the YADF Demo `Sample.pas` only
