@@ -441,7 +441,21 @@ uses
   , DRagLint.LSP.UsesOnSave    { TUsesOnSave: the source.addMissingImports twin of the quickfix }
   , DRagLint.Lint.Autofix      { BuildBufferFixEdits: the "Fix: <rule>" quickfixes }
   , DRagLint.Refactor.TextEdit { TTextEdit: what a fixer returns }
+  , System.NetEncoding         { TNetEncoding.URL.EncodePath: the file:/// URI builder }
   ;
+
+/// <summary>Maps a local path to the percent-encoded file:/// URI the client holds for it.</summary>
+/// <param name="APath">A local path; backslashes become slashes.</param>
+/// <returns>file:/// + the path with space, '#' and other unsafe characters %-encoded, so it
+/// equals the client's URI for the same document (same form as TLSPServer.FileToUri).</returns>
+function PathToFileUri(const APath: string): string;
+var
+  Encoded: string;
+begin
+  Encoded:= TNetEncoding.URL.EncodePath(StringReplace(APath, '\', '/', [rfReplaceAll]));
+  if Encoded.StartsWith('/') then Encoded:= Copy(Encoded, 2, MaxInt);
+  Result:= 'file:///' + Encoded;
+end;
 
 { TLspCompletion }
 
@@ -1592,7 +1606,7 @@ begin
       TextEdit.AddPair('newText', NewLineText);
 
       { Build the WorkspaceEdit: a map from file URI to array of TextEdits. }
-      FileUri:= 'file:///' + StringReplace(AFile, '\', '/', [rfReplaceAll]);
+      FileUri:= PathToFileUri(AFile);
       EditsArray:= TJSONArray.Create;
       EditsArray.AddElement(TextEdit);
 
@@ -1690,7 +1704,7 @@ begin
         LspEdits.AddElement(TE);
       end;
       var Changes: TJSONObject:= TJSONObject.Create;
-      Changes.AddPair('file:///' + StringReplace(AFile, '\', '/', [rfReplaceAll]), LspEdits);
+      Changes.AddPair(PathToFileUri(AFile), LspEdits);
       var WEdit: TJSONObject:= TJSONObject.Create;
       WEdit.AddPair('changes', Changes);
       var Action: TJSONObject:= TJSONObject.Create;
@@ -1769,7 +1783,7 @@ class function TLspCompletion.BuildMissingUsesActions(const AFile: string; AStar
 begin
   Result:= TJSONArray.Create;
   if ADiagnostics = nil then Exit;
-  var FileUri: string:= 'file:///' + StringReplace(AFile, '\', '/', [rfReplaceAll]);
+  var FileUri: string:= PathToFileUri(AFile);
   for var I: Integer:= 0 to ADiagnostics.Count - 1 do
   begin
     if ADiagnostics.Items[I] is not TJSONObject then Continue;
