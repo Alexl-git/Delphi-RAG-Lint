@@ -428,6 +428,22 @@ type
       class function StripParamModifier(const AName: string)                            : string     ;
   end;
 
+/// <summary>Records the drive-letter form of a file:/// URI the client sent, so every URI the
+/// server builds afterwards (PathToFileUri, TLSPServer.FileToUri) is in that same form.</summary>
+/// <param name="AUri">Any URI from the client. Only a file:/// URI whose path starts with a drive
+/// letter changes the recorded form: `C:` / `c:` (IDE plugin) or `c%3A` (VS Code).</param>
+/// <remarks>Process-wide state: one LSP server per process talks to one client. Written and read
+/// on the request thread only; not guarded for concurrent writers.</remarks>
+procedure NoteClientFileUri(const AUri: string);
+
+/// <summary>Maps a local path to the percent-encoded file:/// URI the client holds for it.</summary>
+/// <param name="APath">A local path; backslashes become slashes.</param>
+/// <returns>file:/// + the path with space, '#' and other unsafe characters %-encoded; once the
+/// client sent a drive-letter URI (NoteClientFileUri) the drive letter's case and its colon
+/// (`:` or `%3A`) follow the client's form, so the result equals the client's URI for the same
+/// document. Before that, the drive is written as the path has it, with a plain colon.</returns>
+function PathToFileUri(const APath: string): string;
+
 implementation
 
 uses
@@ -444,17 +460,46 @@ uses
   , System.NetEncoding         { TNetEncoding.URL.EncodePath: the file:/// URI builder }
   ;
 
-/// <summary>Maps a local path to the percent-encoded file:/// URI the client holds for it.</summary>
-/// <param name="APath">A local path; backslashes become slashes.</param>
-/// <returns>file:/// + the path with space, '#' and other unsafe characters %-encoded, so it
-/// equals the client's URI for the same document (same form as TLSPServer.FileToUri).</returns>
+const
+  FILE_URI_PREFIX   = 'file:///';
+  URI_DRIVE_COLON   = ':';
+  URI_ENCODED_COLON = '%3A';
+  URI_DRIVE_LEN     = 2; { 'C:' -- the drive letter and its colon }
+
+var
+  GClientFormKnown   : Boolean = False; { a client drive-letter file URI was seen }
+  GClientColonEncoded: Boolean = False; { ... its drive colon was %3A (VS Code) }
+  GClientDriveLower  : Boolean = False; { ... its drive letter was lower case }
+
+function IsDriveLetter(const AChar: Char): Boolean;
+begin
+  Result:= CharInSet(AChar, ['A'..'Z', 'a'..'z']);
+end;
+
+procedure NoteClientFileUri(const AUri: string);
+begin
+  if not StartsText(FILE_URI_PREFIX, AUri) then Exit;
+  var Rest: string:= Copy(AUri, Length(FILE_URI_PREFIX) + 1, MaxInt);
+  if (Length(Rest) < 2) or not IsDriveLetter(Rest[1]) then Exit;
+  var Encoded: Boolean:= SameText(Copy(Rest, 2, Length(URI_ENCODED_COLON)), URI_ENCODED_COLON);
+  if not Encoded and (Rest[2] <> URI_DRIVE_COLON) then Exit;
+  GClientFormKnown   := True;
+  GClientColonEncoded:= Encoded;
+  GClientDriveLower  := CharInSet(Rest[1], ['a'..'z']);
+end;
+
 function PathToFileUri(const APath: string): string;
 var
   Encoded: string;
 begin
   Encoded:= TNetEncoding.URL.EncodePath(StringReplace(APath, '\', '/', [rfReplaceAll]));
   if Encoded.StartsWith('/') then Encoded:= Copy(Encoded, 2, MaxInt);
-  Result:= 'file:///' + Encoded;
+  if GClientFormKnown and (Length(Encoded) >= URI_DRIVE_LEN) and IsDriveLetter(Encoded[1]) and (Encoded[2] = URI_DRIVE_COLON) then
+  begin
+    var Drive: string:= if GClientDriveLower then LowerCase(Encoded[1]) else UpperCase(Encoded[1]);
+    Encoded:= Drive + (if GClientColonEncoded then URI_ENCODED_COLON else URI_DRIVE_COLON) + Copy(Encoded, URI_DRIVE_LEN + 1, MaxInt);
+  end;
+  Result:= FILE_URI_PREFIX + Encoded;
 end;
 
 { TLspCompletion }

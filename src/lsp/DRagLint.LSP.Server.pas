@@ -322,6 +322,7 @@ type
       TCtxEntry = record
         Ctx  : TLspFileContext;
         Stamp: string;   { the .dproj / .dlcontext.json write stamp the entry was resolved against }
+        Checked: UInt64; { 148 LS: GetTickCount64 of the last stamp check of a project-less entry }
       end;
     strict private
       { LSP-1 CORE: per-file project context (SPEC.md 1b / 3). }
@@ -338,7 +339,8 @@ type
       FCtxCache      : TDictionary<string, TCtxEntry>;
       FNoticed       : TDictionary<string, Byte>; { lower(path or folder)|reason already shown }
       FNoticeWarns   : Boolean;                   { the last ContextNotice text holds a warning-level reason }
-      FNearProjects  : TDictionary<string, TArray<string>>; { lower(folder) -> project files in and just under it; session-long }
+      FNearProjects  : TDictionary<string, TArray<string>>; { lower(folder) -> project files in and just under it }
+      FNearStamps    : TDictionary<string, string>;          { 148 LS: lower(folder) -> the NearStamp its FNearProjects entry was listed at }
       FProjectUnits  : TObjectDictionary<string, TDictionary<string, Byte>>; { lower(project)|stamp -> lower(listed unit paths) }
       FPending       : TObjectList<TJSONObject>;  { notifications queued for the stdio loop }
       FQueueNotices  : Boolean;                   { True only inside Run: proxy mode never writes to stdout }
@@ -2256,6 +2258,10 @@ const
   LSP_PROJECT_SEARCH_LEVELS = 4;
   { 1.44 lspctx: most sub-folders one NearProjects look lists; a huge parent stays cheap. }
   LSP_PROJECT_SEARCH_DIRS = 256;
+  { 148 LS: how often a project-less file's context re-checks the folders the project search reads. }
+  LSP_CTX_RECHECK_MS = 2000;
+  { 148 LS: the folder write-time format of a NearStamp (ms; NTFS keeps 100 ns). }
+  LSP_DIR_STAMP_FMT = 'yyyymmddhhnnsszzz';
   LSP_ERR_INVALID_PARAMS   = -32602;
   LSP_CONFIG_SECTION       = 'dragLint';
   LSP_CONTEXT_FILE_EXT     = '.dlcontext.json';
@@ -2498,6 +2504,7 @@ begin
   FCtxCache:= TDictionary<string, TCtxEntry>.Create;
   FNoticed := TDictionary<string, Byte>.Create;
   FNearProjects:= TDictionary<string, TArray<string>>.Create;
+  FNearStamps  := TDictionary<string, string>.Create;
   FProjectUnits:= TObjectDictionary<string, TDictionary<string, Byte>>.Create([doOwnsValues]);
   FResolved:= TDictionary<string, TLspDbSet>.Create;
   FWorkLock      := TCriticalSection.Create;
@@ -2554,6 +2561,7 @@ begin
   FNoticed.Free;
   FProjectUnits.Free;
   FNearProjects.Free;
+  FNearStamps.Free;
   FResolved.Free;
   FCtxCache.Free;
   FSets.Free;
@@ -2722,6 +2730,7 @@ class function TLSPServer.FileFromUri(const AUri: string): string;
 var
   Decoded: string;
 begin
+  NoteClientFileUri(AUri); { 148 LS: later server-built URIs follow this client's drive form (c%3A or C:) }
   Result:= AUri;
   if Result.StartsWith('file:///') then Result:= Copy(Result, 9, MaxInt);
   Decoded:= TNetEncoding.URL.Decode(Result);
@@ -2729,16 +2738,8 @@ begin
 end;
 
 function TLSPServer.FileToUri(const APath: string): string;
-var
-  Normalised: string;
-  Encoded   : string;
 begin
-  Normalised:= StringReplace(APath, '\', '/', [rfReplaceAll]);
-  Encoded:= TNetEncoding.URL.EncodePath(Normalised);
-  // EncodePath preserves the leading slash if it exists, so we'd end up
-  // with file://// for absolute Windows paths. Strip it before prepending.
-  if Encoded.StartsWith('/') then Encoded:= Copy(Encoded, 2, MaxInt);
-  Result:= 'file:///' + Encoded;
+  Result:= PathToFileUri(APath); { 148 LS: one builder; drive form follows the client }
 end;
 
 function TLSPServer.LocationFromSymbol(const ASym: TSymbol): TJSONObject;
@@ -3641,15 +3642,33 @@ begin
   end;
 end;
 
+function ProjectSearchStamp(const APath: string): string; forward;
+
 function TLSPServer.FileContext(const APath: string): TLspFileContext;
 var
   Key  : string;
   Entry: TCtxEntry;
 begin
   Key:= LowerCase(APath);
-  if FCtxCache.TryGetValue(Key, Entry) and (Entry.Stamp = DprojStamp(Entry.Ctx.Project)) then Exit(Entry.Ctx);
-  Entry.Ctx  := ComputeFileContext(APath);
-  Entry.Stamp:= DprojStamp(Entry.Ctx.Project);
+  var Had: Boolean:= FCtxCache.TryGetValue(Key, Entry);
+  if Had and (Entry.Ctx.Project <> '') and (Entry.Stamp = DprojStamp(Entry.Ctx.Project)) then Exit(Entry.Ctx);
+  { 148 LS: a file with no project re-checks the folders the project search reads (at most
+    every LSP_CTX_RECHECK_MS), so a project file created mid-session is seen without a restart. }
+  if Had and (Entry.Ctx.Project = '') then
+  begin
+    var NowTick: UInt64:= GetTickCount64;
+    if NowTick - Entry.Checked < LSP_CTX_RECHECK_MS then Exit(Entry.Ctx);
+    Entry.Checked:= NowTick;
+    if Entry.Stamp = ProjectSearchStamp(APath) then
+    begin
+      FCtxCache.AddOrSetValue(Key, Entry);
+      Exit(Entry.Ctx);
+    end;
+  end;
+  if Had then TProjectProfileCache.Forget(APath); { its file -> .dproj memo may hold the answer of before }
+  Entry.Ctx    := ComputeFileContext(APath);
+  Entry.Stamp  := if Entry.Ctx.Project <> '' then DprojStamp(Entry.Ctx.Project) else ProjectSearchStamp(APath);
+  Entry.Checked:= GetTickCount64;
   FCtxCache.AddOrSetValue(Key, Entry);
   Result:= Entry.Ctx;
 end;
@@ -3725,12 +3744,56 @@ begin
   end;
 end;
 
+{ 148 LS: what a project search of ADir reads -- the write time of ADir and of each folder
+  just under it that NearProjects lists. Creating or deleting a file changes its folder's
+  write time, so a project file created mid-session changes the stamp. '' = unreadable. }
+function NearStamp(const ADir: string): string;
+begin
+  Result:= '';
+  try
+    var Sb: TStringBuilder:= TStringBuilder.Create;
+    try
+      Sb.Append(FormatDateTime(LSP_DIR_STAMP_FMT, TDirectory.GetLastWriteTime(ADir)));
+      var Subs: TArray<string>:= TDirectory.GetDirectories(ADir);
+      TArray.Sort<string>(Subs);
+      if Length(Subs) > LSP_PROJECT_SEARCH_DIRS then SetLength(Subs, LSP_PROJECT_SEARCH_DIRS);
+      for var D: string in Subs do
+        if not IsProjectSearchSkipped(ExtractFileName(D)) then
+          Sb.Append('|').Append(FormatDateTime(LSP_DIR_STAMP_FMT, TDirectory.GetLastWriteTime(D)));
+      Result:= Sb.ToString;
+    finally
+      Sb.Free;
+    end;
+  except
+    on E: Exception do Result:= ''; // an unreadable folder keeps its last listing
+  end;
+end;
+
+{ 148 LS: the NearStamp of every folder FindListingProject climbs for APath, in its order
+  and with its stops (LSP_PROJECT_SEARCH_LEVELS, the repository root, the drive root). }
+function ProjectSearchStamp(const APath: string): string;
+begin
+  Result:= '';
+  var Dir: string:= ExcludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(APath)));
+  for var Level:= 0 to LSP_PROJECT_SEARCH_LEVELS do
+  begin
+    if (Dir = '') or not TDirectory.Exists(Dir) then Exit;
+    Result:= Result + '/' + NearStamp(Dir);
+    if IsRepositoryRoot(Dir) then Exit;
+    var Parent: string:= ExcludeTrailingPathDelimiter(ExtractFilePath(Dir));
+    if SameText(Parent, Dir) then Exit;
+    Dir:= Parent;
+  end;
+end;
+
 function TLSPServer.NearProjects(const ADir: string): TArray<string>;
 var
   Key: string;
 begin
   Key:= LowerCase(ADir);
-  if FNearProjects.TryGetValue(Key, Result) then Exit;
+  var Stamp: string:= NearStamp(ADir); { 148 LS: was session-long; a changed folder is re-listed }
+  var Seen: string;
+  if FNearProjects.TryGetValue(Key, Result) and FNearStamps.TryGetValue(Key, Seen) and (Seen = Stamp) then Exit;
   Result:= ProjectFilesIn(ADir);
   try
     var Subs: TArray<string>:= TDirectory.GetDirectories(ADir);
@@ -3741,7 +3804,8 @@ begin
   except
     on E: Exception do Writeln(ErrOutput, 'drag-lint LSP: project search skipped ', ADir, ': ', E.Message);
   end;
-  FNearProjects.Add(Key, Result);
+  FNearProjects.AddOrSetValue(Key, Result);
+  FNearStamps.AddOrSetValue(Key, Stamp);
 end;
 
 { Does the project file LIST this exact unit path? A .dproj's DCCReference, a .dpr's
@@ -5990,7 +6054,7 @@ begin
     else
       Keep:= Keep + [F];
   if Length(Keep) = 0 then Exit;
-  var FileUri: string:= 'file:///' + StringReplace(APath, '\', '/', [rfReplaceAll]);
+  var FileUri: string:= FileToUri(APath);
   var Edit: TJSONObject:= TUsesOnSave.TextChangeEdit(FileUri, ABufferText, TUsesOnSave.RemoveUnusedEntries(APath, ABufferText, Keep));
   if Edit = nil then Exit;
   var Diags: TJSONArray:= TJSONArray.Create;
@@ -6093,7 +6157,7 @@ begin
         lint, which a light-bulb request must not pay for. }
       var FromOverlay: Boolean;
       var BufText: string:= TEncoding.ANSI.GetString(TLiveDocuments.ReadBytes(Path, FromOverlay));
-      var FileUri: string:= 'file:///' + StringReplace(Path, '\', '/', [rfReplaceAll]);
+      var FileUri: string:= FileToUri(Path);
       var RmQuick: TJSONArray:= TUsesOnSave.RemoveUnusedQuickfixes(Path, FileUri, BufText, Diags, StartLine, EndLine);
       try
         for var J:= 0 to RmQuick.Count - 1 do Actions.AddElement(RmQuick.Items[J].Clone as TJSONValue);
