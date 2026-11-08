@@ -84,6 +84,7 @@ uses
   , DragLint.Plugin.About
   , DragLint.Plugin.Settings      { MigrateGhostTextDefault -- see Register }
   , DragLint.Plugin.DbResolver    { PublishLibraryDefaults -- see Register }
+  , DragLint.Plugin.ConvertSelectionEditor { C12 N7 -- see Register }
   ;
 
 {$R 'DragLintSplash.res'}
@@ -161,6 +162,8 @@ begin
   RegisterDragLintMenu;
   RegisterDragLintOptions;
   try RegisterProjectMenu; except end;
+  { C12 N7: the designer right-click Convert entries (unregistered by the IDE with the package). }
+  try RegisterConvertSelectionEditor; except end;
   StartOpenSourceServer;
   { Register the dockable forms at STARTUP so the IDE can restore them when it
     reloads a saved desktop that had them docked. Registering only on menu click

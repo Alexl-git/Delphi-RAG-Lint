@@ -23,6 +23,18 @@
       "type": "ide-menu",
       "path": "drag-lint > Convert Components > Open Conversion Editor...",
       "steps": ["Open the unit", "Choose drag-lint > Convert Components > Open Conversion Editor...", "ConvRulesEditor opens with the unit loaded and no scope; the unit stays open"]
+    },
+    {
+      "type": "ide-context",
+      "host": "Form Designer",
+      "caption": "drag-lint: Convert Selected Component(s)...",
+      "steps": ["Select the component(s) on the form", "Right-click one of them and choose drag-lint: Convert Selected Component(s)...", "The same hand-off as drag-lint > Convert Components > Convert Selected Component(s)... follows"]
+    },
+    {
+      "type": "ide-context",
+      "host": "Form Designer",
+      "caption": "drag-lint: Convert All of This Type on the Form...",
+      "steps": ["Select a component of each type to convert", "Right-click one of them and choose drag-lint: Convert All of This Type on the Form...", "The same hand-off as drag-lint > Convert Components > Convert All of This Type on the Form... follows"]
     }
   ],
   "audience": "both",

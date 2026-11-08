@@ -111,6 +111,7 @@
         <DCCReference Include="DragLint.Plugin.UsagesQuery.pas"/>
         <DCCReference Include="DragLint.Plugin.ConvertRequest.pas"/>
         <DCCReference Include="DragLint.Plugin.ConvertLaunch.pas"/>
+        <DCCReference Include="DragLint.Plugin.ConvertSelectionEditor.pas"/>
         <DCCReference Include="DragLint.Plugin.BookmarksCore.pas"/>
         <DCCReference Include="DragLint.Plugin.Bookmarks.pas"/>
         <DCCReference Include="DragLint.Plugin.SymbolSearchForm.pas"/>
