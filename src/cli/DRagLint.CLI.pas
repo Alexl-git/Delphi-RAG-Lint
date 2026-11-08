@@ -2225,6 +2225,9 @@ begin
     JObj.AddPair('end_line'  , TJSONNumber.Create(R.EndLine  ));
     JObj.AddPair('end_col'   , TJSONNumber.Create(R.EndCol   ));
     if R.ContextText <> '' then JObj.AddPair('context', R.ContextText);
+    { D08 / D10 (owner ruling 2026-11-08): an event firing or a built-in, not a routine call. }
+    if R.ExternalKind = EXTERNAL_KIND_INDIRECT then JObj.AddPair('mode', CALLER_MODE_EVENT)
+    else if R.ExternalKind = EXTERNAL_KIND_INTRINSIC then JObj.AddPair('mode', CALLER_MODE_BUILT_IN);
     if R.Resolution <> '' then JObj.AddPair('resolution', R.Resolution); { XERJ item 3: LAST key }
     AJArr.AddElement(JObj);
   end;
@@ -29558,10 +29561,15 @@ begin
       JObj.AddPair('external'    , TJSONTrue.Create);
       JObj.AddPair('via'         , Via);
       JObj.AddPair('receiver_type', R.ReceiverTypeText);
+      { D08 / D10 (owner ruling 2026-11-08): only when the stored target is not a routine. }
+      if R.ExternalKind = EXTERNAL_KIND_INDIRECT then JObj.AddPair('mode', CALLER_MODE_EVENT)
+      else if R.ExternalKind = EXTERNAL_KIND_INTRINSIC then JObj.AddPair('mode', CALLER_MODE_BUILT_IN);
       JObj.AddPair('resolution'   , RESOLUTION_EXTERNAL); { XERJ item 3: LAST key }
       AJson.AddElement(JObj);
     end
-    else Writeln(Format('  -> %s   (library, %s)', [QName, (if Via = 'edge' then 'by name' else 'resolved now')]));
+    else Writeln(Format('  -> %s   (library, %s)%s', [QName, (if Via = 'edge' then 'by name' else 'resolved now'),
+      (if R.ExternalKind = EXTERNAL_KIND_INDIRECT then '  [event]'
+       else if R.ExternalKind = EXTERNAL_KIND_INTRINSIC then '  [built-in]' else '')]));
   end; // for R
 end;
 

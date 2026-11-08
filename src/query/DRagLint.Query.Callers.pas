@@ -23,6 +23,7 @@ uses
   DRagLint.Core.Model       ,
   DRagLint.Core.Interfaces  ;
 
+
 type
   /// <summary>One caller row, in the shape both the CLI renderer and the LSP
   /// hoverBundle reply need.</summary>
@@ -745,6 +746,10 @@ begin
     Row.HasLine    := Refs[i].StartLine > 0;
     Row.Confidence := '';
     Row.Resolution := Refs[i].Resolution;
+    { D08 / D10 (owner ruling 2026-11-08): a site bound to an event property fires it
+      (`event`); one bound to a compiler intrinsic calls no user routine (`built-in`). }
+    if Refs[i].ExternalKind = EXTERNAL_KIND_INDIRECT then Row.Mode:= CALLER_MODE_EVENT
+    else if Refs[i].ExternalKind = EXTERNAL_KIND_INTRINSIC then Row.Mode:= CALLER_MODE_BUILT_IN;
     Row.TargetQName:= '';
     Row.CodeText   := CodeLineFromContext(Refs[i].ContextText, Refs[i].StartLine);
     Row.EnclosingSymbolId:= Refs[i].EnclosingSymbolId;

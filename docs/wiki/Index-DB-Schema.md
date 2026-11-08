@@ -150,6 +150,7 @@ filled by the resolve pass. Indexes: `idx_refs_file`, `idx_refs_symbol`,
 | receiver_text | TEXT | receiver expression left of the dot, verbatim; '' for bare/`inherited`; written by resolve |
 | external_target | TEXT | qualified name of a call target in ANOTHER DB (library); NULL = resolved locally or not at all. A ref never has both a local `call_edges` row and this |
 | receiver_type_text | TEXT | receiver's declared type text as the resolver reached it; NULL = never resolved by a 1.16+ engine, '' = bare/untypable (added by `Migrate`, no version bump; absent on older DBs) |
+| external_kind | TEXT | what `external_target` names when it is NOT a routine: `indirect` = an event property / procedural field the call fires (the handler is chosen at run time), `intrinsic` = a compiler intrinsic bound to the synthetic `System.@intrinsic.DynArray.Create`; NULL = a routine or no external target (added by `Migrate`, no version bump; absent on older DBs) |
 
 ### call_edges
 One row per call ref resolved to a local routine. `ref_id` is the PK, so a ref has at most

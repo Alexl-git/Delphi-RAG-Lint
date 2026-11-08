@@ -10324,6 +10324,7 @@ begin
     end;
   end;
   if ARef.ReceiverText <> '' then AEdge.ExternalTarget:= BindExternally(ARef, ARef.ReceiverText, Owner, Text);
+  if AEdge.ExternalTarget <> '' then AEdge.ExternalKind:= FOracle.LastKind; // D08 / D10 mark
 end;
 
 function TCallResolver.ResolveOne(const ACallRef: TReference): TCallEdge;
@@ -10583,6 +10584,7 @@ begin
   if Result.TargetSymbolId = 0 then
   begin
     Result.ExternalTarget:= BindExternally(ACallRef, Rcv, TypeId, RcvType);
+    if Result.ExternalTarget <> '' then Result.ExternalKind:= FOracle.LastKind; // D08 / D10 mark
     { BindHead typed a head the project could not: that text is the fact now. }
     if (Result.ReceiverTypeText = '') and (RcvType.Text <> '') then
       Result.ReceiverTypeText:= RcvType.Text;
@@ -10825,8 +10827,8 @@ begin
   if AText.Head = '' then
   begin
     { E-RECV-UNDECIDABLE D08: `TArray<Integer>.Create(1)` has no head text (generic
-      arguments); count the intrinsic so it does not read as a miss. Binds nothing. }
-    if Kind = ekCall then FOracle.NoteIntrinsic(AReceiver, ACallRef.NameText, FileUsesUnits(ACallRef.FileId));
+      arguments); a dynamic-array constructor binds to the synthetic built-in name. }
+    if Kind = ekCall then Result:= FOracle.BindIntrinsic(AReceiver, ACallRef.NameText, FileUsesUnits(ACallRef.FileId));
     Exit;
   end;
   var HeadLc: string:= LowerCase(Trim(AText.Head.Split(['.'])[0]));

@@ -38,10 +38,11 @@ type
 
   /// <summary>Counters of the oracle's outcomes, printed on the resolve: summary line.</summary>
   /// <remarks>Every Bind / BindHead / BindBare call increments exactly one counter.
-  /// Intrinsic and LateBound (E-RECV-UNDECIDABLE D08 / D10) name declines that have no
-  /// routine to bind to: a dynamic-array constructor (`TBytes.Create`) and a call through an
-  /// event property or procedural field (`V.OnColumnSizeChanged(V, nil)`). Both leave the
-  /// site unbound exactly as before; they only stop it reading as a miss.</remarks>
+  /// Intrinsic and LateBound (E-RECV-UNDECIDABLE D08 / D10, owner ruling 2026-11-08) count the
+  /// binds that are not a routine: a dynamic-array constructor (`TBytes.Create`, bound to the
+  /// synthetic INTRINSIC_DYNARRAY_CREATE) and a call through an event property or procedural
+  /// field (`V.OnColumnSizeChanged(V, nil)`, bound to the property). They are not in Bound;
+  /// LastKind tells the caller which kind the last answer was.</remarks>
   TOracleStats = record
     Bound, AmbiguousType, NoMember, NoStore, NoType, Intrinsic, LateBound: Integer;
   end;
@@ -76,7 +77,10 @@ type
     FHelperMembers: TDictionary<string, string>;
     FHelperTypes  : TDictionary<string, TArray<TLibCand>>;
     FAliases      : TDictionary<string, TArray<TLibCand>>;
+    FLastKind     : string;
     function IsDynArrayType(const ATypeText: string; const AUses: TArray<string>; ADepth: Integer): Boolean;
+    function NamesVisibleType(const AText, ALeaf: string; const AUses: TArray<string>): Boolean;
+    function InQualifier(const AText: string; const ACands: TArray<TLibCand>): TArray<TLibCand>;
     function HelperCands(const ALeaf: string): TArray<TLibCand>;
     function PickTypeOrHelper(const ATypeText: string; const ATypeUses, AHelperUses: TArray<string>;
       out ACand: TLibCand; out AReason: string): Boolean;
@@ -124,16 +128,19 @@ type
     /// calling file (`S.Split` -> TStringHelper.Split); two visible helpers decline.</remarks>
     function Bind(const ATypeText, APending, AMember: string; AKind: TExternalKind;
       const AUsesUnits: TArray<string>; out AReason: string): string;
-    /// <summary>E-RECV-UNDECIDABLE D08: counts a dynamic-array constructor call whose receiver
-    /// is a generic type text no head rung reads (`TArray&lt;Integer&gt;.Create(1)`) as
-    /// Stats.Intrinsic.</summary>
+    /// <summary>E-RECV-UNDECIDABLE D08: binds a dynamic-array constructor call whose receiver
+    /// is a generic type text no head rung reads (`TArray&lt;Integer&gt;.Create(1)`) to the
+    /// synthetic INTRINSIC_DYNARRAY_CREATE.</summary>
     /// <param name="AReceiver">The call's receiver text as written.</param>
-    /// <param name="AMember">The called member; only `Create` counts.</param>
+    /// <param name="AMember">The called member; only `Create` binds.</param>
     /// <param name="AUsesUnits">The calling file's used units.</param>
-    /// <returns>True when the site was counted.</returns>
-    /// <remarks>Binds nothing and writes nothing; it is not one of the Bind calls the
-    /// "exactly one counter" rule of TOracleStats speaks of, and touches no other counter.</remarks>
-    function NoteIntrinsic(const AReceiver, AMember: string; const AUsesUnits: TArray<string>): Boolean;
+    /// <returns>INTRINSIC_DYNARRAY_CREATE, or '' (and no counter moves) when it is not one.</returns>
+    /// <remarks>A hit counts as Stats.Intrinsic and sets LastKind to EXTERNAL_KIND_INTRINSIC.</remarks>
+    function BindIntrinsic(const AReceiver, AMember: string; const AUsesUnits: TArray<string>): string;
+    /// <summary>The kind of the last non-empty answer of Bind / BindHead / BindBare /
+    /// BindIntrinsic: '' (a routine), EXTERNAL_KIND_INDIRECT or EXTERNAL_KIND_INTRINSIC.</summary>
+    /// <remarks>Read it right after the call whose answer it describes; the next call resets it.</remarks>
+    property LastKind: string read FLastKind;
     /// <summary>Binds a receiver whose HEAD identifier no project rung typed: in Delphi's
     /// order, a member inherited by the enclosing class from AScopeType, a routine of a used
     /// unit the whole chain names (`System.SysUtils.DeleteFile`), a library type, a library
@@ -472,28 +479,57 @@ end;
   `array of ..`, directly or through at most MAX_ALIAS_HOPS further aliases
   (`TBytes = TArray<Byte>`). A name that is also a visible class / record / interface, or that
   no visible alias declares, is not one. }
+{ A visible class / record / interface the type text can name: a text WITH generic arguments
+  (`TArray<Integer>`) names only a generic declaration, so System.Generics.Collections' plain
+  `TArray` class does not hide System's `TArray<T> = array of T`. }
+function TLibraryOracle.NamesVisibleType(const AText, ALeaf: string; const AUses: TArray<string>): Boolean;
+begin
+  Result:= False;
+  var Generic: Boolean:= AText.Contains('<');
+  for var C: TLibCand in VisibleOf(Cached(FTypes, ALeaf, TYPE_KINDS, True), AUses) do
+    if not Generic or (FStores[C.Store].GetSymbolById(C.Ids[0]).GenericParams <> '') then Exit(True);
+end;
+
+{ The candidates a UNIT-QUALIFIED text can mean (`SysUtils.TBytes` -> System.SysUtils's, as
+  Spring writes it): declared in a unit whose name is the qualifier or ends with `.qualifier`.
+  An unqualified text keeps every candidate. }
+function TLibraryOracle.InQualifier(const AText: string; const ACands: TArray<TLibCand>): TArray<TLibCand>;
+begin
+  var Plain: string:= AText;
+  var Lt: Integer:= Pos('<', Plain);
+  if Lt > 0 then Plain:= Copy(Plain, 1, Lt - 1);
+  var Dot: Integer:= Plain.LastIndexOf('.');
+  if Dot < 0 then Exit(ACands);
+  var Q: string:= LowerCase(Trim(Copy(Plain, 1, Dot)));
+  Result:= [];
+  for var C: TLibCand in ACands do
+    if (C.UnitStem = Q) or C.UnitStem.EndsWith('.' + Q) then Result:= Result + [C];
+end;
+
 function TLibraryOracle.IsDynArrayType(const ATypeText: string; const AUses: TArray<string>;
   ADepth: Integer): Boolean;
 begin
   var Text: string:= Trim(ATypeText);
   if Text.ToLower.StartsWith('array of') then Exit(True);
   var Leaf: string:= NormalizeTypeLeaf(Text);
-  { Too deep, not a plain name, or a visible class / record / interface of the name. }
-  if (ADepth > MAX_ALIAS_HOPS) or (Leaf = '') or Leaf.StartsWith('^')
-     or (Length(VisibleOf(Cached(FTypes, Leaf, TYPE_KINDS, True), AUses)) > 0) then Exit(False);
-  var Seen: TArray<TLibCand>:= VisibleOf(Cached(FAliases, Leaf, [skTypeAlias], False), AUses);
+  { Too deep, not a plain name, or a visible class / record / interface the text can name. }
+  if (ADepth > MAX_ALIAS_HOPS) or (Leaf = '') or Leaf.StartsWith('^') or NamesVisibleType(Text, Leaf, AUses) then
+    Exit(False);
+  var Seen: TArray<TLibCand>:= InQualifier(Text, VisibleOf(Cached(FAliases, Leaf, [skTypeAlias], False), AUses));
   Result:= Length(Seen) > 0;
   for var C: TLibCand in Seen do
     Result:= Result and IsDynArrayType(C.Sig, LibraryUses(C.Store, C.FileId) + [IMPLICIT_ROOT_UNIT], ADepth + 1);
 end;
 
-function TLibraryOracle.NoteIntrinsic(const AReceiver, AMember: string; const AUsesUnits: TArray<string>): Boolean;
+function TLibraryOracle.BindIntrinsic(const AReceiver, AMember: string; const AUsesUnits: TArray<string>): string;
 begin
   var Lt: Integer:= Pos('<', AReceiver);
   var GenericHead: Boolean:= (Lt > 1) and AReceiver.EndsWith('>') and IsIdent(Copy(AReceiver, 1, Lt - 1));
-  Result:= (Length(FStores) > 0) and SameText(AMember, 'Create') and GenericHead
-           and IsDynArrayType(AReceiver, AUsesUnits + [IMPLICIT_ROOT_UNIT, 'sysinit'], 0);
-  if Result then Inc(FStats.Intrinsic);
+  Result   := '';
+  FLastKind:= '';
+  if (Length(FStores) > 0) and SameText(AMember, 'Create') and GenericHead
+     and IsDynArrayType(AReceiver, AUsesUnits + [IMPLICIT_ROOT_UNIT, 'sysinit'], 0) then
+    Result:= Count(INTRINSIC_DYNARRAY_CREATE, R_INTRINSIC);
 end;
 
 { E-RECV-UNDECIDABLE D05: every library helper whose target is named ALeaf
@@ -736,11 +772,12 @@ begin
   if DeclaringMember(ACand, AMember, Hit) then
   begin
     if Hit.Kind in (if AKind = ekMemberAccess then OK_ACCESS else OK_CALL) then Exit(Hit.QualifiedName);
-    { D10: a call through a property or field -- an event; what runs is decided at run time. }
+    { D10: a call through a property or field -- an event; what runs is decided at run time,
+      so the answer is the PROPERTY, marked late-bound (never a routine). }
     if (AKind = ekCall) and (Hit.Kind in [skProperty, skField]) then
     begin
       AReason:= R_LATE_BOUND;
-      Exit('');
+      Exit(Hit.QualifiedName);
     end;
   end;
   AReason:= R_NO_MEMBER;
@@ -749,13 +786,22 @@ end;
 
 function TLibraryOracle.Count(const AResult, AReason: string): string;
 begin
-  Result:= AResult;
-  if AResult <> '' then Inc(FStats.Bound)
+  Result   := AResult;
+  FLastKind:= '';
+  if (AResult <> '') and (AReason = R_LATE_BOUND) then
+  begin
+    Inc(FStats.LateBound);
+    FLastKind:= EXTERNAL_KIND_INDIRECT;
+  end
+  else if (AResult <> '') and (AReason = R_INTRINSIC) then
+  begin
+    Inc(FStats.Intrinsic);
+    FLastKind:= EXTERNAL_KIND_INTRINSIC;
+  end
+  else if AResult <> '' then Inc(FStats.Bound)
   else if AReason = R_AMBIGUOUS then Inc(FStats.AmbiguousType)
   else if AReason = R_NO_STORE then Inc(FStats.NoStore)
   else if AReason = R_NO_TYPE then Inc(FStats.NoType)
-  else if AReason = R_INTRINSIC then Inc(FStats.Intrinsic)
-  else if AReason = R_LATE_BOUND then Inc(FStats.LateBound)
   else Inc(FStats.NoMember);
 end;
 
@@ -861,9 +907,9 @@ begin
       end;
   end;
   { D08: `TBytes.Create(1, 2)`, `TArray<Integer>.Create(1)` -- a dynamic array's constructor
-    is a compiler intrinsic with no declaration; name it rather than call it a miss. }
+    is a compiler intrinsic with no declaration: bind it to the synthetic built-in name. }
   if (AKind = ekCall) and (Pending = '') and SameText(AMember, 'Create') and IsDynArrayType(Head, Visible, 0) then
-    Exit(Count('', R_INTRINSIC));
+    Exit(Count(INTRINSIC_DYNARRAY_CREATE, R_INTRINSIC));
   Result:= Count('', R_NO_TYPE);
 end;
 

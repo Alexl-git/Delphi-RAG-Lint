@@ -5870,6 +5870,12 @@ begin
     NULL = never resolved by a 1.16 engine; '' = bare/untypable; additive, no
     SCHEMA_VERSION bump (dispatch_edges / data_flows precedent). }
   TryExec('ALTER TABLE refs ADD COLUMN receiver_type_text TEXT');
+  { wave 147 (owner ruling 2026-11-08, E-RECV-UNDECIDABLE D08/D10): refs.external_kind --
+    what external_target names when it is NOT a routine: 'indirect' (an event property /
+    procedural field, the routine is chosen at run time) or 'intrinsic' (a compiler
+    intrinsic, a synthetic name). NULL = a routine, or no external target. Additive, no
+    SCHEMA_VERSION bump (receiver_type_text precedent); written by the resolve pass only. }
+  TryExec('ALTER TABLE refs ADD COLUMN external_kind TEXT');
   // N-06: unit_uses rows extracted from an include directive carry the absolute
   // .inc path and the host line of the directive (NULL = the unit's own text).
   // The partial index serves editors and the .inc host-invalidation lookup.
@@ -8769,6 +8775,7 @@ begin
     { item 4: both columns are additive (Migrate); a DB older than the engine reads '' }
     var RtyF  : TField:= Q.FindField('receiver_type_text');
     var ExtF  : TField:= Q.FindField('external_target');
+    var XkF   : TField:= Q.FindField('external_kind');
     while not Q.Eof do
     begin
       R:= Default(TReference);
@@ -8784,6 +8791,7 @@ begin
       if (RcvF <> nil) and not RcvF.IsNull then R.ReceiverText:= RcvF.AsString;
       if (RtyF <> nil) and not RtyF.IsNull then R.ReceiverTypeText:= RtyF.AsString;
       if (ExtF <> nil) and not ExtF.IsNull then R.ExternalTarget:= ExtF.AsString;
+      if (XkF <> nil) and not XkF.IsNull then R.ExternalKind:= XkF.AsString;
       List.Add(R);
       Q.Next;
     end;
@@ -10961,7 +10969,12 @@ begin
       var ExtF : TField:= Q.FindField('external_target');
       if (EdgeF <> nil) and not EdgeF.IsNull then
         R.Resolution:= (if SameText(EdgeF.AsString, 'ambiguous') then RESOLUTION_AMBIGUOUS else RESOLUTION_EXACT)
-      else if (ExtF <> nil) and not ExtF.IsNull and (ExtF.AsString <> '') then R.Resolution:= RESOLUTION_EXTERNAL
+      else if (ExtF <> nil) and not ExtF.IsNull and (ExtF.AsString <> '') then
+      begin
+        R.Resolution:= RESOLUTION_EXTERNAL;
+        var XkF: TField:= Q.FindField('external_kind'); // D08 / D10: what the external name is
+        if (XkF <> nil) and not XkF.IsNull then R.ExternalKind:= XkF.AsString;
+      end
       else if R.SymbolId <> 0 then R.Resolution:= RESOLUTION_EXACT
       else R.Resolution:= RESOLUTION_NAME_ONLY;
       List.Add(R);
@@ -16602,7 +16615,8 @@ begin
       and for the same reason: this runs inside the one big transaction below,
       where a fresh statement per row would dominate the pass. }
     UpdRcv.Connection:= FConn;
-    UpdRcv.SQL.Text  := 'UPDATE refs SET receiver_text = :r, external_target = :x, receiver_type_text = :t WHERE id = :id';
+    UpdRcv.SQL.Text  := 'UPDATE refs SET receiver_text = :r, external_target = :x, receiver_type_text = :t, ' +
+                        'external_kind = :k WHERE id = :id';
     { DataType MUST be set before Prepare. FireDAC cannot infer a parameter's
       type from the SQL alone and fails at execute with "Parameter [R] data type
       is unknown" -- which surfaces as a FATAL that aborts the whole index run,
@@ -16610,6 +16624,7 @@ begin
     UpdRcv.ParamByName('r' ).DataType:= ftString;
     UpdRcv.ParamByName('x' ).DataType:= ftString;
     UpdRcv.ParamByName('t' ).DataType:= ftString;
+    UpdRcv.ParamByName('k' ).DataType:= ftString;
     UpdRcv.ParamByName('id').DataType:= ftLargeint;
     UpdRcv.Prepare;
 
@@ -16837,6 +16852,9 @@ begin
         else UpdRcv.ParamByName('x').Clear;
         { item 4: '' is a value (bare / untypable); NULL only if never computed. }
         UpdRcv.ParamByName('t').AsWideString := Edge.ReceiverTypeText;
+        { D08 / D10: NULL for a routine target or none, so every existing row keeps its meaning. }
+        if (Edge.ExternalTarget <> '') and (Edge.ExternalKind <> '') then UpdRcv.ParamByName('k').AsWideString:= Edge.ExternalKind
+        else UpdRcv.ParamByName('k').Clear;
         UpdRcv.ParamByName('id').AsLargeInt := Ref.Id;
         UpdRcv.ExecSQL;
         end
