@@ -17273,7 +17273,13 @@ begin
   var Ok: Boolean;
   var Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
-  Result:= RunExtractInterface(Store, RefactorLibraries(AArgs), Opts);
+  { E-NARROW-CHANNEL (148 RN): an --apply run listens, so shutdown / Cancel stop its build and roll it back. }
+  if Opts.Apply then OpenGateStandDown('extract-interface', AArgs.DbPath);
+  try
+    Result:= RunExtractInterface(Store, RefactorLibraries(AArgs), Opts);
+  finally
+    CloseGateStandDown;
+  end;
 end;
 
 { lane 146 g3: lazy-init }
@@ -17297,7 +17303,13 @@ begin
   var Ok: Boolean;
   var Store:= OpenReadOnlyStore(AArgs.DbPath, Ok);
   if not Ok then Exit(2);
-  Result:= RunLazyInit(Store, Opts);
+  { E-NARROW-CHANNEL (148 RN): an --apply run listens, so shutdown / Cancel stop its build and roll it back. }
+  if Opts.Apply then OpenGateStandDown('lazy-init', AArgs.DbPath);
+  try
+    Result:= RunLazyInit(Store, Opts);
+  finally
+    CloseGateStandDown;
+  end;
 end;
 { O2 (1.45): the type oracle for the .scm rules of `lint <file>`, which run BEFORE the flow store below
   is opened. Same membership rule as that block (the --db first, then ResolveConsumerDbs, the
