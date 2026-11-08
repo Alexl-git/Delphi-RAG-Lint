@@ -17,7 +17,9 @@
   used units both declare; in real code, mostly a library class the project
   index does not hold). There the enum pass keeps its binding, and this rule --
   which types with targets by NAME across the project and library indexes --
-  is the reporter. DupTarget below is that positive.
+  is the reporter. FnTarget below is that positive (with GetEwObj do: a function
+  result the resolver does not type). DupTarget (two used units declare TEwDup) was it until 1.47:
+  B5's Delphi tie-break decides that case now, so it is a negative control.
 
   WHY A NEW RULE AND NOT with-hides-outer-symbol. That rule's hidden side is a
   local, a Self member or an outer with layer; a unit-level enum value is none
@@ -82,7 +84,10 @@ type
     cmdOther: Integer;
     Caption : string;
   end;
+
+function GetEwObj: TEwObj;
 implementation
+function GetEwObj: TEwObj; begin Result := nil; end;
 end.
 '@
 
@@ -108,7 +113,8 @@ end.
 #   36  NEG: qualified TEwCmd.cmdDelta
 #   43  NEG: with-member read that is not an enum value
 #   49  NEG: bare enum read outside any with
-#   56  POSITIVE: the with target is untypable to the resolver (TEwDup twice)
+#   56  B5-DECIDED (1.47): TEwDup twice -> Delphi's tie-break picks uEwTypes2, the index binds the member, SILENT
+#   63  POSITIVE: the with target is a function result (with GetEwObj do), untyped by the resolver
 Emit 'uEwUse.pas' @'
 unit uEwUse;
 interface
@@ -168,6 +174,13 @@ begin
     C := cmdPlain;
   if C = cmdOther then Exit;
 end;
+procedure FnTarget;
+var X: Integer;
+begin
+  with GetEwObj do
+    X := cmdOther;
+  if X > 0 then Exit;
+end;
 end.
 '@
 
@@ -199,6 +212,8 @@ try {
                                           "where r.name_text = 'cmdDelta' and r.start_line = 15") 2>&1 | Out-String
   $bind56 = & $Exe sql --db $db --query ("select s.kind || ':' || s.qualified_name from refs r join symbols s on s.id = r.symbol_id " +
                                           "where r.name_text = 'cmdPlain' and r.start_line = 56") 2>&1 | Out-String
+  $bind63 = & $Exe sql --db $db --query ("select s.kind || ':' || s.qualified_name from refs r join symbols s on s.id = r.symbol_id " +
+                                          "where r.name_text = 'cmdOther' and r.start_line = 63") 2>&1 | Out-String
 } finally { Pop-Location }
 
 $lines = @($onOut -split "`r?`n" | Where-Object { $_ -match 'enum-read-inside-with' })
@@ -210,16 +225,18 @@ Write-Host ''
 Write-Host 'PRECONDITIONS -- what the resolver (1.8.0, with scope modelled) recorded' -ForegroundColor Cyan
 Check 'R7 CLOSED: line 15 cmdDelta is bound to the FIELD TEwRec.cmdDelta, not the enum value' `
   (($bind15 -match 'field:uEwTypes\.TEwRec\.cmdDelta') -and ($bind15 -notmatch 'enum_value')) ($bind15.Trim())
-Check 'RESIDUAL: line 56 cmdPlain (untypable with target) is still bound to the enum value' `
-  ($bind56 -match 'enum_value:uEwTypes\.TEwCmd\.cmdPlain') ($bind56.Trim())
+Check 'B5 DECIDED: line 56 cmdPlain binds the last-used unit''s member uEwTypes2.TEwDup.cmdPlain (Delphi tie-break)' `
+  (($bind56 -match 'field:uEwTypes2\.TEwDup\.cmdPlain') -and ($bind56 -notmatch 'enum_value')) ($bind56.Trim())
+Check 'RESIDUAL: line 63 cmdOther (with GetEwObj do, a function result) is still bound to the enum value' `
+  ($bind63 -match 'enum_value:uEwTypes\.TEwCmd\.cmdOther') ($bind63.Trim())
 
 Write-Host ''
 Write-Host 'THE FINDING' -ForegroundColor Cyan
-$dup = HitAt $onOut 56
+$dup = HitAt $onOut 63
 # positive-control: enum-read-inside-with
-Check 'UNDECIDABLE TARGET: with D do C := cmdPlain fires once' ($dup.Count -eq 1) ("got " + $dup.Count + " of " + $lines.Count + " total")
-Check 'and it names the with-target member that wins' (($dup -join ' ') -match 'TEwDup\.cmdPlain') ''
-Check 'and it names the enum value it is NOT' (($dup -join ' ') -match 'TEwCmd\.cmdPlain') ''
+Check 'UNDECIDABLE TARGET: with GetEwObj do X := cmdOther fires once' ($dup.Count -eq 1) ("got " + $dup.Count + " of " + $lines.Count + " total")
+Check 'and it names the with-target member that wins' (($dup -join ' ') -match 'TEwObj\.cmdOther') ''
+Check 'and it names the enum value it is NOT' (($dup -join ' ') -match 'TEwCmd\.cmdOther') ''
 Check 'and it is a warning' (($dup -join ' ') -match '\[warning\]') ''
 Check 'R7 CLOSED: the RECORD site (15) is silent -- the index binds the member now' ((HitAt $onOut 15).Count -eq 0) ''
 Check 'R7 CLOSED: the CLASS site (22) is silent -- the index binds the member now' ((HitAt $onOut 22).Count -eq 0) ''
@@ -231,18 +248,19 @@ Check 'NO MEMBER: an enum read in a with body with no same-named member is SILEN
 Check 'QUALIFIED: TEwCmd.cmdDelta inside the with is SILENT' ((HitAt $onOut 36).Count -eq 0) ''
 Check 'NOT ENUM: a with-member read that names no enum value is SILENT' ((HitAt $onOut 43).Count -eq 0) ''
 Check 'NO WITH: a bare enum read outside any with is SILENT' ((HitAt $onOut 49).Count -eq 0) ''
+Check 'B5 DECIDED: the two-declaration target (56) is SILENT -- the index binds the member now' ((HitAt $onOut 56).Count -eq 0) ''
 Check 'exactly the one positive, nothing else' ($lines.Count -eq 1) ("got " + $lines.Count)
 
 Write-Host ''
 Write-Host 'OVERLAP -- with-hides-outer-symbol does not already cover this' -ForegroundColor Cyan
-$overlap = @($onOut -split "`r?`n" | Where-Object { $_ -match 'with-hides-outer-symbol' -and $_ -match 'uEwUse\.pas:(15|22|56):' })
+$overlap = @($onOut -split "`r?`n" | Where-Object { $_ -match 'with-hides-outer-symbol' -and $_ -match 'uEwUse\.pas:(15|22|56|63):' })
 Check 'with-hides-outer-symbol is silent on the positive and the R7-closed sites' ($overlap.Count -eq 0) `
   'if this goes RED the older rule now covers the case -- retire one of the two'
 
 Write-Host ''
 Write-Host 'SINGLE-FILE lint --rule' -ForegroundColor Cyan
 Check 'lint <file> --rule enum-read-inside-with reports the positive' `
-  ((HitAt $fileOut 56).Count -eq 1) `
+  ((HitAt $fileOut 63).Count -eq 1) `
   'RED means the per-file path never runs the check under --rule'
 
 Write-Host ''

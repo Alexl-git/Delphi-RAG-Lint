@@ -5582,7 +5582,7 @@ var
 
     { The type a with-entity denotes, or '' for silence. Deliberately narrow: a
       routine local or parameter, a field of the enclosing class, an `as` cast,
-      or a constructor call. Anything else is not worth a guess -- and the
+      a constructor call, or a unit-level function with ONE indexed declaration. Anything else is not worth a guess -- and the
       per-ROUTINE decl map matters, not a file-wide one: a same-named local in
       another routine must not decide this routine's type. }
     function EntityType(const E: TTSNode): string;
@@ -5602,6 +5602,25 @@ var
               if (M.Kind = skField) and SameText(M.Name, NodeStr(E)) then
                 Exit(BareTypeName(M.Signature));
           end;
+        { A unit-level FUNCTION named by the entity (`with GetObj do`): its declared
+          return type, when exactly ONE function of that name is indexed and no
+          local shadows it. The resolver leaves such a with-target untyped and
+          binds a same-named bare read to the enum value -- the residual this rule
+          still reports after the 1.47 same-named-type tie-break (B5). Two
+          candidates = silence. }
+        if (AStore <> nil) and not LocalNames.ContainsKey(Nm) then
+        begin
+          var FnType: string:= '';
+          var FnCount: Integer:= 0;
+          for var Sy: TSymbol in AStore.FindSymbolsByExactName(NodeStr(E)) do
+            if Sy.Kind = skFunction then
+            begin
+              Inc(FnCount);
+              var Colon: Integer:= Sy.Signature.LastDelimiter(':');
+              FnType:= if Colon >= 0 then BareTypeName(Sy.Signature.Substring(Colon + 1)) else '';
+            end;
+          if FnCount = 1 then Exit(FnType);
+        end;
         Exit('');
       end;
       if E.NodeType = 'exprBinary' then
