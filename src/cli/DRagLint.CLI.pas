@@ -534,6 +534,7 @@ type
     EiClass      : string ; // extract-interface --class <name>
     EiMembers    : string ; // extract-interface --members <a,b>
     EiReparent   : Boolean; // extract-interface --reparent-interfaced
+    LiDefer      : Boolean; // lazy-init --defer (lane 147 G3P)
     FixNaming    : Boolean; // --fix-naming (batch --fix: explicit consent to the opt-in naming fixes)
     { --stand-in-for <realpath>: analyse THIS file's text, but answer as though
       it were <realpath>. The IDE lints an unsaved buffer by writing a snapshot
@@ -1865,6 +1866,7 @@ begin
       Result.EiMembers:= ParamStr(i);
     end
     else if A = '--reparent-interfaced' then Result.EiReparent:= True
+    else if A = '--defer' then Result.LiDefer:= True
     else if (A = '--routine') and (i < ParamCount) then
     begin
       Inc(i);
@@ -17252,6 +17254,7 @@ begin
   Opts.Apply       := AArgs.Apply;
   Opts.NoBackup    := AArgs.NoBackup;
   Opts.NoCompile   := AArgs.NoCompile;
+  Opts.Defer       := AArgs.LiDefer;
   Opts.Json        := AArgs.AsJson or SameText(AArgs.Format, 'json');
   if not ExplicitDbsExist(AArgs, 'lazy-init') then Exit(2);
   if NoDbResolved(AArgs.DbPath, 'lazy-init') then Exit(2);

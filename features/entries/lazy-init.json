@@ -13,7 +13,7 @@
       "type": "cli",
       "verb": "lazy-init",
       "example": "drag-lint lazy-init --all --plan --db <db>",
-      "usage": "drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
+      "usage": "drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--defer] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]",
       "flags": [
         {
           "name": "--unit",
@@ -25,6 +25,9 @@
         {
           "name": "--name",
           "arg": "<routine>"
+        },
+        {
+          "name": "--defer"
         },
         {
           "name": "--plan"
@@ -67,7 +70,7 @@
           "arg": "json"
         }
       ],
-      "help": ["  drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - name what an initialization section does and move its body verbatim into a run-once routine: plan by default, every refusal named, --apply through a scratch build and the compile gate"]
+      "help": ["  drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--defer] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]   - name what an initialization section does and move its body verbatim into a run-once routine: plan by default, every refusal named, --apply through a scratch build and the compile gate; --defer (one --unit) moves the call to the first use"]
     }
   ],
   "audience": "both",

@@ -518,7 +518,7 @@ begin
   Writeln('       see wiki page: Rebuild-Index-for-This-Project');
   Writeln('  drag-lint index --project <file.dproj> [--db <file.sqlite>] [--recompile|--rebuild] [--dry-run] [--watch [--interval N]]');
   Writeln('       see wiki page: Rescan-this-unit');
-  Writeln('  drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]');
+  Writeln('  drag-lint lazy-init (--unit <name> | --all) (--plan | --apply --project <X.dproj>) --db <db> [--name <routine>] [--defer] [--no-backup] [--platform <p>] [--rsvars <bat>] [--build-timeout <s>] [--no-compile] [--library-db <db>] [--json|--format json]');
   Writeln('       see wiki page: lazy-init');
   Writeln('  drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--labels] [--no-preprocess] [--library-db <lib.sqlite>]');
   Writeln('       see wiki page: Copy-Diagnostics-Current-File');
