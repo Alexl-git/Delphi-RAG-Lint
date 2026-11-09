@@ -3102,8 +3102,9 @@ function TCyclePlanner.CtorSiteOk(const pItem: TMoveItem; const pCode: string; p
 begin
   Result:= False;
   if pItem.CtorName = '' then Exit;
-  { --ctor-wide: `L.Add(TX.Create(..))` with L a list field that switches: T of the list is the base class too }
-  var IntoList:= GCtorWide and (Length(pLists) > 0) and TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1), '\b(Self\s*\.\s*)?(' +
+  { `L.Add(TX.Create(..))` with L a list field that switches: T of the list is the base class too (--ctor-wide w4; on
+    the default path since 150-CY-10b, lane 150 CY1: Loader TFolderWorker) }
+  var IntoList:= (Length(pLists) > 0) and TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1), '\b(Self\s*\.\s*)?(' +
     string.Join('|', pLists) + ')\s*\.\s*Add\s*\(\s*$', [roIgnoreCase]);
   if not IntoList and ((Length(pSlots) = 0) or not TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1),
     '(^|[;\s])(Self\s*\.\s*)?(' + string.Join('|', pSlots) + ')\s*:=\s*$', [roIgnoreCase])) then Exit;
@@ -3402,16 +3403,17 @@ begin
         { --ctor-wide: a field pulled into the base class is the same memory: a store through the slot is sound }
         (GCtorWide and (B.Sym.Kind = skField)) then Pulled:= Pulled + [B.Sym.Name];
   var Own: TArray<string>:= nil;
-  if GCtorWide and (pItem.CtorName <> '') then
+  if pItem.CtorName <> '' then
     for var C in FStore.FindAllChildSymbols(pItem.Sym.Id) do Own:= Own + [C.Name];
   for var R in F.Refs do
   begin
     if (R.StartLine < First) or (R.StartLine > Last) or not SameText(R.ReceiverText, pSlot.Name) then Continue;
     var IsRead:= (SameText(R.Kind, 'member-access') and MemberAccessOf(R.Id, MA) and SameText(MA.MemberMode, 'read')) or
       MatchText(R.NameText, Pulled);
-    { --ctor-wide: a member the class does not declare is what it inherits, and the base class inherits it from the
-      same parent: same object, same member. A store stays refused: its setter was never on the whitelist }
-    if GCtorWide and not IsRead and (pItem.CtorName <> '') and not MatchText(R.NameText, Own) and not TRegEx.IsMatch(CodePart(LineAt(F.Lines, R.StartLine)),
+    { a member the class does not declare is what it inherits, and the base class inherits it from the same parent:
+      same object, same member (--ctor-wide w4; on the default path since 150-CY-10b: `W.Finished` of a TThread
+      child). A store stays refused: its setter was never on the whitelist }
+    if not IsRead and (pItem.CtorName <> '') and not MatchText(R.NameText, Own) and not TRegEx.IsMatch(CodePart(LineAt(F.Lines, R.StartLine)),
       '\b' + pSlot.Name + '\s*\.\s*' + R.NameText + '\s*:=', [roIgnoreCase]) then IsRead:= True;
     if not IsRead and not SameText(R.NameText, 'Free') then
       Exit(Format('`%s:%d`: %s; `%s.%s` is not a read of a member', [ExtractFileName(F.Path), R.StartLine, What,
@@ -3483,11 +3485,11 @@ begin
     pIndex, pLen, pPulled, pSlots) then Exit(True);
   if TRegEx.IsMatch(Rest, '^\s*\.\s*(Add|Insert|Remove|IndexOf|Contains|Delete|Clear|Count|Free)\b', [roIgnoreCase]) then
     Exit(True);
-  { --ctor-wide: `var S: TX := F[..]` as a whole statement, S a slot that switches }
-  if GCtorWide and (Length(pSlots) > 0) and TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1), '\bvar\s+(' + string.Join('|', pSlots) +
+  { `var S: TX := F[..]` as a whole statement, S a slot that switches (--ctor-wide w4; default since 150-CY-10b) }
+  if (Length(pSlots) > 0) and TRegEx.IsMatch(Copy(pCode, 1, pIndex - 1), '\bvar\s+(' + string.Join('|', pSlots) +
     ')\s*:\s*' + pTypeName + '\s*:=\s*(Self\s*\.\s*)?$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*\[[^;]*\]\s*(;|$)') then Exit(True);
-  { --ctor-wide: the ownership switch of the list itself names no element type }
-  if GCtorWide and TRegEx.IsMatch(Rest, '^\s*\.\s*OwnsObjects\b', [roIgnoreCase]) then Exit(True);
+  { the ownership switch of the list itself names no element type (--ctor-wide w4; default since 150-CY-10b) }
+  if TRegEx.IsMatch(Rest, '^\s*\.\s*OwnsObjects\b', [roIgnoreCase]) then Exit(True);
   if TRegEx.IsMatch(Rest, '^\s*(=|<>)\s*nil\b', [roIgnoreCase]) then Exit(True);
   var Before:= Copy(pCode, 1, pIndex - 1);
   if TRegEx.IsMatch(Before, '\b(Assigned|FreeAndNil)\s*\(\s*$', [roIgnoreCase]) and TRegEx.IsMatch(Rest, '^\s*\)') then
@@ -3538,10 +3540,11 @@ begin
         R.StartLine, Head]));
   Pulled:= nil;
   for var B in pItem.BaseMembers do Pulled:= Pulled + [B.Sym.Name];
-  { --ctor-wide: `F[..].M` with M no member of the class itself reads what the class inherits, and the base class
-    inherits it from the same parent (a name it does not have fails the dcc gate, never compiles to something else) }
+  { `F[..].M` with M no member of the class itself reads what the class inherits, and the base class inherits it from
+    the same parent (a name it does not have fails the dcc gate, never compiles to something else). A list field: on
+    the default path since 150-CY-10b (--ctor-wide w4); an array field: --ctor-wide only, as before }
   var Own: TArray<string>:= nil;
-  if GCtorWide and (pItem.CtorName <> '') then
+  if (GCtorWide or IsList) and (pItem.CtorName <> '') then
   begin
     for var C in FStore.FindAllChildSymbols(pItem.Sym.Id) do Own:= Own + [C.Name];
     for var L:= 1 to Length(F.Lines) do
