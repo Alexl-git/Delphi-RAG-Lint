@@ -50,6 +50,8 @@ function Write-Ascii([string]$Path, [string]$Text) {
   [System.IO.File]::WriteAllText($Path, $norm, [System.Text.Encoding]::ASCII)
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: exe not found: $Exe" -ForegroundColor Red; exit 2 }
+$RunStart = Get-Date
+$StrayReport = Join-Path (Get-Location).Path ('lint-report-' + (Get-Date -Format 'yyyyMMdd') + '.txt')
 $Exe = (Resolve-Path $Exe).Path
 if (Test-Path $WorkDir) { [System.IO.Directory]::Delete($WorkDir, $true) }
 $shDir = Join-Path $WorkDir 'shared'
@@ -124,7 +126,7 @@ function DocEditCount([string]$Db, [string]$Unit) {
   return -1   # an output shape this guard does not know is a FAIL, never a silent 0
 }
 function DriftCount([string]$Db, [string]$Unit) {
-  $o = & $Exe lint-all --db $Db --quiet 2>$null
+  $o = & $Exe lint-all --db $Db --quiet --output (Join-Path (Split-Path $Db) 'lint-report.txt') 2>$null   # --output: lint-all otherwise drops lint-report-<date>.txt into the caller's cwd (150 LN item 5)
   return @($o | Select-String 'doc-drift' | Where-Object { $_.Line -match "\\$Unit\.pas:" }).Count
 }
 function ViaLine([string]$Unit, [string]$Prop) {
@@ -163,6 +165,7 @@ DocApply $dbA 'MarkProv'; ReindexBoth
 $c1 = ViaLine 'MarkProv' 'Value'
 Check 'C1 A''s write reaps [A]AUse and keeps [B]BUse' (($c1 -match '\[B\]BUse\.UseIt') -and ($c1 -notmatch 'AUse')) "line: $c1"
 
+Check 'S1 no stray lint-report-<date>.txt written into the caller cwd' (-not ((Test-Path $StrayReport) -and ((Get-Item $StrayReport).LastWriteTime -ge $RunStart))) $StrayReport
 if ($script:Failed) { Write-Host 'run_shared_via_property_guard: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_shared_via_property_guard: PASS' -ForegroundColor Green
 exit 0
