@@ -2336,7 +2336,9 @@ type
       /// </remarks>
       function GetEnumValueSymbols: TArray<TEnumValueDecl>;
       /// <summary>Implements ISymbolStore.GetUnitLevelValueDecls -- every const
-      /// and var parented directly by a unit symbol.</summary>
+      /// and var parented directly by a unit or program symbol, plus a
+      /// parentless const/var declared in a .dpr (a program's top level on an
+      /// index whose extractor wrote no program symbol).</summary>
       /// <returns>Empty when the index holds none; otherwise one TSymbol per
       /// row with Id, FileId, ParentId, Kind, Name, Signature, Section set.</returns>
       /// <exception cref="Exception">via TSymbolKindHelper.FromText when a kind
@@ -9803,8 +9805,14 @@ begin
     Q.SQL.Text  := 'SELECT s.id, s.file_id, s.parent_id, s.kind, s.name, ' +
                    '       s.signature, s.section ' +
                    'FROM symbols s ' +
-                   'JOIN symbols p ON p.id = s.parent_id AND p.kind = ''unit'' ' +
-                   'WHERE s.kind IN (''const'',''var'')';
+                   'LEFT JOIN symbols p ON p.id = s.parent_id ' +
+                   'WHERE s.kind IN (''const'',''var'') ' +
+                   { 150-RS2 (4): a PROGRAM's top-level const/var is unit-level
+                     too -- parented by the program symbol (EX3), or parentless
+                     in a .dpr on an index written before that (P1 COne, P2 GRun). }
+                   '  AND (p.kind IN (''unit'',''program'') ' +
+                   '       OR (s.parent_id IS NULL AND EXISTS (SELECT 1 FROM files f ' +
+                   '           WHERE f.id = s.file_id AND LOWER(f.path) LIKE ''%.dpr'')))';
     Q.Open;
     { Bound ONCE after Open -- see GetEnumValueSymbols for why. }
     ColId     := Q.FieldByName('id'       );

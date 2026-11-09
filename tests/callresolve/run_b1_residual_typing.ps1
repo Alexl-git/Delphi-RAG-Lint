@@ -9,8 +9,8 @@
   not modelled separately".
 
   CASES (markers in the fixture; lines are read from it)
-    P1 X := COne.Alpha      .dpr main block, program-level typed const   -> KNOWN GAP: unbound (the value has no parent)
-    P2 GRun.Go              .dpr main block, program-level var           -> KNOWN GAP: unbound (same)
+    P1 X := COne.Alpha      .dpr main block, program-level typed const   -> uP.TPoint2.Alpha (150-RS2 (4))
+    P2 GRun.Go              .dpr main block, program-level var           -> uP.TRun.Go (150-RS2 (4))
     P3 X := GLib.Alpha      .dpr main block, a used unit's interface var -> uP.TPoint2.Alpha
     H1 inherited Go         class helper for TRun                        -> uP.TRun.Go (the helped type's method)
     N1 Application.Run      .dpr main block, nothing in the project names it -> unbound (oracle head, as before)
@@ -129,11 +129,11 @@ function RefAt([string]$File, [string]$Marker, [string]$Kind, [string]$Name) {
 }
 
 $r = RefAt 'App.dpr' 'P1' 'member-access' 'Alpha'
-Check 'P1  KNOWN GAP (150 row): .dpr COne.Alpha stays unbound -- program-level values have parent_id NULL, GetUnitLevelValueDecls joins parent kind unit' `
-  (($r.Count -eq 1) -and ($null -eq $r[0].sq)) ("rows=$($r.Count) rt=$($r[0].rt) rtt=$($r[0].rtt) sq=$($r[0].sq)")
+Check 'P1  .dpr COne.Alpha (program-level typed const) binds uP.TPoint2.Alpha (150-RS2 (4): GetUnitLevelValueDecls admits program-level values)' `
+  (($r.Count -eq 1) -and ($r[0].sq -eq 'uP.TPoint2.Alpha')) ("rows=$($r.Count) rt=$($r[0].rt) rtt=$($r[0].rtt) sq=$($r[0].sq)")
 $r = RefAt 'App.dpr' 'P2' 'call' 'Go'
-Check 'P2  KNOWN GAP (150 row): .dpr GRun.Go stays unbound -- same cause as P1' `
-  (($r.Count -eq 1) -and ($null -eq $r[0].tq)) ("rows=$($r.Count) rt=$($r[0].rt) rtt=$($r[0].rtt) tq=$($r[0].tq)")
+Check 'P2  .dpr GRun.Go (program-level var) binds uP.TRun.Go (150-RS2 (4))' `
+  (($r.Count -eq 1) -and ($r[0].tq -eq 'uP.TRun.Go')) ("rows=$($r.Count) rt=$($r[0].rt) rtt=$($r[0].rtt) tq=$($r[0].tq)")
 $r = RefAt 'App.dpr' 'P3' 'member-access' 'Alpha'
 Check 'P3  .dpr GLib.Alpha (used unit var) binds uP.TPoint2.Alpha' `
   (($r.Count -eq 1) -and ($r[0].sq -eq 'uP.TPoint2.Alpha')) ("rows=$($r.Count) rt=$($r[0].rt) rtt=$($r[0].rtt) sq=$($r[0].sq)")
