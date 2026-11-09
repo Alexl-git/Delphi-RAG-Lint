@@ -154,6 +154,9 @@ try {
   finally { foreach ($v in 'DRAGLINT_TEST_RESOLVE_DELAY_MS', 'DRAGLINT_TEST_REINDEX_TIMEOUT_MS') { [Environment]::SetEnvironmentVariable($v, $null) } }
   Check 'M0: precondition -- the timed-out child left a DB file' (Test-Path (Db $pm)) ("stderr=" + $rm.Err.Trim())
   Check 'M1: a timed-out build says the index is INCOMPLETE and how to finish it' ($rm.Err -match 'INCOMPLETE.*drag-lint index --project') ("stderr=" + $rm.Err.Trim())
+  # M2 -- 149 IC 647ea3ae2: the timeout line names the wait it really made (the 6 s seam), not the
+  # 600 s REINDEX_TIMEOUT_MS constant. M0 is the control: the timeout path really ran.
+  Check 'M2: the timeout line names the elapsed wait (~6 s), not the 600 s constant' (($rm.Err -match 'did not finish within [5-9] s') -and ($rm.Err -notmatch 'within 600 s')) ("stderr=" + $rm.Err.Trim())
   # O -- 149 IC (148 IX row): the auto-create caller's failure line names ITS verb, not 'rename:'.
   Check 'O: the timed-out auto-create names its own verb, not rename:' (($rm.Err -match 'auto-create: reindex failed') -and ($rm.Err -notmatch 'rename: reindex failed')) ("stderr=" + $rm.Err.Trim())
   # N -- 149 IC (148 IX row): every LATER reader of the half-built index is told so, not only the run
